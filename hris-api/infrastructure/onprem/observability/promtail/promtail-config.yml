@@ -46,3 +46,26 @@ scrape_configs:
           compose_project:
           stream:
           stack:
+
+  # Project Truth DEV/UAT/PROD application workloads run in K3s/containerd,
+  # not Docker Compose. Read the CRI pod logs directly so Grafana can correlate
+  # a durable credential job ID with its API/device stages.
+  - job_name: k3s-pods
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: k3s-pods
+          stack: hris-k3s
+          __path__: /var/log/pods/*/*/*.log
+    pipeline_stages:
+      - cri: {}
+      - regex:
+          source: filename
+          expression: '/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/.*\.log'
+      - labels:
+          namespace:
+          pod:
+          container:
+          job:
+          stack:

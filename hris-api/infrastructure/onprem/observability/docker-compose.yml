@@ -60,6 +60,7 @@ services:
       - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/pods:/var/log/pods:ro
     depends_on:
       - loki
     restart: unless-stopped
