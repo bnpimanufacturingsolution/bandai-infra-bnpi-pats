@@ -4,6 +4,7 @@ import {
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryError,
 	classifyCredentialRecoveryWrite,
+	planCredentialRecoveryWorkerFailure,
 	summarizeCredentialRecovery,
 } from "../helper/hikvision-credential-recovery.helper";
 
@@ -34,6 +35,29 @@ describe("Hikvision credential recovery graph", () => {
 			category: "authentication",
 			retryable: false,
 			observabilityDefect: false,
+		});
+	});
+
+	it("retries transient database transport loss without retrying forever", () => {
+		const error = new Error(
+			"Invalid prisma.credentialRecoveryTask.count(): Can't reach database server at hris-postgres:5432",
+		);
+		expect(classifyCredentialRecoveryError(error)).to.include({
+			code: "database_transport",
+			category: "persistence",
+			retryable: true,
+			observabilityDefect: false,
+		});
+		expect(planCredentialRecoveryWorkerFailure(error, 0)).to.include({
+			attempt: 1,
+			maxAttempts: 5,
+			shouldRetry: true,
+			status: "retrying",
+		});
+		expect(planCredentialRecoveryWorkerFailure(error, 5)).to.include({
+			attempt: 6,
+			shouldRetry: false,
+			status: "failed",
 		});
 	});
 

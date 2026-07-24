@@ -49,6 +49,7 @@ import {
 	hikvisionFetch,
 	hikvisionFetchBinary,
 	resolveHikvisionTunnelTarget,
+	withHikvisionPrismaTransportRetry,
 } from "../../lib/hikvision-client";
 import {
 	buildDeviceUserEmployeeNoCandidates,
@@ -95,6 +96,7 @@ import {
 	buildCredentialRecoveryPendingTaskWhere,
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryError,
+	planCredentialRecoveryWorkerFailure,
 	summarizeCredentialRecovery,
 } from "../../helper/hikvision-credential-recovery.helper";
 import {
@@ -12607,30 +12609,65 @@ export const controller = (prisma: PrismaClient) => {
 				}, 250);
 			}
 		} catch (error: any) {
-			const classification = classifyCredentialRecoveryError(error);
+			let recoveryDecision:
+				| ReturnType<typeof planCredentialRecoveryWorkerFailure>
+				| undefined;
+			const persistFailure = async () => {
+				const current = await jobStore.findUnique({
+					where: { id: params.jobId },
+					select: { request: true },
+				});
+				const currentRequest = (current?.request || {}) as Record<string, unknown>;
+				recoveryDecision = planCredentialRecoveryWorkerFailure(
+					error,
+					Number(currentRequest.workerRetryAttempt || 0),
+				);
+				return jobStore.update({
+					where: { id: params.jobId },
+					data: {
+						status: recoveryDecision.status,
+						currentStage: recoveryDecision.shouldRetry
+							? "worker_retrying"
+							: "worker_failed",
+						request: {
+							...currentRequest,
+							workerRetryAttempt: recoveryDecision.attempt,
+						},
+						latestError: {
+							...recoveryDecision,
+							at: new Date().toISOString(),
+							jobId: params.jobId,
+							stage: recoveryDecision.shouldRetry
+								? "worker_retrying"
+								: "worker_failed",
+						},
+						heartbeatAt: new Date(),
+						leaseOwner: null,
+						leaseExpiresAt: null,
+						completedAt: recoveryDecision.shouldRetry ? null : new Date(),
+					},
+				});
+			};
+			await withHikvisionPrismaTransportRetry(persistFailure, [
+				0, 1_000, 2_500, 5_000, 10_000,
+			]);
+			const classification =
+				recoveryDecision || planCredentialRecoveryWorkerFailure(error, 0);
 			deviceLogger.error("Credential recovery worker failed", {
 				event: "credential_recovery_worker_failed",
 				jobId: params.jobId,
-				stage: "worker_failed",
+				stage: classification.shouldRetry ? "worker_retrying" : "worker_failed",
 				...classification,
 			});
-			await jobStore.update({
-				where: { id: params.jobId },
-				data: {
-					status: "failed",
-					currentStage: "worker_failed",
-					latestError: {
-						...classification,
-						at: new Date().toISOString(),
-						jobId: params.jobId,
-						stage: "worker_failed",
-					},
-					heartbeatAt: new Date(),
-					leaseOwner: null,
-					leaseExpiresAt: null,
-					completedAt: new Date(),
-				},
-			});
+			if (classification.shouldRetry) {
+				setTimeout(() => {
+					processHikvisionCredentialRecoveryJob(params).catch((retryError) =>
+						deviceLogger.error(
+							`Credential recovery job ${params.jobId} worker retry failed: ${retryError}`,
+						),
+					);
+				}, Math.min(30_000, 2_000 * classification.attempt));
+			}
 		}
 	};
 

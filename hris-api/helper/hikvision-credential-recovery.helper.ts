@@ -7,6 +7,7 @@ export type CredentialRecoveryClassification =
 
 export type CredentialRecoveryErrorClassification = {
 	code:
+		| "database_transport"
 		| "device_authentication"
 		| "device_transport"
 		| "inventory_read_safety_gate"
@@ -16,6 +17,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "code_or_data_contract"
 		| "unclassified";
 	category:
+		| "persistence"
 		| "authentication"
 		| "transport"
 		| "safety_gate"
@@ -36,6 +38,23 @@ export const classifyCredentialRecoveryError = (
 	const normalized = message.toLowerCase();
 	const matches = (...patterns: RegExp[]) => patterns.some((pattern) => pattern.test(normalized));
 
+	if (
+		matches(
+			/can't reach database server/,
+			/database server.*(?:unreachable|closed|connection)/,
+			/server has closed the connection/,
+			/connection.*(?:terminated|closed).*database/,
+			/\bp1001\b/,
+		)
+	) {
+		return {
+			code: "database_transport",
+			category: "persistence",
+			message,
+			retryable: true,
+			observabilityDefect: false,
+		};
+	}
 	if (matches(/\bunauthori[sz]ed\b/, /\b401\b/, /\bauthentication\b/, /invalid credentials/)) {
 		return {
 			code: "device_authentication",
@@ -134,6 +153,23 @@ export const classifyCredentialRecoveryError = (
 		message,
 		retryable: false,
 		observabilityDefect: true,
+	};
+};
+
+export const planCredentialRecoveryWorkerFailure = (
+	error: unknown,
+	priorAttempt: number,
+	maxAttempts = 5,
+) => {
+	const classification = classifyCredentialRecoveryError(error);
+	const attempt = Math.max(0, Number(priorAttempt) || 0) + 1;
+	const shouldRetry = classification.retryable && attempt <= Math.max(1, maxAttempts);
+	return {
+		...classification,
+		attempt,
+		maxAttempts,
+		shouldRetry,
+		status: shouldRetry ? ("retrying" as const) : ("failed" as const),
 	};
 };
 
