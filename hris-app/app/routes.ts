@@ -38,6 +38,10 @@ const adminRoutes = [
 		route("employees/new", "routes/hr/employees.new.tsx", {
 			id: "admin-configuration-employees-new",
 		}),
+		// Profile under admin layout so the configuration sidebar stays mounted.
+		route("employees/:id", "routes/employee/employee.$id.tsx", {
+			id: "admin-configuration-employees-profile",
+		}),
 		route("employees/:id/edit", "routes/hr/employees.$id.edit.tsx", {
 			id: "admin-configuration-employees-edit",
 		}),

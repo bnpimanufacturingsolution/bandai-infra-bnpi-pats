@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
 import { Card, CardContent } from "~/components/atoms/Card";
@@ -39,11 +39,15 @@ export default function EmployeeDetailPage() {
 	const { id } = useParams();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const navigate = useNavigate();
+	const location = useLocation();
 	const { user } = useAuth();
 	const requestedTab = searchParams.get("tab") || "personal";
 	const activeTab = knownTabIds.has(requestedTab) ? requestedTab : "personal";
 	const fromParam = searchParams.get("from");
 	const { data: employee, isLoading, error } = useEmployee(id || "");
+	const isAdminConfigurationProfile = location.pathname.startsWith(
+		"/admin/configuration/employees/",
+	);
 
 	const isOwnProfile = user?.metadata?.employee?.id === id;
 	const { data: documentActionMetrics } = useDocumentActionMetrics(id, {
@@ -55,7 +59,8 @@ export default function EmployeeDetailPage() {
 				item.priorityState !== "optional" &&
 				(item.isActionable || item.priorityState === "pending_approval"),
 		).length || 0;
-	const shouldShowBackButton = Boolean(fromParam) || !isOwnProfile;
+	const shouldShowBackButton =
+		Boolean(fromParam) || !isOwnProfile || isAdminConfigurationProfile;
 
 	const handleTabChange = (tabId: string) => {
 		setSearchParams((previousParams) => {
@@ -68,6 +73,10 @@ export default function EmployeeDetailPage() {
 	const handleBack = () => {
 		if (fromParam) {
 			navigate(`/${fromParam.replace(/-/g, "/")}`);
+			return;
+		}
+		if (isAdminConfigurationProfile) {
+			navigate("/admin/configuration/employees");
 			return;
 		}
 		navigate(-1);

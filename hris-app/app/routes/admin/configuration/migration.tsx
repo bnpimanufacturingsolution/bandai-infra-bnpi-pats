@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import {
 	AlertCircle,
+	ArrowLeft,
 	BadgeCheck,
 	Briefcase,
 	Building2,
@@ -52,9 +53,14 @@ import { useImportSections, useSections } from "~/lib/hooks/useSections";
 import { useImportShiftTypes, useShiftTypes } from "~/lib/hooks/useSchedules";
 import { useTimesheets } from "~/lib/hooks/useTimesheets";
 import { hrisApiClient } from "~/lib/api-client";
-import { HR_MODAL_BASE_CLASS } from "~/lib/ui/admin-configuration-modal";
-
-const ADMIN_MIGRATION_WORKBOOK_MODAL_CLASS = `min-h-[72vh] max-w-[calc(100vw-32px)] gap-3 p-4 sm:max-w-7xl ${HR_MODAL_BASE_CLASS}`;
+import { HR_MODAL_STANDARD_CLASS } from "~/lib/ui/admin-configuration-modal";
+import {
+	buildCloseWorkbookSearchParams,
+	buildCloseWorkbookUploadSearchParams,
+	buildOpenWorkbookSearchParams,
+	buildOpenWorkbookUploadSearchParams,
+	isWorkbookUploadOpen,
+} from "~/lib/admin-migration-ui";
 
 export type ImportAction =
 	| "import-departments"
@@ -986,11 +992,14 @@ function getWorkbookSummary(group: ImportWorkbookGroup) {
 	const loading = group.steps.some((step) => step.isLoading);
 	const totalRecords = group.steps.reduce((total, step) => total + (step.count || 0), 0);
 
-	if (loading) return "Checking imports";
-	if (group.id === "dm4") {
-		return `${group.steps.length}/${group.steps.length} proof stages - ${totalRecords.toLocaleString()} records`;
+	if (loading) return "Loading…";
+	if (totalRecords > 0) {
+		return `${totalRecords.toLocaleString()} records in HRIS`;
 	}
-	return `${wiredImporters}/${group.steps.length} importers wired - ${totalRecords.toLocaleString()} records`;
+	if (group.id === "dm4") {
+		return `${group.steps.length} stages · not imported yet`;
+	}
+	return `${wiredImporters} sheets · not imported yet`;
 }
 
 function downloadTemplate(fileName: string, content = EMPTY_TEMPLATE) {
@@ -2242,6 +2251,8 @@ export default function AdminMigrationPage() {
 	const dm4SourceResolutionKeyRef = useRef("");
 	const dm4ProofEventKeyRef = useRef("");
 	const [dm4SourcePathDraft, setDm4SourcePathDraft] = useState("");
+	const [isUploadingDm4Files, setIsUploadingDm4Files] = useState(false);
+	const dm4FileInputRef = useRef<HTMLInputElement | null>(null);
 	const [downloadingReportRunIds, setDownloadingReportRunIds] = useState<Set<string>>(
 		() => new Set(),
 	);
@@ -3667,13 +3678,11 @@ export default function AdminMigrationPage() {
 		});
 	};
 
-	const openWorkbookModal = (groupId: string) => {
+	const openWorkbookPage = (groupId: string, options?: { upload?: boolean }) => {
 		setActiveWorkbookGroupId(groupId);
-		setSearchParams((prev) => {
-			const next = new URLSearchParams(prev);
-			next.set("workbook", groupId);
-			return next;
-		});
+		setSearchParams((prev) =>
+			buildOpenWorkbookSearchParams(prev, groupId, { upload: options?.upload === true }),
+		);
 	};
 
 	function getWorkbookResumeTarget(group: ImportWorkbookGroup) {
@@ -3689,28 +3698,34 @@ export default function AdminMigrationPage() {
 		};
 	}
 
-	const resumeWorkbookModal = (group: ImportWorkbookGroup) => {
+	const resumeWorkbookPage = (group: ImportWorkbookGroup) => {
 		const resumeTarget = getWorkbookResumeTarget(group);
 		setActiveWorkbookGroupId(group.id);
-		setSearchParams((prev) => {
-			const next = new URLSearchParams(prev);
-			next.set("workbook", group.id);
-			if (resumeTarget?.jobId) next.set("importJobId", resumeTarget.jobId);
-			return next;
-		});
+		setSearchParams((prev) =>
+			buildOpenWorkbookSearchParams(prev, group.id, {
+				importJobId: resumeTarget?.jobId || null,
+			}),
+		);
 	};
 
-	const closeWorkbookModal = () => {
+	const closeWorkbookPage = () => {
 		setActiveWorkbookGroupId(null);
 		setDm3ActiveRunId(null);
-		setSearchParams((prev) => {
-			const next = new URLSearchParams(prev);
-			next.delete("workbook");
-			next.delete("importJobId");
-			next.delete("runId");
-			return next;
-		});
+		setSearchParams((prev) => buildCloseWorkbookSearchParams(prev));
 	};
+
+	const openWorkbookUploadModal = () => {
+		setSearchParams((prev) => buildOpenWorkbookUploadSearchParams(prev));
+	};
+
+	const closeWorkbookUploadModal = () => {
+		setSearchParams((prev) => buildCloseWorkbookUploadSearchParams(prev));
+	};
+
+	const isUploadModalOpen =
+		Boolean(activeWorkbookGroup) &&
+		activeWorkbookGroup?.id !== "dm4" &&
+		isWorkbookUploadOpen(searchParams);
 
 	const closeImportModal = () => {
 		setSearchParams((prev) => {
@@ -5193,15 +5208,29 @@ export default function AdminMigrationPage() {
 
 	const setDm4SourcePaths = (paths: string[]) => {
 		setDm4SourceFilesText(
-			Array.from(new Set(paths.map((path) => path.trim()).filter(Boolean))).join("\n"),
+			Array.from(new Set(paths.map((entry) => entry.trim()).filter(Boolean))).join("\n"),
 		);
 	};
 
-	const addDm4SourcePath = (path: string) => {
-		const nextPath = path.trim();
-		if (!nextPath) return;
+	const addDm4SourcePath = (nextPathValue: string) => {
+		const nextPath = nextPathValue.trim();
+		if (!nextPath) {
+			toast.error("Enter a server path or choose files to upload.");
+			return;
+		}
+		const normalized = nextPath.replace(/\\/g, "/").toLowerCase();
+		if (
+			dm4SourcePaths.some(
+				(existing) => existing.replace(/\\/g, "/").toLowerCase() === normalized,
+			)
+		) {
+			toast.message("That file is already in the list.");
+			setDm4SourcePathDraft("");
+			return;
+		}
 		setDm4SourcePaths([...dm4SourcePaths, nextPath]);
 		setDm4SourcePathDraft("");
+		toast.success("Path added to DM4 sources.");
 	};
 
 	const removeDm4SourcePath = (index: number) => {
@@ -5211,6 +5240,70 @@ export default function AdminMigrationPage() {
 	const restoreDm4DefaultSourcePaths = () => {
 		setDm4SourceFilesText(DM4_DEFAULT_SOURCE_FILES_TEXT);
 		setDm4SourcePathDraft("");
+		toast.message("Restored default biometrics source list.");
+	};
+
+	const uploadDm4BrowserFiles = async (fileList: FileList | File[] | null | undefined) => {
+		const files = Array.from(fileList || []).filter(Boolean);
+		if (files.length === 0) return;
+
+		const invalid = files.filter(
+			(file) => !/\.xlsx?$/i.test(file.name) || file.name.startsWith("~$"),
+		);
+		const valid = files.filter(
+			(file) => /\.xlsx?$/i.test(file.name) && !file.name.startsWith("~$"),
+		);
+		if (valid.length === 0) {
+			toast.error("Choose .xlsx biometrics workbook files.");
+			return;
+		}
+		if (invalid.length > 0) {
+			toast.message(`Skipped ${invalid.length} non-Excel file(s).`);
+		}
+
+		setIsUploadingDm4Files(true);
+		try {
+			const formData = new FormData();
+			for (const file of valid) {
+				formData.append("files", file);
+			}
+			if (organizationId) {
+				formData.append("organizationId", organizationId);
+			}
+			const response = await hrisApiClient.post<{
+				data?: {
+					sourceWorkbookFiles?: string[];
+					sourceWorkbookCount?: number;
+				};
+				sourceWorkbookFiles?: string[];
+			}>("/api/migration/dm4/upload-source-workbooks", formData, {
+				timeoutMs: 120_000,
+			});
+			const payload = (response as any)?.data?.data || (response as any)?.data || response;
+			const uploadedPaths = Array.isArray(payload?.sourceWorkbookFiles)
+				? payload.sourceWorkbookFiles.map((entry: unknown) => String(entry || "").trim()).filter(Boolean)
+				: [];
+			if (uploadedPaths.length === 0) {
+				throw new Error(
+					(response as any)?.message || "Upload succeeded but no workbook paths were returned.",
+				);
+			}
+			setDm4SourcePaths([...dm4SourcePaths, ...uploadedPaths]);
+			toast.success(
+				`Uploaded ${uploadedPaths.length} biometrics file${uploadedPaths.length === 1 ? "" : "s"}.`,
+			);
+		} catch (error: any) {
+			toast.error(
+				error?.data?.errors?.[0]?.message ||
+					error?.message ||
+					"Failed to upload biometrics workbook files.",
+			);
+		} finally {
+			setIsUploadingDm4Files(false);
+			if (dm4FileInputRef.current) {
+				dm4FileInputRef.current.value = "";
+			}
+		}
 	};
 
 	function buildDm4ProofImportReport({
@@ -5452,6 +5545,8 @@ export default function AdminMigrationPage() {
 			toast.error("Upload an .xlsx workbook.");
 			return;
 		}
+		// Close upload modal so progress shows on the workbook page.
+		closeWorkbookUploadModal();
 		if (group.id === "dm3") {
 			try {
 				await handleDurableDm3WorkbookUpload(group, file);
@@ -6375,12 +6470,12 @@ export default function AdminMigrationPage() {
 	) => {
 		const progress = getDisplayedWorkbookProgress(group, step);
 		const status = progress?.status || "Pending";
+		const displayStatus =
+			status === "Checking" && typeof progress?.rowCount !== "number" ? "Waiting" : status;
 		const rowLabel =
 			typeof progress?.rowCount === "number"
-				? `${progress.rowCount} rows`
-				: status === "Checking"
-					? "Checking"
-					: "Rows pending";
+				? `${progress.rowCount.toLocaleString()} rows`
+				: null;
 		const shouldShowIssue =
 			Boolean(progress?.message) && ["Failed", "Blocked", "Needs recovery"].includes(status);
 
@@ -6392,26 +6487,22 @@ export default function AdminMigrationPage() {
 					<div className="truncate text-sm font-medium text-gray-950">
 						{options.showIndex === false ? step.label : `${index + 1}. ${step.label}`}
 					</div>
+					{shouldShowIssue ? (
+						<p className="mt-0.5 truncate text-xs text-red-600" title={progress?.message}>
+							{progress?.message}
+						</p>
+					) : null}
 				</div>
 				<div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+					{rowLabel ? (
+						<span className="text-xs text-gray-500 tabular-nums">{rowLabel}</span>
+					) : null}
 					<Badge
 						variant="outline"
 						className={`shrink-0 rounded-md px-2.5 py-1 text-[11px] leading-none whitespace-nowrap ${WORKBOOK_STATUS_CLASS[status]}`}>
-						{status}
-					</Badge>
-					<Badge
-						variant="outline"
-						className="shrink-0 rounded-md border-gray-200 bg-white px-2.5 py-1 text-[11px] leading-none text-gray-700 whitespace-nowrap">
-						{rowLabel}
+						{displayStatus}
 					</Badge>
 				</div>
-				{shouldShowIssue ? (
-					<div
-						className="col-span-2 min-w-0 truncate text-xs text-red-600"
-						title={progress?.message}>
-						{progress?.message}
-					</div>
-				) : null}
 			</div>
 		);
 	};
@@ -6548,7 +6639,7 @@ export default function AdminMigrationPage() {
 						type="button"
 						className="flex w-full items-center justify-between gap-3 border-t border-gray-200 px-4 py-2.5 text-left">
 						<span className="text-xs font-medium text-gray-700">
-							Manual CSV imports
+							Advanced: import one sheet as CSV
 						</span>
 						<ChevronDown
 							className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${
@@ -6566,15 +6657,515 @@ export default function AdminMigrationPage() {
 		);
 	};
 
-	return (
+	const renderWorkbookPage = () => {
+		if (!activeWorkbookGroup) return null;
+		const group = activeWorkbookGroup;
+		const isDm4 = group.id === "dm4";
+		const stepStatuses = group.steps.map((step) => getDisplayedWorkbookProgress(group, step));
+		const completedCount = stepStatuses.filter((progress) => progress?.status === "Imported").length;
+		const failedCount = stepStatuses.filter((progress) =>
+			["Failed", "Blocked", "Needs recovery"].includes(String(progress?.status || "")),
+		).length;
+		const hasMeaningfulReport =
+			Boolean(activeWorkbookReport) &&
+			(activeWorkbookReportIsTerminal ||
+				activeWorkbookDisplayTotals.totalRows > 0 ||
+				["running", "failed", "completed", "blocked"].includes(
+					String(activeWorkbookReport?.status || "").toLowerCase(),
+				));
+		// Optional reference panel only when real downloadable/mapped sources exist.
+		// DM4 biometrics paths already live in the primary "What to do" card.
+		const sourceInputsReady =
+			!isDm4 &&
+			activeWorkbookSourceInputs.some(
+				(source) =>
+					source.downloadable ||
+					(Array.isArray(source.sheetMappings) && source.sheetMappings.length > 0),
+			);
+		const title = group.title.replace(/^DM\d+\s*-\s*/i, "");
+
+		return (
+			<div className="mx-auto max-w-3xl space-y-5 pb-10">
+				<div className="space-y-3">
+					<button
+						type="button"
+						onClick={() => closeWorkbookPage()}
+						className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-900">
+						<ArrowLeft className="h-3.5 w-3.5" />
+						All workbooks
+					</button>
+					<div className="flex flex-wrap items-start justify-between gap-3">
+						<div className="min-w-0 space-y-1">
+							<div className="flex flex-wrap items-center gap-2">
+								<span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-[11px] font-semibold tracking-wide text-gray-600">
+									{group.id.toUpperCase()}
+								</span>
+								<h1 className="text-2xl font-semibold tracking-tight text-gray-950">
+									{title}
+								</h1>
+							</div>
+							<p className="text-sm text-gray-500">
+								{isDm4
+									? "Import biometrics punch files into attendance and timesheets."
+									: "Upload one Excel workbook to import all sheets in order."}
+							</p>
+						</div>
+						{activeWorkbookResumeTarget || canRetryDm4Run ? (
+							<div className="flex shrink-0 flex-wrap gap-2">
+								{activeWorkbookResumeTarget ? (
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="h-9 border-orange-200 bg-orange-50 px-3 text-xs text-orange-800 hover:bg-orange-100"
+										onClick={() => resumeWorkbookPage(group)}>
+										<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
+										Resume import
+									</Button>
+								) : null}
+								{canRetryDm4Run ? (
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="h-9 border-orange-200 bg-orange-50 px-3 text-xs text-orange-800 hover:bg-orange-100"
+										disabled={isRetryingDm4Run}
+										onClick={() => void retryDm4MigrationRun()}>
+										{isRetryingDm4Run ? (
+											<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+										) : (
+											<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
+										)}
+										Retry import
+									</Button>
+								) : null}
+							</div>
+						) : null}
+					</div>
+				</div>
+
+				<section className="rounded-2xl border border-orange-100 bg-gradient-to-b from-orange-50/80 to-white p-5 shadow-sm">
+					<p className="text-[11px] font-semibold uppercase tracking-wide text-orange-700">
+						What to do
+					</p>
+					{isDm4 ? (
+						<div className="mt-2 space-y-4">
+							<div>
+								<h2 className="text-lg font-semibold text-gray-950">
+									Import biometrics data
+								</h2>
+								<p className="mt-1 text-sm text-gray-600">
+									Point to server-side biometrics Excel files, then run import.
+									Employees and schedules from DM3 must already exist.
+								</p>
+							</div>
+							<ol className="space-y-2 text-sm text-gray-700">
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										1
+									</span>
+									<span>
+										Upload biometrics Excel files (or add a server path)
+									</span>
+								</li>
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										2
+									</span>
+									<span>
+										Click Import attendance ({dm4SourcePaths.length} file
+										{dm4SourcePaths.length === 1 ? "" : "s"} ready)
+									</span>
+								</li>
+							</ol>
+							<input
+								ref={dm4FileInputRef}
+								type="file"
+								accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+								multiple
+								className="hidden"
+								onChange={(event) => {
+									void uploadDm4BrowserFiles(event.target.files);
+								}}
+							/>
+							<div className="rounded-xl border border-gray-200 bg-white p-3">
+								<div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+									<p className="text-xs font-semibold text-gray-900">Source files</p>
+									<button
+										type="button"
+										className="text-[11px] font-medium text-gray-500 hover:text-gray-800"
+										onClick={restoreDm4DefaultSourcePaths}>
+										Use defaults
+									</button>
+								</div>
+								<button
+									type="button"
+									disabled={isUploadingDm4Files || isLoadingDm4Proof}
+									onClick={() => dm4FileInputRef.current?.click()}
+									onDragEnter={(event) => {
+										event.preventDefault();
+										setDraggingWorkbookGroupId("dm4");
+									}}
+									onDragOver={(event) => {
+										event.preventDefault();
+										setDraggingWorkbookGroupId("dm4");
+									}}
+									onDragLeave={(event) => {
+										if (
+											!event.currentTarget.contains(
+												event.relatedTarget as Node | null,
+											)
+										) {
+											setDraggingWorkbookGroupId(null);
+										}
+									}}
+									onDrop={(event) => {
+										event.preventDefault();
+										setDraggingWorkbookGroupId(null);
+										void uploadDm4BrowserFiles(event.dataTransfer.files);
+									}}
+									className={`flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-colors ${
+										draggingWorkbookGroupId === "dm4"
+											? "border-orange-300 bg-orange-50"
+											: "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white"
+									} disabled:cursor-not-allowed disabled:opacity-60`}>
+									<div className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
+										{isUploadingDm4Files ? (
+											<Loader2 className="h-4 w-4 animate-spin" />
+										) : (
+											<Upload className="h-4 w-4" />
+										)}
+									</div>
+									<span className="text-sm font-semibold text-gray-950">
+										{isUploadingDm4Files
+											? "Uploading biometrics files…"
+											: "Drop biometrics .xlsx files here"}
+									</span>
+									<span className="text-xs text-gray-500">
+										or click to choose one or more workbooks
+									</span>
+								</button>
+								<div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+									<input
+										value={dm4SourcePathDraft}
+										onChange={(event) => setDm4SourcePathDraft(event.target.value)}
+										onKeyDown={(event) => {
+											if (event.key === "Enter") {
+												event.preventDefault();
+												addDm4SourcePath(dm4SourcePathDraft);
+											}
+										}}
+										className="h-9 min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-3 font-mono text-xs text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-300 focus:bg-white focus:ring-2 focus:ring-orange-100"
+										placeholder="Optional server path: docs/.../Biometrics Data_....xlsx"
+									/>
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="h-9 px-3 text-xs"
+										disabled={isUploadingDm4Files || isLoadingDm4Proof}
+										onClick={() => addDm4SourcePath(dm4SourcePathDraft)}>
+										<Plus className="mr-1 h-3.5 w-3.5" />
+										Add path
+									</Button>
+								</div>
+								<div className="mt-3 max-h-48 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100">
+									{dm4SourcePaths.length === 0 ? (
+										<p className="px-3 py-4 text-center text-xs text-gray-500">
+											No source files yet. Upload biometrics workbooks or add a
+											server path.
+										</p>
+									) : (
+										dm4SourcePaths.map((filePath, index) => (
+											<div
+												key={`${filePath}-${index}`}
+												className="flex items-center justify-between gap-2 px-3 py-2">
+												<div className="min-w-0">
+													<p className="truncate text-xs font-medium text-gray-900">
+														{getDm4WorkbookFileName(filePath)}
+													</p>
+													{isDm4ApprovedOvertimeSource(filePath) ? (
+														<span className="text-[10px] font-medium text-emerald-700">
+															Approved overtime
+														</span>
+													) : (
+														<p className="truncate font-mono text-[10px] text-gray-400">
+															{filePath}
+														</p>
+													)}
+												</div>
+												<button
+													type="button"
+													className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-700"
+													aria-label={`Remove ${getDm4WorkbookFileName(filePath)}`}
+													onClick={() => removeDm4SourcePath(index)}>
+													<X className="h-3.5 w-3.5" />
+												</button>
+											</div>
+										))
+									)}
+								</div>
+							</div>
+							<div className="flex justify-end">
+								<Button
+									type="button"
+									className="h-10 px-4 text-sm"
+									disabled={
+										isLoadingDm4Proof ||
+										isUploadingDm4Files ||
+										dm4SourcePaths.length === 0
+									}
+									onClick={() => void startDm4MigrationRun()}>
+									{isLoadingDm4Proof ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<PlayCircle className="mr-1.5 h-4 w-4" />
+									)}
+									{isLoadingDm4Proof ? "Importing…" : "Import attendance"}
+								</Button>
+							</div>
+						</div>
+					) : (
+						<div className="mt-2 space-y-4">
+							<div>
+								<h2 className="text-lg font-semibold text-gray-950">
+									Upload the workbook
+								</h2>
+								<p className="mt-1 text-sm text-gray-600">
+									One Excel file fills all sheets below. Download the template if you
+									do not already have a completed workbook.
+								</p>
+							</div>
+							<ol className="space-y-2 text-sm text-gray-700">
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										1
+									</span>
+									<span>Download template (optional)</span>
+								</li>
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										2
+									</span>
+									<span>Fill the sheets in Excel</span>
+								</li>
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										3
+									</span>
+									<span>Upload the completed .xlsx file</span>
+								</li>
+							</ol>
+							<div className="flex flex-wrap gap-2">
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={downloadingTemplateWorkbookId === group.id}
+									onClick={() => downloadWorkbookTemplate(group)}>
+									{downloadingTemplateWorkbookId === group.id ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Download className="mr-1.5 h-4 w-4" />
+									)}
+									Download template
+								</Button>
+								<Button
+									type="button"
+									className="h-10 px-4 text-sm"
+									onClick={() => openWorkbookUploadModal()}
+									disabled={extractWorkbook.isPending}>
+									<Upload className="mr-1.5 h-4 w-4" />
+									Upload workbook
+								</Button>
+							</div>
+						</div>
+					)}
+				</section>
+
+				<section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+					<div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+						<div>
+							<h2 className="text-sm font-semibold text-gray-950">Import checklist</h2>
+							<p className="mt-0.5 text-xs text-gray-500">
+								{completedCount}/{group.steps.length} sheets complete
+								{failedCount > 0 ? ` · ${failedCount} need attention` : ""}
+							</p>
+						</div>
+						<Badge
+							variant="outline"
+							className={`rounded-md px-2 py-0.5 text-[11px] ${WORKBOOK_STATUS_CLASS[activeWorkbookBottomStatus]}`}>
+							{activeWorkbookBottomStatus === "Pending"
+								? "Not started"
+								: activeWorkbookBottomStatus}
+						</Badge>
+					</div>
+					<div className="divide-y divide-gray-100">
+						{group.steps.map((step, index) => renderWorkbookRow(group, step, index))}
+					</div>
+					{renderGeneratedWorkbookRows(group)}
+				</section>
+
+				{hasMeaningfulReport ? (
+					<section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+						<div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-4 py-3">
+							<div className="flex flex-wrap items-center gap-2">
+								<h2 className="text-sm font-semibold text-gray-950">
+									Last import results
+								</h2>
+								<Badge
+									variant="outline"
+									className="rounded-md border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-700">
+									{activeWorkbookReport?.status || activeWorkbookBottomStatus}
+								</Badge>
+							</div>
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								className="h-8 px-2.5 text-xs"
+								disabled={
+									!activeWorkbookReport ||
+									downloadingReportRunIds.has(activeWorkbookReport.runId)
+								}
+								onClick={() =>
+									activeWorkbookReport &&
+									void handleMigrationReportDownload(activeWorkbookReport)
+								}>
+								{activeWorkbookReport &&
+								downloadingReportRunIds.has(activeWorkbookReport.runId) ? (
+									<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+								) : (
+									<Download className="mr-1.5 h-3.5 w-3.5" />
+								)}
+								Download report
+							</Button>
+						</div>
+						<div className="grid grid-cols-3 gap-px border-b border-gray-100 bg-gray-100 text-xs sm:grid-cols-6">
+							{[
+								["Rows", activeWorkbookDisplayTotals.totalRows],
+								["Created", activeWorkbookDisplayTotals.created],
+								["Updated", activeWorkbookDisplayTotals.updated],
+								["Skipped", activeWorkbookDisplayTotals.skipped],
+								["Blocked", activeWorkbookDisplayTotals.blocked],
+								["Failed", activeWorkbookDisplayTotals.failed],
+							].map(([label, value]) => (
+								<div key={label} className="bg-white px-3 py-2.5">
+									<div className="text-[11px] text-gray-500">{label}</div>
+									<div className="font-semibold tabular-nums text-gray-950">
+										{value}
+									</div>
+								</div>
+							))}
+						</div>
+						<div className="overflow-x-auto">
+							<table className="min-w-full text-left text-xs">
+								<thead className="border-b border-gray-100 bg-gray-50 text-[11px] text-gray-500">
+									<tr>
+										<th className="px-3 py-2 font-medium">Sheet</th>
+										<th className="px-3 py-2 font-medium">Status</th>
+										<th className="px-3 py-2 text-right font-medium">Rows</th>
+										<th className="px-3 py-2 text-right font-medium">Created</th>
+										<th className="px-3 py-2 font-medium">Issue</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-gray-100">
+									{activeWorkbookSourceReportRows.map((sheet) => (
+										<tr key={sheet.sheetName}>
+											<td className="whitespace-nowrap px-3 py-2 font-medium text-gray-900">
+												{sheet.sheetName}
+											</td>
+											<td className="whitespace-nowrap px-3 py-2">
+												<Badge
+													variant="outline"
+													className={`rounded-md px-2 py-0.5 text-[11px] ${WORKBOOK_STATUS_CLASS[sheet.status]}`}>
+													{sheet.status}
+												</Badge>
+											</td>
+											<td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700">
+												{sheet.totalRows}
+											</td>
+											<td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-gray-700">
+												{sheet.created}
+											</td>
+											<td className="min-w-[140px] px-3 py-2 text-gray-500">
+												{sheet.firstError || "—"}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+						{activeWorkbookLiveEvents.length > 0 ? (
+							<div className="border-t border-gray-100">
+								<p className="px-4 py-2 text-xs font-semibold text-gray-900">
+									Recent activity
+								</p>
+								<div className="max-h-48 overflow-auto border-t border-gray-100">
+									<ul className="divide-y divide-gray-100 text-xs">
+										{activeWorkbookLiveEvents.slice(0, 12).map((event) => (
+											<li key={event.id} className="px-4 py-2 text-gray-700">
+												<span className="text-gray-400">
+													{formatReportTimestamp(event.at)}
+												</span>
+												{" · "}
+												<span className="font-medium text-gray-900">
+													{event.sheetName || event.stepCode || "Run"}
+												</span>
+												{" · "}
+												{event.message || event.eventType || event.status}
+											</li>
+										))}
+									</ul>
+								</div>
+							</div>
+						) : null}
+					</section>
+				) : (
+					<section className="rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 px-4 py-5 text-center">
+						<p className="text-sm font-medium text-gray-800">No import run yet</p>
+						<p className="mt-1 text-xs text-gray-500">
+							{isDm4
+								? "Results appear here after you import biometrics files."
+								: "Results appear here after you upload a workbook."}
+						</p>
+					</section>
+				)}
+
+				{sourceInputsReady ? (
+					<section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+						{renderSourceInputPanel(group)}
+					</section>
+				) : null}
+
+				<section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+					{renderManualFallback(group)}
+				</section>
+			</div>
+		);
+	};
+
+return (
 		<div className="space-y-4">
-			<section className="rounded-lg border border-gray-200 bg-white p-4">
+			{activeWorkbookGroup ? (
+				renderWorkbookPage()
+			) : (
+			<>
+			<section className="rounded-xl border border-gray-200 bg-white p-5">
 				<div className="flex flex-wrap items-center justify-between gap-3">
-					<h1 className="text-xl font-semibold text-gray-950">Bandai Migration</h1>
+					<div>
+						<h1 className="text-xl font-semibold tracking-tight text-gray-950">
+							Data Migration
+						</h1>
+						<p className="mt-1 text-sm text-gray-500">
+							Work through DM1 → DM4 in order. Open a workbook, then upload or import.
+						</p>
+					</div>
 					<Badge
 						variant="outline"
-						className="rounded-md border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] font-medium text-orange-800">
-						DM1 - DM4.3 templates
+						className="rounded-md border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-medium text-gray-700">
+						DM1 – DM4
 					</Badge>
 				</div>
 			</section>
@@ -6587,11 +7178,14 @@ export default function AdminMigrationPage() {
 						return (
 							<section
 								key={group.id}
-								className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white">
-								<div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+								className="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white">
+								<div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
 									<div className="min-w-0">
+										<p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+											{group.id.toUpperCase()}
+										</p>
 										<h3 className="truncate text-sm font-semibold text-gray-950">
-											{group.title}
+											{group.title.replace(/^DM\d+\s*-\s*/i, "")}
 										</h3>
 									</div>
 									<div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -6607,7 +7201,7 @@ export default function AdminMigrationPage() {
 												variant="outline"
 												className="h-8 border-orange-200 bg-orange-50 px-2.5 text-xs text-orange-800 hover:bg-orange-100"
 												aria-label={`Resume ${group.id.toUpperCase()} workbook import`}
-												onClick={() => resumeWorkbookModal(group)}>
+												onClick={() => resumeWorkbookPage(group)}>
 												<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
 												Resume
 											</Button>
@@ -6617,12 +7211,26 @@ export default function AdminMigrationPage() {
 											size="sm"
 											variant="outline"
 											className="h-8 px-2.5 text-xs"
-											aria-label={`Upload ${group.id.toUpperCase()} workbook`}
-											onClick={() => openWorkbookModal(group.id)}
+											aria-label={`Open ${group.id.toUpperCase()} workbook`}
+											onClick={() => openWorkbookPage(group.id)}
 											disabled={extractWorkbook.isPending}>
-											<Upload className="mr-1.5 h-3.5 w-3.5" />
-											{`Upload ${group.id.toUpperCase()}`}
+											<FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+											Open
 										</Button>
+										{group.id !== "dm4" ? (
+											<Button
+												type="button"
+												size="sm"
+												className="h-8 px-2.5 text-xs"
+												aria-label={`Upload ${group.id.toUpperCase()} workbook`}
+												onClick={() =>
+													openWorkbookPage(group.id, { upload: true })
+												}
+												disabled={extractWorkbook.isPending}>
+												<Upload className="mr-1.5 h-3.5 w-3.5" />
+												Upload
+											</Button>
+										) : null}
 									</div>
 								</div>
 								<div className="divide-y divide-gray-100">
@@ -6698,7 +7306,7 @@ export default function AdminMigrationPage() {
 															variant="outline"
 															className="h-8 px-2.5 text-xs"
 															onClick={() =>
-																openWorkbookModal(group.id)
+																openWorkbookPage(group.id)
 															}>
 															<FileText className="mr-1.5 h-3.5 w-3.5" />
 															Open workbook
@@ -6778,531 +7386,28 @@ export default function AdminMigrationPage() {
 					</Button>
 				</div>
 			</section>
+			</>
+			)}
 
+
+			{/* Upload-only modal (DM1–DM3). Workbook detail is a full page. */}
 			<Modal
-				open={Boolean(activeWorkbookGroup)}
+				open={isUploadModalOpen}
 				onOpenChange={(open: boolean) => {
-					if (!open) closeWorkbookModal();
+					if (!open) closeWorkbookUploadModal();
 				}}
-				title={activeWorkbookGroup?.title || "Workbook import"}
-				className={ADMIN_MIGRATION_WORKBOOK_MODAL_CLASS}>
-				{activeWorkbookGroup && (
-					<div className="space-y-3">
-						<div className="rounded-lg border border-gray-200 bg-white p-3">
-							<div className="flex flex-wrap items-center justify-between gap-3">
-								<div className="flex min-w-0 items-center gap-2">
-									<FileSpreadsheet className="h-4 w-4 shrink-0 text-gray-500" />
-									<p className="truncate text-sm font-semibold text-gray-950">
-										{activeWorkbookGroup.fileName}
-									</p>
-								</div>
-								{activeWorkbookGroup.id !== "dm4" ? (
-						<Button
-							type="button"
-							size="sm"
-							variant="outline"
-							className="h-8 px-2.5 text-xs"
-							disabled={
-								downloadingTemplateWorkbookId === activeWorkbookGroup.id
-							}
-							onClick={() => downloadWorkbookTemplate(activeWorkbookGroup)}>
-							{downloadingTemplateWorkbookId === activeWorkbookGroup.id ? (
-								<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-							) : (
-								<Download className="mr-1.5 h-3.5 w-3.5" />
-							)}
-							{downloadingTemplateWorkbookId === activeWorkbookGroup.id
-								? "Downloading..."
-								: "Download .xlsx template"}
-						</Button>
-								) : null}
-							</div>
-						</div>
-
-						<div className="grid gap-3 lg:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]">
-							<div className="space-y-3">
-								{renderSourceInputPanel(activeWorkbookGroup)}
-								{activeWorkbookGroup.id !== "dm4"
-									? renderWorkbookUploadPanel(activeWorkbookGroup)
-									: null}
-								<div className="rounded-lg border border-gray-200 bg-white">
-									<div className="divide-y divide-gray-100">
-										{activeWorkbookGroup.steps.map((step, index) =>
-											renderWorkbookRow(activeWorkbookGroup, step, index),
-										)}
-									</div>
-									{renderGeneratedWorkbookRows(activeWorkbookGroup)}
-								</div>
-
-								{activeWorkbookGroup.id === "dm4" ? (
-									<div className="rounded-lg border border-gray-200 bg-white p-3">
-										<div className="flex flex-wrap items-center justify-between gap-2">
-											<p className="text-sm font-semibold text-gray-950">
-												DM4 workbook files
-											</p>
-											<Badge
-												variant="outline"
-												className="rounded-md border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-700">
-												{dm4SourcePaths.length} files
-											</Badge>
-										</div>
-										<div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-											<input
-												value={dm4SourcePathDraft}
-												onChange={(event) =>
-													setDm4SourcePathDraft(event.target.value)
-												}
-												onKeyDown={(event) => {
-													if (event.key === "Enter") {
-														event.preventDefault();
-														addDm4SourcePath(dm4SourcePathDraft);
-													}
-												}}
-												className="h-9 min-w-0 rounded-md border border-gray-200 bg-white px-3 font-mono text-xs text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-300 focus:ring-2 focus:ring-orange-100"
-												placeholder="docs/2026-20260527T124252Z-3-001/2026"
-											/>
-											<Button
-												type="button"
-												size="sm"
-												variant="outline"
-												className="h-9 px-2.5 text-xs"
-												onClick={() =>
-													addDm4SourcePath(dm4SourcePathDraft)
-												}>
-												<Plus className="mr-1.5 h-3.5 w-3.5" />
-												Add
-											</Button>
-										</div>
-										<div className="mt-3 rounded-md border border-gray-100 bg-gray-50">
-											<div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 text-xs">
-												<span className="truncate font-medium text-gray-800">
-													{dm4SourcePaths.length || 0} workbook files
-												</span>
-												<button
-													type="button"
-													className="rounded-md px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-white hover:text-gray-900"
-													onClick={restoreDm4DefaultSourcePaths}>
-													Use defaults
-												</button>
-											</div>
-											<div className="max-h-40 divide-y divide-gray-100 overflow-y-auto">
-												{dm4SourcePaths.map((path, index) => (
-													<div
-														key={`${path}-${index}`}
-														className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-xs">
-														<div className="min-w-0">
-															<div className="flex min-w-0 items-center gap-1.5">
-																<p className="truncate font-medium text-gray-800">
-																	{getDm4WorkbookFileName(path)}
-																</p>
-																{isDm4ApprovedOvertimeSource(path) ? (
-																	<Badge
-																		variant="outline"
-																		className="shrink-0 rounded-md border-emerald-200 bg-emerald-50 px-1.5 py-0 text-[10px] text-emerald-700">
-																		DM4.3 approved OT
-																	</Badge>
-																) : null}
-															</div>
-															<p className="truncate font-mono text-[10px] text-gray-500">
-																{path}
-															</p>
-														</div>
-														<button
-															type="button"
-															className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 hover:bg-white hover:text-gray-700"
-															aria-label={`Remove workbook file ${index + 1}`}
-															onClick={() =>
-																removeDm4SourcePath(index)
-															}>
-															<X className="h-3.5 w-3.5" />
-														</button>
-													</div>
-												))}
-											</div>
-										</div>
-										<div className="mt-3 flex justify-end">
-											<Button
-												type="button"
-												size="sm"
-												className="h-8 px-2.5 text-xs"
-												disabled={isLoadingDm4Proof}
-												onClick={() => void startDm4MigrationRun()}>
-												{isLoadingDm4Proof ? (
-													<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-												) : (
-													<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
-												)}
-												{isLoadingDm4Proof
-													? "Importing DM4..."
-													: "Import DM4 attendance"}
-											</Button>
-										</div>
-									</div>
-								) : null}
-							</div>
-
-							<div className="rounded-lg border border-gray-200 bg-white">
-								<div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
-									<div className="flex min-w-0 flex-wrap items-center gap-2">
-										<p className="text-xs font-semibold text-gray-900">
-											Import report
-										</p>
-										<Badge
-											variant="outline"
-											className="rounded-md border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-700">
-											{activeWorkbookReport?.status ||
-												activeWorkbookBottomStatus}
-										</Badge>
-									</div>
-									<div className="flex shrink-0 flex-wrap items-center gap-2">
-										{canRetryDm4Run ? (
-											<Button
-												type="button"
-												size="sm"
-												variant="outline"
-												className="h-8 border-orange-200 bg-orange-50 px-2.5 text-xs text-orange-800 hover:bg-orange-100"
-												disabled={isRetryingDm4Run}
-												onClick={() => void retryDm4MigrationRun()}>
-												{isRetryingDm4Run ? (
-													<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-												) : (
-													<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
-												)}
-												Retry DM4
-											</Button>
-										) : null}
-									<Button
-										type="button"
-										size="sm"
-										variant="outline"
-										className="h-8 px-2.5 text-xs"
-										disabled={
-											!activeWorkbookReport ||
-											downloadingReportRunIds.has(
-												activeWorkbookReport.runId,
-											)
-										}
-										onClick={() =>
-											activeWorkbookReport &&
-											void handleMigrationReportDownload(activeWorkbookReport)
-										}>
-										{activeWorkbookReport &&
-										downloadingReportRunIds.has(
-											activeWorkbookReport.runId,
-										) ? (
-											<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-										) : (
-											<Download className="mr-1.5 h-3.5 w-3.5" />
-										)}
-										{activeWorkbookReport &&
-										downloadingReportRunIds.has(activeWorkbookReport.runId)
-											? "Downloading..."
-											: "Download report"}
-									</Button>
-									</div>
-								</div>
-								<div className="grid grid-cols-2 gap-px border-b border-gray-100 bg-gray-100 text-xs md:grid-cols-4 xl:grid-cols-7">
-									{[
-										[
-											"Elapsed",
-											formatElapsed(
-												getWorkbookReportElapsedMs(activeWorkbookReport),
-											),
-										],
-										["Rows", activeWorkbookDisplayTotals.totalRows],
-										["Created", activeWorkbookDisplayTotals.created],
-										["Updated", activeWorkbookDisplayTotals.updated],
-										["Skipped", activeWorkbookDisplayTotals.skipped],
-										["Blocked", activeWorkbookDisplayTotals.blocked],
-										["Failed", activeWorkbookDisplayTotals.failed],
-									].map(([label, value]) => (
-										<div key={label} className="bg-white px-3 py-2">
-											<div className="text-[11px] text-gray-500">{label}</div>
-											<div className="font-semibold text-gray-950">
-												{value}
-											</div>
-										</div>
-									))}
-								</div>
-								<div className="overflow-x-auto">
-									<table className="min-w-[720px] text-left text-xs">
-										<thead className="border-b border-gray-100 bg-gray-50 text-[11px] text-gray-500">
-											<tr>
-												<th className="px-3 py-2 font-medium">Sheet</th>
-												<th className="px-3 py-2 font-medium">Status</th>
-												<th className="px-3 py-2 text-right font-medium">
-													Rows
-												</th>
-												<th className="px-3 py-2 text-right font-medium">
-													Created
-												</th>
-												<th className="px-3 py-2 text-right font-medium">
-													Updated
-												</th>
-												<th className="px-3 py-2 text-right font-medium">
-													Failed
-												</th>
-												<th className="px-3 py-2 font-medium">Issue</th>
-											</tr>
-										</thead>
-										<tbody className="divide-y divide-gray-100">
-											{activeWorkbookSourceReportRows.map((sheet) => (
-												<tr key={sheet.sheetName}>
-													<td className="whitespace-nowrap px-3 py-2 font-medium text-gray-900">
-														{sheet.sheetName}
-													</td>
-													<td className="whitespace-nowrap px-3 py-2">
-														<Badge
-															variant="outline"
-															className={`rounded-md px-2 py-0.5 text-[11px] ${WORKBOOK_STATUS_CLASS[sheet.status]}`}>
-															{sheet.status}
-														</Badge>
-													</td>
-													<td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
-														{sheet.totalRows}
-													</td>
-													<td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
-														{sheet.created}
-													</td>
-													<td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
-														{sheet.updated}
-													</td>
-													<td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
-														{sheet.failed}
-													</td>
-													<td className="min-w-[180px] px-3 py-2 text-gray-500">
-														{sheet.firstError || "-"}
-													</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-								{activeWorkbookGeneratedReportRows.length > 0 ? (
-									<Collapsible
-										open={Boolean(groupGeneratedOpen[activeWorkbookGroup.id])}
-										onOpenChange={(open: boolean) =>
-											setGroupGeneratedOpen((current) =>
-												current[activeWorkbookGroup.id] === open
-													? current
-													: {
-															...current,
-															[activeWorkbookGroup.id]: open,
-														},
-											)
-										}>
-										<CollapsibleTrigger asChild>
-											<button
-												type="button"
-												className="flex w-full items-center justify-between gap-3 border-t border-gray-100 px-3 py-2 text-left">
-												<div className="min-w-0">
-													<span className="block truncate text-xs font-semibold text-gray-900">
-														Essential generated work
-													</span>
-													<span className="block truncate text-[11px] text-gray-500">
-														Not source workbook sheets, but required for DM3
-														closure
-													</span>
-												</div>
-												<div className="flex shrink-0 items-center gap-2">
-													<Badge
-														variant="outline"
-														className="rounded-md border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-700">
-														{activeWorkbookGeneratedReportRows.length} rows
-													</Badge>
-													<ChevronDown
-														className={`h-4 w-4 text-gray-500 transition-transform ${
-															groupGeneratedOpen[activeWorkbookGroup.id]
-																? "rotate-180"
-																: ""
-														}`}
-													/>
-												</div>
-											</button>
-										</CollapsibleTrigger>
-										<CollapsibleContent>
-											<div className="overflow-x-auto border-t border-gray-100">
-												<table className="min-w-[720px] text-left text-xs">
-													<tbody className="divide-y divide-gray-100">
-														{activeWorkbookGeneratedReportRows.map((sheet) => (
-															<tr key={sheet.sheetName}>
-																<td className="whitespace-nowrap px-3 py-2 font-medium text-gray-900">
-																	{sheet.sheetName}
-																</td>
-																<td className="whitespace-nowrap px-3 py-2">
-																	<Badge
-																		variant="outline"
-																		className={`rounded-md px-2 py-0.5 text-[11px] ${WORKBOOK_STATUS_CLASS[sheet.status]}`}>
-																		{sheet.status}
-																	</Badge>
-																</td>
-																<td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
-																	{sheet.totalRows}
-																</td>
-																<td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
-																	{sheet.created}
-																</td>
-																<td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
-																	{sheet.updated}
-																</td>
-																<td className="whitespace-nowrap px-3 py-2 text-right text-gray-700">
-																	{sheet.failed}
-																</td>
-																<td className="min-w-[180px] px-3 py-2 text-gray-500">
-																	{sheet.firstError || "-"}
-																</td>
-															</tr>
-														))}
-													</tbody>
-												</table>
-											</div>
-										</CollapsibleContent>
-									</Collapsible>
-								) : null}
-								{activeWorkbookLiveEvents.length > 0 ? (
-									<div className="border-t border-gray-100">
-										<div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-											<p className="text-xs font-semibold text-gray-900">
-												Row evidence log
-											</p>
-											<Badge
-												variant="outline"
-												className="rounded-md border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-700">
-												{activeWorkbookLiveEvents.length} latest rows
-											</Badge>
-										</div>
-										<div className="max-h-72 overflow-auto border-t border-gray-100">
-											<table className="min-w-[980px] text-left text-[11px]">
-												<thead className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50 text-gray-500">
-													<tr>
-														<th className="px-3 py-1.5 font-medium">
-															Time
-														</th>
-														<th className="px-3 py-1.5 font-medium">
-															Sheet
-														</th>
-														<th className="px-3 py-1.5 font-medium">
-															Row
-														</th>
-														<th className="px-3 py-1.5 font-medium">
-															Employee
-														</th>
-														<th className="px-3 py-1.5 font-medium">
-															Date
-														</th>
-														<th className="px-3 py-1.5 font-medium">
-															Event
-														</th>
-														<th className="px-3 py-1.5 font-medium">
-															Evidence
-														</th>
-													</tr>
-												</thead>
-												<tbody className="divide-y divide-gray-100 bg-white">
-													{activeWorkbookLiveEvents.map((event) => {
-														const eventBadgeStatus =
-															getEventBadgeStatus(event);
-														return (
-														<tr key={event.id}>
-															<td className="whitespace-nowrap px-3 py-1.5 text-gray-500">
-																{formatReportTimestamp(event.at)}
-															</td>
-															<td className="max-w-[180px] truncate px-3 py-1.5 font-medium text-gray-900">
-																{event.sheetName ||
-																	event.stepCode ||
-																	"-"}
-															</td>
-															<td className="whitespace-nowrap px-3 py-1.5 text-gray-700">
-																{getEventRowLabel(event)}
-															</td>
-															<td className="max-w-[240px] truncate px-3 py-1.5 text-gray-800">
-																{getEventEmployeeLabel(event)}
-															</td>
-															<td className="whitespace-nowrap px-3 py-1.5 text-gray-700">
-																{getEventDateLabel(event)}
-															</td>
-															<td className="whitespace-nowrap px-3 py-1.5">
-																<Badge
-																	variant="outline"
-																	className={`rounded-md px-2 py-0.5 text-[11px] ${WORKBOOK_STATUS_CLASS[eventBadgeStatus] || "border-gray-200 bg-gray-50 text-gray-700"}`}>
-																	{event.eventType ||
-																		event.status}
-																</Badge>
-															</td>
-															<td className="min-w-[320px] px-3 py-1.5 text-gray-700">
-																{getEventEvidenceLabel(event) ||
-																	"-"}
-															</td>
-														</tr>
-														);
-													})}
-												</tbody>
-											</table>
-										</div>
-									</div>
-								) : null}
-							</div>
-						</div>
-
-						<div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
-							<div className="flex min-w-0 items-center justify-between gap-2">
-								<div className="flex min-w-0 items-center gap-2">
-									<Badge
-										variant="outline"
-										className={`rounded-md px-2 py-0.5 text-[11px] ${WORKBOOK_STATUS_CLASS[activeWorkbookBottomStatus]}`}>
-										{activeWorkbookBottomStatus}
-									</Badge>
-									<span className="min-w-0 truncate text-xs text-gray-700">
-										{activeWorkbookBottomMessage}
-									</span>
-								</div>
-								<div className="flex shrink-0 flex-wrap items-center gap-2">
-									{canRetryDm4Run ? (
-										<Button
-											type="button"
-											size="sm"
-											variant="outline"
-											className="h-8 border-orange-200 bg-orange-50 px-2.5 text-xs text-orange-800 hover:bg-orange-100"
-											disabled={isRetryingDm4Run}
-											onClick={() => void retryDm4MigrationRun()}>
-											{isRetryingDm4Run ? (
-												<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-											) : (
-												<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
-											)}
-											Retry DM4
-										</Button>
-									) : null}
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									className="h-8 px-2.5 text-xs"
-									disabled={
-										!activeWorkbookReport ||
-										downloadingReportRunIds.has(activeWorkbookReport.runId)
-									}
-									onClick={() =>
-										activeWorkbookReport &&
-										void handleMigrationReportDownload(activeWorkbookReport)
-									}>
-									{activeWorkbookReport &&
-									downloadingReportRunIds.has(activeWorkbookReport.runId) ? (
-										<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-									) : (
-										<Download className="mr-1.5 h-3.5 w-3.5" />
-									)}
-									{activeWorkbookReport &&
-									downloadingReportRunIds.has(activeWorkbookReport.runId)
-										? "Downloading..."
-										: "Download report"}
-								</Button>
-								</div>
-							</div>
-						</div>
-					</div>
-				)}{" "}
+				title={
+					activeWorkbookGroup
+						? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
+						: "Upload workbook"
+				}
+				description="Select the .xlsx workbook for this migration stage."
+				className={HR_MODAL_STANDARD_CLASS}>
+				{activeWorkbookGroup && activeWorkbookGroup.id !== "dm4"
+					? renderWorkbookUploadPanel(activeWorkbookGroup)
+					: null}
 			</Modal>
+
 
 			<GenericImportModal
 				open={action === "import-departments"}

@@ -122,6 +122,8 @@ export interface DataTableProps<T> {
 	filterColumns?: 1 | 2; // Layout for the advanced filter popover
 	filterValues?: Record<string, string>; // Controlled advanced filter values for server-side lists
 	rowClassName?: (item: T) => string; // Function to determine row className based on item
+	/** When set, entire data rows become clickable (actions column still stops propagation). */
+	onRowClick?: (item: T) => void;
 	// Grouping props
 	groupBy?: GroupConfig; // Configuration for grouping data
 	// Server-side props
@@ -177,6 +179,7 @@ const DataTable = <T extends Record<string, any>>({
 	addButtonStyle,
 	noCard = false, // Default to false for backward compatibility
 	rowClassName,
+	onRowClick,
 	customFilters,
 	filterPopoverExtra,
 	headerActions,
@@ -588,8 +591,22 @@ const DataTable = <T extends Record<string, any>>({
 			{paginatedItems.map((item, index) => (
 				<tr
 					key={item.id || index}
+					role={onRowClick ? "button" : undefined}
+					tabIndex={onRowClick ? 0 : undefined}
+					onClick={onRowClick ? () => onRowClick(item) : undefined}
+					onKeyDown={
+						onRowClick
+							? (event) => {
+									if (event.key === "Enter" || event.key === " ") {
+										event.preventDefault();
+										onRowClick(item);
+									}
+								}
+							: undefined
+					}
 					className={cn(
 						"hover:bg-neutral-50/50 transition-colors group/row",
+						onRowClick && "cursor-pointer",
 						rowClassName?.(item),
 					)}>
 					{visibleColumns.map((column) => (
@@ -611,7 +628,10 @@ const DataTable = <T extends Record<string, any>>({
 						</td>
 					))}
 					{hasActionsColumn && (
-						<td className={cn("px-4 py-4", actionColumnClassName)}>
+						<td
+							className={cn("px-4 py-4", actionColumnClassName)}
+							onClick={(event) => event.stopPropagation()}
+							onKeyDown={(event) => event.stopPropagation()}>
 							<div className="flex justify-center">
 								{renderActions ? renderActions(item) : renderDefaultActions(item)}
 							</div>
@@ -1242,8 +1262,30 @@ const DataTable = <T extends Record<string, any>>({
 														{group.items.map((item, index) => (
 															<tr
 																key={item.id || index}
+																role={onRowClick ? "button" : undefined}
+																tabIndex={onRowClick ? 0 : undefined}
+																onClick={
+																	onRowClick
+																		? () => onRowClick(item)
+																		: undefined
+																}
+																onKeyDown={
+																	onRowClick
+																		? (event) => {
+																				if (
+																					event.key ===
+																						"Enter" ||
+																					event.key === " "
+																				) {
+																					event.preventDefault();
+																					onRowClick(item);
+																				}
+																			}
+																		: undefined
+																}
 																className={cn(
 																	"hover:bg-neutral-50/50 transition-colors group/row",
+																	onRowClick && "cursor-pointer",
 																	rowClassName?.(item),
 																)}>
 																{visibleColumns.map((column) => (
@@ -1285,7 +1327,13 @@ const DataTable = <T extends Record<string, any>>({
 																		className={cn(
 																			"px-4 py-4",
 																			actionColumnClassName,
-																		)}>
+																		)}
+																		onClick={(event) =>
+																			event.stopPropagation()
+																		}
+																		onKeyDown={(event) =>
+																			event.stopPropagation()
+																		}>
 																		<div className="flex justify-center">
 																			{renderActions
 																				? renderActions(item)
@@ -1376,7 +1424,30 @@ const DataTable = <T extends Record<string, any>>({
 												{group.items.map((item, index) => (
 													<div
 														key={item.id || index}
-														className="p-4 relative group active:bg-neutral-50 transition-colors">
+														role={onRowClick ? "button" : undefined}
+														tabIndex={onRowClick ? 0 : undefined}
+														onClick={
+															onRowClick
+																? () => onRowClick(item)
+																: undefined
+														}
+														onKeyDown={
+															onRowClick
+																? (event) => {
+																		if (
+																			event.key === "Enter" ||
+																			event.key === " "
+																		) {
+																			event.preventDefault();
+																			onRowClick(item);
+																		}
+																	}
+																: undefined
+														}
+														className={cn(
+															"p-4 relative group active:bg-neutral-50 transition-colors",
+															onRowClick && "cursor-pointer",
+														)}>
 														<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 															<div className="flex-1 min-w-0">
 																<div className="flex items-center gap-2 mb-0.5">
@@ -1432,7 +1503,14 @@ const DataTable = <T extends Record<string, any>>({
 																onDelete ||
 																onView ||
 																renderActions) && (
-																<div className="flex items-center justify-start sm:justify-end">
+																<div
+																	className="flex items-center justify-start sm:justify-end"
+																	onClick={(event) =>
+																		event.stopPropagation()
+																	}
+																	onKeyDown={(event) =>
+																		event.stopPropagation()
+																	}>
 																	{renderActions
 																		? renderActions(item)
 																		: renderDefaultActions(
@@ -1457,8 +1535,27 @@ const DataTable = <T extends Record<string, any>>({
 									return (
 										<div
 											key={item.id || index}
+											role={onRowClick ? "button" : undefined}
+											tabIndex={onRowClick ? 0 : undefined}
+											onClick={
+												onRowClick ? () => onRowClick(item) : undefined
+											}
+											onKeyDown={
+												onRowClick
+													? (event) => {
+															if (
+																event.key === "Enter" ||
+																event.key === " "
+															) {
+																event.preventDefault();
+																onRowClick(item);
+															}
+														}
+													: undefined
+											}
 											className={cn(
 												"p-4 relative group active:bg-neutral-50 transition-colors",
+												onRowClick && "cursor-pointer",
 												index !== paginatedItems.length - 1 &&
 													"border-b border-neutral-100",
 											)}>
@@ -1516,7 +1613,12 @@ const DataTable = <T extends Record<string, any>>({
 													onDelete ||
 													onView ||
 													renderActions) && (
-													<div className="flex items-center justify-start sm:justify-end">
+													<div
+														className="flex items-center justify-start sm:justify-end"
+														onClick={(event) => event.stopPropagation()}
+														onKeyDown={(event) =>
+															event.stopPropagation()
+														}>
 														{renderActions
 															? renderActions(item)
 															: renderDefaultActions(item)}

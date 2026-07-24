@@ -882,6 +882,16 @@ CREATE TABLE "employee_payrolls" (
     "paidAt" TIMESTAMP(3),
     "paymentMethod" TEXT,
     "referenceNumber" TEXT,
+    "isPublished" BOOLEAN NOT NULL DEFAULT false,
+    "publishedAt" TIMESTAMP(3),
+    "publishedBy" TEXT,
+    "payslipGeneratedAt" TIMESTAMP(3),
+    "payslipReleasedAt" TIMESTAMP(3),
+    "payslipReleasedBy" TEXT,
+    "hasPaymentIssue" BOOLEAN NOT NULL DEFAULT false,
+    "paymentIssueAt" TIMESTAMP(3),
+    "paymentIssueBy" TEXT,
+    "paymentIssueNote" TEXT,
     "snapshotLockedAt" TIMESTAMP(3),
     "snapshotLockedBy" TEXT,
     "snapshotLockReason" TEXT,
@@ -1088,6 +1098,7 @@ CREATE TABLE "payroll_periods" (
     "cutoffDay" INTEGER,
     "notes" TEXT,
     "generationMetadata" JSONB,
+    "payslipReleaseAttachmentUrl" TEXT,
     "processedBy" TEXT,
     "processedAt" TIMESTAMP(3),
     "isDeleted" BOOLEAN NOT NULL DEFAULT false,
@@ -2042,6 +2053,9 @@ CREATE INDEX "employee_payrolls_organizationId_employeeId_isDeleted_idx" ON "emp
 
 -- CreateIndex
 CREATE INDEX "employee_payrolls_organizationId_payrollPeriodId_isPaid_isDeleted_idx" ON "employee_payrolls"("organizationId", "payrollPeriodId", "isPaid", "isDeleted");
+
+-- CreateIndex
+CREATE INDEX "employee_payrolls_organizationId_payrollPeriodId_isPublished_isDeleted_idx" ON "employee_payrolls"("organizationId", "payrollPeriodId", "isPublished", "isDeleted");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "employee_payrolls_employeeId_payrollPeriodId_key" ON "employee_payrolls"("employeeId", "payrollPeriodId");

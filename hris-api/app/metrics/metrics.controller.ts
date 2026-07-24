@@ -2851,10 +2851,11 @@ async function generatePayrollPeriodMetric(
 				...(sectionId ? { sectionId } : {}),
 			};
 			const detailLimitRaw = Number(whereFilter.limit || 0);
+			// Cap list payload size, but keep high enough for payroll issues modal.
 			const detailLimit =
 				Number.isFinite(detailLimitRaw) && detailLimitRaw > 0
-					? Math.min(Math.floor(detailLimitRaw), 25)
-					: undefined;
+					? Math.min(Math.floor(detailLimitRaw), 500)
+					: 100;
 			const employeeBlockerSelect = {
 				id: true,
 				employeeId: true,
@@ -2901,56 +2902,42 @@ async function generatePayrollPeriodMetric(
 					orderBy: {
 						updatedAt: "desc",
 					},
+					take: 1,
 				},
 			} as const;
 
-			// Get payroll-scope employees for blocker details
-			const employees = detailLimit
-				? await prisma.employee.findMany({
-						where: {
-							...payrollEmployeeWhere,
-							OR: [
-								{ basicSalary: { lte: 0 } },
-								{ embeddedSchedule: { equals: Prisma.DbNull } },
-								{
-									timesheets: {
-										none: {
-											payrollPeriodId,
-											isDeleted: false,
-										},
-									},
-								},
-								{
-									timesheets: {
-										some: {
-											payrollPeriodId,
-											isDeleted: false,
-											status: { in: ["DRAFT", "SUBMITTED", "REJECTED", "REVISED", "APPROVED"] },
-										},
-									},
-								},
-							],
-						},
-						select: employeeBlockerSelect,
-						orderBy: { updatedAt: "desc" },
-						take: Math.max(detailLimit * 8, detailLimit),
-					})
-				: await prisma.employee.findMany({
-						where: payrollEmployeeWhere,
-						select: employeeBlockerSelect,
+			const buildMissingFields = (emp: {
+				basicSalary?: number | null;
+				embeddedSchedule?: unknown;
+			}) => {
+				const missing: any[] = [];
+				if (!emp.embeddedSchedule) {
+					missing.push({
+						field: "Work Schedule",
+						description:
+							"Employee embedded schedule is not configured. Schedule is required for timekeeping and payroll processing.",
+						severity: "critical",
 					});
+				}
+				if (!emp.basicSalary || emp.basicSalary <= 0) {
+					missing.push({
+						field: "Basic Salary",
+						description:
+							"Basic salary is not configured or is invalid. Salary is required for payroll processing.",
+						severity: "critical",
+					});
+				}
+				return missing;
+			};
 
-			const missingInfo: any[] = [];
-			const timesheetNotSubmitted: any[] = [];
-			const pendingApproval: any[] = [];
-			const correctionNeeded: any[] = [];
-			const readyForPayroll: any[] = [];
-			const blockedEmployeeIds = new Set<string>();
-
-			employees.forEach((emp) => {
+			const toTimesheetBlocker = (
+				emp: any,
+				blockerType: "not_submitted" | "pending_approval" | "correction_needed" | "ready_for_payroll",
+			) => {
 				const employeeName = getEmployeeName(emp);
 				const managerName = emp.reportTo ? getEmployeeName(emp.reportTo) : null;
-				const baseTimesheetPayload = {
+				const timesheet = emp.timesheets?.[0];
+				return {
 					id: emp.id,
 					employeeId: emp.employeeId,
 					name: employeeName,
@@ -2961,34 +2948,109 @@ async function generatePayrollPeriodMetric(
 					managerEmployeeId: emp.reportTo?.employeeId || null,
 					periodStart: payrollPeriod.startDate,
 					periodEnd: payrollPeriod.endDate,
+					timesheetId: timesheet?.id || null,
+					status: timesheet?.status || "MISSING",
+					blockerType,
 				};
-				const timesheet = emp.timesheets[0];
+			};
 
-				// Check for timekeeping-related required fields based on schema
-				const missing: any[] = [];
+			// Query each issue type directly so list rows match payrollRunSummary counts.
+			// Previous implementation sampled a broad OR set by updatedAt and often returned
+			// zero missing-info rows even when the summary count was non-zero.
+			const missingInfoWhere = {
+				...payrollEmployeeWhere,
+				OR: [
+					{ basicSalary: { lte: 0 } },
+					{ embeddedSchedule: { equals: Prisma.DbNull } },
+				],
+			};
+			const notSubmittedWhere = {
+				...payrollEmployeeWhere,
+				OR: [
+					{
+						timesheets: {
+							none: {
+								payrollPeriodId,
+								isDeleted: false,
+							},
+						},
+					},
+					{
+						timesheets: {
+							some: {
+								payrollPeriodId,
+								isDeleted: false,
+								status: "DRAFT",
+							},
+						},
+					},
+				],
+			};
 
-				// DB-native schedule presence: embedded schedule copy is the persisted source of truth
-				if (!emp.embeddedSchedule) {
-					missing.push({
-						field: "Work Schedule",
-						description:
-							"Employee embedded schedule is not configured. Schedule is required for timekeeping and payroll processing.",
-						severity: "critical",
-					});
-				}
+			const [
+				missingInfoEmployees,
+				timesheetNotSubmittedEmployees,
+				pendingApprovalEmployees,
+				correctionNeededEmployees,
+				blockedEmployeesTotal,
+				semiMonthlyEmployeesTotal,
+				missingInfoTotal,
+			] = await Promise.all([
+				prisma.employee.findMany({
+					where: missingInfoWhere,
+					select: employeeBlockerSelect,
+					orderBy: [{ employeeId: "asc" }, { updatedAt: "desc" }],
+					take: detailLimit,
+				}),
+				prisma.employee.findMany({
+					where: notSubmittedWhere,
+					select: employeeBlockerSelect,
+					orderBy: [{ employeeId: "asc" }, { updatedAt: "desc" }],
+					take: detailLimit,
+				}),
+				prisma.employee.findMany({
+					where: {
+						...payrollEmployeeWhere,
+						timesheets: {
+							some: {
+								payrollPeriodId,
+								isDeleted: false,
+								status: "SUBMITTED",
+							},
+						},
+					},
+					select: employeeBlockerSelect,
+					orderBy: [{ employeeId: "asc" }, { updatedAt: "desc" }],
+					take: detailLimit,
+				}),
+				prisma.employee.findMany({
+					where: {
+						...payrollEmployeeWhere,
+						timesheets: {
+							some: {
+								payrollPeriodId,
+								isDeleted: false,
+								status: { in: ["REJECTED", "REVISED"] },
+							},
+						},
+					},
+					select: employeeBlockerSelect,
+					orderBy: [{ employeeId: "asc" }, { updatedAt: "desc" }],
+					take: detailLimit,
+				}),
+				prisma.employee.count({ where: notSubmittedWhere }),
+				prisma.employee.count({ where: payrollEmployeeWhere }),
+				prisma.employee.count({ where: missingInfoWhere }),
+			]);
 
-				// Basic salary is required for payroll (should already be filtered, but double-check)
-				if (!emp.basicSalary || emp.basicSalary <= 0) {
-					missing.push({
-						field: "Basic Salary",
-						description:
-							"Basic salary is not configured or is invalid. Salary is required for payroll processing.",
-						severity: "critical",
-					});
-				}
-
-				if (missing.length > 0) {
-					missingInfo.push({
+			const missingInfo = missingInfoEmployees
+				.map((emp) => {
+					const missingFields = buildMissingFields(emp);
+					if (missingFields.length === 0) return null;
+					const employeeName = getEmployeeName(emp);
+					const managerName = emp.reportTo ? getEmployeeName(emp.reportTo) : null;
+					const timesheet = emp.timesheets?.[0];
+					return {
 						id: emp.id,
 						employeeId: emp.employeeId,
 						name: employeeName,
@@ -2999,80 +3061,21 @@ async function generatePayrollPeriodMetric(
 						managerEmployeeId: emp.reportTo?.employeeId || null,
 						timesheetId: timesheet?.id || null,
 						status: timesheet?.status || "MISSING",
-						missingFields: missing,
-					});
-				}
+						missingFields,
+					};
+				})
+				.filter(Boolean);
 
-				// Check timesheet status
-				if (!timesheet || timesheet.status === "DRAFT") {
-					blockedEmployeeIds.add(emp.id);
-					timesheetNotSubmitted.push({
-						...baseTimesheetPayload,
-						timesheetId: timesheet?.id || null,
-						status: timesheet?.status || "MISSING",
-						blockerType: "not_submitted",
-					});
-				} else if (timesheet.status === "SUBMITTED") {
-					pendingApproval.push({
-						...baseTimesheetPayload,
-						timesheetId: timesheet.id,
-						status: timesheet.status,
-						blockerType: "pending_approval",
-					});
-				} else if (timesheet.status === "REJECTED" || timesheet.status === "REVISED") {
-					correctionNeeded.push({
-						...baseTimesheetPayload,
-						timesheetId: timesheet.id,
-						status: timesheet.status,
-						blockerType: "correction_needed",
-					});
-				} else if (timesheet.status === "APPROVED") {
-					readyForPayroll.push({
-						...baseTimesheetPayload,
-						timesheetId: timesheet.id,
-						status: timesheet.status,
-						blockerType: "ready_for_payroll",
-					});
-				}
-			});
-
-			if (detailLimit) {
-				missingInfo.splice(detailLimit);
-				timesheetNotSubmitted.splice(detailLimit);
-				pendingApproval.splice(detailLimit);
-				correctionNeeded.splice(detailLimit);
-				readyForPayroll.splice(detailLimit);
-			}
-
-			const [blockedEmployeesTotal, semiMonthlyEmployeesTotal] = detailLimit
-				? await Promise.all([
-						prisma.employee.count({
-							where: {
-								...payrollEmployeeWhere,
-								OR: [
-									{
-										timesheets: {
-											none: {
-												payrollPeriodId,
-												isDeleted: false,
-											},
-										},
-									},
-									{
-										timesheets: {
-											some: {
-												payrollPeriodId,
-												isDeleted: false,
-												status: "DRAFT",
-											},
-										},
-									},
-								],
-							},
-						}),
-						prisma.employee.count({ where: payrollEmployeeWhere }),
-					])
-				: [blockedEmployeeIds.size, employees.length];
+			const timesheetNotSubmitted = timesheetNotSubmittedEmployees.map((emp) =>
+				toTimesheetBlocker(emp, "not_submitted"),
+			);
+			const pendingApproval = pendingApprovalEmployees.map((emp) =>
+				toTimesheetBlocker(emp, "pending_approval"),
+			);
+			const correctionNeeded = correctionNeededEmployees.map((emp) =>
+				toTimesheetBlocker(emp, "correction_needed"),
+			);
+			const readyForPayroll: any[] = [];
 			const includedEmployeesTotal = Math.max(
 				0,
 				semiMonthlyEmployeesTotal - blockedEmployeesTotal,
@@ -3093,7 +3096,10 @@ async function generatePayrollPeriodMetric(
 				// Unique employees impacted by hard blockers (unsubmitted only).
 				blockedEmployeesTotal,
 				includedEmployeesTotal,
-				semiMonthlyEmployeesTotal, // Total active semi-monthly employees
+				semiMonthlyEmployeesTotal,
+				detailLimit,
+				// Full counts for UI badges (list rows may be capped by detailLimit)
+				missingInfoTotal,
 			};
 		}
 

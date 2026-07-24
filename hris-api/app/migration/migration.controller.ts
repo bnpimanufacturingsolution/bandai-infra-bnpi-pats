@@ -4697,6 +4697,109 @@ export const controller = (prisma: PrismaClient) => {
 		);
 	};
 
+	const uploadDm4SourceWorkbooks = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const anyFiles = ((req as any).files || []) as Express.Multer.File[];
+			const uploadedFiles = [
+				...(((req as any).file ? [(req as any).file] : []) as Express.Multer.File[]),
+				...(Array.isArray(anyFiles) ? anyFiles : []),
+			].filter((file) => file?.buffer && file.originalname);
+
+			if (uploadedFiles.length === 0) {
+				res.status(400).json(
+					buildErrorResponse(
+						"At least one .xlsx/.xls biometrics workbook is required. Use multipart field 'files' or 'file'.",
+						400,
+						[{ field: "files", message: "No workbook files were uploaded." }],
+					),
+				);
+				return;
+			}
+
+			const organizationId =
+				String((req as any).organizationId || req.body?.organizationId || "org").trim() ||
+				"org";
+			const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+			const uploadDir = resolveRepoPath(
+				".runtime",
+				"dm4-uploads",
+				organizationId,
+				stamp,
+			);
+			fs.mkdirSync(uploadDir, { recursive: true });
+
+			const savedDisplayPaths: string[] = [];
+			const rejected: string[] = [];
+			for (const file of uploadedFiles) {
+				const original = String(file.originalname || "workbook.xlsx").trim();
+				const lower = original.toLowerCase();
+				if (!lower.endsWith(".xlsx") && !lower.endsWith(".xls")) {
+					rejected.push(original);
+					continue;
+				}
+				if (path.basename(original).startsWith("~$")) {
+					rejected.push(original);
+					continue;
+				}
+				const safeName = path
+					.basename(original)
+					.replace(/[<>:"|?*\u0000-\u001f]/g, "_")
+					.replace(/\s+/g, " ")
+					.trim();
+				const dest = path.join(uploadDir, safeName || `workbook-${savedDisplayPaths.length + 1}.xlsx`);
+				fs.writeFileSync(dest, file.buffer);
+				savedDisplayPaths.push(toRepoDisplayPath(dest));
+			}
+
+			if (savedDisplayPaths.length === 0) {
+				res.status(400).json(
+					buildErrorResponse(
+						"No valid .xlsx/.xls workbook files were uploaded.",
+						400,
+						[
+							{
+								field: "files",
+								message:
+									rejected.length > 0
+										? `Rejected: ${rejected.slice(0, 5).join(", ")}`
+										: "Upload at least one Excel workbook.",
+							},
+						],
+					),
+				);
+				return;
+			}
+
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.GET_MIGRATION_STATS,
+				`Uploaded DM4 source workbooks: ${savedDisplayPaths.length} files`,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_STATS,
+			);
+
+			res.status(200).json(
+				buildSuccessResponse(
+					`Uploaded ${savedDisplayPaths.length} DM4 source workbook${savedDisplayPaths.length === 1 ? "" : "s"}.`,
+					{
+						sourceWorkbookFiles: savedDisplayPaths,
+						sourceWorkbookCount: savedDisplayPaths.length,
+						rejected,
+						uploadDir: toRepoDisplayPath(uploadDir),
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			migrationLogger.error(`DM4 source workbook upload failed: ${error.message}`, { error });
+			res.status(500).json(
+				buildErrorResponse(
+					`DM4 source workbook upload failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
 	const resolveDm4SourceWorkbooks = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const rawSourceFiles = Array.isArray(req.body?.sourceFiles)
@@ -4803,5 +4906,6 @@ export const controller = (prisma: PrismaClient) => {
 		recoverMigrationRun,
 		rerunMigrationRun,
 		resolveDm4SourceWorkbooks,
+		uploadDm4SourceWorkbooks,
 	};
 };

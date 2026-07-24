@@ -34,6 +34,7 @@ interface IMigrationController {
 	recoverMigrationRun(req: Request, res: Response, next: NextFunction): Promise<void>;
 	rerunMigrationRun(req: Request, res: Response, next: NextFunction): Promise<void>;
 	resolveDm4SourceWorkbooks(req: Request, res: Response, next: NextFunction): Promise<void>;
+	uploadDm4SourceWorkbooks(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IMigrationController): Router => {
@@ -342,6 +343,11 @@ export const router = (route: Router, controller: IMigrationController): Router 
 	routes.post("/runs/:runId/recover", controller.recoverMigrationRun);
 	routes.post("/runs/:runId/rerun", controller.rerunMigrationRun);
 	routes.post("/dm4/resolve-source-workbooks", controller.resolveDm4SourceWorkbooks);
+	routes.post(
+		"/dm4/upload-source-workbooks",
+		uploadImportFiles,
+		controller.uploadDm4SourceWorkbooks,
+	);
 
 	/**
 	 * @openapi

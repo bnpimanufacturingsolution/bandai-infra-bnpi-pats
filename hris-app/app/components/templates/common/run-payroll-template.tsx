@@ -420,7 +420,7 @@ export function RunPayrollTemplate() {
 		data: blockersData,
 		isLoading: blockersLoading,
 		isFetching: blockersFetching,
-	} = usePayrollBlockers(payrollPeriodId, shouldLoadBlockers, 25, payrollScope);
+	} = usePayrollBlockers(payrollPeriodId, shouldLoadBlockers, 200, payrollScope);
 	const generatePayrollMutation = useGenerateTimesheetPayroll();
 	const requestPausePayrollMutation = useRequestPauseTimesheetPayroll();
 	const requestStopPayrollMutation = useRequestStopTimesheetPayroll();
@@ -550,7 +550,10 @@ export function RunPayrollTemplate() {
 		return totals && typeof totals === "object" ? (totals as Record<string, any>) : null;
 	}, [selectedPeriodCard?.generationMetadata]);
 
-	const missingInfoCount = payrollRunSummary.missingInfoEmployeesTotal || 0;
+	const missingInfoCount =
+		Number((blockers as any)?.missingInfoTotal) ||
+		payrollRunSummary.missingInfoEmployeesTotal ||
+		0;
 	const timesheetNotSubmittedCount = payrollRunSummary.timesheetNotSubmittedEmployeesTotal || 0;
 	const pendingApprovalCount = payrollRunSummary.pendingApprovalEmployeesTotal || 0;
 	const approvedMissingInfoRaw = payrollRunSummary.approvedMissingInfoEmployeesTotal;
@@ -2169,7 +2172,7 @@ export function RunPayrollTemplate() {
 
 					<div
 						ref={periodScrollRef}
-						className="flex flex-1 gap-3 overflow-x-auto scroll-smooth pb-0.5 [scrollbar-width:thin] [scrollbar-color:rgba(148,163,184,0.35)_transparent] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300/60 hover:[&::-webkit-scrollbar-thumb]:bg-slate-400/70"
+						className="hover-show-scroll flex flex-1 gap-3 overflow-x-auto scroll-smooth pb-0.5"
 						style={{ scrollBehavior: "smooth" }}>
 						{payPeriods.length > 0 ? (
 							payPeriods.map((p: any) => {
@@ -2204,28 +2207,23 @@ export function RunPayrollTemplate() {
 									<button
 										key={p.id}
 										onClick={() => handlePeriodChange(p.code)}
-										className={`flex-shrink-0 rounded-xl border-2 transition-all w-[132px] ${
+										className={`flex-shrink-0 rounded-xl border-2 bg-white transition-all w-[132px] ${
 											isSelected
-												? "border-orange-500 bg-orange-50"
+												? "border-orange-500"
 												: "border-gray-200 hover:border-orange-300 hover:bg-orange-50/50"
 										}`}>
 										<div
 											className={`text-[11px] font-semibold py-1.5 px-2 rounded-t-lg text-center ${
-												isSelected
-													? "bg-orange-500 text-white"
-													: isCurrent
-														? "bg-emerald-700 text-white"
-														: isCompleted
-															? "bg-orange-600 text-white"
-															: "bg-gray-100 text-gray-600"
+												isCurrent
+													? "bg-emerald-700 text-white"
+													: isCompleted
+														? "bg-orange-600 text-white"
+														: "bg-gray-100 text-gray-600"
 											}`}>
 											{periodMonth}
 										</div>
 										<div className="py-3 text-center">
-											<div
-												className={`text-2xl font-bold ${
-													isSelected ? "text-orange-600" : "text-gray-900"
-												}`}>
+											<div className="text-2xl font-bold text-gray-900">
 												{periodDay}
 											</div>
 											<div className="text-[11px] text-gray-500 truncate px-2">
@@ -3742,6 +3740,23 @@ export function RunPayrollTemplate() {
 													</div>
 												</div>
 											))}
+											{missingInfoCount > displayedMissingInfoEmployees.length ? (
+												<p className="text-xs text-gray-500">
+													Showing {formatCount(displayedMissingInfoEmployees.length)} of{" "}
+													{formatCount(missingInfoCount)} employees. Open an employee
+													profile to fix salary or work schedule.
+												</p>
+											) : null}
+										</div>
+									) : missingInfoCount > 0 && blockersListLoading ? (
+										<div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">
+											Loading employees with missing payroll info…
+										</div>
+									) : missingInfoCount > 0 ? (
+										<div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+											{formatCount(missingInfoCount)} employees are missing basic salary or
+											work schedule, but the detail list could not be loaded. Refresh this
+											dialog or open employee profiles from the timesheets list.
 										</div>
 									) : (
 										<div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-500">

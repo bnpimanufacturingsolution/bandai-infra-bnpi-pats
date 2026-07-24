@@ -161,6 +161,85 @@ const applyEmployeeDocumentSelectionDefaults = (fieldSelections: Record<string, 
 	}
 };
 
+/**
+ * Bare `employeeBenefits: true` expands to every EmployeeBenefit scalar in the
+ * generated Prisma client. Prefer an explicit scalar select so new optional
+ * columns (for example eligibilityMode) cannot hard-500 employee profile reads
+ * when a DB is behind a pending additive migration.
+ */
+const EMPLOYEE_BENEFIT_PROFILE_SCALAR_SELECT = {
+	id: true,
+	organizationId: true,
+	employeeId: true,
+	benefitTypeId: true,
+	payrollPeriodId: true,
+	name: true,
+	description: true,
+	totalAmount: true,
+	currency: true,
+	totalInstallments: true,
+	installmentAmount: true,
+	remainingBalance: true,
+	scheduleMode: true,
+	recurrenceFrequency: true,
+	attendanceBased: true,
+	attendanceAmountBasis: true,
+	eligibilityMode: true,
+	eligibilityDisqualifyOnAbsent: true,
+	eligibilityDisqualifyOnLate: true,
+	eligibilityDisqualifyOnUndertime: true,
+	eligibilityDisqualifyOnLeave: true,
+	amount: true,
+	startDate: true,
+	endDate: true,
+	startPayrollCutOff: true,
+	endPayrollCutOff: true,
+	agreedToTerms: true,
+	agreedAt: true,
+	agreedByIp: true,
+	status: true,
+	isActive: true,
+	approvedById: true,
+	approvedAt: true,
+	notes: true,
+	remarks: true,
+	isDeleted: true,
+	createdAt: true,
+	updatedAt: true,
+} as const;
+
+const applyEmployeeBenefitSelectionDefaults = (fieldSelections: Record<string, any>) => {
+	if (!fieldSelections?.employeeBenefits) return;
+
+	if (fieldSelections.employeeBenefits === true) {
+		fieldSelections.employeeBenefits = {
+			where: { isDeleted: false },
+			select: { ...EMPLOYEE_BENEFIT_PROFILE_SCALAR_SELECT },
+		};
+		return;
+	}
+
+	if (typeof fieldSelections.employeeBenefits === "object") {
+		fieldSelections.employeeBenefits = {
+			...fieldSelections.employeeBenefits,
+			where: {
+				...(fieldSelections.employeeBenefits.where || {}),
+				isDeleted: false,
+			},
+			...(fieldSelections.employeeBenefits.select
+				? {
+						select: {
+							id: true,
+							...fieldSelections.employeeBenefits.select,
+						},
+					}
+				: {
+						select: { ...EMPLOYEE_BENEFIT_PROFILE_SCALAR_SELECT },
+					}),
+		};
+	}
+};
+
 const MAX_EMPLOYEE_CREATE_VALIDATION_ERRORS = 6;
 
 const normalizeValidationFieldPath = (field: string) => field.replace(/\[(\d+)\]/g, ".$1");
@@ -4384,6 +4463,7 @@ export const controller = (prisma: PrismaClient) => {
 			const findManyQueryAny = findManyQuery as any;
 			if (findManyQueryAny.select) {
 				applyEmployeeDocumentSelectionDefaults(findManyQueryAny.select);
+				applyEmployeeBenefitSelectionDefaults(findManyQueryAny.select);
 			}
 			if (document) {
 				if (findManyQueryAny.select) {
@@ -4594,6 +4674,7 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				if (fieldSelections) {
 					applyEmployeeDocumentSelectionDefaults(fieldSelections);
+					applyEmployeeBenefitSelectionDefaults(fieldSelections);
 					if (includeDerivedSchedules) {
 						fieldSelections.embeddedSchedule = true;
 					}

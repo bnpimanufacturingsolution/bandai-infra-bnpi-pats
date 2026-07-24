@@ -240,7 +240,25 @@ export const useEmployee = (id: string, fields?: string | string[], params?: Api
 		"schedules.source",
 		"schedules.changedByEmployeeId",
 		"schedules.changedAt",
-		"employeeBenefits",
+		// Explicit benefit scalars only. Bare `employeeBenefits` expands to every
+		// Prisma scalar and 500s when the DB is behind an additive migration
+		// (for example eligibilityMode on employee_benefits).
+		"employeeBenefits.id",
+		"employeeBenefits.benefitTypeId",
+		"employeeBenefits.name",
+		"employeeBenefits.description",
+		"employeeBenefits.totalAmount",
+		"employeeBenefits.currency",
+		"employeeBenefits.totalInstallments",
+		"employeeBenefits.installmentAmount",
+		"employeeBenefits.remainingBalance",
+		"employeeBenefits.scheduleMode",
+		"employeeBenefits.amount",
+		"employeeBenefits.startDate",
+		"employeeBenefits.endDate",
+		"employeeBenefits.status",
+		"employeeBenefits.isActive",
+		"employeeBenefits.notes",
 	];
 
 	const selectedFields = fields || defaultFields;

@@ -7,7 +7,13 @@ import {
 } from "./migration";
 import {
 	buildClosedImportSearchParams,
+	buildCloseWorkbookSearchParams,
+	buildCloseWorkbookUploadSearchParams,
 	buildOpenImportSearchParams,
+	buildOpenWorkbookSearchParams,
+	buildOpenWorkbookUploadSearchParams,
+	isAdminMigrationWorkbookId,
+	isWorkbookUploadOpen,
 } from "~/lib/admin-migration-ui";
 
 describe("admin migration route contract", () => {
@@ -46,6 +52,37 @@ describe("admin migration route contract", () => {
 		expect(closed.has("action")).toBe(false);
 		expect(closed.get("tab")).toBe("migration");
 		expect(closed.get("page")).toBe("2");
+	});
+
+	it("opens workbook as page state and keeps upload as a separate modal flag", () => {
+		const opened = buildOpenWorkbookSearchParams(
+			new URLSearchParams("tab=migration"),
+			"dm3",
+		);
+		expect(opened.get("workbook")).toBe("dm3");
+		expect(isWorkbookUploadOpen(opened)).toBe(false);
+		expect(isAdminMigrationWorkbookId(opened.get("workbook"))).toBe(true);
+
+		const withUpload = buildOpenWorkbookUploadSearchParams(opened);
+		expect(withUpload.get("workbook")).toBe("dm3");
+		expect(isWorkbookUploadOpen(withUpload)).toBe(true);
+
+		const closedUpload = buildCloseWorkbookUploadSearchParams(withUpload);
+		expect(closedUpload.get("workbook")).toBe("dm3");
+		expect(isWorkbookUploadOpen(closedUpload)).toBe(false);
+
+		const closedPage = buildCloseWorkbookSearchParams(closedUpload);
+		expect(closedPage.has("workbook")).toBe(false);
+		expect(closedPage.has("upload")).toBe(false);
+		expect(closedPage.get("tab")).toBe("migration");
+	});
+
+	it("can open workbook page with upload modal already open from hub CTA", () => {
+		const opened = buildOpenWorkbookSearchParams(new URLSearchParams(), "dm1", {
+			upload: true,
+		});
+		expect(opened.get("workbook")).toBe("dm1");
+		expect(isWorkbookUploadOpen(opened)).toBe(true);
 	});
 
 	it("opens employee import with auto-create explicitly disabled by route helper contract", () => {

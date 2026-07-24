@@ -761,36 +761,28 @@ export default function EmployeeList({
 					: "font-medium text-gray-900 hover:text-primary hover:underline";
 				// Avatar + name + employee code for every EmployeeList surface
 				// (admin configuration, HR employees, team scopes, etc.).
-				const content = (
-					<div className="min-w-0">
-						<div className="flex min-w-0 items-center gap-3">
-							<EmployeeAvatar
-								src={item.avatar}
-								alt={value}
-								size="md"
-								className="shrink-0"
-							/>
-							<div className="min-w-0">
-								<div className={nameClassName} title={value}>
-									{value}
-								</div>
-								<div className="mt-1">
-									<AdminConfigCodeChip>{item.employeeId}</AdminConfigCodeChip>
+				// Row click (DataTable onRowClick) opens the profile when deep links
+				// are enabled; name styling still signals that the row is navigable.
+				return (
+					<div className="min-w-0 space-y-0.5">
+						<div className="min-w-0">
+							<div className="flex min-w-0 items-center gap-3">
+								<EmployeeAvatar
+									src={item.avatar}
+									alt={value}
+									size="md"
+									className="shrink-0"
+								/>
+								<div className="min-w-0">
+									<div className={nameClassName} title={value}>
+										{value}
+									</div>
+									<div className="mt-1">
+										<AdminConfigCodeChip>{item.employeeId}</AdminConfigCodeChip>
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
-				);
-
-				if (disableEmployeeDeepLinks) {
-					return <div className="min-w-0 space-y-0.5">{content}</div>;
-				}
-
-				return (
-					<div
-						onClick={() => navigate(`/employee/${item.id}`)}
-						className="min-w-0 cursor-pointer space-y-0.5">
-						{content}
 					</div>
 				);
 			},
@@ -1037,9 +1029,25 @@ export default function EmployeeList({
 	];
 
 	const handleViewProfile = (item: EmployeeDisplay) => {
+		// Admin configuration must stay under /admin/* so the admin sidebar layout
+		// does not switch to the unified employee workspace.
+		if (isAdminConfigurationEmployees) {
+			navigate(`/admin/configuration/employees/${item.id}`);
+			return;
+		}
 		// Encode current path (replace / with - for clean URLs)
 		const encodedPath = location.pathname.substring(1).replace(/\//g, "-");
 		navigate(`/employee/${item.id}?from=${encodedPath}`);
+	};
+
+	const handleEmployeeRowClick = (item: EmployeeDisplay) => {
+		if (disableEmployeeDeepLinks) return;
+		if (selectFor === "create-pan") {
+			handleSelectEmployee(item);
+			return;
+		}
+		if (selectFor) return;
+		handleViewProfile(item);
 	};
 
 	const handleViewTeamAttendance = (item: EmployeeDisplay) => {
@@ -1507,6 +1515,7 @@ export default function EmployeeList({
 				searchFields={searchFields}
 				onAdd={hideAdd ? undefined : handleAddEmployee}
 				onImport={hideImport ? undefined : openImport}
+				onRowClick={disableEmployeeDeepLinks ? undefined : handleEmployeeRowClick}
 				renderActions={renderActions}
 				isLoading={isTableLoading && !isFetching}
 				emptyMessage={

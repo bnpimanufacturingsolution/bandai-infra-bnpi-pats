@@ -190,7 +190,12 @@ beforeAll(() => {
 
 const LocationProbe = () => {
 	const location = useLocation();
-	return <output aria-label="location-search">{location.search}</output>;
+	return (
+		<>
+			<output aria-label="location-pathname">{location.pathname}</output>
+			<output aria-label="location-search">{location.search}</output>
+		</>
+	);
 };
 
 const renderEmployeeList = (initialEntry = "/hr/employees") =>
@@ -268,6 +273,29 @@ describe("EmployeeList agency advanced filter", () => {
 		expect(
 			screen.getAllByTestId("avatar-image").map((node) => node.getAttribute("src")),
 		).toContain("https://example.test/avatar.png");
+	}, 15_000);
+
+	it("navigates to admin-scoped employee profile when an admin employee row is clicked", async () => {
+		renderEmployeeList("/admin/configuration/employees");
+
+		const employeeNames = await screen.findAllByText("Ana Reyes");
+		const row = employeeNames
+			.map((node) => node.closest("tr"))
+			.find((candidate): candidate is HTMLTableRowElement => candidate != null);
+		expect(row).toBeTruthy();
+
+		const user = userEvent.setup();
+		await user.click(row!);
+
+		await waitFor(() => {
+			expect(screen.getByLabelText("location-pathname")).toHaveTextContent(
+				"/admin/configuration/employees/employee-1",
+			);
+		});
+		// Stay under admin layout path so the configuration sidebar does not switch.
+		expect(screen.getByLabelText("location-pathname")).not.toHaveTextContent(
+			"/employee/employee-1",
+		);
 	}, 15_000);
 
 	it("renders hr employment status as dot text while workforce remains a badge", async () => {

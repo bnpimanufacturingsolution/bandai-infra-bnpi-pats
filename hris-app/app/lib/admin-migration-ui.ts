@@ -26,6 +26,63 @@ const IMPORT_MODAL_STATE_PARAMS = [
 	"importCreateTimesheets",
 ] as const;
 
+/** Workbook detail is a full page (`workbook=dm1..dm4`). Upload is a small modal (`upload=1`). */
+const WORKBOOK_PAGE_STATE_PARAMS = ["workbook", "runId", "importJobId", "upload"] as const;
+const WORKBOOK_UPLOAD_PARAM = "upload";
+const WORKBOOK_UPLOAD_VALUE = "1";
+
+export const ADMIN_MIGRATION_WORKBOOK_IDS = ["dm1", "dm2", "dm3", "dm4"] as const;
+export type AdminMigrationWorkbookId = (typeof ADMIN_MIGRATION_WORKBOOK_IDS)[number];
+
+export function isAdminMigrationWorkbookId(value: string | null | undefined): value is AdminMigrationWorkbookId {
+	return Boolean(value && (ADMIN_MIGRATION_WORKBOOK_IDS as readonly string[]).includes(value));
+}
+
+export function isWorkbookUploadOpen(params: URLSearchParams): boolean {
+	return params.get(WORKBOOK_UPLOAD_PARAM) === WORKBOOK_UPLOAD_VALUE;
+}
+
+export function buildOpenWorkbookSearchParams(
+	previousParams: URLSearchParams,
+	workbookId: string,
+	options?: { upload?: boolean; runId?: string | null; importJobId?: string | null },
+): URLSearchParams {
+	const nextParams = new URLSearchParams(previousParams);
+	nextParams.set("workbook", workbookId);
+	if (options?.upload) {
+		nextParams.set(WORKBOOK_UPLOAD_PARAM, WORKBOOK_UPLOAD_VALUE);
+	} else {
+		nextParams.delete(WORKBOOK_UPLOAD_PARAM);
+	}
+	if (options?.runId) {
+		nextParams.set("runId", options.runId);
+	}
+	if (options?.importJobId) {
+		nextParams.set("importJobId", options.importJobId);
+	}
+	return nextParams;
+}
+
+export function buildCloseWorkbookSearchParams(previousParams: URLSearchParams): URLSearchParams {
+	const nextParams = new URLSearchParams(previousParams);
+	for (const param of WORKBOOK_PAGE_STATE_PARAMS) {
+		nextParams.delete(param);
+	}
+	return nextParams;
+}
+
+export function buildOpenWorkbookUploadSearchParams(previousParams: URLSearchParams): URLSearchParams {
+	const nextParams = new URLSearchParams(previousParams);
+	nextParams.set(WORKBOOK_UPLOAD_PARAM, WORKBOOK_UPLOAD_VALUE);
+	return nextParams;
+}
+
+export function buildCloseWorkbookUploadSearchParams(previousParams: URLSearchParams): URLSearchParams {
+	const nextParams = new URLSearchParams(previousParams);
+	nextParams.delete(WORKBOOK_UPLOAD_PARAM);
+	return nextParams;
+}
+
 function readObject(value: unknown): Record<string, unknown> | null {
 	if (!value || typeof value !== "object") return null;
 	return value as Record<string, unknown>;
