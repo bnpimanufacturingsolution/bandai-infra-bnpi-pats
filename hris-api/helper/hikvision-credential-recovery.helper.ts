@@ -26,6 +26,21 @@ export type CredentialRecoveryTaskDraft = {
 	payload: Record<string, unknown>;
 };
 
+export const buildCredentialRecoveryPendingTaskWhere = (
+	jobId: string,
+	canaryModality: unknown,
+) => {
+	const modality = ["fingerprint", "face"].includes(String(canaryModality || ""))
+		? String(canaryModality)
+		: null;
+	return {
+		jobId,
+		status: { in: ["pending", "retrying"] },
+		kind: { in: ["source_capture", "target_owner_capture"] },
+		...(modality ? { modality } : {}),
+	};
+};
+
 const physicalBoundaryReasons = new Set([
 	"canonical_identity_unproven",
 	"physical_identity_adjudication_required",

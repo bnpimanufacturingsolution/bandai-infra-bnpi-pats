@@ -92,6 +92,7 @@ import { withCredentialDeviceLeases } from "../../helper/credential-device-lease
 import { buildHikvisionCredentialOperationTelemetry } from "../../helper/hikvision-credential-operation-telemetry.helper";
 import { resolveHikvisionDeviceSuppliedPath } from "../../helper/device-user-raw-fingerprint.helper";
 import {
+	buildCredentialRecoveryPendingTaskWhere,
 	buildCredentialRecoveryTaskGraph,
 	summarizeCredentialRecovery,
 } from "../../helper/hikvision-credential-recovery.helper";
@@ -12018,14 +12019,18 @@ export const controller = (prisma: PrismaClient) => {
 			)?.request as any;
 			const recoveryCanaryRequested =
 				Number(recoveryRequest?.maxVerifiedWrites || 0) > 0;
+			const recoveryCanaryModality = ["fingerprint", "face"].includes(
+				String(recoveryRequest?.canaryModality || ""),
+			)
+				? String(recoveryRequest.canaryModality)
+				: null;
 			let processedThisLease = 0;
 			while (true) {
 				const pending = await taskStore.findMany({
-					where: {
-						jobId: params.jobId,
-						status: { in: ["pending", "retrying"] },
-						kind: { in: ["source_capture", "target_owner_capture"] },
-					},
+					where: buildCredentialRecoveryPendingTaskWhere(
+						params.jobId,
+						recoveryCanaryModality,
+					),
 					orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
 					take: 25,
 				});
@@ -12134,11 +12139,10 @@ export const controller = (prisma: PrismaClient) => {
 				taskStore.count({ where: { jobId: params.jobId } }),
 			]);
 			const remainingPending = await taskStore.count({
-				where: {
-					jobId: params.jobId,
-					status: { in: ["pending", "retrying"] },
-					kind: { in: ["source_capture", "target_owner_capture"] },
-				},
+				where: buildCredentialRecoveryPendingTaskWhere(
+					params.jobId,
+					recoveryCanaryModality,
+				),
 			});
 			const persistedJob = await jobStore.findUnique({ where: { id: params.jobId } });
 			const request = (persistedJob?.request || {}) as any;
@@ -12155,11 +12159,33 @@ export const controller = (prisma: PrismaClient) => {
 			let verified = 0;
 			if (!failed && maxVerifiedWrites > 0) {
 				await heartbeat({ currentStage: "replanning_recovered_custody" });
-				const freshPlan = await loadHikvisionSdkMergePlan({
-					req: params.req,
-					organizationId: persistedJob.organizationId,
-					deviceIds: (persistedJob.deviceIds || []).map(String),
-				});
+				const replanHeartbeat = setInterval(() => {
+					heartbeat({ currentStage: "replanning_recovered_custody" }).catch(
+						(error: unknown) =>
+							deviceLogger.warn(
+								`Credential recovery job ${params.jobId} replan heartbeat failed: ${error}`,
+							),
+					);
+				}, 15_000);
+				let freshPlan: any;
+				try {
+					freshPlan = await loadHikvisionSdkMergePlan({
+						req: params.req,
+						organizationId: persistedJob.organizationId,
+						deviceIds: (persistedJob.deviceIds || []).map(String),
+					});
+				} finally {
+					clearInterval(replanHeartbeat);
+				}
+				const expectedDeviceIds = (persistedJob.deviceIds || []).map(String);
+				if (
+					(freshPlan.errors || []).length > 0 ||
+					(freshPlan.validDeviceIds || []).length !== expectedDeviceIds.length
+				) {
+					throw new Error(
+						"Credential recovery replan lost full-inventory readability for the frozen device scope; no physical write was attempted.",
+					);
+				}
 				const originalOperationIds = new Set(
 					(Array.isArray(request.operationIds) ? request.operationIds : []).map(String),
 				);

@@ -1,11 +1,26 @@
 import { expect } from "chai";
 import {
+	buildCredentialRecoveryPendingTaskWhere,
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryWrite,
 	summarizeCredentialRecovery,
 } from "../helper/hikvision-credential-recovery.helper";
 
 describe("Hikvision credential recovery graph", () => {
+	it("constrains source recovery to the requested canary modality", () => {
+		expect(
+			buildCredentialRecoveryPendingTaskWhere("job-1", "fingerprint"),
+		).to.deep.equal({
+			jobId: "job-1",
+			status: { in: ["pending", "retrying"] },
+			kind: { in: ["source_capture", "target_owner_capture"] },
+			modality: "fingerprint",
+		});
+		expect(buildCredentialRecoveryPendingTaskWhere("job-1", "unknown")).to.not.have.property(
+			"modality",
+		);
+	});
+
 	it("does not classify planner recovery as a running queue", () => {
 		expect(
 			classifyCredentialRecoveryWrite({
