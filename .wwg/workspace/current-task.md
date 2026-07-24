@@ -1,20 +1,23 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-25 Multi-agent overnight gap loop (primary)
+
+- Task mode: root + multi-subagent overnight loop; predict then write.
+- **Primary paste prompt:**
+  `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
+- Companion stable card:
+  `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
+- Mandatory every cycle: plan → review(`executionPreview`) → dryRun → start only
+  if `wouldWriteCount>0` → verified must match prediction or fix code defect.
+- Live seed (recheck): residual ~2813; faceReady ~1947 (A/D/E/F); fpReady often 0;
+  unique face gap ~690; unique FP gap ~307. Drive residual and unique gaps down.
+- Runtime: preview SHA `cec3b6f`+, multi-canary env, API image on DEV.
+- Evidence: `.runtime/overnight-biometric-convergence-20260724-230000/`.
+
 ## Latest Task Addendum - 2026-07-25 Stable overnight gap-convergence job card
 
-- Task mode: agent-owned ordered overnight job for fleet face/FP gap reduction
-  on five Main Entrance devices (not B-only).
-- Job card (paste this):
+- Companion card (still valid):
   `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
-- Encodes proven mistakes: B-only face canary env, FP all-or-nothing owner scan,
-  maxVerifiedWrites cap 50, unscoped card recovery burn, timeout misclass,
-  UI gap ≠ ready queue, LOCALS 404 half-success.
-- Fixes already on develop: `ce93414` timeout retry; `a2e9004` multi-device
-  face canary IDs (A/B/D/E/F). Prove live printenv + image SHA before writes.
-- Prior live residual ~2813 credentialWrites; face/FP ready often 0 after B
-  drain until non-B unlock phases run.
-- Evidence baseline:
-  `.runtime/overnight-biometric-convergence-20260724-230000/`.
 
 ## Latest Task Addendum - 2026-07-24 Overnight five-device biometric convergence
 
