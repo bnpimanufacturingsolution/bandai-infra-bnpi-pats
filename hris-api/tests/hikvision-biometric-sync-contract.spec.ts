@@ -897,6 +897,20 @@ describe("Hikvision biometric sync contract", () => {
 		);
 	});
 
+	it("uses native SDK template plus picture custody before face-picture fallback", () => {
+		const controller = controllerSource();
+
+		expect(controller).to.include('"hikvision_sdk_credential_recovery"');
+		expect(controller).to.include('"hikvision_sdk_template_picture"');
+		expect(controller).to.include('"isapi_face_picture_fallback"');
+		expect(controller).to.include("sdkTemplateRecoveryError");
+		expect(controller).to.include('"credential_recovery_face_sdk_fallback"');
+		expect(controller).to.include("faceTemplateSize: Number(result?.faceTemplateSize || 0)");
+		expect(controller.indexOf("await runHikvisionBiometricExportOnVm({")).to.be.lessThan(
+			controller.indexOf("source: \"isapi_face_picture_fallback\""),
+		);
+	});
+
 	it("sanitizes Hikvision faceURL non-image failures before recording raw custody status", () => {
 		const helper = readFileSync(
 			join(process.cwd(), "helper/device-user-raw-fingerprint.helper.ts"),

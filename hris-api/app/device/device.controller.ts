@@ -12250,7 +12250,7 @@ export const controller = (prisma: PrismaClient) => {
 								"../../helper/device-user-raw-fingerprint.helper.js"
 							);
 							const deviceId = String(task.sourceDeviceId || task.targetDeviceId);
-							const result =
+							const result: any =
 								task.modality === "fingerprint"
 									? await captureRawFingerprintsForEnrollment({
 											prisma,
@@ -12260,13 +12260,99 @@ export const controller = (prisma: PrismaClient) => {
 											employeeNo: task.vendorUserId,
 										})
 									: task.modality === "face"
-										? await captureRawFaceForEnrollment({
-												prisma,
-												req: params.req,
-												organizationId: task.organizationId,
-												deviceId,
-												employeeNo: task.vendorUserId,
-											})
+										? await (async () => {
+												const [device, row] = await Promise.all([
+													(prisma as any).device.findFirst({
+														where: {
+															id: deviceId,
+															organizationId: task.organizationId,
+														},
+													}),
+													(prisma as any).deviceUser.findFirst({
+														where: {
+															organizationId: task.organizationId,
+															deviceId,
+															OR: [
+																{ vendorUserId: task.vendorUserId },
+																{ employeeNo: task.vendorUserId },
+															],
+														},
+													}),
+												]);
+												if (!device || !row) {
+													throw new Error(
+														`Face source recovery lost the exact device/user row for ${deviceId}/${task.vendorUserId}`,
+													);
+												}
+												try {
+													const biometricExport =
+														await runHikvisionBiometricExportOnVm({
+															device,
+															organizationId: task.organizationId,
+															vendorUserId: task.vendorUserId,
+															includeFingerprints: false,
+															includeFaces: true,
+														});
+													if (
+														!biometricExport.encryptedFace ||
+														Number(biometricExport.faceTemplateSize || 0) < 1 ||
+														Number(biometricExport.facePictureSize || 0) < 1
+													) {
+														throw new Error(
+															"Hikvision SDK face recovery returned incomplete template/picture custody",
+														);
+													}
+													const metadata = buildDeviceUserBiometricMetadata(
+														biometricExport,
+														"hikvision_sdk_credential_recovery",
+													);
+													applyDeviceUserBiometricMetadataToRow(row, metadata);
+													const updated =
+														await persistDeviceUserBiometricMetadata({
+															organizationId: task.organizationId,
+															deviceId,
+															vendorUserId: task.vendorUserId,
+															row,
+														});
+													return {
+														ok: true,
+														present: true,
+														reason: null,
+														source: "hikvision_sdk_template_picture",
+														faceTemplateSize: Number(
+															biometricExport.faceTemplateSize || 0,
+														),
+														facePictureSize: Number(
+															biometricExport.facePictureSize || 0,
+														),
+														cardOwnerVerified:
+															biometricExport.cardOwnerVerified === true,
+														identityOwnerVerified:
+															biometricExport.identityOwnerVerified === true,
+														deviceUserId: updated?.id || row.id,
+													};
+												} catch (sdkError: any) {
+													const pictureOnly =
+														await captureRawFaceForEnrollment({
+															prisma,
+															req: params.req,
+															organizationId: task.organizationId,
+															deviceId,
+															employeeNo: task.vendorUserId,
+															deviceUserId: row.id,
+														});
+													if (!pictureOnly?.ok) throw sdkError;
+													return {
+														...pictureOnly,
+														source: "isapi_face_picture_fallback",
+														sdkTemplateRecoveryError: String(
+															sdkError?.message ||
+																sdkError ||
+																"sdk_face_template_recovery_failed",
+														),
+													};
+												}
+											})()
 										: {
 												ok: false,
 												reason: "card custody recovery is not implemented",
@@ -12287,6 +12373,24 @@ export const controller = (prisma: PrismaClient) => {
 									leaseExpiresAt: null,
 								},
 							});
+							if (result?.sdkTemplateRecoveryError) {
+								deviceLogger.warn(
+									"Credential recovery face SDK export fell back to picture-only custody",
+									{
+										event: "credential_recovery_face_sdk_fallback",
+										jobId: params.jobId,
+										taskKey: task.taskKey,
+										modality: task.modality,
+										sourceDeviceId: task.sourceDeviceId,
+										vendorUserId: task.vendorUserId,
+										source: result.source,
+										durationMs: Date.now() - startedAt.getTime(),
+										...classifyCredentialRecoveryError(
+											result.sdkTemplateRecoveryError,
+										),
+									},
+								);
+							}
 							deviceLogger.info("Credential recovery task succeeded", {
 								event: "credential_recovery_task_succeeded",
 								jobId: params.jobId,
@@ -12299,6 +12403,14 @@ export const controller = (prisma: PrismaClient) => {
 								attempt,
 								stage: "source_custody_recovered",
 								durationMs: Date.now() - startedAt.getTime(),
+								source: result?.source || null,
+								faceTemplateSize: Number(result?.faceTemplateSize || 0),
+								facePictureSize: Number(
+									result?.facePictureSize || result?.byteLength || 0,
+								),
+								cardOwnerVerified: result?.cardOwnerVerified === true,
+								identityOwnerVerified:
+									result?.identityOwnerVerified === true,
 							});
 						} catch (error: any) {
 							const classification = classifyCredentialRecoveryError(error);
