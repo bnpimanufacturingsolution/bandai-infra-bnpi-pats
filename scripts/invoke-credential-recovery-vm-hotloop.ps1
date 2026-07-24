@@ -1,5 +1,5 @@
 param(
-  [ValidateSet('Test', 'SdkExport')]
+  [ValidateSet('Test', 'SdkExport', 'CapabilityProbe')]
   [string]$Mode = 'Test',
   [string]$TestGrep = 'credential recovery|Hikvision biometric sync contract',
   [string]$DeviceId,
@@ -34,7 +34,7 @@ if ($directAvailable) {
 
 function Invoke-Ssh {
   param([Parameter(Mandatory)][string]$Command)
-  & ssh @sshPrefix $sshTarget $Command
+  & ssh @sshPrefix $sshTarget $Command | ForEach-Object { Write-Host $_ }
   if ($LASTEXITCODE -ne 0) {
     throw "VM command failed with exit code $LASTEXITCODE"
   }
@@ -94,13 +94,22 @@ mkdir -p "`$stage/hris-api" "`$stage/scripts" "`$stage/vendor"
     throw 'Failed to prepare the compressed hot-loop source bundle'
   }
   Copy-ToVm -LocalPath $archivePath -RemotePath "/tmp/$archiveName"
-  Invoke-Ssh "tar -xzf '/tmp/$archiveName' -C '$remoteStage' && rm -f '/tmp/$archiveName' && ln -sfn '$remoteStage' /home/infra/project-truth-hotloop/current"
+  Invoke-Ssh @"
+set -euo pipefail
+tar -xzf '/tmp/$archiveName' -C '$remoteStage'
+rm -f '/tmp/$archiveName'
+current=/home/infra/project-truth-hotloop/current
+if [[ -e "`$current" && ! -L "`$current" ]]; then
+  mv "`$current" "/home/infra/project-truth-hotloop/current-legacy-$runId"
+fi
+ln -sfnT '$remoteStage' "`$current"
+"@
   Invoke-Ssh "chmod 0755 '$remoteStage/scripts/project-truth-hikvision-hot-reload-listener.sh' '$remoteStage/scripts/project-truth-credential-recovery-hotloop.sh'"
 
   if ($Mode -eq 'Test') {
     $encodedGrep = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($TestGrep))
     Invoke-Ssh "'$remoteStage/scripts/project-truth-credential-recovery-hotloop.sh' test '$remoteStage' '$encodedGrep'"
-  } else {
+  } elseif ($Mode -eq 'SdkExport') {
     if ($DeviceId -notmatch '^[A-Za-z0-9_-]+$') {
       throw 'SdkExport requires a safe DeviceId'
     }
@@ -108,6 +117,11 @@ mkdir -p "`$stage/hris-api" "`$stage/scripts" "`$stage/vendor"
       throw 'SdkExport requires a safe VendorUserId'
     }
     Invoke-Ssh "'$remoteStage/scripts/project-truth-credential-recovery-hotloop.sh' sdk-export '$remoteStage' '$DeviceId' '$VendorUserId' '$Modality'"
+  } else {
+    if ($DeviceId -notmatch '^[A-Za-z0-9_-]+$') {
+      throw 'CapabilityProbe requires a safe DeviceId'
+    }
+    Invoke-Ssh "'$remoteStage/scripts/project-truth-credential-recovery-hotloop.sh' capability-probe '$remoteStage' '$DeviceId'"
   }
 } finally {
   if ($archivePath -and (Test-Path -LiteralPath $archivePath)) {

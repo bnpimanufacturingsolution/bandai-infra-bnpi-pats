@@ -141,10 +141,30 @@
           if grep -Eq '^hris-app/' <<<"$changed_files"; then
             build_app=1
           fi
-          if grep -Eq '^(appliance/docker-compose|gitops/runtime-k8s/)' <<<"$changed_files"; then
+          if grep -Eq '^appliance/docker-compose' <<<"$changed_files"; then
             build_api=1
             build_db_init=1
             build_app=1
+          fi
+          runtime_changes="$(
+            grep -E '^gitops/runtime-k8s/' <<<"$changed_files" || true
+          )"
+          if [ -n "$runtime_changes" ]; then
+            runtime_non_api_changes="$(
+              grep -Ev '^gitops/runtime-k8s/overlays/dev/(hris-api-credential-recovery-env\.patch\.yaml|kustomization\.yaml)$' \
+                <<<"$runtime_changes" || true
+            )"
+            if [ -n "$runtime_non_api_changes" ]; then
+              build_api=1
+              build_db_init=1
+              build_app=1
+            elif grep -q 'hris-api-credential-recovery-env.patch.yaml' \
+              "{{ project_truth_repo_root }}/gitops/runtime-k8s/overlays/dev/kustomization.yaml"; then
+              build_api=1
+            else
+              echo "Refusing to treat an unrecognized DEV kustomization-only change as API-only" >&2
+              exit 1
+            fi
           fi
         fi
 

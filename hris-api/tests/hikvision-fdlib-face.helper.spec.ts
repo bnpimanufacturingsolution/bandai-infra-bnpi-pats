@@ -50,6 +50,33 @@ describe("Hikvision FDLib picture face contract", () => {
 		expect(result.capabilityEvidenceSha256).to.match(/^[a-f0-9]{64}$/);
 	});
 
+	it("recognizes the general FDLib MinMoe capability shape for one authorized canary", () => {
+		const result = classifyHikvisionFdlibPictureTarget({
+			capabilityProbe: {
+				status: "supported",
+				response: {
+					supportFDFunction: "post,delete,put,get,setUp",
+					faceURLLen: 1024,
+				},
+			},
+			currentBuildAttestation: "build-123",
+			authorizedCanary: {
+				authorized: true,
+				fdId: "1",
+				faceLibType: "blackFD",
+				allowedRequesterAddresses: ["10.184.37.20"],
+			},
+		});
+		expect(result).to.include({
+			actionable: true,
+			writer: "fdlib_picture_import",
+			reason: "authorized_canary_ready",
+			fdId: "1",
+			faceLibType: "blackFD",
+		});
+		expect(result.allowedRequesterAddresses).to.deep.equal(["10.184.37.20"]);
+	});
+
 	it("keeps unproven capability, upload mode, and build mismatches blocked", () => {
 		expect(
 			classifyHikvisionFdlibPictureTarget({

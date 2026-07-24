@@ -80,6 +80,7 @@ import { resolveProjectTruthRuntimeRoot } from "../../helper/runtime-storage.hel
 import {
 	HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT,
 	HIKVISION_FDLIB_FACE_SEARCH_ENDPOINT,
+	HIKVISION_FDLIB_CAPABILITIES_ENDPOINT,
 	assertHikvisionFdlibPrewriteEvidence,
 	assertHikvisionFdlibWriteAccepted,
 	buildHikvisionFdlibFaceDataRecordBody,
@@ -11088,7 +11089,7 @@ export const controller = (prisma: PrismaClient) => {
 						status: "supported",
 						response: await measureStage("faceCapabilityProbeMs", () =>
 							hikvisionFetch(
-								"/ISAPI/Intelligent/FDLib/FaceDataRecord/capabilities?format=json",
+								HIKVISION_FDLIB_CAPABILITIES_ENDPOINT,
 								{
 								method: "GET",
 								deviceId: String(device.id),
@@ -11108,6 +11109,17 @@ export const controller = (prisma: PrismaClient) => {
 					capabilityProbe,
 					attestation: (device.config as any)?.fdlibPictureWriter,
 					currentBuildAttestation,
+					authorizedCanary:
+						String(
+							process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID || "",
+						).trim() === String(device.id)
+							? {
+									authorized: true,
+									fdId: "1",
+									faceLibType: "blackFD",
+									allowedRequesterAddresses: [String(device.address || "")],
+								}
+							: null,
 				});
 				fdlibTargetCapabilities.set(String(device.id), fdlibClassification);
 				const deviceConfig = ((device.config as any) || {}) as Record<string, any>;
@@ -11138,8 +11150,7 @@ export const controller = (prisma: PrismaClient) => {
 									hikvisionCredentialCapabilityEvidence: {
 										...(deviceConfig.hikvisionCredentialCapabilityEvidence || {}),
 										fdlibPictureWriter: {
-											endpoint:
-												"/ISAPI/Intelligent/FDLib/FaceDataRecord/capabilities?format=json",
+											endpoint: HIKVISION_FDLIB_CAPABILITIES_ENDPOINT,
 											probeStatus: capabilityProbe.status,
 											writer: fdlibClassification.writer,
 											reason: fdlibClassification.reason,

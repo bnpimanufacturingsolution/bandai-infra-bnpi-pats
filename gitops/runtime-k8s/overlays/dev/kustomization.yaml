@@ -3,6 +3,9 @@ namespace: dev
 resources:
   - runtime.yaml
 
+patches:
+  - path: hris-api-credential-recovery-env.patch.yaml
+
 images:
   - name: hris-api-db-init
     newTag: develop

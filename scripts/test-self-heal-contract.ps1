@@ -157,6 +157,7 @@ $bootstrapOnpremScript = Get-Content -Raw 'scripts/bootstrap-onprem-vm.sh'
 $ansiblePullScript = Get-Content -Raw 'appliance/bin/project-truth-ansible-pull.sh'
 $ansiblePullPlaybook = Get-Content -Raw 'ansible/project-truth-pull.yml'
 $hikvisionHotReloadScript = Get-Content -Raw 'scripts/project-truth-hikvision-hot-reload-listener.sh'
+$credentialRecoveryEnvPatch = Get-Content -Raw 'gitops/runtime-k8s/overlays/dev/hris-api-credential-recovery-env.patch.yaml'
 $ansiblePullService = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pull.service'
 $ansiblePullTimer = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pull.timer'
 $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
@@ -210,6 +211,8 @@ $checks.Add((Assert-Text 'ansible-pull wrapper invokes ansible-pull' $ansiblePul
 $checks.Add((Assert-Text 'ansible-pull selects changed runtime services' $ansiblePullPlaybook 'Runtime image selection: services='))
 $checks.Add((Assert-Text 'ansible-pull builds only selected runtime services' $ansiblePullPlaybook 'docker compose build "\$\{services\[@\]\}"'))
 $checks.Add((Assert-Text 'ansible-pull restarts only selected deployments' $ansiblePullPlaybook 'for deployment in "\$\{deployments\[@\]\}"'))
+$checks.Add((Assert-Text 'credential recovery env patch remains API-only' $credentialRecoveryEnvPatch 'name:\s*hris-api'))
+$checks.Add((Assert-Text 'ansible-pull recognizes the API-only recovery env patch' $ansiblePullPlaybook 'hris-api-credential-recovery-env'))
 $checks.Add((Assert-Text 'one-shot Hikvision SDK exports use an isolated device spec' $hikvisionHotReloadScript 'mktemp /tmp/project-truth-hikvision-runtime-spec\.XXXXXX'))
 $checks.Add((Assert-Text 'one-shot Hikvision SDK exports select their isolated spec' $hikvisionHotReloadScript 'SPEC="\$runtime_spec"'))
 $checks.Add((Assert-NoText 'ansible-pull wrapper does not reference retired ZKTeco SDK submodule' $ansiblePullScript 'submodule\.vendor/zkteco-sdk\.update'))

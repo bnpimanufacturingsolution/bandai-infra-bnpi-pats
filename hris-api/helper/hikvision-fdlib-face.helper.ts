@@ -4,6 +4,8 @@ export const HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT =
 	"/ISAPI/Intelligent/FDLib/FaceDataRecord?format=json";
 export const HIKVISION_FDLIB_FACE_SEARCH_ENDPOINT =
 	"/ISAPI/Intelligent/FDLib/FDSearch?format=json";
+export const HIKVISION_FDLIB_CAPABILITIES_ENDPOINT =
+	"/ISAPI/Intelligent/FDLib/capabilities?format=json";
 
 export type HikvisionFdlibFaceWriterAttestation = {
 	status?: unknown;
@@ -24,7 +26,8 @@ export type HikvisionFdlibTargetClassification = {
 		| "url_upload_not_supported"
 		| "build_attestation_missing"
 		| "build_attestation_mismatch"
-		| "target_attestation_invalid";
+		| "target_attestation_invalid"
+		| "authorized_canary_ready";
 	fdId: string | null;
 	faceLibType: "blackFD" | "staticFD" | null;
 	allowedRequesterAddresses: string[];
@@ -135,6 +138,12 @@ export const classifyHikvisionFdlibPictureTarget = (params: {
 	};
 	attestation?: HikvisionFdlibFaceWriterAttestation | null;
 	currentBuildAttestation?: unknown;
+	authorizedCanary?: {
+		authorized?: unknown;
+		fdId?: unknown;
+		faceLibType?: unknown;
+		allowedRequesterAddresses?: unknown;
+	} | null;
 }): HikvisionFdlibTargetClassification => {
 	const capabilityPayload =
 		params.capabilityProbe.response ?? params.capabilityProbe.data ?? {};
@@ -164,11 +173,24 @@ export const classifyHikvisionFdlibPictureTarget = (params: {
 	]
 		.flatMap((value) => value.toLowerCase().split(/[\s,|]+/))
 		.filter(Boolean);
-	// Some terminals expose the FaceDataRecord-specific capability endpoint
-	// with only a faceURL field instead of SupportUploadPictureType.
+	// MinMoe access terminals expose URL delivery on the general FDLib
+	// capability endpoint as faceURLLen plus POST in supportFDFunction. The
+	// FaceDataRecord-specific capability endpoint is a 404 on those builds.
 	const faceUrlCapability =
-		stringValuesForNamedField(capabilityPayload, "faceURL").length > 0;
-	if (!uploadTypes.includes("url") && !faceUrlCapability) {
+		stringValuesForNamedField(capabilityPayload, "faceURL").length > 0 ||
+		stringValuesForNamedField(capabilityPayload, "faceURLLen").some(
+			(value) => Number(value) > 0,
+		);
+	const supportedFunctions = stringValuesForNamedField(
+		capabilityPayload,
+		"supportFDFunction",
+	)
+		.flatMap((value) => value.toLowerCase().split(/[\s,|]+/))
+		.filter(Boolean);
+	if (
+		(!uploadTypes.includes("url") && !faceUrlCapability) ||
+		(supportedFunctions.length > 0 && !supportedFunctions.includes("post"))
+	) {
 		return {
 			...base,
 			actionable: false,
@@ -183,6 +205,29 @@ export const classifyHikvisionFdlibPictureTarget = (params: {
 			actionable: false,
 			writer: "fdlib_picture_import",
 			reason: "build_attestation_missing",
+		};
+	}
+	const authorizedCanary = params.authorizedCanary || {};
+	const canaryFdId = text(authorizedCanary.fdId);
+	const canaryFaceLibType = text(authorizedCanary.faceLibType);
+	const canaryRequesterAddresses = normalizeRequesterAddresses(
+		authorizedCanary.allowedRequesterAddresses,
+	);
+	if (
+		authorizedCanary.authorized === true &&
+		canaryFdId &&
+		Buffer.byteLength(canaryFdId) <= 63 &&
+		(canaryFaceLibType === "blackFD" || canaryFaceLibType === "staticFD") &&
+		canaryRequesterAddresses.length > 0
+	) {
+		return {
+			actionable: true,
+			writer: "fdlib_picture_import",
+			reason: "authorized_canary_ready",
+			fdId: canaryFdId,
+			faceLibType: canaryFaceLibType,
+			allowedRequesterAddresses: canaryRequesterAddresses,
+			capabilityEvidenceSha256,
 		};
 	}
 	const attestation = params.attestation || {};
