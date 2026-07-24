@@ -542,11 +542,52 @@ class HikvisionClient {
 							} catch {
 								errorData = { message: response.statusText, raw: errorText };
 							}
+							// Prefer device ISAPI ResponseStatus fields over bare
+							// "Bad Request" so recovery/merge jobs stay observable.
+							const statusRoot =
+								errorData?.ResponseStatus &&
+								typeof errorData.ResponseStatus === "object"
+									? errorData.ResponseStatus
+									: errorData;
+							const statusCode = statusRoot?.statusCode;
+							const statusString = String(
+								statusRoot?.statusString || statusRoot?.statusMsg || "",
+							).trim();
+							const subStatusCode = String(
+								statusRoot?.subStatusCode || "",
+							).trim();
+							const errorMsg = String(
+								statusRoot?.errorMsg || statusRoot?.errorMessage || "",
+							).trim();
+							const namedParts = [
+								statusString || null,
+								subStatusCode ? `subStatus=${subStatusCode}` : null,
+								errorMsg ? `errorMsg=${errorMsg}` : null,
+								statusCode !== undefined && statusCode !== null && statusCode !== ""
+									? `statusCode=${statusCode}`
+									: null,
+								errorData?.message && errorData.message !== response.statusText
+									? String(errorData.message)
+									: null,
+							].filter(Boolean);
+							const observableMessage =
+								namedParts.length > 0
+									? `Hikvision ${response.status}: ${namedParts.join("; ")}`
+									: errorText
+										? `Hikvision ${response.status}: ${errorText.slice(0, 240)}`
+										: `Hikvision ${response.status}: ${response.statusText || "empty_response_body"}`;
 							throw {
 								status: response.status,
-								message: errorData.message || response.statusText,
+								message: observableMessage,
 								data: {
 									...errorData,
+									statusCode: statusCode ?? null,
+									statusString: statusString || null,
+									subStatusCode: subStatusCode || null,
+									errorMsg: errorMsg || null,
+									responseBodyPrefix: errorText
+										? errorText.slice(0, 500)
+										: null,
 									deviceId: connection.id,
 									deviceName: connection.name,
 									baseUrl: connection.baseUrl,

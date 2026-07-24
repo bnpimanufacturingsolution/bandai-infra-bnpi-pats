@@ -441,6 +441,68 @@ export const buildHikvisionFdlibFaceDataRecordBody = (params: {
 	};
 };
 
+/**
+ * Live MinMoe/FDLib JSON on the current Main Entrance fleet rejects nested
+ * `FDSearchDescription` wrappers with MessageParametersLack(faceLibType) while
+ * accepting the flat body. Keep this shape flat and explicit.
+ */
+export const buildHikvisionFdlibFaceSearchBody = (params: {
+	searchId: string;
+	fdId: string;
+	faceLibType: "blackFD" | "staticFD" | string;
+	vendorUserId: string;
+	searchResultPosition?: number;
+	maxResults?: number;
+}) => {
+	const searchId = text(params.searchId);
+	const fdId = text(params.fdId);
+	const faceLibType = text(params.faceLibType);
+	const vendorUserId = text(params.vendorUserId);
+	if (!searchId || !fdId || !faceLibType || !vendorUserId) {
+		throw new Error("FDSearch requires searchId, fdId, faceLibType, and vendorUserId.");
+	}
+	return {
+		searchID: searchId,
+		searchResultPosition: Math.max(0, Number(params.searchResultPosition || 0) || 0),
+		maxResults: Math.max(1, Math.min(Number(params.maxResults || 5) || 5, 30)),
+		FDID: fdId,
+		FPID: vendorUserId,
+		faceLibType,
+	};
+};
+
+/**
+ * Device faceURL values often append an opaque `@WEB...` session suffix that
+ * must not be treated as part of the filesystem path when re-requesting bytes.
+ * Authority is discarded; callers pin the path back onto the reviewed device.
+ */
+export const resolveHikvisionFdlibFacePicturePath = (value: unknown): string => {
+	const raw = text(value);
+	if (!raw) {
+		throw new Error("FDLib face picture path is empty.");
+	}
+	let pathWithQuery = raw;
+	try {
+		const parsed = new URL(raw);
+		if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+			throw new Error("FDLib face picture path uses an unsupported scheme.");
+		}
+		pathWithQuery = `${parsed.pathname}${parsed.search}`;
+	} catch (error: any) {
+		if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) throw error;
+	}
+	const pathOnly = pathWithQuery.split("?")[0] || "";
+	const stripped = pathOnly.split("@")[0] || "";
+	const query = pathWithQuery.includes("?")
+		? pathWithQuery.slice(pathWithQuery.indexOf("?"))
+		: "";
+	const normalized = `${stripped}${query}`;
+	if (!normalized.startsWith("/") || normalized.startsWith("//")) {
+		throw new Error("FDLib face picture path must be device-local absolute path.");
+	}
+	return normalized;
+};
+
 type DeliveryLease = {
 	tokenHash: string;
 	expiresAt: number;

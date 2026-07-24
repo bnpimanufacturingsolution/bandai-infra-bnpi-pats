@@ -14,6 +14,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "sdk_source_device_not_armed"
 		| "sdk_export_event_missing"
 		| "device_transport"
+		| "device_request_rejected"
 		| "worker_fencing"
 		| "inventory_read_safety_gate"
 		| "identity_safety"
@@ -185,6 +186,21 @@ export const classifyCredentialRecoveryError = (
 			observabilityDefect: false,
 		};
 	}
+	if (
+		matches(
+			/hikvision_http_rejection/,
+			/\bhttp=4\d\d\b/,
+			/\b(?:invalid content|invalid xml|badjsoncontent|parametererror)\b/,
+		)
+	) {
+		return {
+			code: "device_request_rejected",
+			category: "implementation",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
 	if (matches(/full-inventory/, /inventory readability/, /inventory read/)) {
 		return {
 			code: "inventory_read_safety_gate",
@@ -256,6 +272,44 @@ export const classifyCredentialRecoveryError = (
 		retryable: false,
 		observabilityDefect: true,
 	};
+};
+
+export const describeCredentialRecoveryError = (error: unknown) => {
+	const candidate =
+		error && typeof error === "object"
+			? (error as Record<string, any>)
+			: {};
+	const data =
+		candidate.data && typeof candidate.data === "object"
+			? (candidate.data as Record<string, any>)
+			: {};
+	const response =
+		data.ResponseStatus && typeof data.ResponseStatus === "object"
+			? (data.ResponseStatus as Record<string, any>)
+			: data;
+	const safeFields: Array<[string, unknown]> = [
+		["http", candidate.status],
+		["statusCode", response.statusCode],
+		["statusString", response.statusString],
+		["subStatusCode", response.subStatusCode],
+		["errorCode", response.errorCode],
+		["errorMsg", response.errorMsg],
+		["endpoint", data.endpoint],
+		["method", data.method],
+	];
+	const details = safeFields
+		.map(([key, value]) => [key, String(value ?? "").trim()] as const)
+		.filter(([, value]) => value)
+		.map(
+			([key, value]) =>
+				`${key}=${value.replace(/[\r\n|]+/g, " ").slice(0, 240)}`,
+		);
+	const message = String(candidate.message || error || "Unknown recovery failure")
+		.replace(/[\r\n|]+/g, " ")
+		.slice(0, 500);
+	return details.length
+		? `hikvision_http_rejection: ${message} [${details.join(" ")}]`
+		: message;
 };
 
 export const planCredentialRecoveryWorkerFailure = (

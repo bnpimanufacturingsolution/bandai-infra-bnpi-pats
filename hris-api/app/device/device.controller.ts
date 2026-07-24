@@ -84,6 +84,8 @@ import {
 	assertHikvisionFdlibPrewriteEvidence,
 	assertHikvisionFdlibWriteAccepted,
 	buildHikvisionFdlibFaceDataRecordBody,
+	buildHikvisionFdlibFaceSearchBody,
+	resolveHikvisionFdlibFacePicturePath,
 	classifyHikvisionFdlibPictureTarget,
 	hikvisionFdlibFaceDeliveryRegistry,
 	validateHikvisionFdlibFacePicture,
@@ -98,6 +100,7 @@ import {
 	buildExpiredCredentialRecoverySourceLeaseWhere,
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryError,
+	describeCredentialRecoveryError,
 	isCredentialRecoveryPhysicalStage,
 	planCredentialRecoveryWorkerFailure,
 	recoveredCustodyCanUnlockWrite,
@@ -3006,16 +3009,16 @@ export const controller = (prisma: PrismaClient) => {
 					request: params.req,
 					timeoutMs: 15_000,
 					headers: { "Content-Type": "application/json" },
-					body: {
-						FDSearchDescription: {
-							searchID: `merge-fdlib-reread-${Date.now()}-${attempt}`,
-							searchResultPosition: 0,
-							maxResults: 5,
-							FDID: params.classification.fdId,
-							FPID: params.vendorUserId,
-							faceLibType: params.classification.faceLibType,
-						},
-					},
+					// Live devices reject nested FDSearchDescription with
+					// MessageParametersLack(faceLibType); flat body is required.
+					body: buildHikvisionFdlibFaceSearchBody({
+						searchId: `merge-fdlib-reread-${Date.now()}-${attempt}`,
+						fdId: params.classification.fdId,
+						faceLibType: params.classification.faceLibType,
+						vendorUserId: params.vendorUserId,
+						searchResultPosition: 0,
+						maxResults: 5,
+					}),
 				});
 				const record = fdlibRecordForVendorUser(search, params.vendorUserId);
 				const rereadUrl = String(record?.faceURL || record?.faceUrl || "").trim();
@@ -3031,9 +3034,10 @@ export const controller = (prisma: PrismaClient) => {
 				) {
 					throw new Error("FDSearch reread URL escaped the reviewed target device.");
 				}
-				const binary = await hikvisionFetchBinary(
-					`${parsed.pathname}${parsed.search}`,
-					{
+				// Prefer the stripped device-local path: some firmwares advertise
+				// `/file.jpg@WEB...` session suffixes that are not part of storage.
+				const picturePath = resolveHikvisionFdlibFacePicturePath(rereadUrl);
+				const binary = await hikvisionFetchBinary(picturePath, {
 						deviceId: String(params.targetDevice.id),
 						prisma,
 						request: params.req,
@@ -13859,10 +13863,11 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						);
 					} catch (error: any) {
+						const describedError = describeCredentialRecoveryError(error);
 						const result = {
 							...write,
 							status: "error",
-							error: error?.message || String(error),
+							error: describedError,
 						};
 						results.push(result);
 						params.emitProgress?.({
@@ -14118,10 +14123,11 @@ export const controller = (prisma: PrismaClient) => {
 							},
 						);
 					} catch (error: any) {
+						const describedError = describeCredentialRecoveryError(error);
 						const result = {
 							...write,
 							status: "error",
-							error: error?.message || String(error),
+							error: describedError,
 						};
 						results.push(result);
 						params.emitProgress?.({

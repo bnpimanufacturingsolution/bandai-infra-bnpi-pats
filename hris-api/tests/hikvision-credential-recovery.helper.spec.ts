@@ -5,6 +5,7 @@ import {
 	buildCredentialRecoveryTaskGraph,
 	classifyCredentialRecoveryError,
 	classifyCredentialRecoveryWrite,
+	describeCredentialRecoveryError,
 	isCredentialRecoveryPhysicalStage,
 	planCredentialRecoveryWorkerFailure,
 	recoveredCustodyCanUnlockWrite,
@@ -14,6 +15,32 @@ import {
 } from "../helper/hikvision-credential-recovery.helper";
 
 describe("Hikvision credential recovery graph", () => {
+	it("retains safe Hikvision rejection fields without leaking arbitrary response data", () => {
+		const message = describeCredentialRecoveryError({
+			status: 400,
+			message: "Bad Request",
+			data: {
+				statusCode: 6,
+				statusString: "Invalid Content",
+				subStatusCode: "badJsonContent",
+				errorCode: 1610612738,
+				errorMsg: "request body rejected",
+				endpoint: "/ISAPI/Intelligent/FDLib/FaceDataRecord?format=json",
+				method: "POST",
+				password: "must-not-appear",
+				faceURL: "must-not-appear",
+			},
+		});
+		expect(message).to.include("http=400");
+		expect(message).to.include("subStatusCode=badJsonContent");
+		expect(message).to.include("errorCode=1610612738");
+		expect(message).not.to.include("must-not-appear");
+		expect(classifyCredentialRecoveryError(message)).to.include({
+			code: "device_request_rejected",
+			observabilityDefect: false,
+		});
+	});
+
 	it("reclaims only expired non-writing source leases after a restart", () => {
 		const now = new Date("2026-07-24T11:00:00.000Z");
 		expect(buildExpiredCredentialRecoverySourceLeaseWhere("job-1", now)).to.deep.equal({
