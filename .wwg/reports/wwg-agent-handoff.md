@@ -2,34 +2,29 @@
 
 ## 2026-07-24 - Overnight biometric convergence in progress (live writes)
 
-- Status: `IN_PROGRESS_WITH_PROVEN_FACE_PATH`.
-- Runtime: K3s DEV on `project-truth-node`, API image SHA
-  `5a2851cf7f5f800dd50e0ee59742b951079fd250` (API-only GitOps
-  `services=hris-api`), CI run `30103347714` success.
-- Observability: started compose stack on VM; Grafana `:53000` / Loki
-  `:3110` / Prometheus `:9091` healthy. Named recovery events visible in
-  kubectl + Loki (`credential_recovery_write_progress`, FDLib reread
-  `copy_success`). Not bare Bad Request.
-- Five-device plan baseline: 3254 credentialWrites (FP 503 / face 2629 /
-  card 122); ready_from_raw_blob all face (429 then declining); **fp_ready=0**.
-- Fingerprint blocks (stable): `target_owner_scan_incomplete` 429,
-  `canonical_identity_unproven` 36, `source_conflict` 20,
-  `physical_identity_adjudication_required` 18. No new FP write canary until
-  target FP owner checksum scans complete.
-- Face path (stable success): FDLib picture import primarily A→B with
-  physical reread ~0.7–1.5s/write. Device B LOCALS faceURL 404 remains a
-  cosmetic/half-success boundary; model write + FDLib reread still pass.
-- Session verified progress (physical reread owned): **351** face writes,
-  **0** failures; `physicallyVerifiedRemaining` **3254 → 2903** at chain1 end.
-  API `maxVerifiedWrites` hard-capped at **50** per job; chain driver used.
-- Evidence stamp:
-  `.runtime/overnight-biometric-convergence-20260724-230000/`
-  (`STATUS.md`, wave logs, plan-matrix, loki sample, runtime-baseline).
-- Next: continue face 50-write chains while ready face remains; separately
-  unlock FP via complete target fingerprint checksum custody exports; do not
-  invent FP ready. Keep Main C / TEST A/B excluded.
-- No new recommendations were identified beyond continuing the already-open
-  durable recovery overnight work.
+- Status: `IN_PROGRESS_WITH_PROVEN_FACE_AND_FP_PATH`.
+- Runtime: K3s DEV on `project-truth-node`; write path proven under API SHA
+  `5a2851c` then timeout-retry fix `ce93414` (CI `30105690726` success,
+  API-only GitOps). Later docs commits may show `services=none` without
+  wiping the rebuilt API image.
+- Observability: Grafana `:53000` / Loki `:3110` / Prometheus `:9091` healthy
+  after start; named `credential_recovery_write_progress` events for face and
+  fingerprint (not bare Bad Request).
+- Baseline plan: 3254 credentialWrites (FP 503 / face 2629 / card 122).
+- **Verified this session (physical reread):** ~**429 face** + **2 fingerprint**
+  → remaining **2823** (from 3254).
+  - Face: FDLib picture import primarily A→B; B LOCALS faceURL 404 is
+    cosmetic/half-success while model/FDLib reread passes.
+  - Fingerprint proven: vendor **1616** F→B and **901** A→B stored template
+    reread pass.
+- Residual: face `target_write_unsupported` (FDLib capability on non-B);
+  FP mostly `target_owner_scan_incomplete` (owner checksum exports). Prefer
+  modality-scoped recovery jobs (unscoped jobs burn unimplemented card paths).
+- Evidence:
+  `.runtime/overnight-biometric-convergence-20260724-230000/STATUS.md`.
+- Next: continue FP custody-only + canary when `fp_ready>0`; attest FDLib on
+  non-B face targets; keep Main C / TEST A/B excluded.
+- No new recommendations beyond continuing durable recovery overnight work.
 
 ## 2026-07-24 - DEV data cloned to UAT and PROD
 

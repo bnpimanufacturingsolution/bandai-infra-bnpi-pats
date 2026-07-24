@@ -8,13 +8,14 @@
   logs confirm `workerVersion=5a2851c`.
 - Finish line (in progress): reduce face + fingerprint gaps with physical
   reread proof; named observability; stable chained waves.
-- Proven this session: face FDLib A→B path; **~429** verified face writes, gap remaining **2825** (from 3254); zero failed writes; Grafana/Loki up.
-- Fingerprint: not ready (`target_owner_scan_incomplete` dominant). Do not
-  fall through from FP canary to face without recording the FP block matrix
-  (strict mode in `start-wave.py`).
+- Proven this session: ~**429 face** + **2 fingerprint** physical reread
+  verifications; remaining **2823** (from 3254). FP users **1616** (F→B) and
+  **901** (A→B). Grafana/Loki healthy.
+- Residual: FP owner-scan incomplete; face non-B needs FDLib capability.
+  Prefer modality-scoped recovery (not unscoped card mix). Timeout retry fix
+  `ce93414` shipped.
 - Evidence:
   `.runtime/overnight-biometric-convergence-20260724-230000/STATUS.md`.
-- Chain driver continues on VM (`chain-waves.py` / face 50-cap jobs).
 
 ## Latest Task Addendum - 2026-07-24 DEV data clone to UAT and PROD
 
