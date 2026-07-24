@@ -98,6 +98,18 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					"Hikvision SDK biometric export failed for device/user; reason=source_device_not_armed",
+				),
+			),
+		).to.include({
+			code: "sdk_source_device_not_armed",
+			category: "sdk_runtime",
+			retryable: true,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"Credential recovery write-attempt fence refused the canary: claimed 0 of 1 target writes.",
 				),
 			),

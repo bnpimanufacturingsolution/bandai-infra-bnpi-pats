@@ -3926,6 +3926,40 @@ export const controller = (prisma: PrismaClient) => {
 					String(event?.employeeNo || "").trim() === params.vendorUserId,
 			);
 			if (!exportEvent) {
+				const failureEvent = events.find(
+					(event) =>
+						event?.event === "manual_biometric_export_failed" &&
+						String(event?.employeeNo || "").trim() === params.vendorUserId,
+				);
+				if (failureEvent) {
+					const diagnostics = events
+						.filter((event) =>
+							[
+								"sdk_login",
+								"device_armed",
+								"device_login_locked_backoff",
+								"device_login_auth_failed_backoff",
+								"device_login_network_fail_skip_retries",
+								"device_arming_failed_after_retries",
+								"manual_biometric_export_failed",
+							].includes(String(event?.event || "")),
+						)
+						.map((event) => ({
+							event: String(event?.event || ""),
+							deviceId: String(
+								event?.deviceId || event?.sourceDeviceId || "",
+							),
+							ok: String(event?.ok || ""),
+							reason: String(event?.reason || ""),
+							lastError: String(event?.lastError || ""),
+							attempts: String(event?.attempts || event?.attempt || ""),
+						}));
+					throw new Error(
+						`Hikvision SDK biometric export failed for ${params.device.id}/${params.vendorUserId}; ` +
+							`reason=${String(failureEvent.reason || "unnamed")}, ` +
+							`diagnostics=${JSON.stringify(diagnostics)}`,
+					);
+				}
 				const stderrTail = String(finalResult.stderr || "")
 					.trim()
 					.slice(-1_000);

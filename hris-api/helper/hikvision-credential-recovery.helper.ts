@@ -11,6 +11,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "device_authentication"
 		| "face_owner_card_association_missing"
 		| "face_identity_association_unproven"
+		| "sdk_source_device_not_armed"
 		| "sdk_export_event_missing"
 		| "device_transport"
 		| "worker_fencing"
@@ -24,6 +25,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "persistence"
 		| "authentication"
 		| "identity_custody"
+		| "sdk_runtime"
 		| "transport"
 		| "concurrency"
 		| "safety_gate"
@@ -112,6 +114,20 @@ export const classifyCredentialRecoveryError = (
 			category: "identity_custody",
 			message,
 			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/hikvision sdk biometric export failed/,
+			/source_device_not_armed/,
+		)
+	) {
+		return {
+			code: "sdk_source_device_not_armed",
+			category: "sdk_runtime",
+			message,
+			retryable: true,
 			observabilityDefect: false,
 		};
 	}

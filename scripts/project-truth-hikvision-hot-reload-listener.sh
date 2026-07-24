@@ -254,7 +254,14 @@ PY
 hris_token=""
 export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
 tmp_spec=$(mktemp /tmp/project-truth-hikvision-device.XXXXXX)
-trap 'rm -f "$tmp_spec"' EXIT
+runtime_spec=""
+cleanup_specs() {
+  rm -f "$tmp_spec"
+  if [[ -n "$runtime_spec" ]]; then
+    rm -f "$runtime_spec"
+  fi
+}
+trap cleanup_specs EXIT
 
 if [[ "$ALLOW_STATIC_SPEC_OVERRIDE" == "1" && -n "$SPEC_OVERRIDE" && -s "$SPEC_OVERRIDE" ]]; then
   cp "$SPEC_OVERRIDE" "$tmp_spec"
@@ -303,6 +310,15 @@ fi
 if [[ ! -s "$tmp_spec" ]]; then
   echo "no Hikvision device rows with usable credentials were prepared" >&2
   exit 2
+fi
+
+# Concurrent one-shot SDK exports must never share the daemon's device-spec
+# pathname. A shared install allowed one export to replace another export's
+# selected panel between preparation and SDK startup, yielding an armed panel
+# followed by source_device_not_armed for the requested panel.
+if [[ "$RUN_ONCE" == "1" ]]; then
+  runtime_spec=$(mktemp /tmp/project-truth-hikvision-runtime-spec.XXXXXX)
+  SPEC="$runtime_spec"
 fi
 
 umask 077
