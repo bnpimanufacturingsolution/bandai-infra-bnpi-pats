@@ -13920,6 +13920,57 @@ export const controller = (prisma: PrismaClient) => {
 						await withTargetDeviceWriteLock(
 							String(write.targetDeviceId),
 							async () => {
+						// Admin sandbox (vendor 1–20 only): clear conflicting admin
+						// owners' fingerprint slots before write so progressStatus=5
+						// dual-owner does not permanently RED admin test people.
+						// Never runs for PROD vendor ids 21+.
+						if (
+							write.adminSandboxForceOverwrite === true &&
+							Array.isArray(write.adminSandboxConflictingOwners) &&
+							write.adminSandboxConflictingOwners.length > 0
+						) {
+							const {
+								deleteHikvisionFingerprintSlotsForEmployee,
+							} = await import(
+								"../../helper/device-user-raw-fingerprint.helper.js"
+							);
+							const slots = (
+								Array.isArray(write.adminSandboxConflictSlots)
+									? write.adminSandboxConflictSlots
+									: templates.map((t: any) => Number(t.fingerPrintId || 0))
+							)
+								.map((id: any) => Number(id) || 0)
+								.filter((id: number) => id > 0);
+							for (const owner of write.adminSandboxConflictingOwners) {
+								const ownerId = String(owner || "").trim();
+								// Belt-and-suspenders: never delete PROD identity 21+.
+								const ownerNum = Number(ownerId);
+								if (
+									!ownerId ||
+									!Number.isInteger(ownerNum) ||
+									ownerNum < 1 ||
+									ownerNum > 20
+								) {
+									throw new Error(
+										`Admin sandbox force-overwrite refused to clear non-admin vendor ${ownerId}; PROD ids 21+ are protected.`,
+									);
+								}
+								const cleared =
+									await deleteHikvisionFingerprintSlotsForEmployee({
+										prisma,
+										req: params.req,
+										deviceId: String(write.targetDeviceId),
+										employeeNo: ownerId,
+										fingerPrintIds: slots,
+									});
+								deviceLogger.info(
+									`admin_sandbox_fp_clear target=${write.targetDeviceId} owner=${ownerId} slots=${slots.join(",")} ok=${cleared.ok} detail=${JSON.stringify(cleared.attempts).slice(0, 400)}`,
+								);
+								// Soft-fail clear: still attempt write; progress5 will
+								// re-block if device still owns the slot.
+							}
+							await new Promise((resolve) => setTimeout(resolve, 400));
+						}
 						let templatesToWrite = templates;
 						if (Number(write.targetReportedCount || 0) > 0) {
 							const {

@@ -210,9 +210,33 @@ export type DeviceUserCredentialWrite = {
 		fingerPrintId: number;
 		checksum: string;
 	}>;
+	/**
+	 * Operator-authorized DEV admin sandbox (plain vendor ids 1–20 only).
+	 * When true, dual-owner slot conflicts among admin-band people may force
+	 * clear the conflicting admin owner's slot then write. Never set for 21+.
+	 */
+	adminSandboxForceOverwrite?: boolean;
+	/** Conflicting admin-band owners that must be cleared before write. */
+	adminSandboxConflictingOwners?: string[];
+	/** Fingerprint slots involved in the admin-band force clear. */
+	adminSandboxConflictSlots?: number[];
 	/** A transport/SDK success is never enough; execution must re-read this target. */
 	physicalRereadRequired: true;
 };
+
+/**
+ * DEV/admin sandbox plain vendor person ids (1–20). Operator policy 2026-07-25:
+ * these may force-overwrite dual-owner fingerprint slots among themselves.
+ * PROD identity starts at 21 and remains dual-owner fail-closed.
+ */
+export const isAdminSandboxVendorUserId = (value: unknown): boolean => {
+	const raw = String(value ?? "").trim();
+	if (!/^\d+$/.test(raw)) return false;
+	const n = Number(raw);
+	return Number.isInteger(n) && n >= 1 && n <= 20;
+};
+
+export const ADMIN_SANDBOX_VENDOR_ID_MAX = 20;
 
 export type DurableFingerprintOwnerConflictEvidence = {
 	jobId: string;
@@ -360,6 +384,40 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 		}
 		const owners = [...new Set(collisions.map((item) => item.conflictingVendorUserId))];
 		const slots = [...new Set(collisions.map((item) => item.fingerPrintId))];
+		// Operator-authorized admin sandbox (vendor 1–20): when the intended
+		// person AND every conflicting slot owner are admin-band, force-clear
+		// then write is safer than permanent dual-owner RED. PROD ids 21+ stay
+		// fail-closed (never force when either side is outside 1–20).
+		const writeIsAdminSandbox = isAdminSandboxVendorUserId(write.vendorUserId);
+		const ownersAreAdminSandbox = owners.every((owner) =>
+			isAdminSandboxVendorUserId(owner),
+		);
+		if (
+			writeIsAdminSandbox &&
+			ownersAreAdminSandbox &&
+			write.executionEligibility === "ready_from_raw_blob" &&
+			write.sourceEvidenceStatus === "raw_blob_present"
+		) {
+			retainedWrites.push({
+				...write,
+				recommended: true,
+				executionEligibility: "ready_from_raw_blob",
+				blockingReason: null,
+				recoveryStage: "ready_to_write",
+				adminSandboxForceOverwrite: true,
+				adminSandboxConflictingOwners: owners,
+				adminSandboxConflictSlots: slots,
+				recommendationReason:
+					`ADMIN_SANDBOX_FORCE_OVERWRITE (vendor ids 1–${ADMIN_SANDBOX_VENDOR_ID_MAX} only): target slot ${slots.join(
+						", ",
+					)} is owned by admin-band vendor ${owners.join(
+						", ",
+					)}. Clear those admin owners' conflicting fingerprint slot(s), then write richest source for vendor ${write.vendorUserId}. PROD vendor ids ${
+						ADMIN_SANDBOX_VENDOR_ID_MAX + 1
+					}+ remain dual-owner protected.`,
+			});
+			continue;
+		}
 		retainedWrites.push({
 			...write,
 			recommended: false,

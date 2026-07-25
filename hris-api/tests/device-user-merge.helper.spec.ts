@@ -1284,10 +1284,80 @@ describe("device user union merge", () => {
 				item.vendorUserId === "1" &&
 				item.targetDeviceId === "target",
 		);
+		// Both vendor 1 and conflicting owner 8 are admin-sandbox (1–20): force overwrite.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.adminSandboxForceOverwrite).to.equal(true);
+		expect(write?.adminSandboxConflictingOwners).to.deep.equal(["8"]);
+		expect(write?.recommendationReason || "").to.include(
+			"ADMIN_SANDBOX_FORCE_OVERWRITE",
+		);
+	});
+
+	it("keeps dual-owner fail-closed when conflicting owner is PROD vendor 21+", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "collision-checksum" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "900",
+					employeeId: "employee-prod",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "collision-checksum" },
+					],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "earlier-job",
+				vendorUserId: "1",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 2,
+				conflictingVendorUserId: "900",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
 		expect(write?.executionEligibility).to.equal("blocked");
 		expect(write?.blockingReason).to.equal(
 			"physical_identity_adjudication_required",
 		);
+		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
 	});
 
 	it("does not discard uncollided pending slots when only one duplicate-owner slot is equivalent", () => {
@@ -1350,7 +1420,10 @@ describe("device user union merge", () => {
 				item.vendorUserId === "1" &&
 				item.targetDeviceId === "target",
 		);
-		expect(write?.executionEligibility).to.equal("blocked");
+		// Vendor 1 vs owner 8 are both admin-sandbox: force overwrite rather than
+		// permanent dual-owner RED, even when only one of two pending slots collided.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.adminSandboxForceOverwrite).to.equal(true);
 		expect(
 			reconciled.credentialResolutions.some(
 				(item: any) => item.writeId === write?.id,

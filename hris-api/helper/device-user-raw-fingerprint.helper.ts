@@ -673,6 +673,117 @@ export const classifyDeferredFingerprintWrite = (
 };
 
 /**
+ * Clear fingerprint slot ownership for admin-sandbox dual-owner force path.
+ * Only call when planner already proved write+owners are vendor ids 1–20.
+ * Attempts ISAPI FingerPrint Delete; returns structured attempt results.
+ */
+export const deleteHikvisionFingerprintSlotsForEmployee = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	employeeNo: string;
+	fingerPrintIds: number[];
+}): Promise<{
+	employeeNo: string;
+	ok: boolean;
+	attempts: Array<{ fingerPrintId: number; ok: boolean; detail: string }>;
+}> => {
+	const employeeNo = String(params.employeeNo || "").trim();
+	const ids = [
+		...new Set(
+			(params.fingerPrintIds || [])
+				.map((id) => Number(id) || 0)
+				.filter((id) => id > 0),
+		),
+	];
+	const attempts: Array<{ fingerPrintId: number; ok: boolean; detail: string }> =
+		[];
+	if (!employeeNo || !ids.length) {
+		return { employeeNo, ok: false, attempts };
+	}
+	for (const fingerPrintId of ids) {
+		try {
+			// Hikvision ACS ISAPI: delete fingerprint by employee + fingerPrintID.
+			const response = await hikvisionFetch(
+				"/ISAPI/AccessControl/FingerPrint/Delete?format=json",
+				{
+					method: "PUT",
+					deviceId: params.deviceId,
+					prisma: params.prisma,
+					request: params.req,
+					timeoutMs: 20_000,
+					body: {
+						FingerPrintDelete: [
+							{
+								employeeNo,
+								fingerPrintID: fingerPrintId,
+							},
+						],
+					},
+				},
+			);
+			const ok =
+				Number(response?.statusCode) === 1 ||
+				String(response?.statusString || "").toUpperCase() === "OK" ||
+				String(response?.subStatusCode || "").toLowerCase() === "ok" ||
+				// Some firmwares return empty body on success.
+				response == null ||
+				Object.keys(response || {}).length === 0;
+			attempts.push({
+				fingerPrintId,
+				ok,
+				detail: ok
+					? "deleted_or_empty_ack"
+					: JSON.stringify(response || {}).slice(0, 240),
+			});
+		} catch (error: any) {
+			// Fallback shape used by some panels.
+			try {
+				const response = await hikvisionFetch(
+					"/ISAPI/AccessControl/FingerPrint/Delete?format=json",
+					{
+						method: "POST",
+						deviceId: params.deviceId,
+						prisma: params.prisma,
+						request: params.req,
+						timeoutMs: 20_000,
+						body: {
+							FingerPrintDelete: {
+								EmployeeNoList: [{ employeeNo }],
+								fingerPrintID: fingerPrintId,
+								fingerType: "normalFP",
+							},
+						},
+					},
+				);
+				const ok =
+					Number(response?.statusCode) === 1 ||
+					String(response?.statusString || "").toUpperCase() === "OK" ||
+					String(response?.subStatusCode || "").toLowerCase() === "ok";
+				attempts.push({
+					fingerPrintId,
+					ok,
+					detail: ok
+						? "deleted_post_fallback"
+						: `${String(error?.message || error).slice(0, 120)} | ${JSON.stringify(response || {}).slice(0, 120)}`,
+				});
+			} catch (error2: any) {
+				attempts.push({
+					fingerPrintId,
+					ok: false,
+					detail: String(error2?.message || error2 || error).slice(0, 240),
+				});
+			}
+		}
+	}
+	return {
+		employeeNo,
+		ok: attempts.length > 0 && attempts.every((item) => item.ok),
+		attempts,
+	};
+};
+
+/**
  * Write fingerprint via FingerPrintDownload then verify Progress + re-read Upload.
  * Returns sticky=true only when device re-read yields fingerData for that employeeNo.
  * Never treats HTTP OK alone as enrolled.

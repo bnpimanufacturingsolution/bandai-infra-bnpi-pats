@@ -279,6 +279,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("templateMatch");
 		expect(controller).to.include("pictureMatch");
 		expect(controller).to.include("withTargetDeviceWriteLock");
+		// Admin sandbox dual-owner force (vendor 1–20 only) clears conflicting
+		// admin owners before fingerprint write; PROD 21+ stay protected.
+		expect(controller).to.include("adminSandboxForceOverwrite");
+		expect(controller).to.include("admin_sandbox_fp_clear");
+		expect(controller).to.include("deleteHikvisionFingerprintSlotsForEmployee");
 		expect(service).to.include("--stored-face-payload-file");
 		expect(service).to.include('"startRemoteConfigMs"');
 		expect(service).to.include('"sendAndCallbackMs"');
