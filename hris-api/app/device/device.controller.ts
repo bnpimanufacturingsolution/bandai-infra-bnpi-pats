@@ -14403,16 +14403,24 @@ export const controller = (prisma: PrismaClient) => {
 									}
 									// SDK stored-face writer still needs a non-empty card value.
 									// Prefer the single target-owned card; else reuse the reviewed
-									// source card. When same-vendor peer copy is proven and both
-									// sides are card-less (common unlinked inventory), bind the
-									// plain vendor person id as the ACS card key so peer face
-									// writes are agent-owned instead of a permanent room enroll stop.
-									const vendorCardFallback =
-										association.strategy === "same_vendor_user_id"
-											? String(write.vendorUserId || "").trim()
-											: "";
+									// source card. When association is already proven (same vendor,
+									// shared card, or same HRIS employee) and both sides are
+									// card-less, bind the plain vendor person id as the ACS card
+									// key so peer face writes are agent-owned. Live residual after
+									// e38cbf2 still failed when strategy was proven but no physical
+									// card existed — vendor id fallback must always apply once
+									// association.strategy is non-null.
+									const vendorCardFallback = String(
+										write.vendorUserId ||
+											write.employeeNo ||
+											first.vendorUserId ||
+											"",
+									).trim();
 									const writerCardNo = String(
-										targetCardNo || cardNo || vendorCardFallback || "",
+										targetCardNo ||
+											cardNo ||
+											(association.strategy ? vendorCardFallback : "") ||
+											"",
 									).trim();
 									if (!writerCardNo) {
 										throw new Error(
