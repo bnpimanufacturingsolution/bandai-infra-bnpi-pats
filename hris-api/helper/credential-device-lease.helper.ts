@@ -46,12 +46,29 @@ const writeMetadata = async (
 	leaseDir: string,
 	metadata: CredentialDeviceLeaseMetadata,
 ) => {
+	// Parent can disappear under concurrent cleanup/stale reclaim (ENOENT on rename).
+	// Always re-create the lease directory before the atomic write.
+	await fs.mkdir(leaseDir, { recursive: true, mode: 0o700 });
 	const temporary = path.join(leaseDir, `lease-${randomUUID()}.tmp`);
-	await fs.writeFile(temporary, JSON.stringify(metadata, null, 2), {
-		encoding: "utf8",
-		mode: 0o600,
-	});
-	await fs.rename(temporary, path.join(leaseDir, "lease.json"));
+	const target = path.join(leaseDir, "lease.json");
+	const payload = JSON.stringify(metadata, null, 2);
+	const writeOnce = async () => {
+		await fs.writeFile(temporary, payload, {
+			encoding: "utf8",
+			mode: 0o600,
+		});
+		await fs.rename(temporary, target);
+	};
+	try {
+		await writeOnce();
+	} catch (error: any) {
+		if (error?.code !== "ENOENT") throw error;
+		// One retry after another process raced the directory away.
+		await fs.mkdir(leaseDir, { recursive: true, mode: 0o700 });
+		await writeOnce();
+	} finally {
+		await fs.rm(temporary, { force: true }).catch(() => undefined);
+	}
 };
 
 const delay = (ms: number) =>
@@ -146,11 +163,17 @@ export const withCredentialDeviceLeases = async <T>(
 							const existing = await readMetadata(leaseDir);
 							if (existing?.ownerId !== options.ownerId) return;
 							const timestamp = now();
-							await writeMetadata(leaseDir, {
-								...existing,
-								heartbeatAt: new Date(timestamp).toISOString(),
-								expiresAt: new Date(timestamp + ttlMs).toISOString(),
-							});
+							try {
+								await writeMetadata(leaseDir, {
+									...existing,
+									heartbeatAt: new Date(timestamp).toISOString(),
+									expiresAt: new Date(timestamp + ttlMs).toISOString(),
+								});
+							} catch (error: any) {
+								// Stale reclaim / concurrent cleanup must not fail a healthy write wave.
+								if (error?.code === "ENOENT") return;
+								throw error;
+							}
 						}),
 					);
 				})
@@ -162,13 +185,18 @@ export const withCredentialDeviceLeases = async <T>(
 		return await work();
 	} finally {
 		if (heartbeat) clearInterval(heartbeat);
-		await heartbeatInFlight;
+		await heartbeatInFlight.catch(() => undefined);
 		for (const { leaseDir } of acquired.reverse()) {
 			const existing = await readMetadata(leaseDir);
 			if (existing?.ownerId === options.ownerId) {
 				await fs.rm(leaseDir, { recursive: true, force: true });
 			}
 		}
-		if (heartbeatError) throw heartbeatError;
+		// Prefer successful physical work over a late heartbeat race; only surface
+		// non-ENOENT lease defects when the work itself already failed.
+		if (heartbeatError) {
+			const code = (heartbeatError as any)?.code;
+			if (code !== "ENOENT") throw heartbeatError;
+		}
 	}
 };
