@@ -623,12 +623,14 @@ const faceAssociationRank = (value: unknown) =>
  * Exact same selection the recovery worker uses before physical writes.
  * Pure: given plan writes + canary/cap, returns the ordered would-write list.
  *
- * Ordering bias (unique-gap first):
+ * Ordering bias (unique-gap first + target-balanced):
  * 1) fingerprint before face (canary safety)
  * 2) people with fewer remaining ops of this modality first (finish unique IDs)
- * 3) diversify: first occurrence of each vendorUserId preferred within a wave
- * 4) exact_shared_card association
- * 5) stable id
+ * 3) at most one op per person in the first pass
+ * 4) among a person's candidate targets, prefer the least-loaded targetDeviceId
+ *    in the current wave (unlocks in-job multi-target parallel without same-device races)
+ * 5) exact_shared_card association / stable id for remaining ties
+ * 6) fill remaining budget preferring least-loaded targets
  */
 export const selectCredentialRecoveryReadyWrites = (params: {
 	credentialWrites: unknown;
@@ -677,6 +679,11 @@ export const selectCredentialRecoveryReadyWrites = (params: {
 		if (canaryModality && String(write?.modality || "") !== canaryModality) return false;
 		return true;
 	});
+	const personKeyOf = (write: any) => {
+		const person = String(write?.vendorUserId || write?.userKey || "").trim();
+		return person ? `${String(write?.modality || "")}|${person}` : "";
+	};
+	const targetIdOf = (write: any) => String(write?.targetDeviceId || "").trim();
 	const sorted = [...eligible].sort((left: any, right: any) => {
 		const leftPerson = String(left?.vendorUserId || left?.userKey || "").trim();
 		const rightPerson = String(right?.vendorUserId || right?.userKey || "").trim();
@@ -692,22 +699,74 @@ export const selectCredentialRecoveryReadyWrites = (params: {
 			String(left?.id || "").localeCompare(String(right?.id || ""))
 		);
 	});
-	// Diversify unique people within the wave: first take at most one op per person,
-	// then fill remaining budget (closes unique-ID gap faster than 3 targets for one person).
-	const selected: any[] = [];
-	const seenPerson = new Set<string>();
+	const byPerson = new Map<string, any[]>();
 	for (const write of sorted) {
-		if (selected.length >= maxVerifiedWrites) break;
-		const person = String(write?.vendorUserId || write?.userKey || "").trim();
-		const personKey = `${String(write?.modality)}|${person}`;
-		if (person && seenPerson.has(personKey)) continue;
-		if (person) seenPerson.add(personKey);
-		selected.push(write);
+		const personKey = personKeyOf(write);
+		if (!personKey) continue;
+		const list = byPerson.get(personKey) || [];
+		list.push(write);
+		byPerson.set(personKey, list);
 	}
+	const personOrder: string[] = [];
+	const seenPersonOrder = new Set<string>();
 	for (const write of sorted) {
+		const personKey = personKeyOf(write);
+		if (!personKey || seenPersonOrder.has(personKey)) continue;
+		seenPersonOrder.add(personKey);
+		personOrder.push(personKey);
+	}
+
+	const selected: any[] = [];
+	const selectedIds = new Set<string>();
+	const targetLoad = new Map<string, number>();
+	const bumpTarget = (write: any) => {
+		const target = targetIdOf(write) || "_none";
+		targetLoad.set(target, (targetLoad.get(target) || 0) + 1);
+	};
+	const pickLeastLoaded = (candidates: any[]) => {
+		if (candidates.length === 0) return null;
+		return [...candidates].sort((left, right) => {
+			const leftTarget = targetIdOf(left) || "_none";
+			const rightTarget = targetIdOf(right) || "_none";
+			const leftLoad = targetLoad.get(leftTarget) || 0;
+			const rightLoad = targetLoad.get(rightTarget) || 0;
+			return (
+				leftLoad - rightLoad ||
+				faceAssociationRank(left?.faceAssociationStrategy) -
+					faceAssociationRank(right?.faceAssociationStrategy) ||
+				String(left?.id || "").localeCompare(String(right?.id || ""))
+			);
+		})[0];
+	};
+
+	// Pass 1: one op per person, prefer least-loaded target among that person's ready ops.
+	for (const personKey of personOrder) {
 		if (selected.length >= maxVerifiedWrites) break;
-		if (selected.includes(write)) continue;
+		const candidates = byPerson.get(personKey) || [];
+		const pick = pickLeastLoaded(candidates);
+		if (!pick) continue;
+		selected.push(pick);
+		selectedIds.add(String(pick?.id || ""));
+		bumpTarget(pick);
+	}
+	// Pass 2: fill remaining budget; prefer ops on least-loaded targets.
+	const remaining = sorted
+		.filter((write) => !selectedIds.has(String(write?.id || "")))
+		.sort((left, right) => {
+			const leftTarget = targetIdOf(left) || "_none";
+			const rightTarget = targetIdOf(right) || "_none";
+			const leftLoad = targetLoad.get(leftTarget) || 0;
+			const rightLoad = targetLoad.get(rightTarget) || 0;
+			return (
+				leftLoad - rightLoad ||
+				String(left?.id || "").localeCompare(String(right?.id || ""))
+			);
+		});
+	for (const write of remaining) {
+		if (selected.length >= maxVerifiedWrites) break;
 		selected.push(write);
+		selectedIds.add(String(write?.id || ""));
+		bumpTarget(write);
 	}
 	return selected;
 };

@@ -162,6 +162,55 @@ describe("Hikvision credential recovery graph", () => {
 		expect(new Set(people).size).to.equal(3);
 	});
 
+	it("balances first-pass unique people across targets when each person has multi-target ready ops", () => {
+		const credentialWrites = [];
+		for (const person of ["10", "11", "12", "13", "14", "15"]) {
+			for (const target of ["A", "D", "E"]) {
+				credentialWrites.push({
+					id: `fp-${person}-${target}`,
+					modality: "fingerprint",
+					vendorUserId: person,
+					recommended: true,
+					executionEligibility: "ready_from_raw_blob",
+					targetDeviceId: target,
+				});
+			}
+		}
+		const selected = selectCredentialRecoveryReadyWrites({
+			credentialWrites,
+			canaryModality: "fingerprint",
+			maxVerifiedWrites: 6,
+		});
+		expect(selected).to.have.length(6);
+		const people = new Set(selected.map((row: any) => String(row.vendorUserId)));
+		expect(people.size).to.equal(6);
+		const byTarget = selected.reduce((map: Record<string, number>, row: any) => {
+			const t = String(row.targetDeviceId);
+			map[t] = (map[t] || 0) + 1;
+			return map;
+		}, {});
+		// Not all six on one target — spreads across A/D/E.
+		expect(Object.keys(byTarget).length).to.be.at.least(2);
+		expect(Math.max(...Object.values(byTarget))).to.be.at.most(3);
+	});
+
+	it("keeps single-target ready waves on that target only", () => {
+		const credentialWrites = Array.from({ length: 10 }, (_, i) => ({
+			id: `fp-e-${i}`,
+			modality: "fingerprint",
+			vendorUserId: String(100 + i),
+			recommended: true,
+			executionEligibility: "ready_from_raw_blob",
+			targetDeviceId: "E",
+		}));
+		const selected = selectCredentialRecoveryReadyWrites({
+			credentialWrites,
+			canaryModality: "fingerprint",
+			maxVerifiedWrites: 5,
+		});
+		expect(selected.every((row: any) => row.targetDeviceId === "E")).to.equal(true);
+	});
+
 	it("does not treat retrying transport claims as permanent write-budget consumption", () => {
 		const keys = selectPermanentCredentialRecoveryWriteAttemptKeys([
 			{ taskKey: "target_write:a", status: "succeeded" },
