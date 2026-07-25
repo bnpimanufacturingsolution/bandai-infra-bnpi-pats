@@ -168,4 +168,52 @@ describe("credential device lease", () => {
 		expect(observedOwner).to.equal("recovered-owner");
 		await fs.rm(rootDir, { recursive: true, force: true });
 	});
+
+	it("does not fail the wave when a concurrent cleanup removes the lease root", async () => {
+		const rootDir = path.join(os.tmpdir(), `credential-lease-${randomUUID()}`);
+		const leaseDir = leaseDirectory(rootDir, "org-1", "device-a");
+		let completed = false;
+		await withCredentialDeviceLeases(
+			{
+				rootDir,
+				organizationId: "org-1",
+				deviceIds: ["device-a"],
+				ownerId: "resilient-owner",
+				jobId: "resilient-job",
+				scopeHash: "resilient-scope",
+				ttlMs: 300,
+			},
+			async () => {
+				// Simulate volume/job cleanup wiping the lease root mid-heartbeat.
+				await fs.rm(rootDir, { recursive: true, force: true });
+				await new Promise((resolve) => setTimeout(resolve, 250));
+				// Acquire path must recreate root for a second nested wait without ENOENT.
+				await withCredentialDeviceLeases(
+					{
+						rootDir,
+						organizationId: "org-2",
+						deviceIds: ["device-b"],
+						ownerId: "second-owner",
+						jobId: "second-job",
+						scopeHash: "second-scope",
+						ttlMs: 1_000,
+					},
+					async () => {
+						completed = true;
+					},
+				);
+				// First owner heartbeat ENOENT must not poison successful work.
+			},
+		);
+		expect(completed).to.equal(true);
+		// First owner releases only its own lease dir if still present.
+		let firstGone = false;
+		try {
+			await fs.access(leaseDir);
+		} catch {
+			firstGone = true;
+		}
+		expect(firstGone).to.equal(true);
+		await fs.rm(rootDir, { recursive: true, force: true });
+	});
 });

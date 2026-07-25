@@ -99,6 +99,10 @@ export const withCredentialDeviceLeases = async <T>(
 	const acquired: Array<{ deviceId: string; leaseDir: string }> = [];
 	const deadline = now() + waitTimeoutMs;
 
+	const ensureLeaseRoot = async () => {
+		await fs.mkdir(options.rootDir, { recursive: true, mode: 0o700 });
+	};
+
 	const acquire = async (deviceId: string) => {
 		const leaseDir = path.join(
 			options.rootDir,
@@ -106,6 +110,8 @@ export const withCredentialDeviceLeases = async <T>(
 		);
 		while (true) {
 			try {
+				// Exclusive create: non-recursive so an existing lease remains EEXIST.
+				// If the parent root was reclaimed, mkdir returns ENOENT — recreate root.
 				await fs.mkdir(leaseDir, { mode: 0o700 });
 				const timestamp = now();
 				await writeMetadata(leaseDir, {
@@ -122,6 +128,17 @@ export const withCredentialDeviceLeases = async <T>(
 				acquired.push({ deviceId, leaseDir });
 				return;
 			} catch (error: any) {
+				if (error?.code === "ENOENT") {
+					// Parent lease root vanished under concurrent cleanup/volume churn.
+					await ensureLeaseRoot();
+					if (now() >= deadline) {
+						throw new Error(
+							`Credential device lease root missing for ${deviceId} after recreate attempts`,
+						);
+					}
+					await delay(pollMs);
+					continue;
+				}
 				if (error?.code !== "EEXIST") throw error;
 				const existing = await readMetadata(leaseDir);
 				const expired =
