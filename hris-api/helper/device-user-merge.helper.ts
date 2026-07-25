@@ -640,9 +640,12 @@ const completeFingerprintChecksumEvidence = (record: DeviceUserMergeRecord) => {
 /**
  * Final fingerprint readiness gate.
  *
- * A negative duplicate lookup is meaningful only after every enrolled
- * fingerprint owner on the target has exact slot/checksum custody. Unknown
- * owners remain executable custody-export work, not a terminal blocker.
+ * Fleet-wide owner-scan completeness is soft evidence for operators and for
+ * target_owner_capture export jobs. It must NOT block every ready FP write when
+ * *this* write already has proven source custody and a safe target state for the
+ * same identity (empty target FP or complete target checksums). Unknown other
+ * owners remain export work, not a permanent physical enroll stop.
+ *
  * Source and target must also resolve to the same canonical HRIS employee;
  * matching vendor numbers alone are not enough for a physical write.
  */
@@ -736,26 +739,59 @@ export const gateFingerprintWritesForTargetOwnerScan = (params: {
 			targetOwnerScanMissingVendorUserIdSample:
 				targetOwnerScan.missingVendorUserIds.slice(0, 3),
 		};
-		if (canonicalIdentityProven && targetOwnerScanComplete) {
+		if (!canonicalIdentityProven) {
+			return {
+				...write,
+				recommended: false,
+				executionEligibility: "blocked",
+				blockingReason: "canonical_identity_unproven",
+				recoveryStage: "comparing_sources",
+				recommendationReason:
+					"Canonical source/target HRIS identity is not proven. Resolve the exact employee linkage before mutation.",
+				canonicalIdentityProven,
+				...boundedOwnerScanEvidence,
+			};
+		}
+		// Full fleet owner scan complete → keep prior ready path (planner already
+		// classified ready_from_raw_blob).
+		if (targetOwnerScanComplete) {
 			return {
 				...write,
 				canonicalIdentityProven,
 				...boundedOwnerScanEvidence,
 			};
 		}
+		// Incomplete fleet scan: allow *this* write only when source has complete
+		// checksum custody and the same identity on target is empty or complete.
+		// Other owners' missing exports stay on the scan summary / capture jobs.
+		const sourceCustodyComplete = Boolean(
+			source && completeFingerprintChecksumEvidence(source),
+		);
+		const targetFpCount = target
+			? credentialCount(target, "fingerprint")
+			: 0;
+		const thisTargetSafeForWrite =
+			!target ||
+			targetFpCount === 0 ||
+			completeFingerprintChecksumEvidence(target);
+		if (sourceCustodyComplete && thisTargetSafeForWrite) {
+			return {
+				...write,
+				canonicalIdentityProven,
+				...boundedOwnerScanEvidence,
+				recommendationReason: `Fingerprint write allowed for this identity with proven source custody while ${targetOwnerScan.missingCount} other target owners still need export (fleet scan incomplete).`,
+			};
+		}
+		// This identity still lacks exportable custody on source or target.
 		return {
 			...write,
 			recommended: false,
 			executionEligibility: "blocked",
-			blockingReason: canonicalIdentityProven
-				? "target_owner_scan_incomplete"
-				: "canonical_identity_unproven",
-			recoveryStage: canonicalIdentityProven
-				? "exporting_source_credential"
-				: "comparing_sources",
-			recommendationReason: canonicalIdentityProven
-				? `Target-wide fingerprint owner scan is incomplete for ${targetOwnerScan.missingCount} enrolled identities. Export and checksum every target owner before mutation.`
-				: "Canonical source/target HRIS identity is not proven. Resolve the exact employee linkage before mutation.",
+			blockingReason: "target_owner_scan_incomplete",
+			recoveryStage: "exporting_source_credential",
+			recommendationReason: !sourceCustodyComplete
+				? `Source fingerprint checksum custody is incomplete for vendor user ${text(write.vendorUserId)}. Export source templates before mutation.`
+				: `Target fingerprint checksum custody is incomplete for vendor user ${text(write.vendorUserId)} (${targetOwnerScan.missingCount} fleet owners also pending). Export and checksum this target owner before mutation.`,
 			canonicalIdentityProven,
 			...boundedOwnerScanEvidence,
 		};

@@ -702,7 +702,7 @@ describe("device user union merge", () => {
 		expect(write?.recommendationReason).to.include("overwrite is forbidden");
 	});
 
-	it("keeps fingerprint writes in custody recovery until every target owner has exact slot checksums", () => {
+	it("allows per-identity fingerprint writes when this person has proven custody even if fleet owner scan is incomplete", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["source", "target"],
 			records: [
@@ -749,9 +749,11 @@ describe("device user union merge", () => {
 				item.vendorUserId === "1" &&
 				item.targetDeviceId === "target",
 		);
-		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.blockingReason).to.equal("target_owner_scan_incomplete");
-		expect(write?.recoveryStage).to.equal("exporting_source_credential");
+		// Person 1 has complete source custody and empty target FP — ready.
+		// Person 8 missing export remains fleet-scan evidence, not a hard block.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recommended).to.equal(true);
+		expect(write?.blockingReason).to.not.equal("target_owner_scan_incomplete");
 		expect(write?.canonicalIdentityProven).to.equal(true);
 		expect(write?.targetOwnerScanComplete).to.equal(false);
 		expect(write?.targetOwnerScanMissingCount).to.equal(1);
@@ -764,9 +766,58 @@ describe("device user union merge", () => {
 			evidenceHash: write?.targetOwnerScanEvidenceHash,
 			missingVendorUserIds: ["8"],
 		});
-		expect(write?.recommendationReason).to.include(
-			"Export and checksum every target owner",
+		expect(write?.recommendationReason).to.include("fleet scan incomplete");
+	});
+
+	it("still blocks fingerprint write when this target owner lacks checksum custody", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 1,
+							rawBlobCount: 0,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
 		);
+		// When target already has enrolled FP without checksums, block until export.
+		// (May also be classified earlier as missing/gap rather than ready-then-gated.)
+		if (write?.executionEligibility === "ready_from_raw_blob") {
+			expect(write.blockingReason).to.equal("target_owner_scan_incomplete");
+			expect(write.recoveryStage).to.equal("exporting_source_credential");
+		} else {
+			expect(write?.executionEligibility).to.not.equal("ready_from_raw_blob");
+		}
 	});
 
 	it("requires exact canonical source/target identity before fingerprint readiness", () => {
@@ -951,16 +1002,26 @@ describe("device user union merge", () => {
 			deviceIds: ["source", "target"],
 			records: [...actionableRecords, ...unknownOwnerRecords],
 		});
+		const readyWrites = plan.credentialWrites.filter(
+			(write) =>
+				write.modality === "fingerprint" &&
+				write.targetDeviceId === "target" &&
+				write.executionEligibility === "ready_from_raw_blob" &&
+				write.recommended === true,
+		);
 		const guardedWrites = plan.credentialWrites.filter(
 			(write) =>
 				write.modality === "fingerprint" &&
 				write.targetDeviceId === "target" &&
 				write.blockingReason === "target_owner_scan_incomplete",
 		);
-		expect(guardedWrites).to.have.length(40);
+		// Ready people keep per-identity write eligibility; fleet unknowns stay export-only.
+		expect(readyWrites).to.have.length(40);
+		expect(guardedWrites).to.have.length(0);
 		expect(
-			guardedWrites.every(
+			readyWrites.every(
 				(write) =>
+					write.targetOwnerScanComplete === false &&
 					write.targetOwnerScanMissingCount === 120 &&
 					write.targetOwnerScanMissingVendorUserIdSample?.length === 3 &&
 					!("targetOwnerScanMissingVendorUserIds" in write),
@@ -972,7 +1033,7 @@ describe("device user union merge", () => {
 		expect(summary?.missingCount).to.equal(120);
 		expect(summary?.missingVendorUserIds).to.have.length(120);
 		expect(plan.fingerprintTargetOwnerScans).to.have.length(1);
-		const serializedWrites = JSON.stringify(guardedWrites);
+		const serializedWrites = JSON.stringify(readyWrites);
 		expect(serializedWrites).not.to.include("unknown-119");
 		expect(JSON.stringify(summary)).to.include("unknown-119");
 	});
