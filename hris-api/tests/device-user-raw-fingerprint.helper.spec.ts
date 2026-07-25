@@ -11,6 +11,7 @@ import {
 	isRawFingerprintEnrollCaptureEnabled,
 	normalizeIsapiFingerprintList,
 	parseFingerPrintProgress,
+	parseFingerprintProgressOccupyingEmployee,
 	RAW_FINGERPRINT_SCHEMA,
 	resolveHikvisionDeviceSuppliedPath,
 	selectMissingFingerprintTemplatesForTarget,
@@ -79,6 +80,15 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(list[0].fingerPrintId).to.equal(1);
 		expect(list[0].data).to.equal("QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo=");
 		expect(list[1].data.length).to.be.greaterThan(8);
+	});
+
+	it("parses progress5 errorMsg as occupying employee when it is a plain id", () => {
+		// Live 2026-07-25: vendor 1 write rejected with progressErrorMsg "8" (owner).
+		expect(parseFingerprintProgressOccupyingEmployee("8")).to.equal("8");
+		expect(parseFingerprintProgressOccupyingEmployee("16")).to.equal("16");
+		expect(parseFingerprintProgressOccupyingEmployee("employeeNo=12")).to.equal("12");
+		expect(parseFingerprintProgressOccupyingEmployee("timeout")).to.equal(null);
+		expect(parseFingerprintProgressOccupyingEmployee("")).to.equal(null);
 	});
 
 	it("parses FingerPrintProgress status 6 as ok and status 5 as clone/reject fail", () => {

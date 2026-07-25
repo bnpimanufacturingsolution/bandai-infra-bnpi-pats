@@ -672,10 +672,84 @@ export const classifyDeferredFingerprintWrite = (
 	};
 };
 
+const isHikvisionIsapiAckOk = (response: any): boolean =>
+	Number(response?.statusCode) === 1 ||
+	String(response?.statusString || "").toUpperCase() === "OK" ||
+	String(response?.subStatusCode || "").toLowerCase() === "ok" ||
+	// Some firmwares return empty body on success.
+	response == null ||
+	(typeof response === "object" && Object.keys(response || {}).length === 0);
+
+/**
+ * Progress errorMsg on cardReaderRecvStatus=5 often names the employee that
+ * still owns the slot (live 2026-07-25: vendor 1 write → errorMsg "8" while
+ * admin dual-owner was [8]). Treat pure integer tokens as candidate owners.
+ */
+export const parseFingerprintProgressOccupyingEmployee = (
+	errorMsg: unknown,
+): string | null => {
+	const raw = String(errorMsg ?? "").trim();
+	if (!raw) return null;
+	if (/^\d{1,10}$/.test(raw)) return raw;
+	const match = raw.match(/(?:employeeNo|employee|owner|user)\s*[=:#]?\s*(\d{1,10})/i);
+	return match?.[1] || null;
+};
+
+const FINGERPRINT_DELETE_BODY_SHAPES = (
+	employeeNo: string,
+	fingerPrintId: number,
+): Array<{ method: "PUT" | "POST"; body: Record<string, unknown>; label: string }> => [
+	{
+		method: "PUT",
+		label: "array_employee_id",
+		body: {
+			FingerPrintDelete: [{ employeeNo, fingerPrintID: fingerPrintId }],
+		},
+	},
+	{
+		method: "PUT",
+		label: "object_employee_list",
+		body: {
+			FingerPrintDelete: {
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "POST",
+		label: "post_object_employee_list",
+		body: {
+			FingerPrintDelete: {
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "PUT",
+		label: "object_single_employee",
+		body: {
+			FingerPrintDelete: {
+				employeeNo,
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+];
+
 /**
  * Clear fingerprint slot ownership for admin-sandbox dual-owner force path.
  * Only call when planner already proved write+owners are vendor ids 1–20.
- * Attempts ISAPI FingerPrint Delete; returns structured attempt results.
+ *
+ * Defect fixed 2026-07-25: prior soft-fail left conflicting owners on device
+ * (progressStatus=5 errorMsg=<owner>). Now:
+ * 1) try multiple ISAPI Delete body shapes (firmware variance)
+ * 2) reread FingerPrintUpload / prove sticky empty
+ * 3) callers hard-fail when stickyEmpty is false
  */
 export const deleteHikvisionFingerprintSlotsForEmployee = async (params: {
 	prisma: PrismaClient | any;
@@ -683,104 +757,165 @@ export const deleteHikvisionFingerprintSlotsForEmployee = async (params: {
 	deviceId: string;
 	employeeNo: string;
 	fingerPrintIds: number[];
+	/** When true, expand to slots 1–10 (matches C++ DEL_FINGERPRINT all-id mask). */
+	clearAllCommonSlots?: boolean;
+	/** When true (default), reread device and require zero retained templates. */
+	requireStickyEmpty?: boolean;
 }): Promise<{
 	employeeNo: string;
 	ok: boolean;
-	attempts: Array<{ fingerPrintId: number; ok: boolean; detail: string }>;
+	/** True only after physical reread shows no fingerData for the cleared slots. */
+	stickyEmpty: boolean;
+	remainingFingerPrintIds: number[];
+	attempts: Array<{
+		fingerPrintId: number;
+		ok: boolean;
+		shape: string;
+		detail: string;
+	}>;
 }> => {
 	const employeeNo = String(params.employeeNo || "").trim();
+	const requireStickyEmpty = params.requireStickyEmpty !== false;
+	const baseIds = (params.fingerPrintIds || [])
+		.map((id) => Number(id) || 0)
+		.filter((id) => id > 0);
 	const ids = [
 		...new Set(
-			(params.fingerPrintIds || [])
-				.map((id) => Number(id) || 0)
-				.filter((id) => id > 0),
+			params.clearAllCommonSlots
+				? [...baseIds, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+				: baseIds,
 		),
-	];
-	const attempts: Array<{ fingerPrintId: number; ok: boolean; detail: string }> =
-		[];
+	].sort((a, b) => a - b);
+	const attempts: Array<{
+		fingerPrintId: number;
+		ok: boolean;
+		shape: string;
+		detail: string;
+	}> = [];
 	if (!employeeNo || !ids.length) {
-		return { employeeNo, ok: false, attempts };
+		return {
+			employeeNo,
+			ok: false,
+			stickyEmpty: false,
+			remainingFingerPrintIds: [],
+			attempts,
+		};
 	}
 	for (const fingerPrintId of ids) {
-		try {
-			// Hikvision ACS ISAPI: delete fingerprint by employee + fingerPrintID.
-			const response = await hikvisionFetch(
-				"/ISAPI/AccessControl/FingerPrint/Delete?format=json",
-				{
-					method: "PUT",
-					deviceId: params.deviceId,
-					prisma: params.prisma,
-					request: params.req,
-					timeoutMs: 20_000,
-					body: {
-						FingerPrintDelete: [
-							{
-								employeeNo,
-								fingerPrintID: fingerPrintId,
-							},
-						],
-					},
-				},
-			);
-			const ok =
-				Number(response?.statusCode) === 1 ||
-				String(response?.statusString || "").toUpperCase() === "OK" ||
-				String(response?.subStatusCode || "").toLowerCase() === "ok" ||
-				// Some firmwares return empty body on success.
-				response == null ||
-				Object.keys(response || {}).length === 0;
-			attempts.push({
-				fingerPrintId,
-				ok,
-				detail: ok
-					? "deleted_or_empty_ack"
-					: JSON.stringify(response || {}).slice(0, 240),
-			});
-		} catch (error: any) {
-			// Fallback shape used by some panels.
+		let deleted = false;
+		let lastDetail = "no_shape_attempted";
+		let lastShape = "none";
+		for (const shape of FINGERPRINT_DELETE_BODY_SHAPES(employeeNo, fingerPrintId)) {
+			lastShape = shape.label;
 			try {
 				const response = await hikvisionFetch(
 					"/ISAPI/AccessControl/FingerPrint/Delete?format=json",
 					{
-						method: "POST",
+						method: shape.method,
 						deviceId: params.deviceId,
 						prisma: params.prisma,
 						request: params.req,
 						timeoutMs: 20_000,
-						body: {
-							FingerPrintDelete: {
-								EmployeeNoList: [{ employeeNo }],
-								fingerPrintID: fingerPrintId,
-								fingerType: "normalFP",
-							},
-						},
+						body: shape.body,
 					},
 				);
-				const ok =
-					Number(response?.statusCode) === 1 ||
-					String(response?.statusString || "").toUpperCase() === "OK" ||
-					String(response?.subStatusCode || "").toLowerCase() === "ok";
-				attempts.push({
-					fingerPrintId,
-					ok,
-					detail: ok
-						? "deleted_post_fallback"
-						: `${String(error?.message || error).slice(0, 120)} | ${JSON.stringify(response || {}).slice(0, 120)}`,
-				});
-			} catch (error2: any) {
-				attempts.push({
-					fingerPrintId,
-					ok: false,
-					detail: String(error2?.message || error2 || error).slice(0, 240),
-				});
+				if (isHikvisionIsapiAckOk(response)) {
+					deleted = true;
+					lastDetail = `ack_ok:${shape.label}`;
+					break;
+				}
+				lastDetail = JSON.stringify(response || {}).slice(0, 200);
+			} catch (error: any) {
+				lastDetail = String(error?.message || error).slice(0, 200);
 			}
 		}
+		attempts.push({
+			fingerPrintId,
+			ok: deleted,
+			shape: lastShape,
+			detail: lastDetail,
+		});
 	}
+
+	// Device applies deletes asynchronously; settle before sticky reread.
+	await new Promise((resolve) => setTimeout(resolve, 600));
+
+	let remainingFingerPrintIds: number[] = [];
+	if (requireStickyEmpty) {
+		const maxFingerId = Math.max(...ids, 10);
+		const reread = await fetchRawFingerprintsViaIsapi({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId: params.deviceId,
+			employeeNo,
+			maxFingerId,
+			expectedFingerprintCount: maxFingerId,
+		});
+		remainingFingerPrintIds = (reread.fingerprints || [])
+			.map((fp) => Number(fp.fingerPrintId || 0))
+			.filter((id) => id > 0 && ids.includes(id));
+	}
+
+	const stickyEmpty = requireStickyEmpty
+		? remainingFingerPrintIds.length === 0
+		: attempts.some((item) => item.ok);
+	const ok =
+		attempts.length > 0 &&
+		(stickyEmpty || (!requireStickyEmpty && attempts.every((item) => item.ok)));
+
 	return {
 		employeeNo,
-		ok: attempts.length > 0 && attempts.every((item) => item.ok),
+		ok,
+		stickyEmpty,
+		remainingFingerPrintIds,
 		attempts,
 	};
+};
+
+/**
+ * Admin-sandbox only: clear every conflicting owner until sticky-empty, or throw.
+ * Never accepts soft-fail (progress5 loop root cause).
+ */
+export const clearAdminSandboxFingerprintConflictsSticky = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	conflictingOwners: string[];
+	fingerPrintIds: number[];
+	isAdminSandboxVendorUserId: (vendorUserId: string | number | null | undefined) => boolean;
+}): Promise<{
+	clearedOwners: string[];
+	results: Array<Awaited<ReturnType<typeof deleteHikvisionFingerprintSlotsForEmployee>>>;
+}> => {
+	const results: Array<
+		Awaited<ReturnType<typeof deleteHikvisionFingerprintSlotsForEmployee>>
+	> = [];
+	const clearedOwners: string[] = [];
+	for (const owner of params.conflictingOwners) {
+		const ownerId = String(owner || "").trim();
+		if (!ownerId || !params.isAdminSandboxVendorUserId(ownerId)) {
+			throw new Error(
+				`admin_sandbox_fp_clear_refused_non_admin_owner:${ownerId || "empty"}`,
+			);
+		}
+		const cleared = await deleteHikvisionFingerprintSlotsForEmployee({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId: params.deviceId,
+			employeeNo: ownerId,
+			fingerPrintIds: params.fingerPrintIds,
+			clearAllCommonSlots: true,
+			requireStickyEmpty: true,
+		});
+		results.push(cleared);
+		if (!cleared.stickyEmpty) {
+			throw new Error(
+				`admin_sandbox_fp_clear_not_sticky owner=${ownerId} remainingSlots=${cleared.remainingFingerPrintIds.join(",") || "unknown"} attempts=${JSON.stringify(cleared.attempts).slice(0, 500)}`,
+			);
+		}
+		clearedOwners.push(ownerId);
+	}
+	return { clearedOwners, results };
 };
 
 /**

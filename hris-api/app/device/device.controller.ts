@@ -64,6 +64,7 @@ import {
 	buildDeviceUserMergePlan,
 	classifyFaceCustody,
 	fingerprintCustodyMatchesReview,
+	isAdminSandboxVendorUserId,
 	normalizeFingerprintCustodyEvidence,
 	reconcileDurableFingerprintOwnerConflicts,
 	resolveFaceAssociationStrategy,
@@ -14081,52 +14082,40 @@ export const controller = (prisma: PrismaClient) => {
 						// owners' fingerprint slots before write so progressStatus=5
 						// dual-owner does not permanently RED admin test people.
 						// Never runs for PROD vendor ids 21+.
+						// 2026-07-25 defect: soft-fail clear left owners (errorMsg=8)
+						// and writes still progress5. Now sticky-empty or hard fail.
+						const {
+							clearAdminSandboxFingerprintConflictsSticky,
+							parseFingerprintProgressOccupyingEmployee,
+						} = await import(
+							"../../helper/device-user-raw-fingerprint.helper.js"
+						);
+						const isAdminSandboxVendorUserIdFn = isAdminSandboxVendorUserId;
+						const adminForceSlots = (
+							Array.isArray(write.adminSandboxConflictSlots)
+								? write.adminSandboxConflictSlots
+								: templates.map((t: any) => Number(t.fingerPrintId || 0))
+						)
+							.map((id: any) => Number(id) || 0)
+							.filter((id: number) => id > 0);
 						if (
 							write.adminSandboxForceOverwrite === true &&
 							Array.isArray(write.adminSandboxConflictingOwners) &&
 							write.adminSandboxConflictingOwners.length > 0
 						) {
-							const {
-								deleteHikvisionFingerprintSlotsForEmployee,
-							} = await import(
-								"../../helper/device-user-raw-fingerprint.helper.js"
+							const stickyClear =
+								await clearAdminSandboxFingerprintConflictsSticky({
+									prisma,
+									req: params.req,
+									deviceId: String(write.targetDeviceId),
+									conflictingOwners: write.adminSandboxConflictingOwners,
+									fingerPrintIds: adminForceSlots,
+									isAdminSandboxVendorUserId: isAdminSandboxVendorUserIdFn,
+								});
+							deviceLogger.info(
+								`admin_sandbox_fp_clear sticky_ok target=${write.targetDeviceId} owners=${stickyClear.clearedOwners.join(",")} slots=${adminForceSlots.join(",")}`,
 							);
-							const slots = (
-								Array.isArray(write.adminSandboxConflictSlots)
-									? write.adminSandboxConflictSlots
-									: templates.map((t: any) => Number(t.fingerPrintId || 0))
-							)
-								.map((id: any) => Number(id) || 0)
-								.filter((id: number) => id > 0);
-							for (const owner of write.adminSandboxConflictingOwners) {
-								const ownerId = String(owner || "").trim();
-								// Belt-and-suspenders: never delete PROD identity 21+.
-								const ownerNum = Number(ownerId);
-								if (
-									!ownerId ||
-									!Number.isInteger(ownerNum) ||
-									ownerNum < 1 ||
-									ownerNum > 20
-								) {
-									throw new Error(
-										`Admin sandbox force-overwrite refused to clear non-admin vendor ${ownerId}; PROD ids 21+ are protected.`,
-									);
-								}
-								const cleared =
-									await deleteHikvisionFingerprintSlotsForEmployee({
-										prisma,
-										req: params.req,
-										deviceId: String(write.targetDeviceId),
-										employeeNo: ownerId,
-										fingerPrintIds: slots,
-									});
-								deviceLogger.info(
-									`admin_sandbox_fp_clear target=${write.targetDeviceId} owner=${ownerId} slots=${slots.join(",")} ok=${cleared.ok} detail=${JSON.stringify(cleared.attempts).slice(0, 400)}`,
-								);
-								// Soft-fail clear: still attempt write; progress5 will
-								// re-block if device still owns the slot.
-							}
-							await new Promise((resolve) => setTimeout(resolve, 400));
+							await new Promise((resolve) => setTimeout(resolve, 500));
 						}
 						let templatesToWrite = templates;
 						if (Number(write.targetReportedCount || 0) > 0) {
@@ -14169,16 +14158,65 @@ export const controller = (prisma: PrismaClient) => {
 								);
 							}
 						}
+						const runFingerprintBundleWrite = async () =>
+							writeDecryptedBiometricBundleToHikvisionDevice({
+								req: params.req,
+								targetDevice,
+								employeeNo: write.vendorUserId,
+								decrypted: { fingerprints: templatesToWrite },
+								deferFingerprintRereadVerification: true,
+							});
 						const bundleWriteStartedAt = Date.now();
-						const writeResult = await writeDecryptedBiometricBundleToHikvisionDevice({
-							req: params.req,
-							targetDevice,
-							employeeNo: write.vendorUserId,
-							decrypted: { fingerprints: templatesToWrite },
-							deferFingerprintRereadVerification: true,
-						});
+						let writeResult = await runFingerprintBundleWrite();
 						operationTiming.fingerprintBundleWriteMs =
 							Date.now() - bundleWriteStartedAt;
+						// One admin-band recovery: progress5 errorMsg often names the
+						// occupying employee (live: errorMsg "8" while owner was 8).
+						// Clear that owner sticky + retry once. Never for PROD 21+.
+						if (
+							writeResult.fingerprintWrites.some(
+								(item: any) => item.sticky !== true,
+							)
+						) {
+							const occupyingOwners = [
+								...new Set(
+									writeResult.fingerprintWrites
+										.map((item: any) =>
+											parseFingerprintProgressOccupyingEmployee(
+												item.progressErrorMsg,
+											),
+										)
+										.filter(
+											(owner: string | null): owner is string =>
+												Boolean(owner) &&
+												isAdminSandboxVendorUserIdFn(owner) &&
+												String(owner) !== String(write.vendorUserId),
+										),
+								),
+							];
+							const writeIsAdmin =
+								isAdminSandboxVendorUserIdFn(write.vendorUserId);
+							if (writeIsAdmin && occupyingOwners.length > 0) {
+								deviceLogger.info(
+									`admin_sandbox_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${occupyingOwners.join(",")}`,
+								);
+								await clearAdminSandboxFingerprintConflictsSticky({
+									prisma,
+									req: params.req,
+									deviceId: String(write.targetDeviceId),
+									conflictingOwners: occupyingOwners,
+									fingerPrintIds: templatesToWrite
+										.map((t: any) => Number(t.fingerPrintId || 0))
+										.filter((id: number) => id > 0),
+									isAdminSandboxVendorUserId: isAdminSandboxVendorUserIdFn,
+								});
+								await new Promise((resolve) => setTimeout(resolve, 500));
+								const retryStartedAt = Date.now();
+								writeResult = await runFingerprintBundleWrite();
+								operationTiming.fingerprintBundleWriteRetryMs =
+									Date.now() - retryStartedAt;
+							}
+						}
 						if (
 							writeResult.fingerprintWriteCount < templatesToWrite.length ||
 							writeResult.fingerprintWrites.some(

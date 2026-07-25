@@ -283,7 +283,17 @@ describe("Hikvision biometric sync contract", () => {
 		// admin owners before fingerprint write; PROD 21+ stay protected.
 		expect(controller).to.include("adminSandboxForceOverwrite");
 		expect(controller).to.include("admin_sandbox_fp_clear");
-		expect(controller).to.include("deleteHikvisionFingerprintSlotsForEmployee");
+		expect(controller).to.include("clearAdminSandboxFingerprintConflictsSticky");
+		expect(controller).to.include("admin_sandbox_fp_progress5_retry");
+		// Sticky-empty hard-fail + multi-shape delete live in the fingerprint helper.
+		const fingerprintHelper = readFileSync(
+			join(process.cwd(), "helper/device-user-raw-fingerprint.helper.ts"),
+			"utf8",
+		);
+		expect(fingerprintHelper).to.include("deleteHikvisionFingerprintSlotsForEmployee");
+		expect(fingerprintHelper).to.include("admin_sandbox_fp_clear_not_sticky");
+		expect(fingerprintHelper).to.include("stickyEmpty");
+		expect(fingerprintHelper).to.include("parseFingerprintProgressOccupyingEmployee");
 		expect(service).to.include("--stored-face-payload-file");
 		expect(service).to.include('"startRemoteConfigMs"');
 		expect(service).to.include('"sendAndCallbackMs"');
