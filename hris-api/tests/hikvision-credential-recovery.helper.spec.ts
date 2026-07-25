@@ -420,7 +420,7 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
-					"Neither exact shared card custody nor the same canonical HRIS employee proves the face association.",
+					"Neither exact shared card custody, the same canonical HRIS employee, nor the same plain vendor person id proves the face association.",
 				),
 			),
 		).to.include({
@@ -600,11 +600,16 @@ describe("Hikvision credential recovery graph", () => {
 	it("uses one backend classification for physical-action totals", () => {
 		const plan = {
 			credentialWrites: [
+				// Amber agent recovery — not physical enroll.
 				{ blockingReason: "canonical_identity_unproven" },
+				// True dual-owner / identity conflict — red physical.
 				{ blockingReason: "physical_identity_adjudication_required" },
+				// Amber export — not physical enroll.
 				{ blockingReason: "missing_raw_blob" },
 			],
 		};
-		expect(summarizeCredentialRecovery(plan, []).physicalActionRequired).to.equal(2);
+		const summary = summarizeCredentialRecovery(plan, []);
+		expect(summary.physicalActionRequired).to.equal(1);
+		expect(summary.recoveryNeeded).to.equal(2);
 	});
 });

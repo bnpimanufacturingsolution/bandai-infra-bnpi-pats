@@ -264,10 +264,13 @@ describe("Hikvision biometric sync contract", () => {
 		);
 		expect(controller).to.include("Target now reports a face; refusing to overwrite");
 		expect(controller).to.include(
-			"Target full CardInfo inventory did not yield exactly one owned card",
+			"Target full CardInfo inventory yielded multiple owned cards",
 		);
 		expect(controller).to.include(
-			"Neither exact shared card custody nor the same canonical HRIS employee proves",
+			"Neither exact shared card custody, the same canonical HRIS employee, nor the same plain vendor person id proves",
+		);
+		expect(controller).to.include(
+			"Face peer association is proven by same vendor person id, but neither source nor target yields a card value",
 		);
 		expect(controller).to.include('"stored_face_write_reread_completed"');
 		expect(controller).to.include("templateMatch");
@@ -925,17 +928,25 @@ describe("Hikvision biometric sync contract", () => {
 	it("blocks face writes during planning when source and target identity association is unproven", () => {
 		const controller = controllerSource();
 
-		expect(controller).to.include('const faceAssociationStrategy = exactSharedCardMatch');
-		expect(controller).to.include('"exact_shared_card"');
-		expect(controller).to.include('"canonical_hris_employee"');
+		// Planner uses resolveFaceAssociationStrategy: card, HRIS employee, or
+		// same plain vendor person id. Only hard conflicts stay dual-owner red.
+		expect(controller).to.include("resolveFaceAssociationStrategy({");
+		expect(controller).to.include("association.strategy");
+		expect(controller).to.include("association.blockingReason");
 		expect(controller).to.include(
-			'blockingReason: "physical_identity_adjudication_required"',
+			'"physical_identity_adjudication_required"',
 		);
 		expect(controller).to.include("write.modality === \"face\"");
 		expect(controller).to.include("faceAssociationStrategy,");
 		expect(controller.indexOf("if (!faceAssociationStrategy)")).to.be.lessThan(
 			controller.indexOf('writerStrategy: "sdk_face_template_writer"'),
 		);
+		const helper = readFileSync(
+			join(process.cwd(), "helper/device-user-merge.helper.ts"),
+			"utf8",
+		);
+		expect(helper).to.include('"same_vendor_user_id"');
+		expect(helper).to.include("export const resolveFaceAssociationStrategy");
 	});
 
 	it("selects recovery work across the full bounded graph instead of one sorted-device prefix", () => {

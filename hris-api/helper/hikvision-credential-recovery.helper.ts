@@ -133,7 +133,9 @@ export const classifyCredentialRecoveryError = (
 	if (
 		matches(
 			/neither exact shared card custody nor the same canonical hris employee/,
+			/neither exact shared card custody, the same canonical hris employee, nor the same plain vendor person id/,
 			/neither an exact shared physical card nor the same canonical hris employee/,
+			/neither an exact shared physical card, the same canonical hris employee, nor the same plain vendor person id/,
 		)
 	) {
 		return {
@@ -477,7 +479,10 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 						: String(write.faceAssociationStrategy) ===
 							  "canonical_hris_employee"
 							? 20_000
-							: 10_000;
+							: String(write.faceAssociationStrategy) ===
+								  "same_vendor_user_id"
+								? 15_000
+								: 10_000;
 			const taskKey = key("source_capture", sourceDeviceId, vendorUserId, modality);
 			addUnlock(
 				taskKey,
@@ -632,7 +637,9 @@ const faceAssociationRank = (value: unknown) =>
 		? 0
 		: String(value) === "canonical_hris_employee"
 			? 1
-			: 2;
+			: String(value) === "same_vendor_user_id"
+				? 2
+				: 3;
 
 /**
  * Exact same selection the recovery worker uses before physical writes.

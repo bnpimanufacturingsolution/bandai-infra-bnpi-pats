@@ -643,6 +643,279 @@ const completeFingerprintChecksumEvidence = (record: DeviceUserMergeRecord) => {
 };
 
 /**
+ * Face / credential identity association for peer recovery writes.
+ *
+ * Live audit (A/B/D/E/F, 2026-07-25): ~231 face RED rows were
+ * `physical_identity_adjudication_required` while source and target already
+ * shared the same plain vendor person id with no employeeId or card conflict.
+ * That is peer copy, not dual-owner room work.
+ *
+ * Strategy priority:
+ * 1) exact_shared_card — both sides share a non-empty card value
+ * 2) canonical_hris_employee — both sides share the same non-empty employeeId
+ * 3) same_vendor_user_id — write.vendorUserId equals source and target vendor
+ *    person ids and the merge group has no conflicting employeeIds/cards
+ *
+ * Hard conflicts (different non-empty employeeIds or different non-empty cards)
+ * stay physical_identity_adjudication_required.
+ */
+export type FaceAssociationStrategy =
+	| "exact_shared_card"
+	| "canonical_hris_employee"
+	| "same_vendor_user_id";
+
+export type FaceAssociationResolution = {
+	strategy: FaceAssociationStrategy | null;
+	blockingReason: "physical_identity_adjudication_required" | null;
+	recommendationReason: string | null;
+	sameVendorPeer: boolean;
+	employeeConflict: boolean;
+	cardConflict: boolean;
+};
+
+const recordVendorPersonId = (record: {
+	vendorUserId?: unknown;
+	employeeNo?: unknown;
+} | null | undefined) =>
+	text(record?.vendorUserId || record?.employeeNo);
+
+const recordCardNo = (record: {
+	_cardNo?: unknown;
+	rawPayload?: unknown;
+} | null | undefined) => {
+	const raw = (record?.rawPayload || {}) as any;
+	return text(
+		record?._cardNo ||
+			raw?.cardNo ||
+			raw?.CardInfo?.cardNo ||
+			raw?.UserInfo?.cardNo,
+	);
+};
+
+export const resolveFaceAssociationStrategy = (params: {
+	vendorUserId: unknown;
+	source?: {
+		vendorUserId?: unknown;
+		employeeNo?: unknown;
+		employeeId?: unknown;
+		_cardNo?: unknown;
+		rawPayload?: unknown;
+	} | null;
+	target?: {
+		vendorUserId?: unknown;
+		employeeNo?: unknown;
+		employeeId?: unknown;
+		_cardNo?: unknown;
+		rawPayload?: unknown;
+	} | null;
+	/** Other records in the same merge group (conflict scan). */
+	groupRecords?: Array<{
+		vendorUserId?: unknown;
+		employeeNo?: unknown;
+		employeeId?: unknown;
+		_cardNo?: unknown;
+		rawPayload?: unknown;
+	}> | null;
+}): FaceAssociationResolution => {
+	const vendorUserId = text(params.vendorUserId);
+	const sourceVendor = recordVendorPersonId(params.source) || vendorUserId;
+	const targetVendor = recordVendorPersonId(params.target) || vendorUserId;
+	const sourceEmployeeId = text(params.source?.employeeId);
+	const targetEmployeeId = text(params.target?.employeeId);
+	const sourceCardNo = recordCardNo(params.source);
+	const targetCardNo = recordCardNo(params.target);
+	const sameVendorPeer = Boolean(
+		vendorUserId &&
+			sourceVendor === vendorUserId &&
+			targetVendor === vendorUserId,
+	);
+	const employeeConflict = Boolean(
+		sourceEmployeeId &&
+			targetEmployeeId &&
+			sourceEmployeeId !== targetEmployeeId,
+	);
+	const cardConflict = Boolean(
+		sourceCardNo && targetCardNo && sourceCardNo !== targetCardNo,
+	);
+	const groupEmployeeIds = [
+		...new Set(
+			(params.groupRecords || [])
+				.map((record) => text(record.employeeId))
+				.filter(Boolean),
+		),
+	];
+	const groupEmployeeConflict = groupEmployeeIds.length > 1;
+	const groupCardValues = [
+		...new Set(
+			(params.groupRecords || [])
+				.map((record) => recordCardNo(record))
+				.filter(Boolean),
+		),
+	];
+	const groupCardConflict = groupCardValues.length > 1;
+
+	if (employeeConflict || groupEmployeeConflict) {
+		return {
+			strategy: null,
+			blockingReason: "physical_identity_adjudication_required",
+			recommendationReason:
+				"Source and target (or fleet peers for this vendor id) map to different canonical HRIS employees; physical identity adjudication is required before mutation.",
+			sameVendorPeer,
+			employeeConflict: true,
+			cardConflict,
+		};
+	}
+	if (cardConflict || groupCardConflict) {
+		return {
+			strategy: null,
+			blockingReason: "physical_identity_adjudication_required",
+			recommendationReason:
+				"Source and target report different physical card values for this association; physical identity adjudication is required before mutation.",
+			sameVendorPeer,
+			employeeConflict,
+			cardConflict: true,
+		};
+	}
+	if (sourceCardNo && targetCardNo && sourceCardNo === targetCardNo) {
+		return {
+			strategy: "exact_shared_card",
+			blockingReason: null,
+			recommendationReason: null,
+			sameVendorPeer,
+			employeeConflict: false,
+			cardConflict: false,
+		};
+	}
+	if (
+		sourceEmployeeId &&
+		targetEmployeeId &&
+		sourceEmployeeId === targetEmployeeId
+	) {
+		return {
+			strategy: "canonical_hris_employee",
+			blockingReason: null,
+			recommendationReason: null,
+			sameVendorPeer,
+			employeeConflict: false,
+			cardConflict: false,
+		};
+	}
+	// Peer copy on the same plain device person id with no hard conflict.
+	// Missing HRIS link / missing card is agent recovery for optional linkage,
+	// not a dual-owner enroll stop.
+	if (sameVendorPeer) {
+		return {
+			strategy: "same_vendor_user_id",
+			blockingReason: null,
+			recommendationReason: null,
+			sameVendorPeer: true,
+			employeeConflict: false,
+			cardConflict: false,
+		};
+	}
+	return {
+		strategy: null,
+		blockingReason: "physical_identity_adjudication_required",
+		recommendationReason:
+			"Neither an exact shared physical card, the same canonical HRIS employee, nor the same plain vendor person id proves this face source/target association.",
+		sameVendorPeer: false,
+		employeeConflict,
+		cardConflict,
+	};
+};
+
+/**
+ * True when a fingerprint/face write may treat source and target as the same
+ * person for mutation. Prefers shared HRIS employeeId; falls back to same plain
+ * vendor person id when the merge group has no employeeId conflict.
+ */
+export const proveCanonicalDeviceIdentity = (params: {
+	vendorUserId: unknown;
+	source?: {
+		vendorUserId?: unknown;
+		employeeNo?: unknown;
+		employeeId?: unknown;
+	} | null;
+	target?: {
+		vendorUserId?: unknown;
+		employeeNo?: unknown;
+		employeeId?: unknown;
+	} | null;
+	groupRecords?: Array<{
+		vendorUserId?: unknown;
+		employeeNo?: unknown;
+		employeeId?: unknown;
+	}> | null;
+}): {
+	proven: boolean;
+	via: "canonical_hris_employee" | "same_vendor_user_id" | null;
+	reason: string | null;
+} => {
+	const vendorUserId = text(params.vendorUserId);
+	const sourceEmployeeId = text(params.source?.employeeId);
+	const targetEmployeeId = text(params.target?.employeeId);
+	const groupEmployeeIds = [
+		...new Set(
+			(params.groupRecords || [])
+				.map((record) => text(record.employeeId))
+				.filter(Boolean),
+		),
+	];
+	if (groupEmployeeIds.length > 1) {
+		return {
+			proven: false,
+			via: null,
+			reason:
+				"Fleet records for this vendor person map to more than one canonical HRIS employee.",
+		};
+	}
+	if (
+		sourceEmployeeId &&
+		targetEmployeeId &&
+		sourceEmployeeId !== targetEmployeeId
+	) {
+		return {
+			proven: false,
+			via: null,
+			reason:
+				"Source and target resolve to different canonical HRIS employees.",
+		};
+	}
+	if (
+		sourceEmployeeId &&
+		targetEmployeeId &&
+		sourceEmployeeId === targetEmployeeId &&
+		(groupEmployeeIds.length === 0 ||
+			groupEmployeeIds.every((id) => id === sourceEmployeeId))
+	) {
+		return {
+			proven: true,
+			via: "canonical_hris_employee",
+			reason: null,
+		};
+	}
+	const sourceVendor = recordVendorPersonId(params.source) || vendorUserId;
+	const targetVendor = recordVendorPersonId(params.target) || vendorUserId;
+	if (
+		vendorUserId &&
+		sourceVendor === vendorUserId &&
+		targetVendor === vendorUserId
+	) {
+		return {
+			proven: true,
+			via: "same_vendor_user_id",
+			reason: null,
+		};
+	}
+	return {
+		proven: false,
+		via: null,
+		reason:
+			"Canonical source/target HRIS identity is not proven and vendor person ids do not match for peer copy.",
+	};
+};
+
+/**
  * Final fingerprint readiness gate.
  *
  * Fleet-wide owner-scan completeness is soft evidence for operators and for
@@ -651,8 +924,9 @@ const completeFingerprintChecksumEvidence = (record: DeviceUserMergeRecord) => {
  * same identity (empty target FP or complete target checksums). Unknown other
  * owners remain export work, not a permanent physical enroll stop.
  *
- * Source and target must also resolve to the same canonical HRIS employee;
- * matching vendor numbers alone are not enough for a physical write.
+ * Identity proof: same non-empty HRIS employeeId on source/target, or same
+ * plain vendor person id with no group employee conflict (peer copy). Matching
+ * vendor numbers with conflicting employeeIds still block.
  */
 export const gateFingerprintWritesForTargetOwnerScan = (params: {
 	users: DeviceUserMergeGroup[];
@@ -713,20 +987,13 @@ export const gateFingerprintWritesForTargetOwnerScan = (params: {
 		const target = user?.records.find(
 			(record) => record.deviceId === write.targetDeviceId,
 		);
-		const sourceEmployeeId = text(source?.employeeId);
-		const targetEmployeeId = text(target?.employeeId);
-		const groupEmployeeIds = (user?.records || []).map((record) =>
-			text(record.employeeId),
-		);
-		const canonicalIdentityProven = Boolean(
-			sourceEmployeeId &&
-				targetEmployeeId &&
-				sourceEmployeeId === targetEmployeeId &&
-				groupEmployeeIds.length > 0 &&
-				groupEmployeeIds.every(
-					(employeeId) => employeeId === sourceEmployeeId,
-				),
-		);
+		const identity = proveCanonicalDeviceIdentity({
+			vendorUserId: write.vendorUserId,
+			source,
+			target,
+			groupRecords: user?.records || [],
+		});
+		const canonicalIdentityProven = identity.proven;
 		const targetOwnerScan = targetOwnerScanByDeviceId.get(
 			write.targetDeviceId,
 		) || {
@@ -752,6 +1019,7 @@ export const gateFingerprintWritesForTargetOwnerScan = (params: {
 				blockingReason: "canonical_identity_unproven",
 				recoveryStage: "comparing_sources",
 				recommendationReason:
+					identity.reason ||
 					"Canonical source/target HRIS identity is not proven. Resolve the exact employee linkage before mutation.",
 				canonicalIdentityProven,
 				...boundedOwnerScanEvidence,

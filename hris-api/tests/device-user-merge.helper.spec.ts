@@ -4,8 +4,10 @@ import {
 	buildDeviceUserMergePlan,
 	classifyFaceCustody,
 	fingerprintCustodyMatchesReview,
+	proveCanonicalDeviceIdentity,
 	proveFingerprintPhysicalReread,
 	reconcileDurableFingerprintOwnerConflicts,
+	resolveFaceAssociationStrategy,
 	resolveFingerprintCredentialSource,
 	serializeDeviceUserMergePlanForReview,
 } from "../helper/device-user-merge.helper";
@@ -22,6 +24,50 @@ const record = (deviceId: string, patch: any = {}) => ({
 });
 
 describe("device user union merge", () => {
+	it("resolves face association via same vendor person id without inventing dual-owner", () => {
+		const peer = resolveFaceAssociationStrategy({
+			vendorUserId: "15",
+			source: { vendorUserId: "15", employeeId: null, _cardNo: null },
+			target: { vendorUserId: "15", employeeId: null, _cardNo: null },
+		});
+		expect(peer.strategy).to.equal("same_vendor_user_id");
+		expect(peer.blockingReason).to.equal(null);
+		expect(peer.sameVendorPeer).to.equal(true);
+
+		const card = resolveFaceAssociationStrategy({
+			vendorUserId: "15",
+			source: { vendorUserId: "15", _cardNo: "CARD-1" },
+			target: { vendorUserId: "15", _cardNo: "CARD-1" },
+		});
+		expect(card.strategy).to.equal("exact_shared_card");
+
+		const employee = resolveFaceAssociationStrategy({
+			vendorUserId: "15",
+			source: { vendorUserId: "15", employeeId: "emp-a" },
+			target: { vendorUserId: "15", employeeId: "emp-a" },
+		});
+		expect(employee.strategy).to.equal("canonical_hris_employee");
+
+		const conflict = resolveFaceAssociationStrategy({
+			vendorUserId: "15",
+			source: { vendorUserId: "15", employeeId: "emp-a" },
+			target: { vendorUserId: "15", employeeId: "emp-b" },
+		});
+		expect(conflict.strategy).to.equal(null);
+		expect(conflict.blockingReason).to.equal(
+			"physical_identity_adjudication_required",
+		);
+		expect(conflict.employeeConflict).to.equal(true);
+
+		const identity = proveCanonicalDeviceIdentity({
+			vendorUserId: "8",
+			source: { vendorUserId: "8", employeeId: null },
+			target: { vendorUserId: "8", employeeId: null },
+		});
+		expect(identity.proven).to.equal(true);
+		expect(identity.via).to.equal("same_vendor_user_id");
+	});
+
 	it("classifies face custody without treating a picture as an SDK template", () => {
 		expect(
 			classifyFaceCustody({ faceTemplate: "template", facePicture: "picture" }),
@@ -859,7 +905,7 @@ describe("device user union merge", () => {
 		}
 	});
 
-	it("requires exact canonical source/target identity before fingerprint readiness", () => {
+	it("allows fingerprint readiness for same vendor person id even when target HRIS link is missing", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["source", "target"],
 			records: [
@@ -889,10 +935,10 @@ describe("device user union merge", () => {
 		const write = plan.credentialWrites.find(
 			(item) => item.modality === "fingerprint",
 		);
-		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.blockingReason).to.equal("canonical_identity_unproven");
-		expect(write?.recoveryStage).to.equal("comparing_sources");
-		expect(write?.canonicalIdentityProven).to.equal(false);
+		// Peer copy on vendor person "1" is proven; missing target HRIS link is not dual-owner.
+		expect(write?.blockingReason).to.not.equal("canonical_identity_unproven");
+		expect(write?.canonicalIdentityProven).to.equal(true);
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
 	});
 
 	it("rejects a fingerprint write when another fleet record maps the same vendor id to a different employee", () => {

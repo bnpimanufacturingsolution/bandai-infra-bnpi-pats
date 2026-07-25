@@ -66,6 +66,7 @@ import {
 	fingerprintCustodyMatchesReview,
 	normalizeFingerprintCustodyEvidence,
 	reconcileDurableFingerprintOwnerConflicts,
+	resolveFaceAssociationStrategy,
 	serializeDeviceUserMergePlanForReview,
 	type DurableFingerprintOwnerConflictEvidence,
 	type DeviceUserMergeField,
@@ -11761,29 +11762,26 @@ export const controller = (prisma: PrismaClient) => {
 					(record: any) =>
 						String(record.deviceId) === String(write.targetDeviceId),
 				);
-				const sourceEmployeeId = String(sourceRecord?.employeeId || "").trim();
-				const targetEmployeeId = String(targetRecord?.employeeId || "").trim();
-				const sourceCardNo = String(sourceRecord?._cardNo || "").trim();
-				const targetCardNo = String(targetRecord?._cardNo || "").trim();
-				const canonicalEmployeeMatch =
-					Boolean(sourceEmployeeId) && sourceEmployeeId === targetEmployeeId;
-				const exactSharedCardMatch =
-					Boolean(sourceCardNo) && sourceCardNo === targetCardNo;
-				const faceAssociationStrategy = exactSharedCardMatch
-					? "exact_shared_card"
-					: canonicalEmployeeMatch
-						? "canonical_hris_employee"
-						: null;
+				const association = resolveFaceAssociationStrategy({
+					vendorUserId: write.vendorUserId,
+					source: sourceRecord,
+					target: targetRecord,
+					groupRecords: user?.records || [],
+				});
+				const faceAssociationStrategy = association.strategy;
 				if (!faceAssociationStrategy) {
 					return {
 						...write,
 						recommended: false,
 						executionEligibility: "blocked",
-						blockingReason: "physical_identity_adjudication_required",
+						blockingReason:
+							association.blockingReason ||
+							"physical_identity_adjudication_required",
 						recoveryStage: "physical_identity_action_required",
 						faceAssociationStrategy: null,
 						recommendationReason:
-							"Neither an exact shared physical card nor the same canonical HRIS employee proves this face source/target association.",
+							association.recommendationReason ||
+							"Neither an exact shared physical card, the same canonical HRIS employee, nor the same plain vendor person id proves this face source/target association.",
 					};
 				}
 				if (
@@ -14356,30 +14354,52 @@ export const controller = (prisma: PrismaClient) => {
 							await withTargetDeviceWriteLock(
 								String(write.targetDeviceId),
 								async () => {
-									const sourceEmployeeId = String(
-										sourceRecord?.employeeId || "",
-									).trim();
-									const targetEmployeeId = String(before?.employeeId || "").trim();
-									const canonicalEmployeeMatch =
-										Boolean(sourceEmployeeId) &&
-										sourceEmployeeId === targetEmployeeId;
 									const targetCardInventory =
 										await readHikvisionCardValuesForOwnerFromFullInventory({
 											req: params.req,
 											deviceId: String(write.targetDeviceId),
 											vendorUserId: String(write.vendorUserId),
 										});
-									if (targetCardInventory.cardValues.length !== 1) {
+									const targetCardNo =
+										targetCardInventory.cardValues.length === 1
+											? targetCardInventory.cardValues[0]
+											: "";
+									const association = resolveFaceAssociationStrategy({
+										vendorUserId: write.vendorUserId,
+										source: {
+											vendorUserId: write.vendorUserId,
+											employeeId: sourceRecord?.employeeId,
+											_cardNo: cardNo || null,
+										},
+										target: {
+											vendorUserId: write.vendorUserId,
+											employeeId: before?.employeeId,
+											_cardNo: targetCardNo || null,
+										},
+										groupRecords: user?.records || [],
+									});
+									if (!association.strategy) {
 										throw new Error(
-											"Target full CardInfo inventory did not yield exactly one owned card for isolated face association.",
+											association.recommendationReason ||
+												"Neither exact shared card custody, the same canonical HRIS employee, nor the same plain vendor person id proves the face association.",
 										);
 									}
-									const targetCardNo = targetCardInventory.cardValues[0];
-									const exactSharedCardMatch =
-										Boolean(cardNo) && targetCardNo === cardNo;
-									if (!exactSharedCardMatch && !canonicalEmployeeMatch) {
+									// SDK stored-face writer still needs a non-empty card value.
+									// Prefer the single target-owned card; else reuse the reviewed
+									// source card so empty-target peer copies can proceed.
+									const writerCardNo = String(
+										targetCardNo || cardNo || "",
+									).trim();
+									if (!writerCardNo) {
 										throw new Error(
-											"Neither exact shared card custody nor the same canonical HRIS employee proves the face association.",
+											"Face peer association is proven by same vendor person id, but neither source nor target yields a card value for the stored-face writer. Capture or enroll one card for this person, then retry.",
+										);
+									}
+									if (
+										targetCardInventory.cardValues.length > 1
+									) {
+										throw new Error(
+											"Target full CardInfo inventory yielded multiple owned cards; isolated face association is unsafe.",
 										);
 									}
 									await syncSingleHikvisionDeviceUserFromSource({
@@ -14422,7 +14442,7 @@ export const controller = (prisma: PrismaClient) => {
 										operationId: String(write.id),
 										employeeNo: String(write.vendorUserId),
 										sourceDeviceId: String(write.sourceDeviceId),
-										cardNo: targetCardNo,
+										cardNo: writerCardNo,
 										faceTemplate,
 										facePicture,
 										reviewedFleetCapability,
@@ -14484,7 +14504,7 @@ export const controller = (prisma: PrismaClient) => {
 											req: params.req,
 											deviceId: String(write.targetDeviceId),
 											vendorUserId: String(write.vendorUserId),
-											cardNo: targetCardNo,
+											cardNo: writerCardNo,
 										});
 									if (
 										changedIdentityField ||
