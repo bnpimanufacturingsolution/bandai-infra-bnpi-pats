@@ -217,10 +217,13 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include(
 			"readHikvisionCardValuesForOwnerFromFullInventory",
 		);
-		expect(controller).to.include("canonicalEmployeeMatch");
+		expect(controller).to.include("resolveFaceAssociationStrategy");
+		expect(controller).to.include("association.strategy");
 		expect(controller).to.include(
 			"same_canonical_hris_employee_with_target_owned_card",
 		);
+		expect(controller).to.include("same_vendor_user_id");
+		expect(controller).to.include("richestFaceSourcePick");
 		expect(controller).to.include("targetCardRetainedChecksum");
 		expect(controller).to.include(
 			"if (!hasCredential && body.refreshBiometricBundle !== true)",
