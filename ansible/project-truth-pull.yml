@@ -103,9 +103,15 @@
         if [ -f "$state_file" ] && grep -qx "commit=${commit}" "$state_file"; then
           exit 0
         fi
-        previous_commit="$(
-          sed -n 's/^commit=//p' "$state_file" 2>/dev/null | head -n 1
-        )"
+        # When state_file is missing, sed exits non-zero. Under set -o pipefail that
+        # aborts the whole task with empty stdout/stderr before any build starts.
+        # Only read previous_commit when the file exists; tolerate empty content.
+        previous_commit=""
+        if [ -f "$state_file" ]; then
+          previous_commit="$(
+            sed -n 's/^commit=//p' "$state_file" | head -n 1 || true
+          )"
+        fi
 
         runtime_job_root="/var/lib/project-truth/k8s/dev/uploads/project-truth-runtime"
         for job_kind in device-user-merge-jobs device-user-sync-jobs; do
