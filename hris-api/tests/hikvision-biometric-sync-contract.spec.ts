@@ -294,6 +294,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(fingerprintHelper).to.include("admin_sandbox_fp_clear_not_sticky");
 		expect(fingerprintHelper).to.include("stickyEmpty");
 		expect(fingerprintHelper).to.include("parseFingerprintProgressOccupyingEmployee");
+		// Live sticky-clear 2026-07-25: device MessageParametersLack errorMsg=mode
+		// without mode field; shapes must include byEmployeeNo mode.
+		expect(fingerprintHelper).to.include('mode: "byEmployeeNo"');
+		expect(fingerprintHelper).to.include("mode_by_employee_list");
 		expect(service).to.include("--stored-face-payload-file");
 		expect(service).to.include('"startRemoteConfigMs"');
 		expect(service).to.include('"sendAndCallbackMs"');

@@ -699,6 +699,57 @@ const FINGERPRINT_DELETE_BODY_SHAPES = (
 	employeeNo: string,
 	fingerPrintId: number,
 ): Array<{ method: "PUT" | "POST"; body: Record<string, unknown>; label: string }> => [
+	// Live 2026-07-25 sticky-clear burn: devices returned
+	// MessageParametersLack errorMsg=mode statusCode=6 when mode was omitted.
+	// Prefer byEmployeeNo shapes that match UserInfoDetail/Delete contract.
+	{
+		method: "PUT",
+		label: "mode_by_employee_list",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "POST",
+		label: "post_mode_by_employee_list",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "PUT",
+		label: "mode_by_employee_single",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				employeeNo,
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "PUT",
+		label: "mode_all_employee_list",
+		body: {
+			FingerPrintDelete: {
+				mode: "all",
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
 	{
 		method: "PUT",
 		label: "array_employee_id",
