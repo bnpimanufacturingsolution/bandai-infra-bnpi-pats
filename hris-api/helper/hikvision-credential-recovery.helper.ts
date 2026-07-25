@@ -11,8 +11,14 @@ export type CredentialRecoveryErrorClassification = {
 		| "device_authentication"
 		| "face_owner_card_association_missing"
 		| "face_identity_association_unproven"
+		| "face_writer_card_missing"
+		| "face_writer_card_bind_failed"
 		| "sdk_source_device_not_armed"
 		| "sdk_export_event_missing"
+		| "stored_face_sdk_failed"
+		| "stored_face_sdk_wrapper_noise"
+		| "stored_face_device_full"
+		| "device_fp_write_rejected_progress"
 		| "device_transport"
 		| "device_request_rejected"
 		| "worker_fencing"
@@ -34,6 +40,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "capability"
 		| "scope"
 		| "implementation"
+		| "device_apply"
 		| "observability";
 	message: string;
 	retryable: boolean;
