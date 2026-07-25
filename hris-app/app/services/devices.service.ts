@@ -2511,6 +2511,48 @@ class DevicesService extends APIService {
 		}
 	}
 
+	/** Durable peer-copy job (face+FP can take minutes). Poll getHikvisionPeerCopyJob. */
+	async startHikvisionPeerCopyJob(payload: HikvisionCopyUserRequest): Promise<{
+		jobId: string;
+		status?: string;
+		progress?: any;
+		pollPath?: string;
+		hint?: string;
+	}> {
+		try {
+			const response = await hrisApiClient.post<any>(
+				"/api/device/hikvision/copy-user/jobs",
+				payload,
+			);
+			const data = response.data?.data || response.data;
+			if (!data?.jobId) {
+				throw new Error("Failed to start Hikvision peer-copy job");
+			}
+			return data;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Failed to start Hikvision peer-copy job",
+			);
+		}
+	}
+
+	async getHikvisionPeerCopyJob(jobId: string): Promise<any> {
+		try {
+			const response = await hrisApiClient.get<any>(
+				`/api/device/hikvision/copy-user/jobs/${encodeURIComponent(jobId)}`,
+			);
+			return response.data?.data || response.data;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Failed to read Hikvision peer-copy job",
+			);
+		}
+	}
+
 	async mirrorHikvisionFaceToPeers(payload: HikvisionMirrorFaceRequest): Promise<any> {
 		try {
 			const response = await hrisApiClient.post<any>(

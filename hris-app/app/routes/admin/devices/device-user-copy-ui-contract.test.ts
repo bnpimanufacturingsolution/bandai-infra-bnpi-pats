@@ -16,6 +16,11 @@ describe("device user copy UI contract", () => {
 		expect(enroll).toContain("Retry failed devices");
 		expect(enroll).toContain("The target device is not reachable right now");
 		expect(enroll).toContain("Successful copies are kept");
+		// Durable job + progress modal (face+FP can take minutes).
+		expect(enroll).toContain("startHikvisionPeerCopyJob");
+		expect(enroll).toContain("getHikvisionPeerCopyJob");
+		expect(enroll).toContain("formatPeerCopyStageLabel");
+		expect(enroll).toContain("Keep this modal open until status is completed");
 	});
 
 	it("shows potential-operation recovery, physical retention, heartbeat, and reread deltas", () => {
@@ -63,5 +68,7 @@ describe("device user copy UI contract", () => {
 		expect(service).toContain("startingGapSummary");
 		expect(service).toContain("endingGapSummary");
 		expect(service).toContain("gapDelta");
+		expect(service).toContain("startHikvisionPeerCopyJob");
+		expect(service).toContain("/api/device/hikvision/copy-user/jobs");
 	});
 });

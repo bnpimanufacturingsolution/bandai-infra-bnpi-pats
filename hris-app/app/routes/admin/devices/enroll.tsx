@@ -461,6 +461,13 @@ type CopyDeviceUserState = {
 	includeFaceRecognition: boolean;
 	successfulTargets: Array<{ id: string; label: string }>;
 	failedTargets: Array<{ id: string; label: string; error: string }>;
+	/** Durable job id when face/FP copy runs async (poll for progress). */
+	jobId?: string | null;
+	jobStatus?: string | null;
+	jobStage?: string | null;
+	jobMessage?: string | null;
+	jobElapsedMs?: number | null;
+	jobEvents?: Array<{ stage?: string; message?: string; at?: string }>;
 };
 
 type DeviceUserExportFormat = "csv" | "excel" | "json";
@@ -884,6 +891,12 @@ export function DeviceEnrollmentPanel({
 		includeFaceRecognition: true,
 		successfulTargets: [],
 		failedTargets: [],
+		jobId: null,
+		jobStatus: null,
+		jobStage: null,
+		jobMessage: null,
+		jobElapsedMs: null,
+		jobEvents: [],
 	});
 	const [deviceUserExportState, setDeviceUserExportState] = useState<{
 		open: boolean;
@@ -3516,6 +3529,12 @@ export function DeviceEnrollmentPanel({
 			includeFaceRecognition: true,
 			successfulTargets: [],
 			failedTargets: [],
+			jobId: null,
+			jobStatus: null,
+			jobStage: null,
+			jobMessage: null,
+			jobElapsedMs: null,
+			jobEvents: [],
 		});
 	};
 
@@ -3535,6 +3554,29 @@ export function DeviceEnrollmentPanel({
 			return "The target device took too long to respond. Check its network connection, then retry.";
 		}
 		return message || "The target device could not be updated. Retry when it is reachable.";
+	};
+
+	const formatPeerCopyStageLabel = (stage?: string | null) => {
+		const key = String(stage || "").trim();
+		const labels: Record<string, string> = {
+			queued: "Queued",
+			starting: "Starting",
+			source_refresh_retry_wait: "Waiting for source refresh / tunnel",
+			vm_copy_preflight_started: "Checking VM / device reachability",
+			vm_copy_preflight_done: "Reachability OK — preparing copy",
+			vm_copy_attempt_started: "Writing on peer via VM SDK",
+			vm_copy_attempt_finished: "VM write attempt finished",
+			vm_copy_attempt_timeout: "VM write timed out (retrying strategy)",
+			credential_raw_write_started: "Writing biometrics",
+			target_single_user_refresh: "Re-reading target user",
+			peer_link_mirror: "Mirroring HRIS link",
+			completed: "Completed",
+			completed_with_attention: "Completed with some failures",
+			failed: "Failed",
+			worker_stale: "Job went stale (API may have restarted)",
+			processing: "In progress",
+		};
+		return labels[key] || key || "Working";
 	};
 
 	const submitCopyDeviceUser = async () => {
@@ -3559,22 +3601,92 @@ export function DeviceEnrollmentPanel({
 				return;
 			}
 			setIsCopyDeviceUserSubmitting(true);
+			const modalities = [
+				copyDeviceUserState.includeFingerprints ? "fingerprints" : null,
+				copyDeviceUserState.includeFaceRecognition ? "face" : null,
+			]
+				.filter(Boolean)
+				.join(" + ");
 			setCopyDeviceUserStatusMessage(
-				copyDeviceUserState.applyToAllPeers
-					? `Copying to ${targetDeviceIds.length} peer devices in one coordinated VM session. Keep this open until HRIS verifies each target.`
-					: "Copying through the VM. Keep this open until HRIS verifies the target device.",
+				`Starting durable peer-copy job${modalities ? ` (${modalities})` : ""}. Face/fingerprint writes can take several minutes — progress updates below.`,
 			);
-			const successfulTargets: Array<{ id: string; label: string }> = [];
-			let syntheticPeerCopies = 0;
-			const failedTargets: Array<{ id: string; label: string; error: string }> = [];
-			const result = await deviceService.copyHikvisionDeviceUserToPeer({
+			setCopyDeviceUserState((current) => ({
+				...current,
+				jobId: null,
+				jobStatus: "queued",
+				jobStage: "queued",
+				jobMessage: "Starting job…",
+				jobElapsedMs: 0,
+				jobEvents: [],
+			}));
+
+			// Job-based path: mutation alone cannot stream multi-minute FP/face progress.
+			const started = await deviceService.startHikvisionPeerCopyJob({
 				sourceDeviceId: selectedDeviceId,
 				targetDeviceIds,
 				employeeNo: sourceDeviceUser.vendorUserId,
 				includeFingerprints: copyDeviceUserState.includeFingerprints,
 				includeFaceRecognition: copyDeviceUserState.includeFaceRecognition,
 			});
-			for (const targetResult of result?.results || []) {
+			const jobId = String(started?.jobId || "").trim();
+			if (!jobId) {
+				throw new Error("Peer-copy job did not return a jobId");
+			}
+			setCopyDeviceUserState((current) => ({
+				...current,
+				jobId,
+				jobStatus: "processing",
+				jobStage: "starting",
+				jobMessage: started?.hint || "Job started — polling progress…",
+			}));
+			setCopyDeviceUserStatusMessage(
+				`Job ${jobId.slice(0, 8)}… running. Keep this modal open until status is completed.`,
+			);
+
+			const terminal = new Set([
+				"completed",
+				"completed_with_attention",
+				"failed",
+			]);
+			let job: any = null;
+			const maxPolls = 180; // ~6 min at 2s; stale server guard also applies
+			for (let poll = 0; poll < maxPolls; poll += 1) {
+				await new Promise((resolve) => setTimeout(resolve, 2000));
+				job = await deviceService.getHikvisionPeerCopyJob(jobId);
+				const status = String(job?.status || "");
+				const stage = String(job?.currentStage || job?.stage || "");
+				const message = String(job?.message || "");
+				const events = Array.isArray(job?.progressEvents) ? job.progressEvents : [];
+				setCopyDeviceUserState((current) => ({
+					...current,
+					jobId,
+					jobStatus: status,
+					jobStage: stage,
+					jobMessage: message,
+					jobElapsedMs: Number(job?.elapsedMs || 0) || null,
+					jobEvents: events.slice(-12).map((event: any) => ({
+						stage: event?.stage,
+						message: event?.message || event?.error,
+						at: event?.at,
+					})),
+				}));
+				setCopyDeviceUserStatusMessage(
+					message ||
+						`${formatPeerCopyStageLabel(stage)} (${status || "processing"})`,
+				);
+				if (terminal.has(status)) break;
+			}
+			if (!job || !terminal.has(String(job?.status || ""))) {
+				throw new Error(
+					"Peer-copy job is still running or stopped updating. Check network/VM, then retry failed targets.",
+				);
+			}
+
+			const successfulTargets: Array<{ id: string; label: string }> = [];
+			let syntheticPeerCopies = 0;
+			const failedTargets: Array<{ id: string; label: string; error: string }> = [];
+			const resultRows = Array.isArray(job?.results) ? job.results : [];
+			for (const targetResult of resultRows) {
 				const targetDeviceId = String(targetResult?.targetDevice?.id || "");
 				const targetLabel =
 					copyTargetDeviceOptions.find((option) => option.value === targetDeviceId)
@@ -3595,8 +3707,16 @@ export function DeviceEnrollmentPanel({
 					failedTargets.push({
 						id: targetDeviceId,
 						label: targetLabel,
-						error: describeCopyError(targetResult?.error),
+						error: describeCopyError(targetResult?.error || job?.error),
 					});
+				}
+			}
+			// If job completed with summary only (no results array), use summary.
+			if (resultRows.length === 0 && String(job?.status) === "completed") {
+				for (const id of targetDeviceIds) {
+					const label =
+						copyTargetDeviceOptions.find((option) => option.value === id)?.label || id;
+					successfulTargets.push({ id, label });
 				}
 			}
 			if (successfulTargets.length === 0) {
@@ -3606,14 +3726,26 @@ export function DeviceEnrollmentPanel({
 					applyToAllPeers: false,
 					targetDeviceId: targetDeviceIds[0] || current.targetDeviceId,
 					successfulTargets,
-					failedTargets,
+					failedTargets:
+						failedTargets.length > 0
+							? failedTargets
+							: targetDeviceIds.map((id) => ({
+									id,
+									label:
+										copyTargetDeviceOptions.find((o) => o.value === id)?.label ||
+										id,
+									error: describeCopyError(job?.error || job?.message),
+								})),
 				}));
 				setCopyDeviceUserStatusMessage(
-					"No peer copy finished. The source or selected targets are not reachable through the VM SDK path right now.",
+					job?.message ||
+						"No peer copy finished. The source or selected targets are not reachable through the VM SDK path right now.",
 				);
-				throw new Error(failedTargets[0]?.error || "Failed to copy device user");
+				throw new Error(
+					failedTargets[0]?.error || job?.error || job?.message || "Failed to copy device user",
+				);
 			}
-			if (failedTargets.length > 0) {
+			if (failedTargets.length > 0 || String(job?.status) === "completed_with_attention") {
 				setCopyDeviceUserState((current) => ({
 					...current,
 					open: true,
@@ -3621,11 +3753,16 @@ export function DeviceEnrollmentPanel({
 					targetDeviceId: failedTargets[0]?.id || current.targetDeviceId,
 					successfulTargets,
 					failedTargets,
+					jobStatus: job?.status,
+					jobStage: job?.currentStage,
+					jobMessage: job?.message,
 				}));
 				toast.warning(
 					`Copied to ${successfulTargets.length} of ${targetDeviceIds.length} peer devices.`,
 					{
-						description: `${failedTargets[0]?.label}: ${failedTargets[0]?.error}`,
+						description: failedTargets[0]
+							? `${failedTargets[0]?.label}: ${failedTargets[0]?.error}`
+							: job?.message,
 					},
 				);
 				setCopyDeviceUserStatusMessage(
@@ -3641,14 +3778,13 @@ export function DeviceEnrollmentPanel({
 					refetchSyncRuns(),
 				]);
 				return;
-			} else {
-				toast.success(
-					targetDeviceIds.length > 1
-						? `Copied to ${targetDeviceIds.length} peer devices`
-						: "Copied to peer device",
-				);
-				setCopyDeviceUserStatusMessage("");
 			}
+			toast.success(
+				targetDeviceIds.length > 1
+					? `Copied to ${targetDeviceIds.length} peer devices`
+					: "Copied to peer device",
+			);
+			setCopyDeviceUserStatusMessage("");
 			if (syntheticPeerCopies > 0) {
 				toast.success(
 					"Some peer copies used dev-only synthetic biometric tallies for verification.",
@@ -3663,6 +3799,12 @@ export function DeviceEnrollmentPanel({
 				includeFaceRecognition: true,
 				successfulTargets: [],
 				failedTargets: [],
+				jobId: null,
+				jobStatus: null,
+				jobStage: null,
+				jobMessage: null,
+				jobElapsedMs: null,
+				jobEvents: [],
 			});
 			await Promise.allSettled([
 				refetchSourceDeviceUsers(),
@@ -12118,16 +12260,74 @@ export function DeviceEnrollmentPanel({
 							includeFaceRecognition: true,
 							successfulTargets: [],
 							failedTargets: [],
+							jobId: null,
+							jobStatus: null,
+							jobStage: null,
+							jobMessage: null,
+							jobElapsedMs: null,
+							jobEvents: [],
 						});
 					}
 				}}
 				title="Copy device user to peer"
-				description="Copy this Hikvision user to one peer or every peer. If a device is offline, it stays here for retry."
+				description="Copy this Hikvision user to one peer or every peer. Face + fingerprints run as a durable job with live progress (not a silent spinner). Keep this open until completed."
 				className="max-w-lg"
 				showCloseButton={!isCopyDeviceUserSubmitting}
 				closeOnBackdropClick={!isCopyDeviceUserSubmitting}>
 				<div className="space-y-4">
-					{copyDeviceUserStatusMessage ? (
+					{(isCopyDeviceUserSubmitting || copyDeviceUserState.jobId) && (
+						<div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-3 text-sm text-blue-950">
+							<div className="flex items-center gap-2 font-semibold">
+								{isCopyDeviceUserSubmitting ? (
+									<Loader2 className="h-4 w-4 animate-spin shrink-0" />
+								) : null}
+								<span>
+									{formatPeerCopyStageLabel(copyDeviceUserState.jobStage)}
+									{copyDeviceUserState.jobStatus
+										? ` · ${copyDeviceUserState.jobStatus}`
+										: ""}
+								</span>
+							</div>
+							<p className="mt-1 text-xs text-blue-900/90">
+								{copyDeviceUserState.jobMessage ||
+									copyDeviceUserStatusMessage ||
+									"Waiting for first progress heartbeat…"}
+							</p>
+							<div className="mt-2 flex flex-wrap gap-3 text-[11px] text-blue-800">
+								{copyDeviceUserState.jobId ? (
+									<span>Job {String(copyDeviceUserState.jobId).slice(0, 8)}…</span>
+								) : null}
+								{typeof copyDeviceUserState.jobElapsedMs === "number" ? (
+									<span>
+										Elapsed {Math.round(copyDeviceUserState.jobElapsedMs / 1000)}s
+									</span>
+								) : null}
+								{copyDeviceUserState.includeFingerprints ? (
+									<span>Fingerprints on</span>
+								) : (
+									<span>Fingerprints off</span>
+								)}
+								{copyDeviceUserState.includeFaceRecognition ? (
+									<span>Face on</span>
+								) : (
+									<span>Face off</span>
+								)}
+							</div>
+							{(copyDeviceUserState.jobEvents || []).length > 0 ? (
+								<ul className="mt-2 max-h-28 space-y-1 overflow-y-auto border-t border-blue-100 pt-2 text-[11px] text-blue-900">
+									{(copyDeviceUserState.jobEvents || []).slice(-8).map((event, index) => (
+										<li key={`${event.at || "e"}-${index}`}>
+											<span className="font-medium">
+												{formatPeerCopyStageLabel(event.stage)}
+											</span>
+											{event.message ? `: ${event.message}` : ""}
+										</li>
+									))}
+								</ul>
+							) : null}
+						</div>
+					)}
+					{copyDeviceUserStatusMessage && !isCopyDeviceUserSubmitting ? (
 						<div
 							className={`rounded-md border px-3 py-3 text-sm ${
 								isCopyDeviceUserSubmitting
@@ -12320,6 +12520,12 @@ export function DeviceEnrollmentPanel({
 									includeFaceRecognition: true,
 									successfulTargets: [],
 									failedTargets: [],
+									jobId: null,
+									jobStatus: null,
+									jobStage: null,
+									jobMessage: null,
+									jobElapsedMs: null,
+									jobEvents: [],
 								});
 							}}>
 							Cancel
@@ -12339,7 +12545,9 @@ export function DeviceEnrollmentPanel({
 								<RefreshCw className="h-4 w-4" />
 							)}
 							{isCopyDeviceUserSubmitting
-								? "Copying..."
+								? copyDeviceUserState.jobStage
+									? formatPeerCopyStageLabel(copyDeviceUserState.jobStage)
+									: "Copying…"
 								: copyDeviceUserState.failedTargets.length
 									? "Retry failed devices"
 									: copyDeviceUserState.applyToAllPeers

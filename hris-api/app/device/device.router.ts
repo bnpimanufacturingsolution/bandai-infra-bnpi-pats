@@ -57,6 +57,8 @@ interface IController {
 	): Promise<void>;
 	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
 	copyHikvisionDeviceUserToPeer(req: Request, res: Response, next: NextFunction): Promise<void>;
+	startHikvisionPeerCopyJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getHikvisionPeerCopyJob(req: Request, res: Response, next: NextFunction): Promise<void>;
 	planHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
 	reviewHikvisionCredentialRecovery(
 		req: Request,
@@ -161,6 +163,23 @@ export const router = (route: Router, controller: IController): Router => {
 			label: "hikvision-copy-user",
 		}),
 		controller.copyHikvisionDeviceUserToPeer,
+	);
+	// Durable job path for face+FP peer copy (poll progress; do not block UI mutation).
+	routes.post(
+		"/hikvision/copy-user/jobs",
+		requestTimeout({
+			timeoutMs: 60_000,
+			label: "hikvision-copy-user-job-start",
+		}),
+		controller.startHikvisionPeerCopyJob,
+	);
+	routes.get(
+		"/hikvision/copy-user/jobs/:jobId",
+		requestTimeout({
+			timeoutMs: 30_000,
+			label: "hikvision-copy-user-job-get",
+		}),
+		controller.getHikvisionPeerCopyJob,
 	);
 	routes.post(
 		"/hikvision/sdk-users/merge/plan",

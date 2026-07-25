@@ -53,6 +53,14 @@ describe("Hikvision biometric sync contract", () => {
 		expect(router).to.include('label: "hikvision-copy-user"');
 		expect(router).to.include("controller.copyHikvisionDeviceUserToPeer");
 		expect(controller).to.include("const copyHikvisionDeviceUserToPeer = async");
+		// Durable job path for multi-minute face+FP peer copy with pollable stages.
+		expect(router).to.include('"/hikvision/copy-user/jobs"');
+		expect(router).to.include('"/hikvision/copy-user/jobs/:jobId"');
+		expect(router).to.include("controller.startHikvisionPeerCopyJob");
+		expect(router).to.include("controller.getHikvisionPeerCopyJob");
+		expect(controller).to.include("startHikvisionPeerCopyJob");
+		expect(controller).to.include("device-user-peer-copy-jobs");
+		expect(controller).to.include("Peer-copy job queued");
 		expect(controller).to.include("const executeHikvisionDeviceUserPeerCopy = async");
 		expect(controller).to.include("const copyHikvisionUserToPeerWithRetry = async");
 		expect(controller).to.include("const runHikvisionManualCopyOnVm = async");
@@ -562,7 +570,7 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("!params.forcePhysicalCopy &&");
 		expect(hikvisionCpp).to.include("if (!manual_reconcile_mode)");
 		expect(controller).to.include("params.includeFaceRecognition &&");
-		expect(controller).to.include("HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS || 25");
+		expect(controller).to.include("HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS || 45");
 		// Durable merge job snapshots survive API restart (no fake forever-processing).
 		expect(controller).to.include("DEVICE_USER_MERGE_JOB_DIR");
 		expect(controller).to.include("const persistDeviceUserMergeJob =");

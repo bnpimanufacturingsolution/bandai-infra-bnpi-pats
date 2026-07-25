@@ -295,6 +295,10 @@ const DEVICE_USER_MERGE_JOB_DIR = path.join(
 	PROJECT_TRUTH_RUNTIME_ROOT,
 	"device-user-merge-jobs",
 );
+const DEVICE_USER_PEER_COPY_JOB_DIR = path.join(
+	PROJECT_TRUTH_RUNTIME_ROOT,
+	"device-user-peer-copy-jobs",
+);
 const CREDENTIAL_DEVICE_LEASE_DIR = path.join(
 	PROJECT_TRUTH_RUNTIME_ROOT,
 	"credential-device-leases",
@@ -309,6 +313,45 @@ const DEVICE_USER_MERGE_PROCESSING_STALE_MS = Math.max(
 		3 * 60 * 60 * 1000,
 	),
 );
+/** Single-user peer copy with FP+face can run minutes; silent jobs die after this. */
+const DEVICE_USER_PEER_COPY_STALE_MS = Math.max(
+	3 * 60 * 1000,
+	Math.min(
+		Number(process.env.HIKVISION_PEER_COPY_JOB_STALE_MS || 20 * 60 * 1000),
+		60 * 60 * 1000,
+	),
+);
+
+type DeviceUserPeerCopyJobStatus =
+	| "queued"
+	| "processing"
+	| "completed"
+	| "completed_with_attention"
+	| "failed";
+
+type DeviceUserPeerCopyJob = {
+	jobId: string;
+	organizationId: string;
+	status: DeviceUserPeerCopyJobStatus;
+	sourceDeviceId: string;
+	sourceDeviceName: string;
+	targetDeviceIds: string[];
+	targetDeviceNames: string[];
+	employeeNo: string;
+	includeFingerprints: boolean;
+	includeFaceRecognition: boolean;
+	currentStage: string;
+	message: string;
+	heartbeatAt: Date;
+	progressEvents: Array<Record<string, any>>;
+	results: any[];
+	summary: Record<string, any> | null;
+	error: string | null;
+	startedAt: Date;
+	updatedAt: Date;
+	completedAt?: Date;
+	snapshotPath?: string | null;
+};
 
 type DeviceImportJobStatus = "processing" | "completed" | "failed" | "cancelled";
 
@@ -556,10 +599,104 @@ type DeviceUserMergeJob = {
 
 const deviceUserSyncJobs = new Map<string, DeviceUserSyncJob>();
 const deviceUserMergeJobs = new Map<string, DeviceUserMergeJob>();
+const deviceUserPeerCopyJobs = new Map<string, DeviceUserPeerCopyJob>();
 const deviceUserMergePlans = new Map<
 	string,
 	{ organizationId: string; plan: any; createdAt: Date; req: Request }
 >();
+
+const serializeDeviceUserPeerCopyJob = (job: DeviceUserPeerCopyJob) => ({
+	...job,
+	heartbeatAt:
+		job.heartbeatAt instanceof Date ? job.heartbeatAt.toISOString() : job.heartbeatAt,
+	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
+	updatedAt: job.updatedAt instanceof Date ? job.updatedAt.toISOString() : job.updatedAt,
+	completedAt:
+		job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt || null,
+	elapsedMs: Math.max(
+		0,
+		Date.now() -
+			(job.startedAt instanceof Date
+				? job.startedAt.getTime()
+				: new Date(job.startedAt).getTime()),
+	),
+	progressEvents: Array.isArray(job.progressEvents) ? job.progressEvents.slice(-40) : [],
+});
+
+const persistDeviceUserPeerCopyJob = (job: DeviceUserPeerCopyJob) => {
+	try {
+		fsSync.mkdirSync(DEVICE_USER_PEER_COPY_JOB_DIR, { recursive: true });
+		const snapshotPath = path.join(DEVICE_USER_PEER_COPY_JOB_DIR, `${job.jobId}.json`);
+		fsSync.writeFileSync(
+			snapshotPath,
+			JSON.stringify(serializeDeviceUserPeerCopyJob(job), null, 2),
+		);
+		job.snapshotPath = snapshotPath;
+	} catch (error) {
+		deviceLogger.warn(`Failed to persist peer-copy job snapshot: ${error}`);
+	}
+};
+
+const updateDeviceUserPeerCopyJob = (
+	jobId: string,
+	patch: Partial<DeviceUserPeerCopyJob>,
+) => {
+	const current = deviceUserPeerCopyJobs.get(jobId);
+	if (!current) return null;
+	const next: DeviceUserPeerCopyJob = {
+		...current,
+		...patch,
+		heartbeatAt: patch.heartbeatAt || new Date(),
+		updatedAt: new Date(),
+		progressEvents: Array.isArray(patch.progressEvents)
+			? patch.progressEvents
+			: current.progressEvents,
+	};
+	deviceUserPeerCopyJobs.set(jobId, next);
+	persistDeviceUserPeerCopyJob(next);
+	return next;
+};
+
+const readDeviceUserPeerCopyJob = (jobId: string): DeviceUserPeerCopyJob | null => {
+	const memory = deviceUserPeerCopyJobs.get(jobId);
+	if (memory) {
+		const silentMs = Date.now() - memory.heartbeatAt.getTime();
+		if (
+			(memory.status === "processing" || memory.status === "queued") &&
+			silentMs > DEVICE_USER_PEER_COPY_STALE_MS
+		) {
+			return (
+				updateDeviceUserPeerCopyJob(jobId, {
+					status: "failed",
+					currentStage: "worker_stale",
+					message:
+						"Peer-copy job stopped updating. The API/worker may have restarted mid-copy; retry the copy.",
+					error: "peer_copy_job_stale",
+					completedAt: new Date(),
+				}) || memory
+			);
+		}
+		return memory;
+	}
+	try {
+		const filePath = path.join(DEVICE_USER_PEER_COPY_JOB_DIR, `${jobId}.json`);
+		if (!fsSync.existsSync(filePath)) return null;
+		const parsed = JSON.parse(fsSync.readFileSync(filePath, "utf8"));
+		const job: DeviceUserPeerCopyJob = {
+			...parsed,
+			startedAt: new Date(parsed.startedAt),
+			updatedAt: new Date(parsed.updatedAt || parsed.startedAt),
+			heartbeatAt: new Date(parsed.heartbeatAt || parsed.updatedAt || parsed.startedAt),
+			completedAt: parsed.completedAt ? new Date(parsed.completedAt) : undefined,
+			progressEvents: Array.isArray(parsed.progressEvents) ? parsed.progressEvents : [],
+			results: Array.isArray(parsed.results) ? parsed.results : [],
+		};
+		deviceUserPeerCopyJobs.set(jobId, job);
+		return job;
+	} catch {
+		return null;
+	}
+};
 
 const buildDeviceUserMergeWriteMatrix = (plan: any) => {
 	const devices = Array.isArray(plan?.devices) ? plan.devices : [];
@@ -2414,18 +2551,19 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 
-			// Multi-target + FP/face need headroom; default was 10s and caused timeout storms on merge.
-			// Env floor still wins; scale by peers and modalities up to 90s.
+			// Multi-target + FP/face need headroom; default was 10s and caused timeout storms.
+			// Face+FP copy is long-running; job path polls progress. Cap raised to 180s.
 			const configuredCopyTimeout = Math.max(
 				5,
-				Math.min(Number(process.env.HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS || 25), 90),
+				Math.min(Number(process.env.HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS || 45), 180),
 			);
 			const modalityBonus =
-				(params.includeFingerprints ? 8 : 0) + (params.includeFaceRecognition ? 8 : 0);
-			const peerBonus = Math.max(0, targetDevices.length - 1) * 6;
+				(params.includeFingerprints ? 20 : 0) +
+				(params.includeFaceRecognition ? 25 : 0);
+			const peerBonus = Math.max(0, targetDevices.length - 1) * 12;
 			const manualCopyTimeoutSeconds = Math.max(
-				waitSeconds + 5,
-				Math.min(configuredCopyTimeout + modalityBonus + peerBonus, 90),
+				waitSeconds + 10,
+				Math.min(configuredCopyTimeout + modalityBonus + peerBonus, 180),
 			);
 			// Force wrapper to mint HRIS bearer token even when static device spec is used.
 			// Without this, curl to http://127.0.0.1:53001 returns 401 and every peer copy fails.
@@ -18429,6 +18567,275 @@ export const controller = (prisma: PrismaClient) => {
 		};
 	};
 
+	/**
+	 * Durable peer-copy job: FP+face VM work is multi-minute. UI must poll stages
+	 * (preflight → VM write → reread → success) instead of blocking one mutation.
+	 */
+	const startHikvisionPeerCopyJob = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const sourceDeviceId = String(req.body?.sourceDeviceId || "").trim();
+			const legacyTargetDeviceId = String(req.body?.targetDeviceId || "").trim();
+			const requestedTargetDeviceIds = Array.isArray(req.body?.targetDeviceIds)
+				? req.body.targetDeviceIds.map((value: any) => String(value || "").trim())
+				: [];
+			const targetDeviceIds = Array.from(
+				new Set([legacyTargetDeviceId, ...requestedTargetDeviceIds].filter(Boolean)),
+			).filter((deviceId) => deviceId !== sourceDeviceId);
+			const employeeNo = String(req.body?.employeeNo || req.body?.vendorUserId || "").trim();
+			const includeFingerprints = req.body?.includeFingerprints !== false;
+			const includeFaceRecognition = req.body?.includeFaceRecognition !== false;
+			if (!sourceDeviceId || !targetDeviceIds.length || !employeeNo) {
+				res.status(400).json(
+					buildErrorResponse(
+						"sourceDeviceId, targetDeviceId or targetDeviceIds, and employeeNo are required",
+						400,
+					),
+				);
+				return;
+			}
+			if (targetDeviceIds.length > 25) {
+				res.status(400).json(
+					buildErrorResponse(
+						"A peer-copy request can include at most 25 target devices",
+						400,
+					),
+				);
+				return;
+			}
+			const devices = await prisma.device.findMany({
+				where: {
+					organizationId: String(admin.organizationId),
+					isDeleted: false,
+					id: { in: [sourceDeviceId, ...targetDeviceIds] },
+				},
+			});
+			const sourceDevice = devices.find((device) => device.id === sourceDeviceId);
+			const targetDevices = targetDeviceIds
+				.map((id) => devices.find((device) => device.id === id))
+				.filter(Boolean) as any[];
+			if (!sourceDevice || targetDevices.length !== targetDeviceIds.length) {
+				res.status(404).json(
+					buildErrorResponse("Source or one or more target devices were not found", 404),
+				);
+				return;
+			}
+			if (
+				!isHikvisionDevice(sourceDevice) ||
+				targetDevices.some((device) => !isHikvisionDevice(device))
+			) {
+				res.status(400).json(
+					buildErrorResponse(
+						"The source and every target device must be Hikvision devices",
+						400,
+					),
+				);
+				return;
+			}
+			const jobId = randomUUID();
+			const modalityNote = [
+				includeFingerprints ? "fingerprints" : null,
+				includeFaceRecognition ? "face" : null,
+			]
+				.filter(Boolean)
+				.join(" + ");
+			const job: DeviceUserPeerCopyJob = {
+				jobId,
+				organizationId: String(admin.organizationId),
+				status: "queued",
+				sourceDeviceId,
+				sourceDeviceName: String(sourceDevice.name || sourceDevice.address || sourceDeviceId),
+				targetDeviceIds,
+				targetDeviceNames: targetDevices.map(
+					(d) => String(d.name || d.address || d.id),
+				),
+				employeeNo,
+				includeFingerprints,
+				includeFaceRecognition,
+				currentStage: "queued",
+				message: `Peer-copy job queued for user ${employeeNo}${modalityNote ? ` (${modalityNote})` : ""}. Progress updates while VM writes.`,
+				heartbeatAt: new Date(),
+				progressEvents: [
+					{
+						stage: "queued",
+						at: new Date().toISOString(),
+						message: `Queued copy of user ${employeeNo} to ${targetDevices.length} peer(s).`,
+						includeFingerprints,
+						includeFaceRecognition,
+					},
+				],
+				results: [],
+				summary: null,
+				error: null,
+				startedAt: new Date(),
+				updatedAt: new Date(),
+			};
+			deviceUserPeerCopyJobs.set(jobId, job);
+			persistDeviceUserPeerCopyJob(job);
+			// Fire-and-forget worker; client polls GET job.
+			void (async () => {
+				updateDeviceUserPeerCopyJob(jobId, {
+					status: "processing",
+					currentStage: "starting",
+					message: `Starting peer copy for user ${employeeNo}…`,
+				});
+				const appendProgress = (event: any) => {
+					const current = deviceUserPeerCopyJobs.get(jobId);
+					if (!current) return;
+					const progressEvents = [
+						...(current.progressEvents || []),
+						{
+							...event,
+							at: new Date().toISOString(),
+						},
+					].slice(-80);
+					updateDeviceUserPeerCopyJob(jobId, {
+						status: "processing",
+						currentStage: String(event?.stage || current.currentStage || "processing"),
+						message: String(
+							event?.message ||
+								event?.error ||
+								current.message ||
+								"Peer copy in progress",
+						),
+						progressEvents,
+					});
+				};
+				try {
+					const batchData = await copyHikvisionUserToPeersBatch({
+						req,
+						organizationId: String(admin.organizationId),
+						sourceDevice,
+						targetDevices,
+						employeeNo,
+						includeFingerprints,
+						includeFaceRecognition,
+						onProgress: appendProgress,
+					});
+					const results = Array.isArray(batchData?.results) ? batchData.results : [];
+					const successful = results.filter((r: any) => r?.status === "success").length;
+					const failed = results.filter((r: any) => r?.status !== "success").length;
+					const status: DeviceUserPeerCopyJobStatus =
+						failed === 0
+							? "completed"
+							: successful > 0
+								? "completed_with_attention"
+								: "failed";
+					updateDeviceUserPeerCopyJob(jobId, {
+						status,
+						currentStage:
+							status === "completed"
+								? "completed"
+								: status === "completed_with_attention"
+									? "completed_with_attention"
+									: "failed",
+						message:
+							status === "completed"
+								? `Copied user ${employeeNo} to ${successful}/${targetDevices.length} peer(s).`
+								: status === "completed_with_attention"
+									? `Copied user ${employeeNo} to ${successful}/${targetDevices.length} peer(s); ${failed} failed — retry failed targets.`
+									: `Peer copy failed for user ${employeeNo} on all selected targets.`,
+						results,
+						summary: batchData?.summary || {
+							totalTargets: targetDevices.length,
+							successfulTargets: successful,
+							failedTargets: failed,
+						},
+						error: failed > 0 && successful === 0 ? "all_targets_failed" : null,
+						completedAt: new Date(),
+						progressEvents: [
+							...(deviceUserPeerCopyJobs.get(jobId)?.progressEvents || []),
+							{
+								stage: status,
+								at: new Date().toISOString(),
+								message:
+									status === "completed"
+										? "Peer copy finished successfully."
+										: status === "completed_with_attention"
+											? "Peer copy finished with partial failures."
+											: "Peer copy failed.",
+								successful,
+								failed,
+							},
+						],
+					});
+				} catch (error: any) {
+					const message = String(error?.message || error || "Peer copy failed");
+					updateDeviceUserPeerCopyJob(jobId, {
+						status: "failed",
+						currentStage: "failed",
+						message,
+						error: message,
+						completedAt: new Date(),
+						progressEvents: [
+							...(deviceUserPeerCopyJobs.get(jobId)?.progressEvents || []),
+							{
+								stage: "failed",
+								at: new Date().toISOString(),
+								message,
+								error: message,
+							},
+						],
+					});
+				}
+			})();
+			res.status(202).json(
+				buildSuccessResponse(
+					"Hikvision peer-copy job started",
+					{
+						jobId,
+						status: "queued",
+						progress: serializeDeviceUserPeerCopyJob(job),
+						pollPath: `/api/device/hikvision/copy-user/jobs/${jobId}`,
+						hint: "Poll the job until status is completed, completed_with_attention, or failed. Face+fingerprint copies can take minutes.",
+					},
+					202,
+				),
+			);
+		} catch (error: any) {
+			deviceLogger.error(`Start peer-copy job failed: ${error?.message || error}`);
+			res.status(500).json(
+				buildErrorResponse(
+					error?.message || "Failed to start Hikvision peer-copy job",
+					500,
+				),
+			);
+		}
+	};
+
+	const getHikvisionPeerCopyJob = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const admin = assertDeviceUserAdmin(req, res);
+			if (!admin) return;
+			const jobId = String(req.params.jobId || "").trim();
+			const job = readDeviceUserPeerCopyJob(jobId);
+			if (!job || job.organizationId !== String(admin.organizationId)) {
+				res.status(404).json(buildErrorResponse("Peer-copy job not found", 404));
+				return;
+			}
+			res.status(200).json(
+				buildSuccessResponse(
+					"Hikvision peer-copy job",
+					serializeDeviceUserPeerCopyJob(job),
+					200,
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Failed to read peer-copy job", 500),
+			);
+		}
+	};
+
 	const copyHikvisionDeviceUserToPeer = async (
 		req: Request,
 		res: Response,
@@ -18437,6 +18844,15 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const admin = assertDeviceUserAdmin(req, res);
 			if (!admin) return;
+
+			// Prefer durable job for long FP/face copies when client asks (async !== false default for multi-target).
+			const wantsAsync =
+				req.body?.async === true ||
+				req.body?.job === true ||
+				String(req.query?.async || "") === "1";
+			if (wantsAsync) {
+				return startHikvisionPeerCopyJob(req, res, _next);
+			}
 
 			const sourceDeviceId = String(req.body?.sourceDeviceId || "").trim();
 			const legacyTargetDeviceId = String(req.body?.targetDeviceId || "").trim();
@@ -26302,6 +26718,8 @@ export const controller = (prisma: PrismaClient) => {
 		backfillDeviceUserBiometricMetadata,
 		reconcileBiometricSync,
 		copyHikvisionDeviceUserToPeer,
+		startHikvisionPeerCopyJob,
+		getHikvisionPeerCopyJob,
 		planHikvisionSdkUserMerge,
 		reviewHikvisionCredentialRecovery,
 		startHikvisionCredentialRecoveryJob,
