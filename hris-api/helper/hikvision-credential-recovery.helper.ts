@@ -242,6 +242,41 @@ export const classifyCredentialRecoveryError = (
 			observabilityDefect: false,
 		};
 	}
+	// Device applied a write call but progress/reread rejected retention.
+	// This is physical apply evidence, not an observability hole.
+	if (
+		matches(
+			/device_fp_write_rejected_progress5/,
+			/progressstatus[\"']?\s*[:=]\s*5/,
+			/progressstatus.:5/,
+			/sticky[\"']?\s*[:=]\s*false/,
+			/failed to retain one or more raw fingerprint templates/,
+			/target rejected or failed to retain/,
+		)
+	) {
+		return {
+			code: "device_fp_write_rejected_progress",
+			category: "device_apply",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	// Same-vendor face peer is proven but stored-face SDK path needs a card value.
+	if (
+		matches(
+			/neither source nor target yields a card value for the stored-face writer/,
+			/face peer association is proven by same vendor person id, but neither source nor target yields a card/,
+		)
+	) {
+		return {
+			code: "face_writer_card_missing",
+			category: "identity_custody",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
 	if (matches(/scope hash/, /stale plan/, /scope changed/, /plan .*expired/)) {
 		return {
 			code: "stale_scope",

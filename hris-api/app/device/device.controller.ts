@@ -14403,9 +14403,16 @@ export const controller = (prisma: PrismaClient) => {
 									}
 									// SDK stored-face writer still needs a non-empty card value.
 									// Prefer the single target-owned card; else reuse the reviewed
-									// source card so empty-target peer copies can proceed.
+									// source card. When same-vendor peer copy is proven and both
+									// sides are card-less (common unlinked inventory), bind the
+									// plain vendor person id as the ACS card key so peer face
+									// writes are agent-owned instead of a permanent room enroll stop.
+									const vendorCardFallback =
+										association.strategy === "same_vendor_user_id"
+											? String(write.vendorUserId || "").trim()
+											: "";
 									const writerCardNo = String(
-										targetCardNo || cardNo || "",
+										targetCardNo || cardNo || vendorCardFallback || "",
 									).trim();
 									if (!writerCardNo) {
 										throw new Error(

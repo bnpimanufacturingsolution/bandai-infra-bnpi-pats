@@ -528,6 +528,30 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					'Target rejected or failed to retain one or more raw fingerprint templates: [{"fingerPrintId":1,"writeOk":true,"sticky":false,"progressStatus":5,"source":"device_fp_write_rejected_progress5:16"}]',
+				),
+			),
+		).to.include({
+			code: "device_fp_write_rejected_progress",
+			category: "device_apply",
+			retryable: false,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
+					"Face peer association is proven by same vendor person id, but neither source nor target yields a card value for the stored-face writer. Capture or enroll one card for this person, then retry.",
+				),
+			),
+		).to.include({
+			code: "face_writer_card_missing",
+			category: "identity_custody",
+			retryable: false,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"Hikvision SDK export event missing for device/user; exitCode=1, parsedEvents=none",
 				),
 			),
