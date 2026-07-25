@@ -378,13 +378,18 @@ export const buildExpiredCredentialRecoverySourceLeaseWhere = (
 	OR: [{ leaseExpiresAt: { lt: now } }, { leaseExpiresAt: null }],
 });
 
+/**
+ * True red / physical boundary only when a person in the room or a dual-owner
+ * conflict on the device is required. Agent-owned export, richest pick, writer
+ * probe, and HRIS identity linkage stay recovery_needed (amber) — not red.
+ */
 const physicalBoundaryReasons = new Set([
-	"canonical_identity_unproven",
 	"physical_identity_adjudication_required",
 	"duplicate_owner_detected",
 	"different_target_owner_detected",
-	"source_bytes_changed",
-	"writer_unsupported",
+	"physical_reenrollment_required",
+	"source_not_enrolled",
+	"device_firmware_unsupported",
 ]);
 
 export const classifyCredentialRecoveryWrite = (
@@ -398,7 +403,17 @@ export const classifyCredentialRecoveryWrite = (
 	) {
 		return "ready_to_write";
 	}
-	return physicalBoundaryReasons.has(String(write?.blockingReason || ""))
+	const reason = String(write?.blockingReason || "");
+	const stage = String(write?.recoveryStage || "");
+	// Stage can mark dual-owner even when reason is source_conflict (duplicate slot).
+	if (
+		stage === "physical_identity_action_required" ||
+		stage === "physical_reenrollment_required" ||
+		stage === "device_firmware_unsupported"
+	) {
+		return "physical_action_required";
+	}
+	return physicalBoundaryReasons.has(reason)
 		? "physical_action_required"
 		: "recovery_needed";
 };

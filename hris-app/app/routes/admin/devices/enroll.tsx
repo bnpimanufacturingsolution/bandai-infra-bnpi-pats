@@ -188,6 +188,9 @@ const formatSdkMergeRecoveryStage = (write: SdkMergeCredentialWrite) => {
 	if (write.blockingReason === "source_conflict") {
 		return "Compare source checksums and select the richest safe custody";
 	}
+	if (write.blockingReason === "canonical_identity_unproven") {
+		return "Prove HRIS employee link on source and target (agent)";
+	}
 	if (write.blockingReason === "target_write_unsupported") {
 		return "Probe and attest a supported target writer";
 	}
@@ -199,16 +202,24 @@ const formatSdkMergeRecoveryStage = (write: SdkMergeCredentialWrite) => {
 
 const formatSdkMergePhysicalAction = (write: SdkMergeCredentialWrite) => {
 	const reason = String(write.blockingReason || "").trim();
-	if (reason === "physical_identity_adjudication_required" || reason === "source_conflict") {
-		return "Resolve biometric ownership";
+	if (
+		reason === "physical_identity_adjudication_required" ||
+		reason === "duplicate_owner_detected" ||
+		reason === "different_target_owner_detected"
+	) {
+		return "Another person owns this slot on the target (dual-owner) — not auto-overwrite";
+	}
+	if (reason === "source_conflict") {
+		// Only shown when stage is physical_identity_action_required (duplicate slot).
+		return "Target slot already enrolled to a different vendor user";
 	}
 	if (reason === "physical_reenrollment_required" || reason === "source_not_enrolled") {
-		return "Enroll the credential on a physical source";
+		return "Credential not enrolled on any source device";
 	}
 	if (reason === "device_firmware_unsupported") {
-		return "Target firmware requires a physical or firmware change";
+		return "Target firmware cannot accept this write";
 	}
-	return "Resolve the proven physical boundary";
+	return "True physical / ownership boundary (not agent auto-recovery)";
 };
 
 type SdkMergeIssueRow = {
@@ -8832,9 +8843,24 @@ export function DeviceEnrollmentPanel({
 									</div>
 								) : (
 									<div className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-										Ready now 0 means no reviewed write is selectable yet. Start recovery
-										to create durable work with a job ID, worker lease, heartbeat, and
-										resume cursor.
+										{sdkMergeSelectableCredentialWrites.length > 0 ? (
+											<>
+												<span className="font-semibold text-emerald-800">
+													Ready now {mergeMetricValue(sdkMergeSelectableCredentialWrites.length)}
+												</span>
+												{" — "}
+												agent can write these (richest source). Amber = agent
+												recovery (export / identity / probe). Red = true dual-owner
+												or enroll/firmware only.
+											</>
+										) : (
+											<>
+												Ready now 0 = nothing selectable for auto-write in this plan.
+												Start recovery for amber export/probe work. Red is only
+												true ownership/enroll boundaries — not normal richest-source
+												copy.
+											</>
+										)}
 									</div>
 								)}
 								<div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-4 xl:grid-cols-7">
@@ -8862,17 +8888,26 @@ export function DeviceEnrollmentPanel({
 										],
 										["Ready now", sdkMergeSelectableCredentialWrites.length],
 										[
-											"Recovery needed",
+											"Agent recovery",
 											sdkMergeRecoveryQueuedCredentialWriteCount,
 										],
 										[
-											"Physical action required",
+											"Ownership / enroll block",
 											sdkMergePhysicalActionCredentialWrites.length,
 										],
 									].map(([label, value]) => (
 										<div key={String(label)} className="bg-white px-3 py-2">
 											<p className="text-xs text-slate-600">{label}</p>
-											<p className="mt-0.5 text-sm font-semibold text-slate-950">
+											<p
+												className={`mt-0.5 text-sm font-semibold ${
+													label === "Ready now"
+														? "text-emerald-800"
+														: label === "Agent recovery"
+															? "text-amber-800"
+															: label === "Ownership / enroll block"
+																? "text-red-800"
+																: "text-slate-950"
+												}`}>
 												{mergeMetricValue(value)}
 											</p>
 										</div>
@@ -8976,10 +9011,10 @@ export function DeviceEnrollmentPanel({
 															}`}
 															title={write.recommendationReason}>
 															{selectable
-																? "Ready now: raw/export evidence verified"
+																? "Ready now: richest source can write (agent)"
 																: physicalActionRequired
-																	? `Physical action required: ${formatSdkMergePhysicalAction(write)}`
-																	: `Recovery needed: ${formatSdkMergeRecoveryStage(write)}`}
+																	? `Blocked (true ownership/enroll): ${formatSdkMergePhysicalAction(write)}`
+																	: `Agent recovery: ${formatSdkMergeRecoveryStage(write)}`}
 														</p>
 														<p className="mt-0.5 break-words text-xs leading-4 text-slate-600">
 															{write.recommendationReason}

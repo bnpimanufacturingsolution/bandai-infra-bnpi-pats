@@ -361,9 +361,9 @@ describe("admin device user and log sync UI contract", () => {
 		);
 		expect(enroll).toContain("sdkMergePotentialOperationSummary?.byModality?.card");
 		expect(enroll).toContain('"Ready now"');
-		expect(enroll).toContain('"Recovery needed"');
-		expect(enroll).toContain('"Physical action required"');
-		expect(enroll).toContain("Recovery needed: ${formatSdkMergeRecoveryStage(write)}");
+		expect(enroll).toContain('"Agent recovery"');
+		expect(enroll).toContain('"Ownership / enroll block"');
+		expect(enroll).toContain("Agent recovery: ${formatSdkMergeRecoveryStage(write)}");
 		expect(enroll).toContain("Start recovery");
 		expect(enroll).toContain("credentialRecoveryJob.lastAdvancementAt");
 		expect(enroll).toContain("credentialRecoveryJob.activeTask");
@@ -372,10 +372,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("credentialRecoveryJob.latestError.retryable");
 		expect(enroll).toContain('credentialRecoveryJob.status === "completed"');
 		expect(enroll).toContain("(credentialRecoveryJob.counters?.verified ?? 0) > 0");
-		expect(enroll).toContain("worker lease, heartbeat, and");
+		expect(enroll).toContain("agent can write these (richest source)");
+		expect(enroll).toContain("Red = true dual-owner");
 		expect(enroll).not.toContain("SDK_MERGE_PHYSICAL_ACTION_REASONS");
 		expect(enroll).toContain(
-			"Physical action required: ${formatSdkMergePhysicalAction(write)}",
+			"Blocked (true ownership/enroll): ${formatSdkMergePhysicalAction(write)}",
 		);
 		expect(enroll).toContain("!isSdkMergePhysicalActionRequired(write)");
 		expect(enroll).not.toContain("Blocked: exact SDK export/copy probe required");

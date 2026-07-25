@@ -508,6 +508,44 @@ describe("Hikvision credential recovery graph", () => {
 		).to.equal("recovery_needed");
 	});
 
+	it("keeps identity linkage and richest-path blocks as agent recovery not red physical", () => {
+		expect(
+			classifyCredentialRecoveryWrite({
+				executionEligibility: "blocked",
+				blockingReason: "canonical_identity_unproven",
+			}),
+		).to.equal("recovery_needed");
+		expect(
+			classifyCredentialRecoveryWrite({
+				executionEligibility: "blocked",
+				blockingReason: "source_conflict",
+				recoveryStage: "comparing_sources",
+			}),
+		).to.equal("recovery_needed");
+		expect(
+			classifyCredentialRecoveryWrite({
+				executionEligibility: "blocked",
+				blockingReason: "target_write_unsupported",
+			}),
+		).to.equal("recovery_needed");
+	});
+
+	it("marks only true dual-owner / enroll / firmware as physical_action_required", () => {
+		expect(
+			classifyCredentialRecoveryWrite({
+				executionEligibility: "blocked",
+				blockingReason: "physical_identity_adjudication_required",
+			}),
+		).to.equal("physical_action_required");
+		expect(
+			classifyCredentialRecoveryWrite({
+				executionEligibility: "blocked",
+				blockingReason: "source_conflict",
+				recoveryStage: "physical_identity_action_required",
+			}),
+		).to.equal("physical_action_required");
+	});
+
 	it("deduplicates one source capture that unlocks multiple target operations", () => {
 		const plan = {
 			credentialWrites: ["B", "D", "E"].map((targetDeviceId) => ({
