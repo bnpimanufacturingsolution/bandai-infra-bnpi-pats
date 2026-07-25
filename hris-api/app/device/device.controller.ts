@@ -108,6 +108,7 @@ import {
 	remainingCredentialRecoveryWriteAttemptBudget,
 	selectCredentialRecoveryReadyWrites,
 	selectObsoleteCredentialRecoverySourceTaskIds,
+	selectPermanentCredentialRecoveryWriteAttemptKeys,
 	summarizeCredentialRecovery,
 } from "../../helper/hikvision-credential-recovery.helper";
 import {
@@ -12632,16 +12633,19 @@ export const controller = (prisma: PrismaClient) => {
 			)
 				? String(request.canaryModality)
 				: null;
-			const attemptedWriteTasks = await taskStore.findMany({
+			// Only permanent outcomes consume canary budget. Retryable transport
+			// claims (status processing/retrying after ECONNRESET) must not exhaust
+			// maxVerifiedWrites and strand the job in awaiting_replan with verified=0.
+			const permanentWriteTasks = await taskStore.findMany({
 				where: {
 					jobId: params.jobId,
 					kind: "target_write",
-					attempts: { gt: 0 },
+					status: { in: ["succeeded", "failed"] },
 				},
-				select: { taskKey: true },
+				select: { taskKey: true, status: true },
 			});
 			const attemptedWriteTaskKeys = new Set(
-				attemptedWriteTasks.map((task: any) => String(task.taskKey)),
+				selectPermanentCredentialRecoveryWriteAttemptKeys(permanentWriteTasks),
 			);
 			const remainingWriteAttemptBudget = remainingCredentialRecoveryWriteAttemptBudget(
 				maxVerifiedWrites,
@@ -12818,16 +12822,16 @@ export const controller = (prisma: PrismaClient) => {
 						})),
 						skipDuplicates: true,
 					});
+					// Allow reclaim of retrying/processing tasks after transport loss.
+					// Do not require attempts=0 — that burned the whole canary after one ECONNRESET.
+					const claimTaskKeys = readyWrites.map(
+						(write: any) => `target_write:${String(write.id)}`,
+					);
 					const claimedWriteTasks = await taskStore.updateMany({
 						where: {
 							jobId: params.jobId,
-							taskKey: {
-								in: readyWrites.map(
-									(write: any) => `target_write:${String(write.id)}`,
-								),
-							},
-							attempts: 0,
-							status: { in: ["pending", "retrying"] },
+							taskKey: { in: claimTaskKeys },
+							status: { in: ["pending", "retrying", "processing"] },
 						},
 						data: {
 							status: "processing",
@@ -12836,12 +12840,66 @@ export const controller = (prisma: PrismaClient) => {
 							leaseOwner,
 							leaseExpiresAt: new Date(Date.now() + 60_000),
 							startedAt: new Date(),
+							completedAt: null,
+							error: Prisma.JsonNull,
 						},
 					});
 					if (claimedWriteTasks.count !== readyWrites.length) {
-						throw new Error(
-							`Credential recovery write-attempt fence refused the canary: claimed ${claimedWriteTasks.count} of ${readyWrites.length} target writes.`,
+						// Create any missing target_write rows then reclaim once more.
+						const existing = await taskStore.findMany({
+							where: { jobId: params.jobId, taskKey: { in: claimTaskKeys } },
+							select: { taskKey: true },
+						});
+						const existingKeys = new Set(
+							existing.map((task: any) => String(task.taskKey)),
 						);
+						const missing = readyWrites.filter(
+							(write: any) =>
+								!existingKeys.has(`target_write:${String(write.id)}`),
+						);
+						if (missing.length) {
+							await taskStore.createMany({
+								data: missing.map((write: any) => ({
+									jobId: params.jobId,
+									organizationId: persistedJob.organizationId,
+									taskKey: `target_write:${String(write.id)}`,
+									kind: "target_write",
+									modality: write.modality,
+									sourceDeviceId: write.sourceDeviceId,
+									targetDeviceId: write.targetDeviceId,
+									vendorUserId: write.vendorUserId,
+									userKey: write.userKey,
+									status: "pending",
+									stage: "ready_to_write",
+									priority: 100,
+									unlockCount: 1,
+									maxAttempts: 5,
+									payload: { operationIds: [String(write.id)] },
+								})),
+								skipDuplicates: true,
+							});
+						}
+						const reclaimed = await taskStore.updateMany({
+							where: {
+								jobId: params.jobId,
+								taskKey: { in: claimTaskKeys },
+								status: { in: ["pending", "retrying", "processing"] },
+							},
+							data: {
+								status: "processing",
+								stage: "credential_write_claimed",
+								attempts: { increment: 1 },
+								leaseOwner,
+								leaseExpiresAt: new Date(Date.now() + 60_000),
+								startedAt: new Date(),
+								completedAt: null,
+							},
+						});
+						if (reclaimed.count !== readyWrites.length) {
+							throw new Error(
+								`Credential recovery write-attempt fence refused the canary: claimed ${reclaimed.count} of ${readyWrites.length} target writes.`,
+							);
+						}
 					}
 					await heartbeat({
 						currentStage: "writing_canary",
@@ -12990,24 +13048,63 @@ export const controller = (prisma: PrismaClient) => {
 							attempt: 1,
 						};
 					}
-					await taskStore.updateMany({
-						where: {
-							jobId: params.jobId,
-							taskKey: {
-								in: freshTasks.map((task) => task.taskKey),
+					const successTaskKeys = readyWrites
+						.filter((write: any) =>
+							successfulOperationIds.has(String(write.id)),
+						)
+						.map((write: any) => `target_write:${String(write.id)}`);
+					const failedTaskKeys = readyWrites
+						.filter(
+							(write: any) => !successfulOperationIds.has(String(write.id)),
+						)
+						.map((write: any) => `target_write:${String(write.id)}`);
+					if (successTaskKeys.length) {
+						await taskStore.updateMany({
+							where: {
+								jobId: params.jobId,
+								taskKey: { in: successTaskKeys },
 							},
-						},
-						data: {
-							status: writeFailure ? "failed" : "succeeded",
-							stage:
-								!writeFailure
-									? "physically_retained"
+							data: {
+								status: "succeeded",
+								stage: "physically_retained",
+								result: writeResult || {},
+								error: Prisma.JsonNull,
+								completedAt: new Date(),
+							},
+						});
+					}
+					if (failedTaskKeys.length) {
+						const retryable = Boolean(
+							writeFailure &&
+								(writeFailure as any).retryable === true &&
+								verified === 0,
+						);
+						await taskStore.updateMany({
+							where: {
+								jobId: params.jobId,
+								taskKey: { in: failedTaskKeys },
+							},
+							data: {
+								// Full-batch transport loss: keep retrying without permanent fail.
+								status: retryable ? "retrying" : "failed",
+								stage: retryable
+									? "worker_retrying"
 									: "physical_reread_failed",
-							result: writeResult || {},
-							error: writeFailure || Prisma.JsonNull,
-							completedAt: new Date(),
-						},
-					});
+								result: writeResult || {},
+								error: writeFailure || Prisma.JsonNull,
+								completedAt: retryable ? null : new Date(),
+							},
+						});
+						if (retryable) {
+							// Force outer worker retry instead of awaiting_replan with verified=0.
+							throw new Error(
+								String(
+									(writeFailure as any)?.message ||
+										"Retryable physical write batch failed; will retry canary.",
+								),
+							);
+						}
+					}
 				}
 			}
 			const [

@@ -13,6 +13,7 @@ import {
 	remainingCredentialRecoveryWriteAttemptBudget,
 	selectCredentialRecoveryReadyWrites,
 	selectObsoleteCredentialRecoverySourceTaskIds,
+	selectPermanentCredentialRecoveryWriteAttemptKeys,
 	summarizeCredentialRecovery,
 } from "../helper/hikvision-credential-recovery.helper";
 
@@ -31,6 +32,7 @@ describe("Hikvision credential recovery graph", () => {
 				{
 					id: "face-a-1",
 					modality: "face",
+					vendorUserId: "a1",
 					recommended: true,
 					executionEligibility: "ready_from_raw_blob",
 					targetDeviceId: "device-a",
@@ -99,6 +101,76 @@ describe("Hikvision credential recovery graph", () => {
 			maxVerifiedWrites: 50,
 		});
 		expect(selected.map((row: any) => row.id)).to.deep.equal(["face-a-1"]);
+		expect(facePreview.wouldWriteUniquePeople).to.equal(1);
+	});
+
+	it("prefers unique people first so one wave touches more people than multi-target spam", () => {
+		const credentialWrites = [
+			{
+				id: "face-p1-t1",
+				modality: "face",
+				vendorUserId: "1",
+				recommended: true,
+				executionEligibility: "ready_from_raw_blob",
+				targetDeviceId: "A",
+				faceAssociationStrategy: "exact_shared_card",
+			},
+			{
+				id: "face-p1-t2",
+				modality: "face",
+				vendorUserId: "1",
+				recommended: true,
+				executionEligibility: "ready_from_raw_blob",
+				targetDeviceId: "D",
+				faceAssociationStrategy: "exact_shared_card",
+			},
+			{
+				id: "face-p1-t3",
+				modality: "face",
+				vendorUserId: "1",
+				recommended: true,
+				executionEligibility: "ready_from_raw_blob",
+				targetDeviceId: "E",
+				faceAssociationStrategy: "exact_shared_card",
+			},
+			{
+				id: "face-p2-t1",
+				modality: "face",
+				vendorUserId: "2",
+				recommended: true,
+				executionEligibility: "ready_from_raw_blob",
+				targetDeviceId: "A",
+				faceAssociationStrategy: "exact_shared_card",
+			},
+			{
+				id: "face-p3-t1",
+				modality: "face",
+				vendorUserId: "3",
+				recommended: true,
+				executionEligibility: "ready_from_raw_blob",
+				targetDeviceId: "F",
+				faceAssociationStrategy: "exact_shared_card",
+			},
+		];
+		const selected = selectCredentialRecoveryReadyWrites({
+			credentialWrites,
+			canaryModality: "face",
+			maxVerifiedWrites: 3,
+		});
+		const people = selected.map((row: any) => String(row.vendorUserId));
+		expect(people).to.have.members(["1", "2", "3"]);
+		expect(new Set(people).size).to.equal(3);
+	});
+
+	it("does not treat retrying transport claims as permanent write-budget consumption", () => {
+		const keys = selectPermanentCredentialRecoveryWriteAttemptKeys([
+			{ taskKey: "target_write:a", status: "succeeded" },
+			{ taskKey: "target_write:b", status: "failed" },
+			{ taskKey: "target_write:c", status: "retrying" },
+			{ taskKey: "target_write:d", status: "processing" },
+			{ taskKey: "target_write:e", status: "pending" },
+		]);
+		expect(keys).to.deep.equal(["target_write:a", "target_write:b"]);
 	});
 
 	it("classifies binary request_timeout_after messages as retryable transport", () => {

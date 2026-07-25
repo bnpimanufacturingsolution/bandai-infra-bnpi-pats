@@ -622,12 +622,20 @@ const faceAssociationRank = (value: unknown) =>
 /**
  * Exact same selection the recovery worker uses before physical writes.
  * Pure: given plan writes + canary/cap, returns the ordered would-write list.
+ *
+ * Ordering bias (unique-gap first):
+ * 1) fingerprint before face (canary safety)
+ * 2) people with fewer remaining ops of this modality first (finish unique IDs)
+ * 3) diversify: first occurrence of each vendorUserId preferred within a wave
+ * 4) exact_shared_card association
+ * 5) stable id
  */
 export const selectCredentialRecoveryReadyWrites = (params: {
 	credentialWrites: unknown;
 	canaryModality?: unknown;
 	maxVerifiedWrites?: unknown;
 	operationIds?: Iterable<unknown> | null;
+	/** Task keys that permanently consumed write budget (succeeded or non-retryable failed). */
 	attemptedTaskKeys?: Iterable<unknown> | null;
 }) => {
 	const canaryModality = ["fingerprint", "face"].includes(String(params.canaryModality || ""))
@@ -646,25 +654,62 @@ export const selectCredentialRecoveryReadyWrites = (params: {
 			.filter(Boolean),
 	);
 	const writes = Array.isArray(params.credentialWrites) ? params.credentialWrites : [];
-	return writes
-		.filter((write: any) => {
-			const id = String(write?.id || "");
-			if (operationIds && !operationIds.has(id)) return false;
-			if (write?.recommended !== true) return false;
-			if (String(write?.executionEligibility || "") !== "ready_from_raw_blob") return false;
-			if (attemptedTaskKeys.has(`target_write:${id}`)) return false;
-			if (canaryModality && String(write?.modality || "") !== canaryModality) return false;
-			return true;
-		})
-		.sort((left: any, right: any) => {
-			return (
-				modalityRank(left?.modality) - modalityRank(right?.modality) ||
-				faceAssociationRank(left?.faceAssociationStrategy) -
-					faceAssociationRank(right?.faceAssociationStrategy) ||
-				String(left?.id || "").localeCompare(String(right?.id || ""))
-			);
-		})
-		.slice(0, maxVerifiedWrites);
+	const remainingOpsByPersonModality = new Map<string, number>();
+	for (const write of writes) {
+		const modality = String((write as any)?.modality || "");
+		if (canaryModality && modality !== canaryModality) continue;
+		const person = String(
+			(write as any)?.vendorUserId || (write as any)?.userKey || "",
+		).trim();
+		if (!person) continue;
+		const mapKey = `${modality}|${person}`;
+		remainingOpsByPersonModality.set(
+			mapKey,
+			(remainingOpsByPersonModality.get(mapKey) || 0) + 1,
+		);
+	}
+	const eligible = writes.filter((write: any) => {
+		const id = String(write?.id || "");
+		if (operationIds && !operationIds.has(id)) return false;
+		if (write?.recommended !== true) return false;
+		if (String(write?.executionEligibility || "") !== "ready_from_raw_blob") return false;
+		if (attemptedTaskKeys.has(`target_write:${id}`)) return false;
+		if (canaryModality && String(write?.modality || "") !== canaryModality) return false;
+		return true;
+	});
+	const sorted = [...eligible].sort((left: any, right: any) => {
+		const leftPerson = String(left?.vendorUserId || left?.userKey || "").trim();
+		const rightPerson = String(right?.vendorUserId || right?.userKey || "").trim();
+		const leftRemain =
+			remainingOpsByPersonModality.get(`${String(left?.modality)}|${leftPerson}`) || 99;
+		const rightRemain =
+			remainingOpsByPersonModality.get(`${String(right?.modality)}|${rightPerson}`) || 99;
+		return (
+			modalityRank(left?.modality) - modalityRank(right?.modality) ||
+			leftRemain - rightRemain ||
+			faceAssociationRank(left?.faceAssociationStrategy) -
+				faceAssociationRank(right?.faceAssociationStrategy) ||
+			String(left?.id || "").localeCompare(String(right?.id || ""))
+		);
+	});
+	// Diversify unique people within the wave: first take at most one op per person,
+	// then fill remaining budget (closes unique-ID gap faster than 3 targets for one person).
+	const selected: any[] = [];
+	const seenPerson = new Set<string>();
+	for (const write of sorted) {
+		if (selected.length >= maxVerifiedWrites) break;
+		const person = String(write?.vendorUserId || write?.userKey || "").trim();
+		const personKey = `${String(write?.modality)}|${person}`;
+		if (person && seenPerson.has(personKey)) continue;
+		if (person) seenPerson.add(personKey);
+		selected.push(write);
+	}
+	for (const write of sorted) {
+		if (selected.length >= maxVerifiedWrites) break;
+		if (selected.includes(write)) continue;
+		selected.push(write);
+	}
+	return selected;
 };
 
 export type CredentialRecoveryExecutionPreview = {
@@ -675,6 +720,7 @@ export type CredentialRecoveryExecutionPreview = {
 	fingerprintReady: number;
 	wouldWriteCount: number;
 	wouldWriteOperationIds: string[];
+	wouldWriteUniquePeople: number;
 	wouldWriteByTarget: Array<{
 		targetDeviceId: string;
 		modality: string;
@@ -693,6 +739,7 @@ export type CredentialRecoveryExecutionPreview = {
 	certainty: "deterministic_from_plan";
 	gapExpectation: {
 		verifiedWillIncreaseByAtMost: number;
+		uniquePeopleTouchedAtMost: number;
 		uiGapOnlyMovesIfVerifiedGreaterThanZero: true;
 		fpReadyMustBePositiveForFingerprintVerifiedWrites: true;
 		faceReadyMustBePositiveForFaceVerifiedWrites: true;
@@ -777,6 +824,11 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 		}
 	}
 
+	const wouldWriteUniquePeople = new Set(
+		wouldWrite
+			.map((write: any) => String(write?.vendorUserId || write?.userKey || "").trim())
+			.filter(Boolean),
+	).size;
 	return {
 		canaryModality,
 		maxVerifiedWrites,
@@ -785,6 +837,7 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 		fingerprintReady,
 		wouldWriteCount: wouldWrite.length,
 		wouldWriteOperationIds: wouldWrite.map((write: any) => String(write?.id || "")).filter(Boolean),
+		wouldWriteUniquePeople,
 		wouldWriteByTarget: [...wouldByTargetMap.entries()]
 			.map(([mapKey, count]) => {
 				const [modality, targetDeviceId] = mapKey.split("|");
@@ -809,12 +862,29 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 		certainty: "deterministic_from_plan",
 		gapExpectation: {
 			verifiedWillIncreaseByAtMost: wouldWrite.length,
+			uniquePeopleTouchedAtMost: wouldWriteUniquePeople,
 			uiGapOnlyMovesIfVerifiedGreaterThanZero: true,
 			fpReadyMustBePositiveForFingerprintVerifiedWrites: true,
 			faceReadyMustBePositiveForFaceVerifiedWrites: true,
 		},
 	};
 };
+
+/**
+ * Write-attempt budget must only count permanent outcomes.
+ * Retryable transport claims (attempts>0 while still retrying) must not
+ * exhaust maxVerifiedWrites and force awaiting_replan with verified=0.
+ */
+export const selectPermanentCredentialRecoveryWriteAttemptKeys = (
+	tasks: Array<{ taskKey?: unknown; status?: unknown }>,
+) =>
+	tasks
+		.filter((task) => {
+			const status = String(task?.status || "");
+			return status === "succeeded" || status === "failed";
+		})
+		.map((task) => String(task?.taskKey || ""))
+		.filter(Boolean);
 
 const physicalCredentialRecoveryStages = new Set([
 	"writing_canary",
