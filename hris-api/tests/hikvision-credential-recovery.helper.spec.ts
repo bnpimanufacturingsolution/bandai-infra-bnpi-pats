@@ -600,6 +600,18 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					"stored_face_sdk_preview_failed exitCode=255: timeout: the monitored command dumped core",
+				),
+			),
+		).to.include({
+			code: "stored_face_sdk_crash",
+			category: "sdk_runtime",
+			retryable: false,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"Credential-only face isolation failed after reread (fingerprint_or_card changed).",
 				),
 			),

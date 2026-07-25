@@ -17,6 +17,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "sdk_source_device_not_armed"
 		| "sdk_export_event_missing"
 		| "stored_face_sdk_failed"
+		| "stored_face_sdk_crash"
 		| "stored_face_sdk_wrapper_noise"
 		| "stored_face_device_full"
 		| "device_fp_write_rejected_progress"
@@ -175,6 +176,24 @@ export const classifyCredentialRecoveryError = (
 			message,
 			retryable: false,
 			observabilityDefect: true,
+		};
+	}
+	// Must run before broad \btimeout\b transport match: "timeout: ... dumped core"
+	// was misclassified as device_transport and infinite-retried face canaries.
+	if (
+		matches(
+			/dumped core/,
+			/exitcode=255/,
+			/stored_face_sdk_(?:preview|execute)_failed exitcode=255/,
+			/timeout: the monitored command dumped core/,
+		)
+	) {
+		return {
+			code: "stored_face_sdk_crash",
+			category: "sdk_runtime",
+			message,
+			retryable: false,
+			observabilityDefect: false,
 		};
 	}
 	if (
