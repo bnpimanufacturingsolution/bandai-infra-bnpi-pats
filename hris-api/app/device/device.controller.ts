@@ -6910,15 +6910,43 @@ export const controller = (prisma: PrismaClient) => {
 				await (prisma as any).deviceUser.update({ where: { id: existing.id }, data });
 				updated += 1;
 			} else {
-				await (prisma as any).deviceUser.create({
-					data: {
-						organizationId,
-						deviceId,
-						vendorUserId: candidate.vendorUserId,
-						...data,
-					},
-				});
-				created += 1;
+				try {
+					await (prisma as any).deviceUser.create({
+						data: {
+							organizationId,
+							deviceId,
+							vendorUserId: candidate.vendorUserId,
+							...data,
+						},
+					});
+					created += 1;
+				} catch (createError: any) {
+					// Concurrent sync/backfill can insert the same unique key between
+					// findUnique and create. Recover by updating the winner row so a
+					// mid-batch race does not abort the rest of the inventory page.
+					const isUniqueConflict =
+						createError?.code === "P2002" ||
+						String(createError?.message || "")
+							.toLowerCase()
+							.includes("unique constraint");
+					if (!isUniqueConflict) throw createError;
+					const raced = await (prisma as any).deviceUser.findUnique({
+						where: {
+							organizationId_deviceId_vendorUserId: {
+								organizationId,
+								deviceId,
+								vendorUserId: candidate.vendorUserId,
+							},
+						},
+						select: { id: true },
+					});
+					if (!raced?.id) throw createError;
+					await (prisma as any).deviceUser.update({
+						where: { id: raced.id },
+						data,
+					});
+					updated += 1;
+				}
 			}
 		}
 		// A live device read is not proof that an HRIS/physical user was deleted.
@@ -20025,35 +20053,70 @@ export const controller = (prisma: PrismaClient) => {
 							device,
 							startedByUserId: params.startedByUserId || null,
 						});
-				const biometricSummary = await withCredentialDeviceLeases(
-					{
-						rootDir: CREDENTIAL_DEVICE_LEASE_DIR,
-						organizationId: params.organizationId,
-						deviceIds: [String(device.id)],
-						ownerId: `biometric-recovery:${params.jobId}`,
-						jobId: params.jobId,
-						scopeHash: createHash("sha256")
-							.update(
-								JSON.stringify({
-									mode: params.syncMode,
-									deviceId: String(device.id),
-								}),
-							)
-							.digest("hex"),
-					},
-					() =>
-						captureMissingBiometricCustodyForDevice({
-							jobId: params.jobId,
-							req: params.req,
+				// Identity inventory must not be marked failed when a concurrent
+				// credential-recovery job holds the device lease. Capture biometrics
+				// opportunistically; lease/busy errors become needs_attention.
+				let biometricSummary: any = {
+					biometricTotal: 0,
+					biometricProcessed: 0,
+					biometricCaptured: 0,
+					biometricCached: 0,
+					biometricFailed: 0,
+					biometricFailureReasons: {},
+					biometricLeaseSkipped: false,
+				};
+				let biometricLeaseError: string | null = null;
+				try {
+					biometricSummary = await withCredentialDeviceLeases(
+						{
+							rootDir: CREDENTIAL_DEVICE_LEASE_DIR,
 							organizationId: params.organizationId,
-							device,
-						}),
-				);
+							deviceIds: [String(device.id)],
+							ownerId: `biometric-recovery:${params.jobId}`,
+							jobId: params.jobId,
+							scopeHash: createHash("sha256")
+								.update(
+									JSON.stringify({
+										mode: params.syncMode,
+										deviceId: String(device.id),
+									}),
+								)
+								.digest("hex"),
+						},
+						() =>
+							captureMissingBiometricCustodyForDevice({
+								jobId: params.jobId,
+								req: params.req,
+								organizationId: params.organizationId,
+								device,
+							}),
+					);
+				} catch (leaseOrBiometricError: any) {
+					const message = String(
+						leaseOrBiometricError?.message || leaseOrBiometricError || "",
+					);
+					const isLeaseBusy =
+						message.toLowerCase().includes("credential device lease busy") ||
+						message.toLowerCase().includes("lease root missing");
+					if (!isLeaseBusy) throw leaseOrBiometricError;
+					biometricLeaseError = message;
+					biometricSummary = {
+						...biometricSummary,
+						biometricLeaseSkipped: true,
+						biometricLeaseError: message,
+						biometricFailureReasons: {
+							credential_device_lease_busy: 1,
+						},
+					};
+				}
 				const biometricFailed = Number((biometricSummary as any)?.biometricFailed || 0);
 				const biometricFailureReasons = sanitizeDeviceUserSyncFailureReasons(
 					(biometricSummary as any)?.biometricFailureReasons || {},
 				);
-				const deviceStatus = biometricFailed > 0 ? "needs_attention" : "success";
+				const deviceStatus =
+					biometricFailed > 0 || biometricLeaseError
+						? "needs_attention"
+						: "success";
 				setDeviceUserSyncJobResult(results, {
 					deviceId: device.id,
 					deviceName: device.name || device.address || "Hikvision device",
@@ -20063,15 +20126,17 @@ export const controller = (prisma: PrismaClient) => {
 						...sourceResult.summary,
 						...biometricSummary,
 						biometricFailureReasons,
+						identitySyncOk: true,
 					},
 					error:
-						biometricFailed > 0
+						biometricLeaseError ||
+						(biometricFailed > 0
 							? `${biometricFailed} biometric credential(s) still missing raw blobs: ${
 									Object.entries(biometricFailureReasons)
 										.map(([reason, count]) => `${reason}=${count}`)
 										.join(", ") || "reason_unknown"
 								}`
-							: null,
+							: null),
 				});
 				successfulDevices += 1;
 				updateDeviceUserSyncJob(params.jobId, {

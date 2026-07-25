@@ -69,6 +69,18 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("deviceIds");
 	});
 
+	it("recovers DeviceUser create races and does not fail identity sync on biometric lease busy", () => {
+		const controller = controllerSource();
+		// Concurrent sync/backfill can win the unique key between findUnique and create.
+		expect(controller).to.include('createError?.code === "P2002"');
+		expect(controller).to.include("unique constraint");
+		expect(controller).to.include("identitySyncOk: true");
+		// Inventory plane must remain successful when credential recovery holds the lease.
+		expect(controller).to.include("biometricLeaseSkipped");
+		expect(controller).to.include("credential device lease busy");
+		expect(controller).to.include("credential_device_lease_busy");
+	});
+
 	it("expires stale processing device-user sync job snapshots instead of reviving them", () => {
 		const controller = controllerSource();
 
