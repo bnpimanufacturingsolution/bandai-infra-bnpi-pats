@@ -1782,6 +1782,15 @@ struct FaceWriteContext {
     std::condition_variable cv;
     bool done = false;
     bool ok = false;
+    // Observability for writeOk=false with lastError=0 (live 2026-07-25):
+    // NET_DVR_GetLastError is often 0 after a DATA/STATUS failure callback.
+    bool saw_status = false;
+    bool saw_data = false;
+    DWORD callback_status = 0;
+    // FACE_AND_TEMPLATE_STATUS.byRecvStatus: 0-failed, 1-success, 2-full.
+    // 255 means the DATA status packet never arrived.
+    BYTE recv_status = 255;
+    DWORD sdk_error = 0;
 };
 
 struct FaceReadContext {
@@ -1828,14 +1837,34 @@ void CALLBACK face_write_callback(DWORD type, void *buffer, DWORD buffer_length,
     if (ctx == nullptr) return;
     std::lock_guard<std::mutex> lock(ctx->mutex);
     if (type == NET_SDK_CALLBACK_TYPE_STATUS && buffer != nullptr && buffer_length >= sizeof(DWORD)) {
-        const DWORD status = *reinterpret_cast<DWORD *>(buffer);
-        ctx->ok = status == NET_SDK_CALLBACK_STATUS_SUCCESS;
-        if (status == NET_SDK_CALLBACK_STATUS_FAILED || status == NET_SDK_CALLBACK_STATUS_SUCCESS) {
+        DWORD status = 0;
+        std::memcpy(&status, buffer, sizeof(status));
+        ctx->saw_status = true;
+        ctx->callback_status = status;
+        // Prefer DATA byRecvStatus when present; STATUS alone is a fallback.
+        if (status == NET_SDK_CALLBACK_STATUS_FAILED ||
+            status == NET_SDK_CALLBACK_STATUS_EXCEPTION) {
+            ctx->ok = false;
+            ctx->done = true;
+            if (buffer_length >= sizeof(DWORD) * 2) {
+                std::memcpy(
+                    &ctx->sdk_error,
+                    reinterpret_cast<const char *>(buffer) + sizeof(DWORD),
+                    sizeof(DWORD));
+            }
+        } else if (status == NET_SDK_CALLBACK_STATUS_SUCCESS ||
+                   status == NET_SDK_REMOTE_CONFIG_STATUS_SUCCESS) {
+            if (!ctx->saw_data) {
+                ctx->ok = true;
+            }
             ctx->done = true;
         }
     } else if (type == NET_SDK_CALLBACK_TYPE_DATA && buffer != nullptr &&
                buffer_length >= sizeof(NET_DVR_FACE_AND_TEMPLATE_STATUS)) {
         auto *status = reinterpret_cast<NET_DVR_FACE_AND_TEMPLATE_STATUS *>(buffer);
+        ctx->saw_data = true;
+        ctx->recv_status = status->byRecvStatus;
+        // HCNetSDK: 0-failed, 1-success, 2-full
         ctx->ok = status->byRecvStatus == 1;
         ctx->done = true;
     }
@@ -2138,6 +2167,30 @@ bool capture_face_template(
     return ok;
 }
 
+std::string face_write_fail_reason(const FaceWriteContext &ctx, BOOL send_ok) {
+    if (send_ok != TRUE) {
+        return "send_remote_config_failed";
+    }
+    if (!ctx.done) {
+        return "callback_timeout";
+    }
+    if (ctx.saw_data) {
+        // HCNetSDK FACE_AND_TEMPLATE_STATUS.byRecvStatus
+        if (ctx.recv_status == 0) return "device_recv_status_failed";
+        if (ctx.recv_status == 1) return "none";
+        if (ctx.recv_status == 2) return "device_face_template_full";
+        return "device_recv_status_" + std::to_string(static_cast<unsigned>(ctx.recv_status));
+    }
+    if (ctx.saw_status) {
+        if (ctx.callback_status == NET_SDK_CALLBACK_STATUS_SUCCESS ||
+            ctx.callback_status == NET_SDK_REMOTE_CONFIG_STATUS_SUCCESS) {
+            return "status_success_without_data_ack";
+        }
+        return "callback_status_failed_" + std::to_string(ctx.callback_status);
+    }
+    return "write_not_accepted";
+}
+
 bool write_face_and_template(
     DeviceSession &target,
     const std::string &employee_no,
@@ -2162,6 +2215,20 @@ bool write_face_and_template(
         });
         return !face_template.empty() && !face_picture.empty();
     }
+    if (card_no.empty()) {
+        emit_json({
+            {"event", "peer_face_write"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"failReason", "card_no_required_for_face_and_template"},
+            {"recvStatus", ""},
+            {"callbackCompleted", "false"},
+            {"durationMs", std::to_string(elapsed_ms())},
+            {"lastError", "0"}
+        });
+        return false;
+    }
     NET_DVR_FACE_AND_TEMPLATE_COND cond{};
     cond.dwSize = sizeof(cond);
     cond.dwFaceNum = 1;
@@ -2180,14 +2247,18 @@ bool write_face_and_template(
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - remote_config_started_at).count();
     if (handle < 0) {
+        const DWORD start_error = NET_DVR_GetLastError();
         emit_json({
             {"event", "peer_face_write"},
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
+            {"failReason", "start_remote_config_failed"},
+            {"recvStatus", ""},
+            {"sendOk", "false"},
             {"startRemoteConfigMs", std::to_string(start_remote_config_ms)},
             {"durationMs", std::to_string(elapsed_ms())},
-            {"lastError", std::to_string(NET_DVR_GetLastError())}
+            {"lastError", std::to_string(start_error)}
         });
         return false;
     }
@@ -2214,19 +2285,30 @@ bool write_face_and_template(
     NET_DVR_StopRemoteConfig(handle);
     sdk_lock.unlock();
     const bool ok = send_ok == TRUE && ctx.ok;
+    const std::string fail_reason = ok ? "none" : face_write_fail_reason(ctx, send_ok);
+    const DWORD last_error = ok
+        ? 0
+        : (ctx.sdk_error != 0 ? ctx.sdk_error : NET_DVR_GetLastError());
     emit_json({
         {"event", "peer_face_write"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", employee_no},
         {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
+        {"failReason", fail_reason},
+        {"sendOk", send_ok == TRUE ? "true" : "false"},
+        {"sawStatusCallback", ctx.saw_status ? "true" : "false"},
+        {"sawDataCallback", ctx.saw_data ? "true" : "false"},
+        {"callbackStatus", std::to_string(ctx.callback_status)},
+        // Empty string when DATA packet never arrived (recv_status sentinel 255).
+        {"recvStatus", ctx.recv_status == 255 ? "" : std::to_string(static_cast<unsigned>(ctx.recv_status))},
         {"templateSize", std::to_string(face_template.size())},
         {"pictureSize", std::to_string(face_picture.size())},
         {"startRemoteConfigMs", std::to_string(start_remote_config_ms)},
         {"sendAndCallbackMs", std::to_string(send_and_callback_ms)},
         {"callbackCompleted", ctx.done ? "true" : "false"},
         {"durationMs", std::to_string(elapsed_ms())},
-        {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+        {"lastError", std::to_string(last_error)}
     });
     return ok;
 }
@@ -2464,7 +2546,20 @@ bool write_stored_face_with_reread(
         close(lock_fd);
     };
     if (!execute_mode) {
-        const bool preview = write_face_and_template(
+        // Mirror peer reconcile: face is card-keyed; preview whether the ACS
+        // card key would be usable before claiming a dry-run write.
+        bool already_owned = false;
+        const bool card_owner_ok = target_card_allows_owner(
+            target, payload.employee_no, payload.card_no, &already_owned);
+        emit_json({
+            {"event", "stored_face_card_ensure_preview"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"ok", card_owner_ok ? "true" : "false"},
+            {"alreadyOwned", already_owned ? "true" : "false"},
+            {"wouldEnsureCard", already_owned ? "false" : "true"}
+        });
+        const bool preview = card_owner_ok && write_face_and_template(
             target,
             payload.employee_no,
             payload.card_no,
@@ -2476,6 +2571,7 @@ bool write_stored_face_with_reread(
             {"targetDeviceId", payload.target_device_id},
             {"employeeNo", payload.employee_no},
             {"ok", preview ? "true" : "false"},
+            {"cardOwnerOk", card_owner_ok ? "true" : "false"},
             {"templateSize", std::to_string(payload.face_template.size())},
             {"pictureSize", std::to_string(payload.face_picture.size())},
             {"physicalRereadRequired", "true"}
@@ -2496,6 +2592,49 @@ bool write_stored_face_with_reread(
             {"targetDeviceId", payload.target_device_id},
             {"employeeNo", payload.employee_no},
             {"reason", "feature_disabled_pending_authorized_canary"}
+        });
+        release_lock();
+        return false;
+    }
+    // CODE DEFECT (fixed): stored-face path wrote NET_DVR_SET_FACE_AND_TEMPLATE
+    // without ensuring the ACS card key exists. Peer reconcile always called
+    // add_sync_card_if_unowned first. Live 2026-07-25 cardless vendor-id fallback
+    // produced peer_face_write callbackCompleted=true ok=false lastError=0
+    // writeOk=false with zero reread. Card ensure is mandatory for this writer.
+    const auto card_started_at = std::chrono::steady_clock::now();
+    const bool card_ready =
+        add_sync_card_if_unowned(target, payload.employee_no, payload.card_no);
+    const auto card_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - card_started_at).count();
+    emit_json({
+        {"event", "stored_face_card_ensure"},
+        {"targetDeviceId", payload.target_device_id},
+        {"employeeNo", payload.employee_no},
+        {"ok", card_ready ? "true" : "false"},
+        {"durationMs", std::to_string(card_ms)},
+        {"reason", card_ready ? "card_bound_or_already_owned" : "card_bind_failed"}
+    });
+    if (!card_ready) {
+        emit_json({
+            {"event", "stored_face_write_reread_completed"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"ok", "false"},
+            {"writeOk", "false"},
+            {"rereadOk", "false"},
+            {"templateMatch", "false"},
+            {"pictureMatch", "false"},
+            {"failReason", "stored_face_card_ensure_failed"},
+            {"templateSize", std::to_string(payload.face_template.size())},
+            {"pictureSize", std::to_string(payload.face_picture.size())},
+            {"rereadTemplateSize", "0"},
+            {"rereadPictureSize", "0"},
+            {"writeMs", "0"},
+            {"stabilizationWaitMs", "0"},
+            {"rereadMs", "0"},
+            {"durationMs", std::to_string(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - operation_started_at).count())}
         });
         release_lock();
         return false;
@@ -2535,6 +2674,7 @@ bool write_stored_face_with_reread(
         {"rereadOk", reread ? "true" : "false"},
         {"templateMatch", template_match ? "true" : "false"},
         {"pictureMatch", picture_match ? "true" : "false"},
+        {"failReason", verified ? "none" : (wrote ? "reread_or_match_failed" : "peer_face_write_failed")},
         {"templateSize", std::to_string(payload.face_template.size())},
         {"pictureSize", std::to_string(payload.face_picture.size())},
         {"rereadTemplateSize", std::to_string(reread_template.size())},

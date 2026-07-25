@@ -254,6 +254,41 @@ export const classifyCredentialRecoveryError = (
 			observabilityDefect: false,
 		};
 	}
+	// Named stored-face SDK sub-causes (prefer before broad stored_face_sdk_failed).
+	// Live 2026-07-25: writeOk=false lastError=0 was unreadable; C++ now emits
+	// failReason/recvStatus and ensures ACS card before SET_FACE_AND_TEMPLATE.
+	if (
+		matches(
+			/stored_face_card_ensure_failed/,
+			/card_ensure ok=false/,
+			/card_bind_failed/,
+			/peer_card_owner_conflict/,
+			/card_no_required_for_face_and_template/,
+		)
+	) {
+		return {
+			code: "face_writer_card_bind_failed",
+			category: "identity_custody",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/device_face_template_full/,
+			/recvStatus=2\b/,
+			/failReason=device_face_template_full/,
+		)
+	) {
+		return {
+			code: "stored_face_device_full",
+			category: "device_apply",
+			message,
+			retryable: false,
+			observabilityDefect: false,
+		};
+	}
 	// Hot-reload wrapper noise used to be the entire thrown error (INFO lines).
 	// Prefer structured stored_face_sdk_* messages; still classify residual noise.
 	if (
@@ -261,12 +296,18 @@ export const classifyCredentialRecoveryError = (
 			/stored_face_sdk_(?:preview|execute)_failed/,
 			/stored-face sdk (?:preview|write)/,
 			/stored_face_write_/,
+			/peer_face_write ok=false/,
+			/failReason=device_recv_status/,
+			/failReason=peer_face_write_failed/,
 		)
 	) {
 		return {
 			code: "stored_face_sdk_failed",
 			category: "sdk_runtime",
 			message,
+			// Named failReason/recvStatus present => not an observability defect.
+			// Bare writeOk=false lastError=0 without diagnosis was the defect
+			// (fixed in C++ peer_face_write emission).
 			retryable: true,
 			observabilityDefect: false,
 		};

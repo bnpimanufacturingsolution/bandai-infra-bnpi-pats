@@ -2891,14 +2891,61 @@ export const controller = (prisma: PrismaClient) => {
 				stderr: string;
 				events: any[];
 			}) => {
-				const eventError = [...params.events]
-					.reverse()
+				const reversed = [...params.events].reverse();
+				const peerWrite = reversed.find(
+					(event) => event?.event === "peer_face_write",
+				);
+				const reread = reversed.find(
+					(event) => event?.event === "stored_face_write_reread_completed",
+				);
+				const cardEnsure = reversed.find(
+					(event) =>
+						event?.event === "stored_face_card_ensure" ||
+						event?.event === "stored_face_card_ensure_preview",
+				);
+				const blocked = reversed.find(
+					(event) => event?.event === "stored_face_write_blocked",
+				);
+				// Prefer structured C++ diagnosis over dumping full SDK stdout.
+				// Live defect 2026-07-25: writeOk=false lastError=0 with no
+				// recvStatus/failReason made every face failure unreadable.
+				const structuredParts = [
+					cardEnsure
+						? `card_ensure ok=${String(cardEnsure.ok || "")} reason=${String(cardEnsure.reason || cardEnsure.alreadyOwned || "")}`
+						: "",
+					peerWrite
+						? [
+								`peer_face_write ok=${String(peerWrite.ok || "")}`,
+								`failReason=${String(peerWrite.failReason || "")}`,
+								`recvStatus=${String(peerWrite.recvStatus ?? "")}`,
+								`sendOk=${String(peerWrite.sendOk || "")}`,
+								`callbackCompleted=${String(peerWrite.callbackCompleted || "")}`,
+								`lastError=${String(peerWrite.lastError || "0")}`,
+								`templateSize=${String(peerWrite.templateSize || "0")}`,
+								`pictureSize=${String(peerWrite.pictureSize || "0")}`,
+							].join(" ")
+						: "",
+					reread
+						? [
+								`reread writeOk=${String(reread.writeOk || "")}`,
+								`rereadOk=${String(reread.rereadOk || "")}`,
+								`failReason=${String(reread.failReason || "")}`,
+								`templateMatch=${String(reread.templateMatch || "")}`,
+								`pictureMatch=${String(reread.pictureMatch || "")}`,
+							].join(" ")
+						: "",
+					blocked
+						? `blocked reason=${String(blocked.reason || "")}`
+						: "",
+				].filter(Boolean);
+				const eventError = reversed
 					.map((event) =>
 						String(
 							event?.error ||
 								event?.message ||
 								event?.reason ||
 								event?.detail ||
+								event?.failReason ||
 								"",
 						).trim(),
 					)
@@ -2906,6 +2953,7 @@ export const controller = (prisma: PrismaClient) => {
 				const cleanedStderr = sanitizeSdkFaceDiag(params.stderr);
 				const cleanedStdout = sanitizeSdkFaceDiag(params.stdout);
 				const body =
+					structuredParts.join(" | ") ||
 					eventError ||
 					cleanedStderr ||
 					cleanedStdout ||

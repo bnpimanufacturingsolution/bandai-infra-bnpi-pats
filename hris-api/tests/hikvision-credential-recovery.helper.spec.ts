@@ -564,6 +564,42 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					"stored_face_sdk_execute_failed exitCode=1: card_ensure ok=false reason=card_bind_failed | reread writeOk=false failReason=stored_face_card_ensure_failed",
+				),
+			),
+		).to.include({
+			code: "face_writer_card_bind_failed",
+			category: "identity_custody",
+			retryable: false,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
+					"stored_face_sdk_execute_failed exitCode=1: peer_face_write ok=false failReason=device_face_template_full recvStatus=2",
+				),
+			),
+		).to.include({
+			code: "stored_face_device_full",
+			category: "device_apply",
+			retryable: false,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
+					"stored_face_sdk_execute_failed exitCode=1: peer_face_write ok=false failReason=device_recv_status_failed recvStatus=0 sendOk=true callbackCompleted=true lastError=0",
+				),
+			),
+		).to.include({
+			code: "stored_face_sdk_failed",
+			category: "sdk_runtime",
+			retryable: true,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"INFO: hikvision hot-reload LOCAL_API_BASE=http://localhost:3101\nloop[2] find 16 mac and 16 ip",
 				),
 			),

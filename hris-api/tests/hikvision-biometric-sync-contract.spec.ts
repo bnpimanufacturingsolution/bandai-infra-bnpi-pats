@@ -283,6 +283,16 @@ describe("Hikvision biometric sync contract", () => {
 		expect(service).to.include('"startRemoteConfigMs"');
 		expect(service).to.include('"sendAndCallbackMs"');
 		expect(service).to.include('"callbackCompleted"');
+		// CODE DEFECT fix: ensure ACS card before SET_FACE_AND_TEMPLATE and
+		// emit named failReason/recvStatus so writeOk=false is diagnosable.
+		expect(service).to.include("add_sync_card_if_unowned");
+		expect(service).to.include('"stored_face_card_ensure"');
+		expect(service).to.include('"failReason"');
+		expect(service).to.include('"recvStatus"');
+		expect(service).to.include("device_face_template_full");
+		expect(service).to.include("stored_face_card_ensure_failed");
+		expect(controller).to.include("peer_face_write ok=");
+		expect(controller).to.include("card_ensure ok=");
 		expect(service).to.include('"rereadMs"');
 		expect(service).to.include("claim_callback_identity_scan");
 		expect(service).to.include('"callback_identity_enrich_throttled"');
