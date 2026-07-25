@@ -69,6 +69,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("xl:grid-cols-[minmax(190px,1.45fr)_124px_128px_150px_156px_112px_96px]");
 		expect(enroll).toContain("whitespace-normal break-words");
 		expect(enroll).toContain("openPhysicalDeviceUsers");
+		// Deep-links: peer tally device name, merge user id, recovery source/target.
+		expect(enroll).toContain("openDeviceUserDeepLink");
+		expect(enroll).toContain("deviceUserDetails");
+		expect(enroll).toContain("Open device user details");
+		expect(enroll).toContain("Deep-link to vendor user");
 		expect(enroll).toContain("Choose a device first");
 		expect(enroll).toContain('data-testid="device-user-summary-toolbar"');
 		expect(enroll).toContain("flex min-w-0 flex-wrap items-center gap-2");
@@ -530,7 +535,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("formatMetadataPreview");
 		expect(enroll).toContain("Copy to all peer devices");
 		expect(enroll).toContain("targetDeviceIds,");
-		expect(enroll).toContain("one coordinated VM session");
+		expect(enroll).toContain("startHikvisionPeerCopyJob");
+		expect(enroll).toContain("durable peer-copy job");
 		expect(enroll).not.toContain("for (let index = 0; index < targetDeviceIds.length");
 		expect(enroll).toContain(".getDeviceUserPhoto(");
 		expect(enroll).toContain("Photo source");

@@ -4852,7 +4852,48 @@ export function DeviceEnrollmentPanel({
 			next.set("deviceUserView", "source");
 			next.delete("deviceUserStatus");
 			next.delete("deviceUserSearch");
+			next.delete("deviceUserDetails");
 			next.set("deviceUserPage", "1");
+		});
+	};
+	/**
+	 * Deep-link into Sync Center → Device users for a physical device, optionally
+	 * open Device user details for a vendor person id (face/FP/card resolve).
+	 * Used from peer tally, merge issues, and credential recovery ops.
+	 */
+	const openDeviceUserDeepLink = (
+		deviceId?: string | null,
+		vendorUserId?: string | null,
+		options?: { preferSourceView?: boolean },
+	) => {
+		const id = String(deviceId || "").trim();
+		const person = String(vendorUserId || "").trim();
+		if (!id) return;
+		// Drop details for the previous device so the details-open effect rebinds.
+		setDetailsDeviceUser(null);
+		updateSearchParams((next) => {
+			next.set("deviceId", id);
+			next.set("syncPanel", "users");
+			next.set("action", "device-users");
+			// Keep merge deep-link context when operator is resolving from merge/recovery.
+			if (next.get("syncPanel") === "users" || next.get("action") === "device-users") {
+				next.set("mergeDeviceId", id);
+			}
+			if (options?.preferSourceView) {
+				next.set("deviceUserView", "source");
+			} else {
+				// Current/shown view so SOURCE_ONLY + HRIS rows both appear with search.
+				next.set("deviceUserView", "shown");
+			}
+			next.delete("deviceUserStatus");
+			next.set("deviceUserPage", "1");
+			if (person) {
+				next.set("deviceUserSearch", person);
+				next.set("deviceUserDetails", person);
+			} else {
+				next.delete("deviceUserSearch");
+				next.delete("deviceUserDetails");
+			}
 		});
 	};
 	const openDeviceUserCount = (
@@ -9109,9 +9150,21 @@ export function DeviceEnrollmentPanel({
 														}
 														className="h-4 w-4 accent-orange-600"
 													/>
-													<span className="truncate font-medium text-slate-950">
+													<button
+														type="button"
+														className="truncate text-left font-medium text-orange-800 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-orange-300 rounded"
+														title={`Open user ${write.vendorUserId} on source device`}
+														aria-label={`Deep-link to vendor user ${write.vendorUserId} on source device for ${write.modality}`}
+														onClick={() =>
+															openDeviceUserDeepLink(
+																write.sourceDeviceId ||
+																	write.targetDeviceId,
+																write.vendorUserId,
+																{ preferSourceView: true },
+															)
+														}>
 														{write.vendorUserId}
-													</span>
+													</button>
 													<Badge
 														variant={
 															write.modality === "fingerprint"
@@ -9122,22 +9175,52 @@ export function DeviceEnrollmentPanel({
 														}>
 														{write.modality}
 													</Badge>
-													<span className="truncate text-slate-700">
-														{write.sourceDeviceId
-															? mergeDeviceName(
-																	sdkMergePlanDevices,
+													{write.sourceDeviceId ? (
+														<button
+															type="button"
+															className="truncate text-left text-slate-700 underline-offset-2 hover:text-orange-800 hover:underline focus:outline-none focus:ring-2 focus:ring-orange-300 rounded"
+															title="Open source device in Sync Center"
+															aria-label={`Open source device ${mergeDeviceName(sdkMergePlanDevices, write.sourceDeviceId)}`}
+															onClick={() =>
+																openDeviceUserDeepLink(
 																	write.sourceDeviceId,
+																	write.vendorUserId,
+																	{ preferSourceView: true },
 																)
-															: physicalActionRequired
+															}>
+															{mergeDeviceName(
+																sdkMergePlanDevices,
+																write.sourceDeviceId,
+															)}
+														</button>
+													) : (
+														<span className="truncate text-slate-700">
+															{physicalActionRequired
 																? "Physical source required"
 																: "Source recovery needed"}
-													</span>
-													<span className="truncate text-slate-700">
-														{mergeDeviceName(
-															sdkMergePlanDevices,
-															write.targetDeviceId,
-														)}
-													</span>
+														</span>
+													)}
+													{write.targetDeviceId ? (
+														<button
+															type="button"
+															className="truncate text-left text-slate-700 underline-offset-2 hover:text-orange-800 hover:underline focus:outline-none focus:ring-2 focus:ring-orange-300 rounded"
+															title="Open target device in Sync Center"
+															aria-label={`Open target device ${mergeDeviceName(sdkMergePlanDevices, write.targetDeviceId)}`}
+															onClick={() =>
+																openDeviceUserDeepLink(
+																	write.targetDeviceId,
+																	write.vendorUserId,
+																	{ preferSourceView: true },
+																)
+															}>
+															{mergeDeviceName(
+																sdkMergePlanDevices,
+																write.targetDeviceId,
+															)}
+														</button>
+													) : (
+														<span className="truncate text-slate-700">—</span>
+													)}
 													<span className="font-medium text-slate-950">
 														{write.sourceReportedCount} →{" "}
 														{write.targetReportedCount}
@@ -9511,9 +9594,22 @@ export function DeviceEnrollmentPanel({
 																/>
 															</div>
 															<div className="min-w-0">
-																<p className="truncate text-sm font-semibold text-slate-950">
+																<button
+																	type="button"
+																	className="block max-w-full truncate text-left text-sm font-semibold text-orange-800 underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-orange-300 rounded"
+																	title={`Open user ${row.vendorUserId} on ${row.sourceDeviceName || "source device"} in Sync Center`}
+																	aria-label={`Deep-link to vendor user ${row.vendorUserId} to resolve ${row.issueLabel}`}
+																	onClick={() =>
+																		openDeviceUserDeepLink(
+																			row.sourceDeviceId ||
+																				row.targetDeviceId ||
+																				selectedDeviceId,
+																			row.vendorUserId,
+																			{ preferSourceView: true },
+																		)
+																	}>
 																	{row.vendorUserId}
-																</p>
+																</button>
 																<p className="mt-0.5 truncate text-[11px] text-slate-500">
 																	{row.issueLabel}
 																</p>
@@ -10556,6 +10652,33 @@ export function DeviceEnrollmentPanel({
 															? "Selectable source"
 															: "Available for review"}
 												</p>
+												<span
+													role="link"
+													tabIndex={0}
+													className="mt-1 inline-block text-[11px] font-medium text-orange-800 underline-offset-2 hover:underline"
+													title={`Open ${deviceName} for user ${selectedSdkMergeCredentialRow.vendorUserId}`}
+													onClick={(event) => {
+														event.preventDefault();
+														event.stopPropagation();
+														openDeviceUserDeepLink(
+															record.deviceId,
+															selectedSdkMergeCredentialRow.vendorUserId,
+															{ preferSourceView: true },
+														);
+													}}
+													onKeyDown={(event) => {
+														if (event.key === "Enter" || event.key === " ") {
+															event.preventDefault();
+															event.stopPropagation();
+															openDeviceUserDeepLink(
+																record.deviceId,
+																selectedSdkMergeCredentialRow.vendorUserId,
+																{ preferSourceView: true },
+															);
+														}
+													}}>
+													Open device user details
+												</span>
 											</div>
 											<span className="rounded-md border border-slate-200 bg-white px-2 py-1 font-mono text-sm font-semibold text-slate-950">
 												{mergeMetricValue(count)}
@@ -11453,15 +11576,26 @@ export function DeviceEnrollmentPanel({
 												<span>Face</span>
 											</div>
 											{detailsPeerTallyRows.map((row) => (
-												<div
+												<button
+													type="button"
 													key={row.deviceId}
-													className={`grid grid-cols-[minmax(150px,1.4fr)_92px_72px_72px_72px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0 ${
+													onClick={() =>
+														openDeviceUserDeepLink(
+															row.deviceId,
+															detailsDeviceUserVendorUserId ||
+																detailsDeviceUser?.vendorUserId,
+															{ preferSourceView: true },
+														)
+													}
+													className={`grid w-full grid-cols-[minmax(150px,1.4fr)_92px_72px_72px_72px] gap-3 border-b border-slate-100 px-3 py-2 text-left text-sm last:border-b-0 transition-colors hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-300 ${
 														row.isCurrentDevice
 															? "bg-orange-50/50"
 															: "bg-white"
-													}`}>
+													}`}
+													title={`Open ${row.deviceName} in Sync Center for user ${detailsDeviceUserVendorUserId || detailsDeviceUser?.vendorUserId || ""}`}
+													aria-label={`Open device ${row.deviceName} for user ${detailsDeviceUserVendorUserId || detailsDeviceUser?.vendorUserId || "details"}`}>
 													<div className="min-w-0">
-														<p className="truncate font-medium text-slate-950">
+														<p className="truncate font-medium text-orange-800 underline-offset-2 hover:underline">
 															{row.deviceName}
 															{row.isCurrentDevice
 																? " (selected)"
@@ -11488,7 +11622,7 @@ export function DeviceEnrollmentPanel({
 													<div className="font-semibold text-slate-950">
 														{row.faceCount}
 													</div>
-												</div>
+												</button>
 											))}
 										</div>
 									)}
