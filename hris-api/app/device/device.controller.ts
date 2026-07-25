@@ -14650,16 +14650,44 @@ export const controller = (prisma: PrismaClient) => {
 											vendorUserId: String(write.vendorUserId),
 											cardNo: writerCardNo,
 										});
+									// SET_FACE_AND_TEMPLATE is card-keyed. Stored-face path
+									// intentionally ensures the ACS writer card (add_sync_card)
+									// before write — live 2026-07-25: after card-ensure landed,
+									// face reread sizes matched but isolation failed because
+									// cardCount rose 0→1. Allow exact +1 card only when the
+									// writer card is owned by this same vendor user after reread.
+									// Fingerprint count and identity profile fields still must not change.
+									const beforeFp = Number(
+										physicalBeforeCredentials.fingerprintCount || 0,
+									);
+									const afterFp = Number(
+										afterCredentials.fingerprintCount || 0,
+									);
+									const beforeCard = Number(
+										physicalBeforeCredentials.cardCount || 0,
+									);
+									const afterCard = Number(
+										afterCredentials.cardCount || 0,
+									);
+									const cardDeltaOk =
+										afterCard === beforeCard ||
+										(afterCard === beforeCard + 1 &&
+											retainedTargetCard.found === true);
 									if (
 										changedIdentityField ||
-										Number(physicalBeforeCredentials.fingerprintCount || 0) !==
-											Number(afterCredentials.fingerprintCount || 0) ||
-										Number(physicalBeforeCredentials.cardCount || 0) !==
-											Number(afterCredentials.cardCount || 0) ||
+										beforeFp !== afterFp ||
+										!cardDeltaOk ||
 										!retainedTargetCard.found
 									) {
+										const detail = changedIdentityField
+											? changedIdentityField
+											: beforeFp !== afterFp
+												? "fingerprint_count"
+												: !retainedTargetCard.found
+													? "writer_card_not_owned_after_reread"
+													: "unexpected_card_count_delta";
 										throw new Error(
-											`Credential-only face isolation failed after reread (${changedIdentityField || "fingerprint_or_card"} changed).`,
+											`Credential-only face isolation failed after reread (${detail} changed).`,
 										);
 									}
 									let capabilityEvidence: unknown = null;

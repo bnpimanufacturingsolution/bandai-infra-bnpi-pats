@@ -13,6 +13,7 @@ export type CredentialRecoveryErrorClassification = {
 		| "face_identity_association_unproven"
 		| "face_writer_card_missing"
 		| "face_writer_card_bind_failed"
+		| "face_isolation_after_write"
 		| "sdk_source_device_not_armed"
 		| "sdk_export_event_missing"
 		| "stored_face_sdk_failed"
@@ -278,6 +279,24 @@ export const classifyCredentialRecoveryError = (
 			category: "identity_custody",
 			message,
 			retryable: false,
+			observabilityDefect: false,
+		};
+	}
+	// Isolation gate after successful SDK reread — must not be observabilityDefect.
+	// cardCount +1 is expected when ACS writer card was ensured for cardless peers.
+	if (
+		matches(
+			/credential-only face isolation failed/,
+			/writer_card_not_owned_after_reread/,
+			/unexpected_card_count_delta/,
+			/fingerprint_or_card changed/,
+		)
+	) {
+		return {
+			code: "face_isolation_after_write",
+			category: "safety_gate",
+			message,
+			retryable: true,
 			observabilityDefect: false,
 		};
 	}

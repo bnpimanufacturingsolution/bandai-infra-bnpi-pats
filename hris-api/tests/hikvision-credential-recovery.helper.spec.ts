@@ -600,6 +600,18 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					"Credential-only face isolation failed after reread (fingerprint_or_card changed).",
+				),
+			),
+		).to.include({
+			code: "face_isolation_after_write",
+			category: "safety_gate",
+			retryable: true,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"INFO: hikvision hot-reload LOCAL_API_BASE=http://localhost:3101\nloop[2] find 16 mac and 16 ip",
 				),
 			),
