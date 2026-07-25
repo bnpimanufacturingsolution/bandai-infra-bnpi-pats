@@ -9349,6 +9349,149 @@ export const controller = (prisma: PrismaClient) => {
 						includeFingerprints: Boolean(options.includeFingerprints),
 						includeFaces: Boolean(options.includeFaces),
 					});
+					// CODE DEFECT fix (2026-07-25 export truth): biometric-metadata
+					// backfill stores AES envelopes only; admin raw package export
+					// previously reported missing_raw_blob even when decryptable
+					// envelopes existed. Project encrypted custody into plaintext
+					// templates for the portable package when raw plane is empty.
+					const vendorUserIdForCustody = String(
+						row.vendorUserId || row.employeeNo || "",
+					).trim();
+					const cachedEncrypted = parseCachedDeviceUserBiometricTemplates(
+						row._rawBiometricSource || row,
+					);
+					if (
+						options.includeFingerprints &&
+						Number(rawCustody.fingerprint?.missingRawCount || 0) > 0 &&
+						cachedEncrypted.fingerprint
+					) {
+						try {
+							const { recoverPlannerFingerprintTemplates } = await import(
+								"../../helper/device-user-raw-fingerprint.helper.js"
+							);
+							const decryptedStoredFingerprint = decryptDeviceUserBiometricPayload(
+								{
+									organizationId: options.organizationId,
+									deviceId: String(device.id),
+									encrypted: cachedEncrypted.fingerprint,
+									allowLegacyServerEnvelope: true,
+									expectedVendorUserId: vendorUserIdForCustody,
+									expectedModality: "fingerprint",
+								},
+							);
+							const recoveredTemplates = recoverPlannerFingerprintTemplates({
+								payload: decryptedStoredFingerprint,
+								expectedDeviceId: String(device.id),
+								expectedVendorUserId: vendorUserIdForCustody,
+								// Export reads already-saved inventory for this exact
+								// device/person; accept bound envelopes without requiring
+								// a fresh cardOwnerVerified flag on every row.
+								freshUserInfoOwnerVerified: true,
+							});
+							if (recoveredTemplates.length > 0) {
+								const reported = Number(
+									rawCustody.fingerprint.countReported || 0,
+								);
+								rawCustody.fingerprint.templates = recoveredTemplates.map(
+									(template: any) => ({
+										fingerPrintId: template.fingerPrintId,
+										fingerType: template.fingerType ?? "normalFP",
+										length: Number(template.length || 0) || undefined,
+										data: template.data,
+										source: "decrypted_encrypted_biometric_bundle",
+									}),
+								);
+								rawCustody.fingerprint.rawBlobCount = recoveredTemplates.length;
+								rawCustody.fingerprint.storedCount = Math.min(
+									recoveredTemplates.length,
+									Math.max(reported, recoveredTemplates.length),
+								);
+								rawCustody.fingerprint.missingRawCount = Math.max(
+									reported - recoveredTemplates.length,
+									0,
+								);
+								rawCustody.fingerprint.status =
+									reported > 0 &&
+									rawCustody.fingerprint.missingRawCount > 0
+										? "missing_raw_blob"
+										: "raw_blob_present";
+								rawCustody.fingerprint.projectedFromEncrypted = true;
+							}
+						} catch (error: any) {
+							rawCustody.fingerprint.encryptedPresent = true;
+							rawCustody.fingerprint.encryptedCiphertextLength = String(
+								cachedEncrypted.fingerprint?.ciphertext ||
+									cachedEncrypted.fingerprint ||
+									"",
+							).length;
+							rawCustody.fingerprint.encryptedProjectError = String(
+								error?.message || error,
+							).slice(0, 240);
+							deviceLogger.warn(
+								`export encrypted FP project failed device=${device.id} vendor=${vendorUserIdForCustody}: ${error?.message || error}`,
+							);
+						}
+					}
+					if (
+						options.includeFaces &&
+						Number(rawCustody.face?.missingRawCount || 0) > 0 &&
+						cachedEncrypted.face
+					) {
+						try {
+							const decryptedStoredFace = decryptDeviceUserBiometricPayload({
+								organizationId: options.organizationId,
+								deviceId: String(device.id),
+								encrypted: cachedEncrypted.face,
+								allowLegacyServerEnvelope: true,
+								expectedVendorUserId: vendorUserIdForCustody,
+								expectedModality: "face",
+							});
+							const facePicture = String(
+								decryptedStoredFace?.facePicture ||
+									decryptedStoredFace?.base64 ||
+									"",
+							).trim();
+							const faceTemplate = String(
+								decryptedStoredFace?.faceTemplate || "",
+							).trim();
+							if (facePicture || faceTemplate) {
+								const reported = Number(rawCustody.face.countReported || 0);
+								rawCustody.face.blob = {
+									contentType:
+										decryptedStoredFace?.contentType || "image/jpeg",
+									byteLength: facePicture
+										? Math.floor((facePicture.length * 3) / 4)
+										: null,
+									base64: facePicture,
+									faceTemplate,
+									source: "decrypted_encrypted_biometric_bundle",
+									capturedAt: decryptedStoredFace?.capturedAt || null,
+									cardOwnerVerified:
+										decryptedStoredFace?.cardOwnerVerified === true,
+									identityOwnerVerified:
+										decryptedStoredFace?.identityOwnerVerified === true,
+								};
+								rawCustody.face.rawBlobPresent = true;
+								rawCustody.face.storedCount = Math.max(reported, 1);
+								rawCustody.face.missingRawCount = 0;
+								rawCustody.face.status = "raw_blob_present";
+								rawCustody.face.projectedFromEncrypted = true;
+							}
+						} catch (error: any) {
+							rawCustody.face.encryptedPresent = true;
+							rawCustody.face.encryptedCiphertextLength = String(
+								cachedEncrypted.face?.ciphertext ||
+									cachedEncrypted.face ||
+									"",
+							).length;
+							rawCustody.face.encryptedProjectError = String(
+								error?.message || error,
+							).slice(0, 240);
+							deviceLogger.warn(
+								`export encrypted face project failed device=${device.id} vendor=${vendorUserIdForCustody}: ${error?.message || error}`,
+							);
+						}
+					}
 					row.rawBiometricCustody = rawCustody;
 					if (rawCustody.fingerprint.rawBlobCount || rawCustody.face.rawBlobPresent) {
 						rawBiometricExports.push({
@@ -9358,9 +9501,16 @@ export const controller = (prisma: PrismaClient) => {
 							fingerprintRawBlobCount: rawCustody.fingerprint.rawBlobCount,
 							faceStatus: rawCustody.face.status,
 							faceRawBlobPresent: rawCustody.face.rawBlobPresent,
+							projectedFromEncrypted: Boolean(
+								rawCustody.fingerprint.projectedFromEncrypted ||
+									rawCustody.face.projectedFromEncrypted,
+							),
 							source: eventPayload
 								? "device_event_or_device_user_raw_custody"
-								: "device_user_raw_custody",
+								: rawCustody.fingerprint.projectedFromEncrypted ||
+									  rawCustody.face.projectedFromEncrypted
+									? "decrypted_encrypted_biometric_bundle"
+									: "device_user_raw_custody",
 						});
 					}
 					if (
@@ -9372,7 +9522,14 @@ export const controller = (prisma: PrismaClient) => {
 							vendorUserId: row.vendorUserId,
 							fingerprintStatus: rawCustody.fingerprint.status,
 							faceStatus: rawCustody.face.status,
-							error: "Reported biometric enrollment exists but no evidenced raw blob is stored",
+							fingerprintEncryptedPresent: Boolean(
+								rawCustody.fingerprint.encryptedPresent,
+							),
+							faceEncryptedPresent: Boolean(rawCustody.face.encryptedPresent),
+							error: rawCustody.fingerprint.encryptedPresent ||
+								rawCustody.face.encryptedPresent
+								? "Reported biometric enrollment has encrypted custody but raw package projection failed or is incomplete"
+								: "Reported biometric enrollment exists but no evidenced raw blob is stored",
 						});
 					}
 				}

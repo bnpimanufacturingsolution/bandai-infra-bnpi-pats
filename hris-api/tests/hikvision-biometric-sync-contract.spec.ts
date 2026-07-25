@@ -499,6 +499,11 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("hikvision_sdk_biometric_metadata_backfill");
 		expect(controller).to.include('modality?: "fingerprint" | "face" | "combined"');
 		expect(controller).to.include("rawFingerprintBlobCount");
+		// Export must project decryptable AES biometricBundle into raw package
+		// when raw plane empty (backfill only stores encrypted envelopes).
+		expect(controller).to.include("decrypted_encrypted_biometric_bundle");
+		expect(controller).to.include("projectedFromEncrypted");
+		expect(controller).to.include("encryptedPresent");
 		expect(controller).to.include("rawFaceBlobCount");
 		expect(controller).to.include("buildRawDeviceUserBiometricCustody");
 		expect(router).to.include('"/:id/users/biometric-metadata/backfill"');
