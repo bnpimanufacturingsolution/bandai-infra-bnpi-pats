@@ -14401,30 +14401,41 @@ export const controller = (prisma: PrismaClient) => {
 												"Neither exact shared card custody, the same canonical HRIS employee, nor the same plain vendor person id proves the face association.",
 										);
 									}
-									// SDK stored-face writer still needs a non-empty card value.
-									// Prefer the single target-owned card; else reuse the reviewed
-									// source card. When association is already proven (same vendor,
-									// shared card, or same HRIS employee) and both sides are
-									// card-less, bind the plain vendor person id as the ACS card
-									// key so peer face writes are agent-owned. Live residual after
-									// e38cbf2 still failed when strategy was proven but no physical
-									// card existed — vendor id fallback must always apply once
-									// association.strategy is non-null.
-									const vendorCardFallback = String(
+									// SDK stored-face writer needs a non-empty card field.
+									// Order: target inventory card → fresh source export card →
+									// plain vendor person id. Live proof (2026-07-25): residual
+									// face rows are association-proven but card-less; without the
+									// vendor-id ACS key they fail as face_writer_card_missing even
+									// when vendorUserId is present (canonical_hris_employee or
+									// same_vendor strategies). Always bind vendor id once
+									// association is proven — never leave agent face gap work
+									// blocked on room card enroll for this path.
+									const vendorPersonId = String(
 										write.vendorUserId ||
 											write.employeeNo ||
 											first.vendorUserId ||
+											first.employeeNo ||
 											"",
 									).trim();
 									const writerCardNo = String(
 										targetCardNo ||
 											cardNo ||
-											(association.strategy ? vendorCardFallback : "") ||
+											(association.strategy ? vendorPersonId : "") ||
+											vendorPersonId ||
 											"",
 									).trim();
 									if (!writerCardNo) {
 										throw new Error(
 											"Face peer association is proven by same vendor person id, but neither source nor target yields a card value for the stored-face writer. Capture or enroll one card for this person, then retry.",
+										);
+									}
+									if (
+										!targetCardNo &&
+										!cardNo &&
+										writerCardNo === vendorPersonId
+									) {
+										deviceLogger.info(
+											`face_writer_card_vendor_fallback association=${association.strategy} vendorUserId=${vendorPersonId} target=${write.targetDeviceId}`,
 										);
 									}
 									if (
