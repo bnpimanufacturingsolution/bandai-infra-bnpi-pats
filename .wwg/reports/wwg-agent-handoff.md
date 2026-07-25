@@ -1,19 +1,23 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-25 - Multi-agent gap loop executed (face burn proven)
+
+- Status: `IN_PROGRESS_WITH_PROVEN_PREDICT_MATCH`.
+- Prompt executed:
+  `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
+- Stamp: `.runtime/overnight-gap-loop-20260725-075850/` (`STATUS.md`, summary).
+- 8 face cycles with dryRun+executionPreview: **7/8** verified **50/50** match;
+  cycle 7 `awaiting_replan` verified 0 (named defect to fix).
+- Residual **2813 → 2432** (−381); unique face people **690 → 574** (−116);
+  faceReady **1947 → 1566**. Writes to **A/D/E/F** (not B-only).
+- FP: fingerprintReady still 0 (`target_owner_scan_incomplete` 417) — unlock next.
+- Runtime: multi-canary env live; preview SHA live; Grafana/Loki up.
+
 ## 2026-07-25 - Multi-agent overnight gap loop prompt ready
 
-- Status: `JOB_CARD_READY`.
-- **Primary overnight prompt (multi-agent + executionPreview loop):**
+- Status: `EXECUTED_SEE_ABOVE`.
+- Path:
   `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
-- Companion:
-  `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
-- Certainty API on develop: recovery `executionPreview` + `dryRun` (`cec3b6f`,
-  CI `30134664029`); multi-canary (`a2e9004`); timeout retry (`ce93414`).
-- Live DEV (recheck): residual ~2813 ops; faceReady ~1947 to A/D/E/F; fpReady
-  often 0 (owner scan); unique face gap ~690; unique FP ~307. Every job must
-  freeze `wouldWriteCount` then match `verified` or treat as code defect.
-- Evidence:
-  `.runtime/overnight-biometric-convergence-20260724-230000/`.
 
 ## 2026-07-25 - Stable overnight gap-convergence job card ready
 
