@@ -483,7 +483,7 @@ describe("device user union merge", () => {
 		expect(write?.recommendationReason).to.include("strict superset");
 	});
 
-	it("refuses a fingerprint overwrite when the same slot has a different checksum", () => {
+	it("picks richest fingerprint source and allows overwrite when target has different checksums", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [
@@ -520,10 +520,49 @@ describe("device user union merge", () => {
 		});
 		const write = plan.credentialWrites.find((item) => item.modality === "fingerprint");
 		expect(write?.sourceDeviceId).to.equal("a");
-		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.blockingReason).to.equal("source_conflict");
-		expect(write?.recoveryStage).to.equal("comparing_sources");
-		expect(write?.recommendationReason).to.include("overwrite is forbidden");
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recommended).to.equal(true);
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.recoveryStage).to.equal("ready_to_write");
+		expect(write?.recommendationReason).to.include("RICHEST SOURCE OVERWRITE");
+	});
+
+	it("picks a stable richest fingerprint source when tied max counts disagree on checksums", () => {
+		const resolution = resolveFingerprintCredentialSource([
+			record("b", {
+				rawPayload: { numOfFP: 2 },
+				biometricEvidence: {
+					fingerprint: {
+						status: "raw_blob_present",
+						reportedCount: 2,
+						rawBlobCount: 2,
+					},
+					face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+				},
+				_fingerprintTemplateChecksums: [
+					{ fingerPrintId: 1, checksum: "one" },
+					{ fingerPrintId: 2, checksum: "two" },
+				],
+			}),
+			record("a", {
+				rawPayload: { numOfFP: 2 },
+				biometricEvidence: {
+					fingerprint: {
+						status: "raw_blob_present",
+						reportedCount: 2,
+						rawBlobCount: 2,
+					},
+					face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+				},
+				_fingerprintTemplateChecksums: [
+					{ fingerPrintId: 1, checksum: "alpha" },
+					{ fingerPrintId: 2, checksum: "beta" },
+				],
+			}),
+		]);
+		expect(resolution.reason).to.equal("richest_count_default_overwrite");
+		// Stable deviceId among equal counts.
+		expect(resolution.source?.deviceId).to.equal("a");
 	});
 
 	it("identifies real card custody but keeps it blocked until a credential-only writer exists", () => {

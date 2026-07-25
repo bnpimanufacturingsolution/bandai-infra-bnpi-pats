@@ -486,7 +486,12 @@ const faceCustodyIsWritable = (record: DeviceUserMergeRecord) => {
 type FingerprintSourceResolution = {
 	source: DeviceUserMergeRecord | null;
 	candidateDeviceIds: string[];
-	reason: "single_raw_source" | "equal_checksum_sets" | "strict_checksum_superset" | "unproven";
+	reason:
+		| "single_raw_source"
+		| "equal_checksum_sets"
+		| "strict_checksum_superset"
+		| "richest_count_default_overwrite"
+		| "unproven";
 };
 
 const normalizedFingerprintChecksums = (record: DeviceUserMergeRecord) =>
@@ -835,9 +840,16 @@ const fingerprintRecordsConflict = (
 };
 
 /**
- * Resolve tied raw fingerprint sources only when checksum custody proves the
- * bytes equivalent or proves one source is a strict superset. Device ordering
- * is used solely to choose a stable representative of already-equal evidence.
+ * Resolve raw fingerprint sources for recovery writes.
+ *
+ * Preference order (product rule 2026-07-25, operator-authorized):
+ * 1. Equal checksum sets → stable representative.
+ * 2. Single strict checksum superset.
+ * 3. Otherwise **richest by template count** with raw custody (default overwrite).
+ *    Target templates that differ may be overwritten by the selected source.
+ *
+ * Different-owner slot collisions on the physical target remain blocked later by
+ * physical_identity_adjudication_required — that is not a same-person richest pick.
  */
 export const resolveFingerprintCredentialSource = (
 	rawSources: DeviceUserMergeRecord[],
@@ -846,6 +858,9 @@ export const resolveFingerprintCredentialSource = (
 		left.deviceId.localeCompare(right.deviceId),
 	);
 	const candidateDeviceIds = candidates.map((record) => record.deviceId);
+	if (candidates.length === 0) {
+		return { source: null, candidateDeviceIds, reason: "unproven" };
+	}
 	if (candidates.length === 1) {
 		return {
 			source: candidates[0],
@@ -853,36 +868,61 @@ export const resolveFingerprintCredentialSource = (
 			reason: "single_raw_source",
 		};
 	}
-	if (
-		candidates.length < 2 ||
-		candidates.some((record) => !completeFingerprintChecksumEvidence(record))
-	) {
-		return { source: null, candidateDeviceIds, reason: "unproven" };
-	}
-	const sets = candidates.map(checksumSet);
-	const allEqual = sets.every(
-		(candidate) => candidate.size === sets[0].size && setIsSubset(candidate, sets[0]),
+	const completeCandidates = candidates.filter((record) =>
+		completeFingerprintChecksumEvidence(record),
 	);
-	if (allEqual) {
-		return {
-			source: candidates[0],
-			candidateDeviceIds,
-			reason: "equal_checksum_sets",
-		};
-	}
-	const strictSupersets = candidates.filter((candidate, candidateIndex) =>
-		sets.every(
-			(other, otherIndex) =>
-				otherIndex === candidateIndex ||
-				(setIsSubset(other, sets[candidateIndex]) &&
-					other.size < sets[candidateIndex].size),
-		),
-	);
-	return strictSupersets.length === 1
-		? {
+	if (completeCandidates.length >= 2) {
+		const sets = completeCandidates.map(checksumSet);
+		const allEqual = sets.every(
+			(candidate) =>
+				candidate.size === sets[0].size && setIsSubset(candidate, sets[0]),
+		);
+		if (allEqual) {
+			return {
+				source: completeCandidates[0],
+				candidateDeviceIds,
+				reason: "equal_checksum_sets",
+			};
+		}
+		const strictSupersets = completeCandidates.filter(
+			(candidate, candidateIndex) =>
+				sets.every(
+					(other, otherIndex) =>
+						otherIndex === candidateIndex ||
+						(setIsSubset(other, sets[candidateIndex]) &&
+							other.size < sets[candidateIndex].size),
+				),
+		);
+		if (strictSupersets.length === 1) {
+			return {
 				source: strictSupersets[0],
 				candidateDeviceIds,
 				reason: "strict_checksum_superset",
+			};
+		}
+	}
+	// Default overwrite path: max reported fingerprint count, prefer complete
+	// checksum custody, then stable deviceId among ties.
+	const countOf = (record: DeviceUserMergeRecord) =>
+		credentialCount(record, "fingerprint");
+	const pool =
+		completeCandidates.length > 0 ? completeCandidates : candidates;
+	const maxCount = pool.reduce(
+		(max, record) => Math.max(max, countOf(record)),
+		0,
+	);
+	const richest = pool
+		.filter((record) => countOf(record) === maxCount)
+		.sort((left, right) => left.deviceId.localeCompare(right.deviceId));
+	const pick =
+		richest.find((record) => completeFingerprintChecksumEvidence(record)) ||
+		richest[0] ||
+		null;
+	return pick
+		? {
+				source: pick,
+				candidateDeviceIds,
+				reason: "richest_count_default_overwrite",
 			}
 		: { source: null, candidateDeviceIds, reason: "unproven" };
 };
@@ -975,15 +1015,36 @@ const buildCredentialWritesForUser = (
 					? preferredSources.find(
 							(item) =>
 								item.record.deviceId === fingerprintResolution.source?.deviceId,
-						) || null
+						) ||
+						// Resolution may pick from all-raw pool; map by deviceId.
+						(fingerprintResolution.source
+							? {
+									record: fingerprintResolution.source,
+									count: credentialCount(
+										fingerprintResolution.source,
+										"fingerprint",
+									),
+									evidenceStatus: credentialEvidenceStatus(
+										fingerprintResolution.source,
+										"fingerprint",
+									),
+								}
+							: null)
 					: null
-				: modality === "card" && preferredSources.length > 1
-					? [...preferredSources].sort((left, right) =>
-							left.record.deviceId.localeCompare(right.record.deviceId),
-						)[0]
-					: preferredSources.length === 1
-						? preferredSources[0]
-						: null;
+				: modality === "face" && rawSources.length > 0
+					? // Face: default richest (max count) raw source; stable deviceId on ties.
+						[...rawSources].sort((left, right) => {
+							const countDiff = right.count - left.count;
+							if (countDiff !== 0) return countDiff;
+							return left.record.deviceId.localeCompare(right.record.deviceId);
+						})[0]
+					: modality === "card" && preferredSources.length > 1
+						? [...preferredSources].sort((left, right) =>
+								left.record.deviceId.localeCompare(right.record.deviceId),
+							)[0]
+						: preferredSources.length === 1
+							? preferredSources[0]
+							: null;
 		const sourceDeviceId = uniqueSource?.record.deviceId || null;
 		const sourceEvidenceStatus =
 			uniqueSource?.evidenceStatus ||
@@ -994,6 +1055,9 @@ const buildCredentialWritesForUser = (
 				modality === "fingerprint" &&
 				uniqueSource &&
 				fingerprintRecordsConflict(uniqueSource.record, target.record);
+			// Same-person richest-source overwrite is authorized: do not block when
+			// target has different checksums for this vendor id. Cards still require
+			// exact value equality among tied max sources.
 			const blockingReason =
 				modality === "card"
 					? !uniqueSource
@@ -1004,7 +1068,7 @@ const buildCredentialWritesForUser = (
 								  true
 								? null
 								: "credential_only_card_not_supported"
-					: !uniqueSource || fingerprintCustodyConflict
+					: !uniqueSource
 						? "source_conflict"
 						: sourceEvidenceStatus !== "raw_blob_present"
 							? "missing_raw_blob"
@@ -1017,6 +1081,16 @@ const buildCredentialWritesForUser = (
 				(modality === "card" && rawSources.length > 0 ? rawSources : preferredSources).map(
 					(item) => item.record.deviceId,
 				);
+			const richestOverwriteNote =
+				modality === "fingerprint" &&
+				Boolean(uniqueSource) &&
+				!blockingReason &&
+				(fingerprintResolution?.reason === "richest_count_default_overwrite" ||
+					fingerprintCustodyConflict)
+					? `RICHEST SOURCE OVERWRITE: copy ${maxCount} fingerprint template(s) from the richest raw source onto this target. Existing different target templates for this same vendor id will be replaced after physical reread proof.`
+					: modality === "face" && Boolean(uniqueSource) && !blockingReason
+						? `RICHEST SOURCE: copy face custody from the highest-count raw source. Target may be overwritten for this same vendor id after physical reread proof.`
+						: null;
 			writes.push({
 				id: [
 					user.key,
@@ -1036,23 +1110,23 @@ const buildCredentialWritesForUser = (
 					Boolean(sourceDeviceId) && executionEligibility === "ready_from_raw_blob",
 				recommendationReason: blockingReason
 					? blockingReason === "source_conflict"
-						? fingerprintCustodyConflict
-							? "The target has different fingerprint checksum custody in the same slot or outside the source checksum set; overwrite is forbidden."
-							: modality === "card"
-								? "Multiple devices report the same highest card count; exact card-value equality is not proven."
-								: `Multiple devices report the same highest ${modality} count; template equality is not proven.`
+						? modality === "card"
+							? "Multiple devices report the same highest card count; exact card-value equality is not proven."
+							: `Multiple devices report the same highest ${modality} count and no raw richest source could be selected.`
 						: blockingReason === "missing_raw_blob"
 							? `Recovery stage: capture current physical ${modality} custody from each evidenced source, checksum it, and regenerate the plan.`
 							: blockingReason === "target_write_unsupported"
 								? "Recovery stage: probe and attest the target's SDK face-template or FDLib picture writer, then run one serial reread-proven canary."
 								: "Recovery stage: prove CardInfo record capability and exact card ownership, then run one serial reread-proven canary."
-					: modality === "fingerprint" &&
-						  fingerprintResolution?.reason === "equal_checksum_sets"
-						? "Equivalent raw fingerprint custody is proven by equal checksum sets; the stable source representative is safe."
+					: richestOverwriteNote
+						? richestOverwriteNote
 						: modality === "fingerprint" &&
-							  fingerprintResolution?.reason === "strict_checksum_superset"
-							? "The selected raw fingerprint source is the only checksum-proven strict superset."
-							: `A single highest-count source has evidenced raw ${modality} custody and a credential-only target write path.`,
+							  fingerprintResolution?.reason === "equal_checksum_sets"
+							? "Equivalent raw fingerprint custody is proven by equal checksum sets; the stable source representative is safe."
+							: modality === "fingerprint" &&
+								  fingerprintResolution?.reason === "strict_checksum_superset"
+								? "The selected raw fingerprint source is the only checksum-proven strict superset."
+								: `A single highest-count source has evidenced raw ${modality} custody and a credential-only target write path.`,
 				executionEligibility,
 				blockingReason,
 				recoveryStage:

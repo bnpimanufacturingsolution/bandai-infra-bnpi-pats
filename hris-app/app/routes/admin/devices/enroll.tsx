@@ -1867,7 +1867,7 @@ export function DeviceEnrollmentPanel({
 					issueLabel: "Needs decision",
 					missingLabel: `${conflict.deviceA.name} vs ${conflict.deviceB.name}`,
 					dataLabel: `${mergeFieldLabel(conflict.field)}: ${mergeFieldValueLabel(conflict.deviceA.value)} / ${mergeFieldValueLabel(conflict.deviceB.value)}`,
-					recommendedAction: `Use the value from ${mergeDeviceName(plan.devices, selectedRecord?.deviceId || user.sourceDeviceId)} unless local knowledge says otherwise.`,
+					recommendedAction: `Default is RICHEST SOURCE: use the value from ${mergeDeviceName(plan.devices, selectedRecord?.deviceId || user.sourceDeviceId)}. Recovery jobs follow richest custody for fingerprint/face; you can still pick another source in review.`,
 					primaryAction: "choose-richest",
 					conflictField: conflict.field,
 					conflictFields: [conflict.field],
@@ -1906,7 +1906,10 @@ export function DeviceEnrollmentPanel({
 						issueLabel: `${mergeFieldLabel(kind)} gap`,
 						missingLabel: mergeDeviceName(plan.devices, targetRecord.deviceId),
 						dataLabel: `${mergeFieldLabel(kind)} ${targetCount} of ${strongestCount}`,
-						recommendedAction: `Copy ${mergeFieldLabel(kind).toLowerCase()} from ${mergeDeviceName(plan.devices, strongestRecord?.deviceId || user.sourceDeviceId)}.`,
+						recommendedAction:
+							kind === "fingerprint" || kind === "face"
+								? `RICHEST SOURCE (default): copy ${mergeFieldLabel(kind).toLowerCase()} from ${mergeDeviceName(plan.devices, strongestRecord?.deviceId || user.sourceDeviceId)} (${strongestCount} on source → ${targetCount} on target). Recovery jobs overwrite this target for the same vendor id after physical reread proof.`
+								: `Copy ${mergeFieldLabel(kind).toLowerCase()} from ${mergeDeviceName(plan.devices, strongestRecord?.deviceId || user.sourceDeviceId)}.`,
 						primaryAction: "copy",
 						conflictField: kind,
 						conflictFields: user.conflicts.some((conflict) => conflict.field === kind)
