@@ -14565,11 +14565,14 @@ export const controller = (prisma: PrismaClient) => {
 											.digest("hex"),
 										physicalRereadResult:
 											"exact_template_and_picture_checksums_retained",
-										identityAssociationEvidence: exactSharedCardMatch
-											? "exact_shared_card"
-											: "same_canonical_hris_employee_with_target_owned_card",
+										identityAssociationEvidence:
+											association.strategy === "exact_shared_card"
+												? "exact_shared_card"
+												: association.strategy === "same_vendor_user_id"
+													? "same_vendor_user_id"
+													: "same_canonical_hris_employee_with_target_owned_card",
 										targetCardRetainedChecksum: createHash("sha256")
-											.update(targetCardNo)
+											.update(writerCardNo)
 											.digest("hex"),
 									};
 									results.push(result);
