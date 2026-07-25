@@ -1,18 +1,23 @@
 ﻿# Current Task
 
-## Latest Task Addendum - 2026-07-25 Multi-agent overnight gap loop (primary)
+## Latest Task Addendum - 2026-07-25 Agent-owned blocker fix + gap burn (primary)
 
-- Task mode: root + multi-subagent overnight loop; predict then write.
 - **Primary paste prompt:**
+  `docs/00-product/AGENT-PROMPT-overnight-agent-owned-blocker-fix-and-gap-burn.md`
+- Companions:
+  - `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
+  - `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
+- Treat UI “Exporting source credential” / owner scan incomplete as **agent-owned
+  export/gate code work**, not physical enroll. Preview→dryRun→execute match.
+- Live progress: residual 2813→~19xx–22xx; unique face 690→~48x–51x; faceReady
+  burning on A/D/E/F; fpReady still 0 until unlock. Fix budget burn + unique-person
+  selection (`39d5a7d`).
+- Evidence: `.runtime/overnight-gap-loop-20260725-075850/`.
+
+## Latest Task Addendum - 2026-07-25 Multi-agent overnight gap loop
+
+- Companion prompt:
   `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
-- Companion stable card:
-  `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
-- Mandatory every cycle: plan → review(`executionPreview`) → dryRun → start only
-  if `wouldWriteCount>0` → verified must match prediction or fix code defect.
-- Live seed (recheck): residual ~2813; faceReady ~1947 (A/D/E/F); fpReady often 0;
-  unique face gap ~690; unique FP gap ~307. Drive residual and unique gaps down.
-- Runtime: preview SHA `cec3b6f`+, multi-canary env, API image on DEV.
-- Evidence: `.runtime/overnight-biometric-convergence-20260724-230000/`.
 
 ## Latest Task Addendum - 2026-07-25 Stable overnight gap-convergence job card
 

@@ -1,17 +1,21 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-25 - Agent-owned blocker-fix overnight prompt (primary)
+
+- Status: `JOB_CARD_READY`.
+- **Primary prompt:**
+  `docs/00-product/AGENT-PROMPT-overnight-agent-owned-blocker-fix-and-gap-burn.md`
+- Explicit: UI “Exporting source credential” / owner scan incomplete = **code/export
+  defect**, not physical action. Multi-agent root loop: preview→dryRun→write→match;
+  fix gate/budget/unique-person; burn until unique face/FP + residual fall.
+- Proven burn: residual 2813→~2k; unique face 690→~500; non-B FDLib rereads; FP
+  still scan-gated. Fixes: `cec3b6f` preview, `39d5a7d` unique-person+retry budget.
+- Evidence: `.runtime/overnight-gap-loop-20260725-075850/`.
+
 ## 2026-07-25 - Multi-agent gap loop executed (face burn proven)
 
-- Status: `IN_PROGRESS_WITH_PROVEN_PREDICT_MATCH`.
-- Prompt executed:
-  `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
-- Stamp: `.runtime/overnight-gap-loop-20260725-075850/` (`STATUS.md`, summary).
-- 8 face cycles with dryRun+executionPreview: **7/8** verified **50/50** match;
-  cycle 7 `awaiting_replan` verified 0 (named defect to fix).
-- Residual **2813 → 2432** (−381); unique face people **690 → 574** (−116);
-  faceReady **1947 → 1566**. Writes to **A/D/E/F** (not B-only).
-- FP: fingerprintReady still 0 (`target_owner_scan_incomplete` 417) — unlock next.
-- Runtime: multi-canary env live; preview SHA live; Grafana/Loki up.
+- Status: `SUPERSEDED_AS_PRIMARY_SEE_BLOCKER_FIX_CARD` (still valid history).
+- Stamp: `.runtime/overnight-gap-loop-20260725-075850/`.
 
 ## 2026-07-25 - Multi-agent overnight gap loop prompt ready
 
