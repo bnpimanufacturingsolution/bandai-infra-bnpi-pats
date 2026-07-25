@@ -345,6 +345,67 @@ describe("Hikvision credential recovery graph", () => {
 		]);
 	});
 
+	it("exports face source_conflict exporting_source_credential candidates instead of blocked resolution", () => {
+		const tasks = buildCredentialRecoveryTaskGraph({
+			credentialWrites: [
+				{
+					id: "face-export-a",
+					userKey: "u9",
+					vendorUserId: "9",
+					modality: "face",
+					sourceDeviceId: null,
+					targetDeviceId: "B",
+					blockingReason: "source_conflict",
+					recoveryStage: "exporting_source_credential",
+					faceAssociationStrategy: "same_vendor_user_id",
+					sourceCandidateDeviceIds: ["A", "D", "F"],
+				},
+				{
+					id: "face-export-b",
+					userKey: "u9",
+					vendorUserId: "9",
+					modality: "face",
+					sourceDeviceId: null,
+					targetDeviceId: "E",
+					blockingReason: "source_conflict",
+					recoveryStage: "exporting_source_credential",
+					faceAssociationStrategy: "same_vendor_user_id",
+					sourceCandidateDeviceIds: ["A", "D", "F"],
+				},
+				{
+					id: "true-compare",
+					userKey: "u10",
+					vendorUserId: "10",
+					modality: "face",
+					sourceDeviceId: null,
+					targetDeviceId: "B",
+					blockingReason: "source_conflict",
+					recoveryStage: "comparing_sources",
+					sourceCandidateDeviceIds: ["A", "D"],
+				},
+			],
+		});
+		const keys = tasks.map((task) => task.taskKey).sort();
+		expect(keys).to.deep.equal(
+			[
+				"source_capture:A:9:face",
+				"source_capture:D:9:face",
+				"source_capture:F:9:face",
+				"source_resolution:u10:face",
+			].sort(),
+		);
+		const exportCapture = tasks.find(
+			(task) => task.taskKey === "source_capture:A:9:face",
+		);
+		expect(exportCapture?.status).to.equal("pending");
+		expect(exportCapture?.unlockCount).to.equal(2);
+		const blocked = tasks.find(
+			(task) => task.taskKey === "source_resolution:u10:face",
+		);
+		expect(blocked?.status).to.equal("blocked");
+		expect(blocked?.stage).to.equal("comparing_sources");
+	});
+
 	it("prunes only pending source tasks absent from the fresh safe graph", () => {
 		expect(
 			selectObsoleteCredentialRecoverySourceTaskIds(

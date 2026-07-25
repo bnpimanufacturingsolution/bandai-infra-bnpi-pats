@@ -470,40 +470,60 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 		const userKey = text(write.userKey);
 		const classification = classifyCredentialRecoveryWrite(write);
 
-		if (String(write.blockingReason) === "missing_raw_blob") {
-			const associationPriority =
-				modality === "fingerprint"
-					? 40_000
-					: String(write.faceAssociationStrategy) === "exact_shared_card"
-						? 30_000
-						: String(write.faceAssociationStrategy) ===
-							  "canonical_hris_employee"
-							? 20_000
-							: String(write.faceAssociationStrategy) ===
-								  "same_vendor_user_id"
-								? 15_000
-								: 10_000;
-			const taskKey = key("source_capture", sourceDeviceId, vendorUserId, modality);
-			addUnlock(
-				taskKey,
-				{
-					taskKey,
-					kind: "source_capture",
-					modality,
+		const associationPriority =
+			modality === "fingerprint"
+				? 40_000
+				: String(write.faceAssociationStrategy) === "exact_shared_card"
+					? 30_000
+					: String(write.faceAssociationStrategy) === "canonical_hris_employee"
+						? 20_000
+						: String(write.faceAssociationStrategy) === "same_vendor_user_id"
+							? 15_000
+							: 10_000;
+		const candidateDeviceIds = [
+			...new Set(
+				[
 					sourceDeviceId,
+					...((Array.isArray(write.sourceCandidateDeviceIds)
+						? write.sourceCandidateDeviceIds
+						: []) as unknown[]),
+				]
+					.map((value) => text(value))
+					.filter(Boolean),
+			),
+		];
+		const enqueueSourceCapture = (captureDeviceIds: string[]) => {
+			for (const captureDeviceId of captureDeviceIds) {
+				const taskKey = key(
+					"source_capture",
+					captureDeviceId,
 					vendorUserId,
-					userKey,
-					status: "pending",
-					stage: "recovering_source_custody",
-					priority: associationPriority,
-					payload: {
-						sourceCandidateDeviceIds: write.sourceCandidateDeviceIds || [],
-						faceAssociationStrategy: write.faceAssociationStrategy || null,
+					modality,
+				);
+				addUnlock(
+					taskKey,
+					{
+						taskKey,
+						kind: "source_capture",
+						modality,
+						sourceDeviceId: captureDeviceId,
+						vendorUserId,
+						userKey,
+						status: "pending",
+						stage: "recovering_source_custody",
+						priority: associationPriority,
+						payload: {
+							sourceCandidateDeviceIds: candidateDeviceIds,
+							faceAssociationStrategy: write.faceAssociationStrategy || null,
+							originBlockingReason: write.blockingReason || null,
+							originRecoveryStage: write.recoveryStage || null,
+						},
 					},
-				},
-				operationId,
-			);
-		} else if (String(write.blockingReason) === "source_conflict") {
+					operationId,
+				);
+			}
+		};
+		const enqueueBlockedSourceResolution = () => {
 			const taskKey = key("source_resolution", userKey, modality);
 			addUnlock(
 				taskKey,
@@ -517,10 +537,39 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 					status: "blocked",
 					stage: "comparing_sources",
 					priority: 0,
-					payload: { sourceCandidateDeviceIds: write.sourceCandidateDeviceIds || [] },
+					payload: { sourceCandidateDeviceIds: candidateDeviceIds },
 				},
 				operationId,
 			);
+		};
+
+		// Agent-owned export path:
+		// 1) missing_raw_blob → capture selected source (or candidates)
+		// 2) face/FP source_conflict still in exporting_source_credential → capture
+		//    every highest-count candidate (do not leave blocked source_resolution)
+		// 3) comparing_sources remains blocked resolution (true multi-source compare)
+		if (String(write.blockingReason) === "missing_raw_blob") {
+			const captureDeviceIds =
+				sourceDeviceId
+					? [sourceDeviceId]
+					: candidateDeviceIds.length > 0
+						? candidateDeviceIds
+						: [];
+			if (["fingerprint", "face"].includes(modality) && captureDeviceIds.length) {
+				enqueueSourceCapture(captureDeviceIds);
+			}
+		} else if (String(write.blockingReason) === "source_conflict") {
+			const exportingStage =
+				String(write.recoveryStage || "") === "exporting_source_credential";
+			if (
+				exportingStage &&
+				["fingerprint", "face"].includes(modality) &&
+				candidateDeviceIds.length > 0
+			) {
+				enqueueSourceCapture(candidateDeviceIds);
+			} else {
+				enqueueBlockedSourceResolution();
+			}
 		}
 
 		if (classification === "ready_to_write") {
