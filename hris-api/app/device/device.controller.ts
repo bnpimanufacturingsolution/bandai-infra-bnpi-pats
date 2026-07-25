@@ -11705,48 +11705,65 @@ export const controller = (prisma: PrismaClient) => {
 								pictureSha256: evidence.pictureSha256,
 								templateSize: evidence.templateSize,
 								pictureSize: evidence.pictureSize,
+								faceCount: Number(
+									record?.biometricEvidence?.face?.reportedCount ||
+										(record?.rawPayload as any)?.numOfFace ||
+										0,
+								),
 							}
-						: { deviceId, unavailable: true };
+						: { deviceId, unavailable: true, faceCount: 0 };
 				});
-			const available = checksumEvidence.filter(
-				(evidence: any) => evidence.unavailable !== true,
-			);
+			const available = checksumEvidence
+				.filter((evidence: any) => evidence.unavailable !== true)
+				// Stable richest pick among complete sources: highest face count, then deviceId.
+				.sort(
+					(left: any, right: any) =>
+						Number(right.faceCount || 0) - Number(left.faceCount || 0) ||
+						String(left.deviceId).localeCompare(String(right.deviceId)),
+				);
 			const checksumSets = new Set(
 				available.map(
 					(evidence: any) =>
 						`${evidence.templateSha256}:${evidence.pictureSha256}:${evidence.templateSize}:${evidence.pictureSize}`,
 				),
 			);
-			if (
-				available.length === candidateDeviceIds.length &&
-				available.length > 0 &&
-				checksumSets.size === 1
-			) {
-				const sourceDeviceId = candidateDeviceIds[0];
+			// Agent-owned richest pick: do NOT wait for every highest-count peer to
+			// export, and do NOT dual-owner-block when complete sources disagree.
+			// One complete custody set is enough to peer-copy the same vendor person.
+			if (available.length > 0) {
+				const sourceDeviceId = String(available[0].deviceId);
+				const unanimous = checksumSets.size === 1;
+				const allCandidatesReady =
+					available.length === candidateDeviceIds.length;
+				const recommendationReason = unanimous
+					? allCandidatesReady
+						? "All highest-count face sources have exact template and picture checksum equality; the stable source representative is safe."
+						: `RICHEST complete face source selected among ${available.length}/${candidateDeviceIds.length} highest-count candidates with matching custody; incomplete peers remain export work, not a dual-owner stop.`
+					: `RICHEST SOURCE OVERWRITE: ${available.length} complete face sources disagree on template/picture checksums; selected ${sourceDeviceId} for same-vendor peer copy after physical reread proof. Incomplete peers remain export work.`;
 				return {
 					...write,
 					sourceDeviceId,
 					sourceEvidenceStatus: "raw_blob_present",
 					recommended: true,
-					recommendationReason:
-						"All highest-count face sources have exact template and picture checksum equality; the stable source representative is safe.",
+					recommendationReason,
 					executionEligibility: "blocked",
 					blockingReason: "target_write_unsupported",
 					recoveryStage: "probing_target_capability",
 					sourceFaceChecksumEvidence: checksumEvidence,
+					richestFaceSourcePick: {
+						sourceDeviceId,
+						availableCount: available.length,
+						candidateCount: candidateDeviceIds.length,
+						unanimousChecksum: unanimous,
+					},
 				};
 			}
 			return {
 				...write,
 				sourceFaceChecksumEvidence: checksumEvidence,
 				recommendationReason:
-					available.length < candidateDeviceIds.length
-						? "Face source comparison remains open because at least one highest-count physical source has not yielded exact template+picture custody."
-						: "Highest-count face sources have incompatible template or picture checksums; physical identity action is required before mutation.",
-				recoveryStage:
-					available.length < candidateDeviceIds.length
-						? "exporting_source_credential"
-						: "physical_identity_action_required",
+					"Face source comparison remains open because no highest-count physical source has yielded exact template+picture custody yet. Export the richest complete face source; do not treat incomplete peers as dual-owner.",
+				recoveryStage: "exporting_source_credential",
 			};
 		});
 		plan.credentialWrites = (plan.credentialWrites || []).map((write: any) => {
