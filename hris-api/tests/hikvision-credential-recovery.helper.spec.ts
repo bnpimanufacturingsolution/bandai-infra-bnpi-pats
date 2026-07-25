@@ -552,6 +552,30 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			classifyCredentialRecoveryError(
 				new Error(
+					"stored_face_sdk_preview_failed exitCode=1: Stored-face SDK preview did not accept the exact custody payload.",
+				),
+			),
+		).to.include({
+			code: "stored_face_sdk_failed",
+			category: "sdk_runtime",
+			retryable: true,
+			observabilityDefect: false,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
+					"INFO: hikvision hot-reload LOCAL_API_BASE=http://localhost:3101\nloop[2] find 16 mac and 16 ip",
+				),
+			),
+		).to.include({
+			code: "stored_face_sdk_wrapper_noise",
+			category: "sdk_runtime",
+			retryable: true,
+			observabilityDefect: true,
+		});
+		expect(
+			classifyCredentialRecoveryError(
+				new Error(
 					"Hikvision SDK export event missing for device/user; exitCode=1, parsedEvents=none",
 				),
 			),

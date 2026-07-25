@@ -2871,6 +2871,49 @@ export const controller = (prisma: PrismaClient) => {
 					],
 					55_000,
 				);
+			const sanitizeSdkFaceDiag = (value: unknown) =>
+				String(value || "")
+					.split(/\r?\n/)
+					.map((line) => line.trim())
+					.filter(
+						(line) =>
+							line &&
+							!/^INFO:\s*hikvision hot-reload/i.test(line) &&
+							!/^loop\[\d+\]\s+find\s+\d+\s+mac/i.test(line) &&
+							!/^LOCAL_API_BASE=/i.test(line),
+					)
+					.join(" | ")
+					.trim();
+			const sdkFaceFailureMessage = (params: {
+				phase: "preview" | "execute";
+				exitCode: number;
+				stdout: string;
+				stderr: string;
+				events: any[];
+			}) => {
+				const eventError = [...params.events]
+					.reverse()
+					.map((event) =>
+						String(
+							event?.error ||
+								event?.message ||
+								event?.reason ||
+								event?.detail ||
+								"",
+						).trim(),
+					)
+					.find(Boolean);
+				const cleanedStderr = sanitizeSdkFaceDiag(params.stderr);
+				const cleanedStdout = sanitizeSdkFaceDiag(params.stdout);
+				const body =
+					eventError ||
+					cleanedStderr ||
+					cleanedStdout ||
+					(params.phase === "preview"
+						? "Stored-face SDK preview did not accept the exact custody payload."
+						: "Stored-face SDK write lacked exact template-and-picture reread proof.");
+				return `stored_face_sdk_${params.phase}_failed exitCode=${params.exitCode}: ${body}`;
+			};
 			const preview = await run(false);
 			const previewEvents = parseJsonLines(preview.stdout);
 			const previewPassed = previewEvents.some(
@@ -2882,8 +2925,13 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			if (preview.exitCode !== 0 || !previewPassed) {
 				throw new Error(
-					preview.stderr.trim() ||
-						"Stored-face SDK preview did not accept the exact custody payload.",
+					sdkFaceFailureMessage({
+						phase: "preview",
+						exitCode: Number(preview.exitCode || 0),
+						stdout: String(preview.stdout || ""),
+						stderr: String(preview.stderr || ""),
+						events: previewEvents,
+					}),
 				);
 			}
 			const executed = await run(true);
@@ -2902,8 +2950,13 @@ export const controller = (prisma: PrismaClient) => {
 				String(verified?.pictureMatch || "").toLowerCase() !== "true"
 			) {
 				throw new Error(
-					executed.stderr.trim() ||
-						"Stored-face SDK write lacked exact template-and-picture reread proof.",
+					sdkFaceFailureMessage({
+						phase: "execute",
+						exitCode: Number(executed.exitCode || 0),
+						stdout: String(executed.stdout || ""),
+						stderr: String(executed.stderr || ""),
+						events: events,
+					}),
 				);
 			}
 			return {

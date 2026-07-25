@@ -254,6 +254,38 @@ export const classifyCredentialRecoveryError = (
 			observabilityDefect: false,
 		};
 	}
+	// Hot-reload wrapper noise used to be the entire thrown error (INFO lines).
+	// Prefer structured stored_face_sdk_* messages; still classify residual noise.
+	if (
+		matches(
+			/stored_face_sdk_(?:preview|execute)_failed/,
+			/stored-face sdk (?:preview|write)/,
+			/stored_face_write_/,
+		)
+	) {
+		return {
+			code: "stored_face_sdk_failed",
+			category: "sdk_runtime",
+			message,
+			retryable: true,
+			observabilityDefect: false,
+		};
+	}
+	if (
+		matches(
+			/hikvision hot-reload/,
+			/local_api_base=http:\/\/localhost:3101/,
+			/loop\[\d+\]\s+find\s+\d+\s+mac/,
+		)
+	) {
+		return {
+			code: "stored_face_sdk_wrapper_noise",
+			category: "sdk_runtime",
+			message,
+			retryable: true,
+			observabilityDefect: true,
+		};
+	}
 	if (
 		matches(
 			/duplicate owner/,
