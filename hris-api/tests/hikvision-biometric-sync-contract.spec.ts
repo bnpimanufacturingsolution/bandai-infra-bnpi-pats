@@ -222,8 +222,9 @@ describe("Hikvision biometric sync contract", () => {
 		const controller = controllerSource();
 		const service = serviceSource();
 		expect(controller).to.include("runHikvisionStoredFaceWriteOnVm");
-		expect(controller).to.include("stored_face_sdk_preview_failed");
+		expect(controller).to.include("stored_face_sdk_");
 		expect(controller).to.include("sanitizeSdkFaceDiag");
+		expect(controller).to.include("sdkFaceFailureMessage");
 		expect(controller).not.to.include("HIKVISION_STORED_FACE_WRITER_BUILD_ATTESTATION");
 		expect(controller).to.include("resolveHikvisionDeployedBuildAttestation");
 		expect(controller).to.include("resolveFleetWriterCapability");
