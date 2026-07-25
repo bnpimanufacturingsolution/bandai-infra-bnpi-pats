@@ -545,9 +545,10 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 
 		// Agent-owned export path:
 		// 1) missing_raw_blob → capture selected source (or candidates)
-		// 2) face/FP source_conflict still in exporting_source_credential → capture
-		//    every highest-count candidate (do not leave blocked source_resolution)
-		// 3) comparing_sources remains blocked resolution (true multi-source compare)
+		// 2) face/FP source_conflict with candidates → capture every highest-count
+		//    candidate (including legacy comparing_sources labels). Do not leave
+		//    blocked source_resolution when the agent can export custody.
+		// 3) card / no-candidate source_conflict remains blocked source_resolution
 		if (String(write.blockingReason) === "missing_raw_blob") {
 			const captureDeviceIds =
 				sourceDeviceId
@@ -559,12 +560,16 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 				enqueueSourceCapture(captureDeviceIds);
 			}
 		} else if (String(write.blockingReason) === "source_conflict") {
-			const exportingStage =
-				String(write.recoveryStage || "") === "exporting_source_credential";
+			const stage = String(write.recoveryStage || "");
+			const exportingStage = stage === "exporting_source_credential";
+			// No selected source + candidates = incomplete custody export even if a
+			// legacy plan still labels comparing_sources (never dual-owner red).
+			const needsCandidateExport =
+				!sourceDeviceId && candidateDeviceIds.length > 0;
 			if (
-				exportingStage &&
 				["fingerprint", "face"].includes(modality) &&
-				candidateDeviceIds.length > 0
+				candidateDeviceIds.length > 0 &&
+				(exportingStage || needsCandidateExport)
 			) {
 				enqueueSourceCapture(candidateDeviceIds);
 			} else {

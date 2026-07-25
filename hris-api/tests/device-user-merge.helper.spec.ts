@@ -402,6 +402,8 @@ describe("device user union merge", () => {
 		expect(write?.sourceCandidateDeviceIds).to.have.members(["a", "b"]);
 		expect(write?.executionEligibility).to.equal("blocked");
 		expect(write?.blockingReason).to.equal("source_conflict");
+		// No raw richest selected → agent export stage (not dual-owner compare).
+		expect(write?.recoveryStage).to.equal("exporting_source_credential");
 	});
 
 	it("uses a stable representative when tied raw fingerprint checksum sets are equal", () => {

@@ -373,10 +373,36 @@ describe("Hikvision credential recovery graph", () => {
 					sourceCandidateDeviceIds: ["A", "D", "F"],
 				},
 				{
-					id: "true-compare",
+					// Legacy comparing_sources label with no selected source is still
+					// agent export work — never blocked dual-owner resolution.
+					id: "legacy-compare-export",
 					userKey: "u10",
 					vendorUserId: "10",
 					modality: "face",
+					sourceDeviceId: null,
+					targetDeviceId: "B",
+					blockingReason: "source_conflict",
+					recoveryStage: "comparing_sources",
+					sourceCandidateDeviceIds: ["A", "D"],
+				},
+				{
+					// FP same: no raw richest selected → capture candidates.
+					id: "fp-compare-export",
+					userKey: "u1524",
+					vendorUserId: "1524",
+					modality: "fingerprint",
+					sourceDeviceId: null,
+					targetDeviceId: "B",
+					blockingReason: "source_conflict",
+					recoveryStage: "comparing_sources",
+					sourceCandidateDeviceIds: ["A", "D", "F"],
+				},
+				{
+					// Card / no candidates remains blocked resolution.
+					id: "card-compare",
+					userKey: "u99",
+					vendorUserId: "99",
+					modality: "card",
 					sourceDeviceId: null,
 					targetDeviceId: "B",
 					blockingReason: "source_conflict",
@@ -391,7 +417,12 @@ describe("Hikvision credential recovery graph", () => {
 				"source_capture:A:9:face",
 				"source_capture:D:9:face",
 				"source_capture:F:9:face",
-				"source_resolution:u10:face",
+				"source_capture:A:10:face",
+				"source_capture:D:10:face",
+				"source_capture:A:1524:fingerprint",
+				"source_capture:D:1524:fingerprint",
+				"source_capture:F:1524:fingerprint",
+				"source_resolution:u99:card",
 			].sort(),
 		);
 		const exportCapture = tasks.find(
@@ -399,8 +430,12 @@ describe("Hikvision credential recovery graph", () => {
 		);
 		expect(exportCapture?.status).to.equal("pending");
 		expect(exportCapture?.unlockCount).to.equal(2);
+		const fpCapture = tasks.find(
+			(task) => task.taskKey === "source_capture:A:1524:fingerprint",
+		);
+		expect(fpCapture?.status).to.equal("pending");
 		const blocked = tasks.find(
-			(task) => task.taskKey === "source_resolution:u10:face",
+			(task) => task.taskKey === "source_resolution:u99:card",
 		);
 		expect(blocked?.status).to.equal("blocked");
 		expect(blocked?.stage).to.equal("comparing_sources");

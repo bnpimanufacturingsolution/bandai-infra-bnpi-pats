@@ -1401,7 +1401,12 @@ const buildCredentialWritesForUser = (
 					blockingReason === "missing_raw_blob"
 						? "queued_source_custody_recovery"
 						: blockingReason === "source_conflict"
-							? "comparing_sources"
+							? // Face/FP with no selected raw source is agent export work
+								// (capture candidates), not dual-owner / physical compare.
+								// Cards still use comparing_sources for value equality.
+								modality === "card"
+								? "comparing_sources"
+								: "exporting_source_credential"
 							: blockingReason === "target_write_unsupported"
 								? "probing_target_capability"
 								: blockingReason === "credential_only_card_not_supported"
