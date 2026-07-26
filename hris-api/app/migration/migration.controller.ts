@@ -49,6 +49,7 @@ import {
 import {
 	importCompensationMassUpload,
 	importDeductionMassUpload,
+	importStatutoryBenefitsUpload,
 } from "./bnpi-mass-upload-import.service";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
@@ -3345,6 +3346,62 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const importDm3StatutoryBenefitsUpload = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const uploadedFile = resolveUploadedMigrationFile(req);
+			if (!uploadedFile?.buffer) {
+				res.status(400).json(
+					buildErrorResponse(
+						"File is required. Upload Monthly Payment / Statutory Benefits .xlsx as multipart field 'file'.",
+						400,
+					),
+				);
+				return;
+			}
+			const parsedBody = parseMultipartJsonBody(req);
+			if (parsedBody.error) {
+				res.status(400).json(buildErrorResponse(parsedBody.error, 400));
+				return;
+			}
+			const organizationId = String(
+				parsedBody.body?.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+
+			const summary = await importStatutoryBenefitsUpload({
+				prisma,
+				organizationId,
+				buffer: uploadedFile.buffer,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Statutory benefits / monthly payment register imported",
+					{ summary },
+					200,
+				),
+			);
+		} catch (error: any) {
+			migrationLogger.error(
+				`DM3 statutory benefits upload failed: ${error?.message || "Unknown error"}`,
+				{ error },
+			);
+			res.status(500).json(
+				buildErrorResponse(
+					`Statutory benefits upload failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
 	const importDm3EmployeeBenefitsLoans = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const uploadedFile = resolveUploadedMigrationFile(req);
@@ -5002,6 +5059,7 @@ export const controller = (prisma: PrismaClient) => {
 		importDm3EmployeeBenefitsLoans,
 		importDm3CompensationMassUpload,
 		importDm3DeductionMassUpload,
+		importDm3StatutoryBenefitsUpload,
 		finalizeDm3EmployeeImport,
 		recoverDm3EmployeePostActions,
 		getDm3EmployeePostActionsJob,

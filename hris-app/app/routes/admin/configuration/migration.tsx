@@ -2141,21 +2141,13 @@ function buildCsvFileFromRows(
 const DM4_SOURCE_FILES_STORAGE_KEY = "admin-migration::dm4-source-files";
 const DM4_OVERTIME_SOURCE_FILES_STORAGE_KEY = "admin-migration::dm4-overtime-source-files";
 const DM4_TIMESHEET_PROOF_ROUTE =
-	"/hr/timesheets?tab=past&periodCode=PP-20260501-20260516&employeeId=cmpl3zukr098f7zz0x8x7ak99";
-const DM4_DEFAULT_SOURCE_FOLDER = "docs/2026-20260527T124252Z-3-001/2026";
+	"/hr/timesheets?tab=past&periodCode=PP-20260626-20260711&employeeId=cmpl3zukr098f7zz0x8x7ak99";
+/** Prefer local confidential drops; do not seed ghost docs/ paths that no longer exist. */
+const DM4_DEFAULT_SOURCE_FOLDER = "confidential-files/DMs";
 const DM4_APPROVED_OVERTIME_SOURCE_FILE =
-	"docs/Bandai Payroll/2026 rptOvertimeDetails.xlsx";
+	"confidential-files/2rptOvertimeDetails - June 26 - July 10, 2026.xlsx";
 const DM4_DEFAULT_BIOMETRICS_SOURCE_FILES = [
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Apr 11 - 25.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Apr 26 - May 10.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Dec 26 - Jan 10.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Feb 11 - 25.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Feb 26 - Mar 10.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Jan 11 - 25.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Jan 26 - Feb 10.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Mar 11 - 25.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Mar 26 - Apr 10.xlsx",
-	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_May 11 - 25.xlsx",
+	"confidential-files/DMs/Biometrics Data_Jun 26 - Jul 10.xlsx",
 ];
 const DM4_DEFAULT_SOURCE_FILES = [
 	...DM4_DEFAULT_BIOMETRICS_SOURCE_FILES,
@@ -3815,9 +3807,11 @@ export default function AdminMigrationPage() {
 		(workbookUploadKind === "biometrics" || workbookUploadKind === "overtime")
 			? workbookUploadKind
 			: null;
-	const dm3MassUploadRole: "compensation" | "deduction" | null =
+	const dm3MassUploadRole: "compensation" | "deduction" | "statutory" | null =
 		activeWorkbookGroup?.id === "dm3" &&
-		(workbookUploadKind === "compensation" || workbookUploadKind === "deduction")
+		(workbookUploadKind === "compensation" ||
+			workbookUploadKind === "deduction" ||
+			workbookUploadKind === "statutory")
 			? workbookUploadKind
 			: null;
 	const isDm3WorkbookUploadModal =
@@ -6893,7 +6887,10 @@ export default function AdminMigrationPage() {
 		);
 	};
 
-	const importDm3MassUploadFile = async (role: "compensation" | "deduction", file: File) => {
+	const importDm3MassUploadFile = async (
+		role: "compensation" | "deduction" | "statutory",
+		file: File,
+	) => {
 		if (!organizationId) {
 			toast.error("Organization is required for mass upload import.");
 			return;
@@ -6902,15 +6899,25 @@ export default function AdminMigrationPage() {
 			toast.error("Upload an Excel .xlsx file.");
 			return;
 		}
+
+		const label =
+			role === "compensation"
+				? "Compensation"
+				: role === "deduction"
+					? "Deduction"
+					: "Statutory benefits";
+		const formData = new FormData();
+		formData.append("file", file);
+		formData.append("data", JSON.stringify({ organizationId }));
+		const endpoint =
+			role === "compensation"
+				? "/api/migration/dm3/import-compensation-mass-upload"
+				: role === "deduction"
+					? "/api/migration/dm3/import-deduction-mass-upload"
+					: "/api/migration/dm3/import-statutory-benefits-upload";
+
 		setIsImportingDm3MassUpload(true);
-		try {
-			const formData = new FormData();
-			formData.append("file", file);
-			formData.append("data", JSON.stringify({ organizationId }));
-			const endpoint =
-				role === "compensation"
-					? "/api/migration/dm3/import-compensation-mass-upload"
-					: "/api/migration/dm3/import-deduction-mass-upload";
+		const importPromise = (async () => {
 			const response = await hrisApiClient.post<{
 				data?: {
 					summary?: {
@@ -6918,6 +6925,7 @@ export default function AdminMigrationPage() {
 						created?: number;
 						updated?: number;
 						failed?: number;
+						sheetName?: string;
 						errors?: Array<{ row: number; message: string }>;
 					};
 				};
@@ -6926,6 +6934,7 @@ export default function AdminMigrationPage() {
 					created?: number;
 					updated?: number;
 					failed?: number;
+					sheetName?: string;
 				};
 			}>(endpoint, formData, { timeoutMs: 300_000 });
 			const payload = (response as any)?.data?.data || (response as any)?.data || response;
@@ -6934,28 +6943,42 @@ export default function AdminMigrationPage() {
 			const updated = Number(summary.updated || 0);
 			const failed = Number(summary.failed || 0);
 			const total = Number(summary.total || 0);
+			const sheetName = String(summary.sheetName || "").trim();
 			if (failed > 0 && created + updated === 0) {
-				toast.error(
-					`${role === "compensation" ? "Compensation" : "Deduction"} import failed for all ${total || failed} row(s).`,
-				);
-			} else if (failed > 0) {
-				toast.message(
-					`Imported ${created + updated} row(s) (${created} new, ${updated} updated); ${failed} failed.`,
-				);
-			} else {
-				toast.success(
-					`Imported ${created + updated} ${role} row(s) (${created} new, ${updated} updated).`,
+				throw new Error(
+					`${label} import failed for all ${total || failed} row(s).`,
 				);
 			}
-			void queryClient.invalidateQueries({ queryKey: ["migration-workbook-reports", organizationId] });
+			return { created, updated, failed, total, label, sheetName };
+		})();
+
+		toast.promise(importPromise, {
+			loading:
+				role === "statutory"
+					? "Importing statutory benefits / loan deductions…"
+					: `Importing ${label.toLowerCase()} mass upload…`,
+			success: (result) => {
+				const sheetNote = result.sheetName ? ` from sheet "${result.sheetName}"` : "";
+				if (result.failed > 0) {
+					return `Imported ${result.created + result.updated} ${result.label.toLowerCase()} row(s)${sheetNote} (${result.created} new, ${result.updated} updated); ${result.failed} failed.`;
+				}
+				return `Imported ${result.created + result.updated} ${result.label.toLowerCase()} row(s)${sheetNote} (${result.created} new, ${result.updated} updated).`;
+			},
+			error: (error: any) =>
+				error?.data?.errors?.[0]?.message ||
+				error?.message ||
+				`Failed to import ${label.toLowerCase()}.`,
+		});
+
+		try {
+			await importPromise;
+			void queryClient.invalidateQueries({
+				queryKey: ["migration-workbook-reports", organizationId],
+			});
 			setDm3MassUploadFile(null);
 			closeWorkbookUploadModal();
-		} catch (error: any) {
-			toast.error(
-				error?.data?.errors?.[0]?.message ||
-					error?.message ||
-					`Failed to import ${role} mass upload.`,
-			);
+		} catch {
+			// Error toast is handled by toast.promise.
 		} finally {
 			setIsImportingDm3MassUpload(false);
 			if (dm3MassUploadInputRef.current) {
@@ -6964,14 +6987,24 @@ export default function AdminMigrationPage() {
 		}
 	};
 
-	const renderDm3MassUploadPanel = (role: "compensation" | "deduction") => {
+	const renderDm3MassUploadPanel = (role: "compensation" | "deduction" | "statutory") => {
 		const isCompensation = role === "compensation";
+		const isStatutory = role === "statutory";
 		const sampleName = isCompensation
 			? "Compensation Mass Upload 07.15.26.xlsx"
-			: "Deduction Mass Upload 07.15.26.xlsx";
+			: isStatutory
+				? "April 2026 Monthly Payment_Statutory Benefits.xlsx"
+				: "Deduction Mass Upload 07.15.26.xlsx";
 		const expectedHeaders = isCompensation
 			? "COMCODE, Amount, EmployeeID, EmployeeName, StartPayDate"
-			: "DEDCODE, Amount, Payment, EmployeeID, EmployeeName, StartPayment";
+			: isStatutory
+				? "Emp. No., Employee Name, SSS/PHIC/HDMF loans 15th/30th, Calamity, MP2, LRP"
+				: "DEDCODE, Amount, Payment, EmployeeID, EmployeeName, StartPayment";
+		const dropLabel = isCompensation
+			? "Drop compensation mass upload .xlsx"
+			: isStatutory
+				? "Drop monthly payment / statutory benefits .xlsx"
+				: "Drop deduction mass upload .xlsx";
 
 		return (
 			<div className="space-y-3">
@@ -7021,16 +7054,19 @@ export default function AdminMigrationPage() {
 						)}
 					</div>
 					<span className="text-sm font-semibold text-gray-950">
-						{dm3MassUploadFile
-							? dm3MassUploadFile.name
-							: isCompensation
-								? "Drop compensation mass upload .xlsx"
-								: "Drop deduction mass upload .xlsx"}
+						{dm3MassUploadFile ? dm3MassUploadFile.name : dropLabel}
 					</span>
 					<span className="max-w-sm text-xs text-gray-500">
 						Sample: {sampleName}
 						<br />
 						Columns: {expectedHeaders}
+						{isStatutory ? (
+							<>
+								<br />
+								Applies SSS/HDMF loan, calamity, MP2, and LRP deductions as open-horizon
+								enrollments. SSS/PHIC/HDMF contribution amounts stay engine-computed.
+							</>
+						) : null}
 					</span>
 				</button>
 
@@ -7524,7 +7560,7 @@ export default function AdminMigrationPage() {
 								{isDm4
 									? "Import biometrics punches and optional approved overtime into attendance and timesheets."
 									: group.id === "dm3"
-										? "Import the employee workbook, then optional compensation and deduction mass-upload files."
+										? "Import the employee workbook, then optional compensation, deduction, and statutory benefits uploads."
 										: "Upload one Excel workbook to import all sheets in order."}
 							</p>
 						</div>
@@ -7637,8 +7673,8 @@ export default function AdminMigrationPage() {
 									</h2>
 									<p className="mt-1 text-sm text-gray-600">
 										Import the DM3 employee workbook, then optionally attach BNPI
-										compensation and deduction mass-upload files for the payroll
-										cutoff.
+										compensation, deduction mass-upload, or monthly statutory
+										benefits files for payroll deductions.
 									</p>
 								</div>
 								<button
@@ -7679,6 +7715,15 @@ export default function AdminMigrationPage() {
 										Upload deduction mass upload (loan payments / deductions)
 									</span>
 								</li>
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										4
+									</span>
+									<span>
+										Upload statutory benefits / monthly payment register (SSS/HDMF
+										loans, calamity, MP2, LRP)
+									</span>
+								</li>
 							</ol>
 							<div className="flex flex-wrap gap-2">
 								<Button
@@ -7714,6 +7759,23 @@ export default function AdminMigrationPage() {
 										<Upload className="mr-1.5 h-4 w-4" />
 									)}
 									Upload deduction
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={isImportingDm3MassUpload}
+									onClick={() => {
+										setDm3MassUploadFile(null);
+										openWorkbookUploadModal("statutory");
+									}}>
+									{isImportingDm3MassUpload && dm3MassUploadRole === "statutory" ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Upload className="mr-1.5 h-4 w-4" />
+									)}
+									Upload statutory benefits
 								</Button>
 								<Button
 									type="button"
@@ -8182,9 +8244,11 @@ return (
 								? "Upload compensation mass upload"
 								: dm3MassUploadRole === "deduction"
 									? "Upload deduction mass upload"
-									: activeWorkbookGroup
-										? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
-										: "Upload workbook"
+									: dm3MassUploadRole === "statutory"
+										? "Upload statutory benefits"
+										: activeWorkbookGroup
+											? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
+											: "Upload workbook"
 				}
 				description={
 					dm4UploadRole === "biometrics"
@@ -8195,7 +8259,9 @@ return (
 								? "BNPI Compensation Mass Upload (COMCODE / Amount / EmployeeID / StartPayDate)."
 								: dm3MassUploadRole === "deduction"
 									? "BNPI Deduction Mass Upload (DEDCODE / Payment / EmployeeID / StartPayment)."
-									: "Select the .xlsx workbook for this migration stage."
+									: dm3MassUploadRole === "statutory"
+										? "BNPI Monthly Payment / Statutory Benefits (Emp. No., loan 15th/30th columns). Applies open-horizon loan deductions from the latest month sheet."
+										: "Select the .xlsx workbook for this migration stage."
 				}
 				className={HR_MODAL_STANDARD_CLASS}>
 				{dm4UploadRole

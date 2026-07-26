@@ -331,6 +331,11 @@ export const router = (route: Router, controller: IMigrationController): Router 
 		controller.importDm3DeductionMassUpload,
 	);
 	routes.post(
+		"/dm3/import-statutory-benefits-upload",
+		uploadImportFile,
+		controller.importDm3StatutoryBenefitsUpload,
+	);
+	routes.post(
 		"/dm3/finalize-employee-import",
 		uploadImportFile,
 		controller.finalizeDm3EmployeeImport,

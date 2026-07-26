@@ -4,13 +4,17 @@
  * 1) Ensure Docker Postgres clone container (hris-local-dev-clone :5433)
  *    with named volume hris-local-dev-clone-pgdata (distinguishable in `docker volume ls`)
  * 2) Ensure .env.local-clone (from example if missing)
- * 3) Apply Prisma schema via `prisma db push` against the local clone
- * 4) Run predev with BNPI tunnel + device bridges skipped
- * 5) Start API watch with .env + .env.local-clone
+ * 3) Optional: restore golden DM snapshot (npm run dev:local:restore / --restore)
+ * 4) Apply Prisma schema via `prisma db push` against the local clone
+ * 5) Run predev with BNPI tunnel + device bridges skipped
+ * 6) Start API watch with .env + .env.local-clone
  *
  * Does not touch shared VM DEV (55435). For that use: npm run dev
  *
  * Skip schema push: HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true
+ * Restore snapshot on start: HRIS_LOCAL_CLONE_RESTORE_ON_START=true or --restore
+ * Snapshot capture: npm run db:snapshot
+ * Snapshot restore only: npm run db:restore
  */
 const fs = require("fs");
 const path = require("path");
@@ -384,11 +388,44 @@ function startApiWatch() {
 	});
 }
 
+function shouldRestoreOnStart() {
+	const args = new Set(process.argv.slice(2).map((a) => String(a).toLowerCase()));
+	if (args.has("--restore") || args.has("--with-restore") || args.has("restore")) {
+		return true;
+	}
+	const env = String(process.env.HRIS_LOCAL_CLONE_RESTORE_ON_START || "").toLowerCase();
+	return env === "1" || env === "true" || env === "yes";
+}
+
+function restoreLocalCloneSnapshot() {
+	const snapshotScript = path.join(__dirname, "local-db-snapshot.cjs");
+	if (!fs.existsSync(snapshotScript)) {
+		fail(`Missing snapshot script: ${snapshotScript}`);
+	}
+	log("Restoring golden local-db snapshot into clone (before schema push / API start)...");
+	const result = run(process.execPath, [snapshotScript, "restore", "--from", "current"], {
+		env: process.env,
+	});
+	if (result.status !== 0) {
+		fail(
+			`Snapshot restore failed (exit ${result.status == null ? 1 : result.status}). ` +
+				`Capture one first with: npm run db:snapshot`,
+		);
+	}
+	log("Golden snapshot restored");
+}
+
 function main() {
-	log("=== local clone one-shot ===");
+	const restore = shouldRestoreOnStart();
+	log(restore ? "=== local clone one-shot (with restore) ===" : "=== local clone one-shot ===");
 	log(`repo=${repoRoot}`);
 	ensureEnvFile();
 	ensureContainer();
+	if (restore) {
+		// Restore full business data first; schema push afterwards keeps Prisma models in sync
+		// with the repo without wiping the restored rows.
+		restoreLocalCloneSnapshot();
+	}
 	ensureLocalCloneSchema();
 	runPredevLocal();
 	startApiWatch();

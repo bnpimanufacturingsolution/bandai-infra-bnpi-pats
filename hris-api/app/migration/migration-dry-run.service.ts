@@ -40,6 +40,187 @@ export function isDm4ApprovedOvertimeWorkbookPath(filePath: string): boolean {
 	return ANY_APPROVED_OT_WORKBOOK_PATTERN.test(baseName);
 }
 
+/** Parse "Date Range: M/D/YYYY to M/D/YYYY" (or filename dates) from Bandai OT report workbooks. */
+export function parseApprovedOvertimeWorkbookDateRange(
+	filePath: string,
+): { startDate: string; endDate: string } | null {
+	const absolutePath = path.isAbsolute(filePath) ? filePath : resolveRepoPath(filePath);
+	if (!fs.existsSync(absolutePath)) return null;
+
+	const toIso = (month: string, day: string, year: string) =>
+		`${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+
+	try {
+		const workbook = XLSX.readFile(absolutePath, {
+			cellDates: true,
+			dense: true,
+			raw: false,
+			password: "9090",
+		});
+		const sheetName =
+			workbook.SheetNames.find((name) => /overtime/i.test(name)) || workbook.SheetNames[0];
+		const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+			header: 1,
+			defval: "",
+			raw: false,
+			blankrows: false,
+		}) as unknown[][];
+
+		for (const row of rows.slice(0, 12)) {
+			const joined = (row || []).map((cell) => String(cell ?? "").trim()).filter(Boolean).join(" ");
+			const match = joined.match(
+				/Date\s*Range\s*:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s+to\s+(\d{1,2})\/(\d{1,2})\/(\d{4})/i,
+			);
+			if (match) {
+				return {
+					startDate: toIso(match[1], match[2], match[3]),
+					endDate: toIso(match[4], match[5], match[6]),
+				};
+			}
+		}
+	} catch {
+		// Fall through to filename heuristics when the workbook cannot be parsed.
+	}
+
+	const baseName = path.basename(absolutePath);
+	// e.g. "2rptOvertimeDetails - June 26 - July 10, 2026.xlsx"
+	const named = baseName.match(
+		/(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})\s*[-–]\s*(January|February|March|April|May|June|July|August|September|October|November|December)?\s*(\d{1,2}),?\s*(\d{4})/i,
+	);
+	if (named) {
+		const monthIndex = (name: string) =>
+			[
+				"january",
+				"february",
+				"march",
+				"april",
+				"may",
+				"june",
+				"july",
+				"august",
+				"september",
+				"october",
+				"november",
+				"december",
+			].indexOf(name.toLowerCase()) + 1;
+		const startMonth = monthIndex(named[1]);
+		const endMonth = named[3] ? monthIndex(named[3]) : startMonth;
+		const year = named[5];
+		if (startMonth > 0 && endMonth > 0) {
+			return {
+				startDate: `${year}-${String(startMonth).padStart(2, "0")}-${named[2].padStart(2, "0")}`,
+				endDate: `${year}-${String(endMonth).padStart(2, "0")}-${named[4].padStart(2, "0")}`,
+			};
+		}
+	}
+	return null;
+}
+
+function toUtcDateOnly(isoDate: string): Date {
+	const [year, month, day] = isoDate.split("-").map(Number);
+	return new Date(Date.UTC(year, month - 1, day));
+}
+
+/**
+ * Resolve the payroll period for an approved OT workbook.
+ * Prefer exact start/end match on the BNEI period calendar (codes may use exclusive end day).
+ */
+export async function resolveApprovedOvertimePayrollPeriodCode(
+	prisma: PrismaClient,
+	organizationId: string,
+	workbookPath: string,
+	preferredPeriodCode?: string,
+): Promise<{
+	periodCode: string;
+	startDate: string | null;
+	endDate: string | null;
+	matchedBy: "preferred" | "exact_dates" | "start_date" | "filename_code" | "legacy_default";
+}> {
+	const preferred = String(preferredPeriodCode || "").trim();
+	if (preferred) {
+		const found = await prisma.payrollPeriod.findFirst({
+			where: {
+				organizationId,
+				isDeleted: false,
+				OR: [{ code: preferred }, { id: preferred }],
+			},
+			select: { code: true, startDate: true, endDate: true },
+		});
+		if (found) {
+			return {
+				periodCode: found.code,
+				startDate: found.startDate.toISOString().slice(0, 10),
+				endDate: found.endDate.toISOString().slice(0, 10),
+				matchedBy: "preferred",
+			};
+		}
+	}
+
+	const range = parseApprovedOvertimeWorkbookDateRange(workbookPath);
+	if (range) {
+		const startDate = toUtcDateOnly(range.startDate);
+		const endDate = toUtcDateOnly(range.endDate);
+		const exact = await prisma.payrollPeriod.findFirst({
+			where: {
+				organizationId,
+				isDeleted: false,
+				startDate,
+				endDate,
+			},
+			select: { code: true, startDate: true, endDate: true },
+		});
+		if (exact) {
+			return {
+				periodCode: exact.code,
+				startDate: exact.startDate.toISOString().slice(0, 10),
+				endDate: exact.endDate.toISOString().slice(0, 10),
+				matchedBy: "exact_dates",
+			};
+		}
+
+		const byStart = await prisma.payrollPeriod.findFirst({
+			where: {
+				organizationId,
+				isDeleted: false,
+				startDate,
+			},
+			select: { code: true, startDate: true, endDate: true },
+			orderBy: { endDate: "asc" },
+		});
+		if (byStart) {
+			return {
+				periodCode: byStart.code,
+				startDate: byStart.startDate.toISOString().slice(0, 10),
+				endDate: byStart.endDate.toISOString().slice(0, 10),
+				matchedBy: "start_date",
+			};
+		}
+
+		const compact = (iso: string) => iso.replace(/-/g, "");
+		const candidateCode = `PP-${compact(range.startDate)}-${compact(range.endDate)}`;
+		const byCode = await prisma.payrollPeriod.findFirst({
+			where: { organizationId, isDeleted: false, code: candidateCode },
+			select: { code: true, startDate: true, endDate: true },
+		});
+		if (byCode) {
+			return {
+				periodCode: byCode.code,
+				startDate: byCode.startDate.toISOString().slice(0, 10),
+				endDate: byCode.endDate.toISOString().slice(0, 10),
+				matchedBy: "filename_code",
+			};
+		}
+	}
+
+	// Last resort: historical Bandai demo period used by the repair script default.
+	return {
+		periodCode: "PP-20260426-20260511",
+		startDate: range?.startDate || null,
+		endDate: range?.endDate || null,
+		matchedBy: "legacy_default",
+	};
+}
+
 function resolveSourcePathList(rawSourceFiles: unknown[]): string[] {
 	return rawSourceFiles
 		.map((item) => String(item || "").trim())
@@ -256,7 +437,7 @@ async function runDm4DryRunProofScript(resolution: ReturnType<typeof resolveMigr
 	});
 }
 
-async function runApprovedOvertimeDryRun(workbookPath?: string) {
+async function runApprovedOvertimeDryRun(workbookPath?: string, periodCode?: string) {
 	if (!workbookPath) {
 		return { mode: "dry-run", plannedLineUpdates: 0, touchedTimesheets: 0, missingSourceRows: 0 };
 	}
@@ -268,7 +449,9 @@ async function runApprovedOvertimeDryRun(workbookPath?: string) {
 		let stdout = "";
 		let stderr = "";
 		const tsxCliPath = path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
-		const child = spawn(process.execPath, [tsxCliPath, scriptPath, `--overtime-workbook=${workbookPath}`], {
+		const args = [tsxCliPath, scriptPath, `--overtime-workbook=${workbookPath}`];
+		if (periodCode) args.push(`--periodCode=${periodCode}`);
+		const child = spawn(process.execPath, args, {
 			cwd: process.cwd(),
 			windowsHide: true,
 			stdio: ["ignore", "pipe", "pipe"],
@@ -486,12 +669,21 @@ export class MigrationDryRunService {
 			approvedOvertimeFiles: explicitApprovedOvertimeFiles,
 			autoAppendDefaultApprovedOvertime: !hasExplicitApprovedOvertimeOption,
 		});
+		// Missing paths are warnings when other workbooks resolve (stale biometrics defaults + valid OT).
 		const blockers = [
 			...resolution.invalid.map((filePath) => `Invalid workbook source: ${filePath}`),
-			...resolution.missing.map((filePath) => `Missing workbook source: ${filePath}`),
 		];
-		if (resolution.resolvedInputs.length > 0 && resolution.workbookFiles.length === 0) {
-			blockers.push("No .xlsx/.xls workbook files were resolved from DM4 source entries.");
+		if (resolution.workbookFiles.length === 0) {
+			blockers.push(
+				...resolution.missing.map((filePath) => `Missing workbook source: ${filePath}`),
+			);
+			if (resolution.resolvedInputs.length > 0) {
+				blockers.push("No .xlsx/.xls workbook files were resolved from DM4 source entries.");
+			} else {
+				blockers.push(
+					"No DM4 biometrics or approved overtime workbooks were supplied.",
+				);
+			}
 		}
 		const organization = await this.prisma.organization.findUnique({
 			where: { code: "bnei" },
@@ -535,13 +727,48 @@ export class MigrationDryRunService {
 			};
 		}
 
-		const dryRunProof = await runDm4DryRunProofScript(resolution);
+		const attendanceWorkbookFiles =
+			resolution.attendanceWorkbookFiles ||
+			resolution.workbookFiles.filter((filePath) => !isDm4ApprovedOvertimeWorkbookPath(filePath));
+		const approvedOvertimeWorkbooks =
+			resolution.approvedOvertimeWorkbookFiles?.length
+				? resolution.approvedOvertimeWorkbookFiles
+				: resolution.workbookFiles.filter((filePath) => isDm4ApprovedOvertimeWorkbookPath(filePath));
+
+		// OT-only runs must not invoke the attendance proof script (it falls back to missing defaults and fails threshold).
+		const dryRunProof =
+			attendanceWorkbookFiles.length > 0
+				? await runDm4DryRunProofScript(resolution)
+				: {
+						mode: "DRY_RUN_OT_ONLY",
+						phase1Selection: {
+							meetsThreshold: true,
+							selectedRowsTotal: 0,
+							selectedRows: [],
+							sourceRowsScanned: 0,
+							sourceFilesScanned: 0,
+							dbEmployeesMatched: employeeCount,
+							departmentsSelected: [],
+						},
+						dryRunMaterializationPlan: { rowsWouldApply: 0 },
+						guardrails: { mutatesRecurringSchedule: false, otOnly: true },
+					};
 		const materializationPlan = dryRunProof?.dryRunMaterializationPlan || {};
 		const selection = dryRunProof?.phase1Selection || {};
-		const approvedOvertimeWorkbook =
-			resolution.approvedOvertimeWorkbookFiles?.[0] ||
-			resolution.workbookFiles.find((filePath) => isDm4ApprovedOvertimeWorkbookPath(filePath));
-		const approvedOvertimeDryRun = await runApprovedOvertimeDryRun(approvedOvertimeWorkbook);
+		const approvedOvertimeWorkbook = approvedOvertimeWorkbooks[0];
+		const preferredPeriodCode = String(request.options?.periodCode || "").trim() || undefined;
+		const approvedOvertimePeriod = approvedOvertimeWorkbook
+			? await resolveApprovedOvertimePayrollPeriodCode(
+					this.prisma,
+					organization!.id,
+					approvedOvertimeWorkbook,
+					preferredPeriodCode,
+				)
+			: null;
+		const approvedOvertimeDryRun = await runApprovedOvertimeDryRun(
+			approvedOvertimeWorkbook,
+			approvedOvertimePeriod?.periodCode,
+		);
 
 		await this.events.append({
 			runId,
@@ -582,7 +809,11 @@ export class MigrationDryRunService {
 			status: "DRY_RUN_COMPLETED",
 			sourceWorkbook: approvedOvertimeWorkbook ? toRepoDisplayPath(approvedOvertimeWorkbook) : null,
 			message: approvedOvertimeWorkbook
-				? "DM4 dry-run planned approved overtime detail updates."
+				? `DM4 dry-run planned approved overtime detail updates${
+						approvedOvertimePeriod?.periodCode
+							? ` for ${approvedOvertimePeriod.periodCode}`
+							: ""
+					}.`
 				: "No approved overtime details workbook was supplied for DM4 dry-run.",
 			counts: {
 				total: Number(
@@ -598,7 +829,14 @@ export class MigrationDryRunService {
 				plannedLineUpdates: Number(approvedOvertimeDryRun.plannedLineUpdates || 0),
 				touchedTimesheets: Number(approvedOvertimeDryRun.touchedTimesheets || 0),
 				missingSourceRows: Number(approvedOvertimeDryRun.missingSourceRows || 0),
-				approvedOvertimeWorkbookCount: approvedOvertimeWorkbook ? 1 : 0,
+				approvedOvertimeWorkbookCount: approvedOvertimeWorkbooks.length,
+			},
+			metadata: {
+				periodCode: approvedOvertimePeriod?.periodCode || null,
+				periodMatch: approvedOvertimePeriod?.matchedBy || null,
+				attendanceWorkbookCount: attendanceWorkbookFiles.length,
+				otOnly: attendanceWorkbookFiles.length === 0 && approvedOvertimeWorkbooks.length > 0,
+				missingSourceWarnings: resolution.missing.slice(0, 20),
 			},
 		});
 

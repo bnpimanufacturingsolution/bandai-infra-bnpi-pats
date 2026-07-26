@@ -85,7 +85,11 @@ Existing containers created before the named-volume change keep their old mount;
 Writes only to **local clone** — safe for destructive local testing.
 
 - **Schema**: auto-applied every `dev:local` (idempotent `db push`)
-- **Business data**: still empty until you complete `/setup` initialize or restore a dump (see `.runtime/local-db-clone-*`)
+- **Business data**: empty until you complete `/setup` initialize **or** restore a golden snapshot:
+  - Capture after DM work: `cd hris-api; npm run db:snapshot`
+  - Restore only: `npm run db:restore`
+  - Restore + start API: `npm run dev:local:restore`
+  - Snapshot files live under `.runtime/local-db-snapshots/` (gitignored client data)
 
 Success line (both):
 

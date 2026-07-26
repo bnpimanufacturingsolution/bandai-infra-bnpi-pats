@@ -5,16 +5,23 @@ import {
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
 } from "../../helper/bnpi-mass-upload-import.helper";
+import {
+	parseStatutoryBenefitsWorkbook,
+	STATUTORY_MP2_BENEFIT_NAME,
+} from "../../helper/bnpi-statutory-benefits-import.helper";
 import { normalizeEmployeeBenefitPayload } from "../../helper/employee-benefit-program.helper";
 
 export type MassUploadImportSummary = {
-	kind: "compensation" | "deduction";
+	kind: "compensation" | "deduction" | "statutory";
 	total: number;
 	created: number;
 	updated: number;
 	skipped: number;
 	failed: number;
 	errors: Array<{ row: number; field?: string; message: string }>;
+	/** Present for statutory remittance imports. */
+	sheetName?: string;
+	contributionOnlyEmployees?: number;
 };
 
 function readSheetRows(buffer: Buffer): Record<string, unknown>[] {
@@ -51,12 +58,14 @@ async function ensureBenefitType(
 
 	const name = options?.name || compensationBenefitLabel(code);
 	const direction = options?.direction || "COMPENSATION";
+	// BenefitCategory has no DEDUCTION value — use OTHER for deduction-direction types.
+	// payrollDirection is the field that marks compensation vs deduction.
 	return prisma.benefitType.create({
 		data: {
 			organizationId,
 			code,
 			name,
-			category: direction === "DEDUCTION" ? "DEDUCTION" : "ALLOWANCE",
+			category: direction === "DEDUCTION" ? "OTHER" : "ALLOWANCE",
 			payrollDirection: direction,
 			description: `Auto-created from BNPI mass upload (${code})`,
 			isTaxable: direction === "COMPENSATION",
@@ -344,6 +353,165 @@ export async function importDeductionMassUpload(params: {
 			summary.errors.push({
 				row: rowNumber,
 				message: error?.message || "Failed to import deduction row",
+			});
+		}
+	}
+
+	return summary;
+}
+
+/**
+ * Import BNPI Monthly Payment / Statutory Benefits remittance workbook.
+ * Applies loan/deduction enrollments (SSS/HDMF loans, calamity, LRP, MP2) as
+ * ACTIVE open-horizon obligations. Does not freeze SSS/PHIC/HDMF contribution
+ * amounts into benefits — those stay engine-computed by payroll schedule.
+ */
+export async function importStatutoryBenefitsUpload(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	buffer: Buffer;
+}): Promise<MassUploadImportSummary> {
+	const parsedBook = parseStatutoryBenefitsWorkbook(params.buffer);
+	const summary: MassUploadImportSummary = {
+		kind: "statutory",
+		total: parsedBook.deductionRows.length,
+		created: 0,
+		updated: 0,
+		skipped: parsedBook.contributionOnlyEmployees + parsedBook.skippedEmployees,
+		failed: 0,
+		errors: [...parsedBook.errors],
+		sheetName: parsedBook.sheetName,
+		contributionOnlyEmployees: parsedBook.contributionOnlyEmployees,
+	};
+
+	if (!parsedBook.deductionRows.length && parsedBook.errors.length) {
+		summary.failed = Math.max(1, parsedBook.errors.length);
+		return summary;
+	}
+
+	// Open-horizon end date: source has no end-date column; keep ACTIVE for a long term.
+	const OPEN_HORIZON_MONTHS = 240;
+
+	for (const row of parsedBook.deductionRows) {
+		try {
+			const employee = await params.prisma.employee.findFirst({
+				where: {
+					organizationId: params.organizationId,
+					isDeleted: false,
+					employeeId: row.employeeId,
+				},
+				select: { id: true },
+			});
+			if (!employee) {
+				summary.failed += 1;
+				summary.errors.push({
+					row: row.sourceRow,
+					field: "Emp. No.",
+					message: `Employee ${row.employeeId} was not found.`,
+				});
+				continue;
+			}
+
+			if (row.kind === "loan" && row.loanTypeName) {
+				const loanType = await ensureLoanType(
+					params.prisma,
+					params.organizationId,
+					row.loanTypeName,
+				);
+				const termMonths = OPEN_HORIZON_MONTHS;
+				const principal = row.principalAmount;
+				const monthlyPayment = row.paymentAmount;
+				const endDate = addMonths(row.startDate, termMonths);
+				const existing = await params.prisma.employeeLoan.findFirst({
+					where: {
+						organizationId: params.organizationId,
+						employeeId: employee.id,
+						loanTypeId: loanType.id,
+						isDeleted: false,
+						status: { in: ["PENDING", "APPROVED", "ACTIVE"] },
+					},
+					select: { id: true },
+				});
+
+				const loanData = {
+					organizationId: params.organizationId,
+					employeeId: employee.id,
+					loanTypeId: loanType.id,
+					principalAmount: principal,
+					interestRate: Number(loanType.interestRate || 0),
+					totalAmount: principal,
+					termMonths,
+					monthlyPayment,
+					startDate: row.startDate,
+					endDate,
+					amountPaid: 0,
+					balance: principal,
+					status: "ACTIVE" as const,
+					notes: `BNPI Statutory Benefits sheet "${row.sourceSheet}" row ${row.sourceRow}; family=${row.family}; 15th=${row.amount15}; 30th=${row.amount30}; open-horizon enrollment`,
+				};
+
+				if (existing) {
+					await params.prisma.employeeLoan.update({
+						where: { id: existing.id },
+						data: loanData,
+					});
+					summary.updated += 1;
+				} else {
+					await params.prisma.employeeLoan.create({ data: loanData });
+					summary.created += 1;
+				}
+				continue;
+			}
+
+			const benefitCode = row.benefitCode || STATUTORY_MP2_BENEFIT_NAME;
+			const benefitType = await ensureBenefitType(params.prisma, params.organizationId, benefitCode, {
+				name: benefitCode === "MHDMF2" ? STATUTORY_MP2_BENEFIT_NAME : benefitCode,
+				direction: "DEDUCTION",
+			});
+			const existingBenefit = await params.prisma.employeeBenefit.findFirst({
+				where: {
+					organizationId: params.organizationId,
+					employeeId: employee.id,
+					benefitTypeId: benefitType.id,
+					isDeleted: false,
+				},
+				select: { id: true },
+			});
+			const payload = normalizeEmployeeBenefitPayload({
+				organizationId: params.organizationId,
+				employeeId: employee.id,
+				benefitTypeId: benefitType.id,
+				amount: row.paymentAmount,
+				totalAmount: row.paymentAmount,
+				startDate: row.startDate,
+				startPayrollCutOff: row.startDate,
+				// No end date in source → recurring every cutoff until superseded.
+				scheduleMode: "RECURRING",
+				recurrenceFrequency: "EVERY_CUTOFF",
+				totalInstallments: 0,
+				attendanceBased: false,
+				isActive: true,
+				status: "ACTIVE",
+				name: benefitType.name,
+				notes: `BNPI Statutory Benefits sheet "${row.sourceSheet}" row ${row.sourceRow}; family=${row.family}; open-horizon deduction`,
+				currency: "PHP",
+				agreedToTerms: true,
+			});
+			if (existingBenefit) {
+				await params.prisma.employeeBenefit.update({
+					where: { id: existingBenefit.id },
+					data: payload as any,
+				});
+				summary.updated += 1;
+			} else {
+				await params.prisma.employeeBenefit.create({ data: payload as any });
+				summary.created += 1;
+			}
+		} catch (error: any) {
+			summary.failed += 1;
+			summary.errors.push({
+				row: row.sourceRow,
+				message: error?.message || "Failed to import statutory deduction row",
 			});
 		}
 	}

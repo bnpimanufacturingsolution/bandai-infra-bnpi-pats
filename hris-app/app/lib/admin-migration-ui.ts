@@ -42,7 +42,8 @@ export type WorkbookUploadKind =
 	| "biometrics"
 	| "overtime"
 	| "compensation"
-	| "deduction";
+	| "deduction"
+	| "statutory";
 
 export const ADMIN_MIGRATION_WORKBOOK_IDS = ["dm1", "dm2", "dm3", "dm4"] as const;
 export type AdminMigrationWorkbookId = (typeof ADMIN_MIGRATION_WORKBOOK_IDS)[number];
@@ -65,7 +66,8 @@ export function getWorkbookUploadKind(
 		value === "biometrics" ||
 		value === "overtime" ||
 		value === "compensation" ||
-		value === "deduction"
+		value === "deduction" ||
+		value === "statutory"
 	) {
 		return value;
 	}
