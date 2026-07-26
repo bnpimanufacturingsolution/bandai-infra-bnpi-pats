@@ -82,12 +82,10 @@ spec:
       labels:
         app.kubernetes.io/name: hris-postgres
         app.kubernetes.io/part-of: project-truth
-    spec:
-      containers:
+    spec:      containers:
         - name: postgres
           image: postgres:16-alpine
-          imagePullPolicy: Never
-          envFrom:
+          imagePullPolicy: Never          envFrom:
             - secretRef:
                 name: hris-postgres-env
           ports:
@@ -175,17 +173,14 @@ spec:
       labels:
         app.kubernetes.io/name: hris-api
         app.kubernetes.io/part-of: project-truth
-    spec:
-      containers:
+    spec:      containers:
         - name: api
           image: hris-api-local:develop
-          imagePullPolicy: Never
-          env:
+          imagePullPolicy: Never          env:
             - name: NODE_ENV
               value: production
             - name: APP_ENV
-              value: prod
-            - name: JWT_SECRET
+              value: prod            - name: JWT_SECRET
               value: project-truth-local-appliance-jwt-secret-change-me
             - name: PORT
               value: "3001"
@@ -320,14 +315,14 @@ spec:
       labels:
         app.kubernetes.io/name: hris-app
         app.kubernetes.io/part-of: project-truth
-    spec:
-      containers:
+    spec:      containers:
         - name: app
           image: hris-app-local:develop
-          imagePullPolicy: Never
-          env:
+          imagePullPolicy: Never          env:
             - name: APP_ENV
               value: prod
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=2048
             - name: PORT
               value: "3000"
             - name: HOSTNAME
@@ -384,12 +379,10 @@ spec:
       labels:
         app.kubernetes.io/name: hris-emp-app
         app.kubernetes.io/part-of: project-truth
-    spec:
-      containers:
+    spec:      containers:
         - name: app
           image: hris-emp-app-local:develop
-          imagePullPolicy: Never
-          env:
+          imagePullPolicy: Never          env:
             - name: NODE_HOST_IP
               valueFrom:
                 fieldRef:
