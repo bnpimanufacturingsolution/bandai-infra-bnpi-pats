@@ -1,0 +1,17 @@
+[Unit]
+Description=Project Truth disk guard (safe reclaim + threshold alert)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/project-truth-disk-guard.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# Never touch Cloudflare or DB paths from this unit.
+# Guard script is fail-closed on free-space thresholds only.
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Project Truth disk guard every 6 hours
+Requires=project-truth-disk-guard.service
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+Persistent=true
+Unit=project-truth-disk-guard.service
+
+[Install]
+WantedBy=timers.target
