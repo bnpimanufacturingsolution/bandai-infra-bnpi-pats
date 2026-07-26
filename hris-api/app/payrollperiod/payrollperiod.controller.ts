@@ -33,11 +33,12 @@ const payroll_generation_job_service_1 = require("./payroll-generation-job.servi
 const payroll_cycle_helper_1 = require("./payroll-cycle.helper");
 const logger = (0, logger_helper_1.getLogger)();
 const payrollPeriodLogger = logger.child({ module: "payrollPeriod" });
+// BNPI default: 11-25 / 26-10 (matches Bandai semi-monthly register cutoffs).
 const DEFAULT_CYCLE_RULES_JSON = {
     SEMI_MONTHLY: {
-        firstStartDay: 1,
-        secondStartDay: 16,
-        secondEndDay: "LAST_DAY",
+        firstStartDay: 11,
+        secondStartDay: 26,
+        secondEndDay: 10,
     },
     WEEKLY: { anchorWeekday: 1 },
     BIWEEKLY: { anchorWeekday: 1 },
@@ -69,13 +70,18 @@ const controller = (prisma) => {
             ((_c = rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.SEMI_MONTHLY) === null || _c === void 0 ? void 0 : _c.secondEndDay) !== undefined;
         const legacySplitDay = Number(((_d = rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.SEMI_MONTHLY) === null || _d === void 0 ? void 0 : _d.splitDay) || 15);
         if (!config.cycleRules || !hasSemiMonthlyRule) {
+            // Prefer BNPI 11-25 / 26-10. Only honor legacy splitDay when it was explicitly stored.
+            const hasLegacySplitDay = ((_d = rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.SEMI_MONTHLY) === null || _d === void 0 ? void 0 : _d.splitDay) !== undefined;
             const safeSplitDay = Math.min(Math.max(legacySplitDay || 15, 1), 30);
-            const firstStartDay = 1;
-            const secondStartDay = Math.min(Math.max(safeSplitDay + 1, 2), 31);
+            const firstStartDay = hasLegacySplitDay ? 1 : 11;
+            const secondStartDay = hasLegacySplitDay
+                ? Math.min(Math.max(safeSplitDay + 1, 2), 31)
+                : 26;
+            const secondEndDay = hasLegacySplitDay ? "LAST_DAY" : 10;
             const migratedCycleRules = Object.assign(Object.assign({}, (rawCycleRules || {})), { SEMI_MONTHLY: {
                     firstStartDay,
                     secondStartDay,
-                    secondEndDay: "LAST_DAY",
+                    secondEndDay,
                 }, WEEKLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.WEEKLY) || { anchorWeekday: 1 }, BIWEEKLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.BIWEEKLY) || { anchorWeekday: 1 }, MONTHLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.MONTHLY) || { startDay: 1, endDay: "LAST_DAY" }, QUARTERLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.QUARTERLY) || { startMonth: 1 }, ANNUALLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.ANNUALLY) || { startMonth: 1 } });
             config = yield prisma.payrollCycleConfig.update({
                 where: { id: config.id },

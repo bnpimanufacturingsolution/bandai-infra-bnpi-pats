@@ -87,11 +87,12 @@ const LOCAL_ORG_NAME = "Bandai Namco";
 const SYSTEM_INIT_ACTOR = "SYSTEM_INIT";
 const REQUIRED_LEAVE_TYPES = ["VACATION", "SICK", "PERSONAL"] as const;
 const ADMIN_ROLES = new Set(["super_admin", "admin", "hris-admin"]);
+// BNPI default: 11-25 / 26-10 (matches Bandai semi-monthly register cutoffs).
 const DEFAULT_CYCLE_RULES_JSON: Prisma.InputJsonValue = {
 	SEMI_MONTHLY: {
-		firstStartDay: 1,
-		secondStartDay: 16,
-		secondEndDay: "LAST_DAY",
+		firstStartDay: 11,
+		secondStartDay: 26,
+		secondEndDay: 10,
 	},
 	WEEKLY: { anchorWeekday: 1 },
 	BIWEEKLY: { anchorWeekday: 1 },

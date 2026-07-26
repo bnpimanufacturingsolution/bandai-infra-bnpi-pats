@@ -40,12 +40,12 @@ const semiMonthlyPeriods = (
 	});
 
 describe("getMergedCycleRules semi-monthly normalization", () => {
-	it("falls back to the 1-15/16-end default when no override is present", () => {
+	it("falls back to the BNPI 11-25/26-10 default when no override is present", () => {
 		const rules = getMergedCycleRules(baseConfig);
 		assert.deepEqual(rules.SEMI_MONTHLY, {
-			firstStartDay: 1,
-			secondStartDay: 16,
-			secondEndDay: "LAST_DAY",
+			firstStartDay: 11,
+			secondStartDay: 26,
+			secondEndDay: 10,
 		});
 	});
 
@@ -60,14 +60,14 @@ describe("getMergedCycleRules semi-monthly normalization", () => {
 		});
 	});
 
-	it("rejects an override that would leave a gap between periods and falls back to the default", () => {
+	it("rejects an override that would leave a gap between periods and falls back to the BNPI default", () => {
 		const rules = getMergedCycleRules(
 			withSemiMonthly({ firstStartDay: 10, secondStartDay: 25, secondEndDay: 31 }),
 		);
 		assert.deepEqual(rules.SEMI_MONTHLY, {
-			firstStartDay: 1,
-			secondStartDay: 16,
-			secondEndDay: "LAST_DAY",
+			firstStartDay: 11,
+			secondStartDay: 26,
+			secondEndDay: 10,
 		});
 	});
 });
@@ -174,5 +174,38 @@ describe("buildPeriodsFromRange semi-monthly presets across month-length edge ca
 
 		assert.equal(iso(periods[0].payDate), "2026-02-20");
 		assert.equal(iso(periods[1].payDate), "2026-03-05");
+	});
+
+	it("matches BNPI Bandai register cutoff 2026-06-26 to 2026-07-10 with pay date 2026-07-15", () => {
+		const periods = semiMonthlyPeriods(
+			withSemiMonthly({ firstStartDay: 11, secondStartDay: 26, secondEndDay: 10 }),
+			"2026-06-01",
+			"2026-07-31",
+		);
+
+		const jun26Jul10 = periods.find(
+			(period) =>
+				iso(period.startDate) === "2026-06-26" && iso(period.endDate) === "2026-07-10",
+		);
+		assert.ok(jun26Jul10, "expected June 26 – July 10 BNPI period");
+		assert.equal(iso(jun26Jul10!.payDate), "2026-07-15");
+		assert.equal(jun26Jul10!.periodNumber, 2);
+
+		const jul11Jul25 = periods.find(
+			(period) =>
+				iso(period.startDate) === "2026-07-11" && iso(period.endDate) === "2026-07-25",
+		);
+		assert.ok(jul11Jul25, "expected July 11 – July 25 BNPI period");
+		assert.equal(iso(jul11Jul25!.payDate), "2026-07-30");
+	});
+
+	it("uses BNPI 11-25/26-10 as the default config when cycleRules is null", () => {
+		const periods = semiMonthlyPeriods(baseConfig, "2026-06-01", "2026-07-31");
+		const jun26Jul10 = periods.find(
+			(period) =>
+				iso(period.startDate) === "2026-06-26" && iso(period.endDate) === "2026-07-10",
+		);
+		assert.ok(jun26Jul10);
+		assert.equal(iso(jun26Jul10!.payDate), "2026-07-15");
 	});
 });

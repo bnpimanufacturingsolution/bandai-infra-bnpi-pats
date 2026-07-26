@@ -22,9 +22,34 @@ const DM3_EXPECTED_SHEETS = [
 const DM3_EMPLOYEE_HEADERS = ["EMP_ID", "NAME", "DEPARTMENT", "POSITION", "LEVEL", "BASIC_SALARY"];
 const DM3_SCHEDULE_HEADERS = ["EMP_ID", "SCHEDULE_CODE", "EFFECTIVE_FROM"];
 const DM4_TIMESHEET_REVIEW_LINK = "/hr/timesheets";
+/** Legacy strict filename (year + space + name). Kept for older drops. */
 const APPROVED_OT_WORKBOOK_PATTERN = /2026\s+rptOvertimeDetails\.xlsx$/i;
-const ANY_APPROVED_OT_WORKBOOK_PATTERN = /\d{4}\s+rptOvertimeDetails\.xlsx$/i;
+/** Any basename that includes the Bandai OT report name, regardless of prefix/suffix. */
+const ANY_APPROVED_OT_WORKBOOK_PATTERN = /rptOvertimeDetails/i;
 const DEFAULT_APPROVED_OT_WORKBOOK = ["docs", "Bandai Payroll", "2026 rptOvertimeDetails.xlsx"];
+
+export type ResolveMigrationDm4SourceFilesOptions = {
+	/** Explicit OT workbook paths/roles from the UI; accepted regardless of file name. */
+	approvedOvertimeFiles?: unknown[];
+	/** When true (default), append the repo default OT file if none is resolved. */
+	autoAppendDefaultApprovedOvertime?: boolean;
+};
+
+export function isDm4ApprovedOvertimeWorkbookPath(filePath: string): boolean {
+	const baseName = path.basename(String(filePath || "").replace(/\\/g, "/"));
+	return ANY_APPROVED_OT_WORKBOOK_PATTERN.test(baseName);
+}
+
+function resolveSourcePathList(rawSourceFiles: unknown[]): string[] {
+	return rawSourceFiles
+		.map((item) => String(item || "").trim())
+		.filter(Boolean)
+		.map((filePath) => (path.isAbsolute(filePath) ? filePath : resolveRepoPath(filePath)));
+}
+
+function normalizePathKey(filePath: string): string {
+	return filePath.replace(/\\/g, "/").toLowerCase();
+}
 
 function normalizeSheetKey(value: string) {
 	return String(value || "")
@@ -99,42 +124,87 @@ function toRepoDisplayPath(filePath: string) {
 		: filePath.replace(/\\/g, "/");
 }
 
-export function resolveMigrationDm4SourceFiles(rawSourceFiles: unknown[]) {
-	const resolvedInputs = rawSourceFiles
-		.map((item) => String(item || "").trim())
-		.filter(Boolean)
-		.map((filePath) => (path.isAbsolute(filePath) ? filePath : resolveRepoPath(filePath)));
+export function resolveMigrationDm4SourceFiles(
+	rawSourceFiles: unknown[],
+	options: ResolveMigrationDm4SourceFilesOptions = {},
+) {
+	const autoAppendDefaultApprovedOvertime = options.autoAppendDefaultApprovedOvertime !== false;
+	const resolvedInputs = resolveSourcePathList(rawSourceFiles);
+	const explicitApprovedOvertimeInputs = resolveSourcePathList(options.approvedOvertimeFiles || []);
+
+	// Combine for existence checks; OT files may only appear in the explicit list.
+	const allResolvedInputs = Array.from(
+		new Set([...resolvedInputs, ...explicitApprovedOvertimeInputs]),
+	);
+
+	const workbookFiles = Array.from(
+		new Set(allResolvedInputs.flatMap((filePath) => collectWorkbookFiles(filePath))),
+	).sort((left, right) => left.localeCompare(right));
+
+	const explicitApprovedOvertimeFiles = Array.from(
+		new Set(explicitApprovedOvertimeInputs.flatMap((filePath) => collectWorkbookFiles(filePath))),
+	);
+	const namedApprovedOvertimeFiles = workbookFiles.filter((filePath) =>
+		isDm4ApprovedOvertimeWorkbookPath(filePath),
+	);
+
+	let approvedOvertimeWorkbookFiles = Array.from(
+		new Set([...explicitApprovedOvertimeFiles, ...namedApprovedOvertimeFiles]),
+	).sort((left, right) => left.localeCompare(right));
+
 	const defaultApprovedOtWorkbook = resolveRepoPath(...DEFAULT_APPROVED_OT_WORKBOOK);
 	if (
-		resolvedInputs.length > 0 &&
+		autoAppendDefaultApprovedOvertime &&
+		allResolvedInputs.length > 0 &&
+		approvedOvertimeWorkbookFiles.length === 0 &&
 		fs.existsSync(defaultApprovedOtWorkbook) &&
-		!resolvedInputs.some((filePath) => APPROVED_OT_WORKBOOK_PATTERN.test(filePath.replace(/\\/g, "/")))
+		!allResolvedInputs.some((filePath) =>
+			APPROVED_OT_WORKBOOK_PATTERN.test(path.basename(filePath.replace(/\\/g, "/"))),
+		)
 	) {
-		resolvedInputs.push(defaultApprovedOtWorkbook);
+		allResolvedInputs.push(defaultApprovedOtWorkbook);
+		approvedOvertimeWorkbookFiles = [defaultApprovedOtWorkbook];
 	}
-	const missing = resolvedInputs.filter((filePath) => !fs.existsSync(filePath));
-	const invalid = resolvedInputs.filter((filePath) => {
+
+	const approvedOvertimeKeySet = new Set(
+		approvedOvertimeWorkbookFiles.map((filePath) => normalizePathKey(filePath)),
+	);
+	const attendanceWorkbookFiles = workbookFiles.filter(
+		(filePath) => !approvedOvertimeKeySet.has(normalizePathKey(filePath)),
+	);
+
+	// Recompute workbook set if default OT was appended after first collect.
+	const finalWorkbookFiles = Array.from(
+		new Set([
+			...workbookFiles,
+			...approvedOvertimeWorkbookFiles,
+		]),
+	).sort((left, right) => left.localeCompare(right));
+
+	const missing = allResolvedInputs.filter((filePath) => !fs.existsSync(filePath));
+	const invalid = allResolvedInputs.filter((filePath) => {
 		if (!fs.existsSync(filePath)) return false;
 		if (fs.statSync(filePath).isDirectory()) return false;
 		return !/\.(xlsx|xls)$/i.test(filePath);
 	});
-	const workbookFiles = Array.from(
-		new Set(resolvedInputs.flatMap((filePath) => collectWorkbookFiles(filePath))),
-	).sort((left, right) => left.localeCompare(right));
-	const emptyDirectories = resolvedInputs.filter(
+	const emptyDirectories = allResolvedInputs.filter(
 		(filePath) =>
 			fs.existsSync(filePath) &&
 			fs.statSync(filePath).isDirectory() &&
 			collectWorkbookFiles(filePath).length === 0,
 	);
 	return {
-		resolvedInputs,
+		resolvedInputs: allResolvedInputs,
 		missing,
 		invalid,
 		emptyDirectories,
-		workbookFiles,
-		sourceFiles: resolvedInputs.map(toRepoDisplayPath),
-		sourceWorkbookFiles: workbookFiles.map(toRepoDisplayPath),
+		workbookFiles: finalWorkbookFiles,
+		attendanceWorkbookFiles,
+		approvedOvertimeWorkbookFiles,
+		sourceFiles: allResolvedInputs.map(toRepoDisplayPath),
+		sourceWorkbookFiles: finalWorkbookFiles.map(toRepoDisplayPath),
+		approvedOvertimeSourceFiles: approvedOvertimeWorkbookFiles.map(toRepoDisplayPath),
+		attendanceSourceFiles: attendanceWorkbookFiles.map(toRepoDisplayPath),
 	};
 }
 
@@ -144,9 +214,11 @@ async function runDm4DryRunProofScript(resolution: ReturnType<typeof resolveMigr
 		throw new Error("DM4 proof script was not found.");
 	}
 	const args = [scriptPath, "--limit=all"];
-	const attendanceWorkbookFiles = resolution.workbookFiles.filter(
-		(filePath) => !ANY_APPROVED_OT_WORKBOOK_PATTERN.test(filePath.replace(/\\/g, "/")),
-	);
+	const attendanceWorkbookFiles =
+		resolution.attendanceWorkbookFiles ||
+		resolution.workbookFiles.filter(
+			(filePath) => !isDm4ApprovedOvertimeWorkbookPath(filePath),
+		);
 	if (attendanceWorkbookFiles.length > 0) {
 		args.push(`--files=${attendanceWorkbookFiles.join(";")}`);
 	}
@@ -402,7 +474,18 @@ export class MigrationDryRunService {
 			: Array.isArray(request.sourceFiles)
 				? request.sourceFiles.map((file) => file.path || file.name)
 				: [];
-		const resolution = resolveMigrationDm4SourceFiles(rawSourceFiles);
+		const hasExplicitApprovedOvertimeOption =
+			Array.isArray(request.options?.approvedOvertimeFiles) ||
+			Array.isArray(request.options?.approvedOvertimeSourceFiles);
+		const explicitApprovedOvertimeFiles = Array.isArray(request.options?.approvedOvertimeFiles)
+			? request.options.approvedOvertimeFiles
+			: Array.isArray(request.options?.approvedOvertimeSourceFiles)
+				? request.options.approvedOvertimeSourceFiles
+				: [];
+		const resolution = resolveMigrationDm4SourceFiles(rawSourceFiles, {
+			approvedOvertimeFiles: explicitApprovedOvertimeFiles,
+			autoAppendDefaultApprovedOvertime: !hasExplicitApprovedOvertimeOption,
+		});
 		const blockers = [
 			...resolution.invalid.map((filePath) => `Invalid workbook source: ${filePath}`),
 			...resolution.missing.map((filePath) => `Missing workbook source: ${filePath}`),
@@ -455,9 +538,9 @@ export class MigrationDryRunService {
 		const dryRunProof = await runDm4DryRunProofScript(resolution);
 		const materializationPlan = dryRunProof?.dryRunMaterializationPlan || {};
 		const selection = dryRunProof?.phase1Selection || {};
-		const approvedOvertimeWorkbook = resolution.workbookFiles.find((filePath) =>
-			APPROVED_OT_WORKBOOK_PATTERN.test(filePath.replace(/\\/g, "/")),
-		);
+		const approvedOvertimeWorkbook =
+			resolution.approvedOvertimeWorkbookFiles?.[0] ||
+			resolution.workbookFiles.find((filePath) => isDm4ApprovedOvertimeWorkbookPath(filePath));
 		const approvedOvertimeDryRun = await runApprovedOvertimeDryRun(approvedOvertimeWorkbook);
 
 		await this.events.append({

@@ -5,11 +5,12 @@ import * as path from "path";
 import { PrismaClient } from "../../generated/prisma";
 import { MigrationEventService } from "./migration-event.service";
 import { MigrationRunAdapterResult, MigrationRunRequest } from "./migration-run.types";
-import { resolveMigrationDm4SourceFiles } from "./migration-dry-run.service";
+import {
+	isDm4ApprovedOvertimeWorkbookPath,
+	resolveMigrationDm4SourceFiles,
+} from "./migration-dry-run.service";
 
 const activeDm4ProofScripts = new Map<string, ReturnType<typeof spawn>>();
-const APPROVED_OT_WORKBOOK_PATTERN = /2026\s+rptOvertimeDetails\.xlsx$/i;
-const ANY_APPROVED_OT_WORKBOOK_PATTERN = /\d{4}\s+rptOvertimeDetails\.xlsx$/i;
 const BANDAI_2026_PAYROLL_PERIOD_CODE = "PP-20260426-20260511";
 
 export class Dm4MigrationAdapter {
@@ -34,7 +35,19 @@ export class Dm4MigrationAdapter {
 			: Array.isArray(request.sourceFiles)
 				? request.sourceFiles.map((file) => file.path || file.name)
 				: [];
-		const resolution = resolveMigrationDm4SourceFiles(rawSourceFiles);
+		const hasExplicitApprovedOvertimeOption =
+			Array.isArray(request.options?.approvedOvertimeFiles) ||
+			Array.isArray(request.options?.approvedOvertimeSourceFiles);
+		const explicitApprovedOvertimeFiles = Array.isArray(request.options?.approvedOvertimeFiles)
+			? request.options.approvedOvertimeFiles
+			: Array.isArray(request.options?.approvedOvertimeSourceFiles)
+				? request.options.approvedOvertimeSourceFiles
+				: [];
+		const resolution = resolveMigrationDm4SourceFiles(rawSourceFiles, {
+			approvedOvertimeFiles: explicitApprovedOvertimeFiles,
+			// UI sends an explicit list (possibly empty); do not force the legacy default OT file.
+			autoAppendDefaultApprovedOvertime: !hasExplicitApprovedOvertimeOption,
+		});
 		const sourceConfig = String(request.options?.sourceConfig || "").trim();
 		const approveHistoricalTimesheets = request.options?.approveHistoricalTimesheets === true;
 		const scriptPath = path.resolve(process.cwd(), "scripts", "bnpi-demo-attendance-proof.cjs");
@@ -91,9 +104,9 @@ export class Dm4MigrationAdapter {
 
 		const args = [scriptPath, "--apply", "--limit=all", "--batchSize=500", `--progressFile=${progressFile}`];
 		if (approveHistoricalTimesheets) args.push("--approveHistoricalTimesheets");
-		const attendanceWorkbookFiles = resolution.workbookFiles.filter(
-			(filePath) => !ANY_APPROVED_OT_WORKBOOK_PATTERN.test(filePath.replace(/\\/g, "/")),
-		);
+		const attendanceWorkbookFiles =
+			resolution.attendanceWorkbookFiles ||
+			resolution.workbookFiles.filter((filePath) => !isDm4ApprovedOvertimeWorkbookPath(filePath));
 		if (attendanceWorkbookFiles.length > 0) {
 			args.push(`--files=${attendanceWorkbookFiles.join(";")}`);
 		} else if (sourceConfig) {
@@ -258,9 +271,9 @@ export class Dm4MigrationAdapter {
 			metadata: { mutatesRecurringSchedule: false },
 		});
 
-		const approvedOvertimeWorkbook = resolution.workbookFiles.find((filePath) =>
-			APPROVED_OT_WORKBOOK_PATTERN.test(filePath.replace(/\\/g, "/")),
-		);
+		const approvedOvertimeWorkbook =
+			resolution.approvedOvertimeWorkbookFiles?.[0] ||
+			resolution.workbookFiles.find((filePath) => isDm4ApprovedOvertimeWorkbookPath(filePath));
 		const approvedOvertimeRepair = approvedOvertimeWorkbook
 			? await this.runApprovedOvertimeRepair({
 					runId,

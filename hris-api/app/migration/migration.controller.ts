@@ -46,6 +46,10 @@ import {
 	importDm3ReportingLines as importDm3ReportingLinesService,
 	importOpeningLeaveBalances,
 } from "./dm3-workbook-import.service";
+import {
+	importCompensationMassUpload,
+	importDeductionMassUpload,
+} from "./bnpi-mass-upload-import.service";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 
@@ -3224,17 +3228,126 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const resolveUploadedMigrationFile = (req: Request) => {
+		const file = (req as any).file as Express.Multer.File | undefined;
+		const files = (req as any).files as
+			| Express.Multer.File[]
+			| Record<string, Express.Multer.File[]>
+			| undefined;
+		return (
+			file ||
+			(Array.isArray(files) ? files[0] : undefined) ||
+			(files && !Array.isArray(files) ? files.file?.[0] : undefined)
+		);
+	};
+
+	const importDm3CompensationMassUpload = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const uploadedFile = resolveUploadedMigrationFile(req);
+			if (!uploadedFile?.buffer) {
+				res.status(400).json(
+					buildErrorResponse(
+						"File is required. Upload Compensation Mass Upload .xlsx as multipart field 'file'.",
+						400,
+					),
+				);
+				return;
+			}
+			const parsedBody = parseMultipartJsonBody(req);
+			if (parsedBody.error) {
+				res.status(400).json(buildErrorResponse(parsedBody.error, 400));
+				return;
+			}
+			const organizationId = String(
+				parsedBody.body?.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+
+			const summary = await importCompensationMassUpload({
+				prisma,
+				organizationId,
+				buffer: uploadedFile.buffer,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse("Compensation mass upload imported", { summary }, 200),
+			);
+		} catch (error: any) {
+			migrationLogger.error(
+				`DM3 compensation mass upload failed: ${error?.message || "Unknown error"}`,
+				{ error },
+			);
+			res.status(500).json(
+				buildErrorResponse(
+					`Compensation mass upload failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
+	const importDm3DeductionMassUpload = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const uploadedFile = resolveUploadedMigrationFile(req);
+			if (!uploadedFile?.buffer) {
+				res.status(400).json(
+					buildErrorResponse(
+						"File is required. Upload Deduction Mass Upload .xlsx as multipart field 'file'.",
+						400,
+					),
+				);
+				return;
+			}
+			const parsedBody = parseMultipartJsonBody(req);
+			if (parsedBody.error) {
+				res.status(400).json(buildErrorResponse(parsedBody.error, 400));
+				return;
+			}
+			const organizationId = String(
+				parsedBody.body?.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+
+			const summary = await importDeductionMassUpload({
+				prisma,
+				organizationId,
+				buffer: uploadedFile.buffer,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse("Deduction mass upload imported", { summary }, 200),
+			);
+		} catch (error: any) {
+			migrationLogger.error(
+				`DM3 deduction mass upload failed: ${error?.message || "Unknown error"}`,
+				{ error },
+			);
+			res.status(500).json(
+				buildErrorResponse(
+					`Deduction mass upload failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
 	const importDm3EmployeeBenefitsLoans = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
-			const file = (req as any).file as Express.Multer.File | undefined;
-			const files = (req as any).files as
-				| Express.Multer.File[]
-				| Record<string, Express.Multer.File[]>
-				| undefined;
-			const uploadedFile =
-				file ||
-				(Array.isArray(files) ? files[0] : undefined) ||
-				(files && !Array.isArray(files) ? files.file?.[0] : undefined);
+			const uploadedFile = resolveUploadedMigrationFile(req);
 
 			if (!uploadedFile?.buffer) {
 				res.status(400).json(
@@ -4887,6 +5000,8 @@ export const controller = (prisma: PrismaClient) => {
 		importDm3EmployeeDocuments,
 		importDm3OpeningLeaveBalances,
 		importDm3EmployeeBenefitsLoans,
+		importDm3CompensationMassUpload,
+		importDm3DeductionMassUpload,
 		finalizeDm3EmployeeImport,
 		recoverDm3EmployeePostActions,
 		getDm3EmployeePostActionsJob,

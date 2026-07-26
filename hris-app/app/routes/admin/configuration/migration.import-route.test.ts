@@ -3,6 +3,7 @@ import {
 	ADMIN_MIGRATION_IMPORT_ACTION_SEQUENCE,
 	ADMIN_MIGRATION_MODAL_TITLES,
 	getWorkbookReportIssue,
+	isDm4ApprovedOvertimeSource,
 	normalizeWorkbookReportLifecycle,
 } from "./migration";
 import {
@@ -16,6 +17,7 @@ import {
 	formatWorkbookImportProgressDescription,
 	formatWorkbookImportProgressTitle,
 	getWorkbookImportProgressToastId,
+	getWorkbookUploadKind,
 	isAdminMigrationWorkbookId,
 	isMigrationRunStatusSuccess,
 	isMigrationRunStatusTerminal,
@@ -37,6 +39,18 @@ describe("admin migration route contract", () => {
 			"import-loan-types",
 			"import-employees",
 		]);
+	});
+
+	it("labels approved overtime by report basename, not a strict year prefix", () => {
+		expect(
+			isDm4ApprovedOvertimeSource(
+				"confidential-files/2rptOvertimeDetails - June 26 - July 10, 2026.xlsx",
+			),
+		).toBe(true);
+		expect(isDm4ApprovedOvertimeSource("docs/Bandai Payroll/2026 rptOvertimeDetails.xlsx")).toBe(
+			true,
+		);
+		expect(isDm4ApprovedOvertimeSource("Biometrics Data_Jun 26 - Jul 10.xlsx")).toBe(false);
 	});
 
 	it("keeps every import action mapped to a modal title", () => {
@@ -72,6 +86,7 @@ describe("admin migration route contract", () => {
 		const withUpload = buildOpenWorkbookUploadSearchParams(opened);
 		expect(withUpload.get("workbook")).toBe("dm3");
 		expect(isWorkbookUploadOpen(withUpload)).toBe(true);
+		expect(getWorkbookUploadKind(withUpload)).toBe("workbook");
 
 		const closedUpload = buildCloseWorkbookUploadSearchParams(withUpload);
 		expect(closedUpload.get("workbook")).toBe("dm3");
@@ -81,6 +96,35 @@ describe("admin migration route contract", () => {
 		expect(closedPage.has("workbook")).toBe(false);
 		expect(closedPage.has("upload")).toBe(false);
 		expect(closedPage.get("tab")).toBe("migration");
+	});
+
+	it("opens DM4 biometrics and overtime upload modals via dedicated upload kinds", () => {
+		const dm4 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm4");
+		const biometrics = buildOpenWorkbookUploadSearchParams(dm4, "biometrics");
+		expect(biometrics.get("workbook")).toBe("dm4");
+		expect(biometrics.get("upload")).toBe("biometrics");
+		expect(getWorkbookUploadKind(biometrics)).toBe("biometrics");
+		expect(isWorkbookUploadOpen(biometrics)).toBe(true);
+
+		const overtime = buildOpenWorkbookUploadSearchParams(dm4, "overtime");
+		expect(overtime.get("upload")).toBe("overtime");
+		expect(getWorkbookUploadKind(overtime)).toBe("overtime");
+
+		const closed = buildCloseWorkbookUploadSearchParams(overtime);
+		expect(closed.get("workbook")).toBe("dm4");
+		expect(closed.has("upload")).toBe(false);
+	});
+
+	it("opens DM3 compensation and deduction mass-upload modals via dedicated upload kinds", () => {
+		const dm3 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm3");
+		const compensation = buildOpenWorkbookUploadSearchParams(dm3, "compensation");
+		expect(compensation.get("workbook")).toBe("dm3");
+		expect(compensation.get("upload")).toBe("compensation");
+		expect(getWorkbookUploadKind(compensation)).toBe("compensation");
+
+		const deduction = buildOpenWorkbookUploadSearchParams(dm3, "deduction");
+		expect(deduction.get("upload")).toBe("deduction");
+		expect(getWorkbookUploadKind(deduction)).toBe("deduction");
 	});
 
 	it("can open workbook page with upload modal already open (deep link / in-page CTA)", () => {

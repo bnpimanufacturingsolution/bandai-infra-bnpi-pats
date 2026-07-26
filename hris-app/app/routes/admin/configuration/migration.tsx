@@ -63,9 +63,11 @@ import {
 	formatWorkbookImportProgressDescription,
 	formatWorkbookImportProgressTitle,
 	getWorkbookImportProgressToastId,
+	getWorkbookUploadKind,
 	isMigrationRunStatusSuccess,
 	isMigrationRunStatusTerminal,
 	isWorkbookUploadOpen,
+	type WorkbookUploadKind,
 } from "~/lib/admin-migration-ui";
 
 export type ImportAction =
@@ -2137,12 +2139,13 @@ function buildCsvFileFromRows(
 }
 
 const DM4_SOURCE_FILES_STORAGE_KEY = "admin-migration::dm4-source-files";
+const DM4_OVERTIME_SOURCE_FILES_STORAGE_KEY = "admin-migration::dm4-overtime-source-files";
 const DM4_TIMESHEET_PROOF_ROUTE =
 	"/hr/timesheets?tab=past&periodCode=PP-20260501-20260516&employeeId=cmpl3zukr098f7zz0x8x7ak99";
 const DM4_DEFAULT_SOURCE_FOLDER = "docs/2026-20260527T124252Z-3-001/2026";
 const DM4_APPROVED_OVERTIME_SOURCE_FILE =
 	"docs/Bandai Payroll/2026 rptOvertimeDetails.xlsx";
-const DM4_DEFAULT_SOURCE_FILES = [
+const DM4_DEFAULT_BIOMETRICS_SOURCE_FILES = [
 	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Apr 11 - 25.xlsx",
 	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Apr 26 - May 10.xlsx",
 	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Dec 26 - Jan 10.xlsx",
@@ -2153,10 +2156,15 @@ const DM4_DEFAULT_SOURCE_FILES = [
 	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Mar 11 - 25.xlsx",
 	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Mar 26 - Apr 10.xlsx",
 	"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_May 11 - 25.xlsx",
+];
+const DM4_DEFAULT_SOURCE_FILES = [
+	...DM4_DEFAULT_BIOMETRICS_SOURCE_FILES,
 	DM4_APPROVED_OVERTIME_SOURCE_FILE,
 ];
-const DM4_DEFAULT_SOURCE_FILES_TEXT = DM4_DEFAULT_SOURCE_FILES.join("\n");
-function parseDm4SourceFiles(value: string) {
+const DM4_DEFAULT_SOURCE_FILES_TEXT = DM4_DEFAULT_BIOMETRICS_SOURCE_FILES.join("\n");
+const DM4_DEFAULT_OVERTIME_SOURCE_FILES_TEXT = DM4_APPROVED_OVERTIME_SOURCE_FILE;
+
+export function parseDm4SourceFiles(value: string) {
 	return value
 		.split(/\r?\n|;/)
 		.map((item) => item.trim())
@@ -2170,26 +2178,45 @@ function formatDm4SourceMode(value?: string) {
 	return value || "Server default config";
 }
 
-function getDm4WorkbookFileName(filePath: string) {
+export function getDm4WorkbookFileName(filePath: string) {
 	return filePath.split(/[\\/]/).filter(Boolean).pop() || filePath;
 }
 
-function isDm4ApprovedOvertimeSource(filePath: string) {
-	return /\d{4}\s+rptOvertimeDetails\.xlsx$/i.test(filePath.replace(/\\/g, "/"));
+/** Heuristic label only — explicit OT slot accepts any .xlsx name. */
+export function isDm4ApprovedOvertimeSource(filePath: string) {
+	const baseName = getDm4WorkbookFileName(filePath);
+	return /rptOvertimeDetails/i.test(baseName);
 }
 
 function isDm4ResolvableSourcePath(filePath: string) {
 	return !/\.xlsx$/i.test(filePath.trim());
 }
 
-function ensureDm4ApprovedOvertimeSources(paths: string[]) {
-	const existing = new Set(paths.map((filePath) => filePath.replace(/\\/g, "/").toLowerCase()));
-	return [
-		...paths,
-		...(existing.has(DM4_APPROVED_OVERTIME_SOURCE_FILE.toLowerCase())
-			? []
-			: [DM4_APPROVED_OVERTIME_SOURCE_FILE]),
-	];
+function uniqueDm4Paths(paths: string[]) {
+	const seen = new Set<string>();
+	const next: string[] = [];
+	for (const entry of paths) {
+		const trimmed = entry.trim();
+		if (!trimmed) continue;
+		const key = trimmed.replace(/\\/g, "/").toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		next.push(trimmed);
+	}
+	return next;
+}
+
+function splitLegacyDm4SourcePaths(paths: string[]) {
+	const biometrics: string[] = [];
+	const overtime: string[] = [];
+	for (const path of paths) {
+		if (isDm4ApprovedOvertimeSource(path)) overtime.push(path);
+		else biometrics.push(path);
+	}
+	return {
+		biometrics: uniqueDm4Paths(biometrics),
+		overtime: uniqueDm4Paths(overtime),
+	};
 }
 
 function getDm4SourceCountFromReport(report?: MigrationImportReport | null) {
@@ -2239,6 +2266,7 @@ export default function AdminMigrationPage() {
 	const workbookLiveEventsRef = useRef<Record<string, MigrationLiveEvent[]>>({});
 	const [recoveringDm3PostActions, setRecoveringDm3PostActions] = useState(false);
 	const [dm4SourceFilesText, setDm4SourceFilesText] = useState("");
+	const [dm4OvertimeSourceFilesText, setDm4OvertimeSourceFilesText] = useState("");
 	const [dm4ProofReport, setDm4ProofReport] = useState<Dm4ProofReport | null>(null);
 	const [isLoadingDm4Proof, setIsLoadingDm4Proof] = useState(false);
 	const [isRetryingDm4Run, setIsRetryingDm4Run] = useState(false);
@@ -2259,8 +2287,16 @@ export default function AdminMigrationPage() {
 	const dm4SourceResolutionKeyRef = useRef("");
 	const dm4ProofEventKeyRef = useRef("");
 	const [dm4SourcePathDraft, setDm4SourcePathDraft] = useState("");
+	const [dm4OvertimePathDraft, setDm4OvertimePathDraft] = useState("");
 	const [isUploadingDm4Files, setIsUploadingDm4Files] = useState(false);
+	const [isUploadingDm4OvertimeFiles, setIsUploadingDm4OvertimeFiles] = useState(false);
+	const [dm4DragTarget, setDm4DragTarget] = useState<"biometrics" | "overtime" | null>(null);
 	const dm4FileInputRef = useRef<HTMLInputElement | null>(null);
+	const dm4OvertimeFileInputRef = useRef<HTMLInputElement | null>(null);
+	const [dm3MassUploadFile, setDm3MassUploadFile] = useState<File | null>(null);
+	const [isImportingDm3MassUpload, setIsImportingDm3MassUpload] = useState(false);
+	const [dm3MassUploadDrag, setDm3MassUploadDrag] = useState(false);
+	const dm3MassUploadInputRef = useRef<HTMLInputElement | null>(null);
 	const [downloadingReportRunIds, setDownloadingReportRunIds] = useState<Set<string>>(
 		() => new Set(),
 	);
@@ -2559,18 +2595,34 @@ export default function AdminMigrationPage() {
 	useEffect(() => {
 		if (typeof window === "undefined") return;
 		const savedSourceFiles = localStorage.getItem(DM4_SOURCE_FILES_STORAGE_KEY) || "";
+		const savedOvertimeFiles = localStorage.getItem(DM4_OVERTIME_SOURCE_FILES_STORAGE_KEY);
 		const savedPaths = parseDm4SourceFiles(savedSourceFiles);
-		const defaultLikeSavedPaths =
-			savedPaths.length > 0 &&
-			savedPaths.some((path) => path.replace(/\\/g, "/").includes(DM4_DEFAULT_SOURCE_FOLDER)) &&
-			!savedPaths.some(isDm4ApprovedOvertimeSource);
-		setDm4SourceFilesText(
-			savedPaths.length > 0
-				? defaultLikeSavedPaths
-					? ensureDm4ApprovedOvertimeSources(savedPaths).join("\n")
-					: savedSourceFiles
-				: DM4_DEFAULT_SOURCE_FOLDER,
-		);
+		const savedOvertimePaths = parseDm4SourceFiles(savedOvertimeFiles || "");
+
+		if (savedOvertimeFiles !== null) {
+			// New split storage: biometrics + dedicated OT list.
+			const biometricsOnly = uniqueDm4Paths(
+				savedPaths.filter((path) => !isDm4ApprovedOvertimeSource(path)),
+			);
+			setDm4SourceFilesText(
+				biometricsOnly.length > 0 ? biometricsOnly.join("\n") : DM4_DEFAULT_SOURCE_FOLDER,
+			);
+			setDm4OvertimeSourceFilesText(savedOvertimePaths.join("\n"));
+			return;
+		}
+
+		// Legacy combined list → split once into biometrics vs OT slots.
+		if (savedPaths.length > 0) {
+			const split = splitLegacyDm4SourcePaths(savedPaths);
+			setDm4SourceFilesText(
+				split.biometrics.length > 0 ? split.biometrics.join("\n") : DM4_DEFAULT_SOURCE_FOLDER,
+			);
+			setDm4OvertimeSourceFilesText(split.overtime.join("\n"));
+			return;
+		}
+
+		setDm4SourceFilesText(DM4_DEFAULT_SOURCE_FOLDER);
+		setDm4OvertimeSourceFilesText("");
 	}, []);
 
 	useEffect(() => {
@@ -2579,29 +2631,33 @@ export default function AdminMigrationPage() {
 	}, [dm4SourceFilesText]);
 
 	useEffect(() => {
-		const sourceFiles = parseDm4SourceFiles(dm4SourceFilesText);
-		if (sourceFiles.length === 0) return;
-		if (!sourceFiles.some(isDm4ResolvableSourcePath)) {
-			const nextText = ensureDm4ApprovedOvertimeSources(sourceFiles).join("\n");
-			if (nextText !== dm4SourceFilesText) {
-				setDm4SourceFilesText(nextText);
-			}
+		if (typeof window === "undefined") return;
+		localStorage.setItem(DM4_OVERTIME_SOURCE_FILES_STORAGE_KEY, dm4OvertimeSourceFilesText);
+	}, [dm4OvertimeSourceFilesText]);
+
+	useEffect(() => {
+		// Expand folder-style biometrics paths only; OT stays in its own explicit list.
+		const biometricFiles = parseDm4SourceFiles(dm4SourceFilesText);
+		if (biometricFiles.length === 0) return;
+		if (!biometricFiles.some(isDm4ResolvableSourcePath)) {
 			return;
 		}
-		const resolutionKey = sourceFiles.join("\n");
+		const resolutionKey = `bio:${biometricFiles.join("\n")}`;
 		if (dm4SourceResolutionKeyRef.current === resolutionKey) return;
 		dm4SourceResolutionKeyRef.current = resolutionKey;
 
 		let cancelled = false;
 		void hrisApiClient
 			.post<Dm4SourceWorkbooksResponse>("/api/migration/dm4/resolve-source-workbooks", {
-				sourceFiles,
+				sourceFiles: biometricFiles,
 			})
 			.then((response) => {
 				if (cancelled) return;
-				const workbookFiles = response.data?.sourceWorkbookFiles || [];
+				const workbookFiles = (response.data?.sourceWorkbookFiles || []).filter(
+					(filePath) => !isDm4ApprovedOvertimeSource(filePath),
+				);
 				if (workbookFiles.length === 0) return;
-				const nextText = ensureDm4ApprovedOvertimeSources(workbookFiles).join("\n");
+				const nextText = uniqueDm4Paths(workbookFiles).join("\n");
 				if (nextText !== dm4SourceFilesText) {
 					setDm4SourceFilesText(nextText);
 				}
@@ -2609,8 +2665,8 @@ export default function AdminMigrationPage() {
 			.catch(() => {
 				if (cancelled) return;
 				if (
-					sourceFiles.length === 1 &&
-					sourceFiles[0].replace(/\\/g, "/") === DM4_DEFAULT_SOURCE_FOLDER
+					biometricFiles.length === 1 &&
+					biometricFiles[0].replace(/\\/g, "/") === DM4_DEFAULT_SOURCE_FOLDER
 				) {
 					setDm4SourceFilesText(DM4_DEFAULT_SOURCE_FILES_TEXT);
 				}
@@ -3125,6 +3181,7 @@ export default function AdminMigrationPage() {
 			);
 			const activeRefs = [
 				...parseDm4SourceFiles(dm4SourceFilesText),
+				...parseDm4SourceFiles(dm4OvertimeSourceFilesText),
 				...((dm4RunProgressData?.proof?.sourceWorkbookFiles as string[] | undefined) || []),
 				...((dm4RunProgressData?.summary?.sourceWorkbookFiles as string[] | undefined) || []),
 				...((dm4RunProgressData?.summary?.sourceFiles as string[] | undefined) || []),
@@ -3160,6 +3217,7 @@ export default function AdminMigrationPage() {
 			dm4RunProgressData?.proof?.sourceWorkbookFiles,
 			dm4RunProgressData?.summary,
 			dm4SourceFilesText,
+			dm4OvertimeSourceFilesText,
 			latestDm4RunData?.sourceFiles,
 			migrationSourceInputsData?.items,
 		],
@@ -3313,6 +3371,11 @@ export default function AdminMigrationPage() {
 	}, [dm4RunProgressData]);
 
 	const dm4SourcePaths = parseDm4SourceFiles(dm4SourceFilesText);
+	const dm4OvertimeSourcePaths = parseDm4SourceFiles(dm4OvertimeSourceFilesText);
+	const dm4CombinedSourcePaths = uniqueDm4Paths([
+		...dm4SourcePaths,
+		...dm4OvertimeSourcePaths,
+	]);
 	const storedActiveWorkbookReport =
 		activeWorkbookGroup && migrationReports[activeWorkbookGroup.id]
 			? normalizeWorkbookReportLifecycle(migrationReports[activeWorkbookGroup.id])
@@ -3368,7 +3431,7 @@ export default function AdminMigrationPage() {
 					sourceCount:
 						dm4ProofReport.sourceWorkbookCount ||
 						dm4ProofRun.sourceWorkbookCount ||
-						dm4SourcePaths.length,
+						dm4CombinedSourcePaths.length,
 				})
 			: null;
 	const activeWorkbookReport = activeWorkbookGroup
@@ -3737,18 +3800,33 @@ export default function AdminMigrationPage() {
 		setSearchParams((prev) => buildCloseWorkbookSearchParams(prev));
 	};
 
-	const openWorkbookUploadModal = () => {
-		setSearchParams((prev) => buildOpenWorkbookUploadSearchParams(prev));
+	const openWorkbookUploadModal = (kind: WorkbookUploadKind = "workbook") => {
+		setSearchParams((prev) => buildOpenWorkbookUploadSearchParams(prev, kind));
 	};
 
 	const closeWorkbookUploadModal = () => {
 		setSearchParams((prev) => buildCloseWorkbookUploadSearchParams(prev));
 	};
 
-	const isUploadModalOpen =
+	const workbookUploadKind = getWorkbookUploadKind(searchParams);
+	const isUploadModalOpen = Boolean(activeWorkbookGroup) && isWorkbookUploadOpen(searchParams);
+	const dm4UploadRole: "biometrics" | "overtime" | null =
+		activeWorkbookGroup?.id === "dm4" &&
+		(workbookUploadKind === "biometrics" || workbookUploadKind === "overtime")
+			? workbookUploadKind
+			: null;
+	const dm3MassUploadRole: "compensation" | "deduction" | null =
+		activeWorkbookGroup?.id === "dm3" &&
+		(workbookUploadKind === "compensation" || workbookUploadKind === "deduction")
+			? workbookUploadKind
+			: null;
+	const isDm3WorkbookUploadModal =
+		activeWorkbookGroup?.id === "dm3" && workbookUploadKind === "workbook";
+	const isStandardWorkbookUploadModal =
 		Boolean(activeWorkbookGroup) &&
 		activeWorkbookGroup?.id !== "dm4" &&
-		isWorkbookUploadOpen(searchParams);
+		activeWorkbookGroup?.id !== "dm3" &&
+		workbookUploadKind === "workbook";
 
 	const closeImportModal = () => {
 		setSearchParams((prev) => {
@@ -5003,7 +5081,9 @@ export default function AdminMigrationPage() {
 	const startDm4MigrationRun = async () => {
 		setIsLoadingDm4Proof(true);
 		const startedAt = Date.now();
-		const sourceFiles = parseDm4SourceFiles(dm4SourceFilesText);
+		const biometricFiles = parseDm4SourceFiles(dm4SourceFilesText);
+		const approvedOvertimeFiles = parseDm4SourceFiles(dm4OvertimeSourceFilesText);
+		const sourceFiles = uniqueDm4Paths([...biometricFiles, ...approvedOvertimeFiles]);
 		const sourceMode = sourceFiles.length > 0 ? "UI workbook files" : "Server default config";
 		setDm4ProofRun({
 			status: "running",
@@ -5046,6 +5126,8 @@ export default function AdminMigrationPage() {
 					sourceFiles,
 					options: {
 						sourceFiles,
+						// Explicit OT list (may be empty). Backend accepts any filename for these paths.
+						approvedOvertimeFiles,
 						approveHistoricalTimesheets: true,
 					},
 				}),
@@ -5188,7 +5270,10 @@ export default function AdminMigrationPage() {
 	const retryDm4MigrationRun = async () => {
 		if (!dm4RetryableRunId || isRetryingDm4Run) return;
 		const startedAt = Date.now();
-		const sourceFiles = parseDm4SourceFiles(dm4SourceFilesText);
+		const sourceFiles = uniqueDm4Paths([
+			...parseDm4SourceFiles(dm4SourceFilesText),
+			...parseDm4SourceFiles(dm4OvertimeSourceFilesText),
+		]);
 		const sourceMode = sourceFiles.length > 0 ? "UI workbook files" : "Server default config";
 		setIsRetryingDm4Run(true);
 		setDm4ProofReport(null);
@@ -5263,7 +5348,10 @@ export default function AdminMigrationPage() {
 		if (workbookParam !== "dm4" || !dm4RunId) return;
 		if (dm4ResumedJobId === dm4RunId) return;
 		let cancelled = false;
-		const sourceFiles = parseDm4SourceFiles(dm4SourceFilesText);
+		const sourceFiles = uniqueDm4Paths([
+			...parseDm4SourceFiles(dm4SourceFilesText),
+			...parseDm4SourceFiles(dm4OvertimeSourceFilesText),
+		]);
 		const sourceMode = sourceFiles.length > 0 ? "UI workbook files" : "Server default config";
 		const startedAt = Date.now();
 		setDm4ResumedJobId(dm4RunId);
@@ -5361,7 +5449,14 @@ export default function AdminMigrationPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [workbookParam, runIdParam, importJobIdParam, dm4ResumedJobId, dm4SourceFilesText]);
+	}, [
+		workbookParam,
+		runIdParam,
+		importJobIdParam,
+		dm4ResumedJobId,
+		dm4SourceFilesText,
+		dm4OvertimeSourceFilesText,
+	]);
 
 	const selectWorkbookFile = (groupId: string, file: File | null) => {
 		setSelectedWorkbookFiles((current) => ({ ...current, [groupId]: file }));
@@ -5377,34 +5472,53 @@ export default function AdminMigrationPage() {
 	};
 
 	const setDm4SourcePaths = (paths: string[]) => {
-		setDm4SourceFilesText(
-			Array.from(new Set(paths.map((entry) => entry.trim()).filter(Boolean))).join("\n"),
-		);
+		setDm4SourceFilesText(uniqueDm4Paths(paths).join("\n"));
 	};
 
-	const addDm4SourcePath = (nextPathValue: string) => {
+	const setDm4OvertimeSourcePaths = (paths: string[]) => {
+		setDm4OvertimeSourceFilesText(uniqueDm4Paths(paths).join("\n"));
+	};
+
+	const addDm4SourcePath = (
+		nextPathValue: string,
+		role: "biometrics" | "overtime" = "biometrics",
+	) => {
 		const nextPath = nextPathValue.trim();
 		if (!nextPath) {
 			toast.error("Enter a server path or choose files to upload.");
 			return;
 		}
 		const normalized = nextPath.replace(/\\/g, "/").toLowerCase();
+		const currentPaths = role === "overtime" ? dm4OvertimeSourcePaths : dm4SourcePaths;
 		if (
-			dm4SourcePaths.some(
+			currentPaths.some(
 				(existing) => existing.replace(/\\/g, "/").toLowerCase() === normalized,
 			)
 		) {
 			toast.message("That file is already in the list.");
-			setDm4SourcePathDraft("");
+			if (role === "overtime") setDm4OvertimePathDraft("");
+			else setDm4SourcePathDraft("");
+			return;
+		}
+		if (role === "overtime") {
+			setDm4OvertimeSourcePaths([...dm4OvertimeSourcePaths, nextPath]);
+			setDm4OvertimePathDraft("");
+			toast.success("Path added to approved overtime.");
 			return;
 		}
 		setDm4SourcePaths([...dm4SourcePaths, nextPath]);
 		setDm4SourcePathDraft("");
-		toast.success("Path added to DM4 sources.");
+		toast.success("Path added to biometrics sources.");
 	};
 
 	const removeDm4SourcePath = (index: number) => {
 		setDm4SourcePaths(dm4SourcePaths.filter((_, pathIndex) => pathIndex !== index));
+	};
+
+	const removeDm4OvertimeSourcePath = (index: number) => {
+		setDm4OvertimeSourcePaths(
+			dm4OvertimeSourcePaths.filter((_, pathIndex) => pathIndex !== index),
+		);
 	};
 
 	const restoreDm4DefaultSourcePaths = () => {
@@ -5413,7 +5527,16 @@ export default function AdminMigrationPage() {
 		toast.message("Restored default biometrics source list.");
 	};
 
-	const uploadDm4BrowserFiles = async (fileList: FileList | File[] | null | undefined) => {
+	const clearDm4OvertimeSourcePaths = () => {
+		setDm4OvertimeSourcePaths([]);
+		setDm4OvertimePathDraft("");
+		toast.message("Cleared approved overtime file.");
+	};
+
+	const uploadDm4BrowserFiles = async (
+		fileList: FileList | File[] | null | undefined,
+		role: "biometrics" | "overtime" = "biometrics",
+	) => {
 		const files = Array.from(fileList || []).filter(Boolean);
 		if (files.length === 0) return;
 
@@ -5424,14 +5547,19 @@ export default function AdminMigrationPage() {
 			(file) => /\.xlsx?$/i.test(file.name) && !file.name.startsWith("~$"),
 		);
 		if (valid.length === 0) {
-			toast.error("Choose .xlsx biometrics workbook files.");
+			toast.error(
+				role === "overtime"
+					? "Choose an .xlsx approved overtime workbook."
+					: "Choose .xlsx biometrics workbook files.",
+			);
 			return;
 		}
 		if (invalid.length > 0) {
 			toast.message(`Skipped ${invalid.length} non-Excel file(s).`);
 		}
 
-		setIsUploadingDm4Files(true);
+		if (role === "overtime") setIsUploadingDm4OvertimeFiles(true);
+		else setIsUploadingDm4Files(true);
 		try {
 			const formData = new FormData();
 			for (const file of valid) {
@@ -5451,27 +5579,46 @@ export default function AdminMigrationPage() {
 			});
 			const payload = (response as any)?.data?.data || (response as any)?.data || response;
 			const uploadedPaths = Array.isArray(payload?.sourceWorkbookFiles)
-				? payload.sourceWorkbookFiles.map((entry: unknown) => String(entry || "").trim()).filter(Boolean)
+				? payload.sourceWorkbookFiles
+						.map((entry: unknown) => String(entry || "").trim())
+						.filter(Boolean)
 				: [];
 			if (uploadedPaths.length === 0) {
 				throw new Error(
 					(response as any)?.message || "Upload succeeded but no workbook paths were returned.",
 				);
 			}
-			setDm4SourcePaths([...dm4SourcePaths, ...uploadedPaths]);
-			toast.success(
-				`Uploaded ${uploadedPaths.length} biometrics file${uploadedPaths.length === 1 ? "" : "s"}.`,
-			);
+			if (role === "overtime") {
+				// OT slot is single-file: keep the latest upload(s) as the OT list.
+				setDm4OvertimeSourcePaths(uploadedPaths);
+				toast.success(
+					`Uploaded approved overtime file${uploadedPaths.length === 1 ? "" : "s"}.`,
+				);
+			} else {
+				setDm4SourcePaths([...dm4SourcePaths, ...uploadedPaths]);
+				toast.success(
+					`Uploaded ${uploadedPaths.length} biometrics file${uploadedPaths.length === 1 ? "" : "s"}.`,
+				);
+			}
 		} catch (error: any) {
 			toast.error(
 				error?.data?.errors?.[0]?.message ||
 					error?.message ||
-					"Failed to upload biometrics workbook files.",
+					(role === "overtime"
+						? "Failed to upload approved overtime workbook."
+						: "Failed to upload biometrics workbook files."),
 			);
 		} finally {
-			setIsUploadingDm4Files(false);
-			if (dm4FileInputRef.current) {
-				dm4FileInputRef.current.value = "";
+			if (role === "overtime") {
+				setIsUploadingDm4OvertimeFiles(false);
+				if (dm4OvertimeFileInputRef.current) {
+					dm4OvertimeFileInputRef.current.value = "";
+				}
+			} else {
+				setIsUploadingDm4Files(false);
+				if (dm4FileInputRef.current) {
+					dm4FileInputRef.current.value = "";
+				}
 			}
 		}
 	};
@@ -6746,6 +6893,391 @@ export default function AdminMigrationPage() {
 		);
 	};
 
+	const importDm3MassUploadFile = async (role: "compensation" | "deduction", file: File) => {
+		if (!organizationId) {
+			toast.error("Organization is required for mass upload import.");
+			return;
+		}
+		if (!file.name.toLowerCase().endsWith(".xlsx") && !file.name.toLowerCase().endsWith(".xls")) {
+			toast.error("Upload an Excel .xlsx file.");
+			return;
+		}
+		setIsImportingDm3MassUpload(true);
+		try {
+			const formData = new FormData();
+			formData.append("file", file);
+			formData.append("data", JSON.stringify({ organizationId }));
+			const endpoint =
+				role === "compensation"
+					? "/api/migration/dm3/import-compensation-mass-upload"
+					: "/api/migration/dm3/import-deduction-mass-upload";
+			const response = await hrisApiClient.post<{
+				data?: {
+					summary?: {
+						total?: number;
+						created?: number;
+						updated?: number;
+						failed?: number;
+						errors?: Array<{ row: number; message: string }>;
+					};
+				};
+				summary?: {
+					total?: number;
+					created?: number;
+					updated?: number;
+					failed?: number;
+				};
+			}>(endpoint, formData, { timeoutMs: 300_000 });
+			const payload = (response as any)?.data?.data || (response as any)?.data || response;
+			const summary = payload?.summary || {};
+			const created = Number(summary.created || 0);
+			const updated = Number(summary.updated || 0);
+			const failed = Number(summary.failed || 0);
+			const total = Number(summary.total || 0);
+			if (failed > 0 && created + updated === 0) {
+				toast.error(
+					`${role === "compensation" ? "Compensation" : "Deduction"} import failed for all ${total || failed} row(s).`,
+				);
+			} else if (failed > 0) {
+				toast.message(
+					`Imported ${created + updated} row(s) (${created} new, ${updated} updated); ${failed} failed.`,
+				);
+			} else {
+				toast.success(
+					`Imported ${created + updated} ${role} row(s) (${created} new, ${updated} updated).`,
+				);
+			}
+			void queryClient.invalidateQueries({ queryKey: ["migration-workbook-reports", organizationId] });
+			setDm3MassUploadFile(null);
+			closeWorkbookUploadModal();
+		} catch (error: any) {
+			toast.error(
+				error?.data?.errors?.[0]?.message ||
+					error?.message ||
+					`Failed to import ${role} mass upload.`,
+			);
+		} finally {
+			setIsImportingDm3MassUpload(false);
+			if (dm3MassUploadInputRef.current) {
+				dm3MassUploadInputRef.current.value = "";
+			}
+		}
+	};
+
+	const renderDm3MassUploadPanel = (role: "compensation" | "deduction") => {
+		const isCompensation = role === "compensation";
+		const sampleName = isCompensation
+			? "Compensation Mass Upload 07.15.26.xlsx"
+			: "Deduction Mass Upload 07.15.26.xlsx";
+		const expectedHeaders = isCompensation
+			? "COMCODE, Amount, EmployeeID, EmployeeName, StartPayDate"
+			: "DEDCODE, Amount, Payment, EmployeeID, EmployeeName, StartPayment";
+
+		return (
+			<div className="space-y-3">
+				<input
+					ref={dm3MassUploadInputRef}
+					type="file"
+					accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+					className="hidden"
+					onChange={(event) => {
+						const file = event.target.files?.[0] || null;
+						setDm3MassUploadFile(file);
+					}}
+				/>
+				<button
+					type="button"
+					disabled={isImportingDm3MassUpload}
+					onClick={() => dm3MassUploadInputRef.current?.click()}
+					onDragEnter={(event) => {
+						event.preventDefault();
+						setDm3MassUploadDrag(true);
+					}}
+					onDragOver={(event) => {
+						event.preventDefault();
+						setDm3MassUploadDrag(true);
+					}}
+					onDragLeave={(event) => {
+						if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+							setDm3MassUploadDrag(false);
+						}
+					}}
+					onDrop={(event) => {
+						event.preventDefault();
+						setDm3MassUploadDrag(false);
+						const file = event.dataTransfer.files?.[0] || null;
+						if (file) setDm3MassUploadFile(file);
+					}}
+					className={`flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-5 text-center transition-colors ${
+						dm3MassUploadDrag
+							? "border-orange-300 bg-orange-50"
+							: "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white"
+					} disabled:cursor-not-allowed disabled:opacity-60`}>
+					<div className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
+						{isImportingDm3MassUpload ? (
+							<Loader2 className="h-4 w-4 animate-spin" />
+						) : (
+							<Upload className="h-4 w-4" />
+						)}
+					</div>
+					<span className="text-sm font-semibold text-gray-950">
+						{dm3MassUploadFile
+							? dm3MassUploadFile.name
+							: isCompensation
+								? "Drop compensation mass upload .xlsx"
+								: "Drop deduction mass upload .xlsx"}
+					</span>
+					<span className="max-w-sm text-xs text-gray-500">
+						Sample: {sampleName}
+						<br />
+						Columns: {expectedHeaders}
+					</span>
+				</button>
+
+				<div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+					<div className="min-w-0 text-xs text-gray-600">
+						{dm3MassUploadFile ? (
+							<span className="truncate">
+								{(dm3MassUploadFile.size / 1024 / 1024).toFixed(2)} MB selected
+							</span>
+						) : (
+							<span>No file selected</span>
+						)}
+					</div>
+					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							className="h-8 px-2.5 text-xs"
+							disabled={isImportingDm3MassUpload}
+							onClick={() => dm3MassUploadInputRef.current?.click()}>
+							Choose file
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							className="h-8 px-2.5 text-xs"
+							disabled={!dm3MassUploadFile || isImportingDm3MassUpload}
+							onClick={() => {
+								if (dm3MassUploadFile) {
+									void importDm3MassUploadFile(role, dm3MassUploadFile);
+								}
+							}}>
+							{isImportingDm3MassUpload ? (
+								<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+							) : (
+								<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
+							)}
+							{isImportingDm3MassUpload ? "Importing…" : "Import"}
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
+	};
+
+	const renderDm4SourceUploadPanel = (role: "biometrics" | "overtime") => {
+		const isOvertime = role === "overtime";
+		const isUploading = isOvertime ? isUploadingDm4OvertimeFiles : isUploadingDm4Files;
+		const isDragging = dm4DragTarget === role;
+		const paths = isOvertime ? dm4OvertimeSourcePaths : dm4SourcePaths;
+		const pathDraft = isOvertime ? dm4OvertimePathDraft : dm4SourcePathDraft;
+		const setPathDraft = isOvertime ? setDm4OvertimePathDraft : setDm4SourcePathDraft;
+		const fileInputRef = isOvertime ? dm4OvertimeFileInputRef : dm4FileInputRef;
+		const allowMultiple = !isOvertime;
+
+		return (
+			<div className="space-y-3">
+				<input
+					ref={fileInputRef}
+					type="file"
+					accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+					multiple={allowMultiple}
+					className="hidden"
+					onChange={(event) => {
+						void uploadDm4BrowserFiles(event.target.files, role);
+					}}
+				/>
+				<button
+					type="button"
+					disabled={isUploading || isLoadingDm4Proof}
+					onClick={() => fileInputRef.current?.click()}
+					onDragEnter={(event) => {
+						event.preventDefault();
+						setDm4DragTarget(role);
+					}}
+					onDragOver={(event) => {
+						event.preventDefault();
+						setDm4DragTarget(role);
+					}}
+					onDragLeave={(event) => {
+						if (
+							!event.currentTarget.contains(event.relatedTarget as Node | null)
+						) {
+							setDm4DragTarget(null);
+						}
+					}}
+					onDrop={(event) => {
+						event.preventDefault();
+						setDm4DragTarget(null);
+						void uploadDm4BrowserFiles(event.dataTransfer.files, role);
+					}}
+					className={`flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-5 text-center transition-colors ${
+						isDragging
+							? "border-orange-300 bg-orange-50"
+							: "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white"
+					} disabled:cursor-not-allowed disabled:opacity-60`}>
+					<div className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
+						{isUploading ? (
+							<Loader2 className="h-4 w-4 animate-spin" />
+						) : (
+							<Upload className="h-4 w-4" />
+						)}
+					</div>
+					<span className="text-sm font-semibold text-gray-950">
+						{isUploading
+							? isOvertime
+								? "Uploading overtime…"
+								: "Uploading biometrics…"
+							: isOvertime
+								? "Drop overtime details .xlsx here"
+								: "Drop biometrics .xlsx here"}
+					</span>
+					<span className="text-xs text-gray-500">
+						{isOvertime
+							? "Any file name accepted · OT / ND / holiday report"
+							: "One or more biometrics punch workbooks"}
+					</span>
+				</button>
+
+				<div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+					<input
+						value={pathDraft}
+						onChange={(event) => setPathDraft(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") {
+								event.preventDefault();
+								addDm4SourcePath(pathDraft, role);
+							}
+						}}
+						className="h-9 min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-3 font-mono text-xs text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-300 focus:bg-white focus:ring-2 focus:ring-orange-100"
+						placeholder={
+							isOvertime
+								? "Optional server path: …/2rptOvertimeDetails….xlsx"
+								: "Optional server path: …/Biometrics Data_….xlsx"
+						}
+					/>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						className="h-9 px-3 text-xs"
+						disabled={isUploading || isLoadingDm4Proof}
+						onClick={() => addDm4SourcePath(pathDraft, role)}>
+						<Plus className="mr-1 h-3.5 w-3.5" />
+						Add path
+					</Button>
+				</div>
+
+				<div className="max-h-48 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100">
+					{paths.length === 0 ? (
+						<p className="px-3 py-4 text-center text-xs text-gray-500">
+							{isOvertime
+								? "No overtime file yet. You can import biometrics without it."
+								: "No biometrics files yet. Upload or add a server path."}
+						</p>
+					) : (
+						paths.map((filePath, index) => (
+							<div
+								key={`${role}-${filePath}-${index}`}
+								className="flex items-center justify-between gap-2 px-3 py-2">
+								<div className="min-w-0">
+									<p className="truncate text-xs font-medium text-gray-900">
+										{getDm4WorkbookFileName(filePath)}
+									</p>
+									{isOvertime ? (
+										<span className="text-[10px] font-medium text-emerald-700">
+											Used as approved overtime
+										</span>
+									) : (
+										<p className="truncate font-mono text-[10px] text-gray-400">
+											{filePath}
+										</p>
+									)}
+								</div>
+								<button
+									type="button"
+									className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-700"
+									aria-label={`Remove ${getDm4WorkbookFileName(filePath)}`}
+									onClick={() =>
+										isOvertime
+											? removeDm4OvertimeSourcePath(index)
+											: removeDm4SourcePath(index)
+									}>
+									<X className="h-3.5 w-3.5" />
+								</button>
+							</div>
+						))
+					)}
+				</div>
+
+				<div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
+					<div className="flex flex-wrap gap-2">
+						{!isOvertime ? (
+							<button
+								type="button"
+								className="text-[11px] font-medium text-gray-500 hover:text-gray-800"
+								onClick={restoreDm4DefaultSourcePaths}>
+								Use defaults
+							</button>
+						) : paths.length > 0 ? (
+							<button
+								type="button"
+								className="text-[11px] font-medium text-gray-500 hover:text-gray-800"
+								onClick={clearDm4OvertimeSourcePaths}>
+								Clear overtime
+							</button>
+						) : null}
+					</div>
+					<div className="flex items-center gap-2">
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							className="h-8 px-2.5 text-xs"
+							onClick={() => fileInputRef.current?.click()}
+							disabled={isUploading || isLoadingDm4Proof}>
+							Choose file
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							className="h-8 px-2.5 text-xs"
+							disabled={
+								isLoadingDm4Proof ||
+								isUploading ||
+								isUploadingDm4Files ||
+								isUploadingDm4OvertimeFiles ||
+								dm4SourcePaths.length === 0
+							}
+							onClick={() => {
+								closeWorkbookUploadModal();
+								void startDm4MigrationRun();
+							}}>
+							{isLoadingDm4Proof ? (
+								<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+							) : (
+								<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
+							)}
+							{isLoadingDm4Proof ? "Importing…" : "Import attendance"}
+						</Button>
+					</div>
+				</div>
+			</div>
+		);
+	};
+
 	const renderWorkbookRow = (
 		group: ImportWorkbookGroup,
 		step: ImportStep,
@@ -6990,8 +7522,10 @@ export default function AdminMigrationPage() {
 							</div>
 							<p className="text-sm text-gray-500">
 								{isDm4
-									? "Import biometrics punch files into attendance and timesheets."
-									: "Upload one Excel workbook to import all sheets in order."}
+									? "Import biometrics punches and optional approved overtime into attendance and timesheets."
+									: group.id === "dm3"
+										? "Import the employee workbook, then optional compensation and deduction mass-upload files."
+										: "Upload one Excel workbook to import all sheets in order."}
 							</p>
 						</div>
 						{activeWorkbookResumeTarget || canRetryDm4Run ? (
@@ -7036,11 +7570,12 @@ export default function AdminMigrationPage() {
 						<div className="mt-2 space-y-4">
 							<div>
 								<h2 className="text-lg font-semibold text-gray-950">
-									Import biometrics data
+									Import attendance sources
 								</h2>
 								<p className="mt-1 text-sm text-gray-600">
-									Point to server-side biometrics Excel files, then run import.
-									Employees and schedules from DM3 must already exist.
+									Upload biometrics punches required for DM4. Optionally attach
+									approved overtime for the same cutoff. Employees and schedules
+									from DM3 must already exist.
 								</p>
 							</div>
 							<ol className="space-y-2 text-sm text-gray-700">
@@ -7049,7 +7584,7 @@ export default function AdminMigrationPage() {
 										1
 									</span>
 									<span>
-										Upload biometrics Excel files (or add a server path)
+										Upload biometrics, then import attendance from that modal
 									</span>
 								</li>
 								<li className="flex gap-2">
@@ -7057,155 +7592,136 @@ export default function AdminMigrationPage() {
 										2
 									</span>
 									<span>
-										Click Import attendance ({dm4SourcePaths.length} file
-										{dm4SourcePaths.length === 1 ? "" : "s"} ready)
+										Optionally upload approved overtime in a separate modal
 									</span>
 								</li>
 							</ol>
-							<input
-								ref={dm4FileInputRef}
-								type="file"
-								accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-								multiple
-								className="hidden"
-								onChange={(event) => {
-									void uploadDm4BrowserFiles(event.target.files);
-								}}
-							/>
-							<div className="rounded-xl border border-gray-200 bg-white p-3">
-								<div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-									<p className="text-xs font-semibold text-gray-900">Source files</p>
-									<button
-										type="button"
-										className="text-[11px] font-medium text-gray-500 hover:text-gray-800"
-										onClick={restoreDm4DefaultSourcePaths}>
-										Use defaults
-									</button>
+
+							<div className="flex flex-wrap gap-2">
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={isLoadingDm4Proof || isUploadingDm4Files}
+									onClick={() => openWorkbookUploadModal("biometrics")}>
+									{isUploadingDm4Files ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Upload className="mr-1.5 h-4 w-4" />
+									)}
+									Upload biometrics
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={isLoadingDm4Proof || isUploadingDm4OvertimeFiles}
+									onClick={() => openWorkbookUploadModal("overtime")}>
+									{isUploadingDm4OvertimeFiles ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Upload className="mr-1.5 h-4 w-4" />
+									)}
+									Upload overtime
+								</Button>
+							</div>
+						</div>
+					) : group.id === "dm3" ? (
+						<div className="mt-2 space-y-4">
+							<div className="flex flex-wrap items-start justify-between gap-3">
+								<div className="min-w-0">
+									<h2 className="text-lg font-semibold text-gray-950">
+										Upload employee sources
+									</h2>
+									<p className="mt-1 text-sm text-gray-600">
+										Import the DM3 employee workbook, then optionally attach BNPI
+										compensation and deduction mass-upload files for the payroll
+										cutoff.
+									</p>
 								</div>
 								<button
 									type="button"
-									disabled={isUploadingDm4Files || isLoadingDm4Proof}
-									onClick={() => dm4FileInputRef.current?.click()}
-									onDragEnter={(event) => {
-										event.preventDefault();
-										setDraggingWorkbookGroupId("dm4");
-									}}
-									onDragOver={(event) => {
-										event.preventDefault();
-										setDraggingWorkbookGroupId("dm4");
-									}}
-									onDragLeave={(event) => {
-										if (
-											!event.currentTarget.contains(
-												event.relatedTarget as Node | null,
-											)
-										) {
-											setDraggingWorkbookGroupId(null);
-										}
-									}}
-									onDrop={(event) => {
-										event.preventDefault();
-										setDraggingWorkbookGroupId(null);
-										void uploadDm4BrowserFiles(event.dataTransfer.files);
-									}}
-									className={`flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-5 text-center transition-colors ${
-										draggingWorkbookGroupId === "dm4"
-											? "border-orange-300 bg-orange-50"
-											: "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-white"
-									} disabled:cursor-not-allowed disabled:opacity-60`}>
-									<div className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500">
-										{isUploadingDm4Files ? (
-											<Loader2 className="h-4 w-4 animate-spin" />
-										) : (
-											<Upload className="h-4 w-4" />
-										)}
-									</div>
-									<span className="text-sm font-semibold text-gray-950">
-										{isUploadingDm4Files
-											? "Uploading biometrics files…"
-											: "Drop biometrics .xlsx files here"}
-									</span>
-									<span className="text-xs text-gray-500">
-										or click to choose one or more workbooks
-									</span>
-								</button>
-								<div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-									<input
-										value={dm4SourcePathDraft}
-										onChange={(event) => setDm4SourcePathDraft(event.target.value)}
-										onKeyDown={(event) => {
-											if (event.key === "Enter") {
-												event.preventDefault();
-												addDm4SourcePath(dm4SourcePathDraft);
-											}
-										}}
-										className="h-9 min-w-0 rounded-lg border border-gray-200 bg-gray-50 px-3 font-mono text-xs text-gray-900 outline-none placeholder:text-gray-400 focus:border-orange-300 focus:bg-white focus:ring-2 focus:ring-orange-100"
-										placeholder="Optional server path: docs/.../Biometrics Data_....xlsx"
-									/>
-									<Button
-										type="button"
-										size="sm"
-										variant="outline"
-										className="h-9 px-3 text-xs"
-										disabled={isUploadingDm4Files || isLoadingDm4Proof}
-										onClick={() => addDm4SourcePath(dm4SourcePathDraft)}>
-										<Plus className="mr-1 h-3.5 w-3.5" />
-										Add path
-									</Button>
-								</div>
-								<div className="mt-3 max-h-48 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100">
-									{dm4SourcePaths.length === 0 ? (
-										<p className="px-3 py-4 text-center text-xs text-gray-500">
-											No source files yet. Upload biometrics workbooks or add a
-											server path.
-										</p>
+									disabled={downloadingTemplateWorkbookId === group.id}
+									onClick={() => downloadWorkbookTemplate(group)}
+									className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-medium text-orange-600 underline-offset-4 transition-colors hover:text-orange-800 hover:underline disabled:cursor-not-allowed disabled:opacity-50">
+									{downloadingTemplateWorkbookId === group.id ? (
+										<Loader2 className="h-3.5 w-3.5 animate-spin" />
 									) : (
-										dm4SourcePaths.map((filePath, index) => (
-											<div
-												key={`${filePath}-${index}`}
-												className="flex items-center justify-between gap-2 px-3 py-2">
-												<div className="min-w-0">
-													<p className="truncate text-xs font-medium text-gray-900">
-														{getDm4WorkbookFileName(filePath)}
-													</p>
-													{isDm4ApprovedOvertimeSource(filePath) ? (
-														<span className="text-[10px] font-medium text-emerald-700">
-															Approved overtime
-														</span>
-													) : (
-														<p className="truncate font-mono text-[10px] text-gray-400">
-															{filePath}
-														</p>
-													)}
-												</div>
-												<button
-													type="button"
-													className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 hover:bg-gray-50 hover:text-gray-700"
-													aria-label={`Remove ${getDm4WorkbookFileName(filePath)}`}
-													onClick={() => removeDm4SourcePath(index)}>
-													<X className="h-3.5 w-3.5" />
-												</button>
-											</div>
-										))
+										<Download className="h-3.5 w-3.5" />
 									)}
-								</div>
+									{downloadingTemplateWorkbookId === group.id
+										? "Downloading…"
+										: "Download template"}
+								</button>
 							</div>
-							<div className="flex justify-end">
+							<ol className="space-y-2 text-sm text-gray-700">
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										1
+									</span>
+									<span>Upload the DM3 employee workbook</span>
+								</li>
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										2
+									</span>
+									<span>
+										Upload compensation mass upload (allowances for the cutoff)
+									</span>
+								</li>
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										3
+									</span>
+									<span>
+										Upload deduction mass upload (loan payments / deductions)
+									</span>
+								</li>
+							</ol>
+							<div className="flex flex-wrap gap-2">
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={isImportingDm3MassUpload}
+									onClick={() => {
+										setDm3MassUploadFile(null);
+										openWorkbookUploadModal("compensation");
+									}}>
+									{isImportingDm3MassUpload && dm3MassUploadRole === "compensation" ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Upload className="mr-1.5 h-4 w-4" />
+									)}
+									Upload compensation
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={isImportingDm3MassUpload}
+									onClick={() => {
+										setDm3MassUploadFile(null);
+										openWorkbookUploadModal("deduction");
+									}}>
+									{isImportingDm3MassUpload && dm3MassUploadRole === "deduction" ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Upload className="mr-1.5 h-4 w-4" />
+									)}
+									Upload deduction
+								</Button>
 								<Button
 									type="button"
 									className="h-10 px-4 text-sm"
-									disabled={
-										isLoadingDm4Proof ||
-										isUploadingDm4Files ||
-										dm4SourcePaths.length === 0
-									}
-									onClick={() => void startDm4MigrationRun()}>
-									{isLoadingDm4Proof ? (
-										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-									) : (
-										<PlayCircle className="mr-1.5 h-4 w-4" />
-									)}
-									{isLoadingDm4Proof ? "Importing…" : "Import attendance"}
+									onClick={() => openWorkbookUploadModal("workbook")}
+									disabled={extractWorkbook.isPending}>
+									<Upload className="mr-1.5 h-4 w-4" />
+									Upload workbook
 								</Button>
 							</div>
 						</div>
@@ -7648,22 +8164,52 @@ return (
 			)}
 
 
-			{/* Upload-only modal (DM1–DM3). Workbook detail is a full page. */}
+			{/* Upload modal: DM1–DM3 workbook, DM3 mass uploads, or DM4 sources. */}
 			<Modal
 				open={isUploadModalOpen}
 				onOpenChange={(open: boolean) => {
-					if (!open) closeWorkbookUploadModal();
+					if (!open) {
+						setDm3MassUploadFile(null);
+						closeWorkbookUploadModal();
+					}
 				}}
 				title={
-					activeWorkbookGroup
-						? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
-						: "Upload workbook"
+					dm4UploadRole === "biometrics"
+						? "Upload biometrics"
+						: dm4UploadRole === "overtime"
+							? "Upload approved overtime"
+							: dm3MassUploadRole === "compensation"
+								? "Upload compensation mass upload"
+								: dm3MassUploadRole === "deduction"
+									? "Upload deduction mass upload"
+									: activeWorkbookGroup
+										? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
+										: "Upload workbook"
 				}
-				description="Select the .xlsx workbook for this migration stage."
+				description={
+					dm4UploadRole === "biometrics"
+						? "Add biometrics punch workbooks for DM4 attendance materialization."
+						: dm4UploadRole === "overtime"
+							? "Add the approved OT / ND / holiday details workbook. Any file name is accepted."
+							: dm3MassUploadRole === "compensation"
+								? "BNPI Compensation Mass Upload (COMCODE / Amount / EmployeeID / StartPayDate)."
+								: dm3MassUploadRole === "deduction"
+									? "BNPI Deduction Mass Upload (DEDCODE / Payment / EmployeeID / StartPayment)."
+									: "Select the .xlsx workbook for this migration stage."
+				}
 				className={HR_MODAL_STANDARD_CLASS}>
-				{activeWorkbookGroup && activeWorkbookGroup.id !== "dm4"
-					? renderWorkbookUploadPanel(activeWorkbookGroup)
-					: null}
+				{dm4UploadRole
+					? renderDm4SourceUploadPanel(dm4UploadRole)
+					: dm3MassUploadRole
+						? renderDm3MassUploadPanel(dm3MassUploadRole)
+						: activeWorkbookGroup &&
+							  (isDm3WorkbookUploadModal || isStandardWorkbookUploadModal)
+							? renderWorkbookUploadPanel(activeWorkbookGroup)
+							: activeWorkbookGroup &&
+								  activeWorkbookGroup.id !== "dm4" &&
+								  workbookUploadKind === "workbook"
+								? renderWorkbookUploadPanel(activeWorkbookGroup)
+								: null}
 			</Modal>
 
 

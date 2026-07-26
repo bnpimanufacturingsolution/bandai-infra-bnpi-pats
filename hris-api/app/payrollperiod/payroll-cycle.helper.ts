@@ -81,11 +81,18 @@ const clampDay = (day: number, year: number, month: number) => {
 	return Math.min(Math.max(day, 1), lastDay);
 };
 
+/**
+ * BNPI / Bandai Namco default semi-monthly cutoffs:
+ * - Period 1: 11th–25th (same month)
+ * - Period 2: 26th–10th (cross-month)
+ * Proven against payroll register "6/26/2026 to 7/10/2026" pay date "7/15/2026"
+ * with payDateOffsetDays = 5.
+ */
 const defaultRules: Required<PayrollCycleRules> = {
 	SEMI_MONTHLY: {
-		firstStartDay: 1,
-		secondStartDay: 16,
-		secondEndDay: "LAST_DAY",
+		firstStartDay: 11,
+		secondStartDay: 26,
+		secondEndDay: 10,
 	},
 	WEEKLY: { anchorWeekday: 1 },
 	BIWEEKLY: { anchorWeekday: 1 },

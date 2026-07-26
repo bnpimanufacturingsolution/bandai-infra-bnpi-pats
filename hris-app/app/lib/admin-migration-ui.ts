@@ -26,10 +26,23 @@ const IMPORT_MODAL_STATE_PARAMS = [
 	"importCreateTimesheets",
 ] as const;
 
-/** Workbook detail is a full page (`workbook=dm1..dm4`). Upload is a small modal (`upload=1`). */
+/**
+ * Workbook detail is a full page (`workbook=dm1..dm4`).
+ * Upload is a small modal via `upload`:
+ * - `1` → DM1–DM3 single workbook upload
+ * - `compensation` / `deduction` → DM3 BNPI mass upload sources
+ * - `biometrics` / `overtime` → DM4 attendance sources
+ */
 const WORKBOOK_PAGE_STATE_PARAMS = ["workbook", "runId", "importJobId", "upload"] as const;
 const WORKBOOK_UPLOAD_PARAM = "upload";
 const WORKBOOK_UPLOAD_VALUE = "1";
+
+export type WorkbookUploadKind =
+	| "workbook"
+	| "biometrics"
+	| "overtime"
+	| "compensation"
+	| "deduction";
 
 export const ADMIN_MIGRATION_WORKBOOK_IDS = ["dm1", "dm2", "dm3", "dm4"] as const;
 export type AdminMigrationWorkbookId = (typeof ADMIN_MIGRATION_WORKBOOK_IDS)[number];
@@ -38,19 +51,46 @@ export function isAdminMigrationWorkbookId(value: string | null | undefined): va
 	return Boolean(value && (ADMIN_MIGRATION_WORKBOOK_IDS as readonly string[]).includes(value));
 }
 
+function workbookUploadParamValue(kind: WorkbookUploadKind): string {
+	if (kind === "workbook") return WORKBOOK_UPLOAD_VALUE;
+	return kind;
+}
+
+export function getWorkbookUploadKind(
+	params: URLSearchParams,
+): WorkbookUploadKind | null {
+	const value = params.get(WORKBOOK_UPLOAD_PARAM);
+	if (value === WORKBOOK_UPLOAD_VALUE) return "workbook";
+	if (
+		value === "biometrics" ||
+		value === "overtime" ||
+		value === "compensation" ||
+		value === "deduction"
+	) {
+		return value;
+	}
+	return null;
+}
+
 export function isWorkbookUploadOpen(params: URLSearchParams): boolean {
-	return params.get(WORKBOOK_UPLOAD_PARAM) === WORKBOOK_UPLOAD_VALUE;
+	return getWorkbookUploadKind(params) !== null;
 }
 
 export function buildOpenWorkbookSearchParams(
 	previousParams: URLSearchParams,
 	workbookId: string,
-	options?: { upload?: boolean; runId?: string | null; importJobId?: string | null },
+	options?: {
+		upload?: boolean | WorkbookUploadKind;
+		runId?: string | null;
+		importJobId?: string | null;
+	},
 ): URLSearchParams {
 	const nextParams = new URLSearchParams(previousParams);
 	nextParams.set("workbook", workbookId);
 	if (options?.upload) {
-		nextParams.set(WORKBOOK_UPLOAD_PARAM, WORKBOOK_UPLOAD_VALUE);
+		const kind: WorkbookUploadKind =
+			options.upload === true ? "workbook" : options.upload;
+		nextParams.set(WORKBOOK_UPLOAD_PARAM, workbookUploadParamValue(kind));
 	} else {
 		nextParams.delete(WORKBOOK_UPLOAD_PARAM);
 	}
@@ -71,9 +111,12 @@ export function buildCloseWorkbookSearchParams(previousParams: URLSearchParams):
 	return nextParams;
 }
 
-export function buildOpenWorkbookUploadSearchParams(previousParams: URLSearchParams): URLSearchParams {
+export function buildOpenWorkbookUploadSearchParams(
+	previousParams: URLSearchParams,
+	kind: WorkbookUploadKind = "workbook",
+): URLSearchParams {
 	const nextParams = new URLSearchParams(previousParams);
-	nextParams.set(WORKBOOK_UPLOAD_PARAM, WORKBOOK_UPLOAD_VALUE);
+	nextParams.set(WORKBOOK_UPLOAD_PARAM, workbookUploadParamValue(kind));
 	return nextParams;
 }
 

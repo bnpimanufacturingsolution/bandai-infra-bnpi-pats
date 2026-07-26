@@ -101,11 +101,12 @@ const PAY_FREQUENCIES = [
 	"ANNUALLY",
 ] as const;
 
+// BNPI default: 11-25 / 26-10 (matches Bandai semi-monthly register cutoffs).
 const DEFAULT_CYCLE_RULES: CycleRulesForm = {
 	SEMI_MONTHLY: {
-		firstStartDay: 1,
-		secondStartDay: 16,
-		secondEndDay: "LAST_DAY",
+		firstStartDay: 11,
+		secondStartDay: 26,
+		secondEndDay: 10,
 	},
 	WEEKLY: { anchorWeekday: 1 },
 	BIWEEKLY: { anchorWeekday: 1 },
@@ -133,7 +134,7 @@ const mergeCycleRules = (rules?: PayrollCycleRules): CycleRulesForm => ({
 				Number(
 					rules?.SEMI_MONTHLY?.secondStartDay ??
 						DEFAULT_CYCLE_RULES.SEMI_MONTHLY.secondStartDay,
-				) || 16,
+				) || DEFAULT_CYCLE_RULES.SEMI_MONTHLY.secondStartDay,
 				2,
 			),
 			31,
@@ -147,8 +148,8 @@ const mergeCycleRules = (rules?: PayrollCycleRules): CycleRulesForm => ({
 							Number(
 								(rules?.SEMI_MONTHLY?.secondEndDay ??
 									DEFAULT_CYCLE_RULES.SEMI_MONTHLY.secondEndDay) ||
-									1,
-							) || 1,
+									DEFAULT_CYCLE_RULES.SEMI_MONTHLY.secondEndDay,
+							) || Number(DEFAULT_CYCLE_RULES.SEMI_MONTHLY.secondEndDay),
 							1,
 						),
 						31,
@@ -276,9 +277,7 @@ export function PayrollSettingsModule({
 		cycleRules: {
 			...DEFAULT_CYCLE_RULES,
 			SEMI_MONTHLY: {
-				firstStartDay: 1,
-				secondStartDay: 16,
-				secondEndDay: "LAST_DAY",
+				...DEFAULT_CYCLE_RULES.SEMI_MONTHLY,
 			},
 		},
 	});
@@ -1868,6 +1867,12 @@ export function PayrollSettingsModule({
 										</p>
 										<div className="grid grid-cols-2 gap-2">
 											{[
+												{
+													label: "11-25 / 26-10 (BNPI)",
+													firstStartDay: 11,
+													secondStartDay: 26,
+													secondEndDay: 10 as const,
+												},
 												{
 													label: "1-15 / 16-End",
 													firstStartDay: 1,

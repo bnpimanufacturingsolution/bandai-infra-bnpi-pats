@@ -15,6 +15,8 @@ interface IMigrationController {
 	importDm3EmployeeDocuments(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3OpeningLeaveBalances(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3EmployeeBenefitsLoans(req: Request, res: Response, next: NextFunction): Promise<void>;
+	importDm3CompensationMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
+	importDm3DeductionMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
 	finalizeDm3EmployeeImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	recoverDm3EmployeePostActions(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDm3EmployeePostActionsJob(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -317,6 +319,16 @@ export const router = (route: Router, controller: IMigrationController): Router 
 		"/dm3/import-employee-benefits-loans",
 		uploadImportFile,
 		controller.importDm3EmployeeBenefitsLoans,
+	);
+	routes.post(
+		"/dm3/import-compensation-mass-upload",
+		uploadImportFile,
+		controller.importDm3CompensationMassUpload,
+	);
+	routes.post(
+		"/dm3/import-deduction-mass-upload",
+		uploadImportFile,
+		controller.importDm3DeductionMassUpload,
 	);
 	routes.post(
 		"/dm3/finalize-employee-import",
