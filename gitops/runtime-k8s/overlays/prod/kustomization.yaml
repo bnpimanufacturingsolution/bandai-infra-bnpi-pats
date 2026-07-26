@@ -4,11 +4,6 @@ resources:
   - ../../base/priority-classes.yaml
   - runtime.yaml
 
-namespace: prod
-
-resources:
-  - runtime.yaml
-
 images:
   - name: hris-api-db-init
     newTag: develop
