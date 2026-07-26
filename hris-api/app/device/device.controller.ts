@@ -12196,6 +12196,35 @@ export const controller = (prisma: PrismaClient) => {
 				const user = (plan.users || []).find(
 					(candidate: any) => String(candidate.key) === String(write.userKey),
 				);
+				// Without a selected source device, association against undefined
+				// sourceRecord falsely upgrades export/source_conflict residuals
+				// (e.g. vendor 1419) into physical_identity_adjudication_required.
+				// Keep agent-owned export/conflict stages until richest source is set.
+				if (
+					!write.sourceDeviceId ||
+					String(write.sourceDeviceId).trim() === ""
+				) {
+					const keepBlock =
+						write.blockingReason === "source_conflict" ||
+						write.blockingReason === "missing_raw_blob"
+							? write.blockingReason
+							: write.blockingReason || "source_conflict";
+					return {
+						...write,
+						recommended: false,
+						executionEligibility: "blocked",
+						blockingReason: keepBlock,
+						recoveryStage:
+							write.recoveryStage === "physical_identity_action_required"
+								? "exporting_source_credential"
+								: write.recoveryStage || "exporting_source_credential",
+						faceAssociationStrategy: null,
+						originBlockingReason: write.blockingReason || null,
+						recommendationReason:
+							write.recommendationReason ||
+							"Face source device is not selected yet. Export/select the richest complete face source before identity adjudication.",
+					};
+				}
 				const sourceRecord = (user?.records || []).find(
 					(record: any) =>
 						String(record.deviceId) === String(write.sourceDeviceId),
@@ -12208,7 +12237,18 @@ export const controller = (prisma: PrismaClient) => {
 					vendorUserId: write.vendorUserId,
 					source: sourceRecord,
 					target: targetRecord,
-					groupRecords: user?.records || [],
+					// Scope association to the write's vendor person when possible so
+					// multi-vendor identity groups do not force false dual-owner red.
+					groupRecords: (user?.records || []).filter((record: any) => {
+						const vid = String(
+							record?.vendorUserId ||
+								record?.employeeNo ||
+								record?.personId ||
+								"",
+						);
+						const writeVid = String(write.vendorUserId || "");
+						return !writeVid || !vid || vid === writeVid;
+					}),
 				});
 				const faceAssociationStrategy = association.strategy;
 				if (!faceAssociationStrategy) {
@@ -13814,7 +13854,15 @@ export const controller = (prisma: PrismaClient) => {
 				canaryModality,
 				maxVerifiedWrites: maxVerifiedWrites > 0 ? maxVerifiedWrites : 50,
 			});
-			if (req.body?.dryRun === true || req.body?.execute === false) {
+			// Coerce dryRun from bool/string/query so scripts cannot accidentally
+			// create a durable recovery job and burn the single-active slot.
+			const recoveryDryRun =
+				req.body?.dryRun === true ||
+				req.body?.execute === false ||
+				String(req.body?.dryRun ?? "").toLowerCase() === "true" ||
+				String((req.query as any)?.dryRun ?? "").toLowerCase() === "true" ||
+				String(req.body?.execute ?? "").toLowerCase() === "false";
+			if (recoveryDryRun) {
 				res.status(200).json(
 					buildSuccessResponse(
 						"Credential recovery dry-run preview (no job started)",
@@ -13843,6 +13891,7 @@ export const controller = (prisma: PrismaClient) => {
 							},
 							willCreateJob: false,
 							certainty: "deterministic_from_plan",
+							dryRun: true,
 						},
 						200,
 					),
