@@ -82,10 +82,20 @@ spec:
       labels:
         app.kubernetes.io/name: hris-postgres
         app.kubernetes.io/part-of: project-truth
-    spec:      containers:
+    spec:
+      priorityClassName: project-truth-dev
+      containers:
         - name: postgres
           image: postgres:16-alpine
-          imagePullPolicy: Never          envFrom:
+          imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 512Mi
+            limits:
+              cpu: "800m"
+              memory: 1536Mi
+          envFrom:
             - secretRef:
                 name: hris-postgres-env
           ports:
@@ -173,7 +183,9 @@ spec:
       labels:
         app.kubernetes.io/name: hris-api
         app.kubernetes.io/part-of: project-truth
-    spec:      securityContext:
+    spec:
+      priorityClassName: project-truth-dev
+      securityContext:
         fsGroup: 1001
         fsGroupChangePolicy: OnRootMismatch
       initContainers:
@@ -192,11 +204,22 @@ spec:
       containers:
         - name: api
           image: hris-api-local:develop
-          imagePullPolicy: Never          env:
+          imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "250m"
+              memory: 512Mi
+            limits:
+              cpu: "1500m"
+              memory: 2048Mi
+          env:
             - name: NODE_ENV
               value: development
             - name: APP_ENV
-              value: dev            - name: JWT_SECRET
+              value: dev
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=1536
+            - name: JWT_SECRET
               value: project-truth-local-appliance-jwt-secret-change-me
             - name: PORT
               value: "3001"
@@ -333,10 +356,20 @@ spec:
       labels:
         app.kubernetes.io/name: hris-hikvision-watcher
         app.kubernetes.io/part-of: project-truth
-    spec:      containers:
+    spec:
+      priorityClassName: project-truth-dev
+      containers:
         - name: watcher
           image: hris-api-db-init:develop
-          imagePullPolicy: Never          command:
+          imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 128Mi
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+          command:
             - /bin/sh
             - -lc
           args:
@@ -360,8 +393,6 @@ spec:
               value: development
             - name: APP_ENV
               value: dev
-            - name: NODE_OPTIONS
-              value: --max-old-space-size=1536
             - name: HIKVISION_CALLBACK_URL
               value: http://hris-api:3001/api/hikvision/callback
             - name: HIKVISION_EVENT_LIMIT
@@ -398,10 +429,20 @@ spec:
       labels:
         app.kubernetes.io/name: hris-app
         app.kubernetes.io/part-of: project-truth
-    spec:      containers:
+    spec:
+      priorityClassName: project-truth-dev
+      containers:
         - name: app
           image: hris-app-local:develop
-          imagePullPolicy: Never          env:
+          imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "50m"
+              memory: 64Mi
+            limits:
+              cpu: "300m"
+              memory: 256Mi
+          env:
             - name: APP_ENV
               value: dev
             - name: PORT
@@ -460,10 +501,20 @@ spec:
       labels:
         app.kubernetes.io/name: hris-emp-app
         app.kubernetes.io/part-of: project-truth
-    spec:      containers:
+    spec:
+      priorityClassName: project-truth-dev
+      containers:
         - name: app
           image: hris-emp-app-local:develop
-          imagePullPolicy: Never          env:
+          imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "50m"
+              memory: 64Mi
+            limits:
+              cpu: "200m"
+              memory: 256Mi
+          env:
             - name: NODE_HOST_IP
               valueFrom:
                 fieldRef:

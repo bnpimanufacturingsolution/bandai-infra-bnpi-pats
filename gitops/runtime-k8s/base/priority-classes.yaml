@@ -4,22 +4,28 @@ apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: project-truth-prod
+  labels:
+    app.kubernetes.io/part-of: project-truth
 value: 1000000
 globalDefault: false
-description: Project Truth PROD — highest scheduling preference on the shared appliance node
+description: Project Truth PROD - highest scheduling preference on the shared appliance node
 ---
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: project-truth-uat
+  labels:
+    app.kubernetes.io/part-of: project-truth
 value: 100000
 globalDefault: false
-description: Project Truth UAT — medium scheduling preference
+description: Project Truth UAT - medium scheduling preference
 ---
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: project-truth-dev
+  labels:
+    app.kubernetes.io/part-of: project-truth
 value: 10000
 globalDefault: false
-description: Project Truth DEV — lowest preference; keeps recovery burst limits without starving PROD
+description: Project Truth DEV - lowest preference; keeps recovery burst limits without starving PROD
