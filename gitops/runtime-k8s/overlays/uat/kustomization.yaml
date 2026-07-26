@@ -1,7 +1,7 @@
 namespace: uat
 
 resources:
-  - ../../base/priority-classes.yaml
+  - priority-classes.yaml
   - runtime.yaml
 
 images:

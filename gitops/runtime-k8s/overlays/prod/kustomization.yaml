@@ -1,7 +1,7 @@
 namespace: prod
 
 resources:
-  - ../../base/priority-classes.yaml
+  - priority-classes.yaml
   - runtime.yaml
 
 images:
