@@ -16,7 +16,7 @@
         "name": "container",
         "type": "query",
         "datasource": "Loki",
-        "query": "label_values({stack=\"hris-observability\"}, container)",
+        "query": "label_values({stack=~\"hris-observability|hris-k3s\"}, container)",
         "refresh": 1,
         "includeAll": true,
         "multi": true,
@@ -33,7 +33,7 @@
       "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "{stack=\"hris-observability\", container=~\"$container\"}",
+          "expr": "{stack=~\"hris-observability|hris-k3s\", container=~\"$container\"}",
           "refId": "A"
         }
       ],

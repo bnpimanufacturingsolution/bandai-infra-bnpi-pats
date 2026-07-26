@@ -28,6 +28,7 @@ interface EmployeePickerSelectProps {
 const EMPLOYEE_PICKER_FIELDS = [
 	"id",
 	"employeeId",
+	"deviceEmpId",
 	"person.personalInfo",
 	"departmentId",
 	"department.id",
@@ -153,10 +154,14 @@ export function EmployeePickerSelect({
 	);
 	const { data: selectedEmployee } = useEmployee(value || "", EMPLOYEE_PICKER_FIELDS);
 	const selectedEmployeeId = getEmployeeId(selectedEmployee);
-	const fetchedEmployees = React.useMemo(
-		() => (data?.employees || []),
-		[data],
-	);
+	const fetchedEmployees = React.useMemo(() => {
+		const payload = (data as any)?.employees
+			? data
+			: Array.isArray((data as any)?.data)
+				? { employees: (data as any).data }
+				: (data as any)?.data || {};
+		return payload?.employees || [];
+	}, [data]);
 	const candidates = React.useMemo(() => {
 		const rows: Employee[] = [];
 		const seen = new Set<string>();
@@ -176,7 +181,14 @@ export function EmployeePickerSelect({
 
 		return rows;
 	}, [excludeEmployeeId, fetchedEmployees, selectedEmployee, selectedEmployeeId]);
-	const totalCount = Number(data?.count || candidates.length || 0);
+	const totalCount = Number(
+		(data as any)?.count ||
+			(data as any)?.data?.count ||
+			(data as any)?.pagination?.total ||
+			(data as any)?.data?.pagination?.total ||
+			candidates.length ||
+			0,
+	);
 	const selectedLabel = selectedEmployee
 		? `${getEmployeeName(selectedEmployee)} (${selectedEmployee.employeeId || "No ID"})`
 		: "";
@@ -328,7 +340,14 @@ export function EmployeePickerSelect({
 												</span>
 											</div>
 											<div className="truncate text-xs text-muted-foreground">
-												{getAssignmentLabel(employee) || "No assignment"}
+												{[
+													employee.deviceEmpId
+														? `Device ID ${employee.deviceEmpId}`
+														: null,
+													getAssignmentLabel(employee) || "No assignment",
+												]
+													.filter(Boolean)
+													.join(" - ")}
 											</div>
 										</div>
 										<span className="max-w-28 shrink-0 truncate text-xs text-muted-foreground">

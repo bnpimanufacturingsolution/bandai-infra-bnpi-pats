@@ -13,6 +13,8 @@ $logPath = Join-Path $runtimeDir "latest.log"
 $dotenvCli = Join-Path $apiDir "node_modules\dotenv-cli\cli.js"
 $nodeBinary = (Get-Command node.exe).Source
 $ensureDbAccessScript = Join-Path $apiDir "scripts\ensure-bnpi-db-access.cjs"
+$ensureDbWatchScript = Join-Path $repoRoot "scripts\watch-k8s-dev-db-access.ps1"
+$ensureHikvisionRemoteTunnelScript = Join-Path $apiDir "scripts\ensure-hikvision-remote-device-tunnel.cjs"
 
 function Get-RepoApiProcesses {
 	$connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
@@ -40,9 +42,44 @@ function Get-RepoApiProcesses {
 
 function Stop-RepoApiProcesses {
 	$processes = @(Get-RepoApiProcesses)
-	foreach ($proc in $processes) {
-		Write-Host "[local-api-restart] Stopping PID $($proc.ProcessId)"
-		taskkill /PID $proc.ProcessId /T /F | Out-Null
+	if ($processes.Count -eq 0) { return }
+
+	# Killing only the listening index.ts child leaves tsx-watch/dotenv alive;
+	# those parents can respawn an old worker in the middle of a durable job.
+	# Walk upward through this repo's known dev-watch chain and kill only its
+	# highest roots so the entire tree exits exactly once.
+	$all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+	$byId = @{}
+	foreach ($candidate in $all) { $byId[[int]$candidate.ProcessId] = $candidate }
+	$treeIds = [System.Collections.Generic.HashSet[int]]::new()
+	foreach ($proc in $processes) { [void]$treeIds.Add([int]$proc.ProcessId) }
+
+	$changed = $true
+	while ($changed) {
+		$changed = $false
+		foreach ($processId in @($treeIds)) {
+			$current = $byId[$processId]
+			if (-not $current) { continue }
+			$parent = $byId[[int]$current.ParentProcessId]
+			if (-not $parent) { continue }
+			$parentCommand = ([string]$parent.CommandLine).ToLower().Replace("\", "/")
+			$isKnownWatchParent =
+				$parentCommand.Contains("run-dev-api-watch.cjs") -or
+				$parentCommand.Contains("dotenv-cli/cli.js") -or
+				($parent.Name -eq "cmd.exe" -and $parentCommand.Contains("dotenv") -and $parentCommand.Contains("run-dev-api-watch.cjs"))
+			if ($isKnownWatchParent -and $treeIds.Add([int]$parent.ProcessId)) {
+				$changed = $true
+			}
+		}
+	}
+
+	$roots = @($treeIds | Where-Object {
+		$current = $byId[[int]$_]
+		-not $current -or -not $treeIds.Contains([int]$current.ParentProcessId)
+	})
+	foreach ($processId in $roots) {
+		Write-Host "[local-api-restart] Stopping API watch tree root PID $processId"
+		taskkill /PID $processId /T /F | Out-Null
 	}
 }
 
@@ -91,6 +128,18 @@ if (-not (Test-Path $ensureDbAccessScript)) {
 Write-Host "[local-api-restart] Running DB access preflight"
 & $nodeBinary $ensureDbAccessScript
 
+if (Test-Path $ensureDbWatchScript) {
+	Write-Host "[local-api-restart] Ensuring canonical DEV DB self-repair watcher"
+	& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ensureDbWatchScript
+}
+
+if (Test-Path $ensureHikvisionRemoteTunnelScript) {
+Write-Host "[local-api-restart] Ensuring Hikvision remote device tunnels (.20-.25)"
+	& $nodeBinary $ensureHikvisionRemoteTunnelScript
+} else {
+	Write-Host "[local-api-restart] Hikvision remote tunnel ensure skipped: missing $ensureHikvisionRemoteTunnelScript"
+}
+
 $launchScript = @"
 Set-Location '$apiDir'
 `$env:CHOKIDAR_USEPOLLING='true'
@@ -114,12 +163,19 @@ if (-not (Wait-ForApiHealth)) {
 
 Write-Host "[local-api-restart] Local hris-api is healthy on http://localhost:$Port/health"
 
-# Keep Live capture usable for TEST A after every local API restart.
+# Required A-F forwards, VM callback reverse, and listener recovery are owned by
+# run-dev-api-watch.cjs. The TEST A/B lab bridge is optional and must never hold
+# an otherwise healthy local API restart open.
 $bridgeScript = Join-Path $repoRoot "scripts\start-host-hikvision-vm-ssh-bridge.ps1"
 $listenerRestartScript = Join-Path $repoRoot "scripts\restart-local-hikvision-listener.ps1"
-if (Test-Path $bridgeScript) {
+if (
+	$env:HRIS_RESTART_RUN_OPTIONAL_TEST_BRIDGE -eq "true" -and
+	(Test-Path $bridgeScript)
+) {
 	try {
 		Write-Host "[local-api-restart] Ensuring TEST A SSH reverse bridge for Live capture"
+		$previousErrorActionPreference = $ErrorActionPreference
+		$ErrorActionPreference = "Continue"
 		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeScript `
 			-Action start `
 			-HttpDevicePort 443 `
@@ -127,15 +183,28 @@ if (Test-Path $bridgeScript) {
 			-HttpListenPort 59443 `
 			-SdkListenPort 59000 `
 			-ApiLocalPort $Port `
-			-ApiRemotePort 53001
+			-ApiRemotePort 53001 2>&1 | ForEach-Object { Write-Host $_ }
+		$bridgeExitCode = $LASTEXITCODE
+		$ErrorActionPreference = $previousErrorActionPreference
+		if ($bridgeExitCode -ne 0) {
+			Write-Host "[local-api-restart] Bridge ensure skipped: optional TEST A bridge exited $bridgeExitCode"
+		}
 	} catch {
+		$ErrorActionPreference = "Stop"
 		Write-Host "[local-api-restart] Bridge ensure skipped: $($_.Exception.Message)"
 	}
+} else {
+	Write-Host "[local-api-restart] Optional TEST A/B bridge skipped; required live paths are managed by the dependency watchdog"
 }
-if (Test-Path $listenerRestartScript) {
+if (
+	$env:HRIS_RESTART_RUN_OPTIONAL_LISTENER_RESTART -eq "true" -and
+	(Test-Path $listenerRestartScript)
+) {
 	try {
 		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $listenerRestartScript -ApiBase "http://localhost:$Port" -WaitHealthSeconds 0
 	} catch {
 		Write-Host "[local-api-restart] Listener restart skipped: $($_.Exception.Message)"
 	}
+} else {
+	Write-Host "[local-api-restart] Synchronous listener restart skipped; dependency watchdog verifies it after 53001 is healthy"
 }

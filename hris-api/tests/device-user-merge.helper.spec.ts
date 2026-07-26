@@ -1,5 +1,16 @@
 import { expect } from "chai";
-import { applyMergeChoices, buildDeviceUserMergePlan } from "../helper/device-user-merge.helper";
+import {
+	applyMergeChoices,
+	buildDeviceUserMergePlan,
+	classifyFaceCustody,
+	fingerprintCustodyMatchesReview,
+	proveCanonicalDeviceIdentity,
+	proveFingerprintPhysicalReread,
+	reconcileDurableFingerprintOwnerConflicts,
+	resolveFaceAssociationStrategy,
+	resolveFingerprintCredentialSource,
+	serializeDeviceUserMergePlanForReview,
+} from "../helper/device-user-merge.helper";
 
 const record = (deviceId: string, patch: any = {}) => ({
 	deviceId,
@@ -13,6 +24,83 @@ const record = (deviceId: string, patch: any = {}) => ({
 });
 
 describe("device user union merge", () => {
+	it("resolves face association via same vendor person id without inventing dual-owner", () => {
+		const peer = resolveFaceAssociationStrategy({
+			vendorUserId: "15",
+			source: { vendorUserId: "15", employeeId: null, _cardNo: null },
+			target: { vendorUserId: "15", employeeId: null, _cardNo: null },
+		});
+		expect(peer.strategy).to.equal("same_vendor_user_id");
+		expect(peer.blockingReason).to.equal(null);
+		expect(peer.sameVendorPeer).to.equal(true);
+
+		const card = resolveFaceAssociationStrategy({
+			vendorUserId: "15",
+			source: { vendorUserId: "15", _cardNo: "CARD-1" },
+			target: { vendorUserId: "15", _cardNo: "CARD-1" },
+		});
+		expect(card.strategy).to.equal("exact_shared_card");
+
+		const employee = resolveFaceAssociationStrategy({
+			vendorUserId: "15",
+			source: { vendorUserId: "15", employeeId: "emp-a" },
+			target: { vendorUserId: "15", employeeId: "emp-a" },
+		});
+		expect(employee.strategy).to.equal("canonical_hris_employee");
+
+		const conflict = resolveFaceAssociationStrategy({
+			vendorUserId: "15",
+			source: { vendorUserId: "15", employeeId: "emp-a" },
+			target: { vendorUserId: "15", employeeId: "emp-b" },
+		});
+		expect(conflict.strategy).to.equal(null);
+		expect(conflict.blockingReason).to.equal(
+			"physical_identity_adjudication_required",
+		);
+		expect(conflict.employeeConflict).to.equal(true);
+
+		const identity = proveCanonicalDeviceIdentity({
+			vendorUserId: "8",
+			source: { vendorUserId: "8", employeeId: null },
+			target: { vendorUserId: "8", employeeId: null },
+		});
+		expect(identity.proven).to.equal(true);
+		expect(identity.via).to.equal("same_vendor_user_id");
+	});
+
+	it("classifies face custody without treating a picture as an SDK template", () => {
+		expect(
+			classifyFaceCustody({ faceTemplate: "template", facePicture: "picture" }),
+		).to.include({
+			kind: "sdk_template_and_picture",
+			hasTemplate: true,
+			hasPicture: true,
+		});
+		expect(classifyFaceCustody({ facePicture: "picture" })).to.include({
+			kind: "picture_only_not_writable",
+			fdlibCapabilitySupported: false,
+		});
+		expect(
+			classifyFaceCustody({
+				facePicture: "picture",
+				fdlibCapabilitySupported: true,
+			}),
+		).to.include({
+			kind: "fdlib_picture",
+			fdlibCapabilitySupported: true,
+		});
+		expect(classifyFaceCustody({ faceTemplate: "template" })).to.include({
+			kind: "missing",
+			hasTemplate: true,
+			hasPicture: false,
+		});
+		expect(classifyFaceCustody({})).to.include({
+			kind: "missing",
+			hasTemplate: false,
+			hasPicture: false,
+		});
+	});
+
 	it("builds a union and preserves a user found on one device", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
@@ -22,6 +110,49 @@ describe("device user union merge", () => {
 		expect(
 			plan.users.find((user) => user.vendorUserIds.includes("0002"))?.missingOnDeviceIds,
 		).to.deep.equal(["a"]);
+	});
+
+	it("does not treat a failed device read as zero IDs with all unique IDs missing", () => {
+		// Device c was selected but inventory read failed: no records, excluded from validDeviceIds.
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			validDeviceIds: ["a", "b"],
+			records: [
+				record("a", { vendorUserId: "21", rawPayload: { numOfFP: 2, numOfFace: 1 } }),
+				record("b", { vendorUserId: "21", rawPayload: { numOfFP: 1, numOfFace: 0 } }),
+				record("a", { vendorUserId: "32", rawPayload: { numOfFP: 0, numOfFace: 0 } }),
+			],
+		});
+		expect(plan.counts.unionUsers).to.equal(2);
+		expect(plan.failedDeviceIds).to.deep.equal(["c"]);
+		expect(plan.validDeviceIds).to.deep.equal(["a", "b"]);
+		expect(plan.idsReadByDevice.a).to.equal(2);
+		expect(plan.idsReadByDevice.b).to.equal(1);
+		expect(plan.idsReadByDevice.c || 0).to.equal(0);
+		// Missing only among successfully read devices, never the failed panel.
+		for (const user of plan.users) {
+			expect(user.missingOnDeviceIds).to.not.include("c");
+			expect(user.targetDeviceIds).to.not.include("c");
+		}
+		const serialized = serializeDeviceUserMergePlanForReview({
+			...plan,
+			devices: [
+				{ id: "a", name: "A", readStatus: "ok", idsRead: 2 },
+				{ id: "b", name: "B", readStatus: "ok", idsRead: 1 },
+				{
+					id: "c",
+					name: "E",
+					readStatus: "failed",
+					readError: "Unauthorized",
+					idsRead: null,
+				},
+			],
+			errors: [{ deviceId: "c", deviceName: "E", error: "Unauthorized" }],
+		});
+		expect(serialized.failedDeviceIds).to.deep.equal(["c"]);
+		expect(serialized.devices.find((device: any) => device.id === "c")?.readStatus).to.equal(
+			"failed",
+		);
 	});
 
 	it("requires an explicit choice and supports A/B all choices", () => {
@@ -50,16 +181,1389 @@ describe("device user union merge", () => {
 		expect(fingerprintConflict?.deviceB.value).to.equal(1);
 	});
 
+	it("blocks count-only credential gaps until portable bytes are reviewed", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 2,
+							rawBlobCount: 0,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 1, numOfFace: 1, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 1,
+							rawBlobCount: 0,
+						},
+						face: {
+							status: "missing_raw_blob",
+							reportedCount: 1,
+							rawBlobPresent: false,
+						},
+					},
+				}),
+				record("c", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobCount: 0,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+			],
+		});
+
+		const fingerprintWrites = plan.credentialWrites.filter(
+			(write) => write.modality === "fingerprint",
+		);
+		const faceWrites = plan.credentialWrites.filter((write) => write.modality === "face");
+		expect(plan.plannedWrites).to.have.length(0);
+		expect(fingerprintWrites).to.have.length(2);
+		expect(fingerprintWrites.every((write) => write.sourceDeviceId === "a")).to.equal(true);
+		expect(
+			fingerprintWrites.every(
+				(write) =>
+					write.executionEligibility === "blocked" &&
+					write.blockingReason === "missing_raw_blob" &&
+					write.recommended === false,
+			),
+		).to.equal(true);
+		expect(faceWrites).to.have.length(2);
+		expect(faceWrites.every((write) => write.sourceDeviceId === "b")).to.equal(true);
+		expect(plan.counts.actionableCredentialWrites).to.equal(0);
+		expect(plan.counts.blockedCredentialWrites).to.equal(4);
+	});
+
+	it("selects only raw fingerprint custody and blocks stored faces without a write path", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 2, numOfFace: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobPresent: true,
+						},
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 0, numOfFace: 0 },
+					biometricEvidence: {
+						fingerprint: { status: "not_enrolled", reportedCount: 0, rawBlobCount: 0 },
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+			],
+		});
+		const fingerprint = plan.credentialWrites.find((write) => write.modality === "fingerprint");
+		const face = plan.credentialWrites.find((write) => write.modality === "face");
+		expect(fingerprint?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(fingerprint?.recommended).to.equal(true);
+		expect(face?.executionEligibility).to.equal("blocked");
+		expect(face?.blockingReason).to.equal("target_write_unsupported");
+		expect(face?.recommended).to.equal(false);
+		expect(plan.counts.actionableCredentialWrites).to.equal(1);
+		expect(plan.counts.blockedCredentialWrites).to.equal(1);
+	});
+
+	it("keeps every classified face custody kind blocked while its writer is unavailable", () => {
+		for (const faceEvidence of [
+			{
+				custodyKind: "sdk_template_and_picture",
+				fdlibCapabilitySupported: false,
+			},
+			{
+				custodyKind: "fdlib_picture",
+				fdlibCapabilitySupported: true,
+			},
+			{
+				custodyKind: "picture_only_not_writable",
+				fdlibCapabilitySupported: false,
+			},
+		] as const) {
+			const plan = buildDeviceUserMergePlan({
+				deviceIds: ["a", "b"],
+				records: [
+					record("a", {
+						rawPayload: { numOfFP: 0, numOfFace: 1 },
+						biometricEvidence: {
+							fingerprint: {
+								status: "not_enrolled",
+								reportedCount: 0,
+								rawBlobCount: 0,
+							},
+							face: {
+								status: "raw_blob_present",
+								reportedCount: 1,
+								rawBlobPresent: true,
+								...faceEvidence,
+								writerAvailable: false,
+							},
+						},
+					}),
+					record("b", {
+						rawPayload: { numOfFP: 0, numOfFace: 0 },
+						biometricEvidence: {
+							fingerprint: {
+								status: "not_enrolled",
+								reportedCount: 0,
+								rawBlobCount: 0,
+							},
+							face: {
+								status: "not_enrolled",
+								reportedCount: 0,
+								rawBlobPresent: false,
+								custodyKind: "missing",
+								writerAvailable: false,
+							},
+						},
+					}),
+				],
+			});
+			const face = plan.credentialWrites.find((write) => write.modality === "face");
+			expect(face?.executionEligibility).to.equal("blocked");
+			expect(face?.blockingReason).to.equal("target_write_unsupported");
+			expect(face?.recommended).to.equal(false);
+			expect(plan.counts.actionableCredentialWrites).to.equal(0);
+		}
+	});
+
+	it("does not accept FDLib picture custody without affirmative capability evidence", () => {
+		const classified = classifyFaceCustody({
+			facePicture: "picture",
+			fdlibCapabilitySupported: false,
+		});
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 0, numOfFace: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobCount: 0,
+						},
+						face: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobPresent: true,
+							custodyKind: classified.kind,
+							fdlibCapabilitySupported: classified.fdlibCapabilitySupported,
+							// Even a future writer flag cannot upgrade unproven capability.
+							writerAvailable: true,
+						},
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 0, numOfFace: 0 },
+				}),
+			],
+		});
+		const face = plan.credentialWrites.find((write) => write.modality === "face");
+		expect(classified.kind).to.equal("picture_only_not_writable");
+		expect(face?.executionEligibility).to.equal("blocked");
+		expect(face?.blockingReason).to.equal("target_write_unsupported");
+	});
+
+	it("blocks tied count-only sources instead of choosing by device order", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", { rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 } }),
+				record("b", { rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 } }),
+				record("c", { rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 } }),
+			],
+		});
+
+		const write = plan.credentialWrites.find(
+			(item) => item.modality === "fingerprint" && item.targetDeviceId === "c",
+		);
+		expect(write?.sourceDeviceId).to.equal(null);
+		expect(write?.sourceCandidateDeviceIds).to.have.members(["a", "b"]);
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.blockingReason).to.equal("source_conflict");
+		// No raw richest selected → agent export stage (not dual-owner compare).
+		expect(write?.recoveryStage).to.equal("exporting_source_credential");
+	});
+
+	it("uses a stable representative when tied raw fingerprint checksum sets are equal", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["b", "a", "c"],
+			records: [
+				record("b", {
+					rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "beta" },
+						{ fingerPrintId: 1, checksum: "alpha" },
+					],
+				}),
+				record("a", {
+					rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "alpha" },
+						{ fingerPrintId: 2, checksum: "beta" },
+					],
+				}),
+				record("c", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) => item.modality === "fingerprint" && item.targetDeviceId === "c",
+		);
+		expect(write?.sourceDeviceId).to.equal("a");
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recommendationReason).to.include("equal checksum sets");
+		expect(write?.sourceFingerprintTemplateChecksums).to.deep.equal([
+			{ fingerPrintId: 1, checksum: "alpha" },
+			{ fingerPrintId: 2, checksum: "beta" },
+		]);
+		expect(write?.physicalRereadRequired).to.equal(true);
+	});
+
+	it("rejects changed fingerprint slot/checksum custody after review", () => {
+		const reviewed = [
+			{ fingerPrintId: 2, checksum: "BETA" },
+			{ fingerPrintId: 1, checksum: "alpha" },
+		];
+		expect(
+			fingerprintCustodyMatchesReview(reviewed, [
+				{ fingerPrintId: 1, checksum: "alpha" },
+				{ fingerPrintId: 2, checksum: "beta" },
+			]),
+		).to.equal(true);
+		expect(
+			fingerprintCustodyMatchesReview(reviewed, [
+				{ fingerPrintId: 1, checksum: "different" },
+				{ fingerPrintId: 2, checksum: "beta" },
+			]),
+		).to.equal(false);
+		expect(
+			fingerprintCustodyMatchesReview(reviewed, [
+				{ fingerPrintId: 2, checksum: "alpha" },
+				{ fingerPrintId: 1, checksum: "beta" },
+			]),
+		).to.equal(false);
+	});
+
+	it("selects the only strict fingerprint checksum superset", () => {
+		const records = [
+			record("a", {
+				rawPayload: { numOfFP: 1 },
+				biometricEvidence: {
+					fingerprint: {
+						status: "raw_blob_present",
+						reportedCount: 1,
+						rawBlobCount: 1,
+					},
+					face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+				},
+				_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "alpha" }],
+			}),
+			record("b", {
+				rawPayload: { numOfFP: 2 },
+				biometricEvidence: {
+					fingerprint: {
+						status: "raw_blob_present",
+						reportedCount: 2,
+						rawBlobCount: 2,
+					},
+					face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+				},
+				_fingerprintTemplateChecksums: [
+					{ fingerPrintId: 1, checksum: "alpha" },
+					{ fingerPrintId: 2, checksum: "beta" },
+				],
+			}),
+			record("c", {
+				rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+			}),
+		];
+		const source = resolveFingerprintCredentialSource(records.slice(0, 2));
+		expect(source.source?.deviceId).to.equal("b");
+		expect(source.reason).to.equal("strict_checksum_superset");
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records,
+		});
+		const write = plan.credentialWrites.find(
+			(item) => item.modality === "fingerprint" && item.targetDeviceId === "c",
+		);
+		expect(write?.sourceDeviceId).to.equal("b");
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recommendationReason).to.include("strict superset");
+	});
+
+	it("picks richest fingerprint source and allows overwrite when target has different checksums", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "alpha" },
+						{ fingerPrintId: 2, checksum: "beta" },
+					],
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 1, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "different-person-or-finger" },
+					],
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find((item) => item.modality === "fingerprint");
+		expect(write?.sourceDeviceId).to.equal("a");
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recommended).to.equal(true);
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.recoveryStage).to.equal("ready_to_write");
+		expect(write?.recommendationReason).to.include("RICHEST SOURCE OVERWRITE");
+	});
+
+	it("picks a stable richest fingerprint source when tied max counts disagree on checksums", () => {
+		const resolution = resolveFingerprintCredentialSource([
+			record("b", {
+				rawPayload: { numOfFP: 2 },
+				biometricEvidence: {
+					fingerprint: {
+						status: "raw_blob_present",
+						reportedCount: 2,
+						rawBlobCount: 2,
+					},
+					face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+				},
+				_fingerprintTemplateChecksums: [
+					{ fingerPrintId: 1, checksum: "one" },
+					{ fingerPrintId: 2, checksum: "two" },
+				],
+			}),
+			record("a", {
+				rawPayload: { numOfFP: 2 },
+				biometricEvidence: {
+					fingerprint: {
+						status: "raw_blob_present",
+						reportedCount: 2,
+						rawBlobCount: 2,
+					},
+					face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+				},
+				_fingerprintTemplateChecksums: [
+					{ fingerPrintId: 1, checksum: "alpha" },
+					{ fingerPrintId: 2, checksum: "beta" },
+				],
+			}),
+		]);
+		expect(resolution.reason).to.equal("richest_count_default_overwrite");
+		// Stable deviceId among equal counts.
+		expect(resolution.source?.deviceId).to.equal("a");
+	});
+
+	it("identifies real card custody but keeps it blocked until a credential-only writer exists", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					_cardNo: "sensitive-card-number",
+					rawPayload: {
+						numOfFP: 0,
+						numOfFace: 0,
+						numOfCard: 1,
+						cardNo: "CARD-001",
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find((item) => item.modality === "card");
+		expect(write?.sourceDeviceId).to.equal("a");
+		expect(write?.sourceEvidenceStatus).to.equal("raw_blob_present");
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.blockingReason).to.equal("credential_only_card_not_supported");
+		expect(write?.physicalRereadRequired).to.equal(true);
+	});
+
+	it("makes exact card custody actionable only when the dormant writer is explicitly enabled", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 1 },
+					_cardNo: "CARD-001",
+					biometricEvidence: {
+						fingerprint: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobCount: 0,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+						card: {
+							status: "raw_blob_present",
+							cardNoPresent: true,
+							writerAvailable: true,
+						},
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobCount: 0,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+						card: {
+							status: "not_enrolled",
+							cardNoPresent: false,
+							writerAvailable: true,
+						},
+					},
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find((item) => item.modality === "card");
+		expect(write?.sourceDeviceId).to.equal("a");
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recoveryStage).to.equal("ready_to_write");
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.recommended).to.equal(true);
+		expect(write?.physicalRereadRequired).to.equal(true);
+	});
+
+	it("keeps a durable SDK progress-5 duplicate owner from returning unsafe-ready", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "source-slot-1" },
+						{ fingerPrintId: 2, checksum: "source-slot-2" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "source-slot-1" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "8",
+					employeeId: "employee-8",
+					rawPayload: { numOfFP: 1, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "source-slot-2" },
+					],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "physical-job",
+				vendorUserId: "1",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 2,
+				conflictingVendorUserId: "8",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.blockingReason).to.equal(
+			"physical_identity_adjudication_required",
+		);
+		expect(write?.recoveryStage).to.equal(
+			"physical_identity_action_required",
+		);
+		expect(write?.recommendationReason).to.include("target vendor user 8");
+		expect(write?.recommendationReason).to.include("overwrite is forbidden");
+	});
+
+	it("allows per-identity fingerprint writes when this person has proven custody even if fleet owner scan is incomplete", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 2 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+						{ fingerPrintId: 2, checksum: "two" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "8",
+					employeeId: "employee-8",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 1,
+							rawBlobCount: 0,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		// Person 1 has complete source custody and empty target FP — ready.
+		// Person 8 missing export remains fleet-scan evidence, not a hard block.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recommended).to.equal(true);
+		expect(write?.blockingReason).to.not.equal("target_owner_scan_incomplete");
+		expect(write?.canonicalIdentityProven).to.equal(true);
+		expect(write?.targetOwnerScanComplete).to.equal(false);
+		expect(write?.targetOwnerScanMissingCount).to.equal(1);
+		expect(write?.targetOwnerScanMissingVendorUserIdSample).to.deep.equal(["8"]);
+		expect(write?.targetOwnerScanEvidenceHash).to.match(/^[a-f0-9]{64}$/);
+		expect(plan.fingerprintTargetOwnerScans).to.deep.include({
+			targetDeviceId: "target",
+			complete: false,
+			missingCount: 1,
+			evidenceHash: write?.targetOwnerScanEvidenceHash,
+			missingVendorUserIds: ["8"],
+		});
+		expect(write?.recommendationReason).to.include("fleet scan incomplete");
+	});
+
+	it("still blocks fingerprint write when this target owner lacks checksum custody", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 1,
+							rawBlobCount: 0,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		// When target already has enrolled FP without checksums, block until export.
+		// (May also be classified earlier as missing/gap rather than ready-then-gated.)
+		if (write?.executionEligibility === "ready_from_raw_blob") {
+			expect(write.blockingReason).to.equal("target_owner_scan_incomplete");
+			expect(write.recoveryStage).to.equal("exporting_source_credential");
+		} else {
+			expect(write?.executionEligibility).to.not.equal("ready_from_raw_blob");
+		}
+	});
+
+	it("allows fingerprint readiness for same vendor person id even when target HRIS link is missing", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: null,
+					rawPayload: { numOfFP: 0 },
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) => item.modality === "fingerprint",
+		);
+		// Peer copy on vendor person "1" is proven; missing target HRIS link is not dual-owner.
+		expect(write?.blockingReason).to.not.equal("canonical_identity_unproven");
+		expect(write?.canonicalIdentityProven).to.equal(true);
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+	});
+
+	it("rejects a fingerprint write when another fleet record maps the same vendor id to a different employee", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target", "peer"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("peer", {
+					vendorUserId: "1",
+					employeeId: "employee-2",
+					rawPayload: { numOfFP: 0 },
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.blockingReason).to.equal("canonical_identity_unproven");
+		expect(write?.recoveryStage).to.equal("comparing_sources");
+	});
+
+	it("allows fingerprint readiness after canonical identity and the full target owner scan are complete", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 2 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+						{ fingerPrintId: 2, checksum: "two" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "8",
+					employeeId: "employee-8",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 4, checksum: "other-owner" },
+					],
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recoveryStage).to.equal("ready_to_write");
+		expect(write?.canonicalIdentityProven).to.equal(true);
+		expect(write?.targetOwnerScanComplete).to.equal(true);
+		expect(write?.targetOwnerScanMissingCount).to.equal(0);
+		expect(write?.targetOwnerScanMissingVendorUserIdSample).to.deep.equal([]);
+	});
+
+	it("stores complete target-owner recovery IDs once instead of repeating them per write", () => {
+		const actionableRecords = Array.from({ length: 40 }, (_, index) => {
+			const vendorUserId = `ready-${String(index).padStart(3, "0")}`;
+			const employeeId = `employee-ready-${index}`;
+			return [
+				record("source", {
+					vendorUserId,
+					employeeId,
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: `checksum-${index}` },
+					],
+				}),
+				record("target", {
+					vendorUserId,
+					employeeId,
+					rawPayload: { numOfFP: 0 },
+				}),
+			];
+		}).flat();
+		const unknownOwnerRecords = Array.from({ length: 120 }, (_, index) =>
+			record("target", {
+				vendorUserId: `unknown-${String(index).padStart(3, "0")}`,
+				employeeId: `employee-unknown-${index}`,
+				rawPayload: { numOfFP: 1 },
+				biometricEvidence: {
+					fingerprint: {
+						status: "missing_raw_blob",
+						reportedCount: 1,
+						rawBlobCount: 0,
+					},
+					face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+				},
+			}),
+		);
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [...actionableRecords, ...unknownOwnerRecords],
+		});
+		const readyWrites = plan.credentialWrites.filter(
+			(write) =>
+				write.modality === "fingerprint" &&
+				write.targetDeviceId === "target" &&
+				write.executionEligibility === "ready_from_raw_blob" &&
+				write.recommended === true,
+		);
+		const guardedWrites = plan.credentialWrites.filter(
+			(write) =>
+				write.modality === "fingerprint" &&
+				write.targetDeviceId === "target" &&
+				write.blockingReason === "target_owner_scan_incomplete",
+		);
+		// Ready people keep per-identity write eligibility; fleet unknowns stay export-only.
+		expect(readyWrites).to.have.length(40);
+		expect(guardedWrites).to.have.length(0);
+		expect(
+			readyWrites.every(
+				(write) =>
+					write.targetOwnerScanComplete === false &&
+					write.targetOwnerScanMissingCount === 120 &&
+					write.targetOwnerScanMissingVendorUserIdSample?.length === 3 &&
+					!("targetOwnerScanMissingVendorUserIds" in write),
+			),
+		).to.equal(true);
+		const summary = plan.fingerprintTargetOwnerScans.find(
+			(scan) => scan.targetDeviceId === "target",
+		);
+		expect(summary?.missingCount).to.equal(120);
+		expect(summary?.missingVendorUserIds).to.have.length(120);
+		expect(plan.fingerprintTargetOwnerScans).to.have.length(1);
+		const serializedWrites = JSON.stringify(readyWrites);
+		expect(serializedWrites).not.to.include("unknown-119");
+		expect(JSON.stringify(summary)).to.include("unknown-119");
+	});
+
+	it("resolves a durable owner collision as a safe no-write only for canonical identity and checksum equality", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "canonical-employee",
+					rawPayload: { numOfFP: 2, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "source-slot-1" },
+						{ fingerPrintId: 2, checksum: "same-physical-finger" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "canonical-employee",
+					rawPayload: { numOfFP: 1, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "source-slot-1" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "8",
+					employeeId: "canonical-employee",
+					rawPayload: { numOfFP: 1, numOfFace: 0, numOfCard: 0 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: {
+							status: "not_enrolled",
+							reportedCount: 0,
+							rawBlobPresent: false,
+						},
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "same-physical-finger" },
+					],
+				}),
+			],
+		});
+		const originalWrite = plan.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target" &&
+				item.executionEligibility === "ready_from_raw_blob",
+		);
+		expect(originalWrite?.executionEligibility).to.equal("ready_from_raw_blob");
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "physical-job",
+				vendorUserId: "1",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 2,
+				conflictingVendorUserId: "8",
+			},
+		]);
+		expect(
+			reconciled.credentialWrites.some((item) => item.id === originalWrite?.id),
+		).to.equal(false);
+		expect(reconciled.credentialResolutions).to.deep.include({
+			writeId: originalWrite?.id,
+			modality: "fingerprint",
+			resolution: "equivalent_owner_safe_no_write",
+			vendorUserId: "1",
+			targetDeviceId: "target",
+			conflictingVendorUserIds: ["8"],
+			jobIds: ["physical-job"],
+			physicalRereadRequired: true,
+		});
+	});
+
+	it("carries durable duplicate-owner evidence across richest-source replans", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["new-richest", "target"],
+			records: [
+				record("new-richest", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "collision-checksum" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "8",
+					employeeId: "employee-8",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "collision-checksum" },
+					],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "earlier-job",
+				vendorUserId: "1",
+				sourceDeviceId: "old-source-no-longer-selected",
+				targetDeviceId: "target",
+				fingerPrintId: 2,
+				conflictingVendorUserId: "8",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		// Both vendor 1 and conflicting owner 8 are admin-sandbox (1–20): force overwrite.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.adminSandboxForceOverwrite).to.equal(true);
+		expect(write?.adminSandboxConflictingOwners).to.deep.equal(["8"]);
+		expect(write?.recommendationReason || "").to.include(
+			"ADMIN_SANDBOX_FORCE_OVERWRITE",
+		);
+	});
+
+	it("keeps dual-owner fail-closed when conflicting owner is PROD vendor 21+", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "collision-checksum" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "employee-1",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "900",
+					employeeId: "employee-prod",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 2, checksum: "collision-checksum" },
+					],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "earlier-job",
+				vendorUserId: "1",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 2,
+				conflictingVendorUserId: "900",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.blockingReason).to.equal(
+			"physical_identity_adjudication_required",
+		);
+		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
+	});
+
+	it("does not discard uncollided pending slots when only one duplicate-owner slot is equivalent", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1",
+					employeeId: "canonical",
+					rawPayload: { numOfFP: 2 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+						{ fingerPrintId: 2, checksum: "two" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1",
+					employeeId: "canonical",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "8",
+					employeeId: "canonical",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "one" },
+					],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "earlier-job",
+				vendorUserId: "1",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 1,
+				conflictingVendorUserId: "8",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1" &&
+				item.targetDeviceId === "target",
+		);
+		// Vendor 1 vs owner 8 are both admin-sandbox: force overwrite rather than
+		// permanent dual-owner RED, even when only one of two pending slots collided.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.adminSandboxForceOverwrite).to.equal(true);
+		expect(
+			reconciled.credentialResolutions.some(
+				(item: any) => item.writeId === write?.id,
+			),
+		).to.equal(false);
+	});
+
+	it("proves physical retention only from exact target slots and a target-wide owner scan", () => {
+		const intended = record("target", {
+			vendorUserId: "1",
+			rawPayload: { numOfFP: 2 },
+			_fingerprintTemplateChecksums: [
+				{ fingerPrintId: 1, checksum: "ALPHA" },
+				{ fingerPrintId: 2, checksum: "beta" },
+			],
+		});
+		const proof = proveFingerprintPhysicalReread({
+			targetDeviceId: "target",
+			vendorUserId: "1",
+			reviewedTemplates: [
+				{ fingerPrintId: 1, checksum: "alpha" },
+				{ fingerPrintId: 2, checksum: "beta" },
+			],
+			targetRecords: [intended],
+		});
+		expect(proof.physicallyRetained).to.equal(true);
+		expect(proof.reason).to.equal("physically_retained");
+
+		const collision = proveFingerprintPhysicalReread({
+			targetDeviceId: "target",
+			vendorUserId: "1",
+			reviewedTemplates: [{ fingerPrintId: 2, checksum: "beta" }],
+			targetRecords: [
+				intended,
+				record("target", {
+					vendorUserId: "8",
+					rawPayload: { numOfFP: 1 },
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 4, checksum: "beta" },
+					],
+				}),
+			],
+		});
+		expect(collision.physicallyRetained).to.equal(false);
+		expect(collision.reason).to.equal("different_target_owner_detected");
+		expect(collision.conflictingOwners[0]?.vendorUserId).to.equal("8");
+	});
+
+	it("does not choose between different tied card values", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 1, cardNo: "CARD-A" },
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 1, cardNo: "CARD-B" },
+				}),
+				record("c", {
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+				}),
+			],
+		});
+		const write = plan.credentialWrites.find(
+			(item) => item.modality === "card" && item.targetDeviceId === "c",
+		);
+		expect(write?.sourceDeviceId).to.equal(null);
+		expect(write?.sourceCandidateDeviceIds).to.have.members(["a", "b"]);
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.blockingReason).to.equal("source_conflict");
+		expect(write?.recommendationReason).to.include("card-value equality");
+	});
+
 	it("uses the richest device record as the merge source", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b", "c"],
 			records: [
 				record("a", { rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 1 } }),
-				record("b", { rawPayload: { numOfFP: 3, numOfFace: 1, numOfCard: 1 } }),
+				record("b", {
+					rawPayload: { numOfFP: 3, numOfFace: 1, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 3,
+							rawBlobCount: 3,
+						},
+						face: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobPresent: true,
+						},
+					},
+				}),
 			],
 		});
 		expect(plan.users[0].sourceDeviceId).to.equal("b");
-		expect(plan.users[0].targetDeviceIds).to.deep.equal(["a", "c"]);
+		// Device a already has the ID. Only the evidenced missing record on c is a write.
+		expect(plan.users[0].targetDeviceIds).to.deep.equal(["c"]);
+	});
+
+	it("does not use enrollment counts as portable biometric custody evidence", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					displayName: null,
+					rawPayload: { numOfFP: 9, numOfFace: 2 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "missing_raw_blob",
+							reportedCount: 9,
+							rawBlobCount: 0,
+						},
+						face: {
+							status: "missing_raw_blob",
+							reportedCount: 2,
+							rawBlobPresent: false,
+						},
+					},
+				}),
+				record("b", {
+					rawPayload: { numOfFP: 1, numOfFace: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobPresent: true,
+						},
+					},
+				}),
+			],
+		});
+
+		expect(plan.users[0].sourceDeviceId).to.equal("b");
+		expect(plan.users[0].targetDeviceIds).to.deep.equal(["c"]);
 	});
 
 	it("is idempotent for identical repeated reads", () => {
@@ -81,7 +1585,7 @@ describe("device user union merge", () => {
 		expect(applyMergeChoices(plan).executable).to.equal(false);
 	});
 
-	it("preserves an approved manual link ahead of automatic identity matching", () => {
+	it("does not collapse different vendor user ids just because they share an HRIS manual link", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [
@@ -98,9 +1602,71 @@ describe("device user union merge", () => {
 				}),
 			],
 		});
+		expect(plan.users).to.have.length(2);
+		expect(plan.users.map((user) => user.vendorUserIds[0])).to.have.members([
+			"vendor-a",
+			"vendor-b",
+		]);
+		expect(plan.users.every((user) => user.employeeId === "employee-1")).to.equal(true);
+	});
+
+	it("keeps one merge identity for the same vendor user id even when one row is manually linked", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					vendorUserId: "21",
+					employeeId: "employee-21",
+					manualLink: true,
+					rawPayload: { numOfFP: 1, numOfFace: 1 },
+				}),
+				record("b", {
+					vendorUserId: "21",
+					employeeId: null,
+					manualLink: false,
+					rawPayload: { numOfFP: 0, numOfFace: 0 },
+				}),
+			],
+		});
+
 		expect(plan.users).to.have.length(1);
-		expect(plan.users[0].employeeId).to.equal("employee-1");
-		expect(plan.users[0].vendorUserIds).to.have.members(["vendor-a", "vendor-b"]);
+		expect(plan.users[0].key).to.equal("vendor:21");
+		expect(plan.users[0].vendorUserIds).to.deep.equal(["21"]);
+		expect(plan.counts.unionUsers).to.equal(1);
+	});
+
+	it("collapses duplicate source rows for the same device and vendor id before counting unique IDs", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					vendorUserId: "32",
+					rawPayload: { numOfFP: 0, numOfFace: 0 },
+				}),
+				record("a", {
+					vendorUserId: "32",
+					rawPayload: { numOfFP: 1, numOfFace: 1 },
+				}),
+				record("b", {
+					vendorUserId: "32",
+					rawPayload: { numOfFP: 1, numOfFace: 1 },
+				}),
+			],
+		});
+
+		expect(plan.users).to.have.length(1);
+		expect(plan.users[0].records).to.have.length(2);
+		expect(plan.users[0].sourceRows).to.equal(3);
+		expect(plan.users[0].duplicateSourceRows).to.have.length(1);
+		expect(plan.users[0].duplicateSourceRows[0].sourceRows).to.equal(2);
+		expect(plan.users[0].duplicateSourceRows[0].differingFields).to.include.members([
+			"fingerprint",
+			"face",
+		]);
+		expect(plan.counts.unionUsers).to.equal(1);
+		expect((plan.counts as any).sourceRows).to.equal(3);
+		expect((plan.counts as any).dedupedDeviceRecords).to.equal(2);
+		expect((plan.counts as any).duplicateSourceRows).to.equal(1);
 	});
 
 	it("supports keep-existing and clear-choice semantics", () => {
@@ -133,9 +1699,7 @@ describe("device user union merge", () => {
 
 		expect(applied.executable).to.equal(true);
 		expect(applied.users.map((user) => user.key)).to.deep.equal([selected!.key]);
-		expect(applied.plannedWrites.map((write) => write.userKey)).to.not.include(
-			excluded!.key,
-		);
+		expect(applied.plannedWrites.map((write) => write.userKey)).to.not.include(excluded!.key);
 		expect(applied.counts.unionUsers).to.equal(1);
 	});
 
@@ -168,5 +1732,37 @@ describe("device user union merge", () => {
 			"fingerprint",
 			"card",
 		]);
+	});
+
+	it("serializes a compact review plan without SDK biometric payloads or duplicate aliases", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					rawPayload: {
+						numOfFP: 2,
+						numOfFace: 1,
+						numOfCard: 1,
+						fingerprints: ["sensitive-template"],
+						faceData: "sensitive-face",
+					},
+				}),
+			],
+		});
+		const review = serializeDeviceUserMergePlanForReview(plan) as any;
+
+		expect(review).not.to.have.property("unionUsers");
+		expect(review).not.to.have.property("onlyOnOneDevice");
+		expect(review).not.to.have.property("missingHrisLinks");
+		expect(review).to.have.property("potentialOperations");
+		expect(review.users[0].rawPayload).to.equal(undefined);
+		expect(review.users[0].records[0].rawPayload).to.deep.equal({
+			numOfFP: 2,
+			numOfFace: 1,
+			numOfCard: 1,
+		});
+		expect(JSON.stringify(review)).not.to.include("sensitive-template");
+		expect(JSON.stringify(review)).not.to.include("sensitive-face");
+		expect(JSON.stringify(review)).not.to.include("sensitive-card-number");
 	});
 });

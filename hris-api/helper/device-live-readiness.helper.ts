@@ -55,7 +55,7 @@ export type DeviceLiveReadiness = {
 
 /** Fresh saved/alarm proof window (quiet path). */
 const FRESH_PROOF_MS = 10 * 60 * 1000;
-/** Stale: too old to trust quiet armed path without a re-tap. */
+/** Stale: too old to claim current receiving proof without a re-tap. */
 const STALE_PROOF_MS = 30 * 60 * 1000;
 /** Successful C++ → HRIS post must be this fresh for full green enroll. */
 const FRESH_POST_MS = 10 * 60 * 1000;
@@ -289,21 +289,24 @@ export const buildDeviceLiveReadiness = (input: {
 	} else {
 		eventProofCheck = {
 			id: "eventProof",
-			level: "red",
-			ok: false,
-			label: "No recent event proof",
+			level: listenerArmed ? "yellow" : "red",
+			ok: Boolean(listenerArmed),
+			label: listenerArmed ? "Ready for tap proof" : "No recent event proof",
 			detail: lastSdkEventAt
-				? `Last proof ${formatAge(proofAge)} — too old to trust as “live is working now”.`
-				: "No SDK proof in listener logs or saved events yet.",
+				? `Last proof ${formatAge(proofAge)}. Listener is armed; tap once to refresh receiving proof.`
+				: listenerArmed
+					? "Listener is armed; tap once to create current SDK proof."
+					: "No SDK proof in listener logs or saved events yet.",
 		};
 	}
 
-	// Tap: need DB + listener + (receiving OR fresh armed) + not callback path hard-down.
+	// Tap: need DB + listener armed/running + not callback path hard-down. A quiet
+	// armed listener is a yellow "tap to prove" state, not a red failure.
 	const safeToTap =
 		databaseOk &&
 		listenerRunning &&
 		!callbackPathDown &&
-		(listenerReceiving || (listenerArmed && !stale));
+		(listenerReceiving || listenerArmed);
 	// Enroll green: DB + receiving + healthy post path (probe or fresh post).
 	const safeToEnroll =
 		databaseOk &&
@@ -344,9 +347,11 @@ export const buildDeviceLiveReadiness = (input: {
 		headline =
 			"Device signals OK but HRIS post path weak — fix reverse 53001→3001 before trusting enroll";
 	} else if (!listenerReceiving && listenerArmed) {
-		headline = "Armed and waiting — tap once to refresh live receiving proof";
+		headline = "Ready for tap proof — listener armed, waiting for a fresh tap";
+	} else if (stale && listenerArmed) {
+		headline = "Ready for tap proof — listener armed, waiting for a fresh tap";
 	} else if (stale) {
-		headline = "Not fully safe yet — re-arm / tap once for fresh proof before enroll";
+		headline = "Not fully safe yet — restart listener or tap once for fresh proof";
 	} else {
 		headline = "Partially ready — need receiving + successful HRIS post before full green";
 	}

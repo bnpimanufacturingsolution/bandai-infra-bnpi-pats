@@ -51,8 +51,14 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("manual_device_user_lifecycle_backfill");
 		expect(controller).to.include("hikvisionFetchBinary");
 		expect(controller).to.include("readDeviceUserFaceUrl");
-		expect(controller).to.include("Device user face photo host does not match the configured device");
-		expect(controller).to.include('type DeviceUserSyncMode = "full_refresh" | "needs_attention_only" | "peer_converge"');
+		expect(controller).to.include("resolveHikvisionDeviceSuppliedPath");
+		expect(controller).not.to.include(
+			"Device user face photo host does not match the configured device",
+		);
+		expect(controller).to.include("type DeviceUserSyncMode =");
+		expect(controller).to.include('"full_refresh"');
+		expect(controller).to.include('"needs_attention_only"');
+		expect(controller).to.include('"peer_converge"');
 		expect(controller).to.include('const requestedMode = String((req.body as any)?.mode || "")');
 		expect(controller).to.include(".trim()");
 		expect(controller).to.include(".toLowerCase()");
@@ -61,6 +67,18 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("Cross-device convergence queued");
 		expect(controller).to.include("shouldConvergeDeviceUserToPeer");
 		expect(controller).to.include("deviceIds");
+	});
+
+	it("recovers DeviceUser create races and does not fail identity sync on biometric lease busy", () => {
+		const controller = controllerSource();
+		// Concurrent sync/backfill can win the unique key between findUnique and create.
+		expect(controller).to.include('createError?.code === "P2002"');
+		expect(controller).to.include("unique constraint");
+		expect(controller).to.include("identitySyncOk: true");
+		// Inventory plane must remain successful when credential recovery holds the lease.
+		expect(controller).to.include("biometricLeaseSkipped");
+		expect(controller).to.include("credential device lease busy");
+		expect(controller).to.include("credential_device_lease_busy");
 	});
 
 	it("expires stale processing device-user sync job snapshots instead of reviving them", () => {
@@ -110,12 +128,167 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include("void currentVendorUserIds");
 	});
 
-	it("reads independent Hikvision merge devices concurrently and preserves per-device failures", () => {
+	it("reads Hikvision merge devices with bounded concurrency/recovery and preserves failures", () => {
 		const controller = controllerSource();
-		expect(controller).to.include("const deviceResults = await Promise.all(");
-		expect(controller).to.include("devices.map(async (device) => {");
+		expect(controller).to.include("const deviceResults: Array<{");
+		expect(controller).to.include("const mergeReadConcurrency = Math.min(2, devices.length)");
+		expect(controller).to.include("Array.from({ length: mergeReadConcurrency }");
+		expect(controller).to.include("await readNextDevice()");
+		expect(controller).to.include("recovery <= 3 && retryable");
+		expect(controller).to.include("transiently reject a digest/session");
+		expect(controller).to.include("Merge inventory read recovery");
 		expect(controller).to.include("records.push(...result.records)");
 		expect(controller).to.include("if (result.error) errors.push(result.error)");
 		expect(controller).to.include("unreachableDevices: errors.map");
+		expect(controller).to.include("readStatus: error ? \"failed\" : \"ok\"");
+		expect(controller).to.include("idsRead: error ? null : idsRead");
+	});
+
+	it("gates merge biometric copy by usable raw custody instead of reported counts", () => {
+		const controller = controllerSource();
+		expect(controller).to.include('fingerprint?.status === "raw_blob_present"');
+		expect(controller).to.include('face?.status === "raw_blob_present"');
+		expect(controller).to.include("includeFingerprints,");
+		expect(controller).to.include("includeFaceRecognition,");
+	});
+
+	it("joins encrypted SDK fingerprint custody into planner evidence without exposing bytes", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("const encryptedStoredFingerprint =");
+		expect(controller).to.include("recoverPlannerFingerprintTemplates");
+		expect(controller).to.include('expectedModality: "fingerprint"');
+		expect(controller).to.include("const identityOwnerVerified =");
+		expect(controller).to.include("exportEvent.userReadOk");
+		expect(controller).to.include(
+			"exact UserInfo identity read was not proven",
+		);
+		expect(controller).to.include(
+			"Stored fingerprint custody envelope validation failed",
+		);
+		expect(controller).to.include(
+			"buildFingerprintTemplateChecksumEvidence(",
+		);
+		expect(controller).to.include(
+			"rawBlobCount: plannerFingerprintTemplates.length",
+		);
+		expect(controller).not.to.include(
+			"_fingerprintRawTemplates: plannerFingerprintTemplates",
+		);
+	});
+
+	it("compares credential job rereads against the full reviewed fleet plan", () => {
+		const controller = controllerSource();
+		expect(controller).to.include(
+			'mode === "credentials" ? stored.plan : selectedAppliedPlan',
+		);
+		expect(controller).to.include("buildDeviceUserCredentialGapDelta(");
+	});
+
+	it("requires an exact physical fingerprint slot-checksum reread after writing", () => {
+		const controller = controllerSource();
+		expect(controller).to.include(
+			"const physicalReread = await fetchRawFingerprintsViaIsapi",
+		);
+		expect(controller).to.include("missingRetainedChecksums.length > 0");
+		expect(controller).to.include(
+			'physicalRereadResult: "exact_slot_checksum_retained"',
+		);
+		expect(controller).to.include("postWriteFingerprintTemplateChecksums");
+	});
+
+	it("publishes safe exact-reread checksums for face and card canaries", () => {
+		const controller = controllerSource();
+		const router = routerSource();
+		expect(controller).to.include("const encryptedStoredFace =");
+		expect(controller).to.include("decryptedStoredFace?.faceTemplate");
+		expect(controller).to.include("decryptedStoredFace?.facePicture");
+		expect(controller).to.include(
+			"Stored face custody envelope validation failed",
+		);
+		expect(controller).to.include("const authorizedCanaryTarget =");
+		expect(controller).to.include(
+			"process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID",
+		);
+		expect(controller).to.include("Stored-face SDK writes remain serial");
+		expect(controller).to.include(
+			'"exact_template_and_picture_checksums_retained"',
+		);
+		expect(controller).to.include('"exact_card_owner_value_pair_retained"');
+		expect(controller).to.include("capabilityEvidenceChecksum:");
+		expect(controller).to.include("retainedCardChecksum");
+		expect(controller).to.include(
+			"readExactHikvisionCardOwnerFromFullInventory",
+		);
+		expect(controller).to.include(
+			"const searchID = randomUUID()",
+		);
+		expect(controller).to.include(
+			'lastResponseStatus && lastResponseStatus !== "MORE"',
+		);
+		expect(controller).to.include("sourceFaceChecksumEvidence");
+		expect(controller).to.include(
+			"readHikvisionCardValuesForOwnerFromFullInventory",
+		);
+		expect(controller).to.include("resolveFaceAssociationStrategy");
+		expect(controller).to.include("association.strategy");
+		expect(controller).to.include(
+			"same_canonical_hris_employee_with_target_owned_card",
+		);
+		expect(controller).to.include("same_vendor_user_id");
+		expect(controller).to.include("richestFaceSourcePick");
+		expect(controller).to.include("targetCardRetainedChecksum");
+		expect(controller).to.include(
+			"if (!hasCredential && body.refreshBiometricBundle !== true)",
+		);
+		expect(controller).to.include("findExactHikvisionDeviceInfoValue");
+		expect(controller).to.include(
+			"`<(?:[a-z0-9_-]+:)?${tag}(?:\\\\s[^>]*)?>([^<]+)</(?:[a-z0-9_-]+:)?${tag}>`",
+		);
+		expect(controller).to.include(
+			'new Set(["firmwareversion", "firmware", "softwareversion"])',
+		);
+		expect(controller).to.include(
+			"All highest-count face sources have exact template and picture checksum equality",
+		);
+		expect(controller).to.include("attestRetainedHikvisionCardCanary");
+		expect(controller).to.include(
+			"narrow_reciprocal_card_query_false_negative",
+		);
+		expect(controller).to.include("physicalWriteReplayed: false");
+		expect(controller).to.include(
+			"Retained card canary attestation failed at ${attestationStage}",
+		);
+		expect(controller).to.include("attestRetainedHikvisionFaceCanary");
+		expect(controller).to.include(
+			"sdk_wrapper_exit_after_exact_physical_retention",
+		);
+		expect(controller).to.include(
+			"Fresh SDK exports proved exact source/target template and picture checksums",
+		);
+		expect(router).to.include(
+			'"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-card"',
+		);
+		expect(router).to.include(
+			'"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-face"',
+		);
+	});
+
+	it("uses a fast Hikvision UserInfo count for Device Users preview instead of stale all-device skip copy", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("const getHikvisionFastDeviceUserSourceCount = async");
+		expect(controller).to.include("hris-fast-user-count");
+		expect(controller).to.include("Device logs not requested for device-user summary");
+		expect(controller).to.include("Device user counts timed out; using saved HRIS evidence for preview");
+		expect(controller).not.to.include("Live source totals skipped for fast all-device overview");
+		expect(controller).not.to.include("Live source totals skipped for quick saved HRIS preview");
+	});
+
+	it("runs bulk device-user sync in bounded batches so one slow device does not block all devices", () => {
+		const controller = controllerSource();
+		expect(controller).to.include("const DEVICE_USER_SYNC_CONCURRENCY");
+		expect(controller).to.include("processDeviceUserSyncTarget");
+		expect(controller).to.include("index += DEVICE_USER_SYNC_CONCURRENCY");
+		expect(controller).to.include("Promise.all(");
+		expect(controller).to.include(".slice(index, index + DEVICE_USER_SYNC_CONCURRENCY)");
 	});
 });

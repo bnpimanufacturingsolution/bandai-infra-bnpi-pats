@@ -77,6 +77,10 @@ model EmployeeBenefit {
 
   // Legacy/simple details (kept for backward compatibility)
   amount    Float?
+  attendanceBased Boolean @default(false)
+  attendanceAmountBasis BenefitAttendanceAmountBasis?
+  recurrenceFrequency BenefitRecurrenceFrequency?
+  scheduleMode BenefitScheduleMode?
   startDate DateTime? @db.Date
   endDate   DateTime? @db.Date
 

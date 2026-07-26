@@ -206,6 +206,15 @@ as a Project Truth network dependency. Removing it means disabling/removing the
 WSL/Docker Desktop host path, while preserving Hyper-V and the VM switch needed
 for `project-truth-local-vhdx-proof`.
 
+For Windows-host localhost hot reload, the canonical DEV database is the K3s DEV
+Postgres forward on `127.0.0.1:55435` (`dev/hris-postgres`, service
+`10.43.130.9:5432`). Do not silently switch localhost dev to compose DEV
+`10.184.37.19:15433`: that is a duplicate drift-prone diagnostic database and
+has previously shown only the stale `192.168.18.39` device while the real DEV
+runtime had 7 devices including TEST A at `192.168.254.102`. If `55435` is down,
+recover K3s/disk pressure/forwarding first, or require an explicit
+`PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK=true` diagnostic override.
+
 ## Banned Fake Blockers
 
 Do not stop just because:
@@ -276,6 +285,89 @@ the implementation and add a safe preview/dry-run path when that is in scope, or
 stop before irreversible mutation unless the user explicitly approved the
 destructive action and a backup/recovery path is verified. Browser proof comes
 after API/network proof.
+
+## Long-Running Job Observability Rule
+
+Any admin/device job that can take more than a few seconds must expose an honest
+watchable contract before the UI presents it as running. The API must let an
+operator answer: what scope is locked, what source is being used, what target is
+being attempted, what stage is active, when the backend last advanced, how many
+real writes succeeded or failed, and what the latest recoverable error is.
+
+If the backend cannot explain the job through pollable state, progress events,
+or a dry-run/plan that matches execution, the implementation is wrong and should
+be refactored. The UI must not guess, inflate progress, or show editable preview
+controls after a job scope is frozen. Use explicit labels such as stale,
+estimated, queued, applying, rereading, completed, failed, or needs attention.
+Counts must distinguish selected unique IDs, source records, peer copy attempts,
+successful writes, failed writes, and biometric evidence/gaps.
+
+## Evidence Conflict and Root-Cause Closure Rule
+
+Never collapse conflicting evidence into the most convenient status. If the
+operator, physical room, device screen, quick-health endpoint, full-read
+endpoint, saved database state, browser, or logs disagree, mark the claim
+`CONFLICTING` and investigate the disagreement itself.
+
+- Ping, TCP, SSH, a listening tunnel, cached success, and lightweight quick
+  health are transport evidence only. They do not prove authentication, full
+  inventory readability, listener arm state, or callback delivery.
+- A device count must name the evidence class: physically powered/reachable,
+  transport-online, authenticated, inventory-readable, listener-armed, or
+  callback-proven. Never shorten one class to the ambiguous word `online`.
+- Operator physical evidence is a first-class source. It does not get silently
+  overwritten by a cached or weaker endpoint response.
+- Every observed error must be traced to a named cause or remain an explicit
+  unresolved defect. “Unknown,” “intermittent,” “fetch failed,” and “probably
+  network” are symptoms, not root causes.
+- Read the exact API/server/tunnel/listener/device logs for the same request and
+  timestamp. If logs lack enough identifiers or stages to explain the failure,
+  insufficient observability is itself a bug to repair.
+- After a repair, reproduce the original conflict and prove the sources now
+  agree. Do not declare green from a different, easier probe.
+
+## Authorized Write-Job Completion Rule
+
+When the user explicitly requests an actual sync/merge/write job, a read-only
+plan is a safety gate, not the finish line.
+
+1. Discover and freeze the exact verified device and record scope.
+2. Run the non-mutating plan and validate its logic, exclusions, conflicts,
+   source selections, and expected write matrix.
+3. Preserve a rollback/evidence snapshot and refuse scope expansion.
+4. Start the authorized write using the reviewed scope.
+5. Watch pollable job state and correlated logs until terminal.
+6. Repair recoverable failures and retry only the failed safe scope.
+7. Reread source and targets and prove convergence; a `completed` badge alone
+   is not write proof.
+
+Do not stop at preview merely because preview passed. Do not start writes for
+unreviewed identities, unresolved conflicts, unavailable devices, or invented
+biometric bytes.
+
+## Recoverable Credential Blocker Rule
+
+Device merge labels such as `missing_raw_blob`, `source_conflict`,
+`credential_only_card_not_supported`, and `target_write_unsupported` are
+diagnosis categories, not automatic stop conditions.
+
+- Recover missing custody from current physical source reads and classify the
+  exact bytes/capability before replanning.
+- Resolve equal raw-template sources by checksum and strict supersets by
+  evidenced custody; do not leave them as ambiguous "No source" rows.
+- Implement missing card/face writers when the current device exposes a safe
+  SDK/ISAPI capability, then prove retention by physical reread.
+- Convert only genuinely different same-slot biometrics, duplicate owners,
+  absent source bytes, or unsupported firmware into explicit physical/firmware
+  boundaries. Never guess or fabricate biometric truth to make a counter zero.
+- A software-recoverable blocker remains agent-owned work under the Non-Stop
+  Execution Rule.
+- A completed writer must not remain permanently hidden behind a manual
+  operator toggle. Keep it fail-closed while its build, capability probe, and
+  serial physical canary are unproven; after those gates pass, make supported
+  targets automatically actionable from current per-target capability
+  evidence. Retain target/user-scoped canary gates, duplicate-owner refusal,
+  shared device locks, reviewed-byte hashes, and physical reread proof.
 
 ## Browser Verification Tool
 
@@ -359,7 +451,7 @@ For prompts that mention drift, device truth, VM/GitOps state, LAN state, produc
 - Plan and plan review before edits.
 - Execute in passes.
 - Validate against the requested finish line, not just local convenience.
-- Retry or recover through at least three documented plausible fixes before calling a recoverable issue blocked.
+- Retry or recover through at least 5 documented plausible fixes before calling a recoverable issue blocked.
 - Record evidence and remaining drift in the handoff.
 
 When WWG exists, start from `.wwg/reports/wwg-agent-handoff.md`, then use `Agent-Meta-Prompt-Template.md` to structure the actual execution prompt.

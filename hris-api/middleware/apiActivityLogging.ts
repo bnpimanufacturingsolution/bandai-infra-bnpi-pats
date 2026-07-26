@@ -102,7 +102,16 @@ function isSensitiveField(fieldName: string): boolean {
 		normalized.includes("token") ||
 		normalized.includes("secret") ||
 		normalized.includes("cookie") ||
-		normalized.includes("authorization")
+		normalized.includes("authorization") ||
+		normalized.includes("cardno") ||
+		normalized.includes("fingerprint") ||
+		normalized.includes("facetemplate") ||
+		normalized.includes("facepicture") ||
+		normalized.includes("faceurl") ||
+		normalized.includes("rawface") ||
+		normalized.includes("rawblob") ||
+		normalized.includes("templatebase64") ||
+		normalized.includes("picturebase64")
 	);
 }
 

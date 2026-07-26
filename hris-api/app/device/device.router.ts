@@ -1,12 +1,107 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { cache, cacheShort, cacheMedium, cacheUser } from "../../middleware/cache";
 import { uploadImportFile } from "../../middleware/upload";
+import { requestTimeout } from "../../middleware/requestTimeout";
+import { config } from "../../config/config";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getHikvisionListenerStatus(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceLiveReadiness(req: Request, res: Response, next: NextFunction): Promise<void>;
+	proveDeviceLivePath(req: Request, res: Response, next: NextFunction): Promise<void>;
+	controlHikvisionListener(req: Request, res: Response, next: NextFunction): Promise<void>;
+	searchHikvisionDeviceLogs(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceSyncPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceSyncRuns(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceActivity(req: Request, res: Response, next: NextFunction): Promise<void>;
+	resetDeviceEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
+	triggerZktecoAttendanceSync(req: Request, res: Response, next: NextFunction): Promise<void>;
+	triggerHikvisionAttendanceImport(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	getDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	cancelDeviceImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	startDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	cancelDeviceUserSyncJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	previewDeviceUserExport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	exportDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	previewDeviceUserImport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	executeDeviceUserImport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceUserImportJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	listDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	deleteDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
+	deleteDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	captureDeviceUserRawFingerprints(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	captureDeviceUserRawFace(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDeviceUserPhoto(req: Request, res: Response, next: NextFunction): Promise<void>;
+	syncDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	backfillDeviceUserLifecycleEvents(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	backfillDeviceUserBiometricMetadata(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	reconcileBiometricSync(req: Request, res: Response, next: NextFunction): Promise<void>;
+	copyHikvisionDeviceUserToPeer(req: Request, res: Response, next: NextFunction): Promise<void>;
+	startHikvisionPeerCopyJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getHikvisionPeerCopyJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	planHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
+	reviewHikvisionCredentialRecovery(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	startHikvisionCredentialRecoveryJob(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	listHikvisionCredentialRecoveryJobs(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	getHikvisionCredentialRecoveryJob(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	applyHikvisionSdkUserMerge(req: Request, res: Response, next: NextFunction): Promise<void>;
+	reviewHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	startHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	listHikvisionSdkUserMergeJobs(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getHikvisionSdkUserMergeJob(req: Request, res: Response, next: NextFunction): Promise<void>;
+	attestRetainedHikvisionCardCanary(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	attestRetainedHikvisionFaceCanary(
+		req: Request,
+		res: Response,
+		next: NextFunction,
+	): Promise<void>;
+	mirrorHikvisionFaceToPeers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	mockHikvisionFingerprintTally(req: Request, res: Response, next: NextFunction): Promise<void>;
+	mockHikvisionFaceTally(req: Request, res: Response, next: NextFunction): Promise<void>;
+	createSyntheticKioskLoginTap(req: Request, res: Response, next: NextFunction): Promise<void>;
+	backfillDeviceUsers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	linkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
+	unlinkDeviceUser(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -29,8 +124,118 @@ export const router = (route: Router, controller: IController): Router => {
 		}),
 		controller.getEvents,
 	);
+	routes.post("/events/reset", controller.resetDeviceEvents);
+	// Nested under /events so Express never treats the path as /:id (device by id).
+	routes.get("/events/live-readiness", controller.getDeviceLiveReadiness);
+	routes.post("/events/live-readiness/prove", controller.proveDeviceLivePath);
+	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);
+	routes.post("/hikvision/listener", controller.controlHikvisionListener);
 
 	routes.get("/:id/health", controller.getDeviceHealth);
+	routes.post("/:id/hikvision/log-search", controller.searchHikvisionDeviceLogs);
+	routes.get("/users", controller.listDeviceUsers);
+	routes.post("/users/export/preview", controller.previewDeviceUserExport);
+	routes.post("/users/export", controller.exportDeviceUsers);
+	routes.post("/users/import/preview", controller.previewDeviceUserImport);
+	routes.post("/users/import/execute", controller.executeDeviceUserImport);
+	routes.get("/users/import/jobs/:jobId", controller.getDeviceUserImportJob);
+	routes.get("/:id/users", controller.listDeviceUsers);
+	routes.post("/:id/users/delete", controller.deleteDeviceUsers);
+	routes.post("/:id/users/:vendorUserId/delete", controller.deleteDeviceUser);
+	routes.post(
+		"/:id/users/:vendorUserId/raw-fingerprints/capture",
+		controller.captureDeviceUserRawFingerprints,
+	);
+	routes.post("/:id/users/:vendorUserId/raw-face/capture", controller.captureDeviceUserRawFace);
+	routes.get("/users/:userId/photo", controller.getDeviceUserPhoto);
+	routes.post("/:id/users/sync", controller.syncDeviceUsers);
+	routes.post("/:id/users/lifecycle-backfill", controller.backfillDeviceUserLifecycleEvents);
+	routes.post(
+		"/:id/users/biometric-metadata/backfill",
+		controller.backfillDeviceUserBiometricMetadata,
+	);
+	routes.post("/:id/users/backfill", controller.backfillDeviceUsers);
+	routes.post("/biometric-sync/reconcile", controller.reconcileBiometricSync);
+	routes.post(
+		"/hikvision/copy-user",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "hikvision-copy-user",
+		}),
+		controller.copyHikvisionDeviceUserToPeer,
+	);
+	// Durable job path for face+FP peer copy (poll progress; do not block UI mutation).
+	routes.post(
+		"/hikvision/copy-user/jobs",
+		requestTimeout({
+			timeoutMs: 60_000,
+			label: "hikvision-copy-user-job-start",
+		}),
+		controller.startHikvisionPeerCopyJob,
+	);
+	routes.get(
+		"/hikvision/copy-user/jobs/:jobId",
+		requestTimeout({
+			timeoutMs: 30_000,
+			label: "hikvision-copy-user-job-get",
+		}),
+		controller.getHikvisionPeerCopyJob,
+	);
+	routes.post(
+		"/hikvision/sdk-users/merge/plan",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "hikvision-sdk-user-merge-plan",
+		}),
+		controller.planHikvisionSdkUserMerge,
+	);
+	routes.post(
+		"/hikvision/sdk-users/merge/recovery/review",
+		controller.reviewHikvisionCredentialRecovery,
+	);
+	routes.post(
+		"/hikvision/sdk-users/merge/recovery/jobs",
+		controller.startHikvisionCredentialRecoveryJob,
+	);
+	routes.get(
+		"/hikvision/sdk-users/merge/recovery/jobs",
+		controller.listHikvisionCredentialRecoveryJobs,
+	);
+	routes.get(
+		"/hikvision/sdk-users/merge/recovery/jobs/:jobId",
+		controller.getHikvisionCredentialRecoveryJob,
+	);
+	routes.post("/hikvision/sdk-users/merge/apply", controller.applyHikvisionSdkUserMerge);
+	routes.post("/hikvision/sdk-users/merge/review", controller.reviewHikvisionSdkUserMergeJob);
+	routes.post("/hikvision/sdk-users/merge/jobs", controller.startHikvisionSdkUserMergeJob);
+	routes.get("/hikvision/sdk-users/merge/jobs", controller.listHikvisionSdkUserMergeJobs);
+	routes.post(
+		"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-card",
+		controller.attestRetainedHikvisionCardCanary,
+	);
+	routes.post(
+		"/hikvision/sdk-users/merge/jobs/:jobId/attest-retained-face",
+		controller.attestRetainedHikvisionFaceCanary,
+	);
+	routes.get("/hikvision/sdk-users/merge/jobs/:jobId", controller.getHikvisionSdkUserMergeJob);
+	routes.post("/hikvision/mirror-face", controller.mirrorHikvisionFaceToPeers);
+	routes.post("/hikvision/mock-fingerprint", controller.mockHikvisionFingerprintTally);
+	routes.post("/hikvision/mock-face", controller.mockHikvisionFaceTally);
+	// Admin-only labeled offline kiosk tap inject (not physical device truth).
+	routes.post("/kiosk/synthetic-tap", controller.createSyntheticKioskLoginTap);
+	routes.get("/:id/activity", controller.getDeviceActivity);
+	routes.get("/:id/sync-runs", controller.getDeviceSyncRuns);
+	routes.post("/users/:userId/link", controller.linkDeviceUser);
+	routes.post("/users/:userId/unlink", controller.unlinkDeviceUser);
+	routes.get("/sync-preview", controller.getDeviceSyncPreview);
+	routes.get("/import-jobs/:jobId", controller.getDeviceImportJob);
+	routes.post("/import-jobs/:jobId/cancel", controller.cancelDeviceImportJob);
+	routes.post("/users/sync-jobs", controller.startDeviceUserSyncJob);
+	routes.get("/users/sync-jobs/:jobId", controller.getDeviceUserSyncJob);
+	routes.post("/users/sync-jobs/:jobId/cancel", controller.cancelDeviceUserSyncJob);
+	routes.post("/zkteco/sync", controller.triggerZktecoAttendanceSync);
+	routes.post("/hikvision/sync", controller.triggerHikvisionAttendanceImport);
+	routes.post("/hikvision/import", controller.triggerHikvisionAttendanceImport);
 
 	/**
 	 * @openapi

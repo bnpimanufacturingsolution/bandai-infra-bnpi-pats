@@ -2392,9 +2392,11 @@ function ApplicantWorkflowDrawer({
 
 	const executeConfirm = async () => {
 		if (!pipelineConfirm) return;
+		const confirmed = pipelineConfirm;
 		setPendingAction(pipelineConfirm.payload.action);
+		setPipelineConfirm(null);
 		try {
-			let payload = pipelineConfirm.payload;
+			let payload = confirmed.payload;
 			if (payload.action === "REJECT_STEP") {
 				payload = {
 					...payload,
@@ -2406,7 +2408,6 @@ function ApplicantWorkflowDrawer({
 				return;
 			}
 			await onRunAction(payload);
-			setPipelineConfirm(null);
 		} catch (error) {
 			toast.error(getErrorMessage(error));
 		} finally {

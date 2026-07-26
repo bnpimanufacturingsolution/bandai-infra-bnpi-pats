@@ -261,7 +261,7 @@ export const DEFAULT_WORKFORCE_RECRUITMENT_CONFIG_SEED = {
 	autoCreateJobOnApproval:
 		DEFAULT_WORKFORCE_RECRUITMENT_SETTINGS.autoCreateJobOnApproval,
 };
-const LOCAL_ADMIN_SEEDS = [
+export const LOCAL_ADMIN_SEEDS = [
 	{
 		email: "super@admin.com",
 		userName: "super-admin",
@@ -281,6 +281,58 @@ const LOCAL_ADMIN_SEEDS = [
 		role: "hris-admin",
 	},
 ] as const;
+
+type LocalAdminSeed = (typeof LOCAL_ADMIN_SEEDS)[number];
+
+export function orderLocalAdminSeedsForExistingUsers(
+	seeds: readonly LocalAdminSeed[],
+	existingUsers: readonly { email: string; userName: string | null }[],
+): LocalAdminSeed[] {
+	const pending = [...seeds];
+	const ordered: LocalAdminSeed[] = [];
+	const currentUserNameByEmail = new Map(
+		existingUsers.map((user) => [user.email, user.userName]),
+	);
+	const occupyingEmailByUserName = new Map(
+		existingUsers
+			.filter(
+				(user): user is { email: string; userName: string } =>
+					typeof user.userName === "string" && user.userName.length > 0,
+			)
+			.map((user) => [user.userName, user.email]),
+	);
+
+	while (pending.length > 0) {
+		const nextIndex = pending.findIndex((seed) => {
+			const occupyingEmail = occupyingEmailByUserName.get(seed.userName);
+			return !occupyingEmail || occupyingEmail === seed.email;
+		});
+
+		if (nextIndex < 0) {
+			const blocked = pending
+				.map((seed) => `${seed.email}:${seed.userName}`)
+				.sort()
+				.join(", ");
+			throw new Error(
+				`Local admin username reconciliation is blocked by an identity conflict: ${blocked}`,
+			);
+		}
+
+		const [next] = pending.splice(nextIndex, 1);
+		const previousUserName = currentUserNameByEmail.get(next.email);
+		if (
+			previousUserName &&
+			occupyingEmailByUserName.get(previousUserName) === next.email
+		) {
+			occupyingEmailByUserName.delete(previousUserName);
+		}
+		currentUserNameByEmail.set(next.email, next.userName);
+		occupyingEmailByUserName.set(next.userName, next.email);
+		ordered.push(next);
+	}
+
+	return ordered;
+}
 
 export interface SeedProjectDefaultsResult {
 	mode: SeedAuthMode;
@@ -377,14 +429,27 @@ async function ensureDefaultDocumentTypes(prisma: PrismaClient, organizationId: 
 }
 
 const resolveBcrypt = (): { hash(password: string, saltOrRounds: number): Promise<string> } => {
-	// eslint-disable-next-line @typescript-eslint/no-var-requires
 	const bcrypt = require("bcryptjs");
 	return bcrypt as { hash(password: string, saltOrRounds: number): Promise<string> };
 };
 
 async function ensureLocalAdminUsers(prisma: PrismaClient, organizationId: string): Promise<void> {
 	const bcrypt = resolveBcrypt();
-	for (const adminSeed of LOCAL_ADMIN_SEEDS) {
+	const existingUsers = await prisma.user.findMany({
+		where: {
+			OR: [
+				{ email: { in: LOCAL_ADMIN_SEEDS.map((seed) => seed.email) } },
+				{ userName: { in: LOCAL_ADMIN_SEEDS.map((seed) => seed.userName) } },
+			],
+		},
+		select: { email: true, userName: true },
+	});
+	const orderedSeeds = orderLocalAdminSeedsForExistingUsers(
+		LOCAL_ADMIN_SEEDS,
+		existingUsers,
+	);
+
+	for (const adminSeed of orderedSeeds) {
 		const hashedPassword = await bcrypt.hash(adminSeed.password, 10);
 		await prisma.user.upsert({
 			where: { email: adminSeed.email },

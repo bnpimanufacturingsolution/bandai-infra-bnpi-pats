@@ -42,7 +42,7 @@ const shortOverall = (
 	if (level === "green" && safeToEnroll && safeToTap) {
 		return mode === "enroll" ? "Safe to enroll" : "Safe to tap / enroll";
 	}
-	if (level === "yellow") return mode === "enroll" ? "Needs fresh proof" : "Live path needs proof";
+	if (level === "yellow") return mode === "enroll" ? "Needs fresh proof" : "Ready for tap proof";
 	return mode === "enroll" ? "Not safe to enroll" : "Not ready for live ops";
 };
 

@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import applicantService, {
 	type ApplicantActionRequest,
 	type ApplicantAttachmentRecord,
@@ -8,6 +8,91 @@ import applicantService, {
 import type { CreateApplicant, Applicant, UpdateApplicant } from "~/zod/applicant";
 import { toast as sonnerToast } from "sonner";
 import type { ApiQueryParams } from "~/services/api-service";
+
+const optimisticStageActions = new Set<ApplicantActionRequest["action"]>([
+	"ADVANCE",
+	"APPROVE_STEP",
+	"REJECT_STEP",
+	"COMPLETE_STEP",
+	"SCHEDULE_INTERVIEW",
+	"SEND_OFFER",
+	"MARK_ONBOARDING_READY",
+	"MARK_HIRED",
+]);
+
+const patchApplicantInCachedValue = (
+	value: unknown,
+	applicantId: string,
+	patch: Record<string, unknown>,
+): unknown => {
+	if (!value || typeof value !== "object") return value;
+
+	if (Array.isArray(value)) {
+		let changed = false;
+		const next = value.map((item) => {
+			if (!item || typeof item !== "object" || (item as any).id !== applicantId) {
+				return item;
+			}
+			changed = true;
+			return { ...(item as any), ...patch };
+		});
+		return changed ? next : value;
+	}
+
+	const record = value as Record<string, any>;
+	if (record.id === applicantId) {
+		return { ...record, ...patch };
+	}
+
+	if (record.data !== undefined) {
+		const patchedData = patchApplicantInCachedValue(record.data, applicantId, patch);
+		if (patchedData !== record.data) return { ...record, data: patchedData };
+	}
+
+	if (Array.isArray(record.applicants)) {
+		const patchedApplicants = patchApplicantInCachedValue(
+			record.applicants,
+			applicantId,
+			patch,
+		);
+		if (patchedApplicants !== record.applicants) {
+			return { ...record, applicants: patchedApplicants };
+		}
+	}
+
+	if (record.applicants && typeof record.applicants === "object") {
+		let changed = false;
+		const patchedGroups = Object.fromEntries(
+			Object.entries(record.applicants).map(([key, applicants]) => {
+				const patchedApplicants = patchApplicantInCachedValue(
+					applicants,
+					applicantId,
+					patch,
+				);
+				if (patchedApplicants !== applicants) changed = true;
+				return [key, patchedApplicants];
+			}),
+		);
+		if (changed) return { ...record, applicants: patchedGroups };
+	}
+
+	if (record.applicant && typeof record.applicant === "object") {
+		const patchedApplicant = patchApplicantInCachedValue(record.applicant, applicantId, patch);
+		if (patchedApplicant !== record.applicant) return { ...record, applicant: patchedApplicant };
+	}
+
+	return value;
+};
+
+const getResolvedApplicant = (data: unknown): Applicant | null => {
+	if (!data || typeof data !== "object") return null;
+	const record = data as Record<string, any>;
+	if (record.id) return record as Applicant;
+	if (record.applicant?.id) return record.applicant as Applicant;
+	if (record.data?.id) return record.data as Applicant;
+	if (record.data?.applicant?.id) return record.data.applicant as Applicant;
+	return null;
+};
 
 // Query keys structure
 export const queryKeys = {
@@ -286,7 +371,45 @@ export const useApplicantAction = () => {
 		mutationFn: async ({ id, payload }: { id: string; payload: ApplicantActionRequest }) => {
 			return await applicantService.runAction(id, payload);
 		},
-		onSuccess: async (_data, variables) => {
+		onMutate: async (variables) => {
+			const nextStateKey = variables.payload.targetStateKey?.trim();
+			if (
+				!nextStateKey ||
+				!optimisticStageActions.has(variables.payload.action)
+			) {
+				return { snapshots: [] as Array<[QueryKey, unknown]> };
+			}
+
+			await queryClient.cancelQueries({ queryKey: queryKeys.applicants.all });
+			const snapshots = queryClient.getQueriesData({ queryKey: queryKeys.applicants.all });
+			const patch = {
+				currentWorkflowStateKey: nextStateKey.toUpperCase(),
+				lastCompletedStepExecutionId: variables.payload.stepExecutionId || undefined,
+			};
+
+			snapshots.forEach(([queryKey, data]) => {
+				const patched = patchApplicantInCachedValue(data, variables.id, patch);
+				if (patched !== data) {
+					queryClient.setQueryData(queryKey, patched);
+				}
+			});
+
+			return { snapshots };
+		},
+		onSuccess: async (data, variables) => {
+			const updatedApplicant = getResolvedApplicant(data);
+			if (updatedApplicant?.id) {
+				queryClient.setQueriesData(
+					{ queryKey: queryKeys.applicants.all },
+					(current) =>
+						patchApplicantInCachedValue(current, variables.id, updatedApplicant),
+				);
+				queryClient.setQueryData(
+					queryKeys.applicants.detail(variables.id),
+					updatedApplicant,
+				);
+			}
+
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: queryKeys.applicants.all }),
 				queryClient.invalidateQueries({
@@ -295,7 +418,10 @@ export const useApplicantAction = () => {
 			]);
 			sonnerToast.success("Applicant action completed");
 		},
-		onError: (error: any) => {
+		onError: (error: any, _variables, context) => {
+			context?.snapshots?.forEach(([queryKey, data]) => {
+				queryClient.setQueryData(queryKey, data);
+			});
 			sonnerToast.error(error?.message || "Failed to run applicant action");
 		},
 	});

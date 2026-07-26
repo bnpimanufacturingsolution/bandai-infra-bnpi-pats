@@ -45,6 +45,8 @@ services:
     build:
       context: ../hris-api
       dockerfile: Dockerfile
+      args:
+        PROJECT_TRUTH_BUILD_SHA: ${PROJECT_TRUTH_BUILD_SHA:-local-unattested}
     image: hris-api-local:develop
     container_name: hris-api-dev
     restart: unless-stopped
@@ -75,12 +77,18 @@ services:
       API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
       LOG_FORMAT: json
       ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_DEV:-${ZKTECO_BRIDGE_STATUS_URL:-http://zkteco-linux-bridge-dev:4371/status}}
+      PROJECT_TRUTH_VM_HOST: ${PROJECT_TRUTH_VM_HOST:-10.184.37.19}
+      PROJECT_TRUTH_VM_USER: ${PROJECT_TRUTH_VM_USER:-infra}
+      PROJECT_TRUTH_VM_SSH_KEY: /var/run/project-truth/ssh/node-health-appliance_ed25519
+      PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION: vm-container
+      PROJECT_TRUTH_HIKVISION_VM_API_BASE: http://127.0.0.1:3101
     volumes:
       - apiuploads-dev:/app/uploads
       - ./backups/dev:/var/backups/hris
       - ../data/import:/data/import:ro
       - ../source-inputs-organized:/source-inputs-organized:ro
       - ../docs:/docs:ro
+      - /var/lib/project-truth/ssh:/var/run/project-truth/ssh:ro
     networks:
       - default
       - hris-observability
@@ -302,12 +310,18 @@ services:
       API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
       LOG_FORMAT: json
       ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL_UAT:-${ZKTECO_BRIDGE_STATUS_URL:-http://zkteco-linux-bridge-uat:4371/status}}
+      PROJECT_TRUTH_VM_HOST: ${PROJECT_TRUTH_VM_HOST:-10.184.37.19}
+      PROJECT_TRUTH_VM_USER: ${PROJECT_TRUTH_VM_USER:-infra}
+      PROJECT_TRUTH_VM_SSH_KEY: /var/run/project-truth/ssh/node-health-appliance_ed25519
+      PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION: vm-container
+      PROJECT_TRUTH_HIKVISION_VM_API_BASE: http://127.0.0.1:3201
     volumes:
       - apiuploads-uat:/app/uploads
       - ./backups/uat:/var/backups/hris
       - ../data/import:/data/import:ro
       - ../source-inputs-organized:/source-inputs-organized:ro
       - ../docs:/docs:ro
+      - /var/lib/project-truth/ssh:/var/run/project-truth/ssh:ro
     networks:
       - default
       - hris-observability

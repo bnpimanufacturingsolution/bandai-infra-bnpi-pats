@@ -45,7 +45,8 @@ const sdkListenPort = envValue("HIKVISION_VM_BRIDGE_SDK_LISTEN_PORT", "59000");
 const httpListenPort = envValue("HIKVISION_VM_BRIDGE_HTTP_LISTEN_PORT", "59443");
 const apiLocalPort = envValue("HIKVISION_VM_BRIDGE_API_LOCAL_PORT", "3001");
 const apiRemotePort = envValue("HIKVISION_VM_BRIDGE_API_REMOTE_PORT", "53001");
-const sshTarget = envValue("HIKVISION_VM_BRIDGE_SSH_TARGET", "project-truth-hris");
+const sshTarget = envValue("HIKVISION_VM_BRIDGE_SSH_TARGET", "auto");
+const directSshKey = path.join(process.env.USERPROFILE || "", ".ssh", "node-health-appliance_ed25519");
 // Listener restart needs API; during predev it is almost always wasted time.
 const restartListener = envBool("HIKVISION_VM_BRIDGE_RESTART_LISTENER", false);
 
@@ -111,23 +112,41 @@ function processAlive(pid) {
 	}
 }
 
+function sshTargetCandidates() {
+	if (sshTarget !== "auto") return [{ label: sshTarget, args: [sshTarget] }];
+	const direct = fs.existsSync(directSshKey)
+		? [
+				"-i",
+				directSshKey,
+				"infra@10.184.37.19",
+			]
+		: ["infra@10.184.37.19"];
+	return [
+		{ label: "lan:infra@10.184.37.19", args: direct },
+		{ label: "alias:project-truth-hris", args: ["project-truth-hris"] },
+	];
+}
+
 function vmPortOpen(port) {
-	// Fast SSH probe; 4s budget. If SSH is cold this fails and we fall through to full start.
-	const result = spawnSync(
-		"ssh.exe",
-		[
+	// Fast SSH probe; if direct LAN is cold/unreachable, try the public alias.
+	for (const target of sshTargetCandidates()) {
+		const result = spawnSync(
+			"ssh.exe",
+			[
 			"-o",
 			"BatchMode=yes",
 			"-o",
 			"ConnectTimeout=3",
 			"-o",
 			"StrictHostKeyChecking=accept-new",
-			sshTarget,
+			...target.args,
 			`ss -ltn 2>/dev/null | grep -q ':${port} ' || netstat -ltn 2>/dev/null | grep -q ':${port} '`,
-		],
-		{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
-	);
-	return result.status === 0;
+			],
+			{ cwd: repoRoot, stdio: "pipe", windowsHide: true, encoding: "utf8" },
+		);
+		if (result.status === 0) return true;
+	}
+	return false;
 }
 
 function localBridgeMatches(deviceIps) {
@@ -255,18 +274,38 @@ const result = spawnSync(
 	],
 	{
 		cwd: repoRoot,
-		stdio: "inherit",
+		stdio: "pipe",
 		windowsHide: true,
+		encoding: "utf8",
 		env: process.env,
+		timeout: 45_000,
+		killSignal: "SIGKILL",
 	},
 );
 
 const sec = ((Date.now() - t0) / 1000).toFixed(1);
-if (result.status !== 0) {
+const output = `${result.stdout || ""}\n${result.stderr || ""}`.trim();
+if (result.status !== 0 || result.error) {
 	console.warn(
-		`[hikvision-bridge] Bridge start failed (exit ${result.status || 1}) after ${sec}s. Live capture may stay Login failed (7). Continuing API boot.`,
+		`[hikvision-bridge] Bridge start failed (exit ${result.status || 1}${result.error ? `, ${result.error.message}` : ""}) after ${sec}s. Live capture may stay Login failed (7). Continuing API boot.`,
 	);
+	if (output) {
+		const compact = output
+			.split(/\r?\n/)
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.filter((line) => !/^\s*(At |CategoryInfo|FullyQualifiedErrorId)/.test(line))
+			.slice(-6);
+		for (const line of compact) {
+			console.warn(`[hikvision-bridge] ${line.slice(0, 500)}`);
+		}
+	}
 	process.exit(0);
+}
+if (output) {
+	for (const line of output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(-8)) {
+		console.log(`[hikvision-bridge] ${line.slice(0, 500)}`);
+	}
 }
 console.log(`[hikvision-bridge] STEP start: ok in ${sec}s`);
 

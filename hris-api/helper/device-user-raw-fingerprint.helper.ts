@@ -9,12 +9,24 @@
  * payloads also keep the same usable base64 templates for a complete ledger journey.
  */
 import type { PrismaClient } from "../generated/prisma";
+import { createHash } from "crypto";
 import { hikvisionFetch, hikvisionFetchBinary } from "../lib/hikvision-client";
 import { emitDeviceEventSaved } from "./device-event-realtime.helper";
 import { isOpaqueHikvisionPersonToken } from "./hikvision-event-contract.helper";
 
 export const RAW_FINGERPRINT_SCHEMA = "project-truth.hikvision-fingerprint-raw.v1";
 export const RAW_FACE_SCHEMA = "project-truth.hikvision-face-raw.v1";
+
+export type RawFaceBinaryClassification =
+	| { ok: true; reason: null }
+	| {
+			ok: false;
+			reason:
+				| "face_image_not_found_on_device"
+				| "face_image_unauthorized"
+				| "face_binary_empty"
+				| "face_binary_not_image";
+	  };
 
 export type RawFingerprintTemplate = {
 	fingerPrintId: number;
@@ -37,22 +49,252 @@ export type RawFingerprintCustody = {
 	totalDataChars: number;
 };
 
-export const envBool = (name: string, defaultValue: boolean) => {
-	const raw = String(process.env[name] || "").trim().toLowerCase();
-	if (!raw) return defaultValue;
-	if (["0", "false", "no", "off"].includes(raw)) return false;
-	if (["1", "true", "yes", "on"].includes(raw)) return true;
-	return defaultValue;
+export type FingerprintTemplateChecksumEvidence = {
+	fingerPrintId: number;
+	checksum: string;
+};
+
+export const buildFingerprintTemplateChecksumEvidence = (
+	templates: RawFingerprintTemplate[],
+): FingerprintTemplateChecksumEvidence[] =>
+	(templates || [])
+		.filter((template) => String(template.data || "").trim())
+		.map((template) => ({
+			fingerPrintId: Number(template.fingerPrintId || 0),
+			checksum: createHash("sha256")
+				.update(String(template.data || "").trim())
+				.digest("hex"),
+		}))
+		.filter((template) => template.fingerPrintId > 0);
+
+/**
+ * Convert a decrypted SDK custody payload into planner-only templates.
+ * Envelope authentication is handled before this boundary. These redundant
+ * payload bindings keep an envelope copied between rows fail-closed, and the
+ * caller must retain only counts/checksums rather than the returned raw bytes.
+ */
+export const recoverPlannerFingerprintTemplates = (params: {
+	payload: any;
+	expectedDeviceId: string;
+	expectedVendorUserId: string;
+	freshUserInfoOwnerVerified?: boolean;
+}): RawFingerprintTemplate[] => {
+	const payload = params.payload || {};
+	if (
+		String(payload.sourceDeviceId || "") !== params.expectedDeviceId ||
+		String(payload.vendorUserId || "") !== params.expectedVendorUserId ||
+		(payload.identityOwnerVerified !== true &&
+			params.freshUserInfoOwnerVerified !== true)
+	) {
+		throw new Error("Decrypted fingerprint custody source binding mismatch");
+	}
+	const templates = normalizeCallbackFingerprintArray(payload.fingerprints);
+	if (!templates.length) {
+		throw new Error("Decrypted fingerprint custody contains no usable templates");
+	}
+	return templates;
+};
+
+export const findTargetFingerprintDuplicateOwners = (params: {
+	vendorUserId: string;
+	sourceTemplates: FingerprintTemplateChecksumEvidence[];
+	targetExistingTemplates: FingerprintTemplateChecksumEvidence[];
+	targetDeviceTemplates: Array<{
+		vendorUserId: string;
+		templates: FingerprintTemplateChecksumEvidence[];
+	}>;
+}): string[] => {
+	const existingIds = new Set(
+		(params.targetExistingTemplates || []).map((template) => template.fingerPrintId),
+	);
+	const missingChecksums = new Set(
+		(params.sourceTemplates || [])
+			.filter((template) => !existingIds.has(template.fingerPrintId))
+			.map((template) => template.checksum),
+	);
+	return [
+		...new Set(
+			(params.targetDeviceTemplates || [])
+				.filter(
+					(row) =>
+						String(row.vendorUserId) !== String(params.vendorUserId) &&
+						(row.templates || []).some((template) =>
+							missingChecksums.has(template.checksum),
+						),
+				)
+				.map((row) => String(row.vendorUserId)),
+		),
+	].sort();
+};
+
+export const selectMissingFingerprintTemplatesForTarget = (params: {
+	sourceTemplates: RawFingerprintTemplate[];
+	targetTemplates: RawFingerprintTemplate[];
+	targetReportedCount: number;
+}): {
+	targetEvidenceComplete: boolean;
+	missingTemplates: RawFingerprintTemplate[];
+	existingFingerPrintIds: number[];
+} => {
+	const targetReportedCount = Math.max(Number(params.targetReportedCount || 0), 0);
+	const existingFingerPrintIds = [
+		...new Set(
+			(params.targetTemplates || [])
+				.map((template) => Number(template.fingerPrintId || 0))
+				.filter((id) => id > 0),
+		),
+	].sort((left, right) => left - right);
+	const targetEvidenceComplete =
+		targetReportedCount === 0 || existingFingerPrintIds.length >= targetReportedCount;
+	const existing = new Set(existingFingerPrintIds);
+	return {
+		targetEvidenceComplete,
+		existingFingerPrintIds,
+		missingTemplates: (params.sourceTemplates || []).filter(
+			(template) =>
+				String(template.data || "").trim() &&
+				!existing.has(Number(template.fingerPrintId || 0)),
+		),
+	};
 };
 
 /**
  * Legacy JS/ISAPI device pull after enroll identity.
- * Default OFF (C++-first): raw templates must arrive on SDK callback
- * (`fingerprints[]` / faceTemplate from C++ listener). Set
- * HIKVISION_ENROLL_RAW_FINGERPRINT=true only as temporary fallback — not product truth.
+ * Always enabled: when the C++ listener does not provide raw template bytes,
+ * HRIS must still try the ISAPI fallback so environment defaults cannot
+ * suppress biometric custody.
  */
-export const isRawFingerprintEnrollCaptureEnabled = () =>
-	envBool("HIKVISION_ENROLL_RAW_FINGERPRINT", false);
+export const isRawFingerprintEnrollCaptureEnabled = () => true;
+
+export const markDeviceUserRawBiometricFailure = async (params: {
+	prisma: PrismaClient | any;
+	organizationId: string;
+	deviceId: string;
+	employeeNo: string;
+	modality: "fingerprint" | "face";
+	reason: string;
+	diagnosticPath?: string | null;
+	diagnosticStatus?: number | null;
+	expectedCount?: number;
+	attempts?: number;
+}) => {
+	const organizationId = String(params.organizationId || "").trim();
+	const deviceId = String(params.deviceId || "").trim();
+	const employeeNo = String(params.employeeNo || "").trim();
+	const reason = String(params.reason || "raw_capture_failed").trim();
+	if (!organizationId || !deviceId || !employeeNo || !reason) return null;
+	const row = await params.prisma.deviceUser.findFirst({
+		where: {
+			organizationId,
+			deviceId,
+			OR: [{ vendorUserId: employeeNo }, { employeeNo }],
+		},
+		select: { id: true, vendorUserId: true, rawPayload: true, vendorMetadata: true },
+	});
+	if (!row) return null;
+	const priorVendor = row.vendorMetadata && typeof row.vendorMetadata === "object" ? row.vendorMetadata : {};
+	const priorRaw = row.rawPayload && typeof row.rawPayload === "object" ? row.rawPayload : {};
+	const previousFailures =
+		priorVendor.rawBiometricFailures && typeof priorVendor.rawBiometricFailures === "object"
+			? priorVendor.rawBiometricFailures
+			: {};
+	const failure = {
+		reason,
+		status:
+			reason === "no_fingerprint_data_from_device" ||
+			reason === "no_face_on_device" ||
+			reason === "face_image_not_found_on_device" ||
+			reason === "face_image_unauthorized"
+				? "stale_count_only"
+				: "capture_failed",
+		expectedCount: Math.max(Number(params.expectedCount || 0) || 0, 0),
+		attempts: Math.max(Number(params.attempts || 0) || 0, 0),
+		...(params.diagnosticPath ? { diagnosticPath: params.diagnosticPath } : {}),
+		...(Number(params.diagnosticStatus || 0)
+			? { diagnosticStatus: Number(params.diagnosticStatus || 0) }
+			: {}),
+		checkedAt: new Date().toISOString(),
+		source: "live_device_raw_capture",
+	};
+	const rawBiometricFailures = {
+		...previousFailures,
+		[params.modality]: failure,
+	};
+	const rawMetadata = {
+		...(priorRaw._hrisDeviceMetadata || {}),
+		rawBiometricFailures,
+	};
+	return params.prisma.deviceUser.update({
+		where: { id: row.id },
+		data: {
+			vendorMetadata: {
+				...priorVendor,
+				rawBiometricFailures,
+			},
+			rawPayload: {
+				...priorRaw,
+				_hrisDeviceMetadata: rawMetadata,
+			},
+			lastSyncedAt: new Date(),
+		},
+		select: { id: true, vendorUserId: true, vendorMetadata: true, rawPayload: true },
+	});
+};
+
+const bufferPreviewText = (buffer?: Buffer | Uint8Array | string | null) => {
+	if (!buffer) return "";
+	if (typeof buffer === "string") return buffer.slice(0, 1024);
+	return Buffer.from(buffer).toString("utf8", 0, Math.min(buffer.length, 1024));
+};
+
+export const classifyHikvisionRawFaceBinaryResponse = (params: {
+	buffer?: Buffer | Uint8Array | string | null;
+	contentType?: string | null;
+	status?: number | null;
+}): RawFaceBinaryClassification => {
+	const contentType = String(params.contentType || "").toLowerCase();
+	const status = Number(params.status || 0) || 0;
+	const preview = bufferPreviewText(params.buffer).trim().toLowerCase();
+
+	if (status === 401 || preview.includes("<statusvalue>401</statusvalue>") || preview.includes("unauthorized")) {
+		return { ok: false, reason: "face_image_unauthorized" };
+	}
+	if (
+		status === 404 ||
+		preview.includes("404 -- not found") ||
+		preview.includes("can't locate document") ||
+		preview.includes("cant locate document")
+	) {
+		return { ok: false, reason: "face_image_not_found_on_device" };
+	}
+	if (!params.buffer || (typeof params.buffer !== "string" && params.buffer.length < 32)) {
+		return { ok: false, reason: "face_binary_empty" };
+	}
+	if (
+		contentType.includes("text/html") ||
+		contentType.includes("text/xml") ||
+		contentType.includes("application/xml") ||
+		preview.startsWith("<!doctype html") ||
+		preview.startsWith("<html") ||
+		preview.startsWith("<?xml")
+	) {
+		return { ok: false, reason: "face_binary_not_image" };
+	}
+	return { ok: true, reason: null };
+};
+
+export const isExactHikvisionUserInfoOwner = (
+	userInfoNode: unknown,
+	expectedEmployeeNo: unknown,
+): boolean => {
+	const expected = String(expectedEmployeeNo || "").trim();
+	const actual = String(
+		(userInfoNode as any)?.employeeNo ||
+			(userInfoNode as any)?.EmployeeNo ||
+			"",
+	).trim();
+	return Boolean(expected && actual && actual === expected);
+};
 
 export const extractFingerDataFromIsapiNode = (node: any): string => {
 	if (!node || typeof node !== "object") return "";
@@ -269,6 +511,12 @@ export type FingerPrintWriteProgress = {
 	totalStatus: number | null;
 	raw: any;
 	reason: string;
+	timing?: {
+		durationMs: number;
+		attempts: number;
+		requestMs: number;
+		waitMs: number;
+	};
 };
 
 export const parseFingerPrintProgress = (response: any): FingerPrintWriteProgress => {
@@ -336,6 +584,7 @@ export const pollFingerPrintWriteProgress = async (params: {
 	attempts?: number;
 	delayMs?: number;
 }): Promise<FingerPrintWriteProgress> => {
+	const pollStartedAt = Date.now();
 	const attempts = Math.min(Math.max(Number(params.attempts) || 6, 1), 12);
 	const delayMs = Math.min(Math.max(Number(params.delayMs) || 500, 100), 5000);
 	const timeoutMs = Number(params.timeoutMs) || 10_000;
@@ -347,10 +596,17 @@ export const pollFingerPrintWriteProgress = async (params: {
 		raw: null,
 		reason: "no_progress_polls",
 	};
+	let completedAttempts = 0;
+	let requestMs = 0;
+	let waitMs = 0;
 	for (let i = 0; i < attempts; i += 1) {
 		if (i > 0) {
+			const waitStartedAt = Date.now();
 			await new Promise((r) => setTimeout(r, delayMs * i));
+			waitMs += Date.now() - waitStartedAt;
 		}
+		completedAttempts += 1;
+		const requestStartedAt = Date.now();
 		try {
 			const raw = await hikvisionFetch(
 				"/ISAPI/AccessControl/FingerPrintProgress?format=json",
@@ -362,11 +618,21 @@ export const pollFingerPrintWriteProgress = async (params: {
 					timeoutMs,
 				},
 			);
+			requestMs += Date.now() - requestStartedAt;
 			last = parseFingerPrintProgress(raw);
 			if (last.cardReaderRecvStatus === 6 || last.cardReaderRecvStatus === 5) {
-				return last;
+				return {
+					...last,
+					timing: {
+						durationMs: Date.now() - pollStartedAt,
+						attempts: completedAttempts,
+						requestMs,
+						waitMs,
+					},
+				};
 			}
 		} catch (error: any) {
+			requestMs += Date.now() - requestStartedAt;
 			last = {
 				ok: false,
 				cardReaderRecvStatus: null,
@@ -377,7 +643,330 @@ export const pollFingerPrintWriteProgress = async (params: {
 			};
 		}
 	}
-	return last;
+	return {
+		...last,
+		timing: {
+			durationMs: Date.now() - pollStartedAt,
+			attempts: completedAttempts,
+			requestMs,
+			waitMs,
+		},
+	};
+};
+
+export const classifyDeferredFingerprintWrite = (
+	writeOk: boolean,
+	progress: FingerPrintWriteProgress,
+): { acceptedForGroupReread: boolean; source: string } => {
+	const explicitlyRejected = progress.cardReaderRecvStatus === 5;
+	const acceptedForGroupReread = writeOk && !explicitlyRejected;
+	return {
+		acceptedForGroupReread,
+		source: !writeOk
+			? "device_fp_write_failed"
+			: explicitlyRejected
+				? `device_fp_write_rejected_progress5:${progress.errorMsg || "unknown"}`
+				: progress.cardReaderRecvStatus === 6
+					? "device_fp_progress_verified_deferred_to_group_userinfo_reread"
+					: "device_fp_progress_bounded_deferred_to_group_userinfo_reread",
+	};
+};
+
+const isHikvisionIsapiAckOk = (response: any): boolean =>
+	Number(response?.statusCode) === 1 ||
+	String(response?.statusString || "").toUpperCase() === "OK" ||
+	String(response?.subStatusCode || "").toLowerCase() === "ok" ||
+	// Some firmwares return empty body on success.
+	response == null ||
+	(typeof response === "object" && Object.keys(response || {}).length === 0);
+
+/**
+ * Progress errorMsg on cardReaderRecvStatus=5 often names the employee that
+ * still owns the slot (live 2026-07-25: vendor 1 write → errorMsg "8" while
+ * admin dual-owner was [8]). Treat pure integer tokens as candidate owners.
+ */
+export const parseFingerprintProgressOccupyingEmployee = (
+	errorMsg: unknown,
+): string | null => {
+	const raw = String(errorMsg ?? "").trim();
+	if (!raw) return null;
+	if (/^\d{1,10}$/.test(raw)) return raw;
+	const match = raw.match(/(?:employeeNo|employee|owner|user)\s*[=:#]?\s*(\d{1,10})/i);
+	return match?.[1] || null;
+};
+
+const FINGERPRINT_DELETE_BODY_SHAPES = (
+	employeeNo: string,
+	fingerPrintId: number,
+): Array<{ method: "PUT" | "POST"; body: Record<string, unknown>; label: string }> => [
+	// Live 2026-07-25 sticky-clear burn: devices returned
+	// MessageParametersLack errorMsg=mode statusCode=6 when mode was omitted.
+	// Prefer byEmployeeNo shapes that match UserInfoDetail/Delete contract.
+	{
+		method: "PUT",
+		label: "mode_by_employee_list",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "POST",
+		label: "post_mode_by_employee_list",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "PUT",
+		label: "mode_by_employee_single",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				employeeNo,
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "PUT",
+		label: "mode_all_employee_list",
+		body: {
+			FingerPrintDelete: {
+				mode: "all",
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "PUT",
+		label: "array_employee_id",
+		body: {
+			FingerPrintDelete: [{ employeeNo, fingerPrintID: fingerPrintId }],
+		},
+	},
+	{
+		method: "PUT",
+		label: "object_employee_list",
+		body: {
+			FingerPrintDelete: {
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "POST",
+		label: "post_object_employee_list",
+		body: {
+			FingerPrintDelete: {
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+	{
+		method: "PUT",
+		label: "object_single_employee",
+		body: {
+			FingerPrintDelete: {
+				employeeNo,
+				fingerPrintID: fingerPrintId,
+				fingerType: "normalFP",
+			},
+		},
+	},
+];
+
+/**
+ * Clear fingerprint slot ownership for admin-sandbox dual-owner force path.
+ * Only call when planner already proved write+owners are vendor ids 1–20.
+ *
+ * Defect fixed 2026-07-25: prior soft-fail left conflicting owners on device
+ * (progressStatus=5 errorMsg=<owner>). Now:
+ * 1) try multiple ISAPI Delete body shapes (firmware variance)
+ * 2) reread FingerPrintUpload / prove sticky empty
+ * 3) callers hard-fail when stickyEmpty is false
+ */
+export const deleteHikvisionFingerprintSlotsForEmployee = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	employeeNo: string;
+	fingerPrintIds: number[];
+	/** When true, expand to slots 1–10 (matches C++ DEL_FINGERPRINT all-id mask). */
+	clearAllCommonSlots?: boolean;
+	/** When true (default), reread device and require zero retained templates. */
+	requireStickyEmpty?: boolean;
+}): Promise<{
+	employeeNo: string;
+	ok: boolean;
+	/** True only after physical reread shows no fingerData for the cleared slots. */
+	stickyEmpty: boolean;
+	remainingFingerPrintIds: number[];
+	attempts: Array<{
+		fingerPrintId: number;
+		ok: boolean;
+		shape: string;
+		detail: string;
+	}>;
+}> => {
+	const employeeNo = String(params.employeeNo || "").trim();
+	const requireStickyEmpty = params.requireStickyEmpty !== false;
+	const baseIds = (params.fingerPrintIds || [])
+		.map((id) => Number(id) || 0)
+		.filter((id) => id > 0);
+	const ids = [
+		...new Set(
+			params.clearAllCommonSlots
+				? [...baseIds, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+				: baseIds,
+		),
+	].sort((a, b) => a - b);
+	const attempts: Array<{
+		fingerPrintId: number;
+		ok: boolean;
+		shape: string;
+		detail: string;
+	}> = [];
+	if (!employeeNo || !ids.length) {
+		return {
+			employeeNo,
+			ok: false,
+			stickyEmpty: false,
+			remainingFingerPrintIds: [],
+			attempts,
+		};
+	}
+	for (const fingerPrintId of ids) {
+		let deleted = false;
+		let lastDetail = "no_shape_attempted";
+		let lastShape = "none";
+		for (const shape of FINGERPRINT_DELETE_BODY_SHAPES(employeeNo, fingerPrintId)) {
+			lastShape = shape.label;
+			try {
+				const response = await hikvisionFetch(
+					"/ISAPI/AccessControl/FingerPrint/Delete?format=json",
+					{
+						method: shape.method,
+						deviceId: params.deviceId,
+						prisma: params.prisma,
+						request: params.req,
+						timeoutMs: 20_000,
+						body: shape.body,
+					},
+				);
+				if (isHikvisionIsapiAckOk(response)) {
+					deleted = true;
+					lastDetail = `ack_ok:${shape.label}`;
+					break;
+				}
+				lastDetail = JSON.stringify(response || {}).slice(0, 200);
+			} catch (error: any) {
+				lastDetail = String(error?.message || error).slice(0, 200);
+			}
+		}
+		attempts.push({
+			fingerPrintId,
+			ok: deleted,
+			shape: lastShape,
+			detail: lastDetail,
+		});
+	}
+
+	// Device applies deletes asynchronously; settle before sticky reread.
+	await new Promise((resolve) => setTimeout(resolve, 600));
+
+	let remainingFingerPrintIds: number[] = [];
+	if (requireStickyEmpty) {
+		const maxFingerId = Math.max(...ids, 10);
+		const reread = await fetchRawFingerprintsViaIsapi({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId: params.deviceId,
+			employeeNo,
+			maxFingerId,
+			expectedFingerprintCount: maxFingerId,
+		});
+		remainingFingerPrintIds = (reread.fingerprints || [])
+			.map((fp) => Number(fp.fingerPrintId || 0))
+			.filter((id) => id > 0 && ids.includes(id));
+	}
+
+	const stickyEmpty = requireStickyEmpty
+		? remainingFingerPrintIds.length === 0
+		: attempts.some((item) => item.ok);
+	const ok =
+		attempts.length > 0 &&
+		(stickyEmpty || (!requireStickyEmpty && attempts.every((item) => item.ok)));
+
+	return {
+		employeeNo,
+		ok,
+		stickyEmpty,
+		remainingFingerPrintIds,
+		attempts,
+	};
+};
+
+/**
+ * Admin-sandbox only: clear every conflicting owner until sticky-empty, or throw.
+ * Never accepts soft-fail (progress5 loop root cause).
+ */
+export const clearAdminSandboxFingerprintConflictsSticky = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	conflictingOwners: string[];
+	fingerPrintIds: number[];
+	isAdminSandboxVendorUserId: (vendorUserId: string | number | null | undefined) => boolean;
+}): Promise<{
+	clearedOwners: string[];
+	results: Array<Awaited<ReturnType<typeof deleteHikvisionFingerprintSlotsForEmployee>>>;
+}> => {
+	const results: Array<
+		Awaited<ReturnType<typeof deleteHikvisionFingerprintSlotsForEmployee>>
+	> = [];
+	const clearedOwners: string[] = [];
+	for (const owner of params.conflictingOwners) {
+		const ownerId = String(owner || "").trim();
+		if (!ownerId || !params.isAdminSandboxVendorUserId(ownerId)) {
+			throw new Error(
+				`admin_sandbox_fp_clear_refused_non_admin_owner:${ownerId || "empty"}`,
+			);
+		}
+		const cleared = await deleteHikvisionFingerprintSlotsForEmployee({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId: params.deviceId,
+			employeeNo: ownerId,
+			fingerPrintIds: params.fingerPrintIds,
+			clearAllCommonSlots: true,
+			requireStickyEmpty: true,
+		});
+		results.push(cleared);
+		if (!cleared.stickyEmpty) {
+			throw new Error(
+				`admin_sandbox_fp_clear_not_sticky owner=${ownerId} remainingSlots=${cleared.remainingFingerPrintIds.join(",") || "unknown"} attempts=${JSON.stringify(cleared.attempts).slice(0, 500)}`,
+			);
+		}
+		clearedOwners.push(ownerId);
+	}
+	return { clearedOwners, results };
 };
 
 /**
@@ -395,6 +984,7 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 	fingerType?: string | number;
 	enableCardReader?: number[];
 	cardNo?: string;
+	deferRereadVerification?: boolean;
 }): Promise<{
 	writeOk: boolean;
 	writeResponse: any;
@@ -403,7 +993,16 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 	numOfFP: number;
 	fingerprints: RawFingerprintTemplate[];
 	source: string;
+	timing: {
+		durationMs: number;
+		downloadMs: number;
+		progressMs: number;
+		progressAttempts: number;
+		progressRequestMs: number;
+		progressWaitMs: number;
+	};
 }> => {
+	const operationStartedAt = Date.now();
 	const employeeNo = String(params.employeeNo || "").trim();
 	const fingerData = String(params.fingerData || "").trim();
 	const fingerPrintID = Number(params.fingerPrintID || 1) || 1;
@@ -420,6 +1019,7 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 
 	let writeResponse: any = null;
 	let writeOk = false;
+	const downloadStartedAt = Date.now();
 	try {
 		writeResponse = await hikvisionFetch(
 			"/ISAPI/AccessControl/FingerPrintDownload?format=json",
@@ -440,7 +1040,42 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		writeResponse = { error: String(error?.message || error) };
 		writeOk = false;
 	}
+	const downloadMs = Date.now() - downloadStartedAt;
 
+	if (params.deferRereadVerification) {
+		// Defer only the expensive raw-template/UserInfo reread. The device handles
+		// FingerPrintDownload asynchronously, so the next slot must not be posted
+		// until this slot reaches a terminal progress state (or the bounded poll
+		// window expires). Skipping this wait caused the second template in a
+		// two-fingerprint bundle to be rejected while slot one was still applying.
+		const progress = await pollFingerPrintWriteProgress({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId: params.deviceId,
+		});
+		const deferred = classifyDeferredFingerprintWrite(writeOk, progress);
+		return {
+			writeOk,
+			writeResponse,
+			progress,
+			// The credential merge performs one authoritative UserInfo reread after
+			// every slot in this exact person's bundle has been submitted. Progress
+			// polling serializes the device writes; the group reread remains the
+			// authoritative physical-count gate.
+			sticky: deferred.acceptedForGroupReread,
+			numOfFP: 0,
+			fingerprints: [],
+			source: deferred.source,
+			timing: {
+				durationMs: Date.now() - operationStartedAt,
+				downloadMs,
+				progressMs: Number(progress.timing?.durationMs || 0),
+				progressAttempts: Number(progress.timing?.attempts || 0),
+				progressRequestMs: Number(progress.timing?.requestMs || 0),
+				progressWaitMs: Number(progress.timing?.waitMs || 0),
+			},
+		};
+	}
 	const progress = await pollFingerPrintWriteProgress({
 		prisma: params.prisma,
 		req: params.req,
@@ -458,6 +1093,8 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 			req: params.req,
 			deviceId: params.deviceId,
 			employeeNo,
+			maxFingerId: fingerPrintID,
+			expectedFingerprintCount: fingerPrintID,
 		});
 		fingerprints = fetched.fingerprints;
 		try {
@@ -486,10 +1123,20 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		} catch {
 			/* keep */
 		}
-		if (fingerprints.length > 0 || numOfFP > 0) break;
+		if (
+			fingerprints.some(
+				(fingerprint) => Number(fingerprint.fingerPrintId) === fingerPrintID,
+			) ||
+			numOfFP >= fingerPrintID
+		) {
+			break;
+		}
 	}
 
-	const sticky = fingerprints.length > 0 || numOfFP > 0;
+	const sticky =
+		fingerprints.some(
+			(fingerprint) => Number(fingerprint.fingerPrintId) === fingerPrintID,
+		) || numOfFP >= fingerPrintID;
 	const source = sticky
 		? "device_fp_read_after_write_verified"
 		: progress.cardReaderRecvStatus === 5
@@ -506,6 +1153,14 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		numOfFP,
 		fingerprints,
 		source,
+		timing: {
+			durationMs: Date.now() - operationStartedAt,
+			downloadMs,
+			progressMs: Number(progress.timing?.durationMs || 0),
+			progressAttempts: Number(progress.timing?.attempts || 0),
+			progressRequestMs: Number(progress.timing?.requestMs || 0),
+			progressWaitMs: Number(progress.timing?.waitMs || 0),
+		},
 	};
 };
 
@@ -546,6 +1201,11 @@ export const applyRawFingerprintCustodyToRow = (row: any, custody: RawFingerprin
 		fingerprintCount,
 		hasFingerprint: fingerprintCount > 0,
 	};
+	const priorFailures =
+		priorVendor.rawBiometricFailures && typeof priorVendor.rawBiometricFailures === "object"
+			? priorVendor.rawBiometricFailures
+			: {};
+	const { fingerprint: _fingerprintFailure, ...remainingFailures } = priorFailures;
 
 	// Public raw plane — what the operator expects to open on Device User details.
 	const rawFingerprints = {
@@ -570,6 +1230,7 @@ export const applyRawFingerprintCustodyToRow = (row: any, custody: RawFingerprin
 	row.vendorMetadata = {
 		...priorVendor,
 		credentialSummary,
+		rawBiometricFailures: remainingFailures,
 		// Top-level for easy API/UI discovery.
 		rawFingerprints,
 		// Keep a short status flag for badges.
@@ -637,17 +1298,6 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 	source?: string;
 	face?: unknown;
 }> => {
-	if (!isRawFingerprintEnrollCaptureEnabled()) {
-		return {
-			ok: false,
-			rawPresent: false,
-			fingerprintCount: 0,
-			totalDataChars: 0,
-			deviceUserId: params.deviceUserId || null,
-			reason: "disabled_by_env",
-		};
-	}
-
 	const organizationId = String(params.organizationId || "").trim();
 	const deviceId = String(params.deviceId || "").trim();
 	const employeeNo = String(params.employeeNo || "").trim();
@@ -694,6 +1344,16 @@ export const captureRawFingerprintsForEnrollment = async (params: {
 	const mergedFingerprints = mergeRawFingerprintTemplates(priorFingerprints, fingerprints);
 
 	if (!mergedFingerprints.length) {
+		await markDeviceUserRawBiometricFailure({
+			prisma: params.prisma,
+			organizationId,
+			deviceId,
+			employeeNo,
+			modality: "fingerprint",
+			reason: lastError || "no_fingerprint_data_from_device",
+			expectedCount: expectedFingerprintCount,
+			attempts,
+		}).catch(() => undefined);
 		await patchEnrollmentEventRawStatus(params, {
 			status: "raw_capture_failed",
 			reason: lastError || "no_fingerprint_data_from_device",
@@ -922,9 +1582,26 @@ export const captureRawFaceForEnrollment = async (params: {
 		userInfoNode = Array.isArray(ui?.UserInfoSearch?.UserInfo)
 			? ui.UserInfoSearch.UserInfo[0]
 			: ui?.UserInfoSearch?.UserInfo;
+		if (!isExactHikvisionUserInfoOwner(userInfoNode, employeeNo)) {
+			throw new Error(
+				`face_userinfo_identity_mismatch: expected ${employeeNo}, received ${String(
+					userInfoNode?.employeeNo || userInfoNode?.EmployeeNo || "",
+				).trim() || "[empty]"}`,
+			);
+		}
 		faceURL = String(userInfoNode?.faceURL || "").trim();
 		const numOfFace = Number(userInfoNode?.numOfFace || 0) || 0;
 		if (!faceURL || numOfFace < 1) {
+			await markDeviceUserRawBiometricFailure({
+				prisma: params.prisma,
+				organizationId,
+				deviceId,
+				employeeNo,
+				modality: "face",
+				reason: "no_face_on_device",
+				expectedCount: numOfFace,
+				attempts: 1,
+			}).catch(() => undefined);
 			return {
 				ok: false,
 				present: false,
@@ -933,6 +1610,15 @@ export const captureRawFaceForEnrollment = async (params: {
 			};
 		}
 	} catch (error: any) {
+		await markDeviceUserRawBiometricFailure({
+			prisma: params.prisma,
+			organizationId,
+			deviceId,
+			employeeNo,
+			modality: "face",
+			reason: String(error?.message || error || "userinfo_face_lookup_failed"),
+			attempts: 1,
+		}).catch(() => undefined);
 		return {
 			ok: false,
 			present: false,
@@ -941,13 +1627,7 @@ export const captureRawFaceForEnrollment = async (params: {
 		};
 	}
 
-	let picPath = faceURL;
-	try {
-		const u = new URL(faceURL);
-		picPath = `${u.pathname}${u.search}`;
-	} catch {
-		/* relative path ok */
-	}
+	const picPath = resolveHikvisionDeviceSuppliedPath(faceURL);
 
 	let buf: Buffer;
 	let contentType = "image/jpeg";
@@ -971,26 +1651,58 @@ export const captureRawFaceForEnrollment = async (params: {
 									(binary as any)?.data ||
 									(binary as any) ||
 									[],
-							);
-		if (!raw.length || raw.length < 32) {
-			return {
-				ok: false,
-				present: false,
-				reason: "face_binary_empty",
-				deviceUserId: params.deviceUserId || null,
-			};
-		}
-		buf = raw;
+		);
 		contentType = String(
 			(binary as any)?.contentType ||
 				(binary as any)?.headers?.["content-type"] ||
 				"image/jpeg",
 		);
+		const classification = classifyHikvisionRawFaceBinaryResponse({
+			buffer: raw,
+			contentType,
+			status: (binary as any)?.status,
+		});
+		if (!classification.ok) {
+			await markDeviceUserRawBiometricFailure({
+				prisma: params.prisma,
+				organizationId,
+				deviceId,
+				employeeNo,
+				modality: "face",
+				reason: classification.reason,
+				diagnosticPath: picPath,
+				diagnosticStatus: (binary as any)?.status,
+				attempts: 1,
+			}).catch(() => undefined);
+			return {
+				ok: false,
+				present: false,
+				reason: classification.reason,
+				deviceUserId: params.deviceUserId || null,
+			};
+		}
+		buf = raw;
 	} catch (error: any) {
+		const classification = classifyHikvisionRawFaceBinaryResponse({
+			buffer: String(error?.message || error || ""),
+			status: error?.status,
+		});
+		const reason = classification.ok ? "face_binary_fetch_failed" : classification.reason;
+		await markDeviceUserRawBiometricFailure({
+			prisma: params.prisma,
+			organizationId,
+			deviceId,
+			employeeNo,
+			modality: "face",
+			reason,
+			diagnosticPath: picPath,
+			diagnosticStatus: error?.status,
+			attempts: 1,
+		}).catch(() => undefined);
 		return {
 			ok: false,
 			present: false,
-			reason: String(error?.message || error || "face_binary_fetch_failed"),
+			reason,
 			deviceUserId: params.deviceUserId || null,
 		};
 	}
@@ -999,6 +1711,10 @@ export const captureRawFaceForEnrollment = async (params: {
 	const rawFace = {
 		schema: RAW_FACE_SCHEMA,
 		present: b64.length > 32,
+		// This flag is earned by the exact EmployeeNoList UserInfo response
+		// checked above. It binds the downloaded device-local faceURL bytes to
+		// the requested physical user without relying on a card association.
+		identityOwnerVerified: true,
 		capturedAt: new Date().toISOString(),
 		source: "isapi_faceURL_download",
 		contentType,
@@ -1031,11 +1747,17 @@ export const captureRawFaceForEnrollment = async (params: {
 		hasFace: true,
 		faceCount: Math.max(Number(priorVm.credentialSummary?.faceCount || 0) || 0, 1),
 	};
+	const priorFailures =
+		priorVm.rawBiometricFailures && typeof priorVm.rawBiometricFailures === "object"
+			? priorVm.rawBiometricFailures
+			: {};
+	const { face: _faceFailure, ...remainingFailures } = priorFailures;
 	const vendorMetadata = {
 		...priorVm,
 		rawFace,
 		rawFacePresent: true,
 		credentialSummary,
+		rawBiometricFailures: remainingFailures,
 	};
 	const rawPayload = {
 		...priorRaw,
@@ -1045,6 +1767,7 @@ export const captureRawFaceForEnrollment = async (params: {
 			...(priorRaw._hrisDeviceMetadata || {}),
 			rawFace,
 			credentialSummary,
+			rawBiometricFailures: remainingFailures,
 		},
 	};
 
@@ -1066,6 +1789,29 @@ export const captureRawFaceForEnrollment = async (params: {
 		contentType,
 		deviceUserId: updated.id,
 	};
+};
+
+/**
+ * Device firmware may advertise a stale/default authority in faceURL. Use only
+ * its absolute ISAPI path; hikvisionFetchBinary remains pinned to deviceId.
+ */
+export const resolveHikvisionDeviceSuppliedPath = (value: unknown): string => {
+	const raw = String(value || "").trim();
+	if (!raw) throw new Error("Hikvision device path is empty");
+	let path = raw;
+	try {
+		const parsed = new URL(raw);
+		if (!["http:", "https:"].includes(parsed.protocol)) {
+			throw new Error("Hikvision device path uses an unsupported scheme");
+		}
+		path = `${parsed.pathname}${parsed.search}`;
+	} catch (error: any) {
+		if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) throw error;
+	}
+	if (!path.startsWith("/") || path.startsWith("//")) {
+		throw new Error("Hikvision device path must be an absolute device-local path");
+	}
+	return path;
 };
 
 /**
@@ -1339,15 +2085,11 @@ export const scheduleRawFingerprintCaptureForEnrollment = (params: {
 	employeeNo: string;
 	deviceUserId?: string | null;
 }): void => {
-	if (!isRawFingerprintEnrollCaptureEnabled()) {
-		// C++-first: templates must arrive on /api/hikvision/callback fingerprints[] from listener.
-		return;
-	}
 	const employeeNo = String(params.employeeNo || "").trim();
 	if (!employeeNo || isOpaqueHikvisionPersonToken(employeeNo)) return;
 
 	console.warn(
-		`[raw-fingerprint] LEGACY JS/ISAPI fallback capture scheduled for ${employeeNo} device=${params.deviceId} (HIKVISION_ENROLL_RAW_FINGERPRINT=true)`,
+		`[raw-fingerprint] ISAPI fallback capture scheduled for ${employeeNo} device=${params.deviceId}`,
 	);
 
 	void captureRawFingerprintsForEnrollment(params)

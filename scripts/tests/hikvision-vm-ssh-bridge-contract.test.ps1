@@ -18,12 +18,16 @@ function Assert-Contains {
   }
 }
 
-Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'VmSshTarget\s*=\s*''project-truth-hris''' -Message 'SSH bridge must default to the public Project Truth VM alias'
+Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'VmSshTarget\s*=\s*''auto''' -Message 'SSH bridge must default to automatic VM SSH target selection'
+Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'infra@10\.184\.37\.19' -Message 'SSH bridge auto mode must try direct LAN first'
+Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'project-truth-hris' -Message 'SSH bridge auto mode must retain public Project Truth VM alias fallback'
+Assert-Contains -Path 'scripts/ensure-device-live-path.ps1' -Pattern "ErrorActionPreference = 'Continue'" -Message 'Live-path SSH selection must not abort on direct-LAN native stderr before alias fallback'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'ExitOnForwardFailure=yes' -Message 'SSH bridge must fail fast if remote forwards are not established'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'ServerAliveInterval=30' -Message 'SSH bridge must keep the remote forward session alive'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern '58080' -Message 'SSH bridge must preserve the default forwarded HTTPS port base'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern '58000' -Message 'SSH bridge must preserve the default forwarded SDK port base'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern '53001' -Message 'SSH bridge must expose the host-local HRIS API inside the VM for truth-based peer copy'
+Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern '\$forwardArgs\.Add\("\$\{ApiRemotePort\}:127\.0\.0\.1:\$\{ApiLocalPort\}"\)' -Message 'SSH bridge must actually bind VM API reverse port to the host-local API'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'hikvisionRuntimeAddress = ''127\.0\.0\.1''' -Message 'SSH bridge must emit localhost runtime hints for the VM listener'
 Assert-Contains -Path 'scripts/start-host-hikvision-vm-ssh-bridge.ps1' -Pattern 'hikvisionSdkRuntimeAddress = ''127\.0\.0\.1''' -Message 'SSH bridge must emit localhost SDK hints for the VM listener'
 Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'start-host-hikvision-vm-ssh-bridge' -Message 'Main CLI must expose the SSH-based Hikvision VM bridge helper'
@@ -32,6 +36,8 @@ Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'start-host-hikvision
 Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern 'resolve_local_api_base' -Message 'Listener must resolve API base (prefer host reverse)'
 Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern '127\.0\.0\.1:53001' -Message 'Listener must know host reverse 53001'
 Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern 'HIKVISION_HOT_RELOAD_FORCE_API_BASE' -Message 'Listener must allow force override for pure-VM 3101'
+Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern 'if \[\[ -n "\$preferred" \]\] && api_health_ok "\$preferred"; then' -Message 'Configured API default must be health-proven before it can suppress VM fallback'
+Assert-Contains -Path 'scripts/project-truth-hikvision-hot-reload-listener.sh' -Pattern 'HIKVISION_HOT_RELOAD_API_BASE=\$preferred is unhealthy; using healthy VM DEV API \$vm_base' -Message 'Listener must explain dead host-reverse to VM DEV fallback'
 Assert-Contains -Path 'appliance/systemd/project-truth-hikvision-hot-reload-listener.service' -Pattern '(?m)^Environment=HIKVISION_HOT_RELOAD_API_BASE=http://127\.0\.0\.1:53001\s*$' -Message 'Unit default must be host reverse 53001 not K3s 3101'
 $unitLines = Get-Content -LiteralPath (Join-Path $repoRoot 'appliance/systemd/project-truth-hikvision-hot-reload-listener.service')
 $envLines = $unitLines | Where-Object { $_ -match '^Environment=HIKVISION_HOT_RELOAD_API_BASE=' }

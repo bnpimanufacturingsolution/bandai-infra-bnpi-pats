@@ -56,6 +56,20 @@ const STEPS = [
 		phase: "B",
 	},
 	{
+		id: "ensure-k8s-db-watch",
+		label: "Keep canonical DEV DB wire handshake self-repairing",
+		script: "ensure-k8s-db-watch.cjs",
+		typical: "<1s warm / <3s cold",
+		phase: "C",
+	},
+	{
+		id: "ensure-hikvision-remote-device-tunnel",
+		label: "Hikvision remote device tunnels (.20-.25 -> localhost)",
+		script: "ensure-hikvision-remote-device-tunnel.cjs",
+		typical: "<2s warm / 5-30s cold SSH",
+		phase: "C",
+	},
+	{
 		id: "ensure-local-dev-services",
 		label: "Local postgres/services if needed",
 		script: "ensure-local-dev-services.cjs",

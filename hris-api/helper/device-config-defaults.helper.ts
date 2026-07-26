@@ -8,6 +8,7 @@ type DeviceRuntimeDefaultsInput = {
 	config?: unknown;
 	existingConfig?: unknown;
 	name?: string | null;
+	address?: string | null;
 	protocol?: string | null;
 	port?: number | null;
 };
@@ -55,6 +56,61 @@ const cleanConfig = (value: DeviceConfigInput): Record<string, unknown> => {
 	return config;
 };
 
+const getHikvisionReverseBridgeIndex = ({
+	address,
+	name,
+	config,
+}: Pick<DeviceRuntimeDefaultsInput, "address" | "name"> & {
+	config: Record<string, unknown>;
+}) => {
+	const explicitIndex = Number(config.hikvisionReverseBridgeIndex);
+	if (Number.isInteger(explicitIndex) && explicitIndex >= 0) return explicitIndex;
+
+	const nameMatch = String(name || "").match(/\bTEST\s+([A-Z])\b/i);
+	if (nameMatch) {
+		return nameMatch[1].toUpperCase().charCodeAt(0) - "A".charCodeAt(0);
+	}
+
+	const addressMatch = String(address || "").match(/^192\.168\.254\.(\d+)$/);
+	if (addressMatch) {
+		const lastOctet = Number(addressMatch[1]);
+		if (lastOctet >= 109 && lastOctet <= 130) return lastOctet - 109;
+	}
+
+	return null;
+};
+
+const buildHikvisionReverseBridgeDefaults = ({
+	address,
+	name,
+	config,
+	protocol,
+}: Pick<DeviceRuntimeDefaultsInput, "address" | "name" | "protocol"> & {
+	config: Record<string, unknown>;
+}) => {
+	const usesReverseBridge =
+		String(config.hikvisionSdkRuntimeTransport || "").toLowerCase() ===
+			"ssh-reverse-forward" ||
+		String(config.preferHostReverseBridge || "").toLowerCase() === "true" ||
+		String(address || "").startsWith("192.168.254.");
+	if (!usesReverseBridge) return {};
+
+	const bridgeIndex = getHikvisionReverseBridgeIndex({ address, name, config }) || 0;
+	const offset = bridgeIndex * 100;
+	const runtimeProtocol =
+		String(protocol || "").toLowerCase() === "http" ? "http" : "https";
+
+	return {
+		hikvisionRuntimeAddress: "127.0.0.1",
+		hikvisionRuntimePort: 59443 + offset,
+		hikvisionRuntimeProtocol: runtimeProtocol,
+		hikvisionSdkRuntimeAddress: "127.0.0.1",
+		hikvisionSdkRuntimePort: 59000 + offset,
+		hikvisionSdkRuntimeTransport: "ssh-reverse-forward",
+		hikvisionReverseBridgeIndex: bridgeIndex,
+	};
+};
+
 export const resolveDeviceRuntimeVendor = ({
 	config,
 	name,
@@ -83,6 +139,7 @@ export const buildDeviceRuntimeConfig = ({
 	config,
 	existingConfig,
 	name,
+	address,
 	protocol,
 	port,
 }: DeviceRuntimeDefaultsInput): Prisma.InputJsonObject => {
@@ -95,8 +152,18 @@ export const buildDeviceRuntimeConfig = ({
 	if (!vendor) return merged as Prisma.InputJsonObject;
 
 	const runtimeDefaults = DEVICE_RUNTIME_DEFAULTS[vendor];
+	const reverseBridgeDefaults =
+		vendor === "Hikvision"
+			? buildHikvisionReverseBridgeDefaults({
+					address,
+					name,
+					protocol,
+					config: merged,
+				})
+			: {};
 	return {
 		...runtimeDefaults,
+		...reverseBridgeDefaults,
 		...merged,
 		source: runtimeDefaults.source,
 		sdkPort: runtimeDefaults.sdkPort,

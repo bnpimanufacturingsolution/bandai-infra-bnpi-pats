@@ -21,6 +21,20 @@ const remoteLanForwardScript = path.join(
 	"scripts",
 	"start-project-truth-remote-lan-forward.ps1",
 );
+const hikvisionTunnelMapKey = "PROJECT_TRUTH_HIKVISION_TUNNEL_MAP";
+
+function readEnvFileValue(filePath, key) {
+	if (!fs.existsSync(filePath)) return "";
+	for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+		const trimmed = line.trim();
+		if (!trimmed || trimmed.startsWith("#")) continue;
+		const equalsIndex = trimmed.indexOf("=");
+		if (equalsIndex === -1) continue;
+		if (trimmed.slice(0, equalsIndex).trim() !== key) continue;
+		return trimmed.slice(equalsIndex + 1).trim();
+	}
+	return "";
+}
 
 function canConnect(port, host, timeoutMs = 400) {
 	return new Promise((resolve) => {
@@ -40,10 +54,20 @@ function canConnect(port, host, timeoutMs = 400) {
 
 /**
  * TCP-open is not enough for Prisma. A half-dead SSH hop can accept TCP then
- * stall. Prefer a short Postgres wire handshake (SSLRequest -> N/S/E).
- * Fail-closed is kept short so predev does not look hung.
+ * stall. Prefer a Postgres wire handshake (SSLRequest -> N/S/E).
+ *
+ * Cloudflare SSH local-forwards often need 1–3s for the first wire reply even
+ * when 127.0.0.1 TCP is immediate. 500ms was a false-negative on a healthy
+ * K3s DEV Postgres (firstByte 'N') via project-truth-hris. Override with
+ * PROJECT_TRUTH_PG_HANDSHAKE_TIMEOUT_MS when needed.
  */
-function canConnectPostgres(port, host, timeoutMs = 500) {
+function defaultPostgresHandshakeTimeoutMs() {
+	const raw = Number(process.env.PROJECT_TRUTH_PG_HANDSHAKE_TIMEOUT_MS || 5000);
+	if (!Number.isFinite(raw) || raw < 250) return 5000;
+	return Math.min(Math.floor(raw), 30000);
+}
+
+function canConnectPostgres(port, host, timeoutMs = defaultPostgresHandshakeTimeoutMs()) {
 	return new Promise((resolve) => {
 		const socket = net.createConnection({ port, host });
 		let settled = false;
@@ -69,7 +93,7 @@ function canConnectPostgres(port, host, timeoutMs = 500) {
 /** Fast fail: TCP first (250ms), Postgres wire only if TCP is open. */
 async function canUseLocalPostgres(port) {
 	if (!(await canConnect(port, "127.0.0.1", 250))) return false;
-	return canConnectPostgres(port, "127.0.0.1", 500);
+	return canConnectPostgres(port, "127.0.0.1", defaultPostgresHandshakeTimeoutMs());
 }
 
 function runPowerShell(args) {
@@ -137,6 +161,12 @@ async function main() {
 	}
 
 	console.log("[bnpi-db-access] START — resolve Postgres for local hris-api dev");
+	const preservedHikvisionTunnelMap =
+		process.env[hikvisionTunnelMapKey] ||
+		readEnvFileValue(runtimeEnvPath, hikvisionTunnelMapKey);
+	if (preservedHikvisionTunnelMap) {
+		process.env[hikvisionTunnelMapKey] = preservedHikvisionTunnelMap;
+	}
 	loadEnvFile(envPath, { overwrite: true });
 	const datasource = parseDatasourceUrl(
 		process.env.WRITE_DATABASE_URL ||
@@ -265,6 +295,14 @@ async function main() {
 		}
 
 		// Fallback: compose-published DEV Postgres on 15433.
+		// This is an explicit escape hatch only. The host-local DEV truth is the
+		// K3s DEV Postgres forward on 127.0.0.1:55435; compose DEV has drifted
+		// independently before and can show the wrong device set in localhost.
+		if (process.env.PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK !== "true") {
+			throw new Error(
+				`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} after bootstrap. Refusing automatic compose DEV fallback because 10.184.37.19:15433 is a separate drift-prone database. Set PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK=true only for an intentional stale-compose diagnostic.`,
+			);
+		}
 		const composeDevPort = Number(process.env.PROJECT_TRUTH_DEV_COMPOSE_DB_PORT || 15433);
 		const composeHosts = ["127.0.0.1", remoteLanHost].filter(Boolean);
 		let composeHost = null;

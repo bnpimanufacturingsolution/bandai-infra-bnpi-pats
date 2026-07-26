@@ -36,7 +36,9 @@ describe("device log sync targeted import contract", () => {
 	it("runs independent ZKTeco and Hikvision availability probes concurrently", () => {
 		expect(controllerSource).to.contain("HIKVISION_PREVIEW_SEARCH_TIMEOUT_MS || 1800");
 		expect(controllerSource).to.contain("const zktecoPreviewPromise =");
-		expect(controllerSource).to.contain("const hikvisionTotalsPromise = Promise.all(");
+		expect(controllerSource).to.contain("const hikvisionTotalsPromise = quickSavedPreview");
+		expect(controllerSource).to.contain(": withDeviceUserImportTimeout(");
+		expect(controllerSource).to.contain("Promise.allSettled(");
 		expect(controllerSource).to.contain("const [zktecoPreview] = await Promise.all([");
 		expect(controllerSource).to.contain("zktecoPreviewPromise,");
 		expect(controllerSource).to.contain("hikvisionTotalsPromise,");
@@ -47,6 +49,10 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("HIKVISION_PREVIEW_DEVICE_BUDGET_MS");
 		expect(controllerSource).to.contain('mode: "sync-preview"');
 		expect(controllerSource).to.contain("includeDirectUserInventory: !syncPreviewMode");
+		expect(controllerSource).to.contain("const includeLiveCustody =");
+		expect(controllerSource).to.contain("const includeLiveSourceTotals =");
+		expect(controllerSource).to.contain("includeLiveCustody &&");
+		expect(controllerSource).to.contain("includeLiveSourceTotals &&");
 		expect(controllerSource).to.contain(
 			"zktecoDevices.length > 0 ? getZktecoBridgeStatus() : Promise.resolve(null)",
 		);
@@ -63,7 +69,7 @@ describe("device log sync targeted import contract", () => {
 		// Device UI Log tab uses Information major: Add Fingerprint / Add Person Info.
 		expect(controllerSource).to.contain('log.hikvision.com/Information');
 		expect(controllerSource).to.contain("sampleClassify");
-		expect(controllerSource).to.contain("Only exact rows read from logSearch may become Ready to add");
+		expect(controllerSource).to.contain("Ready to add excludes Needs review rows.");
 		expect(controllerSource).not.to.contain("extrapolatedByAction");
 		expect(controllerSource).not.to.contain("Math.round((Number(sampleCount) / sampleSize) * total)");
 	});
@@ -78,7 +84,7 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("attendanceImported");
 		expect(controllerSource).to.contain("persistNormalizedHikvisionEvidence");
 		expect(controllerSource).to.contain(
-			"Reading user & enrollment activity from device operation logs",
+			"Reading user & enrollment activity from classified device operation logs",
 		);
 		expect(controllerSource).to.contain("Reading attendance taps from the device access log");
 		// Old 200-row cap made large residuals stall at 0/200.
@@ -114,5 +120,26 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("Math.ceil(Number(operationTargetHint) * 1.5)");
 		expect(controllerSource).to.contain("operationSourceTotal");
 		expect(controllerSource).to.contain("attendanceSourceTotal");
+	});
+
+	it("persists device log import progress so runtime restarts do not lose queued jobs", () => {
+		expect(controllerSource).to.contain("DEVICE_IMPORT_JOB_DIR");
+		expect(controllerSource).to.contain("persistDeviceImportJob(nextJob)");
+		expect(controllerSource).to.contain("readDeviceImportJob(jobId)");
+		expect(controllerSource).to.contain("markDeviceImportJobStale(job)");
+		expect(controllerSource).to.contain("Start Sync logs again; saved rows remain durable");
+		expect(controllerSource).to.contain("persistDeviceImportJob(job)");
+		expect(controllerSource).to.contain("updatedAt: new Date()");
+	});
+
+	it("retries transient Hikvision import page failures before failing the whole job", () => {
+		expect(controllerSource).to.contain("fetchHikvisionImportPageWithRetry");
+		expect(controllerSource).to.contain("HIKVISION_IMPORT_PAGE_RETRY_LIMIT || 4");
+		expect(controllerSource).to.contain("HIKVISION_IMPORT_RETRY_MIN_PAGE_SIZE || 10");
+		expect(controllerSource).to.contain("isTransientHikvisionImportError");
+		expect(controllerSource).to.contain("status === 401");
+		expect(controllerSource).to.contain("unauthorized|aborted|aborterror|timed out|timeout");
+		expect(controllerSource).to.contain("body.AcsEventCond.maxResults = pageSize");
+		expect(controllerSource).to.contain("Connection: \"close\"");
 	});
 });

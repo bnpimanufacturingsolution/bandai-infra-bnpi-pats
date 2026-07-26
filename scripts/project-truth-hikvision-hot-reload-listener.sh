@@ -44,18 +44,25 @@ resolve_local_api_base() {
     return 0
   fi
 
-  if [[ -n "$preferred" ]]; then
+  # A configured default is not a force flag. Only keep it when it is healthy;
+  # otherwise a dead host reverse must not prevent the VM-owned listener from
+  # falling back to the K3s DEV API.
+  if [[ -n "$preferred" ]] && api_health_ok "$preferred"; then
     echo "$preferred"
     return 0
   fi
 
   if api_health_ok "$vm_base"; then
+    if [[ -n "$preferred" && "$preferred" != "$vm_base" ]]; then
+      echo "WARN: HIKVISION_HOT_RELOAD_API_BASE=$preferred is unhealthy; using healthy VM DEV API $vm_base." >&2
+    fi
     echo "$vm_base"
     return 0
   fi
 
-  # Prefer host reverse target even if not up yet (predev will open the tunnel).
-  echo "$host_base"
+  # Nothing is healthy yet. Retain the configured/default target so the daemon
+  # can retry without silently changing an explicitly prepared startup path.
+  echo "${preferred:-$host_base}"
 }
 
 LOCAL_API_BASE="$(resolve_local_api_base)"
@@ -110,19 +117,32 @@ ensure_work_tree() {
   local build_script="$WORK/scripts/build-hikvision-biometric-service.sh"
   local source_file="$WORK/hikvision_biometric_service.cpp"
   local binary="$WORK/build/hikvision-biometric-service"
+  local deployed_build_script="$SOURCE_ROOT/scripts/build-hikvision-biometric-service.sh"
+  local deployed_source_file="$SOURCE_ROOT/hikvision_biometric_service.cpp"
+  local rebuild_required=0
 
-  if [[ ! -f "$source_file" || ! -f "$build_script" ]]; then
-    mkdir -p "$WORK/scripts"
-    cp "$SOURCE_ROOT/hikvision_biometric_service.cpp" "$source_file"
-    cp "$SOURCE_ROOT/scripts/build-hikvision-biometric-service.sh" "$build_script"
+  if [[ ! -f "$deployed_source_file" || ! -f "$deployed_build_script" ]]; then
+    echo "missing deployed Hikvision source or build script under $SOURCE_ROOT" >&2
+    return 1
+  fi
+
+  mkdir -p "$WORK/scripts"
+
+  # Deployment tools preserve timestamps, so mtime ordering cannot prove that
+  # the long-lived work tree contains the deployed source. Compare content and
+  # force a rebuild whenever either input differs.
+  if [[ ! -f "$source_file" ]] || ! cmp --silent "$deployed_source_file" "$source_file"; then
+    cp "$deployed_source_file" "$source_file"
+    rebuild_required=1
+  fi
+
+  if [[ ! -f "$build_script" ]] || ! cmp --silent "$deployed_build_script" "$build_script"; then
+    cp "$deployed_build_script" "$build_script"
     chmod 0755 "$build_script"
+    rebuild_required=1
   fi
 
-  if [[ ! -x "$binary" || "$SOURCE_ROOT/hikvision_biometric_service.cpp" -nt "$source_file" ]]; then
-    cp "$SOURCE_ROOT/hikvision_biometric_service.cpp" "$source_file"
-  fi
-
-  if [[ ! -x "$binary" || "$source_file" -nt "$binary" || "$build_script" -nt "$binary" ]]; then
+  if [[ ! -x "$binary" || "$rebuild_required" == "1" ]]; then
     HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT" bash "$build_script" >/dev/null
   fi
 }
@@ -234,7 +254,14 @@ PY
 hris_token=""
 export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
 tmp_spec=$(mktemp /tmp/project-truth-hikvision-device.XXXXXX)
-trap 'rm -f "$tmp_spec"' EXIT
+runtime_spec=""
+cleanup_specs() {
+  rm -f "$tmp_spec"
+  if [[ -n "$runtime_spec" ]]; then
+    rm -f "$runtime_spec"
+  fi
+}
+trap cleanup_specs EXIT
 
 if [[ "$ALLOW_STATIC_SPEC_OVERRIDE" == "1" && -n "$SPEC_OVERRIDE" && -s "$SPEC_OVERRIDE" ]]; then
   cp "$SPEC_OVERRIDE" "$tmp_spec"
@@ -285,6 +312,15 @@ if [[ ! -s "$tmp_spec" ]]; then
   exit 2
 fi
 
+# Concurrent one-shot SDK exports must never share the daemon's device-spec
+# pathname. A shared install allowed one export to replace another export's
+# selected panel between preparation and SDK startup, yielding an armed panel
+# followed by source_device_not_armed for the requested panel.
+if [[ "$RUN_ONCE" == "1" ]]; then
+  runtime_spec=$(mktemp /tmp/project-truth-hikvision-runtime-spec.XXXXXX)
+  SPEC="$runtime_spec"
+fi
+
 umask 077
 install -m 600 "$tmp_spec" "$SPEC"
 
@@ -297,8 +333,14 @@ ensure_work_tree
 cd "$WORK"
 export HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT"
 export LD_LIBRARY_PATH="$SDK_ROOT/lib:$SDK_ROOT:$SDK_ROOT/HCNetSDKCom:${LD_LIBRARY_PATH:-}"
-if [[ "$DEVICE_SOURCE" == "api" && -z "${hris_token:-}" ]]; then
-  hris_token="$(fetch_hikvision_hris_token)"
+# Always mint a token when empty. Static-spec override used to skip the API device
+# fetch and left HIKVISION_HRIS_API_TOKEN blank, so every callback/reconcile curl
+# returned HTTP 401 ("No token provided") and merge peer-copy looked like total failure.
+if [[ -z "${hris_token:-}" ]]; then
+  if ! hris_token="$(fetch_hikvision_hris_token)"; then
+    echo "WARN: failed to mint HRIS API token; HRIS posts may 401 until login works" >&2
+    hris_token=""
+  fi
 fi
 export HIKVISION_HRIS_API_TOKEN="$hris_token"
 

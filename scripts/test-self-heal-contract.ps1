@@ -156,6 +156,8 @@ $vmGitCredsScript = Get-Content -Raw 'scripts/configure-vm-git-creds.ps1'
 $bootstrapOnpremScript = Get-Content -Raw 'scripts/bootstrap-onprem-vm.sh'
 $ansiblePullScript = Get-Content -Raw 'appliance/bin/project-truth-ansible-pull.sh'
 $ansiblePullPlaybook = Get-Content -Raw 'ansible/project-truth-pull.yml'
+$hikvisionHotReloadScript = Get-Content -Raw 'scripts/project-truth-hikvision-hot-reload-listener.sh'
+$credentialRecoveryEnvPatch = Get-Content -Raw 'gitops/runtime-k8s/overlays/dev/hris-api-credential-recovery-env.patch.yaml'
 $ansiblePullService = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pull.service'
 $ansiblePullTimer = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pull.timer'
 $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
@@ -206,13 +208,23 @@ $checks.Add((Assert-Text 'VM Git credential command restarts ansible-pull' $vmGi
 $checks.Add((Assert-Text 'VM Git credential command supports password fallback' $vmGitCredsScript 'PROJECT_TRUTH_SSH_PASSWORD'))
 $checks.Add((Assert-Text 'ansible-pull wrapper pulls develop from repo' $ansiblePullScript 'PROJECT_TRUTH_BRANCH:-develop'))
 $checks.Add((Assert-Text 'ansible-pull wrapper invokes ansible-pull' $ansiblePullScript 'ansible-pull'))
+$checks.Add((Assert-Text 'ansible-pull selects changed runtime services' $ansiblePullPlaybook 'Runtime image selection: services='))
+$checks.Add((Assert-Text 'ansible-pull builds only selected runtime services' $ansiblePullPlaybook 'docker compose build "\$\{services\[@\]\}"'))
+$checks.Add((Assert-Text 'ansible-pull restarts only selected deployments' $ansiblePullPlaybook 'for deployment in "\$\{deployments\[@\]\}"'))
+$checks.Add((Assert-Text 'credential recovery env patch remains API-only' $credentialRecoveryEnvPatch 'name:\s*hris-api'))
+$checks.Add((Assert-Text 'ansible-pull recognizes the API-only recovery env patch' $ansiblePullPlaybook 'hris-api-credential-recovery-env'))
+$checks.Add((Assert-Text 'one-shot Hikvision SDK exports use an isolated device spec' $hikvisionHotReloadScript 'mktemp /tmp/project-truth-hikvision-runtime-spec\.XXXXXX'))
+$checks.Add((Assert-Text 'one-shot Hikvision SDK exports select their isolated spec' $hikvisionHotReloadScript 'SPEC="\$runtime_spec"'))
 $checks.Add((Assert-NoText 'ansible-pull wrapper does not reference retired ZKTeco SDK submodule' $ansiblePullScript 'submodule\.vendor/zkteco-sdk\.update'))
 $checks.Add((Assert-Text 'ansible-pull wrapper preflights Git network before fetch' $ansiblePullScript 'repair_network_for_git'))
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs resolver drift before fetch' $ansiblePullScript 'systemd-resolved\.service'))
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs LAN config drift before fetch' $ansiblePullScript 'project-truth-lan-config'))
 $checks.Add((Assert-Text 'ansible-pull playbook updates install root' $ansiblePullPlaybook '/opt/project-truth'))
 $checks.Add((Assert-NoText 'ansible-pull playbook does not import retired Node ZKTeco bridge image into K3s' $ansiblePullPlaybook 'project-truth-zkteco-bridge:develop'))
-$checks.Add((Assert-Text 'ansible-pull playbook restarts K3s app/API deployments after local image import' $ansiblePullPlaybook 'rollout restart deployment/hris-api deployment/hris-app'))
+$checks.Add((Assert-Text 'ansible-pull playbook defers runtime rollout during an active DEV device-job heartbeat' $ansiblePullPlaybook 'Deferring runtime image rollout: active DEV device job snapshot'))
+$checks.Add((Assert-Text 'ansible-pull rollout guard includes credential merge jobs' $ansiblePullPlaybook 'device-user-merge-jobs'))
+$checks.Add((Assert-Text 'ansible-pull rollout guard includes raw-custody sync jobs' $ansiblePullPlaybook 'device-user-sync-jobs'))
+$checks.Add((Assert-Text 'ansible-pull playbook restarts only DEV app/API after a develop image import' $ansiblePullPlaybook 'env_name=dev'))
 $checks.Add((Assert-Text 'ansible-pull playbook keeps legacy Compose app/API containers off K3s LAN ports' $ansiblePullPlaybook 'hris-app hris-api hris-app-dev hris-api-dev hris-app-uat hris-api-uat'))
 $checks.Add((Assert-Text 'ansible-pull playbook refreshes Argo apps after host sync' $ansiblePullPlaybook 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'ansible-pull playbook repairs CoreDNS upstreams' $ansiblePullPlaybook 'forward \. 1\.1\.1\.1 8\.8\.8\.8'))

@@ -10,6 +10,8 @@ describe("admin device user and log sync UI contract", () => {
 		const enroll = readAppFile("app/routes/admin/devices/enroll.tsx");
 		const events = readAppFile("app/routes/admin/devices/events.tsx");
 		const deviceHooks = readAppFile("app/lib/hooks/useDevices.ts");
+		const deviceService = readAppFile("app/services/devices.service.ts");
+		const deviceController = readAppFile("../hris-api/app/device/device.controller.ts");
 
 		expect(deviceHooks).toContain("useDeviceHealthMap");
 		expect(events).toContain('data-testid="device-filter-reachability-dot"');
@@ -27,6 +29,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(manage).toContain('data-field-path="config.vendor"');
 		expect(manage).toContain("Device vendor");
 		expect(manage).toContain("HRIS applies the correct runtime settings automatically.");
+		expect(manage).toContain("Runtime config");
+		expect(manage).toContain("Runtime path");
+		expect(manage).toContain("Auto local bridge");
+		expect(manage).toContain("Direct device only");
+		expect(manage).toContain("buildHikvisionRuntimeConfig");
 		expect(manage).toContain('data-field-path="config.employeeKioskLoginEnabled"');
 		expect(manage).toContain("Enable biometric kiosk login");
 		expect(manage).toContain("sign in the employee kiosk automatically");
@@ -55,12 +62,18 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("source");
 		expect(enroll).toContain("saved");
 		expect(enroll).toContain("Listener");
+		expect(enroll).toContain('activePanel === "overview" || activePanel === "users" || isListenerDetailsOpen');
 		expect(enroll).toContain("Open");
 		expect(enroll).toContain("<span>Last sync</span>");
 		expect(enroll).toContain("Actions</span>");
 		expect(enroll).toContain("xl:grid-cols-[minmax(190px,1.45fr)_124px_128px_150px_156px_112px_96px]");
 		expect(enroll).toContain("whitespace-normal break-words");
 		expect(enroll).toContain("openPhysicalDeviceUsers");
+		// Deep-links: peer tally device name, merge user id, recovery source/target.
+		expect(enroll).toContain("openDeviceUserDeepLink");
+		expect(enroll).toContain("deviceUserDetails");
+		expect(enroll).toContain("Open device user details");
+		expect(enroll).toContain("Deep-link to vendor user");
 		expect(enroll).toContain("Choose a device first");
 		expect(enroll).toContain('data-testid="device-user-summary-toolbar"');
 		expect(enroll).toContain("flex min-w-0 flex-wrap items-center gap-2");
@@ -91,6 +104,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceService.getDeviceUsers");
 		expect(enroll).toContain("vendorUserId: linkTarget.vendorUserId");
 		expect(enroll).toContain("vendorUserIds");
+		expect(enroll).toContain("Math.min(Math.max(sourceVendorUserIdsForQuery.length, 1), 1000)");
+		expect(deviceController).toContain("const maxLimit = vendorUserIds.length > 0 ? 1000 : 100");
 		expect(enroll).toContain("linkTarget.hrisDeviceUser || null");
 		expect(enroll).toContain('status: "UNMATCHED"');
 		expect(enroll).toContain("openDbDeviceUsers?.deviceUsers");
@@ -100,6 +115,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("LINK_CHECK_FAILED");
 		expect(enroll).toContain("Could not verify link");
 		expect(enroll).toContain("Search employee name, ID, device ID");
+		expect(enroll).toContain("EmployeePickerSelect");
+		const employeePicker = readAppFile("app/components/molecules/employee/EmployeePickerSelect.tsx");
+		expect(employeePicker).toContain("(data as any)?.data?.pagination?.total");
+		expect(employeePicker).toContain("(data as any)?.data || {}");
+		expect(enroll).not.toContain("limit: 1000,\n\t\tdocument: true,\n\t\tpagination: true,");
 		expect(enroll).toContain("Unlink employee");
 		expect(enroll).toContain('title="Unlink employee"');
 		expect(enroll).toContain("Confirm this device user should be unlinked");
@@ -112,26 +132,73 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("${storedCount} of ${enrolledCount} stored");
 		expect(enroll).toContain("All enrolled fingerprint templates stored");
 		expect(enroll).toContain("Repair: capture face");
-		expect(enroll).toContain("Fingerprint raw blob custody");
-		expect(enroll).toContain("Face raw blob custody");
+		expect(enroll).toContain("Raw fingerprint templates");
+		expect(enroll).toContain("Raw face photo");
 		expect(enroll).toContain("fingerprintRawMissing");
 		expect(enroll).toContain("faceRawMissing");
 		expect(enroll).toContain("Raw blobs only");
 		expect(enroll).toContain("biometrics_only");
 		expect(enroll).not.toContain("Fingerprint encrypted envelope");
 		expect(enroll).not.toContain("Face encrypted envelope");
-		expect(enroll).toContain("missing biometric custody in the background");
+		expect(enroll).toContain("fastest valid device-user plan");
 		expect(enroll).toContain("deviceIds: [selectedDeviceId]");
 		expect(enroll).toContain("You can close this window and reopen status");
 		expect(enroll).toContain('["Captured", effectiveDeviceUserSyncJobProgress?.biometricCaptured');
-		expect(enroll).toContain('["Missing raw", effectiveDeviceUserSyncJobProgress?.biometricFailed');
+		expect(enroll).toContain('["Device no-data", effectiveDeviceUserSyncJobProgress?.biometricFailed');
 		expect(enroll).toContain("deviceUserSyncFailureLog");
-		expect(enroll).toContain("Recent missing raw");
+		expect(enroll).toContain("Recent device no-data");
+		expect(enroll).toContain("formatDeviceUserSyncRawFailureReason");
+		expect(enroll).toContain("formatDeviceUserSyncRawFailureMessage");
+		expect(enroll).toContain("Face image not found on device");
+		expect(enroll).toContain("Face image unavailable: unauthorized");
+		expect(enroll).toContain("Device returned non-image data");
+		expect(enroll).toContain("face_image_not_found_on_device");
+		expect(enroll).toContain("face_image_unauthorized");
+		expect(enroll).toMatch(
+			/\{formatDeviceUserSyncRawFailureReason\(\s*failure\.reason,\s*\)\}/,
+		);
+		expect(enroll).toMatch(
+			/formatDeviceUserSyncRawFailureMessage\(\s*result\.error,\s*\)/,
+		);
 		expect(enroll).toContain("Building raw-custody plan");
 		expect(enroll).toContain("Retry raw blobs only");
+		expect(enroll).toContain("What Sync can fix");
+		expect(enroll).toContain("missing_device_user_record");
+		expect(enroll).toContain("mergeDeviceUserSyncReviewMatrix");
+		expect(enroll).toContain("preview?.syncDecisionMatrix");
+		expect(enroll).toContain("dryRunPlan.decisionMatrix");
+		expect(enroll).toContain("missing_raw_fingerprint_blob: Math.max");
+		expect(enroll).toContain("missing_employee_link");
+		expect(enroll).toContain("missing_raw_fingerprint_blob");
+		expect(enroll).toContain("missing_raw_face_blob");
+		expect(deviceService).toContain("stale_count_only_or_live_no_data");
+		expect(deviceService).toContain("unsupported_by_sync");
+		expect(enroll).toContain("Fastest valid plan");
+		expect(enroll).toContain("Fast plan: scoped missing work");
+		expect(enroll).toContain("Full source-user reread and already-present rows are skipped");
+		expect(enroll).toContain("Missing links");
+		expect(enroll).toContain("Already skipped");
+		expect(enroll).toContain("Missing links/raw blobs only");
+		expect(enroll).toContain("Building missing-record matrix");
+		expect(enroll).toContain("Reading source users needed for identity gaps");
+		expect(enroll).toContain("Capturing missing fingerprint raw bytes");
+		expect(deviceController).toContain("Capturing missing face raw bytes");
+		expect(deviceController).toContain("Skipping known no-data rows");
+		expect(enroll).toContain('const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "needs_attention_only"');
+		expect(enroll).toContain("Queuing the fastest valid device-user plan from the decision matrix.");
+		expect(enroll).not.toContain("Reading source device users");
 		expect(enroll).not.toContain("serially captures");
 		expect(enroll).toContain("Device-user sync status");
 		expect(enroll).toContain("Open device-user sync status");
+		expect(enroll).not.toContain(
+			"Previous device-user sync status expired after an API restart or cleanup. You can rerun the refresh safely",
+		);
+		expect(enroll).not.toContain(
+			"Previous device-user sync status stopped updating. Start Sync device users again",
+		);
+		expect(enroll).toContain('open: current.open');
+		expect(enroll).toContain('lastProgress: open ? current.lastProgress : null');
+		expect(enroll).toContain('status: open ? current.status : "idle"');
 		expect(enroll).toContain("biometric credentials");
 		expect(enroll).toContain("Current credential");
 		expect(enroll).toContain("Already present");
@@ -139,14 +206,44 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceUserSyncStatusBubble");
 		expect(enroll).toContain("Merge users");
 		expect(enroll).toContain('title="Merge device users"');
-		expect(enroll).toContain("Checking which Hikvision devices are available (up to 5 seconds).");
+		// Failed inventory reads must show Unavailable, never fake zero + all-missing.
+		expect(enroll).toContain("Unavailable");
+		expect(enroll).toContain("readFailed");
+		expect(enroll).toContain("merge-device-read-failed-");
+		expect(enroll).toContain(
+			"Issue counts are not computed for devices that failed inventory read",
+		);
+		expect(enroll).toContain("Checking which Hikvision devices are available (up to 10 seconds).");
 		expect(enroll).toContain("offline or unavailable skipped");
 		expect(enroll).toContain("Searching live device-user records");
 		expect(enroll).toContain("No live device-user records matched this search");
 		expect(enroll).toContain("Merge needs at least two available devices.");
-		expect(enroll).toContain("typeof preview.vendorUserCount === \"number\"");
-		expect(enroll).toContain("Preview merge by unique ID");
-		expect(enroll).toContain("Preview recommended choices");
+		expect(enroll).toContain("deviceService.getDeviceHealth(deviceId");
+		expect(enroll).toContain('result.value?.summary?.status === "online"');
+		expect(enroll).not.toContain("typeof preview.vendorUserCount === \"number\"");
+		expect(enroll).not.toContain("DeviceLiveReadinessStrip");
+		expect(enroll).not.toContain("Checking DB + live path");
+		expect(enroll).not.toContain("useDeviceLiveReadiness");
+		expect(enroll).not.toContain("proveLivePath");
+		expect(enroll).not.toContain("isSyncCenterReviewOpen");
+		expect(enroll).toContain('deviceUserView === "source"');
+		expect(enroll).toContain('status === "source_unavailable"');
+		expect(enroll).toContain('preview.status === "saved_preview"');
+		expect(enroll).toContain('if (status === "saved_preview") return "Unavailable";');
+		expect(enroll).toContain('options.unavailableLabel || "Unavailable"');
+		expect(enroll).not.toContain("Read separately");
+		expect(enroll).not.toContain("Saved preview");
+		expect(enroll).toContain('return "Not checked";');
+		expect(enroll).toContain("Review merge by unique ID");
+		expect(enroll).toContain("Use recommended sources");
+		expect(deviceService).toContain("{ timeoutMs: 300_000 }");
+		expect(enroll).toContain("Enrollment counts alone do not authorize biometric copying");
+		expect(enroll).toContain("No fingerprint copy is recommended");
+		expect(enroll).toContain("No face copy is recommended");
+		expect(enroll).toMatch(
+			/fingerprint\?\.status ===\s*"raw_blob_present"/,
+		);
+		expect(enroll).toContain('face?.status === "raw_blob_present"');
 		expect(enroll).toContain("selected unique ID");
 		expect(enroll).toContain("selected potential write");
 		expect(enroll).toContain("Select all in scope");
@@ -156,12 +253,20 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Issue: ${mergePlural(issueCount, \"device\")}");
 		expect(enroll).toContain("Expected active devices");
 		expect(enroll).toContain("Unique IDs");
-		expect(enroll).toContain("Device records read");
-		expect(enroll).toContain("Issue details");
+		expect(enroll).toContain("Device ID records");
+		expect(enroll).toContain("duplicate source row");
+		expect(enroll).toContain("collapsed into the matching unique IDs");
+		expect(enroll).toContain("Needs review IDs");
 		expect(enroll).toContain("SdkMergeListMode");
 		expect(enroll).toContain("sdkMergeUniqueRows");
 		expect(enroll).toContain("sdkMergeRecordRows");
 		expect(enroll).toContain("sdkMergeWriteRows");
+		expect(enroll).toContain('sdkMergeListMode === "issues"');
+		expect(enroll).toContain("? sdkMergeReviewRows");
+		expect(enroll).toContain("sdkMergeUniqueIssueCount");
+		expect(enroll).toContain("sdkMergeUniqueIssueDeviceCount");
+		expect(enroll).toContain("sdkMergeIssueRowsForUser");
+		expect(enroll).not.toContain("{ value: \"all\", label: \"Issue details\", count: sdkMergeRows.length }");
 		expect(enroll).toContain("setSdkMergeListMode");
 		expect(enroll).toContain("setSdkMergeDeviceListMode");
 		expect(enroll).toContain("Linked record");
@@ -181,7 +286,58 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("row.targetDeviceId === deviceId");
 		expect(enroll).toContain("Showing");
 		expect(enroll).toContain("Page {safeSdkMergePage} of {sdkMergeTotalPages}");
-		expect(enroll).toContain("Preview mode is on.");
+		expect(enroll).toContain("Review selected merge");
+		expect(enroll).toContain("This starts a real device-write job.");
+		expect(enroll).toContain("missing raw blobs are not fabricated");
+		expect(enroll).toContain("sdkMergeSelectedWriteMatrix");
+		expect(enroll).toContain("Writes by target device");
+		expect(enroll).toContain("Sources used");
+		expect(enroll).toContain("Selected source devices for the selected IDs.");
+		expect(enroll).toContain("Selected ID write matrix");
+		expect(enroll).toContain("One row per selected unique ID.");
+		expect(enroll).toContain("Physical source");
+		expect(enroll).toContain("Peer copy attempts");
+		expect(enroll).toContain("Fingerprint gaps");
+		expect(enroll).toContain("Face gaps");
+		expect(enroll).toContain("source evidence and current gaps");
+		expect(enroll).toContain("setSelectedMergeUser(row.key)");
+		expect(enroll).toContain("Locked job scope");
+		expect(enroll).toContain('"Authenticated"');
+		expect(enroll).toContain('"Excluded"');
+		expect(enroll).toContain("credentialed protocol response");
+		expect(enroll).toContain("checkedAt");
+		expect(enroll).toMatch(
+			/This is the frozen source\/target matrix from the job\s+start request\./,
+		);
+		expect(enroll).toContain("sdkMergeState.status !== \"loading\" && !hasSdkMergeJob");
+		expect(enroll).toContain("Targets receiving copies");
+		expect(enroll).toContain("Physical sources used");
+		expect(enroll).toContain("Progress estimate");
+		expect(enroll).toContain("Current phase");
+		expect(enroll).toContain("UI polling");
+		expect(enroll).toContain("Backend heartbeat");
+		expect(enroll).toContain("No detailed backend heartbeat yet");
+		expect(enroll).toContain(
+			"Physically retained increases only after a target reread proves the credential stayed on the panel",
+		);
+		expect(enroll).toContain("Physically retained (reread)");
+		expect(enroll).toContain("Fingerprint retained");
+		expect(enroll).toContain("Face retained");
+		expect(enroll).toContain("Gap totals refresh after the terminal five-device reread");
+		expect(enroll).toContain("Already matched");
+		expect(enroll).toContain("This job was started before detailed merge telemetry was available.");
+		expect(enroll).toContain("Copy failures by path");
+		expect(enroll).toMatch(
+			/Grouped from backend progress\. Latest rows below may be\s+capped\./,
+		);
+		expect(enroll).toContain("sdkMergeJobCopyFailurePairs");
+		expect(deviceService).toContain("copyFailureSummary");
+		expect(deviceController).toContain("copyFailureSummary: job.copyFailureSummary");
+		expect(enroll).toContain("Back to review");
+		expect(enroll).toContain("Review selected merge (${sdkMergeSelectedUniqueCount})");
+		expect(enroll).not.toContain("sdkMergePreviewOnly");
+		expect(enroll).not.toContain("Preview mode is on.");
+		expect(enroll).not.toContain("Preview only");
 		expect(enroll).toContain("<span>Fingerprint</span>");
 		expect(enroll).toContain("<span>Face</span>");
 		expect(enroll).toContain("<span>Card</span>");
@@ -201,6 +357,41 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("dry-run mode prevents writes");
 		expect(enroll).not.toContain("Dry run is on.");
 		expect(enroll).toContain("Potential writes");
+		expect(enroll).toContain("Credential convergence");
+		expect(enroll).toContain("Fingerprint and face are planned independently");
+		expect(enroll).toContain("Select ready operations");
+		expect(enroll).toContain('"Potential operations"');
+		expect(enroll).toContain(
+			"sdkMergePotentialOperationSummary?.totalPotentialOperations",
+		);
+		expect(enroll).toContain("sdkMergePotentialOperationSummary?.byModality?.card");
+		expect(enroll).toContain('"Ready now"');
+		expect(enroll).toContain('"Agent recovery"');
+		expect(enroll).toContain('"Ownership / enroll block"');
+		expect(enroll).toContain("Agent recovery: ${formatSdkMergeRecoveryStage(write)}");
+		expect(enroll).toContain("Start recovery");
+		expect(enroll).toContain("credentialRecoveryJob.lastAdvancementAt");
+		expect(enroll).toContain("credentialRecoveryJob.activeTask");
+		expect(enroll).toContain("Observability defect");
+		expect(enroll).toContain("credentialRecoveryJob.latestError.code");
+		expect(enroll).toContain("credentialRecoveryJob.latestError.retryable");
+		expect(enroll).toContain('credentialRecoveryJob.status === "completed"');
+		expect(enroll).toContain("(credentialRecoveryJob.counters?.verified ?? 0) > 0");
+		expect(enroll).toContain("agent can write these (richest source)");
+		expect(enroll).toContain("Red = true dual-owner");
+		expect(enroll).not.toContain("SDK_MERGE_PHYSICAL_ACTION_REASONS");
+		expect(enroll).toContain(
+			"Blocked (true ownership/enroll): ${formatSdkMergePhysicalAction(write)}",
+		);
+		expect(enroll).toContain("!isSdkMergePhysicalActionRequired(write)");
+		expect(enroll).not.toContain("Blocked: exact SDK export/copy probe required");
+		expect(enroll).not.toContain('"Blocked / review"');
+		expect(enroll).toContain("Review credential-only writes");
+		expect(enroll).toContain("does not rewrite the user record, cards, validity");
+		expect(enroll).toContain('mode: "credentials"');
+		expect(enroll).toContain("selectedCredentialWriteIds");
+		expect(deviceService).toContain('mode?: "users" | "credentials"');
+		expect(deviceService).toContain("credentialWrites?: Array");
 		expect(enroll).toContain("Keep");
 		expect(enroll).toContain("Clear");
 		expect(enroll).toContain("configuredDeviceIds.length < 2");
@@ -233,7 +424,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("deviceUserExportState.open && Boolean(selectedDeviceId)");
 		expect(enroll).toContain('activePanel === "users" || deviceUserExportState.open');
 		expect(enroll).toContain("isLoadingDeviceUserExportRows");
-		expect(enroll).toContain("Raw biometric readiness");
+		expect(enroll).toContain("Biometric readiness");
+		expect(enroll).toContain("Checking export readiness");
+		expect(enroll).toContain("Preview or export will not change the device.");
 		expect(enroll).toContain("getRawFingerprintBlobCell");
 		expect(enroll).toContain("decodeRawBiometricBlobCell");
 		expect(enroll).toContain("encodeRawFingerprintBlobCell");
@@ -249,9 +442,9 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("selectedExportVendorUserIds");
 		expect(enroll).toContain("togglePagedExportVendorUserIds");
 		expect(enroll).toContain("rawBiometricPackage");
-		expect(enroll).toContain("Raw biometric package");
+		expect(enroll).toContain("Biometric custody package");
 		expect(enroll).toMatch(
-			/const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = \[\s*"rawFingerprintBlob",\s*"rawFaceBlob",\s*\] as const;/,
+			/const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = \[\s*"rawFingerprintBlob",\s*"rawFaceBlob",?\s*\] as const;/,
 		);
 		expect(enroll).not.toContain("DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX");
 		expect(enroll).not.toContain("encrypted:v2:");
@@ -275,16 +468,17 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("biometricCsvColumns");
 		expect(enroll).toContain("raw_evidenced_blobs_allowed_for_admin_device_user_sync_package");
 		expect(enroll).toContain("Missing cells must stay explicit");
-		expect(enroll).toContain("Use SDK peer copy when both devices are reachable");
+		expect(enroll).toContain("Package exports carry only custody data already proven in HRIS");
+		expect(enroll).toContain("preview fingerprint or face custody data before any write is allowed");
 		expect(enroll).toContain("Preview import");
 		expect(enroll).toContain("Import CSV file");
 		expect(enroll).toContain("Package JSON");
 		expect(enroll).toContain("CSV template");
 		expect(enroll).toContain("buildDeviceUserImportPayloadFromCsv");
-		expect(enroll).toContain("Raw blob columns");
+		expect(enroll).toContain("Spreadsheet import");
 		expect(enroll).toContain("Transfer mode");
-		expect(enroll).toContain("SDK peer copy");
-		expect(enroll).toContain("Raw package");
+		expect(enroll).toContain("Reachable source copy");
+		expect(enroll).toContain("Package data");
 		expect(enroll).not.toContain("Encrypted bundle passphrase");
 		expect(enroll).toContain("Type IMPORT DEVICE USERS");
 		expect(enroll).toContain("Run execute as background job");
@@ -292,7 +486,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Poll:");
 		expect(enroll).toContain("executeDeviceUserImport");
 		expect(enroll).toContain("previewToken");
-		expect(enroll).toContain("Raw package used");
+		expect(enroll).toContain("Package data used");
 		expect(enroll).toContain("rawBiometricTemplateBytes");
 		expect(enroll).toContain("previewDeviceUserExport");
 		expect(enroll).toContain("previewDeviceUserImport");
@@ -301,7 +495,22 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Reading source users from the physical device");
 		expect(enroll).toContain("deviceUserView");
 		expect(enroll).toContain("deviceUserPage");
+		expect(enroll).toContain('if (view === "open") next.set("deviceUserStatus", "UNMATCHED")');
+		expect(enroll).toContain(
+			'(deviceUserView === "shown" || deviceUserView === "source")',
+		);
 		expect(enroll).toContain("New records");
+		expect(enroll).toContain("What Sync can fix");
+		expect(enroll).toContain("missing_device_user_record");
+		expect(enroll).toContain("missing_raw_fingerprint_blob");
+		expect(enroll).toContain("missing_raw_face_blob");
+		expect(enroll).toContain("Fastest valid plan");
+		expect(enroll).toContain("Building missing-record matrix");
+		expect(enroll).toContain("Reading source users needed for identity gaps");
+		expect(enroll).toContain("Already present");
+		expect(enroll).toContain("Skip rows already present in HRIS unless a forced repair is selected");
+		expect(enroll).toContain("Saved-state first");
+		expect(enroll).toContain("Missing employee links");
 		expect(enroll).toContain("Auto-linked");
 		expect(enroll).toContain("Rows marked Needs link were saved in HRIS");
 		expect(enroll).toContain("saved biometric");
@@ -326,7 +535,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("formatMetadataPreview");
 		expect(enroll).toContain("Copy to all peer devices");
 		expect(enroll).toContain("targetDeviceIds,");
-		expect(enroll).toContain("one coordinated VM session");
+		expect(enroll).toContain("startHikvisionPeerCopyJob");
+		expect(enroll).toContain("durable peer-copy job");
 		expect(enroll).not.toContain("for (let index = 0; index < targetDeviceIds.length");
 		expect(enroll).toContain(".getDeviceUserPhoto(");
 		expect(enroll).toContain("Photo source");
@@ -347,6 +557,20 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("showSyncPreviewSkeleton");
 		expect(events).toContain("Sync-preview only when Sync logs modal is open");
 		expect(deviceHooks).toContain("options.refetchInterval ?? false");
+		expect(deviceService).toContain("{ timeoutMs: 15_000, signal: options.signal }");
+		expect(deviceService).toContain("timeoutMs: 15_000");
+		expect(deviceHooks).toContain("meta: { timeoutMs: 15_000 }");
+		expect(deviceHooks).toContain("queryFn: ({ signal })");
+		expect(deviceHooks).toContain("placeholderData: (previous) => previous");
+		expect(enroll).toContain("Checking listener status");
+		expect(enroll).toContain("Refresh status");
+		expect(enroll).toContain("Retry status");
+		expect(enroll).toContain("Retry availability");
+		expect(enroll).toContain("Refresh tunnels/status");
+		expect(enroll).toContain("checks complete");
+		expect(enroll).toContain("sdkMergeAvailabilityRequest");
+		expect(enroll).toContain("readableDeviceCount");
+		expect(enroll).toContain("live inventory read");
 
 		expect(events).toContain("Sync logs");
 		expect(events).toContain("Sync device logs");
@@ -354,6 +578,27 @@ describe("admin device user and log sync UI contract", () => {
 		expect(events).toContain("const latestSdkEvidenceEvent = latestSdkSavedEvent");
 		expect(events).toContain("latestSdkEvidenceIsOperationSignal");
 		expect(events).toContain("SDK operation signal captured");
+		expect(events).toContain("Listener stopped");
+		expect(events).toContain("Login failed");
+		expect(events).toContain("HRIS callback post failed");
+		expect(events).toContain("HIKVISION_ACTIVE_WORK_EVENTS");
+		expect(events).toContain("Active SDK work:");
+		expect(events).toContain("Reading fingerprint");
+		expect(events).toContain("Reading face");
+		expect(events).toContain("Peer ${operation || \"SDK\"} copy attempt");
+		expect(events).toContain("callbacks /");
+		expect(events).toContain("armed/listening");
+		expect(events).toContain("SDK work active");
+		expect(enroll).toContain("Live copy now");
+		expect(enroll).toContain("Employee now");
+		expect(enroll).toContain("Credential stage");
+		expect(enroll).toContain("From backend progressEvents");
+		expect(enroll).toContain("Latest backend events");
+		expect(enroll).toContain("Most recent progressEvents from the API heartbeat");
+		expect(enroll).toContain("vm_copy_attempt_started");
+		expect(enroll).toContain("Batch copy started");
+		expect(events).toContain('device.state !== "login_failed"');
+		expect(deviceController).toContain("Listener service is stopped; previous arm/read log entries are historical only.");
 		expect(events).toContain("Open it, then run/review device-user reconciliation for the same device.");
 		expect(events).toContain("SDK event proof");
 		expect(events).not.toContain("Browser connected; no recent SDK tap");

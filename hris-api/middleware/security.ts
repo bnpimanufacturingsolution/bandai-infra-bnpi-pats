@@ -5,6 +5,21 @@ import { getLogger } from "../helper/logger.helper";
 import { rateLimiter, slowDownMiddleware } from "./rateLimiter";
 
 const logger = getLogger();
+const parseRequestSizeLimit = (value = "75mb") => {
+	const match = String(value).trim().match(/^(\d+)(kb|mb|gb)?$/i);
+	if (!match) return 75 * 1024 * 1024;
+	const amount = Number(match[1]);
+	const unit = (match[2] || "b").toLowerCase();
+	if (unit === "gb") return amount * 1024 * 1024 * 1024;
+	if (unit === "mb") return amount * 1024 * 1024;
+	if (unit === "kb") return amount * 1024;
+	return amount;
+};
+const formatRequestSizeLimit = (bytes: number) => {
+	if (bytes % (1024 * 1024) === 0) return `${bytes / (1024 * 1024)}MB`;
+	if (bytes % 1024 === 0) return `${bytes / 1024}KB`;
+	return `${bytes}B`;
+};
 
 // Security headers configuration
 const securityHeaders = helmet({
@@ -61,7 +76,7 @@ const securityHeaders = helmet({
 // Request size limiter
 const requestSizeLimiter = (req: Request, res: Response, next: NextFunction) => {
 	const contentLength = parseInt(req.headers["content-length"] || "0");
-	const maxSize = 10 * 1024 * 1024; // 10MB
+	const maxSize = parseRequestSizeLimit(process.env.HRIS_API_BODY_LIMIT || "75mb");
 
 	if (contentLength > maxSize) {
 		logger.warn("Request too large", {
@@ -74,7 +89,7 @@ const requestSizeLimiter = (req: Request, res: Response, next: NextFunction) => 
 		return res.status(413).json({
 			error: "Request too large",
 			message: "Request size exceeds maximum allowed size",
-			maxSize: "10MB",
+			maxSize: formatRequestSizeLimit(maxSize),
 		});
 	}
 

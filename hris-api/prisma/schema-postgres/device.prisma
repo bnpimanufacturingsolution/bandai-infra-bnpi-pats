@@ -18,6 +18,65 @@ enum DeviceEventStatus {
 enum DeviceEventSource {
   HIKVISION_CALLBACK
   EN_HCNETSDK_ALARM
+  ZKTECO_EVENT
+  // Labeled admin-injected offline kiosk proof; not physical device truth.
+  EN_SYNTHETIC_KIOSK_TAP
+}
+
+enum DeviceEventCategory {
+  ATTENDANCE
+  ENROLLMENT
+  USER_MANAGEMENT
+  ACCESS_CONTROL
+  DEVICE_HEALTH
+  RUNTIME
+  UNKNOWN_VENDOR
+}
+
+enum DeviceEventAction {
+  TAP
+  FINGERPRINT_ENROLLED
+  FINGERPRINT_UPDATED
+  FINGERPRINT_DELETED
+  FACE_ENROLLED
+  FACE_UPDATED
+  FACE_DELETED
+  CARD_ENROLLED
+  CARD_UPDATED
+  CARD_DELETED
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  TAP_REJECTED
+  SYNC_SIGNAL
+  SYNC_IMPORTED
+  LISTENER_RECEIVED
+  UNKNOWN
+}
+
+enum DeviceEventConfidence {
+  PROVEN
+  SUPPORTED
+  INFERRED
+  UNKNOWN
+}
+
+enum DeviceUserStatus {
+  ACTIVE
+  UNMATCHED
+  CONFLICT
+  DISABLED
+}
+
+enum DeviceSyncRunType {
+  DEVICE_USERS
+  DEVICE_LOGS
+}
+
+enum DeviceSyncRunStatus {
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 model Device {
@@ -33,8 +92,11 @@ model Device {
 
   access Json
 
-  employees Employee[]
-  events    DeviceEvent[]
+  employees    Employee[]
+  events       DeviceEvent[]
+  users        DeviceUser[]
+  syncRuns     DeviceSyncRun[]
+  personTokens DevicePersonToken[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -43,27 +105,62 @@ model Device {
   @@unique([organizationId, address, port])
 }
 
+/**
+ * Write-time map: Hikvision operation logs use opaque LogAddInfo.EmployeeNo tokens.
+ * Inventory / UserInfo use plain employeeNo. Capture opaque after we write plain.
+ * Historical bulk logs without capture cannot be decoded.
+ */
+model DevicePersonToken {
+  id               String    @id @default(cuid())
+  organizationId   String
+  device           Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId         String
+  /// Opaque base64 token from ContentMgmt/logSearch LogAddInfo.EmployeeNo
+  opaqueToken      String
+  /// Plain device employeeNo we wrote / know (UserInfo.employeeNo)
+  employeeNo       String
+  displayName      String?
+  source           String    @default("WRITE_TIME_CAPTURE")
+  captureMetaId    String?
+  captureEventTime DateTime?
+  firstSeenAt      DateTime  @default(now())
+  lastSeenAt       DateTime  @default(now())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([organizationId, deviceId, opaqueToken])
+  @@index([organizationId, deviceId, employeeNo])
+  @@index([organizationId, opaqueToken])
+  @@map("device_person_tokens")
+}
+
 model DeviceEvent {
-  id             String            @id @default(cuid())
+  id             String      @id @default(cuid())
   organizationId String
-  device         Device            @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  device         Device      @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   deviceId       String
+  deviceUser     DeviceUser? @relation(fields: [deviceUserId], references: [id], onDelete: SetNull)
+  deviceUserId   String?
   employeeId     String?
   attendanceId   String?
 
-  eventTime    DateTime
-  receivedAt   DateTime          @default(now())
-  employeeNo   String?
-  source       DeviceEventSource @default(HIKVISION_CALLBACK)
-  status       DeviceEventStatus @default(RECEIVED)
-  eventType    String?
-  major        String?
-  minor        String?
-  doorNo       String?
-  verifyMode   String?
-  dedupeKey    String
-  payload      Json?
-  errorMessage String?
+  eventTime       DateTime
+  receivedAt      DateTime              @default(now())
+  employeeNo      String?
+  source          DeviceEventSource     @default(HIKVISION_CALLBACK)
+  status          DeviceEventStatus     @default(RECEIVED)
+  eventCategory   DeviceEventCategory   @default(UNKNOWN_VENDOR)
+  eventAction     DeviceEventAction     @default(UNKNOWN)
+  eventLabel      String                @default("Device event")
+  eventConfidence DeviceEventConfidence @default(UNKNOWN)
+  eventType       String?
+  major           String?
+  minor           String?
+  doorNo          String?
+  verifyMode      String?
+  dedupeKey       String
+  payload         Json?
+  errorMessage    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -72,6 +169,146 @@ model DeviceEvent {
   @@index([organizationId, deviceId, receivedAt])
   @@index([organizationId, status, receivedAt])
   @@index([organizationId, source, receivedAt])
+  @@index([organizationId, eventCategory, eventAction, eventTime])
+  @@index([organizationId, source, eventTime])
+  @@index([organizationId, status, eventTime])
+  @@index([organizationId, source, status])
+  @@index([organizationId, source, receivedAt(sort: Desc), createdAt(sort: Desc)])
   @@index([organizationId, employeeNo, receivedAt])
+  @@index([organizationId, deviceUserId, receivedAt])
   @@map("device_events")
+}
+
+model DeviceUser {
+  id             String           @id @default(cuid())
+  organizationId String
+  device         Device           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId       String
+  employee       Employee?        @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  employeeId     String?
+  vendorUserId   String
+  employeeNo     String?
+  displayName    String?
+  userType       String?
+  status         DeviceUserStatus @default(UNMATCHED)
+  validFrom      DateTime?
+  validTo        DateTime?
+  doorRight      String?
+  accessPlan     Json?
+  rawPayload     Json?
+  vendorMetadata Json?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  events DeviceEvent[]
+
+  @@unique([organizationId, deviceId, vendorUserId])
+  @@index([organizationId, deviceId, status])
+  @@index([organizationId, employeeId])
+  @@index([organizationId, vendorUserId])
+  @@map("device_users")
+}
+
+model DeviceSyncRun {
+  id                 String              @id @default(cuid())
+  organizationId     String
+  device             Device              @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  deviceId           String
+  runType            DeviceSyncRunType
+  status             DeviceSyncRunStatus @default(PROCESSING)
+  source             DeviceEventSource?
+  startedByUserId    String?
+  totalSourceRecords Int                 @default(0)
+  importableRecords  Int                 @default(0)
+  savedRecords       Int                 @default(0)
+  skippedRecords     Int                 @default(0)
+  failedRecords      Int                 @default(0)
+  missingRecords     Int                 @default(0)
+  skipSummary        Json?
+  failureSummary     Json?
+  rawSummary         Json?
+  startedAt          DateTime            @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([organizationId, deviceId, runType, startedAt])
+  @@index([organizationId, runType, status])
+  @@map("device_sync_runs")
+}
+
+/// Durable, restart-safe owner of a frozen Hikvision credential recovery scope.
+/// String states are intentional: recovery state evolves independently of the
+/// database migration cadence and is validated by the backend contract.
+model CredentialRecoveryJob {
+  id             String    @id @default(cuid())
+  organizationId String
+  planId         String
+  scopeHash      String
+  status         String    @default("pending")
+  ownerUserId    String
+  deviceIds      Json
+  request        Json
+  counters       Json
+  currentStage   String?
+  currentTaskKey String?
+  heartbeatAt    DateTime?
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+  resumeCursor   Int       @default(0)
+  workerVersion  String?
+  latestError    Json?
+  result         Json?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  tasks CredentialRecoveryTask[]
+
+  @@index([organizationId, status, updatedAt])
+  @@index([organizationId, planId])
+  @@index([status, leaseExpiresAt])
+  @@map("credential_recovery_jobs")
+}
+
+/// One deduplicated unit in a credential recovery graph. Source capture keys
+/// are (sourceDeviceId, vendorUserId, modality); writes/rereads have separate
+/// task kinds so a queue transition can never masquerade as physical truth.
+model CredentialRecoveryTask {
+  id               String                @id @default(cuid())
+  job              CredentialRecoveryJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  jobId            String
+  organizationId   String
+  taskKey          String
+  kind             String
+  modality         String?
+  sourceDeviceId   String?
+  targetDeviceId   String?
+  vendorUserId     String?
+  userKey          String?
+  status           String                @default("pending")
+  stage            String?
+  priority         Int                   @default(0)
+  unlockCount      Int                   @default(0)
+  attempts         Int                   @default(0)
+  maxAttempts      Int                   @default(5)
+  reviewedByteHash String?
+  payload          Json
+  result           Json?
+  error            Json?
+  leaseOwner       String?
+  leaseExpiresAt   DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@unique([jobId, taskKey])
+  @@index([jobId, status, priority])
+  @@index([organizationId, status, leaseExpiresAt])
+  @@index([sourceDeviceId, vendorUserId, modality])
+  @@index([targetDeviceId, status])
+  @@map("credential_recovery_tasks")
 }

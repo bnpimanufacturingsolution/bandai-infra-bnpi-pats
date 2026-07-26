@@ -16,14 +16,14 @@ const modalSource = readFileSync(
 describe("device events page UX contract", () => {
 	it("defaults saved events to event time descending so sync/backfill rows keep chronology", () => {
 		expect(routeSource).to.contain(
-			'const sort = searchParams.get("sort") || "eventTime";',
+			'const sort = searchParams.get("sort") || "receivedAt";',
 		);
 	});
 
 	it("filters event action options by selected event category", () => {
 		expect(routeSource).to.contain("EVENT_ACTIONS_BY_CATEGORY");
-		expect(routeSource).to.contain("getEventActionOptionsForCategory");
-		expect(routeSource).to.contain("getEventActionOptionsForCategory(eventCategory)");
+		expect(routeSource).to.contain("getSavedActionOptionsForCategory");
+		expect(routeSource).to.contain("getSavedActionOptionsForCategory(eventCategory)");
 		// Attendance must not list User created / enroll actions.
 		expect(routeSource).to.contain('ATTENDANCE: ["TAP", "TAP_REJECTED"]');
 		expect(routeSource).to.contain('USER_MANAGEMENT: ["USER_CREATED", "USER_UPDATED", "USER_DELETED"]');
@@ -164,7 +164,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.not.contain("All sources");
 	});
 
-	it("keeps backend-owned device runtime fields out of the normal device form", () => {
+	it("keeps device runtime fields scoped to the device form runtime tab", () => {
 		const manageSource = readFileSync(
 			resolve(currentDir, "../routes/admin/devices/manage.tsx"),
 			"utf8",
@@ -172,6 +172,11 @@ describe("device events page UX contract", () => {
 
 		expect(manageSource).to.contain("Device vendor");
 		expect(manageSource).to.contain("HRIS applies the correct runtime settings automatically.");
+		expect(manageSource).to.contain("Runtime config");
+		expect(manageSource).to.contain("Runtime path");
+		expect(manageSource).to.contain("Auto local bridge");
+		expect(manageSource).to.contain("Direct device only");
+		expect(manageSource).to.contain("buildHikvisionRuntimeConfig");
 		expect(manageSource).to.contain('data-field-path="config.vendor"');
 		expect(manageSource).not.to.contain("Runtime adapter *");
 		expect(manageSource).not.to.contain("Callback path");
@@ -186,12 +191,15 @@ describe("device events page UX contract", () => {
 	it("does not treat a connected socket as proof that live capture is receiving taps", () => {
 		expect(routeSource).to.contain("isSdkAlarmSavedScope");
 		expect(routeSource).to.contain("savedEventsRefetchInterval");
-		expect(routeSource).to.contain("? 2 * 1000");
+		expect(routeSource).to.contain("? 2_000");
 		expect(routeSource).to.contain("Browser online · no new live events");
 		expect(routeSource).to.contain("Live capture has recent event proof.");
 		expect(routeSource).to.contain("Live capture running · waiting for first tap");
+		expect(routeSource).to.contain("Ready for tap proof");
+		expect(routeSource).to.contain("Reachability is separate from listener armed state and tap proof.");
+		expect(routeSource).to.contain("useDeviceHealthMap");
+		expect(routeSource).to.contain("quick: true");
 		expect(routeSource).not.to.contain("Socket connected, SDK idle");
-		expect(routeSource).not.to.contain("Waiting for next tap");
 		// Primary badges/banners must not lead with VM jargon.
 		expect(routeSource).not.to.contain("VM listener unknown");
 		expect(routeSource).not.to.contain("VM listener stopped");
@@ -207,7 +215,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('setFilter("window", value)');
 		// Category uses updateSearchParams so mismatched action is cleared in one URL write.
 		expect(routeSource).to.contain('next.set("eventCategory", value)');
-		expect(routeSource).to.contain('setFilter("eventAction", value)');
+		expect(routeSource).to.contain('next.set("eventAction", value)');
 		// Advanced/internal filters were removed from the toolbar because they mislead operators.
 		expect(routeSource).not.to.contain('setFilter("source", value)');
 		expect(routeSource).not.to.contain('setFilter("status", value)');
@@ -230,9 +238,7 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('action === "listener-control"');
 		expect(routeSource).to.contain('next.set("action", "listener-control")');
 		// Listener modal must fetch even when opened, and not blank on refresh.
-		expect(routeSource).to.contain(
-			"useHikvisionListenerStatus(isSdkAlarmSavedScope || isListenerControlModalOpen)",
-		);
+		expect(routeSource).to.contain('viewMode === "saved" && isSdkAlarmSavedScope');
 		expect(routeSource).to.contain(
 			"isHikvisionListenerStatusPending && !hikvisionListenerStatus",
 		);

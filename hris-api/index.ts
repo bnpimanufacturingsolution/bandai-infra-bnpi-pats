@@ -1,5 +1,7 @@
+import "./helper/telemetry-autostart";
 import express, { Request, Response, NextFunction } from "express";
 import { createServer } from "http";
+import path from "path";
 import { Server } from "socket.io";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -13,8 +15,10 @@ import { authSecurityMiddleware } from "./middleware/security";
 import { networkInterfaces } from "os";
 import { getLogger } from "./helper/logger.helper";
 import { httpMetricsMiddleware, metricsHandler } from "./middleware/observability";
+import { apiActivityLoggingMiddleware } from "./middleware/apiActivityLogging";
 import { apiDebugLoggingMiddleware } from "./middleware/apiDebugLogging";
-import { initializeTelemetry, shutdownTelemetry } from "./helper/telemetry";
+import { hikvisionFdlibFaceDeliveryRegistry } from "./helper/hikvision-fdlib-face.helper";
+import { shutdownTelemetry } from "./helper/telemetry";
 import { recordHttpOutcome, startStatusSampler } from "./app/status/status.service";
 
 process.setMaxListeners(50);
@@ -28,16 +32,6 @@ logger.info("startup.boot.begin", {
 	cloud_run_service: process.env.K_SERVICE || null,
 	cloud_run_revision: process.env.K_REVISION || null,
 	enable_startup_services: config.enableStartupServices,
-});
-
-void initializeTelemetry().catch((error) => {
-	logger.warn("telemetry.init.failed", {
-		event: "telemetry.init.failed",
-		error:
-			error instanceof Error
-				? { message: error.message, name: error.name, stack: error.stack }
-				: error,
-	});
 });
 
 declare global {
@@ -179,7 +173,9 @@ server.setTimeout(config.defaultRequestTimeoutMs);
 
 const io = new Server(server, {
 	cors: {
-		origin: config.cors.origins,
+		origin: (origin, callback) => {
+			callback(null, config.cors.isAllowedOrigin(origin));
+		},
 		credentials: config.cors.credentials,
 	},
 });
@@ -349,6 +345,7 @@ const dashboard = require("./app/dashboard")(prisma);
 const employee = require("./app/employee")(prisma);
 const employeeSchedule = require("./app/employeeSchedule")(prisma);
 const hikvision = config.enableDeviceServices ? require("./app/hikvision")(prisma) : null;
+const zkteco = config.enableDeviceServices ? require("./app/zkteco")(prisma) : null;
 const metrics = config.enableMetricsServices ? require("./app/metrics")(prisma) : null;
 const report = require("./app/report")(prisma);
 const level = require("./app/level")(prisma);
@@ -392,20 +389,57 @@ const timesheetline = require("./app/timesheetline")(prisma);
 const section = require("./app/section")(prisma);
 const leaveType = require("./app/leaveType")(prisma);
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const apiBodyLimit = process.env.HRIS_API_BODY_LIMIT || "75mb";
+app.use(express.json({ limit: apiBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: apiBodyLimit }));
 app.use(cookieParser());
+app.use(
+	"/uploads",
+	express.static(process.env.LOCAL_UPLOAD_ROOT || path.resolve(process.cwd(), "uploads"), {
+		fallthrough: false,
+		maxAge: "1h",
+		setHeaders: (res) => {
+			res.setHeader("Access-Control-Allow-Origin", "*");
+			res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+			res.removeHeader("Cross-Origin-Embedder-Policy");
+			res.removeHeader("Content-Security-Policy");
+		},
+	}),
+);
+// FaceDataRecord.faceURL fetches cannot attach an HRIS bearer token. This
+// endpoint instead authenticates a high-entropy, one-use token plus the
+// attested target address. It is intentionally mounted before request logging
+// so the live URL token never enters application logs.
+app.get(
+	`${config.baseApiPath}/hikvision/fdlib-face-delivery/:token`,
+	(req: Request, res: Response) => {
+		try {
+			const picture = hikvisionFdlibFaceDeliveryRegistry.consume({
+				token: req.params.token,
+				requesterAddress: req.ip || req.socket.remoteAddress || "",
+			});
+			res.setHeader("Content-Type", picture.contentType);
+			res.setHeader("Content-Length", String(picture.size));
+			res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+			res.setHeader("Pragma", "no-cache");
+			res.setHeader("X-Content-Type-Options", "nosniff");
+			res.status(200).send(picture.buffer);
+		} catch {
+			res.status(404).end();
+		}
+	},
+);
 app.use(apiDebugLoggingMiddleware);
-
-const allowedCorsOrigins = new Set(config.cors.origins);
 
 app.use((req: Request, res: Response, next: NextFunction) => {
 	const requestOrigin = req.headers.origin;
 
-	if (requestOrigin && allowedCorsOrigins.has(requestOrigin)) {
+	if (requestOrigin && config.cors.isAllowedOrigin(requestOrigin)) {
 		res.header("Access-Control-Allow-Origin", requestOrigin);
 		res.header("Vary", "Origin");
-		res.header("Access-Control-Allow-Credentials", "true");
+		if (config.cors.credentials) {
+			res.header("Access-Control-Allow-Credentials", "true");
+		}
 		res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
 
 		const requestedHeaders = req.headers["access-control-request-headers"];
@@ -429,7 +463,9 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 // Configure CORS
 app.use(
 	cors({
-		origin: config.cors.origins,
+		origin: (origin, callback) => {
+			callback(null, config.cors.isAllowedOrigin(origin));
+		},
 		credentials: config.cors.credentials,
 	}),
 );
@@ -503,6 +539,7 @@ if (process.env.NODE_ENV !== "production") {
 
 // Apply authentication-specific security middleware
 app.use(`${config.baseApiPath}/auth`, authSecurityMiddleware);
+app.use(config.baseApiPath, apiActivityLoggingMiddleware);
 
 // Block login for employees who are already terminated/resigned (best effort).
 app.use(
@@ -617,10 +654,9 @@ app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) =>
 	if (
 		req.path.startsWith("/docs") ||
 		req.path.startsWith("/auth") ||
-		req.path.startsWith("/calendar-item/public") ||
-		req.path.startsWith("/celebrations/public") ||
 		req.path.startsWith("/system-provisioning") ||
 		req.path.startsWith("/hikvision") ||
+		req.path.startsWith("/zkteco") ||
 		req.path.startsWith("/applicant") ||
 		req.path.startsWith("/person") ||
 		req.path.startsWith("/job") ||
@@ -655,6 +691,9 @@ app.use(config.baseApiPath, employee);
 app.use(config.baseApiPath, employeeSchedule);
 if (config.enableDeviceServices && hikvision) {
 	app.use(`${config.baseApiPath}/hikvision`, hikvision);
+}
+if (config.enableDeviceServices && zkteco) {
+	app.use(config.baseApiPath, zkteco);
 }
 app.use(config.baseApiPath, person);
 if (config.enableMetricsServices && metrics) {

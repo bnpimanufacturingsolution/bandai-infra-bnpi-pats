@@ -3,7 +3,7 @@ type: principle-brief
 status: active
 mutability: high-friction
 scope: agent-reasoning
-last_reviewed: 2026-07-19
+last_reviewed: 2026-07-23
 ---
 
 # Evidence Over Assumption
@@ -28,6 +28,48 @@ Use explicit labels instead of inventing facts:
 - `CONFLICTING` — sources disagree
 - `STALE` — documented truth may be outdated vs code/runtime
 
+## Conflicting evidence is a defect to resolve
+
+When sources disagree, agents must not select the source that makes the system
+look green. Record the disagreement as `CONFLICTING`, identify each evidence
+class, and investigate the boundary.
+
+Example: an operator sees five powered panels and states Main C is down while a
+quick-health endpoint reports six `online`. The correct statement is not “six
+devices are online.” It is:
+
+- operator/physical evidence: five active, Main C down;
+- quick transport evidence: six positive responses;
+- full inventory evidence: separately measured;
+- root cause of the disagreement: `NEEDS_CONFIRMATION` until traced.
+
+The endpoint may be cached, mapped to the wrong tunnel, accepting a proxy
+response, or proving only TCP/ISAPI transport. The agent owns proving which.
+
+## Root cause is required, not optional
+
+An error label is not a diagnosis. `fetch failed`, `Unauthorized`, `timeout`,
+`sign-in failed`, and `listener unavailable` must be correlated across:
+
+1. browser request and response;
+2. API request id, route, duration, and selected device;
+3. tunnel target and traffic proof;
+4. listener/service logs for the same time;
+5. device response/error code when available.
+
+If the existing logs cannot explain the failure, add safe structured
+observability and reproduce it. “We do not know why” means the defect remains
+open; it is not a permitted green conclusion.
+
+## Preview is not completion when a write was requested
+
+For an explicitly authorized merge/sync/write task, dry-run and preview are
+mandatory safety gates. They are not the finish line. The agent must freeze the
+reviewed scope, execute the authorized write, monitor real success/failure
+counts, repair recoverable failures, and reread targets to prove convergence.
+Unknown identity choices or missing biometric custody remain excluded rather
+than fabricated.
+
 ## Product anchors that must not be assumed away
 
 - DeviceEvent is saved source-of-truth for device event history rows.
@@ -35,6 +77,7 @@ Use explicit labels instead of inventing facts:
 - Lifecycle rows such as Fingerprint enrolled come from Operation logs (`ContentMgmt/logSearch`), not from inventory.
 - Attendance taps come from Attendance/access events (`AccessControl/AcsEvent`).
 - Host-local Windows Docker is diagnostic; the Project Truth finish line is VM/GitOps/LAN (+ named tunnel when public).
+- Long-running admin/device jobs must be explainable while they run. If an API cannot expose locked scope, source, target, current stage, backend heartbeat, real successes/failures, and latest recoverable errors, the backend contract is not sufficient and the UI must not invent progress. Counts must distinguish selected unique IDs, source records, peer copy attempts, successful writes, failed writes, and biometric evidence/gaps.
 
 ## Hikvision callback / socket wire truth (do not invent)
 

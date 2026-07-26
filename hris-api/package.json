@@ -101,6 +101,8 @@
 		"repair:dm3-onboarding-documents:execute": "tsx scripts/repair-dm3-onboarding-document-requirements.ts --execute",
 		"dm3:live": "node scripts/run-dm3-live-diagnostic.mjs",
 		"dm4:live": "node scripts/run-dm4-live-diagnostic.mjs",
+		"prove:hikvision-recovery-read-stability": "node scripts/prove-credential-recovery-read-stability.mjs",
+		"run:hikvision-recovery-canary-loop": "node scripts/run-credential-recovery-canary-loop.mjs",
 		"test:attendance-debug": "ts-node scripts/test-attendance-debug.ts",
 		"test:attendance-metrics": "ts-node scripts/test-attendance-metrics.ts",
 		"test:attendance-clock-in": "ts-node scripts/test-attendance-clock-in.ts",

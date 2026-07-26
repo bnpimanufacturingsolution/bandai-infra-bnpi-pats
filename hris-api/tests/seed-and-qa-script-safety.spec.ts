@@ -4,7 +4,15 @@ import {
 	isSeedDryRunRequested,
 	SEED_WRITE_SCRIPT_NAMES,
 } from "../prisma/seeds/seedDryRunGuard";
-import { getGeneralEmployeeSeedPreview } from "../prisma/seeds/generalEmployeeSeeder.shared";
+import {
+	ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED,
+	getGeneralEmployeeSeedPreview,
+	resolveDepartmentSeedIdentity,
+} from "../prisma/seeds/generalEmployeeSeeder.shared";
+import {
+	LOCAL_ADMIN_SEEDS,
+	orderLocalAdminSeedsForExistingUsers,
+} from "../prisma/seeds/defaultProjectSeeder";
 import { MIGRATION_SCRIPT_SAFETY_REGISTRY } from "../scripts/migration/script-safety";
 
 const packageJson = require("../package.json") as { scripts: Record<string, string> };
@@ -40,6 +48,91 @@ describe("seed script dry-run safety guard", () => {
 		expect(SEED_WRITE_SCRIPT_NAMES).to.include("seed:reset-demo-requests");
 		expect(SEED_WRITE_SCRIPT_NAMES).to.include("seed:soa");
 		expect(packageJson.scripts["prisma-seed"]).to.equal("npx prisma db seed");
+	});
+
+	it("keeps prisma-seed aligned with the local admin bootstrap contract", () => {
+		expect(ENSURE_LOCAL_ADMIN_USERS_FOR_GENERAL_SEED).to.equal(true);
+	});
+
+	it("orders a seeded username holder before the seed that needs its old username", () => {
+		const ordered = orderLocalAdminSeedsForExistingUsers(LOCAL_ADMIN_SEEDS, [
+			{ email: "super@admin.com", userName: "super-admin" },
+			{ email: "admin@bandai.local", userName: "hris-admin" },
+		]);
+
+		expect(ordered.map((seed) => seed.email)).to.deep.equal([
+			"super@admin.com",
+			"admin@bandai.local",
+			"hris@admin.com",
+		]);
+	});
+
+	it("fails closed when a configured admin username belongs to a non-seeded identity", () => {
+		expect(() =>
+			orderLocalAdminSeedsForExistingUsers(LOCAL_ADMIN_SEEDS, [
+				{ email: "unrelated@example.com", userName: "hris-admin" },
+			]),
+		).to.throw(/identity conflict/);
+	});
+
+	it("reuses an active same-name department without overwriting its imported code", () => {
+		const resolution = resolveDepartmentSeedIdentity(
+			{
+				name: "Product Assurance",
+				code: "PROD-ASSUR",
+				description: "Seed description",
+				isHr: false,
+			},
+			[
+				{
+					id: "department-existing",
+					name: "Product Assurance",
+					code: "13",
+					isActive: true,
+					isDeleted: false,
+				},
+			],
+		);
+
+		expect(resolution).to.deep.equal({
+			kind: "name",
+			department: {
+				id: "department-existing",
+				name: "Product Assurance",
+				code: "13",
+				isActive: true,
+				isDeleted: false,
+			},
+		});
+	});
+
+	it("fails closed when department code and name resolve to different records", () => {
+		expect(() =>
+			resolveDepartmentSeedIdentity(
+				{
+					name: "Product Assurance",
+					code: "PROD-ASSUR",
+					description: "Seed description",
+					isHr: false,
+				},
+				[
+					{
+						id: "department-by-code",
+						name: "Different Name",
+						code: "PROD-ASSUR",
+						isActive: true,
+						isDeleted: false,
+					},
+					{
+						id: "department-by-name",
+						name: "Product Assurance",
+						code: "13",
+						isActive: true,
+						isDeleted: false,
+					},
+				],
+			),
+		).to.throw(/code and name belong to different records/);
 	});
 });
 

@@ -909,6 +909,7 @@ export const fetchDeviceUserInfoCandidates = async (params: {
 	const maxPages = Math.min(Math.max(Number(params.maxPages) || 12, 1), 20);
 	const out: Array<{ employeeNo: string; displayName: string | null; numOfFP: number }> = [];
 	let position = 0;
+	const searchID = `panel-delta-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 	for (let page = 0; page < maxPages; page += 1) {
 		const response = await hikvisionFetch("/ISAPI/AccessControl/UserInfo/Search?format=json", {
 			method: "POST",
@@ -918,7 +919,7 @@ export const fetchDeviceUserInfoCandidates = async (params: {
 			timeoutMs: 15_000,
 			body: {
 				UserInfoSearchCond: {
-					searchID: `panel-delta-${Date.now()}-${page}`,
+					searchID,
 					searchResultPosition: position,
 					maxResults: pageSize,
 				},
@@ -1777,6 +1778,7 @@ export const applyDevicePersonTokenToEvidence = async <
  * short recent window and persist typed lifecycle DeviceEvents + socket emit.
  */
 const operationLogResolveCooldownMs = new Map<string, number>();
+const activeOperationLogResolves = new Set<string>();
 
 /**
  * Proven lifecycle metaIds on Bandai Hikvision (TEST A DS family, 2026-07-17).
@@ -1874,6 +1876,17 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	const deviceId = String(params.deviceId || "").trim();
 	const organizationId = String(params.organizationId || "").trim();
 	if (!deviceId || !organizationId) return;
+	if (activeOperationLogResolves.has(deviceId)) {
+		console.info(
+			JSON.stringify({
+				event: "hikvision.operation_log_resolve_coalesced",
+				deviceId,
+				triggerMinor: String(params.triggerMinor ?? ""),
+				reason: "resolver_already_active",
+			}),
+		);
+		return;
+	}
 
 	// Short cooldown so a late major=3 after enroll can re-arm without thrash.
 	const cooldownMs = params.cooldownMs ?? 1_200;
@@ -1881,6 +1894,7 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 	const last = operationLogResolveCooldownMs.get(deviceId) || 0;
 	if (now - last < cooldownMs) return;
 	operationLogResolveCooldownMs.set(deviceId, now);
+	activeOperationLogResolves.add(deviceId);
 
 	// Target: lifecycle socket ~1–5s AFTER device logSearch leaves exist.
 	// Aggressive early multipass (not a 45s wait). After first save, only 2 short follow-ups
@@ -1974,6 +1988,8 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 		};
 
 		// Parallel logSearch across leaves — serial was multi-second even when leaves existed.
+		// The shared client turns these eagerly queued calls into one digest-auth
+		// request lane per panel while preserving concurrency across panels.
 		const fetched = await Promise.all(metas.map((meta) => fetchMetaRows(meta)));
 
 		for (const { meta, rows } of fetched) {
@@ -2339,13 +2355,17 @@ export const scheduleOperationLogResolveAfterSdkSignal = (params: {
 				`[device-person-token] operation-log resolve total saved ${totalCreated} lifecycle event(s) device=${deviceId} triggerMinor=${triggerMinor || "?"} (fast multipass)`,
 			);
 		}
-	})().catch((error) => {
-		console.warn(
-			"[device-person-token] operation-log resolve crashed",
-			deviceId,
-			error?.message || error,
-		);
-	});
+	})()
+		.catch((error) => {
+			console.warn(
+				"[device-person-token] operation-log resolve crashed",
+				deviceId,
+				error?.message || error,
+			);
+		})
+		.finally(() => {
+			activeOperationLogResolves.delete(deviceId);
+		});
 };
 
 /** True when an SDK callback is the opaque "something changed on device" major-3 path. */

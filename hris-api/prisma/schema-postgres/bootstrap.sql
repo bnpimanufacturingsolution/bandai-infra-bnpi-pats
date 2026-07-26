@@ -83,6 +83,15 @@ CREATE TYPE "BenefitProgramStatus" AS ENUM ('PENDING', 'APPROVED', 'ACTIVE', 'CO
 CREATE TYPE "BenefitDeductionStatus" AS ENUM ('SCHEDULED', 'DEDUCTED', 'FAILED', 'WAIVED');
 
 -- CreateEnum
+CREATE TYPE "BenefitAttendanceAmountBasis" AS ENUM ('PER_DAY', 'PER_CUTOFF');
+
+-- CreateEnum
+CREATE TYPE "BenefitRecurrenceFrequency" AS ENUM ('EVERY_CUTOFF', 'MONTHLY', 'YEARLY');
+
+-- CreateEnum
+CREATE TYPE "BenefitScheduleMode" AS ENUM ('TIME_BOUND', 'FIXED_INSTALLMENTS', 'RECURRING');
+
+-- CreateEnum
 CREATE TYPE "LoanStatus" AS ENUM ('PENDING', 'APPROVED', 'ACTIVE', 'PAID', 'DEFAULTED', 'CANCELLED');
 
 -- CreateEnum
@@ -762,6 +771,10 @@ CREATE TABLE "employee_benefits" (
     "installmentAmount" DOUBLE PRECISION NOT NULL,
     "remainingBalance" DOUBLE PRECISION NOT NULL,
     "amount" DOUBLE PRECISION,
+    "attendanceBased" BOOLEAN NOT NULL DEFAULT false,
+    "attendanceAmountBasis" "BenefitAttendanceAmountBasis",
+    "recurrenceFrequency" "BenefitRecurrenceFrequency",
+    "scheduleMode" "BenefitScheduleMode",
     "startDate" DATE,
     "endDate" DATE,
     "startPayrollCutOff" TIMESTAMP(3),

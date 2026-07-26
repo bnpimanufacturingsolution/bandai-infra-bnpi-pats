@@ -1,4 +1,8 @@
-import { buildHikvisionDeviceBaseUrl } from "../lib/hikvision-client";
+import {
+	buildHikvisionDeviceBaseUrl,
+	getHikvisionDeviceHttpPort,
+	resolveHikvisionTunnelTarget,
+} from "../lib/hikvision-client";
 
 type DeviceHealthTargetDevice = {
 	address: string;
@@ -11,7 +15,7 @@ export type DeviceHealthNetworkTarget = {
 	host: string;
 	port: number;
 	endpoint: string | null;
-	source: "device_address" | "resolved_runtime_endpoint";
+	source: "device_address" | "resolved_runtime_endpoint" | "env_tunnel_map";
 };
 
 const parseHostFromAddress = (address: string) => {
@@ -29,6 +33,17 @@ export const resolveHikvisionDeviceHealthNetworkTarget = (
 ): DeviceHealthNetworkTarget => {
 	const fallbackHost = parseHostFromAddress(device.address);
 	const fallbackPort = Number(device.port);
+	const httpPort = getHikvisionDeviceHttpPort(device);
+	const tunnelTarget = resolveHikvisionTunnelTarget(fallbackHost, httpPort);
+	if (tunnelTarget) {
+		const protocol = tunnelTarget.protocol || (device.protocol === "https" ? "https" : "http");
+		return {
+			host: tunnelTarget.host,
+			port: tunnelTarget.port,
+			endpoint: `${protocol}://${tunnelTarget.host}:${tunnelTarget.port}`,
+			source: "env_tunnel_map",
+		};
+	}
 
 	try {
 		const endpoint = buildHikvisionDeviceBaseUrl(device);

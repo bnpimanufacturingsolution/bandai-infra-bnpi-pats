@@ -4,6 +4,72 @@ export const PORTABLE_BIOMETRIC_ENVELOPE_FORMAT =
 	"project-truth.hikvision-biometric-template.v2";
 
 type Modality = "fingerprint" | "face";
+type ServerModality = Modality | "combined";
+
+export const SERVER_BIOMETRIC_ENVELOPE_FORMAT =
+	"project-truth.hikvision-biometric-template.v1";
+
+export const encryptServerBiometricEnvelope = (params: {
+	deviceId: string;
+	vendorUserId: string;
+	modality: ServerModality;
+	payload: Record<string, unknown>;
+	secret: string;
+	keySource: string;
+}) => {
+	const salt = randomBytes(16);
+	const iv = randomBytes(12);
+	const key = createHash("sha256").update(params.secret).update(salt).digest();
+	const cipher = createCipheriv("aes-256-gcm", key, iv);
+	const plaintext = Buffer.from(JSON.stringify(params.payload), "utf8");
+	const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+	return {
+		format: SERVER_BIOMETRIC_ENVELOPE_FORMAT,
+		algorithm: "aes-256-gcm",
+		keySource: params.keySource,
+		deviceId: params.deviceId,
+		vendorUserId: params.vendorUserId,
+		modality: params.modality,
+		salt: salt.toString("base64"),
+		iv: iv.toString("base64"),
+		authTag: cipher.getAuthTag().toString("base64"),
+		ciphertext: ciphertext.toString("base64"),
+		plaintextSha256: createHash("sha256").update(plaintext).digest("hex"),
+		createdAt: new Date().toISOString(),
+	};
+};
+
+export const decryptServerBiometricEnvelope = (params: {
+	encrypted: any;
+	secret: string;
+	expectedDeviceId: string;
+	expectedVendorUserId: string;
+	expectedModality: Modality;
+}) => {
+	const encrypted = params.encrypted || {};
+	if (
+		encrypted.format !== SERVER_BIOMETRIC_ENVELOPE_FORMAT ||
+		encrypted.algorithm !== "aes-256-gcm" ||
+		String(encrypted.deviceId || "") !== params.expectedDeviceId ||
+		String(encrypted.vendorUserId || "") !== params.expectedVendorUserId ||
+		encrypted.modality !== params.expectedModality
+	) {
+		throw new Error("Encrypted biometric bundle source binding mismatch");
+	}
+	const salt = Buffer.from(String(encrypted.salt || ""), "base64");
+	const iv = Buffer.from(String(encrypted.iv || ""), "base64");
+	const authTag = Buffer.from(String(encrypted.authTag || ""), "base64");
+	const ciphertext = Buffer.from(String(encrypted.ciphertext || ""), "base64");
+	const key = createHash("sha256").update(params.secret).update(salt).digest();
+	const decipher = createDecipheriv("aes-256-gcm", key, iv);
+	decipher.setAuthTag(authTag);
+	const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+	const plaintextSha256 = createHash("sha256").update(plaintext).digest("hex");
+	if (encrypted.plaintextSha256 && encrypted.plaintextSha256 !== plaintextSha256) {
+		throw new Error("Encrypted biometric bundle hash mismatch");
+	}
+	return JSON.parse(plaintext.toString("utf8"));
+};
 
 const deriveKey = (passphrase: string, salt: Buffer) => {
 	if (!passphrase) throw new Error("Encrypted biometric bundle passphrase is required");

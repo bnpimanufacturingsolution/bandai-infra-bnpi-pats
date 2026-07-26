@@ -18,6 +18,11 @@ module.exports = {
 	resolve: {
 		// Add in `.ts` and `.tsx` as a resolvable extension.
 		extensions: [".webpack.js", ".web.js", ".ts", ".tsx", ".js", ".json", ".yaml"],
+		// NodeNext-style source imports intentionally use the emitted `.js` suffix.
+		// During the TypeScript bundle, resolve those requests back to source `.ts`.
+		extensionAlias: {
+			".js": [".js", ".ts"],
+		},
 		modules: ["./node_modules", "node_modules"],
 	},
 	resolveLoader: {

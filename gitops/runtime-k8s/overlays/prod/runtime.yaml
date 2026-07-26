@@ -225,6 +225,16 @@ spec:
               value: "180000"
             - name: ZKTECO_BRIDGE_SYNC_TIMEOUT_MS
               value: "90000"
+            - name: PROJECT_TRUTH_VM_HOST
+              value: 10.184.37.19
+            - name: PROJECT_TRUTH_VM_USER
+              value: infra
+            - name: PROJECT_TRUTH_VM_SSH_KEY
+              value: /var/run/project-truth/ssh/node-health-appliance_ed25519
+            - name: PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION
+              value: vm-container
+            - name: PROJECT_TRUTH_HIKVISION_VM_API_BASE
+              value: http://127.0.0.1:3001
           ports:
             - name: http
               containerPort: 3001
@@ -255,6 +265,9 @@ spec:
             - name: dm-docs
               mountPath: /docs
               readOnly: true
+            - name: project-truth-ssh
+              mountPath: /var/run/project-truth/ssh
+              readOnly: true
       volumes:
         - name: uploads
           persistentVolumeClaim:
@@ -270,6 +283,10 @@ spec:
         - name: dm-docs
           hostPath:
             path: /var/lib/project-truth/dm-workflow/docs
+            type: DirectoryOrCreate
+        - name: project-truth-ssh
+          hostPath:
+            path: /var/lib/project-truth/ssh
             type: DirectoryOrCreate
 ---
 apiVersion: v1

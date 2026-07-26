@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cctype>
 #include <condition_variable>
 #include <csignal>
 #include <cstdio>
@@ -23,6 +24,8 @@
 #include <functional>
 
 #include <dirent.h>
+#include <fcntl.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -64,6 +67,10 @@ struct ReconcileJob {
     std::string sdk_time;
     bool include_fingerprints = false;
     bool include_face_recognition = true;
+    bool include_card = false;
+    // Manual merge jobs may copy biometric credentials without rewriting the
+    // already-converged user/profile/card plane.
+    bool credential_only = false;
     // Filled by enrich_hris_job_before_post when ACS person was empty or templates needed.
     // identity_source: acs_dwEmployeeNo | inventory_delta | userinfo_touch |
     //                  poll_inventory | empty
@@ -88,6 +95,7 @@ std::deque<ReconcileJob> hris_immediate_event_queue;
 std::deque<ReconcileJob> hris_enrichment_event_queue;
 std::deque<ReconcileJob> reconcile_queue;
 std::vector<DeviceSession> sessions;
+std::mutex sessions_mutex;
 std::ofstream evidence_stream;
 std::mutex evidence_mutex;
 std::mutex sdk_request_mutex;
@@ -109,6 +117,9 @@ std::map<std::string, unsigned long long> delayed_reconcile_by_host;
 // last_seen timestamps (not expiry). TTL applied when reading.
 std::map<std::string, std::chrono::steady_clock::time_point> recent_employee_candidates;
 std::map<std::string, std::chrono::steady_clock::time_point> recent_poll_reconcile_by_key;
+std::mutex callback_identity_scan_mutex;
+std::map<std::string, std::chrono::steady_clock::time_point>
+    recent_callback_identity_scan_by_host;
 std::map<std::string, std::set<std::string>> observed_employee_numbers_by_host;
 std::set<std::string> inventory_baseline_ready_hosts;
 // UserInfo field fingerprint per host/employee for modify detection when ACS person is empty.
@@ -129,15 +140,22 @@ std::atomic<unsigned long long> delayed_reconcile_token{0};
 std::atomic<unsigned long long> callback_spool_token{0};
 constexpr size_t HRIS_IMMEDIATE_WORKER_COUNT = 2;
 bool execute_mode = true;
+bool automatic_peer_reconcile_enabled = true;
 std::string hris_api_base;
 std::string hris_api_token;
 std::string min_sdk_time;
 std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";
+std::string reconcile_quarantine_dir =
+    "/tmp/project-truth-hikvision-reconcile-quarantine";
 std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";
 // Long enough for panel create → enroll / modify multipass without inventing ids.
 constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(180);
 constexpr auto poll_reconcile_min_interval = std::chrono::seconds(3);
 constexpr auto inventory_poll_interval = std::chrono::seconds(2);
+// A full UserInfo inventory is 29 SDK pages on the current 865-user panels.
+// Keep it out of the ordinary callback hot path and coalesce the remaining
+// explicit management-event fallback scans for a full minute per device.
+constexpr auto callback_identity_scan_min_interval = std::chrono::minutes(1);
 
 bool curl_post_json(
     const std::string &url,
@@ -227,6 +245,20 @@ void emit_json(const std::map<std::string, std::string> &fields) {
         evidence_stream << line.str() << std::endl;
         evidence_stream.flush();
     }
+}
+
+// Raw biometric custody is a process-to-process transport contract only. It must
+// never be duplicated into the durable listener JSONL evidence stream.
+void emit_sensitive_json_stdout_only(const std::map<std::string, std::string> &fields) {
+    std::ostringstream line;
+    line << "{\"ts\":\"" << now_utc() << "\"";
+    for (const auto &field : fields) {
+        line << ",\"" << json_escape(field.first) << "\":\"" << json_escape(field.second) << "\"";
+    }
+    line << "}";
+
+    std::lock_guard<std::mutex> lock(evidence_mutex);
+    std::cout << line.str() << std::endl;
 }
 
 std::string minor_name(DWORD minor) {
@@ -453,13 +485,68 @@ std::string base64_encode(const BYTE *data, size_t length) {
     return encoded;
 }
 
+bool base64_decode(const std::string &input, std::vector<char> *output) {
+    static const std::string alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    output->clear();
+    std::string compact;
+    compact.reserve(input.size());
+    for (unsigned char c : input) {
+        if (!std::isspace(c)) compact.push_back(static_cast<char>(c));
+    }
+    if (compact.empty() || compact.size() % 4 != 0) return false;
+    auto sextet = [&](char c, unsigned int *value) {
+        const auto position = alphabet.find(c);
+        if (position == std::string::npos) return false;
+        *value = static_cast<unsigned int>(position);
+        return true;
+    };
+    for (size_t i = 0; i < compact.size(); i += 4) {
+        const bool final_group = i + 4 == compact.size();
+        const bool third_padding = compact[i + 2] == '=';
+        const bool fourth_padding = compact[i + 3] == '=';
+        if ((!final_group && (third_padding || fourth_padding)) ||
+            (third_padding && !fourth_padding)) {
+            return false;
+        }
+        unsigned int a = 0;
+        unsigned int b = 0;
+        unsigned int c = 0;
+        unsigned int d = 0;
+        if (!sextet(compact[i], &a) || !sextet(compact[i + 1], &b) ||
+            (!third_padding && !sextet(compact[i + 2], &c)) ||
+            (!fourth_padding && !sextet(compact[i + 3], &d))) {
+            return false;
+        }
+        output->push_back(static_cast<char>((a << 2) | (b >> 4)));
+        if (!third_padding) {
+            output->push_back(static_cast<char>((b << 4) | (c >> 2)));
+        }
+        if (!fourth_padding) {
+            output->push_back(static_cast<char>((c << 6) | d));
+        }
+    }
+    return !output->empty();
+}
+
 DeviceSession *find_session_by_host(const std::string &host) {
+    std::lock_guard<std::mutex> lock(sessions_mutex);
     for (auto &session : sessions) {
         if (session.config.host == host) {
             return &session;
         }
     }
     return nullptr;
+}
+
+std::string find_session_device_id_by_host(const std::string &host) {
+    std::lock_guard<std::mutex> lock(sessions_mutex);
+    for (const auto &session : sessions) {
+        if (session.config.host == host) {
+            return session.config.hris_device_id;
+        }
+    }
+    return "";
 }
 
 std::string recent_employee_candidate_key(const std::string &host, const std::string &employee_no) {
@@ -510,9 +597,36 @@ bool should_queue_poll_reconcile_now(const std::string &key) {
     return true;
 }
 
+bool claim_callback_identity_scan(const std::string &host) {
+    if (host.empty()) {
+        return false;
+    }
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lock(callback_identity_scan_mutex);
+    const auto found = recent_callback_identity_scan_by_host.find(host);
+    if (found != recent_callback_identity_scan_by_host.end() &&
+        now - found->second < callback_identity_scan_min_interval) {
+        return false;
+    }
+    recent_callback_identity_scan_by_host[host] = now;
+    return true;
+}
+
 void queue_reconcile(const ReconcileJob &job) {
     if (!job.employee_no.empty()) {
         mark_recent_employee_candidate(job.source_host, job.employee_no);
+    }
+    const bool manual_reconcile = job.event_kind.rfind("manual_", 0) == 0;
+    if (!automatic_peer_reconcile_enabled && !manual_reconcile) {
+        emit_json({
+            {"event", "automatic_peer_reconcile_paused"},
+            {"sourceDeviceId", job.source_device_id},
+            {"sourceHost", job.source_host},
+            {"employeeNo", job.employee_no},
+            {"minor", minor_name(job.minor)},
+            {"reason", "explicit_merge_owns_sdk_writes"}
+        });
+        return;
     }
     const bool full_mirror = should_full_mirror_reconcile(job);
     if (full_mirror && !job.source_host.empty()) {
@@ -627,8 +741,7 @@ void CALLBACK alarm_callback(
     const std::string card_no =
         fixed_bytes_to_string(acs->struAcsEventInfo.byCardNo, ACS_CARD_NO_LEN);
     const std::string kind = classify_event(acs->dwMajor, acs->dwMinor);
-    const std::string source_device_id =
-        find_session_by_host(host) != nullptr ? find_session_by_host(host)->config.hris_device_id : "";
+    const std::string source_device_id = find_session_device_id_by_host(host);
     const std::string door_no = std::to_string(acs->struAcsEventInfo.dwDoorNo);
     const std::string verify_mode =
         acs->struAcsEventInfo.byCardReaderKind == 4 ? "fingerprint" : "";
@@ -646,7 +759,7 @@ void CALLBACK alarm_callback(
         {"employeeNoExt", employee_no_ext},
         {"acsIdentitySource", identity_from_acs},
         {"acsEventInfoExtend", acs->byAcsEventInfoExtend == 1 ? "true" : "false"},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"doorNo", door_no},
         {"verifyMode", verify_mode},
         {"serialNo", serial_no},
@@ -817,6 +930,9 @@ std::string build_hikvision_callback_json(const ReconcileJob &job) {
     return body.str();
 }
 
+std::set<std::string> extract_employee_numbers_from_search_response(
+    const std::string &response);
+
 bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::string *user_json) {
     if (job.employee_no.empty()) {
         emit_json({
@@ -841,18 +957,67 @@ bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::strin
         body.str(),
         &response);
 
+    const std::set<std::string> returned_employees =
+        extract_employee_numbers_from_search_response(response);
+    const bool exact_owner =
+        ok && returned_employees.size() == 1 &&
+        returned_employees.count(job.employee_no) == 1;
     emit_json({
         {"event", "source_user_read"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", job.employee_no},
-        {"ok", ok ? "true" : "false"},
+        {"ok", exact_owner ? "true" : "false"},
+        {"responseAccepted", ok ? "true" : "false"},
+        {"returnedEmployeeCount", std::to_string(returned_employees.size())},
+        {"exactEmployeePresent",
+         returned_employees.count(job.employee_no) == 1 ? "true" : "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
 
-    if (ok && user_json != nullptr) {
+    if (exact_owner && user_json != nullptr) {
         *user_json = response;
     }
-    return ok;
+    return exact_owner;
+}
+
+std::string extract_enclosing_json_object(const std::string &json, size_t pos_inside);
+std::string extract_string_field_from_json(
+    const std::string &json,
+    const std::string &field_name);
+int extract_int_field_from_json(const std::string &json, const std::string &field_name);
+
+std::string extract_card_object_for_employee(
+    const std::string &response,
+    const std::string &employee_no) {
+    if (response.empty() || employee_no.empty()) {
+        return "";
+    }
+    static const std::regex employee_regex("\"employeeNo\"\\s*:\\s*\"([^\"]+)\"");
+    for (std::sregex_iterator it(response.begin(), response.end(), employee_regex), end;
+         it != end;
+         ++it) {
+        if ((*it)[1].str() != employee_no) {
+            continue;
+        }
+        const size_t pos = static_cast<size_t>((*it).position(0));
+        const std::string object = extract_enclosing_json_object(response, pos);
+        if (!object.empty() && !extract_string_field_from_json(object, "cardNo").empty()) {
+            return object;
+        }
+    }
+    // Some HCNetSDK STDXML responses wrap the single CardInfo record such that
+    // object-bound extraction is not stable. A one-row response is still safe
+    // when its complete employee set contains only the requested exact owner.
+    const std::set<std::string> employees =
+        extract_employee_numbers_from_search_response(response);
+    const std::string sole_card_no = extract_string_field_from_json(response, "cardNo");
+    if (employees.size() == 1 &&
+        employees.count(employee_no) == 1 &&
+        !sole_card_no.empty()) {
+        return std::string("{\"employeeNo\":\"") + json_escape(employee_no) +
+            "\",\"cardNo\":\"" + json_escape(sole_card_no) + "\"}";
+    }
+    return "";
 }
 
 bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::string *card_json) {
@@ -873,24 +1038,134 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
          << "\"}]}}";
 
     std::string response;
-    const bool ok = stdxml_json_request(
+    const bool filtered_ok = stdxml_json_request(
         source,
         "POST /ISAPI/AccessControl/CardInfo/Search?format=json",
         body.str(),
         &response);
+    std::string exact_card = filtered_ok
+        ? extract_card_object_for_employee(response, job.employee_no)
+        : "";
+    const std::set<std::string> filtered_employees =
+        extract_employee_numbers_from_search_response(response);
 
     emit_json({
         {"event", "source_card_read"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", job.employee_no},
-        {"ok", ok ? "true" : "false"},
-        {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+        {"strategy", "filtered_exact_owner"},
+        {"ok", !exact_card.empty() ? "true" : "false"},
+        {"responseAccepted", filtered_ok ? "true" : "false"},
+        {"returnedEmployeeCount", std::to_string(filtered_employees.size())},
+        {"exactEmployeePresent",
+         filtered_employees.count(job.employee_no) == 1 ? "true" : "false"},
+        {"lastError", filtered_ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
 
-    if (ok && card_json != nullptr) {
-        *card_json = response;
+    if (!exact_card.empty()) {
+        if (card_json != nullptr) {
+            *card_json = std::string("{\"CardInfo\":") + exact_card + "}";
+        }
+        return true;
     }
-    return ok;
+
+    // Some deployed panels return an empty or failed response for EmployeeNoList
+    // CardInfo searches even though the exact owned card is present. Fall back to a
+    // complete, stable-search-ID inventory scan and accept only an exact employee owner.
+    constexpr int request_page_size = 200;
+    constexpr int max_pages = 100;
+    const std::string search_id = "pt-card-full-" + job.employee_no;
+    int position = 0;
+    int total_matches = -1;
+    int scanned_rows = 0;
+    bool read_failed = false;
+    for (int page = 0; page < max_pages; ++page) {
+        std::ostringstream full_body;
+        full_body << "{\"CardInfoSearchCond\":{\"searchID\":\""
+                  << json_escape(search_id)
+                  << "\",\"searchResultPosition\":" << position
+                  << ",\"maxResults\":" << request_page_size << "}}";
+
+        std::string full_response;
+        const bool page_ok = stdxml_json_request(
+            source,
+            "POST /ISAPI/AccessControl/CardInfo/Search?format=json",
+            full_body.str(),
+            &full_response);
+        if (!page_ok) {
+            read_failed = true;
+            emit_json({
+                {"event", "source_card_inventory_page"},
+                {"sourceDeviceId", source.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"ok", "false"},
+                {"offset", std::to_string(position)},
+                {"lastError", std::to_string(NET_DVR_GetLastError())}
+            });
+            break;
+        }
+
+        const int page_matches = extract_int_field_from_json(full_response, "numOfMatches");
+        const int response_total = extract_int_field_from_json(full_response, "totalMatches");
+        if (response_total >= 0) {
+            total_matches = response_total;
+        }
+        exact_card = extract_card_object_for_employee(full_response, job.employee_no);
+        const int advance = page_matches > 0
+            ? page_matches
+            : static_cast<int>(
+                extract_employee_numbers_from_search_response(full_response).size());
+        scanned_rows += std::max(advance, 0);
+
+        emit_json({
+            {"event", "source_card_inventory_page"},
+            {"sourceDeviceId", source.config.hris_device_id},
+            {"employeeNo", job.employee_no},
+            {"ok", "true"},
+            {"offset", std::to_string(position)},
+            {"pageRows", std::to_string(std::max(advance, 0))},
+            {"scannedRows", std::to_string(scanned_rows)},
+            {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""},
+            {"exactOwnerFound", !exact_card.empty() ? "true" : "false"}
+        });
+
+        if (!exact_card.empty()) {
+            if (card_json != nullptr) {
+                *card_json = std::string("{\"CardInfo\":") + exact_card + "}";
+            }
+            emit_json({
+                {"event", "source_card_read"},
+                {"sourceDeviceId", source.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"strategy", "full_inventory_exact_owner"},
+                {"ok", "true"},
+                {"scannedRows", std::to_string(scanned_rows)}
+            });
+            return true;
+        }
+        if (advance <= 0) {
+            break;
+        }
+        position += advance;
+        if ((total_matches >= 0 && position >= total_matches) ||
+            (page_matches >= 0 && page_matches < request_page_size &&
+             full_response.find("\"MORE\"") == std::string::npos &&
+             full_response.find("\"More\"") == std::string::npos)) {
+            break;
+        }
+    }
+
+    emit_json({
+        {"event", "source_card_read"},
+        {"sourceDeviceId", source.config.hris_device_id},
+        {"employeeNo", job.employee_no},
+        {"strategy", "full_inventory_exact_owner"},
+        {"ok", "false"},
+        {"complete", !read_failed && total_matches >= 0 && position >= total_matches ? "true" : "false"},
+        {"scannedRows", std::to_string(scanned_rows)},
+        {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""}
+    });
+    return false;
 }
 
 std::string build_sync_card_no(const std::string &employee_no) {
@@ -918,7 +1193,7 @@ bool add_sync_card(DeviceSession &target, const std::string &employee_no, const 
         {"event", "peer_sync_card"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardPresent", "true"},
         {"ok", ok ? "true" : "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
     });
@@ -1128,10 +1403,13 @@ std::map<std::string, UserInfoTouchSnapshot> read_device_userinfo_touch_map(
     int position = 0;
     int total_matches = -1;
     bool read_failed = false;
+    const std::string search_id =
+        "pt-touch-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count());
 
     for (int page = 0; page < 80 && position < 4000; ++page) {
         std::ostringstream body;
-        body << "{\"UserInfoSearchCond\":{\"searchID\":\"pt-touch-" << page << "-" << position
+        body << "{\"UserInfoSearchCond\":{\"searchID\":\"" << search_id
              << "\",\"searchResultPosition\":" << position
              << ",\"maxResults\":" << request_page_size << "}}";
 
@@ -1332,10 +1610,13 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device, boo
     int position = 0;
     int total_matches = -1;
     bool read_failed = false;
+    const std::string search_id =
+        "pt-inv-" + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count());
 
     for (int page = 0; page < 80 && position < 4000; ++page) {
         std::ostringstream body;
-        body << "{\"UserInfoSearchCond\":{\"searchID\":\"pt-inv-" << page << "-" << position
+        body << "{\"UserInfoSearchCond\":{\"searchID\":\"" << search_id
              << "\",\"searchResultPosition\":" << position
              << ",\"maxResults\":" << request_page_size << "}}";
 
@@ -1501,6 +1782,15 @@ struct FaceWriteContext {
     std::condition_variable cv;
     bool done = false;
     bool ok = false;
+    // Observability for writeOk=false with lastError=0 (live 2026-07-25):
+    // NET_DVR_GetLastError is often 0 after a DATA/STATUS failure callback.
+    bool saw_status = false;
+    bool saw_data = false;
+    DWORD callback_status = 0;
+    // FACE_AND_TEMPLATE_STATUS.byRecvStatus: 0-failed, 1-success, 2-full.
+    // 255 means the DATA status packet never arrived.
+    BYTE recv_status = 255;
+    DWORD sdk_error = 0;
 };
 
 struct FaceReadContext {
@@ -1547,14 +1837,34 @@ void CALLBACK face_write_callback(DWORD type, void *buffer, DWORD buffer_length,
     if (ctx == nullptr) return;
     std::lock_guard<std::mutex> lock(ctx->mutex);
     if (type == NET_SDK_CALLBACK_TYPE_STATUS && buffer != nullptr && buffer_length >= sizeof(DWORD)) {
-        const DWORD status = *reinterpret_cast<DWORD *>(buffer);
-        ctx->ok = status == NET_SDK_CALLBACK_STATUS_SUCCESS;
-        if (status == NET_SDK_CALLBACK_STATUS_FAILED || status == NET_SDK_CALLBACK_STATUS_SUCCESS) {
+        DWORD status = 0;
+        std::memcpy(&status, buffer, sizeof(status));
+        ctx->saw_status = true;
+        ctx->callback_status = status;
+        // Prefer DATA byRecvStatus when present; STATUS alone is a fallback.
+        if (status == NET_SDK_CALLBACK_STATUS_FAILED ||
+            status == NET_SDK_CALLBACK_STATUS_EXCEPTION) {
+            ctx->ok = false;
+            ctx->done = true;
+            if (buffer_length >= sizeof(DWORD) * 2) {
+                std::memcpy(
+                    &ctx->sdk_error,
+                    reinterpret_cast<const char *>(buffer) + sizeof(DWORD),
+                    sizeof(DWORD));
+            }
+        } else if (status == NET_SDK_CALLBACK_STATUS_SUCCESS ||
+                   status == NET_SDK_REMOTE_CONFIG_STATUS_SUCCESS) {
+            if (!ctx->saw_data) {
+                ctx->ok = true;
+            }
             ctx->done = true;
         }
     } else if (type == NET_SDK_CALLBACK_TYPE_DATA && buffer != nullptr &&
                buffer_length >= sizeof(NET_DVR_FACE_AND_TEMPLATE_STATUS)) {
         auto *status = reinterpret_cast<NET_DVR_FACE_AND_TEMPLATE_STATUS *>(buffer);
+        ctx->saw_data = true;
+        ctx->recv_status = status->byRecvStatus;
+        // HCNetSDK: 0-failed, 1-success, 2-full
         ctx->ok = status->byRecvStatus == 1;
         ctx->done = true;
     }
@@ -1857,18 +2167,75 @@ bool capture_face_template(
     return ok;
 }
 
+std::string face_write_fail_reason(const FaceWriteContext &ctx, BOOL send_ok) {
+    if (send_ok != TRUE) {
+        return "send_remote_config_failed";
+    }
+    if (!ctx.done) {
+        return "callback_timeout";
+    }
+    if (ctx.saw_data) {
+        // HCNetSDK FACE_AND_TEMPLATE_STATUS.byRecvStatus
+        if (ctx.recv_status == 0) return "device_recv_status_failed";
+        if (ctx.recv_status == 1) return "none";
+        if (ctx.recv_status == 2) return "device_face_template_full";
+        return "device_recv_status_" + std::to_string(static_cast<unsigned>(ctx.recv_status));
+    }
+    if (ctx.saw_status) {
+        if (ctx.callback_status == NET_SDK_CALLBACK_STATUS_SUCCESS ||
+            ctx.callback_status == NET_SDK_REMOTE_CONFIG_STATUS_SUCCESS) {
+            return "status_success_without_data_ack";
+        }
+        return "callback_status_failed_" + std::to_string(ctx.callback_status);
+    }
+    return "write_not_accepted";
+}
+
 bool write_face_and_template(
     DeviceSession &target,
     const std::string &employee_no,
     const std::string &card_no,
     const std::vector<char> &face_template,
-    const std::vector<char> &face_picture) {
+    const std::vector<char> &face_picture,
+    bool redact_card_no = false) {
+    const auto operation_started_at = std::chrono::steady_clock::now();
+    const auto elapsed_ms = [&]() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - operation_started_at).count();
+    };
+    if (!execute_mode) {
+        emit_json({
+            {"event", "peer_face_write_preview"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"cardNo", card_no.empty() ? "" : "[redacted]"},
+            {"templateSize", std::to_string(face_template.size())},
+            {"pictureSize", std::to_string(face_picture.size())},
+            {"wouldCall", "NET_DVR_SET_FACE_AND_TEMPLATE"}
+        });
+        return !face_template.empty() && !face_picture.empty();
+    }
+    if (card_no.empty()) {
+        emit_json({
+            {"event", "peer_face_write"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"failReason", "card_no_required_for_face_and_template"},
+            {"recvStatus", ""},
+            {"callbackCompleted", "false"},
+            {"durationMs", std::to_string(elapsed_ms())},
+            {"lastError", "0"}
+        });
+        return false;
+    }
     NET_DVR_FACE_AND_TEMPLATE_COND cond{};
     cond.dwSize = sizeof(cond);
     cond.dwFaceNum = 1;
     std::strncpy(reinterpret_cast<char *>(cond.byCardNo), card_no.c_str(), ACS_CARD_NO_LEN - 1);
     FaceWriteContext ctx;
     std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
+    const auto remote_config_started_at = std::chrono::steady_clock::now();
     const LONG handle = NET_DVR_StartRemoteConfig(
         target.user_id,
         NET_DVR_SET_FACE_AND_TEMPLATE,
@@ -1876,13 +2243,22 @@ bool write_face_and_template(
         sizeof(cond),
         face_write_callback,
         &ctx);
+    const auto start_remote_config_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - remote_config_started_at).count();
     if (handle < 0) {
+        const DWORD start_error = NET_DVR_GetLastError();
         emit_json({
             {"event", "peer_face_write"},
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
-            {"lastError", std::to_string(NET_DVR_GetLastError())}
+            {"failReason", "start_remote_config_failed"},
+            {"recvStatus", ""},
+            {"sendOk", "false"},
+            {"startRemoteConfigMs", std::to_string(start_remote_config_ms)},
+            {"durationMs", std::to_string(elapsed_ms())},
+            {"lastError", std::to_string(start_error)}
         });
         return false;
     }
@@ -1893,6 +2269,7 @@ bool write_face_and_template(
     record.pFaceBuffer = const_cast<char *>(face_picture.data());
     record.dwFaceTemplateLen = static_cast<DWORD>(face_template.size());
     record.pFaceTemplateBuffer = const_cast<char *>(face_template.data());
+    const auto send_started_at = std::chrono::steady_clock::now();
     const BOOL send_ok = NET_DVR_SendRemoteConfig(
         handle,
         ENUM_ACS_SEND_DATA,
@@ -1902,18 +2279,36 @@ bool write_face_and_template(
         std::unique_lock<std::mutex> lock(ctx.mutex);
         ctx.cv.wait_for(lock, std::chrono::seconds(10), [&ctx] { return ctx.done; });
     }
+    const auto send_and_callback_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - send_started_at).count();
     NET_DVR_StopRemoteConfig(handle);
     sdk_lock.unlock();
     const bool ok = send_ok == TRUE && ctx.ok;
+    const std::string fail_reason = ok ? "none" : face_write_fail_reason(ctx, send_ok);
+    const DWORD last_error = ok
+        ? 0
+        : (ctx.sdk_error != 0 ? ctx.sdk_error : NET_DVR_GetLastError());
     emit_json({
         {"event", "peer_face_write"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
+        {"failReason", fail_reason},
+        {"sendOk", send_ok == TRUE ? "true" : "false"},
+        {"sawStatusCallback", ctx.saw_status ? "true" : "false"},
+        {"sawDataCallback", ctx.saw_data ? "true" : "false"},
+        {"callbackStatus", std::to_string(ctx.callback_status)},
+        // Empty string when DATA packet never arrived (recv_status sentinel 255).
+        {"recvStatus", ctx.recv_status == 255 ? "" : std::to_string(static_cast<unsigned>(ctx.recv_status))},
         {"templateSize", std::to_string(face_template.size())},
         {"pictureSize", std::to_string(face_picture.size())},
-        {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
+        {"startRemoteConfigMs", std::to_string(start_remote_config_ms)},
+        {"sendAndCallbackMs", std::to_string(send_and_callback_ms)},
+        {"callbackCompleted", ctx.done ? "true" : "false"},
+        {"durationMs", std::to_string(elapsed_ms())},
+        {"lastError", std::to_string(last_error)}
     });
     return ok;
 }
@@ -1923,7 +2318,8 @@ bool read_face_and_template(
     const std::string &employee_no,
     const std::string &card_no,
     std::vector<char> *face_template,
-    std::vector<char> *face_picture) {
+    std::vector<char> *face_picture,
+    bool redact_card_no = false) {
     NET_DVR_FACE_AND_TEMPLATE_COND cond{};
     cond.dwSize = sizeof(cond);
     cond.dwFaceNum = 1;
@@ -1942,7 +2338,7 @@ bool read_face_and_template(
             {"event", "source_face_read"},
             {"sourceDeviceId", source.config.hris_device_id},
             {"employeeNo", employee_no},
-            {"cardNo", card_no},
+            {"cardNo", card_no.empty() ? "" : "[redacted]"},
             {"ok", "false"},
             {"lastError", std::to_string(NET_DVR_GetLastError())}
         });
@@ -1963,13 +2359,335 @@ bool read_face_and_template(
         {"event", "source_face_read"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
         {"templateSize", std::to_string(ctx.face_template.size())},
         {"pictureSize", std::to_string(ctx.face_picture.size())},
         {"lastError", ok ? "0" : std::to_string(ctx.sdk_error ? ctx.sdk_error : NET_DVR_GetLastError())}
     });
     return ok;
+}
+
+std::string extract_string_field_from_json(
+    const std::string &json,
+    const std::string &field_name);
+
+bool target_card_allows_owner(
+    DeviceSession &target,
+    const std::string &employee_no,
+    const std::string &card_no,
+    bool *already_owned_by_employee) {
+    if (already_owned_by_employee != nullptr) *already_owned_by_employee = false;
+    std::ostringstream body;
+    body << "{\"CardInfoSearchCond\":{\"searchID\":\"pt-card-owner-"
+         << json_escape(employee_no)
+         << "\",\"searchResultPosition\":0,\"maxResults\":5,\"CardNoList\":[{\"cardNo\":\""
+         << json_escape(card_no) << "\"}]}}";
+    std::string response;
+    const bool read_ok = stdxml_json_request(
+        target,
+        "POST /ISAPI/AccessControl/CardInfo/Search?format=json",
+        body.str(),
+        &response);
+    if (!read_ok) {
+        emit_json({
+            {"event", "peer_card_owner_probe"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"reason", "target_card_owner_read_failed"}
+        });
+        return false;
+    }
+    const std::string owner = extract_string_field_from_json(response, "employeeNo");
+    if (!owner.empty() && owner != employee_no) {
+        emit_json({
+            {"event", "peer_card_owner_conflict"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"existingOwner", owner},
+            {"ok", "false"}
+        });
+        return false;
+    }
+    if (already_owned_by_employee != nullptr) {
+        *already_owned_by_employee = owner == employee_no;
+    }
+    return true;
+}
+
+bool add_sync_card_if_unowned(
+    DeviceSession &target,
+    const std::string &employee_no,
+    const std::string &card_no) {
+    bool already_owned = false;
+    if (!target_card_allows_owner(target, employee_no, card_no, &already_owned)) {
+        return false;
+    }
+    if (already_owned) {
+        emit_json({
+            {"event", "peer_sync_card"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"cardPresent", "true"},
+            {"ok", "true"},
+            {"retained", "true"}
+        });
+        return true;
+    }
+    return add_sync_card(target, employee_no, card_no);
+}
+
+struct StoredFaceWritePayload {
+    std::string target_device_id;
+    std::string employee_no;
+    std::string card_no;
+    std::vector<char> face_template;
+    std::vector<char> face_picture;
+};
+
+bool load_stored_face_write_payload(
+    const std::string &payload_path,
+    StoredFaceWritePayload *payload,
+    std::string *reason) {
+    const int payload_fd = open(payload_path.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (payload_fd < 0) {
+        *reason = "payload_open_failed";
+        return false;
+    }
+    struct stat file_stat {};
+    if (fstat(payload_fd, &file_stat) != 0) {
+        close(payload_fd);
+        *reason = "payload_stat_failed";
+        return false;
+    }
+    if (!S_ISREG(file_stat.st_mode) || file_stat.st_uid != geteuid()) {
+        close(payload_fd);
+        *reason = "payload_owner_or_type_invalid";
+        return false;
+    }
+    if ((file_stat.st_mode & 0777) != 0600) {
+        close(payload_fd);
+        *reason = "payload_permissions_must_be_0600";
+        return false;
+    }
+    if (file_stat.st_size <= 0 || file_stat.st_size > 16 * 1024 * 1024) {
+        close(payload_fd);
+        *reason = "payload_size_invalid";
+        return false;
+    }
+    std::string body(static_cast<size_t>(file_stat.st_size), '\0');
+    size_t offset = 0;
+    while (offset < body.size()) {
+        const ssize_t count = read(payload_fd, &body[offset], body.size() - offset);
+        if (count <= 0) break;
+        offset += static_cast<size_t>(count);
+    }
+    close(payload_fd);
+    if (offset != body.size()) {
+        *reason = "payload_read_failed";
+        return false;
+    }
+    payload->target_device_id = extract_string_field_from_json(body, "targetDeviceId");
+    payload->employee_no = extract_string_field_from_json(body, "employeeNo");
+    payload->card_no = extract_string_field_from_json(body, "cardNo");
+    const std::string template_b64 = extract_string_field_from_json(body, "faceTemplate");
+    const std::string picture_b64 = extract_string_field_from_json(body, "facePicture");
+    if (payload->target_device_id.empty() || payload->employee_no.empty() ||
+        payload->card_no.empty()) {
+        *reason = "payload_identity_or_card_missing";
+        return false;
+    }
+    if (!base64_decode(template_b64, &payload->face_template) ||
+        !base64_decode(picture_b64, &payload->face_picture)) {
+        *reason = "payload_face_template_and_picture_required";
+        return false;
+    }
+    return true;
+}
+
+std::string stored_face_lock_path(const std::string &device_id) {
+    std::string safe;
+    safe.reserve(device_id.size());
+    for (unsigned char c : device_id) {
+        safe.push_back(std::isalnum(c) || c == '-' || c == '_' ? static_cast<char>(c) : '_');
+    }
+    return "/tmp/project-truth-hikvision-face-" + safe + ".lock";
+}
+
+bool write_stored_face_with_reread(
+    DeviceSession &target,
+    const StoredFaceWritePayload &payload) {
+    const auto operation_started_at = std::chrono::steady_clock::now();
+    const std::string lock_path = stored_face_lock_path(payload.target_device_id);
+    const int lock_fd = open(
+        lock_path.c_str(),
+        O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_RDWR,
+        0600);
+    struct stat lock_stat {};
+    const bool secure_lock =
+        lock_fd >= 0 &&
+        fstat(lock_fd, &lock_stat) == 0 &&
+        S_ISREG(lock_stat.st_mode) &&
+        lock_stat.st_uid == geteuid() &&
+        (lock_stat.st_mode & 0777) == 0600;
+    if (!secure_lock || flock(lock_fd, LOCK_EX | LOCK_NB) != 0) {
+        if (lock_fd >= 0) close(lock_fd);
+        emit_json({
+            {"event", "stored_face_write_blocked"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"reason", secure_lock ? "device_write_lock_busy" : "device_write_lock_unsafe"}
+        });
+        return false;
+    }
+    auto release_lock = [&]() {
+        flock(lock_fd, LOCK_UN);
+        close(lock_fd);
+    };
+    if (!execute_mode) {
+        // Mirror peer reconcile: face is card-keyed; preview whether the ACS
+        // card key would be usable before claiming a dry-run write.
+        bool already_owned = false;
+        const bool card_owner_ok = target_card_allows_owner(
+            target, payload.employee_no, payload.card_no, &already_owned);
+        emit_json({
+            {"event", "stored_face_card_ensure_preview"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"ok", card_owner_ok ? "true" : "false"},
+            {"alreadyOwned", already_owned ? "true" : "false"},
+            {"wouldEnsureCard", already_owned ? "false" : "true"}
+        });
+        const bool preview = card_owner_ok && write_face_and_template(
+            target,
+            payload.employee_no,
+            payload.card_no,
+            payload.face_template,
+            payload.face_picture,
+            true);
+        emit_json({
+            {"event", "stored_face_write_preview_completed"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"ok", preview ? "true" : "false"},
+            {"cardOwnerOk", card_owner_ok ? "true" : "false"},
+            {"templateSize", std::to_string(payload.face_template.size())},
+            {"pictureSize", std::to_string(payload.face_picture.size())},
+            {"physicalRereadRequired", "true"}
+        });
+        release_lock();
+        return preview;
+    }
+    const char *enabled = std::getenv("HIKVISION_ENABLE_STORED_FACE_WRITE");
+    const char *writer_tested = std::getenv("HIKVISION_STORED_FACE_WRITER_TESTED");
+    const char *authorized_canary =
+        std::getenv("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+    if (enabled == nullptr || std::string(enabled) != "1" ||
+        writer_tested == nullptr || std::string(writer_tested) != "1" ||
+        authorized_canary == nullptr ||
+        std::string(authorized_canary) != payload.target_device_id) {
+        emit_json({
+            {"event", "stored_face_write_blocked"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"reason", "feature_disabled_pending_authorized_canary"}
+        });
+        release_lock();
+        return false;
+    }
+    // CODE DEFECT (fixed): stored-face path wrote NET_DVR_SET_FACE_AND_TEMPLATE
+    // without ensuring the ACS card key exists. Peer reconcile always called
+    // add_sync_card_if_unowned first. Live 2026-07-25 cardless vendor-id fallback
+    // produced peer_face_write callbackCompleted=true ok=false lastError=0
+    // writeOk=false with zero reread. Card ensure is mandatory for this writer.
+    const auto card_started_at = std::chrono::steady_clock::now();
+    const bool card_ready =
+        add_sync_card_if_unowned(target, payload.employee_no, payload.card_no);
+    const auto card_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - card_started_at).count();
+    emit_json({
+        {"event", "stored_face_card_ensure"},
+        {"targetDeviceId", payload.target_device_id},
+        {"employeeNo", payload.employee_no},
+        {"ok", card_ready ? "true" : "false"},
+        {"durationMs", std::to_string(card_ms)},
+        {"reason", card_ready ? "card_bound_or_already_owned" : "card_bind_failed"}
+    });
+    if (!card_ready) {
+        emit_json({
+            {"event", "stored_face_write_reread_completed"},
+            {"targetDeviceId", payload.target_device_id},
+            {"employeeNo", payload.employee_no},
+            {"ok", "false"},
+            {"writeOk", "false"},
+            {"rereadOk", "false"},
+            {"templateMatch", "false"},
+            {"pictureMatch", "false"},
+            {"failReason", "stored_face_card_ensure_failed"},
+            {"templateSize", std::to_string(payload.face_template.size())},
+            {"pictureSize", std::to_string(payload.face_picture.size())},
+            {"rereadTemplateSize", "0"},
+            {"rereadPictureSize", "0"},
+            {"writeMs", "0"},
+            {"stabilizationWaitMs", "0"},
+            {"rereadMs", "0"},
+            {"durationMs", std::to_string(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now() - operation_started_at).count())}
+        });
+        release_lock();
+        return false;
+    }
+    const auto write_started_at = std::chrono::steady_clock::now();
+    const bool wrote = write_face_and_template(
+        target,
+        payload.employee_no,
+        payload.card_no,
+        payload.face_template,
+        payload.face_picture,
+        true);
+    const auto write_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - write_started_at).count();
+    if (wrote) std::this_thread::sleep_for(std::chrono::milliseconds(750));
+    std::vector<char> reread_template;
+    std::vector<char> reread_picture;
+    const auto reread_started_at = std::chrono::steady_clock::now();
+    const bool reread = wrote && read_face_and_template(
+        target,
+        payload.employee_no,
+        payload.card_no,
+        &reread_template,
+        &reread_picture,
+        true);
+    const auto reread_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - reread_started_at).count();
+    const bool template_match = reread && reread_template == payload.face_template;
+    const bool picture_match = reread && reread_picture == payload.face_picture;
+    const bool verified = wrote && reread && template_match && picture_match;
+    emit_json({
+        {"event", "stored_face_write_reread_completed"},
+        {"targetDeviceId", payload.target_device_id},
+        {"employeeNo", payload.employee_no},
+        {"ok", verified ? "true" : "false"},
+        {"writeOk", wrote ? "true" : "false"},
+        {"rereadOk", reread ? "true" : "false"},
+        {"templateMatch", template_match ? "true" : "false"},
+        {"pictureMatch", picture_match ? "true" : "false"},
+        {"failReason", verified ? "none" : (wrote ? "reread_or_match_failed" : "peer_face_write_failed")},
+        {"templateSize", std::to_string(payload.face_template.size())},
+        {"pictureSize", std::to_string(payload.face_picture.size())},
+        {"rereadTemplateSize", std::to_string(reread_template.size())},
+        {"rereadPictureSize", std::to_string(reread_picture.size())},
+        {"writeMs", std::to_string(write_ms)},
+        {"stabilizationWaitMs", wrote ? "750" : "0"},
+        {"rereadMs", std::to_string(reread_ms)},
+        {"durationMs", std::to_string(
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - operation_started_at).count())}
+    });
+    release_lock();
+    return verified;
 }
 
 NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record(
@@ -2072,12 +2790,9 @@ bool export_biometric_templates_for_employee(
 
     std::string user_json;
     std::string card_json;
-    read_source_user(source, job, &user_json);
-    read_source_card(source, job, &card_json);
+    const bool user_read_ok = read_source_user(source, job, &user_json);
+    const bool card_owner_verified = read_source_card(source, job, &card_json);
     std::string card_no = extract_string_field_from_json(card_json, "cardNo");
-    if (card_no.empty()) {
-        card_no = extract_string_field_from_json(user_json, "cardNo");
-    }
 
     std::vector<NET_DVR_FINGER_PRINT_CFG_V50> fingerprints;
     if (include_fingerprints) {
@@ -2106,12 +2821,16 @@ bool export_biometric_templates_for_employee(
     }
     fingerprint_json << "]";
 
-    emit_json({
+    emit_sensitive_json_stdout_only({
         {"event", "manual_biometric_export_completed"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
-        {"ok", (!include_fingerprints || !fingerprints.empty() || !include_face || face_ok) ? "true" : "false"},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
+        {"userReadOk", user_read_ok ? "true" : "false"},
+        {"cardOwnerVerified", card_owner_verified ? "true" : "false"},
+        {"cardAssociationStrategy", card_owner_verified ? "exact_employee_owner" : "none"},
+        {"ok", ((!include_fingerprints || !fingerprints.empty()) &&
+                (!include_face || face_ok)) ? "true" : "false"},
         {"fingerprintCount", std::to_string(fingerprints.size())},
         {"faceTemplateSize", std::to_string(face_template.size())},
         {"facePictureSize", std::to_string(face_picture.size())},
@@ -2120,7 +2839,162 @@ bool export_biometric_templates_for_employee(
         {"facePicture", face_picture.empty() ? "" : base64_encode(reinterpret_cast<const BYTE *>(face_picture.data()), face_picture.size())}
     });
 
-    return !fingerprints.empty() || !face_template.empty() || !face_picture.empty();
+    return (!include_fingerprints || !fingerprints.empty()) &&
+        (!include_face || (card_owner_verified && !face_template.empty() && !face_picture.empty()));
+}
+
+bool delete_face_for_exact_owner(
+    DeviceSession &target,
+    const std::string &employee_no) {
+    const char *authorized_target_env =
+        std::getenv("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+    const std::string authorized_target =
+        authorized_target_env == nullptr ? "" : authorized_target_env;
+    if (authorized_target.empty() ||
+        authorized_target != target.config.hris_device_id ||
+        employee_no.empty()) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"reason", "authorized_exact_canary_target_required"}
+        });
+        return false;
+    }
+
+    ReconcileJob job;
+    job.source_device_id = target.config.hris_device_id;
+    job.source_host = target.config.host;
+    job.employee_no = employee_no;
+    std::string pre_user_json;
+    if (!read_source_user(target, job, &pre_user_json)) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"reason", "exact_employee_userinfo_not_found"}
+        });
+        return false;
+    }
+    const int pre_face_count = extract_int_field_from_json(pre_user_json, "numOfFace");
+    const int pre_fingerprint_count = extract_int_field_from_json(pre_user_json, "numOfFP");
+    const int pre_card_count = extract_int_field_from_json(pre_user_json, "numOfCard");
+    const std::string pre_name = extract_string_field_from_json(pre_user_json, "name");
+    if (pre_face_count < 1 ||
+        pre_fingerprint_count < 0 ||
+        pre_card_count < 0) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"reason", pre_face_count < 1
+                ? "exact_employee_has_no_face"
+                : "predelete_credential_counts_unreadable"},
+            {"preDeleteFaceCount",
+             pre_face_count >= 0 ? std::to_string(pre_face_count) : ""},
+            {"preDeleteFingerprintCount",
+             pre_fingerprint_count >= 0 ? std::to_string(pre_fingerprint_count) : ""},
+            {"preDeleteCardCount",
+             pre_card_count >= 0 ? std::to_string(pre_card_count) : ""}
+        });
+        return false;
+    }
+    std::string card_json;
+    if (!read_source_card(target, job, &card_json)) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"reason", "exact_employee_owned_card_not_found"}
+        });
+        return false;
+    }
+    const std::string card_no = extract_string_field_from_json(card_json, "cardNo");
+    if (card_no.empty()) {
+        return false;
+    }
+    if (!execute_mode) {
+        emit_json({
+            {"event", "face_delete_preview"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"exactCardOwnerVerified", "true"},
+            {"preDeleteFaceCount", std::to_string(pre_face_count)},
+            {"preDeleteFingerprintCount", std::to_string(pre_fingerprint_count)},
+            {"preDeleteCardCount", std::to_string(pre_card_count)},
+            {"wouldCall", "NET_DVR_DEL_FACE_PARAM_CFG"},
+            {"postDeleteIsolationRequired", "true"}
+        });
+        return true;
+    }
+
+    NET_DVR_FACE_PARAM_CTRL control{};
+    control.dwSize = sizeof(control);
+    control.byMode = 0;
+    std::strncpy(
+        reinterpret_cast<char *>(control.struProcessMode.struByCard.byCardNo),
+        card_no.c_str(),
+        ACS_CARD_NO_LEN - 1);
+    control.struProcessMode.struByCard.byEnableCardReader[0] = 1;
+    control.struProcessMode.struByCard.byFaceID[0] = 1;
+    std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
+    const BOOL deleted = NET_DVR_RemoteControl(
+        target.user_id,
+        NET_DVR_DEL_FACE_PARAM_CFG,
+        &control,
+        sizeof(control));
+    const DWORD delete_error = deleted == TRUE ? 0 : NET_DVR_GetLastError();
+    sdk_lock.unlock();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+    std::string user_json;
+    const bool reread_ok = read_source_user(target, job, &user_json);
+    const int face_count = extract_int_field_from_json(user_json, "numOfFace");
+    const int fingerprint_count = extract_int_field_from_json(user_json, "numOfFP");
+    const int card_count = extract_int_field_from_json(user_json, "numOfCard");
+    const std::string post_name = extract_string_field_from_json(user_json, "name");
+    std::string post_card_json;
+    const bool post_card_owner_verified =
+        reread_ok && read_source_card(target, job, &post_card_json);
+    const std::string post_card_no =
+        extract_string_field_from_json(post_card_json, "cardNo");
+    const bool identity_retained =
+        reread_ok && pre_name == post_name;
+    const bool fingerprint_retained =
+        reread_ok && fingerprint_count == pre_fingerprint_count;
+    const bool card_count_retained =
+        reread_ok && card_count == pre_card_count;
+    const bool exact_card_retained =
+        post_card_owner_verified && post_card_no == card_no;
+    const bool physically_absent = reread_ok && face_count == 0;
+    const bool credential_isolation_retained =
+        physically_absent &&
+        identity_retained &&
+        fingerprint_retained &&
+        card_count_retained &&
+        exact_card_retained;
+    emit_json({
+        {"event", "face_delete_reread_completed"},
+        {"targetDeviceId", target.config.hris_device_id},
+        {"employeeNo", employee_no},
+        {"deleteAccepted", deleted == TRUE ? "true" : "false"},
+        {"sdkLastError", std::to_string(delete_error)},
+        {"preDeleteFaceCount", std::to_string(pre_face_count)},
+        {"postDeleteFaceCount", face_count >= 0 ? std::to_string(face_count) : ""},
+        {"preDeleteFingerprintCount", std::to_string(pre_fingerprint_count)},
+        {"postDeleteFingerprintCount",
+         fingerprint_count >= 0 ? std::to_string(fingerprint_count) : ""},
+        {"preDeleteCardCount", std::to_string(pre_card_count)},
+        {"postDeleteCardCount", card_count >= 0 ? std::to_string(card_count) : ""},
+        {"identityRetained", identity_retained ? "true" : "false"},
+        {"fingerprintCountRetained", fingerprint_retained ? "true" : "false"},
+        {"cardCountRetained", card_count_retained ? "true" : "false"},
+        {"exactCardAssociationRetained", exact_card_retained ? "true" : "false"},
+        {"physicallyAbsent", physically_absent ? "true" : "false"},
+        {"credentialIsolationRetained",
+         credential_isolation_retained ? "true" : "false"}
+    });
+    return deleted == TRUE && credential_isolation_retained;
 }
 
 bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::string &user_json) {
@@ -2399,7 +3273,7 @@ bool write_peer_fingerprints(
             {"event", "peer_fingerprint_write_legacy_attempt"},
             {"targetDeviceId", target.config.hris_device_id},
             {"employeeNo", job.employee_no},
-            {"cardNo", job.card_no},
+            {"cardNo", "[redacted]"},
             {"templateCount", std::to_string(templates.size())}
         });
 
@@ -2444,7 +3318,7 @@ bool write_peer_fingerprints(
                         {"event", "peer_fingerprint_write_legacy_send_failed"},
                         {"targetDeviceId", target.config.hris_device_id},
                         {"employeeNo", job.employee_no},
-                        {"cardNo", job.card_no},
+                        {"cardNo", "[redacted]"},
                         {"lastError", std::to_string(NET_DVR_GetLastError())}
                     });
                     break;
@@ -2465,7 +3339,7 @@ bool write_peer_fingerprints(
                 {"event", "peer_fingerprint_write_legacy_start_failed"},
                 {"targetDeviceId", target.config.hris_device_id},
                 {"employeeNo", job.employee_no},
-                {"cardNo", job.card_no},
+                {"cardNo", "[redacted]"},
                 {"lastError", std::to_string(NET_DVR_GetLastError())}
             });
         }
@@ -2475,7 +3349,7 @@ bool write_peer_fingerprints(
         {"event", "peer_fingerprint_write"},
         {"targetDeviceId", target.config.hris_device_id},
         {"employeeNo", job.employee_no},
-        {"cardNo", job.card_no},
+        {"cardNo", job.card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
         {"templateCount", std::to_string(templates.size())},
         {"rawFingerprintTemplateStored", "false"},
@@ -2562,7 +3436,7 @@ bool capture_and_sync_fingerprint_for_employee(
         {"event", "manual_fingerprint_capture_sync_started"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"fingerNo", std::to_string(finger_no)},
         {"fingerType", std::to_string(finger_type)},
         {"mode", execute_mode ? "execute" : "dry-run"}
@@ -2635,7 +3509,7 @@ bool capture_and_sync_face_for_employee(
         {"event", "manual_face_capture_sync_started"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
     if (card_no.empty()) {
@@ -2702,7 +3576,7 @@ bool mirror_face_for_employee(
         {"event", "manual_face_mirror_started"},
         {"sourceDeviceId", source.config.hris_device_id},
         {"employeeNo", employee_no},
-        {"cardNo", card_no},
+        {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
     if (card_no.empty()) {
@@ -2943,6 +3817,21 @@ bool ensure_reconcile_spool_dir() {
     return false;
 }
 
+bool ensure_reconcile_quarantine_dir() {
+    if (::mkdir(reconcile_quarantine_dir.c_str(), 0700) == 0) {
+        return true;
+    }
+    if (errno == EEXIST) {
+        return true;
+    }
+    emit_json({
+        {"event", "hris_contract_spool_quarantine_dir_failed"},
+        {"path", reconcile_quarantine_dir},
+        {"errno", std::to_string(errno)}
+    });
+    return false;
+}
+
 bool ensure_callback_spool_dir() {
     if (::mkdir(callback_spool_dir.c_str(), 0755) == 0 || errno == EEXIST) {
         return true;
@@ -3097,6 +3986,27 @@ void replay_pending_hris_contract_posts() {
             emit_json({
                 {"event", "hris_contract_spool_read_failed"},
                 {"path", path}
+            });
+            continue;
+        }
+        std::smatch source_device_match;
+        const std::regex source_device_pattern(
+            R"reconcile("sourceDeviceId"\s*:\s*"([^"]+)")reconcile");
+        if (!std::regex_search(body, source_device_match, source_device_pattern)) {
+            const size_t separator = path.find_last_of('/');
+            const std::string filename =
+                path.substr(separator == std::string::npos ? 0 : separator + 1);
+            const std::string quarantine_path =
+                reconcile_quarantine_dir + "/" + filename;
+            const bool preserved =
+                ensure_reconcile_quarantine_dir() &&
+                std::rename(path.c_str(), quarantine_path.c_str()) == 0;
+            emit_json({
+                {"event", "hris_contract_spool_quarantined"},
+                {"path", path},
+                {"quarantinePath", preserved ? quarantine_path : ""},
+                {"reason", "missing_source_device_id"},
+                {"preserved", preserved ? "true" : "false"}
             });
             continue;
         }
@@ -3435,6 +4345,24 @@ bool needs_callback_identity_enrich(const ReconcileJob &job) {
            job.event_kind.find("poll_") == 0;
 }
 
+bool should_defer_empty_callback_identity_to_backend(const ReconcileJob &job) {
+    if (!job.employee_no.empty()) {
+        return false;
+    }
+    // Explicit management events may use the bounded inventory-delta fallback
+    // below. Generic major=3/observed operation signals are far more frequent
+    // and already have a durable API-side operation-log resolver. Scanning all
+    // 865 users here blocks the same panel transport needed by plans/writes.
+    if (is_user_management_minor(job.minor) ||
+        is_fingerprint_management_minor(job.minor) ||
+        is_card_management_minor(job.minor)) {
+        return false;
+    }
+    return job.major == 3 ||
+           is_observed_operation_sync_minor(job.minor) ||
+           job.event_kind == "biometric_operation_sync";
+}
+
 bool needs_callback_template_enrich(const ReconcileJob &job) {
     if (job.employee_no.empty()) {
         return false;
@@ -3732,59 +4660,47 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
 
     const bool is_repost = job.event_kind.find("identity_repost") != std::string::npos;
 
-    if (job.employee_no.empty() && needs_callback_identity_enrich(job)) {
+    if (should_defer_empty_callback_identity_to_backend(job)) {
+        job.identity_source = "empty";
+        emit_json({
+            {"event", "callback_identity_enrich_deferred"},
+            {"sourceDeviceId", job.source_device_id},
+            {"sourceHost", job.source_host},
+            {"major", std::to_string(job.major)},
+            {"minor", std::to_string(job.minor)},
+            {"reason", "backend_operation_log_resolution"}
+        });
+    } else if (job.employee_no.empty() && needs_callback_identity_enrich(job)) {
         // Panel UserInfo may lag ACS major=3 — multipass inventory with longer delays on repost.
-        const int *delays = nullptr;
-        int delay_count = 0;
-        static const int first_delays_ms[] = {0, 400, 1200, 2500};
-        static const int repost_delays_ms[] = {0, 800, 2000, 4000};
-        if (is_repost) {
-            delays = repost_delays_ms;
-            delay_count = 4;
-        } else {
-            delays = first_delays_ms;
-            delay_count = 4;
-        }
-        // inventory_delta: stop early after one complete no-new-plain so modify path
-        // reaches userinfo_touch quickly (full inventory is expensive on 300+ user devices).
-        bool inventory_complete_no_new = false;
-        for (int i = 0; i < delay_count; ++i) {
-            if (delays[i] > 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(delays[i]));
-            }
-            const std::string plain = resolve_plain_employee_no_from_inventory(*session);
+        const bool identity_scan_claimed =
+            claim_callback_identity_scan(job.source_host);
+        if (!identity_scan_claimed) {
+            emit_json({
+                {"event", "callback_identity_enrich_throttled"},
+                {"sourceDeviceId", job.source_device_id},
+                {"sourceHost", job.source_host},
+                {"isRepost", is_repost ? "true" : "false"},
+                {"cooldownMs", "60000"},
+                {"reason", "full_inventory_single_flight"}
+            });
+        } else if (!is_repost) {
+            // One initial inventory delta detects a genuinely new identity.
+            const std::string plain =
+                resolve_plain_employee_no_from_inventory(*session);
             if (!plain.empty()) {
                 job.employee_no = plain;
                 job.identity_source = "inventory_delta";
                 mark_recent_employee_candidate(job.source_host, plain);
-                inventory_complete_no_new = false;
-                break;
             }
-            // Second+ pass only helps when UserInfo lag creates a true NEW plain after create.
-            // If baseline is ready and inventory completed empty, further inventory multipass
-            // only delays touch/candidate resolution for modify-of-existing.
-            if (i == 0) {
-                inventory_complete_no_new = true;
-            }
-            if (inventory_complete_no_new && i >= 1 && !is_repost) {
-                break;
-            }
-        }
-        // Modify of existing person: inventory_delta finds no NEW plain.
-        // Prefer UserInfo field-change (name/numOfFP) device truth over recency heuristics.
-        if (job.employee_no.empty()) {
-            static const int touch_delays_ms[] = {0, 800, 2000};
-            for (int delay_ms : touch_delays_ms) {
-                if (delay_ms > 0) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
-                }
-                const std::string plain = resolve_plain_employee_no_from_userinfo_touch(*session);
-                if (!plain.empty()) {
-                    job.employee_no = plain;
-                    job.identity_source = "userinfo_touch";
-                    mark_recent_employee_candidate(job.source_host, plain);
-                    break;
-                }
+        } else {
+            // One delayed touch pass covers lagged creates and changes to an
+            // existing person's name or biometric counts.
+            const std::string plain =
+                resolve_plain_employee_no_from_userinfo_touch(*session);
+            if (!plain.empty()) {
+                job.employee_no = plain;
+                job.identity_source = "userinfo_touch";
+                mark_recent_employee_candidate(job.source_host, plain);
             }
         }
         emit_json({
@@ -3798,11 +4714,10 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
         });
         if (job.employee_no.empty()) {
             job.identity_source = "empty";
-            // First incomplete pass: keep path alive, then delayed re-POST for plain id.
-            if (!is_repost) {
-                schedule_delayed_hris_identity_repost(job, 2000, 1);
-                schedule_delayed_hris_identity_repost(job, 5000, 2);
-                schedule_delayed_hris_identity_repost(job, 10000, 3);
+            // One delayed pass covers UserInfo lag without amplifying empty
+            // callbacks into thousands of full-inventory page reads.
+            if (!is_repost && identity_scan_claimed) {
+                schedule_delayed_hris_identity_repost(job, 5000, 1);
             }
         }
     } else if (!job.employee_no.empty() && job.identity_source.empty()) {
@@ -4396,6 +5311,10 @@ void process_reconcile_job(const ReconcileJob &job) {
             {"peerUserWrites", std::to_string(peer_write_count)},
             {"mode", execute_mode ? "execute" : "dry-run"}
         });
+        if (job.event_kind.find("manual_") == 0) {
+            keep_running = 0;
+            queue_cv.notify_all();
+        }
         return;
     }
 
@@ -4409,9 +5328,12 @@ void process_reconcile_job(const ReconcileJob &job) {
     std::vector<char> face_picture;
     std::string card_json;
     std::string card_no;
-    const bool face_available = !user_delete && user_ok &&
+    const bool card_available =
+        (job.include_card || job.include_face_recognition) &&
+        !user_delete && user_ok &&
         read_source_card(*source, job, &card_json) &&
-        !(card_no = extract_string_field_from_json(card_json, "cardNo")).empty() &&
+        !(card_no = extract_string_field_from_json(card_json, "cardNo")).empty();
+    const bool face_available = job.include_face_recognition && card_available &&
         read_face_and_template(*source, job.employee_no, card_no, &face_template, &face_picture);
 
     const bool new_user_sync = job.event_kind == "poll_missing_user" ||
@@ -4423,7 +5345,7 @@ void process_reconcile_job(const ReconcileJob &job) {
                 {"event", "source_sync_card_created"},
                 {"sourceDeviceId", source->config.hris_device_id},
                 {"employeeNo", job.employee_no},
-                {"cardNo", card_no}
+                {"cardNo", "[redacted]"}
             });
         } else {
             card_no.clear();
@@ -4435,13 +5357,38 @@ void process_reconcile_job(const ReconcileJob &job) {
             continue;
         }
         peer_count += 1;
-        if (retry_peer_operation("user", target, job.employee_no, [&]() {
-                return user_delete ? delete_peer_user(target, job) : (user_ok && write_peer_user(target, job, user_json));
-            })) {
-            peer_write_count += 1;
+        if (!job.credential_only) {
+            if (retry_peer_operation("user", target, job.employee_no, [&]() {
+                    return user_delete ? delete_peer_user(target, job) : (user_ok && write_peer_user(target, job, user_json));
+                })) {
+                peer_write_count += 1;
+            }
+        } else {
+            emit_json({
+                {"event", "peer_user_write_skipped"},
+                {"targetDeviceId", target.config.hris_device_id},
+                {"employeeNo", job.employee_no},
+                {"reason", "credential_only"}
+            });
         }
-        if (!user_delete && !card_no.empty()) {
-            add_sync_card(target, job.employee_no, card_no);
+        if (!user_delete && card_available && (!job.credential_only || job.include_card)) {
+            if (!execute_mode) {
+                bool already_owned = false;
+                const bool owner_ok =
+                    target_card_allows_owner(target, job.employee_no, card_no, &already_owned);
+                emit_json({
+                    {"event", "peer_card_write_preview"},
+                    {"targetDeviceId", target.config.hris_device_id},
+                    {"employeeNo", job.employee_no},
+                    {"ok", owner_ok ? "true" : "false"},
+                    {"alreadyOwned", already_owned ? "true" : "false"}
+                });
+            } else {
+                retry_peer_operation("card", target, job.employee_no, [&]() {
+                    return add_sync_card_if_unowned(
+                        target, job.employee_no, card_no);
+                });
+            }
         }
         if (fingerprint_delete || job.include_fingerprints) {
             retry_peer_operation("fingerprint", target, job.employee_no, [&]() {
@@ -4466,8 +5413,13 @@ void process_reconcile_job(const ReconcileJob &job) {
         {"sourceFaceAvailable", face_available ? "true" : "false"},
         {"sourceFaceTemplateSize", std::to_string(face_template.size())},
         {"sourceFacePictureSize", std::to_string(face_picture.size())},
+        {"credentialOnly", job.credential_only ? "true" : "false"},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
+    if (job.event_kind.find("manual_") == 0) {
+        keep_running = 0;
+        queue_cv.notify_all();
+    }
 }
 
 void prepare_immediate_hris_job_for_post(ReconcileJob &job) {
@@ -4640,7 +5592,7 @@ void usage(const char *program) {
         << "[--replay-spool-only] [--post-contract-file path] "
         << "[--manual-full-mirror-source-device-id id] "
         << "[--manual-employee-no employeeNo] [--manual-include-fingerprints] "
-        << "[--manual-exclude-face] "
+        << "[--manual-exclude-face] [--manual-include-card] [--manual-credential-only] "
         << "[--manual-source-employee-no employeeNo] [--manual-target-device-id id] "
         << "[--manual-target-employee-no employeeNo] "
         << "[--capture-fingerprint-employee-no employeeNo] [--capture-fingerprint-source-device-id id] "
@@ -4648,7 +5600,9 @@ void usage(const char *program) {
         << "[--capture-face-employee-no employeeNo] [--capture-face-source-device-id id] "
         << "[--mirror-face-employee-no employeeNo] [--mirror-face-source-device-id id] "
         << "[--export-biometric-employee-no employeeNo] [--export-biometric-source-device-id id] "
-        << "[--export-biometric-no-fingerprints] [--export-biometric-no-face]\n";
+        << "[--export-biometric-no-fingerprints] [--export-biometric-no-face] "
+        << "[--delete-face-device-id id] [--delete-face-employee-no employeeNo] "
+        << "[--stored-face-payload-file mode-0600-json]\n";
 }
 
 }  // namespace
@@ -4662,6 +5616,8 @@ int main(int argc, char **argv) {
     std::string manual_employee_no;
     bool manual_include_fingerprints = false;
     bool manual_include_face_recognition = true;
+    bool manual_include_card = false;
+    bool manual_credential_only = false;
     std::string manual_source_employee_no;
     std::string manual_target_device_id;
     std::string manual_target_employee_no;
@@ -4677,6 +5633,9 @@ int main(int argc, char **argv) {
     std::string export_biometric_source_device_id;
     bool export_biometric_include_fingerprints = true;
     bool export_biometric_include_face = true;
+    std::string delete_face_device_id;
+    std::string delete_face_employee_no;
+    std::string stored_face_payload_file;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -4737,6 +5696,10 @@ int main(int argc, char **argv) {
             manual_include_fingerprints = true;
         } else if (arg == "--manual-exclude-face") {
             manual_include_face_recognition = false;
+        } else if (arg == "--manual-include-card") {
+            manual_include_card = true;
+        } else if (arg == "--manual-credential-only") {
+            manual_credential_only = true;
         } else if (arg == "--manual-source-employee-no") {
             if (!next(&manual_source_employee_no)) return 2;
         } else if (arg == "--manual-target-device-id") {
@@ -4771,6 +5734,12 @@ int main(int argc, char **argv) {
             export_biometric_include_fingerprints = false;
         } else if (arg == "--export-biometric-no-face") {
             export_biometric_include_face = false;
+        } else if (arg == "--delete-face-device-id") {
+            if (!next(&delete_face_device_id)) return 2;
+        } else if (arg == "--delete-face-employee-no") {
+            if (!next(&delete_face_employee_no)) return 2;
+        } else if (arg == "--stored-face-payload-file") {
+            if (!next(&stored_face_payload_file)) return 2;
         } else if (arg == "--min-sdk-time") {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
@@ -4792,6 +5761,16 @@ int main(int argc, char **argv) {
     const char *env_token = std::getenv("HIKVISION_HRIS_API_TOKEN");
     if (hris_api_token.empty() && env_token != nullptr) {
         hris_api_token = env_token;
+    }
+    const char *automatic_reconcile_env =
+        std::getenv("HIKVISION_AUTOMATIC_PEER_RECONCILE");
+    if (automatic_reconcile_env != nullptr) {
+        std::string value = automatic_reconcile_env;
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+            return static_cast<char>(std::tolower(c));
+        });
+        automatic_peer_reconcile_enabled =
+            value != "0" && value != "false" && value != "off" && value != "no";
     }
 
     if (replay_spool_only) {
@@ -4819,7 +5798,8 @@ int main(int argc, char **argv) {
     const bool manual_fingerprint_clone_mode =
         !manual_full_mirror_source_device_id.empty() &&
         !manual_source_employee_no.empty() &&
-        !manual_target_employee_no.empty();
+        !manual_target_employee_no.empty() &&
+        manual_include_fingerprints;
     const bool manual_fingerprint_capture_mode =
         !capture_fingerprint_employee_no.empty() && !capture_fingerprint_source_device_id.empty();
     const bool manual_face_capture_mode =
@@ -4828,15 +5808,68 @@ int main(int argc, char **argv) {
         !mirror_face_employee_no.empty() && !mirror_face_source_device_id.empty();
     const bool manual_biometric_export_mode =
         !export_biometric_employee_no.empty() && !export_biometric_source_device_id.empty();
+    const bool delete_face_device_arg_present = !delete_face_device_id.empty();
+    const bool delete_face_employee_arg_present = !delete_face_employee_no.empty();
+    const bool delete_face_mode =
+        delete_face_device_arg_present && delete_face_employee_arg_present;
+    const bool stored_face_write_mode = !stored_face_payload_file.empty();
     const bool manual_reconcile_queue_mode =
         !manual_full_mirror_source_device_id.empty() && !manual_fingerprint_clone_mode;
     const bool manual_reconcile_mode =
         manual_reconcile_queue_mode || !manual_employee_no.empty() || manual_fingerprint_clone_mode ||
         manual_fingerprint_capture_mode || manual_face_capture_mode || manual_face_mirror_mode ||
-        manual_biometric_export_mode;
+        manual_biometric_export_mode || delete_face_mode || stored_face_write_mode;
 
     if (configs.empty()) {
         usage(argv[0]);
+        return 2;
+    }
+    if (delete_face_device_arg_present != delete_face_employee_arg_present) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", delete_face_device_id},
+            {"employeeNo", delete_face_employee_no},
+            {"reason", "paired_delete_face_device_and_employee_required"}
+        });
+        return 2;
+    }
+    const bool another_manual_action_requested =
+        stored_face_write_mode ||
+        !manual_full_mirror_source_device_id.empty() ||
+        !manual_employee_no.empty() ||
+        manual_include_fingerprints ||
+        manual_include_card ||
+        manual_credential_only ||
+        !manual_source_employee_no.empty() ||
+        !manual_target_device_id.empty() ||
+        !manual_target_employee_no.empty() ||
+        !capture_fingerprint_employee_no.empty() ||
+        !capture_fingerprint_source_device_id.empty() ||
+        !capture_face_employee_no.empty() ||
+        !capture_face_source_device_id.empty() ||
+        !mirror_face_employee_no.empty() ||
+        !mirror_face_source_device_id.empty() ||
+        !export_biometric_employee_no.empty() ||
+        !export_biometric_source_device_id.empty();
+    if (delete_face_mode &&
+        (configs.size() != 1 ||
+         configs.front().hris_device_id != delete_face_device_id)) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", delete_face_device_id},
+            {"employeeNo", delete_face_employee_no},
+            {"configuredDeviceCount", std::to_string(configs.size())},
+            {"reason", "delete_face_requires_single_exact_target_config"}
+        });
+        return 2;
+    }
+    if (delete_face_mode && another_manual_action_requested) {
+        emit_json({
+            {"event", "face_delete_blocked"},
+            {"targetDeviceId", delete_face_device_id},
+            {"employeeNo", delete_face_employee_no},
+            {"reason", "delete_face_requires_exclusive_manual_mode"}
+        });
         return 2;
     }
 
@@ -4865,26 +5898,6 @@ int main(int argc, char **argv) {
         return 1;
     }
     emit_json({{"event", "sdk_callback_register"}, {"ok", "true"}});
-    if (std::getenv("HIKVISION_SKIP_SPOOL_REPLAY") == nullptr) {
-        replay_pending_hris_contract_posts();
-        replay_pending_hikvision_callbacks();
-    }
-
-    // CRITICAL latency fix (host-local + multi-device):
-    // Start HRIS post workers BEFORE arming every device. Otherwise a live TEST A
-    // can queue taps during arm, then wait ~60-90s while 6 off-LAN devices fail
-    // login (3 retries each) before workers start — that is the "tap lag".
-    // Auth delivery has its own worker. Lifecycle enrichment, peer reconciliation,
-    // and spool replay cannot occupy the attendance lane.
-    std::vector<std::thread> hris_immediate_posters;
-    hris_immediate_posters.reserve(HRIS_IMMEDIATE_WORKER_COUNT);
-    for (size_t i = 0; i < HRIS_IMMEDIATE_WORKER_COUNT; ++i) {
-        hris_immediate_posters.emplace_back(hris_immediate_post_loop);
-    }
-    std::thread hris_enrichment_poster(hris_enrichment_post_loop);
-    std::thread reconcile_worker(reconcile_worker_loop);
-    std::thread callback_spool_replayer(callback_spool_replay_loop);
-
     // Arm reverse-tunnel / local hosts first (127.0.0.1 TEST A) so live path is ready
     // before wasting time on unreachable LAN peers.
     std::vector<DeviceConfig> arm_order = configs;
@@ -4896,6 +5909,10 @@ int main(int argc, char **argv) {
         };
         return score(a) < score(b);
     });
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        sessions.reserve(arm_order.size());
+    }
 
     for (const auto &config : arm_order) {
         emit_json({
@@ -4921,8 +5938,11 @@ int main(int argc, char **argv) {
             attempts_performed = attempt;
             DeviceSession session;
             session.config = config;
-            if (login_device(session) && (arm_alarm(session) || manual_reconcile_mode)) {
-                sessions.push_back(session);
+            if (login_device(session) && (manual_reconcile_mode || arm_alarm(session))) {
+                {
+                    std::lock_guard<std::mutex> lock(sessions_mutex);
+                    sessions.push_back(session);
+                }
                 armed = true;
                 emit_json({
                     {"event", "device_armed"},
@@ -4931,16 +5951,23 @@ int main(int argc, char **argv) {
                     {"attempt", std::to_string(attempt)},
                     {"peerEnabled", "true"}
                 });
-                // Seed inventory baseline ASAP so later create/enroll empty-ACS
-                // can resolve NEW plains via delta (not swallow into first baseline).
-                try {
-                    seed_inventory_baseline_for_session(sessions.back());
-                } catch (...) {
-                    emit_json({
-                        {"event", "inventory_baseline_seed_failed"},
-                        {"deviceId", config.hris_device_id},
-                        {"host", config.host}
-                    });
+                // Baseline scans read every user and can take tens of seconds per panel.
+                // They are required for callback identity deltas in listener mode, but a
+                // bounded manual copy already names the employee and must not scan every
+                // selected device before doing that one write.
+                if (!manual_reconcile_mode) {
+                    try {
+                        DeviceSession *seed_session = find_session_by_host(config.host);
+                        if (seed_session != nullptr) {
+                            seed_inventory_baseline_for_session(*seed_session);
+                        }
+                    } catch (...) {
+                        emit_json({
+                            {"event", "inventory_baseline_seed_failed"},
+                            {"deviceId", config.hris_device_id},
+                            {"host", config.host}
+                        });
+                    }
                 }
             } else if (session.user_id >= 0) {
                 NET_DVR_Logout_V30(session.user_id);
@@ -5002,29 +6029,99 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (sessions.empty()) {
+    bool has_sessions = false;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex);
+        has_sessions = !sessions.empty();
+    }
+    if (!has_sessions) {
         keep_running = 0;
         queue_cv.notify_all();
-        for (auto &poster : hris_immediate_posters) {
-            if (poster.joinable()) {
-                poster.join();
-            }
-        }
-        if (hris_enrichment_poster.joinable()) {
-            hris_enrichment_poster.join();
-        }
-        if (reconcile_worker.joinable()) {
-            reconcile_worker.join();
-        }
-        if (callback_spool_replayer.joinable()) {
-            callback_spool_replayer.join();
-        }
         emit_json({{"event", "service_start_failed"}, {"reason", "no_armed_devices"}});
         NET_DVR_Cleanup();
         return 1;
     }
 
-    std::thread poller(polling_loop);
+    if (stored_face_write_mode) {
+        StoredFaceWritePayload payload;
+        std::string reason;
+        bool ok = load_stored_face_write_payload(stored_face_payload_file, &payload, &reason);
+        DeviceSession *target = nullptr;
+        if (ok) {
+            for (auto &session : sessions) {
+                if (session.config.hris_device_id == payload.target_device_id) {
+                    target = &session;
+                    break;
+                }
+            }
+            if (target == nullptr) {
+                ok = false;
+                reason = "target_device_not_armed";
+            }
+        }
+        if (!ok) {
+            emit_json({
+                {"event", "stored_face_write_blocked"},
+                {"targetDeviceId", payload.target_device_id},
+                {"employeeNo", payload.employee_no},
+                {"reason", reason}
+            });
+        } else {
+            ok = write_stored_face_with_reread(*target, payload);
+        }
+        close_sessions();
+        NET_DVR_Cleanup();
+        emit_json({{"event", "sdk_cleanup"}, {"ok", "true"}});
+        return ok ? 0 : 1;
+    }
+
+    if (delete_face_mode) {
+        DeviceSession *target = nullptr;
+        for (auto &session : sessions) {
+            if (session.config.hris_device_id == delete_face_device_id) {
+                target = &session;
+                break;
+            }
+        }
+        const bool ok =
+            target != nullptr && delete_face_for_exact_owner(*target, delete_face_employee_no);
+        if (target == nullptr) {
+            emit_json({
+                {"event", "face_delete_blocked"},
+                {"targetDeviceId", delete_face_device_id},
+                {"employeeNo", delete_face_employee_no},
+                {"reason", "target_device_not_armed"}
+            });
+        }
+        close_sessions();
+        NET_DVR_Cleanup();
+        emit_json({{"event", "sdk_cleanup"}, {"ok", "true"}});
+        return ok ? 0 : 1;
+    }
+
+    // Start worker threads after the initial session list is stable. SDK callbacks
+    // can arrive during arming; they queue jobs, then workers process them once
+    // all reachable devices are added, avoiding arm-time session-vector races.
+    std::vector<std::thread> hris_immediate_posters;
+    hris_immediate_posters.reserve(HRIS_IMMEDIATE_WORKER_COUNT);
+    for (size_t i = 0; i < HRIS_IMMEDIATE_WORKER_COUNT; ++i) {
+        hris_immediate_posters.emplace_back(hris_immediate_post_loop);
+    }
+    std::thread hris_enrichment_poster(hris_enrichment_post_loop);
+    std::thread reconcile_worker(reconcile_worker_loop);
+    std::thread callback_spool_replayer(callback_spool_replay_loop);
+    // Historical reconcile/callback spools can contain thousands of durable
+    // rows. Replaying them before SDK login made a healthy service look active
+    // while no panel was armed for minutes or hours. Arm first; replay remains
+    // durable background work and is safe to resume after a process restart.
+    if (std::getenv("HIKVISION_SKIP_SPOOL_REPLAY") == nullptr) {
+        std::thread(replay_pending_hris_contract_posts).detach();
+    }
+
+    std::thread poller;
+    if (!manual_reconcile_mode && automatic_peer_reconcile_enabled) {
+        poller = std::thread(polling_loop);
+    }
     if (manual_fingerprint_clone_mode) {
         DeviceSession *manual_source = nullptr;
         DeviceSession *manual_target = nullptr;
@@ -5168,13 +6265,25 @@ int main(int argc, char **argv) {
                 : "manual_single_user_reconcile";
             manual_job.include_fingerprints = manual_include_fingerprints || manual_employee_no.empty();
             manual_job.include_face_recognition = manual_include_face_recognition;
-            queue_reconcile(manual_job);
+            manual_job.include_card = manual_include_card;
+            manual_job.credential_only = manual_credential_only;
+            if (!execute_mode && manual_job.credential_only) {
+                // A credential-only dry run must read the exact source templates
+                // and emit target preview events, but may not enqueue a worker
+                // that is intentionally disabled in global dry-run mode.
+                process_reconcile_job(manual_job);
+            } else {
+                queue_reconcile(manual_job);
+            }
             emit_json({
                 {"event", "manual_reconcile_queued"},
                 {"sourceDeviceId", manual_job.source_device_id},
                 {"sourceHost", manual_job.source_host},
                 {"employeeNo", manual_job.employee_no},
                 {"includeFingerprints", manual_job.include_fingerprints ? "true" : "false"},
+                {"includeFaceRecognition", manual_job.include_face_recognition ? "true" : "false"},
+                {"includeCard", manual_job.include_card ? "true" : "false"},
+                {"credentialOnly", manual_job.credential_only ? "true" : "false"},
                 {"mode", execute_mode ? "execute" : "dry-run"}
             });
         }
@@ -5183,6 +6292,7 @@ int main(int argc, char **argv) {
         {"event", "service_started"},
         {"armedDevices", std::to_string(sessions.size())},
         {"mode", execute_mode ? "execute" : "dry-run"},
+        {"automaticPeerReconcile", automatic_peer_reconcile_enabled ? "true" : "false"},
         {"hrisApiBase", hris_api_base}
     });
 

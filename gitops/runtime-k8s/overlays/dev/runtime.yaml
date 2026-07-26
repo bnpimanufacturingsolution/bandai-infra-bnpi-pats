@@ -176,6 +176,22 @@ spec:
         app.kubernetes.io/name: hris-api
         app.kubernetes.io/part-of: project-truth
     spec:
+      securityContext:
+        fsGroup: 1001
+        fsGroupChangePolicy: OnRootMismatch
+      initContainers:
+        - name: runtime-volume-permissions
+          image: hris-api-local:develop
+          imagePullPolicy: Never
+          command:
+            - sh
+            - -lc
+            - mkdir -p /app/uploads/project-truth-runtime && chown -R 1001:1001 /app/uploads
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: uploads
+              mountPath: /app/uploads
       containers:
         - name: api
           image: hris-api-local:develop
@@ -193,6 +209,8 @@ spec:
               value: local
             - name: LOCAL_UPLOAD_ROOT
               value: /app/uploads
+            - name: PROJECT_TRUTH_RUNTIME_ROOT
+              value: /app/uploads/project-truth-runtime
             - name: PG_DATABASE_URL
               value: postgresql://postgres:postgres@hris-postgres:5432/hris
             - name: WRITE_DATABASE_URL
@@ -231,6 +249,10 @@ spec:
               value: infra
             - name: PROJECT_TRUTH_VM_SSH_KEY
               value: /var/run/project-truth/ssh/node-health-appliance_ed25519
+            - name: PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION
+              value: vm-container
+            - name: PROJECT_TRUTH_HIKVISION_VM_API_BASE
+              value: http://127.0.0.1:3101
           ports:
             - name: http
               containerPort: 3001

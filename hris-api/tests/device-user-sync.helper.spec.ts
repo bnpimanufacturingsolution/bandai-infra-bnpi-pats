@@ -108,6 +108,25 @@ describe("DeviceUser sync helper", () => {
 		expect(decision.matchReason).to.equal("employeeId");
 	});
 
+	it("links numeric vendor IDs to five-digit padded Employee.employeeId records", () => {
+		expect(buildDeviceUserEmployeeNoCandidates("21")).to.include("00021");
+		expect(buildDeviceUserEmployeeNoCandidates("989")).to.include("00989");
+
+		const shortIdDecision = resolveDeviceUserLinkDecision(candidate("21"), [
+			{ id: "emp-21", employeeId: "00021", deviceEmpId: null },
+		]);
+		expect(shortIdDecision.status).to.equal("ACTIVE");
+		expect(shortIdDecision.employeeId).to.equal("emp-21");
+		expect(shortIdDecision.matchReason).to.equal("employeeId");
+
+		const threeDigitDecision = resolveDeviceUserLinkDecision(candidate("989"), [
+			{ id: "emp-989", employeeId: "00989", deviceEmpId: null },
+		]);
+		expect(threeDigitDecision.status).to.equal("ACTIVE");
+		expect(threeDigitDecision.employeeId).to.equal("emp-989");
+		expect(threeDigitDecision.matchReason).to.equal("employeeId");
+	});
+
 	it("marks users without a safe employee match as unmatched", () => {
 		const decision = resolveDeviceUserLinkDecision(candidate("9999"), [
 			{ id: "emp-db-1", employeeId: "01360", deviceEmpId: "1360" },

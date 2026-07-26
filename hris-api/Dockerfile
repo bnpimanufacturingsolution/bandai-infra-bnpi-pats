@@ -1,5 +1,6 @@
 # Multi-stage Dockerfile for high-performance Node.js LMS API application
 FROM node:20-alpine AS base
+ARG PROJECT_TRUTH_BUILD_SHA=local-unattested
 
 # Set working directory
 # CI smoke change: no functional impact.
@@ -53,6 +54,8 @@ RUN npm run build \
 
 # Production image, copy all the files and run the app
 FROM base AS runner
+ARG PROJECT_TRUTH_BUILD_SHA=local-unattested
+ENV PROJECT_TRUTH_BUILD_SHA=${PROJECT_TRUTH_BUILD_SHA}
 
 # Install system dependencies for Prisma, database backups, and host SSH access.
 RUN apk add --no-cache libc6-compat openssl openssh-client postgresql16-client

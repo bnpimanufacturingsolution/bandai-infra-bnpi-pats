@@ -1,5 +1,29 @@
 # Project Truth
 
+## DEV/UAT/PROD data parity snapshot (2026-07-24)
+
+- Status: `CONFIRMED_K3S_RUNTIME_WITH_PUBLIC_NETWORK_BOUNDARY`.
+- The verified K3s DEV `hris` PostgreSQL snapshot from 2026-07-24 was restored
+  into UAT and PROD after SHA-256-verified pre-clone backups of all three
+  databases and upload volumes.
+- DEV, UAT, and PROD now match on 75 public tables and current business counts,
+  including 2,225 employees, 2,048 users, 8,680 documents, 42 workflow
+  instances, 87,217 attendances, 10,965 timesheets, 129,255 timesheet lines,
+  5,692 device users, and 20,374 device events.
+- All three environment upload volumes contain the same 71-file SHA-256 set.
+  DM import/source files remain shared VM host paths already mounted into every
+  environment; Kubernetes secrets and per-environment configuration were not
+  replaced.
+- LAN PROD/DEV/UAT app/API routes, admin authentication, `/api/auth/me`, and
+  headless browser dashboard entry passed. All six Argo CD applications were
+  `Synced/Healthy` at revision `3c831d8`.
+- The VM-managed Cloudflare service stayed enabled/active, but public HTTPS
+  from the BNPI workstation still reset at TLS. Public reachability is
+  `NEEDS_CONFIRMATION` from an unfiltered external vantage point.
+- Rollback/evidence:
+  `.runtime/dev-to-uat-prod-20260724-144222/REPORT.md` and VM backup directory
+  `/var/lib/project-truth/backups/dev-to-uat-prod-20260724-144222`.
+
 Adoption status: INFERRED_FROM_EXISTING_PROJECT
 Status: Inferred from repository evidence. Requires human/agent review before becoming accepted project truth.
 Truth confidence: HIGH
@@ -12,6 +36,59 @@ Items marked `INFERRED`, `NEEDS_CONFIRMATION`, `CONFLICTING`, or `STALE` should 
 If this file conflicts with lower-priority reports, generated notes, task files, or stale documentation, this file wins once confirmed.
 
 Project Truth must not be silently overwritten. Requirement evolution is allowed when documented and accepted.
+
+## Credential Recovery Queue Truth (2026-07-24)
+
+- Status: `CONFIRMED_CODE_EVIDENCE_WITH_RUNTIME_BOUNDARY`.
+- The Merge device users UI's current `Recovery queued` headline is not a
+  durable or executing backend queue. The backend assigns recovery-stage
+  classifications while building a plan, and the frontend counts operations
+  that are neither selectable nor locally classified as requiring physical
+  action. No recovery worker consumes that displayed population.
+- `Ready now 0` means the displayed plan has zero recommended operations with
+  `executionEligibility=ready_from_raw_blob` that pass the frontend physical
+  action filter. It does not mean there are no gaps and does not prove recovery
+  is running.
+- The currently callable software-recovery primitive is selected per-device
+  biometric metadata backfill followed by a fresh plan, guarded merge write,
+  and physical target reread. Historical selected batches recovered 209/209
+  and 21/21 source rows, but this does not prove automatic recovery.
+- The 2026-07-24 operator screenshot is historical evidence only: 3,257
+  potential operations, 505 fingerprint, 2,630 face, 122 card, ready 0,
+  recovery queued 3,237, and headline physical action 20. Its backend stage
+  summary reported physical identity action 18. The 18-versus-20 total is
+  `CONFLICTING` because the frontend and backend use different classification
+  logic.
+- A future honest running state requires a durable recovery job, task/worker
+  leases, heartbeat, resume cursor, deduplicated source custody work, shared
+  physical-device locks, pollable stage timings, and physical-reread-owned gap
+  counters. Until then, use `Recovery needed` rather than `queued`.
+- Architecture and evidence:
+  `docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md`.
+
+## Confirmed Local DEV and Sync Center Runtime Truth (2026-07-23)
+
+- Canonical Windows hot-reload PostgreSQL is the K3s DEV forward at `127.0.0.1:55435`; compose DEV is not an automatic fallback.
+- Local app/API are `http://localhost:5175` and `http://localhost:3001`. API startup probe-first restores required DB, A-F device forwards, VM reverse API/callback port `53001`, and the listener path. Optional TEST A/B bridges must not hold API startup open.
+- Main Entrance A-F use host-forward HTTP `10080-10085`, HTTPS `10443-10448`, and SDK `18000-18005`. Health requires traffic proof, not merely an SSH process or listening port.
+- Sync Center merge availability is sourced from bounded per-device quick health. Missing `vendorUserCount` from `sync-preview?quick=true` is not offline evidence.
+- Transport-online and full inventory-readable are separate truths. Read-only merge planning preserves partial reads, reports exact failures, and must not start physical writes without reviewed scope.
+- Saved `DeviceEvent` rows are PostgreSQL truth independent of listener readiness; background listener checks cannot clear or replace the saved ledger.
+- Hikvision SDK command routing is execution-location aware. Windows hot reload uses the VM bridge and reverse API `53001`; a native API process on the Linux VM executes the SDK wrapper locally with no SSH; K3s/Docker API containers use only the direct same-VM control target and their VM-local API port (`3001` PROD, `3101` DEV, `3201` UAT), with no Cloudflare SSH fallback and no callback route back to Windows. Container-to-host command execution remains an internal SSH boundary until a VM-local SDK control service or sidecar replaces it.
+- Evidence: `.runtime/sync-center-dev-green-20260723-114317/` and `.wwg/reports/wwg-agent-handoff.md`.
+
+### Current device-count conflict and write boundary
+
+- Operator physical evidence reports exactly five Main Entrance devices online
+  and Main Entrance Device C down.
+- Earlier A-F quick-health responses are weaker, conflicting transport evidence;
+  they do not establish six physically online or inventory-readable devices.
+- The conflict must be root-caused across device identity, tunnel mapping, cache,
+  endpoint semantics, authentication, and full inventory logs.
+- The previous merge pass stopped at a read-only plan with zero write requests.
+  It is not a completed merge. An explicitly authorized merge task must continue
+  through frozen-scope write execution, terminal monitoring, failure repair, and
+  post-write physical rereads.
 
 ## Product Identity
 
@@ -134,7 +211,7 @@ Accepted or observed architecture:
   - Evidence: On 2026-07-06 local hot-reload implementation added `DeviceUser` with direct optional `employeeId`, unique `organizationId + deviceId + vendorUserId`, status values `ACTIVE`, `UNMATCHED`, `CONFLICT`, and `DISABLED`, source payload fields, sync timestamps, and relations from `Device`, `Employee`, and `DeviceEvent`. Hikvision `UserInfo/Search` sync upserts `DeviceUser` rows and auto-links only exact unambiguous employee matches; manual link/unlink exists for admin correction. Event import now resolves `DeviceEvent.employeeNo` / `vendorUserId` through `DeviceUser(deviceId + vendorUserId)` before falling back to legacy `Employee.deviceEmpId`. Legacy `Employee.deviceId` and `Employee.deviceEmpId` remain for compatibility. On 2026-07-13 `DeviceUser.vendorMetadata` was added as additive JSON/JSONB storage for per-device vendor SDK/ISAPI user metadata while preserving `rawPayload`; the Sync Center details modal exposes the value through a preview tooltip and expandable JSON. The earlier 2026-07-14 encrypted-envelope export proof is now STALE for the active Device Users export/import journey. As of 2026-07-20, owner requirement and implementation direction are raw biometric custody: package CSV/Excel/JSON uses evidenced raw fingerprint fingerData and raw face/image blobs from DeviceUser, with matching DeviceEvent payload fallback, and uses explicit `not_enrolled`, `missing_raw_blob`, or `not_requested` statuses when bytes are absent. Boundary: physical target-device write-back still requires focused SDK proof; no biometric values may be fabricated from counts.
 - Item: Device-user sync and device-log sync are separate admin workflows, with review/confirmation before the user sync mutates identity records.
   - Status: CONFIRMED_LOCAL_UI_EVIDENCE_WITH_BOUNDARY
-  - Evidence: On 2026-07-06 local browser proof at `localhost:5175/admin/configuration/devices?deviceId=cmpxw13hx002h7zwso7dyedrn&action=enroll-users` showed the `Device Users` modal, device row dropdown link `View Device Users`, `Review sync` as the first action, and a final `Sync device users` confirmation inside the status modal. The copy distinguishes identity records from attendance/device logs. Screenshot evidence: `.runtime/browser-evidence/screenshots/device-users-review-sync-modal.png`.
+  - Evidence: On 2026-07-06 local browser proof at `localhost:5175/admin/configuration/devices?deviceId=cmpxw13hx002h7zwso7dyedrn&action=enroll-users` showed the `Device Users` modal, device row dropdown link `View Device Users`, `Review sync` as the first action, and a final `Sync device users` confirmation inside the status modal. The copy distinguishes identity records from attendance/device logs. Screenshot evidence: `.runtime/browser-evidence/screenshots/device-users-review-sync-modal.png`. As of 2026-07-21, Device Users sync first builds a missing-record decision matrix from saved HRIS `DeviceUser` truth, source summary evidence, missing raw custody, stale/no-data evidence, and sync capability. The sync-job start endpoint supports non-mutating `dryRun=true` planner proof before job creation. The default fast job targets actionable missing work (`needs_attention_only`) and skips source-device user rereads when the matrix says saved HRIS state is sufficient. Already-present rows and known no-data/stale count-only rows do not dominate default runtime, and biometric bytes must not be fabricated from counts. Evidence: `.runtime/sync-center-decision-matrix-20260721-110520/` and `.runtime/sync-center-dry-run-scope-20260721-112157/`.
 - Item: Device sync run summaries persist known skipped device-log rows so preview can distinguish saved, known skipped, failed, and truly missing source records.
   - Status: CONFIRMED_LOCAL_RUNTIME_EVIDENCE_WITH_BOUNDARY
   - Evidence: On 2026-07-06 local Hikvision log sync processed 982 source rows for `Main Entrance Device`, saved/imported 376, classified 606 as skipped/known skipped, failed 0, and left missing 0. A `DeviceSyncRun` row records those counts, and the admin events preview labels `Known skipped` separately from `Still missing`. Boundary: local hot-reload proof only until GitOps/K3s/public DEV is promoted and verified.
@@ -256,6 +333,10 @@ Do not introduce without approval:
   - Status: NEEDS_CONFIRMATION
   - Evidence: Existing project adoption audit
 
+- Item: Main Entrance Hikvision DEV inventory is six active rows on `10.184.37.20` through `10.184.37.25`; Windows localhost hot reload reaches those VM-routable terminals through one SSH tunnel map covering HTTP `80`, HTTPS `443`, and SDK `8000` for every address.
+  - Status: CONFIRMED_LOCAL_AND_K3S_RUNTIME_EVIDENCE_WITH_PUBLIC_BOUNDARY
+  - Evidence: On 2026-07-22, direct LAN SSH to `infra@10.184.37.19` succeeded. K3s DEV Postgres returned six active rows: B `.20`, A `.21`, C `.22`, D `.23`, E `.24`, and F `.25`, all HTTPS `443` with SDK `8000`. VM probes reached all six on TCP `80/443/8000`; K3s DEV quick health reported all six online. The prior Windows bootstrap mapped only `.20-.23`, which made `.24/.25` fall back to unavailable direct Windows routing and display offline. The default tunnel/predev set was extended to `.20-.25`; after API restart, local quick health and Playwright reported all six online through `env_tunnel_map`, and full authenticated health for `.24/.25` read device system time successfully. Boundary: LAN/K3s and localhost are proven, but public `bnpi-hris.tech` ingress returned Cloudflare 503/TLS resets while the named service remained active; QUIC and two additive HTTP/2 connector attempts from VM source `.19` and `.78` all hit edge TLS/control-stream resets. Evidence root: `.runtime/hikvision-six-device-20260722-143712/`.
+
 ## Safety and Production Boundaries
 
 Current boundaries:
@@ -323,4 +404,5 @@ For adopted projects, do not treat inferred truth as final confirmed truth until
 - A persisted `processing` device-user sync snapshot is active only while it has recent progress evidence. If the stored job has not updated for 30 minutes, the API/UI must treat it as stopped/stale and require a fresh admin-triggered Sync device users run instead of reviving it on app/dev-server startup.
 - A credential count is inventory evidence only. Failed or missing SDK bytes remain a failed modality and must not be promoted into a portable envelope.
 - Device merge and log previews use bounded concurrent availability checks. Offline/unavailable devices are identified and skipped; they must not block available devices. Background refetch preserves the last usable rows rather than replacing the table with a full loading skeleton.
+- Hikvision device-user merge preview must show one selectable merge row per unique device/vendor person ID read from the selected physical devices. Saved HRIS `DeviceUser` rows may attach link/status/manual-link context, but they must not drive the unique-ID count or collapse two different vendor IDs into one selectable unique ID. Duplicate source rows for the same device/user ID are truth/evidence to collapse and report; they must not create duplicate "unique ID" choices. Evidence: `.runtime/merge-strict-device-id-truth-20260721-113511/api-merge-plan-strict-device-id-summary.json`.
 - Evidence: `.runtime/device-preflight-latency-20260715-151721/` and `.runtime/biometric-portability-proof-20260715-114841/playwright-main-c-background/`.

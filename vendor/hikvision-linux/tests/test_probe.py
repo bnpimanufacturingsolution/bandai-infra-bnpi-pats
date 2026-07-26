@@ -159,6 +159,127 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn("queue_cv.notify_one()", text)
         self.assertIn("queue_cv.notify_all()", text)
 
+    def test_managed_listener_can_pause_automatic_peer_writes_without_disarming(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        self.assertIn('std::getenv("HIKVISION_AUTOMATIC_PEER_RECONCILE")', text)
+        self.assertIn('"automatic_peer_reconcile_paused"', text)
+        self.assertIn('"explicit_merge_owns_sdk_writes"', text)
+        self.assertIn("!manual_reconcile_mode && automatic_peer_reconcile_enabled", text)
+        self.assertIn('"automaticPeerReconcile"', text)
+
+    def test_stored_face_writer_is_secure_serial_disabled_and_reread_verified(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        self.assertIn("--stored-face-payload-file", text)
+        self.assertIn("payload_permissions_must_be_0600", text)
+        self.assertIn("(file_stat.st_mode & 0777) != 0600", text)
+        self.assertIn("O_RDONLY | O_CLOEXEC | O_NOFOLLOW", text)
+        self.assertIn("HIKVISION_ENABLE_STORED_FACE_WRITE", text)
+        self.assertIn("HIKVISION_STORED_FACE_WRITER_TESTED", text)
+        self.assertIn("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID", text)
+        self.assertIn("feature_disabled_pending_authorized_canary", text)
+        self.assertIn("flock(lock_fd, LOCK_EX | LOCK_NB)", text)
+        self.assertIn("write_face_and_template(", text)
+        self.assertIn("read_face_and_template(", text)
+        self.assertIn('"stored_face_write_reread_completed"', text)
+        self.assertIn('"templateMatch"', text)
+        self.assertIn('"pictureMatch"', text)
+        self.assertNotIn('redact_card_no ? "[redacted]" : card_no', text)
+        self.assertIn('card_no.empty() ? "" : "[redacted]"', text)
+
+        stored_writer = text.split("bool write_stored_face_with_reread(", 1)[1].split(
+            "NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record", 1
+        )[0]
+        gate_position = stored_writer.index(
+            'std::getenv("HIKVISION_ENABLE_STORED_FACE_WRITE")'
+        )
+        execute_write_position = stored_writer.index(
+            "write_face_and_template(", gate_position
+        )
+        self.assertLess(gate_position, execute_write_position)
+        self.assertLess(
+            execute_write_position,
+            stored_writer.index("read_face_and_template(", execute_write_position),
+        )
+        self.assertNotIn("faceTemplate", stored_writer.split("emit_json", 1)[1])
+        self.assertNotIn("facePicture", stored_writer.split("emit_json", 1)[1])
+
+    def test_card_lookup_falls_back_to_exact_owner_full_inventory_without_logging_values(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
+        text = source.read_text(encoding="utf-8")
+
+        card_reader = text.split("bool read_source_card(", 1)[1].split(
+            "std::string build_sync_card_no", 1
+        )[0]
+        self.assertIn('"pt-card-full-" + job.employee_no', card_reader)
+        self.assertIn('"searchResultPosition\\":" << position', card_reader)
+        self.assertIn('"numOfMatches"', card_reader)
+        self.assertIn("extract_card_object_for_employee", card_reader)
+        self.assertIn('"full_inventory_exact_owner"', card_reader)
+        self.assertIn("employees.size() == 1", text)
+        self.assertIn('"exactEmployeePresent"', card_reader)
+        self.assertNotIn('{"cardNo", job.card_no}', text)
+        self.assertNotIn('{"cardNo", card_no}', text)
+
+        exporter = text.split("bool export_biometric_templates_for_employee(", 1)[1].split(
+            "bool write_peer_user", 1
+        )[0]
+        self.assertIn("emit_sensitive_json_stdout_only", exporter)
+        self.assertIn('"cardOwnerVerified"', exporter)
+        self.assertNotIn("card_no = extract_string_field_from_json(user_json", exporter)
+        self.assertIn("(!include_face || face_ok)", exporter)
+
+        self.assertIn("--delete-face-device-id", text)
+        self.assertIn("--delete-face-employee-no", text)
+        self.assertIn('"paired_delete_face_device_and_employee_required"', text)
+        self.assertIn('"delete_face_requires_single_exact_target_config"', text)
+        self.assertIn('"delete_face_requires_exclusive_manual_mode"', text)
+        self.assertIn("configs.size() != 1", text)
+        self.assertIn(
+            "configs.front().hris_device_id != delete_face_device_id",
+            text,
+        )
+        self.assertIn("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID", text)
+        self.assertIn("NET_DVR_DEL_FACE_PARAM_CFG", text)
+        self.assertIn('"face_delete_reread_completed"', text)
+        self.assertIn('"physicallyAbsent"', text)
+        self.assertIn('"exact_employee_has_no_face"', text)
+        self.assertIn('"postDeleteIsolationRequired"', text)
+        self.assertIn('"preDeleteFaceCount"', text)
+        self.assertIn('"postDeleteFaceCount"', text)
+        self.assertIn('"fingerprintCountRetained"', text)
+        self.assertIn('"cardCountRetained"', text)
+        self.assertIn('"exactCardAssociationRetained"', text)
+        self.assertIn('"credentialIsolationRetained"', text)
+        self.assertIn("return deleted == TRUE && credential_isolation_retained;", text)
+        delete_face = text.split("bool delete_face_for_exact_owner(", 1)[1].split(
+            "bool write_peer_user", 1
+        )[0]
+        self.assertNotIn("delete_peer_user(", delete_face)
+        self.assertNotIn("delete_peer_fingerprints(", delete_face)
+        self.assertNotIn("NET_DVR_DEL_CARD", delete_face)
+        self.assertNotIn("NET_DVR_DEL_FINGERPRINT", delete_face)
+        self.assertNotIn("post_hris_contract", delete_face)
+        self.assertLess(
+            text.index('"delete_face_requires_single_exact_target_config"'),
+            text.index("if (!NET_DVR_Init())"),
+        )
+        self.assertLess(
+            delete_face.index("if (pre_face_count < 1"),
+            delete_face.index("NET_DVR_DEL_FACE_PARAM_CFG"),
+        )
+        self.assertLess(
+            delete_face.index("read_source_card(target, job, &card_json)"),
+            delete_face.index("NET_DVR_DEL_FACE_PARAM_CFG"),
+        )
+        self.assertLess(
+            delete_face.index("NET_DVR_DEL_FACE_PARAM_CFG"),
+            delete_face.index("read_source_user(target, job, &user_json)"),
+        )
+
     def test_build_script_produces_project_truth_named_service(self) -> None:
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"
         text = script.read_text(encoding="utf-8")

@@ -148,7 +148,7 @@ describe("device-live-readiness helper", () => {
 		expect(readiness.safeToEnroll).to.equal(false);
 	});
 
-	it("treats armed-but-quiet-without-fresh-proof as not fully safe", () => {
+	it("treats armed-but-quiet-without-fresh-proof as ready for tap proof, not broken", () => {
 		const readiness = buildDeviceLiveReadiness({
 			databaseOk: true,
 			listenerRunning: true,
@@ -160,9 +160,14 @@ describe("device-live-readiness helper", () => {
 			now,
 		});
 		expect(readiness.proof.stale).to.equal(true);
+		expect(readiness.safeToTap).to.equal(true);
 		expect(readiness.safeToEnroll).to.equal(false);
-		expect(readiness.overall).to.equal("red");
-		expect(readiness.checks.find((c) => c.id === "eventProof")?.level).to.equal("red");
+		expect(readiness.overall).to.equal("yellow");
+		expect(readiness.headline).to.match(/ready for tap proof/i);
+		expect(readiness.checks.find((c) => c.id === "eventProof")?.level).to.equal("yellow");
+		expect(readiness.checks.find((c) => c.id === "eventProof")?.label).to.equal(
+			"Ready for tap proof",
+		);
 	});
 
 	it("is yellow when armed quiet and proof is aging but not ancient", () => {

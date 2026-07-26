@@ -2,14 +2,44 @@ import { expect } from "chai";
 import {
 	applyRawFingerprintCustodyToRow,
 	buildRawFingerprintCustody,
+	buildFingerprintTemplateChecksumEvidence,
 	captureRawFingerprintsForEnrollment,
+	classifyDeferredFingerprintWrite,
+	classifyHikvisionRawFaceBinaryResponse,
+	findTargetFingerprintDuplicateOwners,
+	isExactHikvisionUserInfoOwner,
+	isRawFingerprintEnrollCaptureEnabled,
 	normalizeIsapiFingerprintList,
 	parseFingerPrintProgress,
+	parseFingerprintProgressOccupyingEmployee,
 	RAW_FINGERPRINT_SCHEMA,
+	resolveHikvisionDeviceSuppliedPath,
+	selectMissingFingerprintTemplatesForTarget,
 	shouldCaptureRawFingerprintForEventAction,
 } from "../helper/device-user-raw-fingerprint.helper";
 
 describe("device-user-raw-fingerprint helper", () => {
+	it("attests face ownership only when UserInfo returns the exact requested employee", () => {
+		expect(isExactHikvisionUserInfoOwner({ employeeNo: "722" }, "722")).to.equal(true);
+		expect(isExactHikvisionUserInfoOwner({ EmployeeNo: "722" }, "722")).to.equal(true);
+		expect(isExactHikvisionUserInfoOwner({ employeeNo: "723" }, "722")).to.equal(false);
+		expect(isExactHikvisionUserInfoOwner({}, "722")).to.equal(false);
+	});
+
+	it("pins a device-advertised face URL to the configured device route", () => {
+		expect(
+			resolveHikvisionDeviceSuppliedPath(
+				"http://192.0.2.88/ISAPI/Intelligent/FDLib/picture?picID=abc",
+			),
+		).to.equal("/ISAPI/Intelligent/FDLib/picture?picID=abc");
+		expect(() => resolveHikvisionDeviceSuppliedPath("file:///etc/passwd")).to.throw(
+			"unsupported scheme",
+		);
+		expect(() => resolveHikvisionDeviceSuppliedPath("//evil.invalid/path")).to.throw(
+			"absolute device-local path",
+		);
+	});
+
 	it("normalizes ISAPI FingerPrintList into raw base64 templates", () => {
 		// Proven TEST A shape (FingerPrintInfo.FingerPrintList[]).
 		const proven = normalizeIsapiFingerprintList({
@@ -52,6 +82,15 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(list[1].data.length).to.be.greaterThan(8);
 	});
 
+	it("parses progress5 errorMsg as occupying employee when it is a plain id", () => {
+		// Live 2026-07-25: vendor 1 write rejected with progressErrorMsg "8" (owner).
+		expect(parseFingerprintProgressOccupyingEmployee("8")).to.equal("8");
+		expect(parseFingerprintProgressOccupyingEmployee("16")).to.equal("16");
+		expect(parseFingerprintProgressOccupyingEmployee("employeeNo=12")).to.equal("12");
+		expect(parseFingerprintProgressOccupyingEmployee("timeout")).to.equal(null);
+		expect(parseFingerprintProgressOccupyingEmployee("")).to.equal(null);
+	});
+
 	it("parses FingerPrintProgress status 6 as ok and status 5 as clone/reject fail", () => {
 		const ok = parseFingerPrintProgress({
 			FingerPrintStatus: {
@@ -72,6 +111,109 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(fail.cardReaderRecvStatus).to.equal(5);
 		expect(fail.errorMsg).to.equal("15");
 		expect(fail.reason).to.include("errorMsg=15");
+	});
+
+	it("keeps deferred bundle writes gated by terminal fingerprint progress", () => {
+		const accepted = classifyDeferredFingerprintWrite(true, {
+			ok: true,
+			cardReaderRecvStatus: 6,
+			errorMsg: null,
+			totalStatus: 1,
+			raw: {},
+			reason: "card_reader_recv_status_6_ok",
+		});
+		expect(accepted.acceptedForGroupReread).to.equal(true);
+		expect(accepted.source).to.include("progress_verified");
+
+		const rejected = classifyDeferredFingerprintWrite(true, {
+			ok: false,
+			cardReaderRecvStatus: 5,
+			errorMsg: "1544",
+			totalStatus: 1,
+			raw: {},
+			reason: "card_reader_recv_status_5_fail_errorMsg=1544",
+		});
+		expect(rejected.acceptedForGroupReread).to.equal(false);
+		expect(rejected.source).to.equal("device_fp_write_rejected_progress5:1544");
+
+		const failedPost = classifyDeferredFingerprintWrite(false, {
+			ok: false,
+			cardReaderRecvStatus: null,
+			errorMsg: null,
+			totalStatus: null,
+			raw: null,
+			reason: "progress_status_missing",
+		});
+		expect(failedPost.acceptedForGroupReread).to.equal(false);
+		expect(failedPost.source).to.equal("device_fp_write_failed");
+	});
+
+	it("writes only target-missing fingerprint slots and blocks incomplete target evidence", () => {
+		const source = [
+			{ fingerPrintId: 1, fingerType: 0, length: 4, data: "AAAA" },
+			{ fingerPrintId: 2, fingerType: 0, length: 4, data: "BBBB" },
+		];
+		const target = [
+			{ fingerPrintId: 1, fingerType: 0, length: 4, data: "KEEP" },
+		];
+		const selection = selectMissingFingerprintTemplatesForTarget({
+			sourceTemplates: source,
+			targetTemplates: target,
+			targetReportedCount: 1,
+		});
+		expect(selection.targetEvidenceComplete).to.equal(true);
+		expect(selection.existingFingerPrintIds).to.deep.equal([1]);
+		expect(selection.missingTemplates.map((item) => item.fingerPrintId)).to.deep.equal([2]);
+
+		const unreadable = selectMissingFingerprintTemplatesForTarget({
+			sourceTemplates: source,
+			targetTemplates: [],
+			targetReportedCount: 1,
+		});
+		expect(unreadable.targetEvidenceComplete).to.equal(false);
+		expect(unreadable.missingTemplates).to.have.length(2);
+	});
+
+	it("classifies a missing source slot already owned by another target user", () => {
+		const source = buildFingerprintTemplateChecksumEvidence([
+			{ fingerPrintId: 1, fingerType: 0, length: 4, data: "KEEP" },
+			{ fingerPrintId: 2, fingerType: 0, length: 4, data: "DUPLICATE" },
+		]);
+		const targetExisting = buildFingerprintTemplateChecksumEvidence([
+			{ fingerPrintId: 1, fingerType: 0, length: 4, data: "KEEP" },
+		]);
+		const owners = findTargetFingerprintDuplicateOwners({
+			vendorUserId: "1715",
+			sourceTemplates: source,
+			targetExistingTemplates: targetExisting,
+			targetDeviceTemplates: [
+				{ vendorUserId: "1715", templates: targetExisting },
+				{
+					vendorUserId: "1544",
+					templates: buildFingerprintTemplateChecksumEvidence([
+						{ fingerPrintId: 1, fingerType: 0, length: 9, data: "DUPLICATE" },
+					]),
+				},
+			],
+		});
+		expect(owners).to.deep.equal(["1544"]);
+	});
+
+	it("keeps raw fingerprint fallback enabled even when env tries to disable it", () => {
+		const previousFallback = process.env.HIKVISION_ENROLL_RAW_FINGERPRINT;
+		try {
+			delete process.env.HIKVISION_ENROLL_RAW_FINGERPRINT;
+			expect(isRawFingerprintEnrollCaptureEnabled()).to.equal(true);
+
+			process.env.HIKVISION_ENROLL_RAW_FINGERPRINT = "false";
+			expect(isRawFingerprintEnrollCaptureEnabled()).to.equal(true);
+
+			process.env.HIKVISION_ENROLL_RAW_FINGERPRINT = "off";
+			expect(isRawFingerprintEnrollCaptureEnabled()).to.equal(true);
+		} finally {
+			if (previousFallback === undefined) delete process.env.HIKVISION_ENROLL_RAW_FINGERPRINT;
+			else process.env.HIKVISION_ENROLL_RAW_FINGERPRINT = previousFallback;
+		}
 	});
 
 	it("builds and applies raw fingerprint custody onto DeviceUser row", () => {
@@ -188,8 +330,12 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(result.rawPresent).to.equal(true);
 		expect(result.fingerprintCount).to.equal(1);
 		expect(result.totalDataChars).to.be.greaterThan(8);
-		expect(updates).to.have.length(1);
-		const savedMeta = updates[0].data.vendorMetadata;
+		expect(updates.length).to.be.greaterThan(0);
+		const fingerprintUpdate = updates.find((update) =>
+			Boolean(update.data.vendorMetadata?.rawFingerprints?.templates?.length),
+		);
+		expect(fingerprintUpdate).to.exist;
+		const savedMeta = fingerprintUpdate.data.vendorMetadata;
 		expect(savedMeta.rawFingerprints.templates[0].data).to.equal(
 			"cmF3LWZpbmdlci10ZW1wbGF0ZS1kYXRh",
 		);
@@ -211,6 +357,31 @@ describe("device-user-raw-fingerprint helper", () => {
 		expect(shouldCaptureRawFingerprintForEventAction("FINGERPRINT_UPDATED")).to.equal(true);
 		expect(shouldCaptureRawFingerprintForEventAction("USER_CREATED")).to.equal(true);
 		expect(shouldCaptureRawFingerprintForEventAction("TAP")).to.equal(false);
+	});
+
+	it("classifies Hikvision faceURL HTML/XML failures without treating them as images", () => {
+		const notFound = classifyHikvisionRawFaceBinaryResponse({
+			contentType: "text/html",
+			status: 404,
+			buffer: Buffer.from(`<!DOCTYPE html><html><body>Can't locate document: /LOCALS/pic/enrlFace/0/0000000200.jpg@WEB000000060622</body></html>`),
+		});
+		expect(notFound.ok).to.equal(false);
+		expect(notFound.reason).to.equal("face_image_not_found_on_device");
+
+		const unauthorized = classifyHikvisionRawFaceBinaryResponse({
+			contentType: "application/xml",
+			status: 401,
+			buffer: Buffer.from(`<?xml version="1.0"?><userCheck><statusValue>401</statusValue><statusString>Unauthorized</statusString></userCheck>`),
+		});
+		expect(unauthorized.ok).to.equal(false);
+		expect(unauthorized.reason).to.equal("face_image_unauthorized");
+
+		const validJpeg = classifyHikvisionRawFaceBinaryResponse({
+			contentType: "image/jpeg",
+			status: 200,
+			buffer: Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(128, 1)]),
+		});
+		expect(validJpeg.ok).to.equal(true);
 	});
 
 	it("persists raw templates from C++ callback fingerprints array without AES", async () => {
