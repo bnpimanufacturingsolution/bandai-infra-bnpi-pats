@@ -1,17 +1,28 @@
 [Unit]
 Description=Project Truth disk guard (safe reclaim + threshold alert)
-After=network-online.target
-Wants=network-online.target
+Documentation=file:///usr/local/share/project-truth/project-truth-disk-guard.sh
+# Never order against or depend on cloudflared. This unit must not stop tunnels.
+After=local-fs.target
+Wants=local-fs.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/project-truth-disk-guard.sh
+# Root required for journal vacuum and k3s/crictl sockets.
+User=root
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
-
-# Never touch Cloudflare or DB paths from this unit.
-# Guard script is fail-closed on free-space thresholds only.
+Environment=PROJECT_TRUTH_JOURNAL_SIZE=200M
+Environment=PROJECT_TRUTH_OBS_ROLLING_DAYS=3
+Environment=PROJECT_TRUTH_TMP_DAYS=2
+Environment=PROJECT_TRUTH_DISK_MAX_USE_PCT=85
+Environment=PROJECT_TRUTH_DISK_MIN_AVAIL_GB=25
+EnvironmentFile=-/etc/project-truth/disk-guard.env
+# Canonical install path (also mirrored to /usr/local/bin/project-truth-disk-guard).
+ExecStart=/usr/local/sbin/project-truth-disk-guard.sh
+# Exit 1 when still over threshold after prune is intentional signal.
+SuccessExitStatus=0
+RemainAfterExit=no
 
 [Install]
 WantedBy=multi-user.target
