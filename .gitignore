@@ -29,6 +29,7 @@ terraform.tfstate.backup
 # Local DM migration workbook/source payloads.
 # These are copied from HRIS-PROJECT for local/VM operations and may contain
 # client payroll, attendance, biometric, agency, or employee data.
+confidential-files/
 data/import/
 hris-api/data/
 docs/2026-20260527T124252Z-3-001/
