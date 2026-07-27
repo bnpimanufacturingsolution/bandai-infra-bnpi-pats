@@ -305,11 +305,16 @@ describe("Hikvision biometric sync contract", () => {
 		// Live sticky-clear 2026-07-25: device MessageParametersLack errorMsg=mode
 		// without mode field; shapes must include byEmployeeNo mode.
 		expect(fingerprintHelper).to.include('mode: "byEmployeeNo"');
+		// No-mode primary shapes re-trigger MessageParametersLack errorMsg=mode.
+		expect(fingerprintHelper).to.include("mode_by_employee_list_all_slots");
+		expect(fingerprintHelper).to.not.match(
+			/label: "object_single_employee"/,
+		);
 		expect(fingerprintHelper).to.include("mode_by_employee_list");
 		// Live sticky-clear 2026-07-27: mode shapes still failed until Delete
 		// sent Content-Type application/json (fetch default is form-urlencoded).
 		expect(fingerprintHelper).to.include(
-			'headers: { "Content-Type": "application/json" }',
+			'"Content-Type": "application/json; charset=UTF-8"',
 		);
 		expect(service).to.include("--stored-face-payload-file");
 		expect(service).to.include('"startRemoteConfigMs"');

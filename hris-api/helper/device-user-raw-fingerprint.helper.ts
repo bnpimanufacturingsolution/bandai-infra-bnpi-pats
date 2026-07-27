@@ -699,9 +699,10 @@ const FINGERPRINT_DELETE_BODY_SHAPES = (
 	employeeNo: string,
 	fingerPrintId: number,
 ): Array<{ method: "PUT" | "POST"; body: Record<string, unknown>; label: string }> => [
-	// Live 2026-07-25 sticky-clear burn: devices returned
-	// MessageParametersLack errorMsg=mode statusCode=6 when mode was omitted.
-	// Prefer byEmployeeNo shapes that match UserInfoDetail/Delete contract.
+	// Live 2026-07-25/27 sticky-clear burn:
+	// - Missing mode → MessageParametersLack errorMsg=mode statusCode=6
+	// - Some firmwares reject per-slot id shapes but accept employee-wide delete
+	// Never include no-mode bodies in the primary list (they only restate "mode").
 	{
 		method: "PUT",
 		label: "mode_by_employee_list",
@@ -726,6 +727,27 @@ const FINGERPRINT_DELETE_BODY_SHAPES = (
 			},
 		},
 	},
+	// Employee-wide clear (no fingerPrintID) — matches many panels' UserInfoDetail style.
+	{
+		method: "PUT",
+		label: "mode_by_employee_list_all_slots",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				EmployeeNoList: [{ employeeNo }],
+			},
+		},
+	},
+	{
+		method: "POST",
+		label: "post_mode_by_employee_list_all_slots",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				EmployeeNoList: [{ employeeNo }],
+			},
+		},
+	},
 	{
 		method: "PUT",
 		label: "mode_by_employee_single",
@@ -740,51 +762,36 @@ const FINGERPRINT_DELETE_BODY_SHAPES = (
 	},
 	{
 		method: "PUT",
+		label: "mode_by_employee_detail",
+		body: {
+			FingerPrintDelete: {
+				mode: "byEmployeeNo",
+				EmployeeNoDetail: {
+					employeeNo,
+					fingerPrintID: fingerPrintId,
+					fingerType: "normalFP",
+				},
+			},
+		},
+	},
+	{
+		method: "PUT",
+		label: "mode_by_employee_cond",
+		body: {
+			FingerPrintDeleteCond: {
+				mode: "byEmployeeNo",
+				EmployeeNoList: [{ employeeNo }],
+				fingerPrintID: fingerPrintId,
+			},
+		},
+	},
+	{
+		method: "PUT",
 		label: "mode_all_employee_list",
 		body: {
 			FingerPrintDelete: {
 				mode: "all",
 				EmployeeNoList: [{ employeeNo }],
-				fingerPrintID: fingerPrintId,
-				fingerType: "normalFP",
-			},
-		},
-	},
-	{
-		method: "PUT",
-		label: "array_employee_id",
-		body: {
-			FingerPrintDelete: [{ employeeNo, fingerPrintID: fingerPrintId }],
-		},
-	},
-	{
-		method: "PUT",
-		label: "object_employee_list",
-		body: {
-			FingerPrintDelete: {
-				EmployeeNoList: [{ employeeNo }],
-				fingerPrintID: fingerPrintId,
-				fingerType: "normalFP",
-			},
-		},
-	},
-	{
-		method: "POST",
-		label: "post_object_employee_list",
-		body: {
-			FingerPrintDelete: {
-				EmployeeNoList: [{ employeeNo }],
-				fingerPrintID: fingerPrintId,
-				fingerType: "normalFP",
-			},
-		},
-	},
-	{
-		method: "PUT",
-		label: "object_single_employee",
-		body: {
-			FingerPrintDelete: {
-				employeeNo,
 				fingerPrintID: fingerPrintId,
 				fingerType: "normalFP",
 			},
@@ -856,6 +863,7 @@ export const deleteHikvisionFingerprintSlotsForEmployee = async (params: {
 		let deleted = false;
 		let lastDetail = "no_shape_attempted";
 		let lastShape = "none";
+		const shapeAttempts: Array<{ shape: string; ok: boolean; detail: string }> = [];
 		for (const shape of FINGERPRINT_DELETE_BODY_SHAPES(employeeNo, fingerPrintId)) {
 			lastShape = shape.label;
 			try {
@@ -871,25 +879,50 @@ export const deleteHikvisionFingerprintSlotsForEmployee = async (params: {
 						prisma: params.prisma,
 						request: params.req,
 						timeoutMs: 20_000,
-						headers: { "Content-Type": "application/json" },
+						headers: {
+							"Content-Type": "application/json; charset=UTF-8",
+							Accept: "application/json",
+						},
 						body: shape.body,
 					},
 				);
 				if (isHikvisionIsapiAckOk(response)) {
 					deleted = true;
 					lastDetail = `ack_ok:${shape.label}`;
+					shapeAttempts.push({
+						shape: shape.label,
+						ok: true,
+						detail: lastDetail,
+					});
 					break;
 				}
 				lastDetail = JSON.stringify(response || {}).slice(0, 200);
+				shapeAttempts.push({
+					shape: shape.label,
+					ok: false,
+					detail: lastDetail,
+				});
 			} catch (error: any) {
 				lastDetail = String(error?.message || error).slice(0, 200);
+				shapeAttempts.push({
+					shape: shape.label,
+					ok: false,
+					detail: lastDetail,
+				});
 			}
 		}
+		// Prefer reporting first mode-shape failure (not only the last) for observability.
+		const preferred =
+			shapeAttempts.find((item) => item.ok) ||
+			shapeAttempts.find((item) => item.shape.startsWith("mode_")) ||
+			shapeAttempts[shapeAttempts.length - 1];
 		attempts.push({
 			fingerPrintId,
 			ok: deleted,
-			shape: lastShape,
-			detail: lastDetail,
+			shape: preferred?.shape || lastShape,
+			detail: preferred
+				? `${preferred.detail} | tried=${shapeAttempts.map((item) => item.shape).join(",")}`
+				: lastDetail,
 		});
 	}
 

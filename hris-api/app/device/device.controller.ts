@@ -12296,36 +12296,9 @@ export const controller = (prisma: PrismaClient) => {
 							targetConfig?.storedFaceWriter?.testedBuildAttestation || "",
 						) === buildAttestation &&
 						targetConfig?.storedFaceWriter?.physicallyRetained === true);
-				if (
-					targetCapabilityTested &&
-					sourceRecord?._faceCustodyEvidence
-				) {
-					return {
-						...write,
-						recommended: true,
-						executionEligibility: "ready_from_raw_blob",
-						blockingReason: null,
-						recoveryStage: "ready_to_write",
-						writerStrategy: "sdk_face_template_writer",
-						faceAssociationStrategy,
-						writerCapabilityProof: fleetFaceCapability
-							? {
-									operationId: String(write.id),
-									vendorUserId: String(write.vendorUserId),
-									sourceDeviceId: String(write.sourceDeviceId),
-									targetDeviceId: String(write.targetDeviceId),
-									writer: "sdk_face_template_picture",
-									targetModel: fleetFaceCapability.targetModel,
-									targetFirmware: fleetFaceCapability.targetFirmware,
-									exactBuildSha: fleetFaceCapability.exactBuildSha,
-									imageDigest: fleetFaceCapability.imageDigest,
-									evidenceChecksum:
-										fleetFaceCapability.decision.evidenceChecksum,
-									evidence: fleetFaceCapability.evidence,
-								}
-							: undefined,
-					};
-				}
+				// Prefer FDLib picture import BEFORE SDK stored-face writer.
+				// Live 2026-07-27: SDK path dumped core (exit 255) on E/F for 1419
+				// while FDLib picture path is the proven non-B face writer.
 				const fdlibCapability = fdlibTargetCapabilities.get(
 					String(write.targetDeviceId),
 				);
@@ -12373,6 +12346,36 @@ export const controller = (prisma: PrismaClient) => {
 						},
 						sourcePictureSha256: sourcePicture.pictureSha256,
 						sourcePictureSize: sourcePicture.pictureSize,
+					};
+				}
+				if (
+					targetCapabilityTested &&
+					sourceRecord?._faceCustodyEvidence
+				) {
+					return {
+						...write,
+						recommended: true,
+						executionEligibility: "ready_from_raw_blob",
+						blockingReason: null,
+						recoveryStage: "ready_to_write",
+						writerStrategy: "sdk_face_template_writer",
+						faceAssociationStrategy,
+						writerCapabilityProof: fleetFaceCapability
+							? {
+									operationId: String(write.id),
+									vendorUserId: String(write.vendorUserId),
+									sourceDeviceId: String(write.sourceDeviceId),
+									targetDeviceId: String(write.targetDeviceId),
+									writer: "sdk_face_template_picture",
+									targetModel: fleetFaceCapability.targetModel,
+									targetFirmware: fleetFaceCapability.targetFirmware,
+									exactBuildSha: fleetFaceCapability.exactBuildSha,
+									imageDigest: fleetFaceCapability.imageDigest,
+									evidenceChecksum:
+										fleetFaceCapability.decision.evidenceChecksum,
+									evidence: fleetFaceCapability.evidence,
+								}
+							: undefined,
 					};
 				}
 				return {
