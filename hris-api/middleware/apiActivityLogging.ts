@@ -47,14 +47,16 @@ function getModuleLabel(route: string): string {
 
 function isExcludedPath(req: Request): boolean {
 	const path = req.path || req.originalUrl || "";
-	return config.apiActivityLogging.excludedPaths.some((excludedPath) => {
+	const excluded = config?.apiActivityLogging?.excludedPaths;
+	if (!Array.isArray(excluded) || excluded.length === 0) return false;
+	return excluded.some((excludedPath) => {
 		if (!excludedPath) return false;
 		return path === excludedPath || path.startsWith(`${excludedPath}/`);
 	});
 }
 
 function shouldSample(): boolean {
-	const sampleRate = config.apiActivityLogging.sampleRate;
+	const sampleRate = Number(config?.apiActivityLogging?.sampleRate ?? 1);
 	if (sampleRate >= 1) return true;
 	if (sampleRate <= 0) return false;
 
@@ -73,7 +75,7 @@ function getClientIp(req: Request): string {
 }
 
 function getBodyMetadata(req: Request): Record<string, unknown> | null {
-	if (config.apiActivityLogging.bodyMode === "none") {
+	if ((config?.apiActivityLogging?.bodyMode || "none") === "none") {
 		return null;
 	}
 
@@ -205,12 +207,14 @@ export function apiActivityLoggingMiddleware(
 	res: Response,
 	next: NextFunction,
 ): void {
-	if (!config.apiActivityLogging.enabled || isExcludedPath(req)) {
+	// Fail-open: monorepo snapshot drops of config.apiActivityLogging must not 500 login.
+	const activityCfg = config?.apiActivityLogging;
+	if (!activityCfg || activityCfg.enabled !== true || isExcludedPath(req)) {
 		next();
 		return;
 	}
 
-	if (!config.apiActivityLogging.includeReads && READ_METHODS.has(req.method.toUpperCase())) {
+	if (!activityCfg.includeReads && READ_METHODS.has(req.method.toUpperCase())) {
 		next();
 		return;
 	}
