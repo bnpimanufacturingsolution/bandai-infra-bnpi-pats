@@ -6,6 +6,22 @@ import { applyAttendanceBackfill } from "../app/attendance/attendance-backfill.s
 const VALID_EMPLOYEE_ID = "507f1f77bcf86cd799439012";
 const BACKFILL_DATE = "2026-06-10";
 
+const TIMEKEEPING_FIELDS = {
+	totalMinutesWorked: 480,
+	regularMinutes: 480,
+	overtimeMinutes: 0,
+	undertimeMinutes: 0,
+	lateMinutes: 0,
+	earlyOutMinutes: 0,
+	breakMinutes: 0,
+	hoursWorked: "8:00",
+	regularHours: "8:00",
+	overtimeHours: "0:00",
+	undertimeHours: "0:00",
+	lateHours: "0:00",
+	earlyOutHours: "0:00",
+};
+
 describe("attendance backfill service", () => {
 	it("accepts backfill payloads without an attendanceId", () => {
 		const parsed = CreateAttendanceBackfillSchema.safeParse({
@@ -71,21 +87,21 @@ describe("attendance backfill service", () => {
 			earlyOutMinutes: 0,
 			breakMinutes: 0,
 		});
-		const deriveBehaviorFlags = () => [];
-		const buildAttendanceTimekeepingFields = () => ({
-			totalMinutesWorked: 480,
-			regularMinutes: 480,
-			overtimeMinutes: 0,
-			undertimeMinutes: 0,
-			lateMinutes: 0,
-			earlyOutMinutes: 0,
-			breakMinutes: 0,
-			hoursWorked: "8:00",
-			regularHours: "8:00",
-			overtimeHours: "0:00",
-			undertimeHours: "0:00",
-			lateHours: "0:00",
-			earlyOutHours: "0:00",
+		const resolveOvertimePolicyApplication = async () => ({
+			policy: {
+				requireManagerApprovedOvertime: true,
+				overtimeFlagThresholdMinutes: 60,
+			},
+			timekeepingFields: TIMEKEEPING_FIELDS,
+			metadata: {
+				overtimeCandidate: false,
+				pendingOvertimeMinutes: 0,
+				pendingOvertimeHours: "0:00",
+				overtimeCandidateReason: null,
+				overtimeRequestId: null,
+				overtimeApprovalStatus: "NONE" as const,
+			},
+			behaviorFlags: [],
 		});
 		const applyAttendanceToObligation = async () => ({ id: "obligation-1" });
 		const refreshTimesheetForAttendanceDate = async () => ({ id: "timesheet-1" });
@@ -109,8 +125,7 @@ describe("attendance backfill service", () => {
 				resolveEffectiveShift,
 				fetchAttendanceEmployeeSnapshotFields,
 				calculateTimekeeping,
-				deriveBehaviorFlags,
-				buildAttendanceTimekeepingFields,
+				resolveOvertimePolicyApplication,
 				applyAttendanceToObligation,
 				refreshTimesheetForAttendanceDate,
 				invalidateCacheByPattern,

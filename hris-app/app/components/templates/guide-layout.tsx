@@ -1,5 +1,5 @@
 import { type ReactNode, useState, useCallback } from "react";
-import { GuideSidebar } from "../organisms/guide/guide-sidebar";
+import { SidebarItem } from "../molecules/guide/sidebar-item";
 import type { NavItem } from "~/types/guide-data";
 
 interface GuideLayoutProps {
@@ -36,12 +36,23 @@ export const GuideLayout = ({ version, navigation, activeId, children }: GuideLa
 
 	return (
 		<div className="flex h-screen overflow-hidden bg-background">
-			<GuideSidebar
-				version={version}
-				navigation={navigation}
-				activeId={currentActiveId}
-				onNavigate={handleNavigate}
-			/>
+			<aside className="w-80 shrink-0 overflow-y-auto border-r border-border bg-guide-sidebar p-4">
+				{version ? (
+					<div className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+						v{version}
+					</div>
+				) : null}
+				<div className="space-y-1">
+					{navigation.map((item) => (
+						<SidebarItem
+							key={item.id}
+							item={item}
+							activeId={currentActiveId}
+							onNavigate={handleNavigate}
+						/>
+					))}
+				</div>
+			</aside>
 			<main className="flex-1 overflow-y-auto">
 				<div className="max-w-4xl mx-auto px-8 py-12">{children}</div>
 			</main>

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/index.md) -->
 # WWG Wiki Index
 
 Status: ACTIVE
@@ -22,6 +23,7 @@ Status: ACTIVE
 - Domain rules: `06-domain/rules.md`
 - Screens and routes: `07-ux/screens.md`
 - User journeys: `07-ux/user-journeys.md`
+- Design system: `07-ux/design-system.md`
 - Context completeness review: `11-synthesis/context-completeness-review.md`
 - Open questions: `11-synthesis/open-questions.md`
 
@@ -34,4 +36,3 @@ Status: ACTIVE
 ## Accuracy Rule
 
 Inferred context must stay labeled until reviewed. Do not promote inferred payroll, auth, authorization, deployment, credential, or employee-policy details to accepted truth without owner confirmation.
-

@@ -17,7 +17,7 @@ import {
 	Loader2,
 } from "lucide-react";
 import { useCallback, useMemo, useState, useEffect } from "react";
-import { useSearchParams, useNavigate, Link, useLocation } from "react-router";
+import { useSearchParams, useNavigate, useLocation } from "react-router";
 import { useRequests, useApproveRequest, useRequest } from "~/lib/hooks/useRequests";
 import { useTimesheet, useUpdateTimesheet } from "~/lib/hooks/useTimesheets";
 import type { Request, RequestType, RequestStatus } from "~/services/requests.service";
@@ -26,6 +26,7 @@ import {
 	getDocumentTypeLabel,
 	getMetadataField as getDocumentMetadataField,
 } from "~/lib/document-request-handler";
+import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
 import { RequestReviewModal } from "~/components/molecules/RequestReviewModal";
 import { TimesheetViewModal } from "~/components/organisms/TimesheetViewModal";
 import type { TimesheetBreakdownDay } from "~/components/molecules/TimesheetCalendarApproval";
@@ -77,9 +78,9 @@ const APPROVAL_STATUS_FILTER_OPTIONS = [
 	{ value: "completed", label: "Completed" },
 ] as const;
 const APPROVAL_REQUEST_FIELDS =
-	"id,code,requester.person.personalInfo,requester.employeeId,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,targetEmployee.id,targetEmployee.employeeId,targetEmployee.person.personalInfo,targetEmployee.reportTo.id,targetEmployee.reportTo.employeeId,targetEmployee.reportTo.person.personalInfo,targetEmployee.department.name,targetEmployee.position.title,description,type,startDate,endDate,metadata,currentWorkflowStateKey,createdAt,currentStepExecution.id,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.stepType,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId";
+	"id,code,requester.person.personalInfo,requester.employeeId,requester.user.avatar,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,targetEmployee.id,targetEmployee.employeeId,targetEmployee.person.personalInfo,targetEmployee.reportTo.id,targetEmployee.reportTo.employeeId,targetEmployee.reportTo.person.personalInfo,targetEmployee.department.name,targetEmployee.position.title,description,type,startDate,endDate,metadata,currentWorkflowStateKey,createdAt,currentStepExecution.id,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.stepType,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId";
 const APPROVAL_DETAIL_FIELDS =
-	"id,code,requester.person.personalInfo,requester.employeeId,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,targetEmployee.id,targetEmployee.employeeId,targetEmployee.person.personalInfo,targetEmployee.reportTo.id,targetEmployee.reportTo.employeeId,targetEmployee.reportTo.person.personalInfo,targetEmployee.department.name,targetEmployee.position.title,description,type,startDate,endDate,metadata,currentWorkflowStateKey,notes,attachments,createdAt,updatedAt,currentStepExecution.id,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.stepType,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.id,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId,stepExecutions.id,stepExecutions.stepNumber,stepExecutions.stepName,stepExecutions.stepType,stepExecutions.assigneeType,stepExecutions.status,stepExecutions.completedAt,stepExecutions.comments,stepExecutions.assignee.id,stepExecutions.assignee.employeeId,stepExecutions.assignee.person.personalInfo,stepExecutions.assignee.department.name,transactions";
+	"id,code,requester.person.personalInfo,requester.employeeId,requester.user.avatar,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,targetEmployee.id,targetEmployee.employeeId,targetEmployee.person.personalInfo,targetEmployee.reportTo.id,targetEmployee.reportTo.employeeId,targetEmployee.reportTo.person.personalInfo,targetEmployee.department.name,targetEmployee.position.title,description,type,startDate,endDate,metadata,currentWorkflowStateKey,notes,attachments,createdAt,updatedAt,currentStepExecution.id,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.stepType,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.id,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId,stepExecutions.id,stepExecutions.stepNumber,stepExecutions.stepName,stepExecutions.stepType,stepExecutions.assigneeType,stepExecutions.status,stepExecutions.completedAt,stepExecutions.comments,stepExecutions.assignee.id,stepExecutions.assignee.employeeId,stepExecutions.assignee.person.personalInfo,stepExecutions.assignee.department.name,transactions";
 
 const getRequestState = (request?: Request | null): RequestStatus =>
 	(request?.currentWorkflowStateKey as RequestStatus) || "OPEN";
@@ -323,8 +324,16 @@ export default function Approvals() {
 	const modalRequest = requestDetails || viewing;
 	const activeTimesheetRequest = isTimesheetSubmissionRequest(modalRequest) ? modalRequest : null;
 	const linkedTimesheetId = getLinkedTimesheetId(activeTimesheetRequest);
-	const { data: activeTimesheet, isLoading: isLoadingTimesheet } =
-		useTimesheet(linkedTimesheetId);
+	const isTimesheetReviewOpen = action === "timesheet.review" && Boolean(linkedTimesheetId);
+	const { data: activeTimesheet, isLoading: isLoadingTimesheet } = useTimesheet(
+		linkedTimesheetId || "",
+		{
+			enabled: Boolean(linkedTimesheetId),
+			...(isTimesheetReviewOpen
+				? { staleTime: 0, refetchOnMount: "always" as const }
+				: {}),
+		},
+	);
 
 	const formatStatusLabel = (status: RequestStatus): string =>
 		String(status)
@@ -554,7 +563,7 @@ export default function Approvals() {
 	};
 
 	const getTypeLabel = (type: RequestType, metadata?: Record<string, any>): string => {
-		const labels: Record<RequestType, string> = {
+		const labels: Record<string, string> = {
 			EXPENSE_REIMBURSEMENT: "Expense Reimbursement",
 			DOCUMENT_REQUEST: "Document Request",
 			ATTENDANCE_CORRECTION: "Attendance Correction",
@@ -566,6 +575,7 @@ export default function Approvals() {
 			OTHER: "General Request",
 			LEAVE: "Leave Request",
 			OVERTIME: "Overtime Request",
+			PAYROLL_CORRECTION: "Payroll Correction",
 			RESIGNATION: "Resignation",
 			TERMINATION: "Termination",
 			REGULARIZATION: "Regularization",
@@ -578,7 +588,7 @@ export default function Approvals() {
 	};
 
 	const getTypeIcon = (type: RequestType) => {
-		const icons: Record<RequestType, any> = {
+		const icons: Record<string, any> = {
 			EXPENSE_REIMBURSEMENT: DollarSign,
 			DOCUMENT_REQUEST: FileText,
 			ATTENDANCE_CORRECTION: Clock,
@@ -587,6 +597,7 @@ export default function Approvals() {
 			OTHER: Settings,
 			LEAVE: FileText,
 			OVERTIME: Clock,
+			PAYROLL_CORRECTION: Clock,
 			RESIGNATION: AlertCircle,
 			TERMINATION: AlertCircle,
 			REGULARIZATION: FileText,
@@ -600,16 +611,17 @@ export default function Approvals() {
 	};
 
 	const getTypeColor = (type: RequestType): string => {
-		const colors: Record<RequestType, string> = {
+		const colors: Record<string, string> = {
 			EXPENSE_REIMBURSEMENT: "text-green-600",
 			DOCUMENT_REQUEST: "text-blue-600",
 			ATTENDANCE_CORRECTION: "text-orange-600",
 			TIME_ADJUSTMENT: "text-orange-600",
 			TIMESHEET: "text-orange-600",
-			OTHER: "text-purple-600",
+			OTHER: "text-neutral-600",
 			LEAVE: "text-blue-600",
 			RESIGNATION: "text-red-600",
 			OVERTIME: "text-orange-600",
+			PAYROLL_CORRECTION: "text-neutral-700",
 			TERMINATION: "text-red-600",
 			REGULARIZATION: "text-indigo-600",
 			PROMOTION: "text-emerald-600",
@@ -669,35 +681,21 @@ export default function Approvals() {
 			{
 				key: "requester",
 				label: "Requester",
-				width: "200px",
+				width: "220px",
 				render: (_value, item) => {
-					const requester = item.requester;
-					if (requester?.person?.personalInfo) {
-						const firstName = requester.person.personalInfo.firstName || "";
-						const lastName = requester.person.personalInfo.lastName || "";
-						const requesterProfileId = requester.id;
-						const employeeCode = requester.employeeId || "";
-						return (
-							<div className="flex items-center gap-2">
-								<div className="p-1.5 bg-gray-100 rounded-full">
-									<User className="h-4 w-4 text-gray-500" />
-								</div>
-								<div className="flex flex-col">
-									<Link
-										to={`/employee/${requesterProfileId}`}
-										className="text-sm font-medium text-gray-900 hover:text-orange-600 hover:underline cursor-pointer transition-colors">
-										{firstName} {lastName}
-									</Link>
-									{employeeCode && (
-										<span className="text-xs text-gray-500">
-											{employeeCode}
-										</span>
-									)}
-								</div>
-							</div>
-						);
-					}
-					return <span className="text-sm text-gray-500">-</span>;
+					const requester = item.requester as any;
+					const firstName = requester?.person?.personalInfo?.firstName || "";
+					const lastName = requester?.person?.personalInfo?.lastName || "";
+					const fullName = `${firstName} ${lastName}`.trim();
+
+					return (
+						<EmployeeTableCell
+							profileId={requester?.id || item.requesterId}
+							fullName={fullName || null}
+							employeeId={requester?.employeeId || null}
+							avatar={requester?.user?.avatar ?? null}
+						/>
+					);
 				},
 			},
 			{
@@ -1092,6 +1090,7 @@ export default function Approvals() {
 			/>
 
 			<RequestReviewModal
+				variant="compact"
 				open={action === "view" && !isTimesheetSubmissionRequest(modalRequest || null)}
 				onOpenChange={(open) => {
 					if (!open) {
@@ -1183,6 +1182,7 @@ export default function Approvals() {
 				timesheet={activeTimesheet || null}
 				isLoading={isLoadingDetails || isLoadingTimesheet}
 				approvalMode={true}
+				approvedEditedDaysSummary={activeTimesheet?.approvedEditedDaysSummary ?? null}
 				onApprove={handleApproveTimesheetRequest}
 				onReject={handleRejectTimesheetRequest}
 				isApproving={

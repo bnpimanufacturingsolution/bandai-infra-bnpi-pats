@@ -1,11 +1,33 @@
 // @ts-nocheck
 import { Prisma, PrismaClient } from "../generated/prisma";
+import { buildEmployeeFilter, getEmployeeName } from "./attendance-metrics-common.helper";
 import { getDateKeyInBusinessTimeZone } from "./attendance.helper";
 import {
 	deriveAttendanceObligationDisplayStatus,
 	type AttendanceObligationDisplayStatus,
 } from "./attendance-obligation.helper";
 import { enrichAttendanceRecordsBatchWithLeaveHolidayContext } from "./day-context.helper";
+
+export interface AttendanceDailyTrendDepartmentTotal {
+	departmentId: string | null;
+	departmentName: string;
+	total: number;
+}
+
+export interface AttendanceDailyTrendDayBucket {
+	businessDate: string;
+	total: number;
+	departmentBreakdown: AttendanceDailyTrendDepartmentTotal[];
+}
+
+export interface AttendanceDailyTrendByDepartmentResult {
+	startDate: Date;
+	endDate: Date;
+	totalDays: number;
+	totalRecords: number;
+	departments: AttendanceDailyTrendDepartmentTotal[];
+	series: AttendanceDailyTrendDayBucket[];
+}
 
 function timeStringToMinutes(value: unknown): number {
 	const [hours, minutes] = String(value || "0:00")
@@ -53,6 +75,74 @@ function normalizeSearch(value?: string | null) {
 	return String(value || "")
 		.trim()
 		.toLowerCase();
+}
+
+async function resolveObligationEmployeeIds(
+	prisma: PrismaClient,
+	params: {
+		organizationId: string;
+		search?: string;
+		departmentId?: string;
+		sectionId?: string;
+		positionId?: string;
+		levelId?: string;
+		reportToId?: string;
+		employeeId?: string;
+	},
+): Promise<string[] | null> {
+	const searchQuery = normalizeSearch(params.search);
+	const hasScope =
+		Boolean(
+			params.departmentId ||
+				params.sectionId ||
+				params.positionId ||
+				params.levelId ||
+				params.reportToId ||
+				params.employeeId,
+		) || Boolean(searchQuery);
+	if (!hasScope) return null;
+
+	const employeeWhere = buildEmployeeFilter(params.organizationId, {
+		departmentId: params.departmentId,
+		sectionId: params.sectionId,
+		positionId: params.positionId,
+		levelId: params.levelId,
+		reportToId: params.reportToId,
+		employeeId: params.employeeId,
+	});
+
+	const employees = await prisma.employee.findMany({
+		where: employeeWhere,
+		select: {
+			id: true,
+			employeeId: true,
+			person: {
+				select: {
+					personalInfo: true,
+				},
+			},
+		},
+	});
+
+	const searchTerms = searchQuery.split(/\s+/).filter(Boolean);
+	const scopedEmployees = searchTerms.length
+		? employees.filter((employee: any) => {
+				const searchableText = [
+					employee.employeeId,
+					employee.id,
+					getEmployeeName(employee),
+					employee.person?.personalInfo?.firstName,
+					employee.person?.personalInfo?.middleName,
+					employee.person?.personalInfo?.lastName,
+				]
+					.filter(Boolean)
+					.join(" ")
+					.toLowerCase();
+				return searchTerms.every((term) => searchableText.includes(term));
+			})
+		: employees;
+
+	return scopedEmployees.map((employee: any) => String(employee.id));
 }
 
 function matchesStatus(
@@ -254,6 +344,13 @@ function readRawId(value: any): string | null {
 	return String(value);
 }
 
+function buildTrendDepartmentKey(departmentId: string | null, departmentName: string) {
+	return [
+		String(departmentId || "").trim() || "unassigned",
+		String(departmentName || "Unassigned").trim() || "Unassigned",
+	].join("::");
+}
+
 function getBusinessDateKeys(startDate: Date, endDate: Date): string[] {
 	const keys: string[] = [];
 	const cursor = new Date(startDate);
@@ -275,16 +372,23 @@ function buildMissingScheduleEmployeeWhere(params: {
 	endDate: Date;
 	search?: string;
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
 	employeeId?: string;
 }) {
 	const searchQuery = normalizeSearch(params.search);
+	const baseFilter = buildEmployeeFilter(params.organizationId, {
+		departmentId: params.departmentId,
+		sectionId: params.sectionId,
+		positionId: params.positionId,
+		levelId: params.levelId,
+		reportToId: params.reportToId,
+		employeeId: params.employeeId,
+	});
 	return {
-		organizationId: params.organizationId,
-		isDeleted: false,
-		...(params.employeeId ? { id: params.employeeId } : {}),
-		...(params.departmentId ? { departmentId: params.departmentId } : {}),
-		...(params.reportToId ? { reportToId: params.reportToId } : {}),
+		...baseFilter,
 		AND: [
 			{
 				OR: [
@@ -344,6 +448,9 @@ async function countEmployeesMissingSchedule(
 		endDate: Date;
 		search?: string;
 		departmentId?: string;
+		sectionId?: string;
+		positionId?: string;
+		levelId?: string;
 		reportToId?: string;
 		employeeId?: string;
 	},
@@ -361,6 +468,9 @@ async function getMissingScheduleEmployeeFacet(
 		page: number;
 		search?: string;
 		departmentId?: string;
+		sectionId?: string;
+		positionId?: string;
+		levelId?: string;
 		reportToId?: string;
 		employeeId?: string;
 	},
@@ -537,8 +647,12 @@ function buildPostgresObligationFilterSql(params: {
 	search?: string;
 	status?: string;
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
 	employeeId?: string;
+	employeeIds?: string[] | null;
 	shiftType?: string;
 }) {
 	const conditions: Prisma.Sql[] = [
@@ -552,18 +666,10 @@ function buildPostgresObligationFilterSql(params: {
 		Prisma.sql`COALESCE(ao."businessDate", to_char(ao."date", 'YYYY-MM-DD')) <= to_char(pp."endDate", 'YYYY-MM-DD')`,
 	];
 
-	if (params.employeeId) conditions.push(Prisma.sql`ao."employeeId" = ${params.employeeId}`);
-	if (params.departmentId)
-		conditions.push(Prisma.sql`ao."departmentIdSnapshot" = ${params.departmentId}`);
-	if (params.reportToId)
-		conditions.push(Prisma.sql`ao."reportToIdSnapshot" = ${params.reportToId}`);
-
-	const searchQuery = normalizeSearch(params.search);
-	if (searchQuery) {
-		conditions.push(Prisma.sql`(
-			ao."employeeCodeSnapshot" ILIKE ${`%${searchQuery}%`} OR
-			ao."employeeNameSnapshot" ILIKE ${`%${searchQuery}%`}
-		)`);
+	if (params.employeeIds?.length) {
+		conditions.push(
+			Prisma.sql`ao."employeeId" IN (${Prisma.join(params.employeeIds.map((id) => Prisma.sql`${id}`))})`,
+		);
 	}
 
 	return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
@@ -579,8 +685,12 @@ async function getPostgresObligationFacet(params: {
 	search?: string;
 	status?: string;
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
 	employeeId?: string;
+	employeeIds?: string[] | null;
 	shiftType?: string;
 }) {
 	const todayKey = getDateKeyInBusinessTimeZone(new Date());
@@ -756,6 +866,150 @@ async function getPostgresObligationFacet(params: {
 	return result?.[0] || {};
 }
 
+async function getPostgresObligationTrendFacet(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	startDate: Date;
+	endDate: Date;
+	search?: string;
+	status?: string;
+	departmentId?: string;
+	reportToId?: string;
+	employeeId?: string;
+	shiftType?: string;
+}) {
+	const todayKey = getDateKeyInBusinessTimeZone(new Date());
+	const whereSql = buildPostgresObligationFilterSql(params);
+	const statusCondition = buildPostgresStatusCondition(params.status);
+	const shiftType = String(params.shiftType || "").trim().toUpperCase();
+	// Rest-day/off-day obligations exist for every scheduled employee whether or not
+	// they were expected to work, so counting them here flattens the trend into a
+	// constant headcount. Exclude them by default; an explicit status filter (e.g.
+	// WORKED_REST_DAY) opts back in since the caller is asking for those rows specifically.
+	const excludeOffDaysByDefault = !params.status ? Prisma.sql`f."_isOffDay" = false` : null;
+	const postFilterConditions = [
+		statusCondition,
+		excludeOffDaysByDefault,
+		shiftType ? Prisma.sql`f."_shiftTypeKeyUpper" = ${shiftType}` : null,
+	].filter(Boolean) as Prisma.Sql[];
+	const postFilterSql =
+		postFilterConditions.length > 0
+			? Prisma.sql`WHERE ${Prisma.join(postFilterConditions, " AND ")}`
+			: Prisma.empty;
+	const shiftKeySql = buildPostgresShiftKeyExpression("d");
+	const shiftLabelSql = buildPostgresShiftLabelExpression("d");
+
+	const result = await params.prisma.$queryRaw<any[]>(Prisma.sql`
+		WITH ranked AS (
+			SELECT
+				ao.*,
+				COALESCE(ao."businessDate", to_char(ao."date", 'YYYY-MM-DD')) AS "_obligationDateKey",
+				row_number() OVER (
+					PARTITION BY ao."employeeId", COALESCE(ao."businessDate", to_char(ao."date", 'YYYY-MM-DD'))
+					ORDER BY ao."date" DESC, pp."startDate" DESC, ao."updatedAt" DESC, ao."createdAt" DESC, ao."employeeNameSnapshot" ASC
+				) AS "_rank"
+			FROM "attendance_obligations" ao
+			INNER JOIN "payroll_periods" pp ON pp."id" = ao."payrollPeriodId"
+			WHERE ${whereSql}
+		),
+		deduped AS (
+			SELECT * FROM ranked WHERE "_rank" = 1
+		),
+		enriched AS (
+			SELECT
+				d.*,
+				UPPER(COALESCE(d."status", 'EXPECTED')) AS "_storedStatus",
+				CASE
+					WHEN UPPER(COALESCE(d."status", 'EXPECTED')) <> 'EXPECTED' THEN UPPER(COALESCE(d."status", 'EXPECTED'))
+					WHEN d."_obligationDateKey" < ${todayKey} THEN 'ABSENT'
+					WHEN d."_obligationDateKey" > ${todayKey} THEN 'SCHEDULED'
+					ELSE 'NOT_CLOCKED_IN'
+				END AS "_displayStatus",
+				${postgresTimeStringToMinutesExpression(Prisma.sql`d."lateHours"`)} AS "_lateMinutes",
+				${postgresTimeStringToMinutesExpression(Prisma.sql`d."earlyOutHours"`)} AS "_earlyOutMinutes",
+				${postgresTimeStringToMinutesExpression(Prisma.sql`d."overtimeHours"`)} AS "_overtimeMinutes",
+				${postgresTimeStringToMinutesExpression(Prisma.sql`d."hoursWorked"`)} AS "_hoursWorkedMinutes",
+				${postgresTimeStringToMinutesExpression(Prisma.sql`d."undertimeHours"`)} AS "_undertimeMinutes",
+				${shiftKeySql} AS "_shiftTypeKey",
+				${shiftLabelSql} AS "_shiftTypeLabel",
+				UPPER(COALESCE(d."metadata"->>'leaveType', 'LEAVE')) AS "_metadataLeaveType"
+			FROM deduped d
+		),
+		filtered AS (
+			SELECT
+				e.*,
+				UPPER(e."_shiftTypeKey") AS "_shiftTypeKeyUpper",
+				(COALESCE(e."behaviorFlags", ARRAY[]::text[]) @> ARRAY['TARDINESS']::text[] OR e."_lateMinutes" > 0) AS "_isLate",
+				(e."_earlyOutMinutes" > 0) AS "_isEarlyOut",
+				(e."_overtimeMinutes" > 0) AS "_isOvertime",
+				(e."_displayStatus" IN ('PRESENT', 'INCOMPLETE')) AS "_isClockedIn",
+				(e."timeOut" IS NOT NULL) AS "_isClockedOut",
+				(UPPER(e."_shiftTypeKey") = 'OFF') AS "_isOffDay",
+				(
+					e."_displayStatus" = 'HOLIDAY' OR
+					(
+						jsonb_typeof(e."metadata"->'holidayEntries') = 'array' AND
+						jsonb_array_length(e."metadata"->'holidayEntries') > 0
+					)
+				) AS "_isHoliday"
+			FROM enriched e
+		),
+		final_filtered AS (
+			SELECT * FROM filtered f
+			${postFilterSql}
+		),
+		daily_department_breakdown AS (
+			SELECT
+				"_obligationDateKey" AS "businessDate",
+				"departmentIdSnapshot" AS "departmentId",
+				COALESCE("departmentNameSnapshot", 'Unassigned') AS "departmentName",
+				COUNT(*)::int AS "total"
+			FROM final_filtered
+			GROUP BY "_obligationDateKey", "departmentIdSnapshot", "departmentNameSnapshot"
+		),
+		department_totals AS (
+			SELECT
+				"departmentIdSnapshot" AS "departmentId",
+				COALESCE("departmentNameSnapshot", 'Unassigned') AS "departmentName",
+				COUNT(*)::int AS "total"
+			FROM final_filtered
+			GROUP BY "departmentIdSnapshot", "departmentNameSnapshot"
+		),
+		day_totals AS (
+			SELECT
+				"_obligationDateKey" AS "businessDate",
+				COUNT(*)::int AS "total"
+			FROM final_filtered
+			GROUP BY "_obligationDateKey"
+		)
+		SELECT
+			COALESCE(
+				(
+					SELECT json_agg(row_to_json(daily_department_breakdown) ORDER BY "businessDate" ASC, "departmentName" ASC)
+					FROM daily_department_breakdown
+				),
+				'[]'::json
+			) AS "dailyDepartmentBreakdown",
+			COALESCE(
+				(
+					SELECT json_agg(row_to_json(department_totals) ORDER BY "total" DESC, "departmentName" ASC)
+					FROM department_totals
+				),
+				'[]'::json
+			) AS "departmentTotals",
+			COALESCE(
+				(
+					SELECT json_agg(row_to_json(day_totals) ORDER BY "businessDate" ASC)
+					FROM day_totals
+				),
+				'[]'::json
+			) AS "dayTotals",
+			json_build_array(json_build_object('total', (SELECT COUNT(*)::int FROM final_filtered))) AS "totalRecords"
+	`);
+
+	return result?.[0] || {};
+}
+
 async function countCompanyEventDays(
 	prisma: PrismaClient,
 	organizationId: string,
@@ -838,12 +1092,13 @@ async function countApprovedOvertimeDays(
 		organizationId: string;
 		startDate: Date;
 		endDate: Date;
-		employeeId?: string;
-		departmentId?: string;
-		reportToId?: string;
+		employeeIds?: string[] | null;
 		shiftType?: string;
 	},
 ) {
+	if (params.employeeIds && params.employeeIds.length === 0) {
+		return 0;
+	}
 	const shiftType = String(params.shiftType || "")
 		.trim()
 		.toUpperCase();
@@ -857,11 +1112,11 @@ async function countApprovedOvertimeDays(
 		Prisma.sql`t."isDeleted" = false`,
 		Prisma.sql`${postgresTimeStringToMinutesExpression(Prisma.sql`tl."overtimeHours"`)} > 0`,
 	];
-	if (params.employeeId) conditions.push(Prisma.sql`tl."employeeId" = ${params.employeeId}`);
-	if (params.departmentId)
-		conditions.push(Prisma.sql`tl."departmentIdSnapshot" = ${params.departmentId}`);
-	if (params.reportToId)
-		conditions.push(Prisma.sql`tl."reportToIdSnapshot" = ${params.reportToId}`);
+	if (params.employeeIds?.length) {
+		conditions.push(
+			Prisma.sql`tl."employeeId" IN (${Prisma.join(params.employeeIds.map((id) => Prisma.sql`${id}`))})`,
+		);
+	}
 	if (shiftType) {
 		const shiftKeySql = buildPostgresShiftKeyExpression("tl");
 		conditions.push(Prisma.sql`UPPER(${shiftKeySql}) = ${shiftType}`);
@@ -882,7 +1137,11 @@ function buildRawMatch(params: {
 	endDate: Date;
 	employeeId?: string;
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
+	employeeIds?: string[] | null;
 }) {
 	return {
 		organizationId: params.organizationId,
@@ -891,13 +1150,11 @@ function buildRawMatch(params: {
 			$gte: toExtendedJsonDate(params.startDate),
 			$lte: toExtendedJsonDate(params.endDate),
 		},
-		...(params.employeeId ? { employeeId: toExtendedJsonObjectId(params.employeeId) } : {}),
-		...(params.departmentId
-			? { departmentIdSnapshot: toExtendedJsonObjectId(params.departmentId) }
-			: {}),
-		...(params.reportToId
-			? { reportToIdSnapshot: toExtendedJsonObjectId(params.reportToId) }
-			: {}),
+		...(params.employeeIds?.length
+			? { employeeId: { $in: params.employeeIds.map((id) => toExtendedJsonObjectId(id)) } }
+			: params.employeeId
+				? { employeeId: toExtendedJsonObjectId(params.employeeId) }
+				: {}),
 	};
 }
 
@@ -973,8 +1230,12 @@ function buildObligationAggregationPipeline(params: {
 	search?: string;
 	status?: string;
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
 	employeeId?: string;
+	employeeIds?: string[] | null;
 	shiftType?: string;
 }) {
 	const todayKey = getDateKeyInBusinessTimeZone(new Date());
@@ -993,7 +1254,11 @@ function buildObligationAggregationPipeline(params: {
 				endDate: params.endDate,
 				employeeId: params.employeeId,
 				departmentId: params.departmentId,
+				sectionId: params.sectionId,
+				positionId: params.positionId,
+				levelId: params.levelId,
 				reportToId: params.reportToId,
+				employeeIds: params.employeeIds,
 			}),
 		},
 		{
@@ -1445,12 +1710,25 @@ export async function calculateAttendanceObligationDetailed(
 	search?: string,
 	status?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	shiftType?: string,
 ) {
 	const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
 	const safePage = Math.max(Number(page) || 1, 1);
+	const employeeIds = await resolveObligationEmployeeIds(prisma, {
+		organizationId,
+		search,
+		departmentId,
+		sectionId,
+		positionId,
+		levelId,
+		reportToId,
+		employeeId,
+	});
 	if (String(status || "").trim().toUpperCase() === "MISSING_SCHEDULE") {
 		const missingScheduleFacet = await getMissingScheduleEmployeeFacet(prisma, {
 			organizationId,
@@ -1460,6 +1738,9 @@ export async function calculateAttendanceObligationDetailed(
 			page: safePage,
 			search,
 			departmentId,
+			sectionId,
+			positionId,
+			levelId,
 			reportToId,
 			employeeId,
 		});
@@ -1498,9 +1779,13 @@ export async function calculateAttendanceObligationDetailed(
 		search,
 		status,
 		departmentId,
+		sectionId,
+		positionId,
+		levelId,
 		reportToId,
 		employeeId,
 		shiftType,
+		employeeIds,
 	});
 	const rows = Array.isArray(facet.records) ? facet.records : [];
 
@@ -1630,6 +1915,9 @@ export async function calculateAttendanceObligationDetailed(
 		endDate,
 		search,
 		departmentId,
+		sectionId,
+		positionId,
+		levelId,
 		reportToId,
 		employeeId,
 	});
@@ -1667,9 +1955,7 @@ export async function calculateAttendanceObligationDetailed(
 		organizationId,
 		startDate,
 		endDate,
-		employeeId,
-		departmentId,
-		reportToId,
+		employeeIds,
 		shiftType,
 	});
 	metrics.unapprovedOvertimeCount = Math.max(
@@ -1707,6 +1993,9 @@ export async function calculateAttendanceObligationSummary(
 	search?: string,
 	status?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	shiftType?: string,
@@ -1721,11 +2010,152 @@ export async function calculateAttendanceObligationSummary(
 		search,
 		status,
 		departmentId,
+		sectionId,
+		positionId,
+		levelId,
 		reportToId,
 		employeeId,
 		shiftType,
 	);
 	return detailed.metrics;
+}
+
+export async function calculateAttendanceDailyTrendByDepartment(
+	prisma: PrismaClient,
+	organizationId: string,
+	startDate: Date,
+	endDate: Date,
+	search?: string,
+	status?: string,
+	departmentId?: string,
+	reportToId?: string,
+	employeeId?: string,
+	shiftType?: string,
+): Promise<AttendanceDailyTrendByDepartmentResult> {
+	const normalizedStartDate = new Date(startDate);
+	normalizedStartDate.setUTCHours(0, 0, 0, 0);
+	const normalizedEndDate = new Date(endDate);
+	normalizedEndDate.setUTCHours(23, 59, 59, 999);
+
+	if (normalizedStartDate.getTime() > normalizedEndDate.getTime()) {
+		return {
+			startDate: normalizedStartDate,
+			endDate: normalizedEndDate,
+			totalDays: 0,
+			totalRecords: 0,
+			departments: [],
+			series: [],
+		};
+	}
+
+	const facet = await getPostgresObligationTrendFacet({
+		prisma,
+		organizationId,
+		startDate: normalizedStartDate,
+		endDate: normalizedEndDate,
+		search,
+		status,
+		departmentId,
+		reportToId,
+		employeeId,
+		shiftType,
+	});
+
+	const rawDailyRows = Array.isArray((facet as any).dailyDepartmentBreakdown)
+		? (facet as any).dailyDepartmentBreakdown
+		: [];
+	const rawDepartmentTotals = Array.isArray((facet as any).departmentTotals)
+		? (facet as any).departmentTotals
+		: [];
+	const rawDayTotals = Array.isArray((facet as any).dayTotals) ? (facet as any).dayTotals : [];
+	const totalRecords = Number((facet as any)?.totalRecords?.[0]?.total || 0);
+	const dayKeys = getBusinessDateKeys(normalizedStartDate, normalizedEndDate);
+
+	const departments = rawDepartmentTotals
+		.map((item: any) => ({
+			departmentId: item.departmentId || null,
+			departmentName: String(item.departmentName || "Unassigned"),
+			total: Number(item.total || 0),
+		}))
+		.sort((left: AttendanceDailyTrendDepartmentTotal, right: AttendanceDailyTrendDepartmentTotal) => {
+			const totalDelta = right.total - left.total;
+			if (totalDelta !== 0) return totalDelta;
+			const nameDelta = left.departmentName.localeCompare(right.departmentName);
+			if (nameDelta !== 0) return nameDelta;
+			return String(left.departmentId || "").localeCompare(String(right.departmentId || ""));
+		});
+
+	const departmentMeta = departments.map((department) => ({
+		...department,
+		key: buildTrendDepartmentKey(department.departmentId, department.departmentName),
+	}));
+	const departmentByKey = new Map(
+		departmentMeta.map((department) => [department.key, department] as const),
+	);
+
+	const departmentTotalsByDay = new Map<string, Map<string, number>>();
+	for (const row of rawDailyRows) {
+		const businessDate = String(row.businessDate || "").trim();
+		if (!businessDate) continue;
+		const departmentKey = buildTrendDepartmentKey(row.departmentId || null, row.departmentName);
+		const total = Number(row.total || 0);
+
+		if (!departmentByKey.has(departmentKey)) {
+			const fallbackDepartment = {
+				departmentId: row.departmentId || null,
+				departmentName: String(row.departmentName || "Unassigned"),
+				total,
+				key: departmentKey,
+			};
+			departmentMeta.push(fallbackDepartment);
+			departmentByKey.set(departmentKey, fallbackDepartment);
+		}
+
+		const bucket = departmentTotalsByDay.get(businessDate) || new Map<string, number>();
+		bucket.set(departmentKey, total);
+		departmentTotalsByDay.set(businessDate, bucket);
+	}
+
+	departmentMeta.sort((left, right) => {
+		const totalDelta = right.total - left.total;
+		if (totalDelta !== 0) return totalDelta;
+		const nameDelta = left.departmentName.localeCompare(right.departmentName);
+		if (nameDelta !== 0) return nameDelta;
+		return String(left.departmentId || "").localeCompare(String(right.departmentId || ""));
+	});
+
+	const dayTotalsByDate = new Map(
+		rawDayTotals.map((item: any) => [String(item.businessDate || "").trim(), Number(item.total || 0)]),
+	);
+
+	const series = dayKeys.map((businessDate) => {
+		const dayDepartmentTotals = departmentTotalsByDay.get(businessDate) || new Map<string, number>();
+		const departmentBreakdown = departmentMeta.map((department) => ({
+			departmentId: department.departmentId,
+			departmentName: department.departmentName,
+			total: Number(dayDepartmentTotals.get(department.key) || 0),
+		}));
+
+		return {
+			businessDate,
+			total:
+				dayTotalsByDate.get(businessDate) ??
+				departmentBreakdown.reduce(
+					(sum: number, item: AttendanceDailyTrendDepartmentTotal) => sum + item.total,
+					0,
+				),
+			departmentBreakdown,
+		};
+	});
+
+	return {
+		startDate: normalizedStartDate,
+		endDate: normalizedEndDate,
+		totalDays: dayKeys.length,
+		totalRecords,
+		departments: departmentMeta.map(({ key: _key, ...department }) => department),
+		series,
+	};
 }
 
 export async function calculateAttendanceObligationTodayOpsSummary(
@@ -1734,6 +2164,9 @@ export async function calculateAttendanceObligationTodayOpsSummary(
 	targetDate: Date,
 	search?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	shiftType?: string,
@@ -1749,6 +2182,9 @@ export async function calculateAttendanceObligationTodayOpsSummary(
 		search,
 		undefined,
 		departmentId,
+		sectionId,
+		positionId,
+		levelId,
 		reportToId,
 		employeeId,
 		shiftType,

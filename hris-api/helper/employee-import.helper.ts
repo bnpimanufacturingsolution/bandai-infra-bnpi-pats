@@ -225,11 +225,17 @@ export class EmployeeImportHelper {
 		levelName?: string,
 		sectionNameOrCode?: string,
 	): DerivedRoleFlags {
+		// Prefer resolved section id (handles code/name aliases) then name/code HR cache.
+		const sectionId = this.getSectionId(sectionNameOrCode, departmentName);
+		const isHrFromSectionId =
+			sectionId != null ? Boolean(this.sectionHrCache.get(String(sectionId).toLowerCase())) : false;
+		const isHrFromSectionName = this.isHrSection(sectionNameOrCode, departmentName);
 		return deriveRoleAndFlags({
 			department: {
 				isHr:
 					this.isHrDepartment(departmentName) ||
-					this.isHrSection(sectionNameOrCode, departmentName),
+					isHrFromSectionId ||
+					isHrFromSectionName,
 				name: departmentName,
 			},
 			level: {

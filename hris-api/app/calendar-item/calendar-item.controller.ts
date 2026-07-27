@@ -21,6 +21,8 @@ import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { recomputeAttendanceObligationsForRange } from "../../helper/attendance-obligation.helper";
+import { resolvePublicKioskOrganizationId } from "../../helper/public-kiosk-org.helper";
+import { z } from "zod";
 
 const logger = getLogger();
 const calendarItemLogger = logger.child({ module: "calendarItem" });
@@ -32,6 +34,18 @@ const HOLIDAY_TYPE_META: Record<HolidayTypeImport, { category: string }> = {
 	"special-non-working": { category: "Special (Non-Working) Holiday" },
 	"special-working": { category: "Special (Working) Holiday" },
 };
+
+const PublicKioskCalendarQuerySchema = z
+	.object({
+		organizationId: z.string().trim().min(1).optional(),
+		organizationCode: z.string().trim().min(1).optional(),
+		year: z.coerce.number().int().min(2000).max(2100).optional(),
+		limit: z.coerce.number().int().min(1).max(24).optional().default(8),
+	})
+	.refine((value) => Boolean(value.organizationId || value.organizationCode), {
+		message: "organizationId or organizationCode is required",
+		path: ["organizationId"],
+	});
 
 const getImportValue = (row: Record<string, any>, aliases: string[]) => {
 	const normalizedAliases = aliases.map((alias) =>
@@ -99,6 +113,82 @@ const normalizeHolidayType = (value: unknown): HolidayTypeImport => {
 };
 
 export const controller = (prisma: PrismaClient) => {
+	const getPublicKiosk = async (req: Request, res: Response, _next: NextFunction) => {
+		const parsed = PublicKioskCalendarQuerySchema.safeParse(req.query);
+		if (!parsed.success) {
+			const formattedErrors = formatZodErrors(parsed.error.format());
+			res.status(400).json(buildErrorResponse("Validation failed", 400, formattedErrors));
+			return;
+		}
+
+		try {
+			const orgResolution = await resolvePublicKioskOrganizationId(prisma, {
+				organizationId: parsed.data.organizationId,
+				organizationCode: parsed.data.organizationCode,
+			});
+			if (!orgResolution.ok) {
+				res.status(400).json(
+					buildErrorResponse(orgResolution.message, 400, [
+						{ field: orgResolution.field, message: orgResolution.message },
+					]),
+				);
+				return;
+			}
+
+			const now = new Date();
+			// Login kiosk should show company events only (not the full holiday calendar).
+			const where: Prisma.CalendarItemWhereInput = {
+				organizationId: orgResolution.organizationId,
+				type: "COMPANY_EVENT",
+				status: {
+					notIn: ["CANCELLED", "DRAFT"],
+				},
+				endDate: {
+					gte: now,
+				},
+			};
+
+			if (parsed.data.year) {
+				where.year = parsed.data.year;
+			}
+
+			const calendarItems = await prisma.calendarItem.findMany({
+				where,
+				select: {
+					id: true,
+					organizationId: true,
+					year: true,
+					title: true,
+					description: true,
+					type: true,
+					startDate: true,
+					endDate: true,
+					isAllDay: true,
+					timezone: true,
+					status: true,
+				},
+				orderBy: {
+					startDate: "asc",
+				},
+				take: parsed.data.limit,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse("Public kiosk calendar items retrieved successfully", {
+					organizationId: orgResolution.organizationId,
+					resolvedBy: orgResolution.resolvedBy,
+					calendarItems,
+					pagination: buildPagination(calendarItems.length, 1, parsed.data.limit),
+				}),
+			);
+		} catch (error) {
+			calendarItemLogger.error(`Failed to retrieve public kiosk calendar items: ${error}`);
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
+		}
+	};
+
 	const recomputeHolidayObligations = async (
 		calendarItem: {
 			organizationId: string;
@@ -768,5 +858,5 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { create, getAll, getById, update, remove, importFromXLSX };
+	return { create, getAll, getById, getPublicKiosk, update, remove, importFromXLSX };
 };

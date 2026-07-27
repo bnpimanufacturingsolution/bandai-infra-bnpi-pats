@@ -15,6 +15,7 @@ import { useEmployees } from "~/lib/hooks/useEmployees";
 import { useNoWorkReport } from "~/lib/hooks/useMetrics";
 import { buildReportFileName, exportRowsToCsv, exportRowsToPdf } from "~/lib/utils/report-export";
 import { ReportExportDialog } from "../components/ReportExportDialog";
+import { ReportEmployeeCell } from "../components/ReportEmployeeCell";
 import { ReportScopeDateFilters } from "../components/ReportScopeDateFilters";
 import { useReportScopeFilters } from "../useReportScopeFilters";
 import { toast } from "sonner";
@@ -336,10 +337,14 @@ export function NoWorkReportTab() {
 								<tbody>
 									{employees.length > 0 ? (
 										employees.map((employee) => (
-											<tr key={employee.id} className="border-t">
+										<tr key={employee.id} className="border-t">
 												<td className="px-6 py-3">{employee.employeeId}</td>
 												<td className="px-6 py-3 font-medium">
-													{employee.name}
+													<ReportEmployeeCell
+														rosterEmployees={allEmployees}
+														employeeId={employee.employeeId}
+														fullName={employee.name}
+													/>
 												</td>
 												<td className="px-6 py-3">{employee.department}</td>
 												<td className="px-6 py-3">

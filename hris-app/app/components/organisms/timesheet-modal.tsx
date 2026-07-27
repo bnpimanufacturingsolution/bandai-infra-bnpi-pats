@@ -5,11 +5,15 @@ import {
 	useUpdateTimesheet,
 	useRequestTimesheetEditPermission,
 	useRequestTimesheetEditPermissionCurrent,
+	useCreateOvertimeRequest,
+	useCreatePayrollCorrection,
 } from "~/lib/hooks/useTimesheets";
 import type {
 	ApprovedEditedDaysSummary,
+	CreatePayrollCorrectionPayload,
 	Timesheet,
 	TimesheetBreakdown,
+	TimesheetSubmitPayload,
 } from "~/services/timesheet.service";
 import { TimesheetViewModal } from "./TimesheetViewModal";
 import type { TimesheetBreakdownDay } from "~/components/molecules/TimesheetCalendarApproval";
@@ -49,6 +53,8 @@ export function TimesheetModal({
 	const updateTimesheetMutation = useUpdateTimesheet();
 	const requestEditPermissionMutation = useRequestTimesheetEditPermission();
 	const requestEditPermissionCurrentMutation = useRequestTimesheetEditPermissionCurrent();
+	const createOvertimeRequestMutation = useCreateOvertimeRequest();
+	const createPayrollCorrectionMutation = useCreatePayrollCorrection();
 
 	// When modal opens, refetch timesheets
 	useEffect(() => {
@@ -69,7 +75,7 @@ export function TimesheetModal({
 		}
 	}, [timesheetsData, isLoadingView]);
 
-	const handleSubmit = async (updatedBreakdown: TimesheetBreakdownDay[]) => {
+	const handleSubmit = async ({ breakdown, editedDayKeys }: TimesheetSubmitPayload) => {
 		try {
 			const isSubmittedCorrectionFlow =
 				currentTimesheet?.status === "SUBMITTED" &&
@@ -80,20 +86,22 @@ export function TimesheetModal({
 				currentTimesheet?.status === "REVISED" ||
 				isSubmittedCorrectionFlow;
 
-			if (currentTimesheet?.id && canPreUpdateBeforeSubmit && updatedBreakdown?.length) {
+			if (currentTimesheet?.id && canPreUpdateBeforeSubmit && breakdown?.length) {
 				await updateTimesheetMutation.mutateAsync({
 					id: currentTimesheet.id,
 					payload: {
-						breakdown: updatedBreakdown as TimesheetBreakdown[],
+						breakdown: breakdown as TimesheetBreakdown[],
+						editedDayKeys,
 					},
 				});
 			}
 
 			const submittedTimesheet = await submitMutation.mutateAsync(
 				isSubmittedCorrectionFlow
-					? {}
+					? { editedDayKeys }
 					: {
-							breakdown: updatedBreakdown as TimesheetBreakdown[],
+							breakdown: breakdown as TimesheetBreakdown[],
+							editedDayKeys,
 						},
 			);
 
@@ -110,9 +118,35 @@ export function TimesheetModal({
 
 			void refetch();
 			onClose();
-		} catch (error) {
+		} catch (error: any) {
 			console.error("Failed to submit timesheet:", error);
 		}
+	};
+
+	const handleFileOvertimeRequest = async (params: {
+		date: string;
+		description?: string;
+		notes?: string;
+	}) => {
+		if (!currentTimesheet?.id) {
+			throw new Error("Timesheet is not available");
+		}
+		await createOvertimeRequestMutation.mutateAsync({
+			timesheetId: currentTimesheet.id,
+			payload: params,
+		});
+		void refetch();
+	};
+
+	const handleRequestPayrollCorrection = async (payload: CreatePayrollCorrectionPayload) => {
+		if (!currentTimesheet?.id) {
+			throw new Error("Timesheet is not available");
+		}
+		await createPayrollCorrectionMutation.mutateAsync({
+			timesheetId: currentTimesheet.id,
+			payload,
+		});
+		void refetch();
 	};
 
 	const handleRequestEditPermission = async (reason: string) => {
@@ -163,6 +197,10 @@ export function TimesheetModal({
 				requestEditPermissionMutation.isPending ||
 				requestEditPermissionCurrentMutation.isPending
 			}
+			onFileOvertimeRequest={handleFileOvertimeRequest}
+			isFilingOvertimeRequest={createOvertimeRequestMutation.isPending}
+			onRequestPayrollCorrection={handleRequestPayrollCorrection}
+			isRequestingPayrollCorrection={createPayrollCorrectionMutation.isPending}
 			approvedEditedDaysSummary={approvedEditedDaysSummary}
 			deepLinkDay={deepLinkDay}
 			onDeepLinkDayChange={onDeepLinkDayChange}

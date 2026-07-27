@@ -1,14 +1,15 @@
+import { lazy, Suspense } from "react";
 import {
 	isRouteErrorResponse,
 	Links,
+	Meta,
 	Outlet,
 	Scripts,
 	ScrollRestoration,
 	useLocation,
 } from "react-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 
 // import type { Route } from "./+types/root";
 import "./app.css";
@@ -18,18 +19,15 @@ import AuthProvider from "./contexts/auth-provider";
 import { PasswordEnforcementGuard } from "./components/guards/password-enforcement-guard";
 import { ProvisioningGuard } from "./components/guards/provisioning-guard";
 
-export const links = () => [
-	{ rel: "preconnect", href: "https://fonts.googleapis.com" },
-	{
-		rel: "preconnect",
-		href: "https://fonts.gstatic.com",
-		crossOrigin: "anonymous",
-	},
-	{
-		rel: "stylesheet",
-		href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Outfit:wght@100..900&display=swap",
-	},
-];
+// Font loading is handled by self-hosted Fontsource imports in app.css.
+export const links = () => [];
+
+const ReactQueryDevtools = import.meta.env.DEV
+	? lazy(async () => {
+			const module = await import("@tanstack/react-query-devtools");
+			return { default: module.ReactQueryDevtools };
+		})
+	: null;
 
 export function Layout({ children }: { children: React.ReactNode }) {
 	return (
@@ -38,6 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 				<meta charSet="utf-8" />
 				<meta name="viewport" content="width=device-width, initial-scale=1" />
 				<title>HR Management System</title>
+				<Meta />
 				<Links />
 			</head>
 			<body>
@@ -52,7 +51,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
 	const location = useLocation();
 	const isPublicStatusPage = location.pathname === "/status";
-	const devtools = import.meta.env.DEV ? <ReactQueryDevtools initialIsOpen={false} /> : null;
 
 	return (
 		<QueryClientProvider client={queryClient}>
@@ -68,7 +66,11 @@ export default function App() {
 						closeButton
 						swipeDirections={["top", "right", "bottom", "left"]}
 					/>
-					{devtools}
+					{ReactQueryDevtools ? (
+						<Suspense fallback={null}>
+							<ReactQueryDevtools initialIsOpen={false} />
+						</Suspense>
+					) : null}
 				</ToastProvider>
 			</AuthProvider>
 		</QueryClientProvider>

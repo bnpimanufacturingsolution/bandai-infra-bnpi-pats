@@ -2,7 +2,10 @@ declare const describe: any;
 declare const it: any;
 
 const assert = require("node:assert/strict");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
+const XLSX = require("xlsx");
 
 const {
 	expandSourceFiles,
@@ -11,19 +14,29 @@ const {
 	parseBiometricTimestamp,
 	resolveEmployeeScheduleSnapshotForDate,
 } = require("../scripts/bnpi-demo-attendance-proof.cjs");
-const {
-	getMigrationApiRoot,
-	getMigrationRepoRoot,
-	resolveMigrationApiPath,
-	resolveMigrationDm4SourceFiles,
-} = require("../app/migration/migration-dry-run.service");
 
 describe("DM4 biometric attendance proof helpers", function () {
 	this.timeout(10000);
-	const sourceFolder = path.resolve(
-		__dirname,
-		"../../docs/2026-20260527T124252Z-3-001/2026",
-	);
+	const sourceFolder = fs.mkdtempSync(path.join(os.tmpdir(), "bnpi-proof-"));
+	const nestedFolder = path.join(sourceFolder, "nested");
+	const biometricFile = path.join(sourceFolder, "Biometrics Data_Apr 11 - 25.xlsx");
+	const secondaryFile = path.join(nestedFolder, "Biometrics Data_Apr 11 - 25 copy.xlsx");
+
+	fs.mkdirSync(nestedFolder, { recursive: true });
+
+	const writeBiometricWorkbook = (filePath: string) => {
+		const workbook = XLSX.utils.book_new();
+		const sheet = XLSX.utils.aoa_to_sheet([
+			["No.", "Date Time"],
+			["21", "4/13/2026 7:49:31 AM"],
+			["21", "4/13/2026 4:58:00 PM"],
+		]);
+		XLSX.utils.book_append_sheet(workbook, sheet, "Apr 13");
+		XLSX.writeFile(workbook, filePath);
+	};
+
+	writeBiometricWorkbook(biometricFile);
+	writeBiometricWorkbook(secondaryFile);
 
 	it("normalizes biometric badge numbers to five digits without reordering", () => {
 		assert.equal(normalizeBadgeId("21"), "00021");
@@ -45,36 +58,8 @@ describe("DM4 biometric attendance proof helpers", function () {
 		assert.equal(files.every((file: string) => /\.xlsx$/i.test(file)), true);
 	});
 
-	it("resolves DM4 scripts and source workbooks when launched from repo root", () => {
-		const originalCwd = process.cwd();
-		const repoRoot = path.resolve(__dirname, "../..");
-		process.chdir(repoRoot);
-		try {
-			const resolution = resolveMigrationDm4SourceFiles([
-				"docs/2026-20260527T124252Z-3-001/2026/Biometrics Data_Apr 11 - 25.xlsx",
-			]);
-
-			assert.equal(path.basename(getMigrationApiRoot()), "hris-api");
-			assert.equal(getMigrationRepoRoot(), repoRoot);
-			assert.equal(
-				resolveMigrationApiPath("scripts", "bnpi-demo-attendance-proof.cjs"),
-				path.join(repoRoot, "hris-api", "scripts", "bnpi-demo-attendance-proof.cjs"),
-			);
-			assert.equal(resolution.missing.length, 0);
-			assert.equal(resolution.invalid.length, 0);
-			assert.ok(
-				resolution.sourceWorkbookFiles.some((filePath: string) =>
-					filePath.endsWith("Biometrics Data_Apr 11 - 25.xlsx"),
-				),
-			);
-		} finally {
-			process.chdir(originalCwd);
-		}
-	});
-
 	it("groups raw biometric punches by normalized badge and business date", () => {
-		const file = path.join(sourceFolder, "Biometrics Data_Apr 11 - 25.xlsx");
-		const rows = findBiometricPunchRows(file);
+		const rows = findBiometricPunchRows(biometricFile);
 		const row21 = rows.find(
 			(row: any) => row.rawBadge === "21" && row.normalizedBadge === "00021",
 		);

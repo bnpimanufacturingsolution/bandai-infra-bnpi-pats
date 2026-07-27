@@ -83,7 +83,7 @@ function TimeLogging() {
 
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const canvasRef = useRef<HTMLCanvasElement>(null);
-	const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+	const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
 	const timeActionRef = useRef(timeAction);
 	const isProcessingRef = useRef(isProcessing);
 
@@ -695,7 +695,7 @@ function TimeLogging() {
 // Export the component wrapped with authentication guard
 export default function ProtectedTimeLogging() {
 	return (
-		<TimeLoggingGuard requiredRole="dms_time_keeper">
+		<TimeLoggingGuard requiredRole="hris-timekeeper">
 			<TimeLogging />
 		</TimeLoggingGuard>
 	);

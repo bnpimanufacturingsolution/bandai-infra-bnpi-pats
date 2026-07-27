@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import {
 	ArrowDown,
+	ArrowRight,
 	ArrowUp,
 	CheckCircle2,
+	ChevronRight,
 	Edit,
 	Loader2,
 	Plus,
@@ -13,7 +15,6 @@ import {
 } from "lucide-react";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
-import { Badge } from "~/components/atoms/Badge";
 import { Modal } from "~/components/atoms/Modal";
 import { Select, type SelectOption } from "~/components/atoms/Select";
 import { ConstraintTokenRow } from "~/components/molecules/ConstraintTokens";
@@ -24,6 +25,15 @@ import {
 	AccordionItem,
 	AccordionTrigger,
 } from "~/components/ui/accordion";
+import {
+	Drawer,
+	DrawerClose,
+	DrawerContent,
+	DrawerDescription,
+	DrawerFooter,
+	DrawerHeader,
+	DrawerTitle,
+} from "~/components/ui/drawer";
 import {
 	useCreateWorkflowInstance,
 	useDeleteWorkflowInstance,
@@ -82,7 +92,7 @@ const DOMAIN_OPTIONS: SelectOption[] = [
 	{ value: "PAYROLL", label: "Payroll" },
 ];
 
-const REQUEST_TYPE_OPTIONS: SelectOption[] = [
+export const REQUEST_TYPE_OPTIONS: SelectOption[] = [
 	{ value: "LEAVE", label: "Leave Request" },
 	{ value: "OVERTIME", label: "Overtime" },
 	{ value: "TIME_ADJUSTMENT", label: "Time Adjustment" },
@@ -123,6 +133,13 @@ const ASSIGNEE_TYPE_OPTIONS: SelectOption[] = [
 	{ value: "TARGET_DEPARTMENT_MANAGER", label: "Target Department Manager" },
 	{ value: "HR", label: "HR" },
 	{ value: "SYSTEM", label: "System" },
+];
+
+const DOMAIN_FILTERS: Array<{ value: DomainFilter; label: string }> = [
+	{ value: "ALL", label: "All" },
+	{ value: "REQUEST", label: "Request" },
+	{ value: "RECRUITMENT", label: "Recruitment" },
+	{ value: "PAYROLL", label: "Payroll" },
 ];
 
 const makeId = () => {
@@ -338,6 +355,7 @@ export default function AdminWorkflowTemplatesPage() {
 	const selectedId = searchParams.get("id") || "";
 	const action = (searchParams.get("action") || "").toLowerCase() as EditorMode | "delete" | "";
 	const isEditing = action === "create" || action === "edit";
+	const isDrawerOpen = Boolean(selectedId) && !isEditing && action !== "delete";
 
 	const { data, isLoading, isError, error } = useWorkflowInstances({
 		page: 1,
@@ -376,6 +394,7 @@ export default function AdminWorkflowTemplatesPage() {
 			}))
 			.filter((group) => group.items.length > 0);
 	}, [visibleItems]);
+
 	const coverage = useMemo(() => {
 		const covered = new Set(
 			WORKFLOW_COVERAGE_ITEMS.filter((item) =>
@@ -416,16 +435,6 @@ export default function AdminWorkflowTemplatesPage() {
 	};
 
 	useEffect(() => {
-		if (isLoading || isEditing || action === "delete") return;
-		if (selectedId && filteredItems.some((item) => item.id === selectedId)) return;
-		const fallback = visibleItems[0] || filteredItems[0];
-		if (!fallback) return;
-		updateSearchParams((next) => {
-			next.set("id", fallback.id);
-		});
-	}, [action, filteredItems, isEditing, isLoading, selectedId, visibleItems]);
-
-	useEffect(() => {
 		if (action === "create") {
 			codeManuallyEditedRef.current = false;
 			setDraft(emptyDraft());
@@ -456,11 +465,17 @@ export default function AdminWorkflowTemplatesPage() {
 		});
 	};
 
+	const closeDrawer = () => {
+		updateSearchParams((next) => {
+			next.delete("id");
+			if (action !== "create" && action !== "edit") next.delete("action");
+		});
+	};
+
 	const closeAction = () => {
 		setErrors({});
 		updateSearchParams((next) => {
 			next.delete("action");
-			if (!next.get("id") && selectedWorkflow) next.set("id", selectedWorkflow.id);
 		});
 	};
 
@@ -542,7 +557,12 @@ export default function AdminWorkflowTemplatesPage() {
 			updateMutation.mutate(
 				{ id: selectedWorkflow.id, payload },
 				{
-					onSuccess: () => closeAction(),
+					onSuccess: () => {
+						updateSearchParams((next) => {
+							next.delete("action");
+							next.set("id", selectedWorkflow.id);
+						});
+					},
 				},
 			);
 			return;
@@ -625,7 +645,10 @@ export default function AdminWorkflowTemplatesPage() {
 	};
 
 	const headerActions = (
-		<Button type="button" onClick={startCreate} className="h-9 rounded-md bg-orange-600 text-white hover:bg-orange-700">
+		<Button
+			type="button"
+			onClick={startCreate}
+			className="h-9 rounded-lg bg-neutral-900 px-3 text-white hover:bg-neutral-800">
 			<Plus className="h-4 w-4" />
 			Add Template
 		</Button>
@@ -633,16 +656,54 @@ export default function AdminWorkflowTemplatesPage() {
 
 	return (
 		<RulesPoliciesShell title="Workflow Templates" actions={headerActions}>
-			<WorkflowCoveragePanel
-				totalTemplates={allItems.length}
-				visibleTemplates={visibleItems.length}
-				coverage={coverage}
-			/>
-			<div className="grid min-h-[640px] gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
-				<aside className="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white">
-					<div className="border-b border-gray-100 p-3">
-						<div className="relative">
-							<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+			<div className="space-y-4">
+				{/* Compact coverage strip */}
+				<section className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3">
+					<div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+						<div className="flex items-baseline gap-2">
+							<span className="text-neutral-500">Templates</span>
+							<span className="font-semibold tabular-nums text-neutral-900">{allItems.length}</span>
+						</div>
+						<div className="hidden h-3 w-px bg-neutral-200 sm:block" />
+						<div className="flex items-baseline gap-2">
+							<span className="text-neutral-500">Request coverage</span>
+							<span
+								className={`font-semibold tabular-nums ${
+									coverage.requestCovered === coverage.requestTotal
+										? "text-neutral-900"
+										: "text-amber-700"
+								}`}>
+								{coverage.requestCovered}/{coverage.requestTotal}
+							</span>
+						</div>
+						{coverage.missing.length > 0 ? (
+							<>
+								<div className="hidden h-3 w-px bg-neutral-200 sm:block" />
+								<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+									<span className="text-xs text-neutral-500">Gaps</span>
+									{coverage.missing.slice(0, 6).map((item) => (
+										<span
+											key={item.key}
+											className="rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+											{item.label}
+										</span>
+									))}
+									{coverage.missing.length > 6 ? (
+										<span className="text-[11px] text-neutral-400">
+											+{coverage.missing.length - 6}
+										</span>
+									) : null}
+								</div>
+							</>
+						) : null}
+					</div>
+				</section>
+
+				{/* Template list */}
+				<section className="overflow-hidden rounded-xl border border-neutral-200/80 bg-white">
+					<div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+						<div className="relative min-w-0 flex-1 sm:max-w-sm">
+							<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
 							<Input
 								value={searchQuery}
 								onChange={(event) =>
@@ -651,136 +712,290 @@ export default function AdminWorkflowTemplatesPage() {
 										else next.delete("search");
 									})
 								}
-								placeholder="Search templates"
-								className="h-10 rounded-md border-gray-200 bg-white pl-9 text-sm"
+								placeholder="Search templates…"
+								className="h-9 rounded-lg border-neutral-200 bg-neutral-50/50 pl-9 text-sm focus:bg-white"
 							/>
 						</div>
+						<div className="flex flex-wrap items-center gap-1">
+							{DOMAIN_FILTERS.map((filter) => {
+								const active = domainFilter === filter.value;
+								return (
+									<button
+										key={filter.value}
+										type="button"
+										onClick={() =>
+											updateSearchParams((next) => {
+												if (filter.value === "ALL") next.delete("domain");
+												else next.set("domain", filter.value);
+											})
+										}
+										className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors ${
+											active
+												? "bg-neutral-900 text-white"
+												: "text-neutral-600 hover:bg-neutral-100"
+										}`}>
+										{filter.label}
+									</button>
+								);
+							})}
+						</div>
 					</div>
 
-					<div className="max-h-[560px] overflow-y-auto">
-						{isLoading ? (
-							<div className="flex min-h-40 items-center justify-center text-sm text-gray-500">
-								<Loader2 className="mr-2 h-4 w-4 animate-spin text-orange-600" />
-								Loading templates
-							</div>
-						) : isError ? (
-							<div className="p-4 text-sm text-red-600">
-								{(error as any)?.message || "Failed to load workflow templates."}
-							</div>
-						) : visibleItems.length === 0 ? (
-							<div className="p-4 text-sm text-gray-500">No workflow templates found.</div>
-						) : (
-							<Accordion
-								type="multiple"
-								defaultValue={groupedVisibleItems.map((group) => group.key)}
-								className="divide-y divide-gray-100">
-								{groupedVisibleItems.map((group) => (
-									<AccordionItem key={group.key} value={group.key} className="border-b-0">
-										<AccordionTrigger className="px-3 py-2.5 hover:no-underline data-[state=open]:bg-neutral-50">
-											<div className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
-												<span className="truncate text-sm font-semibold text-gray-900">
-													{group.label}
-												</span>
-												<span className="text-xs font-medium tabular-nums text-gray-500">
-													{group.items.length}
-												</span>
-											</div>
-										</AccordionTrigger>
-										<AccordionContent className="pb-0">
-											<div className="divide-y divide-gray-100">
-												{group.items.map((item) => {
-													const states = parseStateDrafts(item.states);
-													const steps = parseStepDrafts(item.steps);
-													const isSelected = item.id === selectedWorkflow?.id && !isEditing;
-													return (
-														<button
-															key={item.id}
-															type="button"
-															onClick={() => setSelectedTemplate(item.id)}
-															className={`block w-full px-3 py-3 text-left transition-colors ${
-																isSelected
-																	? "bg-orange-50/70 ring-1 ring-inset ring-orange-200"
-																	: "bg-white hover:bg-gray-50"
-															}`}>
-															<div className="flex min-w-0 items-start justify-between gap-3">
-																<div className="min-w-0">
-																	<p className="truncate text-sm font-semibold leading-5 text-gray-900">
-																		{getWorkflowName(item)}
-																	</p>
-																	<p className="mt-0.5 truncate font-mono text-xs text-gray-500">
-																		{item.code || item.id}
-																	</p>
-																</div>
-																<Badge variant="warning" className="shrink-0 rounded-md px-2 py-0.5 text-[11px] text-white">
-																	{item.currentStateKey || "OPEN"}
-																</Badge>
-															</div>
-															<div className="mt-2 flex flex-wrap items-center gap-1.5">
-																{item.requestType ? (
-																	<Badge variant="outline" className="rounded-md px-2 py-0.5 text-[11px]">
-																		{formatRequestType(item.requestType)}
-																	</Badge>
-																) : null}
-																<span className="text-xs text-gray-500">
-																	{steps.length} steps / {states.length} states
-																</span>
-															</div>
-														</button>
-													);
-												})}
-											</div>
-										</AccordionContent>
-									</AccordionItem>
-								))}
-							</Accordion>
-						)}
-					</div>
-
-					<div className="flex items-center justify-between border-t border-gray-100 px-3 py-2">
-						<p className="text-xs text-gray-500">
-							{visibleItems.length}
-							{filteredItems.length > visibleItems.length ? ` of ${filteredItems.length}` : ""} template
-							{filteredItems.length === 1 ? "" : "s"}
-						</p>
-						<p className="text-xs text-gray-500">Showing up to {pageSize}</p>
-					</div>
-				</aside>
-
-				<main className="min-w-0">
-					{isEditing ? (
-						<EditorPane
-							mode={action as EditorMode}
-							draft={draft}
-							errors={errors}
-							stateOptions={stateOptions}
-							isSaving={isSaving}
-							onCancel={closeAction}
-							onSave={saveDraft}
-							onAddState={addState}
-							onAddStep={addStep}
-							onMoveStep={moveStep}
-							onChangeDraft={(nextDraft) => setDraft(nextDraft)}
-							onCodeEdited={() => {
-								codeManuallyEditedRef.current = true;
-							}}
-						/>
-					) : selectedWorkflow && !isLoadingDetail ? (
-						<DetailPane workflow={selectedWorkflow} onEdit={startEdit} onDelete={startDelete} />
+					{isLoading ? (
+						<div className="flex min-h-56 items-center justify-center text-sm text-neutral-500">
+							<Loader2 className="mr-2 h-4 w-4 animate-spin text-neutral-400" />
+							Loading templates
+						</div>
+					) : isError ? (
+						<div className="p-6 text-sm text-red-600">
+							{(error as any)?.message || "Failed to load workflow templates."}
+						</div>
+					) : visibleItems.length === 0 ? (
+						<div className="flex min-h-56 flex-col items-center justify-center gap-3 px-6 text-center">
+							<p className="text-sm font-medium text-neutral-900">No templates found</p>
+							<p className="max-w-sm text-sm text-neutral-500">
+								{searchQuery || domainFilter !== "ALL"
+									? "Try a different search or domain filter."
+									: "Create your first workflow template for requests, recruitment, or payroll."}
+							</p>
+							{!searchQuery && domainFilter === "ALL" ? (
+								<Button
+									type="button"
+									onClick={startCreate}
+									className="mt-1 h-9 rounded-lg bg-neutral-900 text-white hover:bg-neutral-800">
+									<Plus className="h-4 w-4" />
+									Add Template
+								</Button>
+							) : null}
+						</div>
 					) : (
-						<div className="flex min-h-[420px] items-center justify-center rounded-lg border border-gray-200 bg-white text-sm text-gray-500">
-							{isLoadingDetail ? (
-								<>
-									<Loader2 className="mr-2 h-4 w-4 animate-spin text-orange-600" />
-									Loading template
-								</>
-							) : (
-								"Select a workflow template."
-							)}
+						<div className="divide-y divide-neutral-100">
+							{groupedVisibleItems.map((group) => (
+								<div key={group.key}>
+									<div className="flex items-center justify-between bg-neutral-50/80 px-4 py-2">
+										<span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+											{group.label}
+										</span>
+										<span className="text-xs tabular-nums text-neutral-400">
+											{group.items.length}
+										</span>
+									</div>
+									<ul className="divide-y divide-neutral-50">
+										{group.items.map((item) => {
+											const states = parseStateDrafts(item.states);
+											const steps = parseStepDrafts(item.steps);
+											const isActive = item.id === selectedId && isDrawerOpen;
+											return (
+												<li key={item.id}>
+													<button
+														type="button"
+														onClick={() => setSelectedTemplate(item.id)}
+														className={`group flex w-full items-center gap-4 px-4 py-3.5 text-left transition-colors ${
+															isActive
+																? "bg-neutral-50"
+																: "bg-white hover:bg-neutral-50/70"
+														}`}>
+														<div className="min-w-0 flex-1">
+															<div className="flex flex-wrap items-center gap-2">
+																<p className="truncate text-sm font-medium text-neutral-900">
+																	{getWorkflowName(item)}
+																</p>
+																{item.requestType ? (
+																	<span className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600">
+																		{formatRequestType(item.requestType)}
+																	</span>
+																) : null}
+															</div>
+															<div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+																<span className="font-mono text-neutral-400">
+																	{item.code || item.id.slice(0, 12)}
+																</span>
+																<span>
+																	{steps.length} step{steps.length === 1 ? "" : "s"}
+																</span>
+																<span>
+																	{states.length} state{states.length === 1 ? "" : "s"}
+																</span>
+																{item.currentStateKey ? (
+																	<span className="text-neutral-400">
+																		· {item.currentStateKey}
+																	</span>
+																) : null}
+															</div>
+														</div>
+														<ChevronRight
+															className={`h-4 w-4 shrink-0 transition-colors ${
+																isActive
+																	? "text-neutral-700"
+																	: "text-neutral-300 group-hover:text-neutral-500"
+															}`}
+														/>
+													</button>
+												</li>
+											);
+										})}
+									</ul>
+								</div>
+							))}
 						</div>
 					)}
-				</main>
+
+					{visibleItems.length > 0 ? (
+						<div className="flex items-center justify-between border-t border-neutral-100 px-4 py-2.5">
+							<p className="text-xs text-neutral-400">
+								{visibleItems.length}
+								{filteredItems.length > visibleItems.length
+									? ` of ${filteredItems.length}`
+									: ""}{" "}
+								template{filteredItems.length === 1 ? "" : "s"}
+							</p>
+							{filteredItems.length > pageSize ? (
+								<p className="text-xs text-neutral-400">Showing first {pageSize}</p>
+							) : null}
+						</div>
+					) : null}
+				</section>
 			</div>
 
+			{/* Detail drawer */}
+			<Drawer
+				open={isDrawerOpen}
+				onOpenChange={(open) => {
+					if (!open) closeDrawer();
+				}}
+				direction="right">
+				<DrawerContent className="ml-auto flex h-full min-h-0 w-full min-w-0 flex-col border-l border-neutral-200 bg-white shadow-xl sm:!max-w-[min(92vw,36rem)]">
+					{isLoadingDetail && !selectedWorkflow ? (
+						<>
+							<DrawerHeader className="shrink-0 border-b border-neutral-100">
+								<DrawerTitle className="text-base font-semibold text-neutral-900">
+									Loading template
+								</DrawerTitle>
+								<DrawerDescription className="text-sm text-neutral-500">
+									Fetching workflow details…
+								</DrawerDescription>
+							</DrawerHeader>
+							<div className="flex flex-1 items-center justify-center text-sm text-neutral-500">
+								<Loader2 className="mr-2 h-4 w-4 animate-spin text-neutral-400" />
+								Loading
+							</div>
+						</>
+					) : selectedWorkflow ? (
+						<>
+							<DrawerHeader className="shrink-0 space-y-3 border-b border-neutral-100 pb-4">
+								<div className="flex items-start justify-between gap-3">
+									<div className="min-w-0 space-y-1">
+										<DrawerTitle className="text-base font-semibold leading-snug text-neutral-900">
+											{getWorkflowName(selectedWorkflow)}
+										</DrawerTitle>
+										<DrawerDescription className="font-mono text-xs text-neutral-400">
+											{selectedWorkflow.code || selectedWorkflow.id}
+										</DrawerDescription>
+									</div>
+									<DrawerClose asChild>
+										<button
+											type="button"
+											className="rounded-lg p-1.5 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700"
+											aria-label="Close">
+											<X className="h-4 w-4" />
+										</button>
+									</DrawerClose>
+								</div>
+								<div className="flex flex-wrap items-center gap-1.5">
+									<span className="rounded-md bg-neutral-100 px-2 py-0.5 text-[11px] font-medium text-neutral-700">
+										{formatDomainLabel(selectedWorkflow.domain)}
+									</span>
+									{selectedWorkflow.requestType ? (
+										<span className="rounded-md border border-neutral-200 px-2 py-0.5 text-[11px] font-medium text-neutral-600">
+											{formatRequestType(selectedWorkflow.requestType)}
+										</span>
+									) : null}
+									<span className="rounded-md bg-neutral-900 px-2 py-0.5 text-[11px] font-medium text-white">
+										{selectedWorkflow.currentStateKey || "OPEN"}
+									</span>
+								</div>
+								{selectedWorkflow.description ? (
+									<p className="text-sm leading-relaxed text-neutral-600">
+										{selectedWorkflow.description}
+									</p>
+								) : null}
+							</DrawerHeader>
+
+							<div className="min-h-0 flex-1 overflow-y-auto">
+								<DetailContent workflow={selectedWorkflow} />
+							</div>
+
+							<DrawerFooter className="shrink-0 flex-row gap-2 border-t border-neutral-100 bg-neutral-50/50 sm:justify-end">
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 flex-1 rounded-lg sm:flex-none"
+									onClick={startDelete}>
+									<Trash2 className="h-4 w-4" />
+									Delete
+								</Button>
+								<Button
+									type="button"
+									className="h-9 flex-1 rounded-lg bg-neutral-900 text-white hover:bg-neutral-800 sm:flex-none"
+									onClick={startEdit}>
+									<Edit className="h-4 w-4" />
+									Configure
+								</Button>
+							</DrawerFooter>
+						</>
+					) : (
+						<>
+							<DrawerHeader>
+								<DrawerTitle>Template not found</DrawerTitle>
+								<DrawerDescription>
+									This workflow template may have been removed.
+								</DrawerDescription>
+							</DrawerHeader>
+							<DrawerFooter>
+								<DrawerClose asChild>
+									<Button type="button" variant="outline" className="rounded-lg">
+										Close
+									</Button>
+								</DrawerClose>
+							</DrawerFooter>
+						</>
+					)}
+				</DrawerContent>
+			</Drawer>
+
+			{/* Create / Edit modal */}
+			<Modal
+				open={isEditing}
+				onOpenChange={(open) => {
+					if (!open) closeAction();
+				}}
+				title={action === "edit" ? "Edit Workflow Template" : "Create Workflow Template"}
+				description={
+					action === "edit"
+						? "Update states, steps, and transitions for this template."
+						: "Define domain, states, and approval steps for a new template."
+				}
+				className="max-w-5xl"
+				closeOnBackdropClick={false}>
+				<EditorPane
+					mode={(action as EditorMode) || "create"}
+					draft={draft}
+					errors={errors}
+					stateOptions={stateOptions}
+					isSaving={isSaving}
+					onCancel={closeAction}
+					onSave={saveDraft}
+					onAddState={addState}
+					onAddStep={addStep}
+					onMoveStep={moveStep}
+					onChangeDraft={(nextDraft) => setDraft(nextDraft)}
+					onCodeEdited={() => {
+						codeManuallyEditedRef.current = true;
+					}}
+				/>
+			</Modal>
+
+			{/* Delete modal */}
 			<Modal
 				open={action === "delete"}
 				onOpenChange={(open) => {
@@ -788,28 +1003,27 @@ export default function AdminWorkflowTemplatesPage() {
 				}}
 				title="Delete Workflow Template"
 				description="This soft-deletes the template from the workflow template list."
-				className="max-w-lg">
-				<div className="space-y-3">
-					<div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+				className="max-w-md">
+				<div className="space-y-4">
+					<div className="rounded-lg border border-red-100 bg-red-50/80 px-3 py-2.5 text-sm text-red-700">
 						Delete{" "}
-						<span className="font-semibold">
-							{getWorkflowName(selectedWorkflow)}
-						</span>
-						? Runtime workflow records are not edited from this page.
+						<span className="font-semibold">{getWorkflowName(selectedWorkflow)}</span>? Runtime
+						workflow records are not edited from this page.
 					</div>
 					<div className="flex justify-end gap-2">
-						<Button type="button" variant="outline" onClick={closeAction}>
+						<Button type="button" variant="outline" className="h-9 rounded-lg" onClick={closeAction}>
 							Cancel
 						</Button>
 						<Button
 							type="button"
 							variant="destructive"
+							className="h-9 rounded-lg"
 							onClick={confirmDelete}
 							disabled={deleteMutation.isPending}>
 							{deleteMutation.isPending ? (
 								<>
 									<Loader2 className="h-4 w-4 animate-spin" />
-									Deleting...
+									Deleting…
 								</>
 							) : (
 								"Delete Template"
@@ -822,204 +1036,110 @@ export default function AdminWorkflowTemplatesPage() {
 	);
 }
 
-function WorkflowCoveragePanel({
-	totalTemplates,
-	visibleTemplates,
-	coverage,
-}: {
-	totalTemplates: number;
-	visibleTemplates: number;
-	coverage: {
-		covered: Set<string>;
-		missing: WorkflowCoverageItem[];
-		requestCovered: number;
-		requestTotal: number;
-	};
-}) {
-	const missingPreview = coverage.missing.slice(0, 10);
-	const hiddenMissingCount = Math.max(coverage.missing.length - missingPreview.length, 0);
-
-	return (
-		<section className="rounded-lg border border-gray-200 bg-white p-3">
-			<div className="grid gap-2 md:grid-cols-4">
-				<CoverageMetric label="Templates" value={String(totalTemplates)} />
-				<CoverageMetric
-					label="Shown"
-					value={visibleTemplates === totalTemplates ? String(visibleTemplates) : `${visibleTemplates}/${totalTemplates}`}
-				/>
-				<CoverageMetric
-					label="Request Types"
-					value={`${coverage.requestCovered}/${coverage.requestTotal}`}
-					tone={coverage.requestCovered === coverage.requestTotal ? "default" : "warning"}
-				/>
-				<CoverageMetric
-					label="Coverage Gaps"
-					value={String(coverage.missing.length)}
-					tone={coverage.missing.length === 0 ? "default" : "warning"}
-				/>
-			</div>
-			{coverage.missing.length > 0 ? (
-				<div className="mt-3 flex flex-wrap gap-1.5 border-t border-gray-100 pt-3">
-					{missingPreview.map((item) => (
-						<Badge
-							key={item.key}
-							variant="outline"
-							className="rounded-md border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800">
-							{item.label}
-						</Badge>
-					))}
-					{hiddenMissingCount > 0 ? (
-						<Badge variant="outline" className="rounded-md px-2 py-0.5 text-[11px]">
-							+{hiddenMissingCount} more
-						</Badge>
-					) : null}
-				</div>
-			) : null}
-		</section>
-	);
-}
-
-function CoverageMetric({
-	label,
-	value,
-	tone = "default",
-}: {
-	label: string;
-	value: string;
-	tone?: "default" | "warning";
-}) {
-	return (
-		<div className="min-w-0 rounded-md border border-gray-100 bg-gray-50 px-3 py-2">
-			<p className="truncate text-xs font-medium text-gray-500">{label}</p>
-			<p className={tone === "warning" ? "mt-1 text-sm font-semibold text-amber-800" : "mt-1 text-sm font-semibold text-gray-900"}>
-				{value}
-			</p>
-		</div>
-	);
-}
-
-function DetailPane({
-	workflow,
-	onEdit,
-	onDelete,
-}: {
-	workflow: WorkflowInstance;
-	onEdit: () => void;
-	onDelete: () => void;
-}) {
+function DetailContent({ workflow }: { workflow: WorkflowInstance }) {
 	const states = normalizeStates(parseStateDrafts(workflow.states));
 	const steps = normalizeSteps(parseStepDrafts(workflow.steps));
 
 	return (
-		<div className="space-y-3">
-			<div className="rounded-lg border border-gray-200 bg-white p-3">
-				<div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-					<div className="min-w-0">
-						<div className="flex min-w-0 flex-wrap items-center gap-2">
-							<h2 className="min-w-0 break-words text-base font-semibold leading-6 text-gray-900">
-								{getWorkflowName(workflow)}
-							</h2>
-						</div>
-						<div className="mt-2 flex flex-wrap items-center gap-1.5">
-							<Badge className="rounded-md bg-slate-700 px-2 py-1 text-[11px] text-white hover:bg-slate-700">
-								{formatDomainLabel(workflow.domain)}
-							</Badge>
-							{workflow.requestType ? (
-								<Badge variant="outline" className="rounded-md px-2 py-1 text-[11px]">
-									{formatRequestType(workflow.requestType)}
-								</Badge>
-							) : null}
-							<Badge variant="warning" className="rounded-md px-2 py-1 text-[11px] text-white">
-								{workflow.currentStateKey || "OPEN"}
-							</Badge>
-						</div>
-					</div>
-					<div className="flex flex-wrap gap-2">
-						<Button type="button" variant="outline" className="h-9 rounded-md" onClick={onDelete}>
-							<Trash2 className="h-4 w-4" />
-							Delete
-						</Button>
-						<Button type="button" variant="outline" className="h-9 rounded-md" onClick={onEdit}>
-							<Edit className="h-4 w-4" />
-							Configure
-						</Button>
-					</div>
+		<div className="space-y-6 p-4">
+			<section>
+				<div className="mb-3 flex items-center justify-between">
+					<h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+						Step flow
+					</h3>
+					<span className="text-xs tabular-nums text-neutral-400">{steps.length}</span>
 				</div>
-			</div>
-
-			<div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
-				<section className="min-w-0 rounded-lg border border-gray-200 bg-white">
-					<div className="flex min-h-11 items-center justify-between border-b border-gray-100 px-4 py-2">
-						<h3 className="text-sm font-semibold text-gray-900">Step Flow</h3>
-						<span className="text-xs text-gray-500">{steps.length} configured</span>
-					</div>
-					<div className="divide-y divide-gray-100">
-						{steps.map((step) => (
-							<div key={`${step.step_number}-${step.step_name}`} className="p-3">
-								<div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-									<div className="min-w-0">
-										<p className="break-words text-sm font-semibold text-gray-900">
-											{step.step_number}. {step.step_name}
-										</p>
-										<div className="mt-1 flex flex-wrap items-center gap-1.5">
-											<Badge variant="secondary" className="rounded-md px-2 py-0.5 text-[11px] text-white">
+				{steps.length === 0 ? (
+					<p className="text-sm text-neutral-500">No steps configured.</p>
+				) : (
+					<ol className="space-y-0">
+						{steps.map((step, index) => {
+							const transitions = getStepTransitions(step);
+							return (
+								<li key={`${step.step_number}-${step.step_name}`} className="relative flex gap-3">
+									<div className="flex flex-col items-center">
+										<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-neutral-200 bg-white text-xs font-semibold tabular-nums text-neutral-700">
+											{step.step_number}
+										</div>
+										{index < steps.length - 1 ? (
+											<div className="w-px flex-1 bg-neutral-200" />
+										) : null}
+									</div>
+									<div className={`min-w-0 flex-1 ${index < steps.length - 1 ? "pb-5" : ""}`}>
+										<p className="text-sm font-medium text-neutral-900">{step.step_name}</p>
+										<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+											<span className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600">
 												{step.step_type}
-											</Badge>
-											<Badge variant="secondary" className="rounded-md px-2 py-0.5 text-[11px] text-white">
+											</span>
+											<span className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600">
 												{step.assignee_type}
-											</Badge>
-											<Badge
-												variant={step.is_required === false ? "outline" : "warning"}
-												className={`rounded-md px-2 py-0.5 text-[11px] ${
-													step.is_required === false ? "" : "text-white"
+											</span>
+											<span
+												className={`rounded-md px-1.5 py-0.5 text-[11px] font-medium ${
+													step.is_required === false
+														? "bg-neutral-50 text-neutral-500"
+														: "bg-neutral-900 text-white"
 												}`}>
 												{step.is_required === false ? "Optional" : "Required"}
-											</Badge>
+											</span>
 										</div>
+										{transitions.length > 0 ? (
+											<div className="mt-2 flex flex-wrap gap-1.5">
+												{transitions.map(([label, value]) => (
+													<span
+														key={`${step.step_number}-${label}-${value}`}
+														className="inline-flex items-center gap-1 rounded-md border border-neutral-200 bg-neutral-50/80 px-1.5 py-0.5 text-[11px] text-neutral-600">
+														<span className="text-neutral-400">{label}</span>
+														<ArrowRight className="h-2.5 w-2.5 text-neutral-300" />
+														<span className="font-mono text-neutral-800">{value}</span>
+													</span>
+												))}
+											</div>
+										) : null}
 									</div>
-								</div>
-								<div className="mt-2 flex flex-wrap gap-1.5">
-									{getStepTransitions(step).map(([label, value]) => (
-										<span
-											key={`${step.step_number}-${label}-${value}`}
-											className="inline-flex max-w-full items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-medium text-gray-700">
-											<span className="text-gray-500">{label}</span>
-											<span className="max-w-[180px] truncate font-mono text-gray-900">{value}</span>
-										</span>
-									))}
-								</div>
-							</div>
-						))}
-					</div>
-				</section>
+								</li>
+							);
+						})}
+					</ol>
+				)}
+			</section>
 
-				<section className="min-w-0 rounded-lg border border-gray-200 bg-white">
-					<div className="flex min-h-11 items-center justify-between border-b border-gray-100 px-4 py-2">
-						<h3 className="text-sm font-semibold text-gray-900">State Catalog</h3>
-						<span className="text-xs text-gray-500">{states.length} states</span>
-					</div>
-					<div className="divide-y divide-gray-100">
+			<section>
+				<div className="mb-3 flex items-center justify-between">
+					<h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+						States
+					</h3>
+					<span className="text-xs tabular-nums text-neutral-400">{states.length}</span>
+				</div>
+				{states.length === 0 ? (
+					<p className="text-sm text-neutral-500">No states configured.</p>
+				) : (
+					<ul className="divide-y divide-neutral-100 overflow-hidden rounded-lg border border-neutral-200">
 						{states.map((state) => (
-							<div key={`${state.order}-${state.key}`} className="flex items-start justify-between gap-3 px-3 py-2">
+							<li
+								key={`${state.order}-${state.key}`}
+								className="flex items-center justify-between gap-3 px-3 py-2.5">
 								<div className="min-w-0">
-									<p className="truncate font-mono text-xs font-semibold text-gray-900">{state.key}</p>
-									<p className="truncate text-xs text-gray-500">{state.label}</p>
+									<p className="truncate font-mono text-xs font-semibold text-neutral-900">
+										{state.key}
+									</p>
+									<p className="truncate text-xs text-neutral-500">{state.label}</p>
 								</div>
 								<div className="flex shrink-0 items-center gap-1.5">
-									<Badge variant="outline" className="rounded-md px-2 py-0.5 text-[11px]">
+									<span className="text-[11px] tabular-nums text-neutral-400">
 										#{state.order + 1}
-									</Badge>
+									</span>
 									{state.isTerminal ? (
-										<Badge variant="warning" className="rounded-md px-2 py-0.5 text-[11px] text-white">
+										<span className="rounded-md bg-neutral-900 px-1.5 py-0.5 text-[10px] font-medium text-white">
 											Terminal
-										</Badge>
+										</span>
 									) : null}
 								</div>
-							</div>
+							</li>
 						))}
-					</div>
-				</section>
-			</div>
+					</ul>
+				)}
+			</section>
 		</div>
 	);
 }
@@ -1066,23 +1186,8 @@ function EditorPane({
 	};
 
 	return (
-		<div className="space-y-3">
-			<section className="rounded-lg border border-gray-200 bg-white p-3">
-				<div className="mb-3 flex flex-col gap-3 border-b border-gray-100 pb-3 lg:flex-row lg:items-center lg:justify-between">
-					<h2 className="text-base font-semibold text-gray-900">
-						{mode === "edit" ? "Edit Workflow Template" : "Create Workflow Template"}
-					</h2>
-					<div className="flex flex-wrap gap-2">
-						<Button type="button" variant="outline" className="h-9 rounded-md" onClick={onCancel}>
-							<X className="h-4 w-4" />
-							Cancel
-						</Button>
-						<Button type="button" className="h-9 rounded-md bg-orange-600 text-white hover:bg-orange-700" disabled={isSaving} onClick={onSave}>
-							{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-							{isSaving ? "Saving..." : "Save Template"}
-						</Button>
-					</div>
-				</div>
+		<div className="space-y-5">
+			<section className="space-y-3">
 				<div className="grid gap-3 md:grid-cols-2">
 					<Field label="Domain" error={errors.domain}>
 						<Select
@@ -1109,13 +1214,11 @@ function EditorPane({
 								error={Boolean(errors.requestType)}
 							/>
 							<ConstraintTokenRow
-								tokens={[
-									{ label: "Required", tone: draft.requestType ? "default" : "invalid" },
-								]}
+								tokens={[{ label: "Required", tone: draft.requestType ? "default" : "invalid" }]}
 							/>
 						</Field>
 					) : (
-						<div className="flex h-10 items-center rounded-md border border-gray-200 bg-gray-50 px-3 text-sm text-gray-500">
+						<div className="flex h-10 items-center rounded-lg border border-neutral-200 bg-neutral-50 px-3 text-sm text-neutral-500">
 							Request type not used
 						</div>
 					)}
@@ -1125,7 +1228,7 @@ function EditorPane({
 							value={draft.name}
 							onChange={(event) => onChangeDraft({ ...draft, name: event.target.value })}
 							placeholder="Leave request workflow"
-							className="h-10 rounded-md border-gray-200 bg-white text-sm"
+							className="h-10 rounded-lg border-neutral-200 bg-white text-sm"
 						/>
 						<ConstraintTokenRow tokens={[{ label: "Optional", tone: "subtle" }]} />
 					</Field>
@@ -1138,7 +1241,7 @@ function EditorPane({
 								onChangeDraft({ ...draft, code: event.target.value.toUpperCase() });
 							}}
 							placeholder="WF-LEAVE-DEFAULT"
-							className="h-10 rounded-md border-gray-200 bg-white font-mono text-sm"
+							className="h-10 rounded-lg border-neutral-200 bg-white font-mono text-sm"
 						/>
 						<ConstraintTokenRow tokens={[{ label: "Auto", tone: draft.code ? "default" : "subtle" }]} />
 					</Field>
@@ -1152,9 +1255,7 @@ function EditorPane({
 							error={Boolean(errors.currentStateKey)}
 						/>
 						<ConstraintTokenRow
-							tokens={[
-								{ label: "Match state", tone: errors.currentStateKey ? "invalid" : "default" },
-							]}
+							tokens={[{ label: "Match state", tone: errors.currentStateKey ? "invalid" : "default" }]}
 						/>
 					</Field>
 
@@ -1163,36 +1264,42 @@ function EditorPane({
 							value={draft.description}
 							onChange={(event) => onChangeDraft({ ...draft, description: event.target.value })}
 							placeholder="Admin-facing workflow summary"
-							className="h-10 rounded-md border-gray-200 bg-white text-sm"
+							className="h-10 rounded-lg border-neutral-200 bg-white text-sm"
 						/>
 					</Field>
 				</div>
 			</section>
 
-			<div className="grid gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-				<section className="rounded-lg border border-gray-200 bg-white">
-					<div className="flex min-h-11 items-center justify-between border-b border-gray-100 px-4 py-2">
-						<h3 className="text-sm font-semibold text-gray-900">States</h3>
-						<Button type="button" variant="outline" size="sm" className="h-8 rounded-md" onClick={onAddState}>
-							<Plus className="h-4 w-4" />
-							Add State
+			<div className="grid gap-4 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+				<section className="overflow-hidden rounded-xl border border-neutral-200">
+					<div className="flex min-h-11 items-center justify-between border-b border-neutral-100 px-3 py-2">
+						<h3 className="text-sm font-medium text-neutral-900">States</h3>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-8 rounded-lg"
+							onClick={onAddState}>
+							<Plus className="h-3.5 w-3.5" />
+							Add
 						</Button>
 					</div>
 					{errors.states ? <ErrorText>{errors.states}</ErrorText> : null}
 					<Accordion
 						type="multiple"
 						defaultValue={draft.states.slice(0, 3).map((state) => state.id)}
-						className="divide-y divide-gray-100">
+						className="divide-y divide-neutral-100">
 						{draft.states.map((state, index) => (
 							<AccordionItem key={state.id} value={state.id} className="border-b-0">
-								<AccordionTrigger className="px-3 py-2.5 hover:no-underline data-[state=open]:bg-neutral-50">
+								<AccordionTrigger className="px-3 py-2.5 hover:no-underline data-[state=open]:bg-neutral-50/80">
 									<div className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
 										<div className="min-w-0">
-											<p className="truncate font-mono text-xs font-semibold text-gray-900">
+											<p className="truncate font-mono text-xs font-semibold text-neutral-900">
 												{state.key || `STATE_${index + 1}`}
 											</p>
-											<p className="truncate text-xs text-gray-500">
-												State {index + 1} / {state.isTerminal ? "Terminal" : "Non-terminal"}
+											<p className="truncate text-xs text-neutral-500">
+												State {index + 1}
+												{state.isTerminal ? " · Terminal" : ""}
 											</p>
 										</div>
 									</div>
@@ -1200,38 +1307,36 @@ function EditorPane({
 								<AccordionContent className="px-3 pb-3">
 									<div className="space-y-2">
 										<div className="flex items-center justify-between gap-2">
-											<span className="text-xs font-semibold text-gray-500">State {index + 1}</span>
-											<div className="flex gap-1">
-												<IconButton
-													label="Remove state"
-													disabled={draft.states.length <= 1}
-													onClick={() =>
-														onChangeDraft({
-															...draft,
-															states: normalizeStates(draft.states.filter((item) => item.id !== state.id)),
-														})
-													}>
-													<Trash2 className="h-4 w-4" />
-												</IconButton>
-											</div>
+											<span className="text-xs font-medium text-neutral-500">State {index + 1}</span>
+											<IconButton
+												label="Remove state"
+												disabled={draft.states.length <= 1}
+												onClick={() =>
+													onChangeDraft({
+														...draft,
+														states: normalizeStates(draft.states.filter((item) => item.id !== state.id)),
+													})
+												}>
+												<Trash2 className="h-4 w-4" />
+											</IconButton>
 										</div>
 										<Input
 											value={state.key}
 											onChange={(event) => updateState(state.id, { key: event.target.value })}
-											className="h-9 rounded-md border-gray-200 bg-white font-mono text-sm"
+											className="h-9 rounded-lg border-neutral-200 bg-white font-mono text-sm"
 										/>
 										<Input
 											value={state.label}
 											onChange={(event) => updateState(state.id, { label: event.target.value })}
-											className="h-9 rounded-md border-gray-200 bg-white text-sm"
+											className="h-9 rounded-lg border-neutral-200 bg-white text-sm"
 										/>
 										<button
 											type="button"
 											onClick={() => updateState(state.id, { isTerminal: !state.isTerminal })}
-											className={`h-8 rounded-md border px-2 text-xs font-medium ${
+											className={`h-8 rounded-lg border px-2 text-xs font-medium transition-colors ${
 												state.isTerminal
-													? "border-orange-200 bg-orange-50 text-orange-700"
-													: "border-gray-200 bg-white text-gray-600"
+													? "border-neutral-900 bg-neutral-900 text-white"
+													: "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
 											}`}>
 											{state.isTerminal ? "Terminal state" : "Non-terminal"}
 										</button>
@@ -1242,12 +1347,17 @@ function EditorPane({
 					</Accordion>
 				</section>
 
-				<section className="rounded-lg border border-gray-200 bg-white">
-					<div className="flex min-h-11 items-center justify-between border-b border-gray-100 px-4 py-2">
-						<h3 className="text-sm font-semibold text-gray-900">Steps</h3>
-						<Button type="button" variant="outline" size="sm" className="h-8 rounded-md" onClick={onAddStep}>
-							<Plus className="h-4 w-4" />
-							Add Step
+				<section className="overflow-hidden rounded-xl border border-neutral-200">
+					<div className="flex min-h-11 items-center justify-between border-b border-neutral-100 px-3 py-2">
+						<h3 className="text-sm font-medium text-neutral-900">Steps</h3>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-8 rounded-lg"
+							onClick={onAddStep}>
+							<Plus className="h-3.5 w-3.5" />
+							Add
 						</Button>
 					</div>
 					{errors.steps ? <ErrorText>{errors.steps}</ErrorText> : null}
@@ -1255,24 +1365,24 @@ function EditorPane({
 					<Accordion
 						type="multiple"
 						defaultValue={draft.steps.slice(0, 2).map((step) => step.id)}
-						className="divide-y divide-gray-100">
+						className="divide-y divide-neutral-100">
 						{draft.steps.map((step, index) => (
 							<AccordionItem key={step.id} value={step.id} className="border-b-0">
-								<AccordionTrigger className="px-3 py-2.5 hover:no-underline data-[state=open]:bg-neutral-50">
+								<AccordionTrigger className="px-3 py-2.5 hover:no-underline data-[state=open]:bg-neutral-50/80">
 									<div className="flex min-w-0 flex-1 flex-col gap-1 text-left sm:flex-row sm:items-center sm:justify-between">
 										<div className="min-w-0">
-											<p className="truncate text-sm font-semibold text-gray-900">
+											<p className="truncate text-sm font-medium text-neutral-900">
 												{index + 1}. {step.step_name || `Step ${index + 1}`}
 											</p>
-											<p className="truncate text-xs text-gray-500">
+											<p className="truncate text-xs text-neutral-500">
 												{step.step_type} / {step.assignee_type}
 											</p>
 										</div>
 										<span
-											className={`w-fit rounded-md border px-2 py-0.5 text-[11px] font-medium ${
+											className={`w-fit rounded-md px-2 py-0.5 text-[11px] font-medium ${
 												step.is_required !== false
-													? "border-orange-200 bg-orange-50 text-orange-700"
-													: "border-gray-200 bg-white text-gray-600"
+													? "bg-neutral-900 text-white"
+													: "bg-neutral-100 text-neutral-600"
 											}`}>
 											{step.is_required !== false ? "Required" : "Optional"}
 										</span>
@@ -1281,12 +1391,18 @@ function EditorPane({
 								<AccordionContent className="px-3 pb-3">
 									<div className="space-y-3">
 										<div className="flex items-center justify-between gap-2">
-											<span className="text-xs font-semibold text-gray-500">Step {index + 1}</span>
+											<span className="text-xs font-medium text-neutral-500">Step {index + 1}</span>
 											<div className="flex gap-1">
-												<IconButton label="Move up" disabled={index === 0} onClick={() => onMoveStep(index, -1)}>
+												<IconButton
+													label="Move up"
+													disabled={index === 0}
+													onClick={() => onMoveStep(index, -1)}>
 													<ArrowUp className="h-4 w-4" />
 												</IconButton>
-												<IconButton label="Move down" disabled={index === draft.steps.length - 1} onClick={() => onMoveStep(index, 1)}>
+												<IconButton
+													label="Move down"
+													disabled={index === draft.steps.length - 1}
+													onClick={() => onMoveStep(index, 1)}>
 													<ArrowDown className="h-4 w-4" />
 												</IconButton>
 												<IconButton
@@ -1308,21 +1424,27 @@ function EditorPane({
 												<Input
 													value={step.step_name}
 													onChange={(event) => updateStep(step.id, { step_name: event.target.value })}
-													className="h-9 rounded-md border-gray-200 bg-white text-sm"
+													className="h-9 rounded-lg border-neutral-200 bg-white text-sm"
 												/>
 											</Field>
 											<div className="grid gap-3 sm:grid-cols-2">
 												<Field label="Step Type">
 													<Select
 														value={step.step_type}
-														onChange={(value) => updateStep(step.id, { step_type: value as WorkflowStepType })}
+														onChange={(value) =>
+															updateStep(step.id, { step_type: value as WorkflowStepType })
+														}
 														options={STEP_TYPE_OPTIONS}
 													/>
 												</Field>
 												<Field label="Assignee">
 													<Select
 														value={step.assignee_type}
-														onChange={(value) => updateStep(step.id, { assignee_type: value as WorkflowAssigneeType })}
+														onChange={(value) =>
+															updateStep(step.id, {
+																assignee_type: value as WorkflowAssigneeType,
+															})
+														}
 														options={ASSIGNEE_TYPE_OPTIONS}
 													/>
 												</Field>
@@ -1332,26 +1454,30 @@ function EditorPane({
 										<button
 											type="button"
 											onClick={() => updateStep(step.id, { is_required: step.is_required === false })}
-											className={`h-8 rounded-md border px-2 text-xs font-medium ${
+											className={`h-8 rounded-lg border px-2 text-xs font-medium transition-colors ${
 												step.is_required !== false
-													? "border-orange-200 bg-orange-50 text-orange-700"
-													: "border-gray-200 bg-white text-gray-600"
+													? "border-neutral-900 bg-neutral-900 text-white"
+													: "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
 											}`}>
 											{step.is_required !== false ? "Required step" : "Optional step"}
 										</button>
 
 										<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-											{[
-												["On Enter", "state_on_enter"],
-												["On Approve", "state_on_approve"],
-												["On Reject", "state_on_reject"],
-												["On Complete", "state_on_complete"],
-												["On Skip", "state_on_skip"],
-											].map(([label, key]) => (
+											{(
+												[
+													["On Enter", "state_on_enter"],
+													["On Approve", "state_on_approve"],
+													["On Reject", "state_on_reject"],
+													["On Complete", "state_on_complete"],
+													["On Skip", "state_on_skip"],
+												] as const
+											).map(([label, key]) => (
 												<Field key={`${step.id}-${key}`} label={label}>
 													<Select
 														value={String((step as any)[key] || "")}
-														onChange={(value) => updateStep(step.id, { [key]: value } as Partial<WorkflowStepDraft>)}
+														onChange={(value) =>
+															updateStep(step.id, { [key]: value } as Partial<WorkflowStepDraft>)
+														}
 														options={[{ value: "", label: "None" }, ...stateOptions]}
 														placeholder="None"
 													/>
@@ -1364,6 +1490,20 @@ function EditorPane({
 						))}
 					</Accordion>
 				</section>
+			</div>
+
+			<div className="flex flex-wrap items-center justify-end gap-2 border-t border-neutral-100 pt-4">
+				<Button type="button" variant="outline" className="h-9 rounded-lg" onClick={onCancel}>
+					Cancel
+				</Button>
+				<Button
+					type="button"
+					className="h-9 rounded-lg bg-neutral-900 text-white hover:bg-neutral-800"
+					disabled={isSaving}
+					onClick={onSave}>
+					{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+					{isSaving ? "Saving…" : mode === "edit" ? "Save Changes" : "Create Template"}
+				</Button>
 			</div>
 		</div>
 	);
@@ -1380,7 +1520,7 @@ function Field({
 }) {
 	return (
 		<div className="min-w-0 space-y-1.5">
-			<label className="text-xs font-medium text-gray-600">{label}</label>
+			<label className="text-xs font-medium text-neutral-600">{label}</label>
 			{children}
 			{error ? <p className="text-xs text-red-600">{error}</p> : null}
 		</div>
@@ -1403,7 +1543,7 @@ function IconButton({
 			type="button"
 			variant="outline"
 			size="sm"
-			className="h-8 w-8 rounded-md p-0"
+			className="h-8 w-8 rounded-lg p-0"
 			disabled={disabled}
 			onClick={onClick}
 			aria-label={label}
@@ -1414,5 +1554,7 @@ function IconButton({
 }
 
 function ErrorText({ children }: { children: React.ReactNode }) {
-	return <div className="border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{children}</div>;
+	return (
+		<div className="border-b border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">{children}</div>
+	);
 }

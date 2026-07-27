@@ -16,23 +16,12 @@ export interface AuthRequest extends Request {
 	role?: string;
 	roleId?: string;
 	userId?: string;
-	userName?: string;
 	firstName?: string;
 	lastName?: string;
 	organizationId?: string;
 	metadata?: {
-		userId?: string;
-		userName?: string;
-		firstName?: string;
-		lastName?: string;
-		employeeId?: string;
 		employee?: {
 			id: string;
-			employeeId?: string;
-			personalInfo?: {
-				firstName?: string;
-				lastName?: string;
-			};
 		};
 	};
 }
@@ -45,18 +34,8 @@ interface JwtPayload {
 	firstName?: string;
 	lastName?: string;
 	metadata?: {
-		userId?: string;
-		userName?: string;
-		firstName?: string;
-		lastName?: string;
-		employeeId?: string;
 		employee?: {
 			id: string;
-			employeeId?: string;
-			personalInfo?: {
-				firstName?: string;
-				lastName?: string;
-			};
 		};
 	};
 	iat: number;
@@ -65,9 +44,6 @@ interface JwtPayload {
 
 type VerifyTokenDependencies = {
 	prisma: {
-		user?: {
-			findUnique: typeof prisma.user.findUnique;
-		};
 		employee: {
 			findFirst: typeof prisma.employee.findFirst;
 		};
@@ -79,7 +55,6 @@ export type AuthFailureKind =
 	| "JWT_SECRET_MISSING"
 	| "INVALID_TOKEN"
 	| "DATASOURCE_CONFIG"
-	| "DATABASE_UNAVAILABLE"
 	| "EMPLOYEE_LOOKUP_FAILED"
 	| "ACCOUNT_DEACTIVATED";
 
@@ -117,7 +92,6 @@ const clearAuthContext = (req: AuthRequest) => {
 	delete req.role;
 	delete req.roleId;
 	delete req.userId;
-	delete req.userName;
 	delete req.firstName;
 	delete req.lastName;
 	delete req.organizationId;
@@ -131,68 +105,13 @@ const attachAuthContext = (req: AuthRequest, decoded: JwtPayload) => {
 	req.firstName = decoded.firstName;
 	req.lastName = decoded.lastName;
 	req.organizationId = decoded.organizationId;
-	req.metadata = {
-		...(decoded.metadata || {}),
-		userId: decoded.metadata?.userId || decoded.userId,
-		firstName: decoded.metadata?.firstName || decoded.firstName,
-		lastName: decoded.metadata?.lastName || decoded.lastName,
-	};
-};
-
-const asRecord = (value: unknown): Record<string, unknown> =>
-	value && typeof value === "object" && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
-
-const jsonStringField = (value: unknown, key: string): string | undefined => {
-	const raw = asRecord(value)[key];
-	return typeof raw === "string" && raw.trim() ? raw.trim() : undefined;
-};
-
-const nestedRecord = (value: unknown, key: string): Record<string, unknown> => {
-	const raw = asRecord(value)[key];
-	return asRecord(raw);
+	req.metadata = decoded.metadata;
 };
 
 const isJwtVerificationError = (error: unknown) =>
 	error instanceof TokenExpiredError ||
 	error instanceof JsonWebTokenError ||
 	error instanceof NotBeforeError;
-
-/** Prisma/network failures that look like "auth down" but are really DB tunnel/runtime. */
-const isDatabaseConnectivityError = (error: unknown): boolean => {
-	const record = error && typeof error === "object" ? (error as Record<string, unknown>) : {};
-	const code = String(record.code || "").trim().toUpperCase();
-	if (
-		code === "P1001" ||
-		code === "P1002" ||
-		code === "P1017" ||
-		code === "P2024" ||
-		code === "ECONNREFUSED" ||
-		code === "ETIMEDOUT" ||
-		code === "ENOTFOUND" ||
-		code === "ECONNRESET"
-	) {
-		return true;
-	}
-	const message = String(
-		(error instanceof Error ? error.message : "") || record.message || error || "",
-	).toLowerCase();
-	return (
-		message.includes("can't reach database") ||
-		message.includes("cannot reach database") ||
-		message.includes("connection refused") ||
-		message.includes("connection timed out") ||
-		message.includes("server has closed the connection") ||
-		message.includes("database system is starting up") ||
-		message.includes("too many connections") ||
-		message.includes("econnrefused") ||
-		message.includes("etimedout")
-	);
-};
-
-const DATABASE_UNAVAILABLE_MESSAGE =
-	"Database is temporarily unreachable (local Postgres tunnel or DB host). Restore DB access (port 55435 / predev) and retry — your session is not necessarily invalid.";
 
 const normalizeAuthError = (error: unknown): AuthMiddlewareError => {
 	if (error instanceof AuthMiddlewareError) {
@@ -211,22 +130,12 @@ const normalizeAuthError = (error: unknown): AuthMiddlewareError => {
 
 	if (error instanceof PrismaDatasourceConfigError) {
 		return new AuthMiddlewareError(
-			DATABASE_UNAVAILABLE_MESSAGE,
+			"Authentication is temporarily unavailable",
 			"DATASOURCE_CONFIG",
-			503,
+			500,
 			"auth.datasource.invalid",
 			error,
 			error.details,
-		);
-	}
-
-	if (isDatabaseConnectivityError(error)) {
-		return new AuthMiddlewareError(
-			DATABASE_UNAVAILABLE_MESSAGE,
-			"DATABASE_UNAVAILABLE",
-			503,
-			"auth.database.unavailable",
-			error,
 		);
 	}
 
@@ -320,42 +229,14 @@ const authenticateRequest = async (req: AuthRequest) => {
 	});
 
 	try {
-		const localUser = await verifyTokenDependencies.prisma.user?.findUnique({
-			where: { id: decoded.userId },
-			select: {
-				id: true,
-				userName: true,
-				email: true,
-				metadata: true,
-			},
-		});
-		const metadataEmployee = nestedRecord(localUser?.metadata, "employee");
-		const metadataPersonalInfo = nestedRecord(metadataEmployee, "personalInfo");
-		const metadataFirstName = jsonStringField(metadataPersonalInfo, "firstName");
-		const metadataLastName = jsonStringField(metadataPersonalInfo, "lastName");
-		req.userName = localUser?.userName || localUser?.email || req.userName;
-		req.metadata = {
-			...(req.metadata || {}),
-			userName: req.userName,
-			firstName: req.firstName || metadataFirstName,
-			lastName: req.lastName || metadataLastName,
-		};
-
-		const employeeIdFromToken =
-			decoded.metadata?.employee?.id || jsonStringField(metadataEmployee, "id");
+		const employeeIdFromToken = decoded.metadata?.employee?.id;
 		const employee = await verifyTokenDependencies.prisma.employee.findFirst({
 			where: employeeIdFromToken
 				? { id: employeeIdFromToken, isDeleted: false }
 				: { userId: decoded.userId, isDeleted: false },
 			select: {
 				id: true,
-				employeeId: true,
 				employmentStatus: true,
-				person: {
-					select: {
-						personalInfo: true,
-					},
-				},
 			},
 		});
 
@@ -373,34 +254,6 @@ const authenticateRequest = async (req: AuthRequest) => {
 					employmentStatus: actionBlock.status,
 				},
 			);
-		}
-
-		if (employee?.id) {
-			const firstName =
-				jsonStringField(employee.person?.personalInfo, "firstName") ||
-				metadataFirstName ||
-				req.firstName;
-			const lastName =
-				jsonStringField(employee.person?.personalInfo, "lastName") ||
-				metadataLastName ||
-				req.lastName;
-			req.firstName = firstName;
-			req.lastName = lastName;
-			req.metadata = {
-				...(req.metadata || {}),
-				firstName,
-				lastName,
-				employeeId: employee.id,
-				employee: {
-					...(req.metadata?.employee || {}),
-					id: employee.id,
-					employeeId: employee.employeeId || undefined,
-					personalInfo: {
-						firstName,
-						lastName,
-					},
-				},
-			};
 		}
 	} catch (error) {
 		if (error instanceof AuthMiddlewareError) {
@@ -446,10 +299,6 @@ export const __setVerifyTokenDependenciesForTests = (
 	verifyTokenDependencies = {
 		...verifyTokenDependencies,
 		...dependencies,
-		prisma: {
-			...verifyTokenDependencies.prisma,
-			...(dependencies.prisma || {}),
-		},
 	};
 };
 

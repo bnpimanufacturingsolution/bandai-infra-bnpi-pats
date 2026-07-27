@@ -12,10 +12,21 @@ import {
 	CategoricalText,
 	formatCategoricalTextLabel,
 } from "~/components/atoms/CategoricalText";
-import { ConstraintTokenRow } from "~/components/molecules/ConstraintTokens";
 import { ConfigurationEmptyGuide } from "~/components/molecules/ConfigurationEmptyGuide";
 import { GenericImportModal } from "~/components/organisms/shared/GenericImportModal";
-import { Eye, Edit, Trash2, MoreVertical, Loader2, Check, X, Coins } from "lucide-react";
+import {
+	Eye,
+	Edit,
+	Trash2,
+	MoreVertical,
+	Loader2,
+	Check,
+	X,
+	Coins,
+	FileText,
+	SlidersHorizontal,
+	ToggleLeft,
+} from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useSearchParams } from "react-router-dom";
 import { toast as sonnerToast } from "sonner";
@@ -38,6 +49,12 @@ import {
 } from "~/lib/hooks/useBenefitTypes";
 import { useAdminFormErrorNavigation } from "~/lib/ui/admin-configuration-form";
 import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "~/components/ui/accordion";
+import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -52,6 +69,7 @@ import {
 	AdminConfigMutedDash,
 	AdminConfigPolicyChip,
 	AdminConfigPrimaryCell,
+	AdminConfigRelationText,
 	AdminConfigStatusBadge,
 } from "~/lib/ui/admin-configuration-table";
 
@@ -179,6 +197,23 @@ const sanitizeBenefitTypeFormData = (data: BenefitTypeFormData): BenefitTypeForm
 		minServiceMonths: policy.showMinServiceMonths
 			? toOptionalNumber(data.minServiceMonths)
 			: undefined,
+		defaultEligibilityMode: data.defaultEligibilityMode || null,
+		defaultEligibilityDisqualifyOnAbsent:
+			data.defaultEligibilityMode === "ATTENDANCE_QUALIFIED"
+				? data.defaultEligibilityDisqualifyOnAbsent !== false
+				: null,
+		defaultEligibilityDisqualifyOnLate:
+			data.defaultEligibilityMode === "ATTENDANCE_QUALIFIED"
+				? data.defaultEligibilityDisqualifyOnLate === true
+				: null,
+		defaultEligibilityDisqualifyOnUndertime:
+			data.defaultEligibilityMode === "ATTENDANCE_QUALIFIED"
+				? data.defaultEligibilityDisqualifyOnUndertime === true
+				: null,
+		defaultEligibilityDisqualifyOnLeave:
+			data.defaultEligibilityMode === "ATTENDANCE_QUALIFIED"
+				? data.defaultEligibilityDisqualifyOnLeave === true
+				: null,
 	};
 };
 const IMPORT_FIELDS = {
@@ -277,6 +312,11 @@ export function BenefitTypesTemplate({
 			coverage: undefined,
 			minAmount: undefined,
 			maxAmount: undefined,
+			defaultEligibilityMode: null,
+			defaultEligibilityDisqualifyOnAbsent: true,
+			defaultEligibilityDisqualifyOnLate: false,
+			defaultEligibilityDisqualifyOnUndertime: false,
+			defaultEligibilityDisqualifyOnLeave: false,
 		},
 	});
 
@@ -304,29 +344,26 @@ export function BenefitTypesTemplate({
 				coverage: activeItem.coverage,
 				minAmount: activeItem.minAmount,
 				maxAmount: activeItem.maxAmount,
+				defaultEligibilityMode: activeItem.defaultEligibilityMode || null,
+				defaultEligibilityDisqualifyOnAbsent:
+					activeItem.defaultEligibilityDisqualifyOnAbsent !== false,
+				defaultEligibilityDisqualifyOnLate:
+					activeItem.defaultEligibilityDisqualifyOnLate === true,
+				defaultEligibilityDisqualifyOnUndertime:
+					activeItem.defaultEligibilityDisqualifyOnUndertime === true,
+				defaultEligibilityDisqualifyOnLeave:
+					activeItem.defaultEligibilityDisqualifyOnLeave === true,
 			});
 		}
 	}, [action, isLoadingItem, activeItem, reset]);
 
 	const watchedCategory = watch("category");
-	const watchedCode = watch("code") || "";
-	const watchedName = watch("name") || "";
-	const watchedDescription = watch("description") || "";
 	const watchedPayrollDirection = watch("payrollDirection");
-	const watchedReconciliationAction = watch("reconciliationAction") || "";
-	const watchedDefaultInstallments = watch("defaultInstallments");
-	const watchedPayrollCycleDays = watch("payrollCycleDays");
 	const watchedRequireTermsAgreement = watch("requireTermsAgreement");
-	const watchedFixedAmount = watch("fixedAmount");
-	const watchedPercentage = watch("percentage");
-	const watchedMinServiceMonths = watch("minServiceMonths");
-	const watchedProvider = watch("provider") || "";
-	const watchedCoverage = watch("coverage");
-	const watchedMinAmount = watch("minAmount");
-	const watchedMaxAmount = watch("maxAmount");
 	const watchedIsTaxable = watch("isTaxable");
 	const watchedIsActive = watch("isActive");
 	const watchedIsDefault = watch("isDefault");
+	const watchedDefaultEligibilityMode = watch("defaultEligibilityMode");
 	const currentCategoryPolicy = CATEGORY_FIELD_POLICY[watchedCategory];
 	const handleInvalidSubmit = useAdminFormErrorNavigation();
 
@@ -366,6 +403,11 @@ export function BenefitTypesTemplate({
 			isTaxable: false,
 			isActive: true,
 			isDefault: false,
+			defaultEligibilityMode: null,
+			defaultEligibilityDisqualifyOnAbsent: true,
+			defaultEligibilityDisqualifyOnLate: false,
+			defaultEligibilityDisqualifyOnUndertime: false,
+			defaultEligibilityDisqualifyOnLeave: false,
 		});
 		updateSearchParams((next) => {
 			next.set("action", "create");
@@ -511,7 +553,11 @@ CA,Cash Advance,OTHER,DEDUCTION,Recurring cash advance deduction,TRUE,TRUE,FALSE
 			label: "Payroll",
 			width: "130px",
 			priority: "high",
-			render: (val) => <CategoricalText value={val} />,
+			render: (val) => (
+				<AdminConfigRelationText>
+					{formatCategoricalTextLabel(val)}
+				</AdminConfigRelationText>
+			),
 		},
 		{
 			key: "category",
@@ -682,448 +728,479 @@ CA,Cash Advance,OTHER,DEDUCTION,Recurring cash advance deduction,TRUE,TRUE,FALSE
 				) : (
 					<form
 						onSubmit={handleSubmit(onSubmit, handleInvalidSubmit)}
-						className="space-y-5">
-						<div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
-							<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div data-field-path="code">
-									<label className="mb-1 block text-sm font-medium text-gray-700">
-										Code *
-									</label>
-									<Input
-										placeholder="e.g. DMA"
-										aria-invalid={Boolean(errors.code)}
-										{...register("code")}
-									/>
-									<ConstraintTokenRow
-										tokens={[
-											{
-												label: "1+",
-												tone: watchedCode.trim() ? "default" : "invalid",
-											},
-											{ label: "Aa1", tone: "subtle" },
-										]}
-									/>
-								</div>
-								<div data-field-path="name">
-									<label className="mb-1 block text-sm font-medium text-gray-700">
-										Name *
-									</label>
-									<Input
-										placeholder="e.g. De Minimis Allowance"
-										aria-invalid={Boolean(errors.name)}
-										{...register("name")}
-									/>
-									<ConstraintTokenRow
-										tokens={[
-											{
-												label: "1+",
-												tone: watchedName.trim() ? "default" : "invalid",
-											},
-											{ label: "A-Z", tone: "subtle" },
-										]}
-									/>
-								</div>
-								<div data-field-path="category">
-									<label className="mb-1 block text-sm font-medium text-gray-700">
-										Category *
-									</label>
-									<Select
-										options={categoryOptions}
-										value={watchedCategory}
-										onChange={(value) =>
-											setValue("category", value as BenefitCategory, {
-												shouldDirty: true,
-												shouldValidate: true,
-											})
-										}
-										placeholder="Select category"
-									/>
-									<ConstraintTokenRow
-										tokens={[{ label: watchedCategory, tone: "default" }]}
-									/>
-								</div>
-								<div data-field-path="payrollDirection">
-									<label className="mb-1 block text-sm font-medium text-gray-700">
-										Payroll Treatment *
-									</label>
-									<Select
-										options={payrollDirectionOptions}
-										value={watchedPayrollDirection}
-										onChange={(value) =>
-											setValue(
-												"payrollDirection",
-												value as BenefitPayrollDirection,
-												{ shouldDirty: true, shouldValidate: true },
-											)
-										}
-										placeholder="Select treatment"
-									/>
-									<ConstraintTokenRow
-										tokens={[
-											{
-												label:
-													watchedPayrollDirection ===
-													BenefitPayrollDirection.DEDUCTION
-														? "Deducts"
-														: "Adds",
-												tone: "default",
-											},
-										]}
-									/>
-								</div>
-							</div>
-							<div data-field-path="description">
-								<label className="mb-1 block text-sm font-medium text-gray-700">
-									Description
-								</label>
-								<Input
-									placeholder="Optional description"
-									{...register("description")}
-								/>
-								<ConstraintTokenRow
-									tokens={[
-										{
-											label: "0-160",
-											tone:
-												watchedDescription.length > 160
-													? "invalid"
-													: "subtle",
-										},
-									]}
-								/>
-							</div>
-						</div>
+						className="space-y-3">
+						<Accordion
+							type="single"
+							collapsible
+							defaultValue="basics"
+							className="space-y-2">
+							{/* Basic information */}
+							<AccordionItem
+								value="basics"
+								className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-none last:border-b data-[state=open]:border-slate-300 data-[state=open]:bg-slate-50">
+								<AccordionTrigger className="px-4 py-3 hover:no-underline data-[state=open]:bg-transparent">
+									<div className="flex items-start gap-3 text-left">
+										<span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-600">
+											<FileText className="h-3.5 w-3.5" />
+										</span>
+										<div>
+											<p className="text-sm font-semibold text-slate-900">
+												Basic information
+											</p>
+											<p className="text-xs font-normal text-slate-500">
+												Code, name, category, and payroll treatment
+											</p>
+										</div>
+									</div>
+								</AccordionTrigger>
+								<AccordionContent className="bg-slate-50 px-4 pb-4 pt-1">
+									<div className="space-y-4">
+										<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+											<div data-field-path="code">
+												<label className="mb-1 block text-sm font-medium text-gray-700">
+													Code *
+												</label>
+												<Input
+													placeholder="e.g. DMA"
+													aria-invalid={Boolean(errors.code)}
+													{...register("code")}
+												/>
+											</div>
+											<div data-field-path="name">
+												<label className="mb-1 block text-sm font-medium text-gray-700">
+													Name *
+												</label>
+												<Input
+													placeholder="e.g. De Minimis Allowance"
+													aria-invalid={Boolean(errors.name)}
+													{...register("name")}
+												/>
+											</div>
+											<div data-field-path="category">
+												<label className="mb-1 block text-sm font-medium text-gray-700">
+													Category *
+												</label>
+												<Select
+													options={categoryOptions}
+													value={watchedCategory}
+													onChange={(value) =>
+														setValue(
+															"category",
+															value as BenefitCategory,
+															{
+																shouldDirty: true,
+																shouldValidate: true,
+															},
+														)
+													}
+													placeholder="Select category"
+												/>
+											</div>
+											<div data-field-path="payrollDirection">
+												<label className="mb-1 block text-sm font-medium text-gray-700">
+													Payroll Treatment *
+												</label>
+												<Select
+													options={payrollDirectionOptions}
+													value={watchedPayrollDirection}
+													onChange={(value) =>
+														setValue(
+															"payrollDirection",
+															value as BenefitPayrollDirection,
+															{
+																shouldDirty: true,
+																shouldValidate: true,
+															},
+														)
+													}
+													placeholder="Select treatment"
+												/>
+											</div>
+										</div>
+										<div data-field-path="description">
+											<label className="mb-1 block text-sm font-medium text-gray-700">
+												Description
+											</label>
+											<Input
+												placeholder="Optional description"
+												{...register("description")}
+											/>
+										</div>
+									</div>
+								</AccordionContent>
+							</AccordionItem>
 
-						<div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
-							<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div data-field-path="reconciliationAction">
-									<label className="mb-1 block text-sm font-medium text-gray-700">
-										Reconciliation Action
-									</label>
-									<Input
-										placeholder="e.g. GROSS_INCLUDED"
-										{...register("reconciliationAction")}
-									/>
-									<ConstraintTokenRow
-										tokens={[
-											{
-												label: watchedReconciliationAction
-													? "Payroll map"
-													: "Optional",
-												tone: "subtle",
-											},
-										]}
-									/>
-								</div>
-								<div data-field-path="defaultInstallments">
-									<label className="mb-1 block text-sm font-medium text-gray-700">
-										Default Installments
-									</label>
-									<Input
-										type="number"
-										min={1}
-										placeholder="6"
-										aria-invalid={Boolean(errors.defaultInstallments)}
-										{...register("defaultInstallments", {
-											valueAsNumber: true,
-										})}
-									/>
-									<ConstraintTokenRow
-										tokens={[
-											{
-												label: "1+",
-												tone:
-													Number(watchedDefaultInstallments) >= 1
-														? "default"
-														: "invalid",
-											},
-										]}
-									/>
-								</div>
-								<div data-field-path="payrollCycleDays">
-									<label className="mb-1 block text-sm font-medium text-gray-700">
-										Payroll Cycle Days
-									</label>
-									<Input
-										type="number"
-										min={1}
-										placeholder="15"
-										aria-invalid={Boolean(errors.payrollCycleDays)}
-										{...register("payrollCycleDays", { valueAsNumber: true })}
-									/>
-									<ConstraintTokenRow
-										tokens={[
-											{
-												label: "1+",
-												tone:
-													Number(watchedPayrollCycleDays) >= 1
-														? "default"
-														: "invalid",
-											},
-										]}
-									/>
-								</div>
-							</div>
-						</div>
+							{/* Payroll mapping */}
+							<AccordionItem
+								value="payroll"
+								className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-none last:border-b data-[state=open]:border-slate-300 data-[state=open]:bg-slate-50">
+								<AccordionTrigger className="px-4 py-3 hover:no-underline data-[state=open]:bg-transparent">
+									<div className="flex items-start gap-3 text-left">
+										<span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-600">
+											<Coins className="h-3.5 w-3.5" />
+										</span>
+										<div>
+											<p className="text-sm font-semibold text-slate-900">
+												Payroll mapping
+											</p>
+											<p className="text-xs font-normal text-slate-500">
+												Installments and reconciliation defaults
+											</p>
+										</div>
+									</div>
+								</AccordionTrigger>
+								<AccordionContent className="bg-slate-50 px-4 pb-4 pt-1">
+									<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+										<div data-field-path="reconciliationAction">
+											<label className="mb-1 block text-sm font-medium text-gray-700">
+												Reconciliation Action
+											</label>
+											<Input
+												placeholder="e.g. GROSS_INCLUDED"
+												{...register("reconciliationAction")}
+											/>
+										</div>
+										<div data-field-path="defaultInstallments">
+											<label className="mb-1 block text-sm font-medium text-gray-700">
+												Default Installments
+											</label>
+											<Input
+												type="number"
+												min={1}
+												placeholder="6"
+												aria-invalid={Boolean(errors.defaultInstallments)}
+												{...register("defaultInstallments", {
+													valueAsNumber: true,
+												})}
+											/>
+										</div>
+										<div
+											className="md:col-span-2"
+											data-field-path="defaultEligibilityMode"
+											data-testid="benefit-type-eligibility-defaults">
+											<label className="mb-1 block text-sm font-medium text-gray-700">
+												Enrollment eligibility default
+											</label>
+											<p className="mb-2 text-xs text-slate-500">
+												Prefills employee enrollments. Independent of amount
+												pro-rate (Compute from attendance).
+											</p>
+											<Select
+												options={[
+													{
+														value: "",
+														label: "None (always pay when enrolled)",
+													},
+													{
+														value: "ENROLLED_ALWAYS",
+														label: "Always pay when enrolled",
+													},
+													{
+														value: "ATTENDANCE_QUALIFIED",
+														label: "Must pass attendance qualification",
+													},
+												]}
+												value={watchedDefaultEligibilityMode || ""}
+												onChange={(value) =>
+													setValue(
+														"defaultEligibilityMode",
+														value === "ATTENDANCE_QUALIFIED" ||
+															value === "ENROLLED_ALWAYS"
+															? value
+															: null,
+														{ shouldDirty: true, shouldValidate: true },
+													)
+												}
+												placeholder="Select eligibility default"
+											/>
+											{watchedDefaultEligibilityMode ===
+												"ATTENDANCE_QUALIFIED" && (
+												<div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+													{(
+														[
+															[
+																"defaultEligibilityDisqualifyOnAbsent",
+																"Disqualify on ABSENT",
+															],
+															[
+																"defaultEligibilityDisqualifyOnLate",
+																"Disqualify on late",
+															],
+															[
+																"defaultEligibilityDisqualifyOnUndertime",
+																"Disqualify on undertime",
+															],
+															[
+																"defaultEligibilityDisqualifyOnLeave",
+																"Disqualify on leave",
+															],
+														] as const
+													).map(([field, label]) => (
+														<label
+															key={field}
+															className="flex items-center gap-2 text-sm text-slate-700"
+															htmlFor={field}>
+															<input
+																id={field}
+																type="checkbox"
+																className="h-4 w-4 rounded border-slate-300"
+																{...register(field)}
+															/>
+															{label}
+														</label>
+													))}
+												</div>
+											)}
+										</div>
+										<div data-field-path="payrollCycleDays">
+											<label className="mb-1 block text-sm font-medium text-gray-700">
+												Payroll Cycle Days
+											</label>
+											<Input
+												type="number"
+												min={1}
+												placeholder="15"
+												aria-invalid={Boolean(errors.payrollCycleDays)}
+												{...register("payrollCycleDays", {
+													valueAsNumber: true,
+												})}
+											/>
+										</div>
+									</div>
+								</AccordionContent>
+							</AccordionItem>
 
-						<div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
-							<div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-								{currentCategoryPolicy.guidance}
-							</div>
-							<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-								{currentCategoryPolicy.showProvider && (
-									<div data-field-path="provider">
-										<label className="mb-1 block text-sm font-medium text-gray-700">
-											Provider
-										</label>
-										<Input
-											placeholder="e.g. Maxicare"
-											{...register("provider")}
-										/>
-										<ConstraintTokenRow
-											tokens={[
-												{
-													label: watchedProvider ? "Set" : "Optional",
-													tone: "subtle",
-												},
-											]}
-										/>
+							{/* Category details */}
+							<AccordionItem
+								value="category"
+								className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-none last:border-b data-[state=open]:border-slate-300 data-[state=open]:bg-slate-50">
+								<AccordionTrigger className="px-4 py-3 hover:no-underline data-[state=open]:bg-transparent">
+									<div className="flex items-start gap-3 text-left">
+										<span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-600">
+											<SlidersHorizontal className="h-3.5 w-3.5" />
+										</span>
+										<div>
+											<p className="text-sm font-semibold text-slate-900">
+												Category details
+											</p>
+											<p className="text-xs font-normal text-slate-500">
+												Fields that apply for the selected category
+											</p>
+										</div>
 									</div>
-								)}
-								{currentCategoryPolicy.showMinServiceMonths && (
-									<div data-field-path="minServiceMonths">
-										<label className="mb-1 block text-sm font-medium text-gray-700">
-											Min Service Months
-										</label>
-										<Input
-											type="number"
-											min={0}
-											placeholder="0"
-											{...register("minServiceMonths", {
-												valueAsNumber: true,
-											})}
-										/>
-										<ConstraintTokenRow
-											tokens={[
-												{
-													label: "0+",
-													tone:
-														watchedMinServiceMonths == null ||
-														Number(watchedMinServiceMonths) >= 0
-															? "subtle"
-															: "invalid",
-												},
-											]}
-										/>
+								</AccordionTrigger>
+								<AccordionContent className="bg-slate-50 px-4 pb-4 pt-1">
+									<div className="space-y-4">
+										<div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 text-xs leading-relaxed text-slate-600">
+											{currentCategoryPolicy.guidance}
+										</div>
+										<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+											{currentCategoryPolicy.showProvider && (
+												<div data-field-path="provider">
+													<label className="mb-1 block text-sm font-medium text-gray-700">
+														Provider
+													</label>
+													<Input
+														placeholder="e.g. Maxicare"
+														{...register("provider")}
+													/>
+												</div>
+											)}
+											{currentCategoryPolicy.showMinServiceMonths && (
+												<div data-field-path="minServiceMonths">
+													<label className="mb-1 block text-sm font-medium text-gray-700">
+														Min Service Months
+													</label>
+													<Input
+														type="number"
+														min={0}
+														placeholder="0"
+														{...register("minServiceMonths", {
+															valueAsNumber: true,
+														})}
+													/>
+												</div>
+											)}
+											{currentCategoryPolicy.showFixedAmount && (
+												<div data-field-path="fixedAmount">
+													<label className="mb-1 block text-sm font-medium text-gray-700">
+														Fixed Amount
+													</label>
+													<Input
+														type="number"
+														step="0.01"
+														min={0}
+														placeholder="0.00"
+														{...register("fixedAmount", {
+															valueAsNumber: true,
+														})}
+													/>
+												</div>
+											)}
+											{currentCategoryPolicy.showCoverage && (
+												<div data-field-path="coverage">
+													<label className="mb-1 block text-sm font-medium text-gray-700">
+														Coverage Amount
+													</label>
+													<Input
+														type="number"
+														step="0.01"
+														min={0}
+														placeholder="0.00"
+														{...register("coverage", {
+															valueAsNumber: true,
+														})}
+													/>
+												</div>
+											)}
+											{currentCategoryPolicy.showPercentage && (
+												<div data-field-path="percentage">
+													<label className="mb-1 block text-sm font-medium text-gray-700">
+														Percentage
+													</label>
+													<Input
+														type="number"
+														step="0.01"
+														min={0}
+														placeholder="0.00"
+														{...register("percentage", {
+															valueAsNumber: true,
+														})}
+													/>
+												</div>
+											)}
+											{currentCategoryPolicy.showMinMax && (
+												<div data-field-path="minAmount">
+													<label className="mb-1 block text-sm font-medium text-gray-700">
+														Min Amount
+													</label>
+													<Input
+														type="number"
+														step="0.01"
+														min={0}
+														placeholder="0.00"
+														{...register("minAmount", {
+															valueAsNumber: true,
+														})}
+													/>
+												</div>
+											)}
+											{currentCategoryPolicy.showMinMax && (
+												<div data-field-path="maxAmount">
+													<label className="mb-1 block text-sm font-medium text-gray-700">
+														Max Amount
+													</label>
+													<Input
+														type="number"
+														step="0.01"
+														min={0}
+														placeholder="0.00"
+														{...register("maxAmount", {
+															valueAsNumber: true,
+														})}
+													/>
+												</div>
+											)}
+										</div>
 									</div>
-								)}
-								{currentCategoryPolicy.showFixedAmount && (
-									<div data-field-path="fixedAmount">
-										<label className="mb-1 block text-sm font-medium text-gray-700">
-											Fixed Amount
-										</label>
-										<Input
-											type="number"
-											step="0.01"
-											min={0}
-											placeholder="0.00"
-											{...register("fixedAmount", { valueAsNumber: true })}
-										/>
-										<ConstraintTokenRow
-											tokens={[
-												{
-													label: "0+",
-													tone:
-														watchedFixedAmount == null ||
-														Number(watchedFixedAmount) >= 0
-															? "subtle"
-															: "invalid",
-												},
-											]}
-										/>
-									</div>
-								)}
-								{currentCategoryPolicy.showCoverage && (
-									<div data-field-path="coverage">
-										<label className="mb-1 block text-sm font-medium text-gray-700">
-											Coverage Amount
-										</label>
-										<Input
-											type="number"
-											step="0.01"
-											min={0}
-											placeholder="0.00"
-											{...register("coverage", { valueAsNumber: true })}
-										/>
-										<ConstraintTokenRow
-											tokens={[
-												{
-													label: "0+",
-													tone:
-														watchedCoverage == null ||
-														Number(watchedCoverage) >= 0
-															? "subtle"
-															: "invalid",
-												},
-											]}
-										/>
-									</div>
-								)}
-								{currentCategoryPolicy.showPercentage && (
-									<div data-field-path="percentage">
-										<label className="mb-1 block text-sm font-medium text-gray-700">
-											Percentage
-										</label>
-										<Input
-											type="number"
-											step="0.01"
-											min={0}
-											placeholder="0.00"
-											{...register("percentage", { valueAsNumber: true })}
-										/>
-										<ConstraintTokenRow
-											tokens={[
-												{
-													label: "0+",
-													tone:
-														watchedPercentage == null ||
-														Number(watchedPercentage) >= 0
-															? "subtle"
-															: "invalid",
-												},
-											]}
-										/>
-									</div>
-								)}
-								{currentCategoryPolicy.showMinMax && (
-									<div data-field-path="minAmount">
-										<label className="mb-1 block text-sm font-medium text-gray-700">
-											Min Amount
-										</label>
-										<Input
-											type="number"
-											step="0.01"
-											min={0}
-											placeholder="0.00"
-											{...register("minAmount", { valueAsNumber: true })}
-										/>
-										<ConstraintTokenRow
-											tokens={[
-												{
-													label: "0+",
-													tone:
-														watchedMinAmount == null ||
-														Number(watchedMinAmount) >= 0
-															? "subtle"
-															: "invalid",
-												},
-											]}
-										/>
-									</div>
-								)}
-								{currentCategoryPolicy.showMinMax && (
-									<div data-field-path="maxAmount">
-										<label className="mb-1 block text-sm font-medium text-gray-700">
-											Max Amount
-										</label>
-										<Input
-											type="number"
-											step="0.01"
-											min={0}
-											placeholder="0.00"
-											{...register("maxAmount", { valueAsNumber: true })}
-										/>
-										<ConstraintTokenRow
-											tokens={[
-												{
-													label: "0+",
-													tone:
-														watchedMaxAmount == null ||
-														Number(watchedMaxAmount) >= 0
-															? "subtle"
-															: "invalid",
-												},
-											]}
-										/>
-									</div>
-								)}
-							</div>
-						</div>
+								</AccordionContent>
+							</AccordionItem>
 
-						<div className="rounded-xl border border-slate-200 bg-white p-4">
-							<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-								<label
-									htmlFor="isTaxable"
-									className="flex items-center gap-2 text-sm font-medium text-gray-700">
-									<input
-										type="checkbox"
-										id="isTaxable"
-										className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-										checked={!!watchedIsTaxable}
-										onChange={(event) =>
-											setValue("isTaxable", event.target.checked, {
-												shouldDirty: true,
-											})
-										}
-									/>
-									Taxable Benefit
-								</label>
-								<label
-									htmlFor="requireTermsAgreement"
-									className="flex items-center gap-2 text-sm font-medium text-gray-700">
-									<input
-										type="checkbox"
-										id="requireTermsAgreement"
-										className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-										checked={!!watchedRequireTermsAgreement}
-										onChange={(event) =>
-											setValue(
-												"requireTermsAgreement",
-												event.target.checked,
-												{
-													shouldDirty: true,
-												},
-											)
-										}
-									/>
-									Require Terms Agreement
-								</label>
-								<label
-									htmlFor="isDefault"
-									className="flex items-center gap-2 text-sm font-medium text-gray-700">
-									<input
-										type="checkbox"
-										id="isDefault"
-										className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-										checked={!!watchedIsDefault}
-										onChange={(event) =>
-											setValue("isDefault", event.target.checked, {
-												shouldDirty: true,
-											})
-										}
-									/>
-									Default Benefit
-								</label>
-								<label
-									htmlFor="isActive"
-									className="flex items-center gap-2 text-sm font-medium text-gray-700">
-									<input
-										type="checkbox"
-										id="isActive"
-										className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-										checked={!!watchedIsActive}
-										onChange={(event) =>
-											setValue("isActive", event.target.checked, {
-												shouldDirty: true,
-											})
-										}
-									/>
-									Active
-								</label>
-							</div>
-						</div>
+							{/* Flags & status */}
+							<AccordionItem
+								value="settings"
+								className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-none last:border-b data-[state=open]:border-slate-300 data-[state=open]:bg-slate-50">
+								<AccordionTrigger className="px-4 py-3 hover:no-underline data-[state=open]:bg-transparent">
+									<div className="flex items-start gap-3 text-left">
+										<span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-600">
+											<ToggleLeft className="h-3.5 w-3.5" />
+										</span>
+										<div>
+											<p className="text-sm font-semibold text-slate-900">
+												Flags & status
+											</p>
+											<p className="text-xs font-normal text-slate-500">
+												Tax and availability options
+											</p>
+										</div>
+									</div>
+								</AccordionTrigger>
+								<AccordionContent className="bg-slate-50 px-4 pb-4 pt-1">
+									<div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+										<label
+											htmlFor="isTaxable"
+											className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+											<input
+												type="checkbox"
+												id="isTaxable"
+												className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+												checked={!!watchedIsTaxable}
+												onChange={(event) =>
+													setValue("isTaxable", event.target.checked, {
+														shouldDirty: true,
+													})
+												}
+											/>
+											Taxable Benefit
+										</label>
+										<label
+											htmlFor="requireTermsAgreement"
+											className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+											<input
+												type="checkbox"
+												id="requireTermsAgreement"
+												className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+												checked={!!watchedRequireTermsAgreement}
+												onChange={(event) =>
+													setValue(
+														"requireTermsAgreement",
+														event.target.checked,
+														{
+															shouldDirty: true,
+														},
+													)
+												}
+											/>
+											Require Terms Agreement
+										</label>
+										<label
+											htmlFor="isDefault"
+											className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+											<input
+												type="checkbox"
+												id="isDefault"
+												className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+												checked={!!watchedIsDefault}
+												onChange={(event) =>
+													setValue("isDefault", event.target.checked, {
+														shouldDirty: true,
+													})
+												}
+											/>
+											Default Benefit
+										</label>
+										<label
+											htmlFor="isActive"
+											className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
+											<input
+												type="checkbox"
+												id="isActive"
+												className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+												checked={!!watchedIsActive}
+												onChange={(event) =>
+													setValue("isActive", event.target.checked, {
+														shouldDirty: true,
+													})
+												}
+											/>
+											Active
+										</label>
+									</div>
+								</AccordionContent>
+							</AccordionItem>
+						</Accordion>
 
-						<div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
+						<div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
 							<Button
 								type="button"
 								variant="outline"
@@ -1207,7 +1284,9 @@ CA,Cash Advance,OTHER,DEDUCTION,Recurring cash advance deduction,TRUE,TRUE,FALSE
 									<label className="block text-xs font-medium text-gray-500 mb-1">
 										Payroll Treatment
 									</label>
-									<CategoricalText value={activeItem.payrollDirection} />
+									<AdminConfigRelationText>
+										{formatCategoricalTextLabel(activeItem.payrollDirection)}
+									</AdminConfigRelationText>
 								</div>
 								<div className="col-span-2">
 									<label className="block text-xs font-medium text-gray-500 mb-1">

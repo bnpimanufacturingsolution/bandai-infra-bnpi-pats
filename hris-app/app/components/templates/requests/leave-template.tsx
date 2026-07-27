@@ -30,6 +30,13 @@ import { LeaveRequestModal } from "~/components/organisms/leave-request-modal";
 import { useEmployee } from "~/lib/hooks/useEmployees";
 import { useLeaveSettings } from "~/lib/hooks/useLeaveSettings";
 import { RequestReviewModal } from "~/components/molecules/RequestReviewModal";
+import {
+	getLeaveRequestPrefillFromSearchParams,
+	REQUEST_ROUTE_DATE_PARAM,
+	REQUEST_ROUTE_END_DATE_PARAM,
+	REQUEST_ROUTE_LEAVE_TYPE_PARAM,
+	REQUEST_ROUTE_START_DATE_PARAM,
+} from "~/lib/utils/requests-route";
 
 // Helper function to calculate total days
 const calculateTotalDays = (startDate?: string, endDate?: string): number | null => {
@@ -89,9 +96,13 @@ export function LeaveRequestsPage() {
 	const action = searchParams.get("action");
 	const id = searchParams.get("id");
 	const fromParam = searchParams.get("from");
-	const initialLeaveType = searchParams.get("leaveType");
-	const initialStartDate = searchParams.get("startDate");
-	const initialEndDate = searchParams.get("endDate");
+	const leaveRequestPrefill = getLeaveRequestPrefillFromSearchParams(searchParams);
+	const {
+		initialLeaveType,
+		initialStartDate,
+		initialEndDate,
+		honorPrefilledDates,
+	} = leaveRequestPrefill;
 
 	// Single request ID for fetching (when action is view)
 	const activeRequestId = action === "view" ? id : null;
@@ -507,6 +518,10 @@ export function LeaveRequestsPage() {
 		updateSearchParams((next) => {
 			next.delete("action");
 			next.delete("id");
+			next.delete(REQUEST_ROUTE_DATE_PARAM);
+			next.delete(REQUEST_ROUTE_START_DATE_PARAM);
+			next.delete(REQUEST_ROUTE_END_DATE_PARAM);
+			next.delete(REQUEST_ROUTE_LEAVE_TYPE_PARAM);
 		});
 	};
 
@@ -899,13 +914,20 @@ export function LeaveRequestsPage() {
 
 			{/* Create Leave Request Modal */}
 			<LeaveRequestModal
+				key={
+					honorPrefilledDates
+						? `leave-prefill-${initialStartDate}`
+						: "leave-create"
+				}
 				isOpen={action === "create"}
 				onClose={handleCloseCreate}
 				onSubmit={onCreateSubmit}
 				isPending={createRequestMutation.isPending}
-				initialLeaveType={initialLeaveType || undefined}
-				initialStartDate={initialStartDate || undefined}
-				initialEndDate={initialEndDate || undefined}
+				initialLeaveType={initialLeaveType}
+				initialStartDate={initialStartDate}
+				initialEndDate={initialEndDate}
+				initialDurationUnit={honorPrefilledDates ? "FULL_DAY" : undefined}
+				honorPrefilledDates={honorPrefilledDates}
 			/>
 		</div>
 	);

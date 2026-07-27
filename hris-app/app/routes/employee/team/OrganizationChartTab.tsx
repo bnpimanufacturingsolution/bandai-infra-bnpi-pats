@@ -17,7 +17,19 @@ import { useDepartments } from "~/lib/hooks/useDepartments";
 import { Button } from "~/components/atoms/Button";
 import { DepartmentSectionPicker } from "~/components/molecules/DepartmentSectionPicker";
 import { SearchableSelect, type SearchableSelectOption } from "~/components/ui/searchable-select";
-import { Users, Building, ChevronDown, ChevronRight, ZoomIn, ZoomOut, X } from "lucide-react";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
+import {
+	Users,
+	Building,
+	ChevronDown,
+	ChevronRight,
+	ZoomIn,
+	ZoomOut,
+	X,
+	Printer,
+	Maximize2,
+	Minimize2,
+} from "lucide-react";
 import { useAuth } from "~/lib/hooks/use-auth";
 import {
 	buildOrganizationReportingDeepLink,
@@ -58,9 +70,9 @@ const PRESENTATION_SCALE = 0.35;
 const SCALE_EPSILON = 0.001;
 const FULL_ORG_CHART_LIMIT = 5000;
 const ORG_CHART_FIELDS =
-	"id,person.personalInfo,person.contactInfo,employeeId,employmentHireDate,employmentTerminationDate,department,departmentId,level,position,employmentStatus,reportToId,reportTo.person.personalInfo,reportTo.id";
+	"id,userId,person.personalInfo,person.contactInfo,employeeId,employmentHireDate,employmentTerminationDate,department,departmentId,level,position,employmentStatus,reportToId,reportTo.person.personalInfo,reportTo.id";
 const ORG_CHART_MANAGER_FIELDS =
-	"id,role,person.personalInfo,person.contactInfo,employeeId,employmentHireDate,employmentTerminationDate,department,departmentId,level,position,employmentStatus,employmentType,probationEndDate,reportToId,reportTo.person.personalInfo,reportTo.id";
+	"id,userId,role,person.personalInfo,person.contactInfo,employeeId,employmentHireDate,employmentTerminationDate,department,departmentId,level,position,employmentStatus,employmentType,probationEndDate,reportToId,reportTo.person.personalInfo,reportTo.id";
 
 function getFitScale(container: HTMLDivElement, content: HTMLDivElement) {
 	const containerWidth = container.clientWidth;
@@ -135,14 +147,7 @@ function EmployeeNode({
 	};
 
 	const styles = getLevelStyles(level);
-
-	// Get initials for avatar
-	const initials =
-		firstName && lastName
-			? `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
-			: firstName
-				? firstName.charAt(0).toUpperCase()
-				: "?";
+	const avatarUrl = String(employee.user?.avatar || "").trim();
 
 	return (
 		<div className="flex flex-col items-center z-10 relative group">
@@ -171,10 +176,11 @@ function EmployeeNode({
 				title="Click to focus. Right-click to view profile.">
 				{/* Avatar - Main Attraction */}
 				<div className="pt-3 mb-2">
-					<div
-						className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-base text-white ${styles.avatar}`}>
-						{initials}
-					</div>
+					<EmployeeAvatar
+						src={avatarUrl}
+						alt={fullName}
+						size="xl"
+					/>
 				</div>
 
 				{/* Name and Position */}
@@ -430,6 +436,8 @@ export default function OrganizationChartTab({
 	const [isPanning, setIsPanning] = useState(false);
 	const containerRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
+	const chartDisplayRef = useRef<HTMLDivElement>(null);
+	const [isFullscreen, setIsFullscreen] = useState(false);
 	const pendingScrollBehaviorRef = useRef<ScrollBehavior>("auto");
 	const dragStateRef = useRef<{
 		pointerId: number;
@@ -1283,6 +1291,19 @@ export default function OrganizationChartTab({
 		return () => window.removeEventListener("resize", handleResize);
 	}, [applyViewportPreset]);
 
+	useEffect(() => {
+		const handleFullscreenChange = () => {
+			const nextIsFullscreen = document.fullscreenElement === chartDisplayRef.current;
+			setIsFullscreen(nextIsFullscreen);
+			if (nextIsFullscreen) {
+				requestAnimationFrame(() => applyViewportPreset("smooth"));
+			}
+		};
+
+		document.addEventListener("fullscreenchange", handleFullscreenChange);
+		return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+	}, [applyViewportPreset]);
+
 	// Helpers
 	const toggleNode = (id: string) => {
 		setExpandedNodes((prev) => {
@@ -1469,6 +1490,40 @@ export default function OrganizationChartTab({
 		navigate(`/employee/${targetEmployeeId}`);
 	};
 
+	const handlePrint = () => {
+		const container = containerRef.current;
+		const content = contentRef.current;
+
+		if (container && content) {
+			const nextFitScale = getFitScale(container, content);
+			setFitScale(nextFitScale);
+			setZoomLevel(1);
+			setViewMode("fit");
+			centerContainerScroll(container, "auto");
+		}
+
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				window.print();
+			});
+		});
+	};
+
+	const toggleFullscreen = async () => {
+		const chartDisplay = chartDisplayRef.current;
+		if (!chartDisplay) return;
+
+		try {
+			if (document.fullscreenElement === chartDisplay) {
+				await document.exitFullscreen();
+			} else {
+				await chartDisplay.requestFullscreen();
+			}
+		} catch (error) {
+			console.error("Failed to toggle org chart fullscreen:", error);
+		}
+	};
+
 	const stopPanning = (pointerId?: number) => {
 		const container = containerRef.current;
 		if (container && pointerId !== undefined && container.hasPointerCapture(pointerId)) {
@@ -1515,8 +1570,40 @@ export default function OrganizationChartTab({
 
 	return (
 		<div className="space-y-4">
+			<style>{`
+				@media print {
+					body * {
+						visibility: hidden;
+					}
+
+					#org-chart-print-root,
+					#org-chart-print-root * {
+						visibility: visible;
+					}
+
+					#org-chart-print-root {
+						position: absolute;
+						inset: 0;
+						width: 100%;
+						height: auto !important;
+						overflow: visible !important;
+						border: none !important;
+						border-radius: 0 !important;
+						background: white !important;
+					}
+
+					#org-chart-print-root [data-org-chart-scroll] {
+						height: auto !important;
+						overflow: visible !important;
+					}
+
+					#org-chart-print-root [data-org-chart-content] {
+						transform: none !important;
+					}
+				}
+			`}</style>
 			{/* Header */}
-			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+			<div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 print:hidden">
 				<div>
 					<h2 className="text-2xl font-bold flex items-center gap-2 text-gray-900">
 						<Building className="w-6 h-6 text-orange-600" />
@@ -1595,6 +1682,13 @@ export default function OrganizationChartTab({
 					<div className="flex items-center gap-2 bg-gray-100 p-1 rounded-lg">
 						<Button
 							variant="ghost"
+							onClick={handlePrint}
+							className="h-8 w-8 rounded-md px-0 text-gray-500 hover:bg-white hover:text-gray-900"
+							title="Print organization chart">
+							<Printer className="h-4 w-4" />
+						</Button>
+						<Button
+							variant="ghost"
 							onClick={resetView}
 							className="h-8 w-8 rounded-md px-0 text-gray-500 hover:bg-white hover:text-gray-900"
 							title="Reset to the current branch view">
@@ -1666,10 +1760,14 @@ export default function OrganizationChartTab({
 				</div>
 			) : (
 				<div
-					className="relative w-full h-[calc(100vh-20rem)] bg-gray-50 rounded-lg border border-gray-200 overflow-hidden"
+					id="org-chart-print-root"
+					ref={chartDisplayRef}
+					className={`relative w-full bg-gray-50 rounded-lg border border-gray-200 overflow-hidden ${
+						isFullscreen ? "h-screen" : "h-[calc(100vh-20rem)]"
+					}`}
 					title="Drag empty space to pan. Use mouse wheel to zoom.">
 					{/* Fixed Zoom Controls */}
-					<div className="absolute top-3 right-3 z-30 flex items-center gap-1 rounded-full border border-gray-200 bg-white/95 p-1 shadow-sm backdrop-blur">
+					<div className="absolute top-3 right-3 z-30 flex items-center gap-1 rounded-full border border-gray-200 bg-white/95 p-1 shadow-sm backdrop-blur print:hidden">
 						<div className="px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-gray-500">
 							{viewMode === "fit"
 								? "Fit View"
@@ -1706,11 +1804,24 @@ export default function OrganizationChartTab({
 							title="Fit current view">
 							Fit
 						</Button>
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={toggleFullscreen}
+							className="h-8 px-2"
+							title={isFullscreen ? "Exit full screen" : "View full screen"}>
+							{isFullscreen ? (
+								<Minimize2 className="w-4 h-4" />
+							) : (
+								<Maximize2 className="w-4 h-4" />
+							)}
+						</Button>
 					</div>
 
 					{/* Scrollable Container */}
 					<div
 						ref={containerRef}
+						data-org-chart-scroll
 						onPointerDown={handlePointerDown}
 						onPointerMove={handlePointerMove}
 						onPointerUp={(event) => stopPanning(event.pointerId)}
@@ -1720,6 +1831,7 @@ export default function OrganizationChartTab({
 						}`}>
 						<div
 							ref={contentRef}
+							data-org-chart-content
 							className="mx-auto flex min-w-fit justify-center gap-16 px-8 py-12"
 							style={{
 								transform: `scale(${effectiveScale})`,

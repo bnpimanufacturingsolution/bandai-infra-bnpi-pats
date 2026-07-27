@@ -2,11 +2,12 @@ import { PrismaClient, Prisma } from "../generated/prisma";
 
 const prisma = new PrismaClient();
 
+// BNPI default: 11-25 / 26-10 (matches Bandai semi-monthly register cutoffs).
 const DEFAULT_CYCLE_RULES: Prisma.InputJsonValue = {
 	SEMI_MONTHLY: {
-		firstStartDay: 1,
-		secondStartDay: 16,
-		secondEndDay: "LAST_DAY",
+		firstStartDay: 11,
+		secondStartDay: 26,
+		secondEndDay: 10,
 	},
 	WEEKLY: { anchorWeekday: 1 },
 	BIWEEKLY: { anchorWeekday: 1 },
@@ -29,18 +30,22 @@ async function run() {
 			current?.SEMI_MONTHLY?.secondStartDay !== undefined &&
 			current?.SEMI_MONTHLY?.secondEndDay !== undefined;
 		if (config.cycleRules && hasSemiMonthlyRule) continue;
+		const hasLegacySplitDay = current?.SEMI_MONTHLY?.splitDay !== undefined;
 		const legacySplitDay = Math.min(
 			Math.max(Number(current?.SEMI_MONTHLY?.splitDay || 15), 1),
 			30,
 		);
-		const firstStartDay = 1;
-		const secondStartDay = Math.min(Math.max(legacySplitDay + 1, 2), 31);
+		const firstStartDay = hasLegacySplitDay ? 1 : 11;
+		const secondStartDay = hasLegacySplitDay
+			? Math.min(Math.max(legacySplitDay + 1, 2), 31)
+			: 26;
+		const secondEndDay = hasLegacySplitDay ? "LAST_DAY" : 10;
 		const migrated: Prisma.InputJsonValue = {
 			...(current || {}),
 			SEMI_MONTHLY: {
 				firstStartDay,
 				secondStartDay,
-				secondEndDay: "LAST_DAY",
+				secondEndDay,
 			},
 			WEEKLY: current?.WEEKLY || { anchorWeekday: 1 },
 			BIWEEKLY: current?.BIWEEKLY || { anchorWeekday: 1 },

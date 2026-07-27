@@ -27,6 +27,7 @@ model PayrollPeriod {
 
   notes               String?
   generationMetadata  Json?
+  payslipReleaseAttachmentUrl String?
   processedBy         String?
   processedByEmployee Employee? @relation("PayrollPeriodProcessedBy", fields: [processedBy], references: [id])
   processedAt         DateTime?
@@ -41,6 +42,9 @@ model PayrollPeriod {
   timesheets            Timesheet[]
   timesheetlines        Timesheetline[]
   attendanceObligations AttendanceObligation[]
+  sourcePayrollCorrections  PayrollCorrection[] @relation("PayrollCorrectionSourcePeriod")
+  targetPayrollCorrections  PayrollCorrection[] @relation("PayrollCorrectionTargetPeriod")
+  appliedPayrollCorrections PayrollCorrection[] @relation("PayrollCorrectionAppliedPeriod")
 
   @@unique([organizationId, startDate, endDate])
   @@index([organizationId])

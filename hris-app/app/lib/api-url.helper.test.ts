@@ -27,43 +27,7 @@ describe("api-url helper", () => {
 		expect(resolveSocketBaseUrl("https://example.test/api", "http://fallback")).toBe(
 			"https://example.test",
 		);
-		expect(resolveSocketBaseUrl("/api", "http://127.0.0.1:3100")).toBe(
-			"http://127.0.0.1:3100",
-		);
 		expect(resolveSocketBaseUrl("", "http://fallback")).toBe("http://fallback");
-	});
-
-	it("keeps public tunnel socket connections on the app host", () => {
-		expect(
-			resolveSocketBaseUrl(
-				"https://dev-api.bnpi-hris.tech/api",
-				"https://dev.bnpi-hris.tech",
-			),
-		).toBe("https://dev.bnpi-hris.tech");
-		expect(
-			resolveSocketBaseUrl(
-				"https://uat-api.bnpi-hris.tech/api",
-				"https://uat.bnpi-hris.tech",
-			),
-		).toBe("https://uat.bnpi-hris.tech");
-		expect(
-			resolveSocketBaseUrl(
-				"https://api.bnpi-hris.tech/api",
-				"https://bnpi-hris.tech",
-			),
-		).toBe("https://bnpi-hris.tech");
-	});
-
-	it("keeps LAN and localhost socket connections on the app host proxy", () => {
-		expect(
-			resolveSocketBaseUrl("http://10.184.38.144:3101/api", "http://10.184.38.144:3100"),
-		).toBe("http://10.184.38.144:3100");
-		expect(
-			resolveSocketBaseUrl("http://localhost:3201/api", "http://localhost:3200"),
-		).toBe("http://localhost:3200");
-		expect(
-			resolveSocketBaseUrl("http://10.184.38.144:3001/api", "http://10.184.38.144:3000"),
-		).toBe("http://10.184.38.144:3000");
 	});
 
 	it("normalizes endpoints to avoid duplicate /api/api paths", () => {

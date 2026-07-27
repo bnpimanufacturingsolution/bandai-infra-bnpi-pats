@@ -2,7 +2,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import WorkforceRecruitmentSettingsModule from "./WorkforceRecruitmentSettingsModule";
-import type { WorkforceRecruitmentSettings } from "~/services/workforce-recruitment-settings.service";
 
 const useDepartmentsMock = vi.fn();
 const usePositionsMock = vi.fn();
@@ -11,7 +10,6 @@ const useEmployeesMock = vi.fn();
 const useSettingsMock = vi.fn();
 const useUpdateSettingsMock = vi.fn();
 const useRequestContextMock = vi.fn();
-const useHeadcountsMock = vi.fn();
 
 vi.mock("~/lib/hooks/useDepartments", () => ({
 	useDepartments: (...args: unknown[]) => useDepartmentsMock(...args),
@@ -31,7 +29,6 @@ vi.mock("~/lib/hooks/useEmployees", () => ({
 
 vi.mock("~/lib/hooks/useWorkforceRecruitmentSettings", () => ({
 	useWorkforceRecruitmentSettings: (...args: unknown[]) => useSettingsMock(...args),
-	useWorkforceRecruitmentHeadcounts: (...args: unknown[]) => useHeadcountsMock(...args),
 	useUpdateWorkforceRecruitmentSettings: (...args: unknown[]) =>
 		useUpdateSettingsMock(...args),
 	useWorkforceRecruitmentRequestContext: (...args: unknown[]) =>
@@ -86,7 +83,7 @@ const positions = [
 		levels: [{ id: "level-mid", name: "Mid", rank: 2 }],
 	},
 ];
-const settings: WorkforceRecruitmentSettings = {
+const settings = {
 	isEnabled: true,
 	enforceDepartmentManagerScope: true,
 	defaultWorkflowCode: "JOB-REQ",
@@ -98,25 +95,9 @@ const settings: WorkforceRecruitmentSettings = {
 const mockReadyHooks = ({
 	mockPositions = positions,
 	mockLevels = levels,
-	mockSettings = settings,
-	mockHeadcounts = [
-		{
-			departmentId: "department-manufacturing",
-			departmentName: "Manufacturing",
-			sectionId: "section-assembly",
-			sectionName: "Assembly",
-			positionId: "position-operator",
-			positionTitle: "Production Operator",
-			levelId: null,
-			levelName: null,
-			currentHeadcount: 2,
-		},
-	],
 }: {
-	mockPositions?: unknown[];
-	mockLevels?: unknown[];
-	mockSettings?: typeof settings;
-	mockHeadcounts?: unknown[];
+	mockPositions?: any[];
+	mockLevels?: any[];
 } = {}) => {
 	useDepartmentsMock.mockReturnValue({
 		data: { departments },
@@ -135,11 +116,7 @@ const mockReadyHooks = ({
 		isLoading: false,
 	});
 	useSettingsMock.mockReturnValue({
-		data: mockSettings,
-		isLoading: false,
-	});
-	useHeadcountsMock.mockReturnValue({
-		data: mockHeadcounts,
+		data: settings,
 		isLoading: false,
 	});
 	useUpdateSettingsMock.mockReturnValue({
@@ -158,7 +135,7 @@ beforeEach(() => {
 });
 
 describe("WorkforceRecruitmentSettingsModule coverage terminology", () => {
-	it("renders real sections as section accordions without the old missing-section catalog block", async () => {
+	it("renders real sections as section accordions and missing-section rows in a separate block", async () => {
 		render(<WorkforceRecruitmentSettingsModule showHeader={false} />);
 
 		await waitFor(() => {
@@ -167,16 +144,17 @@ describe("WorkforceRecruitmentSettingsModule coverage terminology", () => {
 
 		expect(screen.queryByText("Department scope")).not.toBeInTheDocument();
 		expect(screen.queryByText("Unassigned section")).not.toBeInTheDocument();
-		expect(screen.queryByRole("columnheader", { name: "Level" })).not.toBeInTheDocument();
-		expect(screen.getAllByRole("columnheader", { name: "Target" }).length).toBeGreaterThan(0);
+		expect(screen.getAllByRole("columnheader", { name: "Level" }).length).toBeGreaterThan(0);
+		expect(
+			screen.queryByRole("columnheader", { name: "Target" }),
+		).not.toBeInTheDocument();
 		expect(screen.getByText("Production Operator")).toBeInTheDocument();
-		expect(screen.queryByText("Floating Technician")).not.toBeInTheDocument();
-		expect(screen.queryByText("Positions without section")).not.toBeInTheDocument();
-		expect(screen.queryByText("No section on employee record")).not.toBeInTheDocument();
-		expect(screen.getAllByText("1 positions / 1 targets").length).toBeGreaterThan(0);
+		expect(screen.getByText("Floating Technician")).toBeInTheDocument();
+		expect(screen.getByText("Positions without section")).toBeInTheDocument();
+		expect(screen.getAllByText("1 positions / 1 levels").length).toBeGreaterThan(0);
 	});
 
-	it("does not render catalog levels when real employees are assigned by section and position", async () => {
+	it("requests and renders every linked level available to the HR job-create flow", async () => {
 		mockReadyHooks({
 			mockPositions: [
 				{
@@ -219,38 +197,10 @@ describe("WorkforceRecruitmentSettingsModule coverage terminology", () => {
 				fields: expect.stringContaining("levels.level.name"),
 			}),
 		);
-		expect(screen.queryByText("Junior")).not.toBeInTheDocument();
-		expect(screen.queryByText("Mid")).not.toBeInTheDocument();
-		expect(screen.queryByText("Senior")).not.toBeInTheDocument();
-		expect(screen.queryByText("Lead")).not.toBeInTheDocument();
-		expect(screen.getAllByText("1 positions / 1 targets").length).toBeGreaterThan(0);
-	});
-
-	it("rolls up current and target headcount in compact coverage headers", async () => {
-		mockReadyHooks({
-			mockSettings: {
-				...settings,
-				policies: [
-					{
-						id: "policy-operator-junior",
-						departmentId: "department-manufacturing",
-						sectionId: "section-assembly",
-						positionId: "position-operator",
-						levelId: "level-junior",
-						targetHeadcount: 3,
-						limitBehavior: "BLOCK",
-						autoCreateJobOnApproval: true,
-						isActive: true,
-					},
-				],
-			},
-		});
-
-		render(<WorkforceRecruitmentSettingsModule showHeader={false} />);
-
-		await waitFor(() => {
-			expect(screen.getAllByText("2/3").length).toBeGreaterThan(0);
-		});
-		expect(screen.getAllByText("Current/Target").length).toBeGreaterThan(0);
+		expect(screen.getByText("Junior")).toBeInTheDocument();
+		expect(screen.getByText("Mid")).toBeInTheDocument();
+		expect(screen.getByText("Senior")).toBeInTheDocument();
+		expect(screen.getByText("Lead")).toBeInTheDocument();
+		expect(screen.getByText("1 positions / 4 levels")).toBeInTheDocument();
 	});
 });

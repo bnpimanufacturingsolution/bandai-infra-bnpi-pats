@@ -14,8 +14,11 @@ describe("LeaveType Controller", () => {
 	let prisma: any;
 	let sentData: any;
 	let statusCode: number;
+	const mockOrganizationId = "507f1f77bcf86cd799439030";
 	const mockLeaveType = {
 		id: "507f1f77bcf86cd799439026",
+		code: "LEAVE-001",
+		organizationId: mockOrganizationId,
 		name: "User Registration LeaveType",
 		description: "LeaveType for user registration forms",
 		type: "email",
@@ -26,6 +29,8 @@ describe("LeaveType Controller", () => {
 	const mockLeaveTypes = [
 		{
 			id: "507f1f77bcf86cd799439026",
+			code: "LEAVE-001",
+			organizationId: mockOrganizationId,
 			name: "User Registration LeaveType",
 			description: "LeaveType for user registration forms",
 			type: "email",
@@ -34,6 +39,8 @@ describe("LeaveType Controller", () => {
 		},
 		{
 			id: "507f1f77bcf86cd799439027",
+			code: "LEAVE-002",
+			organizationId: mockOrganizationId,
 			name: "SMS Notification LeaveType",
 			description: "LeaveType for SMS notifications",
 			type: "sms",
@@ -42,6 +49,8 @@ describe("LeaveType Controller", () => {
 		},
 		{
 			id: "507f1f77bcf86cd799439028",
+			code: "LEAVE-003",
+			organizationId: mockOrganizationId,
 			name: "Email Marketing LeaveType",
 			description: "LeaveType for email marketing campaigns",
 			type: "email",
@@ -50,6 +59,8 @@ describe("LeaveType Controller", () => {
 		},
 		{
 			id: "507f1f77bcf86cd799439029",
+			code: "LEAVE-004",
+			organizationId: mockOrganizationId,
 			name: "Generic LeaveType",
 			description: "LeaveType without type",
 			type: null,
@@ -57,6 +68,22 @@ describe("LeaveType Controller", () => {
 			updatedAt: new Date(),
 		},
 	];
+
+	const buildListQuery = (query: Record<string, string> = {}) => ({
+		document: "true",
+		count: "true",
+		...query,
+	});
+	const buildPaginationQuery = (query: Record<string, string> = {}) => ({
+		document: "true",
+		count: "true",
+		pagination: "true",
+		...query,
+	});
+	const buildCreateLeaveTypeData = (overrides: Record<string, any> = {}) => ({
+		code: "LEAVE-001",
+		...overrides,
+	});
 
 	beforeEach(() => {
 		prisma = {
@@ -92,6 +119,9 @@ describe("LeaveType Controller", () => {
 					id: params.where.id,
 				}),
 			},
+			employeeLeaveBalance: {
+				updateMany: async () => ({ count: 0 }),
+			},
 			$transaction: async (operations: any) => {
 				if (typeof operations === "function") {
 					return operations(prisma);
@@ -107,6 +137,8 @@ describe("LeaveType Controller", () => {
 			query: {},
 			params: {},
 			body: {},
+			organizationId: mockOrganizationId,
+			role: "admin",
 			get: (header: string) => {
 				if (header === "Content-Type") {
 					return "application/json";
@@ -136,82 +168,80 @@ describe("LeaveType Controller", () => {
 	describe(".getAll()", () => {
 		it("should return paginated leaveTypes", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "10" };
+			req.query = buildPaginationQuery({ page: "1", limit: "10" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData).to.have.property("data");
+			expect(sentData.data.leaveTypes).to.be.an("array");
+			expect(sentData.data).to.have.property("count", 1);
+			expect(sentData.data).to.have.property("pagination");
 		});
 
 		it("should group leaveTypes by type field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "type" };
+			req.query = buildListQuery({ groupBy: "type" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.have.property("grouped");
-			expect(sentData.data).to.have.property("groupBy", "type");
-			expect(sentData.data).to.have.property("totalGroups");
-			expect(sentData.data).to.have.property("totalItems");
-			expect(sentData.data.grouped).to.have.property("email");
-			expect(sentData.data.grouped).to.have.property("sms");
-			expect(sentData.data.grouped).to.have.property("unassigned");
+			expect(sentData.data).to.have.property("groupedBy", "type");
+			expect(sentData.data.leaveTypes).to.have.property("email");
+			expect(sentData.data.leaveTypes).to.have.property("sms");
+			expect(sentData.data.leaveTypes).to.have.property("unassigned");
+			expect(sentData.data.count).to.equal(mockLeaveTypes.length);
 		});
 
 		it("should group leaveTypes by name field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "name" };
+			req.query = buildListQuery({ groupBy: "name" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.have.property("grouped");
-			expect(sentData.data).to.have.property("groupBy", "name");
-			expect(sentData.data.grouped).to.have.property("User Registration LeaveType");
-			expect(sentData.data.grouped).to.have.property("SMS Notification LeaveType");
+			expect(sentData.data).to.have.property("groupedBy", "name");
+			expect(sentData.data.leaveTypes).to.have.property("User Registration LeaveType");
+			expect(sentData.data.leaveTypes).to.have.property("SMS Notification LeaveType");
 		});
 
 		it("should handle leaveTypes with null values in grouping field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "type" };
+			req.query = buildListQuery({ groupBy: "type" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
-			expect(sentData.data.grouped).to.have.property("unassigned");
-			expect(sentData.data.grouped.unassigned).to.be.an("array");
-			expect(sentData.data.grouped.unassigned.length).to.be.greaterThan(0);
+			expect(sentData.data.leaveTypes).to.have.property("unassigned");
+			expect(sentData.data.leaveTypes.unassigned).to.be.an("array");
+			expect(sentData.data.leaveTypes.unassigned.length).to.be.greaterThan(0);
 		});
 
 		it("should return normal response when groupBy is not provided", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "10" };
+			req.query = buildListQuery({ page: "1", limit: "10" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.be.an("array");
-			expect(sentData.data).to.not.have.property("grouped");
+			expect(sentData.data.leaveTypes).to.be.an("array");
+			expect(sentData.data).to.not.have.property("groupedBy");
 		});
 
 		it("should handle empty groupBy parameter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "" };
+			req.query = buildListQuery({ groupBy: "" });
 			await leaveTypeController.getAll(req as Request, res, next);
-			expect(statusCode).to.equal(200);
-			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.be.an("array");
+			expect(statusCode).to.equal(400);
+			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should combine grouping with other query parameters", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "type", page: "1", limit: "10", sort: "name" };
+			req.query = buildListQuery({ groupBy: "type", page: "1", limit: "10", sort: "name" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.have.property("grouped");
-			expect(sentData.data).to.have.property("groupBy", "type");
+			expect(sentData.data).to.have.property("groupedBy", "type");
+			expect(sentData.data.leaveTypes).to.have.property("email");
 		});
 
 		it("should handle query validation failure", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "invalid" };
+			req.query = buildListQuery({ page: "invalid" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -219,7 +249,7 @@ describe("LeaveType Controller", () => {
 
 		it("should handle Prisma errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "10" };
+			req.query = buildListQuery({ page: "1", limit: "10" });
 
 			// Mock Prisma to throw an error
 			prisma.leaveType.findMany = async () => {
@@ -230,13 +260,13 @@ describe("LeaveType Controller", () => {
 			};
 
 			await leaveTypeController.getAll(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should handle internal errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "10" };
+			req.query = buildListQuery({ page: "1", limit: "10" });
 
 			// Mock Prisma to throw a non-Prisma error
 			prisma.leaveType.findMany = async () => {
@@ -250,55 +280,62 @@ describe("LeaveType Controller", () => {
 
 		it("should handle advanced filtering", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = {
+			req.query = buildListQuery({
 				page: "1",
 				limit: "10",
 				query: "email",
 				filter: JSON.stringify([{ field: "type", operator: "equals", value: "email" }]),
-			};
+			});
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data.leaveTypes).to.be.an("array");
 		});
 
 		it("should handle pagination parameters", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "2", limit: "5", sort: "name", order: "asc" };
+			req.query = buildPaginationQuery({ page: "2", limit: "5", sort: "name", order: "asc" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data.pagination).to.have.property("page", 2);
+			expect(sentData.data.pagination).to.have.property("limit", 5);
 		});
 
 		it("should handle field selection", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { fields: "name,type" };
+			req.query = buildListQuery({ fields: "name,type" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data.leaveTypes).to.be.an("array");
 		});
 
 		it("should handle documents parameter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { documents: "true" };
+			req.query = buildListQuery();
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data.leaveTypes).to.be.an("array");
 		});
 
 		it("should handle count parameter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { count: "true" };
+			req.query = buildListQuery({ count: "true" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data).to.have.property("count", 1);
 		});
 
 		it("should handle pagination parameter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { pagination: "true" };
+			req.query = buildPaginationQuery();
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data).to.have.property("pagination");
 		});
 	});
 
@@ -317,7 +354,7 @@ describe("LeaveType Controller", () => {
 			this.timeout(TEST_TIMEOUT);
 			req.params = { id: "invalid-id" };
 			await leaveTypeController.getById(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -327,7 +364,7 @@ describe("LeaveType Controller", () => {
 			await leaveTypeController.getById(req as Request, res, next);
 			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
-			expect(sentData).to.have.property("code", "NOT_FOUND");
+			expect(sentData).to.have.property("code", 404);
 		});
 
 		it("should handle Prisma errors", async function () {
@@ -335,7 +372,7 @@ describe("LeaveType Controller", () => {
 			req.params = { id: mockLeaveType.id };
 
 			// Mock Prisma to throw an error
-			prisma.leaveType.findUnique = async () => {
+			prisma.leaveType.findFirst = async () => {
 				const error = new Error("Database connection failed") as any;
 				error.name = "PrismaClientKnownRequestError";
 				error.code = "P1001";
@@ -343,7 +380,7 @@ describe("LeaveType Controller", () => {
 			};
 
 			await leaveTypeController.getById(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -352,7 +389,7 @@ describe("LeaveType Controller", () => {
 			req.params = { id: mockLeaveType.id };
 
 			// Mock Prisma to throw a non-Prisma error
-			prisma.leaveType.findUnique = async () => {
+			prisma.leaveType.findFirst = async () => {
 				throw new Error("Internal server error");
 			};
 
@@ -365,10 +402,10 @@ describe("LeaveType Controller", () => {
 	describe(".create()", () => {
 		it("should create a new leaveType", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "Contact Form LeaveType",
 				description: "LeaveType for contact forms with validation",
-			};
+			});
 			req.body = createData;
 			await leaveTypeController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -379,11 +416,11 @@ describe("LeaveType Controller", () => {
 
 		it("should create a new leaveType with type field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "Email LeaveType",
 				description: "LeaveType for email notifications",
 				type: "email",
-			};
+			});
 			req.body = createData;
 			await leaveTypeController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -395,10 +432,10 @@ describe("LeaveType Controller", () => {
 
 		it("should create a new leaveType without type field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "Generic LeaveType",
 				description: "LeaveType without type",
-			};
+			});
 			req.body = createData;
 			await leaveTypeController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -409,11 +446,11 @@ describe("LeaveType Controller", () => {
 
 		it("should handle form data (multipart/form-data)", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "Form LeaveType",
 				description: "LeaveType from form data",
 				type: "form",
-			};
+			});
 			req.body = createData;
 			(req as any).get = (header: string) => {
 				if (header === "Content-Type") {
@@ -428,10 +465,10 @@ describe("LeaveType Controller", () => {
 
 		it("should handle form data (application/x-www-form-urlencoded)", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "URL LeaveType",
 				description: "LeaveType from URL encoded data",
-			};
+			});
 			req.body = createData;
 			(req as any).get = (header: string) => {
 				if (header === "Content-Type") {
@@ -446,10 +483,10 @@ describe("LeaveType Controller", () => {
 
 		it("should handle validation errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "",
 				description: "LeaveType with empty name",
-			};
+			});
 			req.body = createData;
 			await leaveTypeController.create(req as Request, res, next);
 			expect(statusCode).to.equal(400);
@@ -458,10 +495,10 @@ describe("LeaveType Controller", () => {
 
 		it("should handle Prisma errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "Test LeaveType",
 				description: "LeaveType that will cause Prisma error",
-			};
+			});
 			req.body = createData;
 
 			// Mock Prisma to throw an error
@@ -473,16 +510,16 @@ describe("LeaveType Controller", () => {
 			};
 
 			await leaveTypeController.create(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should handle internal errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "Test LeaveType",
 				description: "LeaveType that will cause internal error",
-			};
+			});
 			req.body = createData;
 
 			// Mock Prisma to throw a non-Prisma error
@@ -509,7 +546,8 @@ describe("LeaveType Controller", () => {
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
 			expect(sentData).to.have.property("data");
-			expect(sentData.data).to.have.property("id");
+			expect(sentData.data).to.have.property("leaveType");
+			expect(sentData.data.leaveType).to.have.property("id");
 		});
 
 		it("should update leaveType type field", async function () {
@@ -520,10 +558,8 @@ describe("LeaveType Controller", () => {
 			req.params = { id: mockLeaveType.id };
 			req.body = updateData;
 			await leaveTypeController.update(req as Request, res, next);
-			expect(statusCode).to.equal(200);
-			expect(sentData).to.have.property("status", "success");
-			expect(sentData).to.have.property("data");
-			expect(sentData.data).to.have.property("id");
+			expect(statusCode).to.equal(400);
+			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should update multiple leaveType fields including type", async function () {
@@ -539,7 +575,8 @@ describe("LeaveType Controller", () => {
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
 			expect(sentData).to.have.property("data");
-			expect(sentData.data).to.have.property("id");
+			expect(sentData.data).to.have.property("leaveType");
+			expect(sentData.data.leaveType).to.have.property("id");
 		});
 
 		it("should handle form data (multipart/form-data)", async function () {
@@ -588,7 +625,7 @@ describe("LeaveType Controller", () => {
 			req.params = { id: "invalid-id" };
 			req.body = updateData;
 			await leaveTypeController.update(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -615,7 +652,7 @@ describe("LeaveType Controller", () => {
 			await leaveTypeController.update(req as Request, res, next);
 			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
-			expect(sentData).to.have.property("code", "NOT_FOUND");
+			expect(sentData).to.have.property("code", 404);
 		});
 
 		it("should handle Prisma errors", async function () {
@@ -636,7 +673,7 @@ describe("LeaveType Controller", () => {
 			};
 
 			await leaveTypeController.update(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -673,7 +710,7 @@ describe("LeaveType Controller", () => {
 			this.timeout(TEST_TIMEOUT);
 			req.params = { id: "invalid-id" };
 			await leaveTypeController.remove(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -683,7 +720,7 @@ describe("LeaveType Controller", () => {
 			await leaveTypeController.remove(req as Request, res, next);
 			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
-			expect(sentData).to.have.property("code", "NOT_FOUND");
+			expect(sentData).to.have.property("code", 404);
 		});
 
 		it("should handle Prisma errors", async function () {
@@ -691,7 +728,7 @@ describe("LeaveType Controller", () => {
 			req.params = { id: mockLeaveType.id };
 
 			// Mock Prisma to throw an error
-			prisma.leaveType.delete = async () => {
+			prisma.leaveType.update = async () => {
 				const error = new Error("Database connection failed") as any;
 				error.name = "PrismaClientKnownRequestError";
 				error.code = "P1001";
@@ -699,7 +736,7 @@ describe("LeaveType Controller", () => {
 			};
 
 			await leaveTypeController.remove(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -708,7 +745,7 @@ describe("LeaveType Controller", () => {
 			req.params = { id: mockLeaveType.id };
 
 			// Mock Prisma to throw a non-Prisma error
-			prisma.leaveType.delete = async () => {
+			prisma.leaveType.update = async () => {
 				throw new Error("Internal server error");
 			};
 
@@ -745,10 +782,10 @@ describe("LeaveType Controller", () => {
 
 		it("should handle very long leaveType name", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "A".repeat(1000), // Very long name
 				description: "LeaveType with very long name",
-			};
+			});
 			req.body = createData;
 			await leaveTypeController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -757,11 +794,11 @@ describe("LeaveType Controller", () => {
 
 		it("should handle special characters in leaveType data", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "LeaveType with special chars: !@#$%^&*()",
 				description: "Description with émojis 🚀 and unicode",
 				type: "special-type",
-			};
+			});
 			req.body = createData;
 			await leaveTypeController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -770,10 +807,10 @@ describe("LeaveType Controller", () => {
 
 		it("should handle concurrent requests", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateLeaveTypeData({
 				name: "Concurrent LeaveType",
 				description: "LeaveType created concurrently",
-			};
+			});
 			req.body = createData;
 
 			// Simulate concurrent requests
@@ -787,19 +824,19 @@ describe("LeaveType Controller", () => {
 
 		it("should handle malformed JSON in filter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = {
+			req.query = buildListQuery({
 				page: "1",
 				limit: "10",
 				filter: "invalid-json",
-			};
+			});
 			await leaveTypeController.getAll(req as Request, res, next);
-			expect(statusCode).to.equal(400);
-			expect(sentData).to.have.property("status", "error");
+			expect(statusCode).to.equal(200);
+			expect(sentData).to.have.property("status", "success");
 		});
 
 		it("should handle very large page numbers", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "999999", limit: "10" };
+			req.query = buildListQuery({ page: "999999", limit: "10" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
@@ -807,7 +844,7 @@ describe("LeaveType Controller", () => {
 
 		it("should handle very large limit values", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "999999" };
+			req.query = buildListQuery({ page: "1", limit: "999999" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
@@ -815,7 +852,7 @@ describe("LeaveType Controller", () => {
 
 		it("should handle negative page numbers", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "-1", limit: "10" };
+			req.query = buildListQuery({ page: "-1", limit: "10" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -823,7 +860,7 @@ describe("LeaveType Controller", () => {
 
 		it("should handle negative limit values", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "-10" };
+			req.query = buildListQuery({ page: "1", limit: "-10" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -831,7 +868,7 @@ describe("LeaveType Controller", () => {
 
 		it("should handle empty string values", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "", limit: "", sort: "", order: "" };
+			req.query = buildListQuery({ page: "", limit: "", sort: "", order: "" });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -839,7 +876,7 @@ describe("LeaveType Controller", () => {
 
 		it("should handle whitespace-only values", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "   ", limit: "   ", sort: "   " };
+			req.query = buildListQuery({ page: "   ", limit: "   ", sort: "   " });
 			await leaveTypeController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -850,8 +887,8 @@ describe("LeaveType Controller", () => {
 			req.params = { id: mockLeaveType.id };
 			req.body = {}; // Empty body
 			await leaveTypeController.update(req as Request, res, next);
-			expect(statusCode).to.equal(200);
-			expect(sentData).to.have.property("status", "success");
+			expect(statusCode).to.equal(400);
+			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should handle partial updates correctly", async function () {

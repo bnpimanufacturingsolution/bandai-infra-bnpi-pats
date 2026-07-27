@@ -18,6 +18,7 @@ Load this file with the shared context bundle before starting work.
 - Preserve human-written content outside generated markers.
 - Record meaningful implementation notes in `reports/agent-implementation-log.md`; treat `reports/codex-implementation-log.md` as a legacy name.
 - Register accessible external-chat files, screenshots, docs, and images through WWG source intake; if the artifact is chat-only and inaccessible, add a raw source note documenting the limitation.
+- For GitHub ticket or project-item screenshot evidence, follow `docs/github-ticket-image-evidence.md` and use GitHub-generated `user-attachments` image URLs instead of local file paths.
 
 ## Output Format
 

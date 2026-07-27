@@ -107,6 +107,10 @@ export const EmployeePayrollComputationRowSchema = z.object({
 		"ADDED_AFTER_NETPAY",
 	]),
 	explanation: z.string(),
+	/** Present on employeeBenefit source lines for tax grouping in UI. */
+	isTaxable: z.boolean().nullable().optional(),
+	/** True when row comes from metadata.payrollSourceDetails (benefit/loan). */
+	isBenefitSource: z.boolean().optional(),
 });
 
 export const EmployeePayrollComputationViewSchema = z.object({
@@ -215,6 +219,28 @@ export const EmployeePayrollSchema = z.object({
 	paidAt: z.coerce.date().optional().nullable(),
 	paymentMethod: z.string().optional().nullable(),
 	referenceNumber: z.string().optional().nullable(),
+	isPublished: z.boolean(),
+	publishedAt: z.coerce.date().optional().nullable(),
+	publishedBy: z
+		.string()
+		.refine((val) => isValidObjectId(val))
+		.optional()
+		.nullable(),
+	payslipGeneratedAt: z.coerce.date().optional().nullable(),
+	payslipReleasedAt: z.coerce.date().optional().nullable(),
+	payslipReleasedBy: z
+		.string()
+		.refine((val) => isValidObjectId(val))
+		.optional()
+		.nullable(),
+	hasPaymentIssue: z.boolean(),
+	paymentIssueAt: z.coerce.date().optional().nullable(),
+	paymentIssueBy: z
+		.string()
+		.refine((val) => isValidObjectId(val))
+		.optional()
+		.nullable(),
+	paymentIssueNote: z.string().optional().nullable(),
 	snapshotLockedAt: z.coerce.date().optional().nullable(),
 	snapshotLockedBy: z
 		.string()
@@ -252,6 +278,14 @@ export const CreateEmployeePayrollSchema = EmployeePayrollSchema.omit({
 	paidAt: true,
 	paymentMethod: true,
 	referenceNumber: true,
+	publishedAt: true,
+	publishedBy: true,
+	payslipGeneratedAt: true,
+	payslipReleasedAt: true,
+	payslipReleasedBy: true,
+	paymentIssueAt: true,
+	paymentIssueBy: true,
+	paymentIssueNote: true,
 	snapshotLockedAt: true,
 	snapshotLockedBy: true,
 	snapshotLockReason: true,

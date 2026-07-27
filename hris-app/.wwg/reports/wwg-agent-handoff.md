@@ -88,7 +88,7 @@ Agents should follow Must Have items first. Missing Other Features are not block
 
 ## Target Folder
 
-C:\Users\1biss\Documents\Projects\hris-app
+C:\Users\User\Desktop\DEVS PROJECTS\BANDAI\hris-app
 
 ## GitHub Repository
 
@@ -173,13 +173,13 @@ Admin routes include:
 ## Architecture and Hosting Preferences
 
 Status: INFERRED_FROM_EXISTING_PROJECT
+Last reviewed: 2026-05-28
 Firebase Hosting is configured through `firebase.json`.
 - Hosting targets: `dev` and `uat`.
 - Public directory: `build/client`.
 - SPA rewrite: all routes rewrite to `/index.html`.
 - The app build output is produced by `react-router build`.
 Observed Firebase/project naming:
-- `hris-dev`.
 
 ## Design Preferences
 
@@ -372,6 +372,6 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 
 - Open VSCode.
 - File -> Open Folder.
-- Select: C:\Users\1biss\Documents\Projects\hris-app.
+- Select: C:\Users\User\Desktop\DEVS PROJECTS\BANDAI\hris-app.
 - Start your chosen coding agent.
 - Use the recommended first prompt above.

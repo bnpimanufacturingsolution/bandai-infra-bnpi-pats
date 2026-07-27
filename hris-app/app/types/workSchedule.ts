@@ -46,7 +46,7 @@ export interface CreateWorkScheduleRequest {
 	isActive?: boolean;
 }
 
-export type UpdateWorkScheduleRequest = Partial<CreateWorkScheduleRequest>;
+export interface UpdateWorkScheduleRequest extends Partial<CreateWorkScheduleRequest> {}
 
 export interface WorkScheduleResponse {
 	status?: string;
@@ -73,5 +73,5 @@ export interface WorkSchedulesResponse {
 	};
 }
 
-export type DailySchedule = Record<string, never>;
-export type LegacyTimeSlot = Record<string, never>;
+export interface DailySchedule {}
+export interface LegacyTimeSlot {}

@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 import { cn } from "~/lib/utils";
 
 interface EmployeeTableCellProps {
@@ -12,26 +12,6 @@ interface EmployeeTableCellProps {
 	stopPropagation?: boolean;
 	onClick?: () => void;
 }
-
-const getEmployeeInitials = (fullName?: string | null, employeeId?: string | null) => {
-	const parts = String(fullName || "")
-		.trim()
-		.split(/\s+/)
-		.filter(Boolean);
-
-	if (parts.length === 1) {
-		return parts[0].slice(0, 2).toUpperCase();
-	}
-
-	if (parts.length > 1) {
-		return `${parts[0][0] || ""}${parts[parts.length - 1][0] || ""}`.toUpperCase();
-	}
-
-	const fallback = String(employeeId || "")
-		.trim()
-		.replace(/[^a-zA-Z0-9]/g, "");
-	return fallback.slice(0, 2).toUpperCase() || "?";
-};
 
 export function EmployeeTableCell({
 	profileId,
@@ -46,16 +26,15 @@ export function EmployeeTableCell({
 	const navigate = useNavigate();
 	const resolvedName = fullName?.trim() || employeeId || fallbackName;
 	const resolvedEmployeeId = employeeId?.trim() || "-";
-	const initials = getEmployeeInitials(fullName, employeeId);
 
 	const content = avatar !== undefined ? (
 		<div className="flex min-w-0 items-center gap-3">
-			<Avatar className="h-9 w-9 shrink-0">
-				{avatar ? <AvatarImage src={avatar} alt={resolvedName} /> : null}
-				<AvatarFallback className="bg-orange-100 text-[11px] font-semibold uppercase text-orange-700">
-					{initials}
-				</AvatarFallback>
-			</Avatar>
+			<EmployeeAvatar
+				src={avatar}
+				alt={resolvedName}
+				size="md"
+				className="shrink-0"
+			/>
 			<div className="flex min-w-0 flex-col">
 				<span className="truncate text-sm font-medium text-gray-900">{resolvedName}</span>
 				<span className="truncate text-xs text-gray-500">{resolvedEmployeeId}</span>
@@ -88,7 +67,8 @@ export function EmployeeTableCell({
 				}
 			}}
 			className={cn(
-				"flex min-w-0 flex-col text-left transition-colors hover:text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2",
+				"flex min-w-0 text-left transition-colors hover:text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2",
+				avatar !== undefined ? "w-full flex-row items-center" : "flex-col",
 				className,
 			)}>
 			{content}

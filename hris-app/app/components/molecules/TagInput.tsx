@@ -72,12 +72,9 @@ interface TagBadgeProps {
 }
 
 function TagBadge({ tag, onRemove }: TagBadgeProps) {
-	// Map tag variants to valid badge variants
-	const badgeVariant = tag.variant as any;
-
 	return (
-		<Badge variant={badgeVariant} className="flex items-center gap-1">
-			{tag.label}
+		<Badge variant="secondary" className="flex items-center gap-1">
+			{tag}
 			<button
 				type="button"
 				onClick={onRemove}

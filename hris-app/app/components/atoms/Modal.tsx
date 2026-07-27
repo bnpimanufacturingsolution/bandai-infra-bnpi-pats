@@ -13,15 +13,8 @@ export interface ModalProps {
 	className?: string;
 	showCloseButton?: boolean;
 	closeOnBackdropClick?: boolean;
-	/** When false, Escape does not close. Default true. */
-	closeOnEscape?: boolean;
 }
 
-/**
- * Modal shell that keeps dialog interactive (dropdowns/portals/scroll).
- * Important: backdrop must not sit above the dialog, and the shell uses
- * pointer-events-none so only the dialog captures clicks.
- */
 const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 	(
 		{
@@ -34,113 +27,91 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 			className,
 			showCloseButton = true,
 			closeOnBackdropClick = true,
-			closeOnEscape = true,
 			...props
 		},
 		ref,
 	) => {
-		const titleId = React.useId();
-		const descriptionId = React.useId();
-		const requestClose = React.useCallback(() => {
-			onOpenChange?.(false);
-			if (typeof document !== "undefined") {
-				document.body.style.overflow = "unset";
-			}
-		}, [onOpenChange]);
-
 		React.useEffect(() => {
 			if (open) {
 				document.body.style.overflow = "hidden";
 			} else {
 				document.body.style.overflow = "unset";
 			}
+
 			return () => {
 				document.body.style.overflow = "unset";
 			};
 		}, [open]);
 
 		React.useEffect(() => {
-			if (!open || !closeOnEscape) return;
+			if (!open) return;
 			const handleKeyDown = (event: KeyboardEvent) => {
 				if (event.key === "Escape") {
-					// Do not capture-phase stopPropagation — Select/dropdowns need Escape too.
-					requestClose();
+					onOpenChange?.(false);
 				}
 			};
 			window.addEventListener("keydown", handleKeyDown);
 			return () => window.removeEventListener("keydown", handleKeyDown);
-		}, [closeOnEscape, open, requestClose]);
+		}, [onOpenChange, open]);
 
 		if (!open) {
 			return trigger ? <>{trigger}</> : null;
 		}
 
+		// Allow nested modals to stack above a parent (e.g. payroll correction over timesheet).
+		const hasExplicitZ =
+			typeof className === "string" && /\bz-\[?\d/.test(className);
+		const shellZ = hasExplicitZ ? undefined : "z-50";
+
 		return (
 			<>
 				{trigger}
-				{/* Shell: no pointer events so portaled menus above work; children re-enable */}
 				<div
-					className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none"
-					data-modal-shell="true">
-					{/* Backdrop behind dialog */}
+					className={cn(
+						"fixed inset-0 flex items-center justify-center",
+						shellZ,
+						hasExplicitZ ? className?.match(/z-\S+/)?.[0] : undefined,
+					)}>
+					{/* Backdrop — under dialog panel in this stacking context */}
 					<div
-						className="absolute inset-0 bg-black/50 pointer-events-auto"
-						aria-hidden="true"
+						className="absolute inset-0 bg-black/50"
 						onClick={() => {
-							if (closeOnBackdropClick) requestClose();
+							if (closeOnBackdropClick) onOpenChange?.(false);
 						}}
+						aria-hidden
 					/>
-					{/* Dialog panel */}
+					{/* Modal Content */}
 					<div
 						ref={ref}
-						role="dialog"
-						aria-modal="true"
-						aria-labelledby={title ? titleId : undefined}
-						aria-describedby={description ? descriptionId : undefined}
 						className={cn(
-							"relative z-[1] flex w-full max-w-3xl max-h-[min(90vh,900px)] flex-col gap-3 border bg-white p-6 shadow-lg rounded-lg pointer-events-auto",
+							"relative z-10 flex flex-col w-full max-w-3xl gap-4 border bg-white p-6 shadow-lg duration-200 rounded-lg mx-4 max-h-[90vh] overflow-y-auto modern-scroll",
 							className,
 						)}
-						onClick={(event) => {
-							// Keep clicks inside dialog from hitting backdrop.
-							event.stopPropagation();
-						}}
-						{...props}>
-						{(title || description || showCloseButton) && (
-							<div className="relative shrink-0 space-y-1 pr-10">
+						{...props}
+						onClick={(e) => e.stopPropagation()}>
+						{(title || description) && (
+							<div className="space-y-1.5">
 								{title && (
-									<h2
-										id={titleId}
-										className="text-lg font-semibold leading-none tracking-tight">
+									<h2 className="text-lg font-semibold leading-none tracking-tight">
 										{title}
 									</h2>
 								)}
 								{description && (
-									<p id={descriptionId} className="text-sm text-muted-foreground">
-										{description}
-									</p>
-								)}
-								{showCloseButton && (
-									<Button
-										type="button"
-										variant="ghost"
-										size="icon"
-										className="absolute right-0 top-0 rounded-sm opacity-90 hover:opacity-100"
-										onClick={(event) => {
-											event.preventDefault();
-											event.stopPropagation();
-											requestClose();
-										}}>
-										<X className="h-4 w-4" />
-										<span className="sr-only">Close</span>
-									</Button>
+									<p className="text-sm text-muted-foreground">{description}</p>
 								)}
 							</div>
 						)}
-						{/* Scrollable body — dropdowns portal outside so they are not clipped */}
-						<div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden modern-scroll">
-							{children}
-						</div>
+						{children}
+						{showCloseButton && (
+							<Button
+								variant="ghost"
+								size="icon"
+								className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+								onClick={() => onOpenChange?.(false)}>
+								<X className="h-4 w-4" />
+								<span className="sr-only">Close</span>
+							</Button>
+						)}
 					</div>
 				</div>
 			</>

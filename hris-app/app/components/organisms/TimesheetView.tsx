@@ -1,4 +1,4 @@
-﻿import { Loader2, FileText } from "lucide-react";
+import { Loader2, FileText } from "lucide-react";
 import type { ReactNode } from "react";
 import { themeColors } from "~/lib/config/theme";
 import {
@@ -14,6 +14,7 @@ import {
 	type TimesheetBreakdownDay,
 	type TimesheetDayRequestAction,
 } from "~/components/molecules/TimesheetCalendar";
+import type { DayPayrollCorrectionMarker } from "~/lib/utils/payroll-correction-day-markers";
 
 export interface TimesheetViewProps {
 	/** Employee data to display */
@@ -47,6 +48,12 @@ export interface TimesheetViewProps {
 	onOpenEmployeeProfile?: (employeeId: string) => void;
 	/** Resolved employee profile id for deep-linking */
 	employeeProfileId?: string;
+	/** Suppress hover tooltips on calendar days while a day editor is open */
+	disableDayTooltips?: boolean;
+	/** When true, day menu offers payroll correction instead of day edits */
+	isPayrollLocked?: boolean;
+	/** Map of YYYY-MM-DD → payroll correction markers for locked sheets */
+	payrollCorrectionByDate?: Map<string, DayPayrollCorrectionMarker> | null;
 }
 
 function unwrapScheduleEnvelope(value: unknown) {
@@ -81,6 +88,9 @@ export function TimesheetView({
 	belowSummaryContent,
 	onOpenEmployeeProfile,
 	employeeProfileId,
+	disableDayTooltips = false,
+	isPayrollLocked = false,
+	payrollCorrectionByDate = null,
 }: TimesheetViewProps) {
 	const activeSchedule = unwrapScheduleEnvelope(employee?.embeddedSchedule);
 	const hasEmployeeSchedule =
@@ -224,6 +234,9 @@ export function TimesheetView({
 				modifiedDayKeys={modifiedDayKeys}
 				payrollPeriodStartDate={payrollPeriodStartDate}
 				payrollPeriodEndDate={payrollPeriodEndDate}
+				disableDayTooltips={disableDayTooltips}
+				isPayrollLocked={isPayrollLocked}
+				payrollCorrectionByDate={payrollCorrectionByDate}
 			/>
 		</div>
 	);

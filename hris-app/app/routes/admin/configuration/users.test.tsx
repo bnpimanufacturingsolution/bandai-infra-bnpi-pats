@@ -4,6 +4,16 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import UsersPage from "./users";
 
+const mockNavigate = vi.fn();
+
+vi.mock("react-router-dom", async (importOriginal) => {
+	const actual = await importOriginal<typeof import("react-router-dom")>();
+	return {
+		...actual,
+		useNavigate: () => mockNavigate,
+	};
+});
+
 vi.mock("~/components/atoms/Button", () => ({
 	Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
 }));
@@ -67,7 +77,11 @@ vi.mock("~/components/atoms/DataTable", () => ({
 vi.mock("~/components/ui/dropdown-menu", () => ({
 	DropdownMenu: ({ children }: any) => <div>{children}</div>,
 	DropdownMenuContent: ({ children }: any) => <div>{children}</div>,
-	DropdownMenuItem: ({ children }: any) => <button type="button">{children}</button>,
+	DropdownMenuItem: ({ children, ...props }: any) => (
+		<button type="button" {...props}>
+			{children}
+		</button>
+	),
 	DropdownMenuSeparator: () => <hr />,
 	DropdownMenuTrigger: ({ children }: any) => <button type="button">{children}</button>,
 }));
@@ -215,5 +229,17 @@ describe("UsersPage", () => {
 
 		expect(accessStatus?.closest("[data-testid='badge']")).toHaveAttribute("data-variant", "success");
 		expect(accountStatus.closest("[data-testid='badge']")).toBeNull();
+	});
+
+	it("navigates to the user activity logs page from the view modal", () => {
+		render(
+			<MemoryRouter initialEntries={["/admin/configuration/users?action=view&id=user-1"]}>
+				<UsersPage />
+			</MemoryRouter>,
+		);
+
+		screen.getByRole("button", { name: "Activity Logs" }).click();
+
+		expect(mockNavigate).toHaveBeenCalledWith("/admin/configuration/users/user-1/activity-logs");
 	});
 });

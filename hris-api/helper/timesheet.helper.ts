@@ -165,6 +165,8 @@ export async function syncTimesheetLinesFromBreakdown(
 		breakdown: any[];
 		attendances?: any[];
 		versionMode?: "update" | "version";
+		versionDayKeys?: Set<string>;
+		manualEditDayKeys?: Set<string>;
 		ledgerType?: "SNAPSHOT" | "CORRECTION" | "HR_ADJUSTMENT" | "SYSTEM_REBUILD";
 		editedBy?: string | null;
 		editReason?: string | null;
@@ -253,12 +255,28 @@ export async function syncTimesheetLinesFromBreakdown(
 					? attendance.breakMinutes
 					: null;
 
+		const shouldVersionDay = params.versionDayKeys
+			? params.versionDayKeys.has(dateKey)
+			: params.versionMode === "version";
+		const isManualEmployeeEdit =
+			shouldVersionDay && params.manualEditDayKeys?.has(dateKey) === true;
+		const persistedLineMetadata = isManualEmployeeEdit
+			? {
+					...timesheetLineMetadata,
+					revision: {
+						...(timesheetLineMetadata as any).revision,
+						source: "EMPLOYEE_MANUAL_EDIT",
+					},
+				}
+			: timesheetLineMetadata;
 		await writeEffectiveTimesheetLine(prisma, {
 			organizationId: params.organizationId,
 			timesheetId: params.timesheetId,
 			date,
-			versionMode: params.versionMode || "update",
-			ledgerType: params.ledgerType || (params.versionMode === "version" ? "CORRECTION" : "SNAPSHOT"),
+			versionMode: shouldVersionDay ? "version" : "update",
+			ledgerType: shouldVersionDay
+				? params.ledgerType || "CORRECTION"
+				: "SNAPSHOT",
 			editedBy: params.editedBy || null,
 			editReason: params.editReason || null,
 			data: {
@@ -284,7 +302,7 @@ export async function syncTimesheetLinesFromBreakdown(
 				employeeNotes: day?.employeeNotes || null,
 				approverNotes: day?.approverNotes || null,
 				notes: day?.employeeNotes || attendance?.notes || null,
-				metadata: timesheetLineMetadata as any,
+				metadata: persistedLineMetadata as any,
 				primaryMarker: timesheetLineMetadata.primaryMarker || null,
 				isManualEntry: Boolean(attendance?.isManualEntry),
 				isVirtual: !attendance?.id,

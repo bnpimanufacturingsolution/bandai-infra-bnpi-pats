@@ -46,22 +46,6 @@ function removeFileSafe(filePath) {
 	}
 }
 
-const markerPath = path.join(rootDir, ".runtime", "cleanup-emitted-js.stamp");
-const maxAgeMs = Number(process.env.HRIS_CLEANUP_EMITTED_JS_MAX_AGE_MS || 5 * 60 * 1000);
-try {
-	if (fs.existsSync(markerPath)) {
-		const age = Date.now() - fs.statSync(markerPath).mtimeMs;
-		if (age >= 0 && age < maxAgeMs && process.env.HRIS_FORCE_CLEANUP_EMITTED_JS !== "true") {
-			console.log(
-				`[cleanup-emitted-js] Fast skip — last cleanup ${Math.round(age / 1000)}s ago (max ${Math.round(maxAgeMs / 1000)}s). Set HRIS_FORCE_CLEANUP_EMITTED_JS=true to force.`,
-			);
-			process.exit(0);
-		}
-	}
-} catch {
-	// fall through to full scan
-}
-
 const files = collectFiles(rootDir);
 const emittedJsFiles = files.filter(isEmittedJsSibling);
 
@@ -74,12 +58,4 @@ for (const filePath of emittedJsFiles) {
 
 if (removedCount > 0) {
 	console.log(`[cleanup-emitted-js] Removed ${removedCount} emitted .js file(s).`);
-} else {
-	console.log("[cleanup-emitted-js] No emitted .js siblings to remove.");
-}
-try {
-	fs.mkdirSync(path.dirname(markerPath), { recursive: true });
-	fs.writeFileSync(markerPath, new Date().toISOString(), "utf8");
-} catch {
-	// ignore stamp failures
 }

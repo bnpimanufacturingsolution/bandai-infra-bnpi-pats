@@ -17,12 +17,16 @@ type ReportEmployeeRosterEntry = {
 
 interface ReportEmployeeCellProps {
 	rosterEmployees?: ReportEmployeeRosterEntry[];
+	/** Internal employee record id (profile deep-link). Prefer this when known. */
+	profileId?: string | null;
 	employeeId?: string | null;
 	employeeCode?: string | null;
 	fullName?: string | null;
 	name?: string | null;
 	fallbackName?: string;
 	className?: string;
+	/** When true (default), cell navigates to `/employee/:profileId` if resolvable. */
+	linkToProfile?: boolean;
 	onClick?: () => void;
 }
 
@@ -74,13 +78,19 @@ const resolveRosterEmployee = (
 
 export function resolveReportEmployeeCell({
 	rosterEmployees,
+	profileId,
 	employeeId,
 	employeeCode,
 	fullName,
 	name,
 }: Pick<
 	ReportEmployeeCellProps,
-	"rosterEmployees" | "employeeId" | "employeeCode" | "fullName" | "name"
+	| "rosterEmployees"
+	| "profileId"
+	| "employeeId"
+	| "employeeCode"
+	| "fullName"
+	| "name"
 >) {
 	const resolvedName = String(fullName || name || "").trim() || undefined;
 	const resolvedRosterEmployee = resolveRosterEmployee(
@@ -90,30 +100,44 @@ export function resolveReportEmployeeCell({
 		resolvedName,
 	);
 
+	// Display code: prefer explicit props, then roster human code (not internal UUID).
+	const displayEmployeeId =
+		String(
+			employeeCode ||
+				employeeId ||
+				resolvedRosterEmployee?.employeeId ||
+				"",
+		).trim() || undefined;
+
+	const resolvedProfileId =
+		String(profileId || resolvedRosterEmployee?.id || "").trim() || undefined;
+
 	return {
 		fullName:
 			resolvedName ||
 			buildRosterNameVariants(resolvedRosterEmployee).find((value) => value) ||
 			undefined,
-		employeeId:
-			String(employeeCode || employeeId || resolvedRosterEmployee?.employeeId || resolvedRosterEmployee?.id || "").trim() ||
-			undefined,
+		employeeId: displayEmployeeId,
+		profileId: resolvedProfileId,
 		avatar: String(resolvedRosterEmployee?.user?.avatar || "").trim() || undefined,
 	};
 }
 
 export function ReportEmployeeCell({
 	rosterEmployees,
+	profileId,
 	employeeId,
 	employeeCode,
 	fullName,
 	name,
 	fallbackName = "N/A",
 	className,
+	linkToProfile = true,
 	onClick,
 }: ReportEmployeeCellProps) {
 	const resolved = resolveReportEmployeeCell({
 		rosterEmployees,
+		profileId,
 		employeeId,
 		employeeCode,
 		fullName,
@@ -122,6 +146,7 @@ export function ReportEmployeeCell({
 
 	return (
 		<EmployeeTableCell
+			profileId={linkToProfile && !onClick ? resolved.profileId : undefined}
 			fullName={resolved.fullName}
 			employeeId={resolved.employeeId}
 			avatar={resolved.avatar ?? null}

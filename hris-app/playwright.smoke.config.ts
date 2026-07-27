@@ -21,11 +21,11 @@ export default defineConfig({
 				url: baseURL,
 				reuseExistingServer: false,
 				timeout: 120_000,
-				env: {
-					VITE_API_BASE_URL: `${baseURL}/api`,
-					VITE_AUTH_TOKEN_STORAGE_ENABLED: "true",
-				},
+			env: {
+				VITE_API_BASE_URL: `${baseURL}/api`,
+				VITE_AUTH_TOKEN_STORAGE_ENABLED: "true",
 			},
+		},
 	use: {
 		baseURL,
 		headless: true,

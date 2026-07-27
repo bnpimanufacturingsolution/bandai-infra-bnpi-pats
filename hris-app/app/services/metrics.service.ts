@@ -1449,6 +1449,12 @@ class MetricsService extends APIService {
 		dateFrom: string,
 		dateTo: string,
 		groupBy: TurnoverAttritionGroupBy,
+		filters?: {
+			departmentId?: string;
+			sectionId?: string;
+			positionId?: string;
+			levelId?: string;
+		},
 	): Promise<TurnoverAttritionReportResponse> {
 		try {
 			const payload = {
@@ -1458,6 +1464,10 @@ class MetricsService extends APIService {
 					dateFrom,
 					dateTo,
 					groupBy,
+					...(filters?.departmentId ? { departmentId: filters.departmentId } : {}),
+					...(filters?.sectionId ? { sectionId: filters.sectionId } : {}),
+					...(filters?.positionId ? { positionId: filters.positionId } : {}),
+					...(filters?.levelId ? { levelId: filters.levelId } : {}),
 				},
 			};
 

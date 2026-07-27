@@ -93,9 +93,21 @@ export const CreateNotificationSchema = z.object({
 	eventKey: z.string().min(1).max(255).optional(),
 	recipientEmployeeIds: z
 		.array(z.string().refine((val) => isValidObjectId(val)))
-		.min(1, "At least one recipient is required"),
+		.optional(),
+	broadcast: z.boolean().default(false),
 	metadata: z.record(z.any()).optional(),
-});
+}).refine(
+	(data) => {
+		if (data.broadcast) {
+			return true;
+		}
+		return data.recipientEmployeeIds && data.recipientEmployeeIds.length > 0;
+	},
+	{
+		message: "recipientEmployeeIds must contain at least one ID when broadcast is false",
+		path: ["recipientEmployeeIds"],
+	}
+);
 
 export type CreateNotificationInput = z.infer<typeof CreateNotificationSchema>;
 

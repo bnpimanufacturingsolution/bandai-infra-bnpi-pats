@@ -1,6 +1,17 @@
 import { hrisApiClient } from "../lib/api-client";
 import { APIService } from "./api-service";
 import type { ApiQueryParams } from "./api-service";
+import type {
+	BenefitAttendanceAmountBasis,
+	BenefitRecurrenceFrequency,
+	BenefitScheduleMode,
+} from "../zod/employee-benefit.zod";
+
+export type {
+	BenefitScheduleMode,
+	BenefitAttendanceAmountBasis,
+	BenefitRecurrenceFrequency,
+} from "../zod/employee-benefit.zod";
 
 export interface EmployeeBenefit {
 	id: string;
@@ -13,6 +24,16 @@ export interface EmployeeBenefit {
 	amount: number;
 	startDate: string;
 	endDate?: string | null;
+	scheduleMode?: BenefitScheduleMode | null;
+	recurrenceFrequency?: BenefitRecurrenceFrequency | null;
+	totalInstallments?: number | null;
+	attendanceBased?: boolean | null;
+	attendanceAmountBasis?: BenefitAttendanceAmountBasis | null;
+	eligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED" | null;
+	eligibilityDisqualifyOnAbsent?: boolean | null;
+	eligibilityDisqualifyOnLate?: boolean | null;
+	eligibilityDisqualifyOnUndertime?: boolean | null;
+	eligibilityDisqualifyOnLeave?: boolean | null;
 	status?: "PENDING" | "APPROVED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "DEFAULTED";
 	isActive: boolean;
 	approvedBy?: string | null;
@@ -23,8 +44,20 @@ export interface EmployeeBenefit {
 	updatedAt: string;
 	employee?: {
 		id: string;
-		firstName: string;
-		lastName: string;
+		employeeId?: string;
+		firstName?: string;
+		lastName?: string;
+		person?: {
+			personalInfo?: {
+				firstName?: string;
+				middleName?: string;
+				lastName?: string;
+			};
+			email?: string;
+		};
+		user?: {
+			avatar?: string | null;
+		};
 		department?: {
 			name: string;
 		};
@@ -52,17 +85,44 @@ export interface EmployeeBenefit {
 
 export interface CreateEmployeeBenefitRequest {
 	organizationId: string;
-	employeeId?: string;
+	employeeId: string;
 	benefitTypeId: string;
 	payrollPeriodId?: string;
 	name: string;
 	description?: string;
 	amount: number;
 	startDate: string;
+	scheduleMode: BenefitScheduleMode;
+	recurrenceFrequency?: BenefitRecurrenceFrequency | null;
 	endDate?: string;
+	totalInstallments?: number;
+	attendanceBased?: boolean;
+	attendanceAmountBasis?: BenefitAttendanceAmountBasis | null;
+	eligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED";
+	eligibilityDisqualifyOnAbsent?: boolean;
+	eligibilityDisqualifyOnLate?: boolean;
+	eligibilityDisqualifyOnUndertime?: boolean;
+	eligibilityDisqualifyOnLeave?: boolean;
 	status?: "PENDING" | "APPROVED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "DEFAULTED";
 	notes?: string;
 	isActive?: boolean;
+}
+
+/** Bulk create: shared benefit fields applied to many employees. */
+export interface BulkCreateEmployeeBenefitRequest
+	extends Omit<CreateEmployeeBenefitRequest, "employeeId"> {
+	employeeIds: string[];
+}
+
+export interface BulkCreateEmployeeBenefitResult {
+	created: EmployeeBenefit[];
+	failed: { employeeId: string; message: string }[];
+}
+
+export interface ImportEmployeeBenefitsResult {
+	success: number;
+	failed: number;
+	errors: Array<{ row: number; error: string; data?: Record<string, unknown> }>;
 }
 
 export interface UpdateEmployeeBenefitRequest {
@@ -73,7 +133,17 @@ export interface UpdateEmployeeBenefitRequest {
 	description?: string;
 	amount?: number;
 	startDate?: string;
+	scheduleMode?: BenefitScheduleMode;
+	recurrenceFrequency?: BenefitRecurrenceFrequency | null;
 	endDate?: string;
+	totalInstallments?: number;
+	attendanceBased?: boolean;
+	attendanceAmountBasis?: BenefitAttendanceAmountBasis | null;
+	eligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED";
+	eligibilityDisqualifyOnAbsent?: boolean;
+	eligibilityDisqualifyOnLate?: boolean;
+	eligibilityDisqualifyOnUndertime?: boolean;
+	eligibilityDisqualifyOnLeave?: boolean;
 	status?: "PENDING" | "APPROVED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "DEFAULTED";
 	notes?: string;
 	isActive?: boolean;
@@ -115,7 +185,8 @@ class EmployeeBenefitService extends APIService {
 
 			const finalQueryString = this.getQueryString();
 			const defaultFields =
-				"id,organizationId,employeeId,benefitTypeId,name,description,amount,startDate,endDate,payrollPeriodId,status,isActive,notes,employee.id,employee.employeeId,employee.person.personalInfo,employee.position.title,benefitType.id,benefitType.code,benefitType.name,benefitType.category,benefitType.payrollDirection,payrollPeriod.id,payrollPeriod.name,payrollPeriod.code,payrollPeriod.startDate,payrollPeriod.endDate";
+				"id,organizationId,employeeId,benefitTypeId,name,description,amount,startDate,endDate,scheduleMode,recurrenceFrequency,totalInstallments,attendanceBased,attendanceAmountBasis,payrollPeriodId,status,isActive,notes,employee.id,employee.employeeId,employee.person.personalInfo,employee.position.title,benefitType.id,benefitType.code,benefitType.name,benefitType.category,benefitType.payrollDirection,payrollPeriod.id,payrollPeriod.name,payrollPeriod.code,payrollPeriod.startDate,payrollPeriod.endDate";
+			// Note: eligibilityMode / disqualify flags require regenerated Prisma client + migration.
 			const endpoint = finalQueryString.includes("fields=")
 				? `/api/employeeBenefit${finalQueryString}`
 				: `/api/employeeBenefit${finalQueryString}${finalQueryString ? "&" : "?"}fields=${defaultFields}`;
@@ -153,7 +224,7 @@ class EmployeeBenefitService extends APIService {
 	async getEmployeeBenefit(id: string): Promise<EmployeeBenefit> {
 		try {
 
-			const endpoint = `/api/employeeBenefit/${id}?fields=id,organizationId,employeeId,benefitTypeId,name,description,amount,startDate,endDate,payrollPeriodId,status,isActive,notes,employee.id,employee.employeeId,employee.person.personalInfo,employee.position.title,employee.person.contactInfo.email,benefitType.id,benefitType.code,benefitType.name,benefitType.category,benefitType.payrollDirection,payrollPeriod.id,payrollPeriod.name,payrollPeriod.code,payrollPeriod.startDate,payrollPeriod.endDate`;
+			const endpoint = `/api/employeeBenefit/${id}?fields=id,organizationId,employeeId,benefitTypeId,name,description,amount,startDate,endDate,scheduleMode,recurrenceFrequency,totalInstallments,attendanceBased,attendanceAmountBasis,payrollPeriodId,status,isActive,notes,employee.id,employee.employeeId,employee.person.personalInfo,employee.position.title,employee.person.contactInfo.email,benefitType.id,benefitType.code,benefitType.name,benefitType.category,benefitType.payrollDirection,payrollPeriod.id,payrollPeriod.name,payrollPeriod.code,payrollPeriod.startDate,payrollPeriod.endDate`;
 			const response = await hrisApiClient.get<any>(endpoint);
 
 			if (!response.data) {
@@ -218,6 +289,86 @@ class EmployeeBenefitService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error creating employee benefit",
+			);
+		}
+	}
+
+	/**
+	 * Create the same benefit enrollment for multiple employees.
+	 */
+	async bulkCreateEmployeeBenefits(
+		data: BulkCreateEmployeeBenefitRequest,
+	): Promise<BulkCreateEmployeeBenefitResult> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/employeeBenefit/bulk", data);
+
+			if (!response.data) {
+				throw new Error("Failed to bulk create employee benefits");
+			}
+
+			let responseData = response.data;
+			if (responseData && typeof responseData === "object" && "data" in responseData) {
+				responseData = responseData.data;
+			}
+
+			const created = Array.isArray(responseData?.created)
+				? (responseData.created as EmployeeBenefit[])
+				: [];
+			const failed = Array.isArray(responseData?.failed)
+				? (responseData.failed as { employeeId: string; message: string }[])
+				: [];
+
+			return { created, failed };
+		} catch (error: any) {
+			console.error("Error bulk creating employee benefits:", error);
+			if (error.status === 400 && error.errors) {
+				throw error;
+			}
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error bulk creating employee benefits",
+			);
+		}
+	}
+
+	/**
+	 * Bulk import employee benefit enrollments from CSV/Excel (mapped canonical columns).
+	 */
+	async importEmployeeBenefits(file: File): Promise<ImportEmployeeBenefitsResult> {
+		try {
+			const formData = new FormData();
+			formData.append("file", file);
+
+			const response = await hrisApiClient.post<any>("/api/employeeBenefit/import", formData, {
+				timeoutMs: 5 * 60 * 1000,
+			});
+
+			let responseData = response.data;
+			if (responseData && typeof responseData === "object" && "data" in responseData) {
+				responseData = responseData.data;
+			}
+
+			return {
+				success: Number(responseData?.success || 0),
+				failed: Number(responseData?.failed || 0),
+				errors: Array.isArray(responseData?.errors) ? responseData.errors : [],
+			};
+		} catch (error: any) {
+			console.error("Error importing employee benefits:", error);
+			// Partial/all-fail responses may still include row results
+			const nested = error?.data?.data || error?.data || error?.response?.data?.data;
+			if (nested && (nested.success !== undefined || nested.failed !== undefined)) {
+				return {
+					success: Number(nested.success || 0),
+					failed: Number(nested.failed || 0),
+					errors: Array.isArray(nested.errors) ? nested.errors : [],
+				};
+			}
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error importing employee benefits",
 			);
 		}
 	}

@@ -136,6 +136,7 @@ jobs:
       GCP_WORKLOAD_IDENTITY_PROVIDER: ""
       GCP_SERVICE_ACCOUNT_EMAIL: ""
       GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL: ""
+      CLOUD_SQL_INSTANCE: ""
       SECRET_DATABASE_URL: ""
       SECRET_JWT_SECRET: ""
       SECRET_CORS_ORIGINS: ""
@@ -164,6 +165,8 @@ jobs:
       GCP_SERVICE_ACCOUNT_EMAIL_UAT: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL_UAT }}
       GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_DEV: ${{ secrets.GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_DEV }}
       GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_UAT: ${{ secrets.GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_UAT }}
+      CLOUD_SQL_INSTANCE_DEV: ${{ secrets.CLOUD_SQL_INSTANCE_DEV }}
+      CLOUD_SQL_INSTANCE_UAT: ${{ secrets.CLOUD_SQL_INSTANCE_UAT }}
       SECRET_DATABASE_URL_DEV: ${{ secrets.SECRET_DATABASE_URL_DEV }}
       SECRET_DATABASE_URL_UAT: ${{ secrets.SECRET_DATABASE_URL_UAT }}
       SECRET_JWT_SECRET_DEV: ${{ secrets.SECRET_JWT_SECRET_DEV }}
@@ -207,6 +210,7 @@ jobs:
               echo "GCP_WORKLOAD_IDENTITY_PROVIDER=$GCP_WORKLOAD_IDENTITY_PROVIDER_DEV" >> "$GITHUB_ENV"
               echo "GCP_SERVICE_ACCOUNT_EMAIL=$GCP_SERVICE_ACCOUNT_EMAIL_DEV" >> "$GITHUB_ENV"
               echo "GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL=$GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_DEV" >> "$GITHUB_ENV"
+              echo "CLOUD_SQL_INSTANCE=$CLOUD_SQL_INSTANCE_DEV" >> "$GITHUB_ENV"
               echo "SECRET_DATABASE_URL=$SECRET_DATABASE_URL_DEV" >> "$GITHUB_ENV"
               echo "SECRET_JWT_SECRET=$SECRET_JWT_SECRET_DEV" >> "$GITHUB_ENV"
               echo "SECRET_CORS_ORIGINS=$SECRET_CORS_ORIGINS_DEV" >> "$GITHUB_ENV"
@@ -230,6 +234,7 @@ jobs:
               echo "GCP_WORKLOAD_IDENTITY_PROVIDER=$GCP_WORKLOAD_IDENTITY_PROVIDER_UAT" >> "$GITHUB_ENV"
               echo "GCP_SERVICE_ACCOUNT_EMAIL=$GCP_SERVICE_ACCOUNT_EMAIL_UAT" >> "$GITHUB_ENV"
               echo "GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL=$GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL_UAT" >> "$GITHUB_ENV"
+              echo "CLOUD_SQL_INSTANCE=$CLOUD_SQL_INSTANCE_UAT" >> "$GITHUB_ENV"
               echo "SECRET_DATABASE_URL=$SECRET_DATABASE_URL_UAT" >> "$GITHUB_ENV"
               echo "SECRET_JWT_SECRET=$SECRET_JWT_SECRET_UAT" >> "$GITHUB_ENV"
               echo "SECRET_CORS_ORIGINS=$SECRET_CORS_ORIGINS_UAT" >> "$GITHUB_ENV"
@@ -316,10 +321,8 @@ jobs:
             fi
           }
 
-          if [ "$DEPLOY_ENV" != "DEV" ]; then
-            add_secret_pair "DATABASE_URL" "$SECRET_DATABASE_URL"
-            add_secret_pair "PG_DATABASE_URL" "$SECRET_DATABASE_URL"
-          fi
+          add_secret_pair "DATABASE_URL" "$SECRET_DATABASE_URL"
+          add_secret_pair "PG_DATABASE_URL" "$SECRET_DATABASE_URL"
           add_secret_pair "JWT_SECRET" "$SECRET_JWT_SECRET"
           add_secret_pair "CORS_ORIGINS" "$SECRET_CORS_ORIGINS"
           add_secret_pair "CORS_CREDENTIALS" "$SECRET_CORS_CREDENTIALS"
@@ -339,16 +342,6 @@ jobs:
             echo "SECRET_ARGS=" >> "$GITHUB_ENV"
           fi
 
-      - name: Clear DEV database secret bindings
-        if: ${{ env.DEPLOY_ENV == 'DEV' }}
-        run: |
-          gcloud run services update "$CLOUD_RUN_SERVICE" \
-            --project "$GCP_PROJECT_ID" \
-            --region "$GCP_REGION" \
-            --platform managed \
-            --remove-secrets=DATABASE_URL,PG_DATABASE_URL \
-            --quiet
-
       - name: Deploy to Cloud Run
         run: |
           unauth_flag=""
@@ -358,12 +351,10 @@ jobs:
             unauth_flag="--no-allow-unauthenticated"
           fi
 
-          runtime_env_pairs=("NODE_ENV=production")
-          if [ "$DEPLOY_ENV" = "DEV" ]; then
-            db_url="$(node -e 'const fs = require("fs"); const text = fs.readFileSync(".env.dev", "utf8"); const line = text.split(/\r?\n/).find((item) => /^(PG_DATABASE_URL|DATABASE_URL)=/.test(item)); if (!line) throw new Error("DATABASE_URL or PG_DATABASE_URL is missing in .env.dev"); let value = line.slice(line.indexOf("=") + 1).trim(); if (value.startsWith("\"") && value.endsWith("\"")) value = value.slice(1, -1); if (!/^postgres(ql)?:\/\//.test(value)) throw new Error(".env.dev database URL must be PostgreSQL"); process.stdout.write(value);')"
-            runtime_env_pairs+=("DATABASE_URL=$db_url" "PG_DATABASE_URL=$db_url")
+          cloudsql_args=()
+          if [ -n "$CLOUD_SQL_INSTANCE" ]; then
+            cloudsql_args=(--add-cloudsql-instances "$CLOUD_SQL_INSTANCE")
           fi
-          runtime_env_vars="$(IFS=,; echo "${runtime_env_pairs[*]}")"
 
           gcloud run deploy "$CLOUD_RUN_SERVICE" \
             --project "$GCP_PROJECT_ID" \
@@ -372,7 +363,8 @@ jobs:
             --image "$IMAGE" \
             --service-account "$GCP_RUNTIME_SERVICE_ACCOUNT_EMAIL" \
             --port 3001 \
-            --set-env-vars "$runtime_env_vars" \
+            --set-env-vars "NODE_ENV=production" \
+            "${cloudsql_args[@]}" \
             $SECRET_ARGS \
             $unauth_flag
 

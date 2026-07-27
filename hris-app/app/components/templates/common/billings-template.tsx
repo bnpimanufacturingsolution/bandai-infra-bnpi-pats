@@ -287,6 +287,7 @@ export function BillingsTemplate({
 					description="Statements in current result"
 					icon={FileText}
 					color="orange"
+					appearance="minimal"
 				/>
 				<SummaryCard
 					title="Total Billed Amount"
@@ -294,6 +295,7 @@ export function BillingsTemplate({
 					description="Gross billed amount"
 					icon={Wallet}
 					color="blue"
+					appearance="minimal"
 				/>
 				<SummaryCard
 					title="Total Remitted"
@@ -301,6 +303,7 @@ export function BillingsTemplate({
 					description="Payments already remitted"
 					icon={Landmark}
 					color="green"
+					appearance="minimal"
 				/>
 				<SummaryCard
 					title="Total Outstanding"
@@ -308,6 +311,7 @@ export function BillingsTemplate({
 					description="Pending remittance amount"
 					icon={AlertTriangle}
 					color="red"
+					appearance="minimal"
 				/>
 			</div>
 

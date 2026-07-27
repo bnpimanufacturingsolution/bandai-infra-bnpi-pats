@@ -3,14 +3,12 @@ import { useEffect } from "react";
 import LeaveApprovalsPage from "./approvals/leave";
 import ExpenseReimbursementApprovalsPage from "./approvals/expense-reimbursement";
 import DocumentRequestApprovalsPage from "./approvals/document-request";
-import Offboarding from "./approvals/offboarding";
 import PersonnelActionApprovalsPage from "./approvals/personnel-action";
 
 type ApprovalTypeRoute =
 	| "leave"
 	| "expense-reimbursement"
 	| "document-request"
-	| "offboarding"
 	| "personnel-action";
 
 export default function ApprovalTypePage() {
@@ -33,7 +31,6 @@ export default function ApprovalTypePage() {
 		"leave",
 		"expense-reimbursement",
 		"document-request",
-		"offboarding",
 		"personnel-action",
 	];
 
@@ -48,8 +45,6 @@ export default function ApprovalTypePage() {
 			return <LeaveApprovalsPage />;
 		case "expense-reimbursement":
 			return <ExpenseReimbursementApprovalsPage />;
-		case "offboarding":
-			return <Offboarding />;
 		case "document-request":
 			return <DocumentRequestApprovalsPage />;
 		case "personnel-action":

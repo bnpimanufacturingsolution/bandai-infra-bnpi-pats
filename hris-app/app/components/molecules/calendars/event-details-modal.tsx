@@ -89,13 +89,13 @@ export function EventDetailsModal({ event, onClose, getEventColor }: EventDetail
 							</div>
 						)}
 
-						{event.assignedUserIds.length > 0 && (
+						{(event.assignedUserIds?.length ?? 0) > 0 && (
 							<div className="flex items-start gap-3">
 								<Users className="w-5 h-5 text-muted-foreground mt-0.5" />
 								<div className="flex-1">
 									<div className="text-sm font-medium">Attendees</div>
 									<div className="text-sm text-muted-foreground">
-										{event.assignedUserIds.length} attendee(s)
+										{event.assignedUserIds?.length} attendee(s)
 									</div>
 								</div>
 							</div>

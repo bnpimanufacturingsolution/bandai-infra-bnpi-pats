@@ -33,11 +33,12 @@ const payroll_generation_job_service_1 = require("./payroll-generation-job.servi
 const payroll_cycle_helper_1 = require("./payroll-cycle.helper");
 const logger = (0, logger_helper_1.getLogger)();
 const payrollPeriodLogger = logger.child({ module: "payrollPeriod" });
+// BNPI default: 11-25 / 26-10 (matches Bandai semi-monthly register cutoffs).
 const DEFAULT_CYCLE_RULES_JSON = {
     SEMI_MONTHLY: {
-        firstStartDay: 1,
-        secondStartDay: 16,
-        secondEndDay: "LAST_DAY",
+        firstStartDay: 11,
+        secondStartDay: 26,
+        secondEndDay: 10,
     },
     WEEKLY: { anchorWeekday: 1 },
     BIWEEKLY: { anchorWeekday: 1 },
@@ -69,13 +70,18 @@ const controller = (prisma) => {
             ((_c = rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.SEMI_MONTHLY) === null || _c === void 0 ? void 0 : _c.secondEndDay) !== undefined;
         const legacySplitDay = Number(((_d = rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.SEMI_MONTHLY) === null || _d === void 0 ? void 0 : _d.splitDay) || 15);
         if (!config.cycleRules || !hasSemiMonthlyRule) {
+            // Prefer BNPI 11-25 / 26-10. Only honor legacy splitDay when it was explicitly stored.
+            const hasLegacySplitDay = ((_d = rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.SEMI_MONTHLY) === null || _d === void 0 ? void 0 : _d.splitDay) !== undefined;
             const safeSplitDay = Math.min(Math.max(legacySplitDay || 15, 1), 30);
-            const firstStartDay = 1;
-            const secondStartDay = Math.min(Math.max(safeSplitDay + 1, 2), 31);
+            const firstStartDay = hasLegacySplitDay ? 1 : 11;
+            const secondStartDay = hasLegacySplitDay
+                ? Math.min(Math.max(safeSplitDay + 1, 2), 31)
+                : 26;
+            const secondEndDay = hasLegacySplitDay ? "LAST_DAY" : 10;
             const migratedCycleRules = Object.assign(Object.assign({}, (rawCycleRules || {})), { SEMI_MONTHLY: {
                     firstStartDay,
                     secondStartDay,
-                    secondEndDay: "LAST_DAY",
+                    secondEndDay,
                 }, WEEKLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.WEEKLY) || { anchorWeekday: 1 }, BIWEEKLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.BIWEEKLY) || { anchorWeekday: 1 }, MONTHLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.MONTHLY) || { startDay: 1, endDay: "LAST_DAY" }, QUARTERLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.QUARTERLY) || { startMonth: 1 }, ANNUALLY: (rawCycleRules === null || rawCycleRules === void 0 ? void 0 : rawCycleRules.ANNUALLY) || { startMonth: 1 } });
             config = yield prisma.payrollCycleConfig.update({
                 where: { id: config.id },
@@ -184,6 +190,7 @@ const controller = (prisma) => {
         }
     });
     const getAll = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a;
         const validationResult = (0, validation_helper_1.validateQueryParams)(req, payrollPeriodLogger);
         if (!validationResult.isValid) {
             res.status(400).json(validationResult.errorResponse);
@@ -220,6 +227,15 @@ const controller = (prisma) => {
                 ? (0, dataGrouping_1.groupDataByField)(payrollPeriods, groupBy)
                 : payrollPeriods;
             const responseData = Object.assign(Object.assign(Object.assign(Object.assign({}, (document && { payrollPeriods: processedData })), (count && { count: total })), (pagination && { pagination: (0, success_handler_helper_1.buildPagination)(total, page, limit) })), (groupBy && { groupedBy: groupBy }));
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.GET_ALL_PAYROLLPERIOD,
+                description: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLLPERIODS_RETRIEVED,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLLPERIOD_LIST,
+                },
+            });
             res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)(constant_1.config.SUCCESS.PAYROLLPERIOD.RETRIEVED_ALL, responseData, 200));
         }
         catch (error) {
@@ -228,6 +244,7 @@ const controller = (prisma) => {
         }
     });
     const getById = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a;
         const { id } = req.params;
         const { fields } = req.query;
         const organizationId = req.organizationId;
@@ -307,6 +324,15 @@ const controller = (prisma) => {
                 return;
             }
             payrollPeriodLogger.info(`${constant_1.config.SUCCESS.PAYROLLPERIOD.RETRIEVED}: ${payrollPeriod.id}`);
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.GET_PAYROLLPERIOD,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLLPERIOD_RETRIEVED}: ${payrollPeriod.id}`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLLPERIOD_DETAILS,
+                },
+            });
             const successResponse = (0, success_handler_helper_1.buildSuccessResponse)(constant_1.config.SUCCESS.PAYROLLPERIOD.RETRIEVED, payrollPeriod, 200);
             res.status(200).json(successResponse);
         }
@@ -317,6 +343,7 @@ const controller = (prisma) => {
         }
     });
     const update = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b;
         const { id } = req.params;
         try {
             if (!id) {
@@ -364,6 +391,36 @@ const controller = (prisma) => {
                 payrollPeriodLogger.warn("Failed to invalidate cache after payrollPeriod update:", cacheError);
             }
             payrollPeriodLogger.info(`${constant_1.config.SUCCESS.PAYROLLPERIOD.UPDATED}: ${updatedPayrollPeriod.id}`);
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.UPDATE_PAYROLLPERIOD,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLLPERIOD_UPDATED}: ${updatedPayrollPeriod.name || updatedPayrollPeriod.id}`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLLPERIOD_UPDATE,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.UPDATE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.LOW,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: updatedPayrollPeriod.id,
+                changesBefore: {
+                    id: existingPayrollPeriod.id,
+                    name: existingPayrollPeriod.name,
+                    status: existingPayrollPeriod.status,
+                    updatedAt: existingPayrollPeriod.updatedAt,
+                },
+                changesAfter: {
+                    id: updatedPayrollPeriod.id,
+                    name: updatedPayrollPeriod.name,
+                    status: updatedPayrollPeriod.status,
+                    updatedAt: updatedPayrollPeriod.updatedAt,
+                },
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLLPERIOD_UPDATED}: ${updatedPayrollPeriod.name || updatedPayrollPeriod.id}`,
+            });
             const successResponse = (0, success_handler_helper_1.buildSuccessResponse)(constant_1.config.SUCCESS.PAYROLLPERIOD.UPDATED, { payrollPeriod: updatedPayrollPeriod }, 200);
             res.status(200).json(successResponse);
         }
@@ -374,6 +431,7 @@ const controller = (prisma) => {
         }
     });
     const remove = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b;
         const { id } = req.params;
         try {
             if (!id) {
@@ -404,6 +462,30 @@ const controller = (prisma) => {
                 payrollPeriodLogger.warn("Failed to invalidate cache after payrollPeriod deletion:", cacheError);
             }
             payrollPeriodLogger.info(`${constant_1.config.SUCCESS.PAYROLLPERIOD.DELETED}: ${id}`);
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.DELETE_PAYROLLPERIOD,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLLPERIOD_DELETED}: ${existingPayrollPeriod.name || id}`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLLPERIOD_DELETION,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.DELETE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.LOW,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: id,
+                changesBefore: {
+                    id: existingPayrollPeriod.id,
+                    name: existingPayrollPeriod.name,
+                    status: existingPayrollPeriod.status,
+                },
+                changesAfter: null,
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLLPERIOD_DELETED}: ${existingPayrollPeriod.name || id}`,
+            });
             const successResponse = (0, success_handler_helper_1.buildSuccessResponse)(constant_1.config.SUCCESS.PAYROLLPERIOD.DELETED, {}, 200);
             res.status(200).json(successResponse);
         }
@@ -414,7 +496,7 @@ const controller = (prisma) => {
         }
     });
     const generatePayroll = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e, _f;
         const { id: payrollPeriodId } = req.params;
         const organizationId = req.organizationId;
         try {
@@ -649,6 +731,35 @@ const controller = (prisma) => {
             yield cache_1.invalidateCache.byPattern("cache:payrollPeriod:*");
             yield cache_1.invalidateCache.byPattern("cache:employeePayroll:*");
             payrollPeriodLogger.info(`Generated payroll for ${successCount} employees (${errorCount} errors)`);
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_e = req.user) === null || _e === void 0 ? void 0 : _e.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.GENERATE_PAYROLL,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_GENERATED}: ${payrollPeriodId} (${successCount} employees)`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_GENERATION,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_f = req.user) === null || _f === void 0 ? void 0 : _f.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.UPDATE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.HIGH,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: payrollPeriodId,
+                changesBefore: {
+                    id: payrollPeriod.id,
+                    status: payrollPeriod.status,
+                },
+                changesAfter: {
+                    id: payrollPeriodId,
+                    status: "COMPLETED",
+                    generated: successCount,
+                    errors: errorCount,
+                    total: employees.length,
+                },
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_GENERATED}: ${payrollPeriodId}`,
+            });
             const successResponse = (0, success_handler_helper_1.buildSuccessResponse)(`Payroll generated successfully for ${successCount} employees`, {
                 generated: successCount,
                 errors: errorCount,
@@ -664,6 +775,7 @@ const controller = (prisma) => {
         }
     });
     const generateTimesheetPayroll = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b;
         const { id: payrollPeriodId } = req.params;
         const organizationId = req.organizationId;
         const requestedDepartmentId = typeof req.body?.departmentId === "string" && req.body.departmentId.trim() !== "all"
@@ -820,6 +932,34 @@ const controller = (prisma) => {
                 message: "Payroll generation started",
                 total: expectedTotal,
             };
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.GENERATE_TIMESHEET_PAYROLL,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_GENERATION_STARTED}: ${payrollPeriodId} (job ${jobId})`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_GENERATION,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.UPDATE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.HIGH,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: payrollPeriodId,
+                changesBefore: {
+                    id: payrollPeriod.id,
+                    status: payrollPeriod.status,
+                },
+                changesAfter: {
+                    id: payrollPeriodId,
+                    status: "PROCESSING",
+                    jobId,
+                    total: expectedTotal,
+                },
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_GENERATION_STARTED}: ${payrollPeriodId}`,
+            });
             const successResponse = (0, success_handler_helper_1.buildSuccessResponse)("Payroll generation started successfully", responseData, 202);
             res.status(202).json(successResponse);
         }
@@ -830,6 +970,7 @@ const controller = (prisma) => {
         }
     });
     const previewTimesheetPayroll = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a;
         const { id: payrollPeriodId } = req.params;
         const organizationId = req.organizationId;
         const requestedPage = Number(req.query.page);
@@ -865,6 +1006,15 @@ const controller = (prisma) => {
                 sectionId: requestedSectionId,
                 employeeId: requestedEmployeeId,
             });
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.PREVIEW_TIMESHEET_PAYROLL,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_PREVIEWED}: ${payrollPeriodId}`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_GENERATION,
+                },
+            });
             res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll preview retrieved successfully", preview, 200));
         }
         catch (error) {
@@ -899,9 +1049,19 @@ const controller = (prisma) => {
         }
     });
     const getActiveTimesheetGenerationProgress = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a;
         try {
             const { id: payrollPeriodId } = req.params;
             const progress = payroll_generation_job_service_1.PayrollGenerationJobService.getActiveJobForPeriod(payrollPeriodId);
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.GET_ACTIVE_GENERATION_PROGRESS,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.ACTIVE_GENERATION_PROGRESS_RETRIEVED}: ${payrollPeriodId}`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_GENERATION,
+                },
+            });
             res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Active payroll generation progress retrieved successfully", progress, 200));
         }
         catch (error) {
@@ -910,6 +1070,7 @@ const controller = (prisma) => {
         }
     });
     const requestStopTimesheetPayroll = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b;
         const { id: payrollPeriodId } = req.params;
         try {
             const payrollPeriod = yield prisma.payrollPeriod.findUnique({ where: { id: payrollPeriodId } });
@@ -928,6 +1089,26 @@ const controller = (prisma) => {
                     data: { status: "OPEN", processedBy: null, processedAt: null },
                 });
                 yield cache_1.invalidateCache.byPattern("cache:payrollPeriod:*");
+                (0, activityLogger_1.logActivity)(req, {
+                    userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                    action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.REQUEST_STOP_TIMESHEET_PAYROLL,
+                    description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_STOP_REQUESTED}: ${payrollPeriodId} (reopened)`,
+                    page: {
+                        url: req.originalUrl,
+                        title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_GENERATION,
+                    },
+                });
+                (0, auditLogger_1.logAudit)(req, {
+                    userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                    action: constant_1.config.AUDIT_LOG.ACTIONS.UPDATE,
+                    resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                    severity: constant_1.config.AUDIT_LOG.SEVERITY.HIGH,
+                    entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                    entityId: payrollPeriodId,
+                    changesBefore: { id: payrollPeriod.id, status: payrollPeriod.status },
+                    changesAfter: { id: payrollPeriodId, status: "OPEN", action: "reopened" },
+                    description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_STOP_REQUESTED}: ${payrollPeriodId}`,
+                });
                 res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll period reopened successfully", {
                     action: "reopened",
                     cancellationRequested: false,
@@ -936,6 +1117,26 @@ const controller = (prisma) => {
                 return;
             }
             payroll_generation_job_service_1.PayrollGenerationJobService.requestStop(activeJob.jobId, "Stop requested. The current payroll run will finish the current employee before stopping.");
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.REQUEST_STOP_TIMESHEET_PAYROLL,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_STOP_REQUESTED}: ${payrollPeriodId} (job ${activeJob.jobId})`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_GENERATION,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.UPDATE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.HIGH,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: payrollPeriodId,
+                changesBefore: { id: payrollPeriod.id, status: payrollPeriod.status },
+                changesAfter: { id: payrollPeriodId, jobId: activeJob.jobId, action: "cancellation_requested" },
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_STOP_REQUESTED}: ${payrollPeriodId}`,
+            });
             res.status(202).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll stop requested successfully", {
                 jobId: activeJob.jobId,
                 action: "cancellation_requested",
@@ -950,6 +1151,7 @@ const controller = (prisma) => {
         }
     });
     const requestPauseTimesheetPayroll = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b;
         const { id: payrollPeriodId } = req.params;
         try {
             const payrollPeriod = yield prisma.payrollPeriod.findUnique({ where: { id: payrollPeriodId } });
@@ -967,6 +1169,26 @@ const controller = (prisma) => {
                 return;
             }
             payroll_generation_job_service_1.PayrollGenerationJobService.requestPause(activeJob.jobId, "Pause requested. The current payroll run will pause after the current employee finishes.");
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.REQUEST_PAUSE_TIMESHEET_PAYROLL,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_PAUSE_REQUESTED}: ${payrollPeriodId} (job ${activeJob.jobId})`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_GENERATION,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.UPDATE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.HIGH,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: payrollPeriodId,
+                changesBefore: { id: payrollPeriod.id, status: payrollPeriod.status },
+                changesAfter: { id: payrollPeriodId, jobId: activeJob.jobId, action: "pause_requested" },
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_PAUSE_REQUESTED}: ${payrollPeriodId}`,
+            });
             res.status(202).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll pause requested successfully", {
                 jobId: activeJob.jobId,
                 action: "pause_requested",
@@ -982,6 +1204,7 @@ const controller = (prisma) => {
     });
     const isPayrollPolicyManager = (role) => ["hris-hr-manager", "hris-hr-user", "hris-admin", "admin", "super_admin"].includes(role || "");
     const getConfig = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a;
         try {
             const organizationId = req.organizationId;
             if (!organizationId) {
@@ -989,6 +1212,15 @@ const controller = (prisma) => {
                 return;
             }
             const cycleConfig = yield getOrCreatePayrollCycleConfig(organizationId);
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.GET_PAYROLL_CONFIG,
+                description: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_CONFIG_RETRIEVED,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_CONFIG,
+                },
+            });
             res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll cycle config retrieved successfully", cycleConfig, 200));
         }
         catch (error) {
@@ -997,6 +1229,7 @@ const controller = (prisma) => {
         }
     });
     const updateConfig = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b;
         try {
             const organizationId = req.organizationId;
             const role = req.role;
@@ -1026,6 +1259,34 @@ const controller = (prisma) => {
                 data: Object.assign(Object.assign({}, parsed.data), { cycleRules: parsed.data.cycleRules !== undefined
                         ? mergedCycleRules
                         : undefined }),
+            });
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.UPDATE_PAYROLL_CONFIG,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_CONFIG_UPDATED}: ${updated.id}`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLL_CONFIG,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.UPDATE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.HIGH,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: updated.id,
+                changesBefore: {
+                    id: currentConfig.id,
+                    defaultPayFrequency: currentConfig.defaultPayFrequency,
+                    payDateOffsetDays: currentConfig.payDateOffsetDays,
+                },
+                changesAfter: {
+                    id: updated.id,
+                    defaultPayFrequency: updated.defaultPayFrequency,
+                    payDateOffsetDays: updated.payDateOffsetDays,
+                },
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_CONFIG_UPDATED}: ${updated.id}`,
             });
             res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll cycle config updated successfully", updated, 200));
         }
@@ -1060,6 +1321,7 @@ const controller = (prisma) => {
         return defaultCalculator === null || defaultCalculator === void 0 ? void 0 : defaultCalculator.id;
     });
     const bulkGenerate = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b;
         try {
             const organizationId = req.organizationId;
             const role = req.role;
@@ -1168,6 +1430,32 @@ const controller = (prisma) => {
                 summary.items.push({ code: period.code, action: "updated" });
             }
             yield cache_1.invalidateCache.byPattern("cache:payrollPeriod:*");
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.BULK_GENERATE_PAYROLL,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_BULK_GENERATED}: created ${summary.created}, updated ${summary.updated}`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLLPERIOD_LIST,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.CREATE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.HIGH,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: organizationId,
+                changesBefore: null,
+                changesAfter: {
+                    dryRun: payload.dryRun,
+                    totalComputed: summary.totalComputed,
+                    created: summary.created,
+                    updated: summary.updated,
+                    skipped: summary.skipped,
+                },
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_BULK_GENERATED}: ${organizationId}`,
+            });
             res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll periods generated successfully", summary, 200));
         }
         catch (error) {
@@ -1176,7 +1464,7 @@ const controller = (prisma) => {
         }
     });
     const bulkAdjust = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
-        var _a;
+        var _a, _b, _c;
         try {
             const organizationId = req.organizationId;
             const role = req.role;
@@ -1203,7 +1491,7 @@ const controller = (prisma) => {
             if (payload.frequency) {
                 whereClause.payFrequency = payload.frequency;
             }
-            if ((_a = payload.periodIds) === null || _a === void 0 ? void 0 : _a.length) {
+            if ((_c = payload.periodIds) === null || _c === void 0 ? void 0 : _c.length) {
                 whereClause.id = { in: payload.periodIds };
             }
             const periods = yield prisma.payrollPeriod.findMany({
@@ -1211,6 +1499,15 @@ const controller = (prisma) => {
                 orderBy: [{ startDate: "asc" }, { periodNumber: "asc" }],
             });
             if (!periods.length) {
+                (0, activityLogger_1.logActivity)(req, {
+                    userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                    action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.BULK_ADJUST_PAYROLL,
+                    description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_BULK_ADJUSTED}: no periods found`,
+                    page: {
+                        url: req.originalUrl,
+                        title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLLPERIOD_LIST,
+                    },
+                });
                 res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("No payroll periods found to adjust", {
                     total: 0,
                     updated: 0,
@@ -1345,6 +1642,31 @@ const controller = (prisma) => {
             const responseMessage = payload.dryRun
                 ? "Payroll period adjustment preview generated (dry-run, no records updated)"
                 : "Payroll periods adjusted successfully";
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.BULK_ADJUST_PAYROLL,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_BULK_ADJUSTED}: updated ${summary.updated}, skipped ${summary.skipped}`,
+                page: {
+                    url: req.originalUrl,
+                    title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.PAYROLLPERIOD_LIST,
+                },
+            });
+            (0, auditLogger_1.logAudit)(req, {
+                userId: ((_b = req.user) === null || _b === void 0 ? void 0 : _b.id) || "unknown",
+                action: constant_1.config.AUDIT_LOG.ACTIONS.UPDATE,
+                resource: constant_1.config.AUDIT_LOG.RESOURCES.PAYROLLPERIOD,
+                severity: constant_1.config.AUDIT_LOG.SEVERITY.HIGH,
+                entityType: constant_1.config.AUDIT_LOG.ENTITY_TYPES.PAYROLLPERIOD,
+                entityId: organizationId,
+                changesBefore: null,
+                changesAfter: {
+                    dryRun: payload.dryRun,
+                    total: summary.total,
+                    updated: summary.updated,
+                    skipped: summary.skipped,
+                },
+                description: `${constant_1.config.AUDIT_LOG.PAYROLLPERIOD.DESCRIPTIONS.PAYROLL_BULK_ADJUSTED}: ${organizationId}`,
+            });
             res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)(responseMessage, Object.assign(Object.assign({}, summary), { dryRunApplied: payload.dryRun }), 200));
         }
         catch (error) {

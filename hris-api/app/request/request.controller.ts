@@ -60,17 +60,15 @@ import {
 	publishRequestCancelledNotification,
 	publishRequestCreatedNotification,
 	publishRequestDecisionNotification,
+	publishDocumentRequestSubmittedNotification,
+	publishDocumentRequestApprovalNeededNotification,
+	publishDocumentRequestCompletedNotification,
 } from "../../helper/notification-dispatch.helper";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { uploadToCloudinary } from "../../helper/cloudinary.helper";
-import {
-	buildAttendanceLedgerSummary,
-	buildAttendanceTimekeepingFields,
-	createLeaveAttendanceRecords,
-	fetchAttendanceEmployeeSnapshotFields,
-	normalizeToEndOfDay,
-	normalizeToStartOfDay,
-} from "../../helper/attendance.helper";
+import { applyAttendanceCorrection } from "../attendance/attendance-correction.service";
+import { applyApprovedLeaveAttendanceReconciliation } from "./leave-attendance-reconciliation.service";
+import { applyApprovedTimeAdjustmentReconciliation } from "./time-adjustment-reconciliation.service";
 import {
 	resolveLeaveSessionWindows,
 	isHalfDaySessionCutoffReached,
@@ -95,11 +93,13 @@ import {
 	determineAttendanceStatus,
 	formatMinutesAsTime,
 } from "../../helper/timekeeping.helper";
-import { refreshTimesheetForAttendanceDate } from "../../helper/timesheet.helper";
 import {
-	applyAttendanceToObligation,
 	recomputeAttendanceObligationsForRange,
 } from "../../helper/attendance-obligation.helper";
+import { applyApprovedOvertimeCompensatoryCredit } from "../timesheet/approved-overtime-comp-leave.service";
+import { applyOvertimeRequestApprovalSideEffects } from "../timesheet/overtime-request.service";
+import { applyPayrollCorrectionApprovalSideEffects } from "../payrollCorrection/payroll-correction.service";
+import { REQUEST_WORKFLOW_CODES } from "../../helper/workflow-config.helper";
 
 const logger = getLogger();
 const requestLogger = logger.child({ module: "request" });
@@ -603,6 +603,14 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			await applyApprovedOvertimeCompensatoryCredit({
+				prisma,
+				organizationId: linkedTimesheet.organizationId,
+				timesheetId: linkedTimesheet.id,
+				approvedByEmployeeId: params.actingEmployeeId || null,
+				approvedAt: params.now,
+			});
+
 		} else {
 			await prisma.timesheet.update({
 				where: { id: linkedTimesheet.id },
@@ -911,40 +919,16 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const coerceAttendanceStatus = (value: unknown): AttendanceStatus => {
-		const normalized = String(value || "")
-			.trim()
-			.toUpperCase();
-		if (normalized === "ABSENT") return "ABSENT";
-		if (normalized === "LEAVE") return "LEAVE";
-		if (normalized === "REST_DAY") return "REST_DAY";
-		if (normalized === "INCOMPLETE") return "INCOMPLETE";
-		return "PRESENT";
-	};
-
-	const parseCorrectionDateTime = (
-		dateValue: string | Date | null | undefined,
-		timeValue: string | null | undefined,
-	) => {
-		if (!dateValue || !timeValue) return null;
-		const dateText =
-			dateValue instanceof Date
-				? dateValue.toISOString().split("T")[0]
-				: String(dateValue).slice(0, 10);
-		const normalizedTime = String(timeValue).trim();
-		if (!dateText || !normalizedTime) return null;
-		return new Date(`${dateText}T${normalizedTime}:00.000Z`);
-	};
-
 	const applyAttendanceCorrectionApprovalSideEffects = async (params: {
 		requestId: string;
 		requestData: any;
 		now: Date;
 		appliedByEmployeeId?: string | null;
 	}) => {
-		const { requestId, requestData, now, appliedByEmployeeId } = params;
+		const { requestId, requestData, appliedByEmployeeId } = params;
 		const metadata = getSafeMetadataObject(requestData.metadata);
 		const correction = getSafeMetadataObject(metadata.attendanceCorrection);
+		const correctedValues = getSafeMetadataObject(correction.correctedValues);
 		const correctionDateRaw =
 			correction.correctionDate || requestData.startDate || requestData.endDate;
 		if (!correctionDateRaw) {
@@ -958,170 +942,113 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		const employeeId =
-			String(requestData.targetEmployeeId || requestData.requesterId || "").trim() || null;
+			String(requestData.targetEmployeeId || requestData.requesterId || correction.employeeId || "")
+				.trim() || null;
 		if (!employeeId) {
 			throw new Error("Attendance correction is missing target employee.");
 		}
 
-		const startOfDay = normalizeToStartOfDay(correctionDate);
-		const endOfDay = normalizeToEndOfDay(correctionDate);
-		const sameDayAttendances = await prisma.attendance.findMany({
-			where: {
-				organizationId: requestData.organizationId,
+		const correctionResult = await applyAttendanceCorrection({
+			prisma,
+			organizationId: requestData.organizationId,
+			rawInput: {
+				attendanceId:
+					correction.attendanceId ||
+					correction.attendance?.id ||
+					correction.targetAttendanceId ||
+					null,
 				employeeId,
-				isDeleted: false,
-				date: {
-					gte: startOfDay,
-					lte: endOfDay,
-				},
+				correctionDate,
+				status: correctedValues.status ?? correction.status ?? null,
+				timeIn: correctedValues.timeIn ?? correction.timeIn ?? null,
+				timeOut: correctedValues.timeOut ?? correction.timeOut ?? null,
+				reasonCategory:
+					correction.reasonCategory ||
+					correctedValues.reasonCategory ||
+					requestData.reasonCategory ||
+					null,
+				notes: correction.reason || requestData.notes || correctedValues.notes || null,
+				timeInLocation: correctedValues.timeInLocation ?? correction.timeInLocation ?? null,
+				timeOutLocation: correctedValues.timeOutLocation ?? correction.timeOutLocation ?? null,
 			},
-			orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+			source: "ATTENDANCE_CORRECTION_REQUEST",
+			actorEmployeeId: appliedByEmployeeId || null,
+			sourceRequestId: requestId,
+			allowDerivedStatus: true,
+			notesFallbacks: [correction.reason, requestData.notes, correctedValues.notes],
+			dependencies: {
+				now: () => now,
+			},
 		});
 
-		if (!sameDayAttendances.length) {
-			throw new Error(
-				"Attendance correction requires an existing attendance record for the selected date.",
-			);
+		return correctionResult;
+	};
+
+	const applyTimeAdjustmentApprovalSideEffects = async (params: {
+		requestId: string;
+		requestData: any;
+		now: Date;
+	}) => {
+		const { requestId, requestData, now } = params;
+		const metadata = getSafeMetadataObject(requestData.metadata);
+
+		const employeeId =
+			String(requestData.targetEmployeeId || requestData.requesterId || "").trim() || null;
+		if (!employeeId) {
+			throw new Error("Time adjustment request is missing target employee.");
 		}
 
-		const ledgerSummary = buildAttendanceLedgerSummary(sameDayAttendances as any[]);
-		const rawAttendance =
-			ledgerSummary.rawAttendance ||
-			sameDayAttendances.find(
-				(attendance) => String((attendance as any).ledgerType || "RAW") === "RAW",
-			) ||
-			sameDayAttendances[0];
-		const effectiveAttendance = ledgerSummary.effectiveAttendance || sameDayAttendances[0];
-		const correctedValues = getSafeMetadataObject(correction.correctedValues);
-		const correctedTimeIn = parseCorrectionDateTime(
-			correctionDate,
-			typeof correctedValues.timeIn === "string" ? correctedValues.timeIn : null,
-		);
-		const correctedTimeOut = parseCorrectionDateTime(
-			correctionDate,
-			typeof correctedValues.timeOut === "string" ? correctedValues.timeOut : null,
-		);
-		const requestedStatus = correctedValues.status
-			? coerceAttendanceStatus(correctedValues.status)
-			: null;
-		const isNonWorkedCorrection =
-			requestedStatus === "ABSENT" ||
-			requestedStatus === "LEAVE" ||
-			requestedStatus === "REST_DAY";
-		const effectiveCorrectedTimeIn = isNonWorkedCorrection ? null : correctedTimeIn;
-		const effectiveCorrectedTimeOut = isNonWorkedCorrection ? null : correctedTimeOut;
-		const hasTimeOut = Boolean(effectiveCorrectedTimeOut);
-		const timekeepingCalc = calculateTimekeeping(
-			effectiveCorrectedTimeIn,
-			effectiveCorrectedTimeOut,
-			(effectiveAttendance as any)?.scheduleSnapshot ||
-				(rawAttendance as any)?.scheduleSnapshot ||
-				null,
-			startOfDay,
-		);
-		const status = requestedStatus || determineAttendanceStatus(timekeepingCalc, hasTimeOut);
+		const adjustmentDateRaw = metadata.date || requestData.startDate || requestData.endDate;
+		if (!adjustmentDateRaw) {
+			throw new Error("Time adjustment request is missing date.");
+		}
 
-		const createdCorrection = await prisma.$transaction(async (tx) => {
-			const employeeSnapshotFields = await fetchAttendanceEmployeeSnapshotFields(
-				tx as any,
-				employeeId,
-			);
-			await tx.attendance.updateMany({
-				where: {
-					organizationId: requestData.organizationId,
-					employeeId,
-					isDeleted: false,
-					date: {
-						gte: startOfDay,
-						lte: endOfDay,
-					},
-					isEffective: true,
-				},
-				data: {
-					isEffective: false,
-				},
-			});
+		const adjustmentDate =
+			adjustmentDateRaw instanceof Date ? adjustmentDateRaw : new Date(adjustmentDateRaw);
+		if (Number.isNaN(adjustmentDate.getTime())) {
+			throw new Error("Time adjustment request has an invalid date.");
+		}
 
-			return tx.attendance.create({
-				data: {
-					organizationId: requestData.organizationId,
-					employeeId,
-					date: startOfDay,
-					timeIn: effectiveCorrectedTimeIn,
-					timeOut: effectiveCorrectedTimeOut,
-					status,
-					notes:
-						String(
-							correction.reason ||
-								requestData.notes ||
-								(correctedValues.notes as string) ||
-								"",
-						).trim() || null,
-					scheduleSnapshot:
-						(effectiveAttendance as any)?.scheduleSnapshot ||
-						(rawAttendance as any)?.scheduleSnapshot ||
-						null,
-					isManualEntry: true,
-					approvedBy: appliedByEmployeeId || null,
-					ledgerType: "CORRECTION",
-					sourceRequestId: requestId,
-					supersedesAttendanceId: effectiveAttendance?.id || rawAttendance?.id || null,
-					appliedAt: now,
-					appliedBy: appliedByEmployeeId || null,
-					isEffective: true,
-					...employeeSnapshotFields,
-					behaviorFlags:
-						status === "LEAVE" || status === "ABSENT" || status === "REST_DAY"
-							? []
-							: deriveBehaviorFlags({
-									timeIn: effectiveCorrectedTimeIn,
-									timeOut: effectiveCorrectedTimeOut,
-									schedule:
-										(effectiveAttendance as any)?.scheduleSnapshot ||
-										(rawAttendance as any)?.scheduleSnapshot ||
-										null,
-									date: startOfDay,
-								}),
-					...buildAttendanceTimekeepingFields(timekeepingCalc, {
-						isNonWorked: isNonWorkedCorrection,
-					}),
-					timeInLocation: isNonWorkedCorrection
-						? null
-						: (effectiveAttendance as any)?.timeInLocation || null,
-					timeOutLocation: isNonWorkedCorrection
-						? null
-						: (effectiveAttendance as any)?.timeOutLocation || null,
-					deviceInfo: {
-						source: "ATTENDANCE_CORRECTION_REQUEST",
-						requestId,
+		const reconciliation = await applyApprovedTimeAdjustmentReconciliation({
+			prisma,
+			organizationId: requestData.organizationId,
+			requestId,
+			employeeId,
+			date: adjustmentDate,
+		});
+
+		await prisma.request.update({
+			where: { id: requestId },
+			data: {
+				metadata: {
+					...metadata,
+					timeAdjustmentReconciliation: {
+						attendanceResults: reconciliation.attendanceResults,
+						timesheetResults: reconciliation.timesheetResults,
+						reconciledAt: now.toISOString(),
 					},
 				},
-			});
-		});
-		await applyAttendanceToObligation(prisma, {
-			organizationId: requestData.organizationId,
-			employeeId,
-			attendanceId: createdCorrection.id,
+			},
 		});
 
-		await refreshTimesheetForAttendanceDate(prisma, {
-			organizationId: requestData.organizationId,
-			employeeId,
-			date: startOfDay,
-		});
+		requestLogger.info(
+			`Reconciled approved time adjustment request ${requestId}: ${reconciliation.attendanceResults.length} attendance day(s), ${reconciliation.timesheetResults.length} timesheet refresh result(s)`,
+		);
 
 		await invalidateCache.byPattern("cache:attendance:list:*");
 		await invalidateCache.byPattern(`cache:attendance:employee:${employeeId}:*`);
-		await invalidateCache.byPattern("cache:timesheet:list:*");
-		await invalidateCache.byPattern("cache:timesheet:view:*");
+		await invalidateCache.byPattern(`cache:request:byId:${requestId}:*`);
+
+		return reconciliation;
 	};
 
 	const applyLeaveApprovalSideEffects = async (params: {
 		requestId: string;
 		requestData: any;
 		now: Date;
+		actingEmployeeId?: string | null;
 	}) => {
-		const { requestId, requestData, now } = params;
+		const { requestId, requestData, now, actingEmployeeId } = params;
 		// LEAVE event contract:
 		// Request is the workflow source of truth, and requesterId is the leave owner.
 		// When a leave request becomes APPROVED/COMPLETED, this post-action must update every
@@ -1130,7 +1057,9 @@ export const controller = (prisma: PrismaClient) => {
 		// - calendar leave event
 		// - raw/effective LEAVE attendance rows
 		// - AttendanceObligation rows consumed by /hr/attendance stat cards and table
-		// Timesheetline is intentionally not the live source here; it snapshots later on submission.
+		// - mutable draft/revised/rejected timesheet snapshots derived from obligations
+		// Locked submitted/approved timesheet snapshots are preserved and surfaced as
+		// adjustment-required follow-up instead of being silently rewritten.
 		const { leaveType, totalDays, durationUnit, halfDaySession } =
 			getLeaveMetadata(requestData);
 
@@ -1252,40 +1181,44 @@ export const controller = (prisma: PrismaClient) => {
 
 		requestLogger.info(`Calendar item created for approved leave request ${requestId}`);
 
-		const attendanceRecordsCreated = await createLeaveAttendanceRecords(
+		const reconciliation = await applyApprovedLeaveAttendanceReconciliation({
 			prisma,
-			employee.id,
-			leaveStartDate,
-			leaveEndDate,
-			employee.organizationId,
-			resolveEmployeeActiveSchedule(employee, leaveStartDate),
+			organizationId: employee.organizationId,
+			requestId,
+			employeeId: employee.id,
+			startDate: leaveStartDate,
+			endDate: leaveEndDate,
+			employeeSchedule: resolveEmployeeActiveSchedule(employee, leaveStartDate),
 			leaveType,
-			requestData.description || `${leaveType} Leave - Approved`,
-			{
-				durationUnit,
-				halfDaySession,
-				sessionWindowStart,
-				sessionWindowEnd,
+			notes: requestData.description || `${leaveType} Leave - Approved`,
+			actorEmployeeId: actingEmployeeId || null,
+			durationUnit,
+			halfDaySession,
+			sessionWindowStart,
+			sessionWindowEnd,
+		});
+
+		await prisma.request.update({
+			where: { id: requestId },
+			data: {
+				metadata: {
+					...getSafeMetadataObject(requestData.metadata),
+					leaveAttendanceReconciliation: {
+						attendanceResults: reconciliation.attendanceResults,
+						timesheetResults: reconciliation.timesheetResults,
+						reconciledAt: now.toISOString(),
+					},
+				},
 			},
-		);
+		});
 
 		requestLogger.info(
-			`Created ${attendanceRecordsCreated} LEAVE attendance records for approved leave request ${requestId}`,
+			`Reconciled approved leave request ${requestId}: ${reconciliation.attendanceResults.length} attendance day(s), ${reconciliation.timesheetResults.length} timesheet refresh result(s)`,
 		);
-
-		// Push the leave workflow event into the live attendance-day truth. This is the path
-		// that makes /hr/attendance show LEAVE and increment totalOnLeave/approvedLeaveTodayCount
-		// without requiring a draft timesheet or timesheet modal refresh.
-		await recomputeAttendanceObligationsForRange(prisma, {
-			organizationId: employee.organizationId,
-			employeeId: employee.id,
-			fromDate: leaveStartDate,
-			toDate: leaveEndDate,
-			reason: "LeaveApproved",
-		});
 
 		await invalidateCache.byPattern("cache:attendance:list:*");
 		await invalidateCache.byPattern(`cache:attendance:employee:${employee.id}:*`);
+		await invalidateCache.byPattern(`cache:request:byId:${requestId}:*`);
 	};
 
 	const create = async (req: AuthRequest, res: Response, _next: NextFunction) => {
@@ -2206,16 +2139,21 @@ export const controller = (prisma: PrismaClient) => {
 				};
 			}
 
-			const workflow = await getDefaultRequestWorkflow(
-				prisma,
-				organizationId,
-				validation.data.type,
+			const preferredWorkflowCode =
 				String(
 					(validation.data.metadata as Record<string, any> | undefined)?.workflowCode ||
 						"",
 				)
 					.trim()
-					.toUpperCase() || undefined,
+					.toUpperCase() ||
+				(validation.data.type === "OVERTIME"
+					? REQUEST_WORKFLOW_CODES.OVERTIME_DEFAULT
+					: undefined);
+			const workflow = await getDefaultRequestWorkflow(
+				prisma,
+				organizationId,
+				validation.data.type,
+				preferredWorkflowCode,
 			);
 			if (!workflow) {
 				requestLogger.error(
@@ -2344,12 +2282,27 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			try {
-				await publishRequestCreatedNotification(
-					prisma,
-					(req as any).io,
-					request.id,
-					request.requesterId,
-				);
+				if (request.type === "DOCUMENT_REQUEST") {
+					await publishDocumentRequestSubmittedNotification(
+						prisma,
+						(req as any).io,
+						request.id,
+						request.requesterId,
+					);
+					await publishDocumentRequestApprovalNeededNotification(
+						prisma,
+						(req as any).io,
+						request.id,
+						request.requesterId,
+					);
+				} else {
+					await publishRequestCreatedNotification(
+						prisma,
+						(req as any).io,
+						request.id,
+						request.requesterId,
+					);
+				}
 			} catch (notificationError) {
 				requestLogger.warn(
 					`Failed to publish request creation notification for ${request.id}: ${notificationError}`,
@@ -3038,10 +2991,36 @@ export const controller = (prisma: PrismaClient) => {
 						requestId: id,
 						requestData: existingRequest,
 						now,
+						actingEmployeeId: actingEmployeeIdForSideEffects || null,
 					});
 				} catch (error) {
 					requestLogger.error(`Error processing leave approval side effects: ${error}`);
 					// Don't fail the approval, just log the error
+				}
+			}
+
+			if (existingRequest.type === "OVERTIME") {
+				const shouldRunOvertimeSideEffects =
+					shouldRunApprovalSideEffects ||
+					(!isApprove && updateData.currentWorkflowStateKey === "REJECTED");
+				if (shouldRunOvertimeSideEffects) {
+					try {
+						await applyOvertimeRequestApprovalSideEffects({
+							prisma,
+							organizationId: existingRequest.organizationId,
+							requestId: id,
+							requestMetadata:
+								((existingRequest.metadata as Record<string, unknown> | null) ||
+									{}) as Record<string, unknown>,
+							isApprove: shouldRunApprovalSideEffects && isApprove,
+							approverEmployeeId: actingEmployeeIdForSideEffects || null,
+							rejectionReason: validation.data.comment || null,
+						});
+					} catch (error) {
+						requestLogger.error(
+							`Error processing overtime approval side effects: ${error}`,
+						);
+					}
 				}
 			}
 
@@ -3057,6 +3036,45 @@ export const controller = (prisma: PrismaClient) => {
 					requestLogger.error(
 						`Error processing attendance correction approval side effects: ${error}`,
 					);
+				}
+			}
+
+			if (shouldRunApprovalSideEffects && existingRequest.type === "TIME_ADJUSTMENT") {
+				try {
+					await applyTimeAdjustmentApprovalSideEffects({
+						requestId: id,
+						requestData: existingRequest,
+						now,
+					});
+				} catch (error) {
+					requestLogger.error(
+						`Error processing time adjustment approval side effects: ${error}`,
+					);
+				}
+			}
+
+			if (existingRequest.type === "PAYROLL_CORRECTION") {
+				const shouldRunPayrollCorrectionSideEffects =
+					shouldRunApprovalSideEffects ||
+					(!isApprove && updateData.currentWorkflowStateKey === "REJECTED");
+				if (shouldRunPayrollCorrectionSideEffects) {
+					try {
+						await applyPayrollCorrectionApprovalSideEffects({
+							prisma,
+							organizationId: existingRequest.organizationId,
+							requestId: id,
+							requestMetadata:
+								((existingRequest.metadata as Record<string, unknown> | null) ||
+									{}) as Record<string, unknown>,
+							isApprove: shouldRunApprovalSideEffects && isApprove,
+							approverEmployeeId: actingEmployeeIdForSideEffects || null,
+							rejectionReason: validation.data.comment || null,
+						});
+					} catch (error) {
+						requestLogger.error(
+							`Error processing payroll correction approval side effects: ${error}`,
+						);
+					}
 				}
 			}
 
@@ -3146,18 +3164,28 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			const notificationStatus = getRequestStateKey(finalRequest || updatedRequest);
+			const requestType = (finalRequest || updatedRequest)?.type;
 			if (
 				notificationStatus === "SUBMITTED" ||
 				notificationStatus === "APPROVED" ||
 				Boolean((finalRequest || updatedRequest)?.currentStepExecutionId)
 			) {
 				try {
-					await publishRequestCreatedNotification(
-						prisma,
-						(req as any).io,
-						id,
-						actingEmployeeIdForSideEffects,
-					);
+					if (requestType === "DOCUMENT_REQUEST") {
+						await publishDocumentRequestApprovalNeededNotification(
+							prisma,
+							(req as any).io,
+							id,
+							actingEmployeeIdForSideEffects,
+						);
+					} else {
+						await publishRequestCreatedNotification(
+							prisma,
+							(req as any).io,
+							id,
+							actingEmployeeIdForSideEffects,
+						);
+					}
 				} catch (notificationError) {
 					requestLogger.warn(
 						`Failed to publish next approver notification for ${id}: ${notificationError}`,
@@ -3167,12 +3195,21 @@ export const controller = (prisma: PrismaClient) => {
 				["APPROVED", "REJECTED", "COMPLETED", "CANCELLED"].includes(notificationStatus)
 			) {
 				try {
-					await publishRequestDecisionNotification(prisma, (req as any).io, {
-						requestId: id,
-						status: notificationStatus,
-						sourceEmployeeId: actingEmployeeIdForSideEffects,
-						comment: validation.data.comment || null,
-					});
+					if (requestType === "DOCUMENT_REQUEST" && notificationStatus === "COMPLETED") {
+						await publishDocumentRequestCompletedNotification(
+							prisma,
+							(req as any).io,
+							id,
+							actingEmployeeIdForSideEffects,
+						);
+					} else {
+						await publishRequestDecisionNotification(prisma, (req as any).io, {
+							requestId: id,
+							status: notificationStatus,
+							sourceEmployeeId: actingEmployeeIdForSideEffects,
+							comment: validation.data.comment || null,
+						});
+					}
 				} catch (notificationError) {
 					requestLogger.warn(
 						`Failed to publish decision notification for ${id}: ${notificationError}`,
@@ -3789,6 +3826,7 @@ export const controller = (prisma: PrismaClient) => {
 					requestId,
 					requestData: request,
 					now,
+					actingEmployeeId: actingEmployeeId || null,
 				});
 			} catch (error) {
 				requestLogger.error(`Error processing leave approval side effects: ${error}`);
@@ -3807,6 +3845,20 @@ export const controller = (prisma: PrismaClient) => {
 			} catch (error) {
 				requestLogger.error(
 					`Error processing attendance correction approval side effects: ${error}`,
+				);
+			}
+		}
+
+		if (request.type === "TIME_ADJUSTMENT") {
+			try {
+				await applyTimeAdjustmentApprovalSideEffects({
+					requestId,
+					requestData: request,
+					now,
+				});
+			} catch (error) {
+				requestLogger.error(
+					`Error processing time adjustment approval side effects: ${error}`,
 				);
 			}
 		}
@@ -4635,6 +4687,21 @@ HR Department`;
 							requestLogger.info(
 								`Workflow transition after document generation: request=${id}, state=${requestAfterStepCompletion?.currentWorkflowStateKey ?? "UNKNOWN"}, currentStepExecutionId=${requestAfterStepCompletion?.currentStepExecutionId ?? "none"}`,
 							);
+
+							if (requestAfterStepCompletion?.currentWorkflowStateKey === "COMPLETED") {
+								try {
+									await publishDocumentRequestCompletedNotification(
+										prisma,
+										(req as any).io,
+										id,
+										hrEmployee.id,
+									);
+								} catch (notificationError) {
+									requestLogger.warn(
+										`Failed to publish document completion notification for ${id}: ${notificationError}`,
+									);
+								}
+							}
 						}
 					} else {
 						requestLogger.warn(

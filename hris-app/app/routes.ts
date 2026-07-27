@@ -38,10 +38,15 @@ const adminRoutes = [
 		route("employees/new", "routes/hr/employees.new.tsx", {
 			id: "admin-configuration-employees-new",
 		}),
+		// Profile under admin layout so the configuration sidebar stays mounted.
+		route("employees/:id", "routes/employee/employee.$id.tsx", {
+			id: "admin-configuration-employees-profile",
+		}),
 		route("employees/:id/edit", "routes/hr/employees.$id.edit.tsx", {
 			id: "admin-configuration-employees-edit",
 		}),
 		route("users", "routes/admin/configuration/users.tsx"),
+		route("users/:id/activity-logs", "routes/admin/configuration/users.$id.activity-logs.tsx"),
 		route("shift-types", "routes/admin/configuration/shift-types.tsx"),
 		route("schedule-templates", "routes/admin/configuration/schedule-templates.tsx"),
 		route("leave-types", "routes/admin/configuration/leave-types.tsx"),
@@ -155,6 +160,7 @@ const hrRoutes = [
 	route("run-payroll", "routes/hr/run-payroll.tsx"),
 	route("benefit-types", "routes/hr/benefit-types.tsx"),
 	route("benefits-management", "routes/hr/benefits-management.tsx"),
+	route("benefits-management/new", "routes/hr/benefits-management.new.tsx"),
 	route("benefit-enrollments", "routes/hr/benefit-enrollments.tsx"),
 	route("announcements", "routes/hr/announcements.tsx"),
 	route("document-viewer", "routes/hr/document-viewer.tsx"),
@@ -163,6 +169,7 @@ const hrRoutes = [
 	route("reports/attendance", "routes/hr/reports/attendance.tsx"),
 	route("reports/workforce", "routes/hr/reports/workforce.tsx"),
 	route("reports/payroll", "routes/hr/reports/payroll.tsx"),
+	route("reports/turnover-attrition", "routes/hr/reports/turnover-attrition.tsx"),
 	...prefix("requests", [
 		route("tickets", "routes/hr/requests/tickets.tsx"),
 		route("documents", "routes/hr/requests/documents.tsx"),
@@ -172,6 +179,7 @@ const hrRoutes = [
 	route("timesheets", "routes/hr/timesheets.tsx"),
 	route("timesheet-settings", "routes/hr/timesheet-settings.tsx"),
 	route("leave-settings", "routes/hr/leave-settings.tsx"),
+	route("audit-logs", "routes/hr/audit-logs.tsx"),
 	route("request-process", "routes/hr/workflows-2.tsx", { id: "hr-workflows-2" }),
 ];
 
@@ -200,6 +208,8 @@ export default [
 	route("callback", "routes/callback.tsx"),
 	route("status", "routes/status.tsx"),
 	route("403", "routes/403.tsx"),
+	// Dev preview — branded LoadingScreen only (no auth / no redirect)
+	route("dev/splash", "routes/dev/splash.tsx"),
 	...prefix("jobs", [
 		index("routes/hr-public/job-page.tsx"),
 		route("/:jobId/apply", "routes/hr-public/apply.tsx"),

@@ -209,7 +209,9 @@ const main = async () => {
 					undefined,
 					undefined,
 					undefined,
+					undefined,
 					employeeId,
+					undefined,
 				);
 				const metricRecord = metrics.records.find(
 					(row: any) => row.attendanceId === attendance.id || row.employeeRefId === employeeId,

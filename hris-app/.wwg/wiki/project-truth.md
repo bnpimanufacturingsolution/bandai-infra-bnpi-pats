@@ -44,6 +44,37 @@ Currently includes:
 - Feature: HR dashboards, employee records, attendance, timesheets, leave, requests, approvals, payroll-related screens, billings, recruitment/jobs, public applicant flows, onboarding, performance, reports, document requests, and reusable form/UI components.
   - Status: INFERRED
   - Evidence: route, service, type, test, and component paths under `app/routes/hr`, `app/routes/employee`, `app/routes/hr-public`, `app/services`, `app/types`, `tests`, and `app/components`.
+- Feature: Timesheet day actions open leave requests with prefilled dates via `/employee/requests?action=create&kind=leave&date=YYYY-MM-DD`. The leave modal preselects `FULL_DAY` duration for timesheet-origin requests and honors the selected date. Sick leave allows any calendar day; vacation and personal leave enforce advance-notice policy unless the request is opened from a timesheet day prefill.
+  - Status: IMPLEMENTED_FROM_USER_REQUEST
+  - Evidence: `app/components/organisms/TimesheetViewModal.tsx`; `app/lib/utils/requests-route.ts`; `app/lib/utils/leave-request-policy.ts`; `app/components/organisms/leave-request-modal.tsx`; `app/components/templates/my-pages/requests-hub-template.tsx`
+- Feature: Payroll-locked timesheets (`lockedAt` / `lockedEmployeePayrollId` / `lockReason`) block day edits and edit-permission requests in `TimesheetViewModal`. Primary post-lock money path is **Request payroll correction** via banner/chip/footer and **in-modal** `TimesheetPayrollCorrectionPanel` (calendar multi-select + Time In/Time Out; type auto-derived and not displayed). Standalone `TimesheetPayrollCorrectionModal` remains as secondary/legacy shell. Day markers load from `listPayrollCorrections`. Time Requests includes a view-only Payroll Corrections tab. Domain SOT remains API `PayrollCorrection` + next-open payroll retro apply (see `../hris-api/.wwg/wiki/project-truth.md`).
+  - Status: CONFIRMED_FROM_IMPLEMENTATION
+  - Evidence: `app/components/organisms/TimesheetViewModal.tsx`; `app/components/molecules/TimesheetPayrollCorrectionPanel.tsx`; `app/components/molecules/TimesheetPayrollCorrectionModal.tsx`; `app/lib/utils/payroll-correction-form.ts`; `app/lib/hooks/useTimesheets.ts` (`useCreatePayrollCorrection`, `useTimesheetPayrollCorrections`); `app/components/templates/my-pages/requests-time-requests-template.tsx`.
+- Feature: Employee payslip detail shows labeled next-period retro lines from `EmployeePayroll.metadata.payrollCorrections[]` under “Adjustments / Retro” and includes their amounts in TOTAL EARNINGS (gross/net already include apply on the API). Parity with emp-app payslip detail.
+  - Status: CONFIRMED_FROM_IMPLEMENTATION
+  - Evidence: `app/components/templates/employee/payslip-detail-template.tsx`; `app/types/employee-payroll.ts`; API apply path `../hris-api/helper/payroll-period.helper.ts` + `metadata.payrollCorrections`.
+- Feature: HR **Payroll summary** modal (`/hr/hr-payroll` past/active view) surfaces applied prior-period corrections: labeled lines in Payroll computation (from `employeePayrollComputationView` / metadata fallback), dedicated **Prior-period corrections** accordion with dayDeltas, and a Daily detail **correction category** so totals tally with GrossPay. Does not rewrite this period’s attendance rows.
+  - Status: CONFIRMED_FROM_IMPLEMENTATION
+  - Evidence: `app/components/templates/common/payroll-management-template.tsx`; API `buildEmployeePayrollComputationView`; `app/types/employee-payroll.ts` (`metadata.payrollCorrections.dayDeltas`).
+- Feature / agent contract: Dual-app UI parity with `hris-emp-app` for timesheets, attendance, employee payroll/payslips, leave-request patterns, and shared molecules/utils. Agents must update both packages when a surface exists in both (see package `AGENTS.md` and monorepo `AGENTS.md` / `.grok/rules/hris-dual-app-ui-parity.md`). HR-admin-only surfaces are exempt.
+  - Status: ACCEPTED_TRUTH
+  - Evidence: user directive 2026-07-15; `AGENTS.md`; `../AGENTS.md`; `../.grok/rules/hris-dual-app-ui-parity.md`; `.wwg/governance/drift-guard.md`.
+- Feature / temporary UX: On employee attendance (`AttendanceTemplate` / `/employee/:id/attendance`) Today card, the **Clock In/Out action button is hidden** (`SHOW_CLOCK_IN_BUTTON = false`). Clock In/Out time cards remain. Primary CTA is a larger **View Timesheet** button. Parity with emp-app `/attendance`. Re-enable by flipping the flag.
+  - Status: CONFIRMED temporary product choice
+  - Evidence: user request 2026-07-21; `app/components/templates/common/attendance-template.tsx`
+- Feature: Perfect Attendance appears in two UI surfaces that must not be conflated: (1) **HR Attendance reports** tab “Perfect Attendance” via metrics `perfectAttendanceMetrics` (analytics only); (2) **payroll / benefits** compensation code **`PFA`** labeled Perfect Attendance on register/payslip (`perfectAttendance` field), filtered under benefits “attendance” preset. Money is enrollment-driven on the API; the report does not award pay. Seed catalog may still show type name Performance Bonus — **CONFLICTING** with product label; prefer PFA + Perfect Attendance in payroll UI language. Domain SOT: `../hris-api/.wwg/wiki/project-truth.md` (reconciled 2026-07-17).
+  - Status: CONFIRMED_FROM_IMPLEMENTATION (UI wiring); CONFLICTING (catalog display name on API seed)
+  - Evidence: `app/routes/hr/reports/tabs/PerfectAttendanceTab.tsx`; `app/components/templates/hr/benefits-management-template.tsx` (`attendance: ["PFA"]`); `app/components/templates/common/run-payroll-template.tsx`; `app/components/templates/common/payroll-management-template.tsx`; API payroll field mapping.
+- Feature: PFA enrollment + attendance-based amount UX (benefits form).
+  - Meaning: When benefit type code is **`PFA`** and **Compute from attendance** is on, the create/edit enrollment form shows a **warning banner** (`pfa-attendance-based-warning`) explaining ABSENT-only pro-rate (still pays with absences; not metrics eligibility; not all-or-nothing). Save is not blocked. With attendance off, PFA pays the fixed enrolled amount when due.
+  - Status: CONFIRMED_FROM_IMPLEMENTATION
+  - Evidence: `app/components/templates/hr/employee-benefit-form.tsx` (`shouldShowPfaAttendanceBasedWarning`); `benefits-management-template.test.tsx`; `docs/BENEFIT_SCHEDULE_MODES.md`. Dual-app: **HR/emp-only** (no emp-app enrollment form counterpart).
+- Feature: HR sidebar **Reports** submenu includes **Attendance Reports** → `/hr/reports/attendance` (Perfect Attendance, Daily Trend, Tardiness & Undertime, Overtime, Leave Balance tabs). Route already existed; nav entry added so the page is discoverable.
+  - Status: CONFIRMED_FROM_IMPLEMENTATION
+  - Evidence: `app/components/organisms/Sidebar.tsx` (`hr-reports-attendance`); `app/routes.ts` (`reports/attendance`); `app/routes/hr/reports/attendance.tsx`.
+- Feature: HR benefits management supports explicit payroll schedule modes `TIME_BOUND`, `FIXED_INSTALLMENTS`, and `RECURRING`. Create is a dedicated full page at `/hr/benefits-management/new` (not a modal); edit/view/delete remain list-page modals. Create assigns employees via multi-select card modal (avatar, name, employee ID; search + department/section/position/level filters) and bulk-creates via `POST /api/employeeBenefit/bulk`. On the create page, the employee picker is deep-linked via `?action=select-employees` (open/close syncs the URL; other query params are preserved). Multi-select mode includes **Select all** (adds all currently filtered employees to the draft) and **Clear** (removes filtered employees from the draft). Edit reuses the same picker in single-select mode (local open state only, no deep link). Recurring uses per-period amount labeling, optional end date (open-ended when empty), omits installment count, and shows **Recurrence** (`EVERY_CUTOFF` / `MONTHLY` / `YEARLY`). API remains authoritative for installment generation and payroll apply. Legacy `?action=create` deep links redirect to `/new`.
+  - Status: CONFIRMED_FROM_IMPLEMENTATION
+  - Evidence: `app/components/molecules/employee/EmployeeMultiSelectModal.tsx`; `app/components/templates/hr/employee-benefit-form.tsx` (`SELECT_EMPLOYEES_ACTION`, `recurrence-frequency`); `app/routes/hr/benefits-management.new.tsx`; `app/services/employee-benefit.service.ts`; paired API bulk route `../hris-api/app/employeeBenefit/*`; `docs/BENEFIT_SCHEDULE_MODES.md`. Multi-employee bulk create confirmed 2026-07-14; select-employees deep link + Select all confirmed 2026-07-17; recurrence frequency v1 confirmed 2026-07-17.
 
 Currently does not include unless approved:
 
@@ -77,6 +108,10 @@ Critical terms:
   - Meaning: Observed project term; confirm canonical meaning before broad use.
   - Status: INFERRED
   - Evidence: app/components/atoms/form/FormFieldGroup.tsx, app/components/atoms/form/form-input.tsx, app/components/atoms/form/form-number-input.tsx, app/components/atoms/form/form-select.tsx
+- Term: Benefit schedule mode
+  - Meaning: UI/API schedule type for payroll benefit adjustments: Time-bound, Fixed installments, or Recurring.
+  - Status: CONFIRMED_FROM_IMPLEMENTATION
+  - Evidence: `docs/BENEFIT_SCHEDULE_MODES.md`; benefits create page + edit modal (`employee-benefit-form.tsx`).
 
 ## Design System Reference
 
@@ -97,15 +132,15 @@ Accepted or observed architecture:
 - Item: paired backend API repository exists at `../hris-api`.
   - Status: CONFIRMED
   - Evidence: sibling repository `../hris-api`; `../hris-api/README.md` identifies "Backend API for HRIS"; `../hris-api/package.json` package name is `hris-api`.
-- Item: App PR/push CI has a blocking deployable quality gate through `npm run quality:ci`, covering app test-obligation enforcement, focused app CI tests, deterministic browser smoke, and production build for `develop` and `uat`.
+- Item: App PR/push CI has a blocking deployable quality gate through `.github/workflows/firebase-hosting-develop.yml`, covering app test-obligation enforcement, focused app CI tests, deterministic browser smoke, and production build for `develop` and `uat`.
   - Status: CONFIRMED
-  - Evidence: `.github/workflows/app-ci.yml`; `package.json`; `scripts/check-test-obligations.mjs`; `docs/testing-strategy.md`; `docs/testing-maturity-audit.md`.
+  - Evidence: `.github/workflows/firebase-hosting-develop.yml`; `package.json`; `scripts/check-test-obligations.mjs`; `docs/testing-strategy.md`; `docs/testing-maturity-audit.md`.
 - Item: App behavior and quality-script source changes must include changed test evidence for the same source feature; broad same-domain or unrelated browser specs are not sufficient TDD evidence.
   - Status: CONFIRMED
   - Evidence: `scripts/check-test-obligations.mjs`; `scripts/check-test-obligations.test.ts`; `app/lib/test-obligation-policy.test.ts`; `docs/testing-strategy.md`; `.wwg/governance/test-enforcement.md`.
 - Item: Firebase preview and branch deployment workflows run or depend on the app quality gate before publishing build artifacts, and manual image deploy runs the gate before building/pushing an image.
   - Status: CONFIRMED_FOR_REPOSITORY_CONFIG; NEEDS_CONFIRMATION_FOR_REMOTE_GITHUB_PROTECTION
-  - Evidence: `.github/workflows/firebase-hosting-pull-request.yml`; `.github/workflows/firebase-hosting-develop.yml`; `.github/workflows/app-image-deploy.yml`; `package.json`.
+  - Evidence: `.github/workflows/firebase-hosting-develop.yml`; `package.json`.
 - Item: Generated `build/client` output and local scratch artifacts are not canonical source and should not be tracked in this repository.
   - Status: CONFIRMED
   - Evidence: `.gitignore`; `app/lib/repository-hygiene.test.ts`; tracked stale artifacts removed in the app testing/cleanup pass.
@@ -130,7 +165,7 @@ Do not introduce without approval:
 - Payment/billing changes beyond .react-router/types/app/routes/hr/+types/billings.$id.ts, .react-router/types/app/routes/hr/+types/billings.ts, app/components/templates/common/billings-template.tsx, app/lib/mock-soa-billings.ts, app/routes/hr/billings.$id.tsx, app/routes/hr/billings.tsx
   - Status: NEEDS_CONFIRMATION
   - Evidence: Existing project adoption audit
-- Deployment changes beyond .github/workflows/app-ci.yml, .github/workflows/app-deploy-preflight.yml, .github/workflows/app-image-deploy.yml, .github/workflows/app-rollback.yml, .github/workflows/firebase-hosting-develop.yml, .github/workflows/firebase-hosting-merge.yml, .github/workflows/firebase-hosting-pull-request.yml, Dockerfile, firebase.json
+- Deployment changes beyond .github/workflows/firebase-hosting-develop.yml, .firebaserc, Dockerfile, firebase.json
   - Status: NEEDS_CONFIRMATION
   - Evidence: Existing project adoption audit
 

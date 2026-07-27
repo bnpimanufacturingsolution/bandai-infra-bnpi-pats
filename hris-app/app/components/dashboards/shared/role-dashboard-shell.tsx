@@ -1,4 +1,4 @@
-﻿import { roleDashboardConfigs } from "./role-dashboard.config";
+import { roleDashboardConfigs } from "./role-dashboard.config";
 import type { RoleDashboardShellProps } from "./role-dashboard.types";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { TimeOffCard } from "./cards/time-off-card";
@@ -11,14 +11,14 @@ import { EmployeeCalendarCard } from "./cards/employee-calendar-card";
 import type { DashboardCardKey } from "./role-dashboard.types";
 import { RegularizationCelebrationModal } from "./regularization-celebration-modal";
 
-export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
+export function RoleDashboardShell({ role }: RoleDashboardShellProps) {
 	const { user } = useAuth();
 	const employeeId = user?.metadata?.employee?.id || "";
-	const config = roleDashboardConfigs[dashboardRole];
+	const config = roleDashboardConfigs[role];
 
 	const renderCard = (cardKey: DashboardCardKey) => {
 		if (cardKey === "time_off") {
-			return <TimeOffCard key={cardKey} role={dashboardRole} employeeId={employeeId} />;
+			return <TimeOffCard key={cardKey} role={role} employeeId={employeeId} />;
 		}
 		if (cardKey === "quick_actions") {
 			return <QuickActionsCard key={cardKey} actions={config.quickActions} />;
@@ -27,7 +27,7 @@ export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 			return <RequestListCard key={cardKey} type="my-requests" employeeId={employeeId} />;
 		}
 		if (cardKey === "action_needed") {
-			return <ActionNeededCard key={cardKey} role={dashboardRole} />;
+			return <ActionNeededCard key={cardKey} role={role} />;
 		}
 		if (cardKey === "pending_approvals") {
 			return (
@@ -44,7 +44,7 @@ export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 			return (
 				<HrQueueCard
 					key={cardKey}
-					role={dashboardRole === "hr-manager" ? "hr-manager" : "hr-user"}
+					role={role === "hr-manager" ? "hr-manager" : "hr-user"}
 				/>
 			);
 		}
@@ -52,7 +52,7 @@ export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 			return <EmployeeCalendarCard key={cardKey} employeeId={employeeId} />;
 		}
 
-		return <ActionNeededCard key={`fallback-${cardKey}`} role={dashboardRole} />;
+		return <ActionNeededCard key={`fallback-${cardKey}`} role={role} />;
 	};
 
 	const topRow = config.layout?.top || ["time_off", "action_needed", "quick_actions"];
@@ -79,8 +79,7 @@ export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 			<RegularizationCelebrationModal
 				employeeId={employeeId}
 				enabled={
-					(dashboardRole === "employee" || dashboardRole === "employee-manager") &&
-					Boolean(employeeId)
+					(role === "employee" || role === "employee-manager") && Boolean(employeeId)
 				}
 			/>
 
@@ -95,19 +94,17 @@ export function RoleDashboardShell({ dashboardRole }: RoleDashboardShellProps) {
 				<div className="hidden text-right text-sm text-gray-500 md:block">{dateLabel}</div>
 			</div>
 
-			<div className="grid min-w-0 grid-cols-1 items-stretch gap-3 md:grid-cols-2 xl:grid-cols-3">
+			<div className="grid min-w-0 auto-rows-fr grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
 				{topRow.map((cardKey) => (
-					<div
-						key={`top-${cardKey}`}
-						className="h-[320px] min-w-0 sm:h-[340px] xl:h-[360px]">
+					<div key={`top-${cardKey}`} className="flex min-h-[240px] min-w-0 flex-col">
 						{renderCard(cardKey)}
 					</div>
 				))}
 			</div>
 
 			<div className="grid min-w-0 flex-1 grid-cols-1 items-stretch gap-3 md:grid-cols-2">
-				<div className="min-h-[210px] min-w-0">{renderCard(bottomLeft)}</div>
-				<div className="min-h-[210px] min-w-0">
+				<div className="flex min-h-[210px] min-w-0 flex-col">{renderCard(bottomLeft)}</div>
+				<div className="flex min-h-[210px] min-w-0 flex-col">
 					{renderCard(bottomRight)}
 				</div>
 			</div>

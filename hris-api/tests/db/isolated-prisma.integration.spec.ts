@@ -11,6 +11,9 @@ import {
 	disconnectQuietly,
 	getCurrentDatabaseName,
 } from "../support/isolated-prisma-client";
+import { resolveIsolatedDbFaultTestConfig } from "../support/isolated-db-fault.guard";
+
+const describeIfFaultTestsEnabled = resolveIsolatedDbFaultTestConfig().allowed ? describe : describe.skip;
 
 async function countFixtureRows(prisma: PrismaClient, organizationId: string) {
 	const [
@@ -42,7 +45,7 @@ async function countFixtureRows(prisma: PrismaClient, organizationId: string) {
 	};
 }
 
-describe("isolated Prisma DB integration harness", () => {
+describeIfFaultTestsEnabled("isolated Prisma DB integration harness", () => {
 	let prisma: PrismaClient | undefined;
 	let fixture: IsolatedHrisFixture | undefined;
 

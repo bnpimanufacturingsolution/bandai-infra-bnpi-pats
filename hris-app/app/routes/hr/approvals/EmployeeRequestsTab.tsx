@@ -20,9 +20,9 @@ import {
 
 const ACTIVE_STATES = ["OPEN", "SUBMITTED", "APPROVED"] as const;
 const REQUEST_FIELDS =
-	"id,code,requester.person.personalInfo,requester.employeeId,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,description,type,startDate,endDate,metadata,currentWorkflowStateKey,createdAt,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId";
+	"id,code,requester.person.personalInfo,requester.employeeId,requester.user.avatar,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,description,type,startDate,endDate,metadata,currentWorkflowStateKey,createdAt,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId";
 const REQUEST_DETAIL_FIELDS =
-	"id,code,requester.person.personalInfo,requester.employeeId,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,description,type,startDate,endDate,metadata,currentWorkflowStateKey,notes,attachments,createdAt,updatedAt,currentStepExecution.id,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.stepType,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.id,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId,stepExecutions.id,stepExecutions.stepNumber,stepExecutions.stepName,stepExecutions.stepType,stepExecutions.assigneeType,stepExecutions.status,stepExecutions.completedAt,stepExecutions.comments,stepExecutions.assignee.id,stepExecutions.assignee.employeeId,stepExecutions.assignee.person.personalInfo,stepExecutions.assignee.department.name,transactions";
+	"id,code,requester.person.personalInfo,requester.employeeId,requester.user.avatar,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,description,type,startDate,endDate,metadata,currentWorkflowStateKey,notes,attachments,createdAt,updatedAt,currentStepExecution.id,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.stepType,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.id,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId,stepExecutions.id,stepExecutions.stepNumber,stepExecutions.stepName,stepExecutions.stepType,stepExecutions.assigneeType,stepExecutions.status,stepExecutions.completedAt,stepExecutions.comments,stepExecutions.assignee.id,stepExecutions.assignee.employeeId,stepExecutions.assignee.person.personalInfo,stepExecutions.assignee.department.name,transactions";
 
 const TAB_STATUS_FILTERS: Record<string, RequestStatus[]> = {
 	submitted: ["SUBMITTED"],
@@ -261,6 +261,7 @@ export default function EmployeeRequestsTab() {
 						profileId={item.requester?.id || item.requesterId}
 						fullName={getRequesterName(item)}
 						employeeId={item.requester?.employeeId || "No employee ID"}
+						avatar={(item.requester as any)?.user?.avatar ?? null}
 					/>
 				),
 			},
@@ -440,6 +441,7 @@ export default function EmployeeRequestsTab() {
 			/>
 
 			<RequestReviewModal
+				variant="compact"
 				open={action === "view"}
 				onOpenChange={(open) => {
 					if (!open) {

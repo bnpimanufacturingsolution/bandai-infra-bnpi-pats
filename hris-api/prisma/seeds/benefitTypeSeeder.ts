@@ -2,7 +2,7 @@ import { PrismaClient, BenefitCategory, BenefitPayrollDirection } from "../../ge
 import { resolveDefaultSeedOrganizationId } from "./seedOrganizationResolver";
 
 export interface BenefitTypeDefinition {
-	code?: string;
+	code: string;
 	name: string;
 	description: string;
 	category: BenefitCategory;
@@ -20,6 +20,11 @@ export interface BenefitTypeDefinition {
 	defaultInstallments?: number;
 	payrollCycleDays?: number;
 	requireTermsAgreement?: boolean;
+	defaultEligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED" | null;
+	defaultEligibilityDisqualifyOnAbsent?: boolean | null;
+	defaultEligibilityDisqualifyOnLate?: boolean | null;
+	defaultEligibilityDisqualifyOnUndertime?: boolean | null;
+	defaultEligibilityDisqualifyOnLeave?: boolean | null;
 }
 
 export const DEFAULT_BENEFIT_TYPES: BenefitTypeDefinition[] = [
@@ -62,6 +67,12 @@ export const DEFAULT_BENEFIT_TYPES: BenefitTypeDefinition[] = [
 		reconciliationAction: "KEEP_AS_BENEFIT",
 		isTaxable: true,
 		isActive: true,
+		// Classic Perfect Attendance: qualify on period attendance, fixed amount when due
+		defaultEligibilityMode: "ATTENDANCE_QUALIFIED",
+		defaultEligibilityDisqualifyOnAbsent: true,
+		defaultEligibilityDisqualifyOnLate: true,
+		defaultEligibilityDisqualifyOnUndertime: true,
+		defaultEligibilityDisqualifyOnLeave: true,
 	},
 	{
 		code: "OTM",
@@ -151,9 +162,19 @@ export async function ensureDefaultBenefitTypes(
 						minServiceMonths: benefitDef.minServiceMonths,
 						isTaxable: benefitDef.isTaxable,
 						isActive: benefitDef.isActive,
+										// Enrollments are recurring-only in HR UI; defaultInstallments kept for catalog legacy only.
 						defaultInstallments: benefitDef.defaultInstallments ?? 6,
 						payrollCycleDays: benefitDef.payrollCycleDays ?? 15,
 						requireTermsAgreement: benefitDef.requireTermsAgreement ?? true,
+						defaultEligibilityMode: benefitDef.defaultEligibilityMode ?? null,
+						defaultEligibilityDisqualifyOnAbsent:
+							benefitDef.defaultEligibilityDisqualifyOnAbsent ?? null,
+						defaultEligibilityDisqualifyOnLate:
+							benefitDef.defaultEligibilityDisqualifyOnLate ?? null,
+						defaultEligibilityDisqualifyOnUndertime:
+							benefitDef.defaultEligibilityDisqualifyOnUndertime ?? null,
+						defaultEligibilityDisqualifyOnLeave:
+							benefitDef.defaultEligibilityDisqualifyOnLeave ?? null,
 						isDeleted: false,
 					},
 					create: {
@@ -173,9 +194,19 @@ export async function ensureDefaultBenefitTypes(
 						minServiceMonths: benefitDef.minServiceMonths,
 						isTaxable: benefitDef.isTaxable,
 						isActive: benefitDef.isActive,
+										// Enrollments are recurring-only in HR UI; defaultInstallments kept for catalog legacy only.
 						defaultInstallments: benefitDef.defaultInstallments ?? 6,
 						payrollCycleDays: benefitDef.payrollCycleDays ?? 15,
 						requireTermsAgreement: benefitDef.requireTermsAgreement ?? true,
+						defaultEligibilityMode: benefitDef.defaultEligibilityMode ?? null,
+						defaultEligibilityDisqualifyOnAbsent:
+							benefitDef.defaultEligibilityDisqualifyOnAbsent ?? null,
+						defaultEligibilityDisqualifyOnLate:
+							benefitDef.defaultEligibilityDisqualifyOnLate ?? null,
+						defaultEligibilityDisqualifyOnUndertime:
+							benefitDef.defaultEligibilityDisqualifyOnUndertime ?? null,
+						defaultEligibilityDisqualifyOnLeave:
+							benefitDef.defaultEligibilityDisqualifyOnLeave ?? null,
 					},
 				}),
 			`benefit type upsert ${benefitDef.name}`,

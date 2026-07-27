@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { cache, cacheShort, cacheMedium, cacheUser } from "../../middleware/cache";
-import { uploadImportFile } from "../../middleware/upload";
+import { uploadDocument, uploadImportFile } from "../../middleware/upload";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -11,6 +11,11 @@ interface IController {
 	resetGeneratedPayrolls(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getBreakdown(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importFromXLSX(req: Request, res: Response, next: NextFunction): Promise<void>;
+	uploadPayslipReleaseAttachment(req: Request, res: Response, next: NextFunction): Promise<void>;
+	publishPayrollPeriod(req: Request, res: Response, next: NextFunction): Promise<void>;
+	generatePayslipsForPeriod(req: Request, res: Response, next: NextFunction): Promise<void>;
+	releasePayslipsForPeriod(req: Request, res: Response, next: NextFunction): Promise<void>;
+	flagPayrollPaymentIssue(req: Request, res: Response, next: NextFunction): Promise<void>;
 	generatePayslipPdf(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
@@ -489,6 +494,20 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.post("/import", uploadImportFile, controller.importFromXLSX);
+	routes.post(
+		"/period/:payrollPeriodId/payslip-release/attachment",
+		uploadDocument,
+		controller.uploadPayslipReleaseAttachment,
+	);
+	routes.post("/period/:payrollPeriodId/publish", controller.publishPayrollPeriod);
+	routes.post(
+		"/period/:payrollPeriodId/payslip-release/generate-payslips",
+		controller.generatePayslipsForPeriod,
+	);
+	routes.post(
+		"/period/:payrollPeriodId/payslip-release/release",
+		controller.releasePayslipsForPeriod,
+	);
 
 	/**
 	 * @openapi
@@ -581,6 +600,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.get("/:id/payslip", controller.generatePayslipPdf);
+	routes.post("/:id/payment-issue", controller.flagPayrollPaymentIssue);
 
 	route.use(path, routes);
 

@@ -24,6 +24,7 @@ import {
 	humanizeEnumValue,
 } from "~/lib/utils/report-export";
 import { ReportExportDialog } from "../components/ReportExportDialog";
+import { ReportEmployeeCell } from "../components/ReportEmployeeCell";
 import { ReportScopeDateFilters } from "../components/ReportScopeDateFilters";
 import { useReportScopeFilters } from "../useReportScopeFilters";
 
@@ -621,7 +622,11 @@ export function LeaveBalanceTab() {
 													key={`${row.employeeId}-${row.leaveType}-${index}`}
 													className="border-t">
 													<td className="px-6 py-3 font-medium">
-														{row.employeeName}
+														<ReportEmployeeCell
+															rosterEmployees={allEmployees}
+															employeeId={row.employeeId}
+															fullName={row.employeeName}
+														/>
 													</td>
 													<td className="px-6 py-3">{row.department}</td>
 													<td className="px-6 py-3">

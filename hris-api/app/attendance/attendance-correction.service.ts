@@ -8,9 +8,9 @@ import {
 } from "../../helper/attendance.helper";
 import {
 	calculateTimekeeping,
-	deriveBehaviorFlags,
 	determineAttendanceStatus,
 } from "../../helper/timekeeping.helper";
+import { resolveOvertimePolicyApplication } from "../../helper/overtime-approval.helper";
 import { applyAttendanceToObligation } from "../../helper/attendance-obligation.helper";
 import { refreshTimesheetForAttendanceDate } from "../../helper/timesheet.helper";
 import { invalidateCache } from "../../middleware/cache";
@@ -585,21 +585,29 @@ export async function applyAttendanceCorrection(
 		scheduleSnapshot,
 		normalized.correctionDate,
 	);
-	const behaviorFlags = isNonWorkedCorrection
-		? []
-		: deriveBehaviorFlagsFn({
-				timeIn: correctedTimeIn,
-				timeOut: correctedTimeOut,
-				schedule: scheduleSnapshot,
-				date: normalized.correctionDate,
-		  });
 	const employeeSnapshotFields = await fetchAttendanceEmployeeSnapshotFieldsFn(
 		params.prisma,
 		normalized.employeeId,
 	);
-	const timekeepingFields = buildAttendanceTimekeepingFieldsFn(timekeepingCalc, {
-		isNonWorked: isNonWorkedCorrection,
-	});
+	const overtimeApplication = isNonWorkedCorrection
+		? null
+		: await resolveOvertimePolicyApplication(params.prisma, params.organizationId, {
+				calc: timekeepingCalc,
+				timeIn: correctedTimeIn,
+				timeOut: correctedTimeOut,
+				schedule: scheduleSnapshot,
+				date: normalized.correctionDate,
+				isNonWorked: isNonWorkedCorrection,
+				attendanceStatus: normalized.status,
+			});
+	const behaviorFlags = isNonWorkedCorrection
+		? []
+		: overtimeApplication?.behaviorFlags || [];
+	const timekeepingFields = overtimeApplication
+		? overtimeApplication.timekeepingFields
+		: buildAttendanceTimekeepingFieldsFn(timekeepingCalc, {
+				isNonWorked: isNonWorkedCorrection,
+			});
 
 	const createdAttendance = await params.prisma.$transaction(async (tx) => {
 		await tx.attendance.updateMany({

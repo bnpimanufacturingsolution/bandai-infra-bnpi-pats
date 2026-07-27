@@ -60,6 +60,12 @@ import { PANRequestModal } from "~/components/modals/PANRequestModal";
 import { ResignationFlowModal } from "~/components/templates/common/ResignationFlowModal";
 import type { PANIntent } from "~/components/atoms/PANBadge";
 import type { Request, RequestStatus, RequestType } from "~/services/requests.service";
+import {
+	getLeaveRequestPrefillFromSearchParams,
+	REQUEST_ROUTE_END_DATE_PARAM,
+	REQUEST_ROUTE_LEAVE_TYPE_PARAM,
+	REQUEST_ROUTE_START_DATE_PARAM,
+} from "~/lib/utils/requests-route";
 import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 import { useShiftTypes } from "~/lib/hooks/useSchedules";
 import { TimePicker } from "~/components/molecules/TimePicker";
@@ -1090,6 +1096,7 @@ export default function EmployeeRequestsHubPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const employeeId = user?.metadata?.employee?.id || "";
 	const organizationId = user?.organizationId || "";
+	const leaveRequestPrefill = getLeaveRequestPrefillFromSearchParams(searchParams);
 	const action = searchParams.get("action");
 	const activeRequestId = action === "view" ? searchParams.get("id") || "" : "";
 	const createKind = useMemo(() => {
@@ -1216,6 +1223,9 @@ export default function EmployeeRequestsHubPage() {
 			next.delete("kind");
 			next.delete("type");
 			next.delete("date");
+			next.delete(REQUEST_ROUTE_START_DATE_PARAM);
+			next.delete(REQUEST_ROUTE_END_DATE_PARAM);
+			next.delete(REQUEST_ROUTE_LEAVE_TYPE_PARAM);
 			next.delete("shiftTypeId");
 			next.delete("targetEmployeeId");
 			next.delete("intent");
@@ -1666,6 +1676,8 @@ export default function EmployeeRequestsHubPage() {
 			/>
 
 			<RequestReviewModal
+				variant="compact"
+				hideEmployeeProfile
 				open={action === "view"}
 				onOpenChange={(open) => {
 					if (!open) {
@@ -1763,12 +1775,22 @@ export default function EmployeeRequestsHubPage() {
 			</Dialog>
 
 			<LeaveRequestModal
+				key={
+					leaveRequestPrefill.honorPrefilledDates
+						? `leave-prefill-${leaveRequestPrefill.initialStartDate}`
+						: "leave-create"
+				}
 				isOpen={action === "create" && createKind === "leave"}
 				onClose={clearCreateParams}
 				onSubmit={handleCreateLeave}
 				isPending={createRequestMutation.isPending}
-				initialStartDate={searchParams.get("date") || undefined}
-				initialEndDate={searchParams.get("date") || undefined}
+				initialLeaveType={leaveRequestPrefill.initialLeaveType}
+				initialStartDate={leaveRequestPrefill.initialStartDate}
+				initialEndDate={leaveRequestPrefill.initialEndDate}
+				initialDurationUnit={
+					leaveRequestPrefill.honorPrefilledDates ? "FULL_DAY" : undefined
+				}
+				honorPrefilledDates={leaveRequestPrefill.honorPrefilledDates}
 			/>
 
 			<DocumentRequestModal

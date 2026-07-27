@@ -247,6 +247,16 @@ model EmployeePayroll {
   paidAt             DateTime?
   paymentMethod      String? // BANK_TRANSFER, CASH, CHECK
   referenceNumber    String?
+  isPublished        Boolean   @default(false)
+  publishedAt        DateTime?
+  publishedBy        String?   @db.ObjectId
+  payslipGeneratedAt DateTime?
+  payslipReleasedAt  DateTime?
+  payslipReleasedBy  String?   @db.ObjectId
+  hasPaymentIssue    Boolean   @default(false)
+  paymentIssueAt     DateTime?
+  paymentIssueBy     String?   @db.ObjectId
+  paymentIssueNote   String?
   snapshotLockedAt   DateTime?
   snapshotLockedBy   String?   @db.ObjectId
   snapshotLockReason String?
@@ -266,5 +276,6 @@ model EmployeePayroll {
   @@index([payrollPeriodId])
   @@index([organizationId, employeeId, isDeleted])
   @@index([organizationId, payrollPeriodId, isPaid, isDeleted])
+  @@index([organizationId, payrollPeriodId, isPublished, isDeleted])
   @@map("employee_payrolls")
 }

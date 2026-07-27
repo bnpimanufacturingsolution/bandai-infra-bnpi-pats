@@ -1,8 +1,10 @@
-import { APIService } from "./api-service";
 import { API_CONFIG } from "../lib/api/config";
 import type { LeaveRequest, PaginatedResponse, ApiResponse } from "../lib/api/config";
+import { hrisApiClient } from "../lib/api-client";
 
-export class LeaveService extends APIService {
+const withId = (endpoint: string, id: string) => endpoint.replace(":id", id);
+
+export class LeaveService {
 	async getLeaveRequests(params?: {
 		page?: number;
 		limit?: number;
@@ -12,18 +14,11 @@ export class LeaveService extends APIService {
 		startDate?: string;
 		endDate?: string;
 	}): Promise<PaginatedResponse<LeaveRequest>> {
-		const queryParams = new URLSearchParams();
-
-		if (params?.page) queryParams.append("page", params.page.toString());
-		if (params?.limit) queryParams.append("limit", params.limit.toString());
-		if (params?.employeeId) queryParams.append("employeeId", params.employeeId);
-		if (params?.status) queryParams.append("status", params.status);
-		if (params?.type) queryParams.append("type", params.type);
-		if (params?.startDate) queryParams.append("startDate", params.startDate);
-		if (params?.endDate) queryParams.append("endDate", params.endDate);
-
-		const url = `${API_CONFIG.ENDPOINTS.LEAVE.LIST}${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
-		return this.get<LeaveRequest[]>(url) as Promise<PaginatedResponse<LeaveRequest>>;
+		const response = await hrisApiClient.get<PaginatedResponse<LeaveRequest>>(
+			API_CONFIG.ENDPOINTS.LEAVE.LIST,
+			params,
+		);
+		return (response.data as PaginatedResponse<LeaveRequest>) || response;
 	}
 
 	async createLeaveRequest(leaveData: {
@@ -31,19 +26,21 @@ export class LeaveService extends APIService {
 		startDate: string;
 		endDate: string;
 		reason: string;
-		employeeId?: string; // Optional, defaults to current user
+		employeeId?: string;
 	}): Promise<ApiResponse<LeaveRequest>> {
-		return this.post<LeaveRequest>(API_CONFIG.ENDPOINTS.LEAVE.REQUEST, leaveData);
+		return hrisApiClient.post<LeaveRequest>(API_CONFIG.ENDPOINTS.LEAVE.REQUEST, leaveData);
 	}
 
 	async approveLeaveRequest(id: string, comments?: string): Promise<ApiResponse<LeaveRequest>> {
-		const url = this.buildUrl(API_CONFIG.ENDPOINTS.LEAVE.APPROVE, { id });
-		return this.post<LeaveRequest>(url, { comments });
+		return hrisApiClient.post<LeaveRequest>(withId(API_CONFIG.ENDPOINTS.LEAVE.APPROVE, id), {
+			comments,
+		});
 	}
 
 	async rejectLeaveRequest(id: string, reason: string): Promise<ApiResponse<LeaveRequest>> {
-		const url = this.buildUrl(API_CONFIG.ENDPOINTS.LEAVE.REJECT, { id });
-		return this.post<LeaveRequest>(url, { reason });
+		return hrisApiClient.post<LeaveRequest>(withId(API_CONFIG.ENDPOINTS.LEAVE.REJECT, id), {
+			reason,
+		});
 	}
 
 	async getLeaveBalance(employeeId?: string): Promise<
@@ -56,11 +53,10 @@ export class LeaveService extends APIService {
 			total: number;
 		}>
 	> {
-		const queryParams = new URLSearchParams();
-		if (employeeId) queryParams.append("employeeId", employeeId);
-
-		const url = `${API_CONFIG.ENDPOINTS.LEAVE.BALANCE}${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
-		return this.get(url);
+		const endpoint = employeeId
+			? `${API_CONFIG.ENDPOINTS.LEAVE.BALANCE}?employeeId=${encodeURIComponent(employeeId)}`
+			: API_CONFIG.ENDPOINTS.LEAVE.BALANCE;
+		return hrisApiClient.get(endpoint);
 	}
 
 	async getMyLeaveRequests(params?: {
@@ -69,7 +65,7 @@ export class LeaveService extends APIService {
 		status?: string;
 		type?: string;
 	}): Promise<PaginatedResponse<LeaveRequest>> {
-		return this.getLeaveRequests({ ...params });
+		return this.getLeaveRequests(params);
 	}
 
 	async getPendingApprovals(params?: {
@@ -84,18 +80,15 @@ export class LeaveService extends APIService {
 		id: string,
 		updates: Partial<LeaveRequest>,
 	): Promise<ApiResponse<LeaveRequest>> {
-		const url = this.buildUrl(API_CONFIG.ENDPOINTS.LEAVE.LIST + "/:id", { id });
-		return this.put<LeaveRequest>(url, updates);
+		return hrisApiClient.put<LeaveRequest>(withId(API_CONFIG.ENDPOINTS.LEAVE.DETAIL, id), updates);
 	}
 
 	async cancelLeaveRequest(id: string, reason: string): Promise<ApiResponse<LeaveRequest>> {
-		const url = this.buildUrl(API_CONFIG.ENDPOINTS.LEAVE.LIST + "/:id", { id });
-		return this.patch<LeaveRequest>(url, {
+		return hrisApiClient.patch<LeaveRequest>(withId(API_CONFIG.ENDPOINTS.LEAVE.DETAIL, id), {
 			status: "cancelled",
 			cancellationReason: reason,
 		});
 	}
 }
 
-// Export singleton instance
 export const leaveService = new LeaveService();

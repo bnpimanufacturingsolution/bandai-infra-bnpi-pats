@@ -1,15 +1,33 @@
-import { renderToStaticMarkup } from "react-dom/server";
+// @vitest-environment jsdom
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { BANDAI_SIDEBAR_LOGO_URL } from "~/constants/branding";
 
 vi.mock("react-router-dom", () => ({
 	useNavigate: () => vi.fn(),
+}));
+
+vi.mock("~/components/ui/avatar", () => ({
+	Avatar: ({ children, className }: any) => (
+		<div data-testid="avatar-root" className={className}>
+			{children}
+		</div>
+	),
+	AvatarImage: ({ src, alt, className }: any) => (
+		<img data-testid="avatar-image" src={src} alt={alt} className={className} />
+	),
+	AvatarFallback: ({ children, className }: any) => (
+		<div data-testid="avatar-fallback" className={className}>
+			{children}
+		</div>
+	),
 }));
 
 import { EmployeeTableCell } from "./EmployeeTableCell";
 
 describe("EmployeeTableCell", () => {
 	it("renders the employee avatar when one is available", () => {
-		const html = renderToStaticMarkup(
+		render(
 			<EmployeeTableCell
 				profileId="emp-1"
 				fullName="Juan Dela Cruz"
@@ -18,14 +36,15 @@ describe("EmployeeTableCell", () => {
 			/>,
 		);
 
-		expect(html).toContain('data-slot="avatar"');
-		expect(html).toContain('data-slot="avatar-fallback"');
-		expect(html).toContain(">JC<");
-		expect(html).toContain("Juan Dela Cruz");
+		expect(screen.getByTestId("avatar-image")).toHaveAttribute(
+			"src",
+			"https://example.test/avatar.png",
+		);
+		expect(screen.getByText("Juan Dela Cruz")).toBeInTheDocument();
 	});
 
-	it("falls back to initials when the avatar is missing", () => {
-		const html = renderToStaticMarkup(
+	it("falls back to the Bandai logo when the avatar is missing", () => {
+		render(
 			<EmployeeTableCell
 				fullName="Maria Santos"
 				employeeId="EMP-002"
@@ -33,7 +52,11 @@ describe("EmployeeTableCell", () => {
 			/>,
 		);
 
-		expect(html).toContain(">MS<");
-		expect(html).toContain("EMP-002");
+		expect(screen.queryByTestId("avatar-image")).toBeNull();
+		expect(screen.getByAltText("Bandai logo")).toHaveAttribute(
+			"src",
+			BANDAI_SIDEBAR_LOGO_URL,
+		);
+		expect(screen.getByText("EMP-002")).toBeInTheDocument();
 	});
 });

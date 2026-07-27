@@ -4,7 +4,7 @@
  * Follows DRY principles to eliminate code duplication
  */
 
-import { PrismaClient } from "../generated/prisma";
+import { PrismaClient, Prisma } from "../generated/prisma";
 
 /**
  * Helper: Parse time string "HH:MM" to total minutes
@@ -28,15 +28,13 @@ export function getEmployeeName(employee: any): string {
 	return employee.employeeId || employee.id || "UNKNOWN";
 }
 
-/**
- * Base employee filter interface
- */
-export interface BaseEmployeeFilter {
-	organizationId: string;
-	isDeleted: boolean;
+export interface EmployeeScopeFilter {
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
-	id?: string;
+	employeeId?: string;
 }
 
 /**
@@ -44,20 +42,46 @@ export interface BaseEmployeeFilter {
  */
 export function buildEmployeeFilter(
 	organizationId: string,
-	departmentId?: string,
+	scopeOrDepartmentId?: string | EmployeeScopeFilter,
 	reportToId?: string,
-): BaseEmployeeFilter {
-	const filter: BaseEmployeeFilter = {
+): Prisma.EmployeeWhereInput {
+	const scope: EmployeeScopeFilter =
+		typeof scopeOrDepartmentId === "object" && scopeOrDepartmentId !== null
+			? scopeOrDepartmentId
+			: {
+					departmentId: scopeOrDepartmentId || undefined,
+					reportToId,
+				};
+
+	const filter: Prisma.EmployeeWhereInput = {
 		organizationId,
 		isDeleted: false,
 	};
 
-	if (departmentId) {
-		filter.departmentId = departmentId;
+	if (scope.departmentId) {
+		filter.departmentId = scope.departmentId;
 	}
 
-	if (reportToId) {
-		filter.reportToId = reportToId;
+	if (scope.sectionId) {
+		filter.position = {
+			sectionId: scope.sectionId,
+		};
+	}
+
+	if (scope.positionId) {
+		filter.positionId = scope.positionId;
+	}
+
+	if (scope.levelId) {
+		filter.levelId = scope.levelId;
+	}
+
+	if (scope.reportToId) {
+		filter.reportToId = scope.reportToId;
+	}
+
+	if (scope.employeeId) {
+		filter.id = scope.employeeId;
 	}
 
 	return filter;

@@ -652,8 +652,6 @@ IT-SE,Software Engineer,Software Engineer,IT-OPS,40000,80000,"Junior,Mid,Senior"
 	const onSubmit = (data: PositionFormData) => {
 		// Check if we're editing by looking at search params
 		const isEditing = action === "edit";
-		const minSalary = data.minSalary ?? undefined;
-		const maxSalary = data.maxSalary ?? undefined;
 
 		if (isEditing && activePosition) {
 			const updatePayload: UpdatePositionRequest = {
@@ -662,8 +660,8 @@ IT-SE,Software Engineer,Software Engineer,IT-OPS,40000,80000,"Junior,Mid,Senior"
 				description: data.description || "",
 				sectionId: data.sectionId || null,
 				levelIds: data.levelIds && data.levelIds.length > 0 ? data.levelIds : undefined,
-				minSalary,
-				maxSalary,
+				minSalary: data.minSalary,
+				maxSalary: data.maxSalary,
 				isManager: data.isManager,
 				isActive: data.isActive,
 			};
@@ -692,8 +690,6 @@ IT-SE,Software Engineer,Software Engineer,IT-OPS,40000,80000,"Junior,Mid,Senior"
 				...data,
 				sectionId: data.sectionId || null,
 				organizationId: organizationId!,
-				minSalary,
-				maxSalary,
 			};
 
 			createPositionMutation.mutate(createPayload, {

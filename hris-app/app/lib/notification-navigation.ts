@@ -35,6 +35,15 @@ const normalizeLegacyEmployeeTarget = (
 			? safeTarget.replace("/employee/payroll", `/employee/${employeeId}/payroll`)
 			: "/dashboard";
 	}
+	if (safeTarget.startsWith("/employee/requests/time-requests")) {
+		return safeTarget.replace("/employee/requests/time-requests", "/employee/requests");
+	}
+	if (safeTarget.startsWith("/employee/approvals/requests") && safeTarget.includes("timesheet.review")) {
+		return safeTarget.replace("/employee/approvals/requests", "/employee/approvals/timesheet");
+	}
+	if (safeTarget.startsWith("/employee/approvals/requests")) {
+		return safeTarget.replace("/employee/approvals/requests", "/employee/approvals");
+	}
 	return safeTarget;
 };
 
@@ -57,6 +66,10 @@ export const resolveNotificationTarget = (
 	const timesheetId = String(metadata.timesheetId || metadata.entityId || "");
 	const employeeId =
 		typeof metadata.employeeId === "string" ? String(metadata.employeeId) : null;
+	const employeePayrollId =
+		typeof metadata.employeePayrollId === "string"
+			? String(metadata.employeePayrollId)
+			: null;
 	const requestType = metadata.requestType ? String(metadata.requestType) : null;
 	const normalizedRequestType = String(requestType || "").toUpperCase();
 	const normalizedTargetUrl = normalizeLegacyEmployeeTarget(targetUrl, employeeId);
@@ -84,8 +97,8 @@ export const resolveNotificationTarget = (
 		}
 		case "TIMESHEET_APPROVAL_VIEW": {
 			const base = isHrRole(currentUserRole)
-				? "/hr/approvals/requests"
-				: "/employee/approvals/requests";
+				? "/hr/approvals/timesheet"
+				: "/employee/approvals/timesheet";
 			const requestOrTimesheetId = requestId || timesheetId;
 			return requestOrTimesheetId
 				? `${base}?action=timesheet.review&id=${requestOrTimesheetId}`
@@ -100,6 +113,16 @@ export const resolveNotificationTarget = (
 			return isHrRole(currentUserRole)
 				? normalizedTargetUrl || "/hr/employee-documents?tab=pending-approval"
 				: normalizedTargetUrl;
+		case "PAYROLL_SELF_VIEW":
+		case "PAYSLIP_SELF_VIEW":
+		case "PAYMENT_ISSUE_SELF_VIEW":
+			if (employeeId && employeePayrollId) {
+				return `/employee/${employeeId}/payroll/${employeePayrollId}`;
+			}
+			if (employeeId) {
+				return `/employee/${employeeId}/payroll`;
+			}
+			return normalizedTargetUrl || "/dashboard";
 		default:
 			return normalizedTargetUrl;
 	}

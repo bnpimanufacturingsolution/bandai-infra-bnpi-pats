@@ -53,15 +53,35 @@ interface TimeRequestFormData {
 	notes?: string;
 }
 
-type TimeRequestType = "OVERTIME" | "TIME_ADJUSTMENT";
+type TimeRequestType = "OVERTIME" | "TIME_ADJUSTMENT" | "PAYROLL_CORRECTION";
+
+const isTimeRequestType = (value: string | null): value is TimeRequestType =>
+	value === "OVERTIME" || value === "TIME_ADJUSTMENT" || value === "PAYROLL_CORRECTION";
+
+const timeRequestTypeLabel = (type: TimeRequestType) => {
+	switch (type) {
+		case "OVERTIME":
+			return "overtime";
+		case "TIME_ADJUSTMENT":
+			return "time adjustment";
+		case "PAYROLL_CORRECTION":
+			return "payroll correction";
+		default:
+			return "time";
+	}
+};
 
 export function TimeRequestsPage() {
 	// URL search params for deep-linked tabs
 	const [searchParams, setSearchParams] = useSearchParams();
-	const activeRequestType = (searchParams.get("type") as TimeRequestType) || "OVERTIME";
+	const typeParam = searchParams.get("type");
+	const activeRequestType: TimeRequestType = isTimeRequestType(typeParam)
+		? typeParam
+		: "OVERTIME";
 	const activeStatusTab = (searchParams.get("tab") as RequestStatus) || "PENDING";
 	const createDateParam = searchParams.get("date") || "";
-	const shouldOpenCreateFromUrl = searchParams.get("action") === "create";
+	const shouldOpenCreateFromUrl =
+		searchParams.get("action") === "create" && activeRequestType !== "PAYROLL_CORRECTION";
 
 	const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 	const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -186,24 +206,39 @@ export function TimeRequestsPage() {
 					},
 				},
 			];
-		} else {
+		}
+		if (activeRequestType === "PAYROLL_CORRECTION") {
 			return [
 				...baseColumns,
 				{
-					key: "adjustmentType",
-					label: "Adjustment Type",
-					width: "150px",
-					render: (value, item) => {
-						const type = getMetadataField(item, "adjustmentType");
-						return <span className="text-gray-900">{type || "-"}</span>;
+					key: "period",
+					label: "Source period",
+					width: "160px",
+					render: (_value, item) => {
+						const name =
+							getMetadataField(item, "sourcePayrollPeriodName") ||
+							getMetadataField(item, "sourcePayrollPeriodCode") ||
+							getMetadataField(item, "periodCode");
+						return <span className="text-gray-900">{name || "-"}</span>;
+					},
+				},
+				{
+					key: "estimatedAmount",
+					label: "Est. amount",
+					width: "120px",
+					render: (_value, item) => {
+						const amount = getMetadataField(item, "estimatedAmount");
+						if (amount === null || amount === undefined)
+							return <span className="text-gray-400">-</span>;
+						return <span className="font-medium text-gray-900">{amount}</span>;
 					},
 				},
 				{
 					key: "reason",
 					label: "Reason",
 					width: "200px",
-					render: (value, item) => {
-						const reason = getMetadataField(item, "reason");
+					render: (_value, item) => {
+						const reason = getMetadataField(item, "reason") || item.description;
 						return (
 							<span className="text-gray-900">
 								{reason && reason.length > 50
@@ -215,6 +250,33 @@ export function TimeRequestsPage() {
 				},
 			];
 		}
+		return [
+			...baseColumns,
+			{
+				key: "adjustmentType",
+				label: "Adjustment Type",
+				width: "150px",
+				render: (value, item) => {
+					const type = getMetadataField(item, "adjustmentType");
+					return <span className="text-gray-900">{type || "-"}</span>;
+				},
+			},
+			{
+				key: "reason",
+				label: "Reason",
+				width: "200px",
+				render: (value, item) => {
+					const reason = getMetadataField(item, "reason");
+					return (
+						<span className="text-gray-900">
+							{reason && reason.length > 50
+								? `${reason.substring(0, 50)}...`
+								: reason || "-"}
+						</span>
+					);
+				},
+			},
+		];
 	}, [activeRequestType]);
 
 	const handleView = (item: Request) => {
@@ -223,12 +285,7 @@ export function TimeRequestsPage() {
 	};
 
 	const handleDelete = (item: Request) => {
-		if (
-			!confirm(
-				`Delete this ${activeRequestType === "OVERTIME" ? "overtime" : "time adjustment"} request?`,
-			)
-		)
-			return;
+		if (!confirm(`Delete this ${timeRequestTypeLabel(activeRequestType)} request?`)) return;
 		deleteRequestMutation.mutate(item.id);
 	};
 
@@ -242,13 +299,19 @@ export function TimeRequestsPage() {
 		// Add download functionality here
 	};
 
-	// Create request handler
+	// Create request handler (payroll corrections are filed from locked timesheets only)
 	const onCreateSubmit = (data: TimeRequestFormData) => {
-		const requesterId = user?.metadata?.employee?.id;
+		if (activeRequestType === "PAYROLL_CORRECTION") {
+			toast.error("Payroll corrections must be filed from a processed timesheet.");
+			return;
+		}
 
-		if (!requesterId) {
+		const requesterId = user?.metadata?.employee?.id;
+		const organizationId = user?.organizationId || user?.organization?.id;
+
+		if (!requesterId || !organizationId) {
 			toast.error(
-				"Employee ID is required. Please ensure you have an associated employee record.",
+				"Employee and organization context are required to create a request.",
 			);
 			return;
 		}
@@ -266,6 +329,7 @@ export function TimeRequestsPage() {
 					};
 
 		const payload = {
+			organizationId,
 			requesterId,
 			type: activeRequestType as RequestType,
 			description: data.description,
@@ -369,14 +433,25 @@ export function TimeRequestsPage() {
 			<div className="flex items-center justify-between">
 				<div>
 					<h1 className="text-2xl font-bold text-gray-900">Time Requests</h1>
-					<p className="text-gray-600">Manage overtime and time adjustment requests</p>
+					<p className="text-gray-600">
+						Manage overtime, time adjustment, and payroll correction requests
+					</p>
 				</div>
-				<Button
-					className="bg-orange-600 hover:bg-orange-700 text-white"
-					onClick={handleOpenCreate}>
-					<Plus className="w-4 h-4 mr-2" />
-					New {activeRequestType === "OVERTIME" ? "Overtime" : "Time Adjustment"} Request
-				</Button>
+				{activeRequestType !== "PAYROLL_CORRECTION" ? (
+					<Button
+						className="bg-orange-600 hover:bg-orange-700 text-white"
+						onClick={handleOpenCreate}>
+						<Plus className="w-4 h-4 mr-2" />
+						New {activeRequestType === "OVERTIME" ? "Overtime" : "Time Adjustment"}{" "}
+						Request
+					</Button>
+				) : (
+					<p className="max-w-sm text-right text-sm text-neutral-600">
+						File payroll corrections from a{" "}
+						<span className="font-semibold text-neutral-800">Processed in payroll</span>{" "}
+						timesheet.
+					</p>
+				)}
 			</div>
 
 			{/* Request Type Tabs */}
@@ -403,6 +478,18 @@ export function TimeRequestsPage() {
 					<div className="flex items-center justify-center gap-2">
 						<Clock className="w-4 h-4" />
 						Time Adjustments
+					</div>
+				</button>
+				<button
+					onClick={() => setActiveRequestType("PAYROLL_CORRECTION")}
+					className={`flex-1 py-2.5 px-4 text-sm font-medium rounded-md transition-colors ${
+						activeRequestType === "PAYROLL_CORRECTION"
+							? "bg-white text-orange-600 shadow-sm"
+							: "text-gray-600 hover:text-gray-900"
+					}`}>
+					<div className="flex items-center justify-center gap-2">
+						<AlertCircle className="w-4 h-4" />
+						Payroll Corrections
 					</div>
 				</button>
 			</div>
@@ -468,8 +555,14 @@ export function TimeRequestsPage() {
 				searchFields={["code"]}
 				renderActions={renderActions}
 				isLoading={isLoading}
-				emptyMessage={`No ${activeRequestType === "OVERTIME" ? "overtime" : "time adjustment"} requests found`}
-				emptyDescription={`${activeRequestType === "OVERTIME" ? "Overtime" : "Time adjustment"} requests will appear here when you submit them.`}
+				emptyMessage={`No ${timeRequestTypeLabel(activeRequestType)} requests found`}
+				emptyDescription={`${
+					activeRequestType === "OVERTIME"
+						? "Overtime"
+						: activeRequestType === "PAYROLL_CORRECTION"
+							? "Payroll correction"
+							: "Time adjustment"
+				} requests will appear here when you submit them.`}
 				searchWidth="w-80"
 				itemsPerPage={10}
 				onExportPDF={() => {
@@ -478,11 +571,19 @@ export function TimeRequestsPage() {
 						const headers =
 							activeRequestType === "OVERTIME"
 								? ["Code", "Status", "Date", "Overtime Hours"]
-								: ["Code", "Status", "Date", "Adjustment Type", "Reason"];
+								: activeRequestType === "PAYROLL_CORRECTION"
+									? ["Code", "Status", "Date", "Source Period", "Est. Amount", "Reason"]
+									: ["Code", "Status", "Date", "Adjustment Type", "Reason"];
+						const titleLabel =
+							activeRequestType === "OVERTIME"
+								? "Overtime"
+								: activeRequestType === "PAYROLL_CORRECTION"
+									? "Payroll Correction"
+									: "Time Adjustment";
 						const tableHTML = `
 								<html>
 									<head>
-										<title>${activeRequestType === "OVERTIME" ? "Overtime" : "Time Adjustment"} Requests Export - PDF</title>
+										<title>${titleLabel} Requests Export - PDF</title>
 										<style>
 											body { font-family: Arial, sans-serif; margin: 20px; }
 											h1 { color: #333; margin-bottom: 20px; }
@@ -492,7 +593,7 @@ export function TimeRequestsPage() {
 										</style>
 									</head>
 									<body>
-										<h1>${activeRequestType === "OVERTIME" ? "Overtime" : "Time Adjustment"} Requests - PDF Export</h1>
+										<h1>${titleLabel} Requests - PDF Export</h1>
 										<p>Generated on: ${formatDateTime(new Date())}</p>
 										<table>
 											<thead>
@@ -524,16 +625,48 @@ export function TimeRequestsPage() {
 													<td>${hours !== "-" ? `${hours} hrs` : "-"}</td>
 												</tr>
 											`;
-														} else {
-															const adjustmentType =
+														}
+														if (activeRequestType === "PAYROLL_CORRECTION") {
+															const period =
 																getMetadataField(
 																	item,
-																	"adjustmentType",
-																) || "-";
+																	"sourcePayrollPeriodName",
+																) ||
+																getMetadataField(
+																	item,
+																	"sourcePayrollPeriodCode",
+																) ||
+																getMetadataField(item, "periodCode") ||
+																"-";
+															const amount =
+																getMetadataField(
+																	item,
+																	"estimatedAmount",
+																) ?? "-";
 															const reason =
 																getMetadataField(item, "reason") ||
+																item.description ||
 																"-";
 															return `
+												<tr>
+													<td>${item.code || "N/A"}</td>
+													<td>${statusBadge.label}</td>
+													<td>${date !== "-" ? formatDateForExport(date) : "-"}</td>
+													<td>${period}</td>
+													<td>${amount}</td>
+													<td>${reason}</td>
+												</tr>
+											`;
+														}
+														const adjustmentType =
+															getMetadataField(
+																item,
+																"adjustmentType",
+															) || "-";
+														const reason =
+															getMetadataField(item, "reason") ||
+															"-";
+														return `
 												<tr>
 													<td>${item.code || "N/A"}</td>
 													<td>${statusBadge.label}</td>
@@ -542,7 +675,6 @@ export function TimeRequestsPage() {
 													<td>${reason}</td>
 												</tr>
 											`;
-														}
 													})
 													.join("")}
 											</tbody>
@@ -559,7 +691,9 @@ export function TimeRequestsPage() {
 					const headers =
 						activeRequestType === "OVERTIME"
 							? ["Code", "Status", "Date", "Overtime Hours"]
-							: ["Code", "Status", "Date", "Adjustment Type", "Reason"];
+							: activeRequestType === "PAYROLL_CORRECTION"
+								? ["Code", "Status", "Date", "Source Period", "Est. Amount", "Reason"]
+								: ["Code", "Status", "Date", "Adjustment Type", "Reason"];
 					const csvContent = [
 						headers,
 						...items.map((item: Request) => {
@@ -573,18 +707,35 @@ export function TimeRequestsPage() {
 									date ? formatDateForExport(date) : "",
 									hours ? hours.toString() : "",
 								];
-							} else {
-								const adjustmentType =
-									getMetadataField(item, "adjustmentType") || "";
-								const reason = getMetadataField(item, "reason") || "";
+							}
+							if (activeRequestType === "PAYROLL_CORRECTION") {
+								const period =
+									getMetadataField(item, "sourcePayrollPeriodName") ||
+									getMetadataField(item, "sourcePayrollPeriodCode") ||
+									getMetadataField(item, "periodCode") ||
+									"";
+								const amount = getMetadataField(item, "estimatedAmount") ?? "";
+								const reason =
+									getMetadataField(item, "reason") || item.description || "";
 								return [
 									item.code || "",
 									statusBadge.label,
 									date ? formatDateForExport(date) : "",
-									adjustmentType,
+									period,
+									amount,
 									reason,
 								];
 							}
+							const adjustmentType =
+								getMetadataField(item, "adjustmentType") || "";
+							const reason = getMetadataField(item, "reason") || "";
+							return [
+								item.code || "",
+								statusBadge.label,
+								date ? formatDateForExport(date) : "",
+								adjustmentType,
+								reason,
+							];
 						}),
 					]
 						.map((row) => row.map((cell: any) => `"${cell}"`).join(","))
@@ -594,9 +745,15 @@ export function TimeRequestsPage() {
 					const link = document.createElement("a");
 					const url = URL.createObjectURL(blob);
 					link.setAttribute("href", url);
+					const downloadSlug =
+						activeRequestType === "OVERTIME"
+							? "overtime"
+							: activeRequestType === "PAYROLL_CORRECTION"
+								? "payroll_correction"
+								: "time_adjustment";
 					link.setAttribute(
 						"download",
-						`${activeRequestType === "OVERTIME" ? "overtime" : "time_adjustment"}_requests_${new Date().toISOString().split("T")[0]}.csv`,
+						`${downloadSlug}_requests_${new Date().toISOString().split("T")[0]}.csv`,
 					);
 					link.style.visibility = "hidden";
 					document.body.appendChild(link);
@@ -614,7 +771,13 @@ export function TimeRequestsPage() {
 						setViewing(null);
 					}
 				}}
-				title={`${activeRequestType === "OVERTIME" ? "Overtime" : "Time Adjustment"} Request Details`}
+				title={`${
+					activeRequestType === "OVERTIME"
+						? "Overtime"
+						: activeRequestType === "PAYROLL_CORRECTION"
+							? "Payroll Correction"
+							: "Time Adjustment"
+				} Request Details`}
 				description="View request information">
 				{isLoadingDetails ? (
 					<div className="flex items-center justify-center py-8">
@@ -683,6 +846,26 @@ export function TimeRequestsPage() {
 										</span>
 									</div>
 								</div>
+							) : activeRequestType === "PAYROLL_CORRECTION" ? (
+								<div>
+									<label className="block text-sm font-medium text-gray-700 mb-1">
+										Source period
+									</label>
+									<div className="p-3 bg-gray-50 rounded-md border">
+										<span className="text-gray-900">
+											{getMetadataField(
+												requestDetails,
+												"sourcePayrollPeriodName",
+											) ||
+												getMetadataField(
+													requestDetails,
+													"sourcePayrollPeriodCode",
+												) ||
+												getMetadataField(requestDetails, "periodCode") ||
+												"Not specified"}
+										</span>
+									</div>
+								</div>
 							) : (
 								<div>
 									<label className="block text-sm font-medium text-gray-700 mb-1">
@@ -697,6 +880,41 @@ export function TimeRequestsPage() {
 								</div>
 							)}
 						</div>
+
+						{activeRequestType === "PAYROLL_CORRECTION" && (
+							<div className="grid grid-cols-2 gap-4">
+								<div>
+									<label className="block text-sm font-medium text-gray-700 mb-1">
+										Est. amount
+									</label>
+									<div className="p-3 bg-gray-50 rounded-md border">
+										<span className="text-gray-900">
+											{(() => {
+												const amount = getMetadataField(
+													requestDetails,
+													"estimatedAmount",
+												);
+												return amount !== null && amount !== undefined
+													? String(amount)
+													: "Not specified";
+											})()}
+										</span>
+									</div>
+								</div>
+								<div>
+									<label className="block text-sm font-medium text-gray-700 mb-1">
+										Reason
+									</label>
+									<div className="p-3 bg-gray-50 rounded-md border min-h-[60px]">
+										<span className="text-gray-900">
+											{getMetadataField(requestDetails, "reason") ||
+												requestDetails.description ||
+												"Not specified"}
+										</span>
+									</div>
+								</div>
+							</div>
+						)}
 
 						{activeRequestType === "TIME_ADJUSTMENT" && (
 							<div>

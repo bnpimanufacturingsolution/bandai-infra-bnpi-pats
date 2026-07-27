@@ -23,11 +23,10 @@ export default function EmployeesPage() {
 				role="hr-user"
 				showEmail={false}
 				showPhone={false}
-				showViewProfileAction={false}
+				showViewProfileAction
 				showAttendanceAction={false}
 				showPayrollAction={false}
 				showTerminateAction={false}
-				disableEmployeeDeepLinks
 			/>
 		</div>
 	);

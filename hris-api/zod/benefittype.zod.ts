@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isValidEntityId as isValidObjectId } from "../helper/id-validation.helper";
 
 import type { EmployeeBenefit } from "./employeebenefit.zod";
+import { BenefitEligibilityMode } from "./employeebenefit.zod";
 
 // BenefitCategory Enum
 export const BenefitCategory = z.enum([
@@ -51,6 +52,11 @@ export const BenefitTypeSchema = z.object({
 	defaultInstallments: z.number().int().min(1),
 	payrollCycleDays: z.number().int().min(1),
 	requireTermsAgreement: z.boolean(),
+	defaultEligibilityMode: BenefitEligibilityMode.nullable().optional(),
+	defaultEligibilityDisqualifyOnAbsent: z.boolean().nullable().optional(),
+	defaultEligibilityDisqualifyOnLate: z.boolean().nullable().optional(),
+	defaultEligibilityDisqualifyOnUndertime: z.boolean().nullable().optional(),
+	defaultEligibilityDisqualifyOnLeave: z.boolean().nullable().optional(),
 	isActive: z.boolean(),
 	createdAt: z.coerce.date(),
 	updatedAt: z.coerce.date(),
@@ -79,6 +85,11 @@ export const CreateBenefitTypeSchema = BenefitTypeSchema.omit({
 	defaultInstallments: true,
 	payrollCycleDays: true,
 	requireTermsAgreement: true,
+	defaultEligibilityMode: true,
+	defaultEligibilityDisqualifyOnAbsent: true,
+	defaultEligibilityDisqualifyOnLate: true,
+	defaultEligibilityDisqualifyOnUndertime: true,
+	defaultEligibilityDisqualifyOnLeave: true,
 	isDefault: true,
 });
 

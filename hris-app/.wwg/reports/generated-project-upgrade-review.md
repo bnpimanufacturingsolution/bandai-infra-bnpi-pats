@@ -3,9 +3,9 @@
 ## Executive Summary
 
 Risk level: medium.
-Safe additions: 2.
-Safe updates: 0.
-Merge/review required: 5.
+Safe additions: 0.
+Safe updates: 1.
+Merge/review required: 8.
 Never-overwrite entries: 9.
 
 ## Read-Only Guarantee
@@ -14,30 +14,31 @@ This review is read-only for project files. WWG writes only this report and its 
 
 ## Detected Project State
 
-- Project path: C:\Users\1biss\Documents\Projects\hris-app
+- Project path: C:\Users\Admin\Documents\Projects\BANDAI HRIS\hris-app
 - Detected WWG version: 0.6.0
 - Generated template version: 0.6.0
-- Checked files: 5
+- Checked files: 14
 
 ## Missing Compact Surfaces
 
-- .wwg/wiki/project-truth-summary.md | risk: low | Compact active surface is missing. Recommendation: Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.
-- .wwg/wiki/terminology-summary.md | risk: low | Compact active surface is missing. Recommendation: Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.
+- None.
 
 ## Safe Additions
 
-- .wwg/wiki/project-truth-summary.md | risk: low | Compact active surface is missing. Recommendation: Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.
-- .wwg/wiki/terminology-summary.md | risk: low | Compact active surface is missing. Recommendation: Add a compact summary surface in a future approved action. The full canonical file must remain authoritative.
+- None.
 
 ## Safe Updates If Unchanged From Template
 
-- None.
+- .wwg/workspace/context/project-context.md | risk: low | File contains valid WWG_GENERATED markers. Recommendation: Only generated sections may be candidates for safe update. Preserve all human content outside markers.
 
 ## Merge/Review Required
 
 - .wwg/governance/drift-guard.md | risk: medium | File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings. Recommendation: Review and merge manually. Do not apply an automatic overwrite.
+- .wwg/wiki/project-truth-summary.md | risk: high | File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings. Recommendation: Review and merge manually. Do not apply an automatic overwrite.
 - .wwg/wiki/project-truth.md | risk: high | File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings. Recommendation: Review and merge manually. Do not apply an automatic overwrite.
+- .wwg/wiki/terminology-summary.md | risk: high | File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings. Recommendation: Review and merge manually. Do not apply an automatic overwrite.
 - .wwg/wiki/terminology.md | risk: high | File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings. Recommendation: Review and merge manually. Do not apply an automatic overwrite.
+- .wwg/workspace/context/project-context.md | risk: medium | File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings. Recommendation: Review and merge manually. Do not apply an automatic overwrite.
 - AGENTS.md | risk: medium | File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings. Recommendation: Review and merge manually. Do not apply an automatic overwrite.
 - README.md | risk: medium | File either carries project-specific truth, lacks reliable unchanged-template evidence, or has upgrade-readiness findings. Recommendation: Review and merge manually. Do not apply an automatic overwrite.
 
@@ -57,6 +58,26 @@ This review is read-only for project files. WWG writes only this report and its 
 
 - MEDIUM agent-instruction-missing-required-reading | AGENTS.md - Agent Instruction file is missing 'Required Reading'. Recommendation: Add 'Required Reading' during a reviewed merge. Do not overwrite project-specific content.
 - MEDIUM agent-instruction-missing-operating-rules | AGENTS.md - Agent Instruction file is missing 'Operating Rules'. Recommendation: Add 'Operating Rules' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-purpose | .wwg/wiki/project-truth-summary.md - Context file is missing 'Purpose'. Recommendation: Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-scope | .wwg/wiki/project-truth-summary.md - Context file is missing 'Scope'. Recommendation: Add 'Scope' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-current-state | .wwg/wiki/project-truth-summary.md - Context file is missing 'Current State'. Recommendation: Add 'Current State' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-canonical-terms | .wwg/wiki/project-truth-summary.md - Context file is missing 'Canonical Terms'. Recommendation: Add 'Canonical Terms' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-decisions | .wwg/wiki/project-truth-summary.md - Context file is missing 'Decisions'. Recommendation: Add 'Decisions' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-constraints | .wwg/wiki/project-truth-summary.md - Context file is missing 'Constraints'. Recommendation: Add 'Constraints' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-references | .wwg/wiki/project-truth-summary.md - Context file is missing 'References'. Recommendation: Add 'References' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-purpose | .wwg/wiki/terminology-summary.md - Context file is missing 'Purpose'. Recommendation: Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-scope | .wwg/wiki/terminology-summary.md - Context file is missing 'Scope'. Recommendation: Add 'Scope' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-current-state | .wwg/wiki/terminology-summary.md - Context file is missing 'Current State'. Recommendation: Add 'Current State' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-canonical-terms | .wwg/wiki/terminology-summary.md - Context file is missing 'Canonical Terms'. Recommendation: Add 'Canonical Terms' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-decisions | .wwg/wiki/terminology-summary.md - Context file is missing 'Decisions'. Recommendation: Add 'Decisions' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-constraints | .wwg/wiki/terminology-summary.md - Context file is missing 'Constraints'. Recommendation: Add 'Constraints' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-references | .wwg/wiki/terminology-summary.md - Context file is missing 'References'. Recommendation: Add 'References' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-scope | .wwg/workspace/context/project-context.md - Context file is missing 'Scope'. Recommendation: Add 'Scope' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-current-state | .wwg/workspace/context/project-context.md - Context file is missing 'Current State'. Recommendation: Add 'Current State' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-canonical-terms | .wwg/workspace/context/project-context.md - Context file is missing 'Canonical Terms'. Recommendation: Add 'Canonical Terms' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-decisions | .wwg/workspace/context/project-context.md - Context file is missing 'Decisions'. Recommendation: Add 'Decisions' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-constraints | .wwg/workspace/context/project-context.md - Context file is missing 'Constraints'. Recommendation: Add 'Constraints' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-references | .wwg/workspace/context/project-context.md - Context file is missing 'References'. Recommendation: Add 'References' during a reviewed merge. Do not overwrite project-specific content.
 - MEDIUM governance-missing-purpose | .wwg/governance/drift-guard.md - Governance file is missing 'Purpose'. Recommendation: Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content.
 - MEDIUM governance-missing-applies-to | .wwg/governance/drift-guard.md - Governance file is missing 'Applies To'. Recommendation: Add 'Applies To' during a reviewed merge. Do not overwrite project-specific content.
 - MEDIUM governance-missing-rules | .wwg/governance/drift-guard.md - Governance file is missing 'Rules'. Recommendation: Add 'Rules' during a reviewed merge. Do not overwrite project-specific content.
@@ -66,7 +87,26 @@ This review is read-only for project files. WWG writes only this report and its 
 
 ## Context Findings
 
-- None.
+- MEDIUM context-missing-purpose | .wwg/wiki/project-truth-summary.md - Context file is missing 'Purpose'. Recommendation: Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-scope | .wwg/wiki/project-truth-summary.md - Context file is missing 'Scope'. Recommendation: Add 'Scope' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-current-state | .wwg/wiki/project-truth-summary.md - Context file is missing 'Current State'. Recommendation: Add 'Current State' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-canonical-terms | .wwg/wiki/project-truth-summary.md - Context file is missing 'Canonical Terms'. Recommendation: Add 'Canonical Terms' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-decisions | .wwg/wiki/project-truth-summary.md - Context file is missing 'Decisions'. Recommendation: Add 'Decisions' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-constraints | .wwg/wiki/project-truth-summary.md - Context file is missing 'Constraints'. Recommendation: Add 'Constraints' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-references | .wwg/wiki/project-truth-summary.md - Context file is missing 'References'. Recommendation: Add 'References' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-purpose | .wwg/wiki/terminology-summary.md - Context file is missing 'Purpose'. Recommendation: Add 'Purpose' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-scope | .wwg/wiki/terminology-summary.md - Context file is missing 'Scope'. Recommendation: Add 'Scope' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-current-state | .wwg/wiki/terminology-summary.md - Context file is missing 'Current State'. Recommendation: Add 'Current State' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-canonical-terms | .wwg/wiki/terminology-summary.md - Context file is missing 'Canonical Terms'. Recommendation: Add 'Canonical Terms' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-decisions | .wwg/wiki/terminology-summary.md - Context file is missing 'Decisions'. Recommendation: Add 'Decisions' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-constraints | .wwg/wiki/terminology-summary.md - Context file is missing 'Constraints'. Recommendation: Add 'Constraints' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-references | .wwg/wiki/terminology-summary.md - Context file is missing 'References'. Recommendation: Add 'References' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-scope | .wwg/workspace/context/project-context.md - Context file is missing 'Scope'. Recommendation: Add 'Scope' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-current-state | .wwg/workspace/context/project-context.md - Context file is missing 'Current State'. Recommendation: Add 'Current State' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-canonical-terms | .wwg/workspace/context/project-context.md - Context file is missing 'Canonical Terms'. Recommendation: Add 'Canonical Terms' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-decisions | .wwg/workspace/context/project-context.md - Context file is missing 'Decisions'. Recommendation: Add 'Decisions' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-constraints | .wwg/workspace/context/project-context.md - Context file is missing 'Constraints'. Recommendation: Add 'Constraints' during a reviewed merge. Do not overwrite project-specific content.
+- MEDIUM context-missing-references | .wwg/workspace/context/project-context.md - Context file is missing 'References'. Recommendation: Add 'References' during a reviewed merge. Do not overwrite project-specific content.
 
 ## Skill Findings
 
@@ -92,11 +132,15 @@ This review is read-only for project files. WWG writes only this report and its 
 
 ## Candidate Workflow
 
-- Not requested. Run `wwg audit --upgrade-candidates --target <project>` to write candidate surfaces and merge guidance under reports.
+- Applied changes: 0
+- Candidate surfaces: 0
+- Merge guidance items: 8
+- Candidate report: .wwg/reports/generated-project-upgrade-candidates.md
+- Merge guidance report: .wwg/reports/generated-project-merge-guidance.md
 
 ## Recommended Actions
 
-- Plan an approved safe-add step for missing compact Project Truth and Terminology surfaces.
+- Limit safe updates to valid WWG_GENERATED sections and preserve all content outside markers.
 - Prepare merge guidance for files requiring review; do not overwrite project-specific truth.
 - Run validation after any future approved upgrade action.
 

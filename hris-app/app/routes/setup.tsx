@@ -24,7 +24,7 @@ import {
 import CompanyIntroduction from "~/components/organisms/onboarding/company-introduction";
 import { Input } from "~/components/ui/input";
 import { StepRail, type SetupRailStep } from "~/components/setup/StepRail";
-import { bandaiLogo, resolveCompanyLogo } from "~/lib/company-logo";
+import bandaiLogo from "~/assets/bandai_logo.png";
 import { useAuth } from "~/lib/hooks/use-auth";
 import {
 	useBootstrapAdmin,
@@ -282,7 +282,9 @@ function buildTimezoneOptions(selectedTimezone?: string | null): SelectOption[] 
 }
 
 function resolveSetupLogo(value?: string | null) {
-	return resolveCompanyLogo(value);
+	const logo = String(value || "").trim();
+	if (!logo || logo === "assets/images/bandai_logo.png") return bandaiLogo;
+	return logo;
 }
 
 function createUtcDate(year: number, month: number, day: number) {
@@ -355,12 +357,12 @@ function buildProvisioningPayrollPeriodsForYear(
 	if (frequency !== "SEMI_MONTHLY") return [];
 
 	const semiMonthlyRules = cycleDraft.cycleRules?.SEMI_MONTHLY || {
-		firstStartDay: 1,
-		secondStartDay: 16,
-		secondEndDay: "LAST_DAY",
+		firstStartDay: 11,
+		secondStartDay: 26,
+		secondEndDay: 10,
 	};
-	const firstStartDay = Number(semiMonthlyRules.firstStartDay || 1);
-	const secondStartDay = Number(semiMonthlyRules.secondStartDay || 16);
+	const firstStartDay = Number(semiMonthlyRules.firstStartDay || 11);
+	const secondStartDay = Number(semiMonthlyRules.secondStartDay || 26);
 	const secondEndDay = semiMonthlyRules.secondEndDay ?? "LAST_DAY";
 	const firstEndDay = Math.max(firstStartDay, secondStartDay - 1);
 
@@ -854,10 +856,11 @@ export default function SetupRoute() {
 				string,
 				any
 			>) || {
+				// BNPI default: 11-25 / 26-10
 				SEMI_MONTHLY: {
-					firstStartDay: 1,
-					secondStartDay: 16,
-					secondEndDay: "LAST_DAY",
+					firstStartDay: 11,
+					secondStartDay: 26,
+					secondEndDay: 10,
 				},
 			},
 		});
@@ -950,7 +953,7 @@ export default function SetupRoute() {
 	);
 	const semiMonthlyUnifiedShift = useMemo(() => {
 		const firstStartDay = Number(
-			payrollCycleDraft?.cycleRules?.SEMI_MONTHLY?.firstStartDay || 1,
+			payrollCycleDraft?.cycleRules?.SEMI_MONTHLY?.firstStartDay || 11,
 		);
 		return Math.min(Math.max(firstStartDay, 1), 16);
 	}, [payrollCycleDraft?.cycleRules?.SEMI_MONTHLY?.firstStartDay]);
@@ -965,7 +968,7 @@ export default function SetupRoute() {
 		[preview?.documentTypes],
 	);
 	if (isLoading || !status) {
-		return <LoadingScreen message="Loading setup workspace" />;
+		return <LoadingScreen message="Loading" subtitle="Setup workspace" />;
 	}
 
 	if (status.mode === "READY") {
@@ -1121,7 +1124,7 @@ export default function SetupRoute() {
 	};
 
 	const setSemiMonthlyUnifiedShift = (rawValue: number) => {
-		const firstStartDay = Math.min(Math.max(Number(rawValue) || 1, 1), 16);
+		const firstStartDay = Math.min(Math.max(Number(rawValue) || 11, 1), 16);
 		const secondStartDay = Math.min(firstStartDay + 15, 31);
 		const secondEndDay: number | "LAST_DAY" =
 			firstStartDay === 1 ? "LAST_DAY" : firstStartDay - 1;
@@ -1992,7 +1995,7 @@ export default function SetupRoute() {
 																				.cycleRules
 																				?.SEMI_MONTHLY
 																				?.firstStartDay ||
-																				1,
+																				11,
 																		)}
 																		-
 																		{Math.max(
@@ -2001,7 +2004,7 @@ export default function SetupRoute() {
 																					.cycleRules
 																					?.SEMI_MONTHLY
 																					?.secondStartDay ||
-																					16,
+																					26,
 																			) - 1,
 																			1,
 																		)}{" "}
@@ -2011,7 +2014,7 @@ export default function SetupRoute() {
 																				.cycleRules
 																				?.SEMI_MONTHLY
 																				?.secondStartDay ||
-																				16,
+																				26,
 																		)}
 																		-
 																		{String(
@@ -2019,7 +2022,7 @@ export default function SetupRoute() {
 																				.cycleRules
 																				?.SEMI_MONTHLY
 																				?.secondEndDay ||
-																				"LAST_DAY",
+																				10,
 																		)}
 																	</p>
 																</div>
@@ -2069,6 +2072,10 @@ export default function SetupRoute() {
 																	<div className="mt-3 flex flex-wrap gap-2">
 																		{[
 																			{
+																				label: "11-25 / 26-10 (BNPI)",
+																				start: 11,
+																			},
+																			{
 																				label: "1-15 / 16-End",
 																				start: 1,
 																			},
@@ -2114,7 +2121,7 @@ export default function SetupRoute() {
 																	value={String(
 																		payrollCycleDraft.cycleRules
 																			?.SEMI_MONTHLY
-																			?.firstStartDay || 1,
+																			?.firstStartDay || 11,
 																	)}
 																	onChange={(event) =>
 																		setPayrollCycleDraft(
@@ -2136,7 +2143,7 @@ export default function SetupRoute() {
 																													event
 																														.target
 																														.value,
-																													1,
+																													11,
 																												),
 																										},
 																								},
@@ -2158,7 +2165,7 @@ export default function SetupRoute() {
 																	value={String(
 																		payrollCycleDraft.cycleRules
 																			?.SEMI_MONTHLY
-																			?.secondStartDay || 16,
+																			?.secondStartDay || 26,
 																	)}
 																	onChange={(event) =>
 																		setPayrollCycleDraft(
@@ -2180,7 +2187,7 @@ export default function SetupRoute() {
 																													event
 																														.target
 																														.value,
-																													16,
+																													26,
 																												),
 																										},
 																								},
@@ -2199,8 +2206,7 @@ export default function SetupRoute() {
 																	value={String(
 																		payrollCycleDraft.cycleRules
 																			?.SEMI_MONTHLY
-																			?.secondEndDay ||
-																			"LAST_DAY",
+																			?.secondEndDay ?? 10,
 																	)}
 																	onChange={(event) =>
 																		setPayrollCycleDraft(
@@ -2227,7 +2233,7 @@ export default function SetupRoute() {
 																															event
 																																.target
 																																.value,
-																															15,
+																															10,
 																														),
 																										},
 																								},

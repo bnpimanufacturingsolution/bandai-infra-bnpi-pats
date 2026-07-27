@@ -1,4 +1,4 @@
-﻿import { NavLink } from "react-router";
+import { NavLink } from "react-router";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useLocation } from "react-router";
 import {
@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useActionMetrics } from "~/lib/hooks/useMetrics";
+import { BANDAI_SIDEBAR_LOGO_URL } from "~/constants/branding";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 
 interface NavItem {
@@ -146,6 +147,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 				path: "/hr/reports",
 				icon: <BarChart3 className="w-5 h-5" />,
 				submenu: [
+					{
+						id: "hr-reports-attendance",
+						label: "Attendance Reports",
+						path: "/hr/reports/attendance",
+						icon: <Clock className="w-4 h-4" />,
+					},
 					{
 						id: "hr-reports-workforce",
 						label: "Workforce Analytics",
@@ -596,11 +603,11 @@ export function Sidebar({ onClose }: SidebarProps) {
 	};
 
 	return (
-		<div className="flex flex-col h-full overflow-hidden bg-white">
+		<div className="sidebar flex flex-col h-full overflow-hidden bg-white">
 			{/* Header with Logo and Close Button */}
 			<div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
 				<img
-					src="https://res.cloudinary.com/dyal0wstg/image/upload/v1759107126/Bandai_Ni_Bryan_1_1_ruj2ty.webp"
+					src={BANDAI_SIDEBAR_LOGO_URL}
 					alt="Logo"
 					className="h-8 w-auto object-contain object-left"
 				/>

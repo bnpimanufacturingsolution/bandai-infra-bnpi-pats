@@ -1,3 +1,5 @@
-import EmployeePayrollsPage from "~/components/templates/common/payroll-template";
+import EmployeePayrollDashboard from "~/components/templates/common/payroll-template";
 
-export default EmployeePayrollsPage;
+export default function HRPayrollPage() {
+	return <EmployeePayrollDashboard />;
+}

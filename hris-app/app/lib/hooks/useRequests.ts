@@ -217,6 +217,8 @@ export const useApproveRequest = () => {
 				queryKey: requestsQueryKeys.requests.detail(variables.id),
 			});
 			queryClient.invalidateQueries({ queryKey: timesheetQueryKeys.timesheets.all });
+			queryClient.invalidateQueries({ queryKey: ["employees"] });
+			queryClient.invalidateQueries({ queryKey: ["metrics"] });
 			queryClient.invalidateQueries({
 				queryKey: scheduleQueryKeys.employeeScheduleTimeline.all,
 			});

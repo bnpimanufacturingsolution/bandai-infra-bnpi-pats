@@ -14,6 +14,9 @@ import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler"
 import { CreateAgencySchema, UpdateAgencySchema } from "../../zod/agency.zod";
 import { invalidateCache } from "../../middleware/cache";
 import { suggestUniqueConfigCode } from "../../helper/config-code.helper";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
+import { config } from "../../config/constant";
 import * as XLSX from "xlsx";
 
 const logger = getLogger();
@@ -58,6 +61,17 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.AGENCY.ACTIONS.GENERATE_AGENCY_CODE,
+				description: config.ACTIVITY_LOG.AGENCY.DESCRIPTIONS.AGENCY_CODE_GENERATED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.AGENCY.PAGES.AGENCY_CREATION,
+				},
+				organizationId,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse("Agency code generated successfully", suggestion, 200),
 			);
@@ -99,6 +113,37 @@ export const controller = (prisma: PrismaClient) => {
 					name: validation.data.name.trim(),
 				},
 			});
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.AGENCY.ACTIONS.CREATE_AGENCY,
+				description: `${config.ACTIVITY_LOG.AGENCY.DESCRIPTIONS.AGENCY_CREATED}: ${agency.name || agency.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.AGENCY.PAGES.AGENCY_CREATION,
+				},
+				organizationId,
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.AGENCY,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.AGENCY,
+				entityId: agency.id,
+				changesBefore: null,
+				changesAfter: {
+					id: agency.id,
+					name: agency.name,
+					code: agency.code,
+					status: agency.status,
+					createdAt: agency.createdAt,
+					updatedAt: agency.updatedAt,
+				},
+				description: `${config.AUDIT_LOG.AGENCY.DESCRIPTIONS.AGENCY_CREATED}: ${agency.name || agency.id}`,
+				organizationId,
+			});
+
 			await invalidateCache.byPattern("cache:agency:list:*");
 			res.status(201).json(buildSuccessResponse("Agency created successfully", agency, 201));
 		} catch (error) {
@@ -149,6 +194,17 @@ export const controller = (prisma: PrismaClient) => {
 
 			const processedData = groupBy && document ? groupDataByField(agencies, groupBy as string) : agencies;
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.AGENCY.ACTIONS.GET_ALL_AGENCY,
+				description: config.ACTIVITY_LOG.AGENCY.DESCRIPTIONS.AGENCIES_RETRIEVED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.AGENCY.PAGES.AGENCY_LIST,
+				},
+				organizationId,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Agencies retrieved successfully",
@@ -185,6 +241,18 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(404).json(buildErrorResponse("Agency not found", 404));
 				return;
 			}
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.AGENCY.ACTIONS.GET_AGENCY,
+				description: `${config.ACTIVITY_LOG.AGENCY.DESCRIPTIONS.AGENCY_RETRIEVED}: ${agency.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.AGENCY.PAGES.AGENCY_DETAILS,
+				},
+				organizationId,
+			});
+
 			res.status(200).json(buildSuccessResponse("Agency retrieved successfully", agency, 200));
 		} catch (error) {
 			agencyLogger.error(`Agency getById failed: ${error}`);
@@ -216,7 +284,6 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const existing = await prisma.agency.findFirst({
 				where: { id, organizationId, isDeleted: false },
-				select: { id: true },
 			});
 			if (!existing) {
 				res.status(404).json(buildErrorResponse("Agency not found", 404));
@@ -228,6 +295,31 @@ export const controller = (prisma: PrismaClient) => {
 			if (typeof data.name === "string") data.name = data.name.trim();
 
 			const agency = await prisma.agency.update({ where: { id }, data });
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.AGENCY.ACTIONS.UPDATE_AGENCY,
+				description: `${config.ACTIVITY_LOG.AGENCY.DESCRIPTIONS.AGENCY_UPDATED}: ${agency.name || agency.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.AGENCY.PAGES.AGENCY_UPDATE,
+				},
+				organizationId,
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.AGENCY,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.AGENCY,
+				entityId: agency.id,
+				changesBefore: existing,
+				changesAfter: agency,
+				description: `${config.AUDIT_LOG.AGENCY.DESCRIPTIONS.AGENCY_UPDATED}: ${agency.name || agency.id}`,
+				organizationId,
+			});
+
 			await invalidateCache.byPattern(`cache:agency:byId:${id}:*`);
 			await invalidateCache.byPattern("cache:agency:list:*");
 			res.status(200).json(buildSuccessResponse("Agency updated successfully", agency, 200));
@@ -253,7 +345,6 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const existing = await prisma.agency.findFirst({
 				where: { id, organizationId, isDeleted: false },
-				select: { id: true },
 			});
 			if (!existing) {
 				res.status(404).json(buildErrorResponse("Agency not found", 404));
@@ -264,6 +355,31 @@ export const controller = (prisma: PrismaClient) => {
 				where: { id },
 				data: { isDeleted: true, status: "INACTIVE" },
 			});
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.AGENCY.ACTIONS.DELETE_AGENCY,
+				description: `${config.ACTIVITY_LOG.AGENCY.DESCRIPTIONS.AGENCY_DELETED}: ${existing.name || id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.AGENCY.PAGES.AGENCY_DELETION,
+				},
+				organizationId,
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.AGENCY,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.AGENCY,
+				entityId: id,
+				changesBefore: existing,
+				changesAfter: null,
+				description: `${config.AUDIT_LOG.AGENCY.DESCRIPTIONS.AGENCY_DELETED}: ${existing.name || id}`,
+				organizationId,
+			});
+
 			await invalidateCache.byPattern(`cache:agency:byId:${id}:*`);
 			await invalidateCache.byPattern("cache:agency:list:*");
 			res.status(200).json(buildSuccessResponse("Agency deleted successfully", {}, 200));
@@ -367,6 +483,36 @@ export const controller = (prisma: PrismaClient) => {
 				});
 			}
 		}
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.AGENCY.ACTIONS.IMPORT_AGENCY,
+			description: `${config.ACTIVITY_LOG.AGENCY.DESCRIPTIONS.AGENCY_IMPORTED}: created=${summary.created}, updated=${summary.updated}`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.AGENCY.PAGES.AGENCY_IMPORT,
+			},
+			organizationId,
+		});
+
+		logAudit(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.AUDIT_LOG.ACTIONS.CREATE,
+			resource: config.AUDIT_LOG.RESOURCES.AGENCY,
+			severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+			entityType: config.AUDIT_LOG.ENTITY_TYPES.AGENCY,
+			entityId: organizationId,
+			changesBefore: null,
+			changesAfter: {
+				total: summary.total,
+				created: summary.created,
+				updated: summary.updated,
+				skipped: summary.skipped,
+				failed: summary.failed,
+			},
+			description: `${config.ACTIVITY_LOG.AGENCY.DESCRIPTIONS.AGENCY_IMPORTED}: created=${summary.created}, updated=${summary.updated}`,
+			organizationId,
+		});
 
 		await invalidateCache.byPattern("cache:agency:list:*");
 		res.status(200).json(buildSuccessResponse("Agency import completed", { summary }, 200));

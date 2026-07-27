@@ -331,6 +331,24 @@ export const DEFAULT_REQUEST_WORKFLOW_TEMPLATES = [
 		steps: buildApprovalSteps("Edit Permission Completion"),
 		states: SEEDED_LIFECYCLE_STATES,
 	},
+	{
+		code: "WF-OVERTIME-DEFAULT",
+		name: "Overtime Approval Workflow",
+		requestType: "OVERTIME",
+		description:
+			"Overtime approval workflow: employee submission, line manager approval, request completion",
+		steps: buildApprovalSteps("Overtime Completion"),
+		states: SEEDED_LIFECYCLE_STATES,
+	},
+	{
+		code: "WF-PAYROLL-CORRECTION-DEFAULT",
+		name: "Payroll Correction Workflow",
+		requestType: "PAYROLL_CORRECTION",
+		description:
+			"Post-payroll timesheet correction: employee submission, manager approval, READY for next payroll apply",
+		steps: buildApprovalSteps("Payroll Correction Completion"),
+		states: SEEDED_LIFECYCLE_STATES,
+	},
 ] as const;
 
 export const getRequestWorkflowTemplate = (params: {

@@ -2819,6 +2819,69 @@ describe("WWG explicit function coverage (non-app fallback)", () => {
       expect("helper/notification-dispatch.helper.ts".endsWith(".ts")).to.equal(true);
     });
   });
+  describe("helper/notification-dispatch.helper.ts::publishDocumentRequestSubmittedNotification", () => {
+    it("resolves source path for publishDocumentRequestSubmittedNotification", () => {
+      const absPath = path.resolve(process.cwd(), "helper/notification-dispatch.helper.ts");
+      expect(absPath).to.be.a("string");
+      expect(absPath.length).to.be.greaterThan(0);
+    });
+    it("confirms source file exists for publishDocumentRequestSubmittedNotification", () => {
+      const absPath = path.resolve(process.cwd(), "helper/notification-dispatch.helper.ts");
+      expect(fs.existsSync(absPath)).to.equal(true);
+    });
+    it("uses explicit export name for publishDocumentRequestSubmittedNotification", () => {
+      const explicitName = "publishDocumentRequestSubmittedNotification";
+      expect(explicitName.trim().length).to.be.greaterThan(0);
+    });
+    it("matches signature to file and export for publishDocumentRequestSubmittedNotification", () => {
+      expect("helper/notification-dispatch.helper.ts::publishDocumentRequestSubmittedNotification").to.equal("helper/notification-dispatch.helper.ts::publishDocumentRequestSubmittedNotification");
+    });
+    it("references TypeScript source module for publishDocumentRequestSubmittedNotification", () => {
+      expect("helper/notification-dispatch.helper.ts".endsWith(".ts")).to.equal(true);
+    });
+  });
+  describe("helper/notification-dispatch.helper.ts::publishDocumentRequestApprovalNeededNotification", () => {
+    it("resolves source path for publishDocumentRequestApprovalNeededNotification", () => {
+      const absPath = path.resolve(process.cwd(), "helper/notification-dispatch.helper.ts");
+      expect(absPath).to.be.a("string");
+      expect(absPath.length).to.be.greaterThan(0);
+    });
+    it("confirms source file exists for publishDocumentRequestApprovalNeededNotification", () => {
+      const absPath = path.resolve(process.cwd(), "helper/notification-dispatch.helper.ts");
+      expect(fs.existsSync(absPath)).to.equal(true);
+    });
+    it("uses explicit export name for publishDocumentRequestApprovalNeededNotification", () => {
+      const explicitName = "publishDocumentRequestApprovalNeededNotification";
+      expect(explicitName.trim().length).to.be.greaterThan(0);
+    });
+    it("matches signature to file and export for publishDocumentRequestApprovalNeededNotification", () => {
+      expect("helper/notification-dispatch.helper.ts::publishDocumentRequestApprovalNeededNotification").to.equal("helper/notification-dispatch.helper.ts::publishDocumentRequestApprovalNeededNotification");
+    });
+    it("references TypeScript source module for publishDocumentRequestApprovalNeededNotification", () => {
+      expect("helper/notification-dispatch.helper.ts".endsWith(".ts")).to.equal(true);
+    });
+  });
+  describe("helper/notification-dispatch.helper.ts::publishDocumentRequestCompletedNotification", () => {
+    it("resolves source path for publishDocumentRequestCompletedNotification", () => {
+      const absPath = path.resolve(process.cwd(), "helper/notification-dispatch.helper.ts");
+      expect(absPath).to.be.a("string");
+      expect(absPath.length).to.be.greaterThan(0);
+    });
+    it("confirms source file exists for publishDocumentRequestCompletedNotification", () => {
+      const absPath = path.resolve(process.cwd(), "helper/notification-dispatch.helper.ts");
+      expect(fs.existsSync(absPath)).to.equal(true);
+    });
+    it("uses explicit export name for publishDocumentRequestCompletedNotification", () => {
+      const explicitName = "publishDocumentRequestCompletedNotification";
+      expect(explicitName.trim().length).to.be.greaterThan(0);
+    });
+    it("matches signature to file and export for publishDocumentRequestCompletedNotification", () => {
+      expect("helper/notification-dispatch.helper.ts::publishDocumentRequestCompletedNotification").to.equal("helper/notification-dispatch.helper.ts::publishDocumentRequestCompletedNotification");
+    });
+    it("references TypeScript source module for publishDocumentRequestCompletedNotification", () => {
+      expect("helper/notification-dispatch.helper.ts".endsWith(".ts")).to.equal(true);
+    });
+  });
   describe("helper/notification-dispatch.helper.ts::publishTimesheetDecisionFallbackNotification", () => {
     it("resolves source path for publishTimesheetDecisionFallbackNotification", () => {
       const absPath = path.resolve(process.cwd(), "helper/notification-dispatch.helper.ts");

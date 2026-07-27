@@ -159,7 +159,7 @@ describe("TimesheetCalendar", () => {
 		expect(screen.getAllByText("0h 0m").length).toBeGreaterThan(0);
 	});
 
-	it("shows future scheduled zero-hour days as open shifts", () => {
+	it("does not show open shift text for future scheduled zero-hour days", () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date("2026-06-09T12:00:00+08:00"));
 
@@ -171,8 +171,25 @@ describe("TimesheetCalendar", () => {
 			/>,
 		);
 
-		expect(screen.getByText("Open Shift")).toBeInTheDocument();
-		expect(screen.queryByText("Scheduled")).not.toBeInTheDocument();
+		expect(screen.queryByText("Open Shift")).not.toBeInTheDocument();
+		expect(screen.getByText("10")).toBeInTheDocument();
+	});
+
+	it("does not show day tooltips when disableDayTooltips is true", () => {
+		render(
+			<TimesheetCalendar
+				breakdown={[manilaBusinessDayFromUtcTimestamp]}
+				payrollPeriodStartDate="2026-06-08"
+				payrollPeriodEndDate="2026-06-08"
+				disableDayTooltips
+			/>,
+		);
+
+		const trigger = screen.getByText("+OT").closest(".w-full");
+		expect(trigger).toBeNull();
+
+		fireEvent.mouseEnter(screen.getByText("+OT"));
+		expect(screen.queryByText("Regular")).not.toBeInTheDocument();
 	});
 });
 

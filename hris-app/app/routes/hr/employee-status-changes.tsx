@@ -5,7 +5,6 @@ import { PANBadge, PAN_COLORS, type PANIntent } from "~/components/atoms/PANBadg
 
 type ChangeType = PANIntent;
 import { DataTable, type Column } from "~/components/atoms/DataTable";
-import { StatusBadge } from "~/components/atoms/StatusBadge";
 import {
 	UserCheck,
 	UserX,
@@ -32,6 +31,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 
 import { useQueryClient } from "@tanstack/react-query";
 import { io } from "socket.io-client";
@@ -39,6 +39,7 @@ import { resolveSocketBaseUrl } from "~/lib/api-url.helper";
 import { getRuntimeApiBase } from "~/lib/runtime-api-base";
 import { queryKeys as metricsQueryKeys, useMetrics } from "~/lib/hooks/useMetrics";
 import { type EligibilityCandidate } from "~/lib/hooks/useEmployees";
+import { EmploymentStatusText } from "~/components/shared/EmploymentStatusText";
 import { CandidateDetailsModal } from "~/components/modals/CandidateDetailsModal";
 // Circular Progress Component
 const CircularProgress = ({
@@ -247,48 +248,69 @@ export default function EmployeeStatusChangesPage() {
 		{
 			key: "employeeName",
 			label: "Employee",
+			width: "200px",
 			sortable: true,
 			render: (value, item) => (
-				<div>
-					<div className="font-medium text-gray-900 max-w-[10rem] truncate">
-						{item.employeeName}
+				<div className="flex min-w-0 items-center gap-2.5">
+					<EmployeeAvatar
+						src={item.avatar}
+						alt={item.employeeName}
+						size="sm"
+						className="shrink-0"
+					/>
+					<div className="min-w-0">
+						<div className="truncate font-medium text-gray-900" title={item.employeeName}>
+							{item.employeeName}
+						</div>
+						<div className="truncate text-xs text-gray-500" title={item.position}>
+							{item.position}
+						</div>
 					</div>
-					<div className="text-xs text-gray-500">{item.position}</div>
 				</div>
 			),
 		},
 		{
 			key: "department",
 			label: "Department",
+			width: "128px",
 			sortable: true,
+			render: (value) => (
+				<span className="block truncate text-gray-700" title={String(value || "")}>
+					{String(value || "-")}
+				</span>
+			),
 		},
 		{
 			key: "currentEmploymentStatus",
-			label: "Employment Status",
+			label: "Status",
+			width: "96px",
 			sortable: true,
-			render: (value) => (
-				<StatusBadge status={value as string} className="text-xs capitalize" />
-			),
+			className: "whitespace-nowrap",
+			render: (value) => <EmploymentStatusText status={value as string} />,
 		},
 		{
 			key: "tenureMonths",
 			label: "Tenure",
+			width: "72px",
 			sortable: true,
+			className: "whitespace-nowrap",
 			render: (value, item) => {
 				const years = Math.floor(item.tenureMonths / 12);
 				const months = item.tenureMonths % 12;
 				return (
-					<div className="text-sm">
+					<span className="text-sm whitespace-nowrap">
 						{years > 0 && `${years}y `}
 						{months}m
-					</div>
+					</span>
 				);
 			},
 		},
 		{
 			key: "eligibleFor",
 			label: "Eligible For",
+			width: "124px",
 			sortable: true,
+			className: "whitespace-nowrap",
 			render: (value, item) => <PANBadge intent={item.eligibleFor} />,
 		},
 		{
@@ -296,7 +318,7 @@ export default function EmployeeStatusChangesPage() {
 			label: "Eligibility Reason",
 			sortable: false,
 			render: (value) => (
-				<div className="text-sm text-gray-600 max-w-xs truncate" title={value as string}>
+				<div className="truncate text-sm text-gray-600" title={value as string}>
 					{value}
 				</div>
 			),
@@ -304,6 +326,10 @@ export default function EmployeeStatusChangesPage() {
 		{
 			key: "actions",
 			label: "Actions",
+			width: "56px",
+			isActionColumn: true,
+			className: "text-center",
+			headerClassName: "text-center",
 			render: (value, item) => (
 				<DropdownMenu>
 					<DropdownMenuTrigger asChild>

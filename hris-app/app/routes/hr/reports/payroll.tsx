@@ -3,14 +3,6 @@ import { Download } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { DepartmentSectionPicker } from "~/components/molecules/DepartmentSectionPicker";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "~/components/ui/select";
 import { usePayrollSummaryMetrics } from "~/lib/hooks/useMetrics";
 import { usePayrollPeriods } from "~/lib/hooks/usePayrollPeriods";
 import { useDepartments } from "~/lib/hooks/useDepartments";
@@ -25,8 +17,9 @@ import {
 	type ReportExportFormat,
 } from "~/lib/utils/report-export";
 import { REPORT_SCOPE_VALUES } from "~/lib/utils/report-scope";
-import { ReportScopeDateFilters } from "./components/ReportScopeDateFilters";
+import { PayrollReportFilterPopover } from "./components/PayrollReportFilterPopover";
 import { ReportExportDialog } from "./components/ReportExportDialog";
+import { ReportEmployeeCell } from "./components/ReportEmployeeCell";
 import {
 	reportTableBodyClassName,
 	reportTableClassName,
@@ -276,10 +269,41 @@ export default function PayrollReportsPage() {
 		return matches.length > 0 ? matches : allEmployees;
 	}, [allEmployees]);
 
-	const managerOptions = useMemo(() => {
-		if (selectedDepartment === "all") return managerCandidates;
-		return managerCandidates.filter((emp: any) => emp.department?.id === selectedDepartment);
+	const managerOptions = useMemo((): Array<{ id: string; label: string }> => {
+		const filtered =
+			selectedDepartment === "all"
+				? managerCandidates
+				: managerCandidates.filter((emp: any) => emp.department?.id === selectedDepartment);
+
+		return filtered.map((emp: any) => ({
+			id: String(emp.id),
+			label:
+				`${emp.person?.personalInfo?.firstName || ""} ${emp.person?.personalInfo?.lastName || ""}`.trim() ||
+				String(emp.employeeId || emp.id),
+		}));
 	}, [managerCandidates, selectedDepartment]);
+
+	const periodOptions = useMemo((): Array<{ id: string; name: string }> => {
+		return payrollPeriods.map((period: any) => ({
+			id: String(period.id),
+			name: String(period.name || period.id),
+		}));
+	}, [payrollPeriods]);
+
+	const activeFiltersCount = useMemo(() => {
+		const now = new Date();
+		const isDefaultScope =
+			scope === REPORT_SCOPE_VALUES.MONTHLY &&
+			Number(activeMonth) === now.getMonth() &&
+			Number(activeYear) === now.getFullYear();
+
+		let count = 0;
+		if (!isDefaultScope) count += 1;
+		if (selectedDepartment !== "all") count += 1;
+		if (selectedManager !== "all") count += 1;
+		if (selectedPeriodId !== "all") count += 1;
+		return count;
+	}, [activeMonth, activeYear, scope, selectedDepartment, selectedManager, selectedPeriodId]);
 
 	const { data, isLoading, error } = usePayrollSummaryMetrics(
 		fromIso,
@@ -404,9 +428,10 @@ export default function PayrollReportsPage() {
 				value:
 					selectedManager === "all"
 						? "All"
-						: managerOptions.find((manager: any) => manager.id === selectedManager)
-							? `${managerOptions.find((manager: any) => manager.id === selectedManager)?.person?.personalInfo?.firstName || ""} ${managerOptions.find((manager: any) => manager.id === selectedManager)?.person?.personalInfo?.lastName || ""}`.trim()
-							: selectedManager,
+						: managerOptions.find(
+								(manager: { id: string; label: string }) =>
+									manager.id === selectedManager,
+							)?.label || selectedManager,
 			},
 			{
 				label: "Payroll Period",
@@ -519,115 +544,46 @@ export default function PayrollReportsPage() {
 	return (
 		<div className="space-y-6 p-6">
 			<Card>
-					<CardHeader>
+				<CardHeader className="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+					<div className="space-y-1.5">
 						<CardTitle>Payroll Reports</CardTitle>
 						<CardDescription>
 							Per-employee payroll register using pay-date and organization filters
 						</CardDescription>
-					</CardHeader>
-				<CardContent className="space-y-6">
-					<div className="flex flex-col xl:flex-row gap-4 items-end justify-between">
-						<div className="flex flex-1 flex-col md:flex-row gap-2 md:gap-4 w-full flex-wrap">
-							<ReportScopeDateFilters
-								scope={scope}
-								activeMonth={activeMonth}
-								activeYear={activeYear}
-								yearOptions={yearOptions}
-								dateRange={dateRange}
-								onScopeChange={setScope}
-								onMonthChange={setMonth}
-								onYearChange={setYear}
-								onDateRangeChange={setDateRange}
-							/>
-
-							<div className="w-full md:w-[160px]">
-								<label
-									htmlFor="payroll-report-department-filter"
-									className="block text-sm font-medium mb-1">
-									Department
-								</label>
-								<DepartmentSectionPicker
-									variant="report"
-									departments={departments}
-									sections={[]}
-									departmentId={selectedDepartment}
-									onDepartmentChange={(value) => {
-										setSelectedDepartment(value);
-										setSelectedManager("all");
-									}}
-									onSectionChange={(value) => {
-										setSelectedDepartment(value);
-										setSelectedManager("all");
-									}}
-								/>
-							</div>
-
-							<div className="w-full md:w-[160px]">
-								<label
-									htmlFor="payroll-report-manager-filter"
-									className="block text-sm font-medium mb-1">
-									Manager
-								</label>
-								<Select value={selectedManager} onValueChange={setSelectedManager}>
-									<SelectTrigger
-										id="payroll-report-manager-filter"
-										className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="all">All Managers</SelectItem>
-										{managerOptions.map((emp: any) => (
-											<SelectItem key={`manager-${emp.id}`} value={emp.id}>
-												{emp.person?.personalInfo?.firstName || ""}{" "}
-												{emp.person?.personalInfo?.lastName || ""}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-
-							<div className="w-full md:w-[220px]">
-								<label
-									htmlFor="payroll-report-period-filter"
-									className="block text-sm font-medium mb-1">
-									Payroll Period
-								</label>
-								<Select
-									value={selectedPeriodId}
-									onValueChange={setSelectedPeriodId}>
-									<SelectTrigger
-										id="payroll-report-period-filter"
-										className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="all">All Periods in Range</SelectItem>
-										{payrollPeriods.map((period: any) => (
-											<SelectItem key={period.id} value={period.id}>
-												{period.name}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-						</div>
-
-						<div className="flex gap-2 shrink-0 w-full md:w-auto mt-4 md:mt-0 items-center">
-							<Button
-								variant="ghost"
-								onClick={clearFilters}
-								className="flex-1 md:flex-none text-muted-foreground hover:text-foreground h-10 px-4">
-								Clear Filters
-							</Button>
-							<Button
-								variant="outline"
-								className="flex-1 md:flex-none"
-								onClick={openExportModal}>
-								<Download className="w-4 h-4 mr-2" />
-								Export
-							</Button>
-						</div>
 					</div>
+					<div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
+						<PayrollReportFilterPopover
+							scope={scope}
+							activeMonth={activeMonth}
+							activeYear={activeYear}
+							yearOptions={yearOptions}
+							dateRange={dateRange}
+							onScopeChange={setScope}
+							onMonthChange={setMonth}
+							onYearChange={setYear}
+							onDateRangeChange={setDateRange}
+							departments={departments}
+							selectedDepartment={selectedDepartment}
+							onDepartmentChange={(value) => {
+								setSelectedDepartment(value);
+								setSelectedManager("all");
+							}}
+							managerOptions={managerOptions}
+							selectedManager={selectedManager}
+							onManagerChange={setSelectedManager}
+							periodOptions={periodOptions}
+							selectedPeriodId={selectedPeriodId}
+							onPeriodChange={setSelectedPeriodId}
+							activeFiltersCount={activeFiltersCount}
+							onClearAll={clearFilters}
+						/>
+						<Button variant="outline" className="h-9" onClick={openExportModal}>
+							<Download className="mr-2 h-4 w-4" />
+							Export
+						</Button>
+					</div>
+				</CardHeader>
+				<CardContent className="space-y-6">
 					{scope === REPORT_SCOPE_VALUES.QUARTERLY ? (
 						<p className="text-sm text-gray-500">
 							Quarterly scope uses the selected month as the quarter anchor.
@@ -727,19 +683,13 @@ export default function PayrollReportsPage() {
 															{item.rowNo || ""}
 														</td>
 														<td className="px-6 py-3">
-															<button
-																type="button"
-																onClick={() =>
-																	goToEmployeePayroll(item)
-																}
-																className="text-left font-medium text-orange-600 hover:text-orange-700 hover:underline">
-																<span className="block max-w-[220px] truncate">
-																	{item.employeeName}
-																</span>
-																<span className="block text-xs font-normal text-gray-500">
-																	{item.employeeCode}
-																</span>
-															</button>
+															<ReportEmployeeCell
+																rosterEmployees={allEmployees}
+																employeeId={item.employeeId}
+																employeeCode={item.employeeCode}
+																fullName={item.employeeName}
+																onClick={() => goToEmployeePayroll(item)}
+															/>
 														</td>
 														<td className="px-4 py-3">
 															<span className="block max-w-[160px] truncate">

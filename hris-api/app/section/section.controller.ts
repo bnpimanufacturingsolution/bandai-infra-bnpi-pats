@@ -21,6 +21,7 @@ import { invalidateCache } from "../../middleware/cache";
 import * as XLSX from "xlsx";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { suggestUniqueConfigCode } from "../../helper/config-code.helper";
+import { syncEmployeeRolesFromOrgStructure } from "../../helper/employee-role-sync.helper";
 
 const logger = getLogger();
 const sectionLogger = logger.child({ module: "section" });
@@ -548,7 +549,15 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const workbook = XLSX.read(file.buffer, { type: "buffer" });
-			const sheetName = workbook.SheetNames[0];
+			const preferredSheetName =
+				workbook.SheetNames.find(
+					(name) => String(name || "").trim().toLowerCase() === "sections",
+				) ||
+				workbook.SheetNames.find((name) =>
+					/section/i.test(String(name || "")),
+				) ||
+				workbook.SheetNames[0];
+			const sheetName = preferredSheetName;
 			const worksheet = workbook.Sheets[sheetName];
 			const rawData = XLSX.utils.sheet_to_json(worksheet, { raw: true, defval: null });
 
@@ -655,41 +664,103 @@ export const controller = (prisma: PrismaClient) => {
 						}
 					}
 
-					const existingSection = await prisma.section.findUnique({
+					// Match by code first, then by (department, name). DM1 re-imports often
+					// change section codes (e.g. numeric legacy "60" -> "QCU") while keeping
+					// the same department+name. Create-only-by-code trips
+					// @@unique([organizationId, departmentId, name]).
+					const existingByCode = await prisma.section.findUnique({
 						where: { organizationId_code: { organizationId, code } },
 					});
-
-					if (existingSection) {
-						await prisma.section.update({
-							where: { id: existingSection.id },
-							data: {
-								name,
-								description: description || null,
+					const existingByName =
+						existingByCode ||
+						(await prisma.section.findFirst({
+							where: {
+								organizationId,
 								departmentId,
-								scheduleId,
-								...(isHr !== null ? { isHr } : {}),
-								...(isActive !== null ? { isActive } : {}),
+								name,
+								isDeleted: false,
+							},
+						}));
+
+					const payload = {
+						name,
+						code,
+						description: description || null,
+						departmentId,
+						scheduleId,
+						...(isHr !== null ? { isHr } : {}),
+						...(isActive !== null ? { isActive } : {}),
+					};
+
+					if (existingByName) {
+						// Another active section already owns this target code.
+						if (
+							existingByCode &&
+							existingByName.id !== existingByCode.id
+						) {
+							results.skipped++;
+							results.errors.push(
+								`Row ${code}: code "${code}" already exists on section "${existingByCode.name}" while name "${name}" exists as code "${existingByName.code}" under the same department`,
+							);
+							continue;
+						}
+						await prisma.section.update({
+							where: { id: existingByName.id },
+							data: {
+								...payload,
+								// Keep isDeleted false if we matched an active row
+								isDeleted: false,
 							},
 						});
 						results.updated++;
 					} else {
-						await prisma.section.create({
-							data: {
+						// Soft-deleted row with same code: revive/update rather than create conflict.
+						const softDeletedByCode = await prisma.section.findFirst({
+							where: {
 								organizationId,
 								code,
-								name,
-								description: description || null,
-								departmentId,
-								scheduleId,
-								isHr: isHr ?? false,
-								isActive: isActive ?? true,
+								isDeleted: true,
 							},
 						});
-						results.created++;
+						if (softDeletedByCode) {
+							await prisma.section.update({
+								where: { id: softDeletedByCode.id },
+								data: {
+									...payload,
+									isDeleted: false,
+									isHr: isHr ?? softDeletedByCode.isHr ?? false,
+									isActive: isActive ?? softDeletedByCode.isActive ?? true,
+								},
+							});
+							results.updated++;
+						} else {
+							await prisma.section.create({
+								data: {
+									organizationId,
+									code,
+									name,
+									description: description || null,
+									departmentId,
+									scheduleId,
+									isHr: isHr ?? false,
+									isActive: isActive ?? true,
+								},
+							});
+							results.created++;
+						}
 					}
 				} catch (error) {
 					results.skipped++;
-					const errorMsg = `Error processing row: ${error}`;
+					const prismaCode =
+						error && typeof error === "object" && "code" in error
+							? String((error as any).code)
+							: "";
+					const prismaMessage =
+						error instanceof Error ? error.message : String(error);
+					const errorMsg =
+						prismaCode === "P2002"
+							? `Row conflict (unique constraint): ${prismaMessage}`
+							: `Error processing row: ${prismaMessage}`;
 					results.errors.push(errorMsg);
 					sectionLogger.error(errorMsg);
 				}
@@ -699,6 +770,55 @@ export const controller = (prisma: PrismaClient) => {
 				await invalidateCache.byPattern("cache:section:*");
 			} catch (cacheError) {
 				sectionLogger.warn("Failed to invalidate cache after import:", cacheError);
+			}
+
+			// Login uses Employee.role, not Section.isHr alone. After DM1 IS_HR imports,
+			// re-derive roles for employees linked to imported sections so GA/HR users
+			// become hris-hr-user / hris-hr-manager without a separate DM3 re-import.
+			let roleSync: {
+				scanned: number;
+				updated: number;
+				unchanged: number;
+				samples: Array<Record<string, unknown>>;
+			} | null = null;
+			if (results.created > 0 || results.updated > 0) {
+				try {
+					const importedCodes = Array.from(
+						new Set(
+							rawData
+								.map((row: any) =>
+									String(row?.CODE || row?.["Section Code"] || "").trim(),
+								)
+								.filter(Boolean),
+						),
+					);
+					const importedSections = importedCodes.length
+						? await prisma.section.findMany({
+								where: {
+									organizationId,
+									code: { in: importedCodes },
+									isDeleted: false,
+								},
+								select: { id: true },
+							})
+						: [];
+					const sectionIds = importedSections.map((section) => section.id);
+					if (sectionIds.length > 0) {
+						const syncResult = await syncEmployeeRolesFromOrgStructure(prisma, {
+							organizationId,
+							sectionIds,
+							sampleLimit: 10,
+						});
+						roleSync = syncResult as any;
+						sectionLogger.info(
+							`Section import role sync: scanned=${syncResult.scanned} updated=${syncResult.updated} unchanged=${syncResult.unchanged}`,
+						);
+					}
+				} catch (roleSyncError) {
+					sectionLogger.warn(
+						`Section import completed but employee role sync failed: ${roleSyncError}`,
+					);
+				}
 			}
 
 			res.status(200).json(
@@ -711,6 +831,7 @@ export const controller = (prisma: PrismaClient) => {
 							updated: results.updated,
 							skipped: results.skipped,
 							errors: results.errors.slice(0, 10),
+							roleSync,
 						},
 					},
 					200,

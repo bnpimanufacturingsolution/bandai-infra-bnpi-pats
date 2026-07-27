@@ -58,6 +58,26 @@ describe("Section Controller", () => {
 		},
 	];
 
+	const mockOrganizationId = "507f1f77bcf86cd799439030";
+	const mockDepartmentId = "507f1f77bcf86cd799439031";
+	const buildListQuery = (query: Record<string, string> = {}) => ({
+		document: "true",
+		count: "true",
+		...query,
+	});
+	const buildPaginationQuery = (query: Record<string, string> = {}) => ({
+		document: "true",
+		count: "true",
+		pagination: "true",
+		...query,
+	});
+	const buildCreateSectionData = (overrides: Record<string, any> = {}) => ({
+		code: "SEC-001",
+		departmentId: mockDepartmentId,
+		isActive: true,
+		...overrides,
+	});
+
 	beforeEach(() => {
 		prisma = {
 			section: {
@@ -107,6 +127,7 @@ describe("Section Controller", () => {
 			query: {},
 			params: {},
 			body: {},
+			organizationId: mockOrganizationId,
 			get: (header: string) => {
 				if (header === "Content-Type") {
 					return "application/json";
@@ -136,82 +157,80 @@ describe("Section Controller", () => {
 	describe(".getAll()", () => {
 		it("should return paginated sections", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "10" };
+			req.query = buildPaginationQuery({ page: "1", limit: "10" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData).to.have.property("data");
+			expect(sentData.data.sections).to.be.an("array");
+			expect(sentData.data).to.have.property("count", 1);
+			expect(sentData.data).to.have.property("pagination");
 		});
 
 		it("should group sections by type field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "type" };
+			req.query = buildListQuery({ groupBy: "type" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.have.property("grouped");
-			expect(sentData.data).to.have.property("groupBy", "type");
-			expect(sentData.data).to.have.property("totalGroups");
-			expect(sentData.data).to.have.property("totalItems");
-			expect(sentData.data.grouped).to.have.property("email");
-			expect(sentData.data.grouped).to.have.property("sms");
-			expect(sentData.data.grouped).to.have.property("unassigned");
+			expect(sentData.data).to.have.property("groupedBy", "type");
+			expect(sentData.data.sections).to.have.property("email");
+			expect(sentData.data.sections).to.have.property("sms");
+			expect(sentData.data.sections).to.have.property("unassigned");
+			expect(sentData.data.count).to.equal(mockSections.length);
 		});
 
 		it("should group sections by name field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "name" };
+			req.query = buildListQuery({ groupBy: "name" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.have.property("grouped");
-			expect(sentData.data).to.have.property("groupBy", "name");
-			expect(sentData.data.grouped).to.have.property("User Registration Section");
-			expect(sentData.data.grouped).to.have.property("SMS Notification Section");
+			expect(sentData.data).to.have.property("groupedBy", "name");
+			expect(sentData.data.sections).to.have.property("User Registration Section");
+			expect(sentData.data.sections).to.have.property("SMS Notification Section");
 		});
 
 		it("should handle sections with null values in grouping field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "type" };
+			req.query = buildListQuery({ groupBy: "type" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
-			expect(sentData.data.grouped).to.have.property("unassigned");
-			expect(sentData.data.grouped.unassigned).to.be.an("array");
-			expect(sentData.data.grouped.unassigned.length).to.be.greaterThan(0);
+			expect(sentData.data.sections).to.have.property("unassigned");
+			expect(sentData.data.sections.unassigned).to.be.an("array");
+			expect(sentData.data.sections.unassigned.length).to.be.greaterThan(0);
 		});
 
 		it("should return normal response when groupBy is not provided", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "10" };
+			req.query = buildListQuery({ page: "1", limit: "10" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.be.an("array");
-			expect(sentData.data).to.not.have.property("grouped");
+			expect(sentData.data.sections).to.be.an("array");
+			expect(sentData.data).to.not.have.property("groupedBy");
 		});
 
 		it("should handle empty groupBy parameter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "" };
+			req.query = buildListQuery({ groupBy: "" });
 			await sectionController.getAll(req as Request, res, next);
-			expect(statusCode).to.equal(200);
-			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.be.an("array");
+			expect(statusCode).to.equal(400);
+			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should combine grouping with other query parameters", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { groupBy: "type", page: "1", limit: "10", sort: "name" };
+			req.query = buildListQuery({ groupBy: "type", page: "1", limit: "10", sort: "name" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
-			expect(sentData.data).to.have.property("grouped");
-			expect(sentData.data).to.have.property("groupBy", "type");
+			expect(sentData.data).to.have.property("groupedBy", "type");
+			expect(sentData.data.sections).to.have.property("email");
 		});
 
 		it("should handle query validation failure", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "invalid" };
+			req.query = buildListQuery({ page: "invalid" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -219,7 +238,7 @@ describe("Section Controller", () => {
 
 		it("should handle Prisma errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "10" };
+			req.query = buildListQuery({ page: "1", limit: "10" });
 
 			// Mock Prisma to throw an error
 			prisma.section.findMany = async () => {
@@ -230,13 +249,13 @@ describe("Section Controller", () => {
 			};
 
 			await sectionController.getAll(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should handle internal errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "10" };
+			req.query = buildListQuery({ page: "1", limit: "10" });
 
 			// Mock Prisma to throw a non-Prisma error
 			prisma.section.findMany = async () => {
@@ -250,55 +269,62 @@ describe("Section Controller", () => {
 
 		it("should handle advanced filtering", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = {
+			req.query = buildListQuery({
 				page: "1",
 				limit: "10",
 				query: "email",
 				filter: JSON.stringify([{ field: "type", operator: "equals", value: "email" }]),
-			};
+			});
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data.sections).to.be.an("array");
 		});
 
 		it("should handle pagination parameters", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "2", limit: "5", sort: "name", order: "asc" };
+			req.query = buildPaginationQuery({ page: "2", limit: "5", sort: "name", order: "asc" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data.pagination).to.have.property("page", 2);
+			expect(sentData.data.pagination).to.have.property("limit", 5);
 		});
 
 		it("should handle field selection", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { fields: "name,type" };
+			req.query = buildListQuery({ fields: "name,type" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data.sections).to.be.an("array");
 		});
 
 		it("should handle documents parameter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { documents: "true" };
+			req.query = buildListQuery();
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data.sections).to.be.an("array");
 		});
 
 		it("should handle count parameter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { count: "true" };
+			req.query = buildListQuery({ count: "true" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data).to.have.property("count", 1);
 		});
 
 		it("should handle pagination parameter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { pagination: "true" };
+			req.query = buildPaginationQuery();
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+			expect(sentData.data).to.have.property("pagination");
 		});
 	});
 
@@ -317,7 +343,7 @@ describe("Section Controller", () => {
 			this.timeout(TEST_TIMEOUT);
 			req.params = { id: "invalid-id" };
 			await sectionController.getById(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -327,7 +353,7 @@ describe("Section Controller", () => {
 			await sectionController.getById(req as Request, res, next);
 			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
-			expect(sentData).to.have.property("code", "NOT_FOUND");
+			expect(sentData).to.have.property("code", 404);
 		});
 
 		it("should handle Prisma errors", async function () {
@@ -335,7 +361,7 @@ describe("Section Controller", () => {
 			req.params = { id: mockSection.id };
 
 			// Mock Prisma to throw an error
-			prisma.section.findUnique = async () => {
+			prisma.section.findFirst = async () => {
 				const error = new Error("Database connection failed") as any;
 				error.name = "PrismaClientKnownRequestError";
 				error.code = "P1001";
@@ -343,7 +369,7 @@ describe("Section Controller", () => {
 			};
 
 			await sectionController.getById(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -352,7 +378,7 @@ describe("Section Controller", () => {
 			req.params = { id: mockSection.id };
 
 			// Mock Prisma to throw a non-Prisma error
-			prisma.section.findUnique = async () => {
+			prisma.section.findFirst = async () => {
 				throw new Error("Internal server error");
 			};
 
@@ -365,10 +391,10 @@ describe("Section Controller", () => {
 	describe(".create()", () => {
 		it("should create a new section", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "Contact Form Section",
 				description: "Section for contact forms with validation",
-			};
+			});
 			req.body = createData;
 			await sectionController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -379,11 +405,11 @@ describe("Section Controller", () => {
 
 		it("should create a new section with type field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "Email Section",
 				description: "Section for email notifications",
 				type: "email",
-			};
+			});
 			req.body = createData;
 			await sectionController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -395,10 +421,10 @@ describe("Section Controller", () => {
 
 		it("should create a new section without type field", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "Generic Section",
 				description: "Section without type",
-			};
+			});
 			req.body = createData;
 			await sectionController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -409,11 +435,11 @@ describe("Section Controller", () => {
 
 		it("should handle form data (multipart/form-data)", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "Form Section",
 				description: "Section from form data",
 				type: "form",
-			};
+			});
 			req.body = createData;
 			(req as any).get = (header: string) => {
 				if (header === "Content-Type") {
@@ -428,10 +454,10 @@ describe("Section Controller", () => {
 
 		it("should handle form data (application/x-www-form-urlencoded)", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "URL Section",
 				description: "Section from URL encoded data",
-			};
+			});
 			req.body = createData;
 			(req as any).get = (header: string) => {
 				if (header === "Content-Type") {
@@ -446,10 +472,10 @@ describe("Section Controller", () => {
 
 		it("should handle validation errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "",
 				description: "Section with empty name",
-			};
+			});
 			req.body = createData;
 			await sectionController.create(req as Request, res, next);
 			expect(statusCode).to.equal(400);
@@ -458,10 +484,10 @@ describe("Section Controller", () => {
 
 		it("should handle Prisma errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "Test Section",
 				description: "Section that will cause Prisma error",
-			};
+			});
 			req.body = createData;
 
 			// Mock Prisma to throw an error
@@ -473,16 +499,16 @@ describe("Section Controller", () => {
 			};
 
 			await sectionController.create(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should handle internal errors", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "Test Section",
 				description: "Section that will cause internal error",
-			};
+			});
 			req.body = createData;
 
 			// Mock Prisma to throw a non-Prisma error
@@ -509,7 +535,8 @@ describe("Section Controller", () => {
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
 			expect(sentData).to.have.property("data");
-			expect(sentData.data).to.have.property("id");
+			expect(sentData.data).to.have.property("section");
+			expect(sentData.data.section).to.have.property("id");
 		});
 
 		it("should update section type field", async function () {
@@ -523,7 +550,8 @@ describe("Section Controller", () => {
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
 			expect(sentData).to.have.property("data");
-			expect(sentData.data).to.have.property("id");
+			expect(sentData.data).to.have.property("section");
+			expect(sentData.data.section).to.have.property("id");
 		});
 
 		it("should update multiple section fields including type", async function () {
@@ -539,7 +567,8 @@ describe("Section Controller", () => {
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
 			expect(sentData).to.have.property("data");
-			expect(sentData.data).to.have.property("id");
+			expect(sentData.data).to.have.property("section");
+			expect(sentData.data.section).to.have.property("id");
 		});
 
 		it("should handle form data (multipart/form-data)", async function () {
@@ -588,7 +617,7 @@ describe("Section Controller", () => {
 			req.params = { id: "invalid-id" };
 			req.body = updateData;
 			await sectionController.update(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -615,7 +644,7 @@ describe("Section Controller", () => {
 			await sectionController.update(req as Request, res, next);
 			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
-			expect(sentData).to.have.property("code", "NOT_FOUND");
+			expect(sentData).to.have.property("code", 404);
 		});
 
 		it("should handle Prisma errors", async function () {
@@ -636,7 +665,7 @@ describe("Section Controller", () => {
 			};
 
 			await sectionController.update(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -673,7 +702,7 @@ describe("Section Controller", () => {
 			this.timeout(TEST_TIMEOUT);
 			req.params = { id: "invalid-id" };
 			await sectionController.remove(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -683,7 +712,7 @@ describe("Section Controller", () => {
 			await sectionController.remove(req as Request, res, next);
 			expect(statusCode).to.equal(404);
 			expect(sentData).to.have.property("status", "error");
-			expect(sentData).to.have.property("code", "NOT_FOUND");
+			expect(sentData).to.have.property("code", 404);
 		});
 
 		it("should handle Prisma errors", async function () {
@@ -699,7 +728,7 @@ describe("Section Controller", () => {
 			};
 
 			await sectionController.remove(req as Request, res, next);
-			expect(statusCode).to.equal(400);
+			expect(statusCode).to.equal(500);
 			expect(sentData).to.have.property("status", "error");
 		});
 
@@ -745,10 +774,10 @@ describe("Section Controller", () => {
 
 		it("should handle very long section name", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "A".repeat(1000), // Very long name
 				description: "Section with very long name",
-			};
+			});
 			req.body = createData;
 			await sectionController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -757,11 +786,11 @@ describe("Section Controller", () => {
 
 		it("should handle special characters in section data", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "Section with special chars: !@#$%^&*()",
 				description: "Description with émojis 🚀 and unicode",
 				type: "special-type",
-			};
+			});
 			req.body = createData;
 			await sectionController.create(req as Request, res, next);
 			expect(statusCode).to.equal(201);
@@ -770,10 +799,10 @@ describe("Section Controller", () => {
 
 		it("should handle concurrent requests", async function () {
 			this.timeout(TEST_TIMEOUT);
-			const createData = {
+			const createData = buildCreateSectionData({
 				name: "Concurrent Section",
 				description: "Section created concurrently",
-			};
+			});
 			req.body = createData;
 
 			// Simulate concurrent requests
@@ -787,19 +816,19 @@ describe("Section Controller", () => {
 
 		it("should handle malformed JSON in filter", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = {
+			req.query = buildListQuery({
 				page: "1",
 				limit: "10",
 				filter: "invalid-json",
-			};
+			});
 			await sectionController.getAll(req as Request, res, next);
-			expect(statusCode).to.equal(400);
-			expect(sentData).to.have.property("status", "error");
+			expect(statusCode).to.equal(200);
+			expect(sentData).to.have.property("status", "success");
 		});
 
 		it("should handle very large page numbers", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "999999", limit: "10" };
+			req.query = buildListQuery({ page: "999999", limit: "10" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
@@ -807,7 +836,7 @@ describe("Section Controller", () => {
 
 		it("should handle very large limit values", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "999999" };
+			req.query = buildListQuery({ page: "1", limit: "999999" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
@@ -815,7 +844,7 @@ describe("Section Controller", () => {
 
 		it("should handle negative page numbers", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "-1", limit: "10" };
+			req.query = buildListQuery({ page: "-1", limit: "10" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -823,7 +852,7 @@ describe("Section Controller", () => {
 
 		it("should handle negative limit values", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "1", limit: "-10" };
+			req.query = buildListQuery({ page: "1", limit: "-10" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -831,7 +860,7 @@ describe("Section Controller", () => {
 
 		it("should handle empty string values", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "", limit: "", sort: "", order: "" };
+			req.query = buildListQuery({ page: "", limit: "", sort: "", order: "" });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -839,7 +868,7 @@ describe("Section Controller", () => {
 
 		it("should handle whitespace-only values", async function () {
 			this.timeout(TEST_TIMEOUT);
-			req.query = { page: "   ", limit: "   ", sort: "   " };
+			req.query = buildListQuery({ page: "   ", limit: "   ", sort: "   " });
 			await sectionController.getAll(req as Request, res, next);
 			expect(statusCode).to.equal(400);
 			expect(sentData).to.have.property("status", "error");
@@ -850,8 +879,8 @@ describe("Section Controller", () => {
 			req.params = { id: mockSection.id };
 			req.body = {}; // Empty body
 			await sectionController.update(req as Request, res, next);
-			expect(statusCode).to.equal(200);
-			expect(sentData).to.have.property("status", "success");
+			expect(statusCode).to.equal(400);
+			expect(sentData).to.have.property("status", "error");
 		});
 
 		it("should handle partial updates correctly", async function () {
@@ -861,6 +890,91 @@ describe("Section Controller", () => {
 			await sectionController.update(req as Request, res, next);
 			expect(statusCode).to.equal(200);
 			expect(sentData).to.have.property("status", "success");
+		});
+	});
+
+	describe(".importFromXLSX()", () => {
+		it("updates existing section when DM1 re-import changes CODE but keeps department+name", async function () {
+			this.timeout(TEST_TIMEOUT);
+			const XLSX = require("xlsx");
+			const existingLegacy = {
+				id: "sec-legacy-60",
+				organizationId: mockOrganizationId,
+				code: "60",
+				name: "Quality and Compliance Unit",
+				departmentId: mockDepartmentId,
+				isDeleted: false,
+				isHr: false,
+				isActive: true,
+			};
+			let updatedPayload: any = null;
+			let createdPayload: any = null;
+
+			prisma.department = {
+				findMany: async () => [
+					{
+						id: mockDepartmentId,
+						code: "16",
+						name: "N/A",
+					},
+				],
+			};
+			prisma.scheduleTemplate = {
+				findMany: async () => [],
+			};
+			prisma.section.findUnique = async (params: any) => {
+				const code = params?.where?.organizationId_code?.code;
+				if (code === "60") return existingLegacy;
+				return null;
+			};
+			prisma.section.findFirst = async (params: any) => {
+				if (
+					params?.where?.departmentId === mockDepartmentId &&
+					params?.where?.name === "Quality and Compliance Unit"
+				) {
+					return existingLegacy;
+				}
+				return null;
+			};
+			prisma.section.update = async (params: any) => {
+				updatedPayload = params;
+				return { ...existingLegacy, ...params.data };
+			};
+			prisma.section.create = async (params: any) => {
+				createdPayload = params.data;
+				return { id: "new", ...params.data };
+			};
+
+			const sheetRows = [
+				{
+					CODE: "QCU",
+					NAME: "Quality and Compliance Unit",
+					DEPARTMENT: "N/A",
+					DESCRIPTION: "From Manpower Databank",
+					IS_ACTIVE: "TRUE",
+					IS_HR: "FALSE",
+				},
+			];
+			const workbook = XLSX.utils.book_new();
+			const worksheet = XLSX.utils.json_to_sheet(sheetRows);
+			XLSX.utils.book_append_sheet(workbook, worksheet, "Sections");
+			const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+			(req as any).file = { buffer };
+			(req as any).organizationId = mockOrganizationId;
+
+			await sectionController.importFromXLSX(req as Request, res, next);
+
+			expect(statusCode).to.equal(200);
+			expect(sentData?.status).to.equal("success");
+			expect(sentData?.data?.summary?.updated).to.equal(1);
+			expect(sentData?.data?.summary?.created).to.equal(0);
+			expect(sentData?.data?.summary?.skipped).to.equal(0);
+			expect(sentData?.data?.summary?.errors || []).to.have.length(0);
+			expect(createdPayload).to.equal(null);
+			expect(updatedPayload?.where?.id).to.equal("sec-legacy-60");
+			expect(updatedPayload?.data?.code).to.equal("QCU");
+			expect(updatedPayload?.data?.name).to.equal("Quality and Compliance Unit");
 		});
 	});
 });

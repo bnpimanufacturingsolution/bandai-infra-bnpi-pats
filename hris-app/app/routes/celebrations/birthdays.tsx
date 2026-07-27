@@ -1,9 +1,12 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Eye, Gift } from "lucide-react";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
+import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
 import { Card, CardContent } from "~/components/ui/card";
+import employeesService from "~/services/employees.service";
 import {
 	Select,
 	SelectContent,
@@ -11,13 +14,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "~/components/ui/select";
-import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-	DialogDescription,
-} from "~/components/ui/dialog";
+import { CelebrantDetailsModal } from "~/components/organisms/celebrations/CelebrantDetailsModal";
 import { useBirthdayCelebrants } from "~/lib/hooks/useCelebrations";
 import type {
 	BirthdayCelebrantItem,
@@ -30,6 +27,9 @@ type BirthdayTableRow = {
 	type: BirthdayItemType;
 	typeLabel: "Employee" | "Kid";
 	displayName: string;
+	employeeCode: string;
+	avatar: string | null;
+	profileId: string;
 	parentDisplayName: string;
 	department: string;
 	relationLabel: string;
@@ -38,6 +38,35 @@ type BirthdayTableRow = {
 	dayGroup: string;
 	today: boolean;
 	source: BirthdayCelebrantItem;
+};
+
+type BirthdayRosterEmployee = {
+	id?: string | null;
+	employeeId?: string | null;
+	user?: {
+		avatar?: string | null;
+	};
+};
+
+const extractRosterEmployees = (payload: unknown): BirthdayRosterEmployee[] => {
+	const data = payload as {
+		data?: BirthdayRosterEmployee[] | { employees?: BirthdayRosterEmployee[] };
+		employees?: BirthdayRosterEmployee[];
+	};
+
+	if (Array.isArray(data?.data)) {
+		return data.data;
+	}
+
+	if (Array.isArray(data?.data?.employees)) {
+		return data.data.employees;
+	}
+
+	if (Array.isArray(data?.employees)) {
+		return data.employees;
+	}
+
+	return [];
 };
 
 const toMonthLabel = (date: Date): string =>
@@ -56,16 +85,12 @@ const isBirthdayToday = (month: number, day: number): boolean => {
 
 const getSearchPlaceholder = (type: BirthdayFilterType): string => {
 	if (type === "EMPLOYEES") {
-		return "Search employee name";
+		return "Search employee name or ID";
 	}
 	if (type === "KIDS") {
 		return "Search kid name or parent name";
 	}
 	return "Search employees or kids";
-};
-
-const getTypeLabel = (type: BirthdayItemType): string => {
-	return type === "EMPLOYEE_BIRTHDAY" ? "Employee" : "Kid";
 };
 
 export default function BirthdayCelebrationsPage() {
@@ -84,6 +109,39 @@ export default function BirthdayCelebrationsPage() {
 		type: "ALL",
 		search: "",
 	});
+
+	const { data: rosterData } = useQuery({
+		queryKey: ["employees", "birthday-roster"],
+		queryFn: () =>
+			employeesService
+				.clearQueryParams()
+				.select(["id", "employeeId", "person.personalInfo", "user.avatar"])
+				.paginate(1, 1000)
+				.getEmployees(true),
+		staleTime: 5 * 60 * 1000,
+		enabled: !error && data?.state !== "NO_ORG",
+	});
+
+	const rosterEmployees = useMemo(
+		() => extractRosterEmployees(rosterData),
+		[rosterData],
+	);
+
+	const employeeRosterById = useMemo(() => {
+		const map = new Map<string, { employeeCode: string; avatar: string | null }>();
+
+		for (const employee of rosterEmployees) {
+			const profileId = String(employee.id || "").trim();
+			if (!profileId) continue;
+
+			map.set(profileId, {
+				employeeCode: String(employee.employeeId || "").trim(),
+				avatar: String(employee.user?.avatar || "").trim() || null,
+			});
+		}
+
+		return map;
+	}, [rosterEmployees]);
 
 	const canShowNoOrg = data?.state === "NO_ORG";
 	const allItems = useMemo(() => data?.items || [], [data?.items]);
@@ -108,12 +166,18 @@ export default function BirthdayCelebrationsPage() {
 				const today = isBirthdayToday(item.month, item.day);
 				const dayLabel = toMonthDayLabel(year, item.month, item.day);
 				const isEmployee = item.type === "EMPLOYEE_BIRTHDAY";
+				const rosterEntry = isEmployee
+					? employeeRosterById.get(String(item.employeeId || "").trim())
+					: undefined;
 
 				return {
 					id: item.id,
 					type: item.type,
-					typeLabel: isEmployee ? "Employee" : "Kid",
+					typeLabel: (isEmployee ? "Employee" : "Kid") as "Employee" | "Kid",
 					displayName: item.displayName,
+					employeeCode: rosterEntry?.employeeCode || "",
+					avatar: rosterEntry?.avatar ?? null,
+					profileId: isEmployee ? String(item.employeeId || "").trim() : "",
 					parentDisplayName: item.parentDisplayName || "",
 					department: item.department || "",
 					relationLabel: isEmployee
@@ -134,7 +198,7 @@ export default function BirthdayCelebrationsPage() {
 					sensitivity: "base",
 				});
 			});
-	}, [filteredItems, year]);
+	}, [employeeRosterById, filteredItems, year]);
 
 	const dayGroupOrder = useMemo(
 		() => Array.from(new Set(tableRows.map((row) => row.dayGroup))),
@@ -155,11 +219,28 @@ export default function BirthdayCelebrationsPage() {
 			label: "Celebrant",
 			sortable: false,
 			width: "34%",
-			render: (value, item) => (
-				<div className="flex items-center gap-2">
-					<span className="font-semibold text-gray-900">{value}</span>
+			render: (_value, item) => (
+				<div className="flex min-w-0 items-center gap-2">
+					{item.type === "EMPLOYEE_BIRTHDAY" ? (
+						<EmployeeTableCell
+							profileId={item.profileId || undefined}
+							fullName={item.displayName}
+							employeeId={item.employeeCode || "-"}
+							avatar={item.avatar}
+						/>
+					) : (
+						<EmployeeTableCell
+							fullName={item.displayName}
+							employeeId={
+								item.parentDisplayName
+									? `Child of ${item.parentDisplayName}`
+									: "Kid celebrant"
+							}
+							avatar={null}
+						/>
+					)}
 					{item.today && (
-						<Badge variant="success-soft" className="px-2 py-0.5 text-[10px]">
+						<Badge variant="success-soft" className="shrink-0 px-2 py-0.5 text-[10px]">
 							Today
 						</Badge>
 					)}
@@ -217,7 +298,12 @@ export default function BirthdayCelebrationsPage() {
 					description={`Showing birthdays for ${toMonthLabel(selectedDate)}`}
 					data={tableRows}
 					columns={columns}
-					searchFields={["displayName", "parentDisplayName", "relationLabel"]}
+					searchFields={[
+						"displayName",
+						"employeeCode",
+						"parentDisplayName",
+						"relationLabel",
+					]}
 					searchPlaceholder={getSearchPlaceholder(activeType)}
 					isLoading={isLoading}
 					emptyMessage="No celebrants found"
@@ -291,70 +377,12 @@ export default function BirthdayCelebrationsPage() {
 				/>
 			)}
 
-			<Dialog
-				open={Boolean(selectedItem)}
-				onOpenChange={(open) => !open && setSelectedItem(null)}>
-				<DialogContent>
-					<DialogHeader>
-						<DialogTitle>Celebrant Details</DialogTitle>
-						<DialogDescription>Read-only birthday information</DialogDescription>
-					</DialogHeader>
-
-					{selectedItem && (
-						<div className="space-y-3 text-sm text-gray-700">
-							<div>
-								<span className="font-medium text-gray-900">Type: </span>
-								<Badge
-									variant={
-										selectedItem.type === "EMPLOYEE_BIRTHDAY"
-											? "info"
-											: "warning-soft"
-									}
-									className="inline-flex ml-1">
-									{getTypeLabel(selectedItem.type)}
-								</Badge>
-							</div>
-							<div>
-								<span className="font-medium text-gray-900">Date: </span>
-								{toMonthDayLabel(year, selectedItem.month, selectedItem.day)}
-							</div>
-							{selectedItem.type === "EMPLOYEE_BIRTHDAY" ? (
-								<>
-									<div>
-										<span className="font-medium text-gray-900">
-											Employee:{" "}
-										</span>
-										{selectedItem.displayName}
-									</div>
-									<div>
-										<span className="font-medium text-gray-900">
-											Department:{" "}
-										</span>
-										{selectedItem.department || "No department"}
-									</div>
-								</>
-							) : (
-								<>
-									<div>
-										<span className="font-medium text-gray-900">Kid: </span>
-										{selectedItem.displayName}
-									</div>
-									<div>
-										<span className="font-medium text-gray-900">Parent: </span>
-										{selectedItem.parentDisplayName || "Unknown"}
-									</div>
-									<div>
-										<span className="font-medium text-gray-900">
-											Department:{" "}
-										</span>
-										{selectedItem.department || "No department"}
-									</div>
-								</>
-							)}
-						</div>
-					)}
-				</DialogContent>
-			</Dialog>
+			<CelebrantDetailsModal
+				item={selectedItem}
+				year={year}
+				rosterByProfileId={employeeRosterById}
+				onClose={() => setSelectedItem(null)}
+			/>
 		</div>
 	);
 }

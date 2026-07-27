@@ -11,7 +11,7 @@ export function useTagManager(initialTags: Tag[] = []) {
 		const trimmedLabel = newTagLabel.trim();
 		if (!trimmedLabel) return;
 
-		setTags((prev) => [...prev, { label: trimmedLabel, variant: newTagVariant }]);
+		setTags((prev) => [...prev, trimmedLabel]);
 		setNewTagLabel("");
 		setNewTagVariant(DEFAULT_TAG_VARIANT);
 	};

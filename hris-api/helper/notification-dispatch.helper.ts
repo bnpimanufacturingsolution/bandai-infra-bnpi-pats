@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from "../generated/prisma";
 import type { Server as SocketIOServer } from "socket.io";
+import { invalidateCache } from "../middleware/cache";
 
 type PrismaExecutor = PrismaClient | Prisma.TransactionClient;
 const asRecord = (value: unknown): Record<string, any> =>
@@ -53,7 +54,10 @@ type NotificationRouteKey =
 	| "REQUEST_SELF_VIEW"
 	| "TIMESHEET_APPROVAL_VIEW"
 	| "TIMESHEET_SELF_VIEW"
-	| "DOCUMENT_REVIEW_PENDING";
+	| "DOCUMENT_REVIEW_PENDING"
+	| "PAYROLL_SELF_VIEW"
+	| "PAYSLIP_SELF_VIEW"
+	| "PAYMENT_ISSUE_SELF_VIEW";
 
 type PublishNotificationInput = {
 	prisma: PrismaExecutor;
@@ -118,9 +122,10 @@ export const buildRequestTargetUrl = (
 
 	const requestRouteByType: Record<string, string> = {
 		LEAVE: "/employee/requests/leave",
-		TIME_ADJUSTMENT: "/employee/requests/time-requests",
-		OVERTIME: "/employee/requests/time-requests",
-		OTHER: "/employee/requests/time-requests",
+		TIME_ADJUSTMENT: "/employee/requests",
+		OVERTIME: "/employee/requests",
+		PAYROLL_CORRECTION: "/employee/requests",
+		OTHER: "/employee/requests",
 		EXPENSE_REIMBURSEMENT: "/employee/requests/expense-reimbursement",
 		DOCUMENT_REQUEST: "/employee/requests/documents",
 		REGULARIZATION: "/employee/requests/pan",
@@ -154,14 +159,14 @@ export const buildTimesheetTargetUrl = (
 
 	if (!requestId) {
 		return role === "hris-hr-manager" || role === "hris-hr-user"
-			? "/hr/approvals/requests"
-			: "/employee/approvals/requests";
+			? "/hr/approvals/timesheet"
+			: "/employee/approvals/timesheet";
 	}
 
 	const base =
 		role === "hris-hr-manager" || role === "hris-hr-user"
-			? "/hr/approvals/requests"
-			: "/employee/approvals/requests";
+			? "/hr/approvals/timesheet"
+			: "/employee/approvals/timesheet";
 	return `${base}?action=timesheet.review&id=${requestId}`;
 };
 
@@ -254,7 +259,222 @@ export const publishNotification = async ({
 		});
 	}
 
+	// Keep list/count GET responses fresh after dispatch (request approval, decisions, etc.).
+	// HTTP create/update/mark-read already invalidate; publish paths must do the same.
+	try {
+		await invalidateCache.byPattern("cache:notification:list:*");
+	} catch (cacheError) {
+		console.warn(
+			`[publishNotification] Failed to invalidate notification list cache for eventKey=${eventKey}:`,
+			cacheError,
+		);
+	}
+
 	return notification;
+};
+
+const getHrRecipientEmployeeIds = async (
+	prisma: PrismaExecutor,
+	organizationId: string,
+): Promise<string[]> => {
+	const hrEmployees = await prisma.employee.findMany({
+		where: {
+			organizationId,
+			isDeleted: false,
+			role: { in: [...HR_WORKFLOW_ROLES] },
+		},
+		select: { id: true },
+	});
+	return hrEmployees.map((employee) => employee.id);
+};
+
+const getDocumentTypeLabel = (documentType: string): string => {
+	const normalized = String(documentType || "").trim().toUpperCase();
+	if (normalized === "CERTIFICATE_OF_EMPLOYMENT" || normalized === "COE") {
+		return "Certificate of Employment";
+	}
+	if (normalized === "BIR_FORM_2316" || normalized === "BIR_2316") {
+		return "BIR Form 2316";
+	}
+	return "Document";
+};
+
+export const publishDocumentRequestSubmittedNotification = async (
+	prisma: PrismaExecutor,
+	io: SocketIOServer | null | undefined,
+	requestId: string,
+	sourceEmployeeId?: string | null,
+) => {
+	const request = await prisma.request.findUnique({
+		where: { id: requestId },
+		select: {
+			id: true,
+			organizationId: true,
+			requesterId: true,
+			metadata: true,
+		},
+	});
+
+	if (!request?.requesterId) return null;
+
+	const metadata = asRecord(request.metadata);
+	const rawDocType = String(metadata.documentType || metadata.docType || metadata.type || "");
+	const docTypeLabel = getDocumentTypeLabel(rawDocType);
+
+	return publishNotification({
+		prisma,
+		io,
+		organizationId: request.organizationId,
+		sourceEmployeeId: sourceEmployeeId ?? null,
+		recipientEmployeeIds: [request.requesterId],
+		category: "REQUEST",
+		type: "INFO",
+		title: "Document request submitted",
+		description: `Your request for ${docTypeLabel} has been submitted successfully.`,
+		eventKey: `request:${request.id}:status:SUBMITTED`,
+		metadata: {
+			entityType: "REQUEST",
+			entityId: request.id,
+			requestType: "DOCUMENT_REQUEST",
+			routeKey: "REQUEST_SELF_VIEW" as NotificationRouteKey,
+			action: "view",
+			status: "SUBMITTED",
+			targetUrl: `/employee/requests/documents?action=view&id=${request.id}`,
+		},
+	});
+};
+
+export const publishDocumentRequestApprovalNeededNotification = async (
+	prisma: PrismaExecutor,
+	io: SocketIOServer | null | undefined,
+	requestId: string,
+	sourceEmployeeId?: string | null,
+) => {
+	const request = await prisma.request.findUnique({
+		where: { id: requestId },
+		select: {
+			id: true,
+			organizationId: true,
+			metadata: true,
+			requester: {
+				select: {
+					person: {
+						select: {
+							personalInfo: true,
+						},
+					},
+				},
+			},
+			currentStepExecution: {
+				select: {
+					id: true,
+					stepName: true,
+					assigneeType: true,
+					assigneeId: true,
+					assignee: {
+						select: {
+							role: true,
+						},
+					},
+				},
+			},
+		},
+	});
+
+	if (!request?.currentStepExecution) return null;
+
+	const isHrStep = request.currentStepExecution.assigneeType === "HR";
+	const recipientEmployeeIds = isHrStep
+		? await getHrRecipientEmployeeIds(prisma, request.organizationId)
+		: uniqueEmployeeIds([request.currentStepExecution.assigneeId]);
+
+	if (recipientEmployeeIds.length === 0) {
+		console.warn(
+			`[publishDocumentRequestApprovalNeededNotification] No recipients for request ${request.id}`,
+		);
+		return null;
+	}
+
+	const requesterName = `${getJsonString((request as any).requester?.person?.personalInfo, "firstName")} ${getJsonString((request as any).requester?.person?.personalInfo, "lastName")}`.trim();
+	const metadata = asRecord(request.metadata);
+	const rawDocType = String(metadata.documentType || metadata.docType || metadata.type || "");
+	const docTypeLabel = getDocumentTypeLabel(rawDocType);
+
+	const title = isHrStep ? "Document generation pending" : "Document approval needed";
+	const description = isHrStep
+		? `A request for ${docTypeLabel} by ${requesterName || "an employee"} is ready for generation.`
+		: `${requesterName || "An employee"} requested ${docTypeLabel} which requires your approval.`;
+
+	const targetUrl = isHrStep
+		? `/hr/requests/tickets?action=view&id=${request.id}`
+		: `/employee/approvals/requests?action=view&id=${request.id}`;
+
+	return publishNotification({
+		prisma,
+		io,
+		organizationId: request.organizationId,
+		sourceEmployeeId: sourceEmployeeId ?? null,
+		recipientEmployeeIds,
+		category: "APPROVAL",
+		type: "INFO",
+		title,
+		description,
+		eventKey: `request:${request.id}:step:${request.currentStepExecution.id}:assigned`,
+		metadata: {
+			entityType: "REQUEST",
+			entityId: request.id,
+			requestType: "DOCUMENT_REQUEST",
+			routeKey: "REQUEST_APPROVAL_VIEW" as NotificationRouteKey,
+			action: "review",
+			status: "PENDING",
+			targetUrl,
+		},
+	});
+};
+
+export const publishDocumentRequestCompletedNotification = async (
+	prisma: PrismaExecutor,
+	io: SocketIOServer | null | undefined,
+	requestId: string,
+	sourceEmployeeId?: string | null,
+) => {
+	const request = await prisma.request.findUnique({
+		where: { id: requestId },
+		select: {
+			id: true,
+			organizationId: true,
+			requesterId: true,
+			metadata: true,
+		},
+	});
+
+	if (!request?.requesterId) return null;
+
+	const metadata = asRecord(request.metadata);
+	const rawDocType = String(metadata.documentType || metadata.docType || metadata.type || "");
+	const docTypeLabel = getDocumentTypeLabel(rawDocType);
+
+	return publishNotification({
+		prisma,
+		io,
+		organizationId: request.organizationId,
+		sourceEmployeeId: sourceEmployeeId ?? null,
+		recipientEmployeeIds: [request.requesterId],
+		category: "REQUEST",
+		type: "SUCCESS",
+		title: "Document completed",
+		description: `Your request for ${docTypeLabel} has been completed and is ready for download.`,
+		eventKey: `request:${request.id}:status:COMPLETED`,
+		metadata: {
+			entityType: "REQUEST",
+			entityId: request.id,
+			requestType: "DOCUMENT_REQUEST",
+			routeKey: "REQUEST_SELF_VIEW" as NotificationRouteKey,
+			action: "view",
+			status: "COMPLETED",
+			targetUrl: `/employee/requests/documents?action=view&id=${request.id}`,
+		},
+	});
 };
 
 export const publishRequestCreatedNotification = async (
@@ -263,18 +483,6 @@ export const publishRequestCreatedNotification = async (
 	requestId: string,
 	sourceEmployeeId?: string | null,
 ) => {
-	const getHrRecipientEmployeeIds = async (organizationId: string): Promise<string[]> => {
-		const hrEmployees = await prisma.employee.findMany({
-			where: {
-				organizationId,
-				isDeleted: false,
-				role: { in: [...HR_WORKFLOW_ROLES] },
-			},
-			select: { id: true },
-		});
-		return hrEmployees.map((employee) => employee.id);
-	};
-
 	const request = await prisma.request.findUnique({
 		where: { id: requestId },
 		select: {
@@ -312,7 +520,7 @@ export const publishRequestCreatedNotification = async (
 
 	const isHrStep = request.currentStepExecution.assigneeType === "HR";
 	const recipientEmployeeIds = isHrStep
-		? await getHrRecipientEmployeeIds(request.organizationId)
+		? await getHrRecipientEmployeeIds(prisma, request.organizationId)
 		: uniqueEmployeeIds([request.currentStepExecution.assigneeId]);
 
 	if (recipientEmployeeIds.length === 0) {
@@ -803,6 +1011,165 @@ export const publishTimesheetReminderNotification = async (
 			timesheetCode: timesheet.code || null,
 			reminderKind: kind,
 			payrollPeriodCode: timesheet.payrollPeriod?.code || null,
+		},
+	});
+};
+
+const getEmployeePayrollNotificationContext = async (
+	prisma: PrismaExecutor,
+	employeePayrollId: string,
+) => {
+	const lookupArgs = {
+		where: { id: employeePayrollId },
+		select: {
+			id: true,
+			organizationId: true,
+			employeeId: true,
+			payrollPeriodId: true,
+			employee: {
+				select: {
+					id: true,
+					employeeId: true,
+					role: true,
+					person: {
+						select: {
+							personalInfo: true,
+						},
+					},
+				},
+			},
+			payrollPeriod: {
+				select: {
+					id: true,
+					name: true,
+					payDate: true,
+				},
+			},
+		},
+	} as const;
+	const employeePayroll =
+		typeof (prisma.employeePayroll as any).findUnique === "function"
+			? await (prisma.employeePayroll as any).findUnique(lookupArgs)
+			: await (prisma.employeePayroll as any).findFirst(lookupArgs);
+
+	if (!employeePayroll?.employeeId) return null;
+	return employeePayroll;
+};
+
+export const publishPayrollPublishedNotification = async (
+	prisma: PrismaExecutor,
+	io: SocketIOServer | null | undefined,
+	params: {
+		employeePayrollId: string;
+		sourceEmployeeId?: string | null;
+	},
+) => {
+	const employeePayroll = await getEmployeePayrollNotificationContext(
+		prisma,
+		params.employeePayrollId,
+	);
+	if (!employeePayroll) return null;
+
+	return publishNotification({
+		prisma,
+		io,
+		organizationId: employeePayroll.organizationId,
+		sourceEmployeeId: params.sourceEmployeeId ?? null,
+		recipientEmployeeIds: [employeePayroll.employeeId],
+		category: "ANNOUNCEMENT",
+		type: "INFO",
+		title: "Payroll published",
+		description: `Your payroll for ${employeePayroll.payrollPeriod?.name || "the selected period"} is now available.`,
+		eventKey: `employeePayroll:${employeePayroll.id}:published`,
+		metadata: {
+			entityType: "EMPLOYEE_PAYROLL",
+			entityId: employeePayroll.id,
+			employeeId: employeePayroll.employeeId,
+			employeePayrollId: employeePayroll.id,
+			payrollPeriodId: employeePayroll.payrollPeriodId,
+			routeKey: "PAYROLL_SELF_VIEW" as NotificationRouteKey,
+			action: "view",
+			status: "PUBLISHED",
+		},
+	});
+};
+
+export const publishPayslipAvailableNotification = async (
+	prisma: PrismaExecutor,
+	io: SocketIOServer | null | undefined,
+	params: {
+		employeePayrollId: string;
+		sourceEmployeeId?: string | null;
+	},
+) => {
+	const employeePayroll = await getEmployeePayrollNotificationContext(
+		prisma,
+		params.employeePayrollId,
+	);
+	if (!employeePayroll) return null;
+
+	return publishNotification({
+		prisma,
+		io,
+		organizationId: employeePayroll.organizationId,
+		sourceEmployeeId: params.sourceEmployeeId ?? null,
+		recipientEmployeeIds: [employeePayroll.employeeId],
+		category: "ANNOUNCEMENT",
+		type: "SUCCESS",
+		title: "Payslip available",
+		description: `Your payslip for ${employeePayroll.payrollPeriod?.name || "the selected period"} is now available.`,
+		eventKey: `employeePayroll:${employeePayroll.id}:payslip-released`,
+		metadata: {
+			entityType: "EMPLOYEE_PAYROLL",
+			entityId: employeePayroll.id,
+			employeeId: employeePayroll.employeeId,
+			employeePayrollId: employeePayroll.id,
+			payrollPeriodId: employeePayroll.payrollPeriodId,
+			routeKey: "PAYSLIP_SELF_VIEW" as NotificationRouteKey,
+			action: "view",
+			status: "PAYSLIP_RELEASED",
+		},
+	});
+};
+
+export const publishPaymentIssueNotification = async (
+	prisma: PrismaExecutor,
+	io: SocketIOServer | null | undefined,
+	params: {
+		employeePayrollId: string;
+		sourceEmployeeId?: string | null;
+		note?: string | null;
+	},
+) => {
+	const employeePayroll = await getEmployeePayrollNotificationContext(
+		prisma,
+		params.employeePayrollId,
+	);
+	if (!employeePayroll) return null;
+
+	return publishNotification({
+		prisma,
+		io,
+		organizationId: employeePayroll.organizationId,
+		sourceEmployeeId: params.sourceEmployeeId ?? null,
+		recipientEmployeeIds: [employeePayroll.employeeId],
+		category: "ALERT",
+		type: "WARNING",
+		title: "Payment issue",
+		description:
+			params.note?.trim() ||
+			`There is a payment issue affecting your payroll for ${employeePayroll.payrollPeriod?.name || "the selected period"}.`,
+		eventKey: `employeePayroll:${employeePayroll.id}:payment-issue`,
+		metadata: {
+			entityType: "EMPLOYEE_PAYROLL",
+			entityId: employeePayroll.id,
+			employeeId: employeePayroll.employeeId,
+			employeePayrollId: employeePayroll.id,
+			payrollPeriodId: employeePayroll.payrollPeriodId,
+			routeKey: "PAYMENT_ISSUE_SELF_VIEW" as NotificationRouteKey,
+			action: "view",
+			status: "PAYMENT_ISSUE",
+			paymentIssueNote: params.note ?? null,
 		},
 	});
 };

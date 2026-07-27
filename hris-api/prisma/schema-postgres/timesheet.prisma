@@ -42,6 +42,9 @@ model TimesheetConfig {
   // Minimum schedule-based overtime minutes required to set OVERTIME behavior flag
   overtimeFlagThresholdMinutes Int @default(60)
 
+  // When true, detected overtime stays pending until a manager approves an OVERTIME request
+  requireManagerApprovedOvertime Boolean @default(true)
+
   // Time computation rules
   workTimeRounding      Json?
   overtimeQualification Json?
@@ -69,7 +72,8 @@ model Timesheet {
   attendances Attendance[]
 
   // Payroll relation - link to generated payroll (optional one-to-one)
-  employeePayroll EmployeePayroll?
+  employeePayroll     EmployeePayroll?
+  payrollCorrections  PayrollCorrection[]
 
   // Materialized day-level source of truth for attendance reporting
   timesheetlines        Timesheetline[]
