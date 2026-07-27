@@ -7,7 +7,9 @@ export const BirthdaysQuerySchema = z.object({
 	year: z.coerce.number().int().min(1900).max(3000),
 	type: BirthdayFilterTypeSchema.default("ALL"),
 	search: z.string().max(100).optional().default(""),
-	organizationId: z.string().optional(), // ignored for security; effective org is from token
+	// Auth route ignores these; public route resolves id or stable seed code (e.g. bnei).
+	organizationId: z.string().trim().min(1).optional(),
+	organizationCode: z.string().trim().min(1).optional(),
 });
 
 export type BirthdayFilterType = z.infer<typeof BirthdayFilterTypeSchema>;

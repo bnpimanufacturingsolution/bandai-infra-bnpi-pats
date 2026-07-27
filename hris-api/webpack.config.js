@@ -5,7 +5,6 @@ module.exports = {
 	entry: {
 		server: "./index.ts",
 		cron: "./cron-entry.ts",
-		backup: "./scripts/run-database-backup.ts",
 	},
 	target: "node",
 	externals: [

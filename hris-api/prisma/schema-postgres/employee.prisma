@@ -114,9 +114,8 @@ model Employee {
   person   Person? @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   personId String  @unique
 
-  device      Device?      @relation(fields: [deviceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  deviceId    String?
-  deviceUsers DeviceUser[]
+  device   Device? @relation(fields: [deviceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  deviceId String?
 
   attendances                        Attendance[]
   attendanceObligations              AttendanceObligation[]
@@ -135,6 +134,7 @@ model Employee {
   departmentScheduleTemplatesCreated DepartmentScheduleTemplate[] @relation("DepartmentScheduleTemplatesCreatedBy")
 
   employeePayrolls             EmployeePayroll[]
+  payrollCorrections           PayrollCorrection[]
   processedPayrollPeriods      PayrollPeriod[]       @relation("PayrollPeriodProcessedBy")
   employeeBenefits             EmployeeBenefit[]
   employeeLoans                EmployeeLoan[]
@@ -180,7 +180,6 @@ model Employee {
   @@index([organizationId, workforceSource, payFrequency, isDeleted])
   @@index([organizationId, isDeleted, employmentStatus, payFrequency, updatedAt])
   @@index([organizationId, agencyId])
-  @@index([organizationId, deviceEmpId, isDeleted])
   @@index([organizationId, employeeId, isDeleted])
   @@map("employees")
 }

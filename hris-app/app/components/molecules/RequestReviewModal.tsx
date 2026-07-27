@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
@@ -14,9 +14,14 @@ import type {
 	RequestWorkflowStateKey,
 } from "~/services/requests.service";
 import {
+	getOvertimeCandidateReasonLabel,
+	getOvertimeRequestHoursLabel,
+} from "~/lib/utils/overtime-request-display";
+import {
 	AlertCircle,
 	ArrowRight,
 	Briefcase,
+	ChevronDown,
 	CheckCircle,
 	CheckCircle2,
 	Clock,
@@ -43,7 +48,11 @@ interface RequestReviewModalProps {
 	skipRequestFetch?: boolean;
 	hideManagerApproval?: boolean;
 	hideLegacyLinks?: boolean;
+	hideEmployeeProfile?: boolean;
+	variant?: "default" | "compact";
 }
+
+const TERMINAL_REQUEST_STATES = ["COMPLETED", "REJECTED", "CANCELLED"] as const;
 
 const ACTIVE_REQUEST_STATES = [
 	"OPEN",
@@ -127,6 +136,37 @@ const formatMetadataLabel = (value: unknown) => {
 		.replace(/_/g, " ")
 		.toLowerCase()
 		.replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const GENERIC_REQUEST_DESCRIPTIONS = new Set(["Timesheet edit permission request"]);
+
+const getRequestReasonText = (
+	request: Request,
+	options?: {
+		resignationReasonDetails?: unknown;
+		fallback?: string;
+	},
+) => {
+	const metadata = getMetadataRecord(request.metadata);
+	const fallback = options?.fallback ?? "No description provided.";
+
+	if (request.type === "RESIGNATION") {
+		return String(
+			options?.resignationReasonDetails || request.description || "No details provided.",
+		);
+	}
+
+	const typedReason = [metadata.reason, metadata.justification, request.notes]
+		.map((value) => String(value || "").trim())
+		.find(Boolean);
+	if (typedReason) return typedReason;
+
+	const description = String(request.description || "").trim();
+	if (description && !GENERIC_REQUEST_DESCRIPTIONS.has(description)) {
+		return description;
+	}
+
+	return description || fallback;
 };
 
 const getStepStatusConfig = (step: RequestStepExecution) => {
@@ -326,6 +366,75 @@ const getMetadataRecord = (value: unknown): Record<string, any> =>
 		? (value as Record<string, any>)
 		: {};
 
+const getLeaveAttendanceReconciliation = (request: Request) => {
+	if (request.type !== "LEAVE") return null;
+	const requestState = getRequestState(request);
+	if (requestState !== "APPROVED" && requestState !== "COMPLETED") return null;
+	const metadata = getMetadataRecord(request.metadata);
+	const reconciliation = getMetadataRecord(metadata.leaveAttendanceReconciliation);
+	return Object.keys(reconciliation).length > 0 ? reconciliation : null;
+};
+
+const getTimeAdjustmentReconciliation = (request: Request) => {
+	if (request.type !== "TIME_ADJUSTMENT") return null;
+	const requestState = getRequestState(request);
+	if (requestState !== "APPROVED" && requestState !== "COMPLETED") return null;
+	const metadata = getMetadataRecord(request.metadata);
+	const reconciliation = getMetadataRecord(metadata.timeAdjustmentReconciliation);
+	return Object.keys(reconciliation).length > 0 ? reconciliation : null;
+};
+
+const buildLeaveAttendanceImpactLabel = (
+	reconciliation: Record<string, any> | null,
+	leaveType: unknown,
+) => {
+	if (!reconciliation) return "";
+	const leaveTypeLabel = formatMetadataLabel(leaveType || "LEAVE");
+	const attendanceResults = Array.isArray(reconciliation.attendanceResults)
+		? reconciliation.attendanceResults
+		: [];
+	const labels = attendanceResults
+		.map((result: any) => {
+			const dateKey = String(result?.dateKey || "").trim();
+			if (!dateKey) return "";
+			if (result?.action === "converted") {
+				return `Converted ${dateKey} to ${leaveTypeLabel} Leave`;
+			}
+			if (result?.action === "created") {
+				return `Created ${dateKey} as ${leaveTypeLabel} Leave`;
+			}
+			if (result?.action === "unchanged") {
+				return `${dateKey} already reflects ${leaveTypeLabel} Leave`;
+			}
+			return "";
+		})
+		.filter(Boolean);
+
+	return labels.join("; ");
+};
+
+const buildTimesheetFollowUpLabel = (reconciliation: Record<string, any> | null) => {
+	if (!reconciliation) return "";
+	const timesheetResults = Array.isArray(reconciliation.timesheetResults)
+		? reconciliation.timesheetResults
+		: [];
+	const labels = timesheetResults
+		.map((result: any) => {
+			const dateKey = String(result?.dateKey || "").trim();
+			if (!dateKey) return "";
+			if (result?.action === "adjustment_required") {
+				return `Adjustment required for ${dateKey} (locked timesheet snapshot).`;
+			}
+			if (result?.action === "refreshed") {
+				return `Draft timesheet refreshed for ${dateKey}.`;
+			}
+			return "";
+		})
+		.filter(Boolean);
+
+	return labels.join(" ");
+};
+
 const getScheduleSnapshotFromValue = (value: unknown): Record<string, any> | null => {
 	const record = getMetadataRecord(value);
 	return Object.keys(record).length > 0 ? record : null;
@@ -475,6 +584,7 @@ const buildDetailRows = (request: Request) => {
 
 	if (request.type === "LEAVE") {
 		const metadata = getMetadataRecord(request.metadata);
+		const reconciliation = getLeaveAttendanceReconciliation(request);
 		rows.push({
 			label: "Leave Type",
 			value: String(metadata.leaveType || "N/A"),
@@ -496,29 +606,128 @@ const buildDetailRows = (request: Request) => {
 			label: "End Date",
 			value: formatDate(request.endDate || request.startDate),
 		});
+		const attendanceImpactLabel = buildLeaveAttendanceImpactLabel(
+			reconciliation,
+			metadata.leaveType,
+		);
+		if (attendanceImpactLabel) {
+			rows.push({
+				label: "Attendance Impact",
+				value: attendanceImpactLabel,
+			});
+		}
+		const timesheetFollowUpLabel = buildTimesheetFollowUpLabel(reconciliation);
+		if (timesheetFollowUpLabel) {
+			rows.push({
+				label: "Timesheet Follow-up",
+				value: timesheetFollowUpLabel,
+			});
+		}
 	}
 
 	if (request.type === "OVERTIME") {
 		const metadata = getMetadataRecord(request.metadata);
+		const overtimeHours = getOvertimeRequestHoursLabel(metadata);
+		const detectionReason = getOvertimeCandidateReasonLabel(metadata.overtimeCandidateReason);
+
 		rows.push({
 			label: "Date",
 			value: formatDate(request.startDate || metadata.date),
 		});
 		rows.push({
-			label: "Hours",
-			value:
-				metadata.hours || metadata.totalHours
-					? String(metadata.hours || metadata.totalHours)
-					: "N/A",
+			label: "Overtime Hours",
+			value: overtimeHours || "N/A",
 			asBadge: true,
 		});
+		if (detectionReason) {
+			rows.push({
+				label: "Detection Reason",
+				value: detectionReason,
+				asBadge: true,
+			});
+		}
+		if (metadata.periodCode) {
+			rows.push({
+				label: "Payroll Period",
+				value: String(metadata.periodCode),
+			});
+		}
+		if (metadata.timesheetCode) {
+			rows.push({
+				label: "Timesheet",
+				value: String(metadata.timesheetCode),
+			});
+		}
+		if (metadata.startTime) {
+			rows.push({
+				label: "Start Time",
+				value: String(metadata.startTime),
+			});
+		}
+		if (metadata.endTime) {
+			rows.push({
+				label: "End Time",
+				value: String(metadata.endTime),
+			});
+		}
+	}
+
+	if (request.type === "PAYROLL_CORRECTION") {
+		const metadata = getMetadataRecord(request.metadata);
+		const dayDeltas = Array.isArray(metadata.dayDeltas) ? metadata.dayDeltas : [];
 		rows.push({
-			label: "Start Time",
-			value: String(metadata.startTime || "N/A"),
+			label: "Source period",
+			value: String(
+				metadata.sourcePayrollPeriodName ||
+					metadata.sourcePayrollPeriodCode ||
+					metadata.periodName ||
+					metadata.periodCode ||
+					"N/A",
+			),
 		});
+		if (metadata.timesheetCode) {
+			rows.push({
+				label: "Timesheet",
+				value: String(metadata.timesheetCode),
+			});
+		}
+		if (metadata.reason || request.description) {
+			rows.push({
+				label: "Correction reason",
+				value: String(metadata.reason || request.description),
+			});
+		}
+		if (metadata.estimatedAmount != null && metadata.estimatedAmount !== "") {
+			const amount = Number(metadata.estimatedAmount);
+			rows.push({
+				label: "Estimated amount",
+				value: Number.isFinite(amount)
+					? `PHP ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+					: String(metadata.estimatedAmount),
+				asBadge: true,
+			});
+		}
+		if (dayDeltas.length > 0) {
+			const summary = dayDeltas
+				.map((d: any) => {
+					const date = String(d?.date || "").slice(0, 10);
+					const type = String(d?.hoursType || "OTHER");
+					const before = Number(d?.beforeMinutes) || 0;
+					const after = Number(d?.afterMinutes) || 0;
+					const delta =
+						d?.deltaMinutes != null ? Number(d.deltaMinutes) : after - before;
+					const sign = delta > 0 ? "+" : "";
+					return `${date} · ${type}: paid ${before} → proposed ${after} min (${sign}${delta})`;
+				})
+				.join("\n");
+			rows.push({
+				label: "Day deltas (paid → proposed)",
+				value: summary,
+			});
+		}
 		rows.push({
-			label: "End Time",
-			value: String(metadata.endTime || "N/A"),
+			label: "Apply rule",
+			value: "Does not change the locked timesheet. Pays as an explicit retro line on the next open payroll after approval.",
 		});
 	}
 
@@ -542,6 +751,16 @@ const buildDetailRows = (request: Request) => {
 			label: "Time Out",
 			value: String(metadata.timeOut || metadata.correctedTimeOut || "N/A"),
 		});
+		if (request.type === "TIME_ADJUSTMENT") {
+			const reconciliation = getTimeAdjustmentReconciliation(request);
+			const timesheetFollowUpLabel = buildTimesheetFollowUpLabel(reconciliation);
+			if (timesheetFollowUpLabel) {
+				rows.push({
+					label: "Timesheet Follow-up",
+					value: timesheetFollowUpLabel,
+				});
+			}
+		}
 	}
 
 	if (request.type === "TIMESHEET") {
@@ -744,8 +963,14 @@ export function RequestReviewModal({
 	skipRequestFetch = false,
 	hideManagerApproval = false,
 	hideLegacyLinks: _hideLegacyLinks = false,
+	hideEmployeeProfile = false,
+	variant = "default",
 }: RequestReviewModalProps) {
 	const { user } = useAuth();
+	const [timelineOpen, setTimelineOpen] = useState<boolean | null>(null);
+	const isCompactView = variant === "compact";
+	const isReviewerView = !!(onApprove || onReject);
+	const showEmployeeProfileCard = isCompactView && !hideEmployeeProfile;
 	const { data: requestDetails } = useRequest(
 		open && request?.id && !skipRequestFetch ? request.id : "",
 		{
@@ -766,6 +991,7 @@ export function RequestReviewModal({
 				"requester.id",
 				"requester.employeeId",
 				"requester.person.personalInfo",
+				"requester.user.avatar",
 				"requester.department.name",
 				"requester.position.title",
 				"targetEmployee.id",
@@ -775,6 +1001,7 @@ export function RequestReviewModal({
 				"targetEmployee.probationEndDate",
 				"targetEmployee.metadata",
 				"targetEmployee.person.personalInfo",
+				"targetEmployee.user.avatar",
 				"targetEmployee.department.name",
 				"targetEmployee.position.title",
 				"currentStepExecution",
@@ -803,6 +1030,12 @@ export function RequestReviewModal({
 	);
 
 	request = requestDetails || request;
+
+	useEffect(() => {
+		if (!request || !isCompactView) return;
+		const state = getRequestState(request);
+		setTimelineOpen(!TERMINAL_REQUEST_STATES.includes(state as (typeof TERMINAL_REQUEST_STATES)[number]));
+	}, [request?.id, request?.currentWorkflowStateKey, isCompactView]);
 
 	if (!request) return null;
 
@@ -863,6 +1096,7 @@ export function RequestReviewModal({
 			OTHER: "General Request",
 			LEAVE: "Leave Request",
 			OVERTIME: "Overtime Request",
+			PAYROLL_CORRECTION: "Payroll Correction",
 			RESIGNATION: "Resignation",
 			TERMINATION: "Termination",
 			PROMOTION: "Promotion",
@@ -874,6 +1108,11 @@ export function RequestReviewModal({
 		return labels[subType as string] || labels[request.type] || "General Request";
 	})();
 	const detailRows = buildDetailRows(request);
+	const payrollCorrectionMetadata =
+		request.type === "PAYROLL_CORRECTION" ? getMetadataRecord(request.metadata) : null;
+	const payrollCorrectionDayDeltas = Array.isArray(payrollCorrectionMetadata?.dayDeltas)
+		? (payrollCorrectionMetadata!.dayDeltas as Array<Record<string, unknown>>)
+		: [];
 	const panType = getPanType(request);
 	const isPan = isPanRequest(request);
 	const isTerminalOutcome = ["COMPLETED", "REJECTED", "CANCELLED"].includes(requestState);
@@ -917,6 +1156,10 @@ export function RequestReviewModal({
 	const outcomeProfileId = targetEmployeeProfileId || requesterProfileId;
 	const outcomeEmployeeName = displayTitle;
 	const outcomeEmployeeId = displayId;
+	const outcomeAvatar =
+		targetEmployee?.user?.avatar || (request.requester as any)?.user?.avatar || null;
+	const outcomePosition =
+		targetEmployee?.position?.title || (request.requester as any)?.position?.title || "";
 	const panMetadata = requestMetadata;
 	const panCurrentValues = getMetadataRecord(panMetadata.current_values);
 	const transactionFieldChanges = (request.transactions || [])
@@ -1083,9 +1326,10 @@ export function RequestReviewModal({
 			}
 
 			if (request.type === "OVERTIME") {
+				const overtimeHours = getOvertimeRequestHoursLabel(requestMetadata);
 				addBusinessStateRow(
 					"Overtime Record",
-					`${requestMetadata.hours || requestMetadata.totalHours || "Requested"} hours`,
+					overtimeHours ? `${overtimeHours} detected` : "Overtime requested",
 					`${requestStateStyle.label} overtime`,
 				);
 				return rows;
@@ -1216,10 +1460,10 @@ export function RequestReviewModal({
 		: isTerminalOutcome
 			? `Completed ${effectiveDateLabel}`
 			: "No pending actor assigned";
-	const impactWhy =
-		request.type === "RESIGNATION"
-			? resignationReasonDetails || request.description
-			: request.description || requestMetadata.justification || request.notes || "";
+	const impactWhy = getRequestReasonText(request, {
+		resignationReasonDetails,
+		fallback: "",
+	});
 	const impactConsequence = (() => {
 		if (request.type === "DOCUMENT_REQUEST") {
 			const documentStatus = formatMetadataLabel(getMetadataField(request, "documentStatus"));
@@ -1262,12 +1506,28 @@ export function RequestReviewModal({
 				.filter(Boolean),
 		),
 	);
+	const overtimeHoursLabel =
+		request.type === "OVERTIME" ? getOvertimeRequestHoursLabel(requestMetadata) : null;
+	const overtimeReasonLabel =
+		request.type === "OVERTIME"
+			? getOvertimeCandidateReasonLabel(requestMetadata.overtimeCandidateReason)
+			: null;
+
 	const headerFacts = [
 		{
 			label: "Ticket",
 			value: typeLabel,
 			meta: request.code || request.id,
 		},
+		...(overtimeHoursLabel
+			? [
+					{
+						label: "Overtime",
+						value: overtimeHoursLabel,
+						meta: overtimeReasonLabel || "Detected from timesheet",
+					},
+				]
+			: []),
 		...(isTerminalOutcome
 			? []
 			: [
@@ -1332,6 +1592,7 @@ export function RequestReviewModal({
 			case "LEAVE":
 			case "TIME_ADJUSTMENT":
 			case "OVERTIME":
+			case "PAYROLL_CORRECTION":
 				return {
 					icon: Clock,
 					gradient: "from-orange-400 to-amber-500",
@@ -1359,6 +1620,314 @@ export function RequestReviewModal({
 		ACTIVE_REQUEST_STATES.includes(requestState as (typeof ACTIVE_REQUEST_STATES)[number]) &&
 		!!onApprove &&
 		(isTaskStep || !!onReject);
+	const justificationText = getRequestReasonText(request, { resignationReasonDetails });
+	const showTimeline = timelineOpen ?? !isTerminalOutcome;
+
+	if (isCompactView) {
+		return (
+			<Dialog open={open} onOpenChange={onOpenChange}>
+				<DialogContent className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl border-none bg-white p-0 shadow-2xl outline-none sm:max-w-[640px]">
+					<div className="flex-none border-b border-gray-100 px-6 py-4 pr-12">
+						<div className="flex flex-wrap items-center gap-2">
+							<h2 className="text-lg font-semibold text-gray-900">{typeLabel}</h2>
+							<span
+								className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${requestStateStyle.badge}`}>
+								<span className={`h-1.5 w-1.5 rounded-full ${requestStateStyle.dot}`} />
+								{requestStateStyle.label}
+							</span>
+						</div>
+						<p className="mt-0.5 truncate text-xs text-gray-500">
+							{request.code || request.id}
+						</p>
+					</div>
+
+					<div className="flex-1 overflow-y-auto custom-scrollbar">
+						<div className="space-y-4 px-6 py-5">
+							{topContent}
+
+							{showEmployeeProfileCard ? (
+								<section className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-3">
+									<EmployeeTableCell
+										profileId={outcomeProfileId}
+										fullName={outcomeEmployeeName}
+										employeeId={outcomeEmployeeId}
+										avatar={outcomeAvatar}
+										className="w-full rounded-lg p-1 transition-colors hover:bg-white"
+									/>
+									{department || outcomePosition ? (
+										<p className="mt-2 pl-12 text-xs text-gray-500">
+											{[department, outcomePosition].filter(Boolean).join(" · ")}
+										</p>
+									) : null}
+								</section>
+							) : null}
+
+							<section className="rounded-xl border border-gray-200">
+								<div className="border-b border-gray-100 px-4 py-3">
+									<h3 className="text-sm font-semibold text-gray-900">Details</h3>
+								</div>
+								<dl className="divide-y divide-gray-100 px-4">
+									{isReviewerView && !isTerminalOutcome && currentStep ? (
+										<div className="grid gap-1 py-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-4">
+											<dt className="text-sm text-gray-500">Current step</dt>
+											<dd className="text-sm font-medium text-gray-900">
+												{currentStepLabel}
+												<span className="mt-0.5 block text-xs font-normal text-gray-500">
+													{currentStepAssignee}
+												</span>
+											</dd>
+										</div>
+									) : null}
+									{detailRows.map((row) => (
+										<div
+											key={row.label}
+											className="grid gap-1 py-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-4">
+											<dt className="text-sm text-gray-500">{row.label}</dt>
+											<dd className="whitespace-pre-wrap text-sm font-medium text-gray-900 [overflow-wrap:anywhere]">
+												{row.displayValue || row.value}
+											</dd>
+										</div>
+									))}
+									{request.type === "PAYROLL_CORRECTION" &&
+									payrollCorrectionDayDeltas.length > 0 ? (
+										<div className="py-3" data-testid="payroll-correction-day-table">
+											<p className="mb-2 text-sm text-gray-500">
+												Day comparison (paid vs proposed)
+											</p>
+											<div className="overflow-x-auto rounded-lg border border-neutral-200">
+												<table className="min-w-full text-left text-sm">
+													<thead className="bg-neutral-50 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+														<tr>
+															<th className="px-3 py-2">Date</th>
+															<th className="px-3 py-2">Type</th>
+															<th className="px-3 py-2">Paid (min)</th>
+															<th className="px-3 py-2">Proposed (min)</th>
+															<th className="px-3 py-2">Delta</th>
+														</tr>
+													</thead>
+													<tbody className="divide-y divide-neutral-100">
+														{payrollCorrectionDayDeltas.map((d, index) => {
+															const before = Number(d?.beforeMinutes) || 0;
+															const after = Number(d?.afterMinutes) || 0;
+															const delta =
+																d?.deltaMinutes != null
+																	? Number(d.deltaMinutes)
+																	: after - before;
+															const sign = delta > 0 ? "+" : "";
+															return (
+																<tr
+																	key={`${String(d?.date || index)}-${index}`}
+																	className="text-neutral-800">
+																	<td className="px-3 py-2 font-medium">
+																		{String(d?.date || "").slice(0, 10) || "—"}
+																	</td>
+																	<td className="px-3 py-2">
+																		{String(d?.hoursType || "OTHER")}
+																	</td>
+																	<td className="px-3 py-2 tabular-nums">{before}</td>
+																	<td className="px-3 py-2 tabular-nums">{after}</td>
+																	<td className="px-3 py-2 font-semibold tabular-nums">
+																		{sign}
+																		{delta}
+																	</td>
+																</tr>
+															);
+														})}
+													</tbody>
+												</table>
+											</div>
+										</div>
+									) : null}
+									<div className="grid gap-1 py-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-4">
+										<dt className="text-sm text-gray-500">Reason</dt>
+										<dd className="whitespace-pre-wrap text-sm text-gray-900 [overflow-wrap:anywhere]">
+											{justificationText}
+										</dd>
+									</div>
+									{isTerminalOutcome ? (
+										<div className="grid gap-1 py-3 sm:grid-cols-[120px_minmax(0,1fr)] sm:gap-4">
+											<dt className="text-sm text-gray-500">Completed on</dt>
+											<dd className="text-sm font-medium text-gray-900">
+												{effectiveDateLabel}
+											</dd>
+										</div>
+									) : null}
+								</dl>
+							</section>
+
+							{impactChangeRows.length > 0 ? (
+								<section className="rounded-xl border border-gray-200">
+									<div className="border-b border-gray-100 px-4 py-3">
+										<h3 className="text-sm font-semibold text-gray-900">
+											What changes
+										</h3>
+									</div>
+									<ul className="divide-y divide-gray-100 px-4">
+										{impactChangeRows.map((row) => (
+											<li
+												key={row.label}
+												className="flex flex-wrap items-center gap-2 py-3 text-sm">
+												<span className="font-medium text-gray-700">
+													{row.label}
+												</span>
+												<span className="text-gray-500">{row.before}</span>
+												<ArrowRight className="h-3.5 w-3.5 text-gray-400" />
+												<span className="font-medium text-gray-900">
+													{row.after}
+												</span>
+											</li>
+										))}
+									</ul>
+								</section>
+							) : null}
+
+							{request.attachments && request.attachments.length > 0 ? (
+								<section className="rounded-xl border border-gray-200">
+									<div className="border-b border-gray-100 px-4 py-3">
+										<h3 className="text-sm font-semibold text-gray-900">
+											Attachments
+										</h3>
+									</div>
+									<div className="space-y-2 px-4 py-3">
+										{request.attachments.map((attachment, index) => (
+											<a
+												key={index}
+												href={attachment}
+												target="_blank"
+												rel="noreferrer"
+												className="flex items-center gap-3 rounded-lg border border-gray-200 px-3 py-2 text-sm transition-colors hover:bg-gray-50">
+												<FileText className="h-4 w-4 flex-shrink-0 text-gray-400" />
+												<span className="min-w-0 flex-1 truncate text-gray-900">
+													{attachment.split("/").pop() ||
+														`Attachment ${index + 1}`}
+												</span>
+												<Download className="h-4 w-4 flex-shrink-0 text-gray-400" />
+											</a>
+										))}
+									</div>
+								</section>
+							) : null}
+
+							{request.type === "DOCUMENT_REQUEST" &&
+							requestState === "APPROVED" &&
+							(request as any).metadata?.documentUrl ? (
+								<section className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+									<h3 className="flex items-center gap-2 text-sm font-semibold text-orange-900">
+										<CheckCircle2 className="h-4 w-4 text-orange-600" />
+										Document ready
+									</h3>
+									<a
+										href={`/employee/${user?.metadata?.employee?.id}?tab=documents&action=view-doc&documentNumber=${(request as any).metadata?.documentNumber || request.code}`}
+										target="_blank"
+										rel="noreferrer"
+										className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm text-white transition-colors hover:bg-orange-700">
+										<FileText className="h-4 w-4" />
+										View Document
+									</a>
+								</section>
+							) : null}
+
+							<section className="rounded-xl border border-gray-200">
+								<button
+									type="button"
+									onClick={() => setTimelineOpen(!showTimeline)}
+									className="flex w-full items-center justify-between px-4 py-3 text-left">
+									<h3 className="text-sm font-semibold text-gray-900">
+										Workflow timeline
+									</h3>
+									<ChevronDown
+										className={`h-4 w-4 text-gray-500 transition-transform ${showTimeline ? "rotate-180" : ""}`}
+									/>
+								</button>
+								{showTimeline ? (
+									<div className="border-t border-gray-100 px-4 py-3">
+										{sortedStepExecutions.length > 0 ? (
+											<div className="space-y-2">
+												{sortedStepExecutions.map((step) => {
+													const status = getStepStatusConfig(step);
+													const assigneeLabel = getStepAssigneeLabel(step);
+													const stepTime = step.completedAt
+														? formatDateTimeShort(step.completedAt)
+														: "Pending";
+
+													return (
+														<div
+															key={step.id}
+															className="flex items-start justify-between gap-3 py-2">
+															<div className="min-w-0">
+																<p className="text-sm font-medium text-gray-900">
+																	{step.stepName}
+																</p>
+																<p className="text-xs text-gray-500">
+																	{assigneeLabel}
+																</p>
+															</div>
+															<div className="flex flex-shrink-0 flex-col items-end gap-1">
+																<span
+																	className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${status.badgeClass}`}>
+																	{status.label}
+																</span>
+																<span className="text-xs text-gray-400">
+																	{stepTime}
+																</span>
+															</div>
+														</div>
+													);
+												})}
+											</div>
+										) : (
+											<p className="text-sm text-gray-500">
+												Workflow history is not available yet.
+											</p>
+										)}
+									</div>
+								) : null}
+							</section>
+						</div>
+					</div>
+
+					<div className="flex flex-none justify-end gap-3 rounded-b-2xl border-t border-gray-100 bg-white px-4 py-3">
+						{customActions}
+
+						{canManagerAct && (
+							<>
+								{!isTaskStep && onReject ? (
+									<Button
+										className="hover:cursor-pointer hover:text-red-600 flex-1 md:flex-none bg-white hover:bg-gray-50 text-red-600 border border-gray-200 h-10 px-5 rounded-lg"
+										variant="outline"
+										onClick={() => onReject?.(request)}
+										disabled={isRejecting}>
+										<UserX className="w-4 h-4 mr-2" />
+										Reject
+									</Button>
+								) : null}
+
+								<Button
+									className="hover:cursor-pointer flex-1 md:flex-none bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white h-10 px-5 rounded-lg"
+									onClick={() => onApprove?.(request)}
+									disabled={isApproving}>
+									<div className="flex items-center gap-2">
+										{isApproving ? (
+											<div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+										) : (
+											<CheckCircle className="w-4 h-4" />
+										)}
+										<span>
+											{isApproving
+												? "Processing..."
+												: isTaskStep
+													? "Complete Task"
+													: "Approve"}
+										</span>
+									</div>
+								</Button>
+							</>
+						)}
+					</div>
+				</DialogContent>
+			</Dialog>
+		);
+	}
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -1625,13 +2194,7 @@ export function RequestReviewModal({
 									</div>
 									<div className="px-5 py-4">
 										<p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-700">
-											{request.type === "RESIGNATION"
-												? resignationReasonDetails ||
-													request.description ||
-													"No details provided."
-												: request.description ||
-													request.metadata?.justification ||
-													"No description provided."}
+											{justificationText}
 										</p>
 									</div>
 								</section>
@@ -1703,7 +2266,7 @@ export function RequestReviewModal({
 																getValueBadgeVariant(row.label),
 															)
 														) : (
-															<span className="[overflow-wrap:anywhere]">
+															<span className="whitespace-pre-wrap [overflow-wrap:anywhere]">
 																{row.displayValue || row.value}
 															</span>
 														)}
@@ -1711,6 +2274,67 @@ export function RequestReviewModal({
 												</div>
 											))}
 										</div>
+
+										{request.type === "PAYROLL_CORRECTION" &&
+										payrollCorrectionDayDeltas.length > 0 ? (
+											<div
+												className="mt-4 border-t border-neutral-100 pt-4"
+												data-testid="payroll-correction-day-table">
+												<p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500">
+													Day comparison (paid vs proposed)
+												</p>
+												<div className="overflow-x-auto rounded-xl border border-neutral-200">
+													<table className="min-w-full text-left text-sm">
+														<thead className="bg-neutral-50 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+															<tr>
+																<th className="px-3 py-2">Date</th>
+																<th className="px-3 py-2">Type</th>
+																<th className="px-3 py-2">Paid</th>
+																<th className="px-3 py-2">Proposed</th>
+																<th className="px-3 py-2">Delta</th>
+															</tr>
+														</thead>
+														<tbody className="divide-y divide-neutral-100">
+															{payrollCorrectionDayDeltas.map((d, index) => {
+																const before = Number(d?.beforeMinutes) || 0;
+																const after = Number(d?.afterMinutes) || 0;
+																const delta =
+																	d?.deltaMinutes != null
+																		? Number(d.deltaMinutes)
+																		: after - before;
+																const sign = delta > 0 ? "+" : "";
+																return (
+																	<tr
+																		key={`${String(d?.date || index)}-${index}`}
+																		className="text-neutral-800">
+																		<td className="px-3 py-2 font-medium">
+																			{String(d?.date || "").slice(0, 10) || "—"}
+																		</td>
+																		<td className="px-3 py-2">
+																			{String(d?.hoursType || "OTHER")}
+																		</td>
+																		<td className="px-3 py-2 tabular-nums">
+																			{before} min
+																		</td>
+																		<td className="px-3 py-2 tabular-nums">
+																			{after} min
+																		</td>
+																		<td className="px-3 py-2 font-semibold tabular-nums">
+																			{sign}
+																			{delta} min
+																		</td>
+																	</tr>
+																);
+															})}
+														</tbody>
+													</table>
+												</div>
+												<p className="mt-2 text-xs text-neutral-500">
+													Approving schedules this as a retro line on the next open
+													payroll. The locked source timesheet is not rewritten.
+												</p>
+											</div>
+										) : null}
 									</div>
 								</section>
 

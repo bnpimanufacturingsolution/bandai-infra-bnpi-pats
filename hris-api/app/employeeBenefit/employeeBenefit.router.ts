@@ -6,6 +6,7 @@ interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
+	bulkCreate(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -312,6 +313,49 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.post("/", controller.create);
+
+	/**
+	 * @openapi
+	 * /api/employeeBenefit/bulk:
+	 *   post:
+	 *     summary: Bulk create employee benefits
+	 *     description: Create the same benefit enrollment for multiple employees
+	 *     tags: [EmployeeBenefit]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required:
+	 *               - organizationId
+	 *               - employeeIds
+	 *               - benefitTypeId
+	 *             properties:
+	 *               organizationId:
+	 *                 type: string
+	 *               employeeIds:
+	 *                 type: array
+	 *                 items:
+	 *                   type: string
+	 *                 minItems: 1
+	 *               benefitTypeId:
+	 *                 type: string
+	 *     responses:
+	 *       201:
+	 *         description: All employee benefits created
+	 *       207:
+	 *         description: Partial success
+	 *       400:
+	 *         $ref: '#/components/responses/BadRequest'
+	 *       401:
+	 *         $ref: '#/components/responses/Unauthorized'
+	 *       500:
+	 *         $ref: '#/components/responses/InternalServerError'
+	 */
+	routes.post("/bulk", controller.bulkCreate);
 
 	/**
 	 * @openapi

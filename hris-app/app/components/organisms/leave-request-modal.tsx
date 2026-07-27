@@ -20,6 +20,10 @@ import {
 	SelectValue,
 } from "~/components/ui/select";
 import { buildCalendarViewDeepLink } from "~/lib/utils/deep-linking";
+import {
+	resolveLeavePrefillDates,
+	shouldApplyAdvanceNoticeRestrictions,
+} from "~/lib/utils/leave-request-policy";
 import type { LeaveHolidayItem } from "~/lib/hooks/useHolidays";
 
 interface LeaveRequestModalProps {
@@ -30,6 +34,8 @@ interface LeaveRequestModalProps {
 	initialLeaveType?: string;
 	initialStartDate?: string;
 	initialEndDate?: string;
+	initialDurationUnit?: "FULL_DAY" | "HALF_DAY";
+	honorPrefilledDates?: boolean;
 	hideCalendarPreview?: boolean;
 }
 
@@ -302,6 +308,8 @@ export function LeaveRequestModal({
 	initialLeaveType,
 	initialStartDate,
 	initialEndDate,
+	initialDurationUnit,
+	honorPrefilledDates = false,
 	hideCalendarPreview = false,
 }: LeaveRequestModalProps) {
 	const { user } = useAuth();
@@ -320,14 +328,34 @@ export function LeaveRequestModal({
 	const { data: holidays = [], isLoading: isLoadingHolidays } = useHolidays(organizationId);
 
 	const [selectedLeaveType, setSelectedLeaveType] = useState("");
-	const [startDate, setStartDate] = useState(getTodayDate());
-	const [endDate, setEndDate] = useState(getTodayDate());
+	const [startDate, setStartDate] = useState(() => {
+		const prefill = resolveLeavePrefillDates(initialStartDate, initialEndDate);
+		if (honorPrefilledDates && prefill) {
+			return prefill.startDate;
+		}
+		return prefill?.startDate || getTodayDate();
+	});
+	const [endDate, setEndDate] = useState(() => {
+		const prefill = resolveLeavePrefillDates(initialStartDate, initialEndDate);
+		if (honorPrefilledDates && prefill) {
+			return prefill.endDate;
+		}
+		return prefill?.endDate || prefill?.startDate || getTodayDate();
+	});
 	const [description, setDescription] = useState("");
 	const [notes, setNotes] = useState("");
-	const [durationUnit, setDurationUnit] = useState<"FULL_DAY" | "HALF_DAY">("HALF_DAY");
-	const [halfDaySession, setHalfDaySession] = useState<"AM" | "PM" | "">(
-		getCurrentManilaHalfDaySession(),
-	);
+	const [durationUnit, setDurationUnit] = useState<"FULL_DAY" | "HALF_DAY">(() => {
+		if (honorPrefilledDates) {
+			return initialDurationUnit ?? "FULL_DAY";
+		}
+		return "HALF_DAY";
+	});
+	const [halfDaySession, setHalfDaySession] = useState<"AM" | "PM" | "">(() => {
+		if (honorPrefilledDates && (initialDurationUnit ?? "FULL_DAY") === "FULL_DAY") {
+			return "";
+		}
+		return getCurrentManilaHalfDaySession();
+	});
 	const [calculatedDays, setCalculatedDays] = useState(1);
 	const [errors, setErrors] = useState<Record<string, string>>({});
 	const normalizedSelectedLeaveType = String(selectedLeaveType || "")
@@ -394,21 +422,16 @@ export function LeaveRequestModal({
 			? `This leave range includes an off day on ${rangeOffScheduleDates[0]}.`
 			: `This leave range includes a non-working holiday on ${rangeBlockedDates[0]}.`
 		: "";
+	const applyAdvanceNoticeRestrictions = shouldApplyAdvanceNoticeRestrictions(
+		normalizedSelectedLeaveType,
+		{ honorPrefilledDates },
+	);
 
-	// Update states from initial props when modal opens
 	useEffect(() => {
-		if (isOpen) {
-			if (initialLeaveType) {
-				setSelectedLeaveType(initialLeaveType);
-			}
-			if (initialStartDate) {
-				setStartDate(initialStartDate);
-			}
-			if (initialEndDate) {
-				setEndDate(initialEndDate);
-			}
+		if (isOpen && initialLeaveType) {
+			setSelectedLeaveType(initialLeaveType);
 		}
-	}, [isOpen, initialLeaveType, initialStartDate, initialEndDate]);
+	}, [isOpen, initialLeaveType]);
 
 	// Get available leave types from employee's leave balances
 	const leaveBalances = employee?.leaveBalances || [];
@@ -478,11 +501,30 @@ export function LeaveRequestModal({
 		}
 
 		const today = getTodayDate();
-		setStartDate(initialStartDate || today);
-		setEndDate(initialEndDate || initialStartDate || today);
+		const prefill = resolveLeavePrefillDates(initialStartDate, initialEndDate);
+
+		if (honorPrefilledDates && prefill) {
+			setStartDate(prefill.startDate);
+			setEndDate(prefill.endDate);
+			const nextDurationUnit = initialDurationUnit ?? "FULL_DAY";
+			setDurationUnit(nextDurationUnit);
+			if (nextDurationUnit === "FULL_DAY") {
+				setHalfDaySession("");
+			}
+			return;
+		}
+
+		setStartDate(prefill?.startDate || today);
+		setEndDate(prefill?.endDate || prefill?.startDate || today);
 		setDurationUnit("HALF_DAY");
 		setHalfDaySession(getCurrentManilaHalfDaySession());
-	}, [initialEndDate, initialStartDate, isOpen]);
+	}, [
+		honorPrefilledDates,
+		initialDurationUnit,
+		initialEndDate,
+		initialStartDate,
+		isOpen,
+	]);
 
 	useEffect(() => {
 		setCalculatedDays(calculateDays(startDate, endDate, durationUnit));
@@ -514,13 +556,6 @@ export function LeaveRequestModal({
 		}
 	}, [durationUnit, halfDaySession, isAmSessionDisabled, isPmSessionDisabled]);
 
-	// Initialize calculated days when modal opens
-	useEffect(() => {
-		if (isOpen) {
-			setCalculatedDays(calculateDays(getTodayDate(), getTodayDate(), durationUnit));
-		}
-	}, [isOpen, durationUnit]);
-
 	// Reset form when modal closes
 	useEffect(() => {
 		if (!isOpen) {
@@ -530,6 +565,9 @@ export function LeaveRequestModal({
 
 	useEffect(() => {
 		if (!selectedLeaveType) {
+			return;
+		}
+		if (!applyAdvanceNoticeRestrictions) {
 			return;
 		}
 
@@ -587,6 +625,7 @@ export function LeaveRequestModal({
 			});
 		}
 	}, [
+		applyAdvanceNoticeRestrictions,
 		blockedHolidayDateKey,
 		offScheduleDateKey,
 		durationUnit,
@@ -627,7 +666,11 @@ export function LeaveRequestModal({
 			newErrors.endDate = "End date must be after start date";
 		}
 
-		if (selectedLeaveType && isDateBefore(startDate, earliestAllowedStartDate)) {
+		if (
+			applyAdvanceNoticeRestrictions &&
+			selectedLeaveType &&
+			isDateBefore(startDate, earliestAllowedStartDate)
+		) {
 			newErrors.startDate =
 				minAdvanceNoticeDays > 0
 					? `Leave must be filed at least ${minAdvanceNoticeDays} day(s) in advance.`
@@ -716,7 +759,9 @@ export function LeaveRequestModal({
 	const selectedBalance = getSelectedBalance();
 	// const remainingAfterRequest = selectedBalance ? selectedBalance.available - calculatedDays : 0; // Unused for now
 	const leavePolicyNoticeText =
-		selectedLeaveType && minAdvanceNoticeDays > 0
+		applyAdvanceNoticeRestrictions &&
+		selectedLeaveType &&
+		minAdvanceNoticeDays > 0
 			? `Earliest available start date for this leave type is ${earliestAllowedStartDate}.`
 			: "";
 	const holidayPolicyText = shouldBlockNonWorkingHolidays
@@ -725,7 +770,10 @@ export function LeaveRequestModal({
 	const schedulePolicyText = "Off days are not selectable for leave requests.";
 	const isStartDateDisabled = (date: Date) => {
 		const dateKey = formatDateString(date);
-		if (isDateBefore(dateKey, earliestAllowedStartDate)) {
+		if (
+			applyAdvanceNoticeRestrictions &&
+			isDateBefore(dateKey, earliestAllowedStartDate)
+		) {
 			return true;
 		}
 		return blockedRequestDates.has(dateKey);
@@ -941,7 +989,11 @@ export function LeaveRequestModal({
 										<CalendarDatePicker
 											value={startDate}
 											onChange={setStartDate}
-											minDate={parseDateString(earliestAllowedStartDate)}
+											minDate={
+												applyAdvanceNoticeRestrictions
+													? parseDateString(earliestAllowedStartDate)
+													: undefined
+											}
 											isDateDisabled={isStartDateDisabled}
 											className={
 												errors.startDate
@@ -978,11 +1030,17 @@ export function LeaveRequestModal({
 											value={endDate}
 											onChange={setEndDate}
 											disabled={durationUnit === "HALF_DAY"}
-											minDate={parseDateString(
-												isDateAfter(getTodayDate(), startDate)
-													? getTodayDate()
-													: startDate,
-											)}
+											minDate={
+												applyAdvanceNoticeRestrictions
+													? parseDateString(
+															isDateAfter(getTodayDate(), startDate)
+																? getTodayDate()
+																: startDate,
+														)
+													: startDate
+														? parseDateString(startDate)
+														: undefined
+											}
 											isDateDisabled={isEndDateDisabled}
 											className={
 												errors.endDate

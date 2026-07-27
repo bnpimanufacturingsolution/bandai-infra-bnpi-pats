@@ -7,9 +7,9 @@ import { DataTable, type Column } from "~/components/atoms/DataTable";
 import { DepartmentSectionPicker } from "~/components/molecules/DepartmentSectionPicker";
 import {
 	HrDataTableManagerFilter,
-	hrDataTableDepartmentFilterClass,
-	hrDataTableFilterClass,
+	hrDataTablePopoverSelectTriggerClass,
 } from "~/components/molecules/HrDataTableFilters";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
 import {
 	Download,
@@ -267,7 +267,13 @@ export function PayrollManagement({
 
 	const handleFilterChange = (filters: Record<string, string>) => {
 		updateSearchParams((next) => {
-			const keys = ["employeeId", "periodId"] as const;
+			const keys = [
+				"employeeId",
+				"periodId",
+				"departmentId",
+				"sectionId",
+				"managerId",
+			] as const;
 			keys.forEach((key) => {
 				const value = filters[key];
 				if (!value || value === "all") {
@@ -416,17 +422,39 @@ export function PayrollManagement({
 	];
 	const payrollAdvancedFilterValues = {
 		employeeId: employeeFilter || "",
+		departmentId: departmentFilter || "",
+		sectionId: sectionFilter || "",
+		managerId: managerFilter || "",
 		...(activeTab === "past" ? { periodId: selectedPeriodId || "" } : {}),
 	};
+	const payrollPopoverFilters = (
+		<>
+			<div className="w-full space-y-1.5">
+				<label className="text-xs font-medium text-gray-600">Department</label>
+				<DepartmentSectionPicker
+					variant="datatable"
+					departments={departments}
+					sections={sections}
+					departmentId={departmentFilter || "all"}
+					sectionId={sectionFilter || "all"}
+					className={hrDataTablePopoverSelectTriggerClass}
+					onDepartmentChange={handleDepartmentFilterChange}
+					onSectionChange={handleSectionFilterChange}
+				/>
+			</div>
+			<div className="w-full space-y-1.5">
+				<label className="text-xs font-medium text-gray-600">Manager</label>
+				<HrDataTableManagerFilter
+					value={managerFilter || "all"}
+					onValueChange={handleManagerFilterChange}
+					options={managerFilterOptions}
+					dataUi="payroll-manager-trigger"
+					triggerClassName={hrDataTablePopoverSelectTriggerClass}
+				/>
+			</div>
+		</>
+	);
 
-	// Helper: get employee initials
-	const getEmployeeInitials = (payroll: EmployeePayroll): string => {
-		const p = payroll?.employee?.person?.personalInfo;
-		if (!p) return "NA";
-		const first = p.firstName?.[0] || "";
-		const last = p.lastName?.[0] || "";
-		return `${first}${last}`.toUpperCase() || "NA";
-	};
 	// Helper: format currency
 	const formatCurrency = (amount: number): string => {
 		return new Intl.NumberFormat("en-PH", {
@@ -1047,7 +1075,124 @@ export function PayrollManagement({
 					"short",
 				)}`
 			: "N/A";
-	const grossFormulaDisplayRows = payrollComputationView?.grossPayRows || [];
+	const formatCorrectionMinutes = (minutes: number) => {
+		const m = Math.max(0, Math.round(Number(minutes) || 0));
+		const h = Math.floor(m / 60);
+		const mm = m % 60;
+		return `${h}:${String(mm).padStart(2, "0")}`;
+	};
+	const formatSignedMinutes = (minutes: number) => {
+		const n = Math.round(Number(minutes) || 0);
+		const abs = formatCorrectionMinutes(Math.abs(n));
+		if (n > 0) return `+${abs}`;
+		if (n < 0) return `-${abs}`;
+		return abs;
+	};
+	type PayrollCorrectionLine = NonNullable<
+		NonNullable<EmployeePayroll["metadata"]>["payrollCorrections"]
+	>[number];
+	const payrollCorrections: PayrollCorrectionLine[] = Array.isArray(
+		(payrollData as EmployeePayroll | undefined)?.metadata?.payrollCorrections,
+	)
+		? ((payrollData as EmployeePayroll).metadata!.payrollCorrections as PayrollCorrectionLine[])
+		: [];
+	const hasPayrollCorrections = payrollCorrections.length > 0;
+	const payrollCorrectionTotal = payrollCorrections.reduce(
+		(sum, line) => sum + (Number(line.amount) || 0),
+		0,
+	);
+	const payrollCorrectionDayRows = payrollCorrections.flatMap((line, lineIndex) => {
+		const deltas = Array.isArray(line.dayDeltas) ? line.dayDeltas : [];
+		if (deltas.length === 0) {
+			return [
+				{
+					key: `${line.correctionId || lineIndex}-summary`,
+					lineLabel: line.label || "Prior-period correction",
+					sourcePeriod: line.sourcePayrollPeriodName || null,
+					date: "—",
+					hoursType: "—",
+					beforeMinutes: null as number | null,
+					afterMinutes: null as number | null,
+					deltaMinutes: null as number | null,
+					timeIn: null as string | null,
+					timeOut: null as string | null,
+					lineAmount: Number(line.amount) || 0,
+				},
+			];
+		}
+		return deltas.map((delta, deltaIndex) => ({
+			key: `${line.correctionId || lineIndex}-${delta.date || deltaIndex}`,
+			lineLabel: line.label || "Prior-period correction",
+			sourcePeriod: line.sourcePayrollPeriodName || null,
+			date: delta.date || "—",
+			hoursType: delta.hoursType || "—",
+			beforeMinutes:
+				delta.beforeMinutes != null ? Number(delta.beforeMinutes) || 0 : null,
+			afterMinutes: delta.afterMinutes != null ? Number(delta.afterMinutes) || 0 : null,
+			deltaMinutes: delta.deltaMinutes != null ? Number(delta.deltaMinutes) || 0 : null,
+			timeIn: delta.timeIn || null,
+			timeOut: delta.timeOut || null,
+			lineAmount: Number(line.amount) || 0,
+		}));
+	});
+	const baseGrossFormulaRows = payrollComputationView?.grossPayRows || [];
+	const isBenefitComputationRow = (row: {
+		field?: string;
+		isBenefitSource?: boolean;
+	}) =>
+		row.isBenefitSource === true ||
+		String(row.field || "").startsWith("source:employeeBenefit") ||
+		String(row.field || "").startsWith("source:employeeLoan");
+	const hasCorrectionInComputationView = baseGrossFormulaRows.some((row) =>
+		String((row as { field?: string }).field || "").startsWith("payrollCorrection:"),
+	);
+	// Client fallback when view was built before correction rows were included server-side
+	const grossFormulaDisplayRows =
+		hasCorrectionInComputationView || !hasPayrollCorrections
+			? baseGrossFormulaRows
+			: [
+					...baseGrossFormulaRows,
+					...payrollCorrections
+						.map((line, index) => {
+							const amount = Number(line.amount) || 0;
+							if (Math.abs(amount) < 0.005) return null;
+							return {
+								label: String(line.label || "Prior-period correction").trim() ||
+									"Prior-period correction",
+								field: `payrollCorrection:${line.correctionId || index}`,
+								operation: (amount < 0 ? "SUBTRACT" : "ADD") as "ADD" | "SUBTRACT",
+								amount: Math.abs(amount),
+								payrollRole: "INCLUDED_IN_GROSSPAY" as const,
+								explanation: line.sourcePayrollPeriodName
+									? `Source period: ${line.sourcePayrollPeriodName}.`
+									: "Next-period applied PayrollCorrection retro line.",
+							};
+						})
+						.filter((row): row is NonNullable<typeof row> => Boolean(row)),
+				];
+	// Partition: base earnings → benefits (tax groups) → corrections / residual
+	const isCorrectionComputationRow = (row: { field?: string }) =>
+		String(row.field || "").startsWith("payrollCorrection:") ||
+		String(row.field || "") === "otherCompensation";
+	const grossBenefitRows = grossFormulaDisplayRows.filter((row) =>
+		isBenefitComputationRow(row as { field?: string; isBenefitSource?: boolean }),
+	);
+	const grossBaseRows = grossFormulaDisplayRows.filter(
+		(row) =>
+			!isBenefitComputationRow(row as { field?: string; isBenefitSource?: boolean }) &&
+			!isCorrectionComputationRow(row as { field?: string }),
+	);
+	const grossTrailingRows = grossFormulaDisplayRows.filter(
+		(row) =>
+			!isBenefitComputationRow(row as { field?: string; isBenefitSource?: boolean }) &&
+			isCorrectionComputationRow(row as { field?: string }),
+	);
+	const grossBenefitTaxableRows = grossBenefitRows.filter(
+		(row) => (row as { isTaxable?: boolean | null }).isTaxable !== false,
+	);
+	const grossBenefitNonTaxableRows = grossBenefitRows.filter(
+		(row) => (row as { isTaxable?: boolean | null }).isTaxable === false,
+	);
 	const deductionFormulaRows = payrollComputationView?.deductionRows || [];
 	const postNetFormulaRows = payrollComputationView?.postNetRows || [];
 	const payrollSummaryCells = [
@@ -1057,7 +1202,9 @@ export function PayrollManagement({
 			tone: "text-gray-950",
 			lines: [
 				"Pay included before deductions: basic allocation, OT, leave, and gross-included items.",
-				"Post-net items are not included here.",
+				hasPayrollCorrections
+					? `Includes ${formatCurrency(payrollCorrectionTotal)} from prior-period PayrollCorrection retro line(s).`
+					: "Post-net items are not included here.",
 			],
 		},
 		{
@@ -1515,31 +1662,39 @@ export function PayrollManagement({
 		return "Work Day";
 	};
 
+	// Percentage widths leave room for sticky Actions (~132px) so table-fixed
+	// stays inside the content shell without horizontal scroll.
 	const columns: Column<EmployeePayroll>[] = [
 		{
 			key: "employee",
 			label: "Employee",
-			width: "250px",
+			width: "20%",
+			className: "max-w-0 overflow-hidden px-2 py-2",
 			render: (_, item) => (
 				<EmployeeTableCell
 					profileId={item.employee?.id}
 					fullName={getEmployeeName(item)}
 					employeeId={item.employee?.employeeId || "No ID"}
+					avatar={item.employee?.user?.avatar ?? null}
+					className="min-w-0"
 				/>
 			),
 		},
 		{
 			key: "payrollPeriod.name",
-			label: "Payroll Period",
-			width: "200px",
+			label: "Period",
+			width: "14%",
+			className: "max-w-0 overflow-hidden px-2 py-2",
 			render: (_, item) => (
-				<div>
-					<div className="font-medium text-sm">{item.payrollPeriod?.name || "N/A"}</div>
-					<div className="text-xs text-gray-500">
+				<div className="min-w-0 leading-tight">
+					<div className="truncate text-xs font-medium text-gray-900">
+						{item.payrollPeriod?.name || "N/A"}
+					</div>
+					<div className="truncate text-[11px] text-gray-500">
 						{item.payrollPeriod?.startDate
 							? formatDate(item.payrollPeriod.startDate, "short")
 							: "N/A"}
-						-
+						{" – "}
 						{item.payrollPeriod?.endDate
 							? formatDate(item.payrollPeriod.endDate, "short")
 							: "N/A"}
@@ -1549,8 +1704,9 @@ export function PayrollManagement({
 		},
 		{
 			key: "employee.payFrequency",
-			label: "Frequency",
-			width: "120px",
+			label: "Freq.",
+			width: "9%",
+			className: "max-w-0 overflow-hidden px-2 py-2",
 			render: (_, item) => {
 				const val = ((item.employee as any).payFrequency || "MONTHLY") as string;
 				const formatted = val
@@ -1558,7 +1714,9 @@ export function PayrollManagement({
 					.replace(/_/g, " ")
 					.replace(/\b\w/g, (c) => c.toUpperCase());
 				return (
-					<Badge variant="outline" className="text-xs font-normal">
+					<Badge
+						variant="outline"
+						className="max-w-full truncate px-1.5 py-0 text-[10px] font-normal leading-4">
 						{formatted || val}
 					</Badge>
 				);
@@ -1566,32 +1724,48 @@ export function PayrollManagement({
 		},
 		{
 			key: "basicPay",
-			label: "Basic Pay",
-			width: "140px",
+			label: "Basic",
+			width: "11%",
+			className: "max-w-0 overflow-hidden px-2 py-2",
+			headerClassName: "text-right",
 			render: (_, item) => (
-				<span className="font-mono text-sm">{formatCurrency(item.basicPay)}</span>
+				<span className="block truncate text-right font-mono text-xs tabular-nums">
+					{formatCurrency(item.basicPay)}
+				</span>
 			),
 		},
 		{
 			key: "grossPay",
-			label: "Gross Pay",
-			width: "140px",
-			render: (value) => <span className="font-mono text-sm">{formatCurrency(value)}</span>,
+			label: "Gross",
+			width: "11%",
+			className: "max-w-0 overflow-hidden px-2 py-2",
+			headerClassName: "text-right",
+			render: (value) => (
+				<span className="block truncate text-right font-mono text-xs tabular-nums">
+					{formatCurrency(value)}
+				</span>
+			),
 		},
 		{
 			key: "totalDeductions",
-			label: "Deductions",
-			width: "150px",
+			label: "Deduct.",
+			width: "11%",
+			className: "max-w-0 overflow-hidden px-2 py-2",
+			headerClassName: "text-right",
 			render: (value) => (
-				<span className="font-mono text-sm text-red-600">-{formatCurrency(value)}</span>
+				<span className="block truncate text-right font-mono text-xs tabular-nums text-red-600">
+					-{formatCurrency(value)}
+				</span>
 			),
 		},
 		{
 			key: "netPay",
-			label: "Net Pay",
-			width: "150px",
+			label: "Net",
+			width: "12%",
+			className: "max-w-0 overflow-hidden px-2 py-2",
+			headerClassName: "text-right",
 			render: (value) => (
-				<span className="font-mono text-sm font-semibold text-green-700">
+				<span className="block truncate text-right font-mono text-xs font-semibold tabular-nums text-green-700">
 					{formatCurrency(value)}
 				</span>
 			),
@@ -1678,6 +1852,7 @@ export function PayrollManagement({
 							emptyDescription="Payroll records will appear here once generated."
 							searchWidth="w-80"
 							searchPlaceholder="Search payroll..."
+							toolbarAlign="right"
 							itemsPerPage={limitParam}
 							currentPage={pageParam}
 							totalItems={totalPayrollItems}
@@ -1687,31 +1862,10 @@ export function PayrollManagement({
 							filters={payrollAdvancedFilters}
 							filterValues={payrollAdvancedFilterValues}
 							onFilterChange={handleFilterChange}
-							filterButtonLabel="Advanced Filters"
+							filterButtonLabel="Filters"
+							filterColumns={2}
+							filterPopoverExtra={payrollPopoverFilters}
 							showExport
-							customFilters={
-								<>
-									<div className={hrDataTableDepartmentFilterClass}>
-									<DepartmentSectionPicker
-										variant="datatable"
-										departments={departments}
-										sections={sections}
-										departmentId={departmentFilter || "all"}
-										sectionId={sectionFilter || "all"}
-										onDepartmentChange={handleDepartmentFilterChange}
-										onSectionChange={handleSectionFilterChange}
-									/>
-									</div>
-									<div className={hrDataTableFilterClass}>
-										<HrDataTableManagerFilter
-											value={managerFilter || "all"}
-											onValueChange={handleManagerFilterChange}
-											options={managerFilterOptions}
-											dataUi="timesheet-manager-trigger"
-										/>
-									</div>
-								</>
-							}
 							onExportCSV={() => handleExportRegister("csv")}
 							onExportPDF={() => handleExportRegister("pdf")}
 							onExportExcel={() => handleExportRegister("xlsx")}
@@ -1742,6 +1896,7 @@ export function PayrollManagement({
 						emptyDescription="Select a period to view payroll records."
 						searchWidth="w-80"
 						searchPlaceholder="Search payroll..."
+						toolbarAlign="right"
 						itemsPerPage={limitParam}
 						currentPage={pageParam}
 						totalItems={totalPayrollItems}
@@ -1751,31 +1906,10 @@ export function PayrollManagement({
 						filters={payrollAdvancedFilters}
 						filterValues={payrollAdvancedFilterValues}
 						onFilterChange={handleFilterChange}
-						filterButtonLabel="Advanced Filters"
+						filterButtonLabel="Filters"
+						filterColumns={2}
+						filterPopoverExtra={payrollPopoverFilters}
 						showExport
-						customFilters={
-							<>
-								<div className={hrDataTableDepartmentFilterClass}>
-								<DepartmentSectionPicker
-									variant="datatable"
-									departments={departments}
-									sections={sections}
-									departmentId={departmentFilter || "all"}
-									sectionId={sectionFilter || "all"}
-									onDepartmentChange={handleDepartmentFilterChange}
-									onSectionChange={handleSectionFilterChange}
-								/>
-								</div>
-								<div className={hrDataTableFilterClass}>
-									<HrDataTableManagerFilter
-										value={managerFilter || "all"}
-										onValueChange={handleManagerFilterChange}
-										options={managerFilterOptions}
-										dataUi="timesheet-manager-trigger"
-									/>
-								</div>
-							</>
-						}
 						onExportCSV={() => handleExportRegister("csv")}
 						onExportPDF={() => handleExportRegister("pdf")}
 						onExportExcel={() => handleExportRegister("xlsx")}
@@ -1828,11 +1962,12 @@ export function PayrollManagement({
 								onClick={() => handleOpenEmployeeProfile(payrollEmployeeProfileId)}
 								disabled={!payrollEmployeeProfileId}
 								className="flex min-w-0 w-full items-start gap-3 rounded-md text-left transition enabled:cursor-pointer enabled:hover:bg-orange-50/60 enabled:focus-visible:outline-none enabled:focus-visible:ring-2 enabled:focus-visible:ring-orange-300 disabled:cursor-default disabled:opacity-100">
-								<div
-									className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-									style={{ backgroundColor: themeColors.orange }}>
-									{getEmployeeInitials(payrollData as EmployeePayroll)}
-								</div>
+								<EmployeeAvatar
+									src={(payrollData as EmployeePayroll)?.employee?.user?.avatar}
+									alt={getEmployeeName(payrollData as EmployeePayroll)}
+									size="md"
+									className="shrink-0"
+								/>
 								<div className="min-w-0 flex-1">
 									<h3 className="text-base font-semibold text-gray-900 truncate">
 										{getEmployeeName(payrollData as EmployeePayroll)}
@@ -1882,82 +2017,185 @@ export function PayrollManagement({
 
 						<Accordion
 							type="multiple"
-							defaultValue={["earnings-deductions"]}
+							defaultValue={
+								hasPayrollCorrections
+									? ["earnings-deductions", "prior-period-corrections"]
+									: ["earnings-deductions"]
+							}
 							className="rounded-lg border border-gray-200 bg-white">
 							<AccordionItem value="earnings-deductions" className="border-b border-gray-200">
 								<AccordionTrigger className="px-3 py-2.5 text-sm font-semibold text-gray-900 hover:no-underline">
 									Payroll computation
 								</AccordionTrigger>
 								<AccordionContent className="px-3 pb-3">
-									<div className="overflow-hidden rounded-md border border-gray-200 bg-white">
-										<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-semibold text-gray-500">
-											<span>Payroll line</span>
-											<span className="text-right">Amount</span>
+									<div className="grid gap-3 md:grid-cols-2">
+										{/* Left: earnings → GrossPay */}
+										<div className="overflow-hidden rounded-md border border-gray-200 bg-white">
+											<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-semibold text-gray-500">
+												<span>Earnings</span>
+												<span className="text-right">Amount</span>
+											</div>
+											<div className="divide-y divide-gray-100">
+												{grossBaseRows.map((row) => (
+													<div
+														key={`gross-${(row as { field?: string }).field || row.label}-${row.amount}`}
+														className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+														<span className="min-w-0 truncate font-medium text-gray-900">
+															{row.label}
+														</span>
+														<span
+															className={`whitespace-nowrap text-right font-mono font-semibold tabular-nums ${
+																row.operation === "SUBTRACT"
+																	? "text-rose-700"
+																	: "text-gray-950"
+															}`}>
+															{row.operation === "SUBTRACT" ? "-" : "+"}
+															{formatCurrency(row.amount)}
+														</span>
+													</div>
+												))}
+												{grossBenefitRows.length > 0 && (
+													<div className="bg-slate-50/80">
+														<div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+															Benefits applied
+														</div>
+														{grossBenefitNonTaxableRows.length > 0 && (
+															<div>
+																<div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-emerald-800/80">
+																	Non-taxable
+																</div>
+																{grossBenefitNonTaxableRows.map((row) => (
+																	<div
+																		key={`gross-nt-${(row as { field?: string }).field || row.label}-${row.amount}`}
+																		className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																		<span className="min-w-0 truncate font-medium text-gray-900">
+																			{row.label}
+																		</span>
+																		<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-gray-950">
+																			{row.operation === "SUBTRACT" ? "-" : "+"}
+																			{formatCurrency(row.amount)}
+																		</span>
+																	</div>
+																))}
+															</div>
+														)}
+														{grossBenefitTaxableRows.length > 0 && (
+															<div>
+																<div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-amber-900/80">
+																	Taxable
+																</div>
+																{grossBenefitTaxableRows.map((row) => (
+																	<div
+																		key={`gross-t-${(row as { field?: string }).field || row.label}-${row.amount}`}
+																		className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																		<span className="min-w-0 truncate font-medium text-gray-900">
+																			{row.label}
+																		</span>
+																		<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-gray-950">
+																			{row.operation === "SUBTRACT" ? "-" : "+"}
+																			{formatCurrency(row.amount)}
+																		</span>
+																	</div>
+																))}
+															</div>
+														)}
+													</div>
+												)}
+												{grossTrailingRows.map((row) => {
+													const isCorrection = String(
+														(row as { field?: string }).field || "",
+													).startsWith("payrollCorrection:");
+													const explanation = String(
+														(row as { explanation?: string }).explanation || "",
+													).trim();
+													return (
+														<div
+															key={`gross-trail-${(row as { field?: string }).field || row.label}-${row.amount}`}
+															className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+															<div className="min-w-0">
+																<span className="block truncate font-medium text-gray-900">
+																	{row.label}
+																</span>
+																{isCorrection && explanation ? (
+																	<span className="mt-0.5 block truncate text-[10px] text-gray-500">
+																		{explanation}
+																	</span>
+																) : null}
+															</div>
+															<span
+																className={`whitespace-nowrap text-right font-mono font-semibold tabular-nums ${
+																	row.operation === "SUBTRACT"
+																		? "text-rose-700"
+																		: "text-gray-950"
+																}`}>
+																{row.operation === "SUBTRACT" ? "-" : "+"}
+																{formatCurrency(row.amount)}
+															</span>
+														</div>
+													);
+												})}
+												<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-orange-50 px-3 py-2 text-sm">
+													<span className="font-semibold text-orange-950">GrossPay</span>
+													<span className="font-mono font-bold tabular-nums text-orange-950">
+														{formatCurrency(payrollGrossPay)}
+													</span>
+												</div>
+											</div>
 										</div>
-										<div className="divide-y divide-gray-100">
-											{grossFormulaDisplayRows.map((row) => (
-												<div
-													key={`gross-${row.label}-${row.amount}`}
-													className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
-													<span className="min-w-0 truncate font-medium text-gray-900">
-														{row.label}
+
+										{/* Right: deductions → NetPay → post-net → TotalReceivable */}
+										<div className="overflow-hidden rounded-md border border-gray-200 bg-white">
+											<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-semibold text-gray-500">
+												<span>Deductions &amp; net</span>
+												<span className="text-right">Amount</span>
+											</div>
+											<div className="divide-y divide-gray-100">
+												{deductionFormulaRows.map((row) => (
+													<div
+														key={`deduction-${row.label}-${row.amount}`}
+														className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+														<span className="min-w-0 truncate font-medium text-gray-900">
+															{row.label}
+														</span>
+														<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-rose-700">
+															-{formatCurrency(row.amount)}
+														</span>
+													</div>
+												))}
+												<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-rose-50 px-3 py-2 text-sm">
+													<span className="font-semibold text-rose-950">
+														Total Deductions
 													</span>
-													<span
-														className={`whitespace-nowrap text-right font-mono font-semibold tabular-nums ${
-															row.operation === "SUBTRACT" ? "text-rose-700" : "text-gray-950"
-														}`}>
-														{row.operation === "SUBTRACT" ? "-" : "+"}
-														{formatCurrency(row.amount)}
+													<span className="font-mono font-bold tabular-nums text-rose-950">
+														-{formatCurrency(payrollTotalDeductions)}
 													</span>
 												</div>
-											))}
-											<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-orange-50 px-3 py-2 text-sm">
-												<span className="font-semibold text-orange-950">GrossPay</span>
-												<span className="font-mono font-bold tabular-nums text-orange-950">
-													{formatCurrency(payrollGrossPay)}
-												</span>
-											</div>
-											{deductionFormulaRows.map((row) => (
-												<div
-													key={`deduction-${row.label}-${row.amount}`}
-													className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
-													<span className="min-w-0 truncate font-medium text-gray-900">
-														{row.label}
-													</span>
-													<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-rose-700">
-														-{formatCurrency(row.amount)}
+												<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-emerald-50 px-3 py-2 text-sm">
+													<span className="font-semibold text-emerald-950">NetPay</span>
+													<span className="font-mono font-bold tabular-nums text-emerald-950">
+														{formatCurrency(payrollNetPay)}
 													</span>
 												</div>
-											))}
-											<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-rose-50 px-3 py-2 text-sm">
-												<span className="font-semibold text-rose-950">Total Deductions</span>
-												<span className="font-mono font-bold tabular-nums text-rose-950">
-													-{formatCurrency(payrollTotalDeductions)}
-												</span>
-											</div>
-											<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-emerald-50 px-3 py-2 text-sm">
-												<span className="font-semibold text-emerald-950">NetPay</span>
-												<span className="font-mono font-bold tabular-nums text-emerald-950">
-													{formatCurrency(payrollNetPay)}
-												</span>
-											</div>
-											{postNetFormulaRows.map((row) => (
-												<div
-													key={`post-net-${row.label}-${row.amount}`}
-													className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
-													<span className="min-w-0 truncate font-medium text-gray-900">
-														{row.label}
+												{postNetFormulaRows.map((row) => (
+													<div
+														key={`post-net-${row.label}-${row.amount}`}
+														className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+														<span className="min-w-0 truncate font-medium text-gray-900">
+															{row.label}
+														</span>
+														<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-sky-700">
+															+{formatCurrency(row.amount)}
+														</span>
+													</div>
+												))}
+												<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-sky-50 px-3 py-2 text-sm">
+													<span className="font-semibold text-sky-950">
+														TotalReceivable
 													</span>
-													<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-sky-700">
-														+{formatCurrency(row.amount)}
+													<span className="font-mono font-bold tabular-nums text-sky-950">
+														{formatCurrency(payrollTotalReceivable)}
 													</span>
 												</div>
-											))}
-											<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-sky-50 px-3 py-2 text-sm">
-												<span className="font-semibold text-sky-950">TotalReceivable</span>
-												<span className="font-mono font-bold tabular-nums text-sky-950">
-													{formatCurrency(payrollTotalReceivable)}
-												</span>
 											</div>
 										</div>
 									</div>
@@ -2336,9 +2574,164 @@ export function PayrollManagement({
 								</AccordionItem>
 						)}
 
+						{/* Prior-period corrections (applied as retro on this payslip) */}
+							{hasPayrollCorrections && (
+								<AccordionItem
+									value="prior-period-corrections"
+									className="border-b border-gray-200">
+									<AccordionTrigger className="px-3 py-2.5 text-sm font-semibold text-gray-900 hover:no-underline">
+										<span className="flex min-w-0 flex-wrap items-center gap-2">
+											Prior-period corrections
+											<Badge
+												variant="outline"
+												className="h-5 rounded-md border-orange-200 bg-orange-50 px-2 text-[10px] font-normal text-orange-800">
+												{formatCurrency(payrollCorrectionTotal)}
+											</Badge>
+										</span>
+									</AccordionTrigger>
+									<AccordionContent className="px-3 pb-3">
+										<div className="space-y-3">
+											<p className="text-[11px] text-gray-500">
+												Approved PayrollCorrection lines applied on this payslip as
+												labeled retro. Day deltas are from the locked source period
+												and do not rewrite that period&apos;s timesheet.
+											</p>
+											{payrollCorrections.map((line, lineIndex) => {
+												const deltas = Array.isArray(line.dayDeltas)
+													? line.dayDeltas
+													: [];
+												const amount = Number(line.amount) || 0;
+												return (
+													<div
+														key={line.correctionId || `corr-${lineIndex}`}
+														className="overflow-hidden rounded-md border border-gray-200 bg-white"
+														data-testid={`payroll-summary-correction-${line.correctionId || lineIndex}`}>
+														<div className="flex flex-wrap items-start justify-between gap-2 border-b border-gray-100 bg-gray-50 px-3 py-2">
+															<div className="min-w-0">
+																<div className="text-sm font-semibold text-gray-900">
+																	{line.label || "Prior-period correction"}
+																</div>
+																<div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+																	{line.sourcePayrollPeriodName ? (
+																		<span>
+																			Source: {line.sourcePayrollPeriodName}
+																		</span>
+																	) : null}
+																	{line.requestId ? (
+																		<span>
+																			Req {String(line.requestId).slice(0, 8)}…
+																		</span>
+																	) : null}
+																	{line.status ? (
+																		<Badge
+																			variant="outline"
+																			className="h-5 rounded-md px-1.5 text-[10px] font-normal">
+																			{line.status}
+																		</Badge>
+																	) : null}
+																</div>
+															</div>
+															<div
+																className={`text-sm font-semibold tabular-nums ${
+																	amount < 0 ? "text-rose-700" : "text-emerald-700"
+																}`}>
+																{amount < 0 ? "-" : "+"}
+																{formatCurrency(Math.abs(amount))}
+															</div>
+														</div>
+														{deltas.length > 0 ? (
+															<div className="max-h-[240px] overflow-auto">
+																<table className="w-full text-left text-xs">
+																	<thead className="sticky top-0 bg-white text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+																		<tr className="border-b border-gray-100">
+																			<th className="px-3 py-1.5">Date</th>
+																			<th className="px-3 py-1.5">Type</th>
+																			<th className="px-3 py-1.5 text-right">
+																				Before
+																			</th>
+																			<th className="px-3 py-1.5 text-right">
+																				After
+																			</th>
+																			<th className="px-3 py-1.5 text-right">
+																				Delta
+																			</th>
+																			<th className="px-3 py-1.5">Clocks</th>
+																		</tr>
+																	</thead>
+																	<tbody className="divide-y divide-gray-50">
+																		{deltas.map((delta, deltaIndex) => {
+																			const deltaMin =
+																				delta.deltaMinutes != null
+																					? Number(delta.deltaMinutes) || 0
+																					: (Number(delta.afterMinutes) || 0) -
+																						(Number(delta.beforeMinutes) || 0);
+																			return (
+																				<tr
+																					key={`${delta.date || deltaIndex}-${delta.hoursType || ""}`}
+																					className="text-gray-800">
+																					<td className="whitespace-nowrap px-3 py-1.5 font-medium">
+																						{delta.date || "—"}
+																					</td>
+																					<td className="px-3 py-1.5">
+																						{delta.hoursType || "—"}
+																					</td>
+																					<td className="px-3 py-1.5 text-right font-mono tabular-nums text-gray-600">
+																						{formatCorrectionMinutes(
+																							Number(delta.beforeMinutes) || 0,
+																						)}
+																					</td>
+																					<td className="px-3 py-1.5 text-right font-mono tabular-nums text-gray-600">
+																						{formatCorrectionMinutes(
+																							Number(delta.afterMinutes) || 0,
+																						)}
+																					</td>
+																					<td
+																						className={`px-3 py-1.5 text-right font-mono font-semibold tabular-nums ${
+																							deltaMin > 0
+																								? "text-emerald-700"
+																								: deltaMin < 0
+																									? "text-rose-700"
+																									: "text-gray-500"
+																						}`}>
+																						{formatSignedMinutes(deltaMin)}
+																					</td>
+																					<td className="whitespace-nowrap px-3 py-1.5 text-gray-500">
+																						{delta.timeIn || delta.timeOut
+																							? `${delta.timeIn || "—"}–${delta.timeOut || "—"}`
+																							: "—"}
+																					</td>
+																				</tr>
+																			);
+																		})}
+																	</tbody>
+																</table>
+															</div>
+														) : (
+															<div className="px-3 py-2 text-xs text-gray-500">
+																No day-level deltas stored on this correction line.
+															</div>
+														)}
+													</div>
+												);
+											})}
+											<div className="flex items-center justify-between rounded-md border border-orange-100 bg-orange-50/60 px-3 py-2 text-sm">
+												<span className="font-semibold text-orange-950">
+													Corrections total (in GrossPay)
+												</span>
+												<span className="font-mono font-bold tabular-nums text-orange-950">
+													{payrollCorrectionTotal < 0 ? "-" : "+"}
+													{formatCurrency(Math.abs(payrollCorrectionTotal))}
+												</span>
+											</div>
+										</div>
+									</AccordionContent>
+								</AccordionItem>
+							)}
+
 						{/* Daily Breakdown */}
 							{((payrollData.timesheet?.breakdown?.length || 0) > 0 ||
-							((payrollData as any).dailyBreakdown?.length || 0) > 0) && (
+							((payrollData as any).dailyBreakdown?.length || 0) > 0 ||
+							hasPayrollCorrections) && (
 								<AccordionItem value="daily-detail" className="border-b-0">
 									<AccordionTrigger className="px-3 py-2.5 text-sm font-semibold text-gray-900 hover:no-underline">
 										Daily detail
@@ -2346,6 +2739,8 @@ export function PayrollManagement({
 									<AccordionContent className="px-3 pb-3">
 							<div className="space-y-5">
 								{/* 1. Daily Attendance Logs */}
+								{((payrollData.timesheet?.breakdown?.length || 0) > 0 ||
+									((payrollData as any).dailyBreakdown?.length || 0) > 0) && (
 								<div className="space-y-3">
 									<div className="flex items-center justify-between">
 										<h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -2628,8 +3023,10 @@ export function PayrollManagement({
 										</div>
 									</div>
 								</div>
+								)}
 
 								{/* 2. Daily Pay Computation */}
+								{((payrollData as any).dailyBreakdown?.length || 0) > 0 && (
 								<div className="space-y-3">
 									<div className="flex items-center justify-between">
 										<h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -3021,6 +3418,127 @@ export function PayrollManagement({
 										</div>
 									</div>
 								</div>
+								)}
+
+								{/* 3. Prior-period corrections (category for GrossPay tally) */}
+								{hasPayrollCorrections && (
+									<div
+										className="space-y-3"
+										data-testid="payroll-summary-daily-corrections">
+										<div className="flex items-center justify-between">
+											<h4 className="flex items-center gap-2 text-sm font-bold text-gray-900">
+												Prior-period corrections
+											</h4>
+											<span className="text-xs text-gray-500">
+												Retro category applied on this payslip (not this
+												period&apos;s attendance)
+											</span>
+										</div>
+										<div className="overflow-hidden rounded-lg border border-orange-100 shadow-sm">
+											<div className="max-h-[320px] overflow-y-auto">
+												<table className="w-full text-left text-xs">
+													<thead className="sticky top-0 z-10 border-b bg-orange-50/80 text-[10px] font-semibold uppercase tracking-wide text-orange-900/80">
+														<tr>
+															<th className="px-3 py-2">Source / line</th>
+															<th className="px-3 py-2">Date</th>
+															<th className="px-3 py-2">Type</th>
+															<th className="px-3 py-2 text-right">
+																Before
+															</th>
+															<th className="px-3 py-2 text-right">
+																After
+															</th>
+															<th className="px-3 py-2 text-right">
+																Delta
+															</th>
+															<th className="px-3 py-2 text-right">
+																Line amount
+															</th>
+														</tr>
+													</thead>
+													<tbody className="divide-y divide-gray-100 bg-white">
+														{payrollCorrectionDayRows.map((row) => (
+															<tr key={row.key} className="text-gray-800">
+																<td className="max-w-[220px] px-3 py-2">
+																	<div className="truncate font-medium text-gray-900">
+																		{row.lineLabel}
+																	</div>
+																	{row.sourcePeriod ? (
+																		<div className="truncate text-[10px] text-gray-500">
+																			{row.sourcePeriod}
+																		</div>
+																	) : null}
+																</td>
+																<td className="whitespace-nowrap px-3 py-2 font-medium">
+																	{row.date}
+																</td>
+																<td className="px-3 py-2">{row.hoursType}</td>
+																<td className="px-3 py-2 text-right font-mono tabular-nums text-gray-600">
+																	{row.beforeMinutes == null
+																		? "—"
+																		: formatCorrectionMinutes(
+																				row.beforeMinutes,
+																			)}
+																</td>
+																<td className="px-3 py-2 text-right font-mono tabular-nums text-gray-600">
+																	{row.afterMinutes == null
+																		? "—"
+																		: formatCorrectionMinutes(
+																				row.afterMinutes,
+																			)}
+																</td>
+																<td
+																	className={`px-3 py-2 text-right font-mono font-semibold tabular-nums ${
+																		(row.deltaMinutes || 0) > 0
+																			? "text-emerald-700"
+																			: (row.deltaMinutes || 0) < 0
+																				? "text-rose-700"
+																				: "text-gray-500"
+																	}`}>
+																	{row.deltaMinutes == null
+																		? "—"
+																		: formatSignedMinutes(
+																				row.deltaMinutes,
+																			)}
+																</td>
+																<td className="px-3 py-2 text-right font-mono tabular-nums text-gray-700">
+																	{/* Amount is per line; repeated for multi-day lines for context */}
+																	{formatCurrency(row.lineAmount)}
+																</td>
+															</tr>
+														))}
+													</tbody>
+													<tfoot className="border-t border-orange-100 bg-orange-50/60">
+														<tr>
+															<td
+																colSpan={6}
+																className="px-3 py-2.5 text-sm font-semibold text-orange-950">
+																+ Prior-period corrections (in GrossPay)
+															</td>
+															<td className="px-3 py-2.5 text-right font-mono text-sm font-bold tabular-nums text-orange-950">
+																{payrollCorrectionTotal < 0 ? "-" : "+"}
+																{formatCurrency(
+																	Math.abs(payrollCorrectionTotal),
+																)}
+															</td>
+														</tr>
+														<tr>
+															<td
+																colSpan={6}
+																className="px-3 py-2 text-xs font-medium text-gray-600">
+																Saved GrossPay (includes corrections + period
+																earnings)
+															</td>
+															<td className="px-3 py-2 text-right font-mono text-sm font-bold tabular-nums text-gray-950">
+																{formatCurrency(payrollGrossPay)}
+															</td>
+														</tr>
+													</tfoot>
+												</table>
+											</div>
+										</div>
+									</div>
+								)}
 							</div>
 									</AccordionContent>
 								</AccordionItem>

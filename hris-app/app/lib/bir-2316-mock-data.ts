@@ -163,7 +163,7 @@ export function getMockBIR2316Data(): BIRForm2316 {
 		contactNumber: "09171234567",
 		statutoryMinimumWagePerDay: 610,
 		statutoryMinimumWagePerMonth: 15000,
-		isMinimumWageEarner: false,
+		isMinimumWageEarner: "false",
 
 		// ========================================
 		// PART II - EMPLOYER INFO (PRESENT)

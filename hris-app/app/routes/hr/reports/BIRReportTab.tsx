@@ -16,6 +16,7 @@ import { useDepartments } from "~/lib/hooks/useDepartments";
 import { useBir1601CMetrics } from "~/lib/hooks/useMetrics";
 import { buildReportFileName, exportRowsToCsv, exportRowsToPdf } from "~/lib/utils/report-export";
 import { ReportExportDialog } from "./components/ReportExportDialog";
+import { ReportEmployeeCell } from "./components/ReportEmployeeCell";
 import {
 	reportTableBodyClassName,
 	reportTableClassName,
@@ -688,7 +689,12 @@ export default function BIRReportTab() {
 																		reportTableRowClassName
 																	}>
 																	<td className="p-2">
-																		{row.employeeName}
+																		<ReportEmployeeCell
+																			rosterEmployees={employees}
+																			employeeId={row.employeeId}
+																			employeeCode={row.employeeCode}
+																			fullName={row.employeeName}
+																		/>
 																	</td>
 																	<td className="p-2">
 																		{row.department}

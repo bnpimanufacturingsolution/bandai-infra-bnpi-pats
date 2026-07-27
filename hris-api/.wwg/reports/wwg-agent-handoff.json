@@ -1,6 +1,6 @@
 {
   "summary": {
-    "target": "C:\\Users\\anoni\\OneDrive\\Desktop\\PROJECT_TRUTH_HYPERV_FRESH\\hris-api",
+    "target": "C:\\Users\\Zen\\Desktop\\AZURO\\BANDAI\\hris-api",
     "targetDisplay": ".",
     "githubRepository": "Not published.",
     "selectedProfiles": [],
@@ -80,7 +80,7 @@
   "runtimeSkillCandidates": {
     "version": 1,
     "generated_by": "wwg",
-    "generated_at": "2026-06-29T03:15:24.517Z",
+    "generated_at": "2026-07-13T06:12:56.871Z",
     "activation_owner": "vorter",
     "activation_status": "candidate_only",
     "project": {
@@ -925,7 +925,7 @@
     "notes": "Review whether this task revealed useful future work outside the approved scope.\nIf yes, add or update `.wwg/governance/recommendation-registry.md`.\nIf no, state that no new recommendations were identified.\n\nRecommendations are candidate work only. They are not project truth, active work, or commitments until reviewed and promoted."
   },
   "wwgReadiness": {
-    "target": "C:\\Users\\anoni\\OneDrive\\Desktop\\PROJECT_TRUTH_HYPERV_FRESH\\hris-api",
+    "target": "C:\\Users\\Zen\\Desktop\\AZURO\\BANDAI\\hris-api",
     "targetDisplay": ".",
     "context": "brief",
     "mustHave": [

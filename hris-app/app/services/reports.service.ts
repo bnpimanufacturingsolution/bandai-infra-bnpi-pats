@@ -36,15 +36,17 @@ class ReportsService {
 	async getManpowerDistributionReference(
 		month = "2026-04",
 	): Promise<ManpowerDistributionWorkbookReference> {
-		const response = await hrisApiClient.get<ManpowerDistributionWorkbookReference>(
+		const response = await hrisApiClient.get<any>(
 			`/api/reports/manpower-distribution/reference?month=${encodeURIComponent(month)}`,
 		);
 
-		if (!response.data) {
+		const data = response.data?.data || response.data;
+
+		if (!data) {
 			throw new Error("Failed to load manpower distribution workbook reference.");
 		}
 
-		return response.data;
+		return data as ManpowerDistributionWorkbookReference;
 	}
 
 	async downloadBir2316(employeeId: string, year: number): Promise<Blob> {

@@ -190,6 +190,7 @@ export async function getOrCreateNormalizedTimesheetConfig(
 				rejectBehavior: "REVISE",
 				overtimeFlagThresholdMinutes:
 					rules.overtimeQualification.minimumMinutesBeforeQualification,
+				requireManagerApprovedOvertime: true,
 				workTimeRounding: rules.workTimeRounding as any,
 				overtimeQualification: rules.overtimeQualification as any,
 				payrollFinalization: rules.payrollFinalization as any,

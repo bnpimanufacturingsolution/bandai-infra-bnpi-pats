@@ -39,6 +39,7 @@ import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler"
 import {
 	CreateTimesheetSchema,
 	UpdateTimesheetSchema,
+	SubmitTimesheetSchema,
 	TimesheetActionSchema,
 	UpdateTimesheetConfigSchema,
 	RequestCurrentTimesheetEditPermissionSchema,
@@ -80,6 +81,17 @@ import {
 	mergeTimesheetConfigRules,
 	normalizeTimesheetRulesConfig,
 } from "../../helper/timesheet-config.helper";
+import { applyApprovedOvertimeCompensatoryCredit } from "./approved-overtime-comp-leave.service";
+import { createOvertimeRequestForTimesheetLine } from "./overtime-request.service";
+import {
+	createPayrollCorrectionRequest,
+	listPayrollCorrectionsForTimesheet,
+} from "../payrollCorrection/payroll-correction.service";
+import {
+	mergeOvertimeMetadata,
+	requiresManagerApprovedOvertime,
+	resolveOvertimePolicyApplication,
+} from "../../helper/overtime-approval.helper";
 
 const logger = getLogger();
 const timesheetLogger = logger.child({ module: "timesheet" });
@@ -191,12 +203,16 @@ export const controller = (prisma: PrismaClient) => {
 		lockedAt?: Date | null;
 	}) =>
 		buildErrorResponse(
-			"This timesheet is locked because the payroll period already consumed its approved snapshot. Create an adjustment instead of changing payroll source truth.",
+			"This timesheet is locked because the payroll period already consumed its approved snapshot. Request a payroll correction for the next open payroll instead of changing paid source truth.",
 			409,
 			[
 				{
 					field: "timesheetId",
 					message: `TIMESHEET_LOCKED:${lock.id}`,
+				},
+				{
+					field: "correctionPath",
+					message: "USE_PAYROLL_CORRECTION",
 				},
 			],
 		);
@@ -216,6 +232,8 @@ export const controller = (prisma: PrismaClient) => {
 		sourcePeriodType: "CURRENT" | "PAST";
 		approvedAt: string;
 		changeType: EditAuditChangeType;
+		isManualEdit?: boolean;
+		changedFields?: TimesheetDayRevisionFieldChange[];
 		dayPreview: {
 			timeIn: string | null;
 			timeOut: string | null;
@@ -242,6 +260,7 @@ export const controller = (prisma: PrismaClient) => {
 	};
 	type TimesheetDayRevisionSummary = {
 		isModified: boolean;
+		isManualEdit?: boolean;
 		lineId: string;
 		previousLineId: string;
 		revisionNo: number;
@@ -288,6 +307,14 @@ export const controller = (prisma: PrismaClient) => {
 					: "") ||
 				"",
 		).slice(0, 10) || resolveBusinessDayKey(day?.date);
+	const resolveLineBusinessDayKey = (line: any): string =>
+		resolveBreakdownBusinessDayKey({
+			businessDate:
+				line?.metadata && typeof line.metadata === "object"
+					? line.metadata.businessDate
+					: undefined,
+			date: line?.date,
+		});
 	const toBusinessDayEnd = (value: Date): Date => {
 		const key = resolveBusinessDayKey(value);
 		return new Date(`${key}T23:59:59.999+08:00`);
@@ -300,6 +327,31 @@ export const controller = (prisma: PrismaClient) => {
 		}
 		return parsed;
 	};
+	const EMPLOYEE_MEANINGFUL_REVISION_FIELDS = new Set([
+		"timeIn",
+		"timeOut",
+		"hoursWorked",
+		"regularHours",
+		"overtimeHours",
+		"undertimeHours",
+		"lateHours",
+		"earlyOutHours",
+		"status",
+		"employeeNotes",
+		"approverNotes",
+	]);
+
+	const toAuditEpochMinute = (value: unknown): number | null => {
+		if (!value) return null;
+		if (value instanceof Date) return Math.floor(value.getTime() / 60000);
+		if (typeof value === "string") {
+			const parsed = new Date(value);
+			if (Number.isNaN(parsed.getTime())) return null;
+			return Math.floor(parsed.getTime() / 60000);
+		}
+		return null;
+	};
+
 	const normalizeBreakdownDayForAudit = (day: any): Record<string, unknown> => {
 		const metadata =
 			day?.metadata && typeof day.metadata === "object" && !Array.isArray(day.metadata)
@@ -320,6 +372,75 @@ export const controller = (prisma: PrismaClient) => {
 			breakMinutes: metadata.breakMinutes ?? null,
 			breakDisplay: metadata.breakDisplay ?? null,
 		};
+	};
+
+	const normalizeStatusForComparison = (status: unknown): string | null => {
+		const normalized = String(status || "").toUpperCase();
+		if (!normalized) return null;
+		if (normalized === "NOT_CLOCKED_IN" || normalized === "ABSENT") return "ABSENT";
+		return normalized;
+	};
+
+	const normalizeAuditDayForComparison = (day: Record<string, unknown>): Record<string, unknown> => ({
+		timeIn: toAuditEpochMinute(day.timeIn),
+		timeOut: toAuditEpochMinute(day.timeOut),
+		status: normalizeStatusForComparison(day.status),
+		hoursWorked: day.hoursWorked ?? "0:00",
+		regularHours: day.regularHours ?? "0:00",
+		overtimeHours: day.overtimeHours ?? "0:00",
+		undertimeHours: day.undertimeHours ?? "0:00",
+		lateHours: day.lateHours ?? "0:00",
+		earlyOutHours: day.earlyOutHours ?? "0:00",
+		employeeNotes: day.employeeNotes ?? null,
+		approverNotes: day.approverNotes ?? null,
+	});
+
+	const EMPLOYEE_MANUAL_EDIT_SOURCE = "EMPLOYEE_MANUAL_EDIT";
+
+	const hasEmployeeMeaningfulRevisionChange = (
+		changedFields: TimesheetDayRevisionFieldChange[],
+	): boolean =>
+		changedFields.some((change) => EMPLOYEE_MEANINGFUL_REVISION_FIELDS.has(change.field));
+
+	const isEmployeeManualEditLine = (line: any): boolean => {
+		const metadata =
+			line?.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
+				? (line.metadata as Record<string, unknown>)
+				: {};
+		const revision =
+			metadata.revision &&
+			typeof metadata.revision === "object" &&
+			!Array.isArray(metadata.revision)
+				? (metadata.revision as Record<string, unknown>)
+				: {};
+		return revision.source === EMPLOYEE_MANUAL_EDIT_SOURCE;
+	};
+
+	const resolveVersionDayKeys = (
+		editedDayKeys: string[] | undefined,
+		changedDays: EditAuditDaySnapshot[],
+		options?: { manualOnly?: boolean },
+	): Set<string> | undefined => {
+		if (Array.isArray(editedDayKeys) && editedDayKeys.length) {
+			return new Set(editedDayKeys);
+		}
+		if (options?.manualOnly) {
+			return undefined;
+		}
+		if (changedDays.length) {
+			return new Set(changedDays.map((day) => day.date));
+		}
+		return undefined;
+	};
+
+	const resolveManualEditDayKeys = (
+		editedDayKeys: string[] | undefined,
+		versionDayKeys?: Set<string>,
+	): Set<string> | undefined => {
+		if (!Array.isArray(editedDayKeys) || !editedDayKeys.length || !versionDayKeys?.size) {
+			return undefined;
+		}
+		return new Set(editedDayKeys.filter((dayKey) => versionDayKeys.has(dayKey)));
 	};
 	const normalizeTimesheetLineForRevisionAudit = (line: any): Record<string, unknown> => {
 		const metadata =
@@ -411,12 +532,12 @@ export const controller = (prisma: PrismaClient) => {
 		const beforeMap = new Map<string, Record<string, unknown>>();
 		const afterMap = new Map<string, Record<string, unknown>>();
 		for (const day of beforeBreakdown || []) {
-			const key = resolveDayKey(day?.date);
+			const key = resolveBreakdownBusinessDayKey(day);
 			if (!key) continue;
 			beforeMap.set(key, normalizeBreakdownDayForAudit(day));
 		}
 		for (const day of afterBreakdown || []) {
-			const key = resolveDayKey(day?.date);
+			const key = resolveBreakdownBusinessDayKey(day);
 			if (!key) continue;
 			afterMap.set(key, normalizeBreakdownDayForAudit(day));
 		}
@@ -425,7 +546,9 @@ export const controller = (prisma: PrismaClient) => {
 		for (const key of uniqueKeys) {
 			const before = beforeMap.get(key) || {};
 			const after = afterMap.get(key) || {};
-			if (JSON.stringify(before) === JSON.stringify(after)) continue;
+			const comparableBefore = normalizeAuditDayForComparison(before);
+			const comparableAfter = normalizeAuditDayForComparison(after);
+			if (JSON.stringify(comparableBefore) === JSON.stringify(comparableAfter)) continue;
 			changes.push({
 				date: key,
 				changeType: detectChangeType(before, after),
@@ -498,6 +621,7 @@ export const controller = (prisma: PrismaClient) => {
 				isDeleted: false,
 				isEffective: true,
 				supersedesLineId: { not: null },
+				ledgerType: "CORRECTION",
 			},
 			select: {
 				id: true,
@@ -562,16 +686,26 @@ export const controller = (prisma: PrismaClient) => {
 			const before = normalizeTimesheetLineForRevisionAudit(previousLine);
 			const after = normalizeTimesheetLineForRevisionAudit(currentLine);
 			const changedFields = buildRevisionFieldChanges(before, after);
-			if (!changedFields.length) continue;
-			const dayKey = resolveDayKey(currentLine.date);
+			if (!changedFields.length || !hasEmployeeMeaningfulRevisionChange(changedFields)) continue;
+			if (!isEmployeeManualEditLine(currentLine)) continue;
+			const dayKey = resolveLineBusinessDayKey(currentLine);
 			if (!dayKey) continue;
+			const editedAt = currentLine.editedAt ? currentLine.editedAt.toISOString() : null;
+			const existing = revisionSummaryByDate.get(dayKey);
+			if (
+				existing &&
+				new Date(existing.editedAt || 0).getTime() >= new Date(editedAt || 0).getTime()
+			) {
+				continue;
+			}
 			revisionSummaryByDate.set(dayKey, {
 				isModified: true,
+				isManualEdit: true,
 				lineId: currentLine.id,
 				previousLineId: previousLine.id,
 				revisionNo: Number(currentLine.revisionNo || 1),
 				ledgerType: String(currentLine.ledgerType || "CORRECTION"),
-				editedAt: currentLine.editedAt ? currentLine.editedAt.toISOString() : null,
+				editedAt,
 				editedBy: currentLine.editedBy || null,
 				editReason: currentLine.editReason || null,
 				changeType: detectChangeType(before, after),
@@ -582,7 +716,7 @@ export const controller = (prisma: PrismaClient) => {
 		if (!revisionSummaryByDate.size) return timesheet;
 
 		timesheet.breakdown = timesheet.breakdown.map((day: any) => {
-			const dayKey = resolveDayKey(day?.date);
+			const dayKey = resolveBreakdownBusinessDayKey(day);
 			const revisionSummary = dayKey ? revisionSummaryByDate.get(dayKey) : null;
 			return revisionSummary ? { ...day, revisionSummary } : day;
 		});
@@ -590,74 +724,270 @@ export const controller = (prisma: PrismaClient) => {
 		return timesheet;
 	};
 
+	const isRevisionWithinSubmissionWindow = (
+		line: { editedAt?: Date | null; updatedAt?: Date | null; date?: Date | null },
+		submittedAt?: Date | string | null,
+	): boolean => {
+		if (!submittedAt) return true;
+		const cutoff = new Date(submittedAt);
+		if (Number.isNaN(cutoff.getTime())) return true;
+		cutoff.setTime(cutoff.getTime() - 5 * 60 * 1000);
+		const editedAt = line.editedAt || line.updatedAt || line.date;
+		if (!editedAt) return false;
+		return new Date(editedAt).getTime() >= cutoff.getTime();
+	};
+
 	const getApprovedEditedDaysSummary = async (params: {
 		organizationId: string;
 		employeeId: string;
+		timesheetId?: string;
+		submittedAt?: Date | string | null;
 	}) => {
-		const rows = await (prisma as any).timesheetline.findMany({
+		const revisionLineSelect = {
+			id: true,
+			timesheetId: true,
+			date: true,
+			updatedAt: true,
+			editedAt: true,
+			ledgerType: true,
+			supersedesLineId: true,
+			timeIn: true,
+			timeOut: true,
+			status: true,
+			hoursWorked: true,
+			regularHours: true,
+			overtimeHours: true,
+			undertimeHours: true,
+			lateHours: true,
+			earlyOutHours: true,
+			employeeNotes: true,
+			approverNotes: true,
+			notes: true,
+			breakMinutes: true,
+			metadata: true,
+		} as const;
+
+		const currentRevisionLines = await (prisma as any).timesheetline.findMany({
+			where: {
+				organizationId: params.organizationId,
+				employeeId: params.employeeId,
+				isDeleted: false,
+				isEffective: true,
+				supersedesLineId: { not: null },
+				ledgerType: "CORRECTION",
+				...(params.timesheetId ? { timesheetId: params.timesheetId } : {}),
+			},
+			select: revisionLineSelect,
+			orderBy: [{ editedAt: "desc" }, { date: "desc" }],
+			take: 500,
+		});
+
+		const previousLineIds = currentRevisionLines
+			.map((line: any) => line.supersedesLineId)
+			.filter((value: unknown): value is string => typeof value === "string" && value.length > 0);
+		const previousLines = previousLineIds.length
+			? await (prisma as any).timesheetline.findMany({
+					where: {
+						organizationId: params.organizationId,
+						id: { in: previousLineIds },
+					},
+					select: revisionLineSelect,
+				})
+			: [];
+		const previousLineById = new Map(previousLines.map((line: any) => [line.id, line]));
+
+		const itemsByDate = new Map<string, ApprovedEditedDaySummaryItem>();
+
+		for (const currentLine of currentRevisionLines) {
+			if (!isRevisionWithinSubmissionWindow(currentLine, params.submittedAt)) continue;
+			const previousLine = previousLineById.get(currentLine.supersedesLineId);
+			if (!previousLine) continue;
+			const before = normalizeTimesheetLineForRevisionAudit(previousLine);
+			const after = normalizeTimesheetLineForRevisionAudit(currentLine);
+			const changedFields = buildRevisionFieldChanges(before, after);
+			if (!changedFields.length || !hasEmployeeMeaningfulRevisionChange(changedFields)) continue;
+			if (!isEmployeeManualEditLine(currentLine)) continue;
+
+			const dayKey = resolveLineBusinessDayKey(currentLine);
+			if (!dayKey) continue;
+
+			const approvedAt = (
+				currentLine.editedAt ||
+				currentLine.updatedAt ||
+				currentLine.date
+			).toISOString();
+			const existing = itemsByDate.get(dayKey);
+			if (
+				existing &&
+				new Date(existing.approvedAt).getTime() >= new Date(approvedAt).getTime()
+			) {
+				continue;
+			}
+
+			itemsByDate.set(dayKey, {
+				entryId: currentLine.id,
+				timesheetId: currentLine.timesheetId,
+				date: dayKey,
+				periodLabel: currentLine.ledgerType || "Timesheet",
+				sourcePeriodType: "PAST",
+				approvedAt,
+				changeType: detectChangeType(before, after),
+				isManualEdit: true,
+				changedFields,
+				dayPreview: normalizeLedgerDayPreview(after),
+			});
+		}
+
+		const historicalRows = await (prisma as any).timesheetline.findMany({
 			where: {
 				organizationId: params.organizationId,
 				employeeId: params.employeeId,
 				isEffective: false,
 				isDeleted: false,
+				...(params.timesheetId ? { timesheetId: params.timesheetId } : {}),
 			},
-			select: {
-				id: true,
-				timesheetId: true,
-				date: true,
-				updatedAt: true,
-				editedAt: true,
-				ledgerType: true,
-				timeIn: true,
-				timeOut: true,
-				status: true,
-				hoursWorked: true,
-				regularHours: true,
-				overtimeHours: true,
-				undertimeHours: true,
-				lateHours: true,
-				earlyOutHours: true,
-				employeeNotes: true,
-				approverNotes: true,
-				breakMinutes: true,
-				metadata: true,
-			},
+			select: revisionLineSelect,
 			orderBy: [{ editedAt: "desc" }, { date: "desc" }],
 			take: 500,
 		});
 
-		const items: ApprovedEditedDaySummaryItem[] = rows.map((row) => ({
-			entryId: row.id,
-			timesheetId: row.timesheetId,
-			date: row.date.toISOString().slice(0, 10),
-			periodLabel: row.ledgerType || "Timesheet",
-			sourcePeriodType: "PAST",
-			approvedAt: (row.editedAt || row.updatedAt || row.date).toISOString(),
-			changeType: "MIXED",
-			dayPreview: normalizeLedgerDayPreview({
-				timeIn: row.timeIn,
-				timeOut: row.timeOut,
-				status: row.status,
-				hoursWorked: row.hoursWorked,
-				regularHours: row.regularHours,
-				overtimeHours: row.overtimeHours,
-				undertimeHours: row.undertimeHours,
-				lateHours: row.lateHours,
-				earlyOutHours: row.earlyOutHours,
-				employeeNotes: row.employeeNotes,
-				approverNotes: row.approverNotes,
-				breakMinutes: row.breakMinutes,
-				breakDisplay:
-					row.metadata && typeof row.metadata === "object"
-						? row.metadata.breakDisplay
-						: null,
-			}),
-		}));
+		const orphanedHistoricalRows = historicalRows.filter(
+			(row: any) => !previousLineById.has(row.id) && !itemsByDate.has(resolveLineBusinessDayKey(row)),
+		);
+		const supersedingLineIds = orphanedHistoricalRows.map((row: any) => row.id);
+		const supersedingLines = supersedingLineIds.length
+			? await (prisma as any).timesheetline.findMany({
+					where: {
+						organizationId: params.organizationId,
+						employeeId: params.employeeId,
+						isDeleted: false,
+						isEffective: true,
+						supersedesLineId: { in: supersedingLineIds },
+						ledgerType: "CORRECTION",
+						...(params.timesheetId ? { timesheetId: params.timesheetId } : {}),
+					},
+					select: revisionLineSelect,
+				})
+			: [];
+		const supersedingLineByPreviousId = new Map(
+			supersedingLines.map((line: any) => [line.supersedesLineId, line]),
+		);
+
+		for (const historicalRow of orphanedHistoricalRows) {
+			const supersedingLine = supersedingLineByPreviousId.get(historicalRow.id);
+			if (!supersedingLine) continue;
+			if (!isRevisionWithinSubmissionWindow(supersedingLine, params.submittedAt)) continue;
+
+			const before = normalizeTimesheetLineForRevisionAudit(historicalRow);
+			const after = normalizeTimesheetLineForRevisionAudit(supersedingLine);
+			const changedFields = buildRevisionFieldChanges(before, after);
+			if (!changedFields.length || !hasEmployeeMeaningfulRevisionChange(changedFields)) continue;
+			if (!isEmployeeManualEditLine(supersedingLine)) continue;
+
+			const dayKey = resolveLineBusinessDayKey(supersedingLine);
+			if (!dayKey || itemsByDate.has(dayKey)) continue;
+
+			itemsByDate.set(dayKey, {
+				entryId: supersedingLine.id,
+				timesheetId: supersedingLine.timesheetId,
+				date: dayKey,
+				periodLabel: supersedingLine.ledgerType || "Timesheet",
+				sourcePeriodType: "PAST",
+				approvedAt: (
+					supersedingLine.editedAt ||
+					supersedingLine.updatedAt ||
+					supersedingLine.date
+				).toISOString(),
+				changeType: detectChangeType(before, after),
+				isManualEdit: true,
+				changedFields,
+				dayPreview: normalizeLedgerDayPreview(after),
+			});
+		}
+
+		const items = Array.from(itemsByDate.values()).sort((a, b) => {
+			const approvedDiff =
+				new Date(b.approvedAt).getTime() - new Date(a.approvedAt).getTime();
+			if (approvedDiff !== 0) return approvedDiff;
+			return b.date.localeCompare(a.date);
+		});
 
 		return {
 			total: items.length,
 			items,
 		};
+	};
+
+	const TIMESHEETLINE_EFFECTIVE_READ_ORDER = [
+		{ date: "asc" as const },
+		{ revisionNo: "asc" as const },
+		{ createdAt: "asc" as const },
+		{ id: "asc" as const },
+	];
+
+	/**
+	 * Normalize Prisma select for timesheet reads.
+	 * - `breakdown` is a virtual response field (built from timesheetlines), not a DB column.
+	 *   Clients often request `fields=...,breakdown,...`; map that to timesheetlines instead.
+	 * - Always apply effective-line filters/order when timesheetlines are selected.
+	 */
+	const applySelectiveTimesheetlineReadContract = (selectFields: any) => {
+		if (!selectFields || typeof selectFields !== "object") return selectFields;
+
+		const requestedBreakdown = Boolean(selectFields.breakdown);
+		if ("breakdown" in selectFields) {
+			delete selectFields.breakdown;
+		}
+
+		// Virtual computed fields that must never be passed to Prisma select
+		for (const virtualKey of [
+			"approvedEditedDaysSummary",
+			"canRequestEditPermission",
+			"requestEditPermissionMode",
+			"isCalculated",
+		]) {
+			if (virtualKey in selectFields) {
+				delete selectFields[virtualKey];
+			}
+		}
+
+		if (requestedBreakdown && !selectFields.timesheetlines) {
+			selectFields.timesheetlines = true;
+		}
+
+		const timesheetlineSelection = selectFields?.timesheetlines;
+		if (!timesheetlineSelection) return selectFields;
+
+		if (timesheetlineSelection === true) {
+			selectFields.timesheetlines = {
+				where: { isDeleted: false, isEffective: true },
+				orderBy: TIMESHEETLINE_EFFECTIVE_READ_ORDER,
+			};
+			return selectFields;
+		}
+
+		if (typeof timesheetlineSelection === "object") {
+			timesheetlineSelection.where = {
+				...(timesheetlineSelection.where || {}),
+				isDeleted: false,
+				isEffective: true,
+			};
+			timesheetlineSelection.orderBy = TIMESHEETLINE_EFFECTIVE_READ_ORDER;
+		}
+		return selectFields;
+	};
+
+	const invalidateTimesheetCaches = async (timesheetId: string, code?: string) => {
+		await invalidateCache.byPattern(`cache:timesheet:byId:${timesheetId}:*`);
+		if (code) {
+			await invalidateCache.byPattern(`cache:timesheet:byCode:${code}:*`);
+		}
+		await invalidateCache.byPattern(`cache:timesheet:byIdentifier:${timesheetId}:*`);
+		if (code) {
+			await invalidateCache.byPattern(`cache:timesheet:byIdentifier:${code}:*`);
+		}
+		await invalidateCache.byPattern("cache:timesheet:list:*");
+		await invalidateCache.byPattern("cache:timesheet:view:*");
 	};
 
 	const getRequestStateKey = (
@@ -895,6 +1225,23 @@ export const controller = (prisma: PrismaClient) => {
 					// Policy: early-out grace is currently disabled in computations; keep explicit metadata for UI clarity.
 					const rawEarlyOutMinutes = calc.earlyOutMinutes;
 					const normalizedBreakDisplay = breakDisplayFromSchedule || "No break";
+					const overtimeApplication = await resolveOvertimePolicyApplication(
+						prisma,
+						params.organizationId,
+						{
+							calc,
+							timeIn: validTimeIn,
+							timeOut: validTimeOut,
+							schedule,
+							date: normalizedDayDate,
+							existingMetadata: incomingMetadata,
+							attendanceStatus: day?.status || null,
+							approvedOvertimeMinutes:
+								incomingMetadata.overtimeApprovalStatus === "APPROVED"
+									? Number(incomingMetadata.pendingOvertimeMinutes || 0)
+									: 0,
+						},
+					);
 
 					return {
 						approvalStatus: normalizeApprovalStatus(day?.approvalStatus),
@@ -903,7 +1250,7 @@ export const controller = (prisma: PrismaClient) => {
 						timeOut: validTimeOut,
 						hoursWorked: formatMinutesAsTime(calc.totalMinutesWorked),
 						regularHours: formatMinutesAsTime(calc.regularMinutes),
-						overtimeHours: formatMinutesAsTime(calc.overtimeMinutes),
+						overtimeHours: overtimeApplication.timekeepingFields.overtimeHours,
 						undertimeHours: formatMinutesAsTime(calc.undertimeMinutes),
 						lateHours: formatMinutesAsTime(calc.lateMinutes),
 						earlyOutHours: formatMinutesAsTime(calc.earlyOutMinutes),
@@ -920,9 +1267,10 @@ export const controller = (prisma: PrismaClient) => {
 							typeof day?.approverNotes === "string" ? day.approverNotes : null,
 						metadata: {
 							...incomingMetadata,
+							...mergeOvertimeMetadata(incomingMetadata, overtimeApplication.metadata),
 							totalMinutes: calc.totalMinutesWorked,
 							regularMinutes: calc.regularMinutes,
-							overtimeMinutes: calc.overtimeMinutes,
+							overtimeMinutes: overtimeApplication.timekeepingFields.overtimeMinutes,
 							undertimeMinutes: calc.undertimeMinutes,
 							lateMinutes: calc.lateMinutes,
 							earlyOutMinutes: calc.earlyOutMinutes,
@@ -1065,16 +1413,7 @@ export const controller = (prisma: PrismaClient) => {
 			return timesheet;
 		}
 
-		await invalidateCache.byPattern(`cache:timesheet:byId:${timesheet.id}:*`);
-		if (timesheet.code) {
-			await invalidateCache.byPattern(`cache:timesheet:byCode:${timesheet.code}:*`);
-		}
-		await invalidateCache.byPattern(`cache:timesheet:byIdentifier:${timesheet.id}:*`);
-		if (timesheet.code) {
-			await invalidateCache.byPattern(`cache:timesheet:byIdentifier:${timesheet.code}:*`);
-		}
-		await invalidateCache.byPattern("cache:timesheet:list:*");
-		await invalidateCache.byPattern("cache:timesheet:view:*");
+		await invalidateTimesheetCaches(timesheet.id, timesheet.code);
 
 		const refetchedTimesheet = (await params.refetch()) || timesheet;
 		if (
@@ -1323,15 +1662,6 @@ export const controller = (prisma: PrismaClient) => {
 				? buildEmployeeSummary(actorMap.get(rejectedById))
 				: null,
 		};
-	};
-
-	const invalidateTimesheetCaches = async (timesheetId: string, code?: string) => {
-		await invalidateCache.byPattern(`cache:timesheet:byId:${timesheetId}:*`);
-		if (code) {
-			await invalidateCache.byPattern(`cache:timesheet:byCode:${code}:*`);
-		}
-		await invalidateCache.byPattern("cache:timesheet:list:*");
-		await invalidateCache.byPattern("cache:timesheet:view:*");
 	};
 
 	const shouldRequireEditPermission = (status: string, editPermissionStatus?: string | null) => {
@@ -2222,6 +2552,7 @@ export const controller = (prisma: PrismaClient) => {
 
 				if (fields) {
 					const selectFields = getNestedFields(fields);
+					applySelectiveTimesheetlineReadContract(selectFields);
 					findQuery.select = selectFields;
 				} else {
 					findQuery.include = {
@@ -2236,7 +2567,7 @@ export const controller = (prisma: PrismaClient) => {
 						attendances: true,
 						timesheetlines: {
 							where: { isDeleted: false, isEffective: true },
-							orderBy: { date: "asc" },
+							orderBy: TIMESHEETLINE_EFFECTIVE_READ_ORDER,
 						},
 					};
 				}
@@ -2268,7 +2599,11 @@ export const controller = (prisma: PrismaClient) => {
 							OR: [{ id }, { code: id }],
 						},
 						...(fields
-							? { select: getNestedFields(fields as string) }
+							? (() => {
+									const refetchSelectFields = getNestedFields(fields as string);
+									applySelectiveTimesheetlineReadContract(refetchSelectFields);
+									return { select: refetchSelectFields };
+								})()
 							: {
 									include: {
 										payrollPeriod: true,
@@ -2282,7 +2617,7 @@ export const controller = (prisma: PrismaClient) => {
 										attendances: true,
 										timesheetlines: {
 											where: { isDeleted: false, isEffective: true },
-											orderBy: { date: "asc" },
+											orderBy: TIMESHEETLINE_EFFECTIVE_READ_ORDER,
 										},
 									},
 								}),
@@ -2321,6 +2656,17 @@ export const controller = (prisma: PrismaClient) => {
 					`Failed to enrich timesheet day context for ${id}:`,
 					enrichmentError,
 				);
+			}
+
+			const organizationId = String((timesheet as any).organizationId || "");
+			const employeeId = String((timesheet as any).employeeId || "");
+			if (organizationId && employeeId) {
+				(timesheet as any).approvedEditedDaysSummary = await getApprovedEditedDaysSummary({
+					organizationId,
+					employeeId,
+					timesheetId: String((timesheet as any).id || ""),
+					submittedAt: (timesheet as any).submittedAt || null,
+				});
 			}
 
 			timesheetLogger.info(`Timesheet retrieved by ${searchField}: ${id}`);
@@ -2367,9 +2713,14 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const validatedData = validationResult.data;
+			const editedDayKeysInput = Array.isArray(validatedData.editedDayKeys)
+				? validatedData.editedDayKeys
+				: undefined;
 			const updatePayload: any = { ...validatedData };
+			delete updatePayload.editedDayKeys;
 			let normalizedBreakdownForLineSync: any[] | null = null;
 			let lineVersionMode: "update" | "version" = "update";
+			let versionDayKeys: Set<string> | undefined;
 
 			const searchField = "identifier";
 
@@ -2404,7 +2755,9 @@ export const controller = (prisma: PrismaClient) => {
 				authReq.metadata.employee.id === existingTimesheet.employeeId;
 			const isBreakdownUpdate = validatedData.breakdown !== undefined;
 			const isBreakdownOnlyUpdate =
-				Object.keys(validatedData).length === 1 && validatedData.breakdown !== undefined;
+				Object.keys(validatedData).every(
+					(key) => key === "breakdown" || key === "editedDayKeys",
+				) && validatedData.breakdown !== undefined;
 
 			if (isEmployeeOwner && authReq.organizationId) {
 				await assertEditingPolicyEnabled(authReq.organizationId);
@@ -2474,9 +2827,10 @@ export const controller = (prisma: PrismaClient) => {
 				const isEditAuditEligible =
 					isEmployeeOwner &&
 					(existingTimesheet.editPermissionStatus === "APPROVED" ||
-						existingTimesheet.editPermissionStatus === "CONSUMED");
+						existingTimesheet.editPermissionStatus === "CONSUMED" ||
+						existingTimesheet.status === "REVISED" ||
+						existingTimesheet.status === "DRAFT");
 				if (isEditAuditEligible) {
-					lineVersionMode = "version";
 					const existingLines = await (prisma as any).timesheetline.findMany({
 						where: {
 							organizationId: existingTimesheet.organizationId,
@@ -2490,7 +2844,12 @@ export const controller = (prisma: PrismaClient) => {
 						buildBreakdownFromTimesheetLines(existingLines),
 						normalizedBreakdown,
 					);
-					if (!changedDays.length) lineVersionMode = "update";
+					versionDayKeys = resolveVersionDayKeys(editedDayKeysInput, changedDays, {
+						manualOnly: isEmployeeOwner,
+					});
+					if (versionDayKeys?.size) {
+						lineVersionMode = "version";
+					}
 				}
 			}
 
@@ -2521,6 +2880,11 @@ export const controller = (prisma: PrismaClient) => {
 					timesheetId: updatedTimesheet.id,
 					breakdown: normalizedBreakdownForLineSync,
 					versionMode: lineVersionMode,
+					versionDayKeys,
+					manualEditDayKeys: resolveManualEditDayKeys(
+						editedDayKeysInput,
+						versionDayKeys,
+					),
 					ledgerType: lineVersionMode === "version" ? "CORRECTION" : "SNAPSHOT",
 					editedBy: authReq.metadata?.employee?.id || authReq.userId || null,
 					editReason: updatePayload.notes || updatePayload.editPermissionReason || null,
@@ -2540,6 +2904,21 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			attachTimesheetBreakdownFromLines(updatedTimesheet as any);
+
+			if (action === "APPROVE") {
+				const approvedOvertimeResult =
+					await applyApprovedOvertimeCompensatoryCredit({
+						prisma,
+						organizationId: updatedTimesheet.organizationId,
+						timesheetId: updatedTimesheet.id,
+						approvedByEmployeeId:
+							(actingEmployeeId as string | null | undefined) ||
+							(authReq.userId as string | null | undefined) ||
+							null,
+						approvedAt: updateData.approvalDate || new Date(),
+					});
+				(updatedTimesheet as any).metadata = approvedOvertimeResult.metadata;
+			}
 
 			logActivity(req, {
 				userId: (req as any).user?.id || "unknown",
@@ -2567,13 +2946,7 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			try {
-				// Invalidate both byId and byCode cache patterns
-				await invalidateCache.byPattern(`cache:timesheet:byId:${updatedTimesheet.id}:*`);
-				await invalidateCache.byPattern(
-					`cache:timesheet:byCode:${updatedTimesheet.code}:*`,
-				);
-				await invalidateCache.byPattern("cache:timesheet:list:*");
-				await invalidateCache.byPattern("cache:timesheet:view:*");
+				await invalidateTimesheetCaches(updatedTimesheet.id, updatedTimesheet.code);
 				timesheetLogger.info(
 					`Cache invalidated after timesheet update (searched by ${searchField}: ${id})`,
 				);
@@ -2700,12 +3073,7 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			try {
-				await invalidateCache.byPattern(`cache:timesheet:byId:${id}:*`);
-				await invalidateCache.byPattern(
-					`cache:timesheet:byCode:${existingTimesheet.code}:*`,
-				);
-				await invalidateCache.byPattern("cache:timesheet:list:*");
-				await invalidateCache.byPattern("cache:timesheet:view:*");
+				await invalidateTimesheetCaches(id, existingTimesheet.code);
 				timesheetLogger.info(`Cache invalidated after timesheet ${id} deletion`);
 			} catch (cacheError) {
 				timesheetLogger.warn("Failed to invalidate cache after deletion:", cacheError);
@@ -2750,6 +3118,160 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	type SubmitBreakdownPersistenceResult = {
+		normalizedBreakdownForLineSync: any[] | null;
+		lineVersionMode: "update" | "version";
+		versionDayKeys?: Set<string>;
+		manualEditDayKeys?: Set<string>;
+		summaryPatch: Record<string, unknown>;
+		skipObligationMaterialize: boolean;
+		errorResponse: ReturnType<typeof buildErrorResponse> | null;
+	};
+
+	const prepareSubmitBreakdownPersistence = async (params: {
+		existingTimesheet: {
+			organizationId: string;
+			employeeId: string;
+			status: string;
+			editPermissionStatus?: string | null;
+			timesheetlines?: any[];
+			employee?: { schedule?: unknown } | null;
+		};
+		breakdown: unknown;
+		editedDayKeys?: string[];
+		isCorrectionResubmit: boolean;
+		isEmployeeOwner: boolean;
+		employeeSchedule?: unknown;
+	}): Promise<SubmitBreakdownPersistenceResult> => {
+		const emptyResult: SubmitBreakdownPersistenceResult = {
+			normalizedBreakdownForLineSync: null,
+			lineVersionMode: "update",
+			summaryPatch: {},
+			skipObligationMaterialize: false,
+			errorResponse: null,
+		};
+
+		const hasBreakdown = Array.isArray(params.breakdown) && params.breakdown.length > 0;
+		const normalizedStatus = String(params.existingTimesheet.status || "").toUpperCase();
+		const isEditAuditEligible =
+			params.isEmployeeOwner &&
+			(params.existingTimesheet.editPermissionStatus === "APPROVED" ||
+				params.existingTimesheet.editPermissionStatus === "CONSUMED" ||
+				normalizedStatus === "REVISED" ||
+				normalizedStatus === "DRAFT");
+
+		if (params.isCorrectionResubmit) {
+			if (hasBreakdown) {
+				const normalizedBreakdown = await normalizeBreakdownForPersistence({
+					organizationId: params.existingTimesheet.organizationId,
+					employeeId: params.existingTimesheet.employeeId,
+					breakdown: params.breakdown as any[],
+					employeeSchedule:
+						params.employeeSchedule ||
+						(params.existingTimesheet.employee as any)?.schedule ||
+						null,
+				});
+				const changedDays = buildChangedDaysFromBreakdown(
+					buildBreakdownFromTimesheetLines(params.existingTimesheet.timesheetlines),
+					normalizedBreakdown,
+				);
+				const versionDayKeys = resolveVersionDayKeys(params.editedDayKeys, changedDays, {
+					manualOnly: params.isEmployeeOwner,
+				});
+				if (!versionDayKeys?.size) {
+					return {
+						...emptyResult,
+						errorResponse: buildErrorResponse("NO_CHANGES_TO_RESUBMIT", 409, [
+							{ field: "breakdown", message: "NO_CHANGES_TO_RESUBMIT" },
+						]),
+					};
+				}
+				return {
+					normalizedBreakdownForLineSync: normalizedBreakdown,
+					lineVersionMode: "version",
+					versionDayKeys,
+					manualEditDayKeys: resolveManualEditDayKeys(
+						params.editedDayKeys,
+						versionDayKeys,
+					),
+					summaryPatch: calculateSummaryFromBreakdown(normalizedBreakdown),
+					skipObligationMaterialize: true,
+					errorResponse: null,
+				};
+			}
+
+			if (params.existingTimesheet.editPermissionStatus === "CONSUMED") {
+				return {
+					...emptyResult,
+					skipObligationMaterialize: true,
+				};
+			}
+
+			return {
+				...emptyResult,
+				errorResponse: buildErrorResponse("NO_CHANGES_TO_RESUBMIT", 409, [
+					{ field: "breakdown", message: "NO_CHANGES_TO_RESUBMIT" },
+				]),
+			};
+		}
+
+		if (hasBreakdown) {
+			const normalizedBreakdown = await normalizeBreakdownForPersistence({
+				organizationId: params.existingTimesheet.organizationId,
+				employeeId: params.existingTimesheet.employeeId,
+				breakdown: params.breakdown as any[],
+				employeeSchedule:
+					params.employeeSchedule ||
+					(params.existingTimesheet.employee as any)?.schedule ||
+					null,
+			});
+
+			// Pre-update PATCH already synced lines and consumed edit permission.
+			// Skip duplicate line sync on submit for DRAFT/REVISED first submissions.
+			if (params.existingTimesheet.editPermissionStatus === "CONSUMED") {
+				return {
+					normalizedBreakdownForLineSync: null,
+					lineVersionMode: "update",
+					versionDayKeys: undefined,
+					summaryPatch: calculateSummaryFromBreakdown(normalizedBreakdown),
+					skipObligationMaterialize: true,
+					errorResponse: null,
+				};
+			}
+
+			let lineVersionMode: "update" | "version" = "update";
+			let versionDayKeys: Set<string> | undefined;
+			let manualEditDayKeys: Set<string> | undefined;
+			if (isEditAuditEligible) {
+				const changedDays = buildChangedDaysFromBreakdown(
+					buildBreakdownFromTimesheetLines(params.existingTimesheet.timesheetlines),
+					normalizedBreakdown,
+				);
+				versionDayKeys = resolveVersionDayKeys(params.editedDayKeys, changedDays, {
+					manualOnly: params.isEmployeeOwner,
+				});
+				if (versionDayKeys?.size) {
+					lineVersionMode = "version";
+					manualEditDayKeys = resolveManualEditDayKeys(
+						params.editedDayKeys,
+						versionDayKeys,
+					);
+				}
+			}
+			return {
+				normalizedBreakdownForLineSync: normalizedBreakdown,
+				lineVersionMode,
+				versionDayKeys,
+				manualEditDayKeys,
+				summaryPatch: calculateSummaryFromBreakdown(normalizedBreakdown),
+				skipObligationMaterialize: true,
+				errorResponse: null,
+			};
+		}
+
+		return emptyResult;
+	};
+
 	/**
 	 * Helper function to generate a timesheet for an employee
 	 * Can be called by various endpoints when timesheet needs to be created
@@ -2780,7 +3302,7 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const { action, rejectionReason, notes, breakdown } = validation.data;
+			const { action, rejectionReason, notes, breakdown, editedDayKeys } = validation.data;
 			const actingEmployeeId = await getActingEmployeeId(authReq);
 
 			// Get existing timesheet
@@ -2818,6 +3340,8 @@ export const controller = (prisma: PrismaClient) => {
 			const updateData: any = {};
 			let normalizedBreakdownForLineSync: any[] | null = null;
 			let lineVersionMode: "update" | "version" = "update";
+			let versionDayKeys: Set<string> | undefined;
+			let manualEditDayKeys: Set<string> | undefined;
 			const existingMetadata =
 				existingTimesheet.metadata &&
 				typeof existingTimesheet.metadata === "object" &&
@@ -2871,53 +3395,25 @@ export const controller = (prisma: PrismaClient) => {
 					}
 
 					{
-						const isCorrectionResubmit = submitEligibility.isCorrectionResubmit;
-
-						if (isCorrectionResubmit) {
-							if (Array.isArray(breakdown) && breakdown.length > 0) {
-								const normalizedBreakdown = await normalizeBreakdownForPersistence({
-									organizationId: existingTimesheet.organizationId,
-									employeeId: existingTimesheet.employeeId,
-									breakdown,
-								});
-								normalizedBreakdownForLineSync = normalizedBreakdown;
-								const changedDays = buildChangedDaysFromBreakdown(
-									buildBreakdownFromTimesheetLines(
-										(existingTimesheet as any).timesheetlines,
-									),
-									normalizedBreakdown,
-								);
-								if (!changedDays.length) {
-									const errorResponse = buildErrorResponse(
-										"NO_CHANGES_TO_RESUBMIT",
-										409,
-										[
-											{
-												field: "breakdown",
-												message: "NO_CHANGES_TO_RESUBMIT",
-											},
-										],
-									);
-									res.status(409).json(errorResponse);
-									return;
-								}
-
-								Object.assign(
-									updateData,
-									calculateSummaryFromBreakdown(normalizedBreakdown),
-								);
-								lineVersionMode = "version";
-							} else {
-								const errorResponse = buildErrorResponse("NO_CHANGES_TO_RESUBMIT", 409, [
-									{
-										field: "breakdown",
-										message: "NO_CHANGES_TO_RESUBMIT",
-									},
-								]);
-								res.status(409).json(errorResponse);
-								return;
-							}
+						const submitBreakdownPersistence = await prepareSubmitBreakdownPersistence({
+							existingTimesheet,
+							breakdown,
+							editedDayKeys,
+							isCorrectionResubmit: submitEligibility.isCorrectionResubmit,
+							isEmployeeOwner: true,
+						});
+						if (submitBreakdownPersistence.errorResponse) {
+							res.status(409).json(submitBreakdownPersistence.errorResponse);
+							return;
 						}
+						normalizedBreakdownForLineSync =
+							submitBreakdownPersistence.normalizedBreakdownForLineSync;
+						lineVersionMode = submitBreakdownPersistence.lineVersionMode;
+						versionDayKeys = submitBreakdownPersistence.versionDayKeys;
+						manualEditDayKeys = submitBreakdownPersistence.manualEditDayKeys;
+						Object.assign(updateData, submitBreakdownPersistence.summaryPatch);
+						(updateData as any).__skipObligationMaterialize =
+							submitBreakdownPersistence.skipObligationMaterialize;
 					}
 
 					updateData.status = "SUBMITTED";
@@ -2936,9 +3432,11 @@ export const controller = (prisma: PrismaClient) => {
 						snapshotType: "TIMESHEET_PERIOD",
 					};
 					if (notes) updateData.notes = notes;
-					if (!Array.isArray(normalizedBreakdownForLineSync)) {
+					if (
+						!Array.isArray(normalizedBreakdownForLineSync) &&
+						!(updateData as any).__skipObligationMaterialize
+					) {
 						// Normal first submission snapshots from AttendanceObligation.
-						// Client breakdowns are display/input context only until a correction resubmit.
 						await materializeTimesheetLinesFromObligations(prisma, {
 							organizationId: existingTimesheet.organizationId,
 							employeeId: existingTimesheet.employeeId,
@@ -2948,6 +3446,7 @@ export const controller = (prisma: PrismaClient) => {
 							toDate: existingTimesheet.payrollPeriod.endDate,
 						});
 					}
+					delete (updateData as any).__skipObligationMaterialize;
 					break;
 
 				case "APPROVE":
@@ -3035,6 +3534,8 @@ export const controller = (prisma: PrismaClient) => {
 					timesheetId: updatedTimesheet.id,
 					breakdown: normalizedBreakdownForLineSync,
 					versionMode: lineVersionMode,
+					versionDayKeys,
+					manualEditDayKeys,
 					ledgerType: lineVersionMode === "version" ? "CORRECTION" : "SNAPSHOT",
 					editedBy: actingEmployeeId || authReq.userId || null,
 					editReason: notes || null,
@@ -3123,12 +3624,7 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			try {
-				await invalidateCache.byPattern(`cache:timesheet:byId:${id}:*`);
-				await invalidateCache.byPattern(
-					`cache:timesheet:byCode:${updatedTimesheet.code}:*`,
-				);
-				await invalidateCache.byPattern("cache:timesheet:list:*");
-				await invalidateCache.byPattern("cache:timesheet:view:*");
+				await invalidateTimesheetCaches(id, updatedTimesheet.code);
 				timesheetLogger.info(`Cache invalidated after timesheet ${id} action`);
 			} catch (cacheError) {
 				timesheetLogger.warn(
@@ -3882,7 +4378,14 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const { notes, breakdown } = req.body || {};
+			const submitValidation = SubmitTimesheetSchema.safeParse(req.body || {});
+			if (!submitValidation.success) {
+				const formattedErrors = formatZodErrors(submitValidation.error.format());
+				const errorResponse = buildErrorResponse("Validation failed", 400, formattedErrors);
+				res.status(400).json(errorResponse);
+				return;
+			}
+			const { notes, breakdown, editedDayKeys } = submitValidation.data;
 			const currentDate = new Date();
 			// Normalize to partial day for inclusive date check
 			const periodCheckDate = new Date(currentDate);
@@ -3980,55 +4483,31 @@ export const controller = (prisma: PrismaClient) => {
 				};
 				let normalizedBreakdownForLineSync: any[] | null = null;
 				let lineVersionMode: "update" | "version" = "update";
-				if (isCorrectionResubmit && Array.isArray(breakdown) && breakdown.length > 0) {
-					const normalizedBreakdown = await normalizeBreakdownForPersistence({
-						organizationId: existingTimesheet.organizationId,
-						employeeId: existingTimesheet.employeeId,
-						breakdown,
-						employeeSchedule: (existingTimesheet.employee as any)?.schedule || null,
-					});
-					normalizedBreakdownForLineSync = normalizedBreakdown;
-					Object.assign(updateData, calculateSummaryFromBreakdown(normalizedBreakdown));
-					const isEditAuditEligible =
-						existingTimesheet.editPermissionStatus === "APPROVED" ||
-						existingTimesheet.editPermissionStatus === "CONSUMED";
-					if (isEditAuditEligible) {
-						const changedDays = buildChangedDaysFromBreakdown(
-							buildBreakdownFromTimesheetLines(
-								(existingTimesheet as any).timesheetlines,
-							),
-							normalizedBreakdown,
-						);
-						if (isCorrectionResubmit && !changedDays.length) {
-							const errorResponse = buildErrorResponse(
-								"NO_CHANGES_TO_RESUBMIT",
-								409,
-								[
-									{
-										field: "breakdown",
-										message: "NO_CHANGES_TO_RESUBMIT",
-									},
-								],
-							);
-							res.status(409).json(errorResponse);
-							return;
-						}
-						if (changedDays.length) lineVersionMode = "version";
-					}
-				} else if (isCorrectionResubmit) {
-					const errorResponse = buildErrorResponse("NO_CHANGES_TO_RESUBMIT", 409, [
-						{
-							field: "breakdown",
-							message: "NO_CHANGES_TO_RESUBMIT",
-						},
-					]);
-					res.status(409).json(errorResponse);
+				let versionDayKeys: Set<string> | undefined;
+				let manualEditDayKeys: Set<string> | undefined;
+				let skipObligationMaterialize = false;
+				const submitBreakdownPersistence = await prepareSubmitBreakdownPersistence({
+					existingTimesheet,
+					breakdown,
+					editedDayKeys,
+					isCorrectionResubmit,
+					isEmployeeOwner: true,
+					employeeSchedule: (existingTimesheet.employee as any)?.schedule || null,
+				});
+				if (submitBreakdownPersistence.errorResponse) {
+					res.status(409).json(submitBreakdownPersistence.errorResponse);
 					return;
 				}
+				normalizedBreakdownForLineSync =
+					submitBreakdownPersistence.normalizedBreakdownForLineSync;
+				lineVersionMode = submitBreakdownPersistence.lineVersionMode;
+				versionDayKeys = submitBreakdownPersistence.versionDayKeys;
+				manualEditDayKeys = submitBreakdownPersistence.manualEditDayKeys;
+				skipObligationMaterialize = submitBreakdownPersistence.skipObligationMaterialize;
+				Object.assign(updateData, submitBreakdownPersistence.summaryPatch);
 
-				if (!Array.isArray(normalizedBreakdownForLineSync)) {
+				if (!Array.isArray(normalizedBreakdownForLineSync) && !skipObligationMaterialize) {
 					// Normal first submission snapshots from AttendanceObligation.
-					// Client breakdowns are display/input context only until a correction resubmit.
 					await materializeTimesheetLinesFromObligations(prisma, {
 						organizationId: existingTimesheet.organizationId,
 						employeeId: existingTimesheet.employeeId,
@@ -4066,6 +4545,8 @@ export const controller = (prisma: PrismaClient) => {
 						timesheetId: updatedTimesheet.id,
 						breakdown: normalizedBreakdownForLineSync,
 						versionMode: lineVersionMode,
+						versionDayKeys,
+						manualEditDayKeys,
 						ledgerType: lineVersionMode === "version" ? "CORRECTION" : "SNAPSHOT",
 						editedBy: employeeId,
 						editReason: notes || null,
@@ -4123,14 +4604,7 @@ export const controller = (prisma: PrismaClient) => {
 				});
 
 				try {
-					await invalidateCache.byPattern(
-						`cache:timesheet:byId:${updatedTimesheet.id}:*`,
-					);
-					await invalidateCache.byPattern(
-						`cache:timesheet:byCode:${updatedTimesheet.code}:*`,
-					);
-					await invalidateCache.byPattern("cache:timesheet:list:*");
-					await invalidateCache.byPattern("cache:timesheet:view:*");
+					await invalidateTimesheetCaches(updatedTimesheet.id, updatedTimesheet.code);
 					timesheetLogger.info("Cache invalidated after timesheet resubmission");
 				} catch (cacheError) {
 					timesheetLogger.warn(
@@ -5136,6 +5610,174 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const createOvertimeRequest = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+		const authReq = req as AuthRequest;
+
+		try {
+			const employeeId = authReq.metadata?.employee?.id;
+			const organizationId = authReq.organizationId;
+			if (!employeeId || !organizationId) {
+				res.status(400).json(buildErrorResponse("Employee context is required", 400));
+				return;
+			}
+
+			const body = (req.body || {}) as Record<string, unknown>;
+			const date = body.date ? new Date(String(body.date)) : null;
+			const timesheetLineId = body.timesheetLineId ? String(body.timesheetLineId) : null;
+			if (!date && !timesheetLineId) {
+				res
+					.status(400)
+					.json(buildErrorResponse("date or timesheetLineId is required", 400));
+				return;
+			}
+
+			const result = await createOvertimeRequestForTimesheetLine({
+				prisma,
+				organizationId,
+				employeeId,
+				timesheetId: id,
+				timesheetLineId,
+				date: date || new Date(),
+				description: typeof body.description === "string" ? body.description : undefined,
+				notes: typeof body.notes === "string" ? body.notes : undefined,
+				generateRequestCode,
+			});
+
+			await invalidateTimesheetCaches(id);
+
+			try {
+				await publishRequestCreatedNotification(
+					prisma,
+					(authReq as any).io,
+					result.requestId,
+					employeeId,
+				);
+			} catch (notificationError) {
+				timesheetLogger.warn(
+					`Failed to publish overtime request notification for ${result.requestId}: ${notificationError}`,
+				);
+			}
+
+			res.status(201).json(buildSuccessResponse("Overtime request created", result, 201));
+		} catch (error) {
+			const message = String((error as Error)?.message || error || "");
+			if (message === "TIMESHEET_NOT_FOUND" || message === "TIMESHEET_LINE_NOT_FOUND") {
+				res.status(404).json(buildErrorResponse(message, 404));
+				return;
+			}
+			if (
+				message === "NOT_OVERTIME_CANDIDATE" ||
+				message === "OVERTIME_REQUEST_ALREADY_FILED"
+			) {
+				res.status(409).json(buildErrorResponse(message, 409));
+				return;
+			}
+			if (message === "WORKFLOW_NOT_CONFIGURED") {
+				res.status(409).json(buildErrorResponse(message, 409));
+				return;
+			}
+			timesheetLogger.error(`Failed to create overtime request: ${error}`);
+			res.status(500).json(buildErrorResponse("Failed to create overtime request", 500));
+		}
+	};
+
+	const createPayrollCorrection = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+		const authReq = req as AuthRequest;
+
+		try {
+			const employeeId = authReq.metadata?.employee?.id;
+			const organizationId = authReq.organizationId;
+			if (!employeeId || !organizationId) {
+				res.status(400).json(buildErrorResponse("Employee context is required", 400));
+				return;
+			}
+
+			const body = (req.body || {}) as Record<string, unknown>;
+			const reason = typeof body.reason === "string" ? body.reason : "";
+			const dayDeltas = body.dayDeltas;
+
+			const result = await createPayrollCorrectionRequest({
+				prisma,
+				organizationId,
+				employeeId,
+				timesheetId: id,
+				reason,
+				dayDeltas,
+				description: typeof body.description === "string" ? body.description : undefined,
+				notes: typeof body.notes === "string" ? body.notes : undefined,
+				generateRequestCode,
+			});
+
+			await invalidateTimesheetCaches(id);
+
+			try {
+				await publishRequestCreatedNotification(
+					prisma,
+					(authReq as any).io,
+					result.requestId,
+					employeeId,
+				);
+			} catch (notificationError) {
+				timesheetLogger.warn(
+					`Failed to publish payroll correction notification for ${result.requestId}: ${notificationError}`,
+				);
+			}
+
+			res
+				.status(201)
+				.json(buildSuccessResponse("Payroll correction request created", result, 201));
+		} catch (error) {
+			const message = String((error as Error)?.message || error || "");
+			if (message === "TIMESHEET_NOT_FOUND") {
+				res.status(404).json(buildErrorResponse(message, 404));
+				return;
+			}
+			if (
+				message === "TIMESHEET_NOT_PAYROLL_LOCKED" ||
+				message === "DUPLICATE_OPEN_CORRECTION_DAY" ||
+				message === "WORKFLOW_NOT_CONFIGURED" ||
+				message === "DAY_DELTAS_REQUIRED" ||
+				message === "REASON_REQUIRED"
+			) {
+				res.status(409).json(buildErrorResponse(message, 409));
+				return;
+			}
+			timesheetLogger.error(`Failed to create payroll correction: ${error}`);
+			res.status(500).json(buildErrorResponse("Failed to create payroll correction", 500));
+		}
+	};
+
+	const listPayrollCorrections = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+		const authReq = req as AuthRequest;
+
+		try {
+			const organizationId = authReq.organizationId;
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization context is required", 400));
+				return;
+			}
+
+			const employeeId = authReq.metadata?.employee?.id as string | undefined;
+			const rows = await listPayrollCorrectionsForTimesheet({
+				prisma,
+				organizationId,
+				timesheetId: id,
+				// Employees see own; managers/HR with broader access can omit filter via role later
+				employeeId: employeeId || undefined,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse("Payroll corrections retrieved", { items: rows }),
+			);
+		} catch (error) {
+			timesheetLogger.error(`Failed to list payroll corrections: ${error}`);
+			res.status(500).json(buildErrorResponse("Failed to list payroll corrections", 500));
+		}
+	};
+
 	return {
 		create,
 		getAll,
@@ -5151,6 +5793,9 @@ export const controller = (prisma: PrismaClient) => {
 		requestEditPermission,
 		reviewEditPermission,
 		consumeEditPermission,
+		createOvertimeRequest,
+		createPayrollCorrection,
+		listPayrollCorrections,
 		normalizeBreakdownPreview,
 		ensurePeriodDrafts,
 		repairCurrentPeriodCoverage,

@@ -31,6 +31,30 @@ const WORKBOOK_RELATIVE_PATH = path.join(
 	"Copy of 2026_04_April_HR Monthly Manpower Distribution.xlsx",
 );
 
+const buildEmptyManpowerDistributionWorkbookReference = (
+	month = "2026-04",
+) => ({
+	sourceWorkbook: WORKBOOK_RELATIVE_PATH.replace(/\\/g, "/"),
+	month,
+	genderSummary: {
+		female: 0,
+		male: 0,
+		total: 0,
+	},
+	bnpiGenderSummary: {
+		female: 0,
+		male: 0,
+		total: 0,
+	},
+	agencyGenderSummary: {
+		female: 0,
+		male: 0,
+		total: 0,
+	},
+	directAgencySnapshot: null,
+	averageManpower: null,
+});
+
 const toNumber = (value: unknown): number => {
 	const parsed = Number(value || 0);
 	return Number.isFinite(parsed) ? parsed : 0;
@@ -141,12 +165,13 @@ const readAverageManpower = (
 export const getManpowerDistributionWorkbookReference = (
 	options: ManpowerDistributionReferenceOptions = {},
 ) => {
+	const month = options.month || "2026-04";
 	const workbookPath = path.resolve(process.cwd(), "..", WORKBOOK_RELATIVE_PATH);
 	const fallbackPath = path.resolve(process.cwd(), WORKBOOK_RELATIVE_PATH);
 	const sourcePath = fs.existsSync(workbookPath) ? workbookPath : fallbackPath;
 
 	if (!fs.existsSync(sourcePath)) {
-		throw new Error("Manpower distribution workbook not found.");
+		return buildEmptyManpowerDistributionWorkbookReference(month);
 	}
 
 	const workbook = XLSX.readFile(sourcePath, {
@@ -160,7 +185,7 @@ export const getManpowerDistributionWorkbookReference = (
 
 	return {
 		sourceWorkbook: WORKBOOK_RELATIVE_PATH.replace(/\\/g, "/"),
-		month: options.month || "2026-04",
+		month,
 		genderSummary: readGrandTotal(workbook, "Gender Summary"),
 		bnpiGenderSummary: readGrandTotal(workbook, "BNPI Gender"),
 		agencyGenderSummary: readGrandTotal(workbook, "Agency Gender"),

@@ -14,6 +14,9 @@ import {
 } from "../../helper/employee-schedule.helper";
 import { invalidateCache } from "../../middleware/cache";
 import { recomputeAttendanceObligationsForRange } from "../../helper/attendance-obligation.helper";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
+import { config } from "../../config/constant";
 
 const getOrganizationId = (req: Request): string | null =>
 	((req as any).organizationId ||
@@ -112,6 +115,17 @@ const summarizePrimarySnapshot = (embeddedSchedule: any) => {
 	const pattern = Array.isArray(embeddedSchedule?.pattern) ? embeddedSchedule.pattern : [];
 	const first = pattern.find((item: any) => Number(item?.day) === 1) || pattern[0] || null;
 	return first?.shiftSnapshot || null;
+};
+
+const summarizeScheduleForAudit = (embeddedSchedule: any) => {
+	if (!embeddedSchedule || typeof embeddedSchedule !== "object") return null;
+	return {
+		templateId: embeddedSchedule.templateId || null,
+		templateCode: embeddedSchedule.templateCode || null,
+		templateName: embeddedSchedule.templateName || null,
+		effectiveStartDate: embeddedSchedule.effectiveStartDate || null,
+		source: embeddedSchedule.templateId ? "template" : "manual",
+	};
 };
 
 export const controller = (prisma: PrismaClient) => {
@@ -351,6 +365,36 @@ export const controller = (prisma: PrismaClient) => {
 			shiftSnapshot: summarizePrimarySnapshot(nextEmbeddedSchedule),
 			scheduleTemplate,
 		};
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.ACTIONS.CREATE_EMPLOYEESCHEDULE,
+			description: `${config.ACTIVITY_LOG.EMPLOYEESCHEDULE.DESCRIPTIONS.EMPLOYEESCHEDULE_CREATED}: employeeId=${validation.data.employeeId}`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.PAGES.EMPLOYEESCHEDULE_CREATION,
+			},
+			organizationId,
+		});
+
+		logAudit(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.AUDIT_LOG.ACTIONS.CREATE,
+			resource: config.AUDIT_LOG.RESOURCES.EMPLOYEESCHEDULE,
+			severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+			entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEESCHEDULE,
+			entityId: validation.data.employeeId,
+			changesBefore: summarizeScheduleForAudit(targetEmployee.embeddedSchedule),
+			changesAfter: {
+				employeeId: validation.data.employeeId,
+				source,
+				scheduleTemplateId: scheduleTemplate?.id || null,
+				...summarizeScheduleForAudit(nextEmbeddedSchedule),
+			},
+			description: `${config.AUDIT_LOG.EMPLOYEESCHEDULE.DESCRIPTIONS.EMPLOYEESCHEDULE_CREATED}: employeeId=${validation.data.employeeId}`,
+			organizationId,
+		});
+
 		res.status(201).json(buildSuccessResponse("Employee schedule created", response, 201));
 	};
 
@@ -557,6 +601,18 @@ export const controller = (prisma: PrismaClient) => {
 				});
 			})
 			.sort((a: any, b: any) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.ACTIONS.GET_ALL_EMPLOYEESCHEDULE,
+			description: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.DESCRIPTIONS.EMPLOYEESCHEDULES_RETRIEVED,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.PAGES.EMPLOYEESCHEDULE_LIST,
+			},
+			organizationId,
+		});
+
 		res.status(200).json(
 			buildSuccessResponse("Employee schedules retrieved", { schedules }, 200),
 		);
@@ -780,6 +836,36 @@ export const controller = (prisma: PrismaClient) => {
 					: null),
 			updated,
 		};
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.ACTIONS.UPDATE_EMPLOYEESCHEDULE,
+			description: `${config.ACTIVITY_LOG.EMPLOYEESCHEDULE.DESCRIPTIONS.EMPLOYEESCHEDULE_UPDATED}: employeeId=${targetEmployeeId}`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.PAGES.EMPLOYEESCHEDULE_UPDATE,
+			},
+			organizationId,
+		});
+
+		logAudit(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.AUDIT_LOG.ACTIONS.UPDATE,
+			resource: config.AUDIT_LOG.RESOURCES.EMPLOYEESCHEDULE,
+			severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+			entityType: config.AUDIT_LOG.ENTITY_TYPES.EMPLOYEESCHEDULE,
+			entityId: targetEmployeeId,
+			changesBefore: summarizeScheduleForAudit(targetEmployee.embeddedSchedule),
+			changesAfter: {
+				employeeId: targetEmployeeId,
+				source,
+				scheduleTemplateId: scheduleTemplate?.id || updatedEmbeddedSchedule?.templateId || null,
+				...summarizeScheduleForAudit(updatedEmbeddedSchedule),
+			},
+			description: `${config.AUDIT_LOG.EMPLOYEESCHEDULE.DESCRIPTIONS.EMPLOYEESCHEDULE_UPDATED}: employeeId=${targetEmployeeId}`,
+			organizationId,
+		});
+
 		res.status(200).json(buildSuccessResponse("Employee schedule updated", response, 200));
 	};
 
@@ -799,6 +885,17 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		const days = await buildCalendarDays({ organizationId, employeeId, start, end });
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.ACTIONS.GET_EMPLOYEESCHEDULE,
+			description: `${config.ACTIVITY_LOG.EMPLOYEESCHEDULE.DESCRIPTIONS.EMPLOYEESCHEDULE_RETRIEVED}: employeeId=${employeeId}`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.PAGES.EMPLOYEESCHEDULE_DETAILS,
+			},
+			organizationId,
+		});
 
 		res.status(200).json(
 			buildSuccessResponse("Employee schedule calendar retrieved", { employeeId, days }, 200),
@@ -829,6 +926,18 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		const days = await buildCalendarDays({ organizationId, employeeId, start, end });
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.ACTIONS.GET_EMPLOYEESCHEDULE,
+			description: `${config.ACTIVITY_LOG.EMPLOYEESCHEDULE.DESCRIPTIONS.EMPLOYEESCHEDULE_RETRIEVED}: employeeId=${employeeId} (pre-schedule)`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.EMPLOYEESCHEDULE.PAGES.EMPLOYEESCHEDULE_DETAILS,
+			},
+			organizationId,
+		});
+
 		res.status(200).json(
 			buildSuccessResponse(
 				"Employee pre-schedule calendar retrieved",

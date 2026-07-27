@@ -1,380 +1,248 @@
+import type { ReactNode } from "react";
+import { StatusBadge } from "~/components/atoms/StatusBadge";
 import type { Employee } from "~/services/employees.service";
 import {
-	CheckCircle,
-	AlertCircle,
+	BadgeCheck,
 	Briefcase,
-	Calendar,
 	Building2,
-	Users,
+	Calendar,
+	CheckCircle2,
 	Clock,
 	MapPin,
-	BadgeCheck,
+	Users,
 } from "lucide-react";
 
 interface EmploymentDetailsTabProps {
 	employee: Employee;
 }
 
+const formatDate = (date?: string | null) => {
+	if (!date) return "N/A";
+	return new Date(date).toLocaleDateString("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+	});
+};
+
+const formatEnumLabel = (value?: string | null) => {
+	const normalized = String(value || "").trim();
+	if (!normalized) return "N/A";
+	return normalized
+		.toLowerCase()
+		.replace(/_/g, " ")
+		.replace(/\b\w/g, (character) => character.toUpperCase());
+};
+
+const calculateTenure = (hireDate?: string | null) => {
+	if (!hireDate) return "Not started";
+
+	const start = new Date(hireDate);
+	const today = new Date();
+	const years = today.getFullYear() - start.getFullYear();
+	const months = today.getMonth() - start.getMonth();
+	const days = today.getDate() - start.getDate();
+
+	let finalYears = years;
+	let finalMonths = months;
+	let finalDays = days;
+
+	if (finalDays < 0) {
+		finalMonths -= 1;
+		finalDays += 30;
+	}
+
+	if (finalMonths < 0) {
+		finalYears -= 1;
+		finalMonths += 12;
+	}
+
+	const parts = [];
+	if (finalYears > 0) parts.push(`${finalYears}y`);
+	if (finalMonths > 0) parts.push(`${finalMonths}m`);
+	if (finalDays > 0) parts.push(`${finalDays}d`);
+
+	return parts.length > 0 ? parts.join(" ") : "0d";
+};
+
+const getProbationLabel = (probationEndDate?: string | null) => {
+	if (!probationEndDate) return null;
+	return new Date(probationEndDate) > new Date()
+		? "Currently on probation"
+		: "Probation completed";
+};
+
 export function EmploymentDetailsTab({ employee }: EmploymentDetailsTabProps) {
-	const formatDate = (date: string | undefined | null) => {
-		if (!date) return "N/A";
-		return new Date(date).toLocaleDateString("en-US", {
-			year: "numeric",
-			month: "long",
-			day: "numeric",
-		});
-	};
-
-	const calculateTenure = (hireDate: string | undefined) => {
-		if (!hireDate) return "0 days";
-		const start = new Date(hireDate);
-		const today = new Date();
-		const years = today.getFullYear() - start.getFullYear();
-		const months = today.getMonth() - start.getMonth();
-		const days = today.getDate() - start.getDate();
-
-		let finalYears = years;
-		let finalMonths = months;
-		let finalDays = days;
-
-		if (finalDays < 0) {
-			finalMonths--;
-			finalDays += 30;
-		}
-		if (finalMonths < 0) {
-			finalYears--;
-			finalMonths += 12;
-		}
-
-		const parts = [];
-		if (finalYears > 0) parts.push(`${finalYears}y`);
-		if (finalMonths > 0) parts.push(`${finalMonths}m`);
-		if (finalDays > 0) parts.push(`${finalDays}d`);
-
-		return parts.length > 0 ? parts.join(" ") : "0 days";
-	};
-
-	const isProbationActive = employee.probationEndDate
-		? new Date(employee.probationEndDate) > new Date()
-		: false;
+	const workforceSource = formatEnumLabel(employee.workforceSource);
+	const workLocation = formatEnumLabel(employee.workLocation);
+	const probationLabel = getProbationLabel(employee.probationEndDate);
 
 	return (
-		<div className="space-y-8">
-			{/* Employment Status Section */}
-			<section>
-				<div className="flex items-center gap-2 mb-4">
-					<div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-						<BadgeCheck className="w-4 h-4 text-orange-600" />
-					</div>
-					<h3 className="text-base font-semibold text-gray-900">Employment Status</h3>
+		<div className="grid gap-4 xl:grid-cols-2" data-testid="employment-card-grid">
+			<EmploymentCard
+				icon={BadgeCheck}
+				title="Employment Status"
+				rows={[
+					{
+						label: "Employee ID",
+						value: employee.employeeId || "Not assigned",
+					},
+					{
+						label: "Status",
+						value: <StatusBadge status={employee.employmentStatus} />,
+					},
+					{
+						label: "Workforce Source",
+						value: workforceSource,
+					},
+				]}
+			/>
+
+			<EmploymentCard
+				icon={Briefcase}
+				title="Work Arrangement"
+				rows={[
+					{
+						label: "Employment Type",
+						value: formatEnumLabel(employee.employmentType),
+					},
+					{
+						label: "Work Location",
+						value: workLocation,
+					},
+					...(employee.agency?.name
+						? [
+								{
+									label: "Agency",
+									value: employee.agency.name,
+									hint: employee.agency.code || null,
+								},
+							]
+						: []),
+				]}
+				emptyMessage="No work arrangement details available."
+			/>
+
+			<EmploymentCard
+				icon={Calendar}
+				title="Important Dates"
+				rows={[
+					{
+						label: "Hire Date",
+						value: formatDate(employee.employmentHireDate),
+						hint: `Tenure ${calculateTenure(employee.employmentHireDate)}`,
+					},
+					{
+						label: "Employment Start",
+						value: formatDate(employee.employmentStartDate),
+					},
+					...(employee.probationEndDate
+						? [
+								{
+									label: "Probation End",
+									value: formatDate(employee.probationEndDate),
+									hint: probationLabel,
+								},
+							]
+						: []),
+					...(employee.employmentTerminationDate
+						? [
+								{
+									label: "Termination Date",
+									value: formatDate(employee.employmentTerminationDate),
+								},
+							]
+						: []),
+				]}
+			/>
+
+			<EmploymentCard
+				icon={Building2}
+				title="Position & Department"
+				rows={[
+					{
+						label: "Department",
+						value: employee.department?.name || "Not assigned",
+						hint: employee.department?.code || null,
+					},
+					{
+						label: "Section",
+						value: employee.section?.name || "Not assigned",
+						hint: employee.section?.code || null,
+					},
+					{
+						label: "Position",
+						value: employee.position?.title || "Not assigned",
+						hint: employee.position?.code || null,
+					},
+					{
+						label: "Level",
+						value: employee.level?.name || "Not assigned",
+					},
+				]}
+			/>
+		</div>
+	);
+}
+
+function EmploymentCard({
+	icon: Icon,
+	title,
+	rows,
+	emptyMessage,
+}: {
+	icon: typeof Briefcase;
+	title: string;
+	rows: Array<{
+		label: string;
+		value: ReactNode;
+		hint?: ReactNode;
+	}>;
+	emptyMessage?: string;
+}) {
+	const visibleRows = rows.filter((row) => {
+		if (typeof row.value === "string") {
+			return row.value.trim().length > 0;
+		}
+		return row.value !== null && row.value !== undefined;
+	});
+
+	return (
+		<section className="rounded-2xl border border-border bg-white shadow-sm">
+			<div className="flex items-center gap-3 border-b border-border bg-muted/30 px-5 py-4">
+				<div className="rounded-xl bg-primary/10 p-2 text-primary">
+					<Icon className="h-4 w-4" />
 				</div>
+				<div>
+					<h3 className="text-base font-semibold text-foreground">{title}</h3>
+				</div>
+			</div>
 
-				<div className="border border-gray-200 rounded-xl overflow-hidden">
-					<div className="divide-y divide-gray-100">
-						{/* Employee ID */}
-						{employee.employeeId && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Briefcase className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Employee ID
-									</span>
-								</div>
-								<span className="text-sm text-gray-600 font-mono">
-									{employee.employeeId}
-								</span>
+			{visibleRows.length > 0 ? (
+				<div className="divide-y divide-border/70 px-5">
+					{visibleRows.map((row) => (
+						<div
+							key={`${title}-${row.label}`}
+							className="flex items-start justify-between gap-4 py-4">
+							<div className="min-w-0 space-y-1">
+								<p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+									{row.label}
+								</p>
+								{row.hint ? (
+									<p className="text-sm text-muted-foreground">{row.hint}</p>
+								) : null}
 							</div>
-						)}
-
-						{/* Employment Status */}
-						<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-							<div className="flex items-center gap-3">
-								{employee.employmentStatus === "ACTIVE" ? (
-									<CheckCircle className="w-4 h-4 text-green-500" />
-								) : (
-									<AlertCircle className="w-4 h-4 text-red-500" />
-								)}
-								<span className="text-sm font-medium text-gray-700">Status</span>
-							</div>
-							<div className="flex items-center gap-2">
-								<span
-									className="w-2 h-2 rounded-full animate-pulse"
-									style={{
-										backgroundColor:
-											employee.employmentStatus === "ACTIVE"
-												? "#22c55e"
-												: employee.employmentStatus === "TERMINATED"
-													? "#ef4444"
-													: "#6b7280",
-									}}
-								/>
-								<span className="text-sm text-gray-600 capitalize">
-									{employee.employmentStatus || "N/A"}
-								</span>
+							<div className="min-w-0 text-right text-sm font-medium text-foreground">
+								{row.value}
 							</div>
 						</div>
-					</div>
+					))}
 				</div>
-			</section>
-
-			{/* Work Arrangement Section */}
-			<section>
-				<div className="flex items-center gap-2 mb-4">
-					<div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-						<Briefcase className="w-4 h-4 text-orange-600" />
-					</div>
-					<h3 className="text-base font-semibold text-gray-900">Work Arrangement</h3>
+			) : (
+				<div className="px-5 py-8 text-sm text-muted-foreground">
+					{emptyMessage || "No information available."}
 				</div>
-
-				<div className="border border-gray-200 rounded-xl overflow-hidden">
-					<div className="divide-y divide-gray-100">
-						{/* Employment Type */}
-						{employee.employmentType && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Briefcase className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Employment Type
-									</span>
-								</div>
-								<span className="text-sm text-gray-600">
-									{employee.employmentType}
-								</span>
-							</div>
-						)}
-
-						{/* Work Location */}
-						{employee.workLocation && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<MapPin className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Work Location
-									</span>
-								</div>
-								<span className="text-sm text-gray-600">
-									{employee.workLocation}
-								</span>
-							</div>
-						)}
-
-						{/* Show empty state if nothing */}
-						{!employee.employmentType && !employee.workLocation && (
-							<div className="px-4 py-8 text-center">
-								<Briefcase className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-								<p className="text-sm text-gray-500">
-									No work arrangement details available
-								</p>
-							</div>
-						)}
-					</div>
-				</div>
-			</section>
-
-			{/* Important Dates Section */}
-			<section>
-				<div className="flex items-center gap-2 mb-4">
-					<div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-						<Calendar className="w-4 h-4 text-orange-600" />
-					</div>
-					<h3 className="text-base font-semibold text-gray-900">Important Dates</h3>
-				</div>
-
-				<div className="border border-gray-200 rounded-xl overflow-hidden">
-					<div className="divide-y divide-gray-100">
-						{/* Hire Date */}
-						{employee.employmentHireDate && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Calendar className="w-4 h-4 text-green-500" />
-									<span className="text-sm font-medium text-gray-700">
-										Hire Date
-									</span>
-								</div>
-								<div className="text-right">
-									<span className="text-sm text-gray-600">
-										{formatDate(employee.employmentHireDate)}
-									</span>
-									<p className="text-xs text-gray-400 mt-0.5">
-										Tenure: {calculateTenure(employee.employmentHireDate)}
-									</p>
-								</div>
-							</div>
-						)}
-
-						{/* Employment Start Date */}
-						{employee.employmentStartDate && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Calendar className="w-4 h-4 text-blue-500" />
-									<span className="text-sm font-medium text-gray-700">
-										Employment Start Date
-									</span>
-								</div>
-								<span className="text-sm text-gray-600">
-									{formatDate(employee.employmentStartDate)}
-								</span>
-							</div>
-						)}
-
-						{/* Probation End Date */}
-						{employee.probationEndDate && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Clock className="w-4 h-4 text-amber-500" />
-									<span className="text-sm font-medium text-gray-700">
-										Probation End
-									</span>
-								</div>
-								<div className="text-right">
-									<span className="text-sm text-gray-600">
-										{formatDate(employee.probationEndDate)}
-									</span>
-									<p className="text-xs text-gray-400 mt-0.5">
-										{isProbationActive
-											? "Currently on probation"
-											: "Probation completed"}
-									</p>
-								</div>
-							</div>
-						)}
-
-						{/* Termination Date */}
-						{employee.employmentTerminationDate && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Calendar className="w-4 h-4 text-red-500" />
-									<span className="text-sm font-medium text-gray-700">
-										Termination Date
-									</span>
-								</div>
-								<span className="text-sm text-gray-600">
-									{formatDate(employee.employmentTerminationDate)}
-								</span>
-							</div>
-						)}
-
-						{/* Show empty state if nothing */}
-						{!employee.employmentHireDate &&
-							!employee.employmentStartDate &&
-							!employee.probationEndDate &&
-							!employee.employmentTerminationDate && (
-								<div className="px-4 py-8 text-center">
-									<Calendar className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-									<p className="text-sm text-gray-500">
-										No date information available
-									</p>
-								</div>
-							)}
-					</div>
-				</div>
-			</section>
-
-			{/* Position & Department Section */}
-			<section>
-				<div className="flex items-center gap-2 mb-4">
-					<div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-						<Building2 className="w-4 h-4 text-orange-600" />
-					</div>
-					<h3 className="text-base font-semibold text-gray-900">Position & Department</h3>
-				</div>
-
-				<div className="border border-gray-200 rounded-xl overflow-hidden">
-					<div className="divide-y divide-gray-100">
-						{/* Department */}
-						{employee.department && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Users className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Department
-									</span>
-								</div>
-								<div className="text-right">
-									<span className="text-sm text-gray-600">
-										{employee.department.name || "N/A"}
-									</span>
-									{employee.department.code && (
-										<p className="text-xs text-gray-400 mt-0.5">
-											Code: {employee.department.code}
-										</p>
-									)}
-								</div>
-							</div>
-						)}
-
-						{/* Position */}
-						{employee.section && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Users className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Section
-									</span>
-								</div>
-								<div className="text-right">
-									<span className="text-sm text-gray-600">
-										{employee.section.name || "N/A"}
-									</span>
-									{employee.section.code && (
-										<p className="text-xs text-gray-400 mt-0.5">
-											Code: {employee.section.code}
-										</p>
-									)}
-								</div>
-							</div>
-						)}
-
-						{/* Position */}
-						{employee.position && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<Briefcase className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">
-										Position
-									</span>
-								</div>
-								<div className="text-right">
-									<span className="text-sm text-gray-600">
-										{employee.position.title || "N/A"}
-									</span>
-									{employee.position.code && (
-										<p className="text-xs text-gray-400 mt-0.5">
-											Code: {employee.position.code}
-										</p>
-									)}
-								</div>
-							</div>
-						)}
-
-						{/* Level */}
-						{employee.level && (
-							<div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
-								<div className="flex items-center gap-3">
-									<BadgeCheck className="w-4 h-4 text-gray-400" />
-									<span className="text-sm font-medium text-gray-700">Level</span>
-								</div>
-								<span className="text-sm text-gray-600">
-									{employee.level.name || "N/A"}
-								</span>
-							</div>
-						)}
-
-						{/* Show empty state if nothing */}
-						{!employee.department &&
-							!employee.section &&
-							!employee.position &&
-							!employee.level && (
-							<div className="px-4 py-8 text-center">
-								<Building2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-								<p className="text-sm text-gray-500">
-									No position information available
-								</p>
-							</div>
-						)}
-					</div>
-				</div>
-			</section>
-		</div>
+			)}
+		</section>
 	);
 }

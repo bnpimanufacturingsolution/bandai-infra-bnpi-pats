@@ -448,6 +448,26 @@
 - UI proof: Sync review modal shows raw custody counts (`718 enrolled Â· 627 raw Â· 91 missing_raw_blob`, `356 enrolled Â· 311 raw Â· 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
 - Evidence: `.runtime/test-a-raw-repair-loop-20260720-103434/`.
 
+## Latest Task Addendum - 2026-07-20 `npm run dev:local` one-shot local clone
+
+- Task mode: Dev ergonomics — one command for isolated local API.
+- `npm run dev` — unchanged shared DEV tunnel path.
+- `npm run dev:local` — single script `scripts/run-dev-local.cjs`: ensure env file, start Docker clone container, predev skips, API watch on `5433`.
+- Boundary: empty new container still needs prior dump/restore for real data.
+
+## Latest Task Addendum - 2026-07-20 Local Windows remote-dev CF SSH / DB tunnel bootstrap
+
+- Task mode: Regression repair + workstation bootstrap (docs + scripts).
+- Problem: Remote Windows host could not complete `hris-api` `npm run dev` / login because LAN SSH to `10.184.37.19` is closed, K3s DEV ClusterIP `10.43.130.9:5432` refused Postgres, local `55435` tunnel half-died, and Hikvision reverse port `59443` was held by stale VM `sshd`.
+- Repo changes:
+  - `scripts/start-k8s-dev-db-access.ps1` — Postgres wire check + compose DEV `127.0.0.1:15433` fallback for SSH `-L` to local `55435`.
+  - `scripts/start-host-hikvision-vm-ssh-bridge.ps1` — clear reverse ports with `fuser -k`.
+  - `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md` — operator log.
+- Workstation-only (not git): `node-health-appliance_ed25519`, SSH config `project-truth-hris`, cloudflared install, VM `authorized_keys` public key append.
+- Operator recipe for API-only local dev: `HIKVISION_VM_BRIDGE_ENABLED=false`, `HRIS_SKIP_DEVICE_LIVE_PATH=true`, `npm.cmd run dev`; success = `Server running at http://localhost:3001`.
+- Evidence: `.runtime/local-dev-cf-ssh-db-tunnel-20260720/`.
+- Boundary: not a push to `origin/develop`; not a K3s health claim; UI "Unable to connect" was empty `:3001`, not auth body.
+
 ## Latest Task Addendum - 2026-07-20 Raw biometric package export/import alignment
 
 - Task mode: Mixed owner-requirement correction across Device Users export/import API, admin UI, contracts, and WWG truth.

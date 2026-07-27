@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/03-requirements/functional-requirements.md) -->
 # Functional Requirements
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -66,6 +67,7 @@ Source basis: route map, service clients, type models, tests, docs, Firebase con
 - CONFIRMED: Support payroll settings, payroll periods, payroll run routes, employee payroll, HR payroll, payslips, billings, and statements of account.
 - CONFIRMED: Payroll models include earnings, deductions, bonuses, overtime, net pay, gross pay, and paid/processed/pending/cancelled states.
 - INFERRED: Payroll depends on employee, attendance, timesheet, leave, and benefit data.
+- CONFIRMED: HR benefits management can create/edit employee benefit enrollments (page title/CTA: Enroll employees) with schedule fields; create uses full page `/hr/benefits-management/new`; recurring uses per-period amount and optional open-ended end date. API owns installment generation/ensure and payroll apply. Domain may still call resulting payroll money a “payroll adjustment.”
 - NEEDS_CONFIRMATION: Whether payroll is production-grade calculation, preview-only, or integration support.
 
 ## Recruitment And Public Applications
@@ -93,4 +95,3 @@ Source basis: route map, service clients, type models, tests, docs, Firebase con
 - CONFIRMED: Admin configuration includes departments, agencies, positions, levels, employees, users, shift types, schedules, schedule templates, loan types, calendar items, holidays, workflows, guide content, devices, audit logs, activity logs, disciplinary actions, messages, notifications, and help.
 - CONFIRMED: Destructive employee deletion scripts exist and must remain approval-gated.
 - NEEDS_CONFIRMATION: Final admin permission matrix and production-safe operation policy.
-

@@ -1,7 +1,8 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/terminology-summary.md) -->
 # Terminology Summary
 
 Status: INFERRED_FROM_EXISTING_PROJECT
-Last reviewed: 2026-05-15
+Last reviewed: 2026-07-15
 
 ## Product Terms
 
@@ -30,6 +31,11 @@ Last reviewed: 2026-05-15
 - Request: workflow item such as leave, overtime, time adjustment, document request, promotion, regularization, transfer, salary change, or termination.
 - Leave: employee absence request and balance domain.
 - Payroll: pay-period and compensation processing domain.
+- PayrollCorrection / PAYROLL_CORRECTION: post-lock payable correction; UI Time In/Time Out on locked timesheet; API next-period retro apply (SOT in hris-api).
+- Retro line: labeled prior-period adjustment on apply-period payslip/HR summary (e.g. Retro OT …).
+- Benefit schedule mode: Time-bound, Fixed installments, or Recurring payroll benefit adjustment schedule (API-authoritative generation).
+- Recurring benefit: per-period amount, optional end date, continuous while active.
+- PFA / Perfect Attendance (payroll): attendance-filter benefit code; register/payslip field `perfectAttendance`. Not the metrics report. Seed name Performance Bonus may conflict — prefer product label + code PFA. attendanceBased off = fixed; on = ABSENT pro-rate + form warning.
 - Payslip: employee-facing payroll statement.
 - Billing / Statement of Account: billing artifact associated with payroll or workforce services.
 - Recruitment: job posting and applicant workflow domain.
@@ -47,4 +53,3 @@ Last reviewed: 2026-05-15
 Use these terms for agent orientation, but treat final user-facing labels and policy terms as NEEDS_CONFIRMATION until reviewed by the project owner.
 
 Keep the app/API ownership split explicit: this repo owns frontend routes, UI, client payloads, browser E2E, and app-side regressions; `../hris-api` owns backend authorization, persistence, DB invariants, API contracts, load tests, and soak tests.
-

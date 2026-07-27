@@ -32,6 +32,9 @@ What it does:
     - `prisma/schema/<name>.prisma` from `prisma/schema/template.prisma`
 - Adds service-specific config into `config/constant.ts`:
     - ERROR, SUCCESS, ACTIVITY_LOG (ACTIONS, DESCRIPTIONS, PAGES), AUDIT_LOG (RESOURCES, ENTITY_TYPES, DESCRIPTIONS)
+- Logging contract (see [LOGGING_STANDARDS.md](LOGGING_STANDARDS.md)):
+    - `logActivity()` on **every** handler, including `getAll` and `getById`
+    - `logAudit()` on **create / update / remove only**; do not call it on reads
 - Wires the service into `index.ts`:
     - Adds `const <name> = require("./app/<name>")(prisma);`
     - Adds `app.use(config.baseApiPath, <name>);`

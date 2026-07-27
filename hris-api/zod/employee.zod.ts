@@ -2,7 +2,10 @@ import { z } from "zod";
 import { isValidEntityId as isValidObjectId } from "../helper/id-validation.helper";
 import { CreatePersonSchema, UpdatePersonSchema } from "./person.zod";
 import { UpdateUserSchema } from "./user.zod";
-import { CreateEmployeeBenefitSchema } from "./employeebenefit.zod";
+import {
+	createEmployeeBenefitScheduleSchema,
+	CreateEmployeeBenefitInputSchema,
+} from "./employeebenefit.zod";
 
 // EmploymentStatus Enum
 export const EmploymentStatus = z.enum([
@@ -255,7 +258,11 @@ export const EmployeeSchema = z.object({
 	requests: z.array(z.string()),
 	employeePayrolls: z.array(z.string()),
 	employeeBenefits: z
-		.array(CreateEmployeeBenefitSchema.extend({ id: z.string().optional() }))
+		.array(
+			createEmployeeBenefitScheduleSchema(
+				CreateEmployeeBenefitInputSchema.extend({ id: z.string().optional() }),
+			),
+		)
 		.or(z.array(z.string())),
 	employeeLoans: z.array(z.string()),
 	documents: z.array(EmployeeDocumentSchema),
@@ -291,9 +298,11 @@ export const CreateEmployeeBaseSchema = EmployeeSchema.omit({
 	.extend({
 		employeeBenefits: z
 			.array(
-				CreateEmployeeBenefitSchema.omit({
-					employeeId: true, // Employee ID is not known at creation
-				}).extend({ id: z.string().optional(), employeeId: z.string().optional() }),
+				createEmployeeBenefitScheduleSchema(
+					CreateEmployeeBenefitInputSchema.omit({
+						employeeId: true, // Employee ID is not known at creation
+					}).extend({ id: z.string().optional(), employeeId: z.string().optional() }),
+				),
 			)
 			.optional(),
 	});
@@ -329,7 +338,9 @@ export const UpdateEmployeeSchema = EmployeeSchema.omit({
 })
 	.extend({
 		employeeBenefits: z.array(
-			CreateEmployeeBenefitSchema.extend({ id: z.string().optional() }),
+			createEmployeeBenefitScheduleSchema(
+				CreateEmployeeBenefitInputSchema.extend({ id: z.string().optional() }),
+			),
 		),
 	})
 	.partial()

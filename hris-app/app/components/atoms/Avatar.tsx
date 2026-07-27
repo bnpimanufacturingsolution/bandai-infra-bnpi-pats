@@ -1,6 +1,9 @@
 import * as React from "react";
+import {
+	EmployeeAvatarFallback,
+	employeeAvatarPlaceholderClassName,
+} from "~/components/atoms/EmployeeAvatar";
 import { cn } from "~/lib/utils";
-import { resolveUploadUrl } from "~/lib/upload-url";
 
 export interface AvatarProps extends React.ComponentProps<"div"> {
 	src?: string;
@@ -11,16 +14,6 @@ export interface AvatarProps extends React.ComponentProps<"div"> {
 
 const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
 	({ className, src, alt, name, size = "md", ...props }, ref) => {
-		const resolvedSrc = resolveUploadUrl(src);
-		const getInitials = (name: string) => {
-			return name
-				.split(" ")
-				.map((n) => n[0])
-				.join("")
-				.toUpperCase()
-				.slice(0, 2);
-		};
-
 		const sizeClasses = {
 			sm: "h-8 w-8 text-xs",
 			md: "h-10 w-10 text-sm",
@@ -32,19 +25,22 @@ const Avatar = React.forwardRef<HTMLDivElement, AvatarProps>(
 			<div
 				ref={ref}
 				className={cn(
-					"relative flex items-center justify-center rounded-full bg-orange-600 text-white font-medium",
+					"relative flex items-center justify-center overflow-hidden rounded-full font-medium",
+					src ? "bg-orange-600 text-white" : employeeAvatarPlaceholderClassName,
 					sizeClasses[size],
 					className,
 				)}
 				{...props}>
-				{resolvedSrc ? (
+				{src ? (
 					<img
-						src={resolvedSrc}
+						src={src}
 						alt={alt || name || "Avatar"}
 						className="h-full w-full rounded-full object-cover"
 					/>
 				) : (
-					<span>{name ? getInitials(name) : "?"}</span>
+					<span className="flex h-full w-full items-center justify-center bg-white p-1">
+						<EmployeeAvatarFallback />
+					</span>
 				)}
 			</div>
 		);

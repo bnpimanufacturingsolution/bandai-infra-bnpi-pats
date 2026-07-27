@@ -6,15 +6,12 @@ import { PrismaClient } from "../../generated/prisma";
 import { MigrationEventService } from "./migration-event.service";
 import { MigrationRunAdapterResult, MigrationRunRequest } from "./migration-run.types";
 import {
-	getMigrationApiRoot,
-	resolveMigrationApiPath,
+	isDm4ApprovedOvertimeWorkbookPath,
+	resolveApprovedOvertimePayrollPeriodCode,
 	resolveMigrationDm4SourceFiles,
 } from "./migration-dry-run.service";
 
 const activeDm4ProofScripts = new Map<string, ReturnType<typeof spawn>>();
-const APPROVED_OT_WORKBOOK_PATTERN = /2026\s+rptOvertimeDetails\.xlsx$/i;
-const ANY_APPROVED_OT_WORKBOOK_PATTERN = /\d{4}\s+rptOvertimeDetails\.xlsx$/i;
-const BANDAI_2026_PAYROLL_PERIOD_CODE = "PP-20260426-20260511";
 
 export class Dm4MigrationAdapter {
 	constructor(
@@ -38,22 +35,70 @@ export class Dm4MigrationAdapter {
 			: Array.isArray(request.sourceFiles)
 				? request.sourceFiles.map((file) => file.path || file.name)
 				: [];
-		const resolution = resolveMigrationDm4SourceFiles(rawSourceFiles);
+		const hasExplicitApprovedOvertimeOption =
+			Array.isArray(request.options?.approvedOvertimeFiles) ||
+			Array.isArray(request.options?.approvedOvertimeSourceFiles);
+		const explicitApprovedOvertimeFiles = Array.isArray(request.options?.approvedOvertimeFiles)
+			? request.options.approvedOvertimeFiles
+			: Array.isArray(request.options?.approvedOvertimeSourceFiles)
+				? request.options.approvedOvertimeSourceFiles
+				: [];
+		const resolution = resolveMigrationDm4SourceFiles(rawSourceFiles, {
+			approvedOvertimeFiles: explicitApprovedOvertimeFiles,
+			// UI sends an explicit list (possibly empty); do not force the legacy default OT file.
+			autoAppendDefaultApprovedOvertime: !hasExplicitApprovedOvertimeOption,
+		});
 		const sourceConfig = String(request.options?.sourceConfig || "").trim();
+		const preferredPeriodCode = String(request.options?.periodCode || "").trim() || undefined;
 		const approveHistoricalTimesheets = request.options?.approveHistoricalTimesheets === true;
-		const scriptPath = resolveMigrationApiPath("scripts", "bnpi-demo-attendance-proof.cjs");
+		const scriptPath = path.resolve(process.cwd(), "scripts", "bnpi-demo-attendance-proof.cjs");
+		const attendanceWorkbookFiles =
+			resolution.attendanceWorkbookFiles ||
+			resolution.workbookFiles.filter((filePath) => !isDm4ApprovedOvertimeWorkbookPath(filePath));
+		const approvedOvertimeWorkbooks =
+			resolution.approvedOvertimeWorkbookFiles?.length
+				? resolution.approvedOvertimeWorkbookFiles
+				: resolution.workbookFiles.filter((filePath) => isDm4ApprovedOvertimeWorkbookPath(filePath));
+		const otOnly = attendanceWorkbookFiles.length === 0 && approvedOvertimeWorkbooks.length > 0;
 
 		await this.events.append({
 			runId,
 			stage: "DM4",
 			eventType: "SOURCE_FILES_RESOLVED",
 			status: "READING_SOURCE",
-			message: `Resolved ${resolution.sourceWorkbookFiles.length} DM4 source workbook file(s).`,
-			counts: { sourceWorkbookCount: resolution.sourceWorkbookFiles.length },
-			metadata: { sourceWorkbookFiles: resolution.sourceWorkbookFiles.slice(0, 50) },
+			message: `Resolved ${resolution.sourceWorkbookFiles.length} DM4 source workbook file(s)${
+				otOnly ? " (approved overtime only)" : ""
+			}.`,
+			counts: {
+				sourceWorkbookCount: resolution.sourceWorkbookFiles.length,
+				attendanceWorkbookCount: attendanceWorkbookFiles.length,
+				approvedOvertimeWorkbookCount: approvedOvertimeWorkbooks.length,
+			},
+			metadata: {
+				sourceWorkbookFiles: resolution.sourceWorkbookFiles.slice(0, 50),
+				attendanceSourceFiles: (resolution.attendanceSourceFiles || []).slice(0, 50),
+				approvedOvertimeSourceFiles: (resolution.approvedOvertimeSourceFiles || []).slice(0, 50),
+				missingSourceWarnings: resolution.missing.slice(0, 20),
+				otOnly,
+			},
 		});
 
-		if (!fs.existsSync(scriptPath)) {
+		if (resolution.workbookFiles.length === 0 && !sourceConfig) {
+			const message =
+				resolution.missing[0]
+					? `No DM4 workbook files were found. Missing: ${resolution.missing[0]}`
+					: "No DM4 biometrics or approved overtime workbooks were supplied.";
+			await this.events.append({
+				runId,
+				stage: "DM4",
+				eventType: "BLOCKER_FOUND",
+				status: "BLOCKED",
+				message,
+			});
+			return { status: "BLOCKED", phase: "READING_SOURCE", errorJson: { message } };
+		}
+
+		if (!otOnly && !fs.existsSync(scriptPath)) {
 			await this.events.append({
 				runId,
 				stage: "DM4",
@@ -86,193 +131,270 @@ export class Dm4MigrationAdapter {
 			return { status: "BLOCKED", phase: "VALIDATING", counts: { matchedEmployees: employeeCount }, errorJson: { message } };
 		}
 
-		const progressFile = path.join(os.tmpdir(), `dm4-progress-${runId}.jsonl`);
-		try {
-			fs.rmSync(progressFile, { force: true });
-		} catch {
-			// Ignore stale diagnostic-file cleanup failures.
-		}
+		let proof: any = null;
+		let stderr = "";
+		let materialization: any = {};
 
-		const args = [scriptPath, "--apply", "--limit=all", "--batchSize=500", `--progressFile=${progressFile}`];
-		if (approveHistoricalTimesheets) args.push("--approveHistoricalTimesheets");
-		const attendanceWorkbookFiles = resolution.workbookFiles.filter(
-			(filePath) => !ANY_APPROVED_OT_WORKBOOK_PATTERN.test(filePath.replace(/\\/g, "/")),
-		);
-		if (attendanceWorkbookFiles.length > 0) {
-			args.push(`--files=${attendanceWorkbookFiles.join(";")}`);
-		} else if (sourceConfig) {
-			args.push(`--sourceConfig=${sourceConfig}`);
-		}
-
-		await this.events.append({
-			runId,
-			stage: "DM4",
-			stepCode: "DM4.1",
-			eventType: "STEP_STARTED",
-			status: "IMPORTING",
-			message: "Reading source workbooks and applying attendance evidence.",
-			counts: { sourceWorkbookCount: resolution.sourceWorkbookFiles.length, matchedEmployees: employeeCount },
-		});
-
-		const { stdout, stderr } = await this.runProofScriptWithProgress({
-			runId,
-			args,
-			progressFile,
-			sourceWorkbookCount: resolution.sourceWorkbookFiles.length,
-			matchedEmployees: employeeCount,
-		});
-		const jsonStart = stdout.indexOf("{");
-		const proof = jsonStart >= 0 ? JSON.parse(stdout.slice(jsonStart)) : null;
-		if (!proof) throw new Error("DM4 proof script did not return a JSON report.");
-		const selectedRowsTotal = Number(
-			proof?.phase1Selection?.selectedRowsTotal || proof?.phase2Application?.appliedTotal || 0,
-		);
-		const attendanceRowsFound = Number(proof?.phase3DbProof?.attendanceRowsFound || 0);
-		const timesheetlineRowsFound = Number(proof?.phase3DbProof?.timesheetlineRowsFound || 0);
-		if (selectedRowsTotal > 0 && attendanceRowsFound === 0 && timesheetlineRowsFound === 0) {
-			const skippedNoSchedule = Number(
-				proof?.phase2Application?.writeCounts?.rowsSkippedNoEmployeeSchedule ||
-					proof?.phase2Materialization?.presentRows?.writeCounts?.rowsSkippedNoEmployeeSchedule ||
-					0,
-			);
-			const message =
-				skippedNoSchedule >= selectedRowsTotal
-					? "DM4 proof selected source rows, but all rows were skipped because no active employee schedule covered the source dates."
-					: "DM4 proof selected source rows, but no attendance or timesheetline DB proof rows were found.";
+		if (otOnly) {
+			// OT-only: do not fall back to missing default biometrics paths in the attendance proof script.
 			await this.events.append({
 				runId,
 				stage: "DM4",
-				eventType: "BLOCKER_FOUND",
-				status: "BLOCKED",
-				message,
-				counts: { selectedRowsTotal, attendanceRowsFound, timesheetlineRowsFound, skippedNoSchedule },
+				stepCode: "DM4.1",
+				eventType: "STEP_COMPLETED",
+				status: "COMPLETED",
+				message:
+					"Skipped Attendance History materialization because no biometrics workbooks were resolved; applying approved overtime only.",
+				counts: {
+					total: 0,
+					created: 0,
+					updated: 0,
+					failed: 0,
+					skipped: 1,
+					matchedEmployees: employeeCount,
+					attendanceWorkbookCount: 0,
+					approvedOvertimeWorkbookCount: approvedOvertimeWorkbooks.length,
+				},
 			});
-			return {
-				status: "BLOCKED",
-				phase: "VERIFYING",
+			await this.events.append({
+				runId,
+				stage: "DM4",
+				stepCode: "DM4.2",
+				eventType: "MATERIALIZATION_COMPLETED",
+				status: "COMPLETED",
+				message:
+					"Skipped timesheet day materialization for OT-only import; existing effective timesheet lines will be updated by DM4.3.",
+				counts: {
+					total: 0,
+					updated: 0,
+					materializedMissingLines: 0,
+					timesheetsRecalculated: 0,
+					skipped: 1,
+				},
+				metadata: { mutatesRecurringSchedule: false, otOnly: true },
+			});
+			proof = {
+				mode: "OT_ONLY_SKIP_ATTENDANCE",
+				phase1Selection: {
+					meetsThreshold: true,
+					selectedRowsTotal: 0,
+					selectedRows: [],
+					sourceRowsScanned: 0,
+					sourceFilesScanned: 0,
+					dbEmployeesMatched: employeeCount,
+					departmentsSelected: [],
+				},
+				phase3DbProof: { attendanceRowsFound: 0, timesheetlineRowsFound: 0 },
+				timesheetMaterialization: { materializedMissingLines: 0, timesheetsRecalculated: 0 },
+				guardrails: { mutatesRecurringSchedule: false, otOnly: true },
+			};
+		} else {
+			const progressFile = path.join(os.tmpdir(), `dm4-progress-${runId}.jsonl`);
+			try {
+				fs.rmSync(progressFile, { force: true });
+			} catch {
+				// Ignore stale diagnostic-file cleanup failures.
+			}
+
+			const args = [scriptPath, "--apply", "--limit=all", "--batchSize=500", `--progressFile=${progressFile}`];
+			if (approveHistoricalTimesheets) args.push("--approveHistoricalTimesheets");
+			if (attendanceWorkbookFiles.length > 0) {
+				args.push(`--files=${attendanceWorkbookFiles.join(";")}`);
+			} else if (sourceConfig) {
+				args.push(`--sourceConfig=${sourceConfig}`);
+			}
+
+			await this.events.append({
+				runId,
+				stage: "DM4",
+				stepCode: "DM4.1",
+				eventType: "STEP_STARTED",
+				status: "IMPORTING",
+				message: "Reading source workbooks and applying attendance evidence.",
 				counts: {
 					sourceWorkbookCount: resolution.sourceWorkbookFiles.length,
+					attendanceWorkbookCount: attendanceWorkbookFiles.length,
 					matchedEmployees: employeeCount,
-					attendanceRowsFound,
-					timesheetlineRowsFound,
-					materializedMissingLines: 0,
-					skippedNoSchedule,
 				},
-				summaryJson: {
-					sourceFiles: resolution.sourceFiles,
-					sourceWorkbookFiles: resolution.sourceWorkbookFiles,
-					stderr: stderr ? stderr.slice(0, 4000) : undefined,
-				},
-				proofJson: proof,
-				errorJson: { message },
-			};
-		}
+			});
 
-		const selectedRows = Array.isArray(proof?.phase1Selection?.selectedRows)
-			? proof.phase1Selection.selectedRows
-			: [];
-		const appliedRows = Array.isArray(proof?.phase2Application?.applied)
-			? proof.phase2Application.applied
-			: Array.isArray(proof?.phase2Materialization?.presentRows?.applied)
-				? proof.phase2Materialization.presentRows.applied
-				: [];
-		const selectedRowsByEmployeeDate = new Map(
-			selectedRows.map((row: any) => [
-				`${row.dbEmployeeId || row.sourceEmployeeId || row.employeeId || ""}:${row.date || ""}`,
-				row,
-			]),
-		);
-		const rowEvidence = (
-			appliedRows.length > 0
-				? appliedRows.map((row: any) => ({
-						...((selectedRowsByEmployeeDate.get(
-							`${row.employeeId || ""}:${row.date || ""}`,
-						) || {}) as Record<string, any>),
-						...row,
-					}))
-				: selectedRows
-		).slice(0, 500);
-		if (rowEvidence.length > 0) {
-			for (let index = 0; index < rowEvidence.length; index += 100) {
-				await this.events.appendMany(
-					rowEvidence.slice(index, index + 100).map((row: any) => ({
-						runId,
-						stage: "DM4",
-						stepCode: "DM4.1",
-						eventType: "ROW_IMPORTED",
-						status: "COMPLETED",
-						sourceWorkbook: row.sourceWorkbook || row.sourceWorkbookPath || null,
-						sourceFile: row.sourceWorkbookPath || row.sourceWorkbook || null,
-						sourceSheet: row.sourceSheet || "Attendance History",
-						sourceRow: Number(row.sourceRow || 0) || null,
-						employeeId: row.employeeId || row.dbEmployeeId || row.sourceEmployeeId || null,
-						employeeName: row.dbEmployeeName || row.sourceEmployeeName || row.employeeName || null,
-						message: `DM4 attendance row materialized for ${row.date || "source date"}.`,
-						counts: {
-							attendanceRowsFound: Number(proof?.phase3DbProof?.attendanceRowsFound || 0),
-							timesheetlineRowsFound: Number(proof?.phase3DbProof?.timesheetlineRowsFound || 0),
-						},
-						metadata: {
-							businessDate: row.date || null,
-							payrollPeriodCode: row.payrollPeriodCode || null,
-							timesheetlineId: row.timesheetlineId || null,
-							attendanceId: row.attendanceId || null,
-							sourceKind: row.sourceKind || "attendance_summary",
-						},
-					})),
-				);
-			}
-		}
-		await this.events.append({
-			runId,
-			stage: "DM4",
-			stepCode: "DM4.1",
-			eventType: "STEP_COMPLETED",
-			status: "COMPLETED",
-			message: "Attendance History rows were materialized with set-based SQL.",
-			counts: {
-				total: Number(proof?.phase1Selection?.selectedRowsTotal || proof?.phase2Application?.appliedTotal || 0),
-				created: Number(proof?.phase2Application?.writeCounts?.attendanceCreated || 0),
-				updated: Number(proof?.phase2Application?.writeCounts?.attendanceUpdated || proof?.phase3DbProof?.attendanceRowsFound || 0),
-				failed: 0,
-				sourceRowsScanned: Number(proof?.phase1Selection?.sourceRowsScanned || 0),
-				matchedEmployees: Number(proof?.phase1Selection?.dbEmployeesMatched || employeeCount),
-			},
-		});
-
-		const materialization = proof?.timesheetMaterialization || proof?.phase2Materialization?.timesheetDays || {};
-		await this.events.append({
-			runId,
-			stage: "DM4",
-			stepCode: "DM4.2",
-			eventType: "MATERIALIZATION_COMPLETED",
-			status: "VERIFYING",
-			message: "Materialized DM4 timesheet candidates idempotently.",
-			counts: {
-				total: Number(
-					proof?.phase3DbProof?.timesheetlineRowsFound ||
-						materialization.scanned ||
-						materialization.timesheetsRecalculated ||
+			const proofResult = await this.runProofScriptWithProgress({
+				runId,
+				args,
+				progressFile,
+				sourceWorkbookCount: resolution.sourceWorkbookFiles.length,
+				matchedEmployees: employeeCount,
+			});
+			stderr = proofResult.stderr;
+			const jsonStart = proofResult.stdout.indexOf("{");
+			proof = jsonStart >= 0 ? JSON.parse(proofResult.stdout.slice(jsonStart)) : null;
+			if (!proof) throw new Error("DM4 proof script did not return a JSON report.");
+			const selectedRowsTotal = Number(
+				proof?.phase1Selection?.selectedRowsTotal || proof?.phase2Application?.appliedTotal || 0,
+			);
+			const attendanceRowsFound = Number(proof?.phase3DbProof?.attendanceRowsFound || 0);
+			const timesheetlineRowsFound = Number(proof?.phase3DbProof?.timesheetlineRowsFound || 0);
+			if (selectedRowsTotal > 0 && attendanceRowsFound === 0 && timesheetlineRowsFound === 0) {
+				const skippedNoSchedule = Number(
+					proof?.phase2Application?.writeCounts?.rowsSkippedNoEmployeeSchedule ||
+						proof?.phase2Materialization?.presentRows?.writeCounts?.rowsSkippedNoEmployeeSchedule ||
 						0,
-				),
-				updated: Number(materialization.timesheetsRecalculated || 0),
-				materializedMissingLines: Number(materialization.materializedMissingLines || 0),
-				timesheetsRecalculated: Number(materialization.timesheetsRecalculated || 0),
-			},
-			metadata: { mutatesRecurringSchedule: false },
-		});
-
-		const approvedOvertimeWorkbook = resolution.workbookFiles.find((filePath) =>
-			APPROVED_OT_WORKBOOK_PATTERN.test(filePath.replace(/\\/g, "/")),
-		);
-		const approvedOvertimeRepair = approvedOvertimeWorkbook
-			? await this.runApprovedOvertimeRepair({
+				);
+				const message =
+					skippedNoSchedule >= selectedRowsTotal
+						? "DM4 proof selected source rows, but all rows were skipped because no active employee schedule covered the source dates."
+						: "DM4 proof selected source rows, but no attendance or timesheetline DB proof rows were found.";
+				await this.events.append({
 					runId,
-					workbookPath: approvedOvertimeWorkbook,
-					periodCode: BANDAI_2026_PAYROLL_PERIOD_CODE,
-				})
-			: null;
-		if (!approvedOvertimeWorkbook) {
+					stage: "DM4",
+					eventType: "BLOCKER_FOUND",
+					status: "BLOCKED",
+					message,
+					counts: { selectedRowsTotal, attendanceRowsFound, timesheetlineRowsFound, skippedNoSchedule },
+				});
+				return {
+					status: "BLOCKED",
+					phase: "VERIFYING",
+					counts: {
+						sourceWorkbookCount: resolution.sourceWorkbookFiles.length,
+						matchedEmployees: employeeCount,
+						attendanceRowsFound,
+						timesheetlineRowsFound,
+						materializedMissingLines: 0,
+						skippedNoSchedule,
+					},
+					summaryJson: {
+						sourceFiles: resolution.sourceFiles,
+						sourceWorkbookFiles: resolution.sourceWorkbookFiles,
+						stderr: stderr ? stderr.slice(0, 4000) : undefined,
+					},
+					proofJson: proof,
+					errorJson: { message },
+				};
+			}
+
+			const selectedRows = Array.isArray(proof?.phase1Selection?.selectedRows)
+				? proof.phase1Selection.selectedRows
+				: [];
+			const appliedRows = Array.isArray(proof?.phase2Application?.applied)
+				? proof.phase2Application.applied
+				: Array.isArray(proof?.phase2Materialization?.presentRows?.applied)
+					? proof.phase2Materialization.presentRows.applied
+					: [];
+			const selectedRowsByEmployeeDate = new Map(
+				selectedRows.map((row: any) => [
+					`${row.dbEmployeeId || row.sourceEmployeeId || row.employeeId || ""}:${row.date || ""}`,
+					row,
+				]),
+			);
+			const rowEvidence = (
+				appliedRows.length > 0
+					? appliedRows.map((row: any) => ({
+							...((selectedRowsByEmployeeDate.get(
+								`${row.employeeId || ""}:${row.date || ""}`,
+							) || {}) as Record<string, any>),
+							...row,
+						}))
+					: selectedRows
+			).slice(0, 500);
+			if (rowEvidence.length > 0) {
+				for (let index = 0; index < rowEvidence.length; index += 100) {
+					await this.events.appendMany(
+						rowEvidence.slice(index, index + 100).map((row: any) => ({
+							runId,
+							stage: "DM4",
+							stepCode: "DM4.1",
+							eventType: "ROW_IMPORTED",
+							status: "COMPLETED",
+							sourceWorkbook: row.sourceWorkbook || row.sourceWorkbookPath || null,
+							sourceFile: row.sourceWorkbookPath || row.sourceWorkbook || null,
+							sourceSheet: row.sourceSheet || "Attendance History",
+							sourceRow: Number(row.sourceRow || 0) || null,
+							employeeId: row.employeeId || row.dbEmployeeId || row.sourceEmployeeId || null,
+							employeeName: row.dbEmployeeName || row.sourceEmployeeName || row.employeeName || null,
+							message: `DM4 attendance row materialized for ${row.date || "source date"}.`,
+							counts: {
+								attendanceRowsFound: Number(proof?.phase3DbProof?.attendanceRowsFound || 0),
+								timesheetlineRowsFound: Number(proof?.phase3DbProof?.timesheetlineRowsFound || 0),
+							},
+							metadata: {
+								businessDate: row.date || null,
+								payrollPeriodCode: row.payrollPeriodCode || null,
+								timesheetlineId: row.timesheetlineId || null,
+								attendanceId: row.attendanceId || null,
+								sourceKind: row.sourceKind || "attendance_summary",
+							},
+						})),
+					);
+				}
+			}
+			await this.events.append({
+				runId,
+				stage: "DM4",
+				stepCode: "DM4.1",
+				eventType: "STEP_COMPLETED",
+				status: "COMPLETED",
+				message: "Attendance History rows were materialized with set-based SQL.",
+				counts: {
+					total: Number(proof?.phase1Selection?.selectedRowsTotal || proof?.phase2Application?.appliedTotal || 0),
+					created: Number(proof?.phase2Application?.writeCounts?.attendanceCreated || 0),
+					updated: Number(
+						proof?.phase2Application?.writeCounts?.attendanceUpdated ||
+							proof?.phase3DbProof?.attendanceRowsFound ||
+							0,
+					),
+					failed: 0,
+					sourceRowsScanned: Number(proof?.phase1Selection?.sourceRowsScanned || 0),
+					matchedEmployees: Number(proof?.phase1Selection?.dbEmployeesMatched || employeeCount),
+				},
+			});
+
+			materialization = proof?.timesheetMaterialization || proof?.phase2Materialization?.timesheetDays || {};
+			await this.events.append({
+				runId,
+				stage: "DM4",
+				stepCode: "DM4.2",
+				eventType: "MATERIALIZATION_COMPLETED",
+				status: "VERIFYING",
+				message: "Materialized DM4 timesheet candidates idempotently.",
+				counts: {
+					total: Number(
+						proof?.phase3DbProof?.timesheetlineRowsFound ||
+							materialization.scanned ||
+							materialization.timesheetsRecalculated ||
+							0,
+					),
+					updated: Number(materialization.timesheetsRecalculated || 0),
+					materializedMissingLines: Number(materialization.materializedMissingLines || 0),
+					timesheetsRecalculated: Number(materialization.timesheetsRecalculated || 0),
+				},
+				metadata: { mutatesRecurringSchedule: false },
+			});
+		}
+
+		const approvedOvertimeRepairs: any[] = [];
+		for (const approvedOvertimeWorkbook of approvedOvertimeWorkbooks) {
+			const periodResolution = await resolveApprovedOvertimePayrollPeriodCode(
+				this.prisma,
+				organization.id,
+				approvedOvertimeWorkbook,
+				preferredPeriodCode,
+			);
+			const repair = await this.runApprovedOvertimeRepair({
+				runId,
+				workbookPath: approvedOvertimeWorkbook,
+				periodCode: periodResolution.periodCode,
+			});
+			approvedOvertimeRepairs.push({
+				workbookPath: approvedOvertimeWorkbook.replace(/\\/g, "/"),
+				periodCode: periodResolution.periodCode,
+				periodMatch: periodResolution.matchedBy,
+				startDate: periodResolution.startDate,
+				endDate: periodResolution.endDate,
+				repair,
+			});
+		}
+		if (approvedOvertimeWorkbooks.length === 0) {
 			await this.events.append({
 				runId,
 				stage: "DM4",
@@ -292,6 +414,7 @@ export class Dm4MigrationAdapter {
 			counts: {
 				attendanceRowsFound: Number(proof?.phase3DbProof?.attendanceRowsFound || 0),
 				timesheetlineRowsFound: Number(proof?.phase3DbProof?.timesheetlineRowsFound || 0),
+				approvedOvertimeWorkbookCount: approvedOvertimeWorkbooks.length,
 			},
 		});
 		await this.events.append({
@@ -303,6 +426,7 @@ export class Dm4MigrationAdapter {
 			metadata: { route: "/hr/timesheets" },
 		});
 
+		const primaryOt = approvedOvertimeRepairs[0];
 		return {
 			status: "COMPLETED",
 			phase: "COMPLETED",
@@ -312,21 +436,32 @@ export class Dm4MigrationAdapter {
 				attendanceRowsFound: Number(proof?.phase3DbProof?.attendanceRowsFound || 0),
 				timesheetlineRowsFound: Number(proof?.phase3DbProof?.timesheetlineRowsFound || 0),
 				materializedMissingLines: Number(materialization.materializedMissingLines || 0),
+				approvedOvertimeWorkbookCount: approvedOvertimeWorkbooks.length,
+				approvedOvertimePlannedLineUpdates: approvedOvertimeRepairs.reduce(
+					(sum, item) => sum + Number(item.repair?.plannedLineUpdates || 0),
+					0,
+				),
 			},
 			summaryJson: {
 				sourceFiles: resolution.sourceFiles,
 				sourceWorkbookFiles: resolution.sourceWorkbookFiles,
-				approvedOvertimeWorkbook: approvedOvertimeWorkbook ? approvedOvertimeWorkbook.replace(/\\/g, "/") : undefined,
+				attendanceSourceFiles: resolution.attendanceSourceFiles,
+				approvedOvertimeSourceFiles: resolution.approvedOvertimeSourceFiles,
+				approvedOvertimeWorkbook: primaryOt?.workbookPath,
+				approvedOvertimePeriodCode: primaryOt?.periodCode,
+				otOnly,
 				stderr: stderr ? stderr.slice(0, 4000) : undefined,
 			},
 			proofJson: {
 				...proof,
-				approvedOvertimeRepair,
+				approvedOvertimeRepair: primaryOt?.repair || null,
+				approvedOvertimeRepairs,
 				timesheetMaterialization: materialization,
 				timesheetReviewLink: "/hr/timesheets",
 				guardrails: {
 					...(proof?.guardrails || {}),
 					mutatesRecurringSchedule: false,
+					otOnly,
 				},
 			},
 		};
@@ -337,7 +472,7 @@ export class Dm4MigrationAdapter {
 		workbookPath: string;
 		periodCode: string;
 	}) {
-		const scriptPath = resolveMigrationApiPath("scripts", "repair-bandai-payroll-source-timesheet-lines.ts");
+		const scriptPath = path.resolve(process.cwd(), "scripts", "repair-bandai-payroll-source-timesheet-lines.ts");
 		if (!fs.existsSync(scriptPath)) {
 			await this.events.append({
 				runId: input.runId,
@@ -364,8 +499,7 @@ export class Dm4MigrationAdapter {
 		const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
 			let stdout = "";
 			let stderr = "";
-			const apiRoot = getMigrationApiRoot();
-			const tsxCliPath = resolveMigrationApiPath("node_modules", "tsx", "dist", "cli.mjs");
+			const tsxCliPath = path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
 			const child = spawn(
 				process.execPath,
 				[
@@ -376,7 +510,7 @@ export class Dm4MigrationAdapter {
 					`--overtime-workbook=${input.workbookPath}`,
 				],
 				{
-					cwd: apiRoot,
+					cwd: process.cwd(),
 					windowsHide: true,
 					stdio: ["ignore", "pipe", "pipe"],
 				},
@@ -466,8 +600,7 @@ export class Dm4MigrationAdapter {
 		const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
 			let stdout = "";
 			let stderr = "";
-			const apiRoot = getMigrationApiRoot();
-			const tsxCliPath = resolveMigrationApiPath("node_modules", "tsx", "dist", "cli.mjs");
+			const tsxCliPath = path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
 			const child = spawn(
 				process.execPath,
 				[
@@ -477,7 +610,7 @@ export class Dm4MigrationAdapter {
 					`--overtime-workbook=${input.workbookPath}`,
 				],
 				{
-					cwd: apiRoot,
+					cwd: process.cwd(),
 					windowsHide: true,
 					stdio: ["ignore", "pipe", "pipe"],
 				},
@@ -555,7 +688,7 @@ export class Dm4MigrationAdapter {
 
 		return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
 			const child = spawn(process.execPath, input.args, {
-				cwd: getMigrationApiRoot(),
+				cwd: process.cwd(),
 				windowsHide: true,
 				stdio: ["ignore", "pipe", "pipe"],
 			});

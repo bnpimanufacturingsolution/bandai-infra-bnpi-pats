@@ -42,6 +42,9 @@ model TimesheetConfig {
   // Minimum schedule-based overtime minutes required to set OVERTIME behavior flag
   overtimeFlagThresholdMinutes Int @default(60)
 
+  // When true, detected overtime stays pending until a manager approves an OVERTIME request
+  requireManagerApprovedOvertime Boolean @default(true)
+
   // Time computation rules
   workTimeRounding      Json?
   overtimeQualification Json?

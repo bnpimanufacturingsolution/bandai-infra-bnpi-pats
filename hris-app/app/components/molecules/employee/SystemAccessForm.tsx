@@ -2,7 +2,6 @@ import type { UseFormReturn } from "react-hook-form";
 import { useWatch } from "react-hook-form";
 import { useEffect, useMemo, useRef } from "react";
 import type { FormData } from "~/types/employee-form.types";
-import { useEmployeeDeviceUsers } from "~/lib/hooks/useDevices";
 import { useRoles } from "~/lib/hooks/useRoles";
 import { useDepartment } from "~/lib/hooks/useDepartments";
 import { useLevel } from "~/lib/hooks/useLevels";
@@ -12,7 +11,6 @@ import { deriveRoleAndFlags, roleLabel, type HrisRole } from "~/lib/utils/role-d
 
 interface SystemAccessFormProps {
 	form: UseFormReturn<FormData>;
-	employeeRecordId?: string;
 	isEditMode?: boolean;
 	showDefaultPassword?: boolean;
 }
@@ -48,7 +46,6 @@ const formatRoleName = (roleName?: string | null) => {
 
 export function SystemAccessForm({
 	form,
-	employeeRecordId,
 	isEditMode = false,
 	showDefaultPassword = !isEditMode,
 }: SystemAccessFormProps) {
@@ -71,17 +68,6 @@ export function SystemAccessForm({
 	const { data: selectedDeptData } = useDepartment(watchedDeptId || "");
 	const { data: selectedLevelData } = useLevel(watchedLevelId || "");
 	const { data: selectedPositionData } = usePosition(watchedPositionId || "");
-	const {
-		data: linkedDeviceUsersData,
-		isLoading: isLoadingLinkedDeviceUsers,
-		isError: isLinkedDeviceUsersError,
-		refetch: refetchLinkedDeviceUsers,
-	} = useEmployeeDeviceUsers(
-		employeeRecordId,
-		{ page: 1, limit: 25, status: "all" },
-		Boolean(isEditMode && employeeRecordId),
-	);
-	const linkedDeviceUsers = linkedDeviceUsersData?.deviceUsers || [];
 
 	const selectedDept = useMemo(() => {
 		const record = selectedDeptData as any;
@@ -268,13 +254,10 @@ export function SystemAccessForm({
 
 			<div className="space-y-5">
 				<div data-field-path="user.email">
-					<label
-						htmlFor="system-access-email"
-						className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
+					<label className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
 						Email Address
 					</label>
 					<input
-						id="system-access-email"
 						type="email"
 						disabled
 						className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600"
@@ -286,13 +269,10 @@ export function SystemAccessForm({
 				</div>
 
 				<div data-field-path="employee.role">
-					<label
-						htmlFor="system-access-role"
-						className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
+					<label className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
 						Role
 					</label>
 					<input
-						id="system-access-role"
 						type="text"
 						disabled
 						value={roleDisplayValue}
@@ -301,13 +281,10 @@ export function SystemAccessForm({
 				</div>
 
 				<div data-field-path="employee.deviceEmpId">
-					<label
-						htmlFor="system-access-device-emp-id"
-						className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
+					<label className="block text-sm font-normal text-muted-foreground/70 mb-1.5">
 						Biometric User ID
 					</label>
 					<input
-						id="system-access-device-emp-id"
 						type="text"
 						className="w-full rounded-md border border-gray-200 bg-background px-3 py-2 text-sm text-gray-900"
 						placeholder={employeeId || "Same as Employee ID"}
@@ -317,107 +294,6 @@ export function SystemAccessForm({
 						Used to match device callbacks to this employee. Defaults to Employee ID.
 					</p>
 				</div>
-
-				{isEditMode && (
-					<div className="rounded-md border border-gray-200 bg-gray-50/70">
-						<div className="flex flex-col gap-2 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p className="text-sm font-medium text-gray-900">
-									Linked biometric devices
-								</p>
-								<p className="text-xs text-muted-foreground">
-									Device user records connected to this employee.
-								</p>
-							</div>
-							<button
-								type="button"
-								onClick={() => void refetchLinkedDeviceUsers()}
-								className="self-start rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 sm:self-auto">
-								Refresh
-							</button>
-						</div>
-						<div className="px-4 py-3">
-							{isLoadingLinkedDeviceUsers ? (
-								<p className="text-sm text-muted-foreground">
-									Checking linked device users...
-								</p>
-							) : isLinkedDeviceUsersError ? (
-								<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-									<p className="text-sm text-red-700">
-										Device user links could not be loaded.
-									</p>
-									<button
-										type="button"
-										onClick={() => void refetchLinkedDeviceUsers()}
-										className="self-start text-xs font-medium text-red-700 underline-offset-2 hover:underline">
-										Try again
-									</button>
-								</div>
-							) : linkedDeviceUsers.length === 0 ? (
-								<p className="text-sm text-muted-foreground">
-									No linked device users found for this employee yet.
-								</p>
-							) : (
-								<div className="divide-y divide-gray-200">
-									{linkedDeviceUsers.map((deviceUser) => {
-										const device = deviceUser.device;
-										const deviceName = device?.name || "Unknown device";
-										const deviceAddress = [
-											device?.address,
-											device?.port ? `:${device.port}` : "",
-										]
-											.filter(Boolean)
-											.join("");
-										const credentialSummary =
-											deviceUser.rawPayload?._hrisDeviceMetadata
-												?.credentialSummary ||
-											deviceUser.rawPayload?._hrisDeviceMetadata
-												?.syntheticCredentialSummary ||
-											{};
-										const counts = [
-											typeof credentialSummary.fingerprintCount === "number"
-												? `${credentialSummary.fingerprintCount} FP`
-												: null,
-											typeof credentialSummary.faceCount === "number"
-												? `${credentialSummary.faceCount} face`
-												: null,
-											typeof credentialSummary.cardCount === "number"
-												? `${credentialSummary.cardCount} card`
-												: null,
-										].filter(Boolean);
-
-										return (
-											<div
-												key={deviceUser.id}
-												className="grid gap-2 py-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-												<div className="min-w-0">
-													<p className="truncate text-sm font-medium text-gray-900">
-														{deviceName}
-													</p>
-													<p className="mt-0.5 text-xs text-muted-foreground">
-														{deviceAddress || "No device address"}{" "}
-														<span className="text-gray-300">/</span>{" "}
-														User ID {deviceUser.vendorUserId}
-													</p>
-												</div>
-												<div className="flex flex-wrap items-center gap-2 md:justify-end">
-													<span className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700">
-														{deviceUser.status}
-													</span>
-													{counts.length > 0 && (
-														<span className="text-xs text-muted-foreground">
-															{counts.join(" / ")}
-														</span>
-													)}
-												</div>
-											</div>
-										);
-									})}
-								</div>
-							)}
-						</div>
-					</div>
-				)}
 
 				{showDefaultPassword && (
 					<div className="bg-gray-50 px-4 py-3 rounded-md border border-gray-200">

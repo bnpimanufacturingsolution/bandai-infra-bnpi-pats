@@ -1,6 +1,9 @@
 import { Response } from "express";
 import { PrismaClient, Prisma } from "../../generated/prisma";
 import { config } from "../../config/config";
+import { config as appConstants } from "../../config/constant";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
 import { buildErrorResponse } from "../../helper/error-handler";
 import { buildSuccessResponse } from "../../helper/success-handler.helper";
 import { uploadToCloudinary } from "../../helper/cloudinary.helper";
@@ -84,11 +87,12 @@ const LOCAL_ORG_NAME = "Bandai Namco";
 const SYSTEM_INIT_ACTOR = "SYSTEM_INIT";
 const REQUIRED_LEAVE_TYPES = ["VACATION", "SICK", "PERSONAL"] as const;
 const ADMIN_ROLES = new Set(["super_admin", "admin", "hris-admin"]);
+// BNPI default: 11-25 / 26-10 (matches Bandai semi-monthly register cutoffs).
 const DEFAULT_CYCLE_RULES_JSON: Prisma.InputJsonValue = {
 	SEMI_MONTHLY: {
-		firstStartDay: 1,
-		secondStartDay: 16,
-		secondEndDay: "LAST_DAY",
+		firstStartDay: 11,
+		secondStartDay: 26,
+		secondEndDay: 10,
 	},
 	WEEKLY: { anchorWeekday: 1 },
 	BIWEEKLY: { anchorWeekday: 1 },
@@ -528,6 +532,19 @@ export const controller = (prisma: PrismaClient) => {
 				userId: getProvisioningActor(req),
 			});
 
+			logActivity(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.GET_PROVISIONING_STATUS,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_STATUS_RETRIEVED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_STATUS,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"System provisioning status retrieved successfully",
@@ -563,6 +580,20 @@ export const controller = (prisma: PrismaClient) => {
 				organization,
 				provisioning,
 			});
+
+			logActivity(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.GET_PROVISIONING_PREVIEW,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_PREVIEW_RETRIEVED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_PREVIEW,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"System provisioning preview retrieved successfully",
@@ -656,6 +687,42 @@ export const controller = (prisma: PrismaClient) => {
 					organizationId: organization.id,
 					userId: actor,
 				});
+
+				logActivity(req, {
+					userId: req.userId || actor,
+					action:
+						appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.INITIALIZE_PROVISIONING,
+					description:
+						appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+							.PROVISIONING_INITIALIZED,
+					organizationId: organization.id,
+					page: {
+						url: req.originalUrl,
+						title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+					},
+				});
+
+				logAudit(req, {
+					userId: req.userId || actor,
+					action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+					resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+					severity: appConstants.AUDIT_LOG.SEVERITY.CRITICAL,
+					entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.ORGANIZATION,
+					entityId: organization.id,
+					changesBefore: {
+						initializationStatus: provisioning.initializationStatus,
+						isProvisioned: provisioning.isProvisioned === true,
+					},
+					changesAfter: {
+						initializationStatus: "COMPLETED",
+						isProvisioned: true,
+						alreadyProvisioned: result.alreadyProvisioned === true,
+						counts: result.counts,
+					},
+					description: appConstants.AUDIT_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS.PROVISIONING_INITIALIZED,
+					organizationId: organization.id,
+				});
+
 				res.status(200).json(
 					buildSuccessResponse(
 						"System provisioning initialized successfully",
@@ -840,6 +907,40 @@ export const controller = (prisma: PrismaClient) => {
 					userId: createdUser.id,
 				});
 
+				logActivity(req, {
+					userId: req.userId || createdUser.id,
+					action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.BOOTSTRAP_ADMIN,
+					description:
+						appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+							.PROVISIONING_ADMIN_BOOTSTRAPPED,
+					organizationId: organization.id,
+					page: {
+						url: req.originalUrl,
+						title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_ACTIVATION,
+					},
+				});
+
+				logAudit(req, {
+					userId: req.userId || createdUser.id,
+					action: appConstants.AUDIT_LOG.ACTIONS.CREATE,
+					resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+					severity: appConstants.AUDIT_LOG.SEVERITY.CRITICAL,
+					entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.USER,
+					entityId: createdUser.id,
+					changesBefore: null,
+					changesAfter: {
+						id: createdUser.id,
+						email: createdUser.email,
+						userName: createdUser.userName,
+						role: createdUser.role,
+						organizationId: createdUser.organizationId,
+					},
+					description:
+						appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+							.PROVISIONING_ADMIN_BOOTSTRAPPED,
+					organizationId: organization.id,
+				});
+
 				res.status(201).json(
 					buildSuccessResponse(
 						"Bootstrap admin created successfully",
@@ -916,6 +1017,42 @@ export const controller = (prisma: PrismaClient) => {
 				organizationId: organization.id,
 				userId: createdUser?.id || SYSTEM_INIT_ACTOR,
 			});
+
+			const bootstrapUserId = createdUser?.id || SYSTEM_INIT_ACTOR;
+
+			logActivity(req, {
+				userId: req.userId || bootstrapUserId,
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.BOOTSTRAP_ADMIN,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_ADMIN_BOOTSTRAPPED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_ACTIVATION,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || bootstrapUserId,
+				action: appConstants.AUDIT_LOG.ACTIONS.CREATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+				severity: appConstants.AUDIT_LOG.SEVERITY.CRITICAL,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.USER,
+				entityId: bootstrapUserId,
+				changesBefore: null,
+				changesAfter: {
+					id: createdUser?.id,
+					email: createdUser?.email,
+					userName: createdUser?.userName,
+					organizationId: createdUser?.organizationId || organization.id,
+				},
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_ADMIN_BOOTSTRAPPED,
+				organizationId: organization.id,
+			});
+
 			res.status(201).json(
 				buildSuccessResponse(
 					"Bootstrap admin created successfully",
@@ -1010,6 +1147,41 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			logActivity(req, {
+				userId: req.userId || actor,
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.UPDATE_HR_SETTINGS,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_HR_SETTINGS_UPDATED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || actor,
+				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+				severity: appConstants.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.ORGANIZATION,
+				entityId: organization.id,
+				changesBefore: {
+					name: organization.name,
+					companyName: extractProvisioningState(organization.branding).hrSettings?.companyName,
+					timezone: extractProvisioningState(organization.branding).hrSettings?.timezone,
+				},
+				changesAfter: {
+					name: companyName,
+					companyName,
+					timezone,
+					...(description !== undefined ? { description } : {}),
+				},
+				description: appConstants.AUDIT_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS.PROVISIONING_SETTINGS_UPDATED,
+				organizationId: organization.id,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"HR setup values updated successfully",
@@ -1066,6 +1238,37 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			logActivity(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.UPLOAD_PROVISIONING_LOGO,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_LOGO_UPLOADED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+				severity: appConstants.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.ORGANIZATION,
+				entityId: organization.id,
+				changesBefore: {
+					logo: currentBranding.logo || null,
+				},
+				changesAfter: {
+					logo: uploadResult.secureUrl,
+					logoPublicId: uploadResult.publicId || null,
+				},
+				description: appConstants.AUDIT_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS.PROVISIONING_SETTINGS_UPDATED,
+				organizationId: organization.id,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Company logo uploaded successfully",
@@ -1091,6 +1294,38 @@ export const controller = (prisma: PrismaClient) => {
 				userId: getProvisioningActor(req),
 			});
 
+			logActivity(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.ACTIVATE_PROVISIONING,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS.PROVISIONING_ACTIVATED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_ACTIVATION,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+				severity: appConstants.AUDIT_LOG.SEVERITY.CRITICAL,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.ORGANIZATION,
+				entityId: organization.id,
+				changesBefore: {
+					isProvisioned: snapshot.isProvisioned,
+					hasAdmin: snapshot.summary.hasAdmin,
+				},
+				changesAfter: {
+					isProvisioned: snapshot.isProvisioned,
+					hasAdmin: snapshot.summary.hasAdmin,
+					activated: true,
+				},
+				description: appConstants.AUDIT_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS.PROVISIONING_ACTIVATED,
+				organizationId: organization.id,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"System provisioning status retrieved successfully",
@@ -1109,6 +1344,21 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const organization = await resolveProvisioningOrganization(req.organizationId);
 			const record = await getOrCreateTimesheetConfig(organization.id);
+
+			logActivity(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.GET_TIMESHEET_SETTINGS,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_TIMESHEET_SETTINGS_RETRIEVED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse("Timesheet settings retrieved successfully", record, 200),
 			);
@@ -1153,11 +1403,41 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			const actor = getProvisioningActor(req);
+
 			await touchProvisioningStep({
 				organizationId: organization.id,
 				stepId: "timesheet-settings",
-				actor: getProvisioningActor(req),
+				actor,
 			});
+
+			logActivity(req, {
+				userId: req.userId || actor,
+				action:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.UPDATE_TIMESHEET_SETTINGS,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_TIMESHEET_SETTINGS_UPDATED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || actor,
+				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+				severity: appConstants.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.ORGANIZATION,
+				entityId: organization.id,
+				changesBefore: { id: current.id },
+				changesAfter: { id: updated.id },
+				description: appConstants.AUDIT_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS.PROVISIONING_SETTINGS_UPDATED,
+				organizationId: organization.id,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse("Timesheet settings updated successfully", updated, 200),
 			);
@@ -1173,6 +1453,19 @@ export const controller = (prisma: PrismaClient) => {
 			const organization = await resolveProvisioningOrganization(req.organizationId);
 			const cycleConfig = await getOrCreatePayrollCycleConfig(organization.id);
 			const calculator = await ensureDefaultCalculator(organization.id);
+			logActivity(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.GET_PAYROLL_SETTINGS,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_PAYROLL_SETTINGS_RETRIEVED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Payroll settings retrieved successfully",
@@ -1304,11 +1597,47 @@ export const controller = (prisma: PrismaClient) => {
 					});
 				}
 			}
+			const actor = getProvisioningActor(req);
+
 			await touchProvisioningStep({
 				organizationId: organization.id,
 				stepId: "payroll-settings",
-				actor: getProvisioningActor(req),
+				actor,
 			});
+
+			logActivity(req, {
+				userId: req.userId || actor,
+				action:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.UPDATE_PAYROLL_SETTINGS,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_PAYROLL_SETTINGS_UPDATED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || actor,
+				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+				severity: appConstants.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.ORGANIZATION,
+				entityId: organization.id,
+				changesBefore: {
+					cycleConfigId: currentConfig.id,
+					calculatorId: calculator.id,
+				},
+				changesAfter: {
+					cycleConfigId: updatedCycleConfig.id,
+					calculatorId: updatedCalculator.id,
+				},
+				description: appConstants.AUDIT_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS.PROVISIONING_SETTINGS_UPDATED,
+				organizationId: organization.id,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Payroll settings updated successfully",
@@ -1341,6 +1670,20 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const organization = await resolveProvisioningOrganization(req.organizationId);
 			const policies = await getExistingLeavePolicies(prisma, organization.id);
+
+			logActivity(req, {
+				userId: req.userId || getProvisioningActor(req),
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.GET_LEAVE_SETTINGS,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_LEAVE_SETTINGS_RETRIEVED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse("Leave settings retrieved successfully", policies, 200),
 			);
@@ -1389,11 +1732,46 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			const policies = await getOrCreateLeavePolicies(prisma, organization.id);
+			const actor = getProvisioningActor(req);
+			const updatedLeaveTypes = updates
+				.map((entry: any) => normalizeLeaveType(String(entry?.leaveType || "")))
+				.filter(Boolean);
+
 			await touchProvisioningStep({
 				organizationId: organization.id,
 				stepId: "leave-settings",
-				actor: getProvisioningActor(req),
+				actor,
 			});
+
+			logActivity(req, {
+				userId: req.userId || actor,
+				action: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.ACTIONS.UPDATE_LEAVE_SETTINGS,
+				description:
+					appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS
+						.PROVISIONING_LEAVE_SETTINGS_UPDATED,
+				organizationId: organization.id,
+				page: {
+					url: req.originalUrl,
+					title: appConstants.ACTIVITY_LOG.SYSTEM_PROVISIONING.PAGES.PROVISIONING_SETTINGS,
+				},
+			});
+
+			logAudit(req, {
+				userId: req.userId || actor,
+				action: appConstants.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: appConstants.AUDIT_LOG.RESOURCES.SYSTEM_PROVISIONING,
+				severity: appConstants.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: appConstants.AUDIT_LOG.ENTITY_TYPES.ORGANIZATION,
+				entityId: organization.id,
+				changesBefore: null,
+				changesAfter: {
+					updatedLeaveTypes,
+					policyCount: policies.length,
+				},
+				description: appConstants.AUDIT_LOG.SYSTEM_PROVISIONING.DESCRIPTIONS.PROVISIONING_SETTINGS_UPDATED,
+				organizationId: organization.id,
+			});
+
 			res.status(200).json(
 				buildSuccessResponse("Leave settings updated successfully", policies, 200),
 			);

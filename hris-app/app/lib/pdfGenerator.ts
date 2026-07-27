@@ -69,7 +69,8 @@ export async function generateFilledPdf(
  * @param filename - The desired filename
  */
 export function downloadPdf(pdfBytes: Uint8Array, filename: string = 'filled-form.pdf') {
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const safeBytes = new Uint8Array(pdfBytes);
+  const blob = new Blob([safeBytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -83,7 +84,8 @@ export function downloadPdf(pdfBytes: Uint8Array, filename: string = 'filled-for
  * @param pdfBytes - The PDF as a byte array
  */
 export function openPdfInNewTab(pdfBytes: Uint8Array) {
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const safeBytes = new Uint8Array(pdfBytes);
+  const blob = new Blob([safeBytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
 }

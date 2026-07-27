@@ -1,6 +1,5 @@
 import { hrisApiClient } from "../lib/api-client";
 import { APIService } from "./api-service";
-import { traceAsync } from "../lib/function-tracing";
 
 import type { CreateApplicant, Applicant, UpdateApplicant } from "~/zod/applicant";
 
@@ -111,32 +110,30 @@ class ApplicantService extends APIService {
 	 * @returns Promise<ApplicantsResponse> - Applicants response with pagination
 	 */
 	async getApplicants(): Promise<ApplicantsResponse> {
-		return traceAsync(async () => {
-			try {
-				// Set the auth token for HRIS API client
+		try {
+			// Set the auth token for HRIS API client
 
-				const queryString = this.getQueryString();
-				const endpoint = `/api/applicant${queryString}`;
+			const queryString = this.getQueryString();
+			const endpoint = `/api/applicant${queryString}`;
 
-				console.log("Fetching applicants from HRIS API:", endpoint);
+			console.log("Fetching applicants from HRIS API:", endpoint);
 
-				const response = await hrisApiClient.get<ApplicantsResponse>(endpoint);
+			const response = await hrisApiClient.get<ApplicantsResponse>(endpoint);
 
-				// Handle nested data structure if API returns { data: { ... } }
-				let applicantsData = response.data;
-				if (applicantsData && typeof applicantsData === "object" && "data" in applicantsData) {
-					applicantsData = (applicantsData as any).data;
-				}
-
-				if (!applicantsData) {
-					throw new Error("Failed to fetch applicants");
-				}
-				return applicantsData as ApplicantsResponse;
-			} catch (error: any) {
-				console.error("Error fetching applicants:", error);
-				throw createApplicantServiceError(error, "Error fetching applicants");
+			// Handle nested data structure if API returns { data: { ... } }
+			let applicantsData = response.data;
+			if (applicantsData && typeof applicantsData === "object" && "data" in applicantsData) {
+				applicantsData = (applicantsData as any).data;
 			}
-		}, "ApplicantService.getApplicants", "applicant-service");
+
+			if (!applicantsData) {
+				throw new Error("Failed to fetch applicants");
+			}
+			return applicantsData as ApplicantsResponse;
+		} catch (error: any) {
+			console.error("Error fetching applicants:", error);
+			throw createApplicantServiceError(error, "Error fetching applicants");
+		}
 	}
 
 	/**
@@ -145,27 +142,26 @@ class ApplicantService extends APIService {
 	 * @returns Promise<Applicant> - Applicant record
 	 */
 	async getApplicantById(id: string): Promise<Applicant> {
-		return traceAsync(async () => {
-			try {
-				const queryString = this.getQueryString();
-				const endpoint = `/api/applicant/${id}${queryString}`;
+		try {
 
-				console.log("Fetching applicant from HRIS API:", endpoint);
+			const queryString = this.getQueryString();
+			const endpoint = `/api/applicant/${id}${queryString}`;
 
-				const response = await hrisApiClient.get<{ data: { applicant: Applicant } }>(endpoint);
+			console.log("Fetching applicant from HRIS API:", endpoint);
 
-				if (!response.data) {
-					throw new Error("Failed to fetch applicant");
-				}
+			const response = await hrisApiClient.get<{ data: { applicant: Applicant } }>(endpoint);
 
-				// Handle nested data structure
-				const applicantData = response.data.data?.applicant || response.data;
-				return applicantData as Applicant;
-			} catch (error: any) {
-				console.error("Error fetching applicant:", error);
-				throw createApplicantServiceError(error, "Error fetching applicant");
+			if (!response.data) {
+				throw new Error("Failed to fetch applicant");
 			}
-		}, "ApplicantService.getApplicantById", "applicant-service");
+
+			// Handle nested data structure
+			const applicantData = response.data.data?.applicant || response.data;
+			return applicantData as Applicant;
+		} catch (error: any) {
+			console.error("Error fetching applicant:", error);
+			throw createApplicantServiceError(error, "Error fetching applicant");
+		}
 	}
 
 	/**
@@ -174,26 +170,25 @@ class ApplicantService extends APIService {
 	 * @returns Promise<Applicant> - Created applicant record
 	 */
 	async createApplicant(data: CreateApplicant | FormData): Promise<Applicant> {
-		return traceAsync(async () => {
-			try {
-				console.log("Creating applicant in HRIS API");
+		try {
 
-				// Don't set Content-Type header manually for FormData - let the browser/axios set it automatically
-				// with the correct boundary for multipart/form-data
-				const response = await hrisApiClient.post<{ data: Applicant }>("/api/applicant", data);
+			console.log("Creating applicant in HRIS API");
 
-				if (!response.data) {
-					throw new Error("Failed to create applicant");
-				}
+			// Don't set Content-Type header manually for FormData - let the browser/axios set it automatically
+			// with the correct boundary for multipart/form-data
+			const response = await hrisApiClient.post<{ data: Applicant }>("/api/applicant", data);
 
-				// Handle nested data structure
-				const applicantData = response.data.data || response.data;
-				return applicantData as Applicant;
-			} catch (error: any) {
-				console.error("Error creating applicant:", error);
-				throw createApplicantServiceError(error, "Error creating applicant");
+			if (!response.data) {
+				throw new Error("Failed to create applicant");
 			}
-		}, "ApplicantService.createApplicant", "applicant-service");
+
+			// Handle nested data structure
+			const applicantData = response.data.data || response.data;
+			return applicantData as Applicant;
+		} catch (error: any) {
+			console.error("Error creating applicant:", error);
+			throw createApplicantServiceError(error, "Error creating applicant");
+		}
 	}
 
 	/**
@@ -203,77 +198,68 @@ class ApplicantService extends APIService {
 	 * @returns Promise<Applicant> - Updated applicant record
 	 */
 	async updateApplicant(id: string, data: UpdateApplicant | FormData): Promise<Applicant> {
-		return traceAsync(async () => {
-			try {
-				console.log("Updating applicant in HRIS API:", id);
+		try {
 
-				// Don't set Content-Type header manually for FormData - let the browser/axios set it automatically
-				// with the correct boundary for multipart/form-data
-				const response = await hrisApiClient.patch<{ data: Applicant }>(
-					`/api/applicant/${id}`,
-					data,
-				);
+			console.log("Updating applicant in HRIS API:", id);
 
-				if (!response.data) {
-					throw new Error("Failed to update applicant");
-				}
+			// Don't set Content-Type header manually for FormData - let the browser/axios set it automatically
+			// with the correct boundary for multipart/form-data
+			const response = await hrisApiClient.patch<{ data: Applicant }>(
+				`/api/applicant/${id}`,
+				data,
+			);
 
-				// Handle nested data structure
-				const applicantData = response.data.data || response.data;
-				return applicantData as Applicant;
-			} catch (error: any) {
-				console.error("Error updating applicant:", error);
-				throw createApplicantServiceError(error, "Error updating applicant");
+			if (!response.data) {
+				throw new Error("Failed to update applicant");
 			}
-		}, "ApplicantService.updateApplicant", "applicant-service");
+
+			// Handle nested data structure
+			const applicantData = response.data.data || response.data;
+			return applicantData as Applicant;
+		} catch (error: any) {
+			console.error("Error updating applicant:", error);
+			throw createApplicantServiceError(error, "Error updating applicant");
+		}
 	}
 
 	async runAction(id: string, payload: ApplicantActionRequest): Promise<Applicant> {
-		return traceAsync(async () => {
-			try {
-				const response = await hrisApiClient.post<{ data: Applicant }>(
-					`/api/applicant/${id}/action`,
-					payload,
-				);
+		try {
+			const response = await hrisApiClient.post<{ data: Applicant }>(
+				`/api/applicant/${id}/action`,
+				payload,
+			);
 
-				if (!response.data) {
-					throw new Error("Failed to run applicant action");
-				}
-
-				const applicantData = response.data.data || response.data;
-				return applicantData as Applicant;
-			} catch (error: any) {
-				console.error("Error running applicant action:", error);
-				throw createApplicantServiceError(error, "Error running applicant action");
+			if (!response.data) {
+				throw new Error("Failed to run applicant action");
 			}
-		}, "ApplicantService.runAction", "applicant-service");
+
+			const applicantData = response.data.data || response.data;
+			return applicantData as Applicant;
+		} catch (error: any) {
+			console.error("Error running applicant action:", error);
+			throw createApplicantServiceError(error, "Error running applicant action");
+		}
 	}
 
 	async getActivities(id: string): Promise<RecruitmentActivityRecord[]> {
-		return traceAsync(async () => {
-			const response = await hrisApiClient.get<any>(`/api/applicant/${id}/activities`);
-			const payload = response?.data?.data || response?.data;
-			return (payload?.activities || []) as RecruitmentActivityRecord[];
-		}, "ApplicantService.getActivities", "applicant-service");
+		const response = await hrisApiClient.get<any>(`/api/applicant/${id}/activities`);
+		const payload = response?.data?.data || response?.data;
+		return (payload?.activities || []) as RecruitmentActivityRecord[];
 	}
 
 	async getAttachments(id: string): Promise<ApplicantAttachmentRecord[]> {
-		return traceAsync(async () => {
-			const response = await hrisApiClient.get<any>(`/api/applicant/${id}/attachments`);
-			const payload = response?.data?.data || response?.data;
-			return (payload?.attachments || []) as ApplicantAttachmentRecord[];
-		}, "ApplicantService.getAttachments", "applicant-service");
+		const response = await hrisApiClient.get<any>(`/api/applicant/${id}/attachments`);
+		const payload = response?.data?.data || response?.data;
+		return (payload?.attachments || []) as ApplicantAttachmentRecord[];
 	}
 
 	async uploadAttachment(
 		id: string,
 		formData: FormData,
 	): Promise<ApplicantAttachmentRecord> {
-		return traceAsync(async () => {
-			const response = await hrisApiClient.post<any>(`/api/applicant/${id}/attachments`, formData);
-			const payload = response?.data?.data || response?.data;
-			return payload as ApplicantAttachmentRecord;
-		}, "ApplicantService.uploadAttachment", "applicant-service");
+		const response = await hrisApiClient.post<any>(`/api/applicant/${id}/attachments`, formData);
+		const payload = response?.data?.data || response?.data;
+		return payload as ApplicantAttachmentRecord;
 	}
 
 	/**
@@ -282,24 +268,23 @@ class ApplicantService extends APIService {
 	 * @returns Promise<Applicant> - Deleted applicant record
 	 */
 	async deleteApplicant(id: string): Promise<Applicant> {
-		return traceAsync(async () => {
-			try {
-				console.log("Deleting applicant in HRIS API:", id);
+		try {
 
-				const response = await hrisApiClient.put<{ data: Applicant }>(`/api/applicant/${id}`);
+			console.log("Deleting applicant in HRIS API:", id);
 
-				if (!response.data) {
-					throw new Error("Failed to delete applicant");
-				}
+			const response = await hrisApiClient.put<{ data: Applicant }>(`/api/applicant/${id}`);
 
-				// Handle nested data structure
-				const applicantData = response.data.data || response.data;
-				return applicantData as Applicant;
-			} catch (error: any) {
-				console.error("Error deleting applicant:", error);
-				throw createApplicantServiceError(error, "Error deleting applicant");
+			if (!response.data) {
+				throw new Error("Failed to delete applicant");
 			}
-		}, "ApplicantService.deleteApplicant", "applicant-service");
+
+			// Handle nested data structure
+			const applicantData = response.data.data || response.data;
+			return applicantData as Applicant;
+		} catch (error: any) {
+			console.error("Error deleting applicant:", error);
+			throw createApplicantServiceError(error, "Error deleting applicant");
+		}
 	}
 }
 

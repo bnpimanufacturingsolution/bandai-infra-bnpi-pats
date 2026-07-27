@@ -10,9 +10,9 @@ import { buildDatedCsvFilename, downloadCsvFile } from "~/lib/utils/csv-export";
 import { DataTable, type Column, type FilterOption } from "~/components/atoms/DataTable";
 import { ConfigurationEmptyGuide } from "~/components/molecules/ConfigurationEmptyGuide";
 import { ConstraintTokenRow } from "~/components/molecules/ConstraintTokens";
-import { UserCog, Eye, Edit, Trash2, MoreVertical, KeyRound } from "lucide-react";
+import { UserCog, Eye, Edit, Trash2, MoreVertical, KeyRound, History } from "lucide-react";
 import { useForm } from "react-hook-form";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "~/lib/hooks/use-auth";
 import {
@@ -79,6 +79,7 @@ const getAccessLabel = (user: UserListItem) => {
 
 export default function UsersPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
+	const navigate = useNavigate();
 
 	const { user } = useAuth();
 	const isUsersApiTemporarilyDisabled = false;
@@ -512,6 +513,10 @@ export default function UsersPage() {
 			<DropdownMenuContent align="end" className="w-48">
 				<DropdownMenuItem onClick={() => handleView(item)}>
 					<Eye className="h-4 w-4 mr-2" /> View Details
+				</DropdownMenuItem>
+				<DropdownMenuItem
+					onClick={() => navigate(`/admin/configuration/users/${item.id}/activity-logs`)}>
+					<History className="h-4 w-4 mr-2" /> Activity Logs
 				</DropdownMenuItem>
 				<DropdownMenuItem onClick={() => openEdit(item)}>
 					<Edit className="h-4 w-4 mr-2" /> Edit
@@ -999,6 +1004,12 @@ export default function UsersPage() {
 												});
 											}}>
 											Close
+										</Button>
+										<Button
+											variant="outline"
+											onClick={() => navigate(`/admin/configuration/users/${user.id}/activity-logs`)}>
+											<History className="mr-2 h-4 w-4" />
+											Activity Logs
 										</Button>
 										<Button onClick={() => openEdit(user)}>Edit User</Button>
 									</div>

@@ -1,24 +1,23 @@
 # Bandai Payroll Workbook Preview
 
-- Workbook: C:\Users\stari\bandai-infra\docs\new-cutoff\HRIS Payroll Computation June_26 - July 10, 2026.xlsx
-- Unlock: succeeded (excel-com-saveas-xlsx)
-- Unlocked copy: C:\Users\stari\bandai-infra\test-results\payroll-bandai-analysis\HRIS Payroll Computation June_26 - July 10, 2026.1784616421745.unlocked.xlsx
-- Detected cutoff: 2026-06-26 to 2026-07-10
-- Pay date: 2026-07-15
-- Parsed employee rows: 859
+- Workbook: C:\Users\User\Desktop\AZURO\BANDAI\bandai-infra\.runtime\payroll-comparison-apr26-may10\HRIS Payroll Computation April 26 - May 10, 2026.unlocked.xlsx
+- Unlock: succeeded (xlsx-direct)
+- Detected cutoff: 2026-04-26 to 2026-05-10
+- Pay date: 2026-05-15
+- Parsed employee rows: 849
 
 ## Sheets
 
 ### Sheet2
 - Hidden: no
-- Range: A1:DA865
+- Range: A1:CX855
 - Merges: 0
 - Header candidates: row 4 (score 5)
-- Formula columns: I No. of Days, J Basic Salary, K Absent-Amt, L UT/Late-Amt, M No. of Reg OT Hrs, N Reg OT, O RD Hrs, P RD Hrs Pay, Q RD OT, R RD OT Pay, S Spc Hol OT Hrs, T Spc Hol OT, U Sun/Spc Hol OT Exc Hrs, V Sun/Spc Hol OT Exc, W Spc Hol RD OT Hrs, X Spc RD OT, Y Spc RD Exc Hrs, Z Spc RD Exc OT, AA Leg Hol OT Hrs, AB Leg Hol OT
+- Formula columns: AY Other Compensation, BH GrossPay, CL NetPay, CW TotalReceivable, I No. of Days, J Basic Salary, K Absent-Amt, L UT/Late-Amt, M No. of Reg OT Hrs, N Reg OT, O RD Hrs, P RD Hrs Pay, Q RD OT, R RD OT Pay, S Spc Hol OT Hrs, T Spc Hol OT, U Sun/Spc Hol OT Exc Hrs, V Sun/Spc Hol OT Exc, W Spc Hol RD OT Hrs, X Spc RD OT
 
 ### Sheet1
 - Hidden: no
-- Range: A1:E872
+- Range: A1:CX861
 - Merges: 0
 - Header candidates: row 4 (score 2)
 - Formula columns: D Total Receivable
@@ -63,17 +62,17 @@
 ## Row Preview
 
 - 00021 Salud, Arvin M.: gross=42500, net=34700.84 (Sheet2 row 5)
-- 00024 Libuit, Augusto L.: gross=15800, net=14992.55 (Sheet2 row 6)
-- 00032 Llarena, Ivy Sheena T.: gross=16732.77, net=11249.41 (Sheet2 row 7)
-- 00050 Almero, Lesley M.: gross=33500, net=23136.66 (Sheet2 row 8)
-- 00062 Ebreo, Danica P.: gross=23175.72, net=20013.58 (Sheet2 row 9)
-- 00065 Belen, Ma. Angelina L.: gross=29741.69, net=19290.38 (Sheet2 row 10)
-- 00073 Andal, Marilou S.: gross=28402.98, net=25118.28 (Sheet2 row 11)
-- 00083 Redondo, Maria Sarah Jane L.: gross=19329.99, net=17909.89 (Sheet2 row 12)
-- 00088 Domingo, Melroshelle A.: gross=20118.17, net=13089.69 (Sheet2 row 13)
-- 00091 Gonzales, Melanie M.: gross=6299.58, net=3820.98 (Sheet2 row 14)
-- 00092 Aguda, Maryann M.: gross=19419.49, net=17058.59 (Sheet2 row 15)
-- 00093 Medrano, Marianne  A.: gross=16683.03, net=15133.31 (Sheet2 row 16)
-- 00094 Araja, Liezl J.: gross=15335.51, net=10401.32 (Sheet2 row 17)
-- 00098 Ona, Rufina M.: gross=11426.8, net=7503.94 (Sheet2 row 18)
-- 00104 Atienza, Maria Cristina H.: gross=54305.51, net=38637.19 (Sheet2 row 19)
+- 00024 Libuit, Augusto L.: gross=15920, net=15094.55 (Sheet2 row 6)
+- 00032 Llarena, Ivy Sheena T.: gross=16906.87, net=10949.67 (Sheet2 row 7)
+- 00050 Almero, Lesley M.: gross=33889.38, net=23448.16 (Sheet2 row 8)
+- 00062 Ebreo, Danica P.: gross=21881.78, net=17858.42 (Sheet2 row 9)
+- 00065 Belen, Ma. Angelina L.: gross=29761.1, net=19764.24 (Sheet2 row 10)
+- 00073 Andal, Marilou S.: gross=31438.08, net=26986.36 (Sheet2 row 11)
+- 00083 Redondo, Maria Sarah Jane L.: gross=16006.27, net=13779.7 (Sheet2 row 12)
+- 00088 Domingo, Melroshelle A.: gross=22287.94, net=13392.55 (Sheet2 row 13)
+- 00091 Gonzales, Melanie M.: gross=0, net=0 (Sheet2 row 14)
+- 00092 Aguda, Maryann M.: gross=18735.14, net=16511.11 (Sheet2 row 15)
+- 00093 Medrano, Marianne  A.: gross=16348.24, net=14009.54 (Sheet2 row 16)
+- 00094 Araja, Liezl J.: gross=17290.41, net=12271.33 (Sheet2 row 17)
+- 00098 Ona, Rufina M.: gross=10306.59, net=5947 (Sheet2 row 18)
+- 00104 Atienza, Maria Cristina H.: gross=51463.06, net=36505.35 (Sheet2 row 19)

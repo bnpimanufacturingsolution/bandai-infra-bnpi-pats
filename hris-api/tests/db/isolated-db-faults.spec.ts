@@ -10,12 +10,14 @@ import {
 	createIsolatedPrismaClient,
 	disconnectQuietly,
 } from "../support/isolated-prisma-client";
+import { resolveIsolatedDbFaultTestConfig } from "../support/isolated-db-fault.guard";
 import {
 	findEffectiveTimesheetLineConflicts,
 	findPaidPayrollSnapshotViolations,
 } from "../support/db-fault-invariants";
 
 const businessDate = new Date("2026-05-05T00:00:00.000Z");
+const describeIfFaultTestsEnabled = resolveIsolatedDbFaultTestConfig().allowed ? describe : describe.skip;
 
 async function expectUniqueConstraintViolation(action: () => Promise<unknown>) {
 	let thrown: unknown;
@@ -51,7 +53,7 @@ async function createTimesheetLine(
 	});
 }
 
-describe("isolated DB fault invariants", () => {
+describeIfFaultTestsEnabled("isolated DB fault invariants", () => {
 	let prisma: PrismaClient | undefined;
 	let fixture: IsolatedHrisFixture | undefined;
 

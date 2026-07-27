@@ -171,6 +171,10 @@ blob-report/
 routes.backup/
 test-letter-spacing.html
 
+# Local screenshot evidence from manual and visual audits
+output/manual-attendance-fix-*/
+output/visual-audit/
+
 # Raw runner scratch files; curated report artifacts stay tracked
 output/reports/app-import-ui-vitest.json
 output/reports/app-import-ui-quality-breakdown.*

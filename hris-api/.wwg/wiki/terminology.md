@@ -4,6 +4,12 @@ This file defines canonical and observed project language.
 
 Adoption status: INFERRED_FROM_EXISTING_PROJECT
 Status: Reconciled from repository evidence on 2026-05-25. Core HRIS/API terms are accepted where backed by README/package/source evidence; policy terms remain inferred until reviewed.
+Update 2026-06-26: `../docs/attendance-timesheet-payroll-tally-prd.md` was never committed to either repo's git history (confirmed via `git log --all --diff-filter=A/D` and `git fsck --unreachable` in both `hris-api` and `hris-app`) and is treated as permanently unrecoverable. The four HR Attendance/Timesheet/Payroll source terms below were re-grounded directly against Prisma schemas and service code instead of that doc; see evidence columns.
+
+Update 2026-07-14: Employee benefit payroll schedule terms expanded to include `RECURRING` (per-period amount, optional end date, lazy installment ensure). See section **Employee Benefit Payroll Schedule Terms**.
+Update 2026-07-14: Attendance-based benefit amount terms (`attendanceBased`, `PER_DAY`, `PER_CUTOFF`) added.
+Update 2026-07-17: Perfect Attendance payroll benefit (`PFA` / `perfectAttendance`) vs perfect attendance metrics report documented; seed name conflict recorded.
+Update 2026-07-23: Benefit attendance eligibility mode + disqualify flags (independent of amount pro-rate); PFA type defaults for classic perfect attendance.
 
 ## Canonical Terms
 
@@ -33,18 +39,55 @@ Status: Reconciled from repository evidence on 2026-05-25. Core HRIS/API terms a
 
 | Term | Meaning | Status | Evidence |
 |---|---|---|---|
-| AttendanceObligation | Live/current/future operational attendance truth. | CONFIRMED_AS_REQUIRED_CONTEXT | `../docs/attendance-timesheet-payroll-tally-prd.md`; Prisma schemas. |
-| Attendance | Biometric/raw/effective clock ledger truth. | CONFIRMED_AS_REQUIRED_CONTEXT | `../docs/attendance-timesheet-payroll-tally-prd.md`; attendance module/schemas. |
-| Timesheetline | Effective submitted/approved/payroll-ready rows used for past totals and approved OT tally. | CONFIRMED_AS_REQUIRED_CONTEXT | `../docs/attendance-timesheet-payroll-tally-prd.md`; timesheetline module/schemas. |
-| EmployeePayroll.timesheetSnapshot | Paid payroll history source once payroll has been paid. | CONFIRMED_AS_REQUIRED_CONTEXT | `../docs/attendance-timesheet-payroll-tally-prd.md`; employee payroll module/schemas. |
+| AttendanceObligation | Live/current/future operational attendance truth; computed per `date`/`businessDate`, defaults `status: EXPECTED`, `phase: PLANNED`, recomputed on leave approval. | CONFIRMED_FROM_IMPLEMENTATION | `prisma/schema-postgres/attendanceobligation.prisma`; `generated/prisma/schema.prisma:299-364`; `helper/attendance-obligation.helper.ts` (`recomputeAttendanceObligationsForRange`); `app/request/leave-attendance-reconciliation.service.ts`. |
+| Attendance | Biometric/raw/effective clock ledger truth; `ledgerType` (`RAW`/`CORRECTION`), `isEffective`, and `supersedesAttendanceId` form the ledger/supersession chain. | CONFIRMED_FROM_IMPLEMENTATION | `prisma/schema-postgres/attendance.prisma`; `generated/prisma/schema.prisma:216-297`; `app/attendance/attendance.controller.ts`; `app/attendance/attendance-correction.service.ts`. |
+| Timesheetline | Effective submitted/approved/payroll-ready rows used for past totals and approved OT tally; `ledgerType: SNAPSHOT`, `revisionNo`/`isEffective`/`supersedesLineId` chain revisions, and parent `Timesheet.status` of `SUBMITTED`/`APPROVED` locks the line against refresh. | CONFIRMED_FROM_IMPLEMENTATION | `prisma/schema-postgres/timesheetline.prisma`; `generated/prisma/schema.prisma:3073-3148`; `helper/timesheet.helper.ts` (`ATTENDANCE_REFRESHABLE_TIMESHEET_STATUSES`, `isTimesheetAttendanceRefreshAllowed`, `TIMESHEET_SNAPSHOT_LOCKED`). |
+| EmployeePayroll.timesheetSnapshot | Paid payroll history source once payroll has been paid; frozen `Json` hours/attendance tally written at payroll generation, locked via `isPaid`/`paidAt`/`snapshotLockedAt`/`snapshotLockedBy`. | CONFIRMED_FROM_IMPLEMENTATION | `prisma/schema-postgres/employeepayroll.prisma:124-146,246-251`; `helper/payroll-period.helper.ts`; `app/employeepayroll/employeepayroll.controller.ts`. |
 | Payroll period | Payroll grouping/cycle domain served by payroll period APIs and schemas. | INFERRED | `app/payrollperiod`, Prisma payroll period schemas. |
-| Payroll snapshot | Immutable history used for paid payroll reads; confirm exact schema field semantics before test hardening. | INFERRED | source-of-truth PRD and employee payroll schemas. |
-| Approved OT | Approved overtime tally sourced from effective `Timesheetline` rows. | CONFIRMED_AS_REQUIRED_CONTEXT | `../docs/attendance-timesheet-payroll-tally-prd.md`. |
+| Payroll snapshot | Immutable history used for paid payroll reads; confirm exact schema field semantics before test hardening. | INFERRED | `prisma/schema-postgres/employeepayroll.prisma:124-146,246-251`; employee payroll module. |
+| OT Candidate | Detected post-shift, rest-day, or holiday excess stored on line/obligation metadata while effective `overtimeHours` stays `0:00` until manager approval. | CONFIRMED_FROM_IMPLEMENTATION | `helper/overtime-approval.helper.ts`; `docs/OVERTIME_APPROVAL_WORKFLOW_PLAN.md`. |
+| Pending OT | Candidate minutes (`pendingOvertimeMinutes` / `pendingOvertimeHours`) visible in timesheet UI before an `OVERTIME` request is approved. | CONFIRMED_FROM_IMPLEMENTATION | `helper/overtime-approval.helper.ts`; `hris-app/app/lib/utils/overtime-candidate.ts`. |
+| OVERTIME Request | `Request.type = OVERTIME` filed from a timesheet candidate day; routed via `WF-OVERTIME-DEFAULT` to the line manager. | CONFIRMED_FROM_IMPLEMENTATION | `app/timesheet/overtime-request.service.ts`; `prisma/seeds/requestWorkflowCatalog.ts`. |
+| Approved OT | Payable overtime written to effective `Timesheetline` rows only after manager approves an `OVERTIME` request (or DM4 pre-approved import evidence bypasses the candidate gate). | CONFIRMED_FROM_IMPLEMENTATION | `app/timesheet/overtime-request.service.ts`; `app/timesheet/approved-overtime-comp-leave.service.ts`; `docs/OVERTIME_APPROVAL_WORKFLOW_PLAN.md`. |
+| Time adjustment reconciliation | The approval-side effect for `TIME_ADJUSTMENT` requests: recompute `AttendanceObligation` for the request's single target date and refresh the mutable timesheet snapshot from current source truth, surfacing locked snapshots as `adjustment_required` follow-up instead of mutating raw punches. Stored at `Request.metadata.timeAdjustmentReconciliation` as `{ attendanceResults, timesheetResults, reconciledAt }`; timesheet action vocabulary is exactly `refreshed` \| `adjustment_required` with locked reason `TIMESHEET_SNAPSHOT_LOCKED`. Unresolved `adjustment_required` is not next-payroll money apply; use `PAYROLL_CORRECTION` for payable post-lock deltas. | CONFIRMED_FROM_IMPLEMENTATION | `app/request/time-adjustment-reconciliation.service.ts`; `app/request/request.controller.ts` (`applyTimeAdjustmentApprovalSideEffects`); `tests/time-adjustment-reconciliation.service.spec.ts`. |
+| PayrollCorrection | First-class durable ledger for post-payroll-lock timesheet corrections. Linked to source timesheet/period and optional request; statuses: `REQUESTED`, `READY`, `APPLIED`, `REJECTED`, `VOID`, `APPROVED_HOLD`. Applied as explicit retro lines on next open payroll generate — never by rewriting locked timesheet days or Period A `timesheetSnapshot`. | ACCEPTED_TRUTH / CONFIRMED_FROM_IMPLEMENTATION | `prisma/schema-postgres/payrollCorrection.prisma`; `app/payrollCorrection/payroll-correction.service.ts`; `helper/payroll-period.helper.ts`; `docs/PAYROLL_CORRECTION_NEXT_PERIOD_PRD.md`. |
+| PAYROLL_CORRECTION request | `Request.type = PAYROLL_CORRECTION` routed via `WF-PAYROLL-CORRECTION-DEFAULT` (manager approval). Creates/links a `PayrollCorrection` row; approval side effects set READY or APPROVED_HOLD (negative). | ACCEPTED_TRUTH / CONFIRMED_FROM_IMPLEMENTATION | `prisma/seeds/requestWorkflowCatalog.ts`; `app/timesheet/timesheet.controller.ts`; `app/request/request.controller.ts`. |
+| dayDeltas (payroll correction) | Per-day settlement shape on create/apply: `date`, `hoursType`, `beforeMinutes`, `afterMinutes`, `deltaMinutes` (optional `timeIn`/`timeOut` audit). Money uses minute deltas × rate for hours type — not punch rewrite. | ACCEPTED_TRUTH / CONFIRMED_FROM_IMPLEMENTATION | `helper/payroll-correction.helper.ts` (`parsePayrollCorrectionDayDeltas`); create body in `docs/PAYROLL_CORRECTION_NEXT_PERIOD_PRD.md`; UI derives minutes from Time In/Out in `payroll-correction-form.ts`. |
+| Retro / payroll correction line | Explicit payslip/register earning line under `EmployeePayroll.metadata.payrollCorrections[]` with source period + request linkage + `dayDeltas`; amount also reflected in `otherCompensation` / gross / net / totalReceivable for the **applying** (later) period. Label formula: `Retro {typeLabel} ({sourcePeriodName} correction)` via `buildRetroPayslipLabel` — e.g. `Retro OT`, `Retro ND`, `Retro hours` (REGULAR), or `Retro adjustment` when mixed/unknown types. | ACCEPTED_TRUTH / CONFIRMED_FROM_IMPLEMENTATION | `helper/payroll-correction.helper.ts` (`buildRetroPayslipLabel`); `buildEmployeePayrollComputationView` gross rows; payslip PDF; emp-app + hris-app `payslip-detail-template.tsx`; HR summary `payroll-management-template.tsx`. |
+| Source period vs apply period | **Source** = locked timesheet/period being corrected. **Apply** = later open payroll where READY corrections become APPLIED retro lines. “Retro” always means money for the source period paid on the apply period. | ACCEPTED_TRUTH / CONFIRMED_FROM_IMPLEMENTATION | `PayrollCorrection.sourcePayrollPeriodId` / `appliedPayrollPeriodId`; generate path in `helper/payroll-period.helper.ts`. |
+
+## Employee Benefit Payroll Schedule Terms
+
+| Term | Meaning | Status | Evidence |
+|---|---|---|---|
+| Benefit schedule mode | Persisted `EmployeeBenefit.scheduleMode`: `TIME_BOUND`, `FIXED_INSTALLMENTS`, or `RECURRING`. Null/absent is legacy compatibility only. | CONFIRMED_FROM_IMPLEMENTATION | `prisma/schema-postgres/employeebenefit.prisma`; `zod/employeebenefit.zod.ts`; `docs/BENEFIT_SCHEDULE_MODES.md`. |
+| TIME_BOUND | Finite schedule: start + required end + **total** amount; one installment per overlapping org payroll period; total split with final-row remainder. | CONFIRMED_FROM_IMPLEMENTATION | `helper/employee-benefit-program.helper.ts` (`buildBenefitInstallments`); employee benefit controller. |
+| FIXED_INSTALLMENTS | Finite schedule: start + positive installment count + **total** amount; N installments on cadence; total split with final-row remainder. | CONFIRMED_FROM_IMPLEMENTATION | `helper/employee-benefit-program.helper.ts`; employee benefit controller. |
+| RECURRING | Open-ended-capable schedule: start + **per-period** amount; end date optional; no bulk installments at create; payroll lazy-ensures one installment per period while active and in range. | CONFIRMED_FROM_IMPLEMENTATION | `planRecurringInstallmentForPeriod` / `ensureRecurringBenefitInstallmentForPeriod`; `helper/payroll-period.helper.ts`; owner decisions 2026-07-14. |
+| EmployeeBenefitInstallment | Payroll execution row (`SCHEDULED` → `DEDUCTED` with payroll cutoff linkage). Authoritative apply source when present. | CONFIRMED_FROM_IMPLEMENTATION | Prisma installment model; `resolvePayrollBenefitSource`; `markPayrollBenefitInstallmentsDeducted`. |
+| Lazy recurring ensure | At payroll source build, for each in-range `RECURRING` benefit, find-or-create the period installment before resolve. | CONFIRMED_FROM_IMPLEMENTATION | `helper/payroll-period.helper.ts`; `tests/payroll-benefit-integration.spec.ts`. |
+| attendanceBased | When true on `EmployeeBenefit`, the period installment amount is computed from timesheet attendance at payroll (not a fixed enrolled payslip amount). | CONFIRMED_FROM_IMPLEMENTATION | `prisma/.../employeebenefit.prisma`; `helper/attendance-benefit-amount.helper.ts`; `docs/BENEFIT_SCHEDULE_MODES.md`. |
+| recurrenceFrequency | RECURRING-only cadence: `EVERY_CUTOFF` (default), `MONTHLY` (period 2 / sole monthly period), `YEARLY` (fiscal year-end last period). | CONFIRMED_FROM_IMPLEMENTATION | `helper/benefit-recurrence.helper.ts`; `docs/BENEFIT_SCHEDULE_MODES.md`. |
+| EVERY_CUTOFF | Recurrence: ensure installment every eligible payroll period. | CONFIRMED_FROM_IMPLEMENTATION | default when recurrenceFrequency null. |
+| MONTHLY (benefit recurrence) | Recurrence: pay on 2nd cutoff (`periodNumber === 2`) or sole period in calendar month. | CONFIRMED_FROM_IMPLEMENTATION | Bandai semi-monthly period 2. |
+| YEARLY (benefit recurrence) | Recurrence: pay on last period of fiscal-year-end month (`ANNUALLY.startMonth`). | CONFIRMED_FROM_IMPLEMENTATION | `getMergedCycleRules`. |
+| PER_DAY | Attendance amount basis: enrolled amount is a **rate per present day**; paid = rate × present_days. | CONFIRMED_FROM_IMPLEMENTATION | `computeAttendanceBenefitAmount`; owner decisions 2026-07-14. |
+| PER_CUTOFF | Attendance amount basis: enrolled amount is **full cut-off** if zero absences; paid = full × (present/scheduled). | CONFIRMED_FROM_IMPLEMENTATION | `computeAttendanceBenefitAmount`; owner decisions 2026-07-14. |
+| present days (benefit attendance v1) | scheduled non-`REST_DAY` days minus days with status `ABSENT` only. Leave does not reduce. | CONFIRMED_FROM_IMPLEMENTATION | `countAttendanceBenefitDaysFromBreakdown`; payroll basic-pay absence alignment. |
+| PFA | Benefit type **code** for Perfect Attendance compensation. Payroll maps `PFA` → `EmployeePayroll.perfectAttendance`. | CONFIRMED_FROM_IMPLEMENTATION | `helper/payroll-source-display.helper.ts`; `helper/payroll-period.helper.ts`; import map `"Perfect Attendance": "PFA"`. |
+| Perfect Attendance (payroll) | Product / Bandai register label for the PFA compensation field (column CT). Classic config: `eligibilityMode=ATTENDANCE_QUALIFIED` + disqualify flags + fixed amount. Amount pro-rate (`attendanceBased`) is separate. | CONFIRMED_FROM_IMPLEMENTATION | register CT; seeder PFA defaults; `benefit-attendance-eligibility.helper.ts`; hris-app eligibility form. |
+| Benefit eligibility mode | `ENROLLED_ALWAYS` (schedule only) or `ATTENDANCE_QUALIFIED` (period all-or-nothing from disqualify flags). | CONFIRMED_FROM_IMPLEMENTATION | `EmployeeBenefit.eligibilityMode`; payroll evaluate order. |
+| Benefit eligibility disqualify flags | `eligibilityDisqualifyOnAbsent` / `Late` / `Undertime` / `Leave` — when QUALIFIED, any matching signal → period amount 0. | CONFIRMED_FROM_IMPLEMENTATION | employeebenefit schema; eligibility helper. |
+| Performance Bonus (PFA seed name) | Default seeded `BenefitType.name` for code `PFA`. Conflicts with product label “Perfect Attendance”; money path still keys on code. | CONFLICTING | `prisma/seeds/benefitTypeSeeder.ts` vs payroll/UI labels. |
+| EmployeePayroll.perfectAttendance | Named payroll register amount for Perfect Attendance compensation. | CONFIRMED_FROM_IMPLEMENTATION | `prisma/schema/employeepayroll.prisma`; employee payroll computation view. |
+| perfectAttendanceMetrics | Metrics API key / report for employees with no late, no undertime, and no `LEAVE` attendance rows in range (≥1 attendance). Analytics only; does not award PFA. | CONFIRMED_FROM_IMPLEMENTATION | `helper/perfect-attendance-metrics.helper.ts`; `zod/metrics.zod.ts`; HR reports Perfect Attendance tab. |
+| RECEIVABLE_ONLY (benefit reconciliation) | Benefit reconciliation action that places compensation on post-net / total receivable (not gross). Bandai PFA examples use this for display grouping; seed default for PFA is `KEEP_AS_BENEFIT` until org data overrides. | CONFIRMED_FROM_IMPLEMENTATION (action); NEEDS_CONFIRMATION (whether PFA must always be RECEIVABLE_ONLY) | `helper/payroll-source-display.helper.ts`; `payroll-period.helper.ts` receivableOnlyBenefits; seeder `KEEP_AS_BENEFIT`. |
 
 ## HRIS Domain Terms
 
 | Term | Meaning | Status | Evidence |
 |---|---|---|---|
+| Sick leave advance-notice exemption | `validateLeaveRequestPolicy` skips `minAdvanceNoticeDays` enforcement when leave type normalizes to `SICK`, allowing backdated sick leave from timesheet flows. | IMPLEMENTED_FROM_USER_REQUEST | `helper/leave-policy.helper.ts`; `tests/leave-policy.helper.spec.ts` |
 | Employee | HRIS worker record/domain. | CONFIRMED | employee modules and Prisma schemas. |
 | Person | Person-level identity record associated with employees/users/applicants. | INFERRED | Prisma person schema. |
 | User | Auth/user account domain. | INFERRED | auth module and user schema. |
@@ -53,7 +96,8 @@ Status: Reconciled from repository evidence on 2026-05-25. Core HRIS/API terms a
 | Workflow | Configurable routing/approval behavior for requests/processes. | INFERRED | workflowConfig and workflowEngine modules/schemas. |
 | Boarding | Onboarding/offboarding process and template domains. | INFERRED | boardingProcess and boardingTemplate modules/schemas. |
 | Device / Hikvision | Device/access-control integration surface. | INFERRED | device and hikvision modules. |
-| Audit logging | Server-side audit trail behavior for sensitive actions. | INFERRED | auditLogging and activityLogging modules/schemas. |
+| Activity logging | User-facing trail of all successful API actions (reads and mutations) via `logActivity()` → `ActivityLogging`. | CONFIRMED | `utils/activityLogger.ts`, `docs/LOGGING_STANDARDS.md`. |
+| Audit logging | Compliance trail for CUD mutations only via `logAudit()` → `AuditLogging`. Reads are excluded. | CONFIRMED | `utils/auditLogger.ts`, `shouldSkipAuditLog()`, `docs/LOGGING_STANDARDS.md`. |
 | Metrics / reports | Backend reporting and aggregate API surface. | CONFIRMED | metrics and report modules. |
 
 ## Incorrect Or Stale Language
@@ -87,10 +131,14 @@ Status: Reconciled from repository evidence on 2026-05-25. Core HRIS/API terms a
 | persistence model source | Prisma schema | schema model | HIGH | `prisma/schema`, `prisma/schema-postgres`. |
 | intentional DB-bug detection | DB invariant test | fault-injection test | MEDIUM | testing task context. |
 | safe destructive test target | Isolated test database / `hris_fault_test` for local DB fault tests | disposable test DB | HIGH | WWG safety boundary and testing docs. |
-| live operational attendance truth | AttendanceObligation | attendance obligation | HIGH | `../docs/attendance-timesheet-payroll-tally-prd.md`. |
-| clock ledger truth | Attendance | clock ledger | HIGH | `../docs/attendance-timesheet-payroll-tally-prd.md`. |
-| approved/payroll-ready totals | Timesheetline | timesheet line | HIGH | `../docs/attendance-timesheet-payroll-tally-prd.md`. |
-| paid payroll history | EmployeePayroll.timesheetSnapshot | payroll snapshot | HIGH | `../docs/attendance-timesheet-payroll-tally-prd.md`. |
+| live operational attendance truth | AttendanceObligation | attendance obligation | HIGH | `prisma/schema-postgres/attendanceobligation.prisma`; `helper/attendance-obligation.helper.ts`. |
+| clock ledger truth | Attendance | clock ledger | HIGH | `prisma/schema-postgres/attendance.prisma`; `app/attendance/attendance-correction.service.ts`. |
+| approved/payroll-ready totals | Timesheetline | timesheet line | HIGH | `prisma/schema-postgres/timesheetline.prisma`; `helper/timesheet.helper.ts`. |
+| paid payroll history | EmployeePayroll.timesheetSnapshot | payroll snapshot | HIGH | `prisma/schema-postgres/employeepayroll.prisma:124-146,246-251`. |
+| continuous payroll benefit | RECURRING schedule mode | open-ended benefit, forever benefit | HIGH | `docs/BENEFIT_SCHEDULE_MODES.md`; lazy ensure helpers. |
+| finite total benefit program | TIME_BOUND / FIXED_INSTALLMENTS | installment plan | HIGH | `docs/BENEFIT_SCHEDULE_MODES.md`. |
+| Perfect Attendance payroll money | Perfect Attendance (payroll) / PFA / `EmployeePayroll.perfectAttendance` | Performance Bonus (seed name), attendance incentive, PFA allowance (informal) | HIGH for money path; MEDIUM for catalog label | payroll helpers + seeder conflict table. |
+| Perfect attendance analytics | perfectAttendanceMetrics | Perfect Attendance report tab | HIGH | metrics helper + hris-app reports. |
 
 ## Terminology Conflicts
 
@@ -98,6 +146,8 @@ Status: Reconciled from repository evidence on 2026-05-25. Core HRIS/API terms a
 |---|---|---|
 | Previous Product Truth described the repo as Web3/eCommerce while README/package/source describe HRIS API. | stale `.wwg/wiki/project-truth.md` content before 2026-05-25 reconciliation. | Use HRIS API language and keep stale terms only as drift warnings. |
 | Generic role labels (`admin`, `user`, `agent`) are too broad for HRIS authorization work. | previous adoption audit vs app/API route and domain evidence. | Use inferred HRIS role labels until the canonical permission matrix is confirmed. |
+| Benefit type code `PFA` is seeded as **Performance Bonus** (`BONUS`) but payroll register, payslip, Bandai import, and HR UI call it **Perfect Attendance** (often informal “allowance” / post-net receivable). | `prisma/seeds/benefitTypeSeeder.ts` vs `payroll-period.helper.ts` CT / `sourceBy(PFA)`; HR run-payroll + benefits filters. | Prefer product label **Perfect Attendance** and code **PFA** in payroll/agent language. Do not rename seed without owner decision. Do not confuse with `perfectAttendanceMetrics` report. |
+| “Perfect attendance” report eligibility vs PFA money. | Metrics: no late/undertime/LEAVE. Amount pro-rate: ABSENT-only. Eligibility mode: configurable QUALIFIED flags. PFA money: enrollment + optional QUALIFIED gate + optional pro-rate. | Keep concepts separate. Prefer eligibility for classic all-or-nothing PFA. |
 
 ## Rules
 

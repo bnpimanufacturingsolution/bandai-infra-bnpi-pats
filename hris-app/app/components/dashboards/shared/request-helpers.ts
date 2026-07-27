@@ -1,4 +1,5 @@
 import type { Request } from "~/services/requests.service";
+import { getOvertimeRequestHoursLabel } from "~/lib/utils/overtime-request-display";
 
 type RequestLikeForTimesheetLink = {
 	type?: string | null;
@@ -39,6 +40,7 @@ export const getRequestTypeLabel = (request: Request): string => {
 		OTHER: "General Request",
 		LEAVE: "Leave Request",
 		OVERTIME: "Overtime Request",
+		PAYROLL_CORRECTION: "Payroll Correction",
 		TIMESHEET: "Timesheet Submission",
 		RESIGNATION: "Resignation",
 		TERMINATION: "Termination",
@@ -56,6 +58,7 @@ export const getRequestDescription = (request: Request): string => {
 		(request.type === "TIME_ADJUSTMENT" ||
 			request.type === "LEAVE" ||
 			request.type === "OVERTIME" ||
+			request.type === "PAYROLL_CORRECTION" ||
 			request.type === "OTHER")
 	) {
 		if (request.endDate && request.startDate !== request.endDate) {
@@ -78,6 +81,20 @@ export const getRequestDescription = (request: Request): string => {
 
 	if (request.type === "EXPENSE_REIMBURSEMENT" && request.amount) {
 		return `P${request.amount.toLocaleString()}`;
+	}
+
+	if (request.type === "OVERTIME") {
+		const overtimeHours = getOvertimeRequestHoursLabel(
+			request.metadata as Record<string, unknown> | null,
+		);
+		const dateLabel = request.startDate
+			? new Date(request.startDate).toLocaleDateString("en-US", {
+					month: "short",
+					day: "numeric",
+				})
+			: null;
+		if (overtimeHours && dateLabel) return `${overtimeHours} OT · ${dateLabel}`;
+		if (overtimeHours) return `${overtimeHours} overtime`;
 	}
 
 	return request.description

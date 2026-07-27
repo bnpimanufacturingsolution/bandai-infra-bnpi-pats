@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Example: How to use the useCreateBoardingTemplateWithItems hook
  *

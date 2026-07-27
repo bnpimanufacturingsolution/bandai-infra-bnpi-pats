@@ -57,7 +57,15 @@ export type UpdateWorkflowConfigRequest = Omit<WorkflowConfig, "code">;
 
 class WorkflowConfigsService extends APIService {
 	async getWorkflowConfigs(params?: ApiQueryParams): Promise<WorkflowConfigsListResponse> {
-		const response = await hrisApiClient.get<any>("/api/workflow-config", params);
+		const queryParams = params
+			? {
+					...params,
+					fields: Array.isArray(params.fields) ? params.fields.join(",") : params.fields,
+					filter: typeof params.filter === "string" ? params.filter : undefined,
+					sort: typeof params.sort === "string" ? params.sort : undefined,
+				}
+			: undefined;
+		const response = await hrisApiClient.get<any>("/api/workflow-config", queryParams);
 		const data = response.data?.data || response.data;
 		if (!data) {
 			throw new Error("Failed to fetch workflow configs");

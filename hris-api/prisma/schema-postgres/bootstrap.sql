@@ -116,7 +116,7 @@ CREATE TYPE "PhoneType" AS ENUM ('mobile', 'home', 'work', 'emergency', 'fax', '
 CREATE TYPE "IdentificationType" AS ENUM ('passport', 'drivers_license', 'national_id', 'postal_id', 'voters_id', 'senior_citizen_id', 'company_id', 'school_id');
 
 -- CreateEnum
-CREATE TYPE "RequestType" AS ENUM ('LEAVE', 'TIMESHEET', 'ATTENDANCE_CORRECTION', 'EXPENSE_REIMBURSEMENT', 'DOCUMENT_REQUEST', 'RESIGNATION', 'TERMINATION', 'REGULARIZATION', 'PROMOTION', 'SALARY_CHANGE', 'TRANSFER', 'SCHEDULE_CHANGE', 'OTHER');
+CREATE TYPE "RequestType" AS ENUM ('LEAVE', 'OVERTIME', 'TIMESHEET', 'ATTENDANCE_CORRECTION', 'EXPENSE_REIMBURSEMENT', 'DOCUMENT_REQUEST', 'RESIGNATION', 'TERMINATION', 'REGULARIZATION', 'PROMOTION', 'SALARY_CHANGE', 'TRANSFER', 'SCHEDULE_CHANGE', 'OTHER');
 
 -- CreateEnum
 CREATE TYPE "RequestTransactionEventCategory" AS ENUM ('LIFECYCLE', 'WORKFLOW', 'ASSIGNMENT', 'BUSINESS_CHANGE', 'ARTIFACT', 'SYSTEM');
@@ -895,6 +895,16 @@ CREATE TABLE "employee_payrolls" (
     "paidAt" TIMESTAMP(3),
     "paymentMethod" TEXT,
     "referenceNumber" TEXT,
+    "isPublished" BOOLEAN NOT NULL DEFAULT false,
+    "publishedAt" TIMESTAMP(3),
+    "publishedBy" TEXT,
+    "payslipGeneratedAt" TIMESTAMP(3),
+    "payslipReleasedAt" TIMESTAMP(3),
+    "payslipReleasedBy" TEXT,
+    "hasPaymentIssue" BOOLEAN NOT NULL DEFAULT false,
+    "paymentIssueAt" TIMESTAMP(3),
+    "paymentIssueBy" TEXT,
+    "paymentIssueNote" TEXT,
     "snapshotLockedAt" TIMESTAMP(3),
     "snapshotLockedBy" TEXT,
     "snapshotLockReason" TEXT,
@@ -1101,6 +1111,7 @@ CREATE TABLE "payroll_periods" (
     "cutoffDay" INTEGER,
     "notes" TEXT,
     "generationMetadata" JSONB,
+    "payslipReleaseAttachmentUrl" TEXT,
     "processedBy" TEXT,
     "processedAt" TIMESTAMP(3),
     "isDeleted" BOOLEAN NOT NULL DEFAULT false,
@@ -1505,6 +1516,7 @@ CREATE TABLE "timesheet_configs" (
     "enableEditBeforeSubmission" BOOLEAN NOT NULL DEFAULT true,
     "rejectBehavior" "TimesheetRejectBehavior" NOT NULL DEFAULT 'REVISE',
     "overtimeFlagThresholdMinutes" INTEGER NOT NULL DEFAULT 60,
+    "requireManagerApprovedOvertime" BOOLEAN NOT NULL DEFAULT true,
     "workTimeRounding" JSONB,
     "overtimeQualification" JSONB,
     "payrollFinalization" JSONB,
@@ -1993,9 +2005,6 @@ CREATE INDEX "employees_organizationId_isDeleted_employmentStatus_payFreq_idx" O
 CREATE INDEX "employees_organizationId_agencyId_idx" ON "employees"("organizationId", "agencyId");
 
 -- CreateIndex
-CREATE INDEX "employees_organizationId_deviceEmpId_isDeleted_idx" ON "employees"("organizationId", "deviceEmpId", "isDeleted");
-
--- CreateIndex
 CREATE INDEX "employees_organizationId_employeeId_isDeleted_idx" ON "employees"("organizationId", "employeeId", "isDeleted");
 
 -- CreateIndex
@@ -2057,6 +2066,9 @@ CREATE INDEX "employee_payrolls_organizationId_employeeId_isDeleted_idx" ON "emp
 
 -- CreateIndex
 CREATE INDEX "employee_payrolls_organizationId_payrollPeriodId_isPaid_isDeleted_idx" ON "employee_payrolls"("organizationId", "payrollPeriodId", "isPaid", "isDeleted");
+
+-- CreateIndex
+CREATE INDEX "employee_payrolls_organizationId_payrollPeriodId_isPublished_isDeleted_idx" ON "employee_payrolls"("organizationId", "payrollPeriodId", "isPublished", "isDeleted");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "employee_payrolls_employeeId_payrollPeriodId_key" ON "employee_payrolls"("employeeId", "payrollPeriodId");

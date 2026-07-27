@@ -225,6 +225,7 @@ export const DEFAULT_TIMESHEET_CONFIG_SEED = {
 	enableEditBeforeSubmission: true,
 	rejectBehavior: "REVISE" as const,
 	overtimeFlagThresholdMinutes: 60,
+	requireManagerApprovedOvertime: true,
 	workTimeRounding:
 		DEFAULT_TIMESHEET_RULES_CONFIG.workTimeRounding as unknown as Prisma.InputJsonValue,
 	overtimeQualification:
@@ -237,6 +238,19 @@ export const DEFAULT_PAYROLL_CYCLE_CONFIG_SEED = {
 	payDateOffsetDays: 5,
 	businessDayRule: "NEXT_BUSINESS_DAY" as const,
 	includeHolidaysInBusinessDayCheck: true,
+	// BNPI default: 11-25 / 26-10 (matches Bandai semi-monthly register cutoffs).
+	cycleRules: {
+		SEMI_MONTHLY: {
+			firstStartDay: 11,
+			secondStartDay: 26,
+			secondEndDay: 10,
+		},
+		WEEKLY: { anchorWeekday: 1 },
+		BIWEEKLY: { anchorWeekday: 1 },
+		MONTHLY: { startDay: 1, endDay: "LAST_DAY" as const },
+		QUARTERLY: { startMonth: 1 },
+		ANNUALLY: { startMonth: 1 },
+	},
 };
 export const DEFAULT_WORKFORCE_RECRUITMENT_CONFIG_SEED = {
 	isEnabled: DEFAULT_WORKFORCE_RECRUITMENT_SETTINGS.isEnabled,

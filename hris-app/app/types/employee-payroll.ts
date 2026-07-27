@@ -32,6 +32,9 @@ export interface EmployeeInfo {
 	employeeId?: string;
 	department?: DepartmentInfo;
 	position?: PositionInfo;
+	user?: {
+		avatar?: string | null;
+	} | null;
 }
 
 export interface PayrollPeriodInfo {
@@ -121,6 +124,10 @@ export interface EmployeePayrollComputationRow {
 		| "DEDUCTED_AFTER_GROSSPAY"
 		| "ADDED_AFTER_NETPAY";
 	explanation: string;
+	/** Present on employeeBenefit source lines for tax grouping. */
+	isTaxable?: boolean | null;
+	/** True when row comes from metadata.payrollSourceDetails. */
+	isBenefitSource?: boolean;
 }
 
 export interface EmployeePayrollComputationView {
@@ -310,6 +317,29 @@ export interface EmployeePayroll {
 			fileUrl?: string | null;
 			generatedAt?: string | null;
 		};
+		/** Explicit retro lines from next-period PayrollCorrection apply */
+		payrollCorrections?: Array<{
+			correctionId?: string;
+			requestId?: string | null;
+			sourcePayrollPeriodId?: string;
+			sourcePayrollPeriodName?: string | null;
+			sourceTimesheetId?: string;
+			label?: string;
+			amount?: number;
+			status?: string;
+			appliedAt?: string;
+			dayDeltas?: Array<{
+				date: string;
+				hoursType?: string;
+				beforeMinutes?: number;
+				afterMinutes?: number;
+				deltaMinutes?: number;
+				timeIn?: string;
+				timeOut?: string;
+				notes?: string | null;
+			}>;
+		}>;
+		payrollCorrectionsAppliedAmount?: number;
 		[key: string]: any;
 	};
 }

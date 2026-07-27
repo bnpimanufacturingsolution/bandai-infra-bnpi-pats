@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/06-domain/workflows.md) -->
 # Domain Workflows
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -32,6 +33,14 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 4. Approvers review and approve or reject the correction.
 5. Approved correction updates attendance evidence and may affect timesheets/payroll readiness.
 
+## Overtime Approval
+
+1. Clock-out or correction detects post-shift, rest-day, or holiday OT as a candidate.
+2. Timesheet day shows a pending OT tag; payable `overtimeHours` remains `0:00`.
+3. Employee files an `OVERTIME` request from the timesheet day (required before submit).
+4. Line manager approves or rejects via `WF-OVERTIME-DEFAULT`.
+5. Approved OT is written to the effective line; rejected OT stays non-payable.
+
 ## Timesheet Approval
 
 1. Timesheet is created or loaded for a period.
@@ -61,10 +70,16 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 
 1. HR/payroll configures payroll settings and payroll periods.
 2. Employee, attendance, timesheet, leave, benefit, and salary data are reviewed.
+3. HR may create payroll benefit adjustments via benefits management with an explicit schedule mode (time-bound, fixed installments, or recurring).
+4. Payroll run or HR payroll screen processes or previews payroll; due benefit installments (including lazy-ensured recurring rows from the API) appear as adjustments.
+5. Payslips are generated for employees.
+6. Billing or statement of account artifacts may be generated where applicable.
+
+### bandai-infra develop notes (same section: Payroll And Billing)
+
 3. Payroll run or HR payroll screen processes or previews payroll.
 4. Payslips are generated for employees.
 5. Billing or statement of account artifacts may be generated where applicable.
-
 ## Firebase Deployment
 
 1. Build runs with React Router build output.
@@ -72,4 +87,3 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 3. GitHub workflow or local Firebase tooling deploys hosting assets.
 4. Secrets and service-account material must be provided safely.
 5. Production or public deployment requires explicit approval.
-

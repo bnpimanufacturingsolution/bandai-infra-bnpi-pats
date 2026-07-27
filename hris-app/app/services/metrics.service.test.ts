@@ -400,4 +400,46 @@ describe("metricsService HR attendance metrics", () => {
 			},
 		});
 	});
+
+	it("requests turnover and attrition with organization hierarchy filters", async () => {
+		const { default: metricsService } = await import("./metrics.service");
+		postMock.mockResolvedValueOnce({
+			data: {
+				metrics: {
+					turnoverAttritionReport: {
+						summary: {
+							averageHeadcount: 0,
+							totalSeparations: 0,
+							voluntarySeparations: 0,
+							involuntarySeparations: 0,
+							turnoverRate: 0,
+							attritionRate: 0,
+						},
+						buckets: [],
+					},
+				},
+			},
+		});
+
+		await metricsService.getTurnoverAttritionReport("2026-06-01", "2026-06-30", "month", {
+			departmentId: "dept-1",
+			sectionId: "section-1",
+			positionId: "position-1",
+			levelId: "level-1",
+		});
+
+		expect(postMock).toHaveBeenCalledWith("/api/metrics", {
+			model: "Employee",
+			data: ["turnoverAttritionReport"],
+			filter: {
+				dateFrom: "2026-06-01",
+				dateTo: "2026-06-30",
+				groupBy: "month",
+				departmentId: "dept-1",
+				sectionId: "section-1",
+				positionId: "position-1",
+				levelId: "level-1",
+			},
+		});
+	});
 });

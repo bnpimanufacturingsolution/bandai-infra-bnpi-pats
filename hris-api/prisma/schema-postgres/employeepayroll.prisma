@@ -247,6 +247,16 @@ model EmployeePayroll {
   paidAt             DateTime?
   paymentMethod      String? // BANK_TRANSFER, CASH, CHECK
   referenceNumber    String?
+  isPublished        Boolean   @default(false)
+  publishedAt        DateTime?
+  publishedBy        String?
+  payslipGeneratedAt DateTime?
+  payslipReleasedAt  DateTime?
+  payslipReleasedBy  String?
+  hasPaymentIssue    Boolean   @default(false)
+  paymentIssueAt     DateTime?
+  paymentIssueBy     String?
+  paymentIssueNote   String?
   snapshotLockedAt   DateTime?
   snapshotLockedBy   String?
   snapshotLockReason String?
@@ -260,11 +270,14 @@ model EmployeePayroll {
 
   // Relations
   soaLineItems SOALineItem[]
+  sourcePayrollCorrections  PayrollCorrection[] @relation("PayrollCorrectionSourcePayroll")
+  appliedPayrollCorrections PayrollCorrection[] @relation("PayrollCorrectionAppliedPayroll")
 
   @@unique([employeeId, payrollPeriodId])
   @@index([organizationId])
   @@index([payrollPeriodId])
   @@index([organizationId, employeeId, isDeleted])
   @@index([organizationId, payrollPeriodId, isPaid, isDeleted])
+  @@index([organizationId, payrollPeriodId, isPublished, isDeleted])
   @@map("employee_payrolls")
 }

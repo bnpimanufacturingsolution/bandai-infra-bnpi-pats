@@ -1113,6 +1113,20 @@ const ensureDefaultSchedule = async (organizationId) => {
 	return { shiftType, scheduleTemplate };
 };
 
+// Only fields DM4 materialization needs. Avoid selecting schema-only columns that may not
+// exist yet on older DBs (e.g. payslipReleaseAttachmentUrl) during findMany/findFirst.
+const PAYROLL_PERIOD_SELECT = {
+	id: true,
+	organizationId: true,
+	name: true,
+	code: true,
+	startDate: true,
+	endDate: true,
+	payDate: true,
+	status: true,
+	isDeleted: true,
+};
+
 const ensurePayrollPeriod = async (organizationId, date) => {
 	const target = dateOnly(date);
 	const existing = await prisma.payrollPeriod.findFirst({
@@ -1123,6 +1137,7 @@ const ensurePayrollPeriod = async (organizationId, date) => {
 			endDate: { gte: target },
 		},
 		orderBy: { startDate: "asc" },
+		select: PAYROLL_PERIOD_SELECT,
 	});
 	if (existing) return { payrollPeriod: existing, created: false };
 
@@ -1142,6 +1157,7 @@ const ensurePayrollPeriod = async (organizationId, date) => {
 			notes: `${SOURCE_TAG}: created for selected BNPI attendance demo proof.`,
 			generationMetadata: { source: SOURCE_TAG, reason: "selected_bnpi_attendance_demo_proof" },
 		},
+		select: PAYROLL_PERIOD_SELECT,
 	});
 	return { payrollPeriod, created: true };
 };
@@ -2091,6 +2107,7 @@ const applySelectedRows = async (organizationId, selectedRows, options = {}) => 
 	const payrollPeriods = await prisma.payrollPeriod.findMany({
 		where: { organizationId, isDeleted: false },
 		orderBy: { startDate: "asc" },
+		select: PAYROLL_PERIOD_SELECT,
 	});
 	const payrollPeriodByDate = new Map();
 	for (const date of uniqueDates) {

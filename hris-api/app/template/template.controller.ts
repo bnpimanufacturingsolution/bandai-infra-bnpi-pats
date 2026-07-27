@@ -161,6 +161,17 @@ export const controller = (prisma: PrismaClient) => {
 			]);
 
 			templateLogger.info(`Retrieved ${templates.length} templates`);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.TEMPLATE.ACTIONS.GET_ALL_TEMPLATE,
+				description: config.ACTIVITY_LOG.TEMPLATE.DESCRIPTIONS.TEMPLATES_RETRIEVED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TEMPLATE.PAGES.TEMPLATE_LIST,
+				},
+			});
+
 			const processedData =
 				groupBy && document ? groupDataByField(templates, groupBy as string) : templates;
 
@@ -249,6 +260,17 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			templateLogger.info(`${config.SUCCESS.TEMPLATE.RETRIEVED}: ${(template as any).id}`);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.TEMPLATE.ACTIONS.GET_TEMPLATE,
+				description: `${config.ACTIVITY_LOG.TEMPLATE.DESCRIPTIONS.TEMPLATE_RETRIEVED}: ${(template as any).id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TEMPLATE.PAGES.TEMPLATE_DETAILS,
+				},
+			});
+
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.TEMPLATE.RETRIEVED,
 				template,
@@ -327,6 +349,29 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			templateLogger.info(`${config.SUCCESS.TEMPLATE.UPDATED}: ${updatedTemplate.id}`);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.TEMPLATE.ACTIONS.UPDATE_TEMPLATE,
+				description: `${config.ACTIVITY_LOG.TEMPLATE.DESCRIPTIONS.TEMPLATE_UPDATED}: ${updatedTemplate.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TEMPLATE.PAGES.TEMPLATE_UPDATE,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.TEMPLATE,
+				severity: config.AUDIT_LOG.SEVERITY.LOW,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TEMPLATE,
+				entityId: updatedTemplate.id,
+				changesBefore: existingTemplate,
+				changesAfter: updatedTemplate,
+				description: `${config.AUDIT_LOG.TEMPLATE.DESCRIPTIONS.TEMPLATE_UPDATED}: ${updatedTemplate.name || updatedTemplate.id}`,
+			});
+
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.TEMPLATE.UPDATED,
 				{ template: updatedTemplate },
@@ -383,6 +428,29 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			templateLogger.info(`${config.SUCCESS.TEMPLATE.DELETED}: ${id}`);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.TEMPLATE.ACTIONS.DELETE_TEMPLATE,
+				description: `${config.ACTIVITY_LOG.TEMPLATE.DESCRIPTIONS.TEMPLATE_DELETED}: ${id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.TEMPLATE.PAGES.TEMPLATE_DELETION,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.TEMPLATE,
+				severity: config.AUDIT_LOG.SEVERITY.LOW,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.TEMPLATE,
+				entityId: id,
+				changesBefore: existingTemplate,
+				changesAfter: null,
+				description: `${config.AUDIT_LOG.TEMPLATE.DESCRIPTIONS.TEMPLATE_DELETED}: ${existingTemplate.name || id}`,
+			});
+
 			const successResponse = buildSuccessResponse(config.SUCCESS.TEMPLATE.DELETED, {}, 200);
 			res.status(200).json(successResponse);
 		} catch (error) {

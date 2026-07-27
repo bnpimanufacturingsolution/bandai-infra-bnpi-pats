@@ -8,24 +8,6 @@ const GuideLayout = lazy(() =>
 	})),
 );
 
-const PageHeader = lazy(() =>
-	import("@/components/organisms/guide/page-header").then((mod) => ({
-		default: mod.PageHeader,
-	})),
-);
-
-const GuideContent = lazy(() =>
-	import("@/components/organisms/guide/guide-content").then((mod) => ({
-		default: mod.GuideContent,
-	})),
-);
-
-const GuideNavigation = lazy(() =>
-	import("@/components/organisms/guide/guide-navigation").then((mod) => ({
-		default: mod.GuideNavigation,
-	})),
-);
-
 export default function GuidePage() {
 	const pageConfig = guideData.pages.introduction;
 
@@ -47,36 +29,28 @@ export default function GuidePage() {
 				version={guideData.version}
 				navigation={guideData.navigation}
 				activeId="introduction">
-				<div className="space-y-12">
-					<Suspense fallback={<div>Loading header...</div>}>
-						<PageHeader
-							title={pageConfig.title}
-							description={pageConfig.description}
-							version={pageConfig.version}
-							lastUpdated={pageConfig.lastUpdated}
-							showMeta={pageConfig.showMeta}
-							showBreadcrumb={pageConfig.showBreadcrumb}
-							breadcrumbItems={[
-								{ label: "Home", href: "/" },
-								{ label: "Getting Started", href: "/getting-started" },
-								{ label: "Introduction" },
-							]}
-							onCopyLink={handleCopyLink}
-							onNavigate={handleNavigate}
-						/>
-					</Suspense>
+				<div className="space-y-8">
+					<header className="space-y-2">
+						<h1 className="text-3xl font-semibold text-gray-900">{pageConfig.title}</h1>
+						<p className="text-sm text-gray-600">{pageConfig.description}</p>
+						<button
+							type="button"
+							onClick={handleCopyLink}
+							className="text-sm font-medium text-orange-600 hover:text-orange-700">
+							Copy link
+						</button>
+					</header>
 
-					<Suspense fallback={<div>Loading content...</div>}>
-						<GuideContent sections={pageConfig.content} />
-					</Suspense>
-
-					<Suspense fallback={null}>
-						<GuideNavigation
-							showNext={pageConfig.showNext}
-							nextPage={pageConfig.nextPage}
-							onNavigate={handleNavigate}
-						/>
-					</Suspense>
+					<div className="space-y-6">
+						{pageConfig.content.map((section) => (
+							<section key={section.id} id={section.id} className="space-y-2">
+								<h2 className="text-xl font-semibold text-gray-900">
+									{section.heading}
+								</h2>
+								<p className="text-sm text-gray-700">{section.body}</p>
+							</section>
+						))}
+					</div>
 				</div>
 			</GuideLayout>
 		</Suspense>

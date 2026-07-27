@@ -4,6 +4,7 @@ import {
 	getAttendanceEmployeeDisplayName,
 	getDateKeyInBusinessTimeZone,
 } from "./attendance.helper";
+import { buildEmployeeFilter } from "./attendance-metrics-common.helper";
 import { deriveGracePeriodStatus, formatMinutesAsTime } from "./timekeeping.helper";
 
 export interface AttendanceRecord {
@@ -233,6 +234,9 @@ async function fetchPersistedTimesheetLineRows(
 		page?: number;
 		searchQuery?: string;
 		departmentId?: string;
+		sectionId?: string;
+		positionId?: string;
+		levelId?: string;
 		reportToId?: string;
 		employeeId?: string;
 	},
@@ -240,8 +244,8 @@ async function fetchPersistedTimesheetLineRows(
 	const safeLimit = Math.max(1, Number(params.limit) || 100);
 	const safePage = Math.max(1, Number(params.page) || 1);
 	const skip = (safePage - 1) * safeLimit;
-	const searchEmployeeIds = await resolveTimesheetLineSearchEmployeeIds(prisma, params);
-	const where = buildTimesheetLineSummaryWhere(params, searchEmployeeIds);
+	const scopedEmployeeIds = await resolveTimesheetLineEmployeeIds(prisma, params);
+	const where = buildTimesheetLineSummaryWhere(params, scopedEmployeeIds);
 
 	const [totalRecords, rows] = await Promise.all([
 		(prisma as any).timesheetline.count({ where }),
@@ -353,26 +357,39 @@ function parseSearchTerms(searchQuery?: string): string[] {
 	return String(searchQuery || "").trim().split(/\s+/).filter(Boolean);
 }
 
-async function resolveTimesheetLineSearchEmployeeIds(
+async function resolveTimesheetLineEmployeeIds(
 	prisma: PrismaClient,
 	params: {
 		organizationId: string;
 		searchQuery?: string;
 		departmentId?: string;
+		sectionId?: string;
+		positionId?: string;
+		levelId?: string;
 		reportToId?: string;
 		employeeId?: string;
 	},
 ): Promise<string[] | null> {
 	const searchTerms = parseSearchTerms(params.searchQuery);
-	if (!searchTerms.length) return null;
+	const hasScopeFilter =
+		Boolean(
+			params.departmentId ||
+				params.sectionId ||
+				params.positionId ||
+				params.levelId ||
+				params.reportToId ||
+				params.employeeId,
+		) || searchTerms.length > 0;
+	if (!hasScopeFilter) return null;
 
-	const employeeWhere: any = {
-		organizationId: params.organizationId,
-		isDeleted: false,
-	};
-	if (params.employeeId) employeeWhere.id = params.employeeId;
-	if (params.departmentId) employeeWhere.departmentId = params.departmentId;
-	if (params.reportToId) employeeWhere.reportToId = params.reportToId;
+	const employeeWhere = buildEmployeeFilter(params.organizationId, {
+		departmentId: params.departmentId,
+		sectionId: params.sectionId,
+		positionId: params.positionId,
+		levelId: params.levelId,
+		reportToId: params.reportToId,
+		employeeId: params.employeeId,
+	});
 
 	const employees = (await prisma.employee.findMany({
 		where: employeeWhere,
@@ -384,6 +401,8 @@ async function resolveTimesheetLineSearchEmployeeIds(
 			agencyId: true,
 			reportToId: true,
 			departmentId: true,
+			positionId: true,
+			levelId: true,
 			person: {
 				select: {
 					personalInfo: true,
@@ -392,9 +411,11 @@ async function resolveTimesheetLineSearchEmployeeIds(
 		},
 	})) as MetricsEmployee[];
 
-	return employees
-		.filter((employee) => matchesSearch(employee, searchTerms))
-		.map((employee) => String(employee.id));
+	const scopedEmployees = searchTerms.length
+		? employees.filter((employee) => matchesSearch(employee, searchTerms))
+		: employees;
+
+	return scopedEmployees.map((employee) => String(employee.id));
 }
 
 function buildTimesheetLineSummaryWhere(params: {
@@ -404,9 +425,12 @@ function buildTimesheetLineSummaryWhere(params: {
 	searchQuery?: string;
 	status?: string;
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
 	employeeId?: string;
-}, searchEmployeeIds: string[] | null = null) {
+}, employeeIds: string[] | null = null) {
 	const where: any = {
 		organizationId: params.organizationId,
 		isDeleted: false,
@@ -438,21 +462,8 @@ function buildTimesheetLineSummaryWhere(params: {
 		appendAndCondition(where, { lateHours: { notIn: ["", "0:00", "00:00", "0h 0m"] } });
 	}
 
-	if (params.employeeId) where.employeeId = params.employeeId;
-	if (params.departmentId) where.departmentIdSnapshot = params.departmentId;
-	if (params.reportToId) where.reportToIdSnapshot = params.reportToId;
-
-	const searchTerms = parseSearchTerms(params.searchQuery);
-	if (searchTerms.length > 0) {
-		if (!searchEmployeeIds?.length) {
-			appendAndCondition(where, { employeeId: { in: [] } });
-		} else if (params.employeeId) {
-			if (!searchEmployeeIds.includes(params.employeeId)) {
-				appendAndCondition(where, { employeeId: { in: [] } });
-			}
-		} else {
-			appendAndCondition(where, { employeeId: { in: searchEmployeeIds } });
-		}
+	if (employeeIds) {
+		appendAndCondition(where, { employeeId: { in: employeeIds } });
 	}
 
 	return where;
@@ -465,8 +476,12 @@ function buildTimesheetLineRawMatch(params: {
 	searchQuery?: string;
 	status?: string;
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
 	employeeId?: string;
+	employeeIds?: string[] | null;
 }) {
 	const match: Record<string, any> = {
 		organizationId: params.organizationId,
@@ -498,18 +513,8 @@ function buildTimesheetLineRawMatch(params: {
 		match.lateHours = { $nin: [null, "", "0:00", "00:00", "0h 0m"] };
 	}
 
-	if (params.employeeId) match.employeeId = toExtendedJsonObjectId(params.employeeId);
-	if (params.departmentId) match.departmentIdSnapshot = toExtendedJsonObjectId(params.departmentId);
-	if (params.reportToId) match.reportToIdSnapshot = toExtendedJsonObjectId(params.reportToId);
-
-	const searchTerms = String(params.searchQuery || "").trim().split(/\s+/).filter(Boolean);
-	if (searchTerms.length > 0) {
-		match.$and = searchTerms.map((term) => ({
-			$or: [
-				{ employeeCodeSnapshot: { $regex: term, $options: "i" } },
-				{ employeeNameSnapshot: { $regex: term, $options: "i" } },
-			],
-		}));
+	if (params.employeeIds) {
+		match.employeeId = { $in: params.employeeIds.map((id) => toExtendedJsonObjectId(id)) };
 	}
 
 	return match;
@@ -743,6 +748,9 @@ export async function calculateAttendanceMetricsDetailed(
 	searchQuery?: string,
 	status?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	shiftType?: string,
@@ -780,9 +788,22 @@ export async function calculateAttendanceMetricsDetailed(
 		status: normalizedStatus,
 		searchQuery,
 		departmentId,
+		sectionId,
+		positionId,
+		levelId,
 		reportToId,
 		employeeId,
 		shiftType,
+		employeeIds: await resolveTimesheetLineEmployeeIds(prisma, {
+			organizationId,
+			searchQuery,
+			departmentId,
+			sectionId,
+			positionId,
+			levelId,
+			reportToId,
+			employeeId,
+		}),
 	});
 	const timesheetLineRows = Array.isArray(facet.records) ? facet.records : [];
 	const totalRecords = Number(facet.totalRecords?.[0]?.total || 0);
@@ -902,10 +923,7 @@ function buildPostgresTimesheetLineFilterSql(params: {
 	organizationId: string;
 	startDateUTC: Date;
 	endDateUTC: Date;
-	searchQuery?: string;
-	departmentId?: string;
-	reportToId?: string;
-	employeeId?: string;
+	employeeIds?: string[] | null;
 }) {
 	const conditions: Prisma.Sql[] = [
 		Prisma.sql`tl."organizationId" = ${params.organizationId}`,
@@ -915,18 +933,10 @@ function buildPostgresTimesheetLineFilterSql(params: {
 		Prisma.sql`tl."date" <= ${params.endDateUTC}`,
 	];
 
-	if (params.employeeId) conditions.push(Prisma.sql`tl."employeeId" = ${params.employeeId}`);
-	if (params.departmentId)
-		conditions.push(Prisma.sql`tl."departmentIdSnapshot" = ${params.departmentId}`);
-	if (params.reportToId)
-		conditions.push(Prisma.sql`tl."reportToIdSnapshot" = ${params.reportToId}`);
-
-	const searchQuery = String(params.searchQuery || "").trim();
-	if (searchQuery) {
-		conditions.push(Prisma.sql`(
-			tl."employeeCodeSnapshot" ILIKE ${`%${searchQuery}%`} OR
-			tl."employeeNameSnapshot" ILIKE ${`%${searchQuery}%`}
-		)`);
+	if (params.employeeIds?.length) {
+		conditions.push(
+			Prisma.sql`tl."employeeId" IN (${Prisma.join(params.employeeIds.map((id) => Prisma.sql`${id}`))})`,
+		);
 	}
 
 	return Prisma.sql`${Prisma.join(conditions, " AND ")}`;
@@ -971,9 +981,13 @@ async function getPostgresTimesheetLineFacet(params: {
 	searchQuery?: string;
 	status?: string;
 	departmentId?: string;
+	sectionId?: string;
+	positionId?: string;
+	levelId?: string;
 	reportToId?: string;
 	employeeId?: string;
 	shiftType?: string;
+	employeeIds?: string[] | null;
 }) {
 	const skip = (params.page - 1) * params.limit;
 	const whereSql = buildPostgresTimesheetLineFilterSql(params);
@@ -1139,6 +1153,9 @@ export async function calculateAttendanceTimesheetLineSummary(
 	searchQuery?: string,
 	status?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 ): Promise<AttendanceTimesheetLineSummary> {
@@ -1162,6 +1179,9 @@ export async function calculateAttendanceTimesheetLineSummary(
 					searchQuery,
 					status,
 					departmentId,
+					sectionId,
+					positionId,
+					levelId,
 					reportToId,
 					employeeId,
 				}),
@@ -1251,6 +1271,9 @@ export async function calculateAttendanceTodayOpsSummary(
 	targetDate: Date,
 	searchQuery?: string,
 	departmentId?: string,
+	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 ): Promise<AttendanceTodayOpsSummary> {
@@ -1263,14 +1286,14 @@ export async function calculateAttendanceTodayOpsSummary(
 	const searchTerms = normalizedSearchQuery.split(/\s+/).filter(Boolean);
 	const shouldLoadPersonForSearch = searchTerms.length > 0;
 
-	const employeeWhere: any = {
-		organizationId,
-		isDeleted: false,
-	};
-
-	if (employeeId) employeeWhere.id = employeeId;
-	if (departmentId) employeeWhere.departmentId = departmentId;
-	if (reportToId) employeeWhere.reportToId = reportToId;
+	const employeeWhere = buildEmployeeFilter(organizationId, {
+		departmentId,
+		sectionId,
+		positionId,
+		levelId,
+		reportToId,
+		employeeId,
+	});
 
 	const employees = (await prisma.employee.findMany({
 		where: employeeWhere,
@@ -1282,6 +1305,8 @@ export async function calculateAttendanceTodayOpsSummary(
 			agencyId: true,
 			reportToId: true,
 			departmentId: true,
+			positionId: true,
+			levelId: true,
 			employmentHireDate: true,
 			employmentStartDate: true,
 			person: shouldLoadPersonForSearch
@@ -1320,6 +1345,9 @@ export async function calculateAttendanceTodayOpsSummary(
 		limit: 100000,
 		searchQuery,
 		departmentId,
+		sectionId,
+		positionId,
+		levelId,
 		reportToId,
 		employeeId,
 	});

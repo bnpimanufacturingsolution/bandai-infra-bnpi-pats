@@ -1,4 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 import { useEmployees } from "~/lib/hooks/useEmployees";
 import { Mail, Phone, Building, Briefcase, MapPin, Search } from "lucide-react";
 import type { Employee } from "~/services/employees.service";
@@ -26,13 +27,6 @@ export default function EmployeeDirectoryView() {
 		// Encode current path (replace / with - for clean URLs)
 		const encodedPath = location.pathname.substring(1).replace(/\//g, "-");
 		navigate(`/employee/${employeeId}?from=${encodedPath}`);
-	};
-
-	const getInitials = (firstName?: string, lastName?: string) => {
-		if (!firstName && !lastName) return "?";
-		const first = firstName?.charAt(0) || "";
-		const last = lastName?.charAt(0) || "";
-		return (first + last).toUpperCase();
 	};
 
 	const getStatusColor = (status: string) => {
@@ -113,17 +107,12 @@ export default function EmployeeDirectoryView() {
 
 								{/* Avatar */}
 								<div className="flex justify-center">
-									{avatar ? (
-										<img
-											src={avatar}
-											alt={fullName}
-											className="w-20 h-20 rounded-full border-4 border-white shadow-md object-cover"
-										/>
-									) : (
-										<div className="w-20 h-20 rounded-full border-4 border-white shadow-md bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white text-2xl font-bold">
-											{getInitials(firstName, lastName)}
-										</div>
-									)}
+									<EmployeeAvatar
+										src={avatar}
+										alt={fullName}
+										size="xl"
+										className="border-4 border-white shadow-md"
+									/>
 								</div>
 							</div>
 

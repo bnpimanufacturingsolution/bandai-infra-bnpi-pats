@@ -14,6 +14,9 @@ interface ApplicantCardProps {
 }
 
 export function ApplicantCard({ applicant, onDragStart, onClick }: ApplicantCardProps) {
+	const positionLabel =
+		typeof applicant.position === "string" ? applicant.position : applicant.position.title;
+
 	const getInitials = (name: string) => {
 		return name
 			.split(" ")
@@ -39,7 +42,7 @@ export function ApplicantCard({ applicant, onDragStart, onClick }: ApplicantCard
 						{applicant.name}
 					</h4>
 					<p className="text-xs text-muted-foreground truncate mt-0.5">
-						{applicant.position}
+						{positionLabel}
 					</p>
 					<div className="flex items-center gap-2 mt-3">
 						<div className="flex items-center gap-1 text-xs text-muted-foreground">

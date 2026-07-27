@@ -53,10 +53,7 @@ export default function TimeLoggingGuard({
 	// Show loading while checking authentication
 	if (isLoading || (isAuthenticated && !user)) {
 		return (
-			<LoadingScreen
-				message="Checking session"
-				subtitle="Verifying your time logging access"
-			/>
+			<LoadingScreen message="Loading" subtitle="Checking time logging access" />
 		);
 	}
 

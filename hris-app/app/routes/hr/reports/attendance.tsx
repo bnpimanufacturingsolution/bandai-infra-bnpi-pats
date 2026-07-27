@@ -38,7 +38,7 @@ export default function AttendanceReportsPage() {
 	};
 
 	return (
-		<div className="flex flex-col gap-6 p-6">
+		<div className="flex flex-col gap-6">
 			<Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
 				<TabsList className="grid h-auto w-full grid-cols-2 gap-2 mb-6 md:grid-cols-5">
 					<TabsTrigger value="trend" className="whitespace-normal text-center text-xs leading-tight md:text-sm">

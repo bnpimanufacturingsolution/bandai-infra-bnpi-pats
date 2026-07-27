@@ -16,6 +16,7 @@ import {
 } from "../../helper/attendance-metrics-detailed.helper";
 import {
 	calculateAttendanceObligationDetailed,
+	calculateAttendanceDailyTrendByDepartment,
 	calculateAttendanceObligationSummary,
 	calculateAttendanceObligationTodayOpsSummary,
 } from "../../helper/attendance-obligation-metrics.helper";
@@ -23,6 +24,7 @@ import { calculatePerfectAttendanceMetrics } from "../../helper/perfect-attendan
 import { calculateTardinessMetrics } from "../../helper/tardiness-metrics.helper";
 import { calculateOvertimeMetrics } from "../../helper/overtime-metrics.helper";
 import { calculateLeaveBalanceMetrics } from "../../helper/leave-balance-metrics.helper";
+import { calculateTurnoverAttritionReport } from "../../helper/turnover-attrition-metrics.helper";
 import {
 	getAttendanceSummaryReport,
 	getCustomAttendanceSummary,
@@ -71,6 +73,7 @@ const AVAILABLE_METRICS = {
 		"attendanceObligationTodayOpsSummary", // Lightweight today cards from live attendance obligations
 		"attendanceTimesheetLineSummary", // Summary-only counts from persisted timesheet lines
 		"attendanceTodayOpsSummary", // Lightweight today dashboard cards from timesheet lines
+		"attendanceDailyTrendByDepartment", // Day-by-department attendance trend chart data
 		"perfectAttendanceMetrics", // Perfect attendance (zero absences + zero tardiness)
 		"tardinessMetrics", // Tardiness, undertime, and early out metrics
 		"overtimeMetrics", // Overtime metrics
@@ -81,7 +84,12 @@ const AVAILABLE_METRICS = {
 		"attendanceSummaryReport", // Attendance summary for today, this week, and this month
 	],
 	CalendarItem: ["birthdaysSummary"],
-	Employee: ["documentComplianceMetrics", "eligibilityCandidates", "leaveBalanceMetrics"],
+	Employee: [
+		"documentComplianceMetrics",
+		"eligibilityCandidates",
+		"leaveBalanceMetrics",
+		"turnoverAttritionReport",
+	],
 	PayrollPeriod: [
 		"payrollPeriodByCode",
 		"payrollRunSummary",
@@ -134,7 +142,7 @@ export const controller = (prisma: PrismaClient) => {
 				if (!metricPromises.has(metric)) {
 					metricPromises.set(
 						metric,
-						generateMetric(prisma, model, metric, whereFilter, req),
+						generateMetric(prisma, model, metric, whereFilter, req, filter),
 					);
 				}
 				return metricPromises.get(metric)!;
@@ -331,6 +339,7 @@ function buildFilter(
 	const reservedFields = [
 		"dateFrom",
 		"dateTo",
+		"groupBy",
 		"periodFrom",
 		"periodTo",
 		"leaveType",
@@ -449,6 +458,11 @@ async function generateMetric(
 	metric: string,
 	whereFilter: any,
 	req?: AuthRequest,
+	rawFilter?: {
+		dateFrom?: string;
+		dateTo?: string;
+		[key: string]: string | number | boolean | null | undefined;
+	},
 ) {
 	switch (model) {
 		case "Request":
@@ -458,7 +472,7 @@ async function generateMetric(
 		case "CalendarItem":
 			return generateCalendarItemMetric(prisma, metric, whereFilter);
 		case "Employee":
-			return generateEmployeeMetric(prisma, metric, whereFilter, req);
+			return generateEmployeeMetric(prisma, metric, whereFilter, req, rawFilter);
 		case "PayrollPeriod":
 			return generatePayrollPeriodMetric(prisma, metric, whereFilter, req);
 		case "Timesheet":
@@ -1180,8 +1194,11 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 					(whereFilter.search || whereFilter.query) as string,
 					whereFilter.status as string,
 					undefined,
-					undefined,
-					undefined,
+					whereFilter.sectionId as string,
+					whereFilter.positionId as string,
+					whereFilter.levelId as string,
+					(whereFilter.reportToId || whereFilter.managerId) as string,
+					whereFilter.employeeId as string,
 					whereFilter.shiftType as string,
 				);
 			}
@@ -1256,6 +1273,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				searchQuery as string,
 				status as string,
 				departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				reportToId as string,
 				employeeId as string,
 				shiftType as string,
@@ -1312,6 +1332,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				(whereFilter.search || whereFilter.query) as string,
 				whereFilter.status as string,
 				whereFilter.departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
 				whereFilter.shiftType as string,
@@ -1367,6 +1390,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				(whereFilter.search || whereFilter.query) as string,
 				whereFilter.status as string,
 				whereFilter.departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
 				whereFilter.shiftType as string,
@@ -1410,6 +1436,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				targetDate,
 				(whereFilter.search || whereFilter.query) as string,
 				whereFilter.departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
 				whereFilter.shiftType as string,
@@ -1460,6 +1489,9 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				(whereFilter.search || whereFilter.query) as string,
 				whereFilter.status as string,
 				whereFilter.departmentId as string,
+				whereFilter.sectionId as string,
+				whereFilter.positionId as string,
+				whereFilter.levelId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
 			);
@@ -1498,6 +1530,48 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				whereFilter.departmentId as string,
 				(whereFilter.reportToId || whereFilter.managerId) as string,
 				whereFilter.employeeId as string,
+			);
+		}
+		case "attendanceDailyTrendByDepartment": {
+			const dateFrom = whereFilter.date?.gte ? new Date(whereFilter.date.gte) : null;
+			const dateTo = whereFilter.date?.lte ? new Date(whereFilter.date.lte) : null;
+			const endDate = dateTo || new Date();
+			endDate.setUTCHours(23, 59, 59, 999);
+			const startDate = dateFrom || new Date(endDate);
+			if (!dateFrom) startDate.setDate(startDate.getDate() - 7);
+			startDate.setUTCHours(0, 0, 0, 0);
+
+			const organizationId =
+				whereFilter.organizationId ||
+				(
+					await prisma.employee.findFirst({
+						where: { isDeleted: false },
+						select: { organizationId: true },
+					})
+				)?.organizationId;
+
+			if (!organizationId) {
+				return {
+					startDate,
+					endDate,
+					totalDays: 0,
+					totalRecords: 0,
+					departments: [],
+					series: [],
+				};
+			}
+
+			return await calculateAttendanceDailyTrendByDepartment(
+				prisma,
+				organizationId,
+				startDate,
+				endDate,
+				(whereFilter.search || whereFilter.query) as string,
+				whereFilter.status as string,
+				whereFilter.departmentId as string,
+				(whereFilter.reportToId || whereFilter.managerId) as string,
+				whereFilter.employeeId as string,
+				whereFilter.shiftType as string,
 			);
 		}
 		case "perfectAttendanceMetrics": {
@@ -1805,8 +1879,50 @@ async function generateEmployeeMetric(
 	metric: string,
 	whereFilter: any,
 	req?: AuthRequest,
+	rawFilter?: {
+		dateFrom?: string;
+		dateTo?: string;
+		[key: string]: string | number | boolean | null | undefined;
+	},
 ) {
 	switch (metric) {
+		case "turnoverAttritionReport": {
+			const organizationId =
+				whereFilter.organizationId ||
+				req?.organizationId ||
+				(
+					await prisma.employee.findFirst({
+						where: { isDeleted: false },
+						select: { organizationId: true },
+					})
+				)?.organizationId;
+
+			const startDate = rawFilter?.dateFrom ? parseDateInputToUTC(String(rawFilter.dateFrom)) : null;
+			const endDate = rawFilter?.dateTo ? parseDateInputToUTC(String(rawFilter.dateTo)) : null;
+			if (!startDate || !endDate) {
+				throw new Error("Date range is required for turnover and attrition metrics");
+			}
+
+			const normalizedGroupBy = String(rawFilter?.groupBy || "month").toLowerCase();
+			const groupBy =
+				normalizedGroupBy === "day" ||
+				normalizedGroupBy === "week" ||
+				normalizedGroupBy === "month" ||
+				normalizedGroupBy === "year"
+					? normalizedGroupBy
+					: "month";
+
+			return await calculateTurnoverAttritionReport(prisma, {
+				organizationId,
+				dateFrom: startDate,
+				dateTo: endDate,
+				groupBy,
+				departmentId: whereFilter.departmentId,
+				sectionId: whereFilter.sectionId,
+				positionId: whereFilter.positionId,
+				levelId: whereFilter.levelId,
+			});
+		}
 		case "eligibilityCandidates": {
 			// Extract organizationId from request if not in filter
 			const organizationId = whereFilter.organizationId || req?.organizationId;
@@ -1815,7 +1931,7 @@ async function generateEmployeeMetric(
 				throw new Error("Organization ID is required for eligibility metrics");
 			}
 
-			return await getEligibilityCandidates(prisma, organizationId);
+			return await getEligibilityCandidates(prisma, organizationId, req);
 		}
 		case "documentComplianceMetrics": {
 			// Fetch active employees with documents
@@ -2335,6 +2451,8 @@ async function generateEmployeeMetric(
 				organizationId,
 				whereFilter.departmentId,
 				whereFilter.sectionId,
+				whereFilter.positionId,
+				whereFilter.levelId,
 				whereFilter.reportToId || whereFilter.managerId,
 				whereFilter.employeeId,
 				whereFilter.leaveType,
@@ -2733,10 +2851,11 @@ async function generatePayrollPeriodMetric(
 				...(sectionId ? { sectionId } : {}),
 			};
 			const detailLimitRaw = Number(whereFilter.limit || 0);
+			// Cap list payload size, but keep high enough for payroll issues modal.
 			const detailLimit =
 				Number.isFinite(detailLimitRaw) && detailLimitRaw > 0
-					? Math.min(Math.floor(detailLimitRaw), 25)
-					: undefined;
+					? Math.min(Math.floor(detailLimitRaw), 500)
+					: 100;
 			const employeeBlockerSelect = {
 				id: true,
 				employeeId: true,
@@ -2783,56 +2902,42 @@ async function generatePayrollPeriodMetric(
 					orderBy: {
 						updatedAt: "desc",
 					},
+					take: 1,
 				},
 			} as const;
 
-			// Get payroll-scope employees for blocker details
-			const employees = detailLimit
-				? await prisma.employee.findMany({
-						where: {
-							...payrollEmployeeWhere,
-							OR: [
-								{ basicSalary: { lte: 0 } },
-								{ embeddedSchedule: { equals: Prisma.DbNull } },
-								{
-									timesheets: {
-										none: {
-											payrollPeriodId,
-											isDeleted: false,
-										},
-									},
-								},
-								{
-									timesheets: {
-										some: {
-											payrollPeriodId,
-											isDeleted: false,
-											status: { in: ["DRAFT", "SUBMITTED", "REJECTED", "REVISED", "APPROVED"] },
-										},
-									},
-								},
-							],
-						},
-						select: employeeBlockerSelect,
-						orderBy: { updatedAt: "desc" },
-						take: Math.max(detailLimit * 8, detailLimit),
-					})
-				: await prisma.employee.findMany({
-						where: payrollEmployeeWhere,
-						select: employeeBlockerSelect,
+			const buildMissingFields = (emp: {
+				basicSalary?: number | null;
+				embeddedSchedule?: unknown;
+			}) => {
+				const missing: any[] = [];
+				if (!emp.embeddedSchedule) {
+					missing.push({
+						field: "Work Schedule",
+						description:
+							"Employee embedded schedule is not configured. Schedule is required for timekeeping and payroll processing.",
+						severity: "critical",
 					});
+				}
+				if (!emp.basicSalary || emp.basicSalary <= 0) {
+					missing.push({
+						field: "Basic Salary",
+						description:
+							"Basic salary is not configured or is invalid. Salary is required for payroll processing.",
+						severity: "critical",
+					});
+				}
+				return missing;
+			};
 
-			const missingInfo: any[] = [];
-			const timesheetNotSubmitted: any[] = [];
-			const pendingApproval: any[] = [];
-			const correctionNeeded: any[] = [];
-			const readyForPayroll: any[] = [];
-			const blockedEmployeeIds = new Set<string>();
-
-			employees.forEach((emp) => {
+			const toTimesheetBlocker = (
+				emp: any,
+				blockerType: "not_submitted" | "pending_approval" | "correction_needed" | "ready_for_payroll",
+			) => {
 				const employeeName = getEmployeeName(emp);
 				const managerName = emp.reportTo ? getEmployeeName(emp.reportTo) : null;
-				const baseTimesheetPayload = {
+				const timesheet = emp.timesheets?.[0];
+				return {
 					id: emp.id,
 					employeeId: emp.employeeId,
 					name: employeeName,
@@ -2843,34 +2948,109 @@ async function generatePayrollPeriodMetric(
 					managerEmployeeId: emp.reportTo?.employeeId || null,
 					periodStart: payrollPeriod.startDate,
 					periodEnd: payrollPeriod.endDate,
+					timesheetId: timesheet?.id || null,
+					status: timesheet?.status || "MISSING",
+					blockerType,
 				};
-				const timesheet = emp.timesheets[0];
+			};
 
-				// Check for timekeeping-related required fields based on schema
-				const missing: any[] = [];
+			// Query each issue type directly so list rows match payrollRunSummary counts.
+			// Previous implementation sampled a broad OR set by updatedAt and often returned
+			// zero missing-info rows even when the summary count was non-zero.
+			const missingInfoWhere = {
+				...payrollEmployeeWhere,
+				OR: [
+					{ basicSalary: { lte: 0 } },
+					{ embeddedSchedule: { equals: Prisma.DbNull } },
+				],
+			};
+			const notSubmittedWhere = {
+				...payrollEmployeeWhere,
+				OR: [
+					{
+						timesheets: {
+							none: {
+								payrollPeriodId,
+								isDeleted: false,
+							},
+						},
+					},
+					{
+						timesheets: {
+							some: {
+								payrollPeriodId,
+								isDeleted: false,
+								status: "DRAFT",
+							},
+						},
+					},
+				],
+			};
 
-				// DB-native schedule presence: embedded schedule copy is the persisted source of truth
-				if (!emp.embeddedSchedule) {
-					missing.push({
-						field: "Work Schedule",
-						description:
-							"Employee embedded schedule is not configured. Schedule is required for timekeeping and payroll processing.",
-						severity: "critical",
-					});
-				}
+			const [
+				missingInfoEmployees,
+				timesheetNotSubmittedEmployees,
+				pendingApprovalEmployees,
+				correctionNeededEmployees,
+				blockedEmployeesTotal,
+				semiMonthlyEmployeesTotal,
+				missingInfoTotal,
+			] = await Promise.all([
+				prisma.employee.findMany({
+					where: missingInfoWhere,
+					select: employeeBlockerSelect,
+					orderBy: [{ employeeId: "asc" }, { updatedAt: "desc" }],
+					take: detailLimit,
+				}),
+				prisma.employee.findMany({
+					where: notSubmittedWhere,
+					select: employeeBlockerSelect,
+					orderBy: [{ employeeId: "asc" }, { updatedAt: "desc" }],
+					take: detailLimit,
+				}),
+				prisma.employee.findMany({
+					where: {
+						...payrollEmployeeWhere,
+						timesheets: {
+							some: {
+								payrollPeriodId,
+								isDeleted: false,
+								status: "SUBMITTED",
+							},
+						},
+					},
+					select: employeeBlockerSelect,
+					orderBy: [{ employeeId: "asc" }, { updatedAt: "desc" }],
+					take: detailLimit,
+				}),
+				prisma.employee.findMany({
+					where: {
+						...payrollEmployeeWhere,
+						timesheets: {
+							some: {
+								payrollPeriodId,
+								isDeleted: false,
+								status: { in: ["REJECTED", "REVISED"] },
+							},
+						},
+					},
+					select: employeeBlockerSelect,
+					orderBy: [{ employeeId: "asc" }, { updatedAt: "desc" }],
+					take: detailLimit,
+				}),
+				prisma.employee.count({ where: notSubmittedWhere }),
+				prisma.employee.count({ where: payrollEmployeeWhere }),
+				prisma.employee.count({ where: missingInfoWhere }),
+			]);
 
-				// Basic salary is required for payroll (should already be filtered, but double-check)
-				if (!emp.basicSalary || emp.basicSalary <= 0) {
-					missing.push({
-						field: "Basic Salary",
-						description:
-							"Basic salary is not configured or is invalid. Salary is required for payroll processing.",
-						severity: "critical",
-					});
-				}
-
-				if (missing.length > 0) {
-					missingInfo.push({
+			const missingInfo = missingInfoEmployees
+				.map((emp) => {
+					const missingFields = buildMissingFields(emp);
+					if (missingFields.length === 0) return null;
+					const employeeName = getEmployeeName(emp);
+					const managerName = emp.reportTo ? getEmployeeName(emp.reportTo) : null;
+					const timesheet = emp.timesheets?.[0];
+					return {
 						id: emp.id,
 						employeeId: emp.employeeId,
 						name: employeeName,
@@ -2881,80 +3061,21 @@ async function generatePayrollPeriodMetric(
 						managerEmployeeId: emp.reportTo?.employeeId || null,
 						timesheetId: timesheet?.id || null,
 						status: timesheet?.status || "MISSING",
-						missingFields: missing,
-					});
-				}
+						missingFields,
+					};
+				})
+				.filter(Boolean);
 
-				// Check timesheet status
-				if (!timesheet || timesheet.status === "DRAFT") {
-					blockedEmployeeIds.add(emp.id);
-					timesheetNotSubmitted.push({
-						...baseTimesheetPayload,
-						timesheetId: timesheet?.id || null,
-						status: timesheet?.status || "MISSING",
-						blockerType: "not_submitted",
-					});
-				} else if (timesheet.status === "SUBMITTED") {
-					pendingApproval.push({
-						...baseTimesheetPayload,
-						timesheetId: timesheet.id,
-						status: timesheet.status,
-						blockerType: "pending_approval",
-					});
-				} else if (timesheet.status === "REJECTED" || timesheet.status === "REVISED") {
-					correctionNeeded.push({
-						...baseTimesheetPayload,
-						timesheetId: timesheet.id,
-						status: timesheet.status,
-						blockerType: "correction_needed",
-					});
-				} else if (timesheet.status === "APPROVED") {
-					readyForPayroll.push({
-						...baseTimesheetPayload,
-						timesheetId: timesheet.id,
-						status: timesheet.status,
-						blockerType: "ready_for_payroll",
-					});
-				}
-			});
-
-			if (detailLimit) {
-				missingInfo.splice(detailLimit);
-				timesheetNotSubmitted.splice(detailLimit);
-				pendingApproval.splice(detailLimit);
-				correctionNeeded.splice(detailLimit);
-				readyForPayroll.splice(detailLimit);
-			}
-
-			const [blockedEmployeesTotal, semiMonthlyEmployeesTotal] = detailLimit
-				? await Promise.all([
-						prisma.employee.count({
-							where: {
-								...payrollEmployeeWhere,
-								OR: [
-									{
-										timesheets: {
-											none: {
-												payrollPeriodId,
-												isDeleted: false,
-											},
-										},
-									},
-									{
-										timesheets: {
-											some: {
-												payrollPeriodId,
-												isDeleted: false,
-												status: "DRAFT",
-											},
-										},
-									},
-								],
-							},
-						}),
-						prisma.employee.count({ where: payrollEmployeeWhere }),
-					])
-				: [blockedEmployeeIds.size, employees.length];
+			const timesheetNotSubmitted = timesheetNotSubmittedEmployees.map((emp) =>
+				toTimesheetBlocker(emp, "not_submitted"),
+			);
+			const pendingApproval = pendingApprovalEmployees.map((emp) =>
+				toTimesheetBlocker(emp, "pending_approval"),
+			);
+			const correctionNeeded = correctionNeededEmployees.map((emp) =>
+				toTimesheetBlocker(emp, "correction_needed"),
+			);
+			const readyForPayroll: any[] = [];
 			const includedEmployeesTotal = Math.max(
 				0,
 				semiMonthlyEmployeesTotal - blockedEmployeesTotal,
@@ -2975,7 +3096,10 @@ async function generatePayrollPeriodMetric(
 				// Unique employees impacted by hard blockers (unsubmitted only).
 				blockedEmployeesTotal,
 				includedEmployeesTotal,
-				semiMonthlyEmployeesTotal, // Total active semi-monthly employees
+				semiMonthlyEmployeesTotal,
+				detailLimit,
+				// Full counts for UI badges (list rows may be capped by detailLimit)
+				missingInfoTotal,
 			};
 		}
 

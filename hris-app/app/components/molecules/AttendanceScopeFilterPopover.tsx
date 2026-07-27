@@ -24,20 +24,24 @@ export interface AttendanceScopeFilterControl {
 
 interface AttendanceScopeFilterPopoverProps {
 	controls: AttendanceScopeFilterControl[];
-	presentGt10Days: boolean;
-	onPresentGt10DaysChange: (value: boolean) => void;
+	presentGt10Days?: boolean;
+	onPresentGt10DaysChange?: (value: boolean) => void;
 	onClearAll: () => void;
+	heading?: string;
 }
 
 export function AttendanceScopeFilterPopover({
 	controls,
-	presentGt10Days,
+	presentGt10Days = false,
 	onPresentGt10DaysChange,
 	onClearAll,
+	heading = "Additional Filters",
 }: AttendanceScopeFilterPopoverProps) {
 	const [open, setOpen] = useState(false);
+	const showPresentGt10Days = typeof onPresentGt10DaysChange === "function";
 	const activeControls = controls.filter((control) => control.value !== "all");
-	const activeFiltersCount = activeControls.length + (presentGt10Days ? 1 : 0);
+	const activeFiltersCount =
+		activeControls.length + (showPresentGt10Days && presentGt10Days ? 1 : 0);
 
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
@@ -58,18 +62,20 @@ export function AttendanceScopeFilterPopover({
 			</PopoverTrigger>
 			<PopoverContent className="w-72" align="start">
 				<div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-					Additional Filters
+					{heading}
 				</div>
-				<div className="flex items-center justify-between space-x-2 mb-6">
-					<Label htmlFor="present-gt-10-days" className="text-sm font-medium text-neutral-700">
-						Present &gt; 10 days
-					</Label>
-					<Switch
-						id="present-gt-10-days"
-						checked={presentGt10Days}
-						onCheckedChange={onPresentGt10DaysChange}
-					/>
-				</div>
+				{showPresentGt10Days ? (
+					<div className="mb-6 flex items-center justify-between space-x-2">
+						<Label htmlFor="present-gt-10-days" className="text-sm font-medium text-neutral-700">
+							Present &gt; 10 days
+						</Label>
+						<Switch
+							id="present-gt-10-days"
+							checked={presentGt10Days}
+							onCheckedChange={onPresentGt10DaysChange}
+						/>
+					</div>
+				) : null}
 
 				<div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">
 					Organization Scope

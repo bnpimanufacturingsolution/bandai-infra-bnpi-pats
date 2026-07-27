@@ -1,6 +1,7 @@
-﻿import { useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { formatDate } from "~/lib/utils/text-utils";
 import {
+	useCreatePayrollCorrection,
 	useRequestTimesheetEditPermission,
 	useTimesheet,
 	useTimesheetAction,
@@ -19,7 +20,11 @@ import {
 import { Button } from "~/components/atoms/Button";
 import { TimesheetViewModal } from "~/components/organisms/TimesheetViewModal";
 import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
-import type { Timesheet, TimesheetBreakdown } from "~/services/timesheet.service";
+import type {
+	CreatePayrollCorrectionPayload,
+	Timesheet,
+	TimesheetBreakdown,
+} from "~/services/timesheet.service";
 import type { TimesheetBreakdownDay } from "~/components/molecules/TimesheetCalendarApproval";
 
 interface TimesheetsTabProps {
@@ -50,7 +55,8 @@ export default function TimesheetsTab({
 		document: "true",
 		pagination: "true",
 		count: "true",
-		fields: "id,totalHoursWorked,totalRegularHours,totalOvertimeHours,status,submittedAt,payrollPeriod.name,payrollPeriod.startDate,payrollPeriod.endDate,employee.id,employee.employeeId,employee.person.personalInfo.firstName,employee.person.personalInfo.lastName",
+		fields:
+			"id,totalHoursWorked,totalRegularHours,totalOvertimeHours,status,submittedAt,lockedAt,lockedEmployeePayrollId,lockReason,payrollPeriod.name,payrollPeriod.startDate,payrollPeriod.endDate,employee.id,employee.employeeId,employee.user.avatar,employee.person.personalInfo.firstName,employee.person.personalInfo.lastName",
 		...(employeeIdOverride && { filter: `employeeId:${employeeIdOverride}` }),
 	});
 
@@ -62,6 +68,7 @@ export default function TimesheetsTab({
 	const timesheetActionMutation = useTimesheetAction();
 	const updateTimesheetMutation = useUpdateTimesheet();
 	const requestEditPermissionMutation = useRequestTimesheetEditPermission();
+	const createPayrollCorrectionMutation = useCreatePayrollCorrection();
 
 	const timesheets = timesheetsData?.timesheets || [];
 	const pagination = timesheetsData?.pagination;
@@ -73,7 +80,12 @@ export default function TimesheetsTab({
 					...(activeTimesheet ?? {}),
 					payrollPeriod:
 						activeTimesheet?.payrollPeriod ?? selectedTimesheetSummary?.payrollPeriod,
-					id: activeTimesheet?.id ?? selectedTimesheetSummary?.id ?? null,
+					// Prefer detail id, then list row, then URL — required for correction CTA
+					id:
+						activeTimesheet?.id ||
+						selectedTimesheetSummary?.id ||
+						activeTimesheetId ||
+						null,
 				} as Timesheet)
 			: null;
 
@@ -106,7 +118,13 @@ export default function TimesheetsTab({
 		});
 	};
 
-	const handleSubmit = async (updatedBreakdown: TimesheetBreakdownDay[]) => {
+	const handleSubmit = async ({
+		breakdown,
+		editedDayKeys,
+	}: {
+		breakdown: TimesheetBreakdownDay[];
+		editedDayKeys: string[];
+	}) => {
 		if (!activeTimesheet?.id) return;
 		const canPreUpdateBeforeSubmit =
 			activeTimesheet.status === "DRAFT" ||
@@ -114,12 +132,13 @@ export default function TimesheetsTab({
 			(activeTimesheet.status === "SUBMITTED" &&
 				(activeTimesheet.editPermissionStatus === "APPROVED" ||
 					activeTimesheet.editPermissionStatus === "CONSUMED"));
-		if (updatedBreakdown?.length) {
+		if (breakdown?.length) {
 			if (canPreUpdateBeforeSubmit) {
 				await updateTimesheetMutation.mutateAsync({
 					id: activeTimesheet.id,
 					payload: {
-						breakdown: updatedBreakdown as TimesheetBreakdown[],
+						breakdown: breakdown as TimesheetBreakdown[],
+						editedDayKeys,
 					},
 				});
 			}
@@ -129,6 +148,7 @@ export default function TimesheetsTab({
 			id: activeTimesheet.id,
 			action: {
 				action: "SUBMIT",
+				editedDayKeys,
 			},
 		});
 		closeView();
@@ -141,6 +161,20 @@ export default function TimesheetsTab({
 			payload: { reason },
 		});
 	};
+
+	const handleRequestPayrollCorrection = async (payload: CreatePayrollCorrectionPayload) => {
+		if (!activeTimesheet?.id) return;
+		await createPayrollCorrectionMutation.mutateAsync({
+			timesheetId: activeTimesheet.id,
+			payload,
+		});
+	};
+
+	const isTimesheetPayrollLocked = (item: {
+		lockedAt?: string | null;
+		lockedEmployeePayrollId?: string | null;
+		lockReason?: string | null;
+	}) => Boolean(item?.lockedAt || item?.lockedEmployeePayrollId || item?.lockReason);
 
 	const getStatusBadgeColor = (status: string) => {
 		// Single primary badge treatment per design-system categorical guidance
@@ -179,7 +213,7 @@ export default function TimesheetsTab({
 		{
 			key: "employee",
 			label: "Employee",
-			width: "240px",
+			width: "17%",
 			render: (_: any, row: any) => {
 				const emp = row.employee;
 				const firstName = emp?.person?.personalInfo?.firstName || "";
@@ -193,6 +227,7 @@ export default function TimesheetsTab({
 						profileId={emp.id}
 						fullName={fileAs}
 						employeeId={row.employeeId || emp.employeeId || "-"}
+						avatar={emp?.user?.avatar ?? null}
 						stopPropagation
 					/>
 				);
@@ -201,19 +236,17 @@ export default function TimesheetsTab({
 		{
 			key: "period",
 			label: "Period",
-			width: "250px",
+			width: "19%",
 			render: (_: any, row: any) => {
 				const period = row.payrollPeriod;
 				if (!period) return <span className="text-gray-400">-</span>;
 
 				return (
-					<div className="flex items-center gap-2">
-						<div>
-							<div className="text-sm font-medium">{period.name}</div>
-							<div className="text-xs text-gray-500">
-								{formatDate(period.startDate, "short")} -{" "}
-								{formatDate(period.endDate, "short")}
-							</div>
+					<div className="min-w-0">
+						<div className="truncate text-sm font-medium">{period.name}</div>
+						<div className="truncate text-xs text-gray-500">
+							{formatDate(period.startDate, "short")} -{" "}
+							{formatDate(period.endDate, "short")}
 						</div>
 					</div>
 				);
@@ -222,7 +255,7 @@ export default function TimesheetsTab({
 		{
 			key: "totalRegularHours",
 			label: "Regular",
-			width: "100px",
+			width: "9%",
 			render: (value: string) => (
 				<span className="text-sm font-medium text-gray-700">{value || "0:00"}</span>
 			),
@@ -230,7 +263,7 @@ export default function TimesheetsTab({
 		{
 			key: "totalOvertimeHours",
 			label: "Overtime",
-			width: "100px",
+			width: "9%",
 			render: (value: string) => (
 				<span
 					className={`text-sm font-medium ${value !== "0:00" ? "text-green-600" : "text-gray-400"}`}>
@@ -241,7 +274,7 @@ export default function TimesheetsTab({
 		{
 			key: "totalHoursWorked",
 			label: "Total",
-			width: "100px",
+			width: "9%",
 			render: (value: string) => (
 				<span className="font-semibold text-gray-900">{value || "0:00"}</span>
 			),
@@ -249,15 +282,22 @@ export default function TimesheetsTab({
 		{
 			key: "status",
 			label: "Status",
-			width: "120px",
-			render: (value: string) => (
-				<Badge className={getStatusBadgeColor(value)}>{value}</Badge>
+			width: "11%",
+			render: (value: string, row: any) => (
+				<div className="flex flex-col gap-1">
+					<Badge className={getStatusBadgeColor(value)}>{value}</Badge>
+					{isTimesheetPayrollLocked(row) ? (
+						<span className="text-[11px] font-medium text-neutral-600">
+							Processed in payroll
+						</span>
+					) : null}
+				</div>
 			),
 		},
 		{
 			key: "submittedAt",
 			label: "Submitted",
-			width: "150px",
+			width: "11%",
 			render: (value: string) => {
 				if (!value) return <span className="text-gray-400">-</span>;
 				return (
@@ -278,7 +318,7 @@ export default function TimesheetsTab({
 	}
 
 	return (
-		<div className="space-y-4">
+		<div className="min-w-0 space-y-4">
 			<DataTable
 				title="Timesheets"
 				columns={columns}
@@ -292,6 +332,8 @@ export default function TimesheetsTab({
 				onPageChange={handlePageChange}
 				showSearch={false}
 				showFilters={false}
+				showExport={false}
+				className="min-w-0 overflow-hidden"
 				renderActions={renderActions}
 			/>
 
@@ -308,6 +350,8 @@ export default function TimesheetsTab({
 					updateTimesheetMutation.isPending || timesheetActionMutation.isPending
 				}
 				isRequestingPermission={requestEditPermissionMutation.isPending}
+				onRequestPayrollCorrection={handleRequestPayrollCorrection}
+				isRequestingPayrollCorrection={createPayrollCorrectionMutation.isPending}
 			/>
 		</div>
 	);

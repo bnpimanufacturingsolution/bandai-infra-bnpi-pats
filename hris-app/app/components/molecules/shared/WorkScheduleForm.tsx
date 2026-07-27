@@ -1,7 +1,8 @@
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
 import { Card, CardContent } from "~/components/atoms/Card";
-import { type SectionStatus, type FormData } from "~/routes/hr/add-employee";
+
+type SectionStatus = "not-started" | "in-progress" | "completed";
 
 interface WorkScheduleFormProps {
 	form: any;

@@ -6,7 +6,7 @@ Generation completed using safe generated-section and WWG-owned file rules.
 
 ## Command
 
-`wwg refresh-context --target C:\Users\1biss\Documents\Projects\hris-app`
+`wwg refresh-context --target C:\Users\uzaro\Documents\Projects\BANDA HRIS\hris-app`
 
 ## Target
 
@@ -36,7 +36,12 @@ Generation completed using safe generated-section and WWG-owned file rules.
 
 ## Context Files Updated
 
-- None.
+- workspace/context/project-context.md
+- workspace/context/architecture-context.md
+- workspace/context/domain-context.md
+- workspace/context/ux-context.md
+- workspace/context/governance-context.md
+- workspace/context/context-maintenance-matrix.md
 
 ## Files Skipped
 

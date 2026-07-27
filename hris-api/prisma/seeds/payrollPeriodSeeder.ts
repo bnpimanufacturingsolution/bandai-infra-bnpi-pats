@@ -24,11 +24,12 @@ const DEFAULT_SEED_CYCLE_CONFIG: PayrollCycleConfigLike = {
 	payDateOffsetDays: 5,
 	businessDayRule: "NEXT_BUSINESS_DAY",
 	includeHolidaysInBusinessDayCheck: true,
+	// BNPI default: 11-25 / 26-10 (matches Bandai semi-monthly register cutoffs).
 	cycleRules: {
 		SEMI_MONTHLY: {
-			firstStartDay: 1,
-			secondStartDay: 16,
-			secondEndDay: "LAST_DAY",
+			firstStartDay: 11,
+			secondStartDay: 26,
+			secondEndDay: 10,
 		},
 	},
 };

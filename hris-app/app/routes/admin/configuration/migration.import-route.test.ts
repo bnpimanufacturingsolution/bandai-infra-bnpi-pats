@@ -3,11 +3,25 @@ import {
 	ADMIN_MIGRATION_IMPORT_ACTION_SEQUENCE,
 	ADMIN_MIGRATION_MODAL_TITLES,
 	getWorkbookReportIssue,
+	isDm4ApprovedOvertimeSource,
 	normalizeWorkbookReportLifecycle,
 } from "./migration";
 import {
 	buildClosedImportSearchParams,
+	buildCloseWorkbookSearchParams,
+	buildCloseWorkbookUploadSearchParams,
 	buildOpenImportSearchParams,
+	buildOpenWorkbookSearchParams,
+	buildOpenWorkbookUploadSearchParams,
+	buildWorkbookImportProgressFromRun,
+	formatWorkbookImportProgressDescription,
+	formatWorkbookImportProgressTitle,
+	getWorkbookImportProgressToastId,
+	getWorkbookUploadKind,
+	isAdminMigrationWorkbookId,
+	isMigrationRunStatusSuccess,
+	isMigrationRunStatusTerminal,
+	isWorkbookUploadOpen,
 } from "~/lib/admin-migration-ui";
 
 describe("admin migration route contract", () => {
@@ -25,6 +39,18 @@ describe("admin migration route contract", () => {
 			"import-loan-types",
 			"import-employees",
 		]);
+	});
+
+	it("labels approved overtime by report basename, not a strict year prefix", () => {
+		expect(
+			isDm4ApprovedOvertimeSource(
+				"confidential-files/2rptOvertimeDetails - June 26 - July 10, 2026.xlsx",
+			),
+		).toBe(true);
+		expect(isDm4ApprovedOvertimeSource("docs/Bandai Payroll/2026 rptOvertimeDetails.xlsx")).toBe(
+			true,
+		);
+		expect(isDm4ApprovedOvertimeSource("Biometrics Data_Jun 26 - Jul 10.xlsx")).toBe(false);
 	});
 
 	it("keeps every import action mapped to a modal title", () => {
@@ -46,6 +72,77 @@ describe("admin migration route contract", () => {
 		expect(closed.has("action")).toBe(false);
 		expect(closed.get("tab")).toBe("migration");
 		expect(closed.get("page")).toBe("2");
+	});
+
+	it("opens workbook as page state and keeps upload as a separate modal flag", () => {
+		const opened = buildOpenWorkbookSearchParams(
+			new URLSearchParams("tab=migration"),
+			"dm3",
+		);
+		expect(opened.get("workbook")).toBe("dm3");
+		expect(isWorkbookUploadOpen(opened)).toBe(false);
+		expect(isAdminMigrationWorkbookId(opened.get("workbook"))).toBe(true);
+
+		const withUpload = buildOpenWorkbookUploadSearchParams(opened);
+		expect(withUpload.get("workbook")).toBe("dm3");
+		expect(isWorkbookUploadOpen(withUpload)).toBe(true);
+		expect(getWorkbookUploadKind(withUpload)).toBe("workbook");
+
+		const closedUpload = buildCloseWorkbookUploadSearchParams(withUpload);
+		expect(closedUpload.get("workbook")).toBe("dm3");
+		expect(isWorkbookUploadOpen(closedUpload)).toBe(false);
+
+		const closedPage = buildCloseWorkbookSearchParams(closedUpload);
+		expect(closedPage.has("workbook")).toBe(false);
+		expect(closedPage.has("upload")).toBe(false);
+		expect(closedPage.get("tab")).toBe("migration");
+	});
+
+	it("opens DM4 biometrics and overtime upload modals via dedicated upload kinds", () => {
+		const dm4 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm4");
+		const biometrics = buildOpenWorkbookUploadSearchParams(dm4, "biometrics");
+		expect(biometrics.get("workbook")).toBe("dm4");
+		expect(biometrics.get("upload")).toBe("biometrics");
+		expect(getWorkbookUploadKind(biometrics)).toBe("biometrics");
+		expect(isWorkbookUploadOpen(biometrics)).toBe(true);
+
+		const overtime = buildOpenWorkbookUploadSearchParams(dm4, "overtime");
+		expect(overtime.get("upload")).toBe("overtime");
+		expect(getWorkbookUploadKind(overtime)).toBe("overtime");
+
+		const closed = buildCloseWorkbookUploadSearchParams(overtime);
+		expect(closed.get("workbook")).toBe("dm4");
+		expect(closed.has("upload")).toBe(false);
+	});
+
+	it("opens DM3 compensation, deduction, and statutory mass-upload modals via dedicated upload kinds", () => {
+		const dm3 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm3");
+		const compensation = buildOpenWorkbookUploadSearchParams(dm3, "compensation");
+		expect(compensation.get("workbook")).toBe("dm3");
+		expect(compensation.get("upload")).toBe("compensation");
+		expect(getWorkbookUploadKind(compensation)).toBe("compensation");
+
+		const deduction = buildOpenWorkbookUploadSearchParams(dm3, "deduction");
+		expect(deduction.get("upload")).toBe("deduction");
+		expect(getWorkbookUploadKind(deduction)).toBe("deduction");
+
+		const statutory = buildOpenWorkbookUploadSearchParams(dm3, "statutory");
+		expect(statutory.get("upload")).toBe("statutory");
+		expect(getWorkbookUploadKind(statutory)).toBe("statutory");
+	});
+
+	it("can open workbook page with upload modal already open (deep link / in-page CTA)", () => {
+		// Hub no longer exposes a direct Upload button; upload opens only after Open workbook.
+		// Helper still supports upload=1 for in-workbook modal and deep links.
+		const opened = buildOpenWorkbookSearchParams(new URLSearchParams(), "dm1", {
+			upload: true,
+		});
+		expect(opened.get("workbook")).toBe("dm1");
+		expect(isWorkbookUploadOpen(opened)).toBe(true);
+
+		const openOnly = buildOpenWorkbookSearchParams(new URLSearchParams(), "dm2");
+		expect(openOnly.get("workbook")).toBe("dm2");
+		expect(isWorkbookUploadOpen(openOnly)).toBe(false);
 	});
 
 	it("opens employee import with auto-create explicitly disabled by route helper contract", () => {

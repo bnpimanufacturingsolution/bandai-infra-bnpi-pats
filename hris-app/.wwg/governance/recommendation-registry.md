@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/governance/recommendation-registry.md) -->
 # WWG Recommendation Registry
 
 This registry captures useful future work discovered by agents, humans, audits, reviews, maintenance runs, retrospectives, and implementation closeouts.
@@ -53,3 +54,7 @@ A recommendation may only become active work when it is explicitly promoted into
 - an implementation prompt
 - an accepted governance rule
 - a regression test plan
+
+## 2026-06-27: HR Attendance Fixes (App-only phase)
+- **HR-initiated TIME_ADJUSTMENT creation**: Requires API authorization changes to allow HR users to create TIME_ADJUSTMENT requests on behalf of employees. This was deferred to a separate backend task.
+- **Compensatory Leave Credit skipping**: The `compensatoryLeaveCredit` summary needs a distinct `skipReason` for zero-delta/zero-overtime cases, rather than just reusing `NO_COMPENSATORY_LEAVE_POLICY`. This was identified but deferred to avoid touching the API in the app-only UX pass.

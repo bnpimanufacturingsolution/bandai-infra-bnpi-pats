@@ -900,7 +900,7 @@ export function DirectIndirectLaborTab() {
 										render: (row) => (
 											<EmployeeDrillLink
 												count={row.headcount}
-												input={{ workforceSource: "AGENCY", agencyName: row.agency }}>
+												input={{ workforceSource: "AGENCY", agency: row.agency }}>
 												{row.agency}
 											</EmployeeDrillLink>
 										),
@@ -912,7 +912,7 @@ export function DirectIndirectLaborTab() {
 										render: (row) => (
 											<EmployeeDrillLink
 												count={row.headcount}
-												input={{ workforceSource: "AGENCY", agencyName: row.agency }}>
+												input={{ workforceSource: "AGENCY", agency: row.agency }}>
 												{formatNumber(row.headcount)}
 											</EmployeeDrillLink>
 										),
@@ -926,7 +926,7 @@ export function DirectIndirectLaborTab() {
 												count={row.female}
 												input={{
 													workforceSource: "AGENCY",
-													agencyName: row.agency,
+													agency: row.agency,
 													gender: "Female",
 												}}>
 												{formatNumber(row.female)}
@@ -942,7 +942,7 @@ export function DirectIndirectLaborTab() {
 												count={row.male}
 												input={{
 													workforceSource: "AGENCY",
-													agencyName: row.agency,
+													agency: row.agency,
 													gender: "Male",
 												}}>
 												{formatNumber(row.male)}

@@ -60,6 +60,8 @@ export async function calculateLeaveBalanceMetrics(
 	organizationId: string,
 	departmentId?: string,
 	sectionId?: string,
+	positionId?: string,
+	levelId?: string,
 	reportToId?: string,
 	employeeId?: string,
 	leaveType?: string,
@@ -69,15 +71,15 @@ export async function calculateLeaveBalanceMetrics(
 	// Build employee filter (no employmentStatus filter per test script)
 	const employeeWhere: Prisma.EmployeeWhereInput = buildEmployeeFilter(
 		organizationId,
-		departmentId,
-		reportToId,
+		{
+			departmentId,
+			sectionId,
+			positionId,
+			levelId,
+			reportToId,
+			employeeId,
+		},
 	);
-	if (sectionId) {
-		employeeWhere.sectionId = sectionId;
-	}
-	if (employeeId) {
-		employeeWhere.id = employeeId;
-	}
 
 	// Fetch employees with their leave balances
 	const employees = await prisma.employee.findMany({

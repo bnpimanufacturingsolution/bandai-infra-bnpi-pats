@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
@@ -7,7 +7,12 @@ import { themeColors } from "~/lib/config/theme";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import { formatDuration } from "~/lib/utils";
 import { TimesheetView } from "./TimesheetView";
-import type { ApprovedEditedDaysSummary, Timesheet } from "~/services/timesheet.service";
+import type {
+	ApprovedEditedDaysSummary,
+	CreatePayrollCorrectionPayload,
+	Timesheet,
+	TimesheetSubmitPayload,
+} from "~/services/timesheet.service";
 import {
 	TimesheetCalendarApproval,
 	checkAllDaysReviewed,
@@ -20,7 +25,14 @@ import { TimesheetEmployeeCard } from "~/components/molecules/TimesheetEmployeeC
 import { TimesheetHoursOverview } from "~/components/molecules/TimesheetHoursOverview";
 import { TimesheetDayEditor } from "~/components/molecules/TimesheetDayEditor";
 import { TimesheetDayTooltipContent } from "~/components/molecules/TimesheetDayTooltipContent";
-import { useNormalizeTimesheetBreakdownPreview } from "~/lib/hooks/useTimesheets";
+import { TimesheetOvertimeRequestModal } from "~/components/molecules/TimesheetOvertimeRequestModal";
+import { TimesheetOvertimeSubmitWarningModal } from "~/components/molecules/TimesheetOvertimeSubmitWarningModal";
+import { TimesheetPayrollCorrectionPanel } from "~/components/molecules/TimesheetPayrollCorrectionPanel";
+import {
+	useCreatePayrollCorrection,
+	useNormalizeTimesheetBreakdownPreview,
+	useTimesheetPayrollCorrections,
+} from "~/lib/hooks/useTimesheets";
 import { useEmployeeScheduleCalendar } from "~/lib/hooks/useSchedules";
 import { useAuth } from "~/lib/hooks/use-auth";
 import type { EmployeeScheduleCalendarResponse } from "~/services/schedules.service";
@@ -28,6 +40,56 @@ import { toast } from "sonner";
 import { buildNightShiftMeta } from "~/lib/utils/night-shift";
 import { isVirtualAbsentLikeRecord } from "~/lib/utils/attendance-status";
 import { formatDate } from "~/lib/utils/text-utils";
+import {
+	canFileOvertimeRequest,
+	findUnfiledOvertimeCandidateDays,
+	readOvertimeCandidateFromDay,
+	resolveOvertimeDayBadge,
+} from "~/lib/utils/overtime-candidate";
+import {
+	buildPayrollCorrectionMarkersByDate,
+	extractPayrollCorrectionItems,
+} from "~/lib/utils/payroll-correction-day-markers";
+
+type RecentModifiedDayItem = {
+	entryId: string;
+	timesheetId: string;
+	date: string;
+	periodLabel: string;
+	sourcePeriodType: "CURRENT" | "PAST";
+	approvedAt: string;
+	modifiedAt: string;
+	changeType: "TIME" | "STATUS" | "NOTES" | "MIXED";
+	isManualEdit?: boolean;
+	dayPreview?: {
+		timeIn: string | null;
+		timeOut: string | null;
+		status: string | null;
+		hoursWorked: string;
+		regularHours: string;
+		overtimeHours: string;
+		undertimeHours: string;
+		lateHours: string;
+		earlyOutHours: string;
+		leaveType?: string | null;
+		leaveEntries?: TimesheetBreakdownDay["leaveEntries"];
+		holidayEntries?: TimesheetBreakdownDay["holidayEntries"];
+		primaryMarker?: TimesheetBreakdownDay["primaryMarker"];
+		approvalStatus?: string | null;
+		employeeNotes: string | null;
+		approverNotes: string | null;
+		metadata?: {
+			breakMinutes?: number | null;
+			breakDisplay?: string | null;
+			rawLateMinutes?: number | null;
+			gracePeriodMinutes?: number | null;
+			withinGrace?: boolean | null;
+			[key: string]: unknown;
+		};
+		nightShift?: TimesheetBreakdownDay["nightShift"];
+	};
+	changedFields?: NonNullable<TimesheetBreakdownDay["revisionSummary"]>["changedFields"];
+};
 
 const formatDayKey = (value?: string | null) => {
 	if (!value) return "";
@@ -159,7 +221,7 @@ interface TimesheetViewModalProps {
 	/** Custom title */
 	title?: string;
 	/** Submit handler */
-	onSubmit?: (updatedBreakdown: TimesheetBreakdownDay[]) => void;
+	onSubmit?: (payload: TimesheetSubmitPayload) => void;
 	/** Is submit in progress */
 	isSubmitting?: boolean;
 	/** Enable approval mode (for managers) */
@@ -174,6 +236,20 @@ interface TimesheetViewModalProps {
 	onRequestEditPermission?: (reason: string) => Promise<void> | void;
 	/** Is request edit permission in progress */
 	isRequestingPermission?: boolean;
+	/** File overtime request for a detected candidate day */
+	onFileOvertimeRequest?: (params: {
+		date: string;
+		description?: string;
+		notes?: string;
+	}) => Promise<void> | void;
+	/** Is overtime request filing in progress */
+	isFilingOvertimeRequest?: boolean;
+	/** Request payroll correction for payroll-locked timesheet */
+	onRequestPayrollCorrection?: (
+		payload: CreatePayrollCorrectionPayload,
+	) => Promise<void> | void;
+	/** Is payroll correction request in progress */
+	isRequestingPayrollCorrection?: boolean;
 	/** Deep-link selected day (YYYY-MM-DD) */
 	deepLinkDay?: string | null;
 	/** Callback to sync deep-link day in URL */
@@ -200,6 +276,10 @@ export function TimesheetViewModal({
 	isApproving = false,
 	onRequestEditPermission,
 	isRequestingPermission = false,
+	onFileOvertimeRequest,
+	isFilingOvertimeRequest = false,
+	onRequestPayrollCorrection,
+	isRequestingPayrollCorrection = false,
 	deepLinkDay,
 	onDeepLinkDayChange,
 	approvedEditedDaysSummary,
@@ -214,11 +294,22 @@ export function TimesheetViewModal({
 	const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
 	const [editPermissionReason, setEditPermissionReason] = useState("");
 	const [showPermissionReasonValidation, setShowPermissionReasonValidation] = useState(false);
+	const [isOvertimeModalOpen, setIsOvertimeModalOpen] = useState(false);
+	const [isPayrollCorrectionMode, setIsPayrollCorrectionMode] = useState(false);
+	const [payrollCorrectionPreselectDates, setPayrollCorrectionPreselectDates] = useState<
+		string[]
+	>([]);
+	const [isOvertimeSubmitWarningOpen, setIsOvertimeSubmitWarningOpen] = useState(false);
+	const [overtimeRequestDay, setOvertimeRequestDay] = useState<TimesheetBreakdownDay | null>(
+		null,
+	);
+	const [overtimeRequestNotes, setOvertimeRequestNotes] = useState("");
 	const [suppressedDeepLinkDay, setSuppressedDeepLinkDay] = useState<string | null>(null);
 	const [showAllApprovedEditedDays, setShowAllApprovedEditedDays] = useState(false);
 	const [selectedApprovedEditedEntryId, setSelectedApprovedEditedEntryId] = useState<
 		string | null
 	>(null);
+	const [explicitEditedDayKeys, setExplicitEditedDayKeys] = useState<Set<string>>(new Set());
 	const normalizeBreakdownPreviewMutation = useNormalizeTimesheetBreakdownPreview();
 
 	// Reset breakdown when timesheet changes
@@ -229,6 +320,10 @@ export function TimesheetViewModal({
 	}, [timesheet?.breakdown]);
 
 	useEffect(() => {
+		setExplicitEditedDayKeys(new Set());
+	}, [timesheet?.id]);
+
+	useEffect(() => {
 		if (!isOpen) {
 			setRejectReason("");
 			setShowRejectValidation(false);
@@ -237,6 +332,9 @@ export function TimesheetViewModal({
 			setShowPermissionReasonValidation(false);
 			setShowAllApprovedEditedDays(false);
 			setSelectedApprovedEditedEntryId(null);
+			setIsOvertimeSubmitWarningOpen(false);
+			setIsPayrollCorrectionMode(false);
+			setPayrollCorrectionPreselectDates([]);
 		}
 	}, [isOpen]);
 
@@ -249,12 +347,33 @@ export function TimesheetViewModal({
 		}
 	};
 
+	const openPayrollCorrectionMode = (preselectDates: string[] = []) => {
+		setPayrollCorrectionPreselectDates(preselectDates.filter(Boolean));
+		setIsPayrollCorrectionMode(true);
+	};
+
+	const exitPayrollCorrectionMode = () => {
+		setIsPayrollCorrectionMode(false);
+		setPayrollCorrectionPreselectDates([]);
+	};
+
 	const handleDayRequestAction = (
 		action: TimesheetDayRequestAction,
 		day: TimesheetBreakdownDay,
 	) => {
 		const dayKey = getTimesheetDayBusinessKey(day);
 		if (!dayKey) return;
+		if (action === "payroll-correction") {
+			// Open when payroll-locked; submit path uses parent handler or built-in mutation.
+			const locked = Boolean(
+				timesheet?.lockedAt ||
+					timesheet?.lockedEmployeePayrollId ||
+					timesheet?.lockReason,
+			);
+			if (approvalMode || !locked || !timesheet?.id) return;
+			openPayrollCorrectionMode([dayKey]);
+			return;
+		}
 		const params = new URLSearchParams();
 		params.set("action", "create");
 		params.set("date", dayKey);
@@ -267,6 +386,13 @@ export function TimesheetViewModal({
 			params.set("kind", "leave");
 			navigate(`/employee/requests?${params.toString()}`);
 			return;
+		}
+		if (action === "overtime") {
+			const candidate = readOvertimeCandidateFromDay(day);
+			if (!canFileOvertimeRequest(candidate)) return;
+			setOvertimeRequestDay(day);
+			setOvertimeRequestNotes("");
+			setIsOvertimeModalOpen(true);
 		}
 	};
 
@@ -287,6 +413,9 @@ export function TimesheetViewModal({
 		const mergedBreakdown = currentBreakdown.map((d) =>
 			getTimesheetDayBusinessKey(d) === targetDayKey ? updatedDay : d,
 		);
+		if (targetDayKey) {
+			setExplicitEditedDayKeys((previous) => new Set(previous).add(targetDayKey));
+		}
 
 		if (!timesheet?.id) {
 			setUpdatedBreakdown(mergedBreakdown);
@@ -333,10 +462,65 @@ export function TimesheetViewModal({
 	const isApprovedStatus = timesheet?.status === "APPROVED";
 	const isRejected = timesheet?.status === "REJECTED";
 	const isRevised = timesheet?.status === "REVISED";
+	const isPayrollLocked = Boolean(
+		timesheet?.lockedAt || timesheet?.lockedEmployeePayrollId || timesheet?.lockReason,
+	);
 	const hasEditPermissionForResubmit =
 		timesheet?.editPermissionStatus === "APPROVED" ||
 		timesheet?.editPermissionStatus === "CONSUMED";
-	const canEditDays = timesheet?.status === "REVISED" || hasEditPermissionForResubmit;
+	const canEditDays =
+		!isPayrollLocked &&
+		(timesheet?.status === "REVISED" || hasEditPermissionForResubmit);
+	// Built-in mutation so CTA works even when a parent forgets to wire onRequestPayrollCorrection.
+	const createPayrollCorrectionMutation = useCreatePayrollCorrection();
+	const canRequestPayrollCorrection = Boolean(
+		!approvalMode &&
+			isPayrollLocked &&
+			timesheet?.id &&
+			(showActions || onRequestPayrollCorrection),
+	);
+	const isPayrollCorrectionSubmitting =
+		isRequestingPayrollCorrection || createPayrollCorrectionMutation.isPending;
+	const submitPayrollCorrection = async (payload: CreatePayrollCorrectionPayload) => {
+		if (onRequestPayrollCorrection) {
+			await onRequestPayrollCorrection(payload);
+			return;
+		}
+		if (!timesheet?.id) {
+			throw new Error("Timesheet is not available");
+		}
+		await createPayrollCorrectionMutation.mutateAsync({
+			timesheetId: timesheet.id,
+			payload,
+		});
+	};
+	const payrollCorrectionsQuery = useTimesheetPayrollCorrections(timesheet?.id, {
+		enabled: Boolean(isOpen && isPayrollLocked && timesheet?.id),
+	});
+	const payrollCorrectionByDate = useMemo(() => {
+		const items = extractPayrollCorrectionItems(payrollCorrectionsQuery.data);
+		return buildPayrollCorrectionMarkersByDate(items);
+	}, [payrollCorrectionsQuery.data]);
+	const payrollCorrectionSummary = useMemo(() => {
+		const items = extractPayrollCorrectionItems(payrollCorrectionsQuery.data);
+		const requested = items.filter((i) => String(i.status).toUpperCase() === "REQUESTED").length;
+		const ready = items.filter((i) =>
+			["READY", "APPROVED_HOLD"].includes(String(i.status).toUpperCase()),
+		).length;
+		const applied = items.filter((i) => String(i.status).toUpperCase() === "APPLIED").length;
+		return {
+			requested,
+			ready,
+			applied,
+			total: items.length,
+			dayCount: payrollCorrectionByDate.size,
+		};
+	}, [payrollCorrectionsQuery.data, payrollCorrectionByDate]);
+	const hasExistingPayrollCorrections = payrollCorrectionSummary.total > 0;
+	const viewPayrollCorrectionRequests = () => {
+		// Employee requests hub (includes payroll correction history).
+		navigate("/employee/requests");
+	};
 	// Check if timesheet can be submitted
 	const canSubmit =
 		timesheet?.status === "DRAFT" ||
@@ -349,20 +533,44 @@ export function TimesheetViewModal({
 	const shouldShowSubmitButton = Boolean(
 		showActions &&
 			!approvalMode &&
+			!isPayrollLocked &&
 			onSubmit &&
 			["DRAFT", "REVISED", "SUBMITTED", "APPROVED"].includes(timesheet?.status || ""),
 	);
 	const submitButtonDisabled = Boolean(isSubmitting || !canSubmit || !hasAssignedApprover);
-	const handleSubmitClick = () => {
-		if (!onSubmit || !hasAssignedApprover) return;
-		onSubmit(
+	const submitBreakdown = useMemo(
+		() =>
 			updatedBreakdown.length > 0
 				? updatedBreakdown
 				: (timesheet?.breakdown as TimesheetBreakdownDay[]) || [],
-		);
+		[updatedBreakdown, timesheet?.breakdown],
+	);
+	const unfilledOvertimeDays = useMemo(
+		() => findUnfiledOvertimeCandidateDays(submitBreakdown),
+		[submitBreakdown],
+	);
+	const performSubmit = () => {
+		if (!onSubmit || !hasAssignedApprover) return;
+		onSubmit({
+			breakdown: submitBreakdown,
+			editedDayKeys: submitEditedDayKeys,
+		});
+	};
+	const handleSubmitClick = () => {
+		if (!onSubmit || !hasAssignedApprover) return;
+		if (unfilledOvertimeDays.length > 0) {
+			setIsOvertimeSubmitWarningOpen(true);
+			return;
+		}
+		performSubmit();
+	};
+	const handleConfirmSubmitWithUnfiledOvertime = () => {
+		setIsOvertimeSubmitWarningOpen(false);
+		performSubmit();
 	};
 	const canOpenPermissionRequest = Boolean(
-		onRequestEditPermission &&
+		!isPayrollLocked &&
+			onRequestEditPermission &&
 			hasAssignedApprover &&
 			(timesheet?.id || timesheet?.canRequestEditPermission) &&
 			timesheet?.status !== "REVISED" &&
@@ -498,6 +706,10 @@ export function TimesheetViewModal({
 	};
 
 	const getSubmitInfoMessage = () => {
+		// Payroll-locked sheets use the locked banner + footer correction CTA, not edit/resubmit copy.
+		if (isPayrollLocked) {
+			return "";
+		}
 		if (!hasAssignedApprover) {
 			return "You do not have a reporting manager assigned yet. Contact HR before submitting this timesheet.";
 		}
@@ -775,6 +987,16 @@ export function TimesheetViewModal({
 				return;
 			}
 
+			const existingHasRevision = Boolean(existingDay.revisionSummary?.isModified);
+			const currentHasRevision = Boolean(day.revisionSummary?.isModified);
+			if (currentHasRevision && !existingHasRevision) {
+				daysByDate.set(dayKey, day);
+				return;
+			}
+			if (!currentHasRevision && existingHasRevision) {
+				return;
+			}
+
 			const existingHours = parseDurationHours(existingDay.hoursWorked);
 			const currentHours = parseDurationHours(day.hoursWorked);
 			if (existingHours === 0 && currentHours > 0) {
@@ -796,7 +1018,40 @@ export function TimesheetViewModal({
 		const parsed = new Date(value);
 		return !Number.isNaN(parsed.getTime());
 	};
-	const currentModifiedDayItems = useMemo(() => {
+	const MEANINGFUL_REVISION_FIELDS = new Set([
+		"timeIn",
+		"timeOut",
+		"hoursWorked",
+		"regularHours",
+		"overtimeHours",
+		"undertimeHours",
+		"lateHours",
+		"earlyOutHours",
+		"status",
+		"employeeNotes",
+		"approverNotes",
+	]);
+	const hasMeaningfulRevisionChange = (
+		changedFields?: NonNullable<TimesheetBreakdownDay["revisionSummary"]>["changedFields"],
+	) => {
+		if (!changedFields?.length) return false;
+		return changedFields.some((change) => MEANINGFUL_REVISION_FIELDS.has(change.field));
+	};
+	const getModifiedDaySortPriority = (changeType?: RecentModifiedDayItem["changeType"]) => {
+		switch (changeType) {
+			case "TIME":
+				return 0;
+			case "MIXED":
+				return 1;
+			case "NOTES":
+				return 2;
+			case "STATUS":
+				return 3;
+			default:
+				return 4;
+		}
+	};
+	const currentModifiedDayItems = useMemo<RecentModifiedDayItem[]>(() => {
 		const displayedDayByDate = new Map(
 			visibleBreakdown
 				.map((day) => [getTimesheetDayBusinessKey(day), day] as const)
@@ -807,7 +1062,12 @@ export function TimesheetViewModal({
 		for (const day of visibleBreakdown) {
 			const dayKey = getTimesheetDayBusinessKey(day);
 			const revisionSummary = day.revisionSummary;
-			if (!dayKey || !revisionSummary?.isModified || !revisionSummary.changedFields?.length) {
+			if (
+				!dayKey ||
+				!revisionSummary?.isModified ||
+				!revisionSummary?.isManualEdit ||
+				!hasMeaningfulRevisionChange(revisionSummary.changedFields)
+			) {
 				continue;
 			}
 
@@ -863,13 +1123,15 @@ export function TimesheetViewModal({
 	}, [timesheet?.id, visibleBreakdown]);
 
 	const recentModifiedDayItems = useMemo(() => {
-		const priorItems = [...approvedEditedDayItems]
+		const priorItems: RecentModifiedDayItem[] = [...approvedEditedDayItems]
 			.filter(
 				(item) =>
 					Boolean(item?.entryId?.trim()) &&
 					Boolean(item?.periodLabel?.trim()) &&
 					isValidDateValue(item?.date) &&
-					isValidDateValue(item?.approvedAt),
+					isValidDateValue(item?.approvedAt) &&
+					item.isManualEdit === true &&
+					hasMeaningfulRevisionChange(item.changedFields),
 			)
 			.sort((a, b) => {
 				const approvedDiff =
@@ -882,8 +1144,13 @@ export function TimesheetViewModal({
 				modifiedAt: item.approvedAt,
 			}));
 
-		const latestPriorItemByDate = new Map<string, (typeof priorItems)[number]>();
-		for (const item of priorItems) {
+		const relevantPriorItems =
+			approvalMode && timesheet?.id
+				? priorItems.filter((item) => item.timesheetId === timesheet.id)
+				: priorItems;
+
+		const latestPriorItemByDate = new Map<string, RecentModifiedDayItem>();
+		for (const item of relevantPriorItems) {
 			const existing = latestPriorItemByDate.get(item.date);
 			if (
 				!existing ||
@@ -894,7 +1161,9 @@ export function TimesheetViewModal({
 		}
 
 		const sourceItems = approvalMode
-			? currentModifiedDayItems
+			? currentModifiedDayItems.length > 0
+				? currentModifiedDayItems
+				: Array.from(latestPriorItemByDate.values())
 			: currentModifiedDayItems.length > 0
 				? currentModifiedDayItems
 				: Array.from(latestPriorItemByDate.values());
@@ -903,9 +1172,12 @@ export function TimesheetViewModal({
 			const modifiedDiff =
 				new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime();
 			if (modifiedDiff !== 0) return modifiedDiff;
-			return new Date(b.date).getTime() - new Date(a.date).getTime();
+			const priorityDiff =
+				getModifiedDaySortPriority(a.changeType) - getModifiedDaySortPriority(b.changeType);
+			if (priorityDiff !== 0) return priorityDiff;
+			return new Date(a.date).getTime() - new Date(b.date).getTime();
 		});
-	}, [approvalMode, approvedEditedDayItems, currentModifiedDayItems]);
+	}, [approvalMode, approvedEditedDayItems, currentModifiedDayItems, timesheet?.id]);
 	const visibleApprovedEditedDayItems = showAllApprovedEditedDays
 		? recentModifiedDayItems
 		: recentModifiedDayItems.slice(0, 3);
@@ -1018,7 +1290,7 @@ export function TimesheetViewModal({
 		return hours + minutes / 60;
 	};
 
-	const timesheetDisplayStatus = timesheet?.lockedAt ? "LOCKED" : timesheet?.status;
+	const timesheetDisplayStatus = isPayrollLocked ? "LOCKED" : timesheet?.status;
 
 	// Get status badge color (minimal/neutral primary treatment)
 	const getStatusColor = () => {
@@ -1168,6 +1440,17 @@ export function TimesheetViewModal({
 			.map((day) => getTimesheetDayBusinessKey(day))
 			.filter(Boolean);
 	}, [timesheet?.breakdown, updatedBreakdown]);
+	const submitEditedDayKeys = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					[...explicitEditedDayKeys, ...modifiedDayKeys].filter(
+						(dayKey): dayKey is string => Boolean(dayKey),
+					),
+				),
+			).sort(),
+		[explicitEditedDayKeys, modifiedDayKeys],
+	);
 
 	// Get employee info for approval mode
 	const employee = timesheet?.employee;
@@ -1209,6 +1492,21 @@ export function TimesheetViewModal({
 		setShowPermissionReasonValidation(false);
 	};
 
+	const handleFileOvertimeRequest = async () => {
+		if (!onFileOvertimeRequest || !overtimeRequestDay) return;
+		const dayKey = getTimesheetDayBusinessKey(overtimeRequestDay);
+		if (!dayKey) return;
+		const candidate = readOvertimeCandidateFromDay(overtimeRequestDay);
+		await onFileOvertimeRequest({
+			date: dayKey,
+			description: `Overtime approval for ${dayKey} (${candidate.pendingOvertimeHours})`,
+			notes: overtimeRequestNotes.trim() || undefined,
+		});
+		setIsOvertimeModalOpen(false);
+		setOvertimeRequestDay(null);
+		setOvertimeRequestNotes("");
+	};
+
 	// Approval mode description
 	const approvalDescription = approvalMode
 		? `Review ${employeeName}'s timesheet and approve or reject`
@@ -1223,24 +1521,41 @@ export function TimesheetViewModal({
 				open={isOpen}
 				onOpenChange={(open) => !open && onClose()}
 				showCloseButton={false}
-				className="w-[96vw] max-w-[1400px] max-h-[98vh]">
+				className={
+					isPayrollCorrectionMode
+						? "w-[96vw] max-w-[1400px] max-h-[98vh] border-[3px] border-neutral-900"
+						: "w-[96vw] max-w-[1400px] max-h-[98vh]"
+				}>
 				{/* Header */}
-				<div className="flex items-start justify-between mb-5">
+				<div className="mb-5 flex items-start justify-between">
 					<div className="space-y-0.5 flex-1 min-w-0">
 						<h2 className="text-xl font-semibold leading-none tracking-tight text-gray-900">
-							{approvalMode ? "Timesheet Approval" : modalTitle}
+							{approvalMode
+								? "Timesheet Approval"
+								: isPayrollCorrectionMode
+									? timesheet?.payrollPeriod?.name
+										? `Request payroll correction · ${timesheet.payrollPeriod.name}`
+										: "Request payroll correction"
+									: modalTitle}
 						</h2>
-						<p className="text-sm text-gray-500">{approvalDescription}</p>
+						{!isPayrollCorrectionMode && (
+							<p className="text-sm text-gray-500">{approvalDescription}</p>
+						)}
 					</div>
 					<div className="flex items-center gap-2">
-						{timesheet && (
+						{timesheet && isPayrollLocked && !isPayrollCorrectionMode && (
+							<span className="px-3 py-0.5 rounded-md text-xs font-medium border border-neutral-200 bg-white text-neutral-700">
+								Processed in payroll
+							</span>
+						)}
+						{timesheet && !isPayrollCorrectionMode && (
 							<span
 								className="px-3 py-0.5 rounded-md text-xs font-semibold uppercase border border-gray-200 bg-white text-gray-700"
 								style={statusColors.bg !== "#f3f4f6" ? { borderColor: statusColors.bg, color: statusColors.text } : undefined}>
 								{timesheetDisplayStatus}
 							</span>
 						)}
-						{canNavigateToAttendance ? (
+						{canNavigateToAttendance && !isPayrollCorrectionMode ? (
 							<TooltipProvider>
 								<Tooltip>
 									<TooltipTrigger asChild>
@@ -1373,7 +1688,7 @@ export function TimesheetViewModal({
 													Recent Modified Days
 												</p>
 												<p className="text-sm text-gray-500">
-													Latest edited rows appear first.
+													Employee manual edits only.
 												</p>
 											</div>
 											{recentModifiedDayItems.length > 3 && (
@@ -1526,7 +1841,7 @@ export function TimesheetViewModal({
 
 								{/* Calendar with Approval Actions */}
 								<TimesheetCalendarApproval
-									breakdown={timesheet?.breakdown as TimesheetBreakdownDay[]}
+									breakdown={visibleBreakdown}
 									onApprovalChange={setUpdatedBreakdown}
 									payrollPeriodStartDate={periodStart}
 									payrollPeriodEndDate={periodEnd}
@@ -1537,6 +1852,58 @@ export function TimesheetViewModal({
 				) : (
 					// Normal View Mode Content
 					<>
+						{isPayrollCorrectionMode ? (
+							<TimesheetPayrollCorrectionPanel
+								breakdown={
+									(displayBreakdown as TimesheetBreakdownDay[]) ||
+									(timesheet?.breakdown as TimesheetBreakdownDay[]) ||
+									[]
+								}
+								payrollPeriodStartDate={periodStart}
+								payrollPeriodEndDate={periodEnd}
+								payrollCorrectionByDate={
+									isPayrollLocked ? payrollCorrectionByDate : null
+								}
+								initialSelectedDates={payrollCorrectionPreselectDates}
+								isSubmitting={isPayrollCorrectionSubmitting}
+								onCancel={exitPayrollCorrectionMode}
+								onSubmit={async (payload) => {
+									await submitPayrollCorrection(payload);
+									exitPayrollCorrectionMode();
+								}}
+							/>
+						) : (
+							<>
+						{isPayrollLocked && !approvalMode && (
+							<div className="mb-2 rounded-lg border border-neutral-200 bg-white px-3 py-1.5">
+								<p className="truncate text-xs text-neutral-600">
+									<span className="font-semibold text-neutral-900">
+										Processed in payroll
+									</span>
+									{timesheet?.payrollPeriod?.name ? (
+										<span> · {timesheet.payrollPeriod.name}</span>
+									) : null}
+									<span> · Day edits blocked; corrections pay as retro next cut-off</span>
+									{payrollCorrectionSummary.dayCount > 0 ? (
+										<span className="text-neutral-700">
+											{" "}
+											· {payrollCorrectionSummary.dayCount} day
+											{payrollCorrectionSummary.dayCount === 1 ? "" : "s"} with
+											deltas
+											{payrollCorrectionSummary.requested
+												? ` · ${payrollCorrectionSummary.requested} requested`
+												: ""}
+											{payrollCorrectionSummary.ready
+												? ` · ${payrollCorrectionSummary.ready} ready`
+												: ""}
+											{payrollCorrectionSummary.applied
+												? ` · ${payrollCorrectionSummary.applied} applied`
+												: ""}
+										</span>
+									) : null}
+								</p>
+							</div>
+						)}
 						{compensatoryLeaveCredit && compensatoryLeaveCredit.lineCount > 0 ? (
 							compensatoryLeaveCredit.creditApplied === false ? (
 								<div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
@@ -1600,9 +1967,19 @@ export function TimesheetViewModal({
 							onOpenEmployeeProfile={handleOpenEmployeeProfile}
 							onDayClick={canEditDays ? handleDayClick : undefined}
 							onDayRequestAction={!approvalMode ? handleDayRequestAction : undefined}
+							isPayrollLocked={isPayrollLocked}
+							payrollCorrectionByDate={
+								isPayrollLocked ? payrollCorrectionByDate : null
+							}
 							modifiedDayKeys={modifiedDayKeys}
 							payrollPeriodStartDate={periodStart}
 							payrollPeriodEndDate={periodEnd}
+							disableDayTooltips={
+								!!editingDay ||
+								isOvertimeModalOpen ||
+								isOvertimeSubmitWarningOpen ||
+								isPayrollCorrectionMode
+							}
 							belowSummaryContent={
 								recentModifiedDayItems.length > 0 ? (
 									<div className="rounded-lg border border-gray-200 bg-white">
@@ -1612,7 +1989,7 @@ export function TimesheetViewModal({
 													Recent Modified Days
 												</p>
 												<p className="text-sm text-gray-500">
-													Latest edited rows appear first.
+													Employee manual edits only.
 												</p>
 											</div>
 											{recentModifiedDayItems.length > 3 && (
@@ -1673,6 +2050,10 @@ export function TimesheetViewModal({
 																			: isRestDay
 																				? "rest"
 																				: "hours";
+																	const overtimeBadge =
+																		resolveOvertimeDayBadge(
+																			dayPreview || {},
+																		);
 																	return (
 																		<TimesheetDayCell
 																			dayNumber={getDayNumberFromIsoDate(
@@ -1705,15 +2086,8 @@ export function TimesheetViewModal({
 																							},
 																						]
 																					: []),
-																				...(dayPreview?.overtimeHours &&
-																				dayPreview.overtimeHours !==
-																					"0:00"
-																					? [
-																							{
-																								label: "+OT",
-																								tone: "ot" as const,
-																							},
-																						]
+																				...(overtimeBadge
+																					? [overtimeBadge]
 																					: []),
 																				...(dayPreview
 																					?.metadata
@@ -1984,14 +2358,16 @@ export function TimesheetViewModal({
 							scheduleDefaultsLoading={isScheduleDefaultsLoading}
 							defaultTimes={dayEditorDefaultTimes}
 						/>
+							</>
+						)}
 					</>
 				)}
 
-				{/* Footer - Only show when we have timesheet data */}
-				{timesheet && !isLoading && !error && (
+				{/* Footer - Only show when we have timesheet data (hidden in correction mode — panel has its own actions) */}
+				{timesheet && !isLoading && !error && !isPayrollCorrectionMode && (
 					<div className="space-y-3 mt-3">
-						{/* Info Message for Submit Mode */}
-						{showActions && !approvalMode && (
+						{/* Info Message for Submit Mode (hidden when payroll-locked — use locked banner + footer CTA) */}
+						{showActions && !approvalMode && !isPayrollLocked && (
 							<div
 								className="rounded-lg p-3 border border-gray-200 bg-white space-y-2">
 								{canOpenPermissionRequest ? (
@@ -2110,6 +2486,37 @@ export function TimesheetViewModal({
 							<Button variant="outline" onClick={onClose} className="text-sm">
 								{approvalMode ? "Cancel" : "Close"}
 							</Button>
+
+							{/* Payroll-locked: correction CTAs replace submit/resubmit */}
+							{canRequestPayrollCorrection &&
+								(hasExistingPayrollCorrections ? (
+									<>
+										<Button
+											type="button"
+											variant="outline"
+											className="text-sm"
+											onClick={viewPayrollCorrectionRequests}>
+											View requests
+										</Button>
+										<Button
+											type="button"
+											variant="outline"
+											className="text-sm"
+											onClick={() => openPayrollCorrectionMode([])}
+											disabled={isPayrollCorrectionSubmitting}>
+											Request another
+										</Button>
+									</>
+								) : (
+									<Button
+										type="button"
+										className="text-white font-semibold text-sm"
+										style={{ backgroundColor: themeColors.orange }}
+										onClick={() => openPayrollCorrectionMode([])}
+										disabled={isPayrollCorrectionSubmitting}>
+										Request payroll correction
+									</Button>
+								))}
 
 							{/* Submit Mode Buttons */}
 							{shouldShowSubmitButton && (
@@ -2233,6 +2640,47 @@ export function TimesheetViewModal({
 					</div>
 				</div>
 			</Modal>
+
+			<TimesheetOvertimeRequestModal
+				open={isOvertimeModalOpen}
+				onOpenChange={(open) => {
+					setIsOvertimeModalOpen(open);
+					if (!open) {
+						setOvertimeRequestDay(null);
+						setOvertimeRequestNotes("");
+					}
+				}}
+				dateLabel={overtimeRequestDay ? getTimesheetDayBusinessKey(overtimeRequestDay) : ""}
+				pendingOvertimeHours={
+					overtimeRequestDay
+						? readOvertimeCandidateFromDay(overtimeRequestDay).pendingOvertimeHours
+						: "0:00"
+				}
+				description={
+					overtimeRequestDay
+						? (() => {
+								const status = readOvertimeCandidateFromDay(overtimeRequestDay)
+									.overtimeApprovalStatus;
+								if (status === "REJECTED") {
+									return "Previous request was rejected. Submit again for manager review.";
+								}
+								return "Your manager will review this before overtime is included in payroll.";
+							})()
+						: undefined
+				}
+				notes={overtimeRequestNotes}
+				onNotesChange={setOvertimeRequestNotes}
+				onSubmit={handleFileOvertimeRequest}
+				isSubmitting={isFilingOvertimeRequest}
+			/>
+
+			<TimesheetOvertimeSubmitWarningModal
+				open={isOvertimeSubmitWarningOpen}
+				onOpenChange={setIsOvertimeSubmitWarningOpen}
+				days={unfilledOvertimeDays}
+				onConfirm={handleConfirmSubmitWithUnfiledOvertime}
+				isSubmitting={isSubmitting}
+			/>
 		</>
 	);
 }

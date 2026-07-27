@@ -213,15 +213,17 @@ export function ExpenseReimbursementRequestsPage() {
 	// Create request handler
 	const onCreateSubmit = (data: ExpenseReimbursementRequestFormData) => {
 		const requesterId = user?.metadata?.employee?.id;
+		const organizationId = user?.organizationId || user?.organization?.id;
 
-		if (!requesterId) {
+		if (!requesterId || !organizationId) {
 			toast.error(
-				"Employee ID is required. Please ensure you have an associated employee record.",
+				"Employee and organization context are required to create a request.",
 			);
 			return;
 		}
 
 		const payload = {
+			organizationId,
 			requesterId, // Employee who is making the request
 			// reviewerId is optional - will be auto-assigned by backend if not provided
 			type: "EXPENSE_REIMBURSEMENT" as const,

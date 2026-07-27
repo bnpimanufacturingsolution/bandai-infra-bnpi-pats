@@ -2,6 +2,7 @@ import { Clock, Lock } from "lucide-react";
 import { differenceInSeconds } from "date-fns";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
+import { EmployeeAvatar } from "~/components/atoms/EmployeeAvatar";
 import { Button } from "~/components/atoms/Button";
 import { useClockIn, useClockOut, useTodayAttendance } from "~/lib/hooks/useEmployees";
 import { getEmployeeActionBlock } from "~/lib/employee-action-block";
@@ -67,7 +68,7 @@ export function ProfileHeaderCard({
 	const managerName =
 		managerFirstName && managerLastName ? `${managerFirstName} ${managerLastName}` : "";
 	const managerId = (employee as any)?.reportTo?.id || "";
-	const managerInitials = getInitials(managerFirstName, managerLastName);
+	const managerAvatar = (employee as any)?.reportTo?.user?.avatar || null;
 	const initials = useMemo(() => getInitials(firstName, lastName), [firstName, lastName]);
 	const profileId = employee?.id || employeeId;
 
@@ -167,9 +168,12 @@ export function ProfileHeaderCard({
 								? "cursor-pointer hover:border-orange-200 hover:bg-orange-50/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
 								: ""
 						}`}>
-						<div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold">
-							{managerInitials}
-						</div>
+						<EmployeeAvatar
+							src={managerAvatar}
+							alt={managerName}
+							size="sm"
+							className="h-6 w-6"
+						/>
 						<span className="text-xs font-medium text-gray-600">
 							Manager:{" "}
 							<span

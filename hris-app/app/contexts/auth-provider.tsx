@@ -13,15 +13,10 @@ const AUTH_TOKEN_STORAGE_ENABLED =
 	String(import.meta.env.VITE_AUTH_TOKEN_STORAGE_ENABLED || "true")
 		.trim()
 		.toLowerCase() !== "disabled";
-const AUTH_TOKEN_STORAGE_KEY = "authToken";
-const E2E_AUTH_BOOTSTRAP_ENABLED =
-	String(import.meta.env.VITE_E2E_AUTH_BOOTSTRAP || "false")
-		.trim()
-		.toLowerCase() === "true";
 const E2E_AUTH_USER_STORAGE_KEY = "e2eAuthUser";
 
 const getE2eAuthUser = (): User | null => {
-	if (!E2E_AUTH_BOOTSTRAP_ENABLED || typeof window === "undefined") return null;
+	if (typeof window === "undefined") return null;
 	try {
 		const raw = window.localStorage.getItem(E2E_AUTH_USER_STORAGE_KEY);
 		return raw ? (JSON.parse(raw) as User) : null;
@@ -32,9 +27,10 @@ const getE2eAuthUser = (): User | null => {
 
 interface AuthProviderProps {
 	children: ReactNode;
+	disableBootstrap?: boolean;
 }
 
-const AuthProvider = ({ children }: AuthProviderProps) => {
+const AuthProvider = ({ children, disableBootstrap = false }: AuthProviderProps) => {
 	const e2eInitialUser = getE2eAuthUser();
 	const [user, setUser] = useState<User | null>(e2eInitialUser);
 	const [isLoading, setIsLoading] = useState(!e2eInitialUser);
@@ -172,10 +168,10 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 				};
 			});
 		} catch (error: any) {
+			console.error("Error fetching current user:", error);
 			setUser(null);
 			// Only set error if it's not a 401/403 (unauthorized) which is expected when not logged in
 			if (error.status && error.status !== 401 && error.status !== 403) {
-				console.error("Error fetching current user:", error);
 				setError("Failed to fetch user data. Please try again.");
 			}
 		} finally {
@@ -337,17 +333,13 @@ const AuthProvider = ({ children }: AuthProviderProps) => {
 
 	// Check for existing authentication on mount
 	useEffect(() => {
-		if (E2E_AUTH_BOOTSTRAP_ENABLED && getE2eAuthUser()) return;
-		if (
-			AUTH_TOKEN_STORAGE_ENABLED &&
-			typeof window !== "undefined" &&
-			!window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
-		) {
+		if (disableBootstrap) {
 			setIsLoading(false);
 			return;
 		}
+		if (e2eInitialUser) return;
 		getCurrentUser();
-	}, []);
+	}, [disableBootstrap, e2eInitialUser]);
 
 	// Listen for centralized deactivation events (from API client or socket handlers)
 	useEffect(() => {

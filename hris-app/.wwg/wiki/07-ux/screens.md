@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-app/.wwg/wiki/07-ux/screens.md) -->
 # Screens And Routes
 
 Status: INFERRED_FROM_EXISTING_PROJECT
@@ -5,6 +6,7 @@ Status: INFERRED_FROM_EXISTING_PROJECT
 ## Auth, Legal, Support, And Profile
 
 - Login: `/auth/login`.
+- Auth / session splash (`LoadingScreen` atom): full-screen white, Bandai logo (same Cloudinary mark as login), soft indeterminate brand-red bar, optional short message only. Subtitle is screen-reader only. No card, phase labels, or status chrome. Parity: `hris-emp-app` same atom.
 - Legal: `/terms`, `/privacy`.
 - Support: `/help`, `/faq`.
 - Profile/user utilities: `/home`, `/profile/:id`, `/notifications`, `/history`.
@@ -40,7 +42,7 @@ HR routes include:
 - Attendance and time corrections.
 - Performance, tasks, messages, notifications.
 - Payroll, HR payroll, billings, payroll periods, run payroll.
-- Benefit types and benefit enrollments.
+- Benefit types and benefit enrollments / benefits management (list: browse types + enrolled counts; create page at `/hr/benefits-management/new` titled Enroll employees with multi-employee select modal; edit modal with single-employee picker; schedule: recurring cadence).
 - Announcements and document viewer.
 - Add user.
 - Reports for attendance, workforce, and payroll.
@@ -79,4 +81,3 @@ Public/utility routes include:
 The product is an operational HRIS/workforce tool. Screens should prioritize dense but scannable data, reliable workflow actions, explicit states, clear approval context, and predictable navigation across repeated HR operations.
 
 Marketing-style layouts are not the default UX shape for this application.
-

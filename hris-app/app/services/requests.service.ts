@@ -17,6 +17,7 @@ export type RequestType =
 	| "SALARY_CHANGE"
 	| "TRANSFER"
 	| "OVERTIME"
+	| "PAYROLL_CORRECTION"
 	| "SCHEDULE_CHANGE";
 export type RequestWorkflowStateKey = string;
 export type RequestStatus = RequestWorkflowStateKey;

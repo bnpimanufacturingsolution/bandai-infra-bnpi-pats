@@ -1,7 +1,7 @@
 # HRIS API Testing Strategy
 
 Status: ACTIVE_DRAFT
-Last reviewed: 2026-05-26
+Last reviewed: 2026-07-13
 
 ## Scope
 
@@ -121,6 +121,33 @@ $env:ALLOW_SHARED_ENV_LOAD_TESTS = "true"
 $env:LOAD_TEST_BASE_URL = "https://..."
 npm run test:load
 ```
+
+## Employee Benefit Schedule Modes
+
+Product and migration notes: `docs/BENEFIT_SCHEDULE_MODES.md`.
+
+Backend ownership for schedule modes:
+
+- Zod contract and legacy compatibility (including `RECURRING` and attendance-based fields): `tests/employee-benefit-schedule.contract.spec.ts`
+- Payroll source display labels (enrollment vs benefit type) and payslip DMA breakdown: `tests/payroll-source-display.helper.spec.ts`, `tests/payroll-benefit-source.helper.spec.ts`, `tests/payslip-pdf.helper.spec.ts` (see `docs/BENEFIT_SCHEDULE_MODES.md`)
+- Installment generation helper, recurring plan, and attendance ensure plan: `tests/employee-benefit-schedule.helper.spec.ts`
+- Attendance amount pure formulas: `tests/attendance-benefit-amount.helper.spec.ts`
+- Create/update controller wiring, partial-update validation, recurring no bulk-create: `tests/employee-benefit-schedule.controller.spec.ts`
+- Payroll installment selection, lazy recurring ensure, cutoff mismatch exclusion, aggregation, deducted state, and idempotency: `tests/payroll-benefit-source.helper.spec.ts`, `tests/payroll-benefit-integration.spec.ts`
+
+Focused schedule + payroll benefit command:
+
+```bash
+npx tsx node_modules/mocha/bin/mocha --no-config tests/attendance-benefit-amount.helper.spec.ts tests/employee-benefit-schedule.contract.spec.ts tests/employee-benefit-schedule.helper.spec.ts tests/employee-benefit-schedule.controller.spec.ts tests/payroll-benefit-source.helper.spec.ts tests/payroll-benefit-integration.spec.ts
+```
+
+Broader payroll source-truth regression slice that includes benefit installment consumption:
+
+```bash
+npm run test:regression:payroll-source-truth
+```
+
+Frontend schedule UI/evidence ownership remains in `../hris-app` (`docs/BENEFIT_SCHEDULE_MODES.md`, `docs/testing-strategy.md`).
 
 ## Next Coverage Targets
 

@@ -8,6 +8,8 @@ import timesheetService, {
 	type SubmitTimesheetRequest,
 	type UpdateTimesheetConfigRequest,
 	type RequestEditPermissionPayload,
+	type CreateOvertimeRequestPayload,
+	type CreatePayrollCorrectionPayload,
 	type RequestCurrentEditPermissionPayload,
 	type ReviewEditPermissionPayload,
 	type NormalizeTimesheetBreakdownPreviewRequest,
@@ -42,6 +44,9 @@ const getTimesheetErrorMessage = (error: any, fallback: string) => {
 	}
 	if (rawMessage.includes("NO_CHANGES_TO_RESUBMIT")) {
 		return "No changes were detected to resubmit.";
+	}
+	if (rawMessage.includes("OVERTIME_REQUEST_REQUIRED")) {
+		return "File overtime requests for all detected overtime days before submitting.";
 	}
 	return error?.message || fallback;
 };
@@ -283,10 +288,16 @@ export const useLockPeriodTimesheets = () => {
 	});
 };
 
+export type UseTimesheetOptions = {
+	enabled?: boolean;
+	staleTime?: number;
+	refetchOnMount?: boolean | "always";
+};
+
 /**
  * Hook to fetch a single timesheet by ID
  */
-export const useTimesheet = (id: string) => {
+export const useTimesheet = (id: string, options?: UseTimesheetOptions) => {
 	return useQuery<Timesheet>({
 		queryKey: timesheetQueryKeys.timesheets.detail(id),
 		queryFn: () =>
@@ -325,6 +336,7 @@ export const useTimesheet = (id: string) => {
 					"timesheetlines.breakMinutes",
 					"timesheetlines.primaryMarker",
 					"timesheetlines.isDeleted",
+					"timesheetlines.isEffective",
 					"totalDays",
 					"totalHoursWorked",
 					"totalRegularHours",
@@ -356,8 +368,9 @@ export const useTimesheet = (id: string) => {
 					"updatedAt",
 				])
 				.getTimesheetById(id),
-		enabled: !!id,
-		staleTime: 2 * 60 * 1000, // 2 minutes
+		enabled: options?.enabled ?? !!id,
+		staleTime: options?.staleTime ?? 2 * 60 * 1000, // 2 minutes
+		refetchOnMount: options?.refetchOnMount,
 	});
 };
 
@@ -566,6 +579,92 @@ export const useUpdateTimesheetConfig = () => {
 		onError: (error: any) => {
 			toast.error(error?.message || "Failed to update timesheet settings");
 		},
+	});
+};
+
+export const useCreateOvertimeRequest = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async ({
+			timesheetId,
+			payload,
+		}: {
+			timesheetId: string;
+			payload: CreateOvertimeRequestPayload;
+		}) => {
+			return await timesheetService.createOvertimeRequest(timesheetId, payload);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: timesheetQueryKeys.timesheets.all });
+			toast.success("Overtime request submitted");
+		},
+		onError: (error: any) => {
+			toast.error(getTimesheetErrorMessage(error, "Failed to file overtime request"));
+		},
+	});
+};
+
+export const useCreatePayrollCorrection = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async ({
+			timesheetId,
+			payload,
+		}: {
+			timesheetId: string;
+			payload: CreatePayrollCorrectionPayload;
+		}) => {
+			return await timesheetService.createPayrollCorrection(timesheetId, payload);
+		},
+		onSuccess: (_data, variables) => {
+			queryClient.invalidateQueries({ queryKey: timesheetQueryKeys.timesheets.all });
+			queryClient.invalidateQueries({
+				queryKey: [
+					...timesheetQueryKeys.timesheets.details(),
+					"payroll-corrections",
+					variables.timesheetId,
+				],
+			});
+			toast.success(
+				"Payroll correction submitted — it will apply on the next open payroll after approval",
+			);
+		},
+		onError: (error: any) => {
+			const msg = String(error?.message || "");
+			if (msg.includes("TIMESHEET_NOT_PAYROLL_LOCKED")) {
+				toast.error("This timesheet is not payroll-locked. Use normal edit instead.");
+				return;
+			}
+			if (msg.includes("DUPLICATE_OPEN_CORRECTION_DAY")) {
+				toast.error("An open correction already covers one of the selected days.");
+				return;
+			}
+			if (msg.includes("WORKFLOW_NOT_CONFIGURED")) {
+				toast.error("Payroll correction workflow is not configured. Contact HR.");
+				return;
+			}
+			toast.error(getTimesheetErrorMessage(error, "Failed to submit payroll correction"));
+		},
+	});
+};
+
+export const useTimesheetPayrollCorrections = (
+	timesheetId?: string | null,
+	options?: { enabled?: boolean },
+) => {
+	return useQuery({
+		queryKey: [
+			...timesheetQueryKeys.timesheets.details(),
+			"payroll-corrections",
+			timesheetId || "",
+		],
+		enabled: Boolean(timesheetId) && options?.enabled !== false,
+		queryFn: async () => {
+			return await timesheetService.listPayrollCorrections(String(timesheetId));
+		},
+		staleTime: 30_000,
 	});
 };
 

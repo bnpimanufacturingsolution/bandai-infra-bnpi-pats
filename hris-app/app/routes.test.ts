@@ -60,6 +60,12 @@ describe("route configuration contract", () => {
 			file: "routes/hr/employees.new.tsx",
 			id: "admin-configuration-employees-new",
 		});
+		expect(
+			allRoutes.find((route) => route.path === "admin/configuration/employees/:id"),
+		).toMatchObject({
+			file: "routes/employee/employee.$id.tsx",
+			id: "admin-configuration-employees-profile",
+		});
 		expect(allRoutes.find((route) => route.path === "hr/approvals/requests")).toMatchObject({
 			file: "routes/employee/approvals.tsx",
 			id: "hr-approvals-requests",
@@ -68,6 +74,20 @@ describe("route configuration contract", () => {
 			file: "routes/hr/workflows-2.tsx",
 			id: "employee-workflows",
 		});
+	});
+
+	it("keeps admin employee profile under the admin layout workspace", () => {
+		const adminLayout = findLayout("./layouts/admin-layout.tsx");
+		const unifiedLayout = findLayout("./layouts/unified-layout.tsx");
+		const adminChildren = flatten(adminLayout?.children || []);
+		const unifiedChildren = flatten(unifiedLayout?.children || []);
+
+		expect(
+			adminChildren.find((route) => route.path === "admin/configuration/employees/:id"),
+		).toBeTruthy();
+		expect(
+			unifiedChildren.find((route) => route.path === "admin/configuration/employees/:id"),
+		).toBeUndefined();
 	});
 
 	it("keeps public applicant entry points outside authenticated layouts", () => {

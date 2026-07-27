@@ -178,6 +178,9 @@ export async function writeEffectiveTimesheetLine(
 						editedAt: editedAt.toISOString(),
 						editedBy: params.editedBy ?? params.data.editedBy ?? null,
 						reason: params.editReason ?? params.data.editReason ?? null,
+						...(typeof metadata.revision?.source === "string"
+							? { source: metadata.revision.source }
+							: {}),
 					},
 				},
 			},

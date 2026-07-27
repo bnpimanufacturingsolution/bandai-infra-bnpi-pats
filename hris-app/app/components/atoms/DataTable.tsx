@@ -1,4 +1,4 @@
-﻿import * as React from "react";
+import * as React from "react";
 import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { cn } from "~/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./Card";
@@ -122,6 +122,8 @@ export interface DataTableProps<T> {
 	filterColumns?: 1 | 2; // Layout for the advanced filter popover
 	filterValues?: Record<string, string>; // Controlled advanced filter values for server-side lists
 	rowClassName?: (item: T) => string; // Function to determine row className based on item
+	/** When set, entire data rows become clickable (actions column still stops propagation). */
+	onRowClick?: (item: T) => void;
 	// Grouping props
 	groupBy?: GroupConfig; // Configuration for grouping data
 	// Server-side props
@@ -138,8 +140,6 @@ export interface DataTableProps<T> {
 	searchValue?: string; // Controlled search value for server-side search
 	containedScroll?: boolean; // Keep dense admin tables scrolling inside the table shell.
 	toolbarAlign?: "left" | "right";
-	emptyStateClassName?: string;
-	containedBodyClassName?: string;
 }
 
 const DataTable = <T extends Record<string, any>>({
@@ -179,6 +179,7 @@ const DataTable = <T extends Record<string, any>>({
 	addButtonStyle,
 	noCard = false, // Default to false for backward compatibility
 	rowClassName,
+	onRowClick,
 	customFilters,
 	filterPopoverExtra,
 	headerActions,
@@ -202,8 +203,6 @@ const DataTable = <T extends Record<string, any>>({
 	searchValue,
 	containedScroll = false,
 	toolbarAlign = "left",
-	emptyStateClassName,
-	containedBodyClassName,
 }: DataTableProps<T>) => {
 	const getDefaultColumnVisibility = React.useCallback(
 		() =>
@@ -376,10 +375,8 @@ const DataTable = <T extends Record<string, any>>({
 		"hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block";
 	const containedTableHeaderViewportClassName =
 		"overflow-hidden border-b border-neutral-200 bg-neutral-100";
-	const containedTableBodyViewportClassName = cn(
-		"max-h-[calc(100vh-31rem)] min-h-[12rem] overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]",
-		containedBodyClassName,
-	);
+	const containedTableBodyViewportClassName =
+		"max-h-[calc(100vh-31rem)] min-h-[12rem] overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]";
 	const mobileListViewportClassName = cn(
 		"md:hidden space-y-3 mt-6",
 		containedScroll &&
@@ -594,8 +591,22 @@ const DataTable = <T extends Record<string, any>>({
 			{paginatedItems.map((item, index) => (
 				<tr
 					key={item.id || index}
+					role={onRowClick ? "button" : undefined}
+					tabIndex={onRowClick ? 0 : undefined}
+					onClick={onRowClick ? () => onRowClick(item) : undefined}
+					onKeyDown={
+						onRowClick
+							? (event) => {
+									if (event.key === "Enter" || event.key === " ") {
+										event.preventDefault();
+										onRowClick(item);
+									}
+								}
+							: undefined
+					}
 					className={cn(
 						"hover:bg-neutral-50/50 transition-colors group/row",
+						onRowClick && "cursor-pointer",
 						rowClassName?.(item),
 					)}>
 					{visibleColumns.map((column) => (
@@ -605,6 +616,7 @@ const DataTable = <T extends Record<string, any>>({
 								"px-4 py-4 group-hover/row:text-gray-900 transition-colors",
 								getColumnResponsiveClassName(column),
 								getPinnedColumnClassName(column),
+								column.className,
 							)}>
 							{column.render ? (
 								column.render(item[column.key as keyof T], item)
@@ -616,7 +628,10 @@ const DataTable = <T extends Record<string, any>>({
 						</td>
 					))}
 					{hasActionsColumn && (
-						<td className={cn("px-4 py-4", actionColumnClassName)}>
+						<td
+							className={cn("px-4 py-4", actionColumnClassName)}
+							onClick={(event) => event.stopPropagation()}
+							onKeyDown={(event) => event.stopPropagation()}>
 							<div className="flex justify-center">
 								{renderActions ? renderActions(item) : renderDefaultActions(item)}
 							</div>
@@ -638,6 +653,7 @@ const DataTable = <T extends Record<string, any>>({
 								"px-4 py-4",
 								getColumnResponsiveClassName(column),
 								getPinnedColumnClassName(column),
+								column.className,
 							)}>
 							<div className="h-4 bg-gray-200 rounded w-full max-w-[12rem]" />
 						</td>
@@ -709,7 +725,7 @@ const DataTable = <T extends Record<string, any>>({
 	};
 
 	const renderEmptyState = () => (
-		<div className={cn("text-center py-12", emptyStateClassName)}>
+		<div className="text-center py-12">
 			<div className="mx-auto w-12 h-12 text-gray-400 mb-4 flex items-center justify-center">
 				<Search className="w-8 h-8" />
 			</div>
@@ -1246,8 +1262,30 @@ const DataTable = <T extends Record<string, any>>({
 														{group.items.map((item, index) => (
 															<tr
 																key={item.id || index}
+																role={onRowClick ? "button" : undefined}
+																tabIndex={onRowClick ? 0 : undefined}
+																onClick={
+																	onRowClick
+																		? () => onRowClick(item)
+																		: undefined
+																}
+																onKeyDown={
+																	onRowClick
+																		? (event) => {
+																				if (
+																					event.key ===
+																						"Enter" ||
+																					event.key === " "
+																				) {
+																					event.preventDefault();
+																					onRowClick(item);
+																				}
+																			}
+																		: undefined
+																}
 																className={cn(
 																	"hover:bg-neutral-50/50 transition-colors group/row",
+																	onRowClick && "cursor-pointer",
 																	rowClassName?.(item),
 																)}>
 																{visibleColumns.map((column) => (
@@ -1261,6 +1299,7 @@ const DataTable = <T extends Record<string, any>>({
 																			getPinnedColumnClassName(
 																				column,
 																			),
+																			column.className,
 																		)}>
 																		{column.render ? (
 																			column.render(
@@ -1288,7 +1327,13 @@ const DataTable = <T extends Record<string, any>>({
 																		className={cn(
 																			"px-4 py-4",
 																			actionColumnClassName,
-																		)}>
+																		)}
+																		onClick={(event) =>
+																			event.stopPropagation()
+																		}
+																		onKeyDown={(event) =>
+																			event.stopPropagation()
+																		}>
 																		<div className="flex justify-center">
 																			{renderActions
 																				? renderActions(item)
@@ -1379,7 +1424,30 @@ const DataTable = <T extends Record<string, any>>({
 												{group.items.map((item, index) => (
 													<div
 														key={item.id || index}
-														className="p-4 relative group active:bg-neutral-50 transition-colors">
+														role={onRowClick ? "button" : undefined}
+														tabIndex={onRowClick ? 0 : undefined}
+														onClick={
+															onRowClick
+																? () => onRowClick(item)
+																: undefined
+														}
+														onKeyDown={
+															onRowClick
+																? (event) => {
+																		if (
+																			event.key === "Enter" ||
+																			event.key === " "
+																		) {
+																			event.preventDefault();
+																			onRowClick(item);
+																		}
+																	}
+																: undefined
+														}
+														className={cn(
+															"p-4 relative group active:bg-neutral-50 transition-colors",
+															onRowClick && "cursor-pointer",
+														)}>
 														<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 															<div className="flex-1 min-w-0">
 																<div className="flex items-center gap-2 mb-0.5">
@@ -1435,7 +1503,14 @@ const DataTable = <T extends Record<string, any>>({
 																onDelete ||
 																onView ||
 																renderActions) && (
-																<div className="flex items-center justify-start sm:justify-end">
+																<div
+																	className="flex items-center justify-start sm:justify-end"
+																	onClick={(event) =>
+																		event.stopPropagation()
+																	}
+																	onKeyDown={(event) =>
+																		event.stopPropagation()
+																	}>
 																	{renderActions
 																		? renderActions(item)
 																		: renderDefaultActions(
@@ -1460,8 +1535,27 @@ const DataTable = <T extends Record<string, any>>({
 									return (
 										<div
 											key={item.id || index}
+											role={onRowClick ? "button" : undefined}
+											tabIndex={onRowClick ? 0 : undefined}
+											onClick={
+												onRowClick ? () => onRowClick(item) : undefined
+											}
+											onKeyDown={
+												onRowClick
+													? (event) => {
+															if (
+																event.key === "Enter" ||
+																event.key === " "
+															) {
+																event.preventDefault();
+																onRowClick(item);
+															}
+														}
+													: undefined
+											}
 											className={cn(
 												"p-4 relative group active:bg-neutral-50 transition-colors",
+												onRowClick && "cursor-pointer",
 												index !== paginatedItems.length - 1 &&
 													"border-b border-neutral-100",
 											)}>
@@ -1519,7 +1613,12 @@ const DataTable = <T extends Record<string, any>>({
 													onDelete ||
 													onView ||
 													renderActions) && (
-													<div className="flex items-center justify-start sm:justify-end">
+													<div
+														className="flex items-center justify-start sm:justify-end"
+														onClick={(event) => event.stopPropagation()}
+														onKeyDown={(event) =>
+															event.stopPropagation()
+														}>
 														{renderActions
 															? renderActions(item)
 															: renderDefaultActions(item)}

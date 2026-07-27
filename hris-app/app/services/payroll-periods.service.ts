@@ -272,7 +272,10 @@ export interface TimesheetPayrollSourceDetail {
 	id: string;
 	source: "employeeBenefit" | "employeeLoan";
 	code?: string | null;
+	/** Primary label: payroll adjustment / enrollment name. */
 	name: string;
+	/** Benefit type name shown as category. */
+	benefitTypeName?: string | null;
 	direction: "COMPENSATION" | "DEDUCTION" | "LOAN";
 	reconciliationAction?: string | null;
 	amount: number;

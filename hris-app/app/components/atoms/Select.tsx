@@ -1,4 +1,4 @@
-import React, { useId, useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, Check } from "lucide-react";
 
@@ -6,8 +6,6 @@ export interface SelectOption {
 	value: string;
 	label: string;
 	disabled?: boolean;
-	/** Optional leading visual (status dot, icon) shown in trigger and menu. */
-	leading?: React.ReactNode;
 }
 
 export interface SelectProps {
@@ -44,14 +42,10 @@ export const Select: React.FC<SelectProps> = ({
 	dropdownClassName = "",
 }) => {
 	const [isOpen, setIsOpen] = useState(false);
+	const [selectedOption, setSelectedOption] = useState<SelectOption | null>(null);
 	const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
 	const selectRef = useRef<HTMLDivElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
-	const listboxId = useId();
-	const selectedOption = useMemo(
-		() => options.find((opt) => opt.value === value) || null,
-		[options, value],
-	);
 
 	const updateDropdownPosition = useCallback(() => {
 		if (!selectRef.current || typeof window === "undefined") return;
@@ -90,38 +84,37 @@ export const Select: React.FC<SelectProps> = ({
 		(option: SelectOption) => {
 			if (option.disabled) return;
 
+			setSelectedOption(option);
 			onChange?.(option.value);
 			setIsOpen(false);
 		},
 		[onChange],
 	);
 
-	// Close dropdown when clicking outside (pointerdown so we beat label/focus races).
-	// Ignore the same interaction that opened the menu.
-	const ignoreOutsideUntilRef = useRef(0);
+	// Find selected option based on value prop
 	useEffect(() => {
-		if (!isOpen) return;
+		const option = options.find((opt) => opt.value === value);
+		setSelectedOption(option || null);
+	}, [value, options]);
 
-		const handlePointerOutside = (event: Event) => {
-			if (Date.now() < ignoreOutsideUntilRef.current) return;
-			const target = event.target as Node | null;
-			if (!target) return;
-			if (selectRef.current?.contains(target) || listRef.current?.contains(target)) {
-				return;
+	// Close dropdown when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent) => {
+			const target = event.target as Node;
+			if (
+				selectRef.current &&
+				!selectRef.current.contains(target) &&
+				!listRef.current?.contains(target)
+			) {
+				setIsOpen(false);
 			}
-			setIsOpen(false);
 		};
 
-		// Defer attach so the opening click cannot immediately close.
-		const timer = window.setTimeout(() => {
-			document.addEventListener("pointerdown", handlePointerOutside, true);
-		}, 0);
-
+		document.addEventListener("mousedown", handleClickOutside);
 		return () => {
-			window.clearTimeout(timer);
-			document.removeEventListener("pointerdown", handlePointerOutside, true);
+			document.removeEventListener("mousedown", handleClickOutside);
 		};
-	}, [isOpen]);
+	}, []);
 
 	useEffect(() => {
 		if (!isOpen) return;
@@ -180,13 +173,10 @@ export const Select: React.FC<SelectProps> = ({
 	}, [isOpen, options, value, onChange, handleSelect]);
 
 	const toggleDropdown = () => {
-		if (disabled) return;
-		if (!isOpen) {
-			// Suppress outside-close for the opening gesture (label re-click, portal mount).
-			ignoreOutsideUntilRef.current = Date.now() + 250;
-			updateDropdownPosition();
+		if (!disabled) {
+			if (!isOpen) updateDropdownPosition();
+			setIsOpen((current) => !current);
 		}
-		setIsOpen((current) => !current);
 	};
 
 	// Extract height and text size from className, or use defaults
@@ -223,7 +213,7 @@ export const Select: React.FC<SelectProps> = ({
 	`;
 
 	const dropdownClasses = `
-		fixed z-[20000] pointer-events-auto
+		fixed z-[1000]
 		bg-white border border-gray-300 rounded-md
 		shadow-lg
 		overflow-auto
@@ -254,7 +244,6 @@ export const Select: React.FC<SelectProps> = ({
 						ref={listRef}
 						className={dropdownClasses}
 						role="listbox"
-						id={listboxId}
 						style={{
 							left: dropdownPosition.left,
 							top: dropdownPosition.top,
@@ -269,24 +258,8 @@ export const Select: React.FC<SelectProps> = ({
 									className={optionClasses(option, isSelected)}
 									onClick={() => handleSelect(option)}
 									role="option"
-									tabIndex={option.disabled ? -1 : 0}
-									aria-selected={isSelected}
-									aria-disabled={option.disabled || undefined}
-									onKeyDown={(event) => {
-										if (option.disabled) return;
-										if (event.key === "Enter" || event.key === " ") {
-											event.preventDefault();
-											handleSelect(option);
-										}
-									}}>
-									<span className="flex min-w-0 items-center gap-2">
-										{option.leading ? (
-											<span className="inline-flex shrink-0 items-center" aria-hidden="true">
-												{option.leading}
-											</span>
-										) : null}
-										<span className="truncate">{option.label}</span>
-									</span>
+									aria-selected={isSelected}>
+									<span className="truncate">{option.label}</span>
 									{isSelected && (
 										<Check className="h-4 w-4 text-blue-600 flex-shrink-0" />
 									)}
@@ -306,16 +279,7 @@ export const Select: React.FC<SelectProps> = ({
 			{/* Select Trigger */}
 			<div
 				className={triggerClasses}
-				onClick={(event) => {
-					// Stop label ancestors from re-dispatching this click.
-					event.preventDefault();
-					event.stopPropagation();
-					toggleDropdown();
-				}}
-				onMouseDown={(event) => {
-					// Prevent focus/label activation races that close the menu immediately.
-					event.stopPropagation();
-				}}
+				onClick={toggleDropdown}
 				onKeyDown={(e) => {
 					if (e.key === "Enter" || e.key === " ") {
 						e.preventDefault();
@@ -324,25 +288,13 @@ export const Select: React.FC<SelectProps> = ({
 				}}
 				tabIndex={disabled ? -1 : 0}
 				role="combobox"
-				aria-controls={listboxId}
 				aria-expanded={isOpen}
 				aria-haspopup="listbox"
 				aria-required={required}
 				aria-invalid={error}
-				data-select-trigger="true"
 				data-field-invalid={error ? "true" : undefined}>
-				<span
-					className={`flex min-w-0 items-center gap-2 truncate ${
-						selectedOption ? "text-gray-900" : "text-gray-500"
-					}`}>
-					{selectedOption?.leading ? (
-						<span className="inline-flex shrink-0 items-center" aria-hidden="true">
-							{selectedOption.leading}
-						</span>
-					) : null}
-					<span className="truncate">
-						{selectedOption ? selectedOption.label : placeholder}
-					</span>
+				<span className={`truncate ${selectedOption ? "text-gray-900" : "text-gray-400"}`}>
+					{selectedOption ? selectedOption.label : placeholder}
 				</span>
 				{isOpen ? (
 					<ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />

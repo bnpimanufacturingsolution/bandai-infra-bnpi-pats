@@ -86,6 +86,156 @@ Helpers, controller job maps, duplicated event/report normalization, fake generi
 DM4 upload paths, hidden proof blocks, template-only import claims, and local UI
 state may be deleted once the shared run/event lifecycle replaces them cleanly.
 
+## Re-import / Second Workbook Semantics (Admin Migration)
+
+Admin DM import at `/admin/configuration/migration` is **idempotent upsert by
+natural business keys**, not a full wipe-and-replace of the organization.
+
+This is product truth for operators and agents: if HR imports workbook A, then
+uploads workbook B with only a few differences, the second run **patches the
+current database forward**. It does **not** make the DB equal to “only what is
+in B.”
+
+### What a second upload does
+
+| Situation in the new file | Result in the database |
+| --- | --- |
+| Row matches an existing natural key, fields **changed** | **Update** the existing record with values from the new row |
+| Row matches an existing natural key, fields **unchanged** | **Skip** / no-op (or light source-metadata refresh where implemented) |
+| Row is **new** (key not in DB) | **Create** |
+| Row was in an earlier import and is **missing** from the new file | **Left as-is** — not deleted, not soft-deleted by default |
+| Dependent sheet is empty or omitted on re-import | That step creates/updates little or nothing; it does **not** clear prior data for that step |
+
+Each upload is a **new migration run** against live DB state. Progress counters
+and durable events describe that run only (`created` / `updated` / `skipped` /
+`failed`). They do not imply a full world replace.
+
+### Natural keys (match targets)
+
+| Workbook / step | Typical match key | Re-import behavior |
+| --- | --- | --- |
+| DM1 masters (departments, sections, positions, levels, shift types / schedule templates, agencies) | Stable codes / names within the org | Upsert: create if missing, update if present |
+| DM2 catalogs (holidays, leave types, benefit types, …) | Stable codes / names within the org | Upsert: create if missing, update if present |
+| DM3.1 Employees | `organizationId` + `EMP_ID` | Existing employee is **updated** from the row; new `EMP_ID` is **created**. Implementation: `EmployeeImportService` (`hris-api/app/employee/employee-import.service.ts`) via DM3 workbook import |
+| DM3.2 Employee Schedule Assignments | Employee by `EMP_ID` + schedule template by `SCHEDULE_CODE` | Same assignment → skip; same timeslots with different notes/source → light refresh + history; different template/effective dates → reassign `Employee.embeddedSchedule` + `EmployeeScheduleHistory`. Employees omitted from the sheet keep their prior schedule |
+| DM3.3 Reporting Lines | Employee `EMP_ID` → `REPORT_TO_EMP_ID` | Valid pairs update `Employee.reportToId`; invalid / cycle / missing IDs are skipped for that row |
+| DM3.4 Employee Documents / 201 Files | Employee + document type | Existing document **updated**; else **created** |
+| DM3.5 Opening Leave Balances | Employee + leave type + period start/end | Same key **updated** (newer source row wins for that period); else **created**. Embedded leave profile is merged for the same period boundary |
+| DM3.6 Employee Benefits / Loans | Employee + benefit/loan type (and period / date range when supplied) | Existing opening **updated**; else **created** |
+| DM4 attendance / timesheet materialization | Employee match + period / day evidence keys | Additive / upsert materialization with provenance; DM4 must **not** mutate recurring `Employee.embeddedSchedule` |
+
+### What re-import will **not** do by default
+
+- Delete employees (or soft-delete them) only because they disappeared from the
+  new workbook.
+- Clear schedules, reporting lines, documents, leave balances, or benefits only
+  because those sheets are empty or thinner in the second file.
+- Treat the second workbook as a private revision of the first file; the target
+  is always **current DB + rows present in this run**.
+- Roll back the previous import. Failures on individual rows do not undo other
+  rows already applied in the same or earlier runs.
+
+If operators need “file B is the only truth and A-only rows must be removed,”
+that is an **explicit cleanup / audit** path (separate script or approved delete
+flow), not the default admin DM import. Do not invent automatic purge from a
+smaller re-upload.
+
+### Operator expectations
+
+- Re-uploading a corrected DM3 with fixed salaries / phones for a subset of
+  `EMP_ID`s updates those people and leaves everyone else alone.
+- Adding new `EMP_ID`s creates them; dropping IDs from the file does not remove
+  them from HRIS.
+- Changing one `SCHEDULE_CODE` reassigns that employee only when that row is
+  present and different; other employees are unchanged.
+- Re-uploading an identical file should be safe (mostly updates/skips) and must
+  not wipe the organization.
+
+### Implementation anchors
+
+- DM3 workbook orchestration: `hris-api/app/migration/dm3-workbook-import.service.ts`
+- Employee create/update: `hris-api/app/employee/employee-import.service.ts`
+  (`findUnique` on `organizationId_employeeId`, then `update` or `create`)
+- Admin UI entry: `/admin/configuration/migration` (`hris-app` migration route)
+- Durable run/event models: `MigrationRun`, `MigrationRunStep`, `MigrationRunEvent`
+
+Keep this section aligned when changing import code. If re-import semantics ever
+become full replace for a sheet, document that as an explicit, opt-in mode and
+update this section; do not silently change default upsert behavior.
+
+## Section `IS_HR` vs Login Role (GA/HR)
+
+DM1 `Sections.IS_HR = TRUE` (for example `GA/HR` / `GAHR` / `GA/HR 1`) marks the
+**section master** as an HR section. That flag alone does **not** change how a
+user logs in.
+
+### What login actually uses
+
+| Field | Source | Used at login / sidebar? |
+| --- | --- | --- |
+| `Section.isHr` | DM1 Sections sheet | **No** — not read by auth/sidebar |
+| `Department.isHr` | DM1 Departments sheet | Indirectly when role was derived from it |
+| `Employee.role` | DM3 import / role sync | **Yes** — HRIS source of truth for app role |
+| `User.role` | Account row; must match `Employee.role` | **Yes historically** — login profile used this first; now prefers `Employee.role` and heals `User.role` |
+| `Employee.isHrManager` / `isManager` | Derived with role | Flags only |
+
+Sidebar “Working Space” HR items (`Employees`, `Timekeeping`, `Run Payroll`, …)
+require `user.role === "hris-hr-user"` or `"hris-hr-manager"`
+(`Sidebar.tsx` `isHR`). The category heading is always labeled **Working Space**
+(not a separate “HR Working Space” string); HR vs employee is which items appear.
+
+If `Employee.role` is upgraded but `User.role` is left as `hris-employee`,
+logout/login previously still showed the employee sidebar. Login profile now
+prefers linked `Employee.role` and best-effort updates `User.role` to match.
+Role sync/repair also writes both tables.
+
+### Expected derivation (employee import)
+
+When DM3 Employees are imported, role is derived as:
+
+- HR section **or** HR department → `hris-hr-user` (or `hris-hr-manager` if level/manager)
+- Otherwise → `hris-employee` / `hris-employee-manager`
+
+Implementation: `EmployeeImportHelper.resolveDerivedRoleFlags` uses department
+`isHr` **and** section `isHr` (by section name/code and resolved section id).
+
+BNPI often keeps the **department** as `Administration` (`isHr=false`) and marks
+only the **GA/HR section** as `IS_HR=true`. That is valid: section HR must drive
+role derivation.
+
+### Why Rio Jane Marasigan (and other GA/HR) can still log in as employee
+
+Typical failure pattern (proven locally for `EMP_ID=01360`):
+
+1. Employee is linked to section `GA/HR 1` (`code=52`, `isHr=true`).
+2. Department is `Administration` (`isHr=false`).
+3. Stored `Employee.role` remains `hris-employee` because:
+   - DM3 was imported before section `IS_HR` was true, or
+   - role was never re-derived after DM1 section import, or
+   - only section master was updated later without role sync.
+4. Login returns `role: hris-employee` → app treats the account as a normal
+   employee, not HR.
+
+DM1 `IS_HR=true` on GA/HR is therefore **necessary but not sufficient**. The
+employee row must also store an HR role.
+
+### Fixes in product path
+
+1. **Section import role sync** — after a successful DM1 Sections import that
+   creates/updates rows, the API re-derives roles for employees linked to those
+   sections (`syncEmployeeRolesFromOrgStructure` in
+   `hris-api/helper/employee-role-sync.helper.ts`, called from section import).
+2. **Repair script** — `hris-api/scripts/repair-employee-roles-from-section-hr.cjs`
+   re-derives roles for the org (optionally scoped with
+   `--section-codes=GAHR,52,53`).
+3. **Re-import DM3 Employees** after DM1 sections have correct `IS_HR` also
+   re-derives roles for rows present in the workbook.
+
+Operators: after changing section `IS_HR`, either re-import DM1 Sections (with
+role sync), run the repair script, or re-import affected DM3 employees, then
+have the user **log out and log in again** so the JWT/session picks up the new
+role.
+
 ## Source Of Truth Table
 
 | Stage | Workbook | Step Code | Sheet / Step | Purpose | Status In App |
@@ -428,6 +578,10 @@ Do not drop these from planning just because they are currently template-only in
 ## Dependency Rules
 
 - Complete `DM0 / /setup` before DM workbook imports.
+- Treat every admin DM re-upload as **upsert merge into current DB** (create /
+  update / skip by natural keys). Rows present only in an earlier import and
+  missing from the new file are **not** deleted by default. See
+  [Re-import / Second Workbook Semantics (Admin Migration)](#re-import--second-workbook-semantics-admin-migration).
 - Import `DM1` before employee imports because employees depend on departments,
   sections, positions, levels, shifts/schedules, and agencies.
 - Import `DM2` before balances and compliance imports because leave balances,

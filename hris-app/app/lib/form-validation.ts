@@ -76,13 +76,12 @@ export const validateField = (value: FormFieldValue, config: FieldConfig): strin
 
 	// Text field length validation
 	if (config.type === "text" || config.type === "textarea") {
-		const textConfig = config as Extract<FieldConfig, { type: "text" | "textarea" }>;
 		if (typeof value === "string") {
-			if (textConfig.minLength && value.length < textConfig.minLength) {
-				return `Must be at least ${textConfig.minLength} characters`;
+			if ("minLength" in config && config.minLength && value.length < config.minLength) {
+				return `Must be at least ${config.minLength} characters`;
 			}
-			if (textConfig.maxLength && value.length > textConfig.maxLength) {
-				return `Must be no more than ${textConfig.maxLength} characters`;
+			if ("maxLength" in config && config.maxLength && value.length > config.maxLength) {
+				return `Must be no more than ${config.maxLength} characters`;
 			}
 		}
 	}

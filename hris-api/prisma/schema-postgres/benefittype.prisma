@@ -44,6 +44,13 @@ model BenefitType {
   payrollCycleDays      Int     @default(15)
   requireTermsAgreement Boolean @default(true)
 
+  // Enrollment attendance-eligibility policy defaults (prefill on create)
+  defaultEligibilityMode                  BenefitEligibilityMode?
+  defaultEligibilityDisqualifyOnAbsent    Boolean?
+  defaultEligibilityDisqualifyOnLate      Boolean?
+  defaultEligibilityDisqualifyOnUndertime Boolean?
+  defaultEligibilityDisqualifyOnLeave     Boolean?
+
   isActive  Boolean  @default(true)
   isDeleted Boolean  @default(false)
   isDefault Boolean  @default(false)

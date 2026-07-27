@@ -29,7 +29,6 @@ import { EmployeeDocumentsCard } from "~/components/organisms/EmployeeDocumentsC
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import userService from "~/services/user.service";
 import { userKeys } from "~/lib/hooks/useUsers";
-import { resolveUploadUrl } from "~/lib/upload-url";
 
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const AVATAR_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -98,7 +97,7 @@ export function MyProfile() {
 		`${firstName} ${lastName}`.trim() || user?.userName || user?.email || "User";
 	const profileInitials = getInitials(firstName, lastName, user?.email);
 	const currentAvatarUrl = String(user?.avatar || "").trim();
-	const visibleAvatarUrl = avatarPreviewUrl || resolveUploadUrl(currentAvatarUrl);
+	const visibleAvatarUrl = avatarPreviewUrl || currentAvatarUrl;
 
 	// Resignation Flow State
 	const [isResignationModalOpen, setIsResignationModalOpen] = useState(false);
@@ -313,13 +312,16 @@ export function MyProfile() {
 									</span>
 								</div>
 							)}
-							{employeeInfo?.section && (
+							{(employeeInfo as { section?: { name?: string } } | undefined)?.section && (
 								<div className="flex justify-between py-3 border-b border-gray-100">
 									<span className="text-sm font-medium text-gray-600">
 										Section
 									</span>
 									<span className="text-sm text-gray-900">
-										{employeeInfo.section.name}
+										{
+											(employeeInfo as { section?: { name?: string } }).section
+												?.name
+										}
 									</span>
 								</div>
 							)}

@@ -597,7 +597,7 @@ export function AddEmployee() {
 			setValue("employee.payFrequency", formData.employee.payFrequency, {
 				shouldValidate: true,
 			});
-			setValue("employee.documents", formData.employee.documents);
+			setValue("employee.documents", formData.employee.documents as any);
 			setValue("employee.leaveBalances", formData.employee.leaveBalances || [], {
 				shouldDirty: false,
 				shouldValidate: false,

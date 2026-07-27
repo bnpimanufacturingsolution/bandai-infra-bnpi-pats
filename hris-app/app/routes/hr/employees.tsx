@@ -20,7 +20,7 @@ export default function HRUserEmployeesPage() {
 
 	return (
 		<div className="space-y-6">
-			<div className="flex w-fit space-x-1 rounded-lg bg-gray-100 p-1">
+			<div className="flex w-fit space-x-1 rounded-lg bg-gray-100 p-1 print:hidden">
 				{views.map((view) => {
 					const Icon = view.icon;
 					return (

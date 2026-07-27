@@ -74,6 +74,7 @@ web_modules/
 
 # dotenv environment variable files
 .env.development.local
+.env.local-clone
 .env.test.local
 .env.production.local
 
@@ -145,8 +146,6 @@ crash.log
 # Local export artifacts
 exports/
 prisma/seeds/exports/
-storage/backups/
-backups/
 
 # Local spreadsheet/reference files
 *.xls

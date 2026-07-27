@@ -40,6 +40,7 @@ terraform destroy
 
 ## Environment behavior
 
+- `npm run dev` uses a bounded Docker Desktop readiness probe before bootstrapping local Postgres, so a loading Docker Desktop cannot stall the dev command indefinitely.
 - Terraform reads `${repo_root}/.env` and injects values into `app` and `cron`.
 - `DATABASE_URL` is overridden so app/cron use local MongoDB container.
 - `REDIS_HOST` and `REDIS_URL` are overridden so services use Docker networking.

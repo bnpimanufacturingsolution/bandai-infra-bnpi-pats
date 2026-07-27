@@ -43,18 +43,6 @@ export type WorkforceRecruitmentSettingsRecord = {
 	policies: WorkforceRecruitmentPolicyRecord[];
 };
 
-export type WorkforceRecruitmentHeadcountRecord = {
-	departmentId: string | null;
-	departmentName: string | null;
-	sectionId: string | null;
-	sectionName: string | null;
-	positionId: string | null;
-	positionTitle: string | null;
-	levelId: string | null;
-	levelName: string | null;
-	currentHeadcount: number;
-};
-
 export const DEFAULT_WORKFORCE_RECRUITMENT_SETTINGS = {
 	isEnabled: true,
 	enforceDepartmentManagerScope: true,
@@ -277,100 +265,6 @@ export const countCurrentHeadcount = async (
 			...(params.levelId ? { levelId: params.levelId } : {}),
 		},
 	});
-
-export const listCurrentHeadcounts = async (
-	prisma: PrismaExecutor,
-	organizationId: string,
-): Promise<WorkforceRecruitmentHeadcountRecord[]> => {
-	const grouped = await prisma.employee.groupBy({
-		by: ["departmentId", "sectionId", "positionId", "levelId"],
-		where: {
-			organizationId,
-			isDeleted: false,
-			employmentStatus: {
-				in: [...ACTIVE_HEADCOUNT_STATUSES],
-			},
-		},
-		_count: {
-			_all: true,
-		},
-	});
-
-	const departmentIds = Array.from(
-		new Set(grouped.map((row) => row.departmentId).filter(Boolean)),
-	) as string[];
-	const sectionIds = Array.from(
-		new Set(grouped.map((row) => row.sectionId).filter(Boolean)),
-	) as string[];
-	const positionIds = Array.from(
-		new Set(grouped.map((row) => row.positionId).filter(Boolean)),
-	) as string[];
-	const levelIds = Array.from(
-		new Set(grouped.map((row) => row.levelId).filter(Boolean)),
-	) as string[];
-
-	const [departments, sections, positions, levels] = await Promise.all([
-		departmentIds.length
-			? prisma.department.findMany({
-					where: { id: { in: departmentIds }, isDeleted: false },
-					select: { id: true, name: true },
-				})
-			: Promise.resolve([]),
-		sectionIds.length
-			? prisma.section.findMany({
-					where: { id: { in: sectionIds }, isDeleted: false },
-					select: { id: true, name: true },
-				})
-			: Promise.resolve([]),
-		positionIds.length
-			? prisma.position.findMany({
-					where: { id: { in: positionIds }, isDeleted: false },
-					select: { id: true, title: true },
-				})
-			: Promise.resolve([]),
-		levelIds.length
-			? prisma.level.findMany({
-					where: { id: { in: levelIds }, isDeleted: false },
-					select: { id: true, name: true },
-				})
-			: Promise.resolve([]),
-	]);
-
-	const departmentNameById = new Map(
-		departments.map((department) => [department.id, department.name]),
-	);
-	const sectionNameById = new Map(sections.map((section) => [section.id, section.name]));
-	const positionTitleById = new Map(
-		positions.map((position) => [position.id, position.title]),
-	);
-	const levelNameById = new Map(levels.map((level) => [level.id, level.name]));
-
-	return grouped
-		.map((row) => ({
-			departmentId: row.departmentId || null,
-			departmentName: row.departmentId
-				? departmentNameById.get(row.departmentId) || null
-				: null,
-			sectionId: row.sectionId || null,
-			sectionName: row.sectionId ? sectionNameById.get(row.sectionId) || null : null,
-			positionId: row.positionId || null,
-			positionTitle: row.positionId ? positionTitleById.get(row.positionId) || null : null,
-			levelId: row.levelId || null,
-			levelName: row.levelId ? levelNameById.get(row.levelId) || null : null,
-			currentHeadcount: Number(row._count?._all || 0),
-		}))
-		.sort((left, right) => {
-			const departmentCompare = String(left.departmentName || "").localeCompare(
-				String(right.departmentName || ""),
-			);
-			if (departmentCompare) return departmentCompare;
-			const sectionCompare = String(left.sectionName || "").localeCompare(
-				String(right.sectionName || ""),
-			);
-			if (sectionCompare) return sectionCompare;
-			return String(left.positionTitle || "").localeCompare(String(right.positionTitle || ""));
-		});
-};
 
 export const buildHiringRequisitionDescription = (params: {
 	departmentName?: string | null;

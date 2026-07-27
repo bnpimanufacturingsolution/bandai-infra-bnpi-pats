@@ -15,6 +15,8 @@ interface IMigrationController {
 	importDm3EmployeeDocuments(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3OpeningLeaveBalances(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3EmployeeBenefitsLoans(req: Request, res: Response, next: NextFunction): Promise<void>;
+	importDm3CompensationMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
+	importDm3DeductionMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
 	finalizeDm3EmployeeImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	recoverDm3EmployeePostActions(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDm3EmployeePostActionsJob(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -34,6 +36,7 @@ interface IMigrationController {
 	recoverMigrationRun(req: Request, res: Response, next: NextFunction): Promise<void>;
 	rerunMigrationRun(req: Request, res: Response, next: NextFunction): Promise<void>;
 	resolveDm4SourceWorkbooks(req: Request, res: Response, next: NextFunction): Promise<void>;
+	uploadDm4SourceWorkbooks(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IMigrationController): Router => {
@@ -318,6 +321,21 @@ export const router = (route: Router, controller: IMigrationController): Router 
 		controller.importDm3EmployeeBenefitsLoans,
 	);
 	routes.post(
+		"/dm3/import-compensation-mass-upload",
+		uploadImportFile,
+		controller.importDm3CompensationMassUpload,
+	);
+	routes.post(
+		"/dm3/import-deduction-mass-upload",
+		uploadImportFile,
+		controller.importDm3DeductionMassUpload,
+	);
+	routes.post(
+		"/dm3/import-statutory-benefits-upload",
+		uploadImportFile,
+		controller.importDm3StatutoryBenefitsUpload,
+	);
+	routes.post(
 		"/dm3/finalize-employee-import",
 		uploadImportFile,
 		controller.finalizeDm3EmployeeImport,
@@ -342,6 +360,11 @@ export const router = (route: Router, controller: IMigrationController): Router 
 	routes.post("/runs/:runId/recover", controller.recoverMigrationRun);
 	routes.post("/runs/:runId/rerun", controller.rerunMigrationRun);
 	routes.post("/dm4/resolve-source-workbooks", controller.resolveDm4SourceWorkbooks);
+	routes.post(
+		"/dm4/upload-source-workbooks",
+		uploadImportFiles,
+		controller.uploadDm4SourceWorkbooks,
+	);
 
 	/**
 	 * @openapi

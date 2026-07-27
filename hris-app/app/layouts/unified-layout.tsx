@@ -45,12 +45,7 @@ export default function UnifiedLayout() {
 			: "/employee/notifications";
 
 	if (isLoading) {
-		return (
-			<LoadingScreen
-				message="Preparing workspace"
-				subtitle="Loading your navigation, notifications, and HR tools"
-			/>
-		);
+		return <LoadingScreen message="Loading" subtitle="Preparing workspace" />;
 	}
 
 	return (

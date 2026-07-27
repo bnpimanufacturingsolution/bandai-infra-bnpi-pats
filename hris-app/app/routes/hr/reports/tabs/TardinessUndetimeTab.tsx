@@ -1,22 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "~/components/ui/select";
 import { Download } from "lucide-react";
-import { DepartmentSectionPicker } from "~/components/molecules/DepartmentSectionPicker";
 import { useTardinessMetrics } from "~/lib/hooks/useMetrics";
 import { useDepartments } from "~/lib/hooks/useDepartments";
 import { useEmployees } from "~/lib/hooks/useEmployees";
+import { REPORT_SCOPE_VALUES } from "~/lib/utils/report-scope";
 import { buildReportFileName, exportRowsToCsv, exportRowsToPdf } from "~/lib/utils/report-export";
+import { AttendanceReportFilterPopover } from "../components/AttendanceReportFilterPopover";
 import { ReportExportDialog } from "../components/ReportExportDialog";
+import { ReportEmployeeCell } from "../components/ReportEmployeeCell";
 import { ReportTable } from "../components/ReportTable";
-import { ReportScopeDateFilters } from "../components/ReportScopeDateFilters";
 import { useReportScopeFilters } from "../useReportScopeFilters";
 import { toast } from "sonner";
 
@@ -68,6 +62,31 @@ export function TardinessUndetimeTab() {
 		if (selectedDepartment === "all") return allEmployees;
 		return allEmployees.filter((emp: any) => emp.department?.id === selectedDepartment);
 	}, [allEmployees, selectedDepartment]);
+
+	const managerOptions = useMemo(
+		() =>
+			managers.map((emp: any) => {
+				const firstName = emp.person?.personalInfo?.firstName || "";
+				const lastName = emp.person?.personalInfo?.lastName || "";
+				const label = `${firstName} ${lastName}`.trim() || emp.employeeId || emp.id;
+				return { id: emp.id, label };
+			}),
+		[managers],
+	);
+
+	const activeFiltersCount = useMemo(() => {
+		const now = new Date();
+		const isDefaultScope =
+			scope === REPORT_SCOPE_VALUES.MONTHLY &&
+			Number(activeMonth) === now.getMonth() &&
+			Number(activeYear) === now.getFullYear();
+
+		let count = 0;
+		if (!isDefaultScope) count += 1;
+		if (selectedDepartment !== "all") count += 1;
+		if (selectedManager !== "all") count += 1;
+		return count;
+	}, [activeMonth, activeYear, scope, selectedDepartment, selectedManager]);
 
 	const { data, isLoading, error } = useTardinessMetrics(
 		fromIso,
@@ -222,7 +241,14 @@ export function TardinessUndetimeTab() {
 		{
 			key: "employee",
 			header: "Employee",
-			accessor: (row: (typeof filteredMetricsEmployees)[number]) => row.name,
+			render: (row: (typeof filteredMetricsEmployees)[number]) => (
+				<ReportEmployeeCell
+					rosterEmployees={allEmployees}
+					profileId={row.id}
+					employeeId={row.employeeId}
+					fullName={row.name}
+				/>
+			),
 		},
 		{
 			key: "department",
@@ -267,81 +293,44 @@ export function TardinessUndetimeTab() {
 
 	return (
 		<Card>
-			<CardHeader>
-				<CardTitle>Tardiness & Undertime Report</CardTitle>
-				<CardDescription>
-					Tardiness details with time variance, undertime tracking, and overtime hours
-				</CardDescription>
+			<CardHeader className="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+				<div className="min-w-0 space-y-1.5">
+					<CardTitle>Tardiness & Undertime Report</CardTitle>
+					<CardDescription>
+						Tardiness details with time variance, undertime tracking, and overtime hours
+					</CardDescription>
+				</div>
+				<div className="flex shrink-0 flex-wrap items-center gap-2 sm:pt-0.5">
+					<AttendanceReportFilterPopover
+						scope={scope}
+						activeMonth={activeMonth}
+						activeYear={activeYear}
+						yearOptions={yearOptions}
+						dateRange={dateRange}
+						onScopeChange={setScope}
+						onMonthChange={setMonth}
+						onYearChange={setYear}
+						onDateRangeChange={setDateRange}
+						departments={departments}
+						selectedDepartment={selectedDepartment}
+						onDepartmentChange={(value) => {
+							setSelectedDepartment(value);
+							setSelectedManager("all");
+						}}
+						managerOptions={managerOptions}
+						selectedManager={selectedManager}
+						onManagerChange={setSelectedManager}
+						activeFiltersCount={activeFiltersCount}
+						onClearAll={handleClearFilters}
+						testIdPrefix="tardiness-report"
+					/>
+					<Button variant="outline" className="h-9" onClick={openExportModal}>
+						<Download className="w-4 h-4 mr-2" />
+						Export
+					</Button>
+				</div>
 			</CardHeader>
 			<CardContent className="space-y-6">
-				{/* Filters */}
-				<div className="flex flex-col xl:flex-row gap-4 items-end justify-between">
-					<div className="flex flex-1 flex-col md:flex-row gap-2 md:gap-4 w-full flex-wrap">
-						<ReportScopeDateFilters
-							scope={scope}
-							activeMonth={activeMonth}
-							activeYear={activeYear}
-							yearOptions={yearOptions}
-							dateRange={dateRange}
-							onScopeChange={setScope}
-							onMonthChange={setMonth}
-							onYearChange={setYear}
-							onDateRangeChange={setDateRange}
-						/>
-						<div className="w-full md:w-[160px]">
-							<label className="block text-sm font-medium mb-1">Department</label>
-							<DepartmentSectionPicker
-								variant="report"
-								departments={departments}
-								sections={[]}
-								departmentId={selectedDepartment}
-								onDepartmentChange={(value) => {
-									setSelectedDepartment(value);
-									setSelectedManager("all");
-								}}
-								onSectionChange={(value) => {
-									setSelectedDepartment(value);
-									setSelectedManager("all");
-								}}
-							/>
-						</div>
-						<div className="w-full md:w-[160px]">
-							<label className="block text-sm font-medium mb-1">Manager</label>
-							<Select value={selectedManager} onValueChange={setSelectedManager}>
-								<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">All Managers</SelectItem>
-									{managers.map((emp: any) => (
-										<SelectItem key={`manager-${emp.id}`} value={emp.id}>
-											{emp.person?.personalInfo?.firstName}{" "}
-											{emp.person?.personalInfo?.lastName}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-					</div>
-
-					{/* Actions */}
-					<div className="flex gap-2 shrink-0 w-full md:w-auto mt-4 md:mt-0 items-center">
-						<Button
-							variant="ghost"
-							onClick={handleClearFilters}
-							className="flex-1 md:flex-none text-muted-foreground hover:text-foreground h-10 px-4">
-							Clear Filters
-						</Button>
-						<Button
-							variant="outline"
-							className="flex-1 md:flex-none"
-							onClick={openExportModal}>
-							<Download className="w-4 h-4 mr-2" />
-							Export
-						</Button>
-					</div>
-				</div>
-
 				{/* Stats Cards */}
 				{isLoading ? (
 					<div className="text-center py-8 text-gray-500">Loading metrics...</div>
@@ -351,33 +340,29 @@ export function TardinessUndetimeTab() {
 					</div>
 				) : (
 					<>
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-							<Card>
-								<CardHeader className="pb-2">
-									<CardTitle className="text-sm font-medium">
+						<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+							<div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2 shadow-sm">
+								<div className="min-w-0">
+									<p className="text-xs font-medium text-muted-foreground">
 										Total Tardiness
-									</CardTitle>
-								</CardHeader>
-								<CardContent>
-									<div className="text-2xl font-bold">
-										{metrics?.totalTardinessInstances || 0}
-									</div>
-									<p className="text-xs text-gray-500">Instances</p>
-								</CardContent>
-							</Card>
-							<Card>
-								<CardHeader className="pb-2">
-									<CardTitle className="text-sm font-medium">
+									</p>
+									<p className="text-[11px] text-muted-foreground/80">Instances</p>
+								</div>
+								<p className="text-xl font-semibold tabular-nums leading-none">
+									{metrics?.totalTardinessInstances || 0}
+								</p>
+							</div>
+							<div className="flex items-center justify-between gap-3 rounded-lg border bg-card px-3 py-2 shadow-sm">
+								<div className="min-w-0">
+									<p className="text-xs font-medium text-muted-foreground">
 										Total Undertime
-									</CardTitle>
-								</CardHeader>
-								<CardContent>
-									<div className="text-2xl font-bold">
-										{metrics?.totalUndertimeHours?.toFixed(2) || 0}
-									</div>
-									<p className="text-xs text-gray-500">Hours</p>
-								</CardContent>
-							</Card>
+									</p>
+									<p className="text-[11px] text-muted-foreground/80">Hours</p>
+								</div>
+								<p className="text-xl font-semibold tabular-nums leading-none">
+									{metrics?.totalUndertimeHours?.toFixed(2) || 0}
+								</p>
+							</div>
 						</div>
 
 						{/* Tabs for different views */}

@@ -21,6 +21,8 @@ import {
 } from "../../zod/applicant.zod";
 import { CreateRecruitmentActivitySchema } from "../../zod/recruitmentActivity.zod";
 import { ApplicantAttachmentTypeEnum } from "../../zod/applicantAttachment.zod";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
 import { config as runtimeConfig } from "../../config/config";
 import { redisClient } from "../../config/redis";
@@ -403,6 +405,37 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			await invalidateApplicantCaches(applicant?.id);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.CREATE_APPLICANT,
+				description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_CREATED}: ${applicant?.id || "unknown"}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_CREATION,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.APPLICANT,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.APPLICANT,
+				entityId: applicant?.id || "unknown",
+				changesBefore: null,
+				changesAfter: applicant
+					? {
+							id: applicant.id,
+							applicantId: applicant.applicantId,
+							organizationId: applicant.organizationId,
+							createdAt: applicant.createdAt,
+							updatedAt: applicant.updatedAt,
+						}
+					: null,
+				description: `${config.AUDIT_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_CREATED}: ${applicant?.id || "unknown"}`,
+			});
+
 			res.status(201).json(buildSuccessResponse(config.SUCCESS.APPLICANT.CREATED, applicant, 201));
 		} catch (error) {
 			applicantLogger.error(`${config.ERROR.APPLICANT.CREATE_FAILED}: ${error}`);
@@ -507,6 +540,16 @@ export const controller = (prisma: PrismaClient) => {
 					? groupDataByField(applicants, effectiveGroupBy as string)
 					: applicants;
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.GET_ALL_APPLICANT,
+				description: config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANTS_RETRIEVED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_LIST,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse(config.SUCCESS.APPLICANT.RETRIEVED_ALL, {
 					...(document && { applicants: processedData }),
@@ -565,6 +608,16 @@ export const controller = (prisma: PrismaClient) => {
 			if (preHireSetup) {
 				(applicant as any).preHireSetup = preHireSetup;
 			}
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.GET_APPLICANT,
+				description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_RETRIEVED}: ${id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_DETAILS,
+				},
+			});
 
 			res
 				.status(200)
@@ -633,6 +686,29 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			await invalidateApplicantCaches(id);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.UPDATE_APPLICANT,
+				description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${updatedApplicant.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_UPDATE,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.APPLICANT,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.APPLICANT,
+				entityId: updatedApplicant.id,
+				changesBefore: existingApplicant,
+				changesAfter: updatedApplicant,
+				description: `${config.AUDIT_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${updatedApplicant.id}`,
+			});
+
 			res
 				.status(200)
 				.json(buildSuccessResponse(config.SUCCESS.APPLICANT.UPDATED, { applicant: updatedApplicant }, 200));
@@ -664,6 +740,15 @@ export const controller = (prisma: PrismaClient) => {
 				req as AuthRequest,
 				requestOrganizationId,
 			);
+
+			const existingApplicant = await prisma.applicant.findFirst({
+				where: { id, organizationId: requestOrganizationId, isDeleted: false },
+			});
+
+			if (!existingApplicant) {
+				res.status(404).json(buildErrorResponse(config.ERROR.APPLICANT.NOT_FOUND, 404));
+				return;
+			}
 
 			let actionResult:
 				| {
@@ -774,6 +859,40 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			await invalidateApplicantCaches(id);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.UPDATE_APPLICANT,
+				description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${id} (${validation.data.action})`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_UPDATE,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.APPLICANT,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.APPLICANT,
+				entityId: id,
+				changesBefore: {
+					id: existingApplicant.id,
+					currentWorkflowStateKey: existingApplicant.currentWorkflowStateKey,
+					updatedAt: existingApplicant.updatedAt,
+				},
+				changesAfter: updatedApplicant
+					? {
+							id: updatedApplicant.id,
+							currentWorkflowStateKey: updatedApplicant.currentWorkflowStateKey,
+							updatedAt: updatedApplicant.updatedAt,
+							action: validation.data.action,
+						}
+					: null,
+				description: `${config.AUDIT_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${id} (${validation.data.action})`,
+			});
+
 			res.status(200).json(buildSuccessResponse("Applicant action completed", updatedApplicant, 200));
 		} catch (error: any) {
 			applicantLogger.error(`Failed applicant action for ${id}: ${error}`);
@@ -810,6 +929,16 @@ export const controller = (prisma: PrismaClient) => {
 				isDeleted: false,
 			},
 			orderBy: { occurredAt: "desc" },
+		});
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.GET_APPLICANT,
+			description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_RETRIEVED}: ${id} activities`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_DETAILS,
+			},
 		});
 
 		res.status(200).json(buildSuccessResponse("Applicant activities retrieved", { activities }, 200));
@@ -861,6 +990,33 @@ export const controller = (prisma: PrismaClient) => {
 		});
 
 		await invalidateApplicantCaches(id);
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.UPDATE_APPLICANT,
+			description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${id} activity`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_UPDATE,
+			},
+		});
+
+		logAudit(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.AUDIT_LOG.ACTIONS.UPDATE,
+			resource: config.AUDIT_LOG.RESOURCES.APPLICANT,
+			severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+			entityType: config.AUDIT_LOG.ENTITY_TYPES.APPLICANT,
+			entityId: id,
+			changesBefore: null,
+			changesAfter: {
+				activityId: activity.id,
+				type: activity.type,
+				title: activity.title,
+			},
+			description: `${config.AUDIT_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${id} activity`,
+		});
+
 		res.status(201).json(buildSuccessResponse("Applicant activity created", activity, 201));
 	};
 
@@ -879,6 +1035,16 @@ export const controller = (prisma: PrismaClient) => {
 				isDeleted: false,
 			},
 			orderBy: { uploadedAt: "desc" },
+		});
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.GET_APPLICANT,
+			description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_RETRIEVED}: ${id} attachments`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_DETAILS,
+			},
 		});
 
 		res.status(200).json(buildSuccessResponse("Applicant attachments retrieved", { attachments }, 200));
@@ -929,6 +1095,33 @@ export const controller = (prisma: PrismaClient) => {
 		});
 
 		await invalidateApplicantCaches(id);
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.UPDATE_APPLICANT,
+			description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${id} attachment`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_UPDATE,
+			},
+		});
+
+		logAudit(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.AUDIT_LOG.ACTIONS.UPDATE,
+			resource: config.AUDIT_LOG.RESOURCES.APPLICANT,
+			severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+			entityType: config.AUDIT_LOG.ENTITY_TYPES.APPLICANT,
+			entityId: id,
+			changesBefore: null,
+			changesAfter: {
+				attachmentId: attachment.id,
+				type: attachment.type,
+				name: attachment.name,
+			},
+			description: `${config.AUDIT_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${id} attachment`,
+		});
+
 		res.status(201).json(buildSuccessResponse("Applicant attachment uploaded", attachment, 201));
 	};
 
@@ -939,6 +1132,15 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(401).json(buildErrorResponse(config.ERROR.COMMON.UNAUTHORIZED, 401));
 			return;
 		}
+
+		const existingAttachment = await prisma.applicantAttachment.findFirst({
+			where: {
+				id: attachmentId,
+				applicantId: id,
+				organizationId,
+				isDeleted: false,
+			},
+		});
 
 		await prisma.applicantAttachment.updateMany({
 			where: {
@@ -953,6 +1155,41 @@ export const controller = (prisma: PrismaClient) => {
 		});
 
 		await invalidateApplicantCaches(id);
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.UPDATE_APPLICANT,
+			description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${id} attachment removed`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_UPDATE,
+			},
+		});
+
+		logAudit(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.AUDIT_LOG.ACTIONS.UPDATE,
+			resource: config.AUDIT_LOG.RESOURCES.APPLICANT,
+			severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+			entityType: config.AUDIT_LOG.ENTITY_TYPES.APPLICANT,
+			entityId: id,
+			changesBefore: existingAttachment
+				? {
+						attachmentId: existingAttachment.id,
+						type: existingAttachment.type,
+						isDeleted: existingAttachment.isDeleted,
+					}
+				: null,
+			changesAfter: existingAttachment
+				? {
+						attachmentId: existingAttachment.id,
+						type: existingAttachment.type,
+						isDeleted: true,
+					}
+				: null,
+			description: `${config.AUDIT_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_UPDATED}: ${id} attachment removed`,
+		});
+
 		res.status(200).json(buildSuccessResponse("Applicant attachment removed", {}, 200));
 	};
 
@@ -964,12 +1201,44 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
+		const existingApplicant = await prisma.applicant.findFirst({
+			where: { id, organizationId, isDeleted: false },
+		});
+
+		if (!existingApplicant) {
+			res.status(404).json(buildErrorResponse(config.ERROR.APPLICANT.NOT_FOUND, 404));
+			return;
+		}
+
 		await prisma.applicant.updateMany({
 			where: { id, organizationId, isDeleted: false },
 			data: { isDeleted: true },
 		});
 
 		await invalidateApplicantCaches(id);
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.DELETE_APPLICANT,
+			description: `${config.ACTIVITY_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_DELETED}: ${id}`,
+			page: {
+				url: req.originalUrl,
+				title: config.ACTIVITY_LOG.APPLICANT.PAGES.APPLICANT_DELETION,
+			},
+		});
+
+		logAudit(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: config.AUDIT_LOG.ACTIONS.DELETE,
+			resource: config.AUDIT_LOG.RESOURCES.APPLICANT,
+			severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+			entityType: config.AUDIT_LOG.ENTITY_TYPES.APPLICANT,
+			entityId: id,
+			changesBefore: existingApplicant,
+			changesAfter: null,
+			description: `${config.AUDIT_LOG.APPLICANT.DESCRIPTIONS.APPLICANT_DELETED}: ${id}`,
+		});
+
 		res.status(200).json(buildSuccessResponse(config.SUCCESS.APPLICANT.DELETED, {}, 200));
 	};
 

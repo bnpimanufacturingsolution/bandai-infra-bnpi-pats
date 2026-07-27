@@ -39,14 +39,6 @@ export const CreateDeviceSchema = DeviceSchema.omit({
 	updatedAt: true,
 	isDeleted: true,
 	employees: true,
-	organizationId: true,
-	config: true,
-	access: true,
-}).extend({
-	organizationId: z.string().refine((val) => isValidObjectId(val)).optional(),
-	protocol: Protocol.default("http"),
-	config: z.any().optional(),
-	access: AccessSchema.optional(),
 });
 
 export type CreateDevice = z.infer<typeof CreateDeviceSchema>;

@@ -203,45 +203,45 @@ export function EmployeeCalendarCard({ employeeId }: EmployeeCalendarCardProps) 
 	};
 
 	return (
-		<Card id="dashboard-employee-calendar" className="h-full">
-			<CardHeader>
+		<Card id="dashboard-employee-calendar" className="h-full gap-4 py-4">
+			<CardHeader className="pb-2">
 				<div className="flex items-center justify-between">
-					<CardTitle className="flex items-center gap-2">
-						<CalendarDays className="w-5 h-5 text-orange-500" />
+					<CardTitle className="flex items-center gap-2 text-base font-semibold">
+						<CalendarDays className="h-4 w-4 text-gray-400" />
 						Calendar
 					</CardTitle>
 					<button
 						onClick={handleViewAll}
-						className="text-gray-600 text-sm hover:text-gray-800">
-						View All &gt;
+						className="text-xs text-gray-400 hover:text-gray-600">
+						View all →
 					</button>
 				</div>
-				<p className="text-sm text-gray-500">{monthLabel}</p>
+				<p className="text-xs text-gray-500">{monthLabel}</p>
 			</CardHeader>
-			<CardContent className="h-full flex flex-col gap-2.5">
+			<CardContent className="pt-0">
 				{isLoading ? (
-					<p className="text-sm text-gray-500">Loading upcoming calendar items...</p>
+					<p className="text-sm text-gray-500">Loading...</p>
 				) : upcomingItems.length === 0 ? (
-					<p className="text-sm text-gray-500">No upcoming calendar items this month.</p>
+					<p className="text-sm text-gray-500">No upcoming items this month.</p>
 				) : (
-					upcomingItems.map((item) => (
-						<button
-							key={item.id}
-							type="button"
-							onClick={() => handleItemClick(item)}
-							className="w-full text-left rounded-lg border border-gray-200 px-3 py-2.5 bg-white hover:bg-gray-50 hover:border-orange-200 transition-colors">
-							<div className="flex items-center justify-between gap-2">
-								<p className="text-sm font-medium text-gray-900 truncate">
-									{item.title}
-								</p>
-								<span
-									className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${typeChipClass[item.type]}`}>
-									{item.type}
-								</span>
-							</div>
-							<p className="mt-1 text-xs text-gray-500">{item.displayDate}</p>
-						</button>
-					))
+					<div className="space-y-1">
+						{upcomingItems.map((item) => (
+							<button
+								key={item.id}
+								type="button"
+								onClick={() => handleItemClick(item)}
+								className="w-full rounded-lg border border-gray-100 px-3 py-1.5 text-left transition hover:bg-gray-50">
+								<div className="flex items-center justify-between gap-2">
+									<p className="truncate text-sm font-medium text-gray-800">{item.title}</p>
+									<span
+										className={`shrink-0 rounded px-1.5 py-px text-[10px] font-medium ${typeChipClass[item.type]}`}>
+										{item.type}
+									</span>
+								</div>
+								<p className="text-xs text-gray-400">{item.displayDate}</p>
+							</button>
+						))}
+					</div>
 				)}
 			</CardContent>
 		</Card>

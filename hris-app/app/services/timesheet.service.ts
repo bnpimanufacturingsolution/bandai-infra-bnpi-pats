@@ -92,6 +92,12 @@ export interface TimesheetBreakdown {
 		gracePeriodMinutes?: number;
 		withinGrace?: boolean;
 		scheduleSnapshot?: any;
+		overtimeCandidate?: boolean;
+		pendingOvertimeMinutes?: number;
+		pendingOvertimeHours?: string;
+		overtimeCandidateReason?: string | null;
+		overtimeRequestId?: string | null;
+		overtimeApprovalStatus?: "NONE" | "REQUESTED" | "APPROVED" | "REJECTED";
 	};
 	revisionSummary?: {
 		isModified: boolean;
@@ -223,6 +229,7 @@ export interface Timesheet {
 	lockedBy?: string | null;
 	lockReason?: string | null;
 	lockRunId?: string | null;
+	lockedEmployeePayrollId?: string | null;
 	rejectionReason?: string | null;
 	notes?: string | null;
 	editPermissionStatus?: TimesheetEditPermissionStatus;
@@ -267,6 +274,7 @@ export interface Timesheet {
 		payDate: string;
 		status: string;
 	};
+	approvedEditedDaysSummary?: ApprovedEditedDaysSummary;
 }
 
 export interface TimesheetsResponse {
@@ -315,6 +323,13 @@ export interface ApprovedEditedDaySummaryItem {
 	sourcePeriodType: "CURRENT" | "PAST";
 	approvedAt: string;
 	changeType: "TIME" | "STATUS" | "NOTES" | "MIXED";
+	isManualEdit?: boolean;
+	changedFields?: Array<{
+		field: string;
+		label: string;
+		before: unknown;
+		after: unknown;
+	}>;
 	dayPreview?: {
 		timeIn: string | null;
 		timeOut: string | null;
@@ -371,6 +386,7 @@ export interface TimesheetActionRequest {
 	rejectionReason?: string;
 	notes?: string;
 	breakdown?: TimesheetBreakdown[];
+	editedDayKeys?: string[];
 }
 
 export interface TimesheetConfig {
@@ -430,10 +446,46 @@ export interface UpdateTimesheetConfigRequest {
 export interface SubmitTimesheetRequest {
 	notes?: string;
 	breakdown?: TimesheetBreakdown[];
+	editedDayKeys?: string[];
 }
 
 export interface RequestEditPermissionPayload {
 	reason: string;
+}
+
+export interface CreateOvertimeRequestPayload {
+	date?: string;
+	timesheetLineId?: string;
+	description?: string;
+	notes?: string;
+}
+
+export type PayrollCorrectionHoursType =
+	| "REGULAR"
+	| "OT"
+	| "ND"
+	| "LATE"
+	| "ABSENT"
+	| "EARLY_OUT"
+	| "OTHER";
+
+export interface PayrollCorrectionDayDeltaPayload {
+	date: string;
+	hoursType: PayrollCorrectionHoursType;
+	beforeMinutes: number;
+	afterMinutes: number;
+	deltaMinutes?: number;
+	/** Proposed clocks (HH:mm) from the correction form; optional audit fields */
+	timeIn?: string;
+	timeOut?: string;
+	notes?: string;
+}
+
+export interface CreatePayrollCorrectionPayload {
+	reason: string;
+	dayDeltas: PayrollCorrectionDayDeltaPayload[];
+	description?: string;
+	notes?: string;
 }
 
 export interface RequestCurrentEditPermissionPayload {
@@ -449,8 +501,14 @@ export interface ReviewEditPermissionPayload {
 
 export interface UpdateTimesheetRequest {
 	breakdown?: TimesheetBreakdown[];
+	editedDayKeys?: string[];
 	status?: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "REVISED";
 	notes?: string;
+}
+
+export interface TimesheetSubmitPayload {
+	breakdown: TimesheetBreakdown[];
+	editedDayKeys: string[];
 }
 
 export interface NormalizeTimesheetBreakdownPreviewRequest {
@@ -981,6 +1039,56 @@ class TimesheetService extends APIService {
 		} catch (error: any) {
 			console.error("Error submitting timesheet:", error);
 			throw new Error(error.message || "Failed to submit timesheet");
+		}
+	}
+
+	async createOvertimeRequest(
+		timesheetId: string,
+		payload: CreateOvertimeRequestPayload,
+	): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>(
+				`/api/timesheet/${timesheetId}/overtime-requests`,
+				payload,
+			);
+			if (!response.data) {
+				throw new Error(response.message || "Failed to create overtime request");
+			}
+			return response.data;
+		} catch (error: any) {
+			console.error("Error creating overtime request:", error);
+			throw new Error(error.message || "Failed to create overtime request");
+		}
+	}
+
+	async createPayrollCorrection(
+		timesheetId: string,
+		payload: CreatePayrollCorrectionPayload,
+	): Promise<any> {
+		try {
+			const response = await hrisApiClient.post<any>(
+				`/api/timesheet/${timesheetId}/payroll-corrections`,
+				payload,
+			);
+			if (!response.data) {
+				throw new Error(response.message || "Failed to create payroll correction");
+			}
+			return response.data;
+		} catch (error: any) {
+			console.error("Error creating payroll correction:", error);
+			throw new Error(error.message || "Failed to create payroll correction");
+		}
+	}
+
+	async listPayrollCorrections(timesheetId: string): Promise<any> {
+		try {
+			const response = await hrisApiClient.get<any>(
+				`/api/timesheet/${timesheetId}/payroll-corrections`,
+			);
+			return response.data;
+		} catch (error: any) {
+			console.error("Error listing payroll corrections:", error);
+			throw new Error(error.message || "Failed to list payroll corrections");
 		}
 	}
 

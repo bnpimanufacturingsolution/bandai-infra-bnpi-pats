@@ -11,6 +11,14 @@ import { cn } from "~/lib/utils";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { Select } from "~/components/atoms/Select";
 
+export interface Holiday {
+	date: Date;
+	name: string;
+	type: "COMPANY" | "GOVERNMENT";
+	description?: string;
+	id?: string;
+}
+
 function Calendar({
 	className,
 	classNames,
@@ -19,11 +27,17 @@ function Calendar({
 	buttonVariant = "ghost",
 	formatters,
 	components,
+	holidays,
+	onHolidayClick,
 	...props
 }: React.ComponentProps<typeof DayPicker> & {
 	buttonVariant?: React.ComponentProps<typeof Button>["variant"];
+	holidays?: Holiday[];
+	onHolidayClick?: (holiday: Holiday) => void;
 }) {
 	const defaultClassNames = getDefaultClassNames();
+	void holidays;
+	void onHolidayClick;
 
 	return (
 		<DayPicker

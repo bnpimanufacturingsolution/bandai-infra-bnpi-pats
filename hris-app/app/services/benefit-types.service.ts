@@ -42,6 +42,11 @@ export interface BenefitType {
 	defaultInstallments?: number;
 	payrollCycleDays?: number;
 	requireTermsAgreement?: boolean;
+	defaultEligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED" | null;
+	defaultEligibilityDisqualifyOnAbsent?: boolean | null;
+	defaultEligibilityDisqualifyOnLate?: boolean | null;
+	defaultEligibilityDisqualifyOnUndertime?: boolean | null;
+	defaultEligibilityDisqualifyOnLeave?: boolean | null;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -67,6 +72,11 @@ export interface CreateBenefitTypeRequest {
 	defaultInstallments?: number;
 	payrollCycleDays?: number;
 	requireTermsAgreement?: boolean;
+	defaultEligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED" | null;
+	defaultEligibilityDisqualifyOnAbsent?: boolean | null;
+	defaultEligibilityDisqualifyOnLate?: boolean | null;
+	defaultEligibilityDisqualifyOnUndertime?: boolean | null;
+	defaultEligibilityDisqualifyOnLeave?: boolean | null;
 	organizationId: string;
 }
 
@@ -91,6 +101,11 @@ export interface UpdateBenefitTypeRequest {
 	defaultInstallments?: number;
 	payrollCycleDays?: number;
 	requireTermsAgreement?: boolean;
+	defaultEligibilityMode?: "ENROLLED_ALWAYS" | "ATTENDANCE_QUALIFIED" | null;
+	defaultEligibilityDisqualifyOnAbsent?: boolean | null;
+	defaultEligibilityDisqualifyOnLate?: boolean | null;
+	defaultEligibilityDisqualifyOnUndertime?: boolean | null;
+	defaultEligibilityDisqualifyOnLeave?: boolean | null;
 }
 
 export interface BenefitTypeResponse {

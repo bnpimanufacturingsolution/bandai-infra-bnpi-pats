@@ -14,21 +14,29 @@ enum BenefitDeductionStatus {
   WAIVED
 }
 
+enum BenefitScheduleMode {
+  TIME_BOUND
+  FIXED_INSTALLMENTS
+  RECURRING
+}
+
 enum BenefitAttendanceAmountBasis {
   PER_DAY
   PER_CUTOFF
 }
 
+/// Cadence filter under scheduleMode RECURRING. Null/missing = EVERY_CUTOFF.
 enum BenefitRecurrenceFrequency {
   EVERY_CUTOFF
   MONTHLY
   YEARLY
 }
 
-enum BenefitScheduleMode {
-  TIME_BOUND
-  FIXED_INSTALLMENTS
-  RECURRING
+/// Whether a period installment may pay based on attendance quality.
+/// ENROLLED_ALWAYS = schedule-only (legacy default). ATTENDANCE_QUALIFIED = all-or-nothing flags.
+enum BenefitEligibilityMode {
+  ENROLLED_ALWAYS
+  ATTENDANCE_QUALIFIED
 }
 
 model EmployeeBenefit {
@@ -51,6 +59,21 @@ model EmployeeBenefit {
   totalInstallments Int    @default(6)
   installmentAmount Float
   remainingBalance  Float
+  scheduleMode      BenefitScheduleMode?
+
+  // RECURRING only: how often payroll ensures an installment (null = EVERY_CUTOFF)
+  recurrenceFrequency BenefitRecurrenceFrequency?
+
+  // Attendance-linked amount computation (optional; default fixed amount)
+  attendanceBased       Boolean                        @default(false)
+  attendanceAmountBasis BenefitAttendanceAmountBasis?
+
+  // Attendance eligibility (optional; independent of amount pro-rate)
+  eligibilityMode                    BenefitEligibilityMode @default(ENROLLED_ALWAYS)
+  eligibilityDisqualifyOnAbsent      Boolean                @default(true)
+  eligibilityDisqualifyOnLate        Boolean                @default(false)
+  eligibilityDisqualifyOnUndertime   Boolean                @default(false)
+  eligibilityDisqualifyOnLeave       Boolean                @default(false)
 
   // Legacy/simple details (kept for backward compatibility)
   amount    Float?

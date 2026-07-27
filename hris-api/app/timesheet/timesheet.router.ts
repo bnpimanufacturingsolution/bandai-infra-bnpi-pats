@@ -15,6 +15,9 @@ interface IController {
 	getConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	updateConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	requestEditPermission(req: Request, res: Response, next: NextFunction): Promise<void>;
+	createOvertimeRequest(req: Request, res: Response, next: NextFunction): Promise<void>;
+	createPayrollCorrection(req: Request, res: Response, next: NextFunction): Promise<void>;
+	listPayrollCorrections(req: Request, res: Response, next: NextFunction): Promise<void>;
 	requestCurrentEditPermission(req: Request, res: Response, next: NextFunction): Promise<void>;
 	reviewEditPermission(req: Request, res: Response, next: NextFunction): Promise<void>;
 	consumeEditPermission(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -232,6 +235,9 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.patch("/config", controller.updateConfig);
 	routes.post("/edit-permission/request-current", controller.requestCurrentEditPermission);
 	routes.post("/:id/edit-permission/request", controller.requestEditPermission);
+	routes.post("/:id/overtime-requests", controller.createOvertimeRequest);
+	routes.post("/:id/payroll-corrections", controller.createPayrollCorrection);
+	routes.get("/:id/payroll-corrections", controller.listPayrollCorrections);
 	routes.post("/:id/edit-permission/review", controller.reviewEditPermission);
 	routes.post("/:id/edit-permission/consume", controller.consumeEditPermission);
 	routes.post("/normalize-breakdown-preview", controller.normalizeBreakdownPreview);

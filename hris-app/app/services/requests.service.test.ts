@@ -65,6 +65,41 @@ describe("requestsService workflow client contract", () => {
 		});
 	});
 
+	it("creates attendance correction requests through the workflow endpoint", async () => {
+		const { default: requestsService } = await import("./requests.service");
+		hrisPostMock.mockResolvedValueOnce({
+			data: {
+				data: {
+					id: "request-1",
+					type: "ATTENDANCE_CORRECTION",
+					currentWorkflowStateKey: "OPEN",
+				},
+			},
+		});
+		const payload = {
+			organizationId: "org-1",
+			requesterId: "emp-1",
+			type: "ATTENDANCE_CORRECTION" as const,
+			description: "Correct missed punch",
+			startDate: "2026-06-25",
+			endDate: "2026-06-25",
+			metadata: {
+				date: "2026-06-25",
+				adjustmentType: "MISSED_PUNCH",
+				reason: "Forgot to clock out",
+			},
+		};
+
+		const result = await requestsService.createRequest(payload);
+
+		expect(hrisPostMock).toHaveBeenCalledWith("/api/request", payload);
+		expect(result).toMatchObject({
+			id: "request-1",
+			type: "ATTENDANCE_CORRECTION",
+			currentWorkflowStateKey: "OPEN",
+		});
+	});
+
 	it("preserves structured create errors for request form handling", async () => {
 		const { default: requestsService } = await import("./requests.service");
 		hrisPostMock.mockRejectedValueOnce({
@@ -115,6 +150,70 @@ describe("requestsService workflow client contract", () => {
 		expect(result).toMatchObject({
 			id: "request-2",
 			currentWorkflowStateKey: "APPROVED",
+		});
+	});
+
+	it("submits attendance correction approval decisions to the approval endpoint", async () => {
+		const { default: requestsService } = await import("./requests.service");
+		hrisPostMock.mockResolvedValueOnce({
+			data: {
+				data: {
+					request: {
+						id: "attendance-correction-1",
+						currentWorkflowStateKey: "APPROVED",
+					},
+				},
+			},
+		});
+
+		const result = await requestsService.approveRequest(
+			"attendance-correction-1",
+			"approve",
+			"Approved by HR",
+		);
+
+		expect(hrisPostMock).toHaveBeenCalledWith(
+			"/api/request/attendance-correction-1/approval",
+			{
+				action: "approve",
+				comment: "Approved by HR",
+			},
+		);
+		expect(result).toMatchObject({
+			id: "attendance-correction-1",
+			currentWorkflowStateKey: "APPROVED",
+		});
+	});
+
+	it("submits attendance correction rejection decisions to the approval endpoint", async () => {
+		const { default: requestsService } = await import("./requests.service");
+		hrisPostMock.mockResolvedValueOnce({
+			data: {
+				data: {
+					request: {
+						id: "attendance-correction-2",
+						currentWorkflowStateKey: "REJECTED",
+					},
+				},
+			},
+		});
+
+		const result = await requestsService.approveRequest(
+			"attendance-correction-2",
+			"reject",
+			"Missing supporting evidence",
+		);
+
+		expect(hrisPostMock).toHaveBeenCalledWith(
+			"/api/request/attendance-correction-2/approval",
+			{
+				action: "reject",
+				comment: "Missing supporting evidence",
+			},
+		);
+		expect(result).toMatchObject({
+			id: "attendance-correction-2",
+			currentWorkflowStateKey: "REJECTED",
 		});
 	});
 

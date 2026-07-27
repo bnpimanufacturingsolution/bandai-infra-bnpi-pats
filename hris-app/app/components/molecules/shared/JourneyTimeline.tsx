@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock } from "lucide-react";
-import { type SectionStatus } from "~/routes/hr/add-employee";
+
+type SectionStatus = "not-started" | "in-progress" | "completed";
 
 interface Section {
 	id: string;

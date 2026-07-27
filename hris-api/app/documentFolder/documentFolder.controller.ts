@@ -3,6 +3,9 @@ import { PrismaClient } from "../../generated/prisma";
 import { CreateDocumentFolderSchema, UpdateDocumentFolderSchema } from "../../zod/documentFolder.zod";
 import { buildSuccessResponse } from "../../helper/success-handler.helper";
 import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler";
+import { logActivity } from "../../utils/activityLogger";
+import { logAudit } from "../../utils/auditLogger";
+import { config } from "../../config/constant";
 
 export const controller = (prisma: PrismaClient) => {
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
@@ -17,6 +20,34 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			const documentFolder = await prisma.documentFolder.create({
 				data: validation.data,
+			});
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_FOLDER.ACTIONS.CREATE_DOCUMENT_FOLDER,
+				description: `${config.ACTIVITY_LOG.DOCUMENT_FOLDER.DESCRIPTIONS.DOCUMENT_FOLDER_CREATED}: ${documentFolder.name || documentFolder.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_FOLDER.PAGES.DOCUMENT_FOLDER_CREATION,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT_FOLDER,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT_FOLDER,
+				entityId: documentFolder.id,
+				changesBefore: null,
+				changesAfter: {
+					id: documentFolder.id,
+					name: documentFolder.name,
+					employeeId: documentFolder.employeeId,
+					createdAt: documentFolder.createdAt,
+					updatedAt: documentFolder.updatedAt,
+				},
+				description: `${config.AUDIT_LOG.DOCUMENT_FOLDER.DESCRIPTIONS.DOCUMENT_FOLDER_CREATED}: ${documentFolder.name || documentFolder.id}`,
 			});
 
 			const successResponse = buildSuccessResponse(
@@ -54,6 +85,16 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			});
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_FOLDER.ACTIONS.GET_DOCUMENT_FOLDERS,
+				description: `${config.ACTIVITY_LOG.DOCUMENT_FOLDER.DESCRIPTIONS.DOCUMENT_FOLDERS_RETRIEVED}: employeeId=${employeeId}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_FOLDER.PAGES.DOCUMENT_FOLDER_LIST,
+				},
+			});
+
 			res.status(200).json(
 				buildSuccessResponse("Document folders retrieved successfully", { folders }, 200),
 			);
@@ -85,6 +126,28 @@ export const controller = (prisma: PrismaClient) => {
 				data: validationResult.data,
 			});
 
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_FOLDER.ACTIONS.UPDATE_DOCUMENT_FOLDER,
+				description: `${config.ACTIVITY_LOG.DOCUMENT_FOLDER.DESCRIPTIONS.DOCUMENT_FOLDER_UPDATED}: ${updated.name || updated.id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_FOLDER.PAGES.DOCUMENT_FOLDER_UPDATE,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.UPDATE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT_FOLDER,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT_FOLDER,
+				entityId: updated.id,
+				changesBefore: existing,
+				changesAfter: updated,
+				description: `${config.AUDIT_LOG.DOCUMENT_FOLDER.DESCRIPTIONS.DOCUMENT_FOLDER_UPDATED}: ${updated.name || updated.id}`,
+			});
+
 			res.status(200).json(buildSuccessResponse("Document Folder updated", { documentFolder: updated }, 200));
 		} catch (error) {
 			console.error(`Error updating document folder: ${error}`);
@@ -104,6 +167,28 @@ export const controller = (prisma: PrismaClient) => {
 
 			await prisma.documentFolder.delete({
 				where: { id },
+			});
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.DOCUMENT_FOLDER.ACTIONS.DELETE_DOCUMENT_FOLDER,
+				description: `${config.ACTIVITY_LOG.DOCUMENT_FOLDER.DESCRIPTIONS.DOCUMENT_FOLDER_DELETED}: ${existing.name || id}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.DOCUMENT_FOLDER.PAGES.DOCUMENT_FOLDER_DELETION,
+				},
+			});
+
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.DELETE,
+				resource: config.AUDIT_LOG.RESOURCES.DOCUMENT_FOLDER,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DOCUMENT_FOLDER,
+				entityId: id,
+				changesBefore: existing,
+				changesAfter: null,
+				description: `${config.AUDIT_LOG.DOCUMENT_FOLDER.DESCRIPTIONS.DOCUMENT_FOLDER_DELETED}: ${existing.name || id}`,
 			});
 
 			res.status(200).json(buildSuccessResponse("Document Folder deleted", {}, 200));

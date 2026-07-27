@@ -3,7 +3,6 @@ import { NextFunction, Request, Response, Router } from "express";
 interface IController {
 	getSettings(req: Request, res: Response, next: NextFunction): Promise<void>;
 	updateSettings(req: Request, res: Response, next: NextFunction): Promise<void>;
-	getHeadcounts(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getRequestContext(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
@@ -13,7 +12,6 @@ export const router = (route: Router, controller: IController): Router => {
 
 	routes.get("/", controller.getSettings);
 	routes.patch("/", controller.updateSettings);
-	routes.get("/headcounts", controller.getHeadcounts);
 	routes.get("/request-context", controller.getRequestContext);
 
 	route.use(path, routes);

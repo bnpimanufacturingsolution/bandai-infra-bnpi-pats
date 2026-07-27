@@ -27,7 +27,6 @@ import {
 	seedWorkflowConfigsInBranding,
 	type ProvisioningWorkflowConfig,
 } from "../../helper/workflow-config.helper";
-import { traceAsync } from "../../middleware/functionTracing";
 
 export const PROVISIONING_SEEDER_VERSION = DEFAULT_PROVISIONING_SEEDER_VERSION;
 
@@ -220,77 +219,26 @@ export const runSystemProvisioning = async (
 		seedDefaultLeaveTypes?: boolean;
 	},
 ): Promise<ProvisioningRunSummary> => {
-	return traceAsync(
-		async () => {
-			const seedPhilippineHolidays = params.seedPhilippineHolidays !== false;
-			const seedMandated201DocumentTypes = params.seedMandated201DocumentTypes !== false;
-			const seedWorkflowTemplates = params.seedWorkflowTemplates !== false;
-			const seedDefaultLeaveTypes = params.seedDefaultLeaveTypes === true;
+	const seedPhilippineHolidays = params.seedPhilippineHolidays !== false;
+	const seedMandated201DocumentTypes = params.seedMandated201DocumentTypes !== false;
+	const seedWorkflowTemplates = params.seedWorkflowTemplates !== false;
+	const seedDefaultLeaveTypes = params.seedDefaultLeaveTypes === true;
 
-			if (params.isProvisioned) {
-				let workflowTemplateCount = 0;
+	if (params.isProvisioned) {
+		let workflowTemplateCount = 0;
 
-				if (seedDefaultLeaveTypes) {
-					await repairSeededDefaultLeaveTypePolicies(prisma, params.organizationId);
-				} else {
-					await removeSeededDefaultLeaveTypes(prisma, params.organizationId);
-				}
+		if (seedDefaultLeaveTypes) {
+			await repairSeededDefaultLeaveTypePolicies(prisma, params.organizationId);
+		} else {
+			await removeSeededDefaultLeaveTypes(prisma, params.organizationId);
+		}
 
-				if (seedWorkflowTemplates) {
-					const workflowTemplateResult = await seedWorkflowInstanceTemplates(
-						prisma,
-						params.organizationId,
-					);
-					workflowTemplateCount = workflowTemplateResult.total;
-
-					const organization = await prisma.organization.findFirst({
-						where: {
-							id: params.organizationId,
-							isDeleted: false,
-						},
-						select: {
-							id: true,
-							branding: true,
-						},
-					});
-
-					if (organization) {
-						await prisma.organization.update({
-							where: { id: organization.id },
-							data: {
-								branding: seedWorkflowConfigsInBranding(organization.branding),
-							},
-						});
-					}
-				}
-
-				return {
-					success: true,
-					alreadyProvisioned: true,
-					counts: {
-						holidays: seedPhilippineHolidays ? ALL_HOLIDAYS.length : 0,
-						workflowConfigs: workflowTemplateCount,
-						devices: DEVICE_DEFINITIONS.length,
-						documentTypes: seedMandated201DocumentTypes
-							? DEFAULT_COMPLIANCE_DOCUMENT_TYPES.length
-							: 0,
-						leavePolicies: seedDefaultLeaveTypes ? DEFAULT_BOOTSTRAP_LEAVE_TYPES.length : 0,
-						payrollPeriods: 25,
-					},
-				};
-			}
-
-			await seedProjectDefaults(prisma, {
-				organizationId: params.organizationId,
-				ensureAdminUsers: false,
-				seedPhilippineHolidays,
-				seedMandated201DocumentTypes,
-				seedDefaultLeaveTypes,
-			});
-
-			if (!seedDefaultLeaveTypes) {
-				await removeSeededDefaultLeaveTypes(prisma, params.organizationId);
-			}
+		if (seedWorkflowTemplates) {
+			const workflowTemplateResult = await seedWorkflowInstanceTemplates(
+				prisma,
+				params.organizationId,
+			);
+			workflowTemplateCount = workflowTemplateResult.total;
 
 			const organization = await prisma.organization.findFirst({
 				where: {
@@ -303,14 +251,7 @@ export const runSystemProvisioning = async (
 				},
 			});
 
-			let workflowTemplateCount = 0;
-
-			if (organization && seedWorkflowTemplates) {
-				const workflowTemplateResult = await seedWorkflowInstanceTemplates(
-					prisma,
-					organization.id,
-				);
-				workflowTemplateCount = workflowTemplateResult.total;
+			if (organization) {
 				await prisma.organization.update({
 					where: { id: organization.id },
 					data: {
@@ -318,22 +259,71 @@ export const runSystemProvisioning = async (
 					},
 				});
 			}
+		}
 
-			return {
-				success: true,
-				counts: {
-					holidays: seedPhilippineHolidays ? ALL_HOLIDAYS.length : 0,
-					workflowConfigs: workflowTemplateCount,
-					devices: DEVICE_DEFINITIONS.length,
-					documentTypes: seedMandated201DocumentTypes
-						? DEFAULT_COMPLIANCE_DOCUMENT_TYPES.length
-						: 0,
-					leavePolicies: seedDefaultLeaveTypes ? DEFAULT_BOOTSTRAP_LEAVE_TYPES.length : 0,
-					payrollPeriods: 25,
-				},
-			};
+		return {
+			success: true,
+			alreadyProvisioned: true,
+			counts: {
+				holidays: seedPhilippineHolidays ? ALL_HOLIDAYS.length : 0,
+				workflowConfigs: workflowTemplateCount,
+				devices: DEVICE_DEFINITIONS.length,
+				documentTypes: seedMandated201DocumentTypes
+					? DEFAULT_COMPLIANCE_DOCUMENT_TYPES.length
+					: 0,
+				leavePolicies: seedDefaultLeaveTypes ? DEFAULT_BOOTSTRAP_LEAVE_TYPES.length : 0,
+				payrollPeriods: 25,
+			},
+		};
+	}
+
+	await seedProjectDefaults(prisma, {
+		organizationId: params.organizationId,
+		ensureAdminUsers: false,
+		seedPhilippineHolidays,
+		seedMandated201DocumentTypes,
+		seedDefaultLeaveTypes,
+	});
+
+	if (!seedDefaultLeaveTypes) {
+		await removeSeededDefaultLeaveTypes(prisma, params.organizationId);
+	}
+
+	const organization = await prisma.organization.findFirst({
+		where: {
+			id: params.organizationId,
+			isDeleted: false,
 		},
-		"runSystemProvisioning",
-		"system-provisioning",
-	);
+		select: {
+			id: true,
+			branding: true,
+		},
+	});
+
+	let workflowTemplateCount = 0;
+
+	if (organization && seedWorkflowTemplates) {
+		const workflowTemplateResult = await seedWorkflowInstanceTemplates(prisma, organization.id);
+		workflowTemplateCount = workflowTemplateResult.total;
+		await prisma.organization.update({
+			where: { id: organization.id },
+			data: {
+				branding: seedWorkflowConfigsInBranding(organization.branding),
+			},
+		});
+	}
+
+	return {
+		success: true,
+		counts: {
+			holidays: seedPhilippineHolidays ? ALL_HOLIDAYS.length : 0,
+			workflowConfigs: workflowTemplateCount,
+			devices: DEVICE_DEFINITIONS.length,
+			documentTypes: seedMandated201DocumentTypes
+				? DEFAULT_COMPLIANCE_DOCUMENT_TYPES.length
+				: 0,
+			leavePolicies: seedDefaultLeaveTypes ? DEFAULT_BOOTSTRAP_LEAVE_TYPES.length : 0,
+			payrollPeriods: 25,
+		},
+	};
 };

@@ -1,3 +1,4 @@
+<!-- docs-union: careful merge of standalone snapshot + bandai-infra develop (hris-api/AGENTS.md) -->
 # Adopted Project Agent Guide
 
 ## Purpose
@@ -6,9 +7,22 @@ Provide the active operating contract for agents working in this adopted WWG pro
 
 Project: hris-api
 
+## Mandatory Grok Skill: WWG Auto-Sync
+
+For every meaningful task in this package, load and follow the monorepo skill:
+
+- `../.grok/skills/wwg-auto-sync/SKILL.md` (slash: `/wwg-auto-sync`)
+- Always-on rule: `../.grok/rules/wwg-auto-sync.md`
+
+**START gate** — read important `.wwg` MDs before code changes.  
+**CLOSE gate** — update those MDs when product truth, terminology, architecture, workflows, schema, or agent contracts changed; always update `.wwg/workspace/current-task.md`.  
+Do not leave new truth only in code. Include a short `## WWG Auto-Sync` section in the final response after meaningful work.
+
 ## HRIS Attendance/Timesheet/Payroll Source-Of-Truth Addendum
 
-Before modifying attendance, timesheet, approved overtime, payroll tally, backfill, or repair-loop behavior in this backend, read `../docs/attendance-timesheet-payroll-tally-prd.md`.
+Before modifying attendance, timesheet, approved overtime, payroll tally, backfill, or repair-loop behavior in this backend, read `.wwg/wiki/project-truth.md` (Canonical Terminology, Architecture Truth) and `.wwg/wiki/terminology.md` (HR Attendance / Timesheet / Payroll Source Terms).
+
+`../docs/attendance-timesheet-payroll-tally-prd.md` was the original binding spec for this split but is confirmed permanently unrecoverable as of 2026-06-26 (never committed in either repo's git history). The terms below are re-grounded directly against Prisma schemas and service code; see the wiki files above for evidence.
 
 Binding split:
 - `AttendanceObligation` is live/current/future operational attendance truth.
@@ -140,8 +154,18 @@ Users may prompt naturally, for example: "Sync Project Truth with the latest doc
 - Report what changed, what was validated, what truth/context/governance surfaces were updated, and what risks remain.
 - State whether new recommendations were added or no new recommendations were identified.
 
+## Logging Contract
+
+Before adding or changing controller handlers, follow [docs/LOGGING_STANDARDS.md](docs/LOGGING_STANDARDS.md):
+
+- **`logActivity()`** — call on **every** successful handler action (reads and mutations).
+- **`logAudit()`** — call on **CUD/mutations only**. Never on GET/read handlers.
+- Use inline calls and constants from `config/constant.ts` (`ACTIVITY_LOG`, `AUDIT_LOG`).
+- Reference implementation: `app/template/template.controller.ts`.
+
 ## References
 
+- `docs/LOGGING_STANDARDS.md`
 - `.wwg/wiki/project-truth-summary.md`
 - `.wwg/wiki/terminology-summary.md`
 - `.wwg/wiki/project-truth.md`
@@ -149,4 +173,3 @@ Users may prompt naturally, for example: "Sync Project Truth with the latest doc
 - `.wwg/workspace/current-task.md`
 - `.wwg/governance/drift-guard.md`
 - `.wwg/governance/test-enforcement.md`
-

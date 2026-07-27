@@ -57,8 +57,8 @@ describe("calculateSSSContribution", () => {
 
 describe("calculatePhilHealthContribution", () => {
 	it("returns 0 without config", () => expect(calculatePhilHealthContribution(20000)).to.equal(0));
-	it("returns 0 below minimum base", () =>
-		expect(calculatePhilHealthContribution(100, PHILHEALTH_CONFIG)).to.equal(0));
+	it("applies the minimum salary floor", () =>
+		expect(calculatePhilHealthContribution(100, PHILHEALTH_CONFIG)).to.equal(250));
 	it("computes contribution within range", () =>
 		expect(calculatePhilHealthContribution(20000, PHILHEALTH_CONFIG)).to.be.greaterThan(0));
 	it("caps at maximum ceiling", () =>

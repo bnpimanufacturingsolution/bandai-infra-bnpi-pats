@@ -37,6 +37,7 @@ import {
 	determineAttendanceStatus,
 	deriveBehaviorFlags,
 } from "../../helper/timekeeping.helper";
+import { resolveOvertimePolicyApplication } from "../../helper/overtime-approval.helper";
 import * as XLSX from "xlsx";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { AttendanceImportService } from "./attendance-import.service";
@@ -467,10 +468,6 @@ export const controller = (prisma: PrismaClient) => {
 					!existingAttendance.timeOut &&
 					validation.data.timeOut
 				) {
-					const overtimeFlagThresholdMinutes = await getOvertimeFlagThresholdMinutes(
-						prisma,
-						organizationId,
-					);
 					// Recalculate timekeeping metrics with timeOut
 					const timekeepingCalc = calculateTimekeeping(
 						existingAttendance.timeIn,
@@ -482,6 +479,18 @@ export const controller = (prisma: PrismaClient) => {
 					// Determine status based on calculations (unless explicitly provided)
 					const finalStatus =
 						validation.data.status || determineAttendanceStatus(timekeepingCalc, true);
+					const overtimeApplication = await resolveOvertimePolicyApplication(
+						prisma,
+						organizationId,
+						{
+							calc: timekeepingCalc,
+							timeIn: existingAttendance.timeIn,
+							timeOut: validation.data.timeOut,
+							schedule: existingAttendance.scheduleSnapshot as any,
+							date: existingAttendance.date || new Date(),
+							attendanceStatus: finalStatus,
+						},
+					);
 
 					const updatedAttendance = await prisma.attendance.update({
 						where: { id: existingAttendance.id },
@@ -490,19 +499,10 @@ export const controller = (prisma: PrismaClient) => {
 							timeOutLocation: validation.data.timeOutLocation,
 							status: finalStatus,
 							behaviorFlags:
-								finalStatus === "LEAVE"
-									? []
-									: deriveBehaviorFlags({
-											timeIn: existingAttendance.timeIn,
-											timeOut: validation.data.timeOut,
-											schedule: existingAttendance.scheduleSnapshot as any,
-											date: existingAttendance.date || new Date(),
-											overtimeThresholdMinutes:
-												overtimeFlagThresholdMinutes,
-										}),
+								finalStatus === "LEAVE" ? [] : overtimeApplication.behaviorFlags,
 							notes: validation.data.notes || existingAttendance.notes,
 							...(await fetchAttendanceEmployeeSnapshotFields(prisma, employeeId)),
-							...buildAttendanceTimekeepingFields(timekeepingCalc),
+							...overtimeApplication.timekeepingFields,
 						},
 					});
 
@@ -580,9 +580,17 @@ export const controller = (prisma: PrismaClient) => {
 			const finalStatus =
 				validation.data.status ||
 				determineAttendanceStatus(timekeepingCalc, !!validation.data.timeOut);
-			const overtimeFlagThresholdMinutes = await getOvertimeFlagThresholdMinutes(
+			const overtimeApplication = await resolveOvertimePolicyApplication(
 				prisma,
 				organizationId,
+				{
+					calc: timekeepingCalc,
+					timeIn: validation.data.timeIn || new Date(),
+					timeOut: validation.data.timeOut || null,
+					schedule: scheduleSnapshot,
+					date: attendanceDate,
+					attendanceStatus: finalStatus,
+				},
 			);
 
 			// Create new attendance record with scheduleSnapshot and timekeeping calculations
@@ -591,21 +599,13 @@ export const controller = (prisma: PrismaClient) => {
 				...validation.data,
 				status: finalStatus,
 				behaviorFlags:
-					finalStatus === "LEAVE"
-						? []
-						: deriveBehaviorFlags({
-								timeIn: validation.data.timeIn || new Date(),
-								timeOut: validation.data.timeOut || null,
-								schedule: scheduleSnapshot,
-								date: attendanceDate,
-								overtimeThresholdMinutes: overtimeFlagThresholdMinutes,
-							}),
+					finalStatus === "LEAVE" ? [] : overtimeApplication.behaviorFlags,
 				scheduleSnapshot, // Copy employee's current schedule for historical accuracy
 				// If isManualEntry is not provided, default to false (biometric)
 				// Only set to true if explicitly provided in the request
 				isManualEntry: validation.data.isManualEntry ?? false,
 				...(await fetchAttendanceEmployeeSnapshotFields(prisma, employeeId)),
-				...buildAttendanceTimekeepingFields(timekeepingCalc),
+				...overtimeApplication.timekeepingFields,
 			};
 
 			const attendance = await prisma.attendance.create({
@@ -1090,10 +1090,6 @@ export const controller = (prisma: PrismaClient) => {
 				scheduleSnapshot: _ignoredScheduleSnapshot,
 				...updatableData
 			} = validatedData as any;
-			const overtimeFlagThresholdMinutes = await getOvertimeFlagThresholdMinutes(
-				prisma,
-				existingAttendance.organizationId,
-			);
 			const timekeepingCalc = calculateTimekeeping(
 				newTimeIn,
 				newTimeOut,
@@ -1104,30 +1100,37 @@ export const controller = (prisma: PrismaClient) => {
 				prisma,
 				existingAttendance.employeeId,
 			);
+			const resolvedStatus =
+				updatableData.status ||
+				determineAttendanceStatus(timekeepingCalc, !!newTimeOut);
+			const overtimeApplication =
+				hasTimeInInput || hasTimeOutInput || hasStatusInput
+					? await resolveOvertimePolicyApplication(
+							prisma,
+							existingAttendance.organizationId,
+							{
+								calc: timekeepingCalc,
+								timeIn: newTimeIn,
+								timeOut: newTimeOut,
+								schedule: existingAttendance.scheduleSnapshot as any,
+								date: existingAttendance.date || new Date(),
+								isNonWorked: isNonWorkedStatus,
+								attendanceStatus: resolvedStatus,
+							},
+						)
+					: null;
 
 			const prismaData = {
 				...updatableData,
 				...employeeSnapshotFields,
 				// Keep persisted fact fields aligned when attendance edits change work semantics.
-				...(hasTimeInInput || hasTimeOutInput || hasStatusInput
+				...(overtimeApplication
 					? {
-							status:
-								updatableData.status ||
-								determineAttendanceStatus(timekeepingCalc, !!newTimeOut),
-							behaviorFlags:
-								isNonWorkedStatus
-									? []
-									: deriveBehaviorFlags({
-											timeIn: newTimeIn,
-											timeOut: newTimeOut,
-											schedule: existingAttendance.scheduleSnapshot as any,
-											date: existingAttendance.date || new Date(),
-											overtimeThresholdMinutes:
-												overtimeFlagThresholdMinutes,
-										}),
-							...buildAttendanceTimekeepingFields(timekeepingCalc, {
-								isNonWorked: isNonWorkedStatus,
-							}),
+							status: resolvedStatus,
+							behaviorFlags: isNonWorkedStatus
+								? []
+								: overtimeApplication.behaviorFlags,
+							...overtimeApplication.timekeepingFields,
 						}
 					: {}),
 			};
@@ -1527,21 +1530,21 @@ export const controller = (prisma: PrismaClient) => {
 						scheduleSnapshot,
 						attendanceDate,
 					);
-					const overtimeFlagThresholdMinutes = await getOvertimeFlagThresholdMinutes(
+					const computedStatus = determineAttendanceStatus(timekeepingCalc, !!timeOut);
+					const overtimeApplication = await resolveOvertimePolicyApplication(
 						prisma,
 						organizationId,
+						{
+							calc: timekeepingCalc,
+							timeIn,
+							timeOut,
+							schedule: scheduleSnapshot,
+							date: attendanceDate,
+							attendanceStatus: computedStatus,
+						},
 					);
-					const computedStatus = determineAttendanceStatus(timekeepingCalc, !!timeOut);
 					const computedFlags =
-						computedStatus === "LEAVE"
-							? []
-							: deriveBehaviorFlags({
-									timeIn,
-									timeOut,
-									schedule: scheduleSnapshot,
-									date: attendanceDate,
-									overtimeThresholdMinutes: overtimeFlagThresholdMinutes,
-								});
+						computedStatus === "LEAVE" ? [] : overtimeApplication.behaviorFlags;
 
 					// Check if attendance already exists
 					const existingAttendance = await prisma.attendance.findFirst({
@@ -1567,7 +1570,7 @@ export const controller = (prisma: PrismaClient) => {
 								status: computedStatus,
 								behaviorFlags: computedFlags,
 								...employeeSnapshotFields,
-								...buildAttendanceTimekeepingFields(timekeepingCalc),
+								...overtimeApplication.timekeepingFields,
 								isManualEntry: true,
 								deviceInfo: {
 									source: "xlsx_import",
@@ -1606,7 +1609,7 @@ export const controller = (prisma: PrismaClient) => {
 								status: computedStatus,
 								behaviorFlags: computedFlags,
 								...employeeSnapshotFields,
-								...buildAttendanceTimekeepingFields(timekeepingCalc),
+								...overtimeApplication.timekeepingFields,
 								scheduleSnapshot: scheduleSnapshot as any, // Copy of employee's schedule
 								isManualEntry: true,
 								deviceInfo: {

@@ -166,92 +166,62 @@ export function RequestListCard({ type, employeeId }: RequestListCardProps) {
 	};
 
 	return (
-		<Card id={`dashboard-${type}`}>
-			<CardHeader>
+		<Card id={`dashboard-${type}`} className="gap-4 py-4">
+			<CardHeader className="pb-2">
 				<div className="flex items-center justify-between">
-					<CardTitle className="flex items-center gap-2">
+					<CardTitle className="flex items-center gap-2 text-base font-semibold">
 						{type === "my-requests" ? (
-							<Hourglass className="w-5 h-5 text-orange-500" />
+							<Hourglass className="h-4 w-4 text-gray-400" />
 						) : (
-							<FileText className="w-5 h-5 text-orange-500" />
+							<FileText className="h-4 w-4 text-gray-400" />
 						)}
 						{title}
 					</CardTitle>
 					<button
 						onClick={() => navigate(viewAllPath)}
-						className="text-gray-600 text-sm hover:text-gray-800">
-						View All &gt;
+						className="text-xs text-gray-400 hover:text-gray-600">
+						View all →
 					</button>
 				</div>
 			</CardHeader>
-			<CardContent>
+			<CardContent className="pt-0">
 				{isLoading ? (
-					<div className="space-y-3">
+					<div className="space-y-1.5">
 						{[1, 2, 3].map((item) => (
 							<div
 								key={item}
-								className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg">
-								<Skeleton className="w-5 h-5 rounded" />
-								<div className="flex-1 space-y-2">
-									<Skeleton className="h-4 w-32" />
-									<Skeleton className="h-3 w-24" />
+								className="flex items-center gap-2 rounded-lg border border-gray-100 p-2">
+								<Skeleton className="h-4 w-4 rounded" />
+								<div className="flex-1 space-y-1.5">
+									<Skeleton className="h-3.5 w-28" />
+									<Skeleton className="h-3 w-20" />
 								</div>
-								<Skeleton className="w-16 h-6 rounded-full" />
+								<Skeleton className="h-5 w-14 rounded-full" />
 							</div>
 						))}
 					</div>
 				) : approvalItems.length === 0 ? (
-					<div className="flex items-center justify-center h-32">
-						<div className="text-gray-600 text-sm">No requests found</div>
+					<div className="flex h-20 items-center justify-center text-sm text-gray-500">
+						No requests
 					</div>
 				) : (
-					<div className="space-y-3 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
+					<div className="max-h-[210px] divide-y divide-gray-100 overflow-y-auto pr-1 text-sm">
 						{approvalItems.map((item) => (
 							<div
 								key={item.id}
 								onClick={() => openRequest(item.id)}
-								onKeyDown={(event) => {
-									if (event.key === "Enter" || event.key === " ") {
-										event.preventDefault();
-										openRequest(item.id);
-									}
-								}}
-								role="button"
-								tabIndex={0}
-								className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-								<div className="flex items-center gap-3 flex-1 min-w-0">
-									<FileText className="w-5 h-5 text-gray-400 flex-shrink-0" />
+								className="flex cursor-pointer items-center justify-between gap-2 py-1.5 hover:bg-gray-50 -mx-1 px-1 rounded transition-colors">
+								<div className="flex min-w-0 items-center gap-2 flex-1">
+									<FileText className="h-4 w-4 shrink-0 text-gray-400" />
 									<div className="min-w-0">
-										<p className="text-sm font-medium text-gray-900 truncate">
-											{item.title}
-										</p>
-										<p className="text-xs text-gray-600 truncate">
-											{item.description}
-										</p>
-										{!isMyRequests && item.requesterName && (
-											<p className="text-xs text-gray-500 mt-1 truncate">
-												By:{" "}
-												{item.requesterId ? (
-													<button
-														type="button"
-														onClick={(event) =>
-															openRequesterProfile(
-																event,
-																item.requesterId,
-															)
-														}
-														className="text-gray-700 hover:text-orange-700 hover:underline cursor-pointer">
-														{item.requesterName}
-													</button>
-												) : (
-													item.requesterName
-												)}
-											</p>
+										<p className="truncate font-medium text-gray-900">{item.title}</p>
+										{item.description && (
+											<p className="truncate text-xs text-gray-500">{item.description}</p>
 										)}
 									</div>
 								</div>
 								<span
-									className={`px-2 py-1 text-xs rounded-full whitespace-nowrap ml-2 ${getRequestStatusClasses(item.state)}`}>
+									className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-medium ${getRequestStatusClasses(item.state)}`}>
 									{getRequestStatusLabel(item.state)}
 								</span>
 							</div>

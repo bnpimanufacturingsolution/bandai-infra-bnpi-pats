@@ -5,6 +5,7 @@ import { uploadImportFile } from "../../middleware/upload";
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getPublicKiosk(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -64,6 +65,19 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
+	// Cache individual calendarItem with predictable key for invalidation
+	routes.get(
+		"/public/kiosk",
+		cache({
+			ttl: 60,
+			keyGenerator: (req: Request) => {
+				const queryKey = Buffer.from(JSON.stringify(req.query || {})).toString("base64");
+				return `public:kiosk:calendarItem:${queryKey}`;
+			},
+		}),
+		controller.getPublicKiosk,
+	);
+
 	// Cache individual calendarItem with predictable key for invalidation
 	routes.get(
 		"/:id",
