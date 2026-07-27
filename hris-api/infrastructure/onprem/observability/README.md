@@ -132,10 +132,14 @@ Backups are written to host path:
 Behavior:
 - Rolling backup: created every interval (`BACKUP_INTERVAL_SECONDS`)
 - Full backup: policy by `FULL_FREQUENCY` (`daily|weekly|monthly|always`)
-- Retention:
-  - `BACKUP_KEEP_ROLLING`
-  - `BACKUP_KEEP_FULL`
+- Retention (defaults tightened after root-full / DiskPressure incident):
+  - `BACKUP_KEEP_ROLLING` default **24** (was 48)
+  - `BACKUP_KEEP_FULL` default **7** (was 30)
 - Each backup also writes a `.sha256` checksum file
+- Host safety net: `project-truth-disk-guard` (systemd timer) age-prunes rolling
+  backups older than 3d and full backups older than 14d, and fails when free
+  space is under 30 GiB or usage is above 85%. See
+  `appliance/bin/project-truth-disk-guard.sh`.
 
 Manual backup now:
 ```bash

@@ -37,6 +37,7 @@
       - project-truth-cloudflare-vm-tunnel
       - project-truth-ansible-pull
       - project-truth-os-sync
+      - project-truth-disk-guard
     project_truth_systemd_units:
       - project-truth-hris.service
       - project-truth-lan-config.service
@@ -48,12 +49,15 @@
       - project-truth-ansible-pull.timer
       - project-truth-os-sync.service
       - project-truth-os-sync.timer
+      - project-truth-disk-guard.service
+      - project-truth-disk-guard.timer
     project_truth_enabled_services:
       - project-truth-hris.service
       - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
       - project-truth-hikvision-hot-reload-listener.service
+
   tasks:
     - name: Ensure Project Truth state directory exists
       ansible.builtin.file:
@@ -317,6 +321,51 @@
     - name: Use ansible-pull as the standard VM pull timer
       ansible.builtin.systemd:
         name: project-truth-ansible-pull.timer
+        enabled: true
+        state: started
+
+    - name: Ensure disk-guard config directory exists
+      ansible.builtin.file:
+        path: /etc/project-truth
+        state: directory
+        mode: "0755"
+
+    - name: Install disk-guard default env if missing
+      ansible.builtin.copy:
+        dest: /etc/project-truth/disk-guard.env
+        force: false
+        mode: "0644"
+        content: |
+          # Project Truth disk guard retention (see appliance/bin/project-truth-disk-guard.sh)
+          # Alert when use > 85% or free < 30 GiB; critical at > 95% or free < 10 GiB.
+          DISK_GUARD_WARN_PCT=85
+          DISK_GUARD_CRIT_PCT=95
+          DISK_GUARD_WARN_FREE_GIB=30
+          DISK_GUARD_CRIT_FREE_GIB=10
+          DISK_GUARD_JOURNAL_VACUUM=7d
+          DISK_GUARD_JOURNAL_MAX_SIZE=500M
+          DISK_GUARD_OBS_ROLLING_DAYS=3
+          DISK_GUARD_OBS_ROLLING_KEEP=24
+          DISK_GUARD_OBS_FULL_DAYS=14
+          DISK_GUARD_OBS_FULL_KEEP=7
+          DISK_GUARD_RETAINED_VHDX_KEEP=1
+          DISK_GUARD_TMP_DAYS=2
+          DISK_GUARD_K8S_IMAGE_TAR_DAYS=3
+          DISK_GUARD_APPLY=1
+          DISK_GUARD_PRUNE_IMAGES=1
+
+    - name: Ensure disk-guard state and log directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /var/lib/project-truth/disk-guard
+        - /var/log/project-truth
+
+    - name: Enable Project Truth disk-guard daily timer
+      ansible.builtin.systemd:
+        name: project-truth-disk-guard.timer
         enabled: true
         state: started
 

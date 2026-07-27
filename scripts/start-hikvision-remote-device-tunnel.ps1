@@ -58,11 +58,22 @@ function Test-TcpConnect {
 }
 
 function Test-SshTarget {
-  param([string]$Target)
+  param(
+    [string]$Target,
+    [bool]$UseKey = $false
+  )
   $previous = $ErrorActionPreference
   $ErrorActionPreference = 'Continue'
   try {
-    & $sshExe -o BatchMode=yes -o ConnectTimeout=15 $Target 'true' *> $null
+    # Fallback LAN target (infra@10.184.37.19) requires the appliance key.
+    # Probing without -i makes BatchMode fail even when keyed SSH works, which
+    # blocked the entire Hikvision device tunnel when Cloudflare SSH is down.
+    $probeArgs = @('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15')
+    if ($UseKey -and (Test-Path -LiteralPath $SshKeyPath)) {
+      $probeArgs = @('-i', $SshKeyPath) + $probeArgs
+    }
+    $probeArgs += @($Target, 'true')
+    & $sshExe @probeArgs *> $null
     return $LASTEXITCODE -eq 0
   } finally {
     $ErrorActionPreference = $previous
@@ -71,28 +82,44 @@ function Test-SshTarget {
 
 function Start-Tunnel {
   param([string]$Target, [bool]$UseKey, [object[]]$ForwardSpecs)
-  $stdoutPath = Join-Path $runRoot 'ssh.stdout.log'
-  $stderrPath = Join-Path $runRoot 'ssh.stderr.log'
-  $args = @(
+  # Log via OpenSSH -E so we do not attach redirected handles that die with the
+  # parent shell/job. Create the process through WMI so agent/tool Job Objects
+  # do not kill the tunnel when the launcher session exits.
+  $logPath = Join-Path $runRoot 'ssh.log'
+  $argParts = @(
     '-N',
     '-o', 'ExitOnForwardFailure=yes',
-    '-o', 'ServerAliveInterval=30',
-    '-o', 'ServerAliveCountMax=3'
+    '-o', 'ServerAliveInterval=15',
+    '-o', 'ServerAliveCountMax=6',
+    '-o', 'TCPKeepAlive=yes',
+    '-o', 'BatchMode=yes',
+    '-o', 'ConnectTimeout=20',
+    '-E', "`"$logPath`""
   )
-  foreach ($forward in $ForwardSpecs) {
-    $args += @('-L', "127.0.0.1:$($forward.LocalPort):$($forward.DeviceIp):$($forward.RemotePort)")
-  }
   if ($UseKey) {
-    $args = @('-i', $SshKeyPath) + $args
+    $argParts = @('-i', "`"$SshKeyPath`"") + $argParts
   }
-  $args += $Target
+  foreach ($forward in $ForwardSpecs) {
+    $argParts += @('-L', "127.0.0.1:$($forward.LocalPort):$($forward.DeviceIp):$($forward.RemotePort)")
+  }
+  $argParts += $Target
 
-  Start-Process -FilePath $sshExe `
-    -ArgumentList $args `
-    -RedirectStandardOutput $stdoutPath `
-    -RedirectStandardError $stderrPath `
-    -WindowStyle Hidden `
-    -PassThru
+  $commandLine = @($sshExe) + $argParts -join ' '
+  $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+    CommandLine = $commandLine
+    CurrentDirectory = $repoRoot
+  }
+  if ($null -eq $created -or [int]$created.ReturnValue -ne 0) {
+    throw "Failed to create detached SSH tunnel process (ReturnValue=$($created.ReturnValue)). Command: $commandLine"
+  }
+
+  $processId = [int]$created.ProcessId
+  $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+  if (-not $process) {
+    throw "SSH tunnel process $processId was created but is not running. See $logPath"
+  }
+  # Fake a process object shape used by the readiness loop.
+  return $process
 }
 
 function Set-LocalApiTunnelEnv {
@@ -175,15 +202,16 @@ if (-not $active -and (Test-Path -LiteralPath $pidFile)) {
 if (-not $active) {
   $target = $SshTarget
   $useKey = $false
-  if (-not (Test-SshTarget -Target $target)) {
+  if (-not (Test-SshTarget -Target $target -UseKey:$false)) {
     if ($NoFallback) {
       throw "SSH target $target is not reachable. Confirm Cloudflare Access is logged in and ssh $target works."
     }
     $target = $FallbackSshTarget
     $useKey = $true
-    if (-not (Test-SshTarget -Target $target)) {
-      throw "Neither SSH target is reachable: primary=$SshTarget fallback=$FallbackSshTarget. No tunnel process or active-state file was created."
+    if (-not (Test-SshTarget -Target $target -UseKey:$true)) {
+      throw "Neither SSH target is reachable: primary=$SshTarget fallback=$FallbackSshTarget (fallback probed with -i $SshKeyPath). No tunnel process or active-state file was created."
     }
+    Write-Host "Primary SSH $SshTarget unavailable; using LAN fallback $FallbackSshTarget with appliance key."
   }
 
   $process = Start-Tunnel -Target $target -UseKey $useKey -ForwardSpecs $forwardSpecs
@@ -198,13 +226,13 @@ if (-not $active) {
   } while ($listeningCount -ne $expectedLocalPorts.Count -and (Get-Date) -lt $readyDeadline)
 
   if ($process.HasExited -or $listeningCount -ne $expectedLocalPorts.Count) {
-    $stderrPath = Join-Path $runRoot 'ssh.stderr.log'
-    $stderr = Get-Content -Raw -LiteralPath $stderrPath -ErrorAction SilentlyContinue
+    $sshLogPath = Join-Path $runRoot 'ssh.log'
+    $sshLog = Get-Content -Raw -LiteralPath $sshLogPath -ErrorAction SilentlyContinue
     if (-not $process.HasExited) {
       Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
     }
     Remove-Item -LiteralPath $pidFile -Force -ErrorAction SilentlyContinue
-    throw "Hikvision remote device tunnel did not open all $($expectedLocalPorts.Count) verified ports (opened=$listeningCount). No active state was recorded. $stderr"
+    throw "Hikvision remote device tunnel did not open all $($expectedLocalPorts.Count) verified ports (opened=$listeningCount). No active state was recorded. $sshLog"
   }
 
   $tunnelMap = (($forwardSpecs | ForEach-Object {
