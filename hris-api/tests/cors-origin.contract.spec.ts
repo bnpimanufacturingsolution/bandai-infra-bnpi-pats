@@ -26,3 +26,17 @@ describe("CORS origin contract", () => {
 		expect(config.cors.isAllowedOrigin("http://evil.example")).to.equal(false);
 	});
 });
+
+describe("API activity logging config contract", () => {
+	it("keeps apiActivityLogging so middleware does not 500 every /api call", () => {
+		// Regression: monorepo snapshot drop removed this object; login failed with
+		// TypeError: Cannot read properties of undefined (reading 'enabled').
+		expect(config.apiActivityLogging).to.be.an("object");
+		expect(config.apiActivityLogging).to.have.property("enabled");
+		expect(config.apiActivityLogging).to.have.property("includeReads");
+		expect(config.apiActivityLogging).to.have.property("sampleRate");
+		expect(config.apiActivityLogging).to.have.property("excludedPaths");
+		expect(config.apiActivityLogging).to.have.property("bodyMode");
+		expect(config.apiActivityLogging.excludedPaths).to.be.an("array");
+	});
+});

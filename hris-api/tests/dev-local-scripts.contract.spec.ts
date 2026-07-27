@@ -45,4 +45,30 @@ describe("dev:local npm script contract", () => {
 			assert.equal(fs.existsSync(abs), true, `Expected ${rel} to exist under hris-api`);
 		});
 	}
+
+	it("skips remote device tunnel + K8s DB watch in local-clone predev", () => {
+		const runDevLocal = fs.readFileSync(
+			path.join(apiRoot, "scripts/run-dev-local.cjs"),
+			"utf8",
+		);
+		const predevLocal = fs.readFileSync(
+			path.join(apiRoot, "scripts/predev-local.cjs"),
+			"utf8",
+		);
+		for (const [label, source] of [
+			["run-dev-local.cjs", runDevLocal],
+			["predev-local.cjs", predevLocal],
+		] as const) {
+			assert.match(
+				source,
+				/HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL/,
+				`${label} must skip remote Hikvision device tunnels for isolated local clone`,
+			);
+			assert.match(
+				source,
+				/PROJECT_TRUTH_DISABLE_K8S_DB_WATCH/,
+				`${label} must disable shared K8s DEV DB watch for isolated local clone`,
+			);
+		}
+	});
 });

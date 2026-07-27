@@ -47,10 +47,16 @@ if (!fs.existsSync(localCloneEnv)) {
 	process.exit(1);
 }
 
-// Local-clone env wins for DB URLs; skip shared-tunnel predev steps.
+// Local-clone env wins for DB URLs; skip shared-tunnel / device-SSH predev steps.
+// Remote Hikvision device forwards and K8s DEV DB watch belong to `npm run dev`
+// (shared 55435 path), not the isolated local Docker clone.
 loadEnvFile(localCloneEnv, { overwrite: true });
 process.env.HRIS_SKIP_BNPI_DB_ACCESS = "true";
 process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD = "true";
+process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL =
+	process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL || "true";
+process.env.PROJECT_TRUTH_DISABLE_K8S_DB_WATCH =
+	process.env.PROJECT_TRUTH_DISABLE_K8S_DB_WATCH || "true";
 process.env.HIKVISION_VM_BRIDGE_ENABLED =
 	process.env.HIKVISION_VM_BRIDGE_ENABLED || "false";
 process.env.HRIS_SKIP_DEVICE_LIVE_PATH =
@@ -59,7 +65,7 @@ process.env.HRIS_SKIP_LOCAL_DB_BOOTSTRAP =
 	process.env.HRIS_SKIP_LOCAL_DB_BOOTSTRAP || "true";
 
 console.log(
-	"[predev-local] Local clone mode — shared VM DEV tunnel (55435) disabled; using .env.local-clone",
+	"[predev-local] Local clone mode — shared VM DEV tunnel (55435) and remote device tunnels disabled; using .env.local-clone",
 );
 
 const result = spawnSync(process.execPath, [path.join(__dirname, "predev-run.cjs")], {

@@ -324,8 +324,16 @@ function ensureLocalCloneSchema() {
 
 function runPredevLocal() {
 	loadEnvFile(localCloneEnv, { overwrite: true });
+	// Local clone is intentionally isolated from shared VM / device SSH wiring.
+	// Without these skips, predev fails hard when remote tunnels are down and
+	// blocks `npm run dev:local` / `dev:local:restore` even though Postgres
+	// restore + schema push already succeeded.
 	process.env.HRIS_SKIP_BNPI_DB_ACCESS = "true";
 	process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD = "true";
+	process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL =
+		process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL || "true";
+	process.env.PROJECT_TRUTH_DISABLE_K8S_DB_WATCH =
+		process.env.PROJECT_TRUTH_DISABLE_K8S_DB_WATCH || "true";
 	process.env.HIKVISION_VM_BRIDGE_ENABLED =
 		process.env.HIKVISION_VM_BRIDGE_ENABLED || "false";
 	process.env.HRIS_SKIP_DEVICE_LIVE_PATH =
@@ -335,7 +343,7 @@ function runPredevLocal() {
 	process.env.HRIS_SKIP_LOCAL_DB_BOOTSTRAP =
 		process.env.HRIS_SKIP_LOCAL_DB_BOOTSTRAP || "true";
 
-	log("Running predev (local clone mode — no shared 55435 tunnel)...");
+	log("Running predev (local clone mode — no shared 55435 tunnel / remote device tunnels)...");
 	const result = run(process.execPath, [path.join(__dirname, "predev-run.cjs")], {
 		env: process.env,
 	});
@@ -352,8 +360,13 @@ function startApiWatch() {
 	loadEnvFile(localCloneEnv, { overwrite: true });
 
 	// Keep local-clone isolation flags even if .env set otherwise.
+	// The API watch watchdog also re-runs remote tunnel helpers unless skipped.
 	process.env.HRIS_SKIP_BNPI_DB_ACCESS = "true";
 	process.env.HRIS_SKIP_PROJECT_TRUTH_REMOTE_LAN_FORWARD = "true";
+	process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL =
+		process.env.HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL || "true";
+	process.env.PROJECT_TRUTH_DISABLE_K8S_DB_WATCH =
+		process.env.PROJECT_TRUTH_DISABLE_K8S_DB_WATCH || "true";
 	process.env.HIKVISION_VM_BRIDGE_ENABLED =
 		process.env.HIKVISION_VM_BRIDGE_ENABLED || "false";
 	process.env.HRIS_SKIP_DEVICE_LIVE_PATH =
