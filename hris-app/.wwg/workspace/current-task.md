@@ -4,25 +4,28 @@
 done
 
 ## Summary
-Rebalanced `/hr/benefits-management` DataTable column widths so the layout is no longer sparse/uneven.
+Employee Directory header UX: consolidate filters into one Filters popover; de-emphasize Columns / Export / Import chrome.
 
 ## Category
-ui-ux / bugfix
+ui-ux
 
 ## Packages
-- hris-app
-- Dual-app: **HR/emp-only (no counterpart)**
+- bandai-infra/hris-app
+- Dual-app: **HR/emp-only (no counterpart)** for admin configuration employees
 
 ## Changes
-- `app/components/templates/hr/benefits-management-template.tsx`
-  - **Benefit**: flexible primary column (`width: 100%` + truncate) absorbs leftover space
-  - **Direction**: fixed `10.5rem` (fits COMPENSATION/DEDUCTION badge)
-  - **Tax**: fixed `7.5rem` (fits Non-taxable)
-  - **Enrolled**: fixed `7rem` (fits header + icon/count)
-  - Actions remains DataTable sticky `132px`
+- `app/components/shared/EmployeeList.tsx`
+  - Department + Manager moved into `filterPopoverExtra` (inside Filters)
+  - Renamed button label to **Filters**
+  - Export title action uses subtle ghost styling
+  - Filter badge counts department/manager too
+- `app/components/atoms/DataTable.tsx`
+  - Columns / Import / Export use subtle ghost toolbar styling
+- `app/components/shared/EmployeeList.test.tsx`
+  - Expectations updated for in-popover department/manager filters
 
 ## Truth delta
-NO — layout polish only; no domain/API/product truth change.
+NO — layout/chrome polish only
 
 ## Drift
 NONE

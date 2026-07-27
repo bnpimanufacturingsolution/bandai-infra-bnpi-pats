@@ -210,7 +210,7 @@ const renderEmployeeList = (initialEntry = "/hr/employees") =>
 
 const openAgencyFilter = async () => {
 	const user = userEvent.setup();
-	await user.click(screen.getByRole("button", { name: /advanced filters/i }));
+	await user.click(screen.getByRole("button", { name: /filters/i }));
 	const agencyTrigger = screen
 		.getAllByRole("combobox")
 		.find((element) => element.textContent?.includes("All Agency"));
@@ -329,31 +329,26 @@ describe("EmployeeList agency advanced filter", () => {
 		expect(screen.getAllByTestId("avatar-root").length).toBeGreaterThanOrEqual(2);
 	}, 15_000);
 
-	it("keeps department and manager filters visible outside advanced filters", async () => {
+	it("keeps department and manager filters inside the Filters popover", async () => {
 		renderEmployeeList("/admin/configuration/employees");
+
+		// Not on the main toolbar until Filters is opened
+		expect(screen.queryByTestId("departmentId-toolbar-filter")).not.toBeInTheDocument();
+		expect(screen.queryByTestId("managerId-toolbar-filter")).not.toBeInTheDocument();
+
+		const user = userEvent.setup();
+		await user.click(screen.getByRole("button", { name: /filters/i }));
 
 		expect(screen.getByTestId("departmentId-toolbar-filter")).toBeInTheDocument();
 		expect(screen.getByTestId("managerId-toolbar-filter")).toBeInTheDocument();
-
-		const user = userEvent.setup();
-		await user.click(screen.getByRole("button", { name: /advanced filters/i }));
-
-		const advancedComboboxes = screen
-			.getAllByRole("combobox")
-			.filter((element) => !element.closest("[data-testid$='-toolbar-filter']"));
-
-		expect(
-			advancedComboboxes.some((element) => element.textContent?.includes("All Department")),
-		).toBe(false);
-		expect(
-			advancedComboboxes.some((element) => element.textContent?.includes("All Manager")),
-		).toBe(false);
 	}, 15_000);
 
 	it("passes department and manager selections through the employee API filter contract", async () => {
 		renderEmployeeList("/admin/configuration/employees");
 
 		const user = userEvent.setup();
+		await user.click(screen.getByRole("button", { name: /filters/i }));
+
 		await user.click(screen.getByTestId("departmentId-toolbar-filter").querySelector("button")!);
 		await user.click(screen.getByText("Production"));
 

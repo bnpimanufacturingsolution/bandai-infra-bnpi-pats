@@ -717,19 +717,30 @@ export default function EmployeeList({
 		id,
 		path,
 		className = "",
+		truncate = true,
 	}: {
 		label?: string | null;
 		id?: string | null;
 		path: string;
 		className?: string;
+		/** When false, show the full label (wrap if needed) instead of ellipsis. */
+		truncate?: boolean;
 	}) => {
 		const cleanLabel = String(label || "").trim();
 		if (!cleanLabel || cleanLabel === "N/A") {
 			return <AdminConfigMutedDash />;
 		}
 
+		const textClassName = [
+			"max-w-full text-left text-sm font-medium text-slate-800",
+			truncate ? "truncate" : "whitespace-normal break-words",
+			className,
+		]
+			.filter(Boolean)
+			.join(" ");
+
 		if (!id || !isAdminConfigurationEmployees) {
-			return <span className={`text-sm text-slate-700 ${className}`}>{cleanLabel}</span>;
+			return <span className={`text-sm text-slate-700 ${truncate ? "truncate" : "whitespace-normal break-words"} ${className}`}>{cleanLabel}</span>;
 		}
 
 		return (
@@ -739,47 +750,51 @@ export default function EmployeeList({
 					event.stopPropagation();
 					navigate(`${path}?action=view&id=${id}`);
 				}}
-				className={`max-w-full truncate text-left text-sm font-medium text-slate-800 underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${className}`}
+				className={`${textClassName} underline-offset-2 hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30`}
 				title={cleanLabel}>
 				{cleanLabel}
 			</button>
 		);
 	};
 
-	// Employee columns configuration
+	// Column balance:
+	// - Name is wide enough for full single-line names (no ellipsis for typical lengths)
+	// - Position is compact; Department absorbs leftover width with full labels
+	// - Workforce / Hire Date / Status / Actions stay compact
 	const employeeColumns: Column<EmployeeDisplay>[] = [
 		{
 			key: "name",
 			label: "Name",
+			// Avatar (~2.5rem) + gap + full first/last name on one line.
+			width: "17rem",
+			className: "min-w-0",
 			sortable: true,
 			searchable: true,
 			required: true,
 			priority: "critical",
 			render: (value, item) => {
 				const nameClassName = disableEmployeeDeepLinks
-					? "font-medium text-gray-900"
-					: "font-medium text-gray-900 hover:text-primary hover:underline";
-				// Avatar + name + employee code for every EmployeeList surface
+					? "whitespace-nowrap font-medium text-gray-900"
+					: "whitespace-nowrap font-medium text-gray-900 hover:text-primary hover:underline";
+				// Avatar + single-line name + employee code for every EmployeeList surface
 				// (admin configuration, HR employees, team scopes, etc.).
 				// Row click (DataTable onRowClick) opens the profile when deep links
 				// are enabled; name styling still signals that the row is navigable.
 				return (
-					<div className="min-w-0 space-y-0.5">
-						<div className="min-w-0">
-							<div className="flex min-w-0 items-center gap-3">
-								<EmployeeAvatar
-									src={item.avatar}
-									alt={value}
-									size="md"
-									className="shrink-0"
-								/>
-								<div className="min-w-0">
-									<div className={nameClassName} title={value}>
-										{value}
-									</div>
-									<div className="mt-1">
-										<AdminConfigCodeChip>{item.employeeId}</AdminConfigCodeChip>
-									</div>
+					<div className="min-w-0 max-w-full">
+						<div className="flex min-w-0 items-center gap-3">
+							<EmployeeAvatar
+								src={item.avatar}
+								alt={value}
+								size="md"
+								className="shrink-0"
+							/>
+							<div className="min-w-0">
+								<div className={nameClassName} title={value}>
+									{value}
+								</div>
+								<div className="mt-1">
+									<AdminConfigCodeChip>{item.employeeId}</AdminConfigCodeChip>
 								</div>
 							</div>
 						</div>
@@ -790,6 +805,9 @@ export default function EmployeeList({
 		{
 			key: "position",
 			label: "Position",
+			// Compact column — titles wrap if needed rather than stealing space from name.
+			width: "8.5rem",
+			className: "min-w-0 align-middle",
 			sortable: false,
 			searchable: true,
 			required: true,
@@ -800,6 +818,7 @@ export default function EmployeeList({
 						label: value,
 						id: item.positionId,
 						path: "/admin/configuration/positions",
+						truncate: false,
 					})}
 					{item.level !== "N/A" && (
 						<div className="text-[11px] text-muted-foreground">
@@ -808,6 +827,7 @@ export default function EmployeeList({
 								id: item.levelId,
 								path: "/admin/configuration/levels",
 								className: "text-[11px] font-normal text-muted-foreground",
+								truncate: false,
 							})}
 						</div>
 					)}
@@ -817,6 +837,9 @@ export default function EmployeeList({
 		{
 			key: "department",
 			label: "Department",
+			// Absorbs leftover table width; show full department/section labels.
+			width: "100%",
+			className: "min-w-0 align-middle",
 			sortable: false,
 			searchable: true,
 			required: true,
@@ -827,6 +850,7 @@ export default function EmployeeList({
 						label: value,
 						id: item.departmentId,
 						path: "/admin/configuration/departments",
+						truncate: false,
 					})}
 					{isAdminConfigurationEmployees && item.section !== "N/A" && (
 						<div className="text-[11px] text-muted-foreground">
@@ -835,6 +859,7 @@ export default function EmployeeList({
 								id: item.sectionId,
 								path: "/admin/configuration/sections",
 								className: "text-[11px] font-normal text-muted-foreground",
+								truncate: false,
 							})}
 						</div>
 					)}
@@ -844,13 +869,16 @@ export default function EmployeeList({
 		{
 			key: "workforceSource",
 			label: "Workforce",
+			width: "5.75rem",
+			className: "!px-2 whitespace-nowrap align-middle",
+			headerClassName: "!px-2 whitespace-nowrap",
 			sortable: true,
 			priority: "medium",
 			hideBelow: "lg",
 			render: (value: "DIRECT" | "AGENCY", item) => (
-				<div className="min-w-[90px]">
+				<div className="min-w-0 max-w-full">
 					<AdminConfigSourceChip
-						className={value === "AGENCY" ? "max-w-[170px]" : undefined}
+						className="max-w-full"
 						title={
 							value === "AGENCY"
 								? item.agencyCode !== "N/A"
@@ -872,6 +900,8 @@ export default function EmployeeList({
 					{
 						key: "email" as const,
 						label: "Email",
+						width: "12rem",
+						className: "min-w-0 max-w-0 overflow-hidden truncate",
 						searchable: true,
 						priority: "low" as const,
 						hideBelow: "xl" as const,
@@ -883,6 +913,8 @@ export default function EmployeeList({
 					{
 						key: "phone" as const,
 						label: "Phone",
+						width: "7.5rem",
+						className: "whitespace-nowrap",
 						searchable: true,
 						priority: "low" as const,
 						hideBelow: "xl" as const,
@@ -892,6 +924,9 @@ export default function EmployeeList({
 		{
 			key: "employmentHireDate",
 			label: "Hire Date",
+			width: "5.5rem",
+			className: "!px-2 whitespace-nowrap align-middle",
+			headerClassName: "!px-2 whitespace-nowrap",
 			sortable: true,
 			priority: "medium",
 			hideBelow: "lg",
@@ -899,7 +934,10 @@ export default function EmployeeList({
 		},
 		{
 			key: "status",
-			label: "Employment Status",
+			label: "Status",
+			width: "6.5rem",
+			className: "!px-2 whitespace-nowrap align-middle",
+			headerClassName: "!px-2 whitespace-nowrap",
 			sortable: true,
 			required: true,
 			priority: "critical",
@@ -1352,6 +1390,9 @@ export default function EmployeeList({
 
 	const advancedFilterValues = useMemo(
 		() => ({
+			// Include toolbar filters so the Filters badge counts them too.
+			departmentId: departmentFilter || "",
+			managerId: effectiveManagerFilter || "",
 			status: statusFilter || "",
 			sectionId: sectionFilter || "",
 			gender: genderFilter || "",
@@ -1365,6 +1406,8 @@ export default function EmployeeList({
 		}),
 		[
 			agencyFilterValue,
+			departmentFilter,
+			effectiveManagerFilter,
 			employmentTypeFilter,
 			genderFilter,
 			hireDateFromFilter,
@@ -1484,16 +1527,14 @@ export default function EmployeeList({
 		value: string | undefined,
 		placeholder: string,
 	) => (
-		<div
-			className="min-w-[150px] max-w-full shrink-0 sm:min-w-[180px]"
-			data-testid={`${option.key}-toolbar-filter`}>
+		<div className="w-full min-w-0" data-testid={`${option.key}-toolbar-filter`}>
 			<Select
 				value={value && value !== "all" ? value : "all"}
 				onValueChange={(nextValue) => handleFilterChange({ [option.key]: nextValue })}>
-				<SelectTrigger className="h-10 w-full rounded-lg border-neutral-200 bg-white text-xs font-semibold text-gray-700 shadow-sm focus:ring-2 focus:ring-primary/20">
+				<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs font-medium focus:ring-2 focus:ring-primary/20">
 					<SelectValue placeholder={placeholder} />
 				</SelectTrigger>
-				<SelectContent>
+				<SelectContent data-filter-select className="z-[120]">
 					<SelectItem value="all">All {option.label}</SelectItem>
 					{option.options.map((item) => (
 						<SelectItem key={item.value} value={item.value}>
@@ -1517,6 +1558,9 @@ export default function EmployeeList({
 				onImport={hideImport ? undefined : openImport}
 				onRowClick={disableEmployeeDeepLinks ? undefined : handleEmployeeRowClick}
 				renderActions={renderActions}
+				// Icon menu (or Select button) only — keep sticky Actions narrow.
+				// 5rem fits the uppercase "Actions" header + icon button with reduced padding.
+				actionColumnWidth={selectFor ? "6.5rem" : "5rem"}
 				isLoading={isTableLoading && !isFetching}
 				emptyMessage={
 					isFocusedDirectReportsView ? "No direct reports" : "No employees found"
@@ -1539,11 +1583,14 @@ export default function EmployeeList({
 				onSort={handleSort}
 				sortKey={sortParam}
 				sortDirection={orderParam}
-				customFilters={
+				// Department + Manager live inside the Filters popover (not the main toolbar).
+				filterPopoverExtra={
 					<>
-						<div data-testid="departmentId-toolbar-filter">
+						<div className="space-y-1.5" data-testid="departmentId-toolbar-filter">
+							<label className="text-xs font-medium text-gray-600">Department</label>
 							<DepartmentSectionPicker
-								variant="datatable"
+								variant="compact"
+								className="w-full min-w-0 [&>button]:w-full [&>button]:min-w-0 [&>button]:justify-between"
 								departments={departments}
 								sections={sections}
 								departmentId={departmentFilter}
@@ -1559,11 +1606,14 @@ export default function EmployeeList({
 								}
 							/>
 						</div>
-						{renderDirectoryToolbarSelect(
-							managerFilterOption,
-							effectiveManagerFilter,
-							isFetchingManagers ? "Loading managers" : "All Manager",
-						)}
+						<div className="space-y-1.5">
+							<label className="text-xs font-medium text-gray-600">Manager</label>
+							{renderDirectoryToolbarSelect(
+								managerFilterOption,
+								effectiveManagerFilter,
+								isFetchingManagers ? "Loading managers" : "All Manager",
+							)}
+						</div>
 					</>
 				}
 				searchWidth={
@@ -1572,21 +1622,18 @@ export default function EmployeeList({
 						: "w-full sm:w-[260px] lg:w-[320px]"
 				}
 				searchValue={searchQuery || ""}
-				filterButtonLabel={useTeamOverviewScope ? "Filters" : "Advanced Filters"}
+				filterButtonLabel="Filters"
 				filterColumns={2}
+				toolbarAlign="right"
 				titleActions={
 					hideExport ? null : (
-						<>
-							{!hideExport && (
-								<Button
-									variant="outline"
-									onClick={() => console.log("Export")}
-									className="h-9 px-3 text-xs">
-									<Download className="h-4 w-4 mr-2" />
-									Export
-								</Button>
-							)}
-						</>
+						<Button
+							variant="ghost"
+							onClick={() => console.log("Export")}
+							className="h-9 rounded-md border-0 bg-transparent px-2.5 text-xs font-medium text-gray-500 shadow-none transition hover:bg-neutral-100 hover:text-gray-700">
+							<Download className="h-3.5 w-3.5 opacity-70" />
+							<span>Export</span>
+						</Button>
 					)
 				}
 				containedScroll

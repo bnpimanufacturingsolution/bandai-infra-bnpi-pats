@@ -100,6 +100,8 @@ export interface DataTableProps<T> {
 	emptyActions?: ReactNode;
 	itemsPerPage?: number;
 	renderActions?: (item: T) => ReactNode;
+	/** Sticky actions column width when actions are present. Default `132px`. */
+	actionColumnWidth?: string;
 	className?: string;
 	showSearch?: boolean;
 	showFilters?: boolean;
@@ -164,6 +166,7 @@ const DataTable = <T extends Record<string, any>>({
 	emptyActions,
 	itemsPerPage = 10,
 	renderActions,
+	actionColumnWidth = "132px",
 	className,
 	showSearch = true,
 	showFilters = true,
@@ -383,7 +386,8 @@ const DataTable = <T extends Record<string, any>>({
 			"max-h-[24vh] min-h-[10rem] overflow-y-auto overscroll-contain modern-scroll pr-1",
 	);
 	const cardClassName = cn(
-		"rounded-lg",
+		// Tighter header→toolbar spacing than default Card gap-6
+		"rounded-lg gap-3",
 		containedScroll && "flex flex-col overflow-visible",
 		className,
 	);
@@ -391,7 +395,6 @@ const DataTable = <T extends Record<string, any>>({
 		? "flex min-h-0 flex-1 flex-col overflow-visible"
 		: undefined;
 	const hasActionsColumn = !!(onEdit || onDelete || onView || renderActions);
-	const actionColumnWidth = "132px";
 	const hasOptionalColumns = columns.some((column) => !column.required && column.priority !== "critical");
 	const hasExplicitColumnWidths = columns.some((column) => Boolean(column.width));
 	const tableClassName = cn(
@@ -418,9 +421,9 @@ const DataTable = <T extends Record<string, any>>({
 		);
 	};
 	const actionColumnClassName =
-		"sticky right-0 z-[5] bg-white text-center whitespace-nowrap shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)] group-hover/row:bg-neutral-50";
+		"sticky right-0 z-[5] bg-white px-2 text-center whitespace-nowrap shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)] group-hover/row:bg-neutral-50";
 	const actionHeaderClassName =
-		"sticky right-0 z-[6] bg-neutral-100 text-center shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]";
+		"sticky right-0 z-[6] bg-neutral-100 px-2 text-center shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]";
 	const isColumnSortable = (column: Column<T>) =>
 		isServerSide ? column.sortable === true : column.sortable !== false;
 	const renderColumnGroup = () => (
@@ -826,21 +829,25 @@ const DataTable = <T extends Record<string, any>>({
 		</div>
 	);
 
+	// Secondary chrome (Columns / Import / Export): ghost, low-contrast — not primary CTAs.
+	const subtleToolbarButtonClassName =
+		"h-9 rounded-md border-0 bg-transparent px-2.5 text-xs font-medium text-gray-500 shadow-none transition hover:bg-neutral-100 hover:text-gray-700";
+
 	const renderColumnDropdown = () => {
 		if (!hasOptionalColumns) return null;
 
 		return (
 			<div className="relative" data-dropdown>
 				<Button
-					variant="outline"
+					variant="ghost"
 					onClick={(e) => {
 						e.stopPropagation();
 						setShowColumnDropdown(!showColumnDropdown);
 						setShowFilterDropdown(false);
 						setShowExportDropdown(false);
 					}}
-					className="h-10 rounded-lg px-3 border-neutral-200 bg-white text-xs font-semibold text-gray-700 shadow-sm transition hover:border-primary/20 hover:bg-primary/5 hover:text-primary">
-					<Eye className="h-4 w-4" />
+					className={subtleToolbarButtonClassName}>
+					<Eye className="h-3.5 w-3.5 opacity-70" />
 					<span>Columns</span>
 				</Button>
 
@@ -948,15 +955,6 @@ const DataTable = <T extends Record<string, any>>({
 									<div className="flex items-center gap-2">{headerActions}</div>
 								)}
 
-								{onImport && (
-									<Button
-										variant="outline"
-										onClick={onImport}
-										className="h-10 rounded-lg px-3 border-neutral-200 bg-white text-xs font-semibold text-gray-700 shadow-sm transition hover:border-primary/20 hover:bg-primary/5 hover:text-primary">
-										<Upload className="h-4 w-4" />
-										<span>Import</span>
-									</Button>
-								)}
 								{onAdd && (
 									<Button
 										onClick={onAdd}
@@ -1654,7 +1652,7 @@ const DataTable = <T extends Record<string, any>>({
 		return (
 			<div className="relative" data-dropdown>
 				<Button
-					variant="outline"
+					variant="ghost"
 					onClick={(e) => {
 						if (onExport && !onExportCSV && !onExportPDF && !onExportExcel) {
 							onExport();
@@ -1665,8 +1663,8 @@ const DataTable = <T extends Record<string, any>>({
 						setShowFilterDropdown(false);
 						setShowColumnDropdown(false);
 					}}
-					className="h-10 rounded-lg px-3 border-neutral-200 bg-white text-xs font-semibold text-gray-700 shadow-sm transition hover:border-primary/20 hover:bg-primary/5 hover:text-primary">
-					<Download className="h-4 w-4" />
+					className={subtleToolbarButtonClassName}>
+					<Download className="h-3.5 w-3.5 opacity-70" />
 					<span>Export</span>
 				</Button>
 
@@ -1732,11 +1730,19 @@ const DataTable = <T extends Record<string, any>>({
 							<CardDescription className="mt-1">{description}</CardDescription>
 						)}
 					</div>
-					<div className="flex min-h-10 flex-wrap items-center justify-start gap-2 sm:justify-end">
+					{/* Subtle chrome group: Columns · Export · Import stay together */}
+					<div className="flex min-h-9 flex-wrap items-center justify-start gap-0.5 sm:justify-end">
 						{renderColumnDropdown()}
 						{renderExportDropdown()}
-						{titleActions && (
-							<div className="flex items-center gap-2">{titleActions}</div>
+						{titleActions}
+						{onImport && (
+							<Button
+								variant="ghost"
+								onClick={onImport}
+								className={subtleToolbarButtonClassName}>
+								<Upload className="h-3.5 w-3.5 opacity-70" />
+								<span>Import</span>
+							</Button>
 						)}
 					</div>
 				</div>

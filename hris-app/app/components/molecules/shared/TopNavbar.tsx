@@ -136,7 +136,7 @@ export function TopNavbar({
 
 	return (
 		<header
-			className={`hidden lg:block bg-white shadow-sm border-b border-orange-200 sticky top-0 z-40 ${className}`}>
+			className={`sticky top-0 z-40 hidden border-b border-gray-100 bg-white lg:block ${className}`}>
 			<div className="flex items-center justify-between h-16 px-6">
 				{/* Left side - Mobile menu button */}
 				<div className="flex items-center gap-2">
