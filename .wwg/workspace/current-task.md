@@ -1,5 +1,22 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-27 Confirm DM4 OT upload still required
+
+- Operator hypothesis: overtime upload can be removed because OT is already in
+  biometrics raw data.
+- **Verdict: FALSE — do not remove DM4 overtime upload.**
+- Evidence:
+  - Biometrics `Biometrics Data_Jun 26 - Jul 10.xlsx` = punch ledger only
+    (`No.`, `Date/Time`; 23,255 rows, 877 device nos).
+  - Approved OT `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx` =
+    OVERTIME/ND/HOLIDAY WORK DETAIL REPORT with Reg OTHrs / ND / Spcl / RHol /
+    RD buckets (DM4.3 → effective Timesheetline).
+  - Source-trace guardrail: raw biometrics = attendance evidence, not payroll
+    OT truth (`validate-bandai-payroll-source-trace.ts`).
+- Docs/UI truth sync (kept OT upload): `docs/dm-migration-workflow.md`,
+  `docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md`, DM4 copy in
+  `hris-app/.../migration.tsx`.
+
 ## Latest Task Addendum - 2026-07-27 Remove DM3 statutory benefits upload
 
 - Task mode: product UX + docs truth sync (DM3 migration).

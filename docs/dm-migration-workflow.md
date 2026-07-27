@@ -288,6 +288,26 @@ The BNPI DM4 proof path in `/admin/configuration/migration?workbook=dm4`
 loads source biometric workbooks and the 2026 approved overtime details workbook
 through `POST /api/migration/runs` with `workbookId = "dm4"` and polls
 `GET /api/migration/runs/:runId/progress`.
+
+### DM4 biometrics vs approved overtime (do not collapse)
+
+These are **two different source planes**. Raw biometrics do **not** replace
+the approved OT upload.
+
+| Source | Typical file | What it contains | What DM4 uses it for |
+| --- | --- | --- | --- |
+| Biometrics raw data | `Biometrics Data_Jun 26 - Jul 10.xlsx` | Punch ledger only: device/employee `No.` + `Date/Time` timestamps (no OT/ND/holiday hour columns) | DM4.1 attendance evidence (`PRESENT` / clock ledger) and day materialization inputs |
+| Approved overtime details | `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx` (or `2026 rptOvertimeDetails.xlsx`) | Payroll report **OVERTIME/ND/HOLIDAY WORK DETAIL REPORT** with day buckets: Regular Dys, Reg OTHrs, Reg NDHrs, Spcl Hrs, Spcl OTHrs, RHol Hrs, RHol OTHrs, RDHrs, RDOTHrs | DM4.3 updates effective `Timesheetline` approved OT / rest-day / holiday / ND buckets for payroll |
+
+Product guardrail (also in payroll source-trace):
+
+- Raw biometric files are **attendance evidence**, not payroll OT truth.
+- Payable Reg OT / RD / Hol / ND register columns require the approved OT
+  workbook (DM4.3), not inference from punch timestamps alone.
+- Biometrics-only DM4 can materialize attendance/timesheet shells; it does
+  **not** load approved OT hour buckets. Do **not** remove the DM4 overtime
+  upload path because punches “look like overtime hours.”
+
 That proof path is one materialization lifecycle. Source workbook rows are
 parsed and normalized in Node, selected `PRESENT` evidence is written, and the
 period timesheet-day snapshot is completed with one set-based PostgreSQL

@@ -7532,7 +7532,7 @@ export default function AdminMigrationPage() {
 							</div>
 							<p className="text-sm text-gray-500">
 								{isDm4
-									? "Import biometrics punches and optional approved overtime into attendance and timesheets."
+									? "Import biometrics punches for attendance, then approved overtime for OT/ND/holiday pay buckets (separate sources)."
 									: group.id === "dm3"
 										? "Import the employee workbook, then optional compensation and deduction mass uploads."
 										: "Upload one Excel workbook to import all sheets in order."}
@@ -7583,9 +7583,11 @@ export default function AdminMigrationPage() {
 									Import attendance sources
 								</h2>
 								<p className="mt-1 text-sm text-gray-600">
-									Upload biometrics punches required for DM4. Optionally attach
-									approved overtime for the same cutoff. Employees and schedules
-									from DM3 must already exist.
+									Upload biometrics punches for attendance (device No. + Date/Time).
+									Upload the approved OT/ND/holiday detail report separately for
+									payroll OT buckets. Raw biometrics are not OT truth — they do not
+									contain Reg OT / ND / RD / Hol hour columns. Employees and
+									schedules from DM3 must already exist.
 								</p>
 							</div>
 							<ol className="space-y-2 text-sm text-gray-700">
@@ -7594,7 +7596,7 @@ export default function AdminMigrationPage() {
 										1
 									</span>
 									<span>
-										Upload biometrics, then import attendance from that modal
+										Upload biometrics punches, then import attendance
 									</span>
 								</li>
 								<li className="flex gap-2">
@@ -7602,7 +7604,8 @@ export default function AdminMigrationPage() {
 										2
 									</span>
 									<span>
-										Optionally upload approved overtime in a separate modal
+										Upload approved overtime details for OT/ND/holiday pay buckets
+										(required for payroll OT parity; not optional when OT is paid)
 									</span>
 								</li>
 							</ol>
@@ -8200,9 +8203,9 @@ return (
 				}
 				description={
 					dm4UploadRole === "biometrics"
-						? "Add biometrics punch workbooks for DM4 attendance materialization."
+						? "Add biometrics punch workbooks (No. + Date/Time) for DM4 attendance materialization. Not a substitute for approved OT."
 						: dm4UploadRole === "overtime"
-							? "Add the approved OT / ND / holiday details workbook. Any file name is accepted."
+							? "Add the approved OT / ND / holiday details report (Reg OTHrs, ND, RD, Hol buckets). Required for payroll OT; separate from raw biometrics punches."
 							: dm3MassUploadRole === "compensation"
 								? "BNPI Compensation Mass Upload (COMCODE / Amount / EmployeeID / StartPayDate)."
 								: dm3MassUploadRole === "deduction"

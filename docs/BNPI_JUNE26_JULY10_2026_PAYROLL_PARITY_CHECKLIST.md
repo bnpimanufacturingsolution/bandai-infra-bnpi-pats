@@ -38,8 +38,8 @@ You have:
 | DM3 | `confidential-files/DMs/DM3-employee-data-migration (4).xlsx` |
 | Compensation (cutoff) | `confidential-files/Compensation Mass Upload 07.15.26.xlsx` |
 | Deduction (cutoff) | `confidential-files/Deduction Mass Upload 07.15.26.xlsx` |
-| Biometrics (cutoff) | `confidential-files/DMs/Biometrics Data_Jun 26 - Jul 10.xlsx` |
-| Approved OT (cutoff) | `confidential-files/2rptOvertimeDetails - June 26 - July 10, 2026.xlsx` |
+| Biometrics (cutoff) | `confidential-files/DMs/Biometrics Data_Jun 26 - Jul 10.xlsx` — punch-only (`No.`, `Date/Time`); **not** OT buckets |
+| Approved OT (cutoff) | `confidential-files/2rptOvertimeDetails - June 26 - July 10, 2026.xlsx` — required for Reg OT / RD / Hol / ND; **not** replaceable by biometrics |
 | Schedules source | `confidential-files/Breaktime Schedule.xlsx` (if not already in DM3.2) |
 | Leave (optional) | `confidential-files/rptLeaveBalance as of June 4, 2026.xlsx` |
 
@@ -95,7 +95,7 @@ Do **not** block on inventing a contribution-amount import or changing period-2 
 |---|---|---|
 | Monthly Salary / Basic Salary | Period basic on employee | DM3 Employees `BASIC_SALARY` |
 | No. of Days / Absent / UT-Late | Attendance + schedule + timesheet rules | DM3.2 schedules + DM4 biometrics + setup timesheet rules |
-| Reg OT / RD / Hol / ND buckets | Approved OT workbook | DM4.3 `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx` |
+| Reg OT / RD / Hol / ND buckets | Approved OT workbook (**not** raw biometrics) | DM4.3 `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx`. Biometrics file has only punch timestamps; OT report has approved hour buckets.
 | Allowances / AON / ARP / PFA / OBA / … | Cutoff compensation file | Compensation Mass Upload 07.15.26 |
 | Loans / NEGADJ / some deductions | Cutoff deduction file | Deduction Mass Upload 07.15.26 |
 | SSS Cont / PhilHealth / Pagibig | Engine (period 2 = **0**) | No file; Calculator + schedule |
@@ -178,12 +178,13 @@ Do **not** block on inventing a contribution-amount import or changing period-2 
 
 ### Phase 3 — Attendance and approved OT (DM4)
 
-- [ ] DM4: biometrics `Biometrics Data_Jun 26 - Jul 10.xlsx`
-- [ ] DM4: approved OT `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx`
+- [ ] DM4: biometrics `Biometrics Data_Jun 26 - Jul 10.xlsx` (attendance punches only)
+- [ ] DM4: approved OT `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx` (**still required**; punches do not contain Reg OT / ND / RD / Hol buckets)
 - [ ] Complete timesheet materialization for the period
 - [ ] Dry-run / repair approved OT → timesheet lines until planned updates = 0  
   (pattern: `npm run dry-run:bandai-payroll-timesheet-lines` then `repair:…` when applicable; point at this period’s OT file)
 - [ ] Sample check: days, absent, OT hours match register **before** Run Payroll
+- [ ] Do **not** skip OT upload because “OT is already in biometrics” — verified false for BNPI sources
 
 ### Phase 4 — Process payroll (clean snapshot)
 
