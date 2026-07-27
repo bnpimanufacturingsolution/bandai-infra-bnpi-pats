@@ -248,6 +248,85 @@ export type DurableFingerprintOwnerConflictEvidence = {
 	observedAt?: string | null;
 };
 
+/**
+ * Parse progressStatus=5 diagnostics from a merge/recovery write error string.
+ * Live shape (2026-07-27):
+ *   Target rejected ...: [{"fingerPrintId":1,"writeOk":true,"sticky":false,
+ *     "progressStatus":5,"progressErrorMsg":"1757","source":"device_fp_write_rejected_progress5:1757"}]
+ * Peer may appear in progressErrorMsg or as the progress5:NNNN suffix on source.
+ */
+export const extractProgress5OwnerConflictsFromWriteError = (params: {
+	jobId: string;
+	vendorUserId: unknown;
+	sourceDeviceId?: unknown;
+	targetDeviceId?: unknown;
+	error: unknown;
+	observedAt?: string | null;
+}): DurableFingerprintOwnerConflictEvidence[] => {
+	const vendorUserId = String(params.vendorUserId ?? "").trim();
+	const error = String(params.error ?? "");
+	if (!vendorUserId || !error) return [];
+	const start = error.indexOf("[");
+	const end = error.lastIndexOf("]");
+	if (start < 0 || end <= start) return [];
+	let attempts: any[] = [];
+	try {
+		const parsed = JSON.parse(error.slice(start, end + 1));
+		attempts = Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
+	}
+	const out: DurableFingerprintOwnerConflictEvidence[] = [];
+	for (const attempt of attempts) {
+		const fingerPrintId = Number(attempt?.fingerPrintId || 0);
+		const progressStatus = Number(attempt?.progressStatus);
+		const fromMsg = String(attempt?.progressErrorMsg ?? "").trim();
+		const fromSourceMatch = String(attempt?.source || "").match(
+			/device_fp_write_rejected_progress5:(\d{1,10})/i,
+		);
+		const peerRaw =
+			(/^\d{1,10}$/.test(fromMsg) ? fromMsg : null) ||
+			fromSourceMatch?.[1] ||
+			null;
+		// Prefer plain employee id tokens only (never free-text).
+		const conflictingVendorUserId = peerRaw ? String(peerRaw) : "";
+		if (
+			progressStatus !== 5 ||
+			!fingerPrintId ||
+			!conflictingVendorUserId ||
+			conflictingVendorUserId === vendorUserId
+		) {
+			continue;
+		}
+		out.push({
+			jobId: String(params.jobId || "").trim() || "unknown-job",
+			vendorUserId,
+			sourceDeviceId: String(params.sourceDeviceId ?? "").trim(),
+			targetDeviceId: String(params.targetDeviceId ?? "").trim(),
+			fingerPrintId,
+			conflictingVendorUserId,
+			observedAt: params.observedAt ?? null,
+		});
+	}
+	return out;
+};
+
+export const dedupeDurableFingerprintOwnerConflicts = (
+	evidence: DurableFingerprintOwnerConflictEvidence[],
+): DurableFingerprintOwnerConflictEvidence[] =>
+	evidence.filter(
+		(item, index, items) =>
+			index ===
+			items.findIndex(
+				(candidate) =>
+					candidate.vendorUserId === item.vendorUserId &&
+					candidate.sourceDeviceId === item.sourceDeviceId &&
+					candidate.targetDeviceId === item.targetDeviceId &&
+					candidate.fingerPrintId === item.fingerPrintId &&
+					candidate.conflictingVendorUserId === item.conflictingVendorUserId,
+			),
+	);
+
 export type FingerprintTargetOwnerScanSummary = {
 	targetDeviceId: string;
 	complete: boolean;
@@ -395,8 +474,12 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 		if (
 			writeIsAdminSandbox &&
 			ownersAreAdminSandbox &&
-			write.executionEligibility === "ready_from_raw_blob" &&
-			write.sourceEvidenceStatus === "raw_blob_present"
+			// Allow force-clear even when the prior planner stage was blocked —
+			// durable progress5 evidence is the stronger signal that admin dual
+			// owners need sticky clear + rewrite (not permanent RED).
+			write.sourceEvidenceStatus === "raw_blob_present" &&
+			(write.executionEligibility === "ready_from_raw_blob" ||
+				Boolean(write.sourceFingerprintTemplateChecksums?.length))
 		) {
 			retainedWrites.push({
 				...write,
@@ -418,18 +501,22 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 			});
 			continue;
 		}
+		// PROD (or mixed admin/PROD) progress5 peer: named anti-dupe residual.
+		// Never auto-delete the peer. Dry-run must not treat this as wouldWrite.
 		retainedWrites.push({
 			...write,
 			recommended: false,
 			executionEligibility: "blocked",
-			blockingReason: "physical_identity_adjudication_required",
+			blockingReason: "device_fp_anti_dupe_peer_owner",
 			recoveryStage: "physical_identity_action_required",
 			recommendationReason:
-				`Physical SDK owner protection reports target vendor user ${owners.join(
+				`Device fingerprint anti-dupe (progressStatus=5) reports peer owner ${owners.join(
 					", ",
-				)} for fingerprint slot ${slots.join(
+				)} for slot ${slots.join(
 					", ",
-				)}. Canonical employee plus checksum equivalence is not proven; overwrite is forbidden.`,
+				)} on this target. PROD vendor ids ${
+					ADMIN_SANDBOX_VENDOR_ID_MAX + 1
+				}+ never auto-clear peers. Canonical employee plus checksum equivalence is not proven; overwrite is forbidden. Reclassify as dual-biometric residual — do not re-queue as ready_from_raw_blob.`,
 		});
 	}
 

@@ -64,6 +64,8 @@ import {
 	buildDeviceUserMergePlan,
 	classifyFaceCustody,
 	fingerprintCustodyMatchesReview,
+	dedupeDurableFingerprintOwnerConflicts,
+	extractProgress5OwnerConflictsFromWriteError,
 	isAdminSandboxVendorUserId,
 	normalizeFingerprintCustodyEvidence,
 	reconcileDurableFingerprintOwnerConflicts,
@@ -1389,81 +1391,128 @@ const readDeviceUserMergeJob = (jobId: string): DeviceUserMergeJob | null => {
 	}
 };
 
-const readDurableFingerprintOwnerConflicts = (
+/**
+ * Collect durable progress5 peer-owner evidence from:
+ * 1) classic merge job snapshots on disk (DEVICE_USER_MERGE_JOB_DIR)
+ * 2) CredentialRecoveryJob DB rows (result.results + latestError) — the live
+ *    gap-burn path that previously never fed replan anti-dupe reclassification
+ *    (defect 2026-07-27: PROD 1751 vs 1757 kept re-queueing as ready).
+ */
+const readDurableFingerprintOwnerConflicts = async (
 	organizationId: string,
-): DurableFingerprintOwnerConflictEvidence[] => {
+): Promise<DurableFingerprintOwnerConflictEvidence[]> => {
+	const evidence: DurableFingerprintOwnerConflictEvidence[] = [];
 	try {
-		if (!fsSync.existsSync(DEVICE_USER_MERGE_JOB_DIR)) return [];
-		const evidence: DurableFingerprintOwnerConflictEvidence[] = [];
-		for (const name of fsSync.readdirSync(DEVICE_USER_MERGE_JOB_DIR)) {
-			if (!/^[a-zA-Z0-9-]+\.json$/.test(name)) continue;
-			const job = readDeviceUserMergeJob(name.slice(0, -5));
-			if (!job || job.organizationId !== organizationId) continue;
-			for (const result of job.results || []) {
+		if (fsSync.existsSync(DEVICE_USER_MERGE_JOB_DIR)) {
+			for (const name of fsSync.readdirSync(DEVICE_USER_MERGE_JOB_DIR)) {
+				if (!/^[a-zA-Z0-9-]+\.json$/.test(name)) continue;
+				const job = readDeviceUserMergeJob(name.slice(0, -5));
+				if (!job || job.organizationId !== organizationId) continue;
+				const observedAt =
+					job.completedAt?.toISOString() ||
+					job.updatedAt?.toISOString() ||
+					null;
+				for (const result of job.results || []) {
+					if (
+						String(result?.modality || "") !== "fingerprint" ||
+						String(result?.status || "") !== "error"
+					) {
+						continue;
+					}
+					evidence.push(
+						...extractProgress5OwnerConflictsFromWriteError({
+							jobId: job.jobId,
+							vendorUserId: result?.vendorUserId,
+							sourceDeviceId: result?.sourceDeviceId,
+							targetDeviceId: result?.targetDeviceId,
+							error: result?.error,
+							observedAt,
+						}),
+					);
+				}
+			}
+		}
+	} catch (error) {
+		deviceLogger.warn(
+			`Failed to read merge-job fingerprint owner-conflict evidence: ${error}`,
+		);
+	}
+	// Credential recovery jobs store the same diagnostics on result.results and
+	// latestError.message — harvest so replan marks PROD anti-dupe residual.
+	try {
+		const recoveryJobs = await (prisma as any).credentialRecoveryJob.findMany({
+			where: { organizationId },
+			orderBy: { updatedAt: "desc" },
+			take: 50,
+			select: {
+				id: true,
+				result: true,
+				latestError: true,
+				completedAt: true,
+				updatedAt: true,
+			},
+		});
+		for (const job of recoveryJobs || []) {
+			const observedAt =
+				(job.completedAt instanceof Date
+					? job.completedAt.toISOString()
+					: job.completedAt
+						? String(job.completedAt)
+						: null) ||
+				(job.updatedAt instanceof Date
+					? job.updatedAt.toISOString()
+					: job.updatedAt
+						? String(job.updatedAt)
+						: null);
+			const resultPayload =
+				job.result && typeof job.result === "object" ? job.result : null;
+			const results = Array.isArray(resultPayload?.results)
+				? resultPayload.results
+				: [];
+			for (const result of results) {
 				if (
 					String(result?.modality || "") !== "fingerprint" ||
 					String(result?.status || "") !== "error"
 				) {
 					continue;
 				}
-				const error = String(result?.error || "");
-				const start = error.indexOf("[");
-				const end = error.lastIndexOf("]");
-				if (start < 0 || end <= start) continue;
-				let attempts: any[] = [];
-				try {
-					const parsed = JSON.parse(error.slice(start, end + 1));
-					attempts = Array.isArray(parsed) ? parsed : [];
-				} catch {
-					continue;
-				}
-				for (const attempt of attempts) {
-					const conflictingVendorUserId = String(
-						attempt?.progressErrorMsg || "",
-					).trim();
-					const fingerPrintId = Number(attempt?.fingerPrintId || 0);
-					if (
-						Number(attempt?.progressStatus) !== 5 ||
-						!conflictingVendorUserId ||
-						!fingerPrintId ||
-						conflictingVendorUserId === String(result?.vendorUserId || "")
-					) {
-						continue;
-					}
-					evidence.push({
-						jobId: job.jobId,
-						vendorUserId: String(result?.vendorUserId || "").trim(),
-						sourceDeviceId: String(result?.sourceDeviceId || "").trim(),
-						targetDeviceId: String(result?.targetDeviceId || "").trim(),
-						fingerPrintId,
-						conflictingVendorUserId,
-						observedAt:
-							job.completedAt?.toISOString() ||
-							job.updatedAt?.toISOString() ||
-							null,
-					});
+				evidence.push(
+					...extractProgress5OwnerConflictsFromWriteError({
+						jobId: String(job.id || ""),
+						vendorUserId: result?.vendorUserId,
+						sourceDeviceId: result?.sourceDeviceId,
+						targetDeviceId: result?.targetDeviceId,
+						error: result?.error,
+						observedAt,
+					}),
+				);
+			}
+			const latestError =
+				job.latestError && typeof job.latestError === "object"
+					? job.latestError
+					: null;
+			if (latestError) {
+				const modality = String(latestError.modality || "fingerprint");
+				if (modality === "fingerprint" || !latestError.modality) {
+					evidence.push(
+						...extractProgress5OwnerConflictsFromWriteError({
+							jobId: String(job.id || ""),
+							vendorUserId: latestError.vendorUserId,
+							sourceDeviceId: latestError.sourceDeviceId,
+							targetDeviceId: latestError.targetDeviceId,
+							error: latestError.message || latestError,
+							observedAt,
+						}),
+					);
 				}
 			}
 		}
-		return evidence.filter(
-			(item, index, items) =>
-				index ===
-				items.findIndex(
-					(candidate) =>
-						candidate.vendorUserId === item.vendorUserId &&
-						candidate.sourceDeviceId === item.sourceDeviceId &&
-						candidate.targetDeviceId === item.targetDeviceId &&
-						candidate.fingerPrintId === item.fingerPrintId &&
-						candidate.conflictingVendorUserId ===
-							item.conflictingVendorUserId,
-				),
-		);
 	} catch (error) {
 		deviceLogger.warn(
-			`Failed to read durable fingerprint owner-conflict evidence: ${error}`,
+			`Failed to read recovery-job fingerprint owner-conflict evidence: ${error}`,
 		);
-		return [];
 	}
+	return dedupeDurableFingerprintOwnerConflicts(evidence);
 };
 
 const isDeviceUserMergeJobStale = (job: DeviceUserMergeJob) => {
@@ -12487,7 +12536,7 @@ export const controller = (prisma: PrismaClient) => {
 		});
 		plan = reconcileDurableFingerprintOwnerConflicts(
 			plan,
-			readDurableFingerprintOwnerConflicts(params.organizationId),
+			await readDurableFingerprintOwnerConflicts(params.organizationId),
 		);
 		const normalizeRecoveryStage = (write: any): HikvisionCredentialRecoveryStage => {
 			const exactStages = new Set([
@@ -12514,7 +12563,10 @@ export const controller = (prisma: PrismaClient) => {
 				return "queued_source_custody_recovery";
 			if (write.blockingReason === "target_write_unsupported")
 				return "probing_target_capability";
-			if (write.blockingReason === "physical_identity_adjudication_required")
+			if (
+				write.blockingReason === "physical_identity_adjudication_required" ||
+				write.blockingReason === "device_fp_anti_dupe_peer_owner"
+			)
 				return "physical_identity_action_required";
 			if (write.blockingReason === "source_conflict") return "comparing_sources";
 			return "preparing_writer";

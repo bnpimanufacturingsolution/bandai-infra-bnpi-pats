@@ -183,6 +183,122 @@ describe("Hikvision credential recovery graph", () => {
 		expect(preview.fullScope.ifYouExecuteNow.willUniqueGapDecrease).to.equal(true);
 		expect(preview.fullScope.ifYouExecuteNow.willUniqueGapReachZeroInThisWave).to.equal(true);
 		expect(preview.fullScope.ifYouExecuteNow.uniqueGapPeopleAfterBestCase).to.equal(0);
+		// Face wave: stickinessRisk low, still unproven physical for wouldWrite>0.
+		expect(preview.fullScope.ifYouExecuteNow.stickinessRisk).to.equal("low");
+		expect(preview.gapExpectation.stickinessUnprovenForWouldWrite).to.equal(true);
+	});
+
+	it("marks PROD ready FP stickinessRisk elevated and predicts anti-dupe residual (fail-closed)", () => {
+		// Live class: vendor 1751 ready_from_raw_blob → progress5 peer 1757 sticky=false.
+		// Dry-run must not treat wouldWrite as verified close.
+		const plan = {
+			credentialWrites: [
+				{
+					id: "fp-1751-d",
+					modality: "fingerprint",
+					vendorUserId: "1751",
+					recommended: true,
+					executionEligibility: "ready_from_raw_blob",
+					targetDeviceId: "device-d",
+					sourceDeviceId: "device-b",
+					sourceFingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "aabbccdd1111" },
+					],
+				},
+				{
+					// Residual peer still on another target (same blob) — collision signal.
+					id: "fp-1757-e-blocked",
+					modality: "fingerprint",
+					vendorUserId: "1757",
+					recommended: false,
+					executionEligibility: "blocked",
+					blockingReason: "physical_identity_adjudication_required",
+					targetDeviceId: "device-e",
+					sourceFingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "AABBCCDD1111" },
+					],
+				},
+			],
+		};
+		const preview = buildCredentialRecoveryExecutionPreview({
+			plan,
+			canaryModality: "fingerprint",
+			maxVerifiedWrites: 50,
+		});
+		const now = preview.fullScope.ifYouExecuteNow;
+		expect(now.wouldWriteCount).to.equal(1);
+		expect(now.stickinessRisk).to.equal("high");
+		expect(now.willUniqueGapReachZeroAssumesAllSticky).to.equal(false);
+		expect(now.predictedFailedClassResidual.prodNoAutoClearFpOps).to.equal(1);
+		expect(now.predictedFailedClassResidual.checksumCollisionPeerOps).to.equal(1);
+		expect(now.predictedFailedClassResidual.uniquePeopleStillAtRiskIfAntiDupeRejects).to.be.at.least(
+			1,
+		);
+		expect(
+			now.knownProgress5Peers.some(
+				(row) =>
+					row.vendorUserId === "1751" &&
+					(row.evidenceClass === "plan_checksum_collision" ||
+						row.evidenceClass === "prod_no_auto_clear"),
+			),
+		).to.equal(true);
+		expect(now.reason).to.match(/stickinessRisk=high|ready_from_raw_blob does not prove/i);
+		expect(now.willUniqueGapReachZeroInThisWave).to.equal(false);
+		expect(now.willUniqueGapDecrease).to.equal(false);
+		expect(preview.gapExpectation.stickinessRisk).to.equal("high");
+		expect(preview.gapExpectation.stickinessUnprovenForWouldWrite).to.equal(true);
+		// Fail-closed: known anti-dupe class must not inflate verified ceiling to full wouldWrite.
+		expect(preview.gapExpectation.verifiedWillIncreaseByAtMost).to.equal(0);
+		expect(
+			preview.fullScope.unlockChecklist.some((row) => row.id === "STICKINESS_PROGRESS5"),
+		).to.equal(true);
+	});
+
+	it("classifies device_fp_anti_dupe_peer_owner as physical action residual", () => {
+		expect(
+			classifyCredentialRecoveryWrite({
+				recommended: false,
+				executionEligibility: "blocked",
+				blockingReason: "device_fp_anti_dupe_peer_owner",
+				recoveryStage: "physical_identity_action_required",
+			}),
+		).to.equal("physical_action_required");
+	});
+
+	it("marks admin-band force overwrite as elevated stickiness (clear path unproven)", () => {
+		const plan = {
+			credentialWrites: [
+				{
+					id: "fp-admin-8",
+					modality: "fingerprint",
+					vendorUserId: "8",
+					recommended: true,
+					executionEligibility: "ready_from_raw_blob",
+					targetDeviceId: "device-a",
+					adminSandboxForceOverwrite: true,
+					adminSandboxConflictingOwners: ["10"],
+					adminSandboxConflictSlots: [1],
+					sourceFingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "adminonlyhash" },
+					],
+				},
+			],
+		};
+		const preview = buildCredentialRecoveryExecutionPreview({
+			plan,
+			canaryModality: "fingerprint",
+			maxVerifiedWrites: 10,
+		});
+		const now = preview.fullScope.ifYouExecuteNow;
+		expect(now.wouldWriteCount).to.equal(1);
+		expect(now.stickinessRisk).to.equal("elevated");
+		expect(now.predictedFailedClassResidual.adminForceOverwriteFpOps).to.equal(1);
+		expect(now.predictedFailedClassResidual.prodNoAutoClearFpOps).to.equal(0);
+		expect(
+			now.knownProgress5Peers.some(
+				(row) => row.evidenceClass === "admin_force_overwrite_unproven",
+			),
+		).to.equal(true);
 	});
 
 	it("prefers unique people first so one wave touches more people than multi-target spam", () => {

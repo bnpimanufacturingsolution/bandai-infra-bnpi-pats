@@ -3,6 +3,7 @@ import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
 	classifyFaceCustody,
+	extractProgress5OwnerConflictsFromWriteError,
 	fingerprintCustodyMatchesReview,
 	proveCanonicalDeviceIdentity,
 	proveFingerprintPhysicalReread,
@@ -778,15 +779,12 @@ describe("device user union merge", () => {
 				item.vendorUserId === "1" &&
 				item.targetDeviceId === "target",
 		);
-		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.blockingReason).to.equal(
-			"physical_identity_adjudication_required",
-		);
-		expect(write?.recoveryStage).to.equal(
-			"physical_identity_action_required",
-		);
-		expect(write?.recommendationReason).to.include("target vendor user 8");
-		expect(write?.recommendationReason).to.include("overwrite is forbidden");
+		// Admin 1 vs admin 8: force-clear path, not permanent dual-owner RED.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.adminSandboxForceOverwrite).to.equal(true);
+		expect(write?.adminSandboxConflictingOwners).to.deep.equal(["8"]);
+		expect(write?.recommendationReason).to.include("ADMIN_SANDBOX_FORCE_OVERWRITE");
 	});
 
 	it("allows per-identity fingerprint writes when this person has proven custody even if fleet owner scan is incomplete", () => {
@@ -1354,10 +1352,11 @@ describe("device user union merge", () => {
 				item.targetDeviceId === "target",
 		);
 		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.blockingReason).to.equal(
-			"physical_identity_adjudication_required",
-		);
+		expect(write?.blockingReason).to.equal("device_fp_anti_dupe_peer_owner");
 		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
+		expect(write?.recommendationReason || "").to.match(
+			/anti-dupe|progressStatus=5|never auto-clear/i,
+		);
 	});
 
 	it("does not discard uncollided pending slots when only one duplicate-owner slot is equivalent", () => {
@@ -1429,6 +1428,102 @@ describe("device user union merge", () => {
 				(item: any) => item.writeId === write?.id,
 			),
 		).to.equal(false);
+	});
+
+	it("extracts progress5 peer owner from recovery write diagnostics (PROD 1751 vs 1757 shape)", () => {
+		const message =
+			'Target rejected or failed to retain one or more raw fingerprint templates: [{"fingerPrintId":1,"writeOk":true,"sticky":false,"progressStatus":5,"progressErrorMsg":"1757","numOfFP":0,"source":"device_fp_write_rejected_progress5:1757"},{"fingerPrintId":2,"writeOk":true,"sticky":false,"progressStatus":5,"progressErrorMsg":"1757","numOfFP":0,"source":"device_fp_write_rejected_progress5:1757"}]';
+		const evidence = extractProgress5OwnerConflictsFromWriteError({
+			jobId: "cms2nvakw02xykx01js2756i3",
+			vendorUserId: "1751",
+			sourceDeviceId: "cmpxw13hx002h7zwso7dyedrn",
+			targetDeviceId: "cmripjwkw00ffl0013lfxcbxw",
+			error: message,
+			observedAt: "2026-07-27T03:23:35.113Z",
+		});
+		expect(evidence).to.have.length(2);
+		expect(evidence[0]).to.include({
+			vendorUserId: "1751",
+			conflictingVendorUserId: "1757",
+			fingerPrintId: 1,
+			targetDeviceId: "cmripjwkw00ffl0013lfxcbxw",
+		});
+		expect(evidence[1].fingerPrintId).to.equal(2);
+	});
+
+	it("reclassifies PROD progress5 peer as device_fp_anti_dupe_peer_owner not ready", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "1751",
+					employeeId: "employee-1751",
+					rawPayload: { numOfFP: 2 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "fp-1751-1" },
+						{ fingerPrintId: 2, checksum: "fp-1751-2" },
+					],
+				}),
+				record("target", {
+					vendorUserId: "1751",
+					employeeId: "employee-1751",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "1757",
+					employeeId: "employee-1757",
+					rawPayload: { numOfFP: 2 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 2,
+							rawBlobCount: 2,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [
+						{ fingerPrintId: 1, checksum: "fp-1757-1" },
+						{ fingerPrintId: 2, checksum: "fp-1757-2" },
+					],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "recovery-job",
+				vendorUserId: "1751",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 1,
+				conflictingVendorUserId: "1757",
+			},
+			{
+				jobId: "recovery-job",
+				vendorUserId: "1751",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 2,
+				conflictingVendorUserId: "1757",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1751" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.executionEligibility).to.equal("blocked");
+		expect(write?.recommended).to.equal(false);
+		expect(write?.blockingReason).to.equal("device_fp_anti_dupe_peer_owner");
+		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
 	});
 
 	it("proves physical retention only from exact target slots and a target-wide owner scan", () => {

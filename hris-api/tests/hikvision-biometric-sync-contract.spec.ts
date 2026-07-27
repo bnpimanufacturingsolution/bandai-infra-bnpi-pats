@@ -162,6 +162,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("progressStatus");
 		expect(controller).to.include("progressErrorMsg");
 		expect(controller).to.include("reconcileDurableFingerprintOwnerConflicts(");
+		// Recovery jobs (not only merge snapshots) must feed progress5 peer evidence.
+		expect(controller).to.include("extractProgress5OwnerConflictsFromWriteError");
+		expect(controller).to.include("credentialRecoveryJob.findMany");
+		expect(controller).to.include("device_fp_anti_dupe_peer_owner");
 	});
 
 	it("persists complete correlated credential operation telemetry without truncating rows", () => {

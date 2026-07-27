@@ -544,6 +544,7 @@ export const buildExpiredCredentialRecoverySourceLeaseWhere = (
  */
 const physicalBoundaryReasons = new Set([
 	"physical_identity_adjudication_required",
+	"device_fp_anti_dupe_peer_owner",
 	"duplicate_owner_detected",
 	"different_target_owner_detected",
 	"physical_reenrollment_required",
@@ -642,6 +643,12 @@ const unlockNeededForWrite = (write: any): string[] => {
 				"if dual-owner different people: policy residual (not auto-write)",
 				"if same vendor: richest overwrite path then replan",
 			];
+		case "device_fp_anti_dupe_peer_owner":
+			return [
+				"device progressStatus=5 named a peer owner (anti-dupe) — PROD 21+ never auto-clears",
+				"prove same-canonical employee + same checksum for equivalent_owner_safe_no_write, or leave as dual-biometric residual",
+				"do not re-queue ready_from_raw_blob; wouldWrite must not claim verify",
+			];
 		default:
 			return [
 				`classify unlock for blockingReason=${reason || "unknown"}`,
@@ -671,6 +678,9 @@ const ownerClassForWrite = (write: any): RecoveryOwnerClass => {
 		reason === "physical_identity_adjudication_required"
 	) {
 		return "agent_unlock";
+	}
+	if (reason === "device_fp_anti_dupe_peer_owner") {
+		return "policy_or_true_physical";
 	}
 	if (classifyCredentialRecoveryWrite(write) === "physical_action_required") {
 		return "policy_or_true_physical";
@@ -1154,7 +1164,49 @@ export type CredentialRecoveryFullScopeCertainty = {
 		/** Unique gap people remaining for modality after best-case wave (optimistic). */
 		uniqueGapPeopleAfterBestCase: number;
 		willUniqueGapDecrease: boolean;
+		/**
+		 * Best-case only: assumes every wouldWrite physically retains (sticky).
+		 * ready_from_raw_blob does NOT prove stickiness — progress5 anti-dupe can
+		 * reject PROD peers with writeOk=true sticky=false.
+		 */
 		willUniqueGapReachZeroInThisWave: boolean;
+		/**
+		 * Physical stickiness honesty for this wave (plan-row only; fail-closed).
+		 * never claims device-proved retention without stickyEmpty / reread evidence.
+		 */
+		stickinessRisk: "none" | "low" | "elevated" | "high";
+		/** true unless every wouldWrite is face-only or admin-band with no known peers. */
+		willUniqueGapReachZeroAssumesAllSticky: boolean;
+		/**
+		 * Known or class-predicted progress5 / anti-dupe peer residual.
+		 * plan_checksum_collision = another vendor in plan shares source template checksum.
+		 * prod_no_auto_clear = vendor 21+ ready FP (clear/retry path does not run).
+		 * admin_force_overwrite_unproven = admin sandbox clear planned but not sticky-proved.
+		 * inventory_peer_checksum = target inventory record holds same checksum under other vendor.
+		 */
+		knownProgress5Peers: Array<{
+			vendorUserId: string;
+			targetDeviceId: string;
+			operationId?: string;
+			peerVendorUserId?: string;
+			evidenceClass:
+				| "plan_checksum_collision"
+				| "inventory_peer_checksum"
+				| "prod_no_auto_clear"
+				| "admin_force_overwrite_unproven";
+			checksumSample?: string;
+		}>;
+		/** Residual prediction after a wave that hits known reject classes (fail-closed upper bound). */
+		predictedFailedClassResidual: {
+			prodNoAutoClearFpOps: number;
+			adminForceOverwriteFpOps: number;
+			checksumCollisionPeerOps: number;
+			/** wouldWrite ops whose stickiness is not plan-proven (at least elevated risk). */
+			stickinessUnprovenOps: number;
+			/** Unique people in wouldWrite that may remain in gap after progress5 class fails. */
+			uniquePeopleStillAtRiskIfAntiDupeRejects: number;
+			note: string;
+		};
 		reason: string;
 	};
 	/** Why ready is empty / residual not writable — full histogram. */
@@ -1217,6 +1269,10 @@ export type CredentialRecoveryExecutionPreview = {
 		uiGapOnlyMovesIfVerifiedGreaterThanZero: true;
 		fpReadyMustBePositiveForFingerprintVerifiedWrites: true;
 		faceReadyMustBePositiveForFaceVerifiedWrites: true;
+		/** Physical retain is never proven by plan-row ready_from_raw_blob alone. */
+		stickinessUnprovenForWouldWrite: boolean;
+		/** Mirror of fullScope.ifYouExecuteNow.stickinessRisk. */
+		stickinessRisk: "none" | "low" | "elevated" | "high";
 	};
 	/** Deep residual + unlock + unique-gap prediction (full dry-run scope). */
 	fullScope: CredentialRecoveryFullScopeCertainty;
@@ -1401,6 +1457,209 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 		wouldWrite.length >= modalityResidual.length &&
 		maxUniqueClosed >= uniqueGapForModality;
 
+	// --- Stickiness / progress5 anti-dupe honesty (plan-row only, fail-closed) ---
+	// ready_from_raw_blob means custody+writer eligibility, NOT device retention.
+	// Live defect class: writeOk=true sticky=false progressStatus=5 errorMsg=<peer>.
+	// Admin band 1–20 may clear+retry; PROD 21+ never auto-clears (fail-closed).
+	const isAdminSandboxVendor = (value: unknown): boolean => {
+		const raw = String(value ?? "").trim();
+		if (!/^\d+$/.test(raw)) return false;
+		const n = Number(raw);
+		return Number.isInteger(n) && n >= 1 && n <= 20;
+	};
+	const normalizeChecksum = (value: unknown) =>
+		String(value || "")
+			.trim()
+			.toLowerCase();
+	// Map source template checksum → vendor people that carry it in any residual FP write.
+	const checksumToVendors = new Map<string, Set<string>>();
+	for (const write of writes) {
+		if (String(write?.modality || "") !== "fingerprint") continue;
+		const vendor = String(write?.vendorUserId || "").trim();
+		if (!vendor) continue;
+		const templates = Array.isArray(write?.sourceFingerprintTemplateChecksums)
+			? write.sourceFingerprintTemplateChecksums
+			: [];
+		for (const template of templates) {
+			const checksum = normalizeChecksum(template?.checksum);
+			if (!checksum) continue;
+			const set = checksumToVendors.get(checksum) || new Set<string>();
+			set.add(vendor);
+			checksumToVendors.set(checksum, set);
+		}
+	}
+	// Inventory peer owners on target devices (when plan.users still carries checksums).
+	const inventoryChecksumOwners = new Map<string, Set<string>>();
+	const planUsers = Array.isArray(params.plan?.users) ? params.plan.users : [];
+	for (const user of planUsers) {
+		const records = Array.isArray(user?.records) ? user.records : [];
+		for (const record of records) {
+			const owner = String(record?.vendorUserId || "").trim();
+			const deviceId = String(record?.deviceId || "").trim();
+			if (!owner || !deviceId) continue;
+			const templates = Array.isArray(record?._fingerprintTemplateChecksums)
+				? record._fingerprintTemplateChecksums
+				: [];
+			for (const template of templates) {
+				const checksum = normalizeChecksum(template?.checksum);
+				if (!checksum) continue;
+				const key = `${deviceId}|${checksum}`;
+				const set = inventoryChecksumOwners.get(key) || new Set<string>();
+				set.add(owner);
+				inventoryChecksumOwners.set(key, set);
+			}
+		}
+	}
+
+	type Progress5Peer = CredentialRecoveryFullScopeCertainty["ifYouExecuteNow"]["knownProgress5Peers"][number];
+	const knownProgress5Peers: Progress5Peer[] = [];
+	let prodNoAutoClearFpOps = 0;
+	let adminForceOverwriteFpOps = 0;
+	let checksumCollisionPeerOps = 0;
+	const stickinessUnprovenPeople = new Set<string>();
+
+	for (const write of wouldWrite) {
+		if (String(write?.modality || "") !== "fingerprint") continue;
+		const vendor = String(write?.vendorUserId || "").trim();
+		const targetDeviceId = String(write?.targetDeviceId || "").trim();
+		const operationId = String(write?.id || "").trim() || undefined;
+		if (!vendor) continue;
+		const templates = Array.isArray(write?.sourceFingerprintTemplateChecksums)
+			? write.sourceFingerprintTemplateChecksums
+			: [];
+		let hadChecksumPeer = false;
+		for (const template of templates) {
+			const checksum = normalizeChecksum(template?.checksum);
+			if (!checksum) continue;
+			const planPeers = [...(checksumToVendors.get(checksum) || [])].filter(
+				(peer) => peer !== vendor,
+			);
+			for (const peer of planPeers.slice(0, 5)) {
+				hadChecksumPeer = true;
+				knownProgress5Peers.push({
+					vendorUserId: vendor,
+					targetDeviceId,
+					operationId,
+					peerVendorUserId: peer,
+					evidenceClass: "plan_checksum_collision",
+					checksumSample: checksum.slice(0, 16),
+				});
+			}
+			const invPeers = [
+				...(inventoryChecksumOwners.get(`${targetDeviceId}|${checksum}`) || []),
+			].filter((peer) => peer !== vendor);
+			for (const peer of invPeers.slice(0, 5)) {
+				hadChecksumPeer = true;
+				knownProgress5Peers.push({
+					vendorUserId: vendor,
+					targetDeviceId,
+					operationId,
+					peerVendorUserId: peer,
+					evidenceClass: "inventory_peer_checksum",
+					checksumSample: checksum.slice(0, 16),
+				});
+			}
+		}
+		if (hadChecksumPeer) {
+			checksumCollisionPeerOps += 1;
+			stickinessUnprovenPeople.add(vendor);
+		}
+		if (write?.adminSandboxForceOverwrite === true) {
+			adminForceOverwriteFpOps += 1;
+			stickinessUnprovenPeople.add(vendor);
+			knownProgress5Peers.push({
+				vendorUserId: vendor,
+				targetDeviceId,
+				operationId,
+				peerVendorUserId: Array.isArray(write?.adminSandboxConflictingOwners)
+					? String(write.adminSandboxConflictingOwners[0] || "") || undefined
+					: undefined,
+				evidenceClass: "admin_force_overwrite_unproven",
+			});
+		} else if (!isAdminSandboxVendor(vendor)) {
+			// PROD band: no progress5 clear/retry; retention not plan-proven.
+			prodNoAutoClearFpOps += 1;
+			stickinessUnprovenPeople.add(vendor);
+			knownProgress5Peers.push({
+				vendorUserId: vendor,
+				targetDeviceId,
+				operationId,
+				evidenceClass: "prod_no_auto_clear",
+			});
+		}
+	}
+
+	// Dedupe peer rows (same vendor/target/class/peer).
+	const peerDedupe = new Set<string>();
+	const knownProgress5PeersDeduped = knownProgress5Peers.filter((row) => {
+		const key = [
+			row.vendorUserId,
+			row.targetDeviceId,
+			row.evidenceClass,
+			row.peerVendorUserId || "",
+			row.operationId || "",
+		].join("|");
+		if (peerDedupe.has(key)) return false;
+		peerDedupe.add(key);
+		return true;
+	}).slice(0, 40);
+
+	const stickinessUnprovenOps =
+		prodNoAutoClearFpOps + adminForceOverwriteFpOps + checksumCollisionPeerOps > 0
+			? wouldWrite.filter((write: any) => {
+					if (String(write?.modality || "") !== "fingerprint") return false;
+					const vendor = String(write?.vendorUserId || "").trim();
+					if (write?.adminSandboxForceOverwrite === true) return true;
+					if (!isAdminSandboxVendor(vendor)) return true;
+					const templates = Array.isArray(write?.sourceFingerprintTemplateChecksums)
+						? write.sourceFingerprintTemplateChecksums
+						: [];
+					return templates.some((template: any) => {
+						const checksum = normalizeChecksum(template?.checksum);
+						if (!checksum) return false;
+						const planPeers = checksumToVendors.get(checksum);
+						if (planPeers && [...planPeers].some((peer) => peer !== vendor)) {
+							return true;
+						}
+						const inv = inventoryChecksumOwners.get(
+							`${String(write?.targetDeviceId || "").trim()}|${checksum}`,
+						);
+						return Boolean(inv && [...inv].some((peer) => peer !== vendor));
+					});
+				}).length
+			: 0;
+
+	const fpWouldWriteCount = wouldWrite.filter(
+		(write: any) => String(write?.modality || "") === "fingerprint",
+	).length;
+	let stickinessRisk: CredentialRecoveryFullScopeCertainty["ifYouExecuteNow"]["stickinessRisk"] =
+		"none";
+	if (fpWouldWriteCount === 0) {
+		stickinessRisk = wouldWrite.length > 0 ? "low" : "none";
+	} else if (checksumCollisionPeerOps > 0 || prodNoAutoClearFpOps > 0) {
+		// Known peer collision or PROD ready FP: progress5 class can reject retention.
+		stickinessRisk = checksumCollisionPeerOps > 0 ? "high" : "elevated";
+	} else if (adminForceOverwriteFpOps > 0) {
+		stickinessRisk = "elevated";
+	} else {
+		// Admin-band ready FP without known peers: clear path exists but still unproven sticky.
+		stickinessRisk = "low";
+	}
+	const willUniqueGapReachZeroAssumesAllSticky = willZero;
+	const predictedFailedClassResidual = {
+		prodNoAutoClearFpOps,
+		adminForceOverwriteFpOps,
+		checksumCollisionPeerOps,
+		stickinessUnprovenOps,
+		uniquePeopleStillAtRiskIfAntiDupeRejects: stickinessUnprovenPeople.size,
+		note:
+			fpWouldWriteCount === 0
+				? "No fingerprint wouldWrite in this wave — progress5 anti-dupe class not applicable."
+				: stickinessRisk === "high" || stickinessRisk === "elevated"
+					? "ready_from_raw_blob ≠ device retain. PROD progress5 peers are dual-biometric residual (no auto-clear). Do not treat wouldWrite as verified close; reclassify anti-dupe after one sticky=false wave."
+					: "Fingerprint wouldWrite is admin-band or face-only class; stickiness still requires physical reread. Admin 1–20 may clear+retry once; never invent sticky success from plan rows.",
+	};
+
 	const faceSourceSelectOps = writes.filter((write: any) => {
 		if (String(write?.modality) !== "face") return false;
 		const sourceId = String(write?.sourceDeviceId || "").trim();
@@ -1439,12 +1698,33 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 		{
 			id: "UNIQUE_GAP_PREDICTION",
 			status: willDecrease ? "open" : wouldWrite.length === 0 ? "blocked" : "open",
-			item: "Predict unique gap delta if all wouldWrite ops verify",
+			item: "Predict unique gap delta if all wouldWrite ops verify+retain (optimistic sticky)",
 			needed: [
 				`uniqueGapPeople(modality)=${uniqueGapForModality}`,
 				`maxUniqueClosedIfVerify=${maxUniqueClosed}`,
 				`willUniqueGapDecrease=${willDecrease}`,
 				`willUniqueGapReachZeroInThisWave=${Boolean(willZero)}`,
+				`willUniqueGapReachZeroAssumesAllSticky=${willUniqueGapReachZeroAssumesAllSticky}`,
+				`stickinessRisk=${stickinessRisk}`,
+			],
+		},
+		{
+			id: "STICKINESS_PROGRESS5",
+			status:
+				stickinessRisk === "none" || stickinessRisk === "low"
+					? stickinessRisk === "none"
+						? "n_a"
+						: "open"
+					: "blocked",
+			item: "Physical stickiness honesty: ready_from_raw_blob ≠ retain; progress5 anti-dupe residual",
+			ops: stickinessUnprovenOps,
+			needed: [
+				`stickinessRisk=${stickinessRisk}`,
+				`prodNoAutoClearFpOps=${prodNoAutoClearFpOps}`,
+				`adminForceOverwriteFpOps=${adminForceOverwriteFpOps}`,
+				`checksumCollisionPeerOps=${checksumCollisionPeerOps}`,
+				`knownProgress5PeerRows=${knownProgress5PeersDeduped.length}`,
+				`uniquePeopleStillAtRiskIfAntiDupeRejects=${stickinessUnprovenPeople.size}`,
 			],
 		},
 		...whyNotReady.slice(0, 12).map((row, index) => ({
@@ -1496,15 +1776,38 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 			wouldWriteCount: wouldWrite.length,
 			wouldWriteUniquePeople,
 			maxUniquePeopleGapClosedIfAllVerify: maxUniqueClosed,
-			uniqueGapPeopleAfterBestCase: Math.max(0, uniqueGapForModality - maxUniqueClosed),
-			willUniqueGapDecrease: willDecrease,
-			willUniqueGapReachZeroInThisWave: Boolean(willZero),
+			// Fail-closed residual after anti-dupe class: people still at risk stay in gap.
+			uniqueGapPeopleAfterBestCase: Math.max(
+				0,
+				uniqueGapForModality -
+					Math.max(0, maxUniqueClosed - stickinessUnprovenPeople.size),
+			),
+			// Do not claim gap decrease when PROD no-clear / checksum collision dominate the wave.
+			willUniqueGapDecrease:
+				willDecrease &&
+				prodNoAutoClearFpOps === 0 &&
+				checksumCollisionPeerOps === 0,
+			// Never claim unique-gap zero while PROD anti-dupe or checksum-collision peers remain.
+			willUniqueGapReachZeroInThisWave: Boolean(
+				willZero &&
+					prodNoAutoClearFpOps === 0 &&
+					checksumCollisionPeerOps === 0 &&
+					stickinessRisk !== "high",
+			),
+			stickinessRisk,
+			willUniqueGapReachZeroAssumesAllSticky: willUniqueGapReachZeroAssumesAllSticky,
+			knownProgress5Peers: knownProgress5PeersDeduped,
+			predictedFailedClassResidual,
 			reason:
 				wouldWrite.length === 0
 					? "Ready queue empty for this modality — execute cannot reduce unique gap KPIs. See whyNotReady + unlockChecklist."
-					: willZero
-						? `Execute would attempt ${wouldWrite.length} writes covering ${wouldWriteUniquePeople} unique people; residual for modality is fully ready so unique gap can reach 0 if all verify.`
-						: `Execute would attempt ${wouldWrite.length} writes covering up to ${wouldWriteUniquePeople} unique people; unique gap falls only for people who fully verify (UI gap needs verified>0).`,
+					: prodNoAutoClearFpOps > 0 || checksumCollisionPeerOps > 0
+						? `Execute would attempt ${wouldWrite.length} writes covering up to ${wouldWriteUniquePeople} unique people, but stickinessRisk=${stickinessRisk}: ready_from_raw_blob does not prove device retain (progress5 anti-dupe / PROD no auto-clear). ${prodNoAutoClearFpOps} PROD FP op(s) have no auto-clear and ${checksumCollisionPeerOps} checksum-collision peer op(s) may hit progress5 (writeOk=true sticky=false). wouldWrite is attempt ceiling, not verified close. uniquePeopleStillAtRiskIfAntiDupeRejects=${predictedFailedClassResidual.uniquePeopleStillAtRiskIfAntiDupeRejects}.`
+						: stickinessRisk === "high" || stickinessRisk === "elevated"
+							? `Execute would attempt ${wouldWrite.length} writes covering up to ${wouldWriteUniquePeople} unique people, but stickinessRisk=${stickinessRisk}: ready_from_raw_blob does not prove device retain (progress5 anti-dupe / admin force clear unproven). uniquePeopleStillAtRiskIfAntiDupeRejects=${predictedFailedClassResidual.uniquePeopleStillAtRiskIfAntiDupeRejects}.`
+							: willZero
+								? `Execute would attempt ${wouldWrite.length} writes covering ${wouldWriteUniquePeople} unique people; residual for modality is fully ready so unique gap can reach 0 if all verify and retain (stickinessRisk=${stickinessRisk}).`
+								: `Execute would attempt ${wouldWrite.length} writes covering up to ${wouldWriteUniquePeople} unique people; unique gap falls only for people who fully verify+retain (UI gap needs verified>0; stickinessRisk=${stickinessRisk}).`,
 		},
 		whyNotReady: whyNotReady.slice(0, 30),
 		unlockChecklist,
@@ -1548,11 +1851,21 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 		blockReasonsWhenZeroReady: blockReasonsWhenZeroReady.slice(0, 20),
 		certainty: "deterministic_from_plan",
 		gapExpectation: {
-			verifiedWillIncreaseByAtMost: wouldWrite.length,
-			uniquePeopleTouchedAtMost: wouldWriteUniquePeople,
+			// Attempt ceiling minus known anti-dupe / PROD no-clear / force-unproven classes.
+			verifiedWillIncreaseByAtMost: Math.max(
+				0,
+				wouldWrite.length - stickinessUnprovenOps,
+			),
+			uniquePeopleTouchedAtMost: Math.max(
+				0,
+				wouldWriteUniquePeople - stickinessUnprovenPeople.size,
+			),
 			uiGapOnlyMovesIfVerifiedGreaterThanZero: true,
 			fpReadyMustBePositiveForFingerprintVerifiedWrites: true,
 			faceReadyMustBePositiveForFaceVerifiedWrites: true,
+			// Fail-closed: plan-row ready is never device-proved physical retain.
+			stickinessUnprovenForWouldWrite: wouldWrite.length > 0,
+			stickinessRisk,
 		},
 		fullScope,
 	};
