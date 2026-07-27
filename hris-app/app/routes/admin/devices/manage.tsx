@@ -1103,7 +1103,7 @@ export default function DevicesManagePage() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Devices"
 				data={items}

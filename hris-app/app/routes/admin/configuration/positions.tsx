@@ -760,7 +760,7 @@ IT-SE,Software Engineer,Software Engineer,IT-OPS,40000,80000,"Junior,Mid,Senior"
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Positions"
 				data={positions}

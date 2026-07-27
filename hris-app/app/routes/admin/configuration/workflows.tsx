@@ -766,7 +766,7 @@ export default function WorkflowsPage({ rulesPolicyMode = false }: WorkflowsPage
 		createWorkflowInstanceMutation.isPending || updateWorkflowInstanceMutation.isPending;
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Workflow Templates"
 				description={
@@ -785,6 +785,7 @@ export default function WorkflowsPage({ rulesPolicyMode = false }: WorkflowsPage
 					<ConfigurationEmptyGuide
 						label="Add workflow template"
 						onClick={openCreateDomainPicker}
+				containedScroll
 					/>
 				}
 				searchWidth="w-80"

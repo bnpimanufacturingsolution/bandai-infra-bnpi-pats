@@ -375,7 +375,7 @@ export default function AgenciesPage() {
 	const isDeepLinkLoading = !!activeAgencyId && isLoadingAgency;
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Agencies"
 				data={items}

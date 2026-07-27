@@ -22,6 +22,7 @@ import {
 	adminRulesPolicyItems,
 } from "~/lib/admin-navigation";
 import bandaiLogo from "~/assets/bandai_logo.png";
+import { isAdminViewportFillPath } from "~/lib/admin-viewport-fill";
 
 interface AdminLayoutProps {
 	children?: React.ReactNode;
@@ -37,6 +38,9 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
 	const { user } = useAuth();
 	const location = useLocation();
+
+	// List/table pages fill the main pane; forms/details keep page scroll.
+	const isViewportFillPage = isAdminViewportFillPath(location.pathname);
 
 	const department = user?.metadata?.employee?.department;
 	const rawOrganizationLogo = user?.organization?.branding?.logo;
@@ -359,9 +363,16 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 								department={department}
 							/>
 
-							{/* Page Content */}
-							<main className="flex-1 p-6 overflow-y-auto min-h-0">
-								{children || <Outlet />}
+							{/* Page content: fixed viewport height (h-0+flex-1). */}
+							<main className="flex h-0 min-h-0 flex-1 flex-col overflow-hidden p-6">
+								<div
+									className={
+										isViewportFillPage
+											? "flex h-full min-h-0 flex-col overflow-hidden"
+											: "flex h-full min-h-0 flex-col overflow-y-auto"
+									}>
+									{children || <Outlet />}
+								</div>
 							</main>
 						</div>
 

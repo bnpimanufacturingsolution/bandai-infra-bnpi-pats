@@ -272,7 +272,7 @@ export default function DisciplinaryActionPage() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Disciplinary Action Rules"
 				description="Create and manage disciplinary action rules for your organization"
@@ -288,6 +288,7 @@ export default function DisciplinaryActionPage() {
 				emptyDescription="Get started by creating your first disciplinary action rule."
 				searchWidth="w-80"
 				itemsPerPage={10}
+				containedScroll
 			/>
 
 			{/* Create/Edit Modal */}

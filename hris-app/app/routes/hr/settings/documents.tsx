@@ -575,7 +575,7 @@ export default function HRDocumentSetupPage() {
 	];
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="201 Document Types"
 				data={documentTypes}

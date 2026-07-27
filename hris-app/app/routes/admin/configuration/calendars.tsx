@@ -373,7 +373,7 @@ export default function CalendarsPage() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Calendars"
 				description="Manage company calendars and holidays"
@@ -404,6 +404,7 @@ export default function CalendarsPage() {
 				onExportExcel={() => {
 					/* your Excel logic */
 				}}
+				containedScroll
 			/>
 
 			{/* Edit / Create Modal */}

@@ -1422,65 +1422,51 @@ export default function EmployeeList({
 
 	if (isLoading) {
 		return (
-			<div className="space-y-6">
+			<div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-300 bg-white p-6">
 				{/* Header Skeleton */}
-				<div className="flex items-center justify-between">
+				<div className="mb-3 flex shrink-0 items-center justify-between">
 					<div className="space-y-2">
-						<div className="h-7 bg-gray-200 rounded w-48 animate-pulse"></div>
-						<div className="h-4 bg-gray-200 rounded w-72 animate-pulse"></div>
+						<div className="h-7 w-48 animate-pulse rounded bg-gray-200"></div>
+						<div className="h-4 w-72 animate-pulse rounded bg-gray-200"></div>
 					</div>
 					<div className="flex gap-2">
-						<div className="h-10 bg-gray-200 rounded w-24 animate-pulse"></div>
-						<div className="h-10 bg-gray-200 rounded w-24 animate-pulse"></div>
-						<div className="h-10 bg-gray-200 rounded w-24 animate-pulse"></div>
+						<div className="h-9 w-20 animate-pulse rounded bg-gray-200"></div>
+						<div className="h-9 w-20 animate-pulse rounded bg-gray-200"></div>
+						<div className="h-9 w-20 animate-pulse rounded bg-gray-200"></div>
 					</div>
 				</div>
 
 				{/* Filters Skeleton */}
-				<div className="flex gap-3">
-					<div className="h-10 bg-gray-200 rounded flex-1 max-w-md animate-pulse"></div>
-					<div className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
-					<div className="h-10 bg-gray-200 rounded w-32 animate-pulse"></div>
+				<div className="mb-3 flex shrink-0 justify-end gap-3">
+					<div className="h-10 w-64 max-w-full animate-pulse rounded bg-gray-200"></div>
+					<div className="h-10 w-24 animate-pulse rounded bg-gray-200"></div>
+					<div className="h-10 w-24 animate-pulse rounded bg-gray-200"></div>
 				</div>
 
-				{/* Table Skeleton */}
-				<div className="border rounded-lg overflow-hidden bg-white">
-					{/* Table Header */}
-					<div className="border-b bg-gray-50 p-4">
+				{/* Table Skeleton — fills remaining height */}
+				<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border bg-white">
+					<div className="shrink-0 border-b bg-gray-50 p-4">
 						<div className="flex gap-4">
-							<div className="h-4 bg-gray-200 rounded w-32 animate-pulse"></div>
-							<div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-							<div className="h-4 bg-gray-200 rounded w-28 animate-pulse"></div>
-							<div className="h-4 bg-gray-200 rounded w-24 animate-pulse"></div>
-							<div className="h-4 bg-gray-200 rounded w-20 animate-pulse"></div>
+							<div className="h-4 w-32 animate-pulse rounded bg-gray-200"></div>
+							<div className="h-4 w-24 animate-pulse rounded bg-gray-200"></div>
+							<div className="h-4 w-28 animate-pulse rounded bg-gray-200"></div>
+							<div className="h-4 w-24 animate-pulse rounded bg-gray-200"></div>
+							<div className="h-4 w-20 animate-pulse rounded bg-gray-200"></div>
 						</div>
 					</div>
-					{/* Table Rows */}
-					<div className="divide-y">
-						{Array.from({ length: 8 }).map((_, idx) => (
+					<div className="min-h-0 flex-1 divide-y overflow-auto">
+						{Array.from({ length: 10 }).map((_, idx) => (
 							<div key={idx} className="p-4">
-								<div className="flex gap-4 items-center">
-									<div className="h-10 w-10 bg-gray-200 rounded-full animate-pulse"></div>
+								<div className="flex items-center gap-4">
+									<div className="h-10 w-10 animate-pulse rounded-full bg-gray-200"></div>
 									<div className="flex-1 space-y-2">
-										<div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div>
-										<div className="h-3 bg-gray-200 rounded w-1/2 animate-pulse"></div>
+										<div className="h-4 w-3/4 animate-pulse rounded bg-gray-200"></div>
+										<div className="h-3 w-1/2 animate-pulse rounded bg-gray-200"></div>
 									</div>
-									<div className="h-6 bg-gray-200 rounded w-20 animate-pulse"></div>
-									<div className="h-8 bg-gray-200 rounded w-8 animate-pulse"></div>
+									<div className="h-6 w-20 animate-pulse rounded bg-gray-200"></div>
+									<div className="h-8 w-8 animate-pulse rounded bg-gray-200"></div>
 								</div>
 							</div>
-						))}
-					</div>
-				</div>
-
-				{/* Pagination Skeleton */}
-				<div className="flex items-center justify-between">
-					<div className="h-4 bg-gray-200 rounded w-48 animate-pulse"></div>
-					<div className="flex gap-2">
-						{Array.from({ length: 5 }).map((_, idx) => (
-							<div
-								key={idx}
-								className="h-8 w-8 bg-gray-200 rounded animate-pulse"></div>
 						))}
 					</div>
 				</div>
@@ -1547,9 +1533,10 @@ export default function EmployeeList({
 	);
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
 			<DataTable
 				title="Employee Directory"
+				className="h-full min-h-0 flex-1 overflow-hidden"
 				data={formattedItems}
 				columns={employeeColumns}
 				filters={employeeFilters}
@@ -1616,11 +1603,7 @@ export default function EmployeeList({
 						</div>
 					</>
 				}
-				searchWidth={
-					useTeamOverviewScope
-						? "w-full sm:w-[220px] md:w-[250px] xl:w-[280px]"
-						: "w-full sm:w-[260px] lg:w-[320px]"
-				}
+				searchWidth="w-56"
 				searchValue={searchQuery || ""}
 				filterButtonLabel="Filters"
 				filterColumns={2}

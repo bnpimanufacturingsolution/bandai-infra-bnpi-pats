@@ -3579,8 +3579,8 @@ export default function DeviceEventsPage() {
 	];
 
 	return (
-		<div className="space-y-3">
-			<div className="flex flex-col gap-2 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
+		<div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+			<div className="flex shrink-0 flex-col gap-2 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
 				<div className="flex min-w-0 items-center gap-3">
 					<Button
 						type="button"
@@ -4044,8 +4044,8 @@ export default function DeviceEventsPage() {
 				</button>
 			)}
 
-			<div className="rounded-md border border-slate-200 bg-white p-2">
-				<div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-200 bg-white p-2">
+				<div className="mb-2 flex shrink-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
 					<div className="min-w-0">
 						<h2 className="truncate text-sm font-semibold text-slate-950">
 							{viewMode === "live" ? "Live events" : "Saved events"}
@@ -4182,9 +4182,8 @@ export default function DeviceEventsPage() {
 							? "bg-emerald-50/80 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-50"
 							: ""
 					}
+					className="min-h-0 flex-1"
 					containedScroll
-					containedBodyClassName="min-h-[7.5rem] max-h-[calc(100vh-33rem)]"
-					emptyStateClassName="rounded-md border border-slate-200 bg-slate-50 px-4 py-5"
 				/>
 			</div>
 

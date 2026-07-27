@@ -583,7 +583,7 @@ export default function UsersPage() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Users"
 				data={items}

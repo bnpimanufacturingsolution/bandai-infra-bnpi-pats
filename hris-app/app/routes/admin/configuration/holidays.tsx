@@ -594,7 +594,7 @@ Company Holiday,special-non-working,2026-01-02,2026-01-02,ACTIVE,SH`;
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Holidays"
 				data={holidays}

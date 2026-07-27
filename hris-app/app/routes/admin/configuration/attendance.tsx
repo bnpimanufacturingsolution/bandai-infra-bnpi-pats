@@ -307,7 +307,7 @@ export default function AttendancePage() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Attendance"
 				description="Manage and import attendance records"
@@ -335,6 +335,7 @@ export default function AttendancePage() {
 				onExportExcel={() => {
 					/* your Excel logic */
 				}}
+				containedScroll
 			/>
 
 			{/* Import Modal */}

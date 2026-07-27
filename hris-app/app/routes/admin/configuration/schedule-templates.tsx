@@ -1296,7 +1296,7 @@ SPLIT0800,Split 8 Hour,8,WORK(8:00AM-12:00PM);BREAK(12:00PM-1:00PM);WORK(1:00PM-
 	];
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Schedule Templates"
 				data={items}

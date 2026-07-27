@@ -141,6 +141,7 @@ export interface DataTableProps<T> {
 	searchPlaceholder?: string;
 	searchValue?: string; // Controlled search value for server-side search
 	containedScroll?: boolean; // Keep dense admin tables scrolling inside the table shell.
+	/** Toolbar (search / add / filters) alignment. Defaults to `right` when `containedScroll` is on. */
 	toolbarAlign?: "left" | "right";
 }
 
@@ -174,7 +175,7 @@ const DataTable = <T extends Record<string, any>>({
 	alwaysShowPagination = true,
 	showExport = true,
 	loadingRows = 5,
-	searchWidth = "w-80",
+	searchWidth = "w-56",
 	columnVisibility,
 	onColumnVisibilityChange,
 	addButtonLabel = "Add",
@@ -205,8 +206,10 @@ const DataTable = <T extends Record<string, any>>({
 	searchPlaceholder,
 	searchValue,
 	containedScroll = false,
-	toolbarAlign = "left",
+	toolbarAlign,
 }: DataTableProps<T>) => {
+	// Admin dense tables (containedScroll) mirror Employee Directory: toolbar on the right.
+	const resolvedToolbarAlign = toolbarAlign ?? (containedScroll ? "right" : "left");
 	const getDefaultColumnVisibility = React.useCallback(
 		() =>
 			columns.reduce(
@@ -367,32 +370,34 @@ const DataTable = <T extends Record<string, any>>({
 		showExport && (!!onExportCSV || !!onExportPDF || !!onExportExcel || !!onExport);
 	const containedHeaderScrollRef = React.useRef<HTMLDivElement | null>(null);
 	const containedBodyScrollRef = React.useRef<HTMLDivElement | null>(null);
-	const headerClassName = containedScroll ? "z-10" : undefined;
+	const headerClassName = containedScroll ? "z-10 shrink-0" : undefined;
 	const desktopTableViewportClassName = containedScroll
-		? "hidden min-h-0 md:block"
+		? "hidden min-h-0 flex-1 flex-col md:flex"
 		: "overflow-x-auto modern-scroll md:block hidden";
 	const desktopTableFrameClassName = containedScroll
-		? "rounded-lg border border-neutral-200 bg-white"
+		? "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white"
 		: "overflow-x-auto rounded-lg border border-neutral-200 bg-white";
+	// Split header/body shell: body flexes to fill remaining card height (no fixed vh offset).
 	const containedTableShellClassName =
-		"hidden overflow-hidden rounded-lg border border-neutral-200 bg-white md:block";
+		"hidden min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white md:flex";
 	const containedTableHeaderViewportClassName =
-		"overflow-hidden border-b border-neutral-200 bg-neutral-100";
+		"shrink-0 overflow-hidden border-b border-neutral-200 bg-neutral-100";
 	const containedTableBodyViewportClassName =
-		"max-h-[calc(100vh-31rem)] min-h-[12rem] overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]";
+		"min-h-0 flex-1 overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]";
 	const mobileListViewportClassName = cn(
 		"md:hidden space-y-3 mt-6",
 		containedScroll &&
-			"max-h-[24vh] min-h-[10rem] overflow-y-auto overscroll-contain modern-scroll pr-1",
+			"min-h-0 flex-1 overflow-y-auto overscroll-contain modern-scroll pr-1",
 	);
 	const cardClassName = cn(
 		// Tighter header→toolbar spacing than default Card gap-6
 		"rounded-lg gap-3",
-		containedScroll && "flex flex-col overflow-visible",
+		// Fill parent height; table body scrolls inside the card (page itself does not scroll)
+		containedScroll && "flex h-full min-h-0 flex-1 flex-col overflow-hidden py-4",
 		className,
 	);
 	const cardContentClassName = containedScroll
-		? "flex min-h-0 flex-1 flex-col overflow-visible"
+		? "flex min-h-0 flex-1 flex-col overflow-hidden"
 		: undefined;
 	const hasActionsColumn = !!(onEdit || onDelete || onView || renderActions);
 	const hasOptionalColumns = columns.some((column) => !column.required && column.priority !== "critical");
@@ -905,198 +910,261 @@ const DataTable = <T extends Record<string, any>>({
 		);
 	};
 
-	const tableContent = (
-		<>
-			{/* Search and Filters */}
-			{(showSearch || showFilters) && (
-				<div className={cn(containedScroll ? "mb-4" : "space-y-4 mb-6")}>
-					<div
-						className={cn(
-							"flex flex-col sm:flex-row gap-3 md:gap-4",
-							toolbarAlign === "right"
-								? "items-end sm:items-center sm:justify-end"
-								: "items-stretch sm:items-center justify-between",
-						)}>
-						<div
-							className={cn(
-								"flex min-w-0 items-center gap-2",
-								toolbarAlign === "right"
-									? "w-full justify-end sm:w-auto"
-									: "flex-1",
-								containedScroll
-									? cn(
-											"flex-wrap md:flex-nowrap md:pb-1",
-											showFilterDropdown ||
-												showColumnDropdown ||
-												showExportDropdown
-												? "md:overflow-visible"
-												: "md:overflow-x-auto",
-										)
-									: "flex-wrap",
-							)}>
-							{showSearch && (
-								<div
-									className={cn(
-										searchWidth,
-										"relative group/search w-full min-w-0 sm:w-auto sm:min-w-[220px] sm:flex-none",
-									)}>
-									<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within/search:text-primary transition-colors" />
-									<Input
-										placeholder={searchPlaceholder || "Search..."}
-										value={search}
-										onChange={(e) => handleSearch(e.target.value)}
-										className="pl-10 h-10 rounded-lg border-neutral-200 bg-white text-sm shadow-sm transition focus:bg-white focus:ring-2 focus:ring-primary/10"
-									/>
-								</div>
+	const renderExportDropdown = () => {
+		if (!hasExportOptions) return null;
+
+		return (
+			<div className="relative" data-dropdown>
+				<Button
+					variant="ghost"
+					onClick={(e) => {
+						if (onExport && !onExportCSV && !onExportPDF && !onExportExcel) {
+							onExport();
+							return;
+						}
+						e.stopPropagation();
+						setShowExportDropdown(!showExportDropdown);
+						setShowFilterDropdown(false);
+						setShowColumnDropdown(false);
+					}}
+					className={subtleToolbarButtonClassName}>
+					<Download className="h-3.5 w-3.5 opacity-70" />
+					<span>Export</span>
+				</Button>
+
+				{showExportDropdown && (
+					<div className="absolute right-0 mt-2 w-56 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg z-[100]">
+						<div className="mb-1 border-b border-neutral-100 p-2">
+							<h4 className="text-xs font-semibold text-gray-900">Export</h4>
+						</div>
+						<div className="space-y-1">
+							{onExportCSV && (
+								<button
+									onClick={() => {
+										setShowExportDropdown(false);
+										setIsExportScopeModalOpen(true);
+									}}
+									className="group flex w-full items-center gap-3 rounded-md p-2.5 transition-colors hover:bg-primary/5">
+									<FileSpreadsheet className="h-4 w-4 text-gray-400 group-hover:text-primary" />
+									<span className="text-xs font-medium text-gray-700 group-hover:text-primary">
+										Download CSV
+									</span>
+								</button>
 							)}
-
-							<div className="contents">
-								{headerActions && (
-									<div className="flex items-center gap-2">{headerActions}</div>
-								)}
-
-								{onAdd && (
-									<Button
-										onClick={onAdd}
-										className={cn(
-											"h-10 rounded-lg px-3 text-xs font-semibold shadow-sm transition",
-											addButtonClassName,
-										)}
-										style={addButtonStyle}>
-										<Plus className="h-4 w-4" />
-										<span>{addButtonLabel}</span>
-									</Button>
-								)}
-
-								{customFilters}
-
-								{showFilters && (filters.length > 0 || filterPopoverExtra) && (
-									<div className="relative" data-dropdown>
-										<Button
-											variant="outline"
-											onClick={(e) => {
-												e.stopPropagation();
-												setShowFilterDropdown(!showFilterDropdown);
-												setShowColumnDropdown(false);
-												setShowExportDropdown(false);
-											}}
-											className="h-10 rounded-lg px-3 border-neutral-200 bg-white text-xs font-semibold text-gray-700 shadow-sm transition hover:border-primary/20 hover:bg-primary/5 hover:text-primary">
-											<Filter className="h-4 w-4" />
-											<span>{filterButtonLabel}</span>
-											{activeFilterCount > 0 && (
-												<Badge
-													variant="primary-soft"
-													className="h-5 min-w-5 px-1 text-[10px] font-semibold">
-													{activeFilterCount}
-												</Badge>
-											)}
-										</Button>
-
-										{showFilterDropdown && (
-											<div
-												className={`absolute right-0 mt-2 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg z-[100] ${
-													filterColumns === 2 ? "w-[36rem]" : "w-72"
-												}`}>
-												<div className="mb-3 flex items-center justify-between">
-													<h4 className="text-xs font-semibold text-gray-900">
-														Filters
-													</h4>
-													<Button
-														variant="ghost"
-														size="sm"
-														onClick={clearFilters}
-														className="h-7 text-xs font-medium text-primary hover:bg-primary/5">
-														Clear
-													</Button>
-												</div>
-												<div
-													className={
-														filterColumns === 2
-															? "grid grid-cols-2 gap-x-4 gap-y-3"
-															: "space-y-3"
-													}>
-													{filterPopoverExtra}
-													{filters.map((filter) => (
-														<div
-															key={filter.key}
-															className="space-y-1.5">
-															<label className="text-xs font-medium text-gray-600">
-																{filter.label}
-															</label>
-															{filter.type === "date" ? (
-																<CalendarDatePicker
-																	value={
-																		activeFilters[filter.key] ||
-																		""
-																	}
-																	onChange={(value) =>
-																		handleFilter(
-																			filter.key,
-																			value,
-																		)
-																	}
-																	className="h-9 rounded-md border-neutral-200 bg-white text-xs font-medium focus:ring-2 focus:ring-primary/20"
-																/>
-															) : (
-																<Select
-																	value={
-																		activeFilters[filter.key] ||
-																		"all"
-																	}
-																	onOpenChange={(open) =>
-																		setOpenFilterSelectKey(
-																			open
-																				? filter.key
-																				: null,
-																		)
-																	}
-																	onValueChange={(value) =>
-																		handleFilter(
-																			filter.key,
-																			value,
-																		)
-																	}>
-																	<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs font-medium focus:ring-2 focus:ring-primary/20">
-																		<SelectValue
-																			placeholder={`All ${filter.label}`}
-																		/>
-																	</SelectTrigger>
-																	<SelectContent
-																		data-filter-select
-																		className="z-[120]">
-																		<SelectItem value="all">
-																			All {filter.label}
-																		</SelectItem>
-																		{filter.options.map(
-																			(option) => (
-																				<SelectItem
-																					key={
-																						option.value
-																					}
-																					value={
-																						option.value
-																					}>
-																					{option.label}
-																				</SelectItem>
-																			),
-																		)}
-																	</SelectContent>
-																</Select>
-															)}
-														</div>
-													))}
-												</div>
-											</div>
-										)}
-									</div>
-								)}
-
-							</div>
+							{onExportPDF && (
+								<button
+									onClick={() => {
+										onExportPDF();
+										setShowExportDropdown(false);
+									}}
+									className="group flex w-full items-center gap-3 rounded-md p-2.5 transition-colors hover:bg-primary/5">
+									<FileText className="h-4 w-4 text-gray-400 group-hover:text-primary" />
+									<span className="text-xs font-medium text-gray-700 group-hover:text-primary">
+										Download PDF
+									</span>
+								</button>
+							)}
+							{onExportExcel && (
+								<button
+									onClick={() => {
+										onExportExcel();
+										setShowExportDropdown(false);
+									}}
+									className="group flex w-full items-center gap-3 rounded-md p-2.5 transition-colors hover:bg-primary/5">
+									<FileSpreadsheet className="h-4 w-4 text-gray-400 group-hover:text-primary" />
+									<span className="text-xs font-medium text-gray-700 group-hover:text-primary">
+										Download Excel
+									</span>
+								</button>
+							)}
 						</div>
 					</div>
-				</div>
-			)}
+				)}
+			</div>
+		);
+	};
 
+	const renderSearchInput = (opts?: { className?: string }) => {
+		if (!showSearch) return null;
+		return (
+			<div
+				className={cn(
+					searchWidth,
+					"relative group/search w-full min-w-0 sm:min-w-[220px]",
+					opts?.className,
+				)}>
+				<Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 transition-colors group-focus-within/search:text-primary" />
+				<Input
+					placeholder={searchPlaceholder || "Search..."}
+					value={search}
+					onChange={(e) => handleSearch(e.target.value)}
+					className="h-10 rounded-lg border-neutral-200 bg-white pl-10 text-sm shadow-sm transition focus:bg-white focus:ring-2 focus:ring-primary/10"
+				/>
+			</div>
+		);
+	};
+
+	const renderFilterButton = () => {
+		if (!showFilters || (filters.length === 0 && !filterPopoverExtra)) return null;
+
+		return (
+			<div className="relative" data-dropdown>
+				<Button
+					variant="outline"
+					onClick={(e) => {
+						e.stopPropagation();
+						setShowFilterDropdown(!showFilterDropdown);
+						setShowColumnDropdown(false);
+						setShowExportDropdown(false);
+					}}
+					className="h-10 rounded-lg border-neutral-200 bg-white px-3 text-xs font-semibold text-gray-700 shadow-sm transition hover:border-primary/20 hover:bg-primary/5 hover:text-primary">
+					<Filter className="h-4 w-4" />
+					<span>{filterButtonLabel}</span>
+					{activeFilterCount > 0 && (
+						<Badge
+							variant="primary-soft"
+							className="h-5 min-w-5 px-1 text-[10px] font-semibold">
+							{activeFilterCount}
+						</Badge>
+					)}
+				</Button>
+
+				{showFilterDropdown && (
+					<div
+						className={`absolute right-0 z-[100] mt-2 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg ${
+							filterColumns === 2 ? "w-[36rem]" : "w-72"
+						}`}>
+						<div className="mb-3 flex items-center justify-between">
+							<h4 className="text-xs font-semibold text-gray-900">Filters</h4>
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={clearFilters}
+								className="h-7 text-xs font-medium text-primary hover:bg-primary/5">
+								Clear
+							</Button>
+						</div>
+						<div
+							className={
+								filterColumns === 2
+									? "grid grid-cols-2 gap-x-4 gap-y-3"
+									: "space-y-3"
+							}>
+							{filterPopoverExtra}
+							{filters.map((filter) => (
+								<div key={filter.key} className="space-y-1.5">
+									<label className="text-xs font-medium text-gray-600">
+										{filter.label}
+									</label>
+									{filter.type === "date" ? (
+										<CalendarDatePicker
+											value={activeFilters[filter.key] || ""}
+											onChange={(value) => handleFilter(filter.key, value)}
+											className="h-9 rounded-md border-neutral-200 bg-white text-xs font-medium focus:ring-2 focus:ring-primary/20"
+										/>
+									) : (
+										<Select
+											value={activeFilters[filter.key] || "all"}
+											onOpenChange={(open) =>
+												setOpenFilterSelectKey(open ? filter.key : null)
+											}
+											onValueChange={(value) =>
+												handleFilter(filter.key, value)
+											}>
+											<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs font-medium focus:ring-2 focus:ring-primary/20">
+												<SelectValue
+													placeholder={`All ${filter.label}`}
+												/>
+											</SelectTrigger>
+											<SelectContent data-filter-select className="z-[120]">
+												<SelectItem value="all">All {filter.label}</SelectItem>
+												{filter.options.map((option) => (
+													<SelectItem key={option.value} value={option.value}>
+														{option.label}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+									)}
+								</div>
+							))}
+						</div>
+					</div>
+				)}
+			</div>
+		);
+	};
+
+	const renderAddButton = () => {
+		if (!onAdd) return null;
+		return (
+			<Button
+				onClick={onAdd}
+				className={cn(
+					"h-10 rounded-lg px-3 text-xs font-semibold shadow-sm transition",
+					addButtonClassName,
+				)}
+				style={addButtonStyle}>
+				<Plus className="h-4 w-4" />
+				<span>{addButtonLabel}</span>
+			</Button>
+		);
+	};
+
+	const renderImportButton = () => {
+		if (!onImport) return null;
+		return (
+			<Button variant="ghost" onClick={onImport} className={subtleToolbarButtonClassName}>
+				<Upload className="h-3.5 w-3.5 opacity-70" />
+				<span>Import</span>
+			</Button>
+		);
+	};
+
+	// Single header line: Title · Search · Columns · Export · Import · Filters · Add (primary last).
+	const renderTitleToolbarRow = () => (
+		<div className="flex min-w-0 flex-col gap-2">
+			<div
+				className={cn(
+					"flex min-w-0 items-center gap-2",
+					showFilterDropdown || showColumnDropdown || showExportDropdown
+						? "overflow-visible"
+						: "overflow-x-auto",
+				)}>
+				<div className="min-w-0 shrink-0">
+					<CardTitle className="truncate text-lg font-semibold whitespace-nowrap">
+						{title}
+					</CardTitle>
+				</div>
+				{renderSearchInput({
+					// Compact width so title + actions keep the single header line balanced
+					className: "w-56 min-w-[12rem] max-w-[14rem] shrink-0",
+				})}
+				<div className="ml-auto flex shrink-0 items-center gap-1.5">
+					{/* Subtle secondary: Columns · Export · Import */}
+					{renderColumnDropdown()}
+					{renderExportDropdown()}
+					{titleActions}
+					{renderImportButton()}
+					{headerActions && (
+						<div className="flex items-center gap-2">{headerActions}</div>
+					)}
+					{customFilters}
+					{/* Filters then primary Add (always last) */}
+					{renderFilterButton()}
+					{renderAddButton()}
+				</div>
+			</div>
+			{description ? (
+				<CardDescription className="max-w-3xl text-xs leading-snug">
+					{description}
+				</CardDescription>
+			) : null}
+		</div>
+	);
+
+	const tableContent = (
+		<div className={cn(containedScroll && "flex min-h-0 flex-1 flex-col")}>
 			{onExportCSV && (
 				<ExportScopeModal
 					open={isExportScopeModalOpen}
@@ -1108,7 +1176,8 @@ const DataTable = <T extends Record<string, any>>({
 				/>
 			)}
 
-			{/* Table */}
+			{/* Table — flex-1 so body fills remaining viewport under toolbar */}
+			<div className={cn(containedScroll && "flex min-h-0 flex-1 flex-col")}>
 			{isLoading ? (
 				renderLoadingSkeleton()
 			) : data.length === 0 ? (
@@ -1632,120 +1701,29 @@ const DataTable = <T extends Record<string, any>>({
 					{renderPagination()}
 				</>
 			)}
-		</>
+			</div>
+		</div>
 	);
 
 	if (noCard) {
 		return (
-			<div className={cn("space-y-4", className)}>
-				{hasOptionalColumns && (
-					<div className="flex justify-end">{renderColumnDropdown()}</div>
-				)}
+			<div
+				className={cn(
+					"flex flex-col gap-3",
+					containedScroll && "min-h-0 flex-1",
+					className,
+				)}>
+				<div className="shrink-0">{renderTitleToolbarRow()}</div>
 				{tableContent}
 			</div>
 		);
 	}
 
-	const renderExportDropdown = () => {
-		if (!hasExportOptions) return null;
-
-		return (
-			<div className="relative" data-dropdown>
-				<Button
-					variant="ghost"
-					onClick={(e) => {
-						if (onExport && !onExportCSV && !onExportPDF && !onExportExcel) {
-							onExport();
-							return;
-						}
-						e.stopPropagation();
-						setShowExportDropdown(!showExportDropdown);
-						setShowFilterDropdown(false);
-						setShowColumnDropdown(false);
-					}}
-					className={subtleToolbarButtonClassName}>
-					<Download className="h-3.5 w-3.5 opacity-70" />
-					<span>Export</span>
-				</Button>
-
-				{showExportDropdown && (
-					<div className="absolute right-0 mt-2 w-56 rounded-lg border border-neutral-200 bg-white p-2 shadow-lg z-[100]">
-						<div className="mb-1 border-b border-neutral-100 p-2">
-							<h4 className="text-xs font-semibold text-gray-900">Export</h4>
-						</div>
-						<div className="space-y-1">
-							{onExportCSV && (
-								<button
-									onClick={() => {
-										setShowExportDropdown(false);
-										setIsExportScopeModalOpen(true);
-									}}
-									className="group flex w-full items-center gap-3 rounded-md p-2.5 transition-colors hover:bg-primary/5">
-									<FileSpreadsheet className="h-4 w-4 text-gray-400 group-hover:text-primary" />
-									<span className="text-xs font-medium text-gray-700 group-hover:text-primary">
-										Download CSV
-									</span>
-								</button>
-							)}
-							{onExportPDF && (
-								<button
-									onClick={() => {
-										onExportPDF();
-										setShowExportDropdown(false);
-									}}
-									className="group flex w-full items-center gap-3 rounded-md p-2.5 transition-colors hover:bg-primary/5">
-									<FileText className="h-4 w-4 text-gray-400 group-hover:text-primary" />
-									<span className="text-xs font-medium text-gray-700 group-hover:text-primary">
-										Download PDF
-									</span>
-								</button>
-							)}
-							{onExportExcel && (
-								<button
-									onClick={() => {
-										onExportExcel();
-										setShowExportDropdown(false);
-									}}
-									className="group flex w-full items-center gap-3 rounded-md p-2.5 transition-colors hover:bg-primary/5">
-									<FileSpreadsheet className="h-4 w-4 text-gray-400 group-hover:text-primary" />
-									<span className="text-xs font-medium text-gray-700 group-hover:text-primary">
-										Download Excel
-									</span>
-								</button>
-							)}
-						</div>
-					</div>
-				)}
-			</div>
-		);
-	};
-
 	return (
 		<Card className={cardClassName} style={{ position: "relative", zIndex: 1 }}>
-			<CardHeader className={containedScroll ? "shrink-0" : undefined}>
-				<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-					<div>
-						<CardTitle className="text-lg font-semibold">{title}</CardTitle>
-						{description && (
-							<CardDescription className="mt-1">{description}</CardDescription>
-						)}
-					</div>
-					{/* Subtle chrome group: Columns · Export · Import stay together */}
-					<div className="flex min-h-9 flex-wrap items-center justify-start gap-0.5 sm:justify-end">
-						{renderColumnDropdown()}
-						{renderExportDropdown()}
-						{titleActions}
-						{onImport && (
-							<Button
-								variant="ghost"
-								onClick={onImport}
-								className={subtleToolbarButtonClassName}>
-								<Upload className="h-3.5 w-3.5 opacity-70" />
-								<span>Import</span>
-							</Button>
-						)}
-					</div>
-				</div>
+			{/* Single header line: title + search + actions */}
+			<CardHeader className={cn(containedScroll && "shrink-0")}>
+				{renderTitleToolbarRow()}
 			</CardHeader>
 			<CardContent className={cardContentClassName}>{tableContent}</CardContent>
 		</Card>

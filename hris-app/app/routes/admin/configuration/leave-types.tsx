@@ -596,7 +596,7 @@ SL,Sick Leave,,2,TRUE,TRUE`;
 	const isDeepLinkLoading = !!activeLeaveTypeId && isLoadingLeaveType;
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Leave Types"
 				data={leaveTypes}

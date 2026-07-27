@@ -349,7 +349,7 @@ export default function LoanTypesPage() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Loan Types"
 				description="Configure employee loan types and terms"
@@ -373,6 +373,7 @@ export default function LoanTypesPage() {
 				onSearch={handleSearch}
 				onPageChange={handlePageChange}
 				searchValue={searchQuery || ""}
+				containedScroll
 			/>
 
 			{/* Create/Edit Modal */}

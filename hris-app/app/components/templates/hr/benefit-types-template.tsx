@@ -644,7 +644,7 @@ CA,Cash Advance,OTHER,DEDUCTION,Recurring cash advance deduction,TRUE,TRUE,FALSE
 	const isDeepLinkLoading = !!activeId && isLoadingItem;
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title={title}
 				data={items}

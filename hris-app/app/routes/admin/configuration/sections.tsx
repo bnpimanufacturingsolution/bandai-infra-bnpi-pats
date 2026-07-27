@@ -649,7 +649,7 @@ QA-LINE,Line Quality Assurance,Product Assurance,REGULAR_SCHEDULE,Manpower datab
 	const isDeepLinkLoading = !!activeSectionId && isLoadingSection;
 
 	return (
-		<div className="space-y-6">
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<DataTable
 				title="Sections"
 				data={sections}

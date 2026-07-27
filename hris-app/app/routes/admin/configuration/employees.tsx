@@ -18,7 +18,8 @@ export default function EmployeesPage() {
 	}
 
 	return (
-		<div className="space-y-6">
+		// h-full + overflow-hidden: fill the admin main pane; only the table body scrolls.
+		<div className="flex h-full min-h-0 flex-col overflow-hidden">
 			<EmployeeList
 				role="hr-user"
 				showEmail={false}

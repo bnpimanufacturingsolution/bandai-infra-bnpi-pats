@@ -188,11 +188,11 @@ export default function BiometricsDeviceUsersPage() {
 	};
 
 	return (
-		<div className="space-y-4">
+		<div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
 			{error && (
-				<div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-					<p className="text-red-800 font-medium">Error loading users</p>
-					<p className="text-red-600 text-sm">{error?.message}</p>
+				<div className="shrink-0 rounded-lg border border-red-200 bg-red-50 p-4">
+					<p className="font-medium text-red-800">Error loading users</p>
+					<p className="text-sm text-red-600">{error?.message}</p>
 				</div>
 			)}
 
@@ -212,6 +212,8 @@ export default function BiometricsDeviceUsersPage() {
 				searchValue={searchValue}
 				onSearch={handleSearch}
 				itemsPerPage={10}
+				className="min-h-0 flex-1"
+				containedScroll
 			/>
 		</div>
 	);

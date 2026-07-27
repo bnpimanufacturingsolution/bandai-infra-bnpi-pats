@@ -496,8 +496,8 @@ export default function ActivityLogsPage() {
 	};
 
 	return (
-		<div className="space-y-5">
-			<Card className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.07)]">
+		<div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+			<Card className="shrink-0 overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_rgba(15,23,42,0.07)]">
 				<CardContent className="flex flex-col gap-4 p-5 md:p-6">
 					<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 						<div className="space-y-3">
@@ -605,6 +605,8 @@ export default function ActivityLogsPage() {
 						View Details
 					</Button>
 				)}
+				className="min-h-0 flex-1"
+				containedScroll
 			/>
 
 			<ActivityLogDetailsModal
