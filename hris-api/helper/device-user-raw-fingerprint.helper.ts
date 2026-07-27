@@ -859,6 +859,10 @@ export const deleteHikvisionFingerprintSlotsForEmployee = async (params: {
 		for (const shape of FINGERPRINT_DELETE_BODY_SHAPES(employeeNo, fingerPrintId)) {
 			lastShape = shape.label;
 			try {
+				// CRITICAL: hikvisionFetch defaults body Content-Type to
+				// application/x-www-form-urlencoded. Without explicit JSON,
+				// devices return MessageParametersLack errorMsg=mode even when
+				// the body includes mode (live sticky-clear burn 2026-07-25/27).
 				const response = await hikvisionFetch(
 					"/ISAPI/AccessControl/FingerPrint/Delete?format=json",
 					{
@@ -867,6 +871,7 @@ export const deleteHikvisionFingerprintSlotsForEmployee = async (params: {
 						prisma: params.prisma,
 						request: params.req,
 						timeoutMs: 20_000,
+						headers: { "Content-Type": "application/json" },
 						body: shape.body,
 					},
 				);
