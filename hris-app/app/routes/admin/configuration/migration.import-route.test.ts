@@ -115,7 +115,7 @@ describe("admin migration route contract", () => {
 		expect(closed.has("upload")).toBe(false);
 	});
 
-	it("opens DM3 compensation, deduction, and statutory mass-upload modals via dedicated upload kinds", () => {
+	it("opens DM3 compensation and deduction mass-upload modals via dedicated upload kinds", () => {
 		const dm3 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm3");
 		const compensation = buildOpenWorkbookUploadSearchParams(dm3, "compensation");
 		expect(compensation.get("workbook")).toBe("dm3");
@@ -126,9 +126,11 @@ describe("admin migration route contract", () => {
 		expect(deduction.get("upload")).toBe("deduction");
 		expect(getWorkbookUploadKind(deduction)).toBe("deduction");
 
-		const statutory = buildOpenWorkbookUploadSearchParams(dm3, "statutory");
-		expect(statutory.get("upload")).toBe("statutory");
-		expect(getWorkbookUploadKind(statutory)).toBe("statutory");
+		// Statutory / monthly-payment register is not a DM3 UI upload kind.
+		// Benefits and deductions come from compensation + deduction mass uploads.
+		const statutoryLegacy = new URLSearchParams(dm3);
+		statutoryLegacy.set("upload", "statutory");
+		expect(getWorkbookUploadKind(statutoryLegacy)).toBe(null);
 	});
 
 	it("can open workbook page with upload modal already open (deep link / in-page CTA)", () => {

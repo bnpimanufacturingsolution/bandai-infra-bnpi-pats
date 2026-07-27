@@ -362,6 +362,11 @@ export async function importDeductionMassUpload(params: {
 
 /**
  * Import BNPI Monthly Payment / Statutory Benefits remittance workbook.
+ *
+ * **Not exposed on the DM3 migration UI or HTTP route.** Operator truth is that
+ * all cutoff benefits and deductions are imported via compensation + deduction
+ * mass upload. This function remains for offline/script recovery only.
+ *
  * Applies loan/deduction enrollments (SSS/HDMF loans, calamity, LRP, MP2) as
  * ACTIVE open-horizon obligations. Does not freeze SSS/PHIC/HDMF contribution
  * amounts into benefits — those stay engine-computed by payroll schedule.

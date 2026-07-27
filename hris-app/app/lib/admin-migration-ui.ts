@@ -31,6 +31,7 @@ const IMPORT_MODAL_STATE_PARAMS = [
  * Upload is a small modal via `upload`:
  * - `1` → DM1–DM3 single workbook upload
  * - `compensation` / `deduction` → DM3 BNPI mass upload sources
+ *   (all benefits and deductions; statutory/monthly-payment register is not a UI path)
  * - `biometrics` / `overtime` → DM4 attendance sources
  */
 const WORKBOOK_PAGE_STATE_PARAMS = ["workbook", "runId", "importJobId", "upload"] as const;
@@ -42,8 +43,7 @@ export type WorkbookUploadKind =
 	| "biometrics"
 	| "overtime"
 	| "compensation"
-	| "deduction"
-	| "statutory";
+	| "deduction";
 
 export const ADMIN_MIGRATION_WORKBOOK_IDS = ["dm1", "dm2", "dm3", "dm4"] as const;
 export type AdminMigrationWorkbookId = (typeof ADMIN_MIGRATION_WORKBOOK_IDS)[number];
@@ -66,8 +66,7 @@ export function getWorkbookUploadKind(
 		value === "biometrics" ||
 		value === "overtime" ||
 		value === "compensation" ||
-		value === "deduction" ||
-		value === "statutory"
+		value === "deduction"
 	) {
 		return value;
 	}

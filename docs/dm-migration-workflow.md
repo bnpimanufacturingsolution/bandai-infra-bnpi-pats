@@ -386,7 +386,13 @@ The HR-facing journey for the wired DM3 workbook is:
    `Employee Benefits / Loans`.
 4. The workbook finalizer runs `Employee Post Actions` last, after schedule and
    document data exists.
-5. HR verifies a sampled employee in the employee profile/compliance surfaces:
+5. Optionally, for BNPI payroll cutoffs, HR uploads the **compensation mass
+   upload** and **deduction mass upload** from the same DM3 page. Those two
+   files are the only BNPI mass-upload path for cutoff benefits and deductions
+   (allowances, loan payments, and other period deductions). A separate
+   statutory / monthly payment register upload is **not** offered in the UI
+   and is not required after compensation and deduction files are imported.
+6. HR verifies a sampled employee in the employee profile/compliance surfaces:
    `Person.identification.statutoryIds.pagibig`, `Employee.basicSalary`,
    `Employee.embeddedSchedule`, `EmployeeScheduleHistory`, `Employee.reportToId`,
    `Employee.reportTo`, `Document`, `EmployeeLeaveBalance`,

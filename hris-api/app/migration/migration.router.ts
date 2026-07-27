@@ -330,11 +330,10 @@ export const router = (route: Router, controller: IMigrationController): Router 
 		uploadImportFile,
 		controller.importDm3DeductionMassUpload,
 	);
-	routes.post(
-		"/dm3/import-statutory-benefits-upload",
-		uploadImportFile,
-		controller.importDm3StatutoryBenefitsUpload,
-	);
+	// Statutory / monthly-payment register upload is intentionally not exposed.
+	// BNPI benefits and deductions for a cutoff are imported via compensation +
+	// deduction mass upload only (`import-compensation-mass-upload` /
+	// `import-deduction-mass-upload`).
 	routes.post(
 		"/dm3/finalize-employee-import",
 		uploadImportFile,

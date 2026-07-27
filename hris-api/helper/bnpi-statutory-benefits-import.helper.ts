@@ -7,8 +7,10 @@
  * Emp. No., Employee Name, SSS EE, PHIC EE, HDMF EE,
  * SSS Loan 15th/30th, HDMF Loan 15th/30th, calamity, MP2, SSS LRP, …
  *
- * Import target for DM3 migration UI: ongoing loan / deduction enrollments
- * (not frozen government contribution amounts as permanent benefits).
+ * Not a DM3 operator upload path. Cutoff benefits and deductions are imported
+ * through compensation + deduction mass upload only. Keep this parser for
+ * offline audit/recovery scripts and unit tests. Does not freeze government
+ * contribution amounts as permanent benefits.
  */
 
 import * as XLSX from "xlsx";

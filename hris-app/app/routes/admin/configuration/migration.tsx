@@ -3807,11 +3807,9 @@ export default function AdminMigrationPage() {
 		(workbookUploadKind === "biometrics" || workbookUploadKind === "overtime")
 			? workbookUploadKind
 			: null;
-	const dm3MassUploadRole: "compensation" | "deduction" | "statutory" | null =
+	const dm3MassUploadRole: "compensation" | "deduction" | null =
 		activeWorkbookGroup?.id === "dm3" &&
-		(workbookUploadKind === "compensation" ||
-			workbookUploadKind === "deduction" ||
-			workbookUploadKind === "statutory")
+		(workbookUploadKind === "compensation" || workbookUploadKind === "deduction")
 			? workbookUploadKind
 			: null;
 	const isDm3WorkbookUploadModal =
@@ -6888,7 +6886,7 @@ export default function AdminMigrationPage() {
 	};
 
 	const importDm3MassUploadFile = async (
-		role: "compensation" | "deduction" | "statutory",
+		role: "compensation" | "deduction",
 		file: File,
 	) => {
 		if (!organizationId) {
@@ -6900,21 +6898,14 @@ export default function AdminMigrationPage() {
 			return;
 		}
 
-		const label =
-			role === "compensation"
-				? "Compensation"
-				: role === "deduction"
-					? "Deduction"
-					: "Statutory benefits";
+		const label = role === "compensation" ? "Compensation" : "Deduction";
 		const formData = new FormData();
 		formData.append("file", file);
 		formData.append("data", JSON.stringify({ organizationId }));
 		const endpoint =
 			role === "compensation"
 				? "/api/migration/dm3/import-compensation-mass-upload"
-				: role === "deduction"
-					? "/api/migration/dm3/import-deduction-mass-upload"
-					: "/api/migration/dm3/import-statutory-benefits-upload";
+				: "/api/migration/dm3/import-deduction-mass-upload";
 
 		setIsImportingDm3MassUpload(true);
 		const importPromise = (async () => {
@@ -6953,10 +6944,7 @@ export default function AdminMigrationPage() {
 		})();
 
 		toast.promise(importPromise, {
-			loading:
-				role === "statutory"
-					? "Importing statutory benefits / loan deductions…"
-					: `Importing ${label.toLowerCase()} mass upload…`,
+			loading: `Importing ${label.toLowerCase()} mass upload…`,
 			success: (result) => {
 				const sheetNote = result.sheetName ? ` from sheet "${result.sheetName}"` : "";
 				if (result.failed > 0) {
@@ -6987,24 +6975,17 @@ export default function AdminMigrationPage() {
 		}
 	};
 
-	const renderDm3MassUploadPanel = (role: "compensation" | "deduction" | "statutory") => {
+	const renderDm3MassUploadPanel = (role: "compensation" | "deduction") => {
 		const isCompensation = role === "compensation";
-		const isStatutory = role === "statutory";
 		const sampleName = isCompensation
 			? "Compensation Mass Upload 07.15.26.xlsx"
-			: isStatutory
-				? "April 2026 Monthly Payment_Statutory Benefits.xlsx"
-				: "Deduction Mass Upload 07.15.26.xlsx";
+			: "Deduction Mass Upload 07.15.26.xlsx";
 		const expectedHeaders = isCompensation
 			? "COMCODE, Amount, EmployeeID, EmployeeName, StartPayDate"
-			: isStatutory
-				? "Emp. No., Employee Name, SSS/PHIC/HDMF loans 15th/30th, Calamity, MP2, LRP"
-				: "DEDCODE, Amount, Payment, EmployeeID, EmployeeName, StartPayment";
+			: "DEDCODE, Amount, Payment, EmployeeID, EmployeeName, StartPayment";
 		const dropLabel = isCompensation
 			? "Drop compensation mass upload .xlsx"
-			: isStatutory
-				? "Drop monthly payment / statutory benefits .xlsx"
-				: "Drop deduction mass upload .xlsx";
+			: "Drop deduction mass upload .xlsx";
 
 		return (
 			<div className="space-y-3">
@@ -7060,13 +7041,6 @@ export default function AdminMigrationPage() {
 						Sample: {sampleName}
 						<br />
 						Columns: {expectedHeaders}
-						{isStatutory ? (
-							<>
-								<br />
-								Applies SSS/HDMF loan, calamity, MP2, and LRP deductions as open-horizon
-								enrollments. SSS/PHIC/HDMF contribution amounts stay engine-computed.
-							</>
-						) : null}
 					</span>
 				</button>
 
@@ -7560,7 +7534,7 @@ export default function AdminMigrationPage() {
 								{isDm4
 									? "Import biometrics punches and optional approved overtime into attendance and timesheets."
 									: group.id === "dm3"
-										? "Import the employee workbook, then optional compensation, deduction, and statutory benefits uploads."
+										? "Import the employee workbook, then optional compensation and deduction mass uploads."
 										: "Upload one Excel workbook to import all sheets in order."}
 							</p>
 						</div>
@@ -7673,8 +7647,9 @@ export default function AdminMigrationPage() {
 									</h2>
 									<p className="mt-1 text-sm text-gray-600">
 										Import the DM3 employee workbook, then optionally attach BNPI
-										compensation, deduction mass-upload, or monthly statutory
-										benefits files for payroll deductions.
+										compensation and deduction mass-upload files. Those uploads cover
+										all payroll benefits and deductions for the cutoff; a separate
+										statutory / monthly payment register upload is not used.
 									</p>
 								</div>
 								<button
@@ -7704,7 +7679,8 @@ export default function AdminMigrationPage() {
 										2
 									</span>
 									<span>
-										Upload compensation mass upload (allowances for the cutoff)
+										Upload compensation mass upload (allowances / benefits for the
+										cutoff)
 									</span>
 								</li>
 								<li className="flex gap-2">
@@ -7713,15 +7689,6 @@ export default function AdminMigrationPage() {
 									</span>
 									<span>
 										Upload deduction mass upload (loan payments / deductions)
-									</span>
-								</li>
-								<li className="flex gap-2">
-									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
-										4
-									</span>
-									<span>
-										Upload statutory benefits / monthly payment register (SSS/HDMF
-										loans, calamity, MP2, LRP)
 									</span>
 								</li>
 							</ol>
@@ -7759,23 +7726,6 @@ export default function AdminMigrationPage() {
 										<Upload className="mr-1.5 h-4 w-4" />
 									)}
 									Upload deduction
-								</Button>
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									className="h-10 px-3 text-sm"
-									disabled={isImportingDm3MassUpload}
-									onClick={() => {
-										setDm3MassUploadFile(null);
-										openWorkbookUploadModal("statutory");
-									}}>
-									{isImportingDm3MassUpload && dm3MassUploadRole === "statutory" ? (
-										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-									) : (
-										<Upload className="mr-1.5 h-4 w-4" />
-									)}
-									Upload statutory benefits
 								</Button>
 								<Button
 									type="button"
@@ -8244,11 +8194,9 @@ return (
 								? "Upload compensation mass upload"
 								: dm3MassUploadRole === "deduction"
 									? "Upload deduction mass upload"
-									: dm3MassUploadRole === "statutory"
-										? "Upload statutory benefits"
-										: activeWorkbookGroup
-											? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
-											: "Upload workbook"
+									: activeWorkbookGroup
+										? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
+										: "Upload workbook"
 				}
 				description={
 					dm4UploadRole === "biometrics"
@@ -8259,9 +8207,7 @@ return (
 								? "BNPI Compensation Mass Upload (COMCODE / Amount / EmployeeID / StartPayDate)."
 								: dm3MassUploadRole === "deduction"
 									? "BNPI Deduction Mass Upload (DEDCODE / Payment / EmployeeID / StartPayment)."
-									: dm3MassUploadRole === "statutory"
-										? "BNPI Monthly Payment / Statutory Benefits (Emp. No., loan 15th/30th columns). Applies open-horizon loan deductions from the latest month sheet."
-										: "Select the .xlsx workbook for this migration stage."
+									: "Select the .xlsx workbook for this migration stage."
 				}
 				className={HR_MODAL_STANDARD_CLASS}>
 				{dm4UploadRole

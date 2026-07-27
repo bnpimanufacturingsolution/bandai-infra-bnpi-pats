@@ -65,8 +65,8 @@ Already implemented:
 | Capability | Where |
 |---|---|
 | DM1–DM3 import | `/admin/configuration/migration` |
-| Compensation / deduction mass upload | DM3 UI + `POST /api/migration/dm3/import-*-mass-upload` |
-| Statutory benefits (loan board) import | DM3 UI + `POST /api/migration/dm3/import-statutory-benefits-upload` |
+| Compensation / deduction mass upload | DM3 UI + `POST /api/migration/dm3/import-*-mass-upload` (covers **all** cutoff benefits and deductions) |
+| Statutory / monthly payment register import | **Removed from DM3 UI and HTTP.** Do not use April statutory board as a migration step; loans/deductions belong in the cutoff deduction mass upload. Offline helper only: `hris-api/helper/bnpi-statutory-benefits-import.helper.ts` |
 | DM4 biometrics + approved OT materialization | DM4 durable migration run |
 | Contribution schedule period 1 full / period 2 zero | `payroll-period.helper.ts` → `BNPI_FIRST_CUTOFF_FULL_SECOND_CUTOFF_NONE` |
 | SSS/PHIC/Pag-IBIG calculation | Calculator + `tax-calculator.helper.ts` at Run Payroll |
@@ -169,11 +169,11 @@ Do **not** block on inventing a contribution-amount import or changing period-2 
 
 ### Phase 2 — Cutoff money enrollments (this period only)
 
-- [ ] Import **Compensation Mass Upload 07.15.26** (`StartPayDate` 6/26/26)
-- [ ] Import **Deduction Mass Upload 07.15.26** (`StartPayment` 6/26/26)
+- [ ] Import **Compensation Mass Upload 07.15.26** (`StartPayDate` 6/26/26) via DM3 **Upload compensation**
+- [ ] Import **Deduction Mass Upload 07.15.26** (`StartPayment` 6/26/26) via DM3 **Upload deduction**
 - [ ] Spot-check sample employees: every non-zero register loan/allowance has a June-dated enrollment
-- [ ] **Avoid** using April statutory as June loan source of truth
-- [ ] If statutory UI was used earlier with April amounts: re-import June deduction rows so they **upsert** loan payments
+- [ ] Do **not** upload April statutory / monthly payment register (UI path removed; benefits/deductions are only compensation + deduction mass upload)
+- [ ] If older April statutory enrollments already exist: re-import June deduction rows so they **upsert** loan payments
 - [ ] For gaps like Rio (SSS loan / RCBC / MHDMF2 missing from mass upload): obtain client rows or add explicit enrollments for this period before expecting full tally
 
 ### Phase 3 — Attendance and approved OT (DM4)
@@ -250,7 +250,7 @@ Do **not** block on inventing a contribution-amount import or changing period-2 
 |---|---|
 | Breaktime Schedule | Build/repair DM3.2 if schedules incomplete |
 | Leave balance Jun 4 | Leave only |
-| April statutory benefits | Audit only; loans only if amounts intentionally reused |
+| April statutory benefits | Audit only; **not** a DM3 upload step (use cutoff compensation/deduction mass uploads) |
 | OT Jun 11–25 workbook | **Other** period; not this cut |
 
 ### Explicitly not a Run Payroll contribution source
@@ -268,11 +268,11 @@ Do **not** block on inventing a contribution-amount import or changing period-2 
 | DM workflow / re-import / DM4 order | `docs/dm-migration-workflow.md` |
 | Contribution split period 1/2 | `hris-api/helper/payroll-period.helper.ts` → `resolveContributionSchedule` |
 | Contribution math | `hris-api/helper/tax-calculator.helper.ts`, `hris-api/config/payroll.config.ts` |
-| Compensation / deduction mass upload | `hris-api/app/migration/bnpi-mass-upload-import.service.ts` |
-| Statutory loan board import | `hris-api/helper/bnpi-statutory-benefits-import.helper.ts` + mass-upload service |
+| Compensation / deduction mass upload | `hris-api/app/migration/bnpi-mass-upload-import.service.ts` + DM3 UI buttons |
+| Statutory loan board parse (offline only; not a migration UI step) | `hris-api/helper/bnpi-statutory-benefits-import.helper.ts` |
 | Historical source-trace roles (Apr/May defaults) | `hris-api/scripts/validate-bandai-payroll-source-trace.ts` |
 | Comparison CLI | `hris-api/scripts/dry-run-bandai-payroll-comparison.ts` |
-| Admin UI uploads | `hris-app/app/routes/admin/configuration/migration.tsx` |
+| Admin UI uploads (workbook + compensation/deduction only) | `hris-app/app/routes/admin/configuration/migration.tsx` |
 
 ---
 

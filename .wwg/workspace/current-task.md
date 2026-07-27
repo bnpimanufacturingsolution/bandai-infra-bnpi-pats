@@ -1,5 +1,18 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-27 Remove DM3 statutory benefits upload
+
+- Task mode: product UX + docs truth sync (DM3 migration).
+- Finish line: `/admin/configuration/migration?workbook=dm3` no longer offers
+  **Upload statutory benefits**. Operator path for cutoff benefits/deductions is
+  compensation mass upload + deduction mass upload only.
+- Code: removed `upload=statutory` kind, UI button/step/modal copy, and
+  `POST /api/migration/dm3/import-statutory-benefits-upload` route/controller.
+- Offline parser/service retained for scripts/tests only
+  (`bnpi-statutory-benefits-import.helper.ts`, `importStatutoryBenefitsUpload`).
+- Docs: `docs/dm-migration-workflow.md`,
+  `docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md`.
+
 ## Latest Task Addendum - 2026-07-25 Agent-owned blocker fix + gap burn (primary)
 
 - **Primary paste prompt:**
