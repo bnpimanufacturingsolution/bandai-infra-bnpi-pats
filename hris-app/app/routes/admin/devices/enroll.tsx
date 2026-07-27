@@ -910,7 +910,9 @@ export function DeviceEnrollmentPanel({
 		result: DeviceUserExportPayload | null;
 	}>({
 		open: false,
-		selection: "currentPage",
+		// Full device inventory by default (not the paged 8-row view). Operators can
+		// still switch to currentPage / selectedRows in the export modal.
+		selection: "all",
 		includeCards: true,
 		includeFingerprints: true,
 		includeFaces: true,
@@ -5237,7 +5239,8 @@ export function DeviceEnrollmentPanel({
 			scope: {
 				type: "currentDevice",
 				sourceEndpoint: fileName,
-				selection: "currentPage",
+				// CSV files carry the full row set provided by the operator, not a UI page.
+				selection: "all",
 				status: "all",
 			},
 			policy: {
