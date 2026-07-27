@@ -18,4 +18,13 @@ describe("SummaryCard", () => {
 		expect(html).toContain("12");
 		expect(html).toContain("color:");
 	});
+
+	it("uses a minimal white background while keeping the themed border color", () => {
+		const html = renderToStaticMarkup(
+			<SummaryCard title="Total Employees" value="2,212" color="blue" />,
+		);
+
+		expect(html).toContain("background-color:#ffffff");
+		expect(html).toContain("border-color:rgba(218, 55, 50, 0.2)");
+	});
 });
