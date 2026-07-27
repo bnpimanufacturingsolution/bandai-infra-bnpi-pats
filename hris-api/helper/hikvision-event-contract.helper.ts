@@ -358,3 +358,38 @@ export const buildHikvisionDeviceEventDedupeKey = (input: {
 
 	return createHash("sha256").update(basis).digest("hex");
 };
+
+/**
+ * Hikvision operation logs (addUserInfo / addFpByEmployeeNo) often put a
+ * base64-like 16-byte privacy token in LogAddInfo.EmployeeNo — NOT a human
+ * employee number like "1" or "17". Treat as opaque for display/matching.
+ *
+ * Restored after monorepo snapshot drop (live recovery wrote failed with
+ * `isOpaqueHikvisionPersonToken is not a function`).
+ */
+export const isOpaqueHikvisionPersonToken = (value?: string | null) => {
+	const token = String(value || "").trim();
+	if (!token) return false;
+	// Readable person/employee ids: short alnum (optionally . _ -), no base64 alphabet noise.
+	if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$/.test(token) && !/[+/=]/.test(token)) {
+		return false;
+	}
+	// Typical device token: base64 with padding, often 16 decoded bytes → ~24 chars.
+	if (/^[A-Za-z0-9+/]{16,}={0,2}$/.test(token) && /[+/=]/.test(token)) {
+		return true;
+	}
+	if (token.length >= 20 && /[+/=]/.test(token)) return true;
+	return false;
+};
+
+/** Prefer a plain employee/person no when any candidate is readable. */
+export const resolveHikvisionLogPersonRef = (
+	candidates: Array<string | null | undefined>,
+): { employeeNo?: string; personRefKind: "plain" | "opaque_device_token" | "missing" } => {
+	const cleaned = candidates.map((value) => String(value || "").trim()).filter(Boolean);
+	const plain = cleaned.find((value) => !isOpaqueHikvisionPersonToken(value));
+	if (plain) return { employeeNo: plain, personRefKind: "plain" };
+	if (cleaned[0]) return { employeeNo: cleaned[0], personRefKind: "opaque_device_token" };
+	return { personRefKind: "missing" };
+};
+
