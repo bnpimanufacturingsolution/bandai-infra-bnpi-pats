@@ -114,8 +114,9 @@ model Employee {
   person   Person? @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   personId String  @unique
 
-  device   Device? @relation(fields: [deviceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  deviceId String?
+  device      Device?      @relation(fields: [deviceId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  deviceId    String?
+  deviceUsers DeviceUser[]
 
   attendances                        Attendance[]
   attendanceObligations              AttendanceObligation[]
