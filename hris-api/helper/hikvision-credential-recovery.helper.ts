@@ -564,6 +564,20 @@ export const classifyCredentialRecoveryWrite = (
 	}
 	const reason = String(write?.blockingReason || "");
 	const stage = String(write?.recoveryStage || "");
+	const sourceId = String(write?.sourceDeviceId || "").trim();
+	const candidates = Array.isArray(write?.sourceCandidateDeviceIds)
+		? write.sourceCandidateDeviceIds
+		: [];
+	// Null source + candidates is agent export/richest-select — not room enroll.
+	// Do not paint it red physical merely because stage says adjudication.
+	const falsePhysicalSourceUnset =
+		!sourceId &&
+		candidates.length > 0 &&
+		(reason === "physical_identity_adjudication_required" ||
+			stage === "physical_identity_action_required");
+	if (falsePhysicalSourceUnset) {
+		return "recovery_needed";
+	}
 	// Stage can mark dual-owner even when reason is source_conflict (duplicate slot).
 	if (
 		stage === "physical_identity_action_required" ||
@@ -575,6 +589,105 @@ export const classifyCredentialRecoveryWrite = (
 	return physicalBoundaryReasons.has(reason)
 		? "physical_action_required"
 		: "recovery_needed";
+};
+
+const unlockNeededForWrite = (write: any): string[] => {
+	const reason = String(write?.blockingReason || "");
+	const sourceId = String(write?.sourceDeviceId || "").trim();
+	const candidates = Array.isArray(write?.sourceCandidateDeviceIds)
+		? write.sourceCandidateDeviceIds.map(String)
+		: [];
+	if (
+		!sourceId &&
+		candidates.length > 0 &&
+		reason === "physical_identity_adjudication_required"
+	) {
+		return [
+			"sourceDeviceId is null but sourceCandidateDeviceIds exist — not true room enroll",
+			"export/select richest source among candidates",
+			"replan until recommended + ready_from_raw_blob",
+		];
+	}
+	switch (reason) {
+		case "missing_raw_blob":
+			return [
+				"source_capture / export raw custody (templates or cardNo)",
+				"replan",
+				"writer capability must allow ready_from_raw_blob",
+			];
+		case "source_conflict":
+			return [
+				"richest-source selection (max templates / checksum superset)",
+				"optional export all candidates",
+				"replan with single sourceDeviceId",
+			];
+		case "target_owner_scan_incomplete":
+			return [
+				"target_owner_capture: export+checksum enrolled owners on target",
+				"or per-identity allow when this person has complete custody",
+			];
+		case "target_write_unsupported":
+		case "target_attestation_invalid":
+			return [
+				"serial canary / FDLib or SDK writer attestation on target",
+				"replan when capability green",
+			];
+		case "canonical_identity_unproven":
+			return [
+				"prove employee/card/vendor linkage across devices",
+				"replan",
+			];
+		case "physical_identity_adjudication_required":
+			return [
+				"if dual-owner different people: policy residual (not auto-write)",
+				"if same vendor: richest overwrite path then replan",
+			];
+		default:
+			return [
+				`classify unlock for blockingReason=${reason || "unknown"}`,
+				"replan after unlock",
+			];
+	}
+};
+
+type RecoveryOwnerClass =
+	| "agent_unlock"
+	| "policy_or_true_physical"
+	| "ready"
+	| "other";
+
+const ownerClassForWrite = (write: any): RecoveryOwnerClass => {
+	if (classifyCredentialRecoveryWrite(write) === "ready_to_write") {
+		return "ready";
+	}
+	const reason = String(write?.blockingReason || "");
+	const sourceId = String(write?.sourceDeviceId || "").trim();
+	const candidates = Array.isArray(write?.sourceCandidateDeviceIds)
+		? write.sourceCandidateDeviceIds
+		: [];
+	if (
+		!sourceId &&
+		candidates.length > 0 &&
+		reason === "physical_identity_adjudication_required"
+	) {
+		return "agent_unlock";
+	}
+	if (classifyCredentialRecoveryWrite(write) === "physical_action_required") {
+		return "policy_or_true_physical";
+	}
+	if (
+		[
+			"missing_raw_blob",
+			"source_conflict",
+			"target_owner_scan_incomplete",
+			"target_write_unsupported",
+			"target_attestation_invalid",
+			"canonical_identity_unproven",
+		].includes(reason)
+	) {
+		return "agent_unlock";
+	}
+	return "other";
 };
 
 const text = (value: unknown) => String(value ?? "").trim();
@@ -1004,6 +1117,75 @@ export const selectCredentialRecoveryReadyWrites = (params: {
 	return selected;
 };
 
+/**
+ * Full residual / ready / unlock / unique-gap certainty for dry-run.
+ * This is the product contract the operator UI and agents must use — not a
+ * thin ready-only count. Incomplete scoping here is a certainty-contract
+ * gap (architecture/observability), not a one-line bug.
+ */
+export type CredentialRecoveryFullScopeCertainty = {
+	/** Frozen plan residual ops (all modalities unless canary filters wouldWrite). */
+	residualOpsTotal: number;
+	residualByModality: {
+		face: number;
+		fingerprint: number;
+		card: number;
+		other: number;
+	};
+	/** UI-style unique gap people in residual (any residual op for that person). */
+	uniqueGapPeople: {
+		face: number;
+		fingerprint: number;
+		card: number;
+	};
+	readyQueue: {
+		readyOps: number;
+		faceReady: number;
+		fingerprintReady: number;
+		/** People who already have at least one ready op (can leave unique gap if all their residual ops verify). */
+		facePeopleWithAnyReadyOp: number;
+		fingerprintPeopleWithAnyReadyOp: number;
+	};
+	ifYouExecuteNow: {
+		wouldWriteCount: number;
+		wouldWriteUniquePeople: number;
+		/** Best-case unique-gap people closed if every write in the wave verifies. */
+		maxUniquePeopleGapClosedIfAllVerify: number;
+		/** Unique gap people remaining for modality after best-case wave (optimistic). */
+		uniqueGapPeopleAfterBestCase: number;
+		willUniqueGapDecrease: boolean;
+		willUniqueGapReachZeroInThisWave: boolean;
+		reason: string;
+	};
+	/** Why ready is empty / residual not writable — full histogram. */
+	whyNotReady: Array<{
+		modality: string;
+		blockingReason: string;
+		recoveryStage: string;
+		executionEligibility: string;
+		count: number;
+		ownerClass: "agent_unlock" | "policy_or_true_physical" | "ready" | "other";
+		falsePhysicalSourceNullWithCandidates: boolean;
+		neededToEnterReadyQueue: string[];
+	}>;
+	/** Ordered unlock checklist before execute can move unique gaps. */
+	unlockChecklist: Array<{
+		id: string;
+		status: "done" | "open" | "blocked" | "n_a";
+		item: string;
+		ops?: number;
+		peopleSample?: string[];
+		needed?: string[];
+	}>;
+	/** Scans/exports still required before ready queue can fill. */
+	scanExportNeeded: {
+		faceSourceSelectOrExportOps: number;
+		fingerprintConflictOrAdjudicationOps: number;
+		cardMissingRawBlobOps: number;
+		note: string;
+	};
+};
+
 export type CredentialRecoveryExecutionPreview = {
 	canaryModality: "fingerprint" | "face" | null;
 	maxVerifiedWrites: number;
@@ -1036,6 +1218,8 @@ export type CredentialRecoveryExecutionPreview = {
 		fpReadyMustBePositiveForFingerprintVerifiedWrites: true;
 		faceReadyMustBePositiveForFaceVerifiedWrites: true;
 	};
+	/** Deep residual + unlock + unique-gap prediction (full dry-run scope). */
+	fullScope: CredentialRecoveryFullScopeCertainty;
 };
 
 /**
@@ -1121,6 +1305,217 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 			.map((write: any) => String(write?.vendorUserId || write?.userKey || "").trim())
 			.filter(Boolean),
 	).size;
+
+	// --- Full residual scope (certainty contract) ---
+	const scopedWrites = canaryModality
+		? writes.filter((write: any) => String(write?.modality || "") === canaryModality)
+		: writes;
+	const residualByModality = { face: 0, fingerprint: 0, card: 0, other: 0 };
+	const uniqueFace = new Set<string>();
+	const uniqueFp = new Set<string>();
+	const uniqueCard = new Set<string>();
+	const facePeopleWithReady = new Set<string>();
+	const fpPeopleWithReady = new Set<string>();
+	const whyMap = new Map<string, {
+		modality: string;
+		blockingReason: string;
+		recoveryStage: string;
+		executionEligibility: string;
+		count: number;
+		ownerClass: RecoveryOwnerClass;
+		falsePhysicalSourceNullWithCandidates: boolean;
+		neededToEnterReadyQueue: string[];
+	}>();
+
+	for (const write of writes) {
+		const modality = String(write?.modality || "other");
+		if (modality === "face") residualByModality.face += 1;
+		else if (modality === "fingerprint") residualByModality.fingerprint += 1;
+		else if (modality === "card") residualByModality.card += 1;
+		else residualByModality.other += 1;
+
+		const person = String(write?.vendorUserId || write?.userKey || "").trim();
+		if (person && modality === "face") uniqueFace.add(person);
+		if (person && modality === "fingerprint") uniqueFp.add(person);
+		if (person && modality === "card") uniqueCard.add(person);
+
+		const isReadyRow = classifyCredentialRecoveryWrite(write) === "ready_to_write";
+		if (isReadyRow && person && modality === "face") facePeopleWithReady.add(person);
+		if (isReadyRow && person && modality === "fingerprint") fpPeopleWithReady.add(person);
+
+		if (canaryModality && modality !== canaryModality) continue;
+		const sourceId = String(write?.sourceDeviceId || "").trim();
+		const candidates = Array.isArray(write?.sourceCandidateDeviceIds)
+			? write.sourceCandidateDeviceIds
+			: [];
+		const falsePhysical =
+			!sourceId &&
+			candidates.length > 0 &&
+			String(write?.blockingReason || "") === "physical_identity_adjudication_required";
+		const blockingReason = String(write?.blockingReason || write?.executionEligibility || "unknown");
+		const recoveryStage = String(write?.recoveryStage || "none");
+		const executionEligibility = String(write?.executionEligibility || "none");
+		const mapKey = `${modality}|${blockingReason}|${recoveryStage}|${executionEligibility}|${falsePhysical ? "fp" : "n"}`;
+		const existing = whyMap.get(mapKey);
+		if (existing) {
+			existing.count += 1;
+		} else {
+			whyMap.set(mapKey, {
+				modality,
+				blockingReason,
+				recoveryStage,
+				executionEligibility,
+				count: 1,
+				ownerClass: ownerClassForWrite(write),
+				falsePhysicalSourceNullWithCandidates: falsePhysical,
+				neededToEnterReadyQueue: unlockNeededForWrite(write),
+			});
+		}
+	}
+
+	const whyNotReady = [...whyMap.values()].sort(
+		(left, right) => right.count - left.count || left.blockingReason.localeCompare(right.blockingReason),
+	);
+
+	const uniqueGapForModality =
+		canaryModality === "face"
+			? uniqueFace.size
+			: canaryModality === "fingerprint"
+				? uniqueFp.size
+				: uniqueFace.size + uniqueFp.size;
+	const maxUniqueClosed = Math.min(wouldWriteUniquePeople, uniqueGapForModality);
+	const willDecrease = wouldWrite.length > 0 && wouldWriteUniquePeople > 0;
+	// Full unique-gap zero in this wave only when every residual op in-scope is ready
+	// and selected into wouldWrite (deterministic, fail-closed if incomplete).
+	const modalityResidual = scopedWrites.filter((write: any) =>
+		canaryModality ? String(write?.modality || "") === canaryModality : true,
+	);
+	const allModalityResidualReady =
+		modalityResidual.length > 0 &&
+		modalityResidual.every(
+			(write: any) => classifyCredentialRecoveryWrite(write) === "ready_to_write",
+		);
+	const willZero =
+		wouldWrite.length > 0 &&
+		allModalityResidualReady &&
+		wouldWrite.length >= modalityResidual.length &&
+		maxUniqueClosed >= uniqueGapForModality;
+
+	const faceSourceSelectOps = writes.filter((write: any) => {
+		if (String(write?.modality) !== "face") return false;
+		const sourceId = String(write?.sourceDeviceId || "").trim();
+		const candidates = Array.isArray(write?.sourceCandidateDeviceIds)
+			? write.sourceCandidateDeviceIds
+			: [];
+		return (
+			(!sourceId && candidates.length > 0) ||
+			["source_conflict", "missing_raw_blob"].includes(String(write?.blockingReason || ""))
+		);
+	}).length;
+	const fpConflictOps = writes.filter(
+		(write: any) =>
+			String(write?.modality) === "fingerprint" &&
+			classifyCredentialRecoveryWrite(write) !== "ready_to_write",
+	).length;
+	const cardMissingOps = writes.filter(
+		(write: any) =>
+			String(write?.modality) === "card" &&
+			String(write?.blockingReason || "") === "missing_raw_blob",
+	).length;
+
+	const unlockChecklist: CredentialRecoveryFullScopeCertainty["unlockChecklist"] = [
+		{
+			id: "READY_QUEUE",
+			status: allReady.length > 0 ? "done" : "open",
+			item: "Ready queue (recommended + ready_from_raw_blob) non-empty for selected modality",
+			ops: allReady.length,
+		},
+		{
+			id: "WOULD_WRITE",
+			status: wouldWrite.length > 0 ? "done" : "blocked",
+			item: "wouldWriteCount > 0 so execute can move unique gaps",
+			ops: wouldWrite.length,
+		},
+		{
+			id: "UNIQUE_GAP_PREDICTION",
+			status: willDecrease ? "open" : wouldWrite.length === 0 ? "blocked" : "open",
+			item: "Predict unique gap delta if all wouldWrite ops verify",
+			needed: [
+				`uniqueGapPeople(modality)=${uniqueGapForModality}`,
+				`maxUniqueClosedIfVerify=${maxUniqueClosed}`,
+				`willUniqueGapDecrease=${willDecrease}`,
+				`willUniqueGapReachZeroInThisWave=${Boolean(willZero)}`,
+			],
+		},
+		...whyNotReady.slice(0, 12).map((row, index) => ({
+			id: `UNLOCK_${index}_${row.blockingReason}`.slice(0, 64),
+			status: "open" as const,
+			item: `Unlock ${row.count}× ${row.modality} blocked by ${row.blockingReason}${row.falsePhysicalSourceNullWithCandidates ? " (false physical: source null + candidates)" : ""}`,
+			ops: row.count,
+			needed: row.neededToEnterReadyQueue,
+		})),
+		{
+			id: "SCAN_EXPORT",
+			status:
+				faceSourceSelectOps + fpConflictOps + cardMissingOps > 0 ? "open" : "done",
+			item: "Scans/exports/richest-source before ready fills",
+			needed: [
+				`faceSourceSelectOrExportOps=${faceSourceSelectOps}`,
+				`fingerprintNotReadyOps=${fpConflictOps}`,
+				`cardMissingRawBlobOps=${cardMissingOps}`,
+			],
+		},
+		{
+			id: "END_GAME_ZERO",
+			status: uniqueGapForModality === 0 && allReady.length === 0 ? "done" : "open",
+			item: "End game: unique gap 0 for modality (policy dual-owner may remain named outside ready)",
+			needed: [
+				`uniqueFace=${uniqueFace.size}`,
+				`uniqueFp=${uniqueFp.size}`,
+				`readyTotal=${allReady.length}`,
+			],
+		},
+	];
+
+	const fullScope: CredentialRecoveryFullScopeCertainty = {
+		residualOpsTotal: writes.length,
+		residualByModality,
+		uniqueGapPeople: {
+			face: uniqueFace.size,
+			fingerprint: uniqueFp.size,
+			card: uniqueCard.size,
+		},
+		readyQueue: {
+			readyOps: allReady.length,
+			faceReady,
+			fingerprintReady,
+			facePeopleWithAnyReadyOp: facePeopleWithReady.size,
+			fingerprintPeopleWithAnyReadyOp: fpPeopleWithReady.size,
+		},
+		ifYouExecuteNow: {
+			wouldWriteCount: wouldWrite.length,
+			wouldWriteUniquePeople,
+			maxUniquePeopleGapClosedIfAllVerify: maxUniqueClosed,
+			uniqueGapPeopleAfterBestCase: Math.max(0, uniqueGapForModality - maxUniqueClosed),
+			willUniqueGapDecrease: willDecrease,
+			willUniqueGapReachZeroInThisWave: Boolean(willZero),
+			reason:
+				wouldWrite.length === 0
+					? "Ready queue empty for this modality — execute cannot reduce unique gap KPIs. See whyNotReady + unlockChecklist."
+					: willZero
+						? `Execute would attempt ${wouldWrite.length} writes covering ${wouldWriteUniquePeople} unique people; residual for modality is fully ready so unique gap can reach 0 if all verify.`
+						: `Execute would attempt ${wouldWrite.length} writes covering up to ${wouldWriteUniquePeople} unique people; unique gap falls only for people who fully verify (UI gap needs verified>0).`,
+		},
+		whyNotReady: whyNotReady.slice(0, 30),
+		unlockChecklist,
+		scanExportNeeded: {
+			faceSourceSelectOrExportOps: faceSourceSelectOps,
+			fingerprintConflictOrAdjudicationOps: fpConflictOps,
+			cardMissingRawBlobOps: cardMissingOps,
+			note: "These ops never enter wouldWrite until unlock/export/richest/scan completes and replan marks ready_from_raw_blob.",
+		},
+	};
+
 	return {
 		canaryModality,
 		maxVerifiedWrites,
@@ -1159,6 +1554,7 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 			fpReadyMustBePositiveForFingerprintVerifiedWrites: true,
 			faceReadyMustBePositiveForFaceVerifiedWrites: true,
 		},
+		fullScope,
 	};
 };
 

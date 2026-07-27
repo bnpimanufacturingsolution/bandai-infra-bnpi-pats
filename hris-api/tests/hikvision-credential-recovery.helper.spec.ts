@@ -102,6 +102,87 @@ describe("Hikvision credential recovery graph", () => {
 		});
 		expect(selected.map((row: any) => row.id)).to.deep.equal(["face-a-1"]);
 		expect(facePreview.wouldWriteUniquePeople).to.equal(1);
+		// Full-scope certainty contract: not ready-only
+		expect(facePreview.fullScope).to.be.an("object");
+		expect(facePreview.fullScope.residualOpsTotal).to.equal(4);
+		expect(facePreview.fullScope.residualByModality.face).to.equal(2);
+		expect(facePreview.fullScope.residualByModality.fingerprint).to.equal(2);
+		expect(facePreview.fullScope.uniqueGapPeople.face).to.equal(1);
+		expect(facePreview.fullScope.ifYouExecuteNow.wouldWriteCount).to.equal(1);
+		expect(facePreview.fullScope.ifYouExecuteNow.willUniqueGapDecrease).to.equal(true);
+		expect(facePreview.fullScope.ifYouExecuteNow.willUniqueGapReachZeroInThisWave).to.equal(
+			false,
+		);
+		expect(facePreview.fullScope.unlockChecklist.some((row) => row.id === "READY_QUEUE")).to
+			.equal(true);
+		expect(facePreview.fullScope.scanExportNeeded).to.be.an("object");
+		expect(zeroFp.fullScope.ifYouExecuteNow.wouldWriteCount).to.equal(0);
+		expect(zeroFp.fullScope.ifYouExecuteNow.willUniqueGapDecrease).to.equal(false);
+		expect(zeroFp.fullScope.ifYouExecuteNow.reason).to.match(/Ready queue empty/i);
+		expect(
+			zeroFp.fullScope.whyNotReady.some(
+				(row) => row.blockingReason === "target_owner_scan_incomplete",
+			),
+		).to.equal(true);
+	});
+
+	it("fullScope marks false-physical source-null+candidates as agent unlock, not true physical", () => {
+		const plan = {
+			credentialWrites: [
+				{
+					id: "face-1419-e",
+					modality: "face",
+					vendorUserId: "1419",
+					recommended: false,
+					executionEligibility: "blocked",
+					blockingReason: "physical_identity_adjudication_required",
+					recoveryStage: "physical_identity_action_required",
+					sourceDeviceId: null,
+					sourceCandidateDeviceIds: ["device-b", "device-a", "device-d"],
+					targetDeviceId: "device-e",
+				},
+			],
+		};
+		expect(classifyCredentialRecoveryWrite(plan.credentialWrites[0])).to.equal(
+			"recovery_needed",
+		);
+		const preview = buildCredentialRecoveryExecutionPreview({
+			plan,
+			canaryModality: "face",
+			maxVerifiedWrites: 50,
+		});
+		expect(preview.wouldWriteCount).to.equal(0);
+		expect(preview.fullScope.uniqueGapPeople.face).to.equal(1);
+		expect(preview.fullScope.ifYouExecuteNow.willUniqueGapDecrease).to.equal(false);
+		const why = preview.fullScope.whyNotReady[0];
+		expect(why.falsePhysicalSourceNullWithCandidates).to.equal(true);
+		expect(why.ownerClass).to.equal("agent_unlock");
+		expect(why.neededToEnterReadyQueue.join(" ")).to.match(/richest|candidates|sourceDeviceId/i);
+	});
+
+	it("fullScope predicts unique gap can reach zero only when all modality residual is ready", () => {
+		const plan = {
+			credentialWrites: [
+				{
+					id: "face-only",
+					modality: "face",
+					vendorUserId: "99",
+					recommended: true,
+					executionEligibility: "ready_from_raw_blob",
+					targetDeviceId: "device-a",
+					faceAssociationStrategy: "exact_shared_card",
+				},
+			],
+		};
+		const preview = buildCredentialRecoveryExecutionPreview({
+			plan,
+			canaryModality: "face",
+			maxVerifiedWrites: 50,
+		});
+		expect(preview.fullScope.ifYouExecuteNow.wouldWriteCount).to.equal(1);
+		expect(preview.fullScope.ifYouExecuteNow.willUniqueGapDecrease).to.equal(true);
+		expect(preview.fullScope.ifYouExecuteNow.willUniqueGapReachZeroInThisWave).to.equal(true);
+		expect(preview.fullScope.ifYouExecuteNow.uniqueGapPeopleAfterBestCase).to.equal(0);
 	});
 
 	it("prefers unique people first so one wave touches more people than multi-target spam", () => {
