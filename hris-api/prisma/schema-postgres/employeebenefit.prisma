@@ -76,11 +76,9 @@ model EmployeeBenefit {
   eligibilityDisqualifyOnLeave       Boolean                @default(false)
 
   // Legacy/simple details (kept for backward compatibility)
+  // scheduleMode / recurrenceFrequency / attendanceBased / attendanceAmountBasis
+  // are defined once above in the EPP-style block (merge #6 left duplicates here).
   amount    Float?
-  attendanceBased Boolean @default(false)
-  attendanceAmountBasis BenefitAttendanceAmountBasis?
-  recurrenceFrequency BenefitRecurrenceFrequency?
-  scheduleMode BenefitScheduleMode?
   startDate DateTime? @db.Date
   endDate   DateTime? @db.Date
 
