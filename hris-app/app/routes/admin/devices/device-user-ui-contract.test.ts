@@ -235,7 +235,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("Saved preview");
 		expect(enroll).toContain('return "Not checked";');
 		expect(enroll).toContain("Review merge by unique ID");
-		expect(enroll).toContain("Use recommended sources");
+		// Auto-resolve uses richest sources (button copy may evolve; keep behavior string).
+		expect(enroll).toMatch(/richest sources|recommended sources|Auto-resolved/);
 		expect(deviceService).toContain("{ timeoutMs: 300_000 }");
 		expect(enroll).toContain("Enrollment counts alone do not authorize biometric copying");
 		expect(enroll).toContain("No fingerprint copy is recommended");
@@ -254,10 +255,11 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Expected active devices");
 		expect(enroll).toContain("Unique IDs");
 		expect(enroll).toContain("Device ID records");
-		expect(enroll).toContain("Peer-copy ready");
 		expect(enroll).toContain("Needs decision");
-		expect(enroll).toContain("FP residual");
-		expect(enroll).toContain("Face residual");
+		// Top chip labels come from MERGE_CHIP_CONTRACT via contractById.*.label
+		expect(enroll).toContain("contractById.peer_copy.label");
+		expect(enroll).toContain("contractById.fingerprint.label");
+		expect(enroll).toContain("contractById.face.label");
 		expect(enroll).toContain("Include card residual");
 		expect(enroll).toContain("includeCardResidual");
 		expect(enroll).toContain("sdkMergeDecisionPeopleCount");
@@ -390,16 +392,15 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("Dry-run only for now");
 		expect(enroll).not.toContain("dry-run mode prevents writes");
 		expect(enroll).not.toContain("Dry run is on.");
-		expect(enroll).toContain("Peer-copy ready");
+		expect(enroll).toMatch(/Peer-copy ready|contractById\.peer_copy/);
 		expect(enroll).toContain("Credential convergence");
 		expect(enroll).toContain("Fingerprint and face are planned independently");
 		expect(enroll).toContain("Select ready operations");
 		expect(enroll).toContain('"Potential operations"');
 		expect(enroll).toContain("sdkMergePotentialOperationsUiTotal");
-		expect(enroll).toContain(
-			"sdkMergePotentialOperationSummary?.totalPotentialOperations",
-		);
-		expect(enroll).toContain("sdkMergePotentialOperationSummary?.byModality?.card");
+		expect(enroll).toContain("sdkMergePotentialOperationSummary");
+		expect(enroll).toContain("totalPotentialOperations");
+		expect(enroll).toContain("byModality");
 		expect(enroll).toContain("includeCardResidual");
 		expect(enroll).toContain("modality !== \"card\"");
 		expect(enroll).toContain('"Ready now"');

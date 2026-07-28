@@ -54,16 +54,18 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 			return () => window.removeEventListener("keydown", handleKeyDown);
 		}, [onOpenChange, open]);
 
-		if (!open) {
-			return trigger ? <>{trigger}</> : null;
-		}
-
+		// Hooks must run unconditionally (nested Sync Center → Merge device users
+		// previously crashed with React #310 when useId ran only while open).
+		const titleId = React.useId();
+		const descriptionId = React.useId();
 		// Allow nested modals to stack above a parent (e.g. payroll correction over timesheet).
 		const hasExplicitZ =
 			typeof className === "string" && /\bz-\[?\d/.test(className);
 		const shellZ = hasExplicitZ ? undefined : "z-50";
-		const titleId = React.useId();
-		const descriptionId = React.useId();
+
+		if (!open) {
+			return trigger ? <>{trigger}</> : null;
+		}
 
 		return (
 			<>

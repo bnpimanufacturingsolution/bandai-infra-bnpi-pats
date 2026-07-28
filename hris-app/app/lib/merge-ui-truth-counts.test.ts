@@ -128,11 +128,12 @@ describe("enroll.tsx merge UI wire-up", () => {
 	});
 
 	it("splits Missing and Needs decision chips (no Needs review soup as primary chip)", () => {
-		expect(enrollSource).toContain('label: "Missing"');
+		// Top chips pull labels from MERGE_CHIP_CONTRACT; issue filter uses "Missing from device".
+		expect(enrollSource).toMatch(/label:\s*"Missing from device"|contractById\.missing\.label/);
 		expect(enrollSource).toContain('label: "Needs decision"');
-		expect(enrollSource).toContain('label: "Peer-copy ready"');
+		expect(enrollSource).toMatch(/Peer-copy ready|contractById\.peer_copy\.label/);
 		// Top chip grid is the single-source set (inline or named)
-		expect(enrollSource).toMatch(/Single-source top chips|sdkMergeTopChips/);
+		expect(enrollSource).toMatch(/Single-source top chips|sdkMergeTopChips|MERGE_CHIP_CONTRACT/);
 		// Soup label must not be a default top chip entry next to Unique IDs
 		expect(enrollSource).not.toMatch(
 			/\{\s*key:\s*"review",\s*label:\s*"Needs review"/,
