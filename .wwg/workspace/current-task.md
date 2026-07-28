@@ -1,5 +1,21 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-28 shared observability recovery
+
+- Task mode: production/runtime regression repair and audit.
+- PROD/DEV/UAT app, API, and employee targets are explicitly monitored and
+  healthy; environment-scoped metrics, logs, and traces are queryable.
+- Public Grafana login and four dashboards pass authenticated Playwright
+  without unexpected application or HTTP 5xx errors.
+- Backup changed from inconsistent live telemetry tar archives to atomic,
+  checksum-validated Grafana PostgreSQL custom dumps with bounded retention.
+  Invalid legacy archives were removed after validating replacements; root
+  usage fell from 81% to 53%.
+- Tempo was upgraded from 2.6.1 to 2.10.5 to repair recurring local-backend
+  poller/compactor races.
+- Runtime revision: `c0c00ee`; evidence:
+  `.runtime/observability-audit-20260728-142401/`.
+
 ## Latest Task Addendum - 2026-07-27 DM3 Upload employee databank
 
 - Task mode: product feature (DM3 migration UX + import service).

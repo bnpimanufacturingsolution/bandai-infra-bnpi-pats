@@ -1,5 +1,25 @@
 # Project Truth
 
+## Shared DEV/UAT/PROD observability recovery (2026-07-28)
+
+- Status: `CONFIRMED_VM_GITOPS_PUBLIC_BROWSER`.
+- Prometheus has three healthy environment API targets and nine healthy
+  blackbox probes covering each PROD/DEV/UAT app, API, and employee frontend
+  host port; no target is down and no alert is firing.
+- Loki has current `prod`, `dev`, and `uat` logs. The OpenTelemetry collector
+  has zero refused or failed spans, and Tempo returns traces for
+  `hris-api-prod`, `hris-api-dev`, and `hris-api-uat`.
+- Public `https://grafana.bnpi-hris.tech` authentication and the API Health,
+  Overview, Logs, and Traces dashboards pass headless Playwright without
+  no-data panels, datasource errors, page/console errors, or HTTP 5xx.
+- Backup now creates atomic, validated PostgreSQL custom dumps of Grafana's
+  durable database only. Mutable telemetry stores use their own retention
+  policies. Defaults retain four rolling and two full dumps.
+- Tempo was upgraded from 2.6.1 to supported 2.10.5 while preserving vParquet4
+  data. Cloudflare remained enabled/active and all six Argo applications were
+  `Synced/Healthy`.
+- Evidence: `.runtime/observability-audit-20260728-142401/`.
+
 ## DEV/UAT/PROD data parity snapshot (2026-07-24)
 
 - Status: `CONFIRMED_K3S_RUNTIME_WITH_PUBLIC_NETWORK_BOUNDARY`.

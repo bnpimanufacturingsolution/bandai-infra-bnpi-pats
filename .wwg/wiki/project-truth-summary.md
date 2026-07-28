@@ -1,6 +1,18 @@
 # Project Truth Summary
 
-Last updated: 2026-07-24
+Last updated: 2026-07-28
+
+## 2026-07-28 shared observability recovery
+
+- PROD, DEV, and UAT have healthy API scrapes plus app/API/employee blackbox
+  probes. Loki and Tempo contain environment-specific logs and traces.
+- Public Grafana authentication and four operational dashboards pass headless
+  Playwright without application errors or HTTP 5xx.
+- Backup is enabled as atomic Grafana PostgreSQL custom dumps with four rolling
+  and two full restore points. Mutable telemetry stores are not tarred live.
+- Tempo runs supported 2.10.5 with vParquet4 data after the 2.6.1
+  poller/compactor race was reproduced and repaired.
+- Evidence: `.runtime/observability-audit-20260728-142401/`.
 
 ## 2026-07-24 environment data parity
 
@@ -117,10 +129,10 @@ Last updated: 2026-07-24
 - Public `bnpi-hris.tech` verification from the client LAN is currently affected by a network policy block/reset: plain HTTP returns a company-policy "Web Page Blocked" response and HTTPS to `bnpi-hris.tech` / `api.bnpi-hris.tech` resets during TLS, while general HTTPS to Cloudflare and Google succeeds. Treat public checks from this LAN as blocked by network policy until verified from an unfiltered vantage point.
 - `verify-gitops-state -GuestIp 10.184.38.91` previously reached the VM over SSH, but that IP is stale for the current session. Argo CD/Application state should be checked against canonical LAN/runtime target `10.184.37.19` or through `ssh project-truth-hris`; `10.184.37.78` is only a retained secondary transition address.
 - V6 runtime proof shows a split serving reality: public/LAN HRIS is green through Docker Compose and VM-side Cloudflare, while many K3s pods are `Pending`, `Evicted`, or `ContainerStatusUnknown` under memory pressure despite Argo Applications reporting `Synced/Healthy`.
-- Observability backup/replication is intentionally paused after the 2026-07-03
-  retained VHDX build because rolling archives had grown to about `161G` and
-  backup logs repeatedly referenced stale `/data/grafana`. Grafana, Prometheus,
-  Loki, Tempo, and HRIS app/API health passed after pruning and restart.
+- The 2026-07-03 paused/broken observability backup state is stale. On
+  2026-07-28 backup was re-enabled as bounded, atomic, validated Grafana
+  PostgreSQL dumps; invalid live-filesystem archives were removed only after
+  replacement restore points passed checksum and catalog validation.
 - Runtime quick tunnels are deprecated for normal public access. Historical TryCloudflare evidence may remain in old reports, but active VM boot/sync paths keep the TryCloudflare service disabled by default.
 - Hikvision has Docker DEV DB evidence for `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM`, DEV physical ACS-pull saved-event proof, DEV VM/K3s watcher proof, and UAT temporary callback/attendance seed proof. It still needs Linux HCNetSDK login/alarm callback proof, direct spontaneous device push proof, UAT physical pull routing, and PROD parity.
 - DeviceUser architecture and UI have local hot-reload proof only as of 2026-07-06. Remaining drift is GitOps/K3s/public DEV promotion and proof that the same `DeviceUser` schema, user sync, event resolver, and durable skipped-row summaries operate in the VM/public serving path.

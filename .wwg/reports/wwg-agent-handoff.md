@@ -1,5 +1,27 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-28 - Shared observability recovered for PROD/DEV/UAT
+
+- Status: `FULFILLED`.
+- Prometheus has three paired API targets and nine app/API/employee probes up;
+  Loki has current environment streams; Tempo returns all three API service
+  names; OTEL refused/failed span counters are zero.
+- Public authenticated Grafana Playwright passed four dashboards without
+  no-data panels, datasource, page/console, or HTTP 5xx errors. Only optional
+  Cloudflare `/cdn-cgi/rum` beacons aborted during navigation.
+- Backup now creates atomic, checksum- and catalog-validated Grafana PostgreSQL
+  dumps. Replacement rolling/full dumps validated before 29 quarantined
+  invalid files and legacy tar/partial artifacts were irreversibly removed.
+  Root usage fell from 81% to 53%.
+- Tempo 2.6.1's recurring local poller/compactor race was reproduced and the
+  runtime upgraded to supported 2.10.5 with vParquet4 preserved.
+- CI through runtime revision `c0c00ee` passed. All six Argo applications were
+  `Synced/Healthy`; Cloudflare remained enabled/active.
+- Direct LAN SSH still times out from this host; `ssh project-truth-hris`
+  works. Existing `REC-20260703-002` owns that drift.
+- Evidence: `.runtime/observability-audit-20260728-142401/`.
+- No new recommendations were identified.
+
 ## 2026-07-25 - Agent-owned blocker-fix overnight prompt (primary)
 
 - Status: `JOB_CARD_READY`.
