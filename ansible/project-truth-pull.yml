@@ -134,6 +134,7 @@
         build_api=1
         build_db_init=1
         build_app=1
+        build_emp_app=1
         if [ -n "$previous_commit" ] &&
            git -C "{{ project_truth_repo_root }}" cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
           changed_files="$(
@@ -142,6 +143,7 @@
           build_api=0
           build_db_init=0
           build_app=0
+          build_emp_app=0
           if grep -Eq '^(hris-api/|vendor/hikvision-linux/|scripts/project-truth-hikvision-)' <<<"$changed_files"; then
             build_api=1
           fi
@@ -151,10 +153,14 @@
           if grep -Eq '^hris-app/' <<<"$changed_files"; then
             build_app=1
           fi
+          if grep -Eq '^(hris-emp-app/|appliance/dockerfiles/hris-emp-app\.)' <<<"$changed_files"; then
+            build_emp_app=1
+          fi
           if grep -Eq '^appliance/docker-compose' <<<"$changed_files"; then
             build_api=1
             build_db_init=1
             build_app=1
+            build_emp_app=1
           fi
           runtime_changes="$(
             grep -E '^gitops/runtime-k8s/' <<<"$changed_files" || true
@@ -168,6 +174,7 @@
               build_api=1
               build_db_init=1
               build_app=1
+              build_emp_app=1
             elif grep -q 'hris-api-credential-recovery-env.patch.yaml' \
               "{{ project_truth_repo_root }}/gitops/runtime-k8s/overlays/dev/kustomization.yaml"; then
               build_api=1
@@ -194,6 +201,10 @@
           services+=(hris-app)
           images+=(hris-app-local:develop)
           deployments+=(hris-app)
+        fi
+        if [ "$build_emp_app" = "1" ]; then
+          services+=(hris-emp-app)
+          images+=(hris-emp-app-local:develop)
         fi
         if [ -z "${services[*]:-}" ]; then
           printf 'commit=%s\nsynced_at=%s\nservices=none\n' \
@@ -224,6 +235,12 @@
           kubectl -n "$env_name" rollout restart "deployment/$deployment" >/dev/null
           kubectl -n "$env_name" rollout status "deployment/$deployment" --timeout=180s
         done
+        if [ "$build_emp_app" = "1" ]; then
+          for employee_env_name in prod dev uat; do
+            kubectl -n "$employee_env_name" rollout restart deployment/hris-emp-app >/dev/null
+            kubectl -n "$employee_env_name" rollout status deployment/hris-emp-app --timeout=180s
+          done
+        fi
         printf 'commit=%s\nsynced_at=%s\nservices=%s\n' \
           "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${services[*]}" > "$state_file"
       args:
