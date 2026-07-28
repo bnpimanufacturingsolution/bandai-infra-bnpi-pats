@@ -17,6 +17,7 @@ import { getLogger } from "./helper/logger.helper";
 import { httpMetricsMiddleware, metricsHandler } from "./middleware/observability";
 import { apiActivityLoggingMiddleware } from "./middleware/apiActivityLogging";
 import { apiDebugLoggingMiddleware } from "./middleware/apiDebugLogging";
+import { isPublicUnauthenticatedApiPath } from "./middleware/isPublicApiRoute";
 import { hikvisionFdlibFaceDeliveryRegistry } from "./helper/hikvision-fdlib-face.helper";
 import { shutdownTelemetry } from "./helper/telemetry";
 import { recordHttpOutcome, startStatusSampler } from "./app/status/status.service";
@@ -654,6 +655,7 @@ app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) =>
 	if (
 		req.path.startsWith("/docs") ||
 		req.path.startsWith("/auth") ||
+		isPublicUnauthenticatedApiPath(req.path) ||
 		req.path.startsWith("/system-provisioning") ||
 		req.path.startsWith("/hikvision") ||
 		req.path.startsWith("/zkteco") ||
