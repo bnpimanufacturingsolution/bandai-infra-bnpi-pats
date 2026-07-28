@@ -170,6 +170,21 @@ const isAuthorizedHikvisionFaceCanaryDevice = (deviceId: unknown) => {
 	return Boolean(id) && authorizedHikvisionFaceCanaryDeviceIds().includes(id);
 };
 
+/**
+ * Comma/space/semicolon-separated device IDs allowed for serial card canaries.
+ * Same multi-target shape as face; single-id env values still work.
+ */
+const authorizedHikvisionCardCanaryDeviceIds = () =>
+	String(process.env.HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID || "")
+		.split(/[,;\s]+/)
+		.map((value) => value.trim())
+		.filter(Boolean);
+
+const isAuthorizedHikvisionCardCanaryDevice = (deviceId: unknown) => {
+	const id = String(deviceId || "").trim();
+	return Boolean(id) && authorizedHikvisionCardCanaryDeviceIds().includes(id);
+};
+
 const DEVICE_EVENT_STATUSES = new Set([
 	"RECEIVED",
 	"MATCHED",
@@ -12028,9 +12043,7 @@ export const controller = (prisma: PrismaClient) => {
 								"",
 						) === cardWriterBuildAttestation;
 					const cardWriterAvailable =
-						String(
-							process.env.HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID || "",
-						).trim() === String(device.id) ||
+						isAuthorizedHikvisionCardCanaryDevice(device.id) ||
 						(cardRecordCapability &&
 							testedBuildAttested &&
 							deviceConfig?.credentialCardWriter?.physicallyRetained === true);
@@ -12557,7 +12570,10 @@ export const controller = (prisma: PrismaClient) => {
 			if (
 				write.modality === "card" &&
 				(write.executionEligibility === "ready_from_raw_blob" ||
-					write.blockingReason === "target_write_unsupported")
+					write.blockingReason === "target_write_unsupported" ||
+					// Plan assembly marks unsupported targets this way; still unlock
+					// when the target is an authorized card canary or fleet-proven.
+					write.blockingReason === "credential_only_card_not_supported")
 			) {
 				const user = (plan.users || []).find(
 					(candidate: any) => String(candidate.key) === String(write.userKey),
@@ -12566,10 +12582,9 @@ export const controller = (prisma: PrismaClient) => {
 					(record: any) =>
 						String(record.deviceId) === String(write.sourceDeviceId),
 				);
-				const authorizedCardCanaryTarget =
-					String(
-						process.env.HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID || "",
-					).trim() === String(write.targetDeviceId);
+				const authorizedCardCanaryTarget = isAuthorizedHikvisionCardCanaryDevice(
+					write.targetDeviceId,
+				);
 				const targetCapabilityTested =
 					authorizedCardCanaryTarget ||
 					Boolean(
@@ -12593,7 +12608,7 @@ export const controller = (prisma: PrismaClient) => {
 					recommended: false,
 					executionEligibility: "blocked",
 					blockingReason: sourceRecord?._cardNo
-						? "target_write_unsupported"
+						? "credential_only_card_not_supported"
 						: "missing_raw_blob",
 					recoveryStage: sourceRecord?._cardNo
 						? "probing_target_capability"
@@ -18043,13 +18058,7 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
-			const authorizedTargetId = String(
-				process.env.HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID || "",
-			).trim();
-			if (
-				!authorizedTargetId ||
-				authorizedTargetId !== String(row.targetDeviceId || "")
-			) {
+			if (!isAuthorizedHikvisionCardCanaryDevice(row.targetDeviceId)) {
 				res.status(409).json(
 					buildErrorResponse(
 						"Retained-card attestation requires the exact target-specific authorized card canary gate.",

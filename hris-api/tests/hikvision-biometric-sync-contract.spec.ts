@@ -191,6 +191,11 @@ describe("Hikvision biometric sync contract", () => {
 		);
 		expect(controller).to.include("HIKVISION_AUTHORIZED_CARD_CANARY_DEVICE_ID");
 		expect(controller).to.include("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID");
+		// Multi-target card canary list (same shape as face) + unlock for
+		// credential_only_card_not_supported when source cardNo is proven.
+		expect(controller).to.include("authorizedHikvisionCardCanaryDeviceIds");
+		expect(controller).to.include("isAuthorizedHikvisionCardCanaryDevice");
+		expect(controller).to.include("credential_only_card_not_supported");
 		expect(controller).to.include("isAuthorizedHikvisionFaceCanaryDevice");
 		expect(controller).to.include("authorizedHikvisionFaceCanaryDeviceIds");
 		expect(controller).to.include("CardInfo custody inventory");
