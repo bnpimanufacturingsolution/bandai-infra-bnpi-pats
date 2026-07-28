@@ -79,5 +79,7 @@ foreach ($source in @('/data/prometheus', '/data/loki', '/data/tempo', '/data/al
 Assert-Contract ($backup.Contains('BACKUP_KEEP_ROLLING="${BACKUP_KEEP_ROLLING:-4}"')) 'rolling backup retention must remain bounded'
 Assert-Contract ($backup.Contains('BACKUP_KEEP_FULL="${BACKUP_KEEP_FULL:-2}"')) 'full backup retention must remain bounded'
 Assert-Contract ($backup.Contains('backup_source_missing=')) 'backup must fail explicitly when a required source mount is absent'
+Assert-Contract ($backup.Contains('.partial.$$')) 'backup archives must be built under a non-published partial filename'
+Assert-Contract ($backup.Contains('backup_archive_failed=')) 'archive failures must be named and must not publish an archive'
 
 Write-Output "Observability contract passed: $checks checks"

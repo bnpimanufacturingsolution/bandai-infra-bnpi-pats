@@ -28,8 +28,17 @@ done
 
 create_archive() {
   out_file="$1"
-  tar -czpf "$out_file" $SRC_PATHS
-  sha256sum "$out_file" > "${out_file}.sha256"
+  tmp_file="${TMP_DIR}/$(basename "$out_file").partial.$$"
+  checksum_tmp="${out_file}.sha256.partial.$$"
+  if ! tar -czpf "$tmp_file" $SRC_PATHS; then
+    rm -f "$tmp_file" "$checksum_tmp"
+    echo "backup_archive_failed=$out_file" >&2
+    return 1
+  fi
+  digest="$(sha256sum "$tmp_file" | awk '{print $1}')"
+  mv "$tmp_file" "$out_file"
+  printf '%s  %s\n' "$digest" "$out_file" > "$checksum_tmp"
+  mv "$checksum_tmp" "${out_file}.sha256"
   echo "backup_created=$out_file"
 }
 
