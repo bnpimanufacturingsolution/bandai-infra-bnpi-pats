@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Write colorful DEV/UAT/PROD comparison xlsx without openpyxl (stdlib only)."""
+"""Export colorful DEV/UAT/PROD compare workbook (stdlib only).
+
+Default outputs:
+  - docs/templates/DEV-UAT-PROD-env-compare.xlsx (repo template)
+  - .runtime/env-compare-*/ when writable
+  - /tmp/DEV-UAT-PROD-compare.xlsx on the appliance
+
+See docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md
+"""
 from __future__ import annotations
 
 import zipfile

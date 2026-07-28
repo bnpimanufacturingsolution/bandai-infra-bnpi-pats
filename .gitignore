@@ -30,6 +30,10 @@ terraform.tfstate.backup
 # Keep package templates out of git; regenerate under templates/ as needed.
 templates/sync-center-device-users/
 templates/
+# Allow committed ops env-compare template under docs/templates/
+!docs/templates/
+!docs/templates/DEV-UAT-PROD-env-compare.xlsx
+!docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md
 
 # Local DM migration workbook/source payloads.
 # These are copied from HRIS-PROJECT for local/VM operations and may contain
