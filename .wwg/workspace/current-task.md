@@ -2543,3 +2543,30 @@ Status: IMPLEMENTED + PROVEN â€” Device admin UX clarity (friendly status, 
 - The VM-managed Cloudflare service remained enabled and active. All six Argo applications were `Synced/Healthy` at the deployed revision. Direct LAN SSH/HTTP from this Windows host timed out; the documented `ssh project-truth-hris` fallback passed and all VM-local plus public paths were independently proven.
 
 
+# Latest Task Addendum - 2026-07-28 SDK Device-User Export / Import
+
+- Status: `PARTIALLY_FULFILLED`; implementation and source export proof are complete, while physical import is gated on the user's future compatible target device.
+- Existing schema/endpoints remain in use. CSV/Excel now contain exactly seven SDK columns, package users omit duplicate HRIS identity/link data, and model/firmware are read once into device-manifest metadata.
+- Fresh Main Entrance Device B proof confirmed 874 unique IDs and 0 duplicates. Protected row validation decoded 1,634 fingerprint slots and 313 faces across all 874 rows with 0 invalid rows.
+- Explicit residuals: fingerprint `not_enrolled=46`, `missing_raw_blob=9`; face `not_enrolled=68`, `missing_raw_blob=493`.
+- Main Entrance A import preview returned 0 new / 873 match / 1 conflict. All five inventory-readable Main Entrance panels already have 874 users; offline C/TEST A/TEST B cannot pass backup/read gates. No physical write was started.
+- The existing import path now surfaces conflicts first, rejects conflict execution, and cannot hide a requested face failure behind fingerprint success.
+- Evidence: `.runtime/sdk-export-import-20260728-152250/`; report: `.wwg/reports/sdk-device-user-export-import-20260728.md`.
+# 2026-07-28 — Hikvision UserInfo pagination concurrency proof
+
+- Read-only Main B benchmark proved one stable `searchID` can serve bounded
+  concurrent `UserInfo/Search` positions without losing snapshot consistency.
+- Main B concurrency 1/2/4/6/8 all returned 874 unique IDs, identical sorted
+  row hash, 825 FP users / 1,646 FP slots, and 806 face users. Concurrency 8
+  averaged 5.417s versus 21.993s sequential.
+- Main A/F/D also matched sequential hashes at concurrency 8. Main E showed
+  intermittent 401/502 page failures at both sequential and parallel levels,
+  proving incomplete reads must be rejected rather than deduplicated into a
+  smaller result.
+- Implementation now defaults read-only UserInfo pages to concurrency 8,
+  retries each failed page three times with a serialized final attempt, requires
+  rows and unique IDs to equal `totalMatches`, and discards/falls back to a new
+  serialized search when validation fails. Physical writes remain serialized.
+- Evidence/report:
+  `.runtime/hikvision-pagination-benchmark-20260728/` and
+  `.wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md`.

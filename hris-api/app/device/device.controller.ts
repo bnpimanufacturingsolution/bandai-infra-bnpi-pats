@@ -4220,12 +4220,15 @@ export const controller = (prisma: PrismaClient) => {
 				await new Promise((resolve) => setTimeout(resolve, 750));
 			}
 		}
+		const faceWrite: string =
+			params.decrypted?.faceTemplate || params.decrypted?.facePicture
+				? "not_implemented_for_raw_package"
+				: "not_present";
 		return {
 			fingerprintWrites: results,
 			fingerprintWriteCount: results.length,
-			faceWrite: params.decrypted?.faceTemplate
-				? "not_implemented_for_encrypted_bundle"
-				: "not_present",
+			fingerprintVerifiedCount: results.filter((result: any) => result.sticky === true).length,
+			faceWrite,
 		};
 	};
 
@@ -6962,47 +6965,109 @@ export const controller = (prisma: PrismaClient) => {
 			1,
 			Math.min(Number(process.env.HIKVISION_USER_SYNC_PAGE_SIZE || 100), 200),
 		);
+		const requestedConcurrency = Math.max(
+			1,
+			Math.min(Number(process.env.HIKVISION_USER_SYNC_PAGE_CONCURRENCY || 8), 8),
+		);
 		const maxUsers = Math.max(
 			1,
 			Math.min(Number(process.env.HIKVISION_USER_SYNC_MAX_USERS || 2000), 10000),
 		);
-		const allUsers: any[] = [];
-		let position = 0;
-		// Hikvision retains and accelerates one paginated search by searchID.
-		// Keep this unique per inventory, but stable across every returned page.
-		const searchID = randomUUID();
-		for (let page = 0; page < 100 && allUsers.length < maxUsers; page += 1) {
-			const data = await hikvisionFetch(hikvisionEndpoint.accessControl.userInfo.search, {
-				method: "POST",
-				deviceId: device.id,
-				prisma,
-				request: req,
-				timeoutMs: 15000,
-				headers: { "Content-Type": "application/json" },
-				body: {
-					UserInfoSearchCond: {
-						searchID,
-						searchResultPosition: position,
-						maxResults: Math.min(pageSize, maxUsers - allUsers.length),
+		const readInventory = async (concurrency: number) => {
+			// Hikvision retains one server-side snapshot by searchID. Create it
+			// once per inventory and reuse it for every page, including retries.
+			const searchID = randomUUID();
+			const fetchPage = async (position: number, allowParallel: boolean) => {
+				let lastError: any = null;
+				for (let attempt = 1; attempt <= 3; attempt += 1) {
+					try {
+						const data = await hikvisionFetch(
+							hikvisionEndpoint.accessControl.userInfo.search,
+							{
+								method: "POST",
+								deviceId: device.id,
+								prisma,
+								request: req,
+								timeoutMs: 15000,
+								// Final retry rejoins the normal serialized lane.
+								serializeDeviceRequests: !(allowParallel && attempt < 3),
+								headers: { "Content-Type": "application/json" },
+								body: {
+									UserInfoSearchCond: {
+										searchID,
+										searchResultPosition: position,
+										maxResults: pageSize,
+									},
+								},
+							},
+						);
+						const users = getUserInfoSearchList(data);
+						const search = data?.UserInfoSearch || data?.data?.UserInfoSearch || {};
+						return {
+							position,
+							users,
+							totalMatches: Number(search.totalMatches || 0),
+						};
+					} catch (error: any) {
+						lastError = error;
+						if (attempt < 3) {
+							await new Promise((resolve) => setTimeout(resolve, attempt * 150));
+						}
+					}
+				}
+				throw lastError;
+			};
+
+			const first = await fetchPage(0, false);
+			if (!first.users.length) return [];
+			const actualPageSize = first.users.length;
+			const expectedTotal = Math.min(
+				Math.max(Number(first.totalMatches || actualPageSize), actualPageSize),
+				maxUsers,
+			);
+			const positions: number[] = [];
+			for (let position = actualPageSize; position < expectedTotal; position += actualPageSize) {
+				positions.push(position);
+			}
+			const pages = new Array<any[]>(positions.length);
+			let cursor = 0;
+			await Promise.all(
+				Array.from(
+					{ length: Math.min(concurrency, Math.max(positions.length, 1)) },
+					async () => {
+						while (cursor < positions.length) {
+							const index = cursor++;
+							const page = await fetchPage(positions[index], concurrency > 1);
+							pages[index] = page.users;
+						}
 					},
-				},
-			});
-			const pageUsers = getUserInfoSearchList(data);
-			const search = data?.UserInfoSearch || data?.data?.UserInfoSearch || {};
-			allUsers.push(...pageUsers);
-			const numOfMatches = Number(search.numOfMatches || pageUsers.length || 0);
-			const status = String(search.responseStatusStrg || "").toUpperCase();
-			if (!pageUsers.length || status !== "MORE" || numOfMatches <= 0) break;
-			position += numOfMatches;
-		}
-		return Array.from(
-			new Map(
+				),
+			);
+			const allUsers = [first.users, ...pages].flat().slice(0, expectedTotal);
+			const keyed = new Map(
 				allUsers.map((user) => [
-					String(user?.employeeNo || user?.employeeNoString || user?.userId),
+					String(user?.employeeNo || user?.employeeNoString || user?.userId || "").trim(),
 					user,
 				]),
-			).values(),
-		);
+			);
+			keyed.delete("");
+			if (allUsers.length !== expectedTotal || keyed.size !== expectedTotal) {
+				throw new Error(
+					`Hikvision UserInfo inventory incomplete for ${device.id}: rows=${allUsers.length} unique=${keyed.size} expected=${expectedTotal}`,
+				);
+			}
+			return Array.from(keyed.values());
+		};
+
+		try {
+			return await readInventory(requestedConcurrency);
+		} catch (parallelError: any) {
+			if (requestedConcurrency <= 1) throw parallelError;
+			deviceLogger.warn(
+				`Hikvision parallel UserInfo inventory failed for ${device.id}; retrying serialized: ${parallelError?.message || parallelError}`,
+			);
+			return readInventory(1);
+		}
 	};
 
 	const loadHikvisionDeviceUserSnapshot = async (req: Request, device: any) => {
@@ -9837,6 +9902,60 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 			exportRows.forEach(compactPortableDeviceUserBiometricMetadata);
+			let liveDeviceIdentity = {
+				model:
+					(device.config as any)?.model ||
+					(device.config as any)?.deviceModel ||
+					null,
+				firmware:
+					(device.config as any)?.firmware ||
+					(device.config as any)?.firmwareVersion ||
+					null,
+				serialNumber:
+					(device.config as any)?.serialNumber ||
+					(device.config as any)?.serial ||
+					null,
+			};
+			try {
+				const deviceInfoResponse = await hikvisionFetch(
+					"/ISAPI/System/deviceInfo?format=json",
+					{
+						method: "GET",
+						deviceId: String(device.id),
+						prisma,
+						request: req,
+						timeoutMs: 12_000,
+					},
+				);
+				const deviceInfo =
+					deviceInfoResponse?.DeviceInfo ||
+					deviceInfoResponse?.deviceInfo ||
+					deviceInfoResponse?.data?.DeviceInfo ||
+					deviceInfoResponse?.data?.deviceInfo ||
+					deviceInfoResponse ||
+					{};
+				liveDeviceIdentity = {
+					model:
+						findExactHikvisionDeviceInfoValue(
+							deviceInfo,
+							new Set(["model", "devicemodel", "devicetype"]),
+						) || liveDeviceIdentity.model,
+					firmware:
+						findExactHikvisionDeviceInfoValue(
+							deviceInfo,
+							new Set(["firmwareversion", "firmware", "softwareversion"]),
+						) || liveDeviceIdentity.firmware,
+					serialNumber:
+						findExactHikvisionDeviceInfoValue(
+							deviceInfo,
+							new Set(["serialnumber", "serialno", "serial"]),
+						) || liveDeviceIdentity.serialNumber,
+				};
+			} catch (error: any) {
+				deviceLogger.warn(
+					`Device-user export deviceInfo probe failed device=${device.id}: ${error?.message || error}`,
+				);
+			}
 			exportDevices.push({
 				device: {
 					id: device.id,
@@ -9844,14 +9963,9 @@ export const controller = (prisma: PrismaClient) => {
 					address: device.address,
 					port: device.port,
 					protocol: device.protocol,
-					model:
-						(device.config as any)?.model ||
-						(device.config as any)?.deviceModel ||
-						null,
-					serialNumber:
-						(device.config as any)?.serialNumber ||
-						(device.config as any)?.serial ||
-						null,
+					model: liveDeviceIdentity.model,
+					firmware: liveDeviceIdentity.firmware,
+					serialNumber: liveDeviceIdentity.serialNumber,
 				},
 				sourceRead,
 				capabilities: capabilitySummary,
@@ -9900,7 +10014,14 @@ export const controller = (prisma: PrismaClient) => {
 							: "unsupported_or_not_requested",
 					},
 				},
-				users: options.includeRecords ? exportRows : [],
+				users: options.includeRecords
+					? exportRows.map((row: any) => ({
+							vendorUserId: row.vendorUserId,
+							displayName: row.displayName || null,
+							userType: row.userType || null,
+							rawBiometricCustody: row.rawBiometricCustody,
+						}))
+					: [],
 			});
 		}
 
@@ -10398,9 +10519,13 @@ export const controller = (prisma: PrismaClient) => {
 				const employeeNo = String(user.employeeNo || vendorUserId).trim();
 				const conflictFields = current
 					? (["displayName", "employeeNo", "userType"] as const).filter(
-							(field) =>
-								String(current?.[field] || "").trim() !==
-								String(user?.[field] || "").trim(),
+							(field) => {
+								const importedValue =
+									field === "employeeNo"
+										? employeeNo
+										: String(user?.[field] || "").trim();
+								return String(current?.[field] || "").trim() !== importedValue;
+							},
 						)
 					: [];
 				return {
@@ -10459,6 +10584,13 @@ export const controller = (prisma: PrismaClient) => {
 			const rawFaceBlobCount = importedUsers.filter(
 				(user: any) => user?.rawBiometricCustody?.face?.blob,
 			).length;
+			const conflictPlanRows = planRows.filter(
+				(row: any) => row.action === "review_conflict",
+			);
+			const visiblePlanRows = [
+				...conflictPlanRows,
+				...planRows.filter((row: any) => row.action !== "review_conflict"),
+			].slice(0, 500);
 			const preview = {
 				execute: false,
 				dryRun: true,
@@ -10505,11 +10637,20 @@ export const controller = (prisma: PrismaClient) => {
 					payload,
 					planRows,
 				}),
-				plan: planRows.slice(0, 500),
-				executeAvailable: planRows.length > 0,
+				plan: visiblePlanRows,
+				planEvidence: {
+					totalRows: planRows.length,
+					returnedRows: visiblePlanRows.length,
+					truncated: visiblePlanRows.length < planRows.length,
+					conflictsTotal: conflictPlanRows.length,
+					order: "conflicts_first_then_remaining_scope",
+				},
+				executeAvailable: planRows.length > 0 && conflictPlanRows.length === 0,
 				executeBlockedReason:
-					planRows.length > 0
-						? null
+					conflictPlanRows.length > 0
+						? `Import contains ${conflictPlanRows.length} conflict row(s); resolve or remove them before execute.`
+						: planRows.length > 0
+							? null
 						: "Import file contains no users for the selected target.",
 				executeRequirements: [
 					`confirmation="${DEVICE_USER_IMPORT_CONFIRMATION}"`,
@@ -10570,16 +10711,21 @@ export const controller = (prisma: PrismaClient) => {
 		const planRows = importedUsers.map((user: any) => {
 			const vendorUserId = String(user.vendorUserId || "").trim();
 			const current = currentByVendorUserId.get(vendorUserId) as any;
+			const employeeNo = String(user.employeeNo || vendorUserId).trim();
 			const conflictFields = current
 				? (["displayName", "employeeNo", "userType"] as const).filter(
-						(field) =>
-							String(current?.[field] || "").trim() !==
-							String(user?.[field] || "").trim(),
+						(field) => {
+							const importedValue =
+								field === "employeeNo"
+									? employeeNo
+									: String(user?.[field] || "").trim();
+							return String(current?.[field] || "").trim() !== importedValue;
+						},
 					)
 				: [];
 			return {
 				vendorUserId,
-				employeeNo: String(user.employeeNo || vendorUserId).trim(),
+				employeeNo,
 				sourceDeviceId: user.sourceDeviceId || null,
 				sourceDeviceName: user.sourceDeviceName || null,
 				action: current
@@ -10592,6 +10738,14 @@ export const controller = (prisma: PrismaClient) => {
 				rawUser: user,
 			};
 		});
+		const conflictPlanRows = planRows.filter(
+			(row: any) => row.action === "review_conflict",
+		);
+		if (conflictPlanRows.length > 0) {
+			throw deviceUserImportRequestError(
+				`Import execute refused ${conflictPlanRows.length} conflict row(s); resolve or remove them and run a fresh preview.`,
+			);
+		}
 		const expectedPreviewToken = buildDeviceUserImportPreviewToken({
 			organizationId: gate.organizationId,
 			targetDeviceId: targetDevice.id,
@@ -10790,21 +10944,45 @@ export const controller = (prisma: PrismaClient) => {
 							employeeNo: row.employeeNo || row.vendorUserId,
 							decrypted: rawPayload,
 						});
+						const fingerprintRequested = fingerprints.length > 0;
+						const fingerprintVerified =
+							!fingerprintRequested ||
+							(writeResult.fingerprintVerifiedCount === fingerprints.length &&
+								writeResult.fingerprintWrites.every(
+									(item: any) => item.sticky === true,
+								));
+						const faceRequested = Boolean(
+							rawPayload.faceTemplate || rawPayload.facePicture,
+						);
+						const faceVerified =
+							!faceRequested || writeResult.faceWrite === "verified_sticky";
+						const allRequestedModalitiesVerified =
+							(fingerprintRequested || faceRequested) &&
+							fingerprintVerified &&
+							faceVerified;
+						const modalityFailures = [
+							fingerprintRequested && !fingerprintVerified
+								? `fingerprint verification failed (${writeResult.fingerprintVerifiedCount}/${fingerprints.length} slots physically retained)`
+								: "",
+							faceRequested && !faceVerified
+								? `face verification failed (${writeResult.faceWrite})`
+								: "",
+						].filter(Boolean);
 						results.push(
 							buildDeviceUserImportResultRow(row, {
-								status:
-									writeResult.fingerprintWriteCount > 0
-										? "imported"
-										: "raw_package_ready",
+								status: allRequestedModalitiesVerified ? "imported" : "failed",
 								method: "rawPackage",
-								error:
-									writeResult.fingerprintWriteCount > 0
-										? null
-										: "Raw biometric package was readable, but no writable fingerprint template was present.",
+								error: allRequestedModalitiesVerified
+									? null
+									: modalityFailures.join("; ") ||
+										"Raw biometric package was readable, but no requested modality was physically verified.",
 								rawBiometricPackage: {
 									fingerprintCount: fingerprints.length,
 									faceTemplatePresent: Boolean(rawPayload.faceTemplate),
 									facePicturePresent: Boolean(rawPayload.facePicture),
+									fingerprintVerified,
+									faceVerified,
+									modalityFailures,
 									writeResult,
 								},
 							}),

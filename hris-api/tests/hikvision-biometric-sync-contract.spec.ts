@@ -579,6 +579,10 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("encryptedPresent");
 		expect(controller).to.include("rawFaceBlobCount");
 		expect(controller).to.include("buildRawDeviceUserBiometricCustody");
+		expect(controller).to.include("Device-user export deviceInfo probe failed");
+		expect(controller).to.include("firmware: liveDeviceIdentity.firmware");
+		expect(controller).to.include("rawBiometricCustody: row.rawBiometricCustody");
+		expect(controller).to.include('field === "employeeNo"');
 		expect(router).to.include('"/:id/users/biometric-metadata/backfill"');
 		expect(router).to.include("controller.backfillDeviceUserBiometricMetadata");
 		expect(controller).to.include("const buildDeviceUserImportPreviewToken =");
@@ -650,6 +654,15 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("HIKVISION_VM_SSH_CONNECT_TIMEOUT_SECONDS");
 		expect(controller).to.include("rawPayload.facePicture");
 		expect(controller).to.include("No raw biometric blob was found on this import row");
+		expect(controller).to.include("fingerprintVerifiedCount");
+		expect(controller).to.include("allRequestedModalitiesVerified");
+		expect(controller).to.include("face verification failed");
+		expect(controller).to.include('"not_implemented_for_raw_package"');
+		expect(controller).to.include("conflicts_first_then_remaining_scope");
+		expect(controller).to.include("Import execute refused");
+		expect(controller).to.not.include(
+			'writeResult.fingerprintWriteCount > 0\n\t\t\t\t\t\t\t\t\t\t? "imported"',
+		);
 		expect(envelopeHelperSource()).to.include("passphrase-scrypt");
 		expect(envelopeHelperSource()).to.include(
 			"Encrypted biometric bundle source binding mismatch",

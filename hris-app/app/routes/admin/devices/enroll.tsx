@@ -493,7 +493,21 @@ type CopyDeviceUserState = {
 
 type DeviceUserExportFormat = "csv" | "excel" | "json";
 type DeviceUserImportFormat = "csv" | "json";
+const DEVICE_USER_SDK_CSV_COLUMNS = [
+	"vendorUserId",
+	"displayName",
+	"userType",
+	"fingerprintStatus",
+	"rawFingerprintBlob",
+	"faceStatus",
+	"rawFaceBlob",
+] as const;
 const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = ["rawFingerprintBlob", "rawFaceBlob"] as const;
+const DEVICE_USER_BIOMETRIC_STATUSES = [
+	"raw_blob_present",
+	"not_enrolled",
+	"missing_raw_blob",
+] as const;
 const DEVICE_USER_RAW_BIOMETRIC_PACKAGE_POLICY =
 	"raw_evidenced_blobs_allowed_for_admin_device_user_sync_package";
 
@@ -5640,16 +5654,28 @@ export function DeviceEnrollmentPanel({
 	};
 	const isRawBiometricStatusValue = (value: string) =>
 		["not_enrolled", "missing_raw_blob", "not_requested"].includes(value.trim());
+	const normalizeDeviceUserBiometricStatus = (
+		value: unknown,
+		hasRawBlob: boolean,
+		credentialCount: number,
+	) => {
+		if (hasRawBlob) return "raw_blob_present";
+		const normalized = String(value || "").trim();
+		if (
+			DEVICE_USER_BIOMETRIC_STATUSES.includes(
+				normalized as (typeof DEVICE_USER_BIOMETRIC_STATUSES)[number],
+			)
+		) {
+			return normalized;
+		}
+		return credentialCount > 0 ? "missing_raw_blob" : "not_enrolled";
+	};
 	const escapeRawFingerprintTemplateCell = (value: unknown) =>
 		String(value || "")
 			.trim()
 			.replace(/\\/g, "\\\\")
 			.replace(/"/g, '\\"');
-	const encodeRawFingerprintBlobCell = (
-		templates: any[],
-		credentialCount: number,
-		status: string,
-	) => {
+	const encodeRawFingerprintBlobCell = (templates: any[]) => {
 		const rawTemplates = templates
 			.map((template: any, index: number) => ({
 				fingerPrintId: template?.fingerPrintId ?? template?.fingerPrintID ?? index + 1,
@@ -5666,15 +5692,14 @@ export function DeviceEnrollmentPanel({
 				})
 				.join(";");
 		}
-		if (status) return status;
-		return credentialCount > 0 ? "missing_raw_blob" : "not_enrolled";
+		return "";
 	};
 	const getRawFingerprintBlobCell = (user: any, credentialCount: number) => {
 		const templates = Array.isArray(user?.rawBiometricCustody?.fingerprint?.templates)
 			? user.rawBiometricCustody.fingerprint.templates
 			: [];
-		const status = String(user?.rawBiometricCustody?.fingerprint?.status || "").trim();
-		return encodeRawFingerprintBlobCell(templates, credentialCount, status);
+		void credentialCount;
+		return encodeRawFingerprintBlobCell(templates);
 	};
 	const getRawFaceBlobCell = (user: any, credentialCount: number) => {
 		const blob = user?.rawBiometricCustody?.face?.blob || {};
@@ -5682,9 +5707,8 @@ export function DeviceEnrollmentPanel({
 			blob.base64 || blob.facePicture || blob.faceTemplate || "",
 		);
 		if (raw) return raw;
-		const status = String(user?.rawBiometricCustody?.face?.status || "").trim();
-		if (status) return status;
-		return credentialCount > 0 ? "missing_raw_blob" : "not_enrolled";
+		void credentialCount;
+		return "";
 	};
 	const decodeRawBiometricBlobCell = (value: unknown) => {
 		const raw = String(value || "").trim();
@@ -5737,23 +5761,7 @@ export function DeviceEnrollmentPanel({
 			data,
 		}));
 	};
-	const getDeviceUserCsvHeaders = () => [
-		"sourceDeviceName",
-		"sourceDeviceId",
-		"vendorUserId",
-		"employeeNo",
-		"displayName",
-		"hrisEmployeeId",
-		"employeeName",
-		"status",
-		"userType",
-		"linkedToHris",
-		"cardCount",
-		"fingerprintCount",
-		"faceCount",
-		...DEVICE_USER_BIOMETRIC_CSV_COLUMNS,
-		"exportedAt",
-	];
+	const getDeviceUserCsvHeaders = () => [...DEVICE_USER_SDK_CSV_COLUMNS];
 	const buildDeviceUserImportPayloadFromCsv = (
 		text: string,
 		fileName = "device-users.csv",
@@ -5768,6 +5776,26 @@ export function DeviceEnrollmentPanel({
 				);
 				const fingerprintRawTemplateBlob = fingerprintRawTemplates[0]?.data || "";
 				const faceRawTemplateBlob = decodeRawBiometricBlobCell(row.rawFaceBlob);
+				const legacyFingerprintStatus = isRawBiometricStatusValue(
+					String(row.rawFingerprintBlob || "").trim(),
+				)
+					? String(row.rawFingerprintBlob || "").trim()
+					: "";
+				const legacyFaceStatus = isRawBiometricStatusValue(
+					String(row.rawFaceBlob || "").trim(),
+				)
+					? String(row.rawFaceBlob || "").trim()
+					: "";
+				const fingerprintStatus = normalizeDeviceUserBiometricStatus(
+					row.fingerprintStatus || legacyFingerprintStatus,
+					fingerprintRawTemplates.length > 0,
+					parseCsvNumber(row.fingerprintCount),
+				);
+				const faceStatus = normalizeDeviceUserBiometricStatus(
+					row.faceStatus || legacyFaceStatus,
+					Boolean(faceRawTemplateBlob),
+					parseCsvNumber(row.faceCount),
+				);
 				return {
 					sourceDeviceName: String(row.sourceDeviceName || "CSV import").trim(),
 					sourceDeviceId,
@@ -5779,10 +5807,18 @@ export function DeviceEnrollmentPanel({
 					status: String(row.status || "UNMATCHED").trim(),
 					userType: String(row.userType || "").trim(),
 					cardCount: parseCsvNumber(row.cardCount),
-					fingerprintCount: parseCsvNumber(row.fingerprintCount),
-					faceCount: parseCsvNumber(row.faceCount),
-					rawFingerprintBlob: String(row.rawFingerprintBlob || "not_requested").trim(),
-					rawFaceBlob: String(row.rawFaceBlob || "not_requested").trim(),
+					fingerprintCount:
+						fingerprintRawTemplates.length ||
+						(fingerprintStatus === "missing_raw_blob" ? 1 : 0),
+					faceCount:
+						Number(Boolean(faceRawTemplateBlob)) +
+						(faceStatus === "missing_raw_blob" ? 1 : 0),
+					fingerprintStatus,
+					faceStatus,
+					rawFingerprintBlob: fingerprintRawTemplates.length
+						? String(row.rawFingerprintBlob || "").trim()
+						: "",
+					rawFaceBlob: faceRawTemplateBlob,
 					biometricTransferMode: String(
 						row.biometricTransferMode ||
 							(fingerprintRawTemplates.length || faceRawTemplateBlob
@@ -5927,11 +5963,11 @@ export function DeviceEnrollmentPanel({
 						fingerprint: {
 							status: row.fingerprintRawTemplates.length
 								? "raw_blob_present"
-								: row.rawFingerprintBlob,
+								: row.fingerprintStatus,
 							templates: row.fingerprintRawTemplates,
 						},
 						face: {
-							status: row.faceRawTemplateBlob ? "raw_blob_present" : row.rawFaceBlob,
+							status: row.faceRawTemplateBlob ? "raw_blob_present" : row.faceStatus,
 							blob: row.faceRawTemplateBlob
 								? { contentType: "image/jpeg", base64: row.faceRawTemplateBlob }
 								: null,
@@ -5950,53 +5986,7 @@ export function DeviceEnrollmentPanel({
 	};
 	const buildDeviceUserCsvTemplate = () => {
 		const headers = getDeviceUserCsvHeaders();
-		const sourceRow = pagedDeviceUserRows[0];
-		const sampleCredentialSummary = getDeviceUserCredentialSummary(sourceRow);
-		const sampleRow = sourceRow
-			? {
-					sourceDeviceName: selectedDevice?.name || "",
-					sourceDeviceId: selectedDeviceId || "",
-					vendorUserId: sourceRow.vendorUserId || "",
-					employeeNo: sourceRow.vendorUserId || "",
-					displayName: sourceRow.displayName || "",
-					hrisEmployeeId: sourceRow.employee?.employeeId || "",
-					employeeName: sourceRow.employee?.fullName || "",
-					status: sourceRow.status || "",
-					userType: sourceRow.userType || "",
-					linkedToHris: sourceRow.employeeId ? "Yes" : "No",
-					cardCount: sampleCredentialSummary.cardCount,
-					fingerprintCount: sampleCredentialSummary.fingerprintCount,
-					faceCount: sampleCredentialSummary.faceCount,
-					rawFingerprintBlob:
-						sampleCredentialSummary.fingerprintCount > 0
-							? "missing_raw_blob"
-							: "not_enrolled",
-					rawFaceBlob:
-						sampleCredentialSummary.faceCount > 0 ? "missing_raw_blob" : "not_enrolled",
-					exportedAt: new Date().toISOString(),
-				}
-			: {
-					sourceDeviceName: selectedDevice?.name || "Source device",
-					sourceDeviceId: selectedDeviceId || "source-device-id",
-					vendorUserId: "1001",
-					employeeNo: "1001",
-					displayName: "Sample Device User",
-					hrisEmployeeId: "EMP-1001",
-					employeeName: "Sample Employee",
-					status: "ACTIVE",
-					userType: "normal",
-					linkedToHris: "Yes",
-					cardCount: 1,
-					fingerprintCount: 1,
-					faceCount: 0,
-					rawFingerprintBlob: "missing_raw_blob",
-					rawFaceBlob: "not_enrolled",
-					exportedAt: new Date().toISOString(),
-				};
-		return [
-			headers.join(","),
-			headers.map((header) => escapeCsvValue((sampleRow as any)[header])).join(","),
-		].join("\r\n");
+		return headers.join(",");
 	};
 	const buildDeviceUserExportRows = (payload: DeviceUserExportPayload) =>
 		(payload.devices || []).flatMap((device: any) =>
@@ -6006,10 +5996,6 @@ export function DeviceEnrollmentPanel({
 					user.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
 					user.vendorMetadata?.credentialSummary ||
 					{};
-				const sourceDeviceId = String(device.device?.id || "");
-				const vendorUserId = String(user.vendorUserId || user.employeeNo || "");
-				void sourceDeviceId;
-				void vendorUserId;
 				const rawFingerprintBlob = getRawFingerprintBlobCell(
 					user,
 					Number(credentialSummary.fingerprintCount || 0),
@@ -6018,23 +6004,24 @@ export function DeviceEnrollmentPanel({
 					user,
 					Number(credentialSummary.faceCount || 0),
 				);
+				const fingerprintStatus = normalizeDeviceUserBiometricStatus(
+					user.rawBiometricCustody?.fingerprint?.status,
+					Boolean(rawFingerprintBlob),
+					Number(credentialSummary.fingerprintCount || 0),
+				);
+				const faceStatus = normalizeDeviceUserBiometricStatus(
+					user.rawBiometricCustody?.face?.status,
+					Boolean(rawFaceBlob),
+					Number(credentialSummary.faceCount || 0),
+				);
 				return {
-					sourceDeviceName: device.device?.name || "",
-					sourceDeviceId: device.device?.id || "",
 					vendorUserId: user.vendorUserId || "",
-					employeeNo: user.employeeNo || "",
 					displayName: user.displayName || "",
-					hrisEmployeeId: user.employee?.employeeId || user.employeeId || "",
-					employeeName: user.employee?.fullName || "",
-					status: user.status || "",
 					userType: user.userType || "",
-					linkedToHris: user.employeeId || user.employee?.id ? "Yes" : "No",
-					cardCount: Number(credentialSummary.cardCount || 0),
-					fingerprintCount: Number(credentialSummary.fingerprintCount || 0),
-					faceCount: Number(credentialSummary.faceCount || 0),
+					fingerprintStatus,
 					rawFingerprintBlob,
+					faceStatus,
 					rawFaceBlob,
-					exportedAt: payload.exportedAt || "",
 				};
 			}),
 		);
@@ -12818,9 +12805,9 @@ export function DeviceEnrollmentPanel({
 					<div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-950">
 						<p className="font-semibold">Biometric handling</p>
 						<p className="mt-1 text-cyan-900">
-							Package exports carry only custody data already proven in HRIS. When a
-							fingerprint or face is not available, the spreadsheet keeps an explicit
-							status so reviewers can see what still needs attention.
+							The SDK export has exactly seven user columns. Raw fingerprint slots stay
+							in one FPn cell, face bytes stay separate, and unavailable custody remains
+							an explicit status instead of a fabricated blob.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -12855,9 +12842,17 @@ export function DeviceEnrollmentPanel({
 							<div className="grid gap-2 sm:grid-cols-4">
 								{[
 									["Users", deviceUserExportState.preview.summary.totalUsers],
-									["Linked", deviceUserExportState.preview.summary.linked],
-									["Unlinked", deviceUserExportState.preview.summary.unlinked],
 									["Devices", deviceUserExportState.preview.summary.devices],
+									[
+										"FP slots",
+										(deviceUserExportState.preview.summary.biometrics as any)
+											?.fingerprintRawBlobsCaptured || 0,
+									],
+									[
+										"Faces",
+										(deviceUserExportState.preview.summary.biometrics as any)
+											?.faceRawBlobsCaptured || 0,
+									],
 								].map(([label, value]) => (
 									<div
 										key={String(label)}
@@ -12984,15 +12979,15 @@ export function DeviceEnrollmentPanel({
 					setDeviceUserImportState((current) => ({ ...current, open }))
 				}
 				title="Import device users"
-				description="Import a CSV or package export to a selected target device. Preview is non-mutating; execute is disabled until confirmation.">
+				description="Restore an SDK device-user package to a compatible target. Preview is non-mutating; execute is disabled until confirmation.">
 				<div className="space-y-4">
 					<div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
 						<p className="font-semibold text-slate-950">
 							Target: {selectedDevice?.name || "Select device"}
 						</p>
 						<p className="mt-1 text-xs text-slate-600">
-							Use the CSV export from another Hikvision device to compare users and
-							preview fingerprint or face custody data before any write is allowed.
+							Package JSON is authoritative for restore. CSV is the seven-column readable
+							projection and remains accepted for backward-compatible preview.
 						</p>
 					</div>
 					<div className="grid gap-2 sm:grid-cols-2">
@@ -13123,14 +13118,20 @@ export function DeviceEnrollmentPanel({
 					) : null}
 					{deviceUserImportState.preview ? (
 						<div className="space-y-3">
-							<div className="grid gap-2 sm:grid-cols-4">
+							<div className="grid gap-2 sm:grid-cols-5">
 								{[
 									["New", deviceUserImportState.preview.counts.newUsers],
 									["Matches", deviceUserImportState.preview.counts.matchingUsers],
 									["Conflicts", deviceUserImportState.preview.counts.conflicts],
 									[
-										"Missing HRIS",
-										deviceUserImportState.preview.counts.missingHrisEmployees,
+										"Package FP",
+										deviceUserImportState.preview.rawBiometricPackage
+											?.rawFingerprintBlobCount || 0,
+									],
+									[
+										"Package faces",
+										deviceUserImportState.preview.rawBiometricPackage
+											?.rawFaceBlobCount || 0,
 									],
 								].map(([label, value]) => (
 									<div

@@ -490,7 +490,10 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("rawBiometricPackage");
 		expect(enroll).toContain("Biometric custody package");
 		expect(enroll).toMatch(
-			/const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = \[\s*"rawFingerprintBlob",\s*"rawFaceBlob",?\s*\] as const;/,
+			/const DEVICE_USER_SDK_CSV_COLUMNS = \[\s*"vendorUserId",\s*"displayName",\s*"userType",\s*"fingerprintStatus",\s*"rawFingerprintBlob",\s*"faceStatus",\s*"rawFaceBlob",?\s*\] as const;/,
+		);
+		expect(enroll).toContain(
+			"const getDeviceUserCsvHeaders = () => [...DEVICE_USER_SDK_CSV_COLUMNS];",
 		);
 		expect(enroll).not.toContain("DEVICE_USER_SPREADSHEET_TEMPLATE_PREFIX");
 		expect(enroll).not.toContain("encrypted:v2:");
@@ -514,8 +517,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("biometricCsvColumns");
 		expect(enroll).toContain("raw_evidenced_blobs_allowed_for_admin_device_user_sync_package");
 		expect(enroll).toContain("Missing cells must stay explicit");
-		expect(enroll).toContain("Package exports carry only custody data already proven in HRIS");
-		expect(enroll).toContain("preview fingerprint or face custody data before any write is allowed");
+		expect(enroll).toContain("The SDK export has exactly seven user columns");
+		expect(enroll).toContain("Package JSON is authoritative for restore");
 		expect(enroll).toContain("Preview import");
 		expect(enroll).toContain("Import CSV file");
 		expect(enroll).toContain("Package JSON");

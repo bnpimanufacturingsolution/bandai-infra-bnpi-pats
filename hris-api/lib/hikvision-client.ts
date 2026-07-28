@@ -13,6 +13,12 @@ interface HikvisionFetchOptions extends Omit<RequestInit, "body"> {
 	ensureJsonFormat?: boolean;
 	/** Return the response body verbatim instead of attempting JSON parsing. */
 	rawResponse?: boolean;
+	/**
+	 * Read-only diagnostic escape hatch for proving whether a device/firmware
+	 * safely supports concurrent requests in one search session. Production
+	 * callers remain serialized by default.
+	 */
+	serializeDeviceRequests?: boolean;
 }
 
 export type HikvisionBinaryResponse = {
@@ -524,9 +530,7 @@ class HikvisionClient {
 				acquireHikvisionTlsBypass();
 			}
 			const client = await this.createClient(connection.username, connection.password);
-			const responseText = await withHikvisionDeviceRequestSlot(
-				connection.id || connection.baseUrl,
-				async () => {
+			const requestWork = async () => {
 					const abortController = new AbortController();
 					const timeout = setTimeout(() => abortController.abort(), timeoutMs);
 					try {
@@ -604,14 +608,20 @@ class HikvisionClient {
 					} finally {
 						clearTimeout(timeout);
 					}
-				},
-				{
-					deviceId: connection.id,
-					deviceName: connection.name,
-					endpoint,
-					method: String(fetchOptions.method || "GET"),
-				},
-			);
+				};
+			const responseText =
+				options.serializeDeviceRequests === false
+					? await requestWork()
+					: await withHikvisionDeviceRequestSlot(
+							connection.id || connection.baseUrl,
+							requestWork,
+							{
+								deviceId: connection.id,
+								deviceName: connection.name,
+								endpoint,
+								method: String(fetchOptions.method || "GET"),
+							},
+						);
 			if (options.rawResponse) {
 				return { raw: responseText };
 			}

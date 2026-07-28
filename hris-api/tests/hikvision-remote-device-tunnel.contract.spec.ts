@@ -12,6 +12,10 @@ describe("Hikvision remote device tunnel contract", () => {
 	const tunnelScript = readRepoFile("scripts/start-hikvision-remote-device-tunnel.ps1");
 	const accessControlRouter = readRepoFile("hris-api/app/hikvision/routes/access.control.router.ts");
 	const deviceController = readRepoFile("hris-api/app/device/device.controller.ts");
+	const hikvisionClient = readRepoFile("hris-api/lib/hikvision-client.ts");
+	const paginationBenchmark = readRepoFile(
+		"hris-api/scripts/benchmark-hikvision-inventory-pagination.ts",
+	);
 	const restartLocalApiScript = readRepoFile("scripts/restart-local-hris-api-dev.ps1");
 	const predevScript = readRepoFile("hris-api/scripts/predev-run.cjs");
 	const devWatchScript = readRepoFile("hris-api/scripts/run-dev-api-watch.cjs");
@@ -99,6 +103,29 @@ describe("Hikvision remote device tunnel contract", () => {
 		expect(deviceController).to.include('by: ["deviceId", "vendorUserId"]');
 		expect(deviceController).to.include('by: ["vendorUserId"]');
 		expect(deviceController).to.include("total: Array.isArray(totalGroups) ? totalGroups.length : 0");
+	});
+
+	it("uses bounded parallel UserInfo pages with exact-count validation and serialized fallback", () => {
+		expect(deviceController).to.include("HIKVISION_USER_SYNC_PAGE_CONCURRENCY || 8");
+		expect(deviceController).to.include("const searchID = randomUUID()");
+		expect(deviceController).to.include("searchResultPosition: position");
+		expect(deviceController).to.include(
+			"serializeDeviceRequests: !(allowParallel && attempt < 3)",
+		);
+		expect(deviceController).to.include("allUsers.length !== expectedTotal");
+		expect(deviceController).to.include("keyed.size !== expectedTotal");
+		expect(deviceController).to.include("retrying serialized");
+		expect(deviceController).to.include("return readInventory(1)");
+		expect(hikvisionClient).to.include("serializeDeviceRequests?: boolean");
+		expect(hikvisionClient).to.include("options.serializeDeviceRequests === false");
+	});
+
+	it("benchmarks parallel pagination by full row hash rather than sampled counts", () => {
+		expect(paginationBenchmark).to.include("searchIdReusedAcrossPages: true");
+		expect(paginationBenchmark).to.include("duplicateIds.length === 0");
+		expect(paginationBenchmark).to.include("uniqueUsers === first.totalMatches");
+		expect(paginationBenchmark).to.include("createHash(\"sha256\")");
+		expect(paginationBenchmark).to.include("result.inventoryHash === baseline.inventoryHash");
 	});
 
 	it("ensures the six-device tunnel before a manual local API restart loads env", () => {

@@ -1444,6 +1444,7 @@ export interface DeviceUserExportPayload {
 	devices: Array<{
 		device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {
 			model?: string | null;
+			firmware?: string | null;
 			serialNumber?: string | null;
 		};
 		sourceRead?: {

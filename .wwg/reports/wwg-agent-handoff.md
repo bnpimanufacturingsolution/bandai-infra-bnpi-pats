@@ -1165,3 +1165,23 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Access boundary: direct LAN SSH and HTTP from this Windows host timed out. `ssh project-truth-hris` passed and provided VM-local runtime proof; public employee paths independently passed. Do not infer a VM/application outage from the host's unavailable direct LAN route.
 
 
+# 2026-07-28 SDK Device-User Export / Import Handoff
+
+- Fresh source truth: Main Entrance B is authenticated and inventory-readable with exactly 874 SDK IDs. Actual existing-path package export also contains 874 unique rows and no duplicates.
+- Protected audit decoded 1,634 FP slots and 313 faces; 9 FP and 493 face rows remain explicit `missing_raw_blob`. See `.runtime/sdk-export-import-20260728-152250/`.
+- Product projection is exactly seven columns; package schema/endpoints are unchanged; new package users are SDK-focused and omit HRIS identity/link duplication.
+- Import false-success/conflict gates were hardened. No write ran because every readable Main Entrance peer already contains 874 users and Main A preview found 1 conflict; offline devices cannot be used as a backed-up target.
+- Continue only after a new compatible device is added and becomes authenticated/inventory-readable. Then run backup → fresh preview → smallest multimodal canary → independent FP/face reread → remaining scope.
+- No new recommendation was identified; the remaining work is the expected physical-device boundary already stated by the user.
+# 2026-07-28 — Fast exact Hikvision inventory
+
+- Main B exact UserInfo inventory improved from 21.993s sequential average to
+  5.417s at page concurrency 8, with identical 874-row hash and biometric
+  totals. A/F/D also matched at concurrency 8.
+- Main E has intermittent 401/502 page failures, including at concurrency 1.
+  The new path retries pages, requires exact `totalMatches` row/unique counts,
+  and starts a fresh serialized inventory if parallel validation fails.
+- Scope boundary: concurrency bypass is only for read-only UserInfo inventory.
+  Capture and write operations keep the normal serialized device lane.
+- Evidence:
+  `.wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md`.
