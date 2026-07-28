@@ -17,22 +17,28 @@ TODAY="$(date +%Y%m%d)"
 WEEK_KEY="$(date +%G-W%V)"
 MONTH_KEY="$(date +%Y-%m)"
 
-SRC_PATHS="/data/prometheus /data/loki /data/tempo /data/alertmanager"
+PGHOST="${PGHOST:-postgres}"
+PGPORT="${PGPORT:-5432}"
+PGDATABASE="${PGDATABASE:-grafana}"
+PGUSER="${PGUSER:-postgres}"
 
-for src_path in $SRC_PATHS; do
-  if [ ! -d "$src_path" ]; then
-    echo "backup_source_missing=$src_path" >&2
-    exit 1
-  fi
-done
+if ! pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" >/dev/null 2>&1; then
+  echo "backup_database_unavailable host=$PGHOST port=$PGPORT database=$PGDATABASE" >&2
+  exit 1
+fi
 
-create_archive() {
+create_dump() {
   out_file="$1"
   tmp_file="${TMP_DIR}/$(basename "$out_file").partial.$$"
   checksum_tmp="${out_file}.sha256.partial.$$"
-  if ! tar -czpf "$tmp_file" $SRC_PATHS; then
+  if ! pg_dump --format=custom --no-owner --no-privileges --file="$tmp_file"; then
     rm -f "$tmp_file" "$checksum_tmp"
-    echo "backup_archive_failed=$out_file" >&2
+    echo "backup_dump_failed=$out_file" >&2
+    return 1
+  fi
+  if ! pg_restore --list "$tmp_file" >/dev/null 2>&1; then
+    rm -f "$tmp_file" "$checksum_tmp"
+    echo "backup_validation_failed=$out_file" >&2
     return 1
   fi
   digest="$(sha256sum "$tmp_file" | awk '{print $1}')"
@@ -48,12 +54,12 @@ prune_keep_n() {
   if [ "$keep" -lt 1 ] 2>/dev/null; then
     return 0
   fi
-  ls -1t "$dir"/*.tar.gz 2>/dev/null | awk "NR>${keep}" | xargs -r rm -f
-  ls -1t "$dir"/*.tar.gz.sha256 2>/dev/null | awk "NR>${keep}" | xargs -r rm -f
+  ls -1t "$dir"/*.dump 2>/dev/null | awk "NR>${keep}" | xargs -r rm -f
+  ls -1t "$dir"/*.dump.sha256 2>/dev/null | awk "NR>${keep}" | xargs -r rm -f
 }
 
-ROLLING_FILE="${ROLLING_DIR}/observability-rolling-${TS}.tar.gz"
-create_archive "$ROLLING_FILE"
+ROLLING_FILE="${ROLLING_DIR}/grafana-rolling-${TS}.dump"
+create_dump "$ROLLING_FILE"
 
 DO_FULL="false"
 FULL_SUFFIX=""
@@ -64,19 +70,19 @@ case "$FULL_FREQUENCY" in
     FULL_SUFFIX="$TODAY"
     ;;
   daily)
-    if ! ls "$FULL_DIR"/observability-full-${TODAY}-*.tar.gz >/dev/null 2>&1; then
+    if ! ls "$FULL_DIR"/grafana-full-${TODAY}-*.dump >/dev/null 2>&1; then
       DO_FULL="true"
       FULL_SUFFIX="$TODAY"
     fi
     ;;
   weekly)
-    if [ "$(date +%u)" = "7" ] && ! ls "$FULL_DIR"/observability-full-${WEEK_KEY}-*.tar.gz >/dev/null 2>&1; then
+    if [ "$(date +%u)" = "7" ] && ! ls "$FULL_DIR"/grafana-full-${WEEK_KEY}-*.dump >/dev/null 2>&1; then
       DO_FULL="true"
       FULL_SUFFIX="$WEEK_KEY"
     fi
     ;;
   monthly)
-    if [ "$(date +%d)" = "01" ] && ! ls "$FULL_DIR"/observability-full-${MONTH_KEY}-*.tar.gz >/dev/null 2>&1; then
+    if [ "$(date +%d)" = "01" ] && ! ls "$FULL_DIR"/grafana-full-${MONTH_KEY}-*.dump >/dev/null 2>&1; then
       DO_FULL="true"
       FULL_SUFFIX="$MONTH_KEY"
     fi
@@ -88,8 +94,8 @@ case "$FULL_FREQUENCY" in
 esac
 
 if [ "$DO_FULL" = "true" ]; then
-  FULL_FILE="${FULL_DIR}/observability-full-${FULL_SUFFIX}-${TS}.tar.gz"
-  create_archive "$FULL_FILE"
+  FULL_FILE="${FULL_DIR}/grafana-full-${FULL_SUFFIX}-${TS}.dump"
+  create_dump "$FULL_FILE"
 fi
 
 prune_keep_n "$ROLLING_DIR" "$BACKUP_KEEP_ROLLING"

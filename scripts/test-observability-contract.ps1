@@ -72,14 +72,20 @@ Assert-Contract (@($logs.templating.list | Where-Object name -eq 'environment').
 Assert-Contract ($logsText.Contains('environment=~\"$environment\"')) 'logs query must filter by environment'
 
 $backup = Read-RepoFile 'hris-api/infrastructure/onprem/observability/backup/backup.sh'
-Assert-Contract (-not $backup.Contains('/data/grafana')) 'backup must not archive the removed Grafana filesystem volume'
-foreach ($source in @('/data/prometheus', '/data/loki', '/data/tempo', '/data/alertmanager')) {
-  Assert-Contract ($backup.Contains($source)) "backup source missing: $source"
-}
+Assert-Contract ($backup.Contains('pg_dump --format=custom')) 'backup must use PostgreSQL consistent dumps'
+Assert-Contract ($backup.Contains('pg_restore --list')) 'backup must validate every PostgreSQL dump'
+Assert-Contract (-not $backup.Contains('/data/')) 'backup must not archive mutable telemetry filesystems'
 Assert-Contract ($backup.Contains('BACKUP_KEEP_ROLLING="${BACKUP_KEEP_ROLLING:-4}"')) 'rolling backup retention must remain bounded'
 Assert-Contract ($backup.Contains('BACKUP_KEEP_FULL="${BACKUP_KEEP_FULL:-2}"')) 'full backup retention must remain bounded'
-Assert-Contract ($backup.Contains('backup_source_missing=')) 'backup must fail explicitly when a required source mount is absent'
+Assert-Contract ($backup.Contains('backup_database_unavailable')) 'backup must fail explicitly when Grafana PostgreSQL is unavailable'
 Assert-Contract ($backup.Contains('.partial.$$')) 'backup archives must be built under a non-published partial filename'
-Assert-Contract ($backup.Contains('backup_archive_failed=')) 'archive failures must be named and must not publish an archive'
+Assert-Contract ($backup.Contains('backup_dump_failed=')) 'dump failures must be named and must not publish a backup'
+
+$compose = Read-RepoFile 'hris-api/infrastructure/onprem/observability/docker-compose.yml'
+Assert-Contract ($compose.Contains('image: postgres:16-alpine')) 'backup must include PostgreSQL client tooling'
+Assert-Contract ($compose.Contains('PGDATABASE=${POSTGRES_GRAFANA_DB:-grafana}')) 'backup must target the Grafana database'
+foreach ($source in @('/data/prometheus', '/data/loki', '/data/tempo', '/data/alertmanager')) {
+  Assert-Contract (-not (($compose -split '(?ms)^  backup-replicator:')[0] -split '(?ms)^  backup:')[1].Contains($source)) "backup must not mount mutable telemetry source: $source"
+}
 
 Write-Output "Observability contract passed: $checks checks"

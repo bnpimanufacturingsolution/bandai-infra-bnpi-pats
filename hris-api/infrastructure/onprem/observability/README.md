@@ -41,17 +41,23 @@ docker compose up -d
 - `HRIS Observability Overview`
 - `HRIS Container Logs`
 
-## Backups (Rolling + Full)
+## Grafana Database Backups (Rolling + Full)
 Backups are written to host path:
 - `infrastructure/onprem/observability/backups/rolling`
 - `infrastructure/onprem/observability/backups/full`
 
 Behavior:
+- Backups are consistent PostgreSQL custom-format dumps of Grafana's durable
+  configuration, users, dashboards, and alerting state.
+- Prometheus, Loki, Tempo, and Alertmanager live filesystems are not archived.
+  Their stores mutate during normal operation and are governed by each
+  component's retention policy; filesystem tar snapshots are not consistent
+  restore points.
 - Rolling backup: created every interval (`BACKUP_INTERVAL_SECONDS`)
 - Full backup: policy by `FULL_FREQUENCY` (`daily|weekly|monthly|always`)
-- Retention (defaults tightened after root-full / DiskPressure incident):
-  - `BACKUP_KEEP_ROLLING` default **24** (was 48)
-  - `BACKUP_KEEP_FULL` default **7** (was 30)
+- Retention:
+  - `BACKUP_KEEP_ROLLING` default **4**
+  - `BACKUP_KEEP_FULL` default **2**
 - Each backup also writes a `.sha256` checksum file
 - Host safety net: `project-truth-disk-guard` (systemd timer) age-prunes rolling
   backups older than 3d and full backups older than 14d, and fails when free
@@ -63,9 +69,9 @@ Manual backup now:
 docker compose exec backup sh /backup/backup.sh
 ```
 
-Manual restore extract:
+Validate a backup before an explicitly reviewed `pg_restore`:
 ```bash
-docker compose exec backup sh /backup/restore.sh /backups/full/<backup-file>.tar.gz
+docker compose exec backup sh /backup/restore.sh /backups/full/<backup-file>.dump
 ```
 
 ## Off-Machine Replication (Remote Copy)
