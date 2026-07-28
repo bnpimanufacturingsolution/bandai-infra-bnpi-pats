@@ -11898,11 +11898,25 @@ export const controller = (prisma: PrismaClient) => {
 						buildFingerprintTemplateChecksumEvidence(
 							plannerFingerprintTemplates,
 						);
+					// Live UserInfo often has card *count* only. Prefer live CardInfo
+					// inventory, then previously captured DeviceUser custody from
+					// isapi_cardinfo_inventory_recovery. Without the saved join,
+					// recovery jobs capture cardNo successfully then replan still
+					// shows missing_raw_blob / ready=0 / awaiting_replan verified=0.
+					const savedCardNo = String(
+						(saved?.rawPayload as any)?.cardNo ||
+							(saved?.rawPayload as any)?.CardInfo?.cardNo ||
+							(saved?.rawPayload as any)?.UserInfo?.cardNo ||
+							(saved?.rawPayload as any)?._hrisDeviceMetadata?.cardCustody
+								?.cardNo ||
+							"",
+					).trim();
 					const exactCardNo = String(
 						(candidate.rawPayload as any)?.cardNo ||
 							(candidate.rawPayload as any)?.CardInfo?.cardNo ||
 							(candidate.rawPayload as any)?.UserInfo?.cardNo ||
 							liveCardsByVendorId.get(String(candidate.vendorUserId)) ||
+							savedCardNo ||
 							"",
 					).trim();
 					let decryptedStoredFace: any = null;
@@ -12032,7 +12046,19 @@ export const controller = (prisma: PrismaClient) => {
 						validTo: candidate.validTo,
 						doorRight: candidate.doorRight,
 						accessPlan: candidate.accessPlan,
-						rawPayload: candidate.rawPayload,
+						// Overlay proven cardNo onto live UserInfo payload so planner
+						// and credentialEvidenceStatus both see raw_blob_present.
+						rawPayload: exactCardNo
+							? {
+									...(candidate.rawPayload || {}),
+									cardNo: exactCardNo,
+									CardInfo: {
+										...((candidate.rawPayload as any)?.CardInfo || {}),
+										cardNo: exactCardNo,
+										employeeNo: String(candidate.vendorUserId || ""),
+									},
+								}
+							: candidate.rawPayload,
 						biometricEvidence: {
 							fingerprint: {
 								status:
@@ -12062,7 +12088,7 @@ export const controller = (prisma: PrismaClient) => {
 							},
 							card: {
 								status:
-									cardReportedCount > 0
+									cardReportedCount > 0 || Boolean(exactCardNo)
 										? exactCardNo
 											? "raw_blob_present"
 											: "missing_raw_blob"
@@ -12949,21 +12975,30 @@ export const controller = (prisma: PrismaClient) => {
 					String(t.kind) === "target_write" && String(t.status) === "succeeded",
 			).length,
 		};
-		const progressLabel = /replan/i.test(stage)
-			? "Re-reading device inventory after card/FP/face custody capture (often 1–3 min)"
-			: /writ|canary|physical/i.test(stage)
-				? "Writing recovered credentials to target panels"
-				: /reread/i.test(stage)
-					? "Physical reread to prove writes stuck"
-					: /source|export|owner_capture|custody|recovering_source/i.test(stage)
-						? "Capturing source custody (card/FP/face bytes from panels)"
-						: /ready|select|probe/i.test(stage)
-							? "Selecting ready writes from recovered custody"
-							: String(job.status) === "pending"
-								? "Queued — waiting for recovery worker"
-								: String(job.status) === "completed"
-									? "Wave finished"
-									: "Recovery worker active";
+		// Status-first honesty: awaiting_replan + source_custody_recovered must not
+		// still read as "Capturing…" (generic /custody/ match lied when verified=0).
+		const progressLabel =
+			String(job.status) === "awaiting_replan"
+				? "Awaiting replan — source custody captured; ready queue not unlocked yet"
+				: String(job.status) === "completed"
+					? "Wave finished"
+					: String(job.status) === "pending"
+						? "Queued — waiting for recovery worker"
+						: /replan/i.test(stage)
+							? "Re-reading device inventory after card/FP/face custody capture (often 1–3 min)"
+							: /writ|canary|physical/i.test(stage)
+								? "Writing recovered credentials to target panels"
+								: /reread/i.test(stage)
+									? "Physical reread to prove writes stuck"
+									: /source_custody_recovered/i.test(stage)
+										? "Source custody recovered — waiting for replan/ready unlock"
+										: /source|export|owner_capture|custody|recovering_source/i.test(
+													stage,
+											  )
+											? "Capturing source custody (card/FP/face bytes from panels)"
+											: /ready|select|probe/i.test(stage)
+												? "Selecting ready writes from recovered custody"
+												: "Recovery worker active";
 		const progressDetail = /replan/i.test(stage)
 			? `Inventory replan in progress${replanElapsedMs ? ` · ${Math.round(replanElapsedMs / 1000)}s elapsed` : ""}. Counters stay low until replan finishes and ready writes are claimed — this is not a stuck zero bar.`
 			: tasksTotal > 0
@@ -13391,6 +13426,10 @@ export const controller = (prisma: PrismaClient) => {
 																},
 																cardCustody: {
 																	cardNoPresent: true,
+																	// Persist exact value so merge replan can
+																	// join saved custody even when live UserInfo
+																	// only reports card count.
+																	cardNo,
 																	source: "isapi_cardinfo_inventory_recovery",
 																	capturedAt: new Date().toISOString(),
 																	pagesRead: inventory.pagesRead,
