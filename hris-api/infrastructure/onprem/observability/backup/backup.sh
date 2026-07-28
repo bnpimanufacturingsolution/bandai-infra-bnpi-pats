@@ -6,8 +6,8 @@ ROLLING_DIR="${BACKUP_ROOT}/rolling"
 FULL_DIR="${BACKUP_ROOT}/full"
 TMP_DIR="${BACKUP_ROOT}/tmp"
 
-BACKUP_KEEP_ROLLING="${BACKUP_KEEP_ROLLING:-24}"
-BACKUP_KEEP_FULL="${BACKUP_KEEP_FULL:-7}"
+BACKUP_KEEP_ROLLING="${BACKUP_KEEP_ROLLING:-4}"
+BACKUP_KEEP_FULL="${BACKUP_KEEP_FULL:-2}"
 FULL_FREQUENCY="${FULL_FREQUENCY:-daily}" # always|daily|weekly|monthly
 
 mkdir -p "$ROLLING_DIR" "$FULL_DIR" "$TMP_DIR"
@@ -17,7 +17,14 @@ TODAY="$(date +%Y%m%d)"
 WEEK_KEY="$(date +%G-W%V)"
 MONTH_KEY="$(date +%Y-%m)"
 
-SRC_PATHS="/data/grafana /data/prometheus /data/loki /data/tempo /data/alertmanager"
+SRC_PATHS="/data/prometheus /data/loki /data/tempo /data/alertmanager"
+
+for src_path in $SRC_PATHS; do
+  if [ ! -d "$src_path" ]; then
+    echo "backup_source_missing=$src_path" >&2
+    exit 1
+  fi
+done
 
 create_archive() {
   out_file="$1"

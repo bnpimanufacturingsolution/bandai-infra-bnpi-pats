@@ -71,4 +71,13 @@ $logs = $logsText | ConvertFrom-Json
 Assert-Contract (@($logs.templating.list | Where-Object name -eq 'environment').Count -eq 1) 'logs dashboard environment variable missing'
 Assert-Contract ($logsText.Contains('environment=~\"$environment\"')) 'logs query must filter by environment'
 
+$backup = Read-RepoFile 'hris-api/infrastructure/onprem/observability/backup/backup.sh'
+Assert-Contract (-not $backup.Contains('/data/grafana')) 'backup must not archive the removed Grafana filesystem volume'
+foreach ($source in @('/data/prometheus', '/data/loki', '/data/tempo', '/data/alertmanager')) {
+  Assert-Contract ($backup.Contains($source)) "backup source missing: $source"
+}
+Assert-Contract ($backup.Contains('BACKUP_KEEP_ROLLING="${BACKUP_KEEP_ROLLING:-4}"')) 'rolling backup retention must remain bounded'
+Assert-Contract ($backup.Contains('BACKUP_KEEP_FULL="${BACKUP_KEEP_FULL:-2}"')) 'full backup retention must remain bounded'
+Assert-Contract ($backup.Contains('backup_source_missing=')) 'backup must fail explicitly when a required source mount is absent'
+
 Write-Output "Observability contract passed: $checks checks"

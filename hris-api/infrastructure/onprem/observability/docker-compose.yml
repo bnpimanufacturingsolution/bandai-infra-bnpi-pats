@@ -196,10 +196,10 @@ services:
     command: ["sh", "/backup/loop.sh"]
     environment:
       - BACKUP_INTERVAL_SECONDS=${BACKUP_INTERVAL_SECONDS:-3600}
-      # Tighter defaults: historical 48 rolling + large full set filled root (~161G).
-      # Disk guard also age-prunes; keep these conservative at the source.
-      - BACKUP_KEEP_ROLLING=${BACKUP_KEEP_ROLLING:-24}
-      - BACKUP_KEEP_FULL=${BACKUP_KEEP_FULL:-7}
+      # Bound local archives: each snapshot contains the full metrics/logs/traces stores.
+      # Four rolling plus two full restore points prevents another 100G+ accumulation.
+      - BACKUP_KEEP_ROLLING=${BACKUP_KEEP_ROLLING:-4}
+      - BACKUP_KEEP_FULL=${BACKUP_KEEP_FULL:-2}
       - FULL_FREQUENCY=${FULL_FREQUENCY:-daily}
       - BACKUP_ROOT=/backups
     volumes:
