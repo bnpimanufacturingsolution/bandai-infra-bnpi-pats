@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 import {
 	MERGE_CHIP_CONTRACT,
 	buildMergePeerCopyCta,
+	buildMergeReviewOpenCta,
+	formatMergeSelectionScopeFooter,
 	formatMergeSourceDeviceTile,
 	formatMergeTargetDeviceTile,
 	sumSelectedExecutablePeerCopies,
@@ -86,6 +88,57 @@ describe("merge-ui-truth-counts contract", () => {
 		expect(sumSelectedExecutablePeerCopies([])).toBe(0);
 	});
 
+	it("open-review CTA never shows selected unique ID count as the work number (no Review selected merge (76))", () => {
+		const zeroWork = buildMergeReviewOpenCta({
+			executablePeerCopies: 0,
+			selectedUniqueIds: 76,
+			profileOverlays: 0,
+			canApply: true,
+		});
+		expect(zeroWork.label).toBe("Review selection (0 peer copies)");
+		expect(zeroWork.label).not.toMatch(/76/);
+		expect(zeroWork.label).not.toMatch(/Review selected merge \(\d+\)/);
+		expect(zeroWork.reason).toBe("zero_work");
+		expect(zeroWork.disabled).toBe(false);
+
+		const withCopies = buildMergeReviewOpenCta({
+			executablePeerCopies: 19,
+			selectedUniqueIds: 76,
+			canApply: true,
+		});
+		expect(withCopies.label).toBe("Review peer copies (19)");
+		expect(withCopies.label).not.toContain("76");
+		expect(withCopies.reason).toBe("review_peer_copies");
+
+		const profileOnly = buildMergeReviewOpenCta({
+			executablePeerCopies: 0,
+			selectedUniqueIds: 76,
+			profileOverlays: 4,
+			canApply: true,
+		});
+		expect(profileOnly.label).toBe("Review profile updates (4)");
+		expect(profileOnly.label).not.toContain("76");
+	});
+
+	it("footer keeps selection as scope-only and emphasizes executable peer copies as work", () => {
+		const zero = formatMergeSelectionScopeFooter({
+			selectedUniqueIds: 76,
+			executablePeerCopies: 0,
+			excludedActionableIds: 798,
+		});
+		expect(zero).toMatch(/76 selected unique IDs \(scope only\)/);
+		expect(zero).toMatch(/0 executable peer copies/);
+		expect(zero).toMatch(/798 actionable IDs excluded/);
+
+		const work = formatMergeSelectionScopeFooter({
+			selectedUniqueIds: 5,
+			executablePeerCopies: 19,
+		});
+		expect(work).toMatch(/19 executable peer copies/);
+		expect(work).toMatch(/real work/);
+		expect(work).not.toMatch(/Review selected merge \(5\)/);
+	});
+
 	it("labels source device tiles so selected IDs and peer copies are not dual bare numbers", () => {
 		const tile = formatMergeSourceDeviceTile({
 			selectedUniqueIds: 6,
@@ -125,6 +178,19 @@ describe("enroll.tsx merge UI wire-up", () => {
 		// Executable copies = writeMatrix.totalWrites / selected matrix sum(COPY)
 		expect(enrollSource).toContain("sdkMergeSelectedExecutablePeerCopies");
 		expect(enrollSource).toContain("totalWrites");
+	});
+
+	it("open-review CTA uses buildMergeReviewOpenCta and never Review selected merge (selectedCount)", () => {
+		expect(enrollSource).toContain("buildMergeReviewOpenCta");
+		expect(enrollSource).toContain("sdkMergeReviewOpenCta");
+		expect(enrollSource).toContain("sdkMergeReviewOpenCta.label");
+		expect(enrollSource).toContain("formatMergeSelectionScopeFooter");
+		expect(enrollSource).not.toMatch(
+			/Review selected merge \(\$\{sdkMergeSelectedUniqueCount\}\)/,
+		);
+		expect(enrollSource).not.toMatch(
+			/`Review selected merge \(\$\{/,
+		);
 	});
 
 	it("splits Missing and Needs decision chips (no Needs review soup as primary chip)", () => {

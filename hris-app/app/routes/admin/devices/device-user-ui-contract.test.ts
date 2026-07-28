@@ -363,7 +363,12 @@ describe("admin device user and log sync UI contract", () => {
 		expect(deviceService).toContain("copyFailureSummary");
 		expect(deviceController).toContain("copyFailureSummary: job.copyFailureSummary");
 		expect(enroll).toContain("Back to review");
-		expect(enroll).toContain("Review selected merge (${sdkMergeSelectedUniqueCount})");
+		// Forbidden: selected unique ID count as primary CTA work number.
+		expect(enroll).not.toContain(
+			"Review selected merge (${sdkMergeSelectedUniqueCount})",
+		);
+		expect(enroll).toContain("buildMergeReviewOpenCta");
+		expect(enroll).toContain("sdkMergeReviewOpenCta.label");
 		// Forbidden Image A lie: CTA labeled by selected unique ID count
 		expect(enroll).not.toContain(
 			"Start peer copy job (${sdkMergeSelectedUniqueCount} IDs)",

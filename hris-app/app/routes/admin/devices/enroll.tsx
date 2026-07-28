@@ -9,6 +9,8 @@ import { formatDateTime } from "~/lib/utils/text-utils";
 import {
 	MERGE_CHIP_CONTRACT,
 	buildMergePeerCopyCta,
+	buildMergeReviewOpenCta,
+	formatMergeSelectionScopeFooter,
 	formatMergeSourceDeviceTile,
 	formatMergeTargetDeviceTile,
 	sumSelectedExecutablePeerCopies,
@@ -3378,6 +3380,26 @@ export function DeviceEnrollmentPanel({
 			0,
 			sdkMergeSelectedConflictCount - sdkMergeSelectedResolvedCount,
 		),
+	});
+	/** Open-review CTA: never "Review selected merge (76)" from selected ID count. */
+	const sdkMergeReviewOpenCta = buildMergeReviewOpenCta({
+		executablePeerCopies: sdkMergeSelectedExecutablePeerCopies,
+		selectedUniqueIds: sdkMergeSelectedUniqueCount,
+		profileOverlays: sdkMergeProfileOverlayPreview.length,
+		canApply: sdkMergeCanApply,
+		isPending: startHikvisionSdkUserMergeJobMutation.isPending,
+		isJobRunning: sdkMergeJobIsProcessing,
+		blockingCount: sdkMergeBlockingCount,
+		unresolvedConflicts: Math.max(
+			0,
+			sdkMergeSelectedConflictCount - sdkMergeSelectedResolvedCount,
+		),
+		credentialWritesSelected: sdkMergeSelectedCredentialWrites.length,
+	});
+	const sdkMergeSelectionScopeFooter = formatMergeSelectionScopeFooter({
+		selectedUniqueIds: sdkMergeSelectedUniqueCount,
+		executablePeerCopies: sdkMergeSelectedExecutablePeerCopies,
+		excludedActionableIds: sdkMergeExcludedActionableCount,
 	});
 	const selectRecommendedCredentialWrites = () => {
 		setSelectedSdkMergeCredentialWriteIds(
@@ -10603,16 +10625,14 @@ export function DeviceEnrollmentPanel({
 					) : null}
 					<div className="flex justify-end gap-2 border-t pt-3">
 						{sdkMergeState.data && !hasSdkMergeJob ? (
-							<p className="mr-auto max-w-xl text-xs leading-5 text-slate-600">
-								{mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")}{" "}
-								selected for review.{" "}
-								{mergePlural(
-									sdkMergeSelectedExecutablePeerCopies,
-									"executable peer copy",
-								)}{" "}
-								(physical creates only);{" "}
-								{mergePlural(sdkMergeExcludedActionableCount, "actionable ID")}{" "}
-								excluded from this scope.
+							<p
+								className={`mr-auto max-w-xl text-xs leading-5 ${
+									sdkMergeSelectedExecutablePeerCopies === 0
+										? "font-medium text-amber-800"
+										: "text-slate-600"
+								}`}
+								data-testid="sdk-merge-selection-scope-footer">
+								{sdkMergeSelectionScopeFooter}
 							</p>
 						) : null}
 						<Button
@@ -10696,10 +10716,22 @@ export function DeviceEnrollmentPanel({
 						{sdkMergeState.data && !hasSdkMergeJob ? (
 							<Button
 								type="button"
+								data-testid="sdk-merge-review-open-cta"
 								disabled={
+									sdkMergeReviewOpenCta.disabled ||
 									!sdkMergeCanApply ||
 									sdkMergeJobIsProcessing ||
 									startHikvisionSdkUserMergeJobMutation.isPending
+								}
+								variant={
+									sdkMergeReviewOpenCta.reason === "zero_work"
+										? "outline"
+										: "default"
+								}
+								className={
+									sdkMergeReviewOpenCta.reason === "review_peer_copies"
+										? "bg-red-600 text-white hover:bg-red-700"
+										: undefined
 								}
 								onClick={openSdkUserMergeConfirm}>
 								{startHikvisionSdkUserMergeJobMutation.isPending ||
@@ -10708,16 +10740,7 @@ export function DeviceEnrollmentPanel({
 								) : (
 									<Link2 className="h-4 w-4" />
 								)}
-								{sdkMergeBlockingCount
-									? `Resolve ${sdkMergeBlockingCount} read issue${sdkMergeBlockingCount === 1 ? "" : "s"}`
-									: sdkMergeSelectedUniqueCount === 0
-										? "Select rows"
-										: sdkMergeSelectedResolvedCount <
-											  sdkMergeSelectedConflictCount
-											? `Resolve ${sdkMergeSelectedConflictCount - sdkMergeSelectedResolvedCount} more`
-											: sdkMergeJobIsProcessing
-												? "Merge job running"
-												: `Review selected merge (${sdkMergeSelectedUniqueCount})`}
+								{sdkMergeReviewOpenCta.label}
 							</Button>
 						) : null}
 					</div>

@@ -147,7 +147,7 @@ export type MergePeerCopyCta = {
 };
 
 /**
- * Review-modal primary CTA.
+ * Review-modal primary CTA (Start peer copy inside confirm modal).
  * Never labels "Start peer copy (N IDs)" from selectedUniqueIds.
  * Disabled when executablePeerCopies === 0 and no profile-only work.
  */
@@ -218,6 +218,148 @@ export function buildMergePeerCopyCta(input: MergePeerCopyCtaInput): MergePeerCo
 	};
 }
 
+export type MergeReviewOpenCtaInput = {
+	/** Physical peer creates only — writeMatrix.totalWrites / sum(COPY) */
+	executablePeerCopies: number;
+	selectedUniqueIds: number;
+	/** Profile A/B DeviceUser overlays (not peer copy) */
+	profileOverlays?: number;
+	canApply?: boolean;
+	/** Unresolved profile field decisions remaining */
+	unresolvedConflicts?: number;
+	blockingCount?: number;
+	isPending?: boolean;
+	/** Alias: isJobRunning || jobRunning */
+	isJobRunning?: boolean;
+	jobRunning?: boolean;
+	/**
+	 * Evidence-backed credential writes on the separate credential path.
+	 * Does not put selected-ID count on the CTA.
+	 */
+	credentialWritesSelected?: number;
+};
+
+export type MergeReviewOpenCta = {
+	disabled: boolean;
+	label: string;
+	/**
+	 * Machine reason for tests / a11y.
+	 * Never treat selectedUniqueIds as "work" on the primary CTA.
+	 */
+	reason:
+		| "pending"
+		| "job_running"
+		| "blocking_reads"
+		| "no_selection"
+		| "unresolved_conflicts"
+		| "review_peer_copies"
+		| "review_profile_only"
+		| "zero_work"
+		| "nothing_to_do";
+	executablePeerCopies: number;
+	selectedUniqueIds: number;
+	profileOverlays: number;
+};
+
+/**
+ * Main-panel primary CTA that opens the Review confirm modal.
+ * Never labels with selectedUniqueIds as the work number
+ * (forbidden: "Review selected merge (76)").
+ * Work number is executable peer copies, then profile overlays.
+ */
+export function buildMergeReviewOpenCta(
+	input: MergeReviewOpenCtaInput,
+): MergeReviewOpenCta {
+	const executablePeerCopies = Math.max(0, Number(input.executablePeerCopies) || 0);
+	const selectedUniqueIds = Math.max(0, Number(input.selectedUniqueIds) || 0);
+	const profileOverlays = Math.max(0, Number(input.profileOverlays) || 0);
+	const unresolvedConflicts = Math.max(0, Number(input.unresolvedConflicts) || 0);
+	const blockingCount = Math.max(0, Number(input.blockingCount) || 0);
+	const credentialWritesSelected = Math.max(
+		0,
+		Number(input.credentialWritesSelected) || 0,
+	);
+	const jobRunning = Boolean(input.isJobRunning || input.jobRunning);
+	const canApply = input.canApply !== false;
+
+	const base = {
+		executablePeerCopies,
+		selectedUniqueIds,
+		profileOverlays,
+	};
+
+	if (input.isPending) {
+		return { ...base, disabled: true, label: "Starting...", reason: "pending" };
+	}
+	if (jobRunning) {
+		return {
+			...base,
+			disabled: true,
+			label: "Merge job running",
+			reason: "job_running",
+		};
+	}
+	if (blockingCount > 0) {
+		return {
+			...base,
+			disabled: true,
+			label: `Resolve ${blockingCount} read issue${blockingCount === 1 ? "" : "s"}`,
+			reason: "blocking_reads",
+		};
+	}
+	if (selectedUniqueIds === 0) {
+		return {
+			...base,
+			disabled: true,
+			label: "Select rows",
+			reason: "no_selection",
+		};
+	}
+	if (!canApply || unresolvedConflicts > 0) {
+		return {
+			...base,
+			disabled: true,
+			label:
+				unresolvedConflicts > 0
+					? `Resolve ${unresolvedConflicts} more`
+					: "Resolve decisions first",
+			reason: "unresolved_conflicts",
+		};
+	}
+	if (executablePeerCopies > 0) {
+		return {
+			...base,
+			disabled: false,
+			label: `Review peer copies (${executablePeerCopies})`,
+			reason: "review_peer_copies",
+		};
+	}
+	if (profileOverlays > 0) {
+		return {
+			...base,
+			disabled: false,
+			label: `Review profile updates (${profileOverlays})`,
+			reason: "review_profile_only",
+		};
+	}
+	// Selection exists, zero executable peer copies, zero profile overlays.
+	// Allow open so operator can inspect dry-run matrix; never show selected count.
+	if (credentialWritesSelected > 0) {
+		return {
+			...base,
+			disabled: false,
+			label: "Review selection (0 peer copies)",
+			reason: "zero_work",
+		};
+	}
+	return {
+		...base,
+		disabled: false,
+		label: "Review selection (0 peer copies)",
+		reason: "zero_work",
+	};
+}
+
 /**
  * Source device tile in Review modal — one primary metric, one secondary.
  * Avoid bare dual numbers (20 vs 6) without labels.
@@ -268,4 +410,27 @@ export function sumSelectedExecutablePeerCopies(
 	rows: Array<{ writes?: number }>,
 ): number {
 	return (rows || []).reduce((sum, row) => sum + Math.max(0, Number(row.writes) || 0), 0);
+}
+
+/**
+ * Footer scope line: selection is secondary; executable peer copies is the work number.
+ */
+export function formatMergeSelectionScopeFooter(params: {
+	selectedUniqueIds: number;
+	executablePeerCopies: number;
+	excludedActionableIds?: number;
+}): string {
+	const selected = Math.max(0, Number(params.selectedUniqueIds) || 0);
+	const copies = Math.max(0, Number(params.executablePeerCopies) || 0);
+	const excluded = Math.max(0, Number(params.excludedActionableIds) || 0);
+	const selectedLabel = `${selected} selected unique ID${selected === 1 ? "" : "s"} (scope only)`;
+	const workLabel =
+		copies > 0
+			? `${copies} executable peer cop${copies === 1 ? "y" : "ies"} (physical creates — real work)`
+			: "0 executable peer copies (nothing physical to create)";
+	const excludedLabel =
+		excluded > 0
+			? `; ${excluded} actionable ID${excluded === 1 ? "" : "s"} excluded from this scope`
+			: "";
+	return `${selectedLabel}. ${workLabel}${excludedLabel}.`;
 }
