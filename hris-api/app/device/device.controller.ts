@@ -17298,6 +17298,13 @@ export const controller = (prisma: PrismaClient) => {
 				appliedPlan,
 				writeMatrix,
 			});
+			// Expose totalWork/dbOverlayWrites at top level so agent scripts do not
+			// 409 or mis-classify missing_people=0 + profile decisions as empty.
+			const physicalWrites = Number(writeMatrix.totalWrites || 0);
+			const dbOverlayWrites = Number(writeMatrix.dbOverlayWrites || 0);
+			const totalWork = Number(
+				writeMatrix.totalWork ?? physicalWrites + dbOverlayWrites,
+			);
 			res.status(200).json(
 				buildSuccessResponse(
 					"SDK user merge write scope reviewed",
@@ -17305,6 +17312,11 @@ export const controller = (prisma: PrismaClient) => {
 						planId,
 						scopeHash: lock.scopeHash,
 						...lock.scope,
+						physicalWrites,
+						dbOverlayWrites,
+						totalWork,
+						profileOverlayWrites: writeMatrix.profileOverlayWrites || [],
+						writeMatrix,
 					},
 					200,
 				),
@@ -17590,6 +17602,13 @@ export const controller = (prisma: PrismaClient) => {
 						progress: started,
 						snapshotPath: started.snapshotPath || null,
 						durable: true,
+						// Explicit work units so scripts/pollers never treat overlay-only
+						// jobs as empty (physicalWrites=0 is valid when db overlays remain).
+						physicalWrites,
+						dbOverlayWrites,
+						totalWork,
+						totalWrites,
+						writeMatrix,
 					},
 					202,
 				),

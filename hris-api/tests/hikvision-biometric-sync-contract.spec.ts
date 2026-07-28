@@ -410,6 +410,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("dbOverlayWrites");
 		expect(controller).to.include("totalWork");
 		expect(controller).to.include("buildProfileOverlayWrites");
+		// Review + start must expose work units so agent scripts never invent empty scope.
+		expect(controller).to.include("physicalWrites");
+		expect(controller).to.include("profileOverlayWrites");
 		// Zero physical + zero overlay is a non-409 success, not "Reviewed scope contains no writes".
 		expect(controller).to.include("nothingToWrite");
 		expect(controller).to.include(
@@ -418,8 +421,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).not.to.include(
 			'buildErrorResponse("Reviewed scope contains no writes", 409)',
 		);
-		// Card/biometric decisions stay out of user-mode invent-bytes path.
+		// Worker must still apply overlays when batchTargets is empty (missing_people=0).
+		expect(controller).to.include("overlayOnlyJob");
 		expect(controller).to.include("deviceuser_profile_overlay");
+		// Missing DeviceUser rows are hard failures for overlays, not silent success.
+		expect(controller).to.include("cannot apply profile overlay");
+		// Card/biometric decisions stay out of user-mode invent-bytes path.
 		expect(controller).to.include("missing_raw_blob stays blocked");
 	});
 

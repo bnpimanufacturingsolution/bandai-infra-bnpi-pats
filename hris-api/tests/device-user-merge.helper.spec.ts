@@ -2034,6 +2034,12 @@ describe("device user union merge", () => {
 		expect(
 			applied.profileOverlayWrites.some((write) => write.fields.includes("displayName")),
 		).to.equal(true);
+		// A for displayName → overlay device b; B for valid* → overlay device a.
+		const byTarget = Object.fromEntries(
+			applied.profileOverlayWrites.map((write) => [write.targetDeviceId, write.fields]),
+		);
+		expect(byTarget.b || []).to.include("displayName");
+		expect(byTarget.a || []).to.include.members(["validFrom", "validTo"]);
 
 		// KEEP produces no overlay work (already aligned for apply).
 		const kept = applyMergeChoices(plan, {
@@ -2047,6 +2053,62 @@ describe("device user union merge", () => {
 		});
 		expect(kept.profileOverlayWrites).to.have.length(0);
 		expect(buildProfileOverlayWrites(kept.users)).to.have.length(0);
+	});
+
+	it("auto-resolve burns profile decision residual (displayName/validFrom/validTo) without inventing card", () => {
+		// Agent-owned path: empty choices + autoResolve → A/B for profile fields → overlays > 0.
+		// Five-device fleets must still pick A or B for profile (not KEEP because of a third peer).
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					displayName: "Name A",
+					validFrom: "2026-01-01",
+					validTo: "2026-06-30",
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+				}),
+				record("b", {
+					displayName: "Name B",
+					validFrom: "2027-01-01",
+					validTo: "2027-06-30",
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+				}),
+				record("c", {
+					displayName: "Name A",
+					validFrom: "2026-01-01",
+					validTo: "2026-06-30",
+					// Richest biometric peer is outside the A/B name conflict pair.
+					rawPayload: { numOfFP: 3, numOfFace: 1, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: { status: "raw_blob_present", rawBlobCount: 3, reportedCount: 3 },
+						face: { status: "raw_blob_present", rawBlobPresent: true, reportedCount: 1 },
+						card: { reportedCount: 1 },
+					},
+				}),
+			],
+		});
+		expect(plan.counts.missing).to.equal(0);
+		expect(plan.plannedWrites).to.have.length(0);
+
+		const applied = applyMergeChoices(plan, { autoResolveDecisions: true });
+		expect(applied.executable).to.equal(true);
+		expect(applied.unresolved).to.have.length(0);
+		const profileConflicts = applied.users[0].conflicts.filter((c) =>
+			["displayName", "validFrom", "validTo"].includes(String(c.field)),
+		);
+		expect(profileConflicts.length).to.be.greaterThan(0);
+		expect(profileConflicts.every((c) => c.choice === "A" || c.choice === "B")).to.equal(
+			true,
+		);
+		expect(applied.profileOverlayWrites.length).to.be.greaterThan(0);
+		expect(applied.counts.profileOverlayWrites).to.equal(applied.profileOverlayWrites.length);
+		// Card remains credential-mode only.
+		expect(
+			applied.profileOverlayWrites.every(
+				(write) => !write.fields.includes("card" as any),
+			),
+		).to.equal(true);
+		expect(isDeviceUserMergeProfileOverlayField("card")).to.equal(false);
 	});
 
 	it("does not treat card/face/fingerprint conflicts as DeviceUser profile overlays", () => {
