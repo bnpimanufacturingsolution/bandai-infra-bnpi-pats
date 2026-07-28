@@ -2158,17 +2158,49 @@ export const buildRichestMergeChoices = (
 	for (const user of plan.users || []) {
 		const records = Array.isArray(user.records) ? user.records : [];
 		const richest = [...records].sort(
-			(left: any, right: any) => richness(right) - richness(left),
+			(left: any, right: any) =>
+				richness(right) - richness(left) ||
+				text(left?.deviceId).localeCompare(text(right?.deviceId)),
 		)[0];
 		const richestDeviceId = text(richest?.deviceId);
 		for (const conflict of user.conflicts || []) {
 			const field = conflict.field as DeviceUserMergeField;
+			const recordA = records.find(
+				(record: any) => text(record.deviceId) === text(conflict.deviceA?.id),
+			);
+			const recordB = records.find(
+				(record: any) => text(record.deviceId) === text(conflict.deviceB?.id),
+			);
+			// Profile fields (displayName/validFrom/validTo/...) must always pick A or B
+			// so decision residual burns via DeviceUser overlay. Never KEEP just because a
+			// third richer peer exists outside the two-sided conflict pair.
+			if (isDeviceUserMergeProfileOverlayField(String(field || ""))) {
+				const scoreA = richness(recordA);
+				const scoreB = richness(recordB);
+				const choice: MergeChoice =
+					scoreB > scoreA
+						? "B"
+						: scoreA > scoreB
+							? "A"
+							: text(conflict.deviceA?.id) === richestDeviceId
+								? "A"
+								: text(conflict.deviceB?.id) === richestDeviceId
+									? "B"
+									: text(conflict.deviceA?.id).localeCompare(
+												text(conflict.deviceB?.id),
+										  ) <= 0
+										? "A"
+										: "B";
+				choices[user.key] = { ...(choices[user.key] || {}), [field]: choice };
+				continue;
+			}
 			const rawEvidencePresent =
 				field === "fingerprint"
 					? richest?.biometricEvidence?.fingerprint?.status === "raw_blob_present"
 					: field === "face"
 						? richest?.biometricEvidence?.face?.status === "raw_blob_present"
 						: true;
+			// Card/face/FP stay KEEP without raw custody — credential mode owns those writes.
 			const choice: MergeChoice = !rawEvidencePresent
 				? "KEEP"
 				: text(conflict.deviceA?.id) === richestDeviceId

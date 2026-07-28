@@ -2,6 +2,7 @@ import { hrisApiClient } from "../lib/api-client";
 import type {
 	HikvisionUserInfoSearchRequest,
 	HikvisionUserInfoSearchResult,
+	HikvisionUserInfo,
 	AcsEventRequest,
 	AcsEventResult,
 	AcsEventCond,
@@ -39,6 +40,54 @@ export class HikvisionService {
 		);
 
 		return (response.data || response) as unknown as HikvisionUserInfoSearchResult;
+	}
+
+	/**
+	 * Page through UserInfoSearch until MORE is exhausted (enroll/source pickers).
+	 */
+	async searchAllUsers(deviceId?: string): Promise<HikvisionUserInfo[]> {
+		const allUsers: HikvisionUserInfo[] = [];
+		const pageSize = 200;
+		let searchResultPosition = 0;
+		let hasMore = true;
+		let pageGuard = 0;
+		let lastSignature = "";
+
+		while (hasMore && pageGuard < 10) {
+			pageGuard += 1;
+			const response = await this.searchUserInfo(
+				`device-users-${Date.now()}-${searchResultPosition}`,
+				searchResultPosition,
+				pageSize,
+				deviceId,
+			);
+			const searchData =
+				(response as any)?.data?.UserInfoSearch ||
+				(response as any)?.UserInfoSearch ||
+				{};
+			const users = Array.isArray(searchData?.UserInfo) ? searchData.UserInfo : [];
+			const responseStatus = String(searchData?.responseStatusStrg || "").toUpperCase();
+			const numOfMatches = Number(searchData?.numOfMatches || users.length || 0);
+			const signature = `${users[0]?.employeeNo || "none"}:${users.length}:${responseStatus}`;
+
+			if (signature === lastSignature) break;
+			lastSignature = signature;
+			allUsers.push(...users);
+
+			if (responseStatus !== "MORE" || numOfMatches <= 0) {
+				hasMore = false;
+			} else {
+				searchResultPosition += numOfMatches;
+			}
+		}
+
+		return Array.from(
+			new Map(
+				allUsers
+					.filter((user) => String(user?.employeeNo || "").trim())
+					.map((user) => [String(user.employeeNo).trim(), user]),
+			).values(),
+		);
 	}
 
 	/**

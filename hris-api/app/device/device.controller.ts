@@ -16318,13 +16318,28 @@ export const controller = (prisma: PrismaClient) => {
 				sourceRecord: any;
 				targetDevice: any;
 				targetDeviceId: string;
-			}) => {
-				const { user, sourceDevice, sourceRecord, targetDevice, targetDeviceId } = params;
+			}): Promise<{ ok: boolean; error?: string; skipped?: boolean }> => {
+				const { user, sourceRecord, targetDevice, targetDeviceId } = params;
+				// Prefer the target device's own vendorUserId (identity groups may link
+				// different vendor ids via employeeId). Fall back to source only if absent.
+				const targetPlanRecord =
+					(user.records || []).find(
+						(record: any) => String(record.deviceId) === String(targetDeviceId),
+					) || null;
+				const targetVendorUserId = String(
+					targetPlanRecord?.vendorUserId || sourceRecord.vendorUserId || "",
+				).trim();
+				if (!targetVendorUserId) {
+					return {
+						ok: false,
+						error: `No vendorUserId for profile overlay on device ${targetDeviceId}`,
+					};
+				}
 				const targetRow = await (prisma as any).deviceUser.findFirst({
 					where: {
 						organizationId: String(admin.organizationId),
 						deviceId: targetDeviceId,
-						vendorUserId: sourceRecord.vendorUserId,
+						vendorUserId: targetVendorUserId,
 					},
 					select: {
 						id: true,
@@ -16339,14 +16354,19 @@ export const controller = (prisma: PrismaClient) => {
 						rawPayload: true,
 					},
 				});
-				if (!targetRow?.id) return;
+				if (!targetRow?.id) {
+					return {
+						ok: false,
+						error: `DeviceUser row missing for vendorUserId ${targetVendorUserId} on device ${targetDeviceId}; cannot apply profile overlay`,
+					};
+				}
 				emitMergeProgress?.({
 					stage: "db_merge_started",
 					userKey: user.key,
-					vendorUserId: sourceRecord.vendorUserId,
+					vendorUserId: targetVendorUserId,
 					targetDeviceId,
 					targetDeviceName: targetDevice.name || targetDevice.address,
-					message: `Updating HRIS DeviceUser row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+					message: `Updating HRIS DeviceUser row for ${targetVendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 				});
 				const selectedRecordFor = (field: string) => {
 					const conflict = user.conflicts.find((item: any) => item.field === field);
@@ -16396,11 +16416,12 @@ export const controller = (prisma: PrismaClient) => {
 				emitMergeProgress?.({
 					stage: "db_merge_done",
 					userKey: user.key,
-					vendorUserId: sourceRecord.vendorUserId,
+					vendorUserId: targetVendorUserId,
 					targetDeviceId,
 					targetDeviceName: targetDevice.name || targetDevice.address,
-					message: `Updated HRIS row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+					message: `Updated HRIS row for ${targetVendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 				});
+				return { ok: true };
 			};
 			const mergeOverlayDeviceUserRowWithRetry = async (
 				params: Parameters<typeof mergeOverlayDeviceUserRow>[0],
@@ -16408,7 +16429,14 @@ export const controller = (prisma: PrismaClient) => {
 				let lastError: any = null;
 				for (let attempt = 1; attempt <= 3; attempt += 1) {
 					try {
-						await mergeOverlayDeviceUserRow(params);
+						const result = await mergeOverlayDeviceUserRow(params);
+						// Soft failures (missing DeviceUser row) must not count as success.
+						if (result && result.ok === false) {
+							return {
+								ok: false,
+								error: result.error || "DeviceUser profile overlay failed",
+							};
+						}
 						return { ok: true };
 					} catch (error: any) {
 						lastError = error;
