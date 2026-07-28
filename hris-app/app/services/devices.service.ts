@@ -829,6 +829,17 @@ export interface CredentialRecoveryJob {
 	wouldWriteCount?: number;
 	/** 0–100 weighted progress from API (stage floors + partial in-flight weight). */
 	progressPercent?: number;
+	/** Operator-facing English for currentStage (replan / capture / write). */
+	progressLabel?: string | null;
+	/** Short contract line: elapsed, task counts, why zeros may be honest. */
+	progressDetail?: string | null;
+	tasksByKind?: {
+		sourceCapturePending?: number;
+		sourceCaptureProcessing?: number;
+		sourceCaptureSucceeded?: number;
+		targetWritePending?: number;
+		targetWriteSucceeded?: number;
+	};
 	progressWeights?: {
 		verified?: number;
 		failed?: number;
@@ -840,6 +851,7 @@ export interface CredentialRecoveryJob {
 		weightedUnits?: number;
 		waveDenominator?: number;
 		stageFloor?: number;
+		replanElapsedMs?: number;
 	};
 	counters?: {
 		physicallyVerifiedRemaining?: number;
@@ -856,6 +868,9 @@ export interface CredentialRecoveryJob {
 		recovered?: number;
 		retrying?: number;
 		blocked?: number;
+		replanStartedAt?: string;
+		phase?: string;
+		replanElapsedMs?: number;
 	};
 	latestError?: CredentialRecoveryError | null;
 	activeTask?: CredentialRecoveryTask | null;

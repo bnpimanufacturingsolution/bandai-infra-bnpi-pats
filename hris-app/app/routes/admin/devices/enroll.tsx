@@ -503,6 +503,33 @@ const CREDENTIAL_RECOVERY_ACTIVE_STATUSES = new Set([
 	"retrying",
 ]);
 
+/** Operator English for opaque recovery stages (never show raw snake_case alone). */
+const credentialRecoveryStageLabel = (
+	job: CredentialRecoveryJob | null | undefined,
+): string => {
+	if (!job) return "No recovery job";
+	if (job.progressLabel) return String(job.progressLabel);
+	const stage = String(job.currentStage || job.status || "");
+	if (/replan/i.test(stage))
+		return "Re-reading device inventory after custody capture (often 1–3 min)";
+	if (/capturing_card|card_custody/i.test(stage))
+		return "Capturing card numbers from source panels";
+	if (/capturing_fingerprint|fingerprint/i.test(stage))
+		return "Capturing fingerprint templates from source panels";
+	if (/capturing_face|face_custody/i.test(stage))
+		return "Capturing face templates from source panels";
+	if (/writ|canary|physical/i.test(stage))
+		return "Writing recovered credentials to target panels";
+	if (/reread/i.test(stage)) return "Physical reread to prove writes stuck";
+	if (/source|export|owner_capture|custody|recovering_source/i.test(stage))
+		return "Capturing source custody (card / fingerprint / face)";
+	if (/ready|select|probe/i.test(stage))
+		return "Selecting ready writes from recovered custody";
+	if (String(job.status) === "pending") return "Queued — waiting for recovery worker";
+	if (String(job.status) === "completed") return "Wave finished";
+	return stage.replace(/_/g, " ") || "Recovery worker active";
+};
+
 /**
  * Weighted wave progress for credential recovery.
  * Prefer API `progressPercent` when present; otherwise client fallback so the bar
@@ -555,17 +582,33 @@ const computeCredentialRecoveryProgressPercent = (
 				recovered * 0.35 +
 				recoveringNow * 0.25;
 	const stage = String(job.currentStage || status);
+	// Order: replan before custody (stage name contains both).
 	let stageFloor = 2;
-	if (/export|custody|recovering_source|owner_capture|inventory/i.test(stage)) {
-		stageFloor = 8;
-	} else if (/replan|ready|select|probe/i.test(stage)) {
-		stageFloor = 18;
-	} else if (/writ|reread|canary/i.test(stage)) {
-		stageFloor = 35;
+	if (/replan/i.test(stage)) {
+		stageFloor = 22;
+		const started = Date.parse(
+			String(counters.replanStartedAt || job.startedAt || job.lastAdvancementAt || ""),
+		);
+		if (Number.isFinite(started)) {
+			const elapsed = Math.max(0, Date.now() - started);
+			stageFloor = Math.min(45, 22 + Math.floor(elapsed / 4_000));
+		}
+	} else if (/writ|reread|canary|physical/i.test(stage)) {
+		stageFloor = 40;
+	} else if (/ready|select|probe/i.test(stage)) {
+		stageFloor = 28;
+	} else if (
+		/export|recovering_source|owner_capture|inventory|source_custody|capturing_/i.test(
+			stage,
+		)
+	) {
+		stageFloor = 10;
+	} else if (/custody/i.test(stage)) {
+		stageFloor = 12;
 	} else if (status === "pending") {
 		stageFloor = 3;
 	} else if (status === "recovering" || status === "retrying") {
-		stageFloor = 6;
+		stageFloor = 8;
 	}
 	if (typeof weights?.stageFloor === "number" && Number.isFinite(weights.stageFloor)) {
 		stageFloor = Math.max(stageFloor, weights.stageFloor);
@@ -9336,14 +9379,18 @@ export function DeviceEnrollmentPanel({
 								{credentialRecoveryJob ? (
 									<div className="border-b border-slate-200 bg-slate-50 px-3 py-3">
 										<div className="flex flex-wrap items-center justify-between gap-2">
-											<div>
+											<div className="min-w-0 flex-1">
 												<p className="text-sm font-semibold text-slate-950">
 													Recovery job {credentialRecoveryJob.id}
 												</p>
-												<p className="mt-0.5 text-xs text-slate-600">
-													{credentialRecoveryJob.currentStage || credentialRecoveryJob.status}
-													{" · "}
-													last advanced{" "}
+												<p className="mt-0.5 text-xs font-medium text-slate-900">
+													{credentialRecoveryStageLabel(credentialRecoveryJob)}
+												</p>
+												<p className="mt-0.5 text-[11px] text-slate-500">
+													status {credentialRecoveryJob.status}
+													{" · stage "}
+													{credentialRecoveryJob.currentStage || "—"}
+													{" · last advanced "}
 													{credentialRecoveryJob.lastAdvancementAt
 														? formatDateTime(
 																credentialRecoveryJob.lastAdvancementAt,
@@ -9352,19 +9399,17 @@ export function DeviceEnrollmentPanel({
 												</p>
 												<p className="mt-1 text-xs font-medium text-slate-700">
 													THIS WAVE only (max {credentialRecoveryWaveTarget})
-													— not full residual: Verified{" "}
+													— Verified{" "}
 													{credentialRecoveryJob.counters?.verified ?? 0}
 													{" / Failed "}
 													{credentialRecoveryJob.counters?.failed ?? 0}
 													{" · bar "}
 													{credentialRecoveryProgressPercent}%
-													{" · "}
-													chips (FP/face/decision) refresh after replan when
-													writes stick.
+													{" · residual left is not wave progress"}
 												</p>
 											</div>
 											<div className="flex flex-col items-end gap-1">
-												<span className="text-sm font-semibold text-slate-950">
+												<span className="text-lg font-bold tabular-nums text-slate-950">
 													{credentialRecoveryProgressPercent}%
 												</span>
 												<Badge
@@ -9387,7 +9432,7 @@ export function DeviceEnrollmentPanel({
 												</Badge>
 											</div>
 										</div>
-										<div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/80 ring-1 ring-slate-200">
+										<div className="mt-3 h-3 overflow-hidden rounded-full bg-white/80 ring-1 ring-slate-200">
 											<div
 												className={`h-full rounded-full transition-all duration-500 ${
 													credentialRecoveryJob.status === "failed" ||
@@ -9395,34 +9440,44 @@ export function DeviceEnrollmentPanel({
 														? "bg-red-600"
 														: credentialRecoveryJob.status === "completed"
 															? "bg-emerald-600"
-															: "bg-orange-600"
+															: credentialRecoveryIsActive
+																? "bg-orange-600 animate-pulse"
+																: "bg-orange-600"
 												}`}
 												style={{
 													width: `${Math.max(
 														credentialRecoveryIsActive &&
-															credentialRecoveryProgressPercent < 2
-															? 2
+															credentialRecoveryProgressPercent < 4
+															? 4
 															: 0,
 														credentialRecoveryProgressPercent,
 													)}%`,
 												}}
 											/>
 										</div>
-										<div className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs">
+										<div className="mt-2 rounded-md border border-orange-200 bg-orange-50/80 px-3 py-2 text-xs">
 											<p className="font-semibold text-slate-950">
 												{credentialRecoveryJob.activeTask
-													? `Now: ${credentialRecoveryJob.activeTask.modality || "credential"} ${credentialRecoveryJob.activeTask.stage || credentialRecoveryJob.activeTask.kind}`
-													: `Now: ${credentialRecoveryJob.currentStage || "waiting for worker"}`}
+													? `Now: ${credentialRecoveryJob.activeTask.modality || "credential"} · ${String(credentialRecoveryJob.activeTask.stage || credentialRecoveryJob.activeTask.kind || "").replace(/_/g, " ")}`
+													: `Now: ${credentialRecoveryStageLabel(credentialRecoveryJob)}`}
+											</p>
+											<p className="mt-1 text-slate-700">
+												{credentialRecoveryJob.progressDetail ||
+													(/replan/i.test(
+														String(credentialRecoveryJob.currentStage || ""),
+													)
+														? "Inventory replan after card/FP capture. Ready/Writing stay 0 until replan finishes — not a frozen job."
+														: "Weighted progress uses this wave (capture → write → reread → verified), not residual left.")}
 											</p>
 											{credentialRecoveryJob.activeTask ? (
 												<p className="mt-1 break-all text-slate-600">
 													source{" "}
-													{credentialRecoveryJob.activeTask.sourceDeviceId || "not applicable"}
+													{credentialRecoveryJob.activeTask.sourceDeviceId || "n/a"}
 													{" → target "}
 													{credentialRecoveryJob.activeTask.targetDeviceId ||
 														"not selected yet"}
 													{" · user "}
-													{credentialRecoveryJob.activeTask.vendorUserId || "not available"}
+													{credentialRecoveryJob.activeTask.vendorUserId || "n/a"}
 													{" · attempt "}
 													{credentialRecoveryJob.activeTask.attempts}
 													{credentialRecoveryJob.activeTask.maxAttempts
@@ -9431,34 +9486,76 @@ export function DeviceEnrollmentPanel({
 												</p>
 											) : null}
 											<p className="mt-1 text-slate-600">
-												Worker lease{" "}
-												{credentialRecoveryJob.workerLeaseActive ? "active" : "inactive"}
-												{" · resume cursor "}
+												Worker{" "}
+												{credentialRecoveryJob.workerLeaseActive
+													? "lease active"
+													: "lease inactive"}
+												{" · cursor "}
 												{credentialRecoveryJob.resumeCursor ?? 0}
 												{" · wave "}
 												{credentialRecoveryJob.counters?.verified ?? 0}+
 												{credentialRecoveryJob.counters?.failed ?? 0}/
 												{credentialRecoveryWaveTarget}
+												{credentialRecoveryJob.tasksByKind ? (
+													<>
+														{" · capture "}
+														{credentialRecoveryJob.tasksByKind
+															.sourceCaptureSucceeded ?? 0}
+														/
+														{(credentialRecoveryJob.tasksByKind
+															.sourceCaptureSucceeded ?? 0) +
+															(credentialRecoveryJob.tasksByKind
+																.sourceCapturePending ?? 0) +
+															(credentialRecoveryJob.tasksByKind
+																.sourceCaptureProcessing ?? 0)}
+													</>
+												) : null}
 											</p>
 										</div>
 										<div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
 											{[
-												["Recovered", credentialRecoveryJob.counters?.recovered ?? 0],
-												["Ready to write", credentialRecoveryJob.counters?.readyToWrite ?? 0],
-												["Writing", credentialRecoveryJob.counters?.writing ?? 0],
+												[
+													"Captured",
+													credentialRecoveryJob.counters?.recovered ?? 0,
+													"Source custody tasks done",
+												],
+												[
+													"Ready to write",
+													credentialRecoveryJob.counters?.readyToWrite ?? 0,
+													"After replan finds raw bytes",
+												],
+												[
+													"Writing",
+													credentialRecoveryJob.counters?.writing ?? 0,
+													"Physical write in flight",
+												],
 												[
 													"Rereading",
-													credentialRecoveryJob.counters?.awaitingPhysicalReread ?? 0,
+													credentialRecoveryJob.counters?.awaitingPhysicalReread ??
+														0,
+													"Proving write on panel",
 												],
-												["Verified", credentialRecoveryJob.counters?.verified ?? 0],
-												["Failed", credentialRecoveryJob.counters?.failed ?? 0],
 												[
-													"Remaining",
+													"Verified",
+													credentialRecoveryJob.counters?.verified ?? 0,
+													"Wave success count",
+												],
+												[
+													"Failed",
+													credentialRecoveryJob.counters?.failed ?? 0,
+													"Wave failures",
+												],
+												[
+													"Residual left",
 													credentialRecoveryJob.counters
 														?.physicallyVerifiedRemaining ?? 0,
+													"Not this-wave progress",
 												],
-											].map(([label, value]) => (
-												<div key={String(label)} className="rounded border bg-white px-2 py-1.5">
+											].map(([label, value, hint]) => (
+												<div
+													key={String(label)}
+													className="rounded border bg-white px-2 py-1.5"
+													title={String(hint)}>
 													<p className="text-slate-600">{label}</p>
 													<p className="font-semibold text-slate-950">
 														{mergeMetricValue(value)}

@@ -12868,27 +12868,46 @@ export const controller = (prisma: PrismaClient) => {
 			1,
 		);
 		const stage = String(job.currentStage || job.status || "");
+		// Order matters: "replanning_recovered_custody" contains both replan and custody.
 		const stageFloor =
 			["completed", "awaiting_replan", "needs_attention", "failed"].includes(
 				String(job.status || ""),
 			)
-				? terminalDone > 0
-					? 100
-					: 100
-				: /export|custody|recovering_source|owner_capture|inventory/i.test(stage)
-					? 8
-					: /replan|ready|select|probe/i.test(stage)
-						? 18
-						: /writ|reread|canary/i.test(stage)
-							? 35
-							: String(job.status) === "pending"
-								? 3
-								: String(job.status) === "recovering" ||
-									  String(job.status) === "retrying"
-									? 6
-									: 2;
+				? 100
+				: /replan/i.test(stage)
+					? 22
+					: /writ|reread|canary|physical/i.test(stage)
+						? 40
+						: /ready|select|probe/i.test(stage)
+							? 28
+							: /export|recovering_source|owner_capture|inventory|source_custody/i.test(
+									stage,
+								)
+								? 10
+								: /custody/i.test(stage)
+									? 12
+									: String(job.status) === "pending"
+										? 3
+										: String(job.status) === "recovering" ||
+											  String(job.status) === "retrying"
+											? 8
+											: 2;
+		// Long inventory replan: ramp 22%→45% by elapsed so the bar is not stuck at floor.
+		const replanStartedRaw = String(
+			(counters as any)?.replanStartedAt || job.startedAt || "",
+		).trim();
+		const replanStartedMs = Date.parse(replanStartedRaw);
+		const replanElapsedMs =
+			/replan/i.test(stage) && Number.isFinite(replanStartedMs)
+				? Math.max(0, Date.now() - replanStartedMs)
+				: 0;
+		const replanRamp =
+			replanElapsedMs > 0
+				? Math.min(45, 22 + Math.floor(replanElapsedMs / 4_000))
+				: 0;
 		const rawPercent = Math.max(
 			stageFloor,
+			replanRamp,
 			Math.min(
 				99,
 				Math.round(
@@ -12906,12 +12925,65 @@ export const controller = (prisma: PrismaClient) => {
 			String(job.status) === "failed"
 				? 100
 				: rawPercent;
+		const tasksByKind = {
+			sourceCapturePending: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "source_capture" &&
+					["pending", "retrying"].includes(String(t.status)),
+			).length,
+			sourceCaptureProcessing: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "source_capture" && String(t.status) === "processing",
+			).length,
+			sourceCaptureSucceeded: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "source_capture" && String(t.status) === "succeeded",
+			).length,
+			targetWritePending: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "target_write" &&
+					["pending", "retrying", "processing"].includes(String(t.status)),
+			).length,
+			targetWriteSucceeded: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "target_write" && String(t.status) === "succeeded",
+			).length,
+		};
+		const progressLabel = /replan/i.test(stage)
+			? "Re-reading device inventory after card/FP/face custody capture (often 1–3 min)"
+			: /writ|canary|physical/i.test(stage)
+				? "Writing recovered credentials to target panels"
+				: /reread/i.test(stage)
+					? "Physical reread to prove writes stuck"
+					: /source|export|owner_capture|custody|recovering_source/i.test(stage)
+						? "Capturing source custody (card/FP/face bytes from panels)"
+						: /ready|select|probe/i.test(stage)
+							? "Selecting ready writes from recovered custody"
+							: String(job.status) === "pending"
+								? "Queued — waiting for recovery worker"
+								: String(job.status) === "completed"
+									? "Wave finished"
+									: "Recovery worker active";
+		const progressDetail = /replan/i.test(stage)
+			? `Inventory replan in progress${replanElapsedMs ? ` · ${Math.round(replanElapsedMs / 1000)}s elapsed` : ""}. Counters stay low until replan finishes and ready writes are claimed — this is not a stuck zero bar.`
+			: tasksTotal > 0
+				? `Tasks ${liveTaskCount("succeeded")}/${tasksTotal} done · ${liveTaskCount("processing")} running · ${liveTaskCount("pending") + liveTaskCount("retrying")} queued`
+				: `Wave size ${plannedWaveSize} · verified ${verified} · failed ${failed}`;
 		return {
 			...job,
-			counters,
+			counters: {
+				...counters,
+				// Residual left after this wave — not "wave remaining".
+				physicallyVerifiedRemaining: Number(
+					(counters as any)?.physicallyVerifiedRemaining || 0,
+				),
+			},
 			plannedWaveSize,
 			wouldWriteCount,
 			progressPercent,
+			progressLabel,
+			progressDetail,
+			tasksByKind,
 			progressWeights: {
 				verified,
 				failed,
@@ -12922,7 +12994,8 @@ export const controller = (prisma: PrismaClient) => {
 				recoveringNow,
 				weightedUnits: Math.round(weightedUnits * 100) / 100,
 				waveDenominator,
-				stageFloor,
+				stageFloor: Math.max(stageFloor, replanRamp || 0),
+				replanElapsedMs,
 			},
 			workerLeaseActive: Boolean(
 				job.leaseOwner &&
@@ -13094,7 +13167,19 @@ export const controller = (prisma: PrismaClient) => {
 								startedAt,
 							},
 						});
-						await heartbeat({ currentTaskKey: task.taskKey });
+						await heartbeat({
+							currentTaskKey: task.taskKey,
+							currentStage:
+								task.modality === "card"
+									? "capturing_card_custody"
+									: task.modality === "fingerprint"
+										? "capturing_fingerprint_custody"
+										: task.modality === "face"
+											? "capturing_face_custody"
+											: "recovering_source_custody",
+						});
+						// Refresh counters as each task starts so UI is not stuck at 0s.
+						await refreshLiveCounters().catch(() => undefined);
 						deviceLogger.info("Credential recovery task started", {
 							event: "credential_recovery_task_started",
 							jobId: params.jobId,
@@ -13511,7 +13596,24 @@ export const controller = (prisma: PrismaClient) => {
 			let verified = 0;
 			let writeFailure: Record<string, unknown> | null = null;
 			if (remainingWriteAttemptBudget > 0) {
-				await heartbeat({ currentStage: "replanning_recovered_custody" });
+				const replanStartedIso = new Date().toISOString();
+				const preReplanCounters = (
+					await jobStore.findUnique({
+						where: { id: params.jobId },
+						select: { counters: true },
+					})
+				)?.counters as Record<string, unknown> | null;
+				await heartbeat({
+					currentStage: "replanning_recovered_custody",
+					currentTaskKey: null,
+					counters: {
+						...(preReplanCounters || {}),
+						replanStartedAt: replanStartedIso,
+						phase: "replan_inventory",
+						// Keep recovered visible during replan so UI is not all zeros.
+						recovered: Number(preReplanCounters?.recovered || 0),
+					},
+				});
 				const replanStartedAt = Date.now();
 				deviceLogger.info("Credential recovery replan started", {
 					event: "credential_recovery_replan_started",
@@ -13521,13 +13623,20 @@ export const controller = (prisma: PrismaClient) => {
 					deviceCount: (persistedJob.deviceIds || []).length,
 				});
 				const replanHeartbeat = setInterval(() => {
-					heartbeat({ currentStage: "replanning_recovered_custody" }).catch(
-						(error: unknown) =>
-							deviceLogger.warn(
-								`Credential recovery job ${params.jobId} replan heartbeat failed: ${error}`,
-							),
+					heartbeat({
+						currentStage: "replanning_recovered_custody",
+						counters: {
+							...(preReplanCounters || {}),
+							replanStartedAt: replanStartedIso,
+							phase: "replan_inventory",
+							replanElapsedMs: Date.now() - replanStartedAt,
+						},
+					}).catch((error: unknown) =>
+						deviceLogger.warn(
+							`Credential recovery job ${params.jobId} replan heartbeat failed: ${error}`,
+						),
 					);
-				}, 15_000);
+				}, 5_000);
 				let freshPlan: any;
 				try {
 					freshPlan = await loadHikvisionSdkMergePlan({
