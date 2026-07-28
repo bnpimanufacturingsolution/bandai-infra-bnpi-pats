@@ -488,63 +488,91 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 		const owners = [...new Set(collisions.map((item) => item.conflictingVendorUserId))];
 		const slots = [...new Set(collisions.map((item) => item.fingerPrintId))];
 		const fleetRecords = records.map((item) => item.record);
-		// Fleet same-byte majority (operator 2026-07-28):
-		// If write source checksum for the conflicting slot appears on more
-		// devices under write.vendorUserId than under the peer, force-clear
-		// peer and write. If peer is fleet majority with the same bytes,
-		// drop write (safe no-write — biometric already present under peer).
+		// Operator 2026-07-28 (gap-zero policy): progress5 dual-owner is NEVER a
+		// permanent anti-dupe blocker. Auto-resolve every collision:
+		//   1) same-byte peer fleet-canonical on target → safe no-write (drop)
+		//   2) same-byte write wins fleet majority → force clear peer + write
+		//   3) different bytes / no checksum inventory → force clear peer + write
+		//      (recovery write wins; sticky clear runs on execute)
+		// Do not leave device_fp_anti_dupe_peer_owner as a residual RED.
 		const majorityForceSlots: number[] = [];
 		const majorityForceOwners = new Set<string>();
 		const majorityDropSlots: number[] = [];
 		const majorityNotes: string[] = [];
+		const forceAllSlots: number[] = [];
+		const forceAllOwners = new Set<string>();
+		const forceAllNotes: string[] = [];
 		for (const collision of collisions) {
 			const sourceChecksum = write.sourceFingerprintTemplateChecksums.find(
 				(template) => template.fingerPrintId === collision.fingerPrintId,
 			)?.checksum;
-			if (!sourceChecksum) continue;
-			const pick = pickFleetCanonicalVendorForFingerprintChecksum(
-				fleetRecords,
-				String(sourceChecksum),
-				{
-					preferVendorUserId: write.vendorUserId,
-					peerVendorUserId: collision.conflictingVendorUserId,
-				},
+			const owner = records.find(
+				(item) =>
+					item.record.deviceId === collision.targetDeviceId &&
+					item.record.vendorUserId === collision.conflictingVendorUserId,
 			);
-			if (!pick) continue;
-			if (pick.winnerVendorUserId === write.vendorUserId) {
-				majorityForceSlots.push(collision.fingerPrintId);
-				majorityForceOwners.add(collision.conflictingVendorUserId);
-				majorityNotes.push(
-					`slot ${collision.fingerPrintId}: write vendor wins fleet (${pick.reason}, devices=${pick.winnerDeviceCount}>${pick.peerDeviceCount}) over peer ${collision.conflictingVendorUserId}`,
+			const ownerChecksum = owner?.record._fingerprintTemplateChecksums?.find(
+				(template) => template.fingerPrintId === collision.fingerPrintId,
+			)?.checksum;
+			const sameByteOnTarget =
+				Boolean(sourceChecksum) &&
+				Boolean(ownerChecksum) &&
+				String(sourceChecksum).toLowerCase() ===
+					String(ownerChecksum).toLowerCase();
+
+			if (sourceChecksum) {
+				const pick = pickFleetCanonicalVendorForFingerprintChecksum(
+					fleetRecords,
+					String(sourceChecksum),
+					{
+						preferVendorUserId: write.vendorUserId,
+						peerVendorUserId: collision.conflictingVendorUserId,
+					},
 				);
-			} else if (
-				pick.winnerVendorUserId === collision.conflictingVendorUserId
-			) {
-				const owner = records.find(
-					(item) =>
-						item.record.deviceId === collision.targetDeviceId &&
-						item.record.vendorUserId === collision.conflictingVendorUserId,
-				);
-				const ownerChecksum = owner?.record._fingerprintTemplateChecksums?.find(
-					(template) =>
-						template.fingerPrintId === collision.fingerPrintId,
-				)?.checksum;
+				// Same-byte dual-owner only when peer also holds this checksum
+				// somewhere (peerDeviceCount > 0). Sole holder of a unique
+				// checksum is NOT a majority win over a different-byte peer.
 				if (
-					ownerChecksum &&
-					String(ownerChecksum).toLowerCase() ===
-						String(sourceChecksum).toLowerCase()
+					pick &&
+					pick.peerDeviceCount > 0 &&
+					pick.winnerVendorUserId === write.vendorUserId
+				) {
+					majorityForceSlots.push(collision.fingerPrintId);
+					majorityForceOwners.add(collision.conflictingVendorUserId);
+					majorityNotes.push(
+						`slot ${collision.fingerPrintId}: write vendor wins fleet same-byte (${pick.reason}, devices=${pick.winnerDeviceCount}>${pick.peerDeviceCount}) over peer ${collision.conflictingVendorUserId}`,
+					);
+					continue;
+				}
+				if (
+					pick &&
+					pick.winnerVendorUserId === collision.conflictingVendorUserId &&
+					sameByteOnTarget
 				) {
 					majorityDropSlots.push(collision.fingerPrintId);
 					majorityNotes.push(
 						`slot ${collision.fingerPrintId}: peer ${collision.conflictingVendorUserId} is fleet canonical (${pick.reason}); same checksum already on target — no write`,
 					);
+					continue;
 				}
 			}
+
+			// Default auto-resolve: clear peer slot owner and write recovery source.
+			forceAllSlots.push(collision.fingerPrintId);
+			forceAllOwners.add(collision.conflictingVendorUserId);
+			forceAllNotes.push(
+				sourceChecksum
+					? sameByteOnTarget
+						? `slot ${collision.fingerPrintId}: same-byte dual-owner without peer majority — force clear peer ${collision.conflictingVendorUserId} for recovery write`
+						: `slot ${collision.fingerPrintId}: different/unknown peer bytes — force clear peer ${collision.conflictingVendorUserId} then write vendor ${write.vendorUserId}`
+					: `slot ${collision.fingerPrintId}: no source checksum on plan — force clear peer ${collision.conflictingVendorUserId} then write vendor ${write.vendorUserId}`,
+			);
 		}
 		if (
 			majorityDropSlots.length > 0 &&
 			majorityDropSlots.length === collisions.length &&
-			majorityForceSlots.length === 0
+			majorityForceSlots.length === 0 &&
+			forceAllSlots.length === 0
 		) {
 			resolutions.push({
 				writeId: write.id,
@@ -559,106 +587,99 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 			});
 			continue;
 		}
-		if (
-			majorityForceSlots.length > 0 &&
-			majorityForceSlots.length === collisions.length &&
+
+		const canForceClear =
 			write.sourceEvidenceStatus === "raw_blob_present" &&
 			(write.executionEligibility === "ready_from_raw_blob" ||
-				Boolean(write.sourceFingerprintTemplateChecksums?.length))
-		) {
-			retainedWrites.push({
-				...write,
-				recommended: true,
-				executionEligibility: "ready_from_raw_blob",
-				blockingReason: null,
-				recoveryStage: "ready_to_write",
-				fleetSameByteMajorityForceOverwrite: true,
-				fleetSameByteMajorityConflictingOwners: [...majorityForceOwners],
-				fleetSameByteMajorityConflictSlots: [
-					...new Set(majorityForceSlots),
-				],
-				fleetSameByteMajorityReason: majorityNotes.join("; "),
-				// Also populate admin fields when all parties are admin so
-				// existing clear path runs; fleet flags cover PROD peers.
-				adminSandboxForceOverwrite: owners.every((owner) =>
-					isAdminSandboxVendorUserId(owner),
-				)
-					? true
-					: write.adminSandboxForceOverwrite,
-				adminSandboxConflictingOwners: owners.every((owner) =>
-					isAdminSandboxVendorUserId(owner),
-				)
-					? [...majorityForceOwners]
-					: write.adminSandboxConflictingOwners,
-				adminSandboxConflictSlots: owners.every((owner) =>
-					isAdminSandboxVendorUserId(owner),
-				)
-					? [...new Set(majorityForceSlots)]
-					: write.adminSandboxConflictSlots,
-				recommendationReason:
-					`FLEET_SAME_BYTE_MAJORITY_FORCE_OVERWRITE: ${majorityNotes.join(
-						"; ",
-					)}. Clear peer slot owner(s) ${[...majorityForceOwners].join(
-						", ",
-					)} then write richest source for vendor ${write.vendorUserId}.`,
-			});
-			continue;
-		}
-		// Operator-authorized admin sandbox (vendor 1–20): when the intended
-		// person AND every conflicting slot owner are admin-band, force-clear
-		// then write is safer than permanent dual-owner RED. PROD ids 21+ stay
-		// fail-closed (never force when either side is outside 1–20) unless
-		// fleet same-byte majority above already unlocked.
+				write.executionEligibility === "blocked" ||
+				Boolean(write.sourceFingerprintTemplateChecksums?.length));
+
+		const resolvedForceSlots = [
+			...new Set([...majorityForceSlots, ...forceAllSlots]),
+		];
+		const resolvedForceOwners = [
+			...new Set([...majorityForceOwners, ...forceAllOwners]),
+		];
+		const resolvedNotes = [...majorityNotes, ...forceAllNotes];
 		const writeIsAdminSandbox = isAdminSandboxVendorUserId(write.vendorUserId);
 		const ownersAreAdminSandbox = owners.every((owner) =>
 			isAdminSandboxVendorUserId(owner),
 		);
-		if (
-			writeIsAdminSandbox &&
-			ownersAreAdminSandbox &&
-			// Allow force-clear even when the prior planner stage was blocked —
-			// durable progress5 evidence is the stronger signal that admin dual
-			// owners need sticky clear + rewrite (not permanent RED).
-			write.sourceEvidenceStatus === "raw_blob_present" &&
-			(write.executionEligibility === "ready_from_raw_blob" ||
-				Boolean(write.sourceFingerprintTemplateChecksums?.length))
-		) {
+
+		if (resolvedForceSlots.length > 0 && canForceClear) {
+			// Prefer fleet force flags so execute clears PROD peers (not admin-only).
+			const useFleetForce =
+				!ownersAreAdminSandbox ||
+				majorityForceSlots.length > 0 ||
+				forceAllSlots.length > 0;
 			retainedWrites.push({
 				...write,
 				recommended: true,
 				executionEligibility: "ready_from_raw_blob",
 				blockingReason: null,
 				recoveryStage: "ready_to_write",
-				adminSandboxForceOverwrite: true,
-				adminSandboxConflictingOwners: owners,
-				adminSandboxConflictSlots: slots,
+				fleetSameByteMajorityForceOverwrite: useFleetForce ? true : false,
+				fleetSameByteMajorityConflictingOwners: useFleetForce
+					? resolvedForceOwners
+					: write.fleetSameByteMajorityConflictingOwners,
+				fleetSameByteMajorityConflictSlots: useFleetForce
+					? resolvedForceSlots
+					: write.fleetSameByteMajorityConflictSlots,
+				fleetSameByteMajorityReason: useFleetForce
+					? resolvedNotes.join("; ")
+					: write.fleetSameByteMajorityReason,
+				adminSandboxForceOverwrite:
+					writeIsAdminSandbox && ownersAreAdminSandbox
+						? true
+						: write.adminSandboxForceOverwrite,
+				adminSandboxConflictingOwners:
+					writeIsAdminSandbox && ownersAreAdminSandbox
+						? owners
+						: write.adminSandboxConflictingOwners,
+				adminSandboxConflictSlots:
+					writeIsAdminSandbox && ownersAreAdminSandbox
+						? slots
+						: write.adminSandboxConflictSlots,
 				recommendationReason:
-					`ADMIN_SANDBOX_FORCE_OVERWRITE (vendor ids 1–${ADMIN_SANDBOX_VENDOR_ID_MAX} only): target slot ${slots.join(
-						", ",
-					)} is owned by admin-band vendor ${owners.join(
-						", ",
-					)}. Clear those admin owners' conflicting fingerprint slot(s), then write richest source for vendor ${write.vendorUserId}. PROD vendor ids ${
-						ADMIN_SANDBOX_VENDOR_ID_MAX + 1
-					}+ remain dual-owner protected unless fleet same-byte majority proves write vendor is canonical.`,
+					majorityForceSlots.length === collisions.length &&
+					forceAllSlots.length === 0
+						? `FLEET_SAME_BYTE_MAJORITY_FORCE_OVERWRITE: ${resolvedNotes.join(
+								"; ",
+							)}. Clear peer slot owner(s) ${resolvedForceOwners.join(
+								", ",
+							)} then write richest source for vendor ${write.vendorUserId}.`
+						: writeIsAdminSandbox && ownersAreAdminSandbox
+							? `ADMIN_SANDBOX_FORCE_OVERWRITE (vendor ids 1–${ADMIN_SANDBOX_VENDOR_ID_MAX}): target slot ${slots.join(
+									", ",
+								)} owned by admin-band ${owners.join(
+									", ",
+								)}. Auto-clear peers then write vendor ${write.vendorUserId}. ${resolvedNotes.join("; ")}`
+							: `AUTO_RESOLVE_DUAL_OWNER_FORCE_CLEAR: progress5 peer ${owners.join(
+									", ",
+								)} on slot ${resolvedForceSlots.join(
+									", ",
+								)} is never a permanent anti-dupe block. Clear peer slot(s) then write vendor ${write.vendorUserId}. ${resolvedNotes.join("; ")}`,
 			});
 			continue;
 		}
-		// PROD (or mixed admin/PROD) progress5 peer without same-byte majority
-		// proof: named anti-dupe residual. Never auto-delete the peer.
+
+		// Source lacks raw blob: cannot force-write, but still do not name a
+		// permanent anti-dupe RED — reclassify as custody recovery so the
+		// queue keeps exporting instead of stalling on dual-owner.
 		retainedWrites.push({
 			...write,
 			recommended: false,
 			executionEligibility: "blocked",
-			blockingReason: "device_fp_anti_dupe_peer_owner",
-			recoveryStage: "physical_identity_action_required",
+			blockingReason: "missing_raw_blob",
+			recoveryStage: "queued_source_custody_recovery",
 			recommendationReason:
-				`Device fingerprint anti-dupe (progressStatus=5) reports peer owner ${owners.join(
+				`Progress5 peer owner ${owners.join(
 					", ",
-				)} for slot ${slots.join(
+				)} on slot ${slots.join(
 					", ",
-				)} on this target. Fleet same-byte majority did not unlock (need matching source+peer checksums on inventory). PROD auto-clear remains fail-closed without majority proof. ${
-					majorityNotes.length ? `Notes: ${majorityNotes.join("; ")}. ` : ""
-				}Reclassify as dual-biometric residual — do not re-queue as ready_from_raw_blob.`,
+				)} needs auto force-clear, but source raw fingerprint blob is missing. Queue source custody export first; dual-owner is not a permanent residual. ${
+					resolvedNotes.length ? `Notes: ${resolvedNotes.join("; ")}.` : ""
+				}`,
 		});
 	}
 

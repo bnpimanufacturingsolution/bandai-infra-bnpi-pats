@@ -1292,7 +1292,7 @@ describe("device user union merge", () => {
 		);
 	});
 
-	it("keeps dual-owner fail-closed when conflicting owner is PROD vendor 21+", () => {
+	it("auto-resolves dual-owner with PROD peer 21+ via force-clear (never permanent anti-dupe)", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["source", "target"],
 			records: [
@@ -1351,11 +1351,14 @@ describe("device user union merge", () => {
 				item.vendorUserId === "1" &&
 				item.targetDeviceId === "target",
 		);
-		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.blockingReason).to.equal("device_fp_anti_dupe_peer_owner");
-		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
+		// Same-byte on target: both hold collision-checksum (1 device each).
+		// Tie → prefer write vendor → force clear PROD peer, never anti-dupe block.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.fleetSameByteMajorityForceOverwrite).to.equal(true);
+		expect(write?.fleetSameByteMajorityConflictingOwners).to.deep.equal(["900"]);
 		expect(write?.recommendationReason || "").to.match(
-			/anti-dupe|progressStatus=5|never auto-clear/i,
+			/FORCE_OVERWRITE|FORCE_CLEAR|auto-clear|Clear peer/i,
 		);
 	});
 
@@ -1451,7 +1454,7 @@ describe("device user union merge", () => {
 		expect(evidence[1].fingerPrintId).to.equal(2);
 	});
 
-	it("reclassifies PROD progress5 peer as device_fp_anti_dupe_peer_owner not ready", () => {
+	it("auto-resolves PROD progress5 peer (different bytes) via force-clear not anti-dupe block", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["source", "target"],
 			records: [
@@ -1520,10 +1523,14 @@ describe("device user union merge", () => {
 				item.vendorUserId === "1751" &&
 				item.targetDeviceId === "target",
 		);
-		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.recommended).to.equal(false);
-		expect(write?.blockingReason).to.equal("device_fp_anti_dupe_peer_owner");
-		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recommended).to.equal(true);
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.fleetSameByteMajorityForceOverwrite).to.equal(true);
+		expect(write?.fleetSameByteMajorityConflictingOwners).to.deep.equal(["1757"]);
+		expect(write?.recommendationReason || "").to.match(
+			/AUTO_RESOLVE_DUAL_OWNER_FORCE_CLEAR/i,
+		);
 	});
 
 	it("fleet same-byte majority unlocks PROD write when write vendor holds checksum on more devices", () => {
@@ -1621,6 +1628,7 @@ describe("device user union merge", () => {
 			records: [
 				record("source", {
 					vendorUserId: "696",
+					employeeId: "employee-696",
 					rawPayload: { numOfFP: 1 },
 					biometricEvidence: {
 						fingerprint: {
@@ -1634,6 +1642,7 @@ describe("device user union merge", () => {
 				}),
 				record("peerA", {
 					vendorUserId: "10",
+					employeeId: "employee-10",
 					rawPayload: { numOfFP: 1 },
 					biometricEvidence: {
 						fingerprint: {
@@ -1647,6 +1656,7 @@ describe("device user union merge", () => {
 				}),
 				record("peerB", {
 					vendorUserId: "10",
+					employeeId: "employee-10",
 					rawPayload: { numOfFP: 1 },
 					biometricEvidence: {
 						fingerprint: {
@@ -1660,10 +1670,12 @@ describe("device user union merge", () => {
 				}),
 				record("target", {
 					vendorUserId: "696",
+					employeeId: "employee-696",
 					rawPayload: { numOfFP: 0 },
 				}),
 				record("target", {
 					vendorUserId: "10",
+					employeeId: "employee-10",
 					rawPayload: { numOfFP: 1 },
 					biometricEvidence: {
 						fingerprint: {
