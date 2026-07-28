@@ -598,10 +598,12 @@ const DataTable = <T extends Record<string, any>>({
 	);
 
 	const renderDesktopDataRows = () => (
-		<tbody className="divide-y divide-neutral-100">
+		<tbody className="divide-y divide-neutral-100" data-datatable-body-rows>
 			{paginatedItems.map((item, index) => (
 				<tr
 					key={item.id || index}
+					data-datatable-row
+					data-row-id={item.id != null ? String(item.id) : undefined}
 					role={onRowClick ? "button" : undefined}
 					tabIndex={onRowClick ? 0 : undefined}
 					onClick={onRowClick ? () => onRowClick(item) : undefined}
@@ -1167,7 +1169,10 @@ const DataTable = <T extends Record<string, any>>({
 	);
 
 	const tableContent = (
-		<div className={cn(containedScroll && "flex min-h-0 flex-1 flex-col")}>
+		<div
+			className={cn(
+				containedScroll && "flex min-h-[14rem] flex-1 flex-col overflow-hidden",
+			)}>
 			{onExportCSV && (
 				<ExportScopeModal
 					open={isExportScopeModalOpen}
@@ -1179,17 +1184,26 @@ const DataTable = <T extends Record<string, any>>({
 				/>
 			)}
 
-			{/* Table — flex-1 so body fills remaining viewport under toolbar */}
-			<div className={cn(containedScroll && "flex min-h-0 flex-1 flex-col")}>
+			{/* Table — flex-1 so body fills remaining viewport under toolbar.
+			    Explicit flex column (not a bare fragment) so flex-1 body + shrink-0
+			    pagination share height correctly under containedScroll. */}
+			<div
+				className={cn(
+					containedScroll && "flex min-h-[12rem] flex-1 flex-col overflow-hidden",
+				)}>
 			{isLoading ? (
 				renderLoadingSkeleton()
 			) : data.length === 0 ? (
-				<>
-					{renderEmptyState()}
-					{renderPagination()}
-				</>
+				<div className={cn(containedScroll && "flex min-h-[12rem] flex-1 flex-col")}>
+					<div className={cn(containedScroll && "min-h-0 flex-1 overflow-auto")}>
+						{renderEmptyState()}
+					</div>
+					{/* Only show pagination chrome when totals are honest for empty page data.
+					    Server-side "1–10 of N" with zero rows is a data/unwrap bug, not empty UX. */}
+					{!(isServerSide && (totalItems ?? 0) > 0) ? renderPagination() : null}
+				</div>
 			) : (
-				<>
+				<div className={cn(containedScroll && "flex min-h-[12rem] flex-1 flex-col overflow-hidden")}>
 					<div className={desktopTableViewportClassName}>
 						{groupBy && groupedData ? (
 							// Grouped Table View
@@ -1702,7 +1716,7 @@ const DataTable = <T extends Record<string, any>>({
 						)}
 					</div>
 					{renderPagination()}
-				</>
+				</div>
 			)}
 			</div>
 		</div>
@@ -1713,9 +1727,11 @@ const DataTable = <T extends Record<string, any>>({
 			<div
 				className={cn(
 					"flex flex-col gap-3",
-					containedScroll && "min-h-0 flex-1",
+					// Match Card path: definite min height so contained body cannot collapse to 0px.
+					containedScroll && "min-h-[14rem] flex-1 overflow-hidden",
 					className,
-				)}>
+				)}
+				data-datatable-root={containedScroll ? "contained" : "plain"}>
 				<div className="shrink-0">{renderTitleToolbarRow()}</div>
 				{tableContent}
 			</div>

@@ -1769,15 +1769,32 @@ class DevicesService extends APIService {
 
 			const endpoint = `/api/device/events${query.toString() ? `?${query.toString()}` : ""}`;
 			const response = await hrisApiClient.get<any>(endpoint);
-			let eventsData = response.data;
-			if (eventsData && typeof eventsData === "object" && "data" in eventsData) {
-				eventsData = eventsData.data;
+			// ApiClient returns the full envelope `{ success, data, ... }`. Unwrap once
+			// (and tolerate a rare double-wrap) so list pages never get total>0 with [] rows.
+			let eventsData: any = response?.data ?? response;
+			if (eventsData && typeof eventsData === "object" && "data" in eventsData && !Array.isArray(eventsData.events)) {
+				const nested = (eventsData as { data?: unknown }).data;
+				if (nested && typeof nested === "object") {
+					eventsData = nested;
+				}
 			}
 
+			const rawEvents =
+				(Array.isArray(eventsData?.events) && eventsData.events) ||
+				(Array.isArray(eventsData?.items) && eventsData.items) ||
+				(Array.isArray(eventsData?.rows) && eventsData.rows) ||
+				(Array.isArray(eventsData) && eventsData) ||
+				[];
+
+			const pagination =
+				eventsData?.pagination && typeof eventsData.pagination === "object"
+					? eventsData.pagination
+					: undefined;
+
 			return {
-				events: eventsData?.events || [],
+				events: rawEvents,
 				summary: eventsData?.summary || {
-					total: 0,
+					total: Number(pagination?.total || 0),
 					byCategory: {},
 					byAction: {},
 					byActionCategory: {},
@@ -1795,7 +1812,7 @@ class DevicesService extends APIService {
 					byStatus: {},
 					bySource: {},
 				},
-				pagination: eventsData?.pagination,
+				pagination,
 			};
 		} catch (error: any) {
 			console.error("Error fetching device events:", error);
