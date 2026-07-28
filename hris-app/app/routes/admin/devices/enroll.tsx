@@ -7,6 +7,7 @@ import { Select } from "~/components/atoms/Select";
 import { EmployeePickerSelect } from "~/components/molecules/employee/EmployeePickerSelect";
 import { formatDateTime } from "~/lib/utils/text-utils";
 import {
+	MERGE_CHIP_CONTRACT,
 	buildMergePeerCopyCta,
 	formatMergeSourceDeviceTile,
 	formatMergeTargetDeviceTile,
@@ -2745,7 +2746,7 @@ export function DeviceEnrollmentPanel({
 		sdkMergeListMode === "unique"
 			? "Unique IDs"
 			: sdkMergeListMode === "records"
-				? "Records"
+				? "Device ID records"
 				: sdkMergeListMode === "review"
 					? "Issue IDs"
 					: sdkMergeListMode === "writes"
@@ -9406,15 +9407,25 @@ export function DeviceEnrollmentPanel({
 								</div>
 							</div>
 
-							{/* Single-source top chips — one formula each; card never in default set. */}
+							{/* Single-source top chips — formulas from MERGE_CHIP_CONTRACT; card opt-in only. */}
 							<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
-								{(
-									[
+								{(() => {
+									const contractById = Object.fromEntries(
+										MERGE_CHIP_CONTRACT.map((c) => [c.id, c]),
+									);
+									const sdkMergeTopChips: Array<{
+										key: string;
+										label: string;
+										value: number;
+										caption: string;
+										active: boolean;
+										onClick: () => void;
+									}> = [
 										{
 											key: "unique",
-											label: "Unique IDs",
+											label: contractById.unique.label,
 											value: sdkMergeUniqueIdCount,
-											caption: "unionUsers — one row per vendor person",
+											caption: contractById.unique.caption,
 											active:
 												sdkMergeListMode === "unique" &&
 												sdkMergeFilter === "all",
@@ -9422,17 +9433,17 @@ export function DeviceEnrollmentPanel({
 										},
 										{
 											key: "records",
-											label: "Records",
+											label: contractById.records.label,
 											value: sdkMergeDeviceRecordCount,
-											caption: "deduped device records (source inventory)",
+											caption: contractById.records.caption,
 											active: sdkMergeListMode === "records",
 											onClick: () => setSdkMergeListMode("records"),
 										},
 										{
 											key: "missing",
-											label: "Missing",
+											label: contractById.missing.label,
 											value: sdkMergeMissingPeopleCount,
-											caption: "people missing on ≥1 selected device",
+											caption: contractById.missing.caption,
 											active:
 												sdkMergeListMode === "issues" &&
 												sdkMergeFilter === "missing",
@@ -9440,9 +9451,9 @@ export function DeviceEnrollmentPanel({
 										},
 										{
 											key: "decision",
-											label: "Needs decision",
+											label: contractById.decision.label,
 											value: sdkMergeDecisionPeopleCount,
-											caption: "people with profile conflicts only",
+											caption: contractById.decision.caption,
 											active:
 												sdkMergeListMode === "issues" &&
 												sdkMergeFilter === "decision",
@@ -9450,17 +9461,17 @@ export function DeviceEnrollmentPanel({
 										},
 										{
 											key: "peer",
-											label: "Peer-copy ready",
+											label: contractById.peer_copy.label,
 											value: sdkMergePeerCopyReadyCount,
-											caption: "executable user-record creates on peers",
+											caption: contractById.peer_copy.caption,
 											active: sdkMergeListMode === "writes",
 											onClick: () => setSdkMergeListMode("writes"),
 										},
 										{
 											key: "fingerprint",
-											label: "FP residual",
+											label: contractById.fingerprint.label,
 											value: sdkMergeCredentialFingerprintWriteCount,
-											caption: "fingerprint credentialWrites (not peer copy)",
+											caption: contractById.fingerprint.caption,
 											active:
 												sdkMergeListMode === "issues" &&
 												sdkMergeFilter === "fingerprint",
@@ -9468,9 +9479,9 @@ export function DeviceEnrollmentPanel({
 										},
 										{
 											key: "face",
-											label: "Face residual",
+											label: contractById.face.label,
 											value: sdkMergeCredentialFaceWriteCount,
-											caption: "face credentialWrites (not peer copy)",
+											caption: contractById.face.caption,
 											active:
 												sdkMergeListMode === "issues" &&
 												sdkMergeFilter === "face",
@@ -9480,10 +9491,9 @@ export function DeviceEnrollmentPanel({
 											? [
 													{
 														key: "card",
-														label: "Card residual",
+														label: contractById.card.label,
 														value: sdkMergeCredentialCardWriteCount,
-														caption:
-															"card credentialWrites (opt-in only)",
+														caption: contractById.card.caption,
 														active:
 															sdkMergeListMode === "issues" &&
 															sdkMergeFilter === "card",
@@ -9491,44 +9501,39 @@ export function DeviceEnrollmentPanel({
 													},
 												]
 											: []),
-									] as Array<{
-										key: string;
-										label: string;
-										value: number;
-										caption: string;
-										active: boolean;
-										onClick: () => void;
-									}>
-								).map((chip) => (
-									<button
-										type="button"
-										key={chip.key}
-										aria-label={`Show ${chip.label}: ${chip.caption}`}
-										title={chip.caption}
-										onClick={chip.onClick}
-										className={`rounded-md border px-3 py-2 text-left ${
-											chip.active
-												? "border-orange-300 bg-orange-50"
-												: "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-										}`}>
-										<div className="flex items-baseline justify-between gap-3">
-											<span className="text-xs font-medium text-slate-600">
-												{chip.label}
-											</span>
-											<span className="text-sm font-semibold tabular-nums text-slate-950">
-												{mergeMetricValue(chip.value)}
-											</span>
-										</div>
-										<p className="mt-1 text-[10px] leading-4 text-slate-500">
-											{chip.caption}
-										</p>
-									</button>
-								))}
+									];
+									return sdkMergeTopChips.map((chip) => (
+										<button
+											type="button"
+											key={chip.key}
+											aria-label={`Show ${chip.label}: ${chip.caption}`}
+											title={`${chip.caption} · ${contractById[chip.key === "peer" ? "peer_copy" : chip.key]?.formula || ""}`}
+											onClick={chip.onClick}
+											className={`rounded-md border px-3 py-2 text-left ${
+												chip.active
+													? "border-orange-300 bg-orange-50"
+													: "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+											}`}>
+											<div className="flex items-baseline justify-between gap-3">
+												<span className="text-xs font-medium text-slate-600">
+													{chip.label}
+												</span>
+												<span className="text-sm font-semibold tabular-nums text-slate-950">
+													{mergeMetricValue(chip.value)}
+												</span>
+											</div>
+											<p className="mt-1 text-[10px] leading-4 text-slate-500">
+												{chip.caption}
+											</p>
+										</button>
+									));
+								})()}
 							</div>
 							<p className="text-[11px] leading-4 text-slate-500">
-								Each chip has one formula (caption). Missing ≠ Needs decision ≠
-								credential residual. Card residual is hidden unless you enable the
-								toggle under Credential convergence.
+								Each chip has one formula from MERGE_CHIP_CONTRACT. Missing ≠ Needs
+								decision (people with profile conflicts only) ≠ credential residual.
+								Card residual is hidden unless you enable the toggle under
+								Credential convergence.
 								{sdkMergeAttentionRowCount > 0 &&
 								sdkMergeAttentionRowCount !==
 									sdkMergeMissingPeopleCount + sdkMergeDecisionPeopleCount

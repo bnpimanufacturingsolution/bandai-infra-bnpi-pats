@@ -62,7 +62,7 @@ export const MERGE_CHIP_CONTRACT: MergeChipContract[] = [
 		id: "decision",
 		label: "Needs decision",
 		formula: "unique people with profile conflicts.length > 0 (DECISION_FIELDS only)",
-		caption: "Name/date A vs B — not card/FP/face counts",
+		caption: "people with profile conflicts only (name/date A vs B — not card/FP/face)",
 		defaultVisible: true,
 		sourcePath: "plan.users[].conflicts (profile fields)",
 	},

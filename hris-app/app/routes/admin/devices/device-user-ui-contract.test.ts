@@ -253,7 +253,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Issue: ${mergePlural(issueCount, \"device\")}");
 		expect(enroll).toContain("Expected active devices");
 		expect(enroll).toContain("Unique IDs");
-		expect(enroll).toContain("Records");
+		expect(enroll).toContain("Device ID records");
 		expect(enroll).toContain("Peer-copy ready");
 		expect(enroll).toContain("Needs decision");
 		expect(enroll).toContain("FP residual");
@@ -262,6 +262,8 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("includeCardResidual");
 		expect(enroll).toContain("sdkMergeDecisionPeopleCount");
 		expect(enroll).toContain("sdkMergeMissingPeopleCount");
+		expect(enroll).toContain("MERGE_CHIP_CONTRACT");
+		expect(enroll).toContain("sdkMergeTopChips");
 		expect(enroll).toContain("duplicate source row");
 		expect(enroll).toContain("collapsed into the matching unique IDs");
 		expect(enroll).toContain("Needs review IDs");
