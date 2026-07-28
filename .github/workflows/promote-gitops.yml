@@ -66,7 +66,7 @@ jobs:
           update_data_key release_tag
           update_data_key runtime_image_tag
 
-          for image in hris-api-db-init hris-api-local hris-app-local; do
+          for image in hris-api-db-init hris-api-local hris-app-local hris-emp-app-local; do
             new_name="$image"
             if [ -n "$registry" ]; then
               new_name="$registry/$image"
@@ -112,7 +112,7 @@ jobs:
           done
 
           expected_count="$(grep -c "newTag: $tag" "$runtime_file")"
-          if [ "$expected_count" -lt 3 ]; then
+          if [ "$expected_count" -lt 4 ]; then
             echo "Runtime image tag update failed for $runtime_file" >&2
             exit 1
           fi

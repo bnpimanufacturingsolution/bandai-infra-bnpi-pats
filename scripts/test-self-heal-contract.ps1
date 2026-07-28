@@ -73,6 +73,7 @@ foreach ($envName in $Environments) {
   $runtimeOverlay = "gitops/runtime-k8s/overlays/$envName"
   $rendered = Get-RenderedOverlay -Path $runtimeOverlay
   $runtimeKustomization = Get-Content -Raw "$runtimeOverlay/kustomization.yaml"
+  $runtimePriorityClasses = Get-Content -Raw "$runtimeOverlay/priority-classes.yaml"
   $environmentPatch = Get-Content -Raw "gitops/overlays/$envName/environment-patch.yaml"
   $environmentRuntimeImageTag = Get-EnvironmentRuntimeImageTag -EnvironmentPatchText $environmentPatch -EnvName $envName
 
@@ -93,6 +94,10 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-Text "runtime-$envName has hris-app Deployment" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*hris-app'))
   $checks.Add((Assert-Text "runtime-$envName has hris-postgres StatefulSet" $rendered '(?ms)^kind:\s*StatefulSet.*?name:\s*hris-postgres'))
   $checks.Add((Assert-Text "runtime-$envName has db init Job" $rendered '(?ms)^kind:\s*Job.*?name:\s*hris-api-db-init'))
+  $checks.Add((Assert-Text "runtime-$envName owns its PriorityClass" $runtimePriorityClasses "name:\s*project-truth-$envName"))
+  foreach ($otherEnvName in @('prod', 'uat', 'dev') | Where-Object { $_ -ne $envName }) {
+    $checks.Add((Assert-NoText "runtime-$envName does not own $otherEnvName PriorityClass" $runtimePriorityClasses "name:\s*project-truth-$otherEnvName"))
+  }
   $checks.Add((Assert-Text "runtime-$envName uses local image policy" $rendered 'imagePullPolicy:\s*Never'))
   $checks.Add((Assert-Text "runtime-$envName has readiness probes" $rendered 'readinessProbe:'))
   $checks.Add((Assert-Text "runtime-$envName has liveness probes" $rendered 'livenessProbe:'))
@@ -126,7 +131,7 @@ foreach ($envName in $Environments) {
     $checks.Add((Assert-NoText "runtime-$envName does not deploy DEV-only Hikvision watcher" $rendered 'name:\s*hris-hikvision-watcher'))
   }
 
-  foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local')) {
+  foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local', 'hris-emp-app-local')) {
     $imageTag = Get-KustomizeImageTag -KustomizationText $runtimeKustomization -ImageName $imageName
     if ($imageTag -ne $environmentRuntimeImageTag) {
       throw "Self-heal contract failed: runtime_image_tag for ${envName} is ${environmentRuntimeImageTag}, but ${imageName} uses ${imageTag}"
@@ -188,6 +193,7 @@ $checks.Add((Assert-Text 'verify-gitops-state can require runtime Applications' 
 $checks.Add((Assert-Text 'promote-gitops updates runtime image tag marker' $promoteWorkflow 'runtime_image_tag'))
 $checks.Add((Assert-Text 'promote-gitops updates runtime kustomize image tags' $promoteWorkflow 'gitops/runtime-k8s/overlays/\$env_name/kustomization\.yaml'))
 $checks.Add((Assert-Text 'promote-gitops supports optional registry image flow' $promoteWorkflow 'image_registry'))
+$checks.Add((Assert-Text 'promote-gitops includes employee portal image' $promoteWorkflow 'hris-emp-app-local'))
 $checks.Add((Assert-Text 'Argo platform declares reconciliation timeout' $platformConfig 'timeout\.reconciliation:\s*60s'))
 $checks.Add((Assert-Text 'Argo platform declares reconciliation jitter' $platformConfig 'timeout\.reconciliation\.jitter:\s*15s'))
 $checks.Add((Assert-Text 'project-truth exposes Argo platform command' $projectTruthScript 'apply-argocd-platform'))

@@ -1,25 +1,4 @@
-# Shared PriorityClasses for Project Truth env tiers on one node.
-# PROD > UAT > DEV under CPU/memory contention. Cluster-scoped (not namespaced).
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: project-truth-prod
-  labels:
-    app.kubernetes.io/part-of: project-truth
-value: 1000000
-globalDefault: false
-description: Project Truth PROD - highest scheduling preference on the shared appliance node
----
-apiVersion: scheduling.k8s.io/v1
-kind: PriorityClass
-metadata:
-  name: project-truth-uat
-  labels:
-    app.kubernetes.io/part-of: project-truth
-value: 100000
-globalDefault: false
-description: Project Truth UAT - medium scheduling preference
----
+# DEV owns only its cluster-scoped PriorityClass. Other environment apps own theirs.
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
