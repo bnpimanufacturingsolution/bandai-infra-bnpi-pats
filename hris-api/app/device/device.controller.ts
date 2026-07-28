@@ -26,6 +26,7 @@ import {
 	buildHikvisionDeviceEventDedupeKey,
 	buildHikvisionLogSearchXml,
 	classifyHikvisionLogSearchRow,
+	isOpaqueHikvisionPersonToken,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
 	normalizeHikvisionLogSearchRow,
@@ -5925,8 +5926,8 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			if (!/^\d+$/.test(vendorUserId) && vendorUserId.length > 32) {
 				// Allow non-numeric plain ids; reject obvious opaque tokens.
-				const { isOpaqueHikvisionPersonToken } =
-					await import("../../helper/hikvision-event-contract.helper.js");
+				// Static import only — webpack dynamic named import can yield
+				// "isOpaqueHikvisionPersonToken is not a function" in dist.
 				if (isOpaqueHikvisionPersonToken(vendorUserId)) {
 					res.status(400).json(
 						buildErrorResponse(
@@ -14356,6 +14357,7 @@ export const controller = (prisma: PrismaClient) => {
 						// and writes still progress5. Now sticky-empty or hard fail.
 						const {
 							clearAdminSandboxFingerprintConflictsSticky,
+							clearFleetSameByteMajorityFingerprintConflictsSticky,
 							parseFingerprintProgressOccupyingEmployee,
 						} = await import(
 							"../../helper/device-user-raw-fingerprint.helper.js"
@@ -14368,7 +14370,32 @@ export const controller = (prisma: PrismaClient) => {
 						)
 							.map((id: any) => Number(id) || 0)
 							.filter((id: number) => id > 0);
+						const fleetForceSlots = (
+							Array.isArray(write.fleetSameByteMajorityConflictSlots)
+								? write.fleetSameByteMajorityConflictSlots
+								: adminForceSlots
+						)
+							.map((id: any) => Number(id) || 0)
+							.filter((id: number) => id > 0);
 						if (
+							write.fleetSameByteMajorityForceOverwrite === true &&
+							Array.isArray(write.fleetSameByteMajorityConflictingOwners) &&
+							write.fleetSameByteMajorityConflictingOwners.length > 0
+						) {
+							const stickyClear =
+								await clearFleetSameByteMajorityFingerprintConflictsSticky({
+									prisma,
+									req: params.req,
+									deviceId: String(write.targetDeviceId),
+									conflictingOwners:
+										write.fleetSameByteMajorityConflictingOwners,
+									fingerPrintIds: fleetForceSlots,
+								});
+							deviceLogger.info(
+								`fleet_same_byte_fp_clear sticky_ok target=${write.targetDeviceId} owners=${stickyClear.clearedOwners.join(",")} slots=${fleetForceSlots.join(",")} reason=${String(write.fleetSameByteMajorityReason || "").slice(0, 200)}`,
+							);
+							await new Promise((resolve) => setTimeout(resolve, 500));
+						} else if (
 							write.adminSandboxForceOverwrite === true &&
 							Array.isArray(write.adminSandboxConflictingOwners) &&
 							write.adminSandboxConflictingOwners.length > 0
@@ -14440,9 +14467,9 @@ export const controller = (prisma: PrismaClient) => {
 						let writeResult = await runFingerprintBundleWrite();
 						operationTiming.fingerprintBundleWriteMs =
 							Date.now() - bundleWriteStartedAt;
-						// One admin-band recovery: progress5 errorMsg often names the
-						// occupying employee (live: errorMsg "8" while owner was 8).
-						// Clear that owner sticky + retry once. Never for PROD 21+.
+						// progress5 errorMsg often names the occupying employee.
+						// Admin sandbox: clear admin peer + retry once.
+						// Fleet same-byte majority: clear proven peer (incl PROD) + retry once.
 						if (
 							writeResult.fingerprintWrites.some(
 								(item: any) => item.sticky !== true,
@@ -14459,22 +14486,53 @@ export const controller = (prisma: PrismaClient) => {
 										.filter(
 											(owner: string | null): owner is string =>
 												Boolean(owner) &&
-												isAdminSandboxVendorUserIdFn(owner) &&
 												String(owner) !== String(write.vendorUserId),
 										),
 								),
 							];
 							const writeIsAdmin =
 								isAdminSandboxVendorUserIdFn(write.vendorUserId);
-							if (writeIsAdmin && occupyingOwners.length > 0) {
+							const adminOccupying = occupyingOwners.filter((owner) =>
+								isAdminSandboxVendorUserIdFn(owner),
+							);
+							const fleetForce =
+								write.fleetSameByteMajorityForceOverwrite === true;
+							const fleetOccupying =
+								fleetForce &&
+								Array.isArray(write.fleetSameByteMajorityConflictingOwners)
+									? occupyingOwners.filter((owner) =>
+											write.fleetSameByteMajorityConflictingOwners.includes(
+												owner,
+											),
+										)
+									: [];
+							if (fleetForce && fleetOccupying.length > 0) {
 								deviceLogger.info(
-									`admin_sandbox_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${occupyingOwners.join(",")}`,
+									`fleet_same_byte_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${fleetOccupying.join(",")}`,
+								);
+								await clearFleetSameByteMajorityFingerprintConflictsSticky({
+									prisma,
+									req: params.req,
+									deviceId: String(write.targetDeviceId),
+									conflictingOwners: fleetOccupying,
+									fingerPrintIds: templatesToWrite
+										.map((t: any) => Number(t.fingerPrintId || 0))
+										.filter((id: number) => id > 0),
+								});
+								await new Promise((resolve) => setTimeout(resolve, 500));
+								const retryStartedAt = Date.now();
+								writeResult = await runFingerprintBundleWrite();
+								operationTiming.fingerprintBundleWriteRetryMs =
+									Date.now() - retryStartedAt;
+							} else if (writeIsAdmin && adminOccupying.length > 0) {
+								deviceLogger.info(
+									`admin_sandbox_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${adminOccupying.join(",")}`,
 								);
 								await clearAdminSandboxFingerprintConflictsSticky({
 									prisma,
 									req: params.req,
 									deviceId: String(write.targetDeviceId),
-									conflictingOwners: occupyingOwners,
+									conflictingOwners: adminOccupying,
 									fingerPrintIds: templatesToWrite
 										.map((t: any) => Number(t.fingerPrintId || 0))
 										.filter((id: number) => id > 0),

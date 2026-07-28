@@ -174,6 +174,7 @@ export type DeviceUserCredentialWrite = {
 		| "canonical_identity_unproven"
 		| "target_owner_scan_incomplete"
 		| "physical_identity_adjudication_required"
+		| "device_fp_anti_dupe_peer_owner"
 		| "source_not_enrolled"
 		| "missing_raw_blob"
 		| "target_write_unsupported"
@@ -220,6 +221,16 @@ export type DeviceUserCredentialWrite = {
 	adminSandboxConflictingOwners?: string[];
 	/** Fingerprint slots involved in the admin-band force clear. */
 	adminSandboxConflictSlots?: number[];
+	/**
+	 * Fleet same-byte majority (operator 2026-07-28): write vendor holds the
+	 * reviewed checksum on more devices than the progress5 peer (or wins
+	 * most-recent / stable tie-break). Allows clear of that peer even when
+	 * either side is PROD 21+, only for the proven matching checksum slots.
+	 */
+	fleetSameByteMajorityForceOverwrite?: boolean;
+	fleetSameByteMajorityConflictingOwners?: string[];
+	fleetSameByteMajorityConflictSlots?: number[];
+	fleetSameByteMajorityReason?: string;
 	/** A transport/SDK success is never enough; execution must re-read this target. */
 	physicalRereadRequired: true;
 };
@@ -246,6 +257,19 @@ export type DurableFingerprintOwnerConflictEvidence = {
 	fingerPrintId: number;
 	conflictingVendorUserId: string;
 	observedAt?: string | null;
+};
+
+export type FleetChecksumCanonicalPick = {
+	checksum: string;
+	winnerVendorUserId: string;
+	winnerDeviceCount: number;
+	peerDeviceCount: number;
+	reason:
+		| "majority_devices"
+		| "tie_most_recent"
+		| "tie_stable_vendor_id"
+		| "single_holder";
+	holders: Array<{ vendorUserId: string; deviceCount: number; latestAt: number }>;
 };
 
 /**
@@ -463,10 +487,128 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 		}
 		const owners = [...new Set(collisions.map((item) => item.conflictingVendorUserId))];
 		const slots = [...new Set(collisions.map((item) => item.fingerPrintId))];
+		const fleetRecords = records.map((item) => item.record);
+		// Fleet same-byte majority (operator 2026-07-28):
+		// If write source checksum for the conflicting slot appears on more
+		// devices under write.vendorUserId than under the peer, force-clear
+		// peer and write. If peer is fleet majority with the same bytes,
+		// drop write (safe no-write — biometric already present under peer).
+		const majorityForceSlots: number[] = [];
+		const majorityForceOwners = new Set<string>();
+		const majorityDropSlots: number[] = [];
+		const majorityNotes: string[] = [];
+		for (const collision of collisions) {
+			const sourceChecksum = write.sourceFingerprintTemplateChecksums.find(
+				(template) => template.fingerPrintId === collision.fingerPrintId,
+			)?.checksum;
+			if (!sourceChecksum) continue;
+			const pick = pickFleetCanonicalVendorForFingerprintChecksum(
+				fleetRecords,
+				String(sourceChecksum),
+				{
+					preferVendorUserId: write.vendorUserId,
+					peerVendorUserId: collision.conflictingVendorUserId,
+				},
+			);
+			if (!pick) continue;
+			if (pick.winnerVendorUserId === write.vendorUserId) {
+				majorityForceSlots.push(collision.fingerPrintId);
+				majorityForceOwners.add(collision.conflictingVendorUserId);
+				majorityNotes.push(
+					`slot ${collision.fingerPrintId}: write vendor wins fleet (${pick.reason}, devices=${pick.winnerDeviceCount}>${pick.peerDeviceCount}) over peer ${collision.conflictingVendorUserId}`,
+				);
+			} else if (
+				pick.winnerVendorUserId === collision.conflictingVendorUserId
+			) {
+				const owner = records.find(
+					(item) =>
+						item.record.deviceId === collision.targetDeviceId &&
+						item.record.vendorUserId === collision.conflictingVendorUserId,
+				);
+				const ownerChecksum = owner?.record._fingerprintTemplateChecksums?.find(
+					(template) =>
+						template.fingerPrintId === collision.fingerPrintId,
+				)?.checksum;
+				if (
+					ownerChecksum &&
+					String(ownerChecksum).toLowerCase() ===
+						String(sourceChecksum).toLowerCase()
+				) {
+					majorityDropSlots.push(collision.fingerPrintId);
+					majorityNotes.push(
+						`slot ${collision.fingerPrintId}: peer ${collision.conflictingVendorUserId} is fleet canonical (${pick.reason}); same checksum already on target — no write`,
+					);
+				}
+			}
+		}
+		if (
+			majorityDropSlots.length > 0 &&
+			majorityDropSlots.length === collisions.length &&
+			majorityForceSlots.length === 0
+		) {
+			resolutions.push({
+				writeId: write.id,
+				modality: "fingerprint",
+				resolution: "fleet_same_byte_peer_canonical_no_write",
+				vendorUserId: write.vendorUserId,
+				targetDeviceId: write.targetDeviceId,
+				conflictingVendorUserIds: owners,
+				jobIds: [...new Set(collisions.map((item) => item.jobId))],
+				notes: majorityNotes,
+				physicalRereadRequired: true,
+			});
+			continue;
+		}
+		if (
+			majorityForceSlots.length > 0 &&
+			majorityForceSlots.length === collisions.length &&
+			write.sourceEvidenceStatus === "raw_blob_present" &&
+			(write.executionEligibility === "ready_from_raw_blob" ||
+				Boolean(write.sourceFingerprintTemplateChecksums?.length))
+		) {
+			retainedWrites.push({
+				...write,
+				recommended: true,
+				executionEligibility: "ready_from_raw_blob",
+				blockingReason: null,
+				recoveryStage: "ready_to_write",
+				fleetSameByteMajorityForceOverwrite: true,
+				fleetSameByteMajorityConflictingOwners: [...majorityForceOwners],
+				fleetSameByteMajorityConflictSlots: [
+					...new Set(majorityForceSlots),
+				],
+				fleetSameByteMajorityReason: majorityNotes.join("; "),
+				// Also populate admin fields when all parties are admin so
+				// existing clear path runs; fleet flags cover PROD peers.
+				adminSandboxForceOverwrite: owners.every((owner) =>
+					isAdminSandboxVendorUserId(owner),
+				)
+					? true
+					: write.adminSandboxForceOverwrite,
+				adminSandboxConflictingOwners: owners.every((owner) =>
+					isAdminSandboxVendorUserId(owner),
+				)
+					? [...majorityForceOwners]
+					: write.adminSandboxConflictingOwners,
+				adminSandboxConflictSlots: owners.every((owner) =>
+					isAdminSandboxVendorUserId(owner),
+				)
+					? [...new Set(majorityForceSlots)]
+					: write.adminSandboxConflictSlots,
+				recommendationReason:
+					`FLEET_SAME_BYTE_MAJORITY_FORCE_OVERWRITE: ${majorityNotes.join(
+						"; ",
+					)}. Clear peer slot owner(s) ${[...majorityForceOwners].join(
+						", ",
+					)} then write richest source for vendor ${write.vendorUserId}.`,
+			});
+			continue;
+		}
 		// Operator-authorized admin sandbox (vendor 1–20): when the intended
 		// person AND every conflicting slot owner are admin-band, force-clear
 		// then write is safer than permanent dual-owner RED. PROD ids 21+ stay
-		// fail-closed (never force when either side is outside 1–20).
+		// fail-closed (never force when either side is outside 1–20) unless
+		// fleet same-byte majority above already unlocked.
 		const writeIsAdminSandbox = isAdminSandboxVendorUserId(write.vendorUserId);
 		const ownersAreAdminSandbox = owners.every((owner) =>
 			isAdminSandboxVendorUserId(owner),
@@ -497,12 +639,12 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 						", ",
 					)}. Clear those admin owners' conflicting fingerprint slot(s), then write richest source for vendor ${write.vendorUserId}. PROD vendor ids ${
 						ADMIN_SANDBOX_VENDOR_ID_MAX + 1
-					}+ remain dual-owner protected.`,
+					}+ remain dual-owner protected unless fleet same-byte majority proves write vendor is canonical.`,
 			});
 			continue;
 		}
-		// PROD (or mixed admin/PROD) progress5 peer: named anti-dupe residual.
-		// Never auto-delete the peer. Dry-run must not treat this as wouldWrite.
+		// PROD (or mixed admin/PROD) progress5 peer without same-byte majority
+		// proof: named anti-dupe residual. Never auto-delete the peer.
 		retainedWrites.push({
 			...write,
 			recommended: false,
@@ -514,9 +656,9 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 					", ",
 				)} for slot ${slots.join(
 					", ",
-				)} on this target. PROD vendor ids ${
-					ADMIN_SANDBOX_VENDOR_ID_MAX + 1
-				}+ never auto-clear peers. Canonical employee plus checksum equivalence is not proven; overwrite is forbidden. Reclassify as dual-biometric residual — do not re-queue as ready_from_raw_blob.`,
+				)} on this target. Fleet same-byte majority did not unlock (need matching source+peer checksums on inventory). PROD auto-clear remains fail-closed without majority proof. ${
+					majorityNotes.length ? `Notes: ${majorityNotes.join("; ")}. ` : ""
+				}Reclassify as dual-biometric residual — do not re-queue as ready_from_raw_blob.`,
 		});
 	}
 
@@ -651,6 +793,107 @@ const normalizedFingerprintChecksums = (record: DeviceUserMergeRecord) =>
 				left.fingerPrintId - right.fingerPrintId ||
 				left.checksum.localeCompare(right.checksum),
 		);
+
+/**
+ * Across fleet inventory, who "owns" this fingerprint byte most?
+ * Count distinct devices where vendor has the checksum on any slot.
+ * Ties → most recent record timestamp → stable vendorUserId.
+ */
+export const pickFleetCanonicalVendorForFingerprintChecksum = (
+	records: DeviceUserMergeRecord[],
+	checksum: string,
+	options?: { preferVendorUserId?: string; peerVendorUserId?: string },
+): FleetChecksumCanonicalPick | null => {
+	const ck = text(checksum).toLowerCase();
+	if (!ck) return null;
+	const byVendor = new Map<
+		string,
+		{ devices: Set<string>; latestAt: number }
+	>();
+	for (const record of records) {
+		const vendorUserId = text(record.vendorUserId);
+		if (!vendorUserId) continue;
+		const hits = normalizedFingerprintChecksums(record).filter(
+			(template) => template.checksum === ck,
+		);
+		if (!hits.length) continue;
+		const entry = byVendor.get(vendorUserId) || {
+			devices: new Set<string>(),
+			latestAt: 0,
+		};
+		entry.devices.add(text(record.deviceId));
+		const ts = Date.parse(
+			String(
+				(record as any).updatedAt ||
+					(record as any).lastSeenAt ||
+					(record as any).syncedAt ||
+					(record as any).createdAt ||
+					0,
+			),
+		);
+		if (Number.isFinite(ts) && ts > entry.latestAt) entry.latestAt = ts;
+		byVendor.set(vendorUserId, entry);
+	}
+	if (!byVendor.size) return null;
+	const holders = [...byVendor.entries()]
+		.map(([vendorUserId, value]) => ({
+			vendorUserId,
+			deviceCount: value.devices.size,
+			latestAt: value.latestAt,
+		}))
+		.sort(
+			(left, right) =>
+				right.deviceCount - left.deviceCount ||
+				right.latestAt - left.latestAt ||
+				left.vendorUserId.localeCompare(right.vendorUserId),
+		);
+	const top = holders[0];
+	const second = holders[1];
+	let reason: FleetChecksumCanonicalPick["reason"] = "majority_devices";
+	if (holders.length === 1) reason = "single_holder";
+	else if (second && top.deviceCount === second.deviceCount) {
+		reason =
+			top.latestAt !== second.latestAt
+				? "tie_most_recent"
+				: "tie_stable_vendor_id";
+	}
+	if (
+		options?.preferVendorUserId &&
+		second &&
+		top.deviceCount === second.deviceCount
+	) {
+		const preferred = holders.find(
+			(h) =>
+				h.vendorUserId === options.preferVendorUserId &&
+				h.deviceCount === top.deviceCount,
+		);
+		if (preferred) {
+			const peer = holders.find(
+				(h) => h.vendorUserId === options.peerVendorUserId,
+			);
+			return {
+				checksum: ck,
+				winnerVendorUserId: preferred.vendorUserId,
+				winnerDeviceCount: preferred.deviceCount,
+				peerDeviceCount: peer?.deviceCount || 0,
+				reason:
+					preferred.latestAt !== (peer?.latestAt || 0)
+						? "tie_most_recent"
+						: "tie_stable_vendor_id",
+				holders,
+			};
+		}
+	}
+	const peer = holders.find((h) => h.vendorUserId === options?.peerVendorUserId);
+	return {
+		checksum: ck,
+		winnerVendorUserId: top.vendorUserId,
+		winnerDeviceCount: top.deviceCount,
+		peerDeviceCount: peer?.deviceCount || 0,
+		reason,
+		holders,
+	};
+};
 
 export const normalizeFingerprintCustodyEvidence = (
 	items: Array<{ fingerPrintId: number; checksum: string }>,

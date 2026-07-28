@@ -1526,6 +1526,183 @@ describe("device user union merge", () => {
 		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
 	});
 
+	it("fleet same-byte majority unlocks PROD write when write vendor holds checksum on more devices", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["sourceA", "sourceB", "sourceC", "target"],
+			records: [
+				record("sourceA", {
+					vendorUserId: "1815",
+					employeeId: "employee-1815",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "SAME-BYTE" }],
+				}),
+				record("sourceB", {
+					vendorUserId: "1815",
+					employeeId: "employee-1815",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "SAME-BYTE" }],
+				}),
+				record("sourceC", {
+					vendorUserId: "1815",
+					employeeId: "employee-1815",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "SAME-BYTE" }],
+				}),
+				record("target", {
+					vendorUserId: "1815",
+					employeeId: "employee-1815",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "1343",
+					employeeId: "employee-1343",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "SAME-BYTE" }],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "job-1",
+				vendorUserId: "1815",
+				sourceDeviceId: "sourceA",
+				targetDeviceId: "target",
+				fingerPrintId: 1,
+				conflictingVendorUserId: "1343",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1815" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.fleetSameByteMajorityForceOverwrite).to.equal(true);
+		expect(write?.fleetSameByteMajorityConflictingOwners).to.deep.equal(["1343"]);
+		expect(write?.blockingReason).to.equal(null);
+	});
+
+	it("fleet same-byte majority drops write when peer is canonical holder of same checksum", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "peerA", "peerB", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "696",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 2, checksum: "FLEET-CK" }],
+				}),
+				record("peerA", {
+					vendorUserId: "10",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 2, checksum: "FLEET-CK" }],
+				}),
+				record("peerB", {
+					vendorUserId: "10",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 2, checksum: "FLEET-CK" }],
+				}),
+				record("target", {
+					vendorUserId: "696",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "10",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 2, checksum: "FLEET-CK" }],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "job-2",
+				vendorUserId: "696",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 2,
+				conflictingVendorUserId: "10",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "696" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write).to.equal(undefined);
+		expect(
+			(reconciled.credentialResolutions as any[]).some(
+				(item) =>
+					item.resolution === "fleet_same_byte_peer_canonical_no_write" &&
+					item.vendorUserId === "696",
+			),
+		).to.equal(true);
+	});
+
 	it("proves physical retention only from exact target slots and a target-wide owner scan", () => {
 		const intended = record("target", {
 			vendorUserId: "1",
