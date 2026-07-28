@@ -219,24 +219,16 @@ export function buildMergePeerCopyCta(input: MergePeerCopyCtaInput): MergePeerCo
 }
 
 export type MergeReviewOpenCtaInput = {
-	/** Physical peer creates only — writeMatrix.totalWrites / sum(COPY) */
+	/** Physical peer creates for the selection only */
 	executablePeerCopies: number;
 	selectedUniqueIds: number;
 	/** Profile A/B DeviceUser overlays (not peer copy) */
 	profileOverlays?: number;
-	canApply?: boolean;
-	/** Unresolved profile field decisions remaining */
-	unresolvedConflicts?: number;
-	blockingCount?: number;
+	canApply: boolean;
 	isPending?: boolean;
-	/** Alias: isJobRunning || jobRunning */
-	isJobRunning?: boolean;
+	blockingCount?: number;
+	unresolvedConflicts?: number;
 	jobRunning?: boolean;
-	/**
-	 * Evidence-backed credential writes on the separate credential path.
-	 * Does not put selected-ID count on the CTA.
-	 */
-	credentialWritesSelected?: number;
 };
 
 export type MergeReviewOpenCta = {
@@ -254,17 +246,16 @@ export type MergeReviewOpenCta = {
 		| "unresolved_conflicts"
 		| "review_peer_copies"
 		| "review_profile_only"
-		| "zero_work"
-		| "nothing_to_do";
+		| "zero_work";
 	executablePeerCopies: number;
 	selectedUniqueIds: number;
 	profileOverlays: number;
 };
 
 /**
- * Main-panel primary CTA that opens the Review confirm modal.
- * Never labels with selectedUniqueIds as the work number
- * (forbidden: "Review selected merge (76)").
+ * Main merge panel primary button that opens the Review confirm modal.
+ * Must never show `Review selected merge (N)` where N = selected unique IDs
+ * — that was the product lie (76 IDs looks like 76 units of work).
  * Work number is executable peer copies, then profile overlays.
  */
 export function buildMergeReviewOpenCta(
@@ -273,14 +264,8 @@ export function buildMergeReviewOpenCta(
 	const executablePeerCopies = Math.max(0, Number(input.executablePeerCopies) || 0);
 	const selectedUniqueIds = Math.max(0, Number(input.selectedUniqueIds) || 0);
 	const profileOverlays = Math.max(0, Number(input.profileOverlays) || 0);
-	const unresolvedConflicts = Math.max(0, Number(input.unresolvedConflicts) || 0);
 	const blockingCount = Math.max(0, Number(input.blockingCount) || 0);
-	const credentialWritesSelected = Math.max(
-		0,
-		Number(input.credentialWritesSelected) || 0,
-	);
-	const jobRunning = Boolean(input.isJobRunning || input.jobRunning);
-	const canApply = input.canApply !== false;
+	const unresolvedConflicts = Math.max(0, Number(input.unresolvedConflicts) || 0);
 
 	const base = {
 		executablePeerCopies,
@@ -291,7 +276,7 @@ export function buildMergeReviewOpenCta(
 	if (input.isPending) {
 		return { ...base, disabled: true, label: "Starting...", reason: "pending" };
 	}
-	if (jobRunning) {
+	if (input.jobRunning) {
 		return {
 			...base,
 			disabled: true,
@@ -315,7 +300,7 @@ export function buildMergeReviewOpenCta(
 			reason: "no_selection",
 		};
 	}
-	if (!canApply || unresolvedConflicts > 0) {
+	if (!input.canApply || unresolvedConflicts > 0) {
 		return {
 			...base,
 			disabled: true,
@@ -342,16 +327,9 @@ export function buildMergeReviewOpenCta(
 			reason: "review_profile_only",
 		};
 	}
-	// Selection exists, zero executable peer copies, zero profile overlays.
-	// Allow open so operator can inspect dry-run matrix; never show selected count.
-	if (credentialWritesSelected > 0) {
-		return {
-			...base,
-			disabled: false,
-			label: "Review selection (0 peer copies)",
-			reason: "zero_work",
-		};
-	}
+	// Selection exists but no physical peer creates and no profile overlays.
+	// Keep enabled so operator can open the dry-run matrix and see "0 work"
+	// (confirm modal already banners zero executable). Do not show selected count.
 	return {
 		...base,
 		disabled: false,
@@ -414,6 +392,7 @@ export function sumSelectedExecutablePeerCopies(
 
 /**
  * Footer scope line: selection is secondary; executable peer copies is the work number.
+ * When executable=0, the work clause states that fact plainly (UI may bold via class).
  */
 export function formatMergeSelectionScopeFooter(params: {
 	selectedUniqueIds: number;

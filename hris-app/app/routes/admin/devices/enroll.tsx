@@ -3388,13 +3388,12 @@ export function DeviceEnrollmentPanel({
 		profileOverlays: sdkMergeProfileOverlayPreview.length,
 		canApply: sdkMergeCanApply,
 		isPending: startHikvisionSdkUserMergeJobMutation.isPending,
-		isJobRunning: sdkMergeJobIsProcessing,
+		jobRunning: sdkMergeJobIsProcessing,
 		blockingCount: sdkMergeBlockingCount,
 		unresolvedConflicts: Math.max(
 			0,
 			sdkMergeSelectedConflictCount - sdkMergeSelectedResolvedCount,
 		),
-		credentialWritesSelected: sdkMergeSelectedCredentialWrites.length,
 	});
 	const sdkMergeSelectionScopeFooter = formatMergeSelectionScopeFooter({
 		selectedUniqueIds: sdkMergeSelectedUniqueCount,
