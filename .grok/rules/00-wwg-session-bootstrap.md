@@ -21,6 +21,11 @@ This file is auto-loaded from `.grok/rules/`. It reinforces root `AGENTS.md`.
 - No claiming done without evidence (API/runtime/browser as required by `AGENTS.md`).
 - Missing fact -> read file or mark `NEEDS_CONFIRMATION`. Never fill gaps with guesses.
 - DeviceEvent is saved event truth. DeviceUser is inventory only. Do not invent lifecycle events from inventory.
+- **Residual counts:** never report bare `decision=16` / gap chips without row/bucket
+  breakdown. Always-on rule: `.grok/rules/03-residual-count-detail.md`
+  (what N is, per-row why, blocker class, next step, UI source).
+- **Reports / recommendations:** table-first, scannable. Always-on:
+  `.grok/rules/04-table-first-reports.md`. Never “completed” without a done/open table.
 
 ## Keep going (non-stop)
 

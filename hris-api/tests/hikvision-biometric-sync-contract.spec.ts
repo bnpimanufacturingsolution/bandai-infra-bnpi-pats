@@ -274,9 +274,15 @@ describe("Hikvision biometric sync contract", () => {
 			"no exact employee-owned CardInfo association",
 		);
 		expect(controller).to.include("storedFaceOwnerVerified");
+		// Unattested stored-face is fail-closed (nulls decryptedStoredFace) with one
+		// per-device INFO summary — not a per-user WARN flood.
+		expect(controller).to.include("unattestedStoredFaceRejectCount");
+		expect(controller).to.include("stored_face_custody_unattested_summary");
 		expect(controller).to.include(
-			"exact physical identity ownership was not attested",
+			"Stored face custody skipped for ${unattestedStoredFaceRejectCount} user(s)",
 		);
+		expect(controller).to.include("identity not attested (fail-closed");
+		expect(controller).to.include("decryptedStoredFace = null");
 		expect(controller).to.include("Target now reports a face; refusing to overwrite");
 		expect(controller).to.include(
 			"Target full CardInfo inventory yielded multiple owned cards",
@@ -396,6 +402,32 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("buildDeviceUserMergeScopeLock");
 		expect(controller).to.include("expectedScopeHash");
 		expect(controller).to.include("Merge scope hash does not match the reviewed write matrix");
+	});
+
+	it("does not 409 user-mode start when only profile overlays remain after auto-resolve", () => {
+		const controller = controllerSource();
+		// Write matrix must distinguish physical peer creates from DeviceUser profile overlays.
+		expect(controller).to.include("dbOverlayWrites");
+		expect(controller).to.include("totalWork");
+		expect(controller).to.include("buildProfileOverlayWrites");
+		// Review + start must expose work units so agent scripts never invent empty scope.
+		expect(controller).to.include("physicalWrites");
+		expect(controller).to.include("profileOverlayWrites");
+		// Zero physical + zero overlay is a non-409 success, not "Reviewed scope contains no writes".
+		expect(controller).to.include("nothingToWrite");
+		expect(controller).to.include(
+			"Nothing physical to write; reviewed decisions are aligned with current DeviceUser rows",
+		);
+		expect(controller).not.to.include(
+			'buildErrorResponse("Reviewed scope contains no writes", 409)',
+		);
+		// Worker must still apply overlays when batchTargets is empty (missing_people=0).
+		expect(controller).to.include("overlayOnlyJob");
+		expect(controller).to.include("deviceuser_profile_overlay");
+		// Missing DeviceUser rows are hard failures for overlays, not silent success.
+		expect(controller).to.include("cannot apply profile overlay");
+		// Card/biometric decisions stay out of user-mode invent-bytes path.
+		expect(controller).to.include("missing_raw_blob stays blocked");
 	});
 
 	it("exposes durable recovery jobs instead of a planner-only queue", () => {
@@ -1013,7 +1045,12 @@ describe("Hikvision biometric sync contract", () => {
 
 		expect(controller).to.include("take: 5_000");
 		expect(controller).to.include("if (deviceId && !independent.has(deviceId))");
-		expect(controller).to.include("if (independent.size >= 5) break");
+		expect(controller).to.include(
+			"CREDENTIAL_RECOVERY_INDEPENDENT_DEVICE_CONCURRENCY",
+		);
+		expect(controller).to.include(
+			"independent.size >= CREDENTIAL_RECOVERY_INDEPENDENT_DEVICE_CONCURRENCY",
+		);
 		expect(controller).to.include("if (remainingWriteAttemptBudget > 0)");
 		expect(controller).to.include(
 			"if (!writeFailure && !verified && remainingPending > 0)",

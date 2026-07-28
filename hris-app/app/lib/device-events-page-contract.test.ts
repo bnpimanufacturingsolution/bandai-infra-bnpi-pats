@@ -232,6 +232,19 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Loading saved events…");
 	});
 
+	it("keeps the saved events table shell from collapsing when chrome is tall", () => {
+		// Viewport-fill + overflow-hidden + flex-1 min-h-0 was collapsing the body to 0px
+		// while pagination still showed "1 to 10 of N" and summary chips showed totals.
+		expect(routeSource).to.contain('data-testid="device-events-page"');
+		expect(routeSource).to.contain('data-testid="device-events-table-shell"');
+		expect(routeSource).to.contain("min-h-[22rem]");
+		expect(routeSource).to.contain("data={rows}");
+		expect(routeSource).to.contain("containedScroll");
+		// Chrome above the ledger must not eat flex height from the table shell.
+		expect(routeSource).to.contain('className="shrink-0 rounded-md border border-slate-200 bg-white"');
+		expect(routeSource).to.contain("(data?.events || []).map(normalizeSavedEvent)");
+	});
+
 	it("lets admin recover the live capture listener from the saved SDK view", () => {
 		expect(routeSource).to.contain("useHikvisionListenerStatus");
 		expect(routeSource).to.contain("useControlHikvisionListener");

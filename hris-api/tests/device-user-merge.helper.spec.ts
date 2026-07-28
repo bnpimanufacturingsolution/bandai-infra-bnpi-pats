@@ -2,9 +2,11 @@ import { expect } from "chai";
 import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
+	buildProfileOverlayWrites,
 	classifyFaceCustody,
 	extractProgress5OwnerConflictsFromWriteError,
 	fingerprintCustodyMatchesReview,
+	isDeviceUserMergeProfileOverlayField,
 	proveCanonicalDeviceIdentity,
 	proveFingerprintPhysicalReread,
 	reconcileDurableFingerprintOwnerConflicts,
@@ -156,30 +158,39 @@ describe("device user union merge", () => {
 		);
 	});
 
-	it("requires an explicit choice and supports A/B all choices", () => {
+	it("requires an explicit choice unless auto-resolve is on, and supports A/B all choices", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [record("a"), record("b", { displayName: "E. Ramos" })],
 		});
 		expect(plan.counts.conflicts).to.be.greaterThan(0);
-		expect(applyMergeChoices(plan).executable).to.equal(false);
+		// Operator opt-out: no auto richest fill → still needs A/B/KEEP.
+		expect(applyMergeChoices(plan, { autoResolveDecisions: false }).executable).to.equal(
+			false,
+		);
+		// Agent-owned default: empty choices auto-fill richest custody.
+		expect(applyMergeChoices(plan).executable).to.equal(true);
 		expect(applyMergeChoices(plan, { applyAll: "A" }).executable).to.equal(true);
 		expect(applyMergeChoices(plan, { applyAll: "B" }).executable).to.equal(true);
 	});
 
-	it("does not treat biometric counts as weaker data", () => {
+	it("does not put biometric count gaps into Needs decision conflicts", () => {
+		// Face/FP/card count mismatches are credential residual, not A/B decisions.
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [
-				record("a", { rawPayload: { numOfFP: 2 } }),
-				record("b", { rawPayload: { numOfFP: 1 } }),
+				record("a", { rawPayload: { numOfFP: 2, numOfFace: 1, numOfCard: 1 } }),
+				record("b", { rawPayload: { numOfFP: 1, numOfFace: 0, numOfCard: 0 } }),
 			],
 		});
-		const fingerprintConflict = plan.users[0].conflicts.find(
-			(conflict) => conflict.field === "fingerprint",
-		);
-		expect(fingerprintConflict?.deviceA.value).to.equal(2);
-		expect(fingerprintConflict?.deviceB.value).to.equal(1);
+		const bioFields = plan.users[0].conflicts.map((conflict) => conflict.field);
+		expect(bioFields).to.not.include("fingerprint");
+		expect(bioFields).to.not.include("face");
+		expect(bioFields).to.not.include("card");
+		// Still planned as credential gap ops (not invented as decision A/B).
+		expect(
+			plan.credentialWrites.some((write) => write.modality === "fingerprint"),
+		).to.equal(true);
 	});
 
 	it("blocks count-only credential gaps until portable bytes are reviewed", () => {
@@ -1292,7 +1303,7 @@ describe("device user union merge", () => {
 		);
 	});
 
-	it("keeps dual-owner fail-closed when conflicting owner is PROD vendor 21+", () => {
+	it("auto-resolves dual-owner with PROD peer 21+ via force-clear (never permanent anti-dupe)", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["source", "target"],
 			records: [
@@ -1351,11 +1362,14 @@ describe("device user union merge", () => {
 				item.vendorUserId === "1" &&
 				item.targetDeviceId === "target",
 		);
-		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.blockingReason).to.equal("device_fp_anti_dupe_peer_owner");
-		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
+		// Same-byte on target: both hold collision-checksum (1 device each).
+		// Tie → prefer write vendor → force clear PROD peer, never anti-dupe block.
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.fleetSameByteMajorityForceOverwrite).to.equal(true);
+		expect(write?.fleetSameByteMajorityConflictingOwners).to.deep.equal(["900"]);
 		expect(write?.recommendationReason || "").to.match(
-			/anti-dupe|progressStatus=5|never auto-clear/i,
+			/FORCE_OVERWRITE|FORCE_CLEAR|auto-clear|Clear peer/i,
 		);
 	});
 
@@ -1451,7 +1465,7 @@ describe("device user union merge", () => {
 		expect(evidence[1].fingerPrintId).to.equal(2);
 	});
 
-	it("reclassifies PROD progress5 peer as device_fp_anti_dupe_peer_owner not ready", () => {
+	it("auto-resolves PROD progress5 peer (different bytes) via force-clear not anti-dupe block", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["source", "target"],
 			records: [
@@ -1520,10 +1534,201 @@ describe("device user union merge", () => {
 				item.vendorUserId === "1751" &&
 				item.targetDeviceId === "target",
 		);
-		expect(write?.executionEligibility).to.equal("blocked");
-		expect(write?.recommended).to.equal(false);
-		expect(write?.blockingReason).to.equal("device_fp_anti_dupe_peer_owner");
-		expect(write?.adminSandboxForceOverwrite).to.not.equal(true);
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.recommended).to.equal(true);
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.fleetSameByteMajorityForceOverwrite).to.equal(true);
+		expect(write?.fleetSameByteMajorityConflictingOwners).to.deep.equal(["1757"]);
+		expect(write?.recommendationReason || "").to.match(
+			/AUTO_RESOLVE_DUAL_OWNER_FORCE_CLEAR/i,
+		);
+	});
+
+	it("fleet same-byte majority unlocks PROD write when write vendor holds checksum on more devices", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["sourceA", "sourceB", "sourceC", "target"],
+			records: [
+				record("sourceA", {
+					vendorUserId: "1815",
+					employeeId: "employee-1815",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "SAME-BYTE" }],
+				}),
+				record("sourceB", {
+					vendorUserId: "1815",
+					employeeId: "employee-1815",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "SAME-BYTE" }],
+				}),
+				record("sourceC", {
+					vendorUserId: "1815",
+					employeeId: "employee-1815",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "SAME-BYTE" }],
+				}),
+				record("target", {
+					vendorUserId: "1815",
+					employeeId: "employee-1815",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "1343",
+					employeeId: "employee-1343",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 1, checksum: "SAME-BYTE" }],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "job-1",
+				vendorUserId: "1815",
+				sourceDeviceId: "sourceA",
+				targetDeviceId: "target",
+				fingerPrintId: 1,
+				conflictingVendorUserId: "1343",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "1815" &&
+				item.targetDeviceId === "target",
+		);
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.fleetSameByteMajorityForceOverwrite).to.equal(true);
+		expect(write?.fleetSameByteMajorityConflictingOwners).to.deep.equal(["1343"]);
+		expect(write?.blockingReason).to.equal(null);
+	});
+
+	it("fleet same-byte majority still force-clears peer so unique FP gap person is not dropped", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["source", "peerA", "peerB", "target"],
+			records: [
+				record("source", {
+					vendorUserId: "696",
+					employeeId: "employee-696",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 2, checksum: "FLEET-CK" }],
+				}),
+				record("peerA", {
+					vendorUserId: "10",
+					employeeId: "employee-10",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 2, checksum: "FLEET-CK" }],
+				}),
+				record("peerB", {
+					vendorUserId: "10",
+					employeeId: "employee-10",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 2, checksum: "FLEET-CK" }],
+				}),
+				record("target", {
+					vendorUserId: "696",
+					employeeId: "employee-696",
+					rawPayload: { numOfFP: 0 },
+				}),
+				record("target", {
+					vendorUserId: "10",
+					employeeId: "employee-10",
+					rawPayload: { numOfFP: 1 },
+					biometricEvidence: {
+						fingerprint: {
+							status: "raw_blob_present",
+							reportedCount: 1,
+							rawBlobCount: 1,
+						},
+						face: { status: "not_enrolled", reportedCount: 0, rawBlobPresent: false },
+					},
+					_fingerprintTemplateChecksums: [{ fingerPrintId: 2, checksum: "FLEET-CK" }],
+				}),
+			],
+		});
+		const reconciled = reconcileDurableFingerprintOwnerConflicts(plan, [
+			{
+				jobId: "job-2",
+				vendorUserId: "696",
+				sourceDeviceId: "source",
+				targetDeviceId: "target",
+				fingerPrintId: 2,
+				conflictingVendorUserId: "10",
+			},
+		]);
+		const write = reconciled.credentialWrites.find(
+			(item) =>
+				item.modality === "fingerprint" &&
+				item.vendorUserId === "696" &&
+				item.targetDeviceId === "target",
+		);
+		// Unique-gap zero: even when peer 10 holds same bytes on more devices,
+		// recovery write for 696 force-clears peer — never drop/ban (operator wait).
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.fleetSameByteMajorityForceOverwrite).to.equal(true);
+		expect(write?.fleetSameByteMajorityConflictingOwners).to.deep.equal(["10"]);
+		expect(
+			(reconciled.credentialResolutions as any[]).some(
+				(item) =>
+					item.resolution === "fleet_same_byte_peer_canonical_no_write" &&
+					item.vendorUserId === "696",
+			),
+		).to.equal(false);
 	});
 
 	it("proves physical retention only from exact target slots and a target-wide owner scan", () => {
@@ -1779,6 +1984,196 @@ describe("device user union merge", () => {
 		).to.equal(false);
 	});
 
+	it("counts profile field overlays when missing_people=0 (no physical plannedWrites)", () => {
+		// Both devices already have the person; only displayName/valid* disagree.
+		// User-mode plannedWrites must stay empty (no missing-person creates), but
+		// auto-resolved A/B profile choices must produce DeviceUser overlay work so
+		// start-job does not 409 "Reviewed scope contains no writes".
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					displayName: "Ernest A",
+					validFrom: "2026-01-01",
+					validTo: "2026-12-31",
+				}),
+				record("b", {
+					displayName: "Ernest B",
+					validFrom: "2027-01-01",
+					validTo: "2027-12-31",
+				}),
+			],
+		});
+		expect(plan.counts.missing).to.equal(0);
+		expect(plan.plannedWrites).to.have.length(0);
+		expect(plan.users[0].conflicts.map((c) => c.field)).to.include.members([
+			"displayName",
+			"validFrom",
+			"validTo",
+		]);
+
+		const applied = applyMergeChoices(plan, {
+			choices: {
+				[plan.users[0].key]: {
+					displayName: "A",
+					validFrom: "B",
+					validTo: "B",
+				} as any,
+			},
+		});
+		expect(applied.executable).to.equal(true);
+		expect(applied.plannedWrites).to.have.length(0);
+		expect(applied.profileOverlayWrites.length).to.be.greaterThan(0);
+		expect(applied.counts.profileOverlayWrites).to.equal(applied.profileOverlayWrites.length);
+		// Card is not a profile overlay field — never invent card bytes from a decision.
+		expect(isDeviceUserMergeProfileOverlayField("card")).to.equal(false);
+		expect(isDeviceUserMergeProfileOverlayField("displayName")).to.equal(true);
+		expect(
+			applied.profileOverlayWrites.every((write) => write.kind === "deviceuser_profile_overlay"),
+		).to.equal(true);
+		expect(
+			applied.profileOverlayWrites.some((write) => write.fields.includes("displayName")),
+		).to.equal(true);
+		// A for displayName → overlay device b; B for valid* → overlay device a.
+		const byTarget = Object.fromEntries(
+			applied.profileOverlayWrites.map((write) => [write.targetDeviceId, write.fields]),
+		);
+		expect(byTarget.b || []).to.include("displayName");
+		expect(byTarget.a || []).to.include.members(["validFrom", "validTo"]);
+
+		// KEEP produces no overlay work (already aligned for apply).
+		const kept = applyMergeChoices(plan, {
+			choices: {
+				[plan.users[0].key]: {
+					displayName: "KEEP",
+					validFrom: "KEEP",
+					validTo: "KEEP",
+				} as any,
+			},
+		});
+		expect(kept.profileOverlayWrites).to.have.length(0);
+		expect(buildProfileOverlayWrites(kept.users)).to.have.length(0);
+	});
+
+	it("auto-resolve picks later dates and longer displayName for profile defaults", () => {
+		const { buildRichestMergeChoices } = require("../helper/device-user-merge.helper") as typeof import("../helper/device-user-merge.helper");
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					displayName: "ernest",
+					validFrom: "2026-01-01T00:00:00.000Z",
+					validTo: "2036-07-08T00:00:00.000Z",
+				}),
+				record("b", {
+					displayName: "ernest T571774",
+					validFrom: "2026-07-09T00:00:00.000Z",
+					validTo: "2036-12-31T00:00:00.000Z",
+				}),
+			],
+		});
+		const choices = buildRichestMergeChoices(plan);
+		const row = choices[plan.users[0].key] || {};
+		// Longer name on B, later dates on B → all B.
+		expect(row.displayName).to.equal("B");
+		expect(row.validFrom).to.equal("B");
+		expect(row.validTo).to.equal("B");
+	});
+
+	it("does not count same Manila calendar day validFrom/validTo encodings as Needs decision", () => {
+		// UTC midnight vs +08 local midnight for the same wall day must not residual.
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					displayName: "same person",
+					validFrom: "2026-07-14T00:00:00+08:00",
+					validTo: "2036-07-13T23:59:59+08:00",
+				}),
+				record("b", {
+					displayName: "same person",
+					// Same Manila days as A after normalization.
+					validFrom: "2026-07-13T16:00:00.000Z",
+					validTo: "2036-07-13T15:59:59.000Z",
+				}),
+			],
+		});
+		expect(plan.users[0]?.conflicts || []).to.have.length(0);
+		expect(plan.counts.conflicts).to.equal(0);
+	});
+
+	it("auto-resolve burns profile decision residual (displayName/validFrom/validTo) without inventing card", () => {
+		// Agent-owned path: empty choices + autoResolve → A/B for profile fields → overlays > 0.
+		// Five-device fleets must still pick A or B for profile (not KEEP because of a third peer).
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b", "c"],
+			records: [
+				record("a", {
+					displayName: "Name A",
+					validFrom: "2026-01-01",
+					validTo: "2026-06-30",
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+				}),
+				record("b", {
+					displayName: "Name B",
+					validFrom: "2027-01-01",
+					validTo: "2027-06-30",
+					rawPayload: { numOfFP: 0, numOfFace: 0, numOfCard: 0 },
+				}),
+				record("c", {
+					displayName: "Name A",
+					validFrom: "2026-01-01",
+					validTo: "2026-06-30",
+					// Richest biometric peer is outside the A/B name conflict pair.
+					rawPayload: { numOfFP: 3, numOfFace: 1, numOfCard: 1 },
+					biometricEvidence: {
+						fingerprint: { status: "raw_blob_present", rawBlobCount: 3, reportedCount: 3 },
+						face: { status: "raw_blob_present", rawBlobPresent: true, reportedCount: 1 },
+						card: { reportedCount: 1 },
+					},
+				}),
+			],
+		});
+		expect(plan.counts.missing).to.equal(0);
+		expect(plan.plannedWrites).to.have.length(0);
+
+		const applied = applyMergeChoices(plan, { autoResolveDecisions: true });
+		expect(applied.executable).to.equal(true);
+		expect(applied.unresolved).to.have.length(0);
+		const profileConflicts = applied.users[0].conflicts.filter((c) =>
+			["displayName", "validFrom", "validTo"].includes(String(c.field)),
+		);
+		expect(profileConflicts.length).to.be.greaterThan(0);
+		expect(profileConflicts.every((c) => c.choice === "A" || c.choice === "B")).to.equal(
+			true,
+		);
+		expect(applied.profileOverlayWrites.length).to.be.greaterThan(0);
+		expect(applied.counts.profileOverlayWrites).to.equal(applied.profileOverlayWrites.length);
+		// Card remains credential-mode only.
+		expect(
+			applied.profileOverlayWrites.every(
+				(write) => !write.fields.includes("card" as any),
+			),
+		).to.equal(true);
+		expect(isDeviceUserMergeProfileOverlayField("card")).to.equal(false);
+	});
+
+	it("does not treat card/face/fingerprint conflicts as DeviceUser profile overlays", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", { rawPayload: { numOfFP: 2, numOfFace: 1, numOfCard: 1 } }),
+				record("b", { rawPayload: { numOfFP: 1, numOfFace: 2, numOfCard: 2 } }),
+			],
+		});
+		const applied = applyMergeChoices(plan, { applyAll: "A" });
+		expect(applied.executable).to.equal(true);
+		// Present on both devices → no missing-person creates.
+		expect(applied.plannedWrites).to.have.length(0);
+		// Biometric count conflicts must not become fake profile overlays or invent bytes.
+		expect(applied.profileOverlayWrites).to.have.length(0);
+	});
+
 	it("applies only selected unique IDs when a merge preview is scoped", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b", "c"],
@@ -1798,7 +2193,7 @@ describe("device user union merge", () => {
 		expect(applied.counts.unionUsers).to.equal(1);
 	});
 
-	it("compares access, validity, card, face, and fingerprint fields", () => {
+	it("Needs decision compares profile fields only; bio counts stay credential residual", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [
@@ -1818,15 +2213,17 @@ describe("device user union merge", () => {
 				}),
 			],
 		});
-		expect(plan.users[0].conflicts.map((conflict) => conflict.field)).to.include.members([
+		const fields = plan.users[0].conflicts.map((conflict) => conflict.field);
+		expect(fields).to.include.members([
 			"validFrom",
 			"validTo",
 			"doorRight",
 			"accessPlan",
-			"face",
-			"fingerprint",
-			"card",
 		]);
+		expect(fields).to.not.include.members(["face", "fingerprint", "card"]);
+		expect(plan.credentialWrites.some((write) => write.modality === "card")).to.equal(
+			true,
+		);
 	});
 
 	it("serializes a compact review plan without SDK biometric payloads or duplicate aliases", () => {

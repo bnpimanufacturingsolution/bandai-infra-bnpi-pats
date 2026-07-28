@@ -6,6 +6,13 @@ import { Badge } from "~/components/atoms/Badge";
 import { Select } from "~/components/atoms/Select";
 import { EmployeePickerSelect } from "~/components/molecules/employee/EmployeePickerSelect";
 import { formatDateTime } from "~/lib/utils/text-utils";
+import {
+	MERGE_CHIP_CONTRACT,
+	buildMergePeerCopyCta,
+	formatMergeSourceDeviceTile,
+	formatMergeTargetDeviceTile,
+	sumSelectedExecutablePeerCopies,
+} from "~/lib/merge-ui-truth-counts";
 import type { Column } from "~/components/atoms/DataTable";
 import {
 	Eye,
@@ -92,6 +99,7 @@ import deviceService, {
 	type DeviceUserExportSelection,
 	type DeviceUserImportPreviewResponse,
 	type DeviceUserImportExecuteResponse,
+	type CredentialRecoveryJob,
 } from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
 
@@ -401,6 +409,17 @@ const mergeMetricValue = (value: unknown) => {
 const mergePlural = (count: number, singular: string, plural = `${singular}s`) =>
 	`${mergeMetricValue(count)} ${count === 1 ? singular : plural}`;
 
+/**
+ * Shared peer-copy truth helpers (Agent A/B contract).
+ * Executable peer copies = sum of physical peer-create slots (COPY column / targetDeviceIds).
+ * Never use selected unique ID count as a peer-copy job size.
+ * Canonical formula lives in ~/lib/merge-ui-truth-counts (sumSelectedExecutablePeerCopies).
+ */
+const countSdkMergeExecutablePeerCopies = sumSelectedExecutablePeerCopies;
+
+const isSdkMergeExecutablePeerCopyRow = (row: { writes: number }) =>
+	Math.max(0, Number(row.writes) || 0) > 0;
+
 const mergeDefinedDeviceIds = (deviceIds: Array<string | undefined>) =>
 	deviceIds.filter((deviceId): deviceId is string => Boolean(deviceId));
 
@@ -494,6 +513,131 @@ const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
 const CREDENTIAL_RECOVERY_JOB_STORAGE_KEY = "hris.credential-recovery-job-id";
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "needs_attention_only";
+
+/** Active recovery worker statuses — do not start another wave while these hold. */
+const CREDENTIAL_RECOVERY_ACTIVE_STATUSES = new Set([
+	"pending",
+	"recovering",
+	"retrying",
+]);
+
+/** Operator English for opaque recovery stages (never show raw snake_case alone). */
+const credentialRecoveryStageLabel = (
+	job: CredentialRecoveryJob | null | undefined,
+): string => {
+	if (!job) return "No recovery job";
+	if (job.progressLabel) return String(job.progressLabel);
+	const stage = String(job.currentStage || job.status || "");
+	if (/replan/i.test(stage))
+		return "Re-reading device inventory after custody capture (often 1–3 min)";
+	if (/capturing_card|card_custody/i.test(stage))
+		return "Capturing card numbers from source panels";
+	if (/capturing_fingerprint|fingerprint/i.test(stage))
+		return "Capturing fingerprint templates from source panels";
+	if (/capturing_face|face_custody/i.test(stage))
+		return "Capturing face templates from source panels";
+	if (/writ|canary|physical/i.test(stage))
+		return "Writing recovered credentials to target panels";
+	if (/reread/i.test(stage)) return "Physical reread to prove writes stuck";
+	if (/source|export|owner_capture|custody|recovering_source/i.test(stage))
+		return "Capturing source custody (card / fingerprint / face)";
+	if (/ready|select|probe/i.test(stage))
+		return "Selecting ready writes from recovered custody";
+	if (String(job.status) === "pending") return "Queued — waiting for recovery worker";
+	if (String(job.status) === "completed") return "Wave finished";
+	return stage.replace(/_/g, " ") || "Recovery worker active";
+};
+
+/**
+ * Weighted wave progress for credential recovery.
+ * Prefer API `progressPercent` when present; otherwise client fallback so the bar
+ * leaves 0% during export/probe/write (not only at verified).
+ * Denominator is THIS WAVE (plannedWaveSize / wouldWrite), not full residual.
+ */
+const computeCredentialRecoveryProgressPercent = (
+	job: CredentialRecoveryJob | null | undefined,
+): number => {
+	if (!job) return 0;
+	const status = String(job.status || "");
+	if (
+		status === "completed" ||
+		status === "awaiting_replan" ||
+		status === "needs_attention" ||
+		status === "failed"
+	) {
+		return 100;
+	}
+	const apiPercent = Number(job.progressPercent);
+	if (Number.isFinite(apiPercent) && apiPercent >= 0) {
+		return Math.max(0, Math.min(100, Math.round(apiPercent)));
+	}
+	const counters = job.counters || {};
+	const weights = job.progressWeights;
+	const verified = Number(weights?.verified ?? counters.verified ?? 0) || 0;
+	const failed = Number(weights?.failed ?? counters.failed ?? 0) || 0;
+	const writing = Number(weights?.writing ?? counters.writing ?? 0) || 0;
+	const awaitingReread =
+		Number(weights?.awaitingPhysicalReread ?? counters.awaitingPhysicalReread ?? 0) || 0;
+	const ready = Number(weights?.readyToWrite ?? counters.readyToWrite ?? 0) || 0;
+	const recovered = Number(weights?.recovered ?? counters.recovered ?? 0) || 0;
+	const recoveringNow =
+		Number(weights?.recoveringNow ?? counters.recoveringNow ?? 0) || 0;
+	const wouldWrite = Number(job.wouldWriteCount ?? 0) || 0;
+	const waveDenom = Math.max(
+		Number(job.plannedWaveSize || 20) || 20,
+		wouldWrite,
+		verified + failed,
+		1,
+	);
+	const weighted =
+		typeof weights?.weightedUnits === "number" && Number.isFinite(weights.weightedUnits)
+			? weights.weightedUnits
+			: verified * 1 +
+				failed * 1 +
+				awaitingReread * 0.85 +
+				writing * 0.65 +
+				ready * 0.45 +
+				recovered * 0.35 +
+				recoveringNow * 0.25;
+	const stage = String(job.currentStage || status);
+	// Order: replan before custody (stage name contains both).
+	let stageFloor = 2;
+	if (/replan/i.test(stage)) {
+		stageFloor = 22;
+		const started = Date.parse(
+			String(counters.replanStartedAt || job.startedAt || job.lastAdvancementAt || ""),
+		);
+		if (Number.isFinite(started)) {
+			const elapsed = Math.max(0, Date.now() - started);
+			stageFloor = Math.min(45, 22 + Math.floor(elapsed / 4_000));
+		}
+	} else if (/writ|reread|canary|physical/i.test(stage)) {
+		stageFloor = 40;
+	} else if (/ready|select|probe/i.test(stage)) {
+		stageFloor = 28;
+	} else if (
+		/export|recovering_source|owner_capture|inventory|source_custody|capturing_/i.test(
+			stage,
+		)
+	) {
+		stageFloor = 10;
+	} else if (/custody/i.test(stage)) {
+		stageFloor = 12;
+	} else if (status === "pending") {
+		stageFloor = 3;
+	} else if (status === "recovering" || status === "retrying") {
+		stageFloor = 8;
+	}
+	if (typeof weights?.stageFloor === "number" && Number.isFinite(weights.stageFloor)) {
+		stageFloor = Math.max(stageFloor, weights.stageFloor);
+	}
+	const denom =
+		typeof weights?.waveDenominator === "number" && weights.waveDenominator > 0
+			? weights.waveDenominator
+			: waveDenom;
+	return Math.max(stageFloor, Math.min(99, Math.round((weighted / denom) * 100)));
+};
+
 const formatDeviceUserSyncJobId = (value?: string | null) => {
 	if (!value) return "No job id";
 	return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
@@ -826,10 +970,14 @@ export function DeviceEnrollmentPanel({
 	const [sdkMergeHandledJobId, setSdkMergeHandledJobId] = useState<string | null>(null);
 	const [sdkMergeDismissedJobId, setSdkMergeDismissedJobId] = useState<string | null>(null);
 	const [sdkMergeConfirmOpen, setSdkMergeConfirmOpen] = useState(false);
+	/** Review modal: show selected IDs with COPY=0 (no-op rows). Default hide. */
+	const [sdkMergeShowNoOpRows, setSdkMergeShowNoOpRows] = useState(false);
 	const [sdkMergeCredentialConfirmOpen, setSdkMergeCredentialConfirmOpen] = useState(false);
 	const [selectedSdkMergeCredentialWriteIds, setSelectedSdkMergeCredentialWriteIds] = useState<
 		Record<string, boolean>
 	>({});
+	/** Card residual is optional product noise — default OFF so chips stay FP/face/peer truth. */
+	const [includeCardResidual, setIncludeCardResidual] = useState(false);
 	const sdkMergePage = Math.max(Number(searchParams.get("mergePage") || 1), 1);
 	const [activeDeviceUserSyncJob, setActiveDeviceUserSyncJob] =
 		useState<ActiveDeviceUserSyncJob | null>(() => {
@@ -1741,14 +1889,21 @@ export function DeviceEnrollmentPanel({
 					.map((user) => [user.key, true]),
 			);
 			setSelectedSdkMergeUserKeys(actionableKeys);
+			// Default: auto-resolve Needs decision via richest custody. Operator
+			// can still Clear choices / pick A|B|KEEP manually before applying.
+			const autoChoices = buildSdkMergeRichestChoices(data.plan);
+			const autoChoiceCount = Object.values(autoChoices).reduce(
+				(sum, row) => sum + Object.keys(row || {}).length,
+				0,
+			);
 			setSdkMergeState({
 				open: true,
 				status: "review",
 				message: searchScope
-					? `Search is scoped to "${searchScope}" across ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped.`
-					: `Review conflicts from ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped.`,
+					? `Search is scoped to "${searchScope}" across ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped. ${autoChoiceCount ? `Auto-resolved ${autoChoiceCount} decision(s) from richest sources (you can still override).` : ""}`
+					: `Review from ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped. ${autoChoiceCount ? `Auto-resolved ${autoChoiceCount} decision(s) from richest sources (manual override still available).` : ""}`,
 				data,
-				choices: {},
+				choices: autoChoices as any,
 				availability: finalAvailability,
 			});
 		} catch (error: any) {
@@ -2244,7 +2399,11 @@ export function DeviceEnrollmentPanel({
 			sdkMergeDisplayRows.find((row) => row.id === sdkMergeSourceReview.rowId) ||
 			null
 		: null;
-	const sdkMergeUniqueIdCount = sdkMergeState.data?.plan.users.length || 0;
+	/** One formula: plan.counts.unionUsers (fallback plan.users length). */
+	const sdkMergeUniqueIdCount =
+		Number(sdkMergeState.data?.plan.counts?.unionUsers) ||
+		sdkMergeState.data?.plan.users.length ||
+		0;
 	const sdkMergePlanDevices = useMemo(
 		() => sdkMergeState.data?.plan.devices || [],
 		[sdkMergeState.data],
@@ -2253,9 +2412,17 @@ export function DeviceEnrollmentPanel({
 		credentialRecoveryJobId,
 		Boolean(credentialRecoveryJobId),
 	);
-	const sdkMergeCredentialWrites = useMemo(
+	const sdkMergeCredentialWritesAll = useMemo(
 		() => sdkMergeState.data?.plan.credentialWrites || [],
 		[sdkMergeState.data],
+	);
+	/** Single UI surface for residual ops — card excluded unless operator opts in. */
+	const sdkMergeCredentialWrites = useMemo(
+		() =>
+			includeCardResidual
+				? sdkMergeCredentialWritesAll
+				: sdkMergeCredentialWritesAll.filter((write) => write.modality !== "card"),
+		[includeCardResidual, sdkMergeCredentialWritesAll],
 	);
 	const sdkMergePotentialOperationSummary =
 		sdkMergeState.data?.plan.potentialOperations;
@@ -2282,14 +2449,31 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeCredentialFaceWriteCount = sdkMergeCredentialWrites.filter(
 		(write) => write.modality === "face",
 	).length;
-	const sdkMergeCredentialCardWriteCount = sdkMergeCredentialWrites.filter(
+	const sdkMergeCredentialCardWriteCount = sdkMergeCredentialWritesAll.filter(
 		(write) => write.modality === "card",
 	).length;
-	const sdkMergeRecoveryStageEntries = Object.entries(
-		sdkMergePotentialOperationSummary?.byRecoveryStage || {},
-	)
-		.filter(([, count]) => Number(count || 0) > 0)
-		.sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0));
+	/** Potential ops total matches visible modalities only (card off by default). */
+	const sdkMergePotentialOperationsUiTotal = includeCardResidual
+		? Number(
+				sdkMergePotentialOperationSummary?.totalPotentialOperations ??
+					sdkMergeCredentialWritesAll.length,
+			)
+		: Number(
+				(sdkMergePotentialOperationSummary?.byModality?.fingerprint ??
+					sdkMergeCredentialFingerprintWriteCount) +
+					(sdkMergePotentialOperationSummary?.byModality?.face ??
+						sdkMergeCredentialFaceWriteCount),
+			) || sdkMergeCredentialWrites.length;
+	const sdkMergeRecoveryStageEntries = useMemo(() => {
+		const stages: Record<string, number> = {};
+		for (const write of sdkMergeCredentialWrites) {
+			const stage = String(write.recoveryStage || "unclassified").trim() || "unclassified";
+			stages[stage] = (stages[stage] || 0) + 1;
+		}
+		return Object.entries(stages)
+			.filter(([, count]) => Number(count || 0) > 0)
+			.sort((left, right) => Number(right[1] || 0) - Number(left[1] || 0));
+	}, [sdkMergeCredentialWrites]);
 	const sdkMergeActionableUserKeys = useMemo(() => {
 		if (!sdkMergeState.data?.plan) return [];
 		return sdkMergeState.data.plan.users
@@ -2318,8 +2502,12 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeSelectedUniqueCount = selectedSdkMergeKeys.length;
 	const sdkMergeExcludedActionableCount =
 		sdkMergeScopedSelectableUserKeys.length - sdkMergeScopedSelectedCount;
+	/** One formula: dedupedDeviceRecords → sourceRows → sum(user.records). */
 	const sdkMergeDeviceRecordCount =
-		sdkMergeState.data?.plan.users.reduce((count, user) => count + user.records.length, 0) || 0;
+		Number(sdkMergeState.data?.plan.counts?.dedupedDeviceRecords) ||
+		Number(sdkMergeState.data?.plan.counts?.sourceRows) ||
+		sdkMergeState.data?.plan.users.reduce((count, user) => count + user.records.length, 0) ||
+		0;
 	const sdkMergeDuplicateSourceRowCount =
 		sdkMergeState.data?.plan.counts?.duplicateSourceRows ||
 		sdkMergeState.data?.plan.users.reduce(
@@ -2333,20 +2521,55 @@ export function DeviceEnrollmentPanel({
 			0,
 		) ||
 		0;
+	/** Peer-copy executable = physical user-record creates only (not credential residual). */
 	const sdkMergeUserPotentialWriteCount =
-		sdkMergeWriteRows.length ||
 		sdkMergeState.data?.plan.plannedWrites?.length ||
+		sdkMergeWriteRows.length ||
 		sdkMergeState.data?.plan.users.reduce(
 			(count, user) => count + user.targetDeviceIds.length,
 			0,
 		) ||
 		0;
-	const sdkMergePotentialWriteCount =
-		sdkMergeUserPotentialWriteCount + sdkMergeCredentialWrites.length;
+	/** Alias kept for older copy paths; must not mix credentials into peer-copy truth. */
+	const sdkMergePotentialWriteCount = sdkMergeUserPotentialWriteCount;
+	/** Missing people: unique IDs with missingOnDeviceIds (not credential gaps). */
+	const sdkMergeMissingPeopleCount = sdkMergeUniqueIssueCount("missing");
+	/**
+	 * Needs decision people: unique IDs with profile conflicts.length > 0.
+	 * Must stay 0 when plan has no profile conflicts (do not count card/FP/face).
+	 */
+	const sdkMergeDecisionPeopleCount =
+		sdkMergeState.data?.plan.users.filter((user) => user.conflicts.length > 0).length || 0;
+	/** Peer-copy ready = executable user-record peer creates for this plan. */
+	const sdkMergePeerCopyReadyCount = sdkMergeUserPotentialWriteCount;
 	const sdkMergeSelectedWriteMatrix = useMemo(() => {
 		const plan = sdkMergeState.data?.plan;
 		if (!plan) {
+			type SelectedWriteRow = {
+				key: string;
+				label: string;
+				vendorUserId: string;
+				sourceDeviceId: string;
+				sourceDeviceName: string;
+				targetDeviceNames: string[];
+				writes: number;
+				conflicts: number;
+				fingerprintSourceCount: number;
+				fingerprintPresentDevices: number;
+				fingerprintExpectedDevices: number;
+				fingerprintGapDevices: number;
+				faceSourceCount: number;
+				facePresentDevices: number;
+				faceExpectedDevices: number;
+				faceGapDevices: number;
+			};
+			const emptyRows: SelectedWriteRow[] = [];
 			return {
+				totalWrites: 0,
+				selectedUniqueIds: 0,
+				executableRows: emptyRows,
+				noOpRows: emptyRows,
+				noOpCount: 0,
 				perTarget: [] as Array<{
 					deviceId: string;
 					deviceName: string;
@@ -2359,24 +2582,7 @@ export function DeviceEnrollmentPanel({
 					selectedUniqueIds: number;
 					writes: number;
 				}>,
-				rows: [] as Array<{
-					key: string;
-					label: string;
-					vendorUserId: string;
-					sourceDeviceId: string;
-					sourceDeviceName: string;
-					targetDeviceNames: string[];
-					writes: number;
-					conflicts: number;
-					fingerprintSourceCount: number;
-					fingerprintPresentDevices: number;
-					fingerprintExpectedDevices: number;
-					fingerprintGapDevices: number;
-					faceSourceCount: number;
-					facePresentDevices: number;
-					faceExpectedDevices: number;
-					faceGapDevices: number;
-				}>,
+				rows: emptyRows,
 			};
 		}
 		const sourceMap = new Map<
@@ -2466,6 +2672,9 @@ export function DeviceEnrollmentPanel({
 					faceGapDevices: Math.max(0, faceTruth.expected - faceTruth.present),
 				};
 			});
+		const totalWrites = countSdkMergeExecutablePeerCopies(rows);
+		const executableRows = rows.filter(isSdkMergeExecutablePeerCopyRow);
+		const noOpRows = rows.filter((row) => !isSdkMergeExecutablePeerCopyRow(row));
 		return {
 			perTarget: Array.from(targetMap.values()).map((item) => ({
 				...item,
@@ -2473,6 +2682,10 @@ export function DeviceEnrollmentPanel({
 			})),
 			perSource: Array.from(sourceMap.values()),
 			rows,
+			totalWrites,
+			executableRows,
+			noOpRows,
+			noOpCount: noOpRows.length,
 		};
 	}, [
 		sdkMergeState.applyAll,
@@ -2480,10 +2693,9 @@ export function DeviceEnrollmentPanel({
 		sdkMergeState.data,
 		selectedSdkMergeUserKeys,
 	]);
-	const sdkMergeSelectedPotentialWriteCount = sdkMergeSelectedWriteMatrix.rows.reduce(
-		(count, row) => count + row.writes,
-		0,
-	);
+	/** Alias: executable peer creates for selected scope (shared with main panel chips). */
+	const sdkMergeSelectedPotentialWriteCount = sdkMergeSelectedWriteMatrix.totalWrites;
+	const sdkMergeSelectedExecutablePeerCopies = sdkMergeSelectedWriteMatrix.totalWrites;
 	const sdkMergeSelectedFingerprintGapCount = sdkMergeSelectedWriteMatrix.rows.reduce(
 		(count, row) => count + row.fingerprintGapDevices,
 		0,
@@ -2498,12 +2710,12 @@ export function DeviceEnrollmentPanel({
 		{
 			value: "missing",
 			label: "Missing from device",
-			count: sdkMergeUniqueIssueCount("missing"),
+			count: sdkMergeMissingPeopleCount,
 		},
 		{
 			value: "decision",
 			label: "Needs decision",
-			count: sdkMergeUniqueIssueCount("decision"),
+			count: sdkMergeDecisionPeopleCount,
 		},
 		{
 			value: "fingerprint",
@@ -2515,6 +2727,15 @@ export function DeviceEnrollmentPanel({
 			label: "Face gaps",
 			count: sdkMergeUniqueIssueCount("face"),
 		},
+		...(includeCardResidual
+			? [
+					{
+						value: "card" as SdkMergeFilter,
+						label: "Card residual",
+						count: sdkMergeUniqueIssueCount("card"),
+					},
+				]
+			: []),
 		{
 			value: "ready",
 			label: "Ready / no action",
@@ -2527,11 +2748,11 @@ export function DeviceEnrollmentPanel({
 			: sdkMergeListMode === "records"
 				? "Device ID records"
 				: sdkMergeListMode === "review"
-					? "Needs review"
+					? "Issue IDs"
 					: sdkMergeListMode === "writes"
-						? "Potential writes"
+						? "Peer-copy ready"
 						: sdkMergeFilterItems.find((item) => item.value === sdkMergeFilter)
-								?.label || "Needs review IDs";
+								?.label || "Issue IDs";
 	const sdkMergeDeviceIssueCounts = useMemo(() => {
 		const plan = sdkMergeState.data?.plan;
 		const failedByDeviceId = new Map<string, string>();
@@ -2626,6 +2847,9 @@ export function DeviceEnrollmentPanel({
 		sdkMergeSelectedUniqueCount > 0 &&
 		sdkMergeSelectedResolvedCount >= sdkMergeSelectedConflictCount &&
 		sdkMergeBlockingCount === 0;
+	/** Peer-copy job only when physical creates exist (sum COPY / totalWrites > 0). */
+	const sdkMergeCanStartPeerCopy =
+		sdkMergeCanApply && sdkMergeSelectedExecutablePeerCopies > 0;
 	const visibleSdkMergeJob: DeviceUserMergeJobProgress | null =
 		(sdkMergeJobId ? sdkMergeJobProgress || sdkMergeLastJob : sdkMergeLastJob) || null;
 	const effectiveSdkMergeJob: DeviceUserMergeJobProgress | null =
@@ -2636,10 +2860,77 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeJobIsProcessing = effectiveSdkMergeJob?.status === "processing";
 	const sdkMergeJobProcessed = Number(effectiveSdkMergeJob?.processedWrites || 0);
 	const sdkMergeJobTotal = Math.max(Number(effectiveSdkMergeJob?.totalWrites || 1), 1);
-	const sdkMergeJobPercent = Math.min(
+	// Stage floors so inventory/snapshot work is not stuck at 0% with an empty bar.
+	const sdkMergeStageProgressFloor: Record<string, number> = {
+		queued: 3,
+		preparing: 6,
+		source_snapshot: 12,
+		source_snapshot_device: 18,
+		source_snapshot_device_done: 28,
+		exporting_source_credential: 14,
+		comparing_sources: 16,
+		resolving_richest_source: 18,
+		probing_target_capability: 20,
+		preparing_writer: 24,
+		ready_to_write: 28,
+		batch_copy_started: 35,
+		copy_started: 40,
+		credential_raw_write_started: 48,
+		writing: 52,
+		vm_copy_preflight_started: 42,
+		vm_copy_preflight_done: 45,
+		vm_copy_attempt_started: 50,
+		copy_success: 70,
+		db_merge_started: 75,
+		db_merge_done: 82,
+		user_done: 85,
+		reread_started: 88,
+		rereading_target: 90,
+		reread_done: 94,
+		physically_retained: 96,
+		completed: 100,
+		completed_with_attention: 100,
+		failed: 100,
+	};
+	const sdkMergeWritePct = Math.min(
 		100,
 		Math.round((sdkMergeJobProcessed / sdkMergeJobTotal) * 100),
 	);
+	const sdkMergeStageKey = String(effectiveSdkMergeJob?.currentStage || "");
+	const sdkMergeStageFloor = Math.max(
+		0,
+		Number(
+			sdkMergeStageProgressFloor[sdkMergeStageKey] ||
+				(sdkMergeJobIsProcessing
+					? /source_snapshot|preparing|queued/i.test(sdkMergeStageKey)
+						? 10
+						: /export|compar|resolv|probe|ready|writ|copy|reread/i.test(
+								sdkMergeStageKey,
+							)
+							? 22
+							: 5
+					: 0),
+		),
+	);
+	const sdkMergeEventBump =
+		sdkMergeJobIsProcessing &&
+		sdkMergeJobProcessed === 0 &&
+		Array.isArray(effectiveSdkMergeJob?.progressEvents)
+			? Math.min(12, effectiveSdkMergeJob.progressEvents.length)
+			: 0;
+	const sdkMergeJobPercent =
+		effectiveSdkMergeJob?.status === "completed" ||
+		effectiveSdkMergeJob?.status === "failed"
+			? 100
+			: Math.min(
+					99,
+					Math.max(
+						sdkMergeStageFloor + sdkMergeEventBump,
+						sdkMergeJobProcessed > 0
+							? Math.round(30 + (sdkMergeWritePct / 100) * 70)
+							: sdkMergeStageFloor + sdkMergeEventBump,
+					),
+				);
 	const sdkMergeJobToneClass =
 		effectiveSdkMergeJob?.status === "failed"
 			? "border-red-200 bg-red-50 text-red-950"
@@ -2923,6 +3214,20 @@ export function DeviceEnrollmentPanel({
 	};
 	const buildSdkMergeRichestChoices = (plan: DeviceUserMergePlanResponse["plan"]) => {
 		const choices: Record<string, Record<string, "A" | "B" | "KEEP">> = {};
+		const dateMs = (value: unknown) => {
+			if (value == null || value === "") return 0;
+			const ms = Date.parse(String(value));
+			return Number.isFinite(ms) ? ms : 0;
+		};
+		const profileFields = new Set([
+			"employeeId",
+			"displayName",
+			"status",
+			"validFrom",
+			"validTo",
+			"doorRight",
+			"accessPlan",
+		]);
 		for (const user of plan.users) {
 			const richestRecord = [...user.records].sort(
 				(left: any, right: any) =>
@@ -2930,6 +3235,38 @@ export function DeviceEnrollmentPanel({
 			)[0];
 			for (const conflict of user.conflicts) {
 				const richestDeviceId = String(richestRecord?.deviceId || "");
+				const field = String(conflict.field || "");
+				// Profile defaults: dates → later/most recent; names → longer string; else richest.
+				if (profileFields.has(field)) {
+					let choice: "A" | "B" = "A";
+					if (field === "validFrom" || field === "validTo") {
+						const msA = dateMs(conflict.deviceA?.value);
+						const msB = dateMs(conflict.deviceB?.value);
+						choice = msB > msA ? "B" : msA > msB ? "A" : "A";
+					} else if (field === "displayName") {
+						const lenA = String(conflict.deviceA?.value ?? "").trim().length;
+						const lenB = String(conflict.deviceB?.value ?? "").trim().length;
+						choice =
+							lenB > lenA
+								? "B"
+								: lenA > lenB
+									? "A"
+									: conflict.deviceA.id === richestDeviceId
+										? "A"
+										: conflict.deviceB.id === richestDeviceId
+											? "B"
+											: "A";
+					} else {
+						choice =
+							conflict.deviceA.id === richestDeviceId
+								? "A"
+								: conflict.deviceB.id === richestDeviceId
+									? "B"
+									: "A";
+					}
+					choices[user.key] = { ...(choices[user.key] || {}), [conflict.field]: choice };
+					continue;
+				}
 				const rawEvidencePresent =
 					conflict.field === "fingerprint"
 						? richestRecord?.biometricEvidence?.fingerprint?.status ===
@@ -2949,23 +3286,99 @@ export function DeviceEnrollmentPanel({
 		}
 		return choices;
 	};
-	const autoResolveSdkMergeFromRichest = () => {
+
+	/** Dry-run preview of profile A/B overlays for Resolve modal (no device writes). */
+	const sdkMergeProfileOverlayPreview = useMemo(() => {
 		const plan = sdkMergeState.data?.plan;
-		if (!plan || sdkMergeBlockingCount > 0) return;
-		const choices = buildSdkMergeRichestChoices(plan);
-		setSdkMergeState((current) => ({
-			...current,
-			applyAll: undefined,
-			choices,
-			message:
-				"Recommended-source choices are filled. Review the selected IDs before starting the merge job.",
-		}));
-		setSdkMergeFilter("decision");
-	};
-	const openSdkUserMergeConfirm = () => {
-		if (!sdkMergeCanApply) return;
-		setSdkMergeConfirmOpen(true);
-	};
+		if (!plan) return [] as Array<{
+			userKey: string;
+			vendorUserId: string;
+			personLabel: string;
+			field: string;
+			fromValue: string;
+			toValue: string;
+			targetDeviceName: string;
+			impact: "high" | "medium" | "low";
+		}>;
+		const profileFields = new Set([
+			"employeeId",
+			"displayName",
+			"status",
+			"validFrom",
+			"validTo",
+			"doorRight",
+			"accessPlan",
+		]);
+		const rows: Array<{
+			userKey: string;
+			vendorUserId: string;
+			personLabel: string;
+			field: string;
+			fromValue: string;
+			toValue: string;
+			targetDeviceName: string;
+			impact: "high" | "medium" | "low";
+		}> = [];
+		for (const user of plan.users) {
+			if (!selectedSdkMergeUserKeys[user.key]) continue;
+			const vendorUserId = mergeVendorUserId(user);
+			const personLabel = mergePersonLabel(user);
+			for (const conflict of user.conflicts || []) {
+				const field = String(conflict.field || "");
+				if (!profileFields.has(field)) continue;
+				const choice =
+					sdkMergeState.applyAll ||
+					sdkMergeState.choices[user.key]?.[conflict.field as DeviceUserMergeField];
+				if (choice !== "A" && choice !== "B") continue;
+				const selected =
+					choice === "B" ? conflict.deviceB : conflict.deviceA;
+				const toValue = mergeFieldValueLabel(selected?.value);
+				for (const record of user.records || []) {
+					const current = (record as any)[field];
+					const currentLabel = mergeFieldValueLabel(current);
+					if (String(currentLabel) === String(toValue)) continue;
+					const impact: "high" | "medium" | "low" =
+						field === "displayName"
+							? "high"
+							: field === "validFrom" || field === "validTo"
+								? "medium"
+								: "low";
+					rows.push({
+						userKey: user.key,
+						vendorUserId,
+						personLabel,
+						field,
+						fromValue: String(currentLabel ?? "—"),
+						toValue: String(toValue ?? "—"),
+						targetDeviceName: mergeDeviceName(plan.devices, record.deviceId),
+						impact,
+					});
+				}
+			}
+		}
+		return rows.sort((a, b) => {
+			const rank = { high: 0, medium: 1, low: 2 };
+			return rank[a.impact] - rank[b.impact] || a.vendorUserId.localeCompare(b.vendorUserId);
+		});
+	}, [
+		sdkMergeState.data?.plan,
+		sdkMergeState.choices,
+		sdkMergeState.applyAll,
+		selectedSdkMergeUserKeys,
+	]);
+	/** One CTA contract: never "Start peer copy (N IDs)" from selection size. */
+	const sdkMergePeerCopyCta = buildMergePeerCopyCta({
+		executablePeerCopies: sdkMergeSelectedExecutablePeerCopies,
+		selectedUniqueIds: sdkMergeSelectedUniqueCount,
+		profileOverlays: sdkMergeProfileOverlayPreview.length,
+		canApply: sdkMergeCanApply,
+		isPending: startHikvisionSdkUserMergeJobMutation.isPending,
+		blockingCount: sdkMergeBlockingCount,
+		unresolvedConflicts: Math.max(
+			0,
+			sdkMergeSelectedConflictCount - sdkMergeSelectedResolvedCount,
+		),
+	});
 	const selectRecommendedCredentialWrites = () => {
 		setSelectedSdkMergeCredentialWriteIds(
 			Object.fromEntries(sdkMergeSelectableCredentialWrites.map((write) => [write.id, true])),
@@ -2978,17 +3391,138 @@ export function DeviceEnrollmentPanel({
 		}));
 	};
 
-	const startCredentialRecovery = async () => {
+	const startCredentialRecovery = async (options?: { quietIfActive?: boolean }) => {
 		const planId = sdkMergeState.data?.planId;
-		if (!planId) return;
+		if (!planId) return false;
+		const alreadyRunning =
+			CREDENTIAL_RECOVERY_ACTIVE_STATUSES.has(String(credentialRecoveryJob?.status || "")) ||
+			startHikvisionCredentialRecoveryMutation.isPending;
+		// No thrash: block while worker active or start mutation in-flight.
+		if (alreadyRunning) {
+			if (!options?.quietIfActive) {
+				toast.message("Recovery job already active — this-wave progress is updating below.");
+			}
+			return false;
+		}
 		try {
+			// Residual default 20 writes/wave (not 1). Progress counters = this wave.
 			const job = await startHikvisionCredentialRecoveryMutation.mutateAsync(planId);
 			setCredentialRecoveryJobId(job.id);
 			window.localStorage.setItem(CREDENTIAL_RECOVERY_JOB_STORAGE_KEY, job.id);
-			toast.success(`Credential recovery ${job.id} started`);
+			const wave = Number(job.plannedWaveSize ?? job.wouldWriteCount ?? 20) || 20;
+			toast.success(
+				`Credential recovery started (this wave up to ${wave}). Progress bar and Verified/Failed are THIS WAVE only — residual chips update after replan.`,
+			);
+			return true;
 		} catch (error: any) {
+			const msg = String(error?.message || "");
+			if (/already active|409/i.test(msg)) {
+				toast.message(msg || "Another recovery job is already active.");
+				return false;
+			}
 			toast.error(error?.message || "Credential recovery could not be started");
+			return false;
 		}
+	};
+
+	/** Decisions only (no recovery start). */
+	const autoResolveSdkMergeFromRichest = () => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan || sdkMergeBlockingCount > 0) return;
+		const choices = buildSdkMergeRichestChoices(plan);
+		const n = Object.values(choices).reduce(
+			(sum, row) => sum + Object.keys(row || {}).length,
+			0,
+		);
+		setSdkMergeState((current) => ({
+			...current,
+			applyAll: undefined,
+			choices,
+			message: `Auto-resolved ${n} decision(s): longer names · later/most recent dates · richest biometrics. Open Review selected merge for dry-run hits (names highlighted).`,
+		}));
+		setSdkMergeFilter("decision");
+	};
+
+	/**
+	 * Primary Resolve journey:
+	 * richest choices → select ready credential ops → auto-start recovery when
+	 * ready or recovery-queued > 0 (no thrash if a wave is already active).
+	 */
+	const resolveAndStartRecoveryJourney = async () => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan || sdkMergeBlockingCount > 0) {
+			toast.error(
+				sdkMergeBlockingCount > 0
+					? `Resolve ${sdkMergeBlockingCount} device read issue(s) first`
+					: "No merge plan loaded",
+			);
+			return;
+		}
+		const choices = buildSdkMergeRichestChoices(plan);
+		const n = Object.values(choices).reduce(
+			(sum, row) => sum + Object.keys(row || {}).length,
+			0,
+		);
+		const readyWrites = sdkMergeSelectableCredentialWrites;
+		const readyCount = readyWrites.length;
+		const recoveryQueued = sdkMergeRecoveryQueuedCredentialWriteCount;
+		if (readyCount > 0) {
+			setSelectedSdkMergeCredentialWriteIds(
+				Object.fromEntries(readyWrites.map((write) => [write.id, true])),
+			);
+		}
+		const recoveryActive = CREDENTIAL_RECOVERY_ACTIVE_STATUSES.has(
+			String(credentialRecoveryJob?.status || ""),
+		);
+		const shouldAutoStart = readyCount > 0 || recoveryQueued > 0;
+		setSdkMergeState((current) => ({
+			...current,
+			applyAll: undefined,
+			choices,
+			message: [
+				`Resolved ${n} decision(s) from richest sources.`,
+				readyCount
+					? `Selected ${mergePlural(readyCount, "ready credential operation")}.`
+					: "No ready credential ops in this plan.",
+				shouldAutoStart
+					? recoveryActive || startHikvisionCredentialRecoveryMutation.isPending
+						? "Recovery already running — not starting a second wave."
+						: "Auto-starting credential recovery for this wave…"
+					: "Nothing ready/queued for recovery auto-start.",
+				"Counters/bar are THIS WAVE only; merge chips update after replan.",
+			].join(" "),
+		}));
+		setSdkMergeFilter("decision");
+		if (recoveryActive || startHikvisionCredentialRecoveryMutation.isPending) {
+			toast.message("Recovery already running — watching this-wave progress below.");
+			return;
+		}
+		if (shouldAutoStart) {
+			await startCredentialRecovery({ quietIfActive: true });
+			return;
+		}
+		toast.message(
+			"Decisions auto-resolved. No ready/queued recovery wave in this plan — review residuals or apply merge when writes exist.",
+		);
+	};
+
+	const credentialRecoveryProgressPercent =
+		computeCredentialRecoveryProgressPercent(credentialRecoveryJob);
+	const credentialRecoveryWaveTarget = Math.max(
+		Number(credentialRecoveryJob?.plannedWaveSize || 0),
+		Number(credentialRecoveryJob?.wouldWriteCount || 0),
+		Number(credentialRecoveryJob?.counters?.verified || 0) +
+			Number(credentialRecoveryJob?.counters?.failed || 0),
+		Number(credentialRecoveryJob?.progressWeights?.waveDenominator || 0),
+		20,
+	);
+	const credentialRecoveryIsActive = CREDENTIAL_RECOVERY_ACTIVE_STATUSES.has(
+		String(credentialRecoveryJob?.status || ""),
+	);
+
+	const openSdkUserMergeConfirm = () => {
+		if (!sdkMergeCanApply) return;
+		setSdkMergeConfirmOpen(true);
 	};
 	const applySdkCredentialMerge = async () => {
 		if (
@@ -3044,17 +3578,25 @@ export function DeviceEnrollmentPanel({
 					: count,
 			0,
 		);
+		// Peer-copy OR profile-only (overlays) — never start when CTA is disabled
+		// (zero executable copies and zero profile overlays).
 		if (
 			sdkMergeSelectedUniqueCount === 0 ||
 			resolvedCount < sdkMergeSelectedConflictCount ||
-			sdkMergeBlockingCount > 0
+			sdkMergeBlockingCount > 0 ||
+			(sdkMergeSelectedExecutablePeerCopies <= 0 &&
+				sdkMergeProfileOverlayPreview.length <= 0)
 		)
 			return;
 		setSdkMergeConfirmOpen(false);
+		const startMessage =
+			sdkMergeSelectedExecutablePeerCopies > 0
+				? `Starting peer-copy job for ${mergePlural(sdkMergeSelectedExecutablePeerCopies, "executable peer create")} across ${mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")}.`
+				: `Applying ${mergePlural(sdkMergeProfileOverlayPreview.length, "profile field overlay")} (no physical peer creates in this selection).`;
 		setSdkMergeState((current) => ({
 			...current,
 			status: "review",
-			message: `Starting merge job for ${mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")}.`,
+			message: startMessage,
 			choices,
 		}));
 		try {
@@ -3064,12 +3606,25 @@ export function DeviceEnrollmentPanel({
 				applyAll: sdkMergeState.applyAll,
 				selectedUserKeys: selectedSdkMergeKeys,
 			});
+			if (result.nothingToWrite || !result.jobId) {
+				setSdkMergeJobId(null);
+				setSdkMergeLastJob(null);
+				setSdkMergeState((current) => ({
+					...current,
+					status: "done",
+					message:
+						result.message ||
+						result.pathHint ||
+						"Nothing physical to write; reviewed decisions are aligned or need credential-mode raw custody (card/face/FP). missing_raw_blob stays blocked.",
+				}));
+				return;
+			}
 			setSdkMergeJobId(result.jobId);
 			setSdkMergeLastJob(result.progress);
 			setSdkMergeHandledJobId(null);
 			setSdkMergeDismissedJobId(null);
 			updateSearchParams((next) => {
-				next.set("mergeJobId", result.jobId);
+				next.set("mergeJobId", result.jobId as string);
 			});
 			setSdkMergeState((current) => ({
 				...current,
@@ -8750,12 +9305,12 @@ export function DeviceEnrollmentPanel({
 												sdkMergeSelectedUniqueCount,
 												"selected unique ID",
 											)}{" "}
-											Â·{" "}
+											·{" "}
 											{mergePlural(
-												sdkMergeSelectedPotentialWriteCount,
-												"selected potential write",
+												sdkMergeSelectedExecutablePeerCopies,
+												"executable peer copy",
 											)}{" "}
-											Â· {sdkMergeExcludedActionableCount} excluded
+											· {sdkMergeExcludedActionableCount} excluded
 										</p>
 										{sdkMergeBlockingCount > 0 ? (
 											<p className="mt-1 text-xs font-medium text-amber-700">
@@ -8800,6 +9355,28 @@ export function DeviceEnrollmentPanel({
 										</Button>
 										<Button
 											type="button"
+											onClick={() => void resolveAndStartRecoveryJourney()}
+											disabled={
+												sdkMergeJobIsProcessing ||
+												sdkMergeBlockingCount > 0 ||
+												startHikvisionCredentialRecoveryMutation.isPending ||
+												(sdkMergeConflictCount === 0 &&
+													sdkMergeSelectableCredentialWrites.length === 0 &&
+													sdkMergeRecoveryQueuedCredentialWriteCount === 0)
+											}>
+											{startHikvisionCredentialRecoveryMutation.isPending ||
+											credentialRecoveryIsActive ? (
+												<Loader2 className="h-4 w-4 animate-spin" />
+											) : (
+												<Activity className="h-4 w-4" />
+											)}
+											{credentialRecoveryIsActive
+												? "Recovery running…"
+												: "Resolve & recover"}
+										</Button>
+										<Button
+											type="button"
+											variant="outline"
 											onClick={autoResolveSdkMergeFromRichest}
 											disabled={
 												sdkMergeJobIsProcessing ||
@@ -8807,7 +9384,7 @@ export function DeviceEnrollmentPanel({
 												sdkMergeConflictCount === 0
 											}>
 											<RefreshCw className="h-4 w-4" />
-											Use recommended sources
+											Re-apply auto-resolve
 										</Button>
 										{sdkMergeState.applyAll ||
 										Object.keys(sdkMergeState.choices).length ? (
@@ -8819,45 +9396,150 @@ export function DeviceEnrollmentPanel({
 														...current,
 														applyAll: undefined,
 														choices: {},
+														message:
+															"Choices cleared — pick A/B/KEEP manually, or re-apply auto-resolve.",
 													}))
 												}>
-												Clear choices
+												Manual mode (clear auto)
 											</Button>
 										) : null}
 									</div>
 								</div>
 							</div>
 
-							<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-								{[
-									["unique", "Unique IDs", sdkMergeUniqueIdCount],
-									["records", "Device ID records", sdkMergeDeviceRecordCount],
-									["review", "Needs review", sdkMergeAttentionRowCount],
-									["writes", "Potential writes", sdkMergePotentialWriteCount],
-								].map(([mode, label, value]) => (
-									<button
-										type="button"
-										key={String(label)}
-										aria-label={`Show ${label}`}
-										onClick={() =>
-											setSdkMergeListMode(mode as SdkMergeListMode)
-										}
-										className={`rounded-md border px-3 py-2 text-left ${
-											sdkMergeListMode === mode
-												? "border-orange-300 bg-orange-50"
-												: "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
-										}`}>
-										<div className="flex items-baseline justify-between gap-3">
-											<span className="text-xs font-medium text-slate-600">
-												{label}
-											</span>
-											<span className="text-sm font-semibold text-slate-950">
-												{mergeMetricValue(value)}
-											</span>
-										</div>
-									</button>
-								))}
+							{/* Single-source top chips — formulas from MERGE_CHIP_CONTRACT; card opt-in only. */}
+							<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
+								{(() => {
+									const contractById = Object.fromEntries(
+										MERGE_CHIP_CONTRACT.map((c) => [c.id, c]),
+									);
+									const sdkMergeTopChips: Array<{
+										key: string;
+										label: string;
+										value: number;
+										caption: string;
+										active: boolean;
+										onClick: () => void;
+									}> = [
+										{
+											key: "unique",
+											label: contractById.unique.label,
+											value: sdkMergeUniqueIdCount,
+											caption: contractById.unique.caption,
+											active:
+												sdkMergeListMode === "unique" &&
+												sdkMergeFilter === "all",
+											onClick: () => setSdkMergeListMode("unique"),
+										},
+										{
+											key: "records",
+											label: contractById.records.label,
+											value: sdkMergeDeviceRecordCount,
+											caption: contractById.records.caption,
+											active: sdkMergeListMode === "records",
+											onClick: () => setSdkMergeListMode("records"),
+										},
+										{
+											key: "missing",
+											label: contractById.missing.label,
+											value: sdkMergeMissingPeopleCount,
+											caption: contractById.missing.caption,
+											active:
+												sdkMergeListMode === "issues" &&
+												sdkMergeFilter === "missing",
+											onClick: () => setSdkMergeFilter("missing"),
+										},
+										{
+											key: "decision",
+											label: contractById.decision.label,
+											value: sdkMergeDecisionPeopleCount,
+											caption: contractById.decision.caption,
+											active:
+												sdkMergeListMode === "issues" &&
+												sdkMergeFilter === "decision",
+											onClick: () => setSdkMergeFilter("decision"),
+										},
+										{
+											key: "peer",
+											label: contractById.peer_copy.label,
+											value: sdkMergePeerCopyReadyCount,
+											caption: contractById.peer_copy.caption,
+											active: sdkMergeListMode === "writes",
+											onClick: () => setSdkMergeListMode("writes"),
+										},
+										{
+											key: "fingerprint",
+											label: contractById.fingerprint.label,
+											value: sdkMergeCredentialFingerprintWriteCount,
+											caption: contractById.fingerprint.caption,
+											active:
+												sdkMergeListMode === "issues" &&
+												sdkMergeFilter === "fingerprint",
+											onClick: () => setSdkMergeFilter("fingerprint"),
+										},
+										{
+											key: "face",
+											label: contractById.face.label,
+											value: sdkMergeCredentialFaceWriteCount,
+											caption: contractById.face.caption,
+											active:
+												sdkMergeListMode === "issues" &&
+												sdkMergeFilter === "face",
+											onClick: () => setSdkMergeFilter("face"),
+										},
+										...(includeCardResidual
+											? [
+													{
+														key: "card",
+														label: contractById.card.label,
+														value: sdkMergeCredentialCardWriteCount,
+														caption: contractById.card.caption,
+														active:
+															sdkMergeListMode === "issues" &&
+															sdkMergeFilter === "card",
+														onClick: () => setSdkMergeFilter("card"),
+													},
+												]
+											: []),
+									];
+									return sdkMergeTopChips.map((chip) => (
+										<button
+											type="button"
+											key={chip.key}
+											aria-label={`Show ${chip.label}: ${chip.caption}`}
+											title={`${chip.caption} · ${contractById[chip.key === "peer" ? "peer_copy" : chip.key]?.formula || ""}`}
+											onClick={chip.onClick}
+											className={`rounded-md border px-3 py-2 text-left ${
+												chip.active
+													? "border-orange-300 bg-orange-50"
+													: "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+											}`}>
+											<div className="flex items-baseline justify-between gap-3">
+												<span className="text-xs font-medium text-slate-600">
+													{chip.label}
+												</span>
+												<span className="text-sm font-semibold tabular-nums text-slate-950">
+													{mergeMetricValue(chip.value)}
+												</span>
+											</div>
+											<p className="mt-1 text-[10px] leading-4 text-slate-500">
+												{chip.caption}
+											</p>
+										</button>
+									));
+								})()}
 							</div>
+							<p className="text-[11px] leading-4 text-slate-500">
+								Each chip has one formula from MERGE_CHIP_CONTRACT. Missing ≠ Needs
+								decision (people with profile conflicts only) ≠ credential residual.
+								Card residual is hidden unless you enable the toggle under
+								Credential convergence.
+								{sdkMergeAttentionRowCount > 0 &&
+								sdkMergeAttentionRowCount !==
+									sdkMergeMissingPeopleCount + sdkMergeDecisionPeopleCount
+									? ` Issue-ID soup (${mergeMetricValue(sdkMergeAttentionRowCount)}) is not a top chip.`
+									: ""}
+							</p>
 
 							<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
 								<div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -8867,24 +9549,40 @@ export function DeviceEnrollmentPanel({
 										</p>
 										<p className="mt-0.5 text-xs leading-5 text-slate-600">
 											Fingerprint and face are planned independently. Enrollment counts
-											identify gaps; they do not prove portable biometric bytes.
+											identify gaps; they do not prove portable biometric bytes. Card is
+											optional and off by default.
 										</p>
+										<label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-slate-700">
+											<input
+												type="checkbox"
+												className="h-3.5 w-3.5 accent-orange-600"
+												checked={includeCardResidual}
+												onChange={(event) =>
+													setIncludeCardResidual(event.target.checked)
+												}
+												aria-label="Include card residual in potential operations and agent recovery"
+											/>
+											<span>
+												Include card residual
+												{!includeCardResidual && sdkMergeCredentialCardWriteCount > 0
+													? ` (${mergeMetricValue(sdkMergeCredentialCardWriteCount)} hidden)`
+													: ""}
+											</span>
+										</label>
 									</div>
 									<div className="flex flex-wrap gap-2">
 										<Button
 											type="button"
-											onClick={startCredentialRecovery}
+											onClick={() => void startCredentialRecovery()}
 											disabled={
-												sdkMergeRecoveryQueuedCredentialWriteCount === 0 ||
+												(sdkMergeSelectableCredentialWrites.length === 0 &&
+													sdkMergeRecoveryQueuedCredentialWriteCount ===
+														0) ||
 												startHikvisionCredentialRecoveryMutation.isPending ||
-												["pending", "recovering", "retrying"].includes(
-													String(credentialRecoveryJob?.status || ""),
-												)
+												credentialRecoveryIsActive
 											}>
 											{startHikvisionCredentialRecoveryMutation.isPending ||
-											["pending", "recovering", "retrying"].includes(
-												String(credentialRecoveryJob?.status || ""),
-											) ? (
+											credentialRecoveryIsActive ? (
 												<Loader2 className="h-4 w-4 animate-spin" />
 											) : (
 												<Activity className="h-4 w-4" />
@@ -8914,49 +9612,105 @@ export function DeviceEnrollmentPanel({
 								{credentialRecoveryJob ? (
 									<div className="border-b border-slate-200 bg-slate-50 px-3 py-3">
 										<div className="flex flex-wrap items-center justify-between gap-2">
-											<div>
+											<div className="min-w-0 flex-1">
 												<p className="text-sm font-semibold text-slate-950">
 													Recovery job {credentialRecoveryJob.id}
 												</p>
-												<p className="mt-0.5 text-xs text-slate-600">
-													{credentialRecoveryJob.currentStage || credentialRecoveryJob.status}
-													{" · "}
-													last advanced{" "}
+												<p className="mt-0.5 text-xs font-medium text-slate-900">
+													{credentialRecoveryStageLabel(credentialRecoveryJob)}
+												</p>
+												<p className="mt-0.5 text-[11px] text-slate-500">
+													status {credentialRecoveryJob.status}
+													{" · stage "}
+													{credentialRecoveryJob.currentStage || "—"}
+													{" · last advanced "}
 													{credentialRecoveryJob.lastAdvancementAt
 														? formatDateTime(
 																credentialRecoveryJob.lastAdvancementAt,
 															)
 														: "not yet"}
 												</p>
+												<p className="mt-1 text-xs font-medium text-slate-700">
+													THIS WAVE only (max {credentialRecoveryWaveTarget})
+													— Verified{" "}
+													{credentialRecoveryJob.counters?.verified ?? 0}
+													{" / Failed "}
+													{credentialRecoveryJob.counters?.failed ?? 0}
+													{" · bar "}
+													{credentialRecoveryProgressPercent}%
+													{" · residual left is not wave progress"}
+												</p>
 											</div>
-											<Badge
-												variant={
+											<div className="flex flex-col items-end gap-1">
+												<span className="text-lg font-bold tabular-nums text-slate-950">
+													{credentialRecoveryProgressPercent}%
+												</span>
+												<Badge
+													variant={
+														credentialRecoveryJob.status === "failed" ||
+														credentialRecoveryJob.status === "needs_attention"
+															? "destructive"
+															: credentialRecoveryJob.status === "completed" &&
+																  (credentialRecoveryJob.counters?.verified ?? 0) > 0
+																? "success"
+																: credentialRecoveryJob.status === "completed" &&
+																	  (credentialRecoveryJob.counters?.verified ?? 0) === 0
+																	? "warning"
+																	: "warning"
+													}>
+													{credentialRecoveryJob.status}
+													{(credentialRecoveryJob.counters?.verified ?? 0) > 0
+														? ` · v${credentialRecoveryJob.counters?.verified}`
+														: ""}
+												</Badge>
+											</div>
+										</div>
+										<div className="mt-3 h-3 overflow-hidden rounded-full bg-white/80 ring-1 ring-slate-200">
+											<div
+												className={`h-full rounded-full transition-all duration-500 ${
 													credentialRecoveryJob.status === "failed" ||
 													credentialRecoveryJob.status === "needs_attention"
-														? "destructive"
-														: credentialRecoveryJob.status === "completed" &&
-															  (credentialRecoveryJob.counters?.verified ?? 0) > 0
-															? "success"
-															: "warning"
-												}>
-												{credentialRecoveryJob.status}
-											</Badge>
+														? "bg-red-600"
+														: credentialRecoveryJob.status === "completed"
+															? "bg-emerald-600"
+															: credentialRecoveryIsActive
+																? "bg-orange-600 animate-pulse"
+																: "bg-orange-600"
+												}`}
+												style={{
+													width: `${Math.max(
+														credentialRecoveryIsActive &&
+															credentialRecoveryProgressPercent < 4
+															? 4
+															: 0,
+														credentialRecoveryProgressPercent,
+													)}%`,
+												}}
+											/>
 										</div>
-										<div className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs">
+										<div className="mt-2 rounded-md border border-orange-200 bg-orange-50/80 px-3 py-2 text-xs">
 											<p className="font-semibold text-slate-950">
 												{credentialRecoveryJob.activeTask
-													? `Now: ${credentialRecoveryJob.activeTask.modality || "credential"} ${credentialRecoveryJob.activeTask.stage || credentialRecoveryJob.activeTask.kind}`
-													: `Now: ${credentialRecoveryJob.currentStage || "waiting for worker"}`}
+													? `Now: ${credentialRecoveryJob.activeTask.modality || "credential"} · ${String(credentialRecoveryJob.activeTask.stage || credentialRecoveryJob.activeTask.kind || "").replace(/_/g, " ")}`
+													: `Now: ${credentialRecoveryStageLabel(credentialRecoveryJob)}`}
+											</p>
+											<p className="mt-1 text-slate-700">
+												{credentialRecoveryJob.progressDetail ||
+													(/replan/i.test(
+														String(credentialRecoveryJob.currentStage || ""),
+													)
+														? "Inventory replan after card/FP capture. Ready/Writing stay 0 until replan finishes — not a frozen job."
+														: "Weighted progress uses this wave (capture → write → reread → verified), not residual left.")}
 											</p>
 											{credentialRecoveryJob.activeTask ? (
 												<p className="mt-1 break-all text-slate-600">
 													source{" "}
-													{credentialRecoveryJob.activeTask.sourceDeviceId || "not applicable"}
+													{credentialRecoveryJob.activeTask.sourceDeviceId || "n/a"}
 													{" → target "}
 													{credentialRecoveryJob.activeTask.targetDeviceId ||
 														"not selected yet"}
 													{" · user "}
-													{credentialRecoveryJob.activeTask.vendorUserId || "not available"}
+													{credentialRecoveryJob.activeTask.vendorUserId || "n/a"}
 													{" · attempt "}
 													{credentialRecoveryJob.activeTask.attempts}
 													{credentialRecoveryJob.activeTask.maxAttempts
@@ -8965,30 +9719,76 @@ export function DeviceEnrollmentPanel({
 												</p>
 											) : null}
 											<p className="mt-1 text-slate-600">
-												Worker lease{" "}
-												{credentialRecoveryJob.workerLeaseActive ? "active" : "inactive"}
-												{" · resume cursor "}
+												Worker{" "}
+												{credentialRecoveryJob.workerLeaseActive
+													? "lease active"
+													: "lease inactive"}
+												{" · cursor "}
 												{credentialRecoveryJob.resumeCursor ?? 0}
+												{" · wave "}
+												{credentialRecoveryJob.counters?.verified ?? 0}+
+												{credentialRecoveryJob.counters?.failed ?? 0}/
+												{credentialRecoveryWaveTarget}
+												{credentialRecoveryJob.tasksByKind ? (
+													<>
+														{" · capture "}
+														{credentialRecoveryJob.tasksByKind
+															.sourceCaptureSucceeded ?? 0}
+														/
+														{(credentialRecoveryJob.tasksByKind
+															.sourceCaptureSucceeded ?? 0) +
+															(credentialRecoveryJob.tasksByKind
+																.sourceCapturePending ?? 0) +
+															(credentialRecoveryJob.tasksByKind
+																.sourceCaptureProcessing ?? 0)}
+													</>
+												) : null}
 											</p>
 										</div>
 										<div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
 											{[
-												["Recovered", credentialRecoveryJob.counters?.recovered ?? 0],
-												["Ready to write", credentialRecoveryJob.counters?.readyToWrite ?? 0],
-												["Writing", credentialRecoveryJob.counters?.writing ?? 0],
+												[
+													"Captured",
+													credentialRecoveryJob.counters?.recovered ?? 0,
+													"Source custody tasks done",
+												],
+												[
+													"Ready to write",
+													credentialRecoveryJob.counters?.readyToWrite ?? 0,
+													"After replan finds raw bytes",
+												],
+												[
+													"Writing",
+													credentialRecoveryJob.counters?.writing ?? 0,
+													"Physical write in flight",
+												],
 												[
 													"Rereading",
-													credentialRecoveryJob.counters?.awaitingPhysicalReread ?? 0,
+													credentialRecoveryJob.counters?.awaitingPhysicalReread ??
+														0,
+													"Proving write on panel",
 												],
-												["Verified", credentialRecoveryJob.counters?.verified ?? 0],
-												["Failed", credentialRecoveryJob.counters?.failed ?? 0],
 												[
-													"Remaining",
+													"Verified",
+													credentialRecoveryJob.counters?.verified ?? 0,
+													"Wave success count",
+												],
+												[
+													"Failed",
+													credentialRecoveryJob.counters?.failed ?? 0,
+													"Wave failures",
+												],
+												[
+													"Residual left",
 													credentialRecoveryJob.counters
 														?.physicallyVerifiedRemaining ?? 0,
+													"Not this-wave progress",
 												],
-											].map(([label, value]) => (
-												<div key={String(label)} className="rounded border bg-white px-2 py-1.5">
+											].map(([label, value, hint]) => (
+												<div
+													key={String(label)}
+													className="rounded border bg-white px-2 py-1.5"
+													title={String(hint)}>
 													<p className="text-slate-600">{label}</p>
 													<p className="font-semibold text-slate-950">
 														{mergeMetricValue(value)}
@@ -9049,39 +9849,53 @@ export function DeviceEnrollmentPanel({
 										)}
 									</div>
 								)}
-								<div className="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-4 xl:grid-cols-7">
-									{[
+								<div
+									className={`grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:grid-cols-3 ${
+										includeCardResidual
+											? "xl:grid-cols-7"
+											: "xl:grid-cols-6"
+									}`}>
+									{(
 										[
-											"Potential operations",
-											sdkMergePotentialOperationSummary?.totalPotentialOperations ??
-												sdkMergeCredentialWrites.length,
-										],
-										[
-											"Fingerprint",
-											sdkMergePotentialOperationSummary?.byModality
-												?.fingerprint ??
-												sdkMergeCredentialFingerprintWriteCount,
-										],
-										[
-											"Face",
-											sdkMergePotentialOperationSummary?.byModality?.face ??
-												sdkMergeCredentialFaceWriteCount,
-										],
-										[
-											"Card",
-											sdkMergePotentialOperationSummary?.byModality?.card ??
-												sdkMergeCredentialCardWriteCount,
-										],
-										["Ready now", sdkMergeSelectableCredentialWrites.length],
-										[
-											"Agent recovery",
-											sdkMergeRecoveryQueuedCredentialWriteCount,
-										],
-										[
-											"Ownership / enroll block",
-											sdkMergePhysicalActionCredentialWrites.length,
-										],
-									].map(([label, value]) => (
+											[
+												"Potential operations",
+												sdkMergePotentialOperationsUiTotal,
+											],
+											[
+												"Fingerprint",
+												sdkMergePotentialOperationSummary?.byModality
+													?.fingerprint ??
+													sdkMergeCredentialFingerprintWriteCount,
+											],
+											[
+												"Face",
+												sdkMergePotentialOperationSummary?.byModality?.face ??
+													sdkMergeCredentialFaceWriteCount,
+											],
+											...(includeCardResidual
+												? [
+														[
+															"Card",
+															sdkMergePotentialOperationSummary
+																?.byModality?.card ??
+																sdkMergeCredentialCardWriteCount,
+														] as const,
+													]
+												: []),
+											[
+												"Ready now",
+												sdkMergeSelectableCredentialWrites.length,
+											],
+											[
+												"Agent recovery",
+												sdkMergeRecoveryQueuedCredentialWriteCount,
+											],
+											[
+												"Ownership / enroll block",
+												sdkMergePhysicalActionCredentialWrites.length,
+											],
+										] as Array<readonly [string, number]>
+									).map(([label, value]) => (
 										<div key={String(label)} className="bg-white px-3 py-2">
 											<p className="text-xs text-slate-600">{label}</p>
 											<p
@@ -9099,6 +9913,13 @@ export function DeviceEnrollmentPanel({
 										</div>
 									))}
 								</div>
+								{!includeCardResidual && sdkMergeCredentialCardWriteCount > 0 ? (
+									<p className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-600">
+										Card residual {mergeMetricValue(sdkMergeCredentialCardWriteCount)}{" "}
+										hidden from Potential operations / Agent recovery — enable
+										&quot;Include card residual&quot; to show.
+									</p>
+								) : null}
 								{sdkMergeRecoveryStageEntries.length ? (
 									<div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
 										<span className="font-semibold text-slate-950">
@@ -9786,10 +10607,10 @@ export function DeviceEnrollmentPanel({
 								{mergePlural(sdkMergeSelectedUniqueCount, "selected unique ID")}{" "}
 								selected for review.{" "}
 								{mergePlural(
-									sdkMergeSelectedPotentialWriteCount,
-									"potential device write",
+									sdkMergeSelectedExecutablePeerCopies,
+									"executable peer copy",
 								)}{" "}
-								would be included;{" "}
+								(physical creates only);{" "}
 								{mergePlural(sdkMergeExcludedActionableCount, "actionable ID")}{" "}
 								excluded from this scope.
 							</p>
@@ -10023,120 +10844,258 @@ export function DeviceEnrollmentPanel({
 				onOpenChange={(open) => {
 					if (!open && !startHikvisionSdkUserMergeJobMutation.isPending) {
 						setSdkMergeConfirmOpen(false);
+						setSdkMergeShowNoOpRows(false);
 					}
 				}}
 				title="Review selected merge"
-				description="Confirm selected unique IDs, source devices, peer copy attempts, and biometric evidence before HRIS starts the job."
+				description="Dry-run first: selection size is not job size. Peer-copy starts only when executable creates exist."
 				className="max-w-5xl"
 				showCloseButton={!startHikvisionSdkUserMergeJobMutation.isPending}
 				closeOnBackdropClick={!startHikvisionSdkUserMergeJobMutation.isPending}>
 				<div className="space-y-4">
-					<div className="grid gap-2 sm:grid-cols-5">
+					<div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
 						{[
-							["Selected unique IDs", sdkMergeSelectedUniqueCount],
-							["Peer copy attempts", sdkMergeSelectedPotentialWriteCount],
-							["Fingerprint gaps", sdkMergeSelectedFingerprintGapCount],
-							["Face gaps", sdkMergeSelectedFaceGapCount],
-							[
-								"Conflicts resolved",
-								`${sdkMergeSelectedResolvedCount}/${sdkMergeSelectedConflictCount}`,
-							],
-						].map(([label, value]) => (
+							{
+								label: "Selected unique IDs",
+								value: sdkMergeSelectedUniqueCount,
+								caption: "People checked in this review scope",
+							},
+							{
+								label: "Executable peer copies",
+								value: sdkMergeSelectedExecutablePeerCopies,
+								caption: "Physical peer creates (sum of COPY)",
+								emphasize: sdkMergeSelectedExecutablePeerCopies === 0,
+							},
+							{
+								label: "Excluded from scope",
+								value: sdkMergeExcludedActionableCount,
+								caption: "Actionable IDs not selected",
+							},
+							{
+								label: "Profile field hits",
+								value: sdkMergeProfileOverlayPreview.length,
+								caption: "HRIS name/date overlays only (not peer copy)",
+							},
+						].map((item) => (
 							<div
-								key={String(label)}
-								className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+								key={item.label}
+								className={`rounded-md border px-3 py-2 ${
+									item.emphasize
+										? "border-amber-300 bg-amber-50"
+										: "border-slate-200 bg-slate-50"
+								}`}>
 								<p className="text-[11px] font-medium uppercase text-slate-500">
-									{label}
+									{item.label}
 								</p>
 								<p className="mt-1 text-base font-semibold text-slate-950">
-									{mergeMetricValue(value)}
+									{mergeMetricValue(item.value)}
+								</p>
+								<p className="mt-0.5 text-[11px] leading-4 text-slate-600">
+									{item.caption}
 								</p>
 							</div>
 						))}
 					</div>
-					<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
-						<p className="font-semibold">This starts a real device-write job.</p>
-						<p className="mt-1 text-xs leading-5 text-amber-900">
-							For each unique ID, HRIS uses the shown physical source device and
-							copies that user to the shown peer target devices. Fingerprint and face
-							columns show source evidence and current gaps, not template-write
-							counts; missing raw blobs are not fabricated.
-						</p>
-					</div>
+					{sdkMergeSelectedExecutablePeerCopies === 0 ? (
+						<div
+							role="status"
+							className="rounded-md border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+							<p className="font-semibold">0 executable peer copies</p>
+							<p className="mt-1 text-xs leading-5 text-amber-900">
+								Every selected ID has COPY 0 (no missing peer target). Selection size
+								({mergeMetricValue(sdkMergeSelectedUniqueCount)} IDs) is not work.
+								Peer-copy start is disabled. Use credential recovery for FP/face
+								gaps, or go back and pick IDs that are missing on a peer device.
+							</p>
+						</div>
+					) : (
+						<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+							<p className="font-semibold">
+								This starts {mergePlural(sdkMergeSelectedExecutablePeerCopies, "physical peer create")}{" "}
+								where selected people are missing on a target device.
+							</p>
+							<p className="mt-1 text-xs leading-5 text-amber-900">
+								Fingerprint/face/card gaps stay on the credential recovery path —
+								this modal does not invent biometric bytes. HRIS name/date overlays
+								follow the dry-run table when present.
+							</p>
+						</div>
+					)}
+					{sdkMergeProfileOverlayPreview.length > 0 ? (
+						<div className="overflow-hidden rounded-md border border-orange-200 bg-orange-50/40">
+							<div className="border-b border-orange-200 bg-orange-50 px-3 py-2">
+								<p className="text-sm font-semibold text-orange-950">
+									Dry-run: profile changes (HRIS DeviceUser only)
+								</p>
+								<p className="mt-0.5 text-xs text-orange-900/80">
+									Not counted as peer copies. Highlighted rows = name changes.
+								</p>
+							</div>
+							<div className="max-h-52 overflow-auto">
+								<div className="grid grid-cols-[64px_minmax(100px,1fr)_88px_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(100px,0.9fr)] gap-2 border-b border-orange-100 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase text-slate-500">
+									<span>Impact</span>
+									<span>Person</span>
+									<span>Field</span>
+									<span>From</span>
+									<span>To (chosen)</span>
+									<span>Device row</span>
+								</div>
+								{sdkMergeProfileOverlayPreview.map((row, index) => (
+									<div
+										key={`${row.userKey}:${row.field}:${row.targetDeviceName}:${index}`}
+										className={`grid grid-cols-[64px_minmax(100px,1fr)_88px_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(100px,0.9fr)] gap-2 border-b border-slate-100 px-3 py-2 text-xs last:border-b-0 ${
+											row.impact === "high"
+												? "bg-orange-100/80"
+												: row.impact === "medium"
+													? "bg-amber-50/60"
+													: "bg-white"
+										}`}>
+										<span
+											className={`font-semibold uppercase ${
+												row.impact === "high"
+													? "text-orange-800"
+													: row.impact === "medium"
+														? "text-amber-800"
+														: "text-slate-600"
+											}`}>
+											{row.impact}
+										</span>
+										<span className="min-w-0 truncate font-medium text-slate-950">
+											{row.vendorUserId} · {row.personLabel}
+										</span>
+										<span className="text-slate-700">{row.field}</span>
+										<span className="min-w-0 truncate text-slate-600">
+											{row.fromValue}
+										</span>
+										<span className="min-w-0 truncate font-semibold text-slate-950">
+											{row.toValue}
+										</span>
+										<span className="min-w-0 truncate text-slate-600">
+											{row.targetDeviceName}
+										</span>
+									</div>
+								))}
+							</div>
+						</div>
+					) : null}
 					<div className="grid gap-3 lg:grid-cols-2">
 						<div className="overflow-hidden rounded-md border border-slate-200">
 							<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
 								<p className="text-sm font-semibold text-slate-950">
-									Writes by target device
+									Peer creates by target
 								</p>
 								<p className="mt-0.5 text-xs text-slate-600">
-									Where selected IDs will be copied.
+									One number per device: missing peers to create on that panel.
 								</p>
 							</div>
 							<div className="max-h-44 overflow-auto">
-								{sdkMergeSelectedWriteMatrix.perTarget.map((target) => (
-									<div
-										key={`confirm-target:${target.deviceId}`}
-										className="grid grid-cols-[minmax(0,1fr)_88px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
-										<div className="min-w-0">
-											<p className="truncate font-medium text-slate-950">
-												{target.deviceName}
-											</p>
-											<p className="truncate text-xs text-slate-600">
-												From{" "}
-												{target.sourceDeviceNames.slice(0, 2).join(", ")}
-												{target.sourceDeviceNames.length > 2
-													? ` +${target.sourceDeviceNames.length - 2}`
-													: ""}
-											</p>
+								{sdkMergeSelectedWriteMatrix.perTarget.length === 0 ? (
+									<p className="px-3 py-3 text-xs text-slate-600">
+										No target devices need peer creates for this selection.
+									</p>
+								) : (
+									sdkMergeSelectedWriteMatrix.perTarget.map((target) => {
+										const tile = formatMergeTargetDeviceTile({
+											writes: target.writes,
+											sourceDeviceNames: target.sourceDeviceNames,
+										});
+										return (
+										<div
+											key={`confirm-target:${target.deviceId}`}
+											className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+											<div className="min-w-0">
+												<p className="truncate font-medium text-slate-950">
+													{target.deviceName}
+												</p>
+												<p className="truncate text-xs text-slate-600">
+													{tile.secondaryText}
+												</p>
+											</div>
+											<div className="text-right">
+												<p className="text-sm font-semibold text-slate-950">
+													{mergeMetricValue(tile.primaryValue)}
+												</p>
+												<p className="text-[11px] text-slate-600">
+													{tile.primaryLabel}
+												</p>
+											</div>
 										</div>
-										<p className="text-sm font-semibold text-slate-950">
-											{mergeMetricValue(target.writes)}
-										</p>
-									</div>
-								))}
+										);
+									})
+								)}
 							</div>
 						</div>
 						<div className="overflow-hidden rounded-md border border-slate-200">
 							<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-								<p className="text-sm font-semibold text-slate-950">Sources used</p>
+								<p className="text-sm font-semibold text-slate-950">
+									Peer creates by source
+								</p>
 								<p className="mt-0.5 text-xs text-slate-600">
-									Selected source devices for the selected IDs.
+									One number per device: peer creates leaving this source (not
+									selected ID count).
 								</p>
 							</div>
 							<div className="max-h-44 overflow-auto">
-								{sdkMergeSelectedWriteMatrix.perSource.map((source) => (
-									<div
-										key={`confirm-source:${source.deviceId}`}
-										className="grid grid-cols-[minmax(0,1fr)_88px] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
-										<div className="min-w-0">
-											<p className="truncate font-medium text-slate-950">
-												{source.deviceName}
-											</p>
-											<p className="truncate text-xs text-slate-600">
-												{mergePlural(
-													source.selectedUniqueIds,
-													"selected unique ID",
-												)}
-											</p>
+								{sdkMergeSelectedWriteMatrix.perSource.length === 0 ? (
+									<p className="px-3 py-3 text-xs text-slate-600">
+										No source devices in this selection.
+									</p>
+								) : (
+									sdkMergeSelectedWriteMatrix.perSource.map((source) => {
+										const tile = formatMergeSourceDeviceTile({
+											selectedUniqueIds: source.selectedUniqueIds,
+											peerCopies: source.writes,
+										});
+										return (
+										<div
+											key={`confirm-source:${source.deviceId}`}
+											className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+											<div className="min-w-0">
+												<p className="truncate font-medium text-slate-950">
+													{source.deviceName}
+												</p>
+												<p className="truncate text-xs text-slate-600">
+													{tile.secondaryText}
+												</p>
+											</div>
+											<div className="text-right">
+												<p className="text-sm font-semibold text-slate-950">
+													{mergeMetricValue(tile.primaryValue)}
+												</p>
+												<p className="text-[11px] text-slate-600">
+													{tile.primaryLabel}
+												</p>
+											</div>
 										</div>
-										<p className="text-sm font-semibold text-slate-950">
-											{mergeMetricValue(source.writes)}
-										</p>
-									</div>
-								))}
+										);
+									})
+								)}
 							</div>
 						</div>
 					</div>
 					<div className="overflow-hidden rounded-md border border-slate-200">
-						<div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-							<p className="text-sm font-semibold text-slate-950">
-								Selected ID write matrix
-							</p>
-							<p className="mt-0.5 text-xs text-slate-600">
-								One row per selected unique ID. Fingerprint/face show source
-								evidence and selected-device coverage.
-							</p>
+						<div className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+							<div className="min-w-0">
+								<p className="text-sm font-semibold text-slate-950">
+									Selected ID write matrix
+								</p>
+								<p className="mt-0.5 text-xs text-slate-600">
+									COPY is executable peer creates for that ID. No-op rows (COPY 0)
+									are hidden by default.
+								</p>
+							</div>
+							{sdkMergeSelectedWriteMatrix.noOpCount > 0 ? (
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-8 shrink-0 text-xs"
+									onClick={() => setSdkMergeShowNoOpRows((current) => !current)}>
+									{sdkMergeShowNoOpRows
+										? "Hide no-op IDs"
+										: `Show ${mergeMetricValue(sdkMergeSelectedWriteMatrix.noOpCount)} no-op IDs`}
+								</Button>
+							) : null}
 						</div>
 						<div className="grid grid-cols-[minmax(150px,1.2fr)_minmax(140px,1fr)_minmax(180px,1.3fr)_128px_128px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase text-slate-600">
 							<span>ID</span>
@@ -10147,7 +11106,12 @@ export function DeviceEnrollmentPanel({
 							<span>Copy</span>
 						</div>
 						<div className="max-h-[42vh] overflow-auto">
-							{sdkMergeSelectedWriteMatrix.rows.map((row) => (
+							{(sdkMergeShowNoOpRows
+								? sdkMergeSelectedWriteMatrix.rows
+								: sdkMergeSelectedWriteMatrix.executableRows.length > 0
+									? sdkMergeSelectedWriteMatrix.executableRows
+									: []
+							).map((row) => (
 								<div
 									key={`confirm:${row.key}`}
 									className="grid grid-cols-[minmax(150px,1.2fr)_minmax(140px,1fr)_minmax(180px,1.3fr)_128px_128px_96px] items-center gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
@@ -10226,6 +11190,23 @@ export function DeviceEnrollmentPanel({
 									</div>
 								</div>
 							))}
+							{!sdkMergeShowNoOpRows &&
+							sdkMergeSelectedWriteMatrix.executableRows.length === 0 ? (
+								<div className="px-3 py-4 text-sm text-slate-600">
+									<p className="font-medium text-slate-900">
+										No rows with peer creates in this selection.
+									</p>
+									<p className="mt-1 text-xs">
+										{mergePlural(
+											sdkMergeSelectedWriteMatrix.noOpCount ||
+												sdkMergeSelectedUniqueCount,
+											"selected ID",
+										)}{" "}
+										have COPY 0. Toggle “Show no-op IDs” to inspect them, or go
+										back and select IDs missing on a peer device.
+									</p>
+								</div>
+							) : null}
 						</div>
 					</div>
 					<div className="flex flex-col-reverse gap-2 border-t pt-3 sm:flex-row sm:justify-end">
@@ -10233,13 +11214,25 @@ export function DeviceEnrollmentPanel({
 							type="button"
 							variant="outline"
 							disabled={startHikvisionSdkUserMergeJobMutation.isPending}
-							onClick={() => setSdkMergeConfirmOpen(false)}>
+							onClick={() => {
+								setSdkMergeConfirmOpen(false);
+								setSdkMergeShowNoOpRows(false);
+							}}>
 							Back to review
 						</Button>
 						<Button
 							type="button"
-							disabled={
-								!sdkMergeCanApply || startHikvisionSdkUserMergeJobMutation.isPending
+							disabled={sdkMergePeerCopyCta.disabled}
+							className={
+								sdkMergePeerCopyCta.disabled ? "opacity-50" : undefined
+							}
+							aria-label={sdkMergePeerCopyCta.label}
+							title={
+								sdkMergePeerCopyCta.reason === "zero_writes"
+									? "No peer copies for this selection — sum of COPY is 0. Selection size is not work."
+									: sdkMergePeerCopyCta.reason === "profile_only"
+										? "Applies HRIS profile overlays only; no physical peer creates."
+										: sdkMergePeerCopyCta.label
 							}
 							onClick={() => void applySdkUserMerge()}>
 							{startHikvisionSdkUserMergeJobMutation.isPending ? (
@@ -10247,9 +11240,7 @@ export function DeviceEnrollmentPanel({
 							) : (
 								<Link2 className="h-4 w-4" />
 							)}
-							{startHikvisionSdkUserMergeJobMutation.isPending
-								? "Starting..."
-								: `Start peer copy job (${sdkMergeSelectedUniqueCount} IDs)`}
+							{sdkMergePeerCopyCta.label}
 						</Button>
 					</div>
 				</div>

@@ -57,6 +57,18 @@ export const selectObsoleteCredentialRecoverySourceTaskIds = (
 		.filter((task) => !currentTaskKeys.has(String(task.taskKey)))
 		.map((task) => String(task.id));
 
+export type CredentialRecoveryCanaryModality = "fingerprint" | "face" | "card";
+
+/** Normalize job/review canary modality; unknown values mean unscoped (all modalities). */
+export const normalizeCredentialRecoveryCanaryModality = (
+	canaryModality: unknown,
+): CredentialRecoveryCanaryModality | null => {
+	const value = String(canaryModality || "").trim();
+	return value === "fingerprint" || value === "face" || value === "card"
+		? value
+		: null;
+};
+
 export const recoveredCustodyCanUnlockWrite = (
 	modality: unknown,
 	result: Record<string, unknown> | null | undefined,
@@ -70,6 +82,15 @@ export const recoveredCustodyCanUnlockWrite = (
 			Number(result?.facePictureSize || 0) > 0 &&
 			result?.cardOwnerVerified === true &&
 			result?.identityOwnerVerified === true
+		);
+	}
+	if (String(modality) === "card") {
+		// Exact single cardNo recovered from CardInfo inventory (never invent card numbers).
+		// Prefer non-empty cardNo; cardCount===1 alone is accepted only as a legacy unlock
+		// signal when the capture path already proved uniqueness but key naming drifted.
+		return (
+			Boolean(String(result?.cardNo || "").trim()) ||
+			Number(result?.cardCount || 0) === 1
 		);
 	}
 	return false;
@@ -516,9 +537,7 @@ export const buildCredentialRecoveryPendingTaskWhere = (
 	jobId: string,
 	canaryModality: unknown,
 ) => {
-	const modality = ["fingerprint", "face"].includes(String(canaryModality || ""))
-		? String(canaryModality)
-		: null;
+	const modality = normalizeCredentialRecoveryCanaryModality(canaryModality);
 	return {
 		jobId,
 		status: { in: ["pending", "retrying"] },
@@ -544,7 +563,9 @@ export const buildExpiredCredentialRecoverySourceLeaseWhere = (
  */
 const physicalBoundaryReasons = new Set([
 	"physical_identity_adjudication_required",
-	"device_fp_anti_dupe_peer_owner",
+	// device_fp_anti_dupe_peer_owner is NO longer a physical boundary:
+	// auto force-clear + write resolves it (unique FP gap zero policy).
+	// If a plan still emits it, treat as agent_unlock residual (amber).
 	"duplicate_owner_detected",
 	"different_target_owner_detected",
 	"physical_reenrollment_required",
@@ -577,6 +598,10 @@ export const classifyCredentialRecoveryWrite = (
 		(reason === "physical_identity_adjudication_required" ||
 			stage === "physical_identity_action_required");
 	if (falsePhysicalSourceUnset) {
+		return "recovery_needed";
+	}
+	// Anti-dupe is agent force-clear work, never a red physical ban.
+	if (reason === "device_fp_anti_dupe_peer_owner") {
 		return "recovery_needed";
 	}
 	// Stage can mark dual-owner even when reason is source_conflict (duplicate slot).
@@ -645,9 +670,9 @@ const unlockNeededForWrite = (write: any): string[] => {
 			];
 		case "device_fp_anti_dupe_peer_owner":
 			return [
-				"device progressStatus=5 named a peer owner (anti-dupe) — PROD 21+ never auto-clears",
-				"prove same-canonical employee + same checksum for equivalent_owner_safe_no_write, or leave as dual-biometric residual",
-				"do not re-queue ready_from_raw_blob; wouldWrite must not claim verify",
+				"agent auto-resolve: force-clear peer fingerprint slot(s) then write recovery source",
+				"replan after reconcileDurableFingerprintOwnerConflicts (should be ready_from_raw_blob + fleet force flags)",
+				"never wait on operator dual-owner ban — unique FP gap policy is auto force-clear",
 			];
 		default:
 			return [
@@ -680,7 +705,8 @@ const ownerClassForWrite = (write: any): RecoveryOwnerClass => {
 		return "agent_unlock";
 	}
 	if (reason === "device_fp_anti_dupe_peer_owner") {
-		return "policy_or_true_physical";
+		// Auto force-clear path owns this — agent unlock, not operator ban.
+		return "agent_unlock";
 	}
 	if (classifyCredentialRecoveryWrite(write) === "physical_action_required") {
 		return "policy_or_true_physical";
@@ -823,12 +849,13 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 			);
 		};
 
-		// Agent-owned export path:
-		// 1) missing_raw_blob → capture selected source (or candidates)
+		// Agent-owned export path (not a permanent "not burnable" residual):
+		// 1) missing_raw_blob → capture selected source (or candidates) for FP/face/card
 		// 2) face/FP source_conflict with candidates → capture every highest-count
 		//    candidate (including legacy comparing_sources labels). Do not leave
 		//    blocked source_resolution when the agent can export custody.
-		// 3) card / no-candidate source_conflict remains blocked source_resolution
+		// 3) card source_conflict with multi-value equality unproven stays blocked
+		//    only after candidate CardInfo export was attempted (or no candidates).
 		if (String(write.blockingReason) === "missing_raw_blob") {
 			const captureDeviceIds =
 				sourceDeviceId
@@ -836,8 +863,14 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 					: candidateDeviceIds.length > 0
 						? candidateDeviceIds
 						: [];
-			if (["fingerprint", "face"].includes(modality) && captureDeviceIds.length) {
+			if (
+				["fingerprint", "face", "card"].includes(modality) &&
+				captureDeviceIds.length
+			) {
 				enqueueSourceCapture(captureDeviceIds);
+			} else if (modality === "card" && !captureDeviceIds.length) {
+				// Still agent work: no device id to read is an observability/plan defect.
+				enqueueBlockedSourceResolution();
 			}
 		} else if (String(write.blockingReason) === "source_conflict") {
 			const stage = String(write.recoveryStage || "");
@@ -851,6 +884,13 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 				candidateDeviceIds.length > 0 &&
 				(exportingStage || needsCandidateExport)
 			) {
+				enqueueSourceCapture(candidateDeviceIds);
+			} else if (
+				modality === "card" &&
+				candidateDeviceIds.length > 0 &&
+				(exportingStage || needsCandidateExport || stage === "comparing_sources")
+			) {
+				// Export CardInfo on every candidate so replan can prove exact value equality.
 				enqueueSourceCapture(candidateDeviceIds);
 			} else {
 				enqueueBlockedSourceResolution();
@@ -898,11 +938,61 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 		}
 	}
 
+	// Target owner capture is export work. Fleet-wide missing lists can be 20–100+
+	// owners and dominate wall-clock even when only a few residual writes remain.
+	// Prefer owners that actually unlock fingerprint writes / force-clear peers.
+	const ownerCaptureNeededByTarget = new Map<string, Set<string>>();
+	const readyFpTargets = new Set<string>();
+	for (const write of writes) {
+		if (text(write.modality) !== "fingerprint") continue;
+		const targetDeviceId = text(write.targetDeviceId);
+		if (!targetDeviceId) continue;
+		const classification = classifyCredentialRecoveryWrite(write);
+		if (classification === "ready_to_write") {
+			readyFpTargets.add(targetDeviceId);
+		}
+		const needed = ownerCaptureNeededByTarget.get(targetDeviceId) || new Set<string>();
+		const vendorUserId = text(write.vendorUserId);
+		if (
+			classification === "ready_to_write" ||
+			String(write.blockingReason) === "target_owner_scan_incomplete"
+		) {
+			if (vendorUserId) needed.add(vendorUserId);
+		}
+		for (const owner of [
+			...(Array.isArray(write.fleetSameByteMajorityConflictingOwners)
+				? write.fleetSameByteMajorityConflictingOwners
+				: []),
+			...(Array.isArray(write.adminSandboxConflictingOwners)
+				? write.adminSandboxConflictingOwners
+				: []),
+		]) {
+			const ownerId = text(owner);
+			if (ownerId) needed.add(ownerId);
+		}
+		if (needed.size) ownerCaptureNeededByTarget.set(targetDeviceId, needed);
+	}
+
 	for (const scan of Array.isArray(plan?.fingerprintTargetOwnerScans)
 		? plan.fingerprintTargetOwnerScans
 		: []) {
-		for (const vendorUserId of scan?.missingVendorUserIds || []) {
-			const targetDeviceId = text(scan.targetDeviceId);
+		const targetDeviceId = text(scan.targetDeviceId);
+		if (!targetDeviceId) continue;
+		// Scope owner export to write-relevant vendors only (force peers + residual
+		// ids). Full fleet missingVendorUserIds dumps made residual waves 2–6 min.
+		const needed = ownerCaptureNeededByTarget.get(targetDeviceId);
+		const missing = Array.isArray(scan?.missingVendorUserIds)
+			? scan.missingVendorUserIds.map((id: unknown) => text(id)).filter(Boolean)
+			: [];
+		let toCapture: string[] = [];
+		if (needed && needed.size > 0) {
+			toCapture = missing.filter((id: string) => needed.has(id));
+		} else if (!readyFpTargets.has(targetDeviceId)) {
+			toCapture = [];
+		} else {
+			toCapture = missing.slice(0, 5);
+		}
+		for (const vendorUserId of toCapture) {
 			const taskKey = key(
 				"target_owner_capture",
 				targetDeviceId,
@@ -919,8 +1009,12 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 				status: "pending",
 				stage: "recovering_target_owner_custody",
 				priority: 9_000,
-				unlockCount: Number(scan.missingCount || 1),
-				payload: { evidenceHash: scan.evidenceHash },
+				unlockCount: 1,
+				payload: {
+					evidenceHash: scan.evidenceHash,
+					scopedOwnerCapture: true,
+					fleetMissingCount: Number(scan.missingCount || missing.length || 0),
+				},
 			});
 		}
 	}
@@ -996,9 +1090,9 @@ export const selectCredentialRecoveryReadyWrites = (params: {
 	/** Task keys that permanently consumed write budget (succeeded or non-retryable failed). */
 	attemptedTaskKeys?: Iterable<unknown> | null;
 }) => {
-	const canaryModality = ["fingerprint", "face"].includes(String(params.canaryModality || ""))
-		? String(params.canaryModality)
-		: null;
+	const canaryModality = normalizeCredentialRecoveryCanaryModality(
+		params.canaryModality,
+	);
 	const maxVerifiedWrites = Math.max(
 		0,
 		Math.min(50, Number(params.maxVerifiedWrites ?? 50) || 0),
@@ -1239,7 +1333,7 @@ export type CredentialRecoveryFullScopeCertainty = {
 };
 
 export type CredentialRecoveryExecutionPreview = {
-	canaryModality: "fingerprint" | "face" | null;
+	canaryModality: CredentialRecoveryCanaryModality | null;
 	maxVerifiedWrites: number;
 	readyTotal: number;
 	faceReady: number;
@@ -1287,9 +1381,9 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 	canaryModality?: unknown;
 	maxVerifiedWrites?: unknown;
 }): CredentialRecoveryExecutionPreview => {
-	const canaryModality = ["fingerprint", "face"].includes(String(params.canaryModality || ""))
-		? (String(params.canaryModality) as "fingerprint" | "face")
-		: null;
+	const canaryModality = normalizeCredentialRecoveryCanaryModality(
+		params.canaryModality,
+	);
 	const maxVerifiedWrites = Math.max(
 		0,
 		Math.min(50, Number(params.maxVerifiedWrites ?? 50) || 0),
@@ -1438,7 +1532,9 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 			? uniqueFace.size
 			: canaryModality === "fingerprint"
 				? uniqueFp.size
-				: uniqueFace.size + uniqueFp.size;
+				: canaryModality === "card"
+					? uniqueCard.size
+					: uniqueFace.size + uniqueFp.size + uniqueCard.size;
 	const maxUniqueClosed = Math.min(wouldWriteUniquePeople, uniqueGapForModality);
 	const willDecrease = wouldWrite.length > 0 && wouldWriteUniquePeople > 0;
 	// Full unique-gap zero in this wave only when every residual op in-scope is ready

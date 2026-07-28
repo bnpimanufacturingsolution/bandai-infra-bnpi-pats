@@ -824,6 +824,35 @@ export interface CredentialRecoveryJob {
 	lastAdvancementAt?: string | null;
 	workerLeaseActive?: boolean;
 	resumeCursor: number;
+	/** Wave size locked at job start (default 20). Progress is for this wave, not full residual. */
+	plannedWaveSize?: number;
+	wouldWriteCount?: number;
+	/** 0–100 weighted progress from API (stage floors + partial in-flight weight). */
+	progressPercent?: number;
+	/** Operator-facing English for currentStage (replan / capture / write). */
+	progressLabel?: string | null;
+	/** Short contract line: elapsed, task counts, why zeros may be honest. */
+	progressDetail?: string | null;
+	tasksByKind?: {
+		sourceCapturePending?: number;
+		sourceCaptureProcessing?: number;
+		sourceCaptureSucceeded?: number;
+		targetWritePending?: number;
+		targetWriteSucceeded?: number;
+	};
+	progressWeights?: {
+		verified?: number;
+		failed?: number;
+		writing?: number;
+		awaitingPhysicalReread?: number;
+		readyToWrite?: number;
+		recovered?: number;
+		recoveringNow?: number;
+		weightedUnits?: number;
+		waveDenominator?: number;
+		stageFloor?: number;
+		replanElapsedMs?: number;
+	};
 	counters?: {
 		physicallyVerifiedRemaining?: number;
 		recoveryNeeded?: number;
@@ -839,6 +868,9 @@ export interface CredentialRecoveryJob {
 		recovered?: number;
 		retrying?: number;
 		blocked?: number;
+		replanStartedAt?: string;
+		phase?: string;
+		replanElapsedMs?: number;
 	};
 	latestError?: CredentialRecoveryError | null;
 	activeTask?: CredentialRecoveryTask | null;
@@ -1737,15 +1769,32 @@ class DevicesService extends APIService {
 
 			const endpoint = `/api/device/events${query.toString() ? `?${query.toString()}` : ""}`;
 			const response = await hrisApiClient.get<any>(endpoint);
-			let eventsData = response.data;
-			if (eventsData && typeof eventsData === "object" && "data" in eventsData) {
-				eventsData = eventsData.data;
+			// ApiClient returns the full envelope `{ success, data, ... }`. Unwrap once
+			// (and tolerate a rare double-wrap) so list pages never get total>0 with [] rows.
+			let eventsData: any = response?.data ?? response;
+			if (eventsData && typeof eventsData === "object" && "data" in eventsData && !Array.isArray(eventsData.events)) {
+				const nested = (eventsData as { data?: unknown }).data;
+				if (nested && typeof nested === "object") {
+					eventsData = nested;
+				}
 			}
 
+			const rawEvents =
+				(Array.isArray(eventsData?.events) && eventsData.events) ||
+				(Array.isArray(eventsData?.items) && eventsData.items) ||
+				(Array.isArray(eventsData?.rows) && eventsData.rows) ||
+				(Array.isArray(eventsData) && eventsData) ||
+				[];
+
+			const pagination =
+				eventsData?.pagination && typeof eventsData.pagination === "object"
+					? eventsData.pagination
+					: undefined;
+
 			return {
-				events: eventsData?.events || [],
+				events: rawEvents,
 				summary: eventsData?.summary || {
-					total: 0,
+					total: Number(pagination?.total || 0),
 					byCategory: {},
 					byAction: {},
 					byActionCategory: {},
@@ -1763,7 +1812,7 @@ class DevicesService extends APIService {
 					byStatus: {},
 					bySource: {},
 				},
-				pagination: eventsData?.pagination,
+				pagination,
 			};
 		} catch (error: any) {
 			console.error("Error fetching device events:", error);
@@ -2119,10 +2168,14 @@ class DevicesService extends APIService {
 	}
 
 	async startHikvisionSdkUserMergeJob(payload: DeviceUserMergeApplyPayload): Promise<{
-		jobId: string;
+		jobId: string | null;
 		scopeHash: string;
-		progress: DeviceUserMergeJobProgress;
+		progress?: DeviceUserMergeJobProgress;
 		review: any;
+		nothingToWrite?: boolean;
+		decisionsRecorded?: boolean;
+		pathHint?: string;
+		message?: string;
 	}> {
 		try {
 			const reviewResponse = await hrisApiClient.post<any>(
@@ -2136,11 +2189,31 @@ class DevicesService extends APIService {
 				{ ...payload, expectedScopeHash: review.scopeHash },
 			);
 			const data = response.data?.data || response.data;
+			const message =
+				response.data?.message ||
+				response.data?.data?.message ||
+				(typeof response.data === "string" ? response.data : undefined);
+			// Executable scope with zero physical peer creates and zero profile overlays
+			// (e.g. KEEP-only or biometric decisions only) returns 200 nothingToWrite —
+			// not a 409 hard failure and not a job id.
+			if (data?.nothingToWrite) {
+				return {
+					jobId: null,
+					scopeHash: String(data.scopeHash || review.scopeHash),
+					review,
+					nothingToWrite: true,
+					decisionsRecorded: data.decisionsRecorded !== false,
+					pathHint: data.pathHint,
+					message:
+						message ||
+						"Nothing physical to write; decisions are aligned or require credential-mode raw custody.",
+				};
+			}
 			if (!data?.jobId) throw new Error("Failed to start SDK user merge job");
 			if (data.scopeHash !== review.scopeHash) {
 				throw new Error("Started merge scope does not match the reviewed scope");
 			}
-			return { ...data, review };
+			return { ...data, review, message };
 		} catch (error: any) {
 			throw new Error(
 				error.data?.errors?.[0]?.message ||
@@ -2168,26 +2241,54 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async startHikvisionCredentialRecoveryJob(planId: string): Promise<CredentialRecoveryJob> {
+	async startHikvisionCredentialRecoveryJob(
+		planId: string,
+		options?: {
+			maxVerifiedWrites?: number;
+			canaryModality?: "fingerprint" | "face" | null;
+		},
+	): Promise<CredentialRecoveryJob> {
 		try {
+			// Residual default 20: stable wave size. Hard max 50 (API ceiling).
+			// Historical UI bug used 1 write/job — looked like no progress.
+			const maxVerifiedWrites = Math.max(
+				1,
+				Math.min(50, Number(options?.maxVerifiedWrites ?? 20) || 20),
+			);
+			const canaryModality =
+				options?.canaryModality === "face" || options?.canaryModality === "fingerprint"
+					? options.canaryModality
+					: "fingerprint";
 			const reviewResponse = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/recovery/review",
-				{ planId },
+				{ planId, canaryModality, maxVerifiedWrites },
 			);
 			const review = reviewResponse.data?.data || reviewResponse.data;
 			if (!review?.scopeHash) throw new Error("Recovery review returned no scope hash");
+			const wouldWrite =
+				Number(review?.executionPreview?.wouldWriteCount ?? 0) || maxVerifiedWrites;
 			const response = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/recovery/jobs",
 				{
 					planId,
 					expectedScopeHash: review.scopeHash,
-					maxVerifiedWrites: 1,
-					canaryModality: "fingerprint",
+					maxVerifiedWrites,
+					canaryModality,
+					// Explicit execute (not dry-run)
+					execute: true,
+					dryRun: false,
 				},
 			);
 			const data = response.data?.data || response.data;
 			if (!data?.job?.id) throw new Error("Recovery job did not return a durable job ID");
-			return data.job as CredentialRecoveryJob;
+			const job = data.job as CredentialRecoveryJob & {
+				plannedWaveSize?: number;
+				wouldWriteCount?: number;
+			};
+			// Surface planned wave so FE progress is not misread as "full residual".
+			job.plannedWaveSize = maxVerifiedWrites;
+			job.wouldWriteCount = wouldWrite;
+			return job;
 		} catch (error: any) {
 			throw new Error(
 				error.data?.errors?.[0]?.message ||

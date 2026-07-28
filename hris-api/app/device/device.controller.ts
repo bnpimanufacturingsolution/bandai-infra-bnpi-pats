@@ -26,6 +26,7 @@ import {
 	buildHikvisionDeviceEventDedupeKey,
 	buildHikvisionLogSearchXml,
 	classifyHikvisionLogSearchRow,
+	isOpaqueHikvisionPersonToken,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
 	normalizeHikvisionLogSearchRow,
@@ -62,11 +63,13 @@ import {
 import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
+	buildProfileOverlayWrites,
 	classifyFaceCustody,
 	fingerprintCustodyMatchesReview,
 	dedupeDurableFingerprintOwnerConflicts,
 	extractProgress5OwnerConflictsFromWriteError,
 	isAdminSandboxVendorUserId,
+	isDeviceUserMergeProfileOverlayField,
 	normalizeFingerprintCustodyEvidence,
 	reconcileDurableFingerprintOwnerConflicts,
 	resolveFaceAssociationStrategy,
@@ -107,6 +110,7 @@ import {
 	classifyCredentialRecoveryError,
 	describeCredentialRecoveryError,
 	isCredentialRecoveryPhysicalStage,
+	normalizeCredentialRecoveryCanaryModality,
 	planCredentialRecoveryWorkerFailure,
 	recoveredCustodyCanUnlockWrite,
 	remainingCredentialRecoveryWriteAttemptBudget,
@@ -305,6 +309,26 @@ const CREDENTIAL_DEVICE_LEASE_DIR = path.join(
 	PROJECT_TRUTH_RUNTIME_ROOT,
 	"credential-device-leases",
 );
+/**
+ * Residual burn defaults (override via env without code thrash):
+ * - independent devices: one source task per panel, bound by unique frozen devices
+ * - max verified writes: smaller residual waves (20) for stable feedback; hard max 50
+ */
+const CREDENTIAL_RECOVERY_INDEPENDENT_DEVICE_CONCURRENCY = Math.max(
+	1,
+	Math.min(
+		8,
+		Number(process.env.PROJECT_TRUTH_RECOVERY_INDEPENDENT_DEVICES || 5) || 5,
+	),
+);
+const CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES = Math.max(
+	1,
+	Math.min(
+		50,
+		Number(process.env.PROJECT_TRUTH_RECOVERY_MAX_VERIFIED_WRITES || 20) || 20,
+	),
+);
+const CREDENTIAL_RECOVERY_MAX_VERIFIED_WRITES_CEILING = 50;
 const DEVICE_IMPORT_JOB_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 /** Merge peer-copy can sit in one long VM batch; still treat silent processing as dead after this. */
@@ -711,8 +735,22 @@ const buildDeviceUserMergeWriteMatrix = (plan: any) => {
 	};
 	const perTarget = new Map<string, any>();
 	const perSource = new Map<string, any>();
+	// Profile A/B decisions that change an existing DeviceUser row (not missing-person creates).
+	// Card/face/FP conflicts never produce these — no invented biometric bytes.
+	const profileOverlayWrites =
+		Array.isArray(plan?.profileOverlayWrites) && plan.profileOverlayWrites.length > 0
+			? plan.profileOverlayWrites
+			: buildProfileOverlayWrites(Array.isArray(plan?.users) ? plan.users : []);
 	const rows = (Array.isArray(plan?.users) ? plan.users : []).map((user: any) => {
-		const selectedConflict = (user.conflicts || []).find((conflict: any) => conflict.choice);
+		// Prefer a resolved profile conflict for peer-create source selection; fall back to
+		// any resolved conflict, then planner sourceDeviceId. Biometric-only choices do not
+		// invent card/face/FP bytes in user mode.
+		const selectedConflict =
+			(user.conflicts || []).find(
+				(conflict: any) =>
+					conflict.choice &&
+					isDeviceUserMergeProfileOverlayField(String(conflict.field || "")),
+			) || (user.conflicts || []).find((conflict: any) => conflict.choice);
 		const sourceDeviceId =
 			selectedConflict?.choice === "B"
 				? selectedConflict.deviceB.id
@@ -733,9 +771,14 @@ const buildDeviceUserMergeWriteMatrix = (plan: any) => {
 			const summary = extractHikvisionCredentialSummary(record?.rawPayload || {});
 			return Number(summary.faceCount || 0) > 0;
 		}).length;
+		// Physical peer creates only (missing people). Field-only overwrites are counted
+		// separately as dbOverlayWrites so missing=0 + decisions does not look empty forever.
 		const targetDeviceIds = (user.targetDeviceIds || []).filter(
 			(targetDeviceId: string) => targetDeviceId && targetDeviceId !== sourceDeviceId,
 		);
+		const overlayTargetDeviceIds = profileOverlayWrites
+			.filter((write: any) => String(write.userKey) === String(user.key))
+			.map((write: any) => String(write.targetDeviceId));
 		const source = perSource.get(sourceDeviceId) || {
 			deviceId: sourceDeviceId,
 			deviceName: deviceLabel(sourceDeviceId),
@@ -765,6 +808,8 @@ const buildDeviceUserMergeWriteMatrix = (plan: any) => {
 			targetDeviceIds,
 			targetDeviceNames: targetDeviceIds.map(deviceLabel),
 			writes: targetDeviceIds.length,
+			dbOverlayTargetDeviceIds: overlayTargetDeviceIds,
+			dbOverlayWrites: overlayTargetDeviceIds.length,
 			fingerprintSourceCount: Number(sourceCredentials.fingerprintCount || 0),
 			fingerprintPresentDevices,
 			fingerprintExpectedDevices: expectedDeviceCount,
@@ -776,9 +821,17 @@ const buildDeviceUserMergeWriteMatrix = (plan: any) => {
 			conflicts: (user.conflicts || []).length,
 		};
 	});
+	const totalPhysicalWrites = rows.reduce((sum: number, row: any) => sum + row.writes, 0);
+	const dbOverlayWrites = profileOverlayWrites.length;
 	return {
 		selectedUniqueIds: rows.length,
-		totalWrites: rows.reduce((sum: number, row: any) => sum + row.writes, 0),
+		// Physical missing-person peer creates only (historical contract for peer copy jobs).
+		totalWrites: totalPhysicalWrites,
+		// Resolved profile A/B DeviceUser overlays (displayName/validFrom/etc.).
+		dbOverlayWrites,
+		// Work units the start-job gate accepts: physical creates and/or DB overlays.
+		totalWork: totalPhysicalWrites + dbOverlayWrites,
+		profileOverlayWrites,
 		fingerprintGaps: rows.reduce((sum: number, row: any) => sum + row.fingerprintGapDevices, 0),
 		faceGaps: rows.reduce((sum: number, row: any) => sum + row.faceGapDevices, 0),
 		conflicts: rows.reduce((sum: number, row: any) => sum + row.conflicts, 0),
@@ -1400,6 +1453,8 @@ const readDeviceUserMergeJob = (jobId: string): DeviceUserMergeJob | null => {
  */
 const readDurableFingerprintOwnerConflicts = async (
 	organizationId: string,
+	// Must be injected: this helper is module-level and cannot see controller(prisma).
+	prismaClient: PrismaClient | any,
 ): Promise<DurableFingerprintOwnerConflictEvidence[]> => {
 	const evidence: DurableFingerprintOwnerConflictEvidence[] = [];
 	try {
@@ -1438,9 +1493,12 @@ const readDurableFingerprintOwnerConflicts = async (
 		);
 	}
 	// Credential recovery jobs store the same diagnostics on result.results and
-	// latestError.message — harvest so replan marks PROD anti-dupe residual.
+	// latestError.message — harvest so replan force-clears the real occupying peers.
 	try {
-		const recoveryJobs = await (prisma as any).credentialRecoveryJob.findMany({
+		if (!prismaClient) {
+			throw new Error("prisma_client_required_for_recovery_owner_conflict_harvest");
+		}
+		const recoveryJobs = await (prismaClient as any).credentialRecoveryJob.findMany({
 			where: { organizationId },
 			orderBy: { updatedAt: "desc" },
 			take: 50,
@@ -5925,8 +5983,8 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			if (!/^\d+$/.test(vendorUserId) && vendorUserId.length > 32) {
 				// Allow non-numeric plain ids; reject obvious opaque tokens.
-				const { isOpaqueHikvisionPersonToken } =
-					await import("../../helper/hikvision-event-contract.helper.js");
+				// Static import only — webpack dynamic named import can yield
+				// "isOpaqueHikvisionPersonToken is not a function" in dist.
 				if (isOpaqueHikvisionPersonToken(vendorUserId)) {
 					res.status(400).json(
 						buildErrorResponse(
@@ -8377,7 +8435,10 @@ export const controller = (prisma: PrismaClient) => {
 				startPosition,
 				pageSize,
 				maxRows,
-				fetchPage: async (searchResultPosition, maxResults) => {
+				fetchPage: async (
+					searchResultPosition: number,
+					maxResults: number,
+				): Promise<string> => {
 					const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
 						method: "POST",
 						deviceId: device.id,
@@ -8402,25 +8463,30 @@ export const controller = (prisma: PrismaClient) => {
 					return String(response?.raw || "");
 				},
 			});
-			const normalized = result.rows.map((row) =>
-				normalizeHikvisionLogSearchRow(row, device),
+			const normalized: NormalizedHikvisionEvidenceEvent[] = result.rows.map(
+				(row: unknown) =>
+					normalizeHikvisionLogSearchRow(row as any, device) as NormalizedHikvisionEvidenceEvent,
 			);
 			const countBy = (
 				key: "eventCategory" | "eventAction" | "eventConfidence" | "evidenceSource",
-			) =>
-				Object.fromEntries(
-					Array.from(
-						normalized.reduce((counts, event) => {
-							const value = String(event[key] || "UNKNOWN");
-							counts.set(value, (counts.get(value) || 0) + 1);
-							return counts;
-						}, new Map<string, number>()),
-					).sort(([left], [right]) => left.localeCompare(right)),
+			): Record<string, number> => {
+				const counts = new Map<string, number>();
+				for (const event of normalized) {
+					const value = String((event as any)[key] || "UNKNOWN");
+					counts.set(value, (counts.get(value) || 0) + 1);
+				}
+				return Object.fromEntries(
+					[...counts.entries()].sort(([left], [right]) => left.localeCompare(right)),
 				);
+			};
 			const summary = {
 				total: normalized.length,
-				mapped: normalized.filter((event) => event.eventAction !== "UNKNOWN").length,
-				unknown: normalized.filter((event) => event.eventAction === "UNKNOWN").length,
+				mapped: normalized.filter(
+					(event: NormalizedHikvisionEvidenceEvent) => event.eventAction !== "UNKNOWN",
+				).length,
+				unknown: normalized.filter(
+					(event: NormalizedHikvisionEvidenceEvent) => event.eventAction === "UNKNOWN",
+				).length,
 				byCategory: countBy("eventCategory"),
 				byAction: countBy("eventAction"),
 				byConfidence: countBy("eventConfidence"),
@@ -9631,16 +9697,16 @@ export const controller = (prisma: PrismaClient) => {
 									rawCustody.fingerprint.missingRawCount > 0
 										? "missing_raw_blob"
 										: "raw_blob_present";
-								rawCustody.fingerprint.projectedFromEncrypted = true;
+								(rawCustody.fingerprint as any).projectedFromEncrypted = true;
 							}
 						} catch (error: any) {
-							rawCustody.fingerprint.encryptedPresent = true;
-							rawCustody.fingerprint.encryptedCiphertextLength = String(
+							(rawCustody.fingerprint as any).encryptedPresent = true;
+							(rawCustody.fingerprint as any).encryptedCiphertextLength = String(
 								cachedEncrypted.fingerprint?.ciphertext ||
 									cachedEncrypted.fingerprint ||
 									"",
 							).length;
-							rawCustody.fingerprint.encryptedProjectError = String(
+							(rawCustody.fingerprint as any).encryptedProjectError = String(
 								error?.message || error,
 							).slice(0, 240);
 							deviceLogger.warn(
@@ -9680,27 +9746,30 @@ export const controller = (prisma: PrismaClient) => {
 										: null,
 									base64: facePicture,
 									faceTemplate,
+									faceURL: decryptedStoredFace?.faceURL || null,
 									source: "decrypted_encrypted_biometric_bundle",
 									capturedAt: decryptedStoredFace?.capturedAt || null,
 									cardOwnerVerified:
 										decryptedStoredFace?.cardOwnerVerified === true,
 									identityOwnerVerified:
 										decryptedStoredFace?.identityOwnerVerified === true,
+									identityAssociation:
+										decryptedStoredFace?.identityAssociation || null,
 								};
 								rawCustody.face.rawBlobPresent = true;
 								rawCustody.face.storedCount = Math.max(reported, 1);
 								rawCustody.face.missingRawCount = 0;
 								rawCustody.face.status = "raw_blob_present";
-								rawCustody.face.projectedFromEncrypted = true;
+								(rawCustody.face as any).projectedFromEncrypted = true;
 							}
 						} catch (error: any) {
-							rawCustody.face.encryptedPresent = true;
-							rawCustody.face.encryptedCiphertextLength = String(
+							(rawCustody.face as any).encryptedPresent = true;
+							(rawCustody.face as any).encryptedCiphertextLength = String(
 								cachedEncrypted.face?.ciphertext ||
 									cachedEncrypted.face ||
 									"",
 							).length;
-							rawCustody.face.encryptedProjectError = String(
+							(rawCustody.face as any).encryptedProjectError = String(
 								error?.message || error,
 							).slice(0, 240);
 							deviceLogger.warn(
@@ -9718,13 +9787,13 @@ export const controller = (prisma: PrismaClient) => {
 							faceStatus: rawCustody.face.status,
 							faceRawBlobPresent: rawCustody.face.rawBlobPresent,
 							projectedFromEncrypted: Boolean(
-								rawCustody.fingerprint.projectedFromEncrypted ||
-									rawCustody.face.projectedFromEncrypted,
+								(rawCustody.fingerprint as any).projectedFromEncrypted ||
+									(rawCustody.face as any).projectedFromEncrypted,
 							),
 							source: eventPayload
 								? "device_event_or_device_user_raw_custody"
-								: rawCustody.fingerprint.projectedFromEncrypted ||
-									  rawCustody.face.projectedFromEncrypted
+								: (rawCustody.fingerprint as any).projectedFromEncrypted ||
+									  (rawCustody.face as any).projectedFromEncrypted
 									? "decrypted_encrypted_biometric_bundle"
 									: "device_user_raw_custody",
 						});
@@ -9739,11 +9808,13 @@ export const controller = (prisma: PrismaClient) => {
 							fingerprintStatus: rawCustody.fingerprint.status,
 							faceStatus: rawCustody.face.status,
 							fingerprintEncryptedPresent: Boolean(
-								rawCustody.fingerprint.encryptedPresent,
+								(rawCustody.fingerprint as any).encryptedPresent,
 							),
-							faceEncryptedPresent: Boolean(rawCustody.face.encryptedPresent),
-							error: rawCustody.fingerprint.encryptedPresent ||
-								rawCustody.face.encryptedPresent
+							faceEncryptedPresent: Boolean(
+								(rawCustody.face as any).encryptedPresent,
+							),
+							error: (rawCustody.fingerprint as any).encryptedPresent ||
+								(rawCustody.face as any).encryptedPresent
 								? "Reported biometric enrollment has encrypted custody but raw package projection failed or is incomplete"
 								: "Reported biometric enrollment exists but no evidenced raw blob is stored",
 						});
@@ -11758,6 +11829,10 @@ export const controller = (prisma: PrismaClient) => {
 						Date.now() - cardInventoryStartedAt;
 				}
 				const recordAssemblyStartedAt = Date.now();
+				// Fail-closed face custody without identity attestation is common
+				// after replan (stored bytes exist, owner flags not set). Log once
+				// per device as a summary so observability is not a 500+ WARN burst.
+				let unattestedStoredFaceRejectCount = 0;
 				for (const candidate of candidates) {
 					const saved = savedByVendorId.get(candidate.vendorUserId);
 					const decision = resolveDeviceUserLinkDecision(candidate, employees);
@@ -11853,9 +11928,10 @@ export const controller = (prisma: PrismaClient) => {
 						decryptedStoredFace?.cardOwnerVerified === true ||
 						decryptedStoredFace?.identityOwnerVerified === true;
 					if (decryptedStoredFace && !storedFaceOwnerVerified) {
-						deviceLogger.warn(
-							`Stored face custody rejected for ${device.id}/${candidate.vendorUserId}; exact physical identity ownership was not attested`,
-						);
+						// Fail-closed: do not use unattested bytes as recovery source.
+						// Per-user WARN floods Grafana after replan (hundreds of rows);
+						// count and emit one summary after the device loop.
+						unattestedStoredFaceRejectCount += 1;
 						decryptedStoredFace = null;
 					}
 					const portableFaceBundle = Boolean(
@@ -12006,6 +12082,20 @@ export const controller = (prisma: PrismaClient) => {
 					});
 				}
 				timings.recordAssemblyMs = Date.now() - recordAssemblyStartedAt;
+				if (unattestedStoredFaceRejectCount > 0) {
+					deviceLogger.info(
+						`Stored face custody skipped for ${unattestedStoredFaceRejectCount} user(s) on ${device.id}: identity not attested (fail-closed; not an operator error)`,
+						{
+							event: "stored_face_custody_unattested_summary",
+							deviceId: device.id,
+							deviceName: device.name || device.address || device.id,
+							rejectedCount: unattestedStoredFaceRejectCount,
+							candidateCount: candidates.length,
+							severity: "info",
+							operatorAction: "none",
+						},
+					);
+				}
 				return {
 					records: deviceRecords,
 					error: null,
@@ -12536,7 +12626,7 @@ export const controller = (prisma: PrismaClient) => {
 		});
 		plan = reconcileDurableFingerprintOwnerConflicts(
 			plan,
-			await readDurableFingerprintOwnerConflicts(params.organizationId),
+			await readDurableFingerprintOwnerConflicts(params.organizationId, prisma),
 		);
 		const normalizeRecoveryStage = (write: any): HikvisionCredentialRecoveryStage => {
 			const exactStages = new Set([
@@ -12716,20 +12806,197 @@ export const controller = (prisma: PrismaClient) => {
 				)[0] || null;
 		const liveTaskCount = (status: string) =>
 			tasks.filter((task: any) => task.status === status).length;
+		const request = (job.request || {}) as Record<string, unknown>;
+		const counters = tasks.length
+			? {
+					...(job.counters || {}),
+					tasksTotal: tasks.length,
+					tasksPending: liveTaskCount("pending"),
+					recoveringNow: liveTaskCount("processing"),
+					recovered: liveTaskCount("succeeded"),
+					retrying: liveTaskCount("retrying"),
+					failed: liveTaskCount("failed"),
+					blocked: liveTaskCount("blocked"),
+				}
+			: job.counters || {};
+		const verified = Number(counters.verified || 0);
+		const failed = Number(counters.failed || 0);
+		const writing = Number(counters.writing || 0);
+		const awaitingReread = Number(counters.awaitingPhysicalReread || 0);
+		const readyToWrite = Number(counters.readyToWrite || 0);
+		const recovered = Number(counters.recovered || 0);
+		const recoveringNow = Number(counters.recoveringNow || 0);
+		const tasksTotal = Number(counters.tasksTotal || tasks.length || 0);
+		const plannedWaveSize = Math.max(
+			1,
+			Math.min(
+				CREDENTIAL_RECOVERY_MAX_VERIFIED_WRITES_CEILING,
+				Number(
+					request.maxVerifiedWrites ||
+						(request.executionPreview as any)?.wouldWriteCount ||
+						CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
+				) || CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
+			),
+		);
+		const wouldWriteCount = Math.max(
+			0,
+			Number((request.executionPreview as any)?.wouldWriteCount || plannedWaveSize) ||
+				plannedWaveSize,
+		);
+		// Weighted progress so the UI bar moves during export/probe/write, not only at verified.
+		// Terminal outcomes (verified/failed) weigh 1.0; in-flight stages use partial weight.
+		const terminalDone = verified + failed;
+		const weightedUnits =
+			verified * 1 +
+			failed * 1 +
+			awaitingReread * 0.85 +
+			writing * 0.65 +
+			readyToWrite * 0.45 +
+			recovered * 0.35 +
+			recoveringNow * 0.25;
+		const taskProgressUnits =
+			tasksTotal > 0
+				? liveTaskCount("succeeded") * 1 +
+					liveTaskCount("failed") * 1 +
+					liveTaskCount("processing") * 0.4 +
+					liveTaskCount("retrying") * 0.3
+				: 0;
+		const waveDenominator = Math.max(
+			plannedWaveSize,
+			wouldWriteCount,
+			terminalDone,
+			1,
+		);
+		const stage = String(job.currentStage || job.status || "");
+		// Order matters: "replanning_recovered_custody" contains both replan and custody.
+		const stageFloor =
+			["completed", "awaiting_replan", "needs_attention", "failed"].includes(
+				String(job.status || ""),
+			)
+				? 100
+				: /replan/i.test(stage)
+					? 22
+					: /writ|reread|canary|physical/i.test(stage)
+						? 40
+						: /ready|select|probe/i.test(stage)
+							? 28
+							: /export|recovering_source|owner_capture|inventory|source_custody/i.test(
+									stage,
+								)
+								? 10
+								: /custody/i.test(stage)
+									? 12
+									: String(job.status) === "pending"
+										? 3
+										: String(job.status) === "recovering" ||
+											  String(job.status) === "retrying"
+											? 8
+											: 2;
+		// Long inventory replan: ramp 22%→45% by elapsed so the bar is not stuck at floor.
+		const replanStartedRaw = String(
+			(counters as any)?.replanStartedAt || job.startedAt || "",
+		).trim();
+		const replanStartedMs = Date.parse(replanStartedRaw);
+		const replanElapsedMs =
+			/replan/i.test(stage) && Number.isFinite(replanStartedMs)
+				? Math.max(0, Date.now() - replanStartedMs)
+				: 0;
+		const replanRamp =
+			replanElapsedMs > 0
+				? Math.min(45, 22 + Math.floor(replanElapsedMs / 4_000))
+				: 0;
+		const rawPercent = Math.max(
+			stageFloor,
+			replanRamp,
+			Math.min(
+				99,
+				Math.round(
+					Math.max(
+						(weightedUnits / waveDenominator) * 100,
+						tasksTotal > 0 ? (taskProgressUnits / tasksTotal) * 100 : 0,
+					),
+				),
+			),
+		);
+		const progressPercent =
+			String(job.status) === "completed" ||
+			String(job.status) === "awaiting_replan" ||
+			String(job.status) === "needs_attention" ||
+			String(job.status) === "failed"
+				? 100
+				: rawPercent;
+		const tasksByKind = {
+			sourceCapturePending: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "source_capture" &&
+					["pending", "retrying"].includes(String(t.status)),
+			).length,
+			sourceCaptureProcessing: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "source_capture" && String(t.status) === "processing",
+			).length,
+			sourceCaptureSucceeded: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "source_capture" && String(t.status) === "succeeded",
+			).length,
+			targetWritePending: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "target_write" &&
+					["pending", "retrying", "processing"].includes(String(t.status)),
+			).length,
+			targetWriteSucceeded: tasks.filter(
+				(t: any) =>
+					String(t.kind) === "target_write" && String(t.status) === "succeeded",
+			).length,
+		};
+		const progressLabel = /replan/i.test(stage)
+			? "Re-reading device inventory after card/FP/face custody capture (often 1–3 min)"
+			: /writ|canary|physical/i.test(stage)
+				? "Writing recovered credentials to target panels"
+				: /reread/i.test(stage)
+					? "Physical reread to prove writes stuck"
+					: /source|export|owner_capture|custody|recovering_source/i.test(stage)
+						? "Capturing source custody (card/FP/face bytes from panels)"
+						: /ready|select|probe/i.test(stage)
+							? "Selecting ready writes from recovered custody"
+							: String(job.status) === "pending"
+								? "Queued — waiting for recovery worker"
+								: String(job.status) === "completed"
+									? "Wave finished"
+									: "Recovery worker active";
+		const progressDetail = /replan/i.test(stage)
+			? `Inventory replan in progress${replanElapsedMs ? ` · ${Math.round(replanElapsedMs / 1000)}s elapsed` : ""}. Counters stay low until replan finishes and ready writes are claimed — this is not a stuck zero bar.`
+			: tasksTotal > 0
+				? `Tasks ${liveTaskCount("succeeded")}/${tasksTotal} done · ${liveTaskCount("processing")} running · ${liveTaskCount("pending") + liveTaskCount("retrying")} queued`
+				: `Wave size ${plannedWaveSize} · verified ${verified} · failed ${failed}`;
 		return {
 			...job,
-			counters: tasks.length
-				? {
-						...(job.counters || {}),
-						tasksTotal: tasks.length,
-						tasksPending: liveTaskCount("pending"),
-						recoveringNow: liveTaskCount("processing"),
-						recovered: liveTaskCount("succeeded"),
-						retrying: liveTaskCount("retrying"),
-						failed: liveTaskCount("failed"),
-						blocked: liveTaskCount("blocked"),
-					}
-				: job.counters,
+			counters: {
+				...counters,
+				// Residual left after this wave — not "wave remaining".
+				physicallyVerifiedRemaining: Number(
+					(counters as any)?.physicallyVerifiedRemaining || 0,
+				),
+			},
+			plannedWaveSize,
+			wouldWriteCount,
+			progressPercent,
+			progressLabel,
+			progressDetail,
+			tasksByKind,
+			progressWeights: {
+				verified,
+				failed,
+				writing,
+				awaitingPhysicalReread: awaitingReread,
+				readyToWrite,
+				recovered,
+				recoveringNow,
+				weightedUnits: Math.round(weightedUnits * 100) / 100,
+				waveDenominator,
+				stageFloor: Math.max(stageFloor, replanRamp || 0),
+				replanElapsedMs,
+			},
 			workerLeaseActive: Boolean(
 				job.leaseOwner &&
 					job.leaseExpiresAt &&
@@ -12856,11 +13123,9 @@ export const controller = (prisma: PrismaClient) => {
 			)?.request as any;
 			const recoveryCanaryRequested =
 				Number(recoveryRequest?.maxVerifiedWrites || 0) > 0;
-			const recoveryCanaryModality = ["fingerprint", "face"].includes(
-				String(recoveryRequest?.canaryModality || ""),
-			)
-				? String(recoveryRequest.canaryModality)
-				: null;
+			const recoveryCanaryModality = normalizeCredentialRecoveryCanaryModality(
+				recoveryRequest?.canaryModality,
+			);
 			let processedThisLease = 0;
 			let actionableCustodyRecovered = false;
 			while (true) {
@@ -12882,7 +13147,10 @@ export const controller = (prisma: PrismaClient) => {
 				for (const task of pending) {
 					const deviceId = String(task.sourceDeviceId || task.targetDeviceId || "");
 					if (deviceId && !independent.has(deviceId)) independent.set(deviceId, task);
-					if (independent.size >= 5) break;
+					if (
+						independent.size >= CREDENTIAL_RECOVERY_INDEPENDENT_DEVICE_CONCURRENCY
+					)
+						break;
 				}
 				await Promise.all(
 					[...independent.values()].map(async (task: any) => {
@@ -12899,7 +13167,19 @@ export const controller = (prisma: PrismaClient) => {
 								startedAt,
 							},
 						});
-						await heartbeat({ currentTaskKey: task.taskKey });
+						await heartbeat({
+							currentTaskKey: task.taskKey,
+							currentStage:
+								task.modality === "card"
+									? "capturing_card_custody"
+									: task.modality === "fingerprint"
+										? "capturing_fingerprint_custody"
+										: task.modality === "face"
+											? "capturing_face_custody"
+											: "recovering_source_custody",
+						});
+						// Refresh counters as each task starts so UI is not stuck at 0s.
+						await refreshLiveCounters().catch(() => undefined);
 						deviceLogger.info("Credential recovery task started", {
 							event: "credential_recovery_task_started",
 							jobId: params.jobId,
@@ -13023,10 +13303,131 @@ export const controller = (prisma: PrismaClient) => {
 													};
 												}
 											})()
-										: {
-												ok: false,
-												reason: "card custody recovery is not implemented",
-											};
+										: task.modality === "card"
+											? await (async () => {
+													// Agent-owned: CardInfo inventory for exact employeeNo.
+													// missing_raw_blob means count reported without stored cardNo —
+													// that is a harvest/export gap, not a permanent physical block.
+													const [device, row] = await Promise.all([
+														(prisma as any).device.findFirst({
+															where: {
+																id: deviceId,
+																organizationId: task.organizationId,
+															},
+														}),
+														(prisma as any).deviceUser.findFirst({
+															where: {
+																organizationId: task.organizationId,
+																deviceId,
+																OR: [
+																	{ vendorUserId: task.vendorUserId },
+																	{ employeeNo: task.vendorUserId },
+																],
+															},
+														}),
+													]);
+													if (!device) {
+														throw new Error(
+															`Card source recovery lost device ${deviceId}`,
+														);
+													}
+													const inventory =
+														await readHikvisionCardValuesForOwnerFromFullInventory(
+															{
+																req: params.req,
+																deviceId,
+																vendorUserId: String(task.vendorUserId),
+															},
+														);
+													const uniqueCards = [
+														...new Set(
+															(inventory.cardValues || [])
+																.map((value: string) => String(value || "").trim())
+																.filter(Boolean),
+														),
+													];
+													if (uniqueCards.length === 0) {
+														return {
+															ok: false,
+															reason: `CardInfo inventory returned no card for ${task.vendorUserId} on ${deviceId} (count-only enroll or empty panel)`,
+															cardCount: 0,
+															pagesRead: inventory.pagesRead,
+															rowsScanned: inventory.rowsScanned,
+														};
+													}
+													if (uniqueCards.length !== 1) {
+														return {
+															ok: false,
+															reason: `CardInfo inventory found ${uniqueCards.length} distinct cards for ${task.vendorUserId}; equality not proven`,
+															cardCount: uniqueCards.length,
+															pagesRead: inventory.pagesRead,
+															rowsScanned: inventory.rowsScanned,
+														};
+													}
+													const cardNo = uniqueCards[0];
+													if (row) {
+														const nextRaw = {
+															...(row.rawPayload || {}),
+															cardNo,
+															CardInfo: {
+																...((row.rawPayload as any)?.CardInfo || {}),
+																cardNo,
+																employeeNo: String(task.vendorUserId),
+															},
+															_hrisDeviceMetadata: {
+																...((row.rawPayload as any)?._hrisDeviceMetadata ||
+																	{}),
+																credentialSummary: {
+																	...((row.rawPayload as any)?._hrisDeviceMetadata
+																		?.credentialSummary || {}),
+																	cardCount: Math.max(
+																		1,
+																		Number(
+																			(row.rawPayload as any)?._hrisDeviceMetadata
+																				?.credentialSummary?.cardCount || 0,
+																		),
+																	),
+																	cardNoPresent: true,
+																},
+																cardCustody: {
+																	cardNoPresent: true,
+																	source: "isapi_cardinfo_inventory_recovery",
+																	capturedAt: new Date().toISOString(),
+																	pagesRead: inventory.pagesRead,
+																	rowsScanned: inventory.rowsScanned,
+																},
+															},
+														};
+														await (prisma as any).deviceUser.update({
+															where: { id: row.id },
+															data: {
+																rawPayload: nextRaw,
+																vendorMetadata: {
+																	...(row.vendorMetadata || {}),
+																	cardPresent: true,
+																	cardCustodySource:
+																		"isapi_cardinfo_inventory_recovery",
+																	cardCapturedAt: new Date().toISOString(),
+																},
+															},
+														});
+													}
+													return {
+														ok: true,
+														present: true,
+														reason: null,
+														source: "isapi_cardinfo_inventory_recovery",
+														cardNo,
+														cardCount: 1,
+														pagesRead: inventory.pagesRead,
+														rowsScanned: inventory.rowsScanned,
+														deviceUserId: row?.id || null,
+													};
+												})()
+											: {
+													ok: false,
+													reason: `source capture unsupported for modality ${task.modality}`,
+												};
 							if (!result?.ok) throw new Error(result?.reason || "source capture failed");
 							if (recoveredCustodyCanUnlockWrite(task.modality, result)) {
 								actionableCustodyRecovered = true;
@@ -13137,7 +13538,8 @@ export const controller = (prisma: PrismaClient) => {
 				// entire custody backlog.
 				if (
 					recoveryCanaryRequested &&
-					processedThisLease >= 5 &&
+					processedThisLease >=
+						CREDENTIAL_RECOVERY_INDEPENDENT_DEVICE_CONCURRENCY &&
 					actionableCustodyRecovered
 				) {
 					break;
@@ -13161,13 +13563,17 @@ export const controller = (prisma: PrismaClient) => {
 			const request = (persistedJob?.request || {}) as any;
 			const maxVerifiedWrites = Math.max(
 				0,
-				Math.min(50, Number(request.maxVerifiedWrites || 0)),
+				Math.min(
+					CREDENTIAL_RECOVERY_MAX_VERIFIED_WRITES_CEILING,
+					Number(
+						request.maxVerifiedWrites ||
+							CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
+					),
+				),
 			);
-			const canaryModality = ["fingerprint", "face"].includes(
-				String(request.canaryModality || ""),
-			)
-				? String(request.canaryModality)
-				: null;
+			const canaryModality = normalizeCredentialRecoveryCanaryModality(
+				request.canaryModality,
+			);
 			// Only permanent outcomes consume canary budget. Retryable transport
 			// claims (status processing/retrying after ECONNRESET) must not exhaust
 			// maxVerifiedWrites and strand the job in awaiting_replan with verified=0.
@@ -13190,7 +13596,24 @@ export const controller = (prisma: PrismaClient) => {
 			let verified = 0;
 			let writeFailure: Record<string, unknown> | null = null;
 			if (remainingWriteAttemptBudget > 0) {
-				await heartbeat({ currentStage: "replanning_recovered_custody" });
+				const replanStartedIso = new Date().toISOString();
+				const preReplanCounters = (
+					await jobStore.findUnique({
+						where: { id: params.jobId },
+						select: { counters: true },
+					})
+				)?.counters as Record<string, unknown> | null;
+				await heartbeat({
+					currentStage: "replanning_recovered_custody",
+					currentTaskKey: null,
+					counters: {
+						...(preReplanCounters || {}),
+						replanStartedAt: replanStartedIso,
+						phase: "replan_inventory",
+						// Keep recovered visible during replan so UI is not all zeros.
+						recovered: Number(preReplanCounters?.recovered || 0),
+					},
+				});
 				const replanStartedAt = Date.now();
 				deviceLogger.info("Credential recovery replan started", {
 					event: "credential_recovery_replan_started",
@@ -13200,13 +13623,20 @@ export const controller = (prisma: PrismaClient) => {
 					deviceCount: (persistedJob.deviceIds || []).length,
 				});
 				const replanHeartbeat = setInterval(() => {
-					heartbeat({ currentStage: "replanning_recovered_custody" }).catch(
-						(error: unknown) =>
-							deviceLogger.warn(
-								`Credential recovery job ${params.jobId} replan heartbeat failed: ${error}`,
-							),
+					heartbeat({
+						currentStage: "replanning_recovered_custody",
+						counters: {
+							...(preReplanCounters || {}),
+							replanStartedAt: replanStartedIso,
+							phase: "replan_inventory",
+							replanElapsedMs: Date.now() - replanStartedAt,
+						},
+					}).catch((error: unknown) =>
+						deviceLogger.warn(
+							`Credential recovery job ${params.jobId} replan heartbeat failed: ${error}`,
+						),
 					);
-				}, 15_000);
+				}, 5_000);
 				let freshPlan: any;
 				try {
 					freshPlan = await loadHikvisionSdkMergePlan({
@@ -13847,7 +14277,9 @@ export const controller = (prisma: PrismaClient) => {
 		const executionPreview = buildCredentialRecoveryExecutionPreview({
 			plan: stored.plan,
 			canaryModality: req.body?.canaryModality,
-			maxVerifiedWrites: req.body?.maxVerifiedWrites ?? 50,
+			maxVerifiedWrites:
+				req.body?.maxVerifiedWrites ??
+				CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
 		});
 		res.status(200).json(
 			buildSuccessResponse(
@@ -13897,17 +14329,24 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const maxVerifiedWrites = Math.max(
 				0,
-				Math.min(50, Number(req.body?.maxVerifiedWrites || 0)),
+				Math.min(
+					CREDENTIAL_RECOVERY_MAX_VERIFIED_WRITES_CEILING,
+					Number(
+						req.body?.maxVerifiedWrites ||
+							CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
+					),
+				),
 			);
-			const canaryModality = ["fingerprint", "face"].includes(
-				String(req.body?.canaryModality || ""),
-			)
-				? String(req.body.canaryModality)
-				: null;
+			const canaryModality = normalizeCredentialRecoveryCanaryModality(
+				req.body?.canaryModality,
+			);
 			const executionPreview = buildCredentialRecoveryExecutionPreview({
 				plan: stored.plan,
 				canaryModality,
-				maxVerifiedWrites: maxVerifiedWrites > 0 ? maxVerifiedWrites : 50,
+				maxVerifiedWrites:
+					maxVerifiedWrites > 0
+						? maxVerifiedWrites
+						: CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
 			});
 			// Coerce dryRun from bool/string/query so scripts cannot accidentally
 			// create a durable recovery job and burn the single-active slot.
@@ -14356,6 +14795,7 @@ export const controller = (prisma: PrismaClient) => {
 						// and writes still progress5. Now sticky-empty or hard fail.
 						const {
 							clearAdminSandboxFingerprintConflictsSticky,
+							clearFleetSameByteMajorityFingerprintConflictsSticky,
 							parseFingerprintProgressOccupyingEmployee,
 						} = await import(
 							"../../helper/device-user-raw-fingerprint.helper.js"
@@ -14368,7 +14808,32 @@ export const controller = (prisma: PrismaClient) => {
 						)
 							.map((id: any) => Number(id) || 0)
 							.filter((id: number) => id > 0);
+						const fleetForceSlots = (
+							Array.isArray(write.fleetSameByteMajorityConflictSlots)
+								? write.fleetSameByteMajorityConflictSlots
+								: adminForceSlots
+						)
+							.map((id: any) => Number(id) || 0)
+							.filter((id: number) => id > 0);
 						if (
+							write.fleetSameByteMajorityForceOverwrite === true &&
+							Array.isArray(write.fleetSameByteMajorityConflictingOwners) &&
+							write.fleetSameByteMajorityConflictingOwners.length > 0
+						) {
+							const stickyClear =
+								await clearFleetSameByteMajorityFingerprintConflictsSticky({
+									prisma,
+									req: params.req,
+									deviceId: String(write.targetDeviceId),
+									conflictingOwners:
+										write.fleetSameByteMajorityConflictingOwners,
+									fingerPrintIds: fleetForceSlots,
+								});
+							deviceLogger.info(
+								`fleet_same_byte_fp_clear sticky_ok target=${write.targetDeviceId} owners=${stickyClear.clearedOwners.join(",")} slots=${fleetForceSlots.join(",")} reason=${String(write.fleetSameByteMajorityReason || "").slice(0, 200)}`,
+							);
+							await new Promise((resolve) => setTimeout(resolve, 500));
+						} else if (
 							write.adminSandboxForceOverwrite === true &&
 							Array.isArray(write.adminSandboxConflictingOwners) &&
 							write.adminSandboxConflictingOwners.length > 0
@@ -14440,9 +14905,9 @@ export const controller = (prisma: PrismaClient) => {
 						let writeResult = await runFingerprintBundleWrite();
 						operationTiming.fingerprintBundleWriteMs =
 							Date.now() - bundleWriteStartedAt;
-						// One admin-band recovery: progress5 errorMsg often names the
-						// occupying employee (live: errorMsg "8" while owner was 8).
-						// Clear that owner sticky + retry once. Never for PROD 21+.
+						// progress5 errorMsg often names the occupying employee.
+						// Admin sandbox: clear admin peer + retry once.
+						// Fleet same-byte majority: clear proven peer (incl PROD) + retry once.
 						if (
 							writeResult.fingerprintWrites.some(
 								(item: any) => item.sticky !== true,
@@ -14459,22 +14924,67 @@ export const controller = (prisma: PrismaClient) => {
 										.filter(
 											(owner: string | null): owner is string =>
 												Boolean(owner) &&
-												isAdminSandboxVendorUserIdFn(owner) &&
 												String(owner) !== String(write.vendorUserId),
 										),
 								),
 							];
 							const writeIsAdmin =
 								isAdminSandboxVendorUserIdFn(write.vendorUserId);
-							if (writeIsAdmin && occupyingOwners.length > 0) {
+							const adminOccupying = occupyingOwners.filter((owner) =>
+								isAdminSandboxVendorUserIdFn(owner),
+							);
+							const fleetForce =
+								write.fleetSameByteMajorityForceOverwrite === true ||
+								write.adminSandboxForceOverwrite === true;
+							// Live 2026-07-28: progress5 often names peers NOT in the
+							// pre-planned force list (341, 382, 696, 11, 1757). Clear
+							// every plain occupying id Progress reports so sticky can stick.
+							const progressOccupying = occupyingOwners.filter(Boolean);
+							const plannedForceOwners = [
+								...new Set(
+									[
+										...(Array.isArray(
+											write.fleetSameByteMajorityConflictingOwners,
+										)
+											? write.fleetSameByteMajorityConflictingOwners
+											: []),
+										...(Array.isArray(write.adminSandboxConflictingOwners)
+											? write.adminSandboxConflictingOwners
+											: []),
+									].map(String),
+								),
+							];
+							const clearOwners =
+								progressOccupying.length > 0
+									? progressOccupying
+									: plannedForceOwners;
+							if (fleetForce && clearOwners.length > 0) {
 								deviceLogger.info(
-									`admin_sandbox_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${occupyingOwners.join(",")}`,
+									`fleet_same_byte_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${clearOwners.join(",")} planned=${plannedForceOwners.join(",")}`,
+								);
+								await clearFleetSameByteMajorityFingerprintConflictsSticky({
+									prisma,
+									req: params.req,
+									deviceId: String(write.targetDeviceId),
+									conflictingOwners: clearOwners,
+									fingerPrintIds: templatesToWrite
+										.map((t: any) => Number(t.fingerPrintId || 0))
+										.filter((id: number) => id > 0),
+								});
+								await new Promise((resolve) => setTimeout(resolve, 500));
+								const retryStartedAt = Date.now();
+								writeResult = await runFingerprintBundleWrite();
+								operationTiming.fingerprintBundleWriteRetryMs =
+									Date.now() - retryStartedAt;
+							} else if (writeIsAdmin && adminOccupying.length > 0) {
+								deviceLogger.info(
+									`admin_sandbox_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${adminOccupying.join(",")}`,
 								);
 								await clearAdminSandboxFingerprintConflictsSticky({
 									prisma,
 									req: params.req,
 									deviceId: String(write.targetDeviceId),
-									conflictingOwners: occupyingOwners,
+									conflictingOwners: adminOccupying,
 									fingerPrintIds: templatesToWrite
 										.map((t: any) => Number(t.fingerPrintId || 0))
 										.filter((id: number) => id > 0),
@@ -15930,13 +16440,28 @@ export const controller = (prisma: PrismaClient) => {
 				sourceRecord: any;
 				targetDevice: any;
 				targetDeviceId: string;
-			}) => {
-				const { user, sourceDevice, sourceRecord, targetDevice, targetDeviceId } = params;
+			}): Promise<{ ok: boolean; error?: string; skipped?: boolean }> => {
+				const { user, sourceRecord, targetDevice, targetDeviceId } = params;
+				// Prefer the target device's own vendorUserId (identity groups may link
+				// different vendor ids via employeeId). Fall back to source only if absent.
+				const targetPlanRecord =
+					(user.records || []).find(
+						(record: any) => String(record.deviceId) === String(targetDeviceId),
+					) || null;
+				const targetVendorUserId = String(
+					targetPlanRecord?.vendorUserId || sourceRecord.vendorUserId || "",
+				).trim();
+				if (!targetVendorUserId) {
+					return {
+						ok: false,
+						error: `No vendorUserId for profile overlay on device ${targetDeviceId}`,
+					};
+				}
 				const targetRow = await (prisma as any).deviceUser.findFirst({
 					where: {
 						organizationId: String(admin.organizationId),
 						deviceId: targetDeviceId,
-						vendorUserId: sourceRecord.vendorUserId,
+						vendorUserId: targetVendorUserId,
 					},
 					select: {
 						id: true,
@@ -15951,14 +16476,19 @@ export const controller = (prisma: PrismaClient) => {
 						rawPayload: true,
 					},
 				});
-				if (!targetRow?.id) return;
+				if (!targetRow?.id) {
+					return {
+						ok: false,
+						error: `DeviceUser row missing for vendorUserId ${targetVendorUserId} on device ${targetDeviceId}; cannot apply profile overlay`,
+					};
+				}
 				emitMergeProgress?.({
 					stage: "db_merge_started",
 					userKey: user.key,
-					vendorUserId: sourceRecord.vendorUserId,
+					vendorUserId: targetVendorUserId,
 					targetDeviceId,
 					targetDeviceName: targetDevice.name || targetDevice.address,
-					message: `Updating HRIS DeviceUser row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+					message: `Updating HRIS DeviceUser row for ${targetVendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 				});
 				const selectedRecordFor = (field: string) => {
 					const conflict = user.conflicts.find((item: any) => item.field === field);
@@ -15977,24 +16507,29 @@ export const controller = (prisma: PrismaClient) => {
 				const validityFromRecord = selectedRecordFor("validFrom");
 				const validityToRecord = selectedRecordFor("validTo");
 				const accessRecord = selectedRecordFor("doorRight");
+				const nextDisplayName = nameRecord
+					? nameRecord.displayName
+					: targetRow.displayName;
+				const nextValidFrom = validityFromRecord
+					? validityFromRecord.validFrom
+						? new Date(validityFromRecord.validFrom)
+						: null
+					: targetRow.validFrom;
+				const nextValidTo = validityToRecord
+					? validityToRecord.validTo
+						? new Date(validityToRecord.validTo)
+						: null
+					: targetRow.validTo;
 				await (prisma as any).deviceUser.update({
 					where: { id: targetRow.id },
 					data: {
 						employeeId: employeeRecord
 							? employeeRecord.employeeId || user.employeeId || null
 							: targetRow.employeeId,
-						displayName: nameRecord ? nameRecord.displayName : targetRow.displayName,
+						displayName: nextDisplayName,
 						status: statusRecord ? statusRecord.status : targetRow.status,
-						validFrom: validityFromRecord
-							? validityFromRecord.validFrom
-								? new Date(validityFromRecord.validFrom)
-								: null
-							: targetRow.validFrom,
-						validTo: validityToRecord
-							? validityToRecord.validTo
-								? new Date(validityToRecord.validTo)
-								: null
-							: targetRow.validTo,
+						validFrom: nextValidFrom,
+						validTo: nextValidTo,
 						doorRight: accessRecord ? accessRecord.doorRight : targetRow.doorRight,
 						accessPlan: accessRecord ? accessRecord.accessPlan : targetRow.accessPlan,
 						rawPayload: {
@@ -16005,23 +16540,184 @@ export const controller = (prisma: PrismaClient) => {
 						},
 					},
 				});
+				// Panel inventory drives Needs decision residual. HRIS DeviceUser
+				// overlay alone leaves live name/date conflicts. Push reviewed
+				// profile fields via UserInfo Modify/SetUp so replan can hit 0.
+				const panelNameChanged =
+					Boolean(nameRecord) &&
+					String(targetPlanRecord?.displayName || "").trim() !==
+						String(nextDisplayName || "").trim();
+				const panelFromChanged =
+					Boolean(validityFromRecord) &&
+					String(targetPlanRecord?.validFrom || "") !== String(nextValidFrom || "");
+				const panelToChanged =
+					Boolean(validityToRecord) &&
+					String(targetPlanRecord?.validTo || "") !== String(nextValidTo || "");
+				if (panelNameChanged || panelFromChanged || panelToChanged) {
+					try {
+						emitMergeProgress?.({
+							stage: "panel_profile_align_started",
+							userKey: user.key,
+							vendorUserId: targetVendorUserId,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							fields: [
+								...(panelNameChanged ? ["displayName"] : []),
+								...(panelFromChanged ? ["validFrom"] : []),
+								...(panelToChanged ? ["validTo"] : []),
+							],
+							message: `Aligning panel UserInfo name/dates for ${targetVendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
+						let baseUserInfo: Record<string, any> = {
+							employeeNo: targetVendorUserId,
+						};
+						try {
+							const searchBody = {
+								UserInfoSearchCond: {
+									searchID: `merge-profile-align-${targetDeviceId}-${targetVendorUserId}-${Date.now()}`,
+									searchResultPosition: 0,
+									maxResults: 5,
+									EmployeeNoList: [{ employeeNo: targetVendorUserId }],
+								},
+							};
+							const searchResp = await hikvisionFetch(
+								`${hikvisionEndpoint.accessControl.userInfo.search}?format=json`,
+								{
+									method: "POST",
+									deviceId: targetDeviceId,
+									prisma,
+									request: req,
+									timeoutMs: 12_000,
+									headers: { "Content-Type": "application/json" },
+									body: searchBody,
+								},
+							);
+							const search =
+								searchResp?.UserInfoSearch ||
+								searchResp?.data?.UserInfoSearch ||
+								searchResp ||
+								{};
+							const list = Array.isArray(search?.UserInfo)
+								? search.UserInfo
+								: search?.UserInfo
+									? [search.UserInfo]
+									: [];
+							const hit =
+								list.find(
+									(row: any) =>
+										String(row?.employeeNo || row?.employeeNoString || "").trim() ===
+										targetVendorUserId,
+								) || list[0];
+							if (hit && typeof hit === "object") {
+								baseUserInfo = { ...hit };
+							}
+						} catch (searchError: any) {
+							deviceLogger.warn(
+								`UserInfo search before profile align failed for ${targetDeviceId}/${targetVendorUserId}; modifying with partial payload: ${searchError?.message || searchError}`,
+							);
+						}
+						baseUserInfo.employeeNo = targetVendorUserId;
+						if (nameRecord && nextDisplayName != null) {
+							baseUserInfo.name = String(nextDisplayName);
+						}
+						const valid = {
+							...((baseUserInfo.Valid || baseUserInfo.valid || {}) as Record<
+								string,
+								any
+							>),
+						};
+						if (valid.enable == null) valid.enable = true;
+						if (validityFromRecord && nextValidFrom) {
+							valid.beginTime = formatHikvisionManilaDateTime(new Date(nextValidFrom));
+						}
+						if (validityToRecord && nextValidTo) {
+							valid.endTime = formatHikvisionManilaDateTime(new Date(nextValidTo));
+						}
+						if (validityFromRecord || validityToRecord) {
+							baseUserInfo.Valid = valid;
+						}
+						const modifyBody = { UserInfo: baseUserInfo };
+						try {
+							await hikvisionFetch(
+								`${hikvisionEndpoint.accessControl.userInfo.modify}?format=json`,
+								{
+									method: "PUT",
+									deviceId: targetDeviceId,
+									prisma,
+									request: req,
+									timeoutMs: 15_000,
+									headers: { "Content-Type": "application/json" },
+									body: modifyBody,
+								},
+							);
+						} catch (modifyError: any) {
+							// Some firmwares only honor SetUp for profile field edits.
+							await hikvisionFetch(
+								`${hikvisionEndpoint.accessControl.userInfo.setUp}?format=json`,
+								{
+									method: "PUT",
+									deviceId: targetDeviceId,
+									prisma,
+									request: req,
+									timeoutMs: 15_000,
+									headers: { "Content-Type": "application/json" },
+									body: modifyBody,
+								},
+							);
+							deviceLogger.info(
+								`UserInfo Modify failed; SetUp succeeded for profile align ${targetDeviceId}/${targetVendorUserId}: ${modifyError?.message || modifyError}`,
+							);
+						}
+						emitMergeProgress?.({
+							stage: "panel_profile_align_done",
+							userKey: user.key,
+							vendorUserId: targetVendorUserId,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							message: `Panel UserInfo name/dates aligned for ${targetVendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
+					} catch (panelError: any) {
+						deviceLogger.warn(
+							`Panel profile align failed for ${targetDeviceId}/${targetVendorUserId}: ${panelError?.message || panelError}`,
+						);
+						emitMergeProgress?.({
+							stage: "panel_profile_align_error",
+							userKey: user.key,
+							vendorUserId: targetVendorUserId,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							error: panelError?.message || String(panelError),
+							message: `Panel UserInfo align failed for ${targetVendorUserId}; HRIS overlay was still applied.`,
+						});
+						// HRIS overlay already applied; panel failure is not a hard job fail
+						// so remaining peers can continue. Residual will show until retry.
+					}
+				}
 				emitMergeProgress?.({
 					stage: "db_merge_done",
 					userKey: user.key,
-					vendorUserId: sourceRecord.vendorUserId,
+					vendorUserId: targetVendorUserId,
 					targetDeviceId,
 					targetDeviceName: targetDevice.name || targetDevice.address,
-					message: `Updated HRIS row for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+					message: `Updated HRIS row for ${targetVendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
 				});
+				return { ok: true };
 			};
 			const mergeOverlayDeviceUserRowWithRetry = async (
 				params: Parameters<typeof mergeOverlayDeviceUserRow>[0],
-			) => {
+			): Promise<{ ok: boolean; error?: string }> => {
 				let lastError: any = null;
 				for (let attempt = 1; attempt <= 3; attempt += 1) {
 					try {
-						await mergeOverlayDeviceUserRow(params);
-						return;
+						const result = await mergeOverlayDeviceUserRow(params);
+						// Soft failures (missing DeviceUser row) must not count as success.
+						if (result && result.ok === false) {
+							return {
+								ok: false,
+								error: result.error || "DeviceUser profile overlay failed",
+							};
+						}
+						return { ok: true };
 					} catch (error: any) {
 						lastError = error;
 						emitMergeProgress?.({
@@ -16047,6 +16743,10 @@ export const controller = (prisma: PrismaClient) => {
 					message:
 						"Physical peer copy succeeded, but the HRIS overlay failed after three attempts. Device reread remains authoritative.",
 				});
+				return {
+					ok: false,
+					error: lastError?.message || String(lastError) || "DeviceUser profile overlay failed",
+				};
 			};
 			for (const user of appliedPlan.users) {
 				// Field-level A/B choices do not establish raw biometric custody.
@@ -16300,6 +17000,76 @@ export const controller = (prisma: PrismaClient) => {
 						}
 					}
 				}
+				// Profile A/B decisions: update existing DeviceUser rows even when the person
+				// is already present on every device (missing_people=0). Does not invent
+				// card/face/FP bytes — biometric modalities stay credential-mode only.
+				const profileOverlayTargets = buildProfileOverlayWrites([user]);
+				const overlayOnlyJob = batchTargets.length === 0 && profileOverlayTargets.length > 0;
+				for (const overlay of profileOverlayTargets) {
+					const targetDeviceId = String(overlay.targetDeviceId || "").trim();
+					const targetDevice = devices.find((device) => device.id === targetDeviceId);
+					if (!targetDeviceId || !targetDevice) continue;
+					// Peer-copy successes already overlaid the new target row above; still
+					// re-apply so present peers (not just missing ones) converge on choices.
+					const overlayResult = await mergeOverlayDeviceUserRowWithRetry({
+						user,
+						sourceDevice,
+						sourceRecord,
+						targetDevice,
+						targetDeviceId,
+					});
+					if (!overlayOnlyJob) continue;
+					// Count as terminal work when there were no physical peer creates.
+					if (overlayResult.ok) {
+						results.push({
+							userKey: user.key,
+							sourceDeviceId: sourceDevice.id,
+							targetDeviceId,
+							status: "success",
+							strategy: "deviceuser_profile_overlay",
+							modality: "profile",
+							fields: overlay.fields,
+						});
+						emitMergeProgress?.({
+							stage: "copy_success",
+							userKey: user.key,
+							vendorUserId: sourceRecord.vendorUserId,
+							sourceDeviceId: sourceDevice.id,
+							sourceDeviceName: sourceDevice.name || sourceDevice.address,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							strategy: "deviceuser_profile_overlay",
+							modality: "profile",
+							fields: overlay.fields,
+							message: `Applied reviewed profile fields (${overlay.fields.join(", ") || "profile"}) for ${sourceRecord.vendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
+					} else {
+						const overlayError =
+							overlayResult.error || "DeviceUser profile overlay failed";
+						results.push({
+							userKey: user.key,
+							sourceDeviceId: sourceDevice.id,
+							targetDeviceId,
+							status: "error",
+							error: overlayError,
+							strategy: "deviceuser_profile_overlay",
+							modality: "profile",
+						});
+						emitMergeProgress?.({
+							stage: "copy_error",
+							userKey: user.key,
+							vendorUserId: sourceRecord.vendorUserId,
+							sourceDeviceId: sourceDevice.id,
+							sourceDeviceName: sourceDevice.name || sourceDevice.address,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							strategy: "deviceuser_profile_overlay",
+							modality: "profile",
+							error: overlayError,
+							message: overlayError,
+						});
+					}
+				}
 				const decisions = user.conflicts.map((conflict: any) => ({
 					field: conflict.field,
 					choice: conflict.choice,
@@ -16318,6 +17088,9 @@ export const controller = (prisma: PrismaClient) => {
 						employeeId: user.employeeId,
 						sourceDeviceId: sourceDevice.id,
 						targetDeviceIds: user.targetDeviceIds,
+						profileOverlayTargets: profileOverlayTargets.map(
+							(write: any) => write.targetDeviceId,
+						),
 						decisions,
 					},
 					description: "Applied reviewed Hikvision device-user merge decisions",
@@ -16330,6 +17103,7 @@ export const controller = (prisma: PrismaClient) => {
 					sourceDeviceId: sourceDevice.id,
 					sourceDeviceName: sourceDevice.name || sourceDevice.address,
 					targets: user.targetDeviceIds.length,
+					profileOverlays: profileOverlayTargets.length,
 					message: `Finished reviewed merge work for user ${sourceRecord.vendorUserId}.`,
 				});
 			}
@@ -16775,6 +17549,11 @@ export const controller = (prisma: PrismaClient) => {
 						.map((key: unknown) => String(key || "").trim())
 						.filter(Boolean)
 				: undefined;
+			const autoResolveDecisions =
+				req.body?.autoResolveDecisions === false ||
+				req.body?.autoResolveDecisions === "false"
+					? false
+					: true;
 			const appliedPlan = applyMergeChoices(stored.plan, {
 				choices: req.body?.choices || {},
 				applyAll:
@@ -16782,6 +17561,7 @@ export const controller = (prisma: PrismaClient) => {
 						? req.body.applyAll
 						: undefined,
 				selectedUserKeys,
+				autoResolveDecisions,
 			});
 			if (!appliedPlan.executable) {
 				res.status(409).json(
@@ -16798,6 +17578,13 @@ export const controller = (prisma: PrismaClient) => {
 				appliedPlan,
 				writeMatrix,
 			});
+			// Expose totalWork/dbOverlayWrites at top level so agent scripts do not
+			// 409 or mis-classify missing_people=0 + profile decisions as empty.
+			const physicalWrites = Number(writeMatrix.totalWrites || 0);
+			const dbOverlayWrites = Number(writeMatrix.dbOverlayWrites || 0);
+			const totalWork = Number(
+				writeMatrix.totalWork ?? physicalWrites + dbOverlayWrites,
+			);
 			res.status(200).json(
 				buildSuccessResponse(
 					"SDK user merge write scope reviewed",
@@ -16805,6 +17592,11 @@ export const controller = (prisma: PrismaClient) => {
 						planId,
 						scopeHash: lock.scopeHash,
 						...lock.scope,
+						physicalWrites,
+						dbOverlayWrites,
+						totalWork,
+						profileOverlayWrites: writeMatrix.profileOverlayWrites || [],
+						writeMatrix,
 					},
 					200,
 				),
@@ -16922,10 +17714,18 @@ export const controller = (prisma: PrismaClient) => {
 					credentialWrites: writeMatrix.rows,
 				};
 			} else {
+				// Default agent-owned auto-resolve: richest source per conflict
+				// unless operator sent explicit choices/applyAll or disabled it.
+				const autoResolveDecisions =
+					req.body?.autoResolveDecisions === false ||
+					req.body?.autoResolveDecisions === "false"
+						? false
+						: true;
 				selectedAppliedPlan = applyMergeChoices(stored.plan, {
 					choices,
 					applyAll,
 					selectedUserKeys,
+					autoResolveDecisions,
 				});
 				if (!selectedAppliedPlan.executable) {
 					const reason = selectedAppliedPlan.ambiguousMatches?.length
@@ -16955,13 +17755,51 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
-			const totalWrites = Number(
+			// User mode: physical peer creates (missing people) and/or DeviceUser profile
+			// overlays from resolved A/B decisions. Credential mode: selected raw writes.
+			// Do not 409 when missing_people=0 but profile decisions still need DB apply.
+			const physicalWrites = Number(
 				writeMatrix.totalWrites || selectedAppliedPlan.plannedWrites?.length || 0,
 			);
-			if (totalWrites <= 0) {
-				res.status(409).json(buildErrorResponse("Reviewed scope contains no writes", 409));
+			const dbOverlayWrites = Number(
+				writeMatrix.dbOverlayWrites ||
+					selectedAppliedPlan.profileOverlayWrites?.length ||
+					0,
+			);
+			const totalWork = Number(
+				writeMatrix.totalWork ?? physicalWrites + dbOverlayWrites,
+			);
+			if (totalWork <= 0) {
+				// Executable scope with nothing left to apply (all KEEP / already aligned).
+				// Clear non-409 success so auto-resolve does not look like a hard failure.
+				res.status(200).json(
+					buildSuccessResponse(
+						mode === "credentials"
+							? "Reviewed credential scope contains no executable writes"
+							: "Nothing physical to write; reviewed decisions are aligned with current DeviceUser rows (no missing-person peer creates and no profile field overlays)",
+						{
+							planId,
+							mode,
+							scopeHash: scopeLock.scopeHash,
+							nothingToWrite: true,
+							decisionsRecorded: true,
+							physicalWrites: 0,
+							dbOverlayWrites: 0,
+							totalWork: 0,
+							writeMatrix,
+							scope: scopeLock.scope,
+							pathHint:
+								mode === "users"
+									? "Profile decisions update HRIS DeviceUser rows only. Card/face/fingerprint still require credential-mode raw custody; missing_raw_blob stays blocked."
+									: "Select ready_from_raw_blob credential rows only; do not invent biometric bytes.",
+						},
+						200,
+					),
+				);
 				return;
 			}
+			// Progress denominator: physical creates when present, else DB overlays only.
+			const totalWrites = physicalWrites > 0 ? physicalWrites : dbOverlayWrites;
 			const jobId = randomUUID();
 			const job: DeviceUserMergeJob = {
 				jobId,
@@ -16981,7 +17819,9 @@ export const controller = (prisma: PrismaClient) => {
 				message:
 					mode === "credentials"
 						? "Credential job queued. HRIS will probe exact SDK templates, write one modality, then reread devices."
-						: "Merge job queued. HRIS will apply reviewed decisions, copy credentials, then reread devices.",
+						: physicalWrites > 0
+							? "Merge job queued. HRIS will apply reviewed decisions, copy missing people, overlay profile fields, then reread devices."
+							: "Merge job queued. HRIS will apply reviewed profile field decisions to DeviceUser rows (no physical peer creates).",
 				currentStage: "queued",
 				currentUserKey: null,
 				currentTargetDeviceId: null,
@@ -17042,6 +17882,13 @@ export const controller = (prisma: PrismaClient) => {
 						progress: started,
 						snapshotPath: started.snapshotPath || null,
 						durable: true,
+						// Explicit work units so scripts/pollers never treat overlay-only
+						// jobs as empty (physicalWrites=0 is valid when db overlays remain).
+						physicalWrites,
+						dbOverlayWrites,
+						totalWork,
+						totalWrites,
+						writeMatrix,
 					},
 					202,
 				),

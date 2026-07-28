@@ -1008,6 +1008,50 @@ export const clearAdminSandboxFingerprintConflictsSticky = async (params: {
 };
 
 /**
+ * Fleet same-byte majority force path: clear named peer owners (including PROD)
+ * only when planner set fleetSameByteMajorityForceOverwrite after checksum
+ * majority proof. Same sticky-empty hard-fail as admin sandbox.
+ */
+export const clearFleetSameByteMajorityFingerprintConflictsSticky = async (params: {
+	prisma: PrismaClient | any;
+	req: any;
+	deviceId: string;
+	conflictingOwners: string[];
+	fingerPrintIds: number[];
+}): Promise<{
+	clearedOwners: string[];
+	results: Array<Awaited<ReturnType<typeof deleteHikvisionFingerprintSlotsForEmployee>>>;
+}> => {
+	const results: Array<
+		Awaited<ReturnType<typeof deleteHikvisionFingerprintSlotsForEmployee>>
+	> = [];
+	const clearedOwners: string[] = [];
+	for (const owner of params.conflictingOwners) {
+		const ownerId = String(owner || "").trim();
+		if (!ownerId) {
+			throw new Error("fleet_same_byte_fp_clear_refused_empty_owner");
+		}
+		const cleared = await deleteHikvisionFingerprintSlotsForEmployee({
+			prisma: params.prisma,
+			req: params.req,
+			deviceId: params.deviceId,
+			employeeNo: ownerId,
+			fingerPrintIds: params.fingerPrintIds,
+			clearAllCommonSlots: true,
+			requireStickyEmpty: true,
+		});
+		results.push(cleared);
+		if (!cleared.stickyEmpty) {
+			throw new Error(
+				`fleet_same_byte_fp_clear_not_sticky owner=${ownerId} remainingSlots=${cleared.remainingFingerPrintIds.join(",") || "unknown"} attempts=${JSON.stringify(cleared.attempts).slice(0, 500)}`,
+			);
+		}
+		clearedOwners.push(ownerId);
+	}
+	return { clearedOwners, results };
+};
+
+/**
  * Write fingerprint via FingerPrintDownload then verify Progress + re-read Upload.
  * Returns sticky=true only when device re-read yields fingerData for that employeeNo.
  * Never treats HTTP OK alone as enrolled.

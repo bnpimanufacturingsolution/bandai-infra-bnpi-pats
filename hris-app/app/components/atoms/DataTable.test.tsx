@@ -131,4 +131,67 @@ describe("DataTable", () => {
 		expect(screen.getAllByText("Software Engineering").length).toBeGreaterThan(0);
 		expect(screen.getByText("Showing 11 to 20 of 42 results")).toBeInTheDocument();
 	});
+
+	it("renders server-side rows inside containedScroll body (Device Events collapse regression)", () => {
+		const eventRows = Array.from({ length: 10 }, (_, index) => ({
+			id: `evt-${index + 1}`,
+			name: `Person ${index + 1}`,
+			code: `P${index + 1}`,
+		}));
+
+		const { container } = render(
+			<div className="flex h-[480px] min-h-0 flex-col overflow-hidden">
+				<DataTable
+					title=""
+					data={eventRows}
+					columns={columns}
+					showSearch={false}
+					showFilters={false}
+					showExport={false}
+					noCard
+					containedScroll
+					onPageChange={() => undefined}
+					currentPage={1}
+					totalItems={37371}
+					itemsPerPage={10}
+					className="min-h-0 flex-1"
+				/>
+			</div>,
+		);
+
+		const root = container.querySelector('[data-datatable-root="contained"]');
+		const bodyViewport = container.querySelector("[data-datatable-body-viewport]");
+		const dataRows = container.querySelectorAll("[data-datatable-row]");
+
+		expect(root).not.toBeNull();
+		expect(bodyViewport).not.toBeNull();
+		expect(bodyViewport?.className || "").toMatch(/min-h-\[12rem\]/);
+		// Desktop + mobile list both render rows → ≥10 row markers, person labels appear twice each.
+		expect(dataRows.length).toBeGreaterThanOrEqual(10);
+		expect(screen.getAllByText("Person 1").length).toBeGreaterThan(0);
+		expect(screen.getAllByText("Person 10").length).toBeGreaterThan(0);
+		expect(screen.getByText("Showing 1 to 10 of 37371 results")).toBeInTheDocument();
+	});
+
+	it("does not show misleading 1–N of total pagination when server-side page data is empty", () => {
+		render(
+			<DataTable
+				title="Saved events"
+				data={[]}
+				columns={columns}
+				showSearch={false}
+				showFilters={false}
+				showExport={false}
+				noCard
+				containedScroll
+				onPageChange={() => undefined}
+				currentPage={1}
+				totalItems={37371}
+				itemsPerPage={10}
+			/>,
+		);
+
+		expect(screen.getByText("No data found")).toBeInTheDocument();
+		expect(screen.queryByText("Showing 1 to 10 of 37371 results")).not.toBeInTheDocument();
+	});
 });

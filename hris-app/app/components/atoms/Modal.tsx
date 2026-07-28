@@ -62,6 +62,8 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 		const hasExplicitZ =
 			typeof className === "string" && /\bz-\[?\d/.test(className);
 		const shellZ = hasExplicitZ ? undefined : "z-50";
+		const titleId = React.useId();
+		const descriptionId = React.useId();
 
 		return (
 			<>
@@ -83,6 +85,10 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 					{/* Modal Content */}
 					<div
 						ref={ref}
+						role="dialog"
+						aria-modal="true"
+						aria-labelledby={title ? titleId : undefined}
+						aria-describedby={description ? descriptionId : undefined}
 						className={cn(
 							"relative z-10 flex flex-col w-full max-w-3xl gap-4 border bg-white p-6 shadow-lg duration-200 rounded-lg mx-4 max-h-[90vh] overflow-y-auto modern-scroll",
 							className,
@@ -92,12 +98,16 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 						{(title || description) && (
 							<div className="space-y-1.5">
 								{title && (
-									<h2 className="text-lg font-semibold leading-none tracking-tight">
+									<h2
+										id={titleId}
+										className="text-lg font-semibold leading-none tracking-tight">
 										{title}
 									</h2>
 								)}
 								{description && (
-									<p className="text-sm text-muted-foreground">{description}</p>
+									<p id={descriptionId} className="text-sm text-muted-foreground">
+										{description}
+									</p>
 								)}
 							</div>
 						)}

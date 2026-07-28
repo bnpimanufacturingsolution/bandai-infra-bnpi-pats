@@ -17,8 +17,54 @@ export const DEVICE_USER_MERGE_FIELDS = [
 	"card",
 ] as const;
 
+/**
+ * Fields that inflate the "Needs decision" chip and require A/B/KEEP review.
+ *
+ * Face / fingerprint / card are intentionally excluded:
+ * - Count gaps (e.g. card 1 vs 0) already appear as credential residual + recovery.
+ * - Putting them in conflicts double-counts residual and makes "Needs decision"
+ *   look like 16 when the operator only has a few profile/name decisions.
+ * - Card is optional for many sites; never default-required for merge apply.
+ *
+ * Product default: decision = profile identity/metadata only.
+ */
+export const DEVICE_USER_MERGE_DECISION_FIELDS = [
+	"vendorUserId",
+	"employeeNo",
+	"employeeId",
+	"displayName",
+	"status",
+	"validFrom",
+	"validTo",
+	"doorRight",
+	"accessPlan",
+] as const;
+
+/**
+ * Profile / HRIS DeviceUser fields that reviewed A/B choices can overlay in the
+ * database after a user-mode merge. Biometric modalities (face/fingerprint/card)
+ * are intentionally excluded — those require credential-mode raw custody and
+ * must never invent missing_raw_blob bytes from a field conflict alone.
+ */
+export const DEVICE_USER_MERGE_PROFILE_OVERLAY_FIELDS = [
+	"employeeId",
+	"displayName",
+	"status",
+	"validFrom",
+	"validTo",
+	"doorRight",
+	"accessPlan",
+] as const;
+
 export type DeviceUserMergeField = (typeof DEVICE_USER_MERGE_FIELDS)[number];
+export type DeviceUserMergeProfileOverlayField =
+	(typeof DEVICE_USER_MERGE_PROFILE_OVERLAY_FIELDS)[number];
 export type MergeChoice = "A" | "B" | "KEEP";
+
+export const isDeviceUserMergeProfileOverlayField = (
+	field: string,
+): field is DeviceUserMergeProfileOverlayField =>
+	(DEVICE_USER_MERGE_PROFILE_OVERLAY_FIELDS as readonly string[]).includes(field);
 export type FaceCustodyKind =
 	| "sdk_template_and_picture"
 	| "fdlib_picture"
@@ -174,6 +220,7 @@ export type DeviceUserCredentialWrite = {
 		| "canonical_identity_unproven"
 		| "target_owner_scan_incomplete"
 		| "physical_identity_adjudication_required"
+		| "device_fp_anti_dupe_peer_owner"
 		| "source_not_enrolled"
 		| "missing_raw_blob"
 		| "target_write_unsupported"
@@ -220,6 +267,16 @@ export type DeviceUserCredentialWrite = {
 	adminSandboxConflictingOwners?: string[];
 	/** Fingerprint slots involved in the admin-band force clear. */
 	adminSandboxConflictSlots?: number[];
+	/**
+	 * Fleet same-byte majority (operator 2026-07-28): write vendor holds the
+	 * reviewed checksum on more devices than the progress5 peer (or wins
+	 * most-recent / stable tie-break). Allows clear of that peer even when
+	 * either side is PROD 21+, only for the proven matching checksum slots.
+	 */
+	fleetSameByteMajorityForceOverwrite?: boolean;
+	fleetSameByteMajorityConflictingOwners?: string[];
+	fleetSameByteMajorityConflictSlots?: number[];
+	fleetSameByteMajorityReason?: string;
 	/** A transport/SDK success is never enough; execution must re-read this target. */
 	physicalRereadRequired: true;
 };
@@ -246,6 +303,19 @@ export type DurableFingerprintOwnerConflictEvidence = {
 	fingerPrintId: number;
 	conflictingVendorUserId: string;
 	observedAt?: string | null;
+};
+
+export type FleetChecksumCanonicalPick = {
+	checksum: string;
+	winnerVendorUserId: string;
+	winnerDeviceCount: number;
+	peerDeviceCount: number;
+	reason:
+		| "majority_devices"
+		| "tie_most_recent"
+		| "tie_stable_vendor_id"
+		| "single_holder";
+	holders: Array<{ vendorUserId: string; deviceCount: number; latestAt: number }>;
 };
 
 /**
@@ -463,60 +533,131 @@ export const reconcileDurableFingerprintOwnerConflicts = <T extends {
 		}
 		const owners = [...new Set(collisions.map((item) => item.conflictingVendorUserId))];
 		const slots = [...new Set(collisions.map((item) => item.fingerPrintId))];
-		// Operator-authorized admin sandbox (vendor 1–20): when the intended
-		// person AND every conflicting slot owner are admin-band, force-clear
-		// then write is safer than permanent dual-owner RED. PROD ids 21+ stay
-		// fail-closed (never force when either side is outside 1–20).
+		const fleetRecords = records.map((item) => item.record);
+		// Operator 2026-07-28 (unique FP gap → 0, zero operator wait):
+		// progress5 dual-owner is NEVER a permanent anti-dupe / ban residual.
+		// Recovery write ALWAYS wins: force-clear peer slot(s) + write when
+		// source has raw blob. Safe no-write only when same canonical HRIS
+		// employee already proved above (equivalent_owner_safe_no_write).
+		// Peer fleet-majority alone must NOT drop the write — that leaves the
+		// gap person without FP under their vendor id (unique_fp stays > 0).
+		const forceSlots: number[] = [];
+		const forceOwners = new Set<string>();
+		const forceNotes: string[] = [];
+		for (const collision of collisions) {
+			const sourceChecksum = write.sourceFingerprintTemplateChecksums.find(
+				(template) => template.fingerPrintId === collision.fingerPrintId,
+			)?.checksum;
+			const owner = records.find(
+				(item) =>
+					item.record.deviceId === collision.targetDeviceId &&
+					item.record.vendorUserId === collision.conflictingVendorUserId,
+			);
+			const ownerChecksum = owner?.record._fingerprintTemplateChecksums?.find(
+				(template) => template.fingerPrintId === collision.fingerPrintId,
+			)?.checksum;
+			const sameByteOnTarget =
+				Boolean(sourceChecksum) &&
+				Boolean(ownerChecksum) &&
+				String(sourceChecksum).toLowerCase() ===
+					String(ownerChecksum).toLowerCase();
+
+			let majorityHint = "";
+			if (sourceChecksum) {
+				const pick = pickFleetCanonicalVendorForFingerprintChecksum(
+					fleetRecords,
+					String(sourceChecksum),
+					{
+						preferVendorUserId: write.vendorUserId,
+						peerVendorUserId: collision.conflictingVendorUserId,
+					},
+				);
+				if (pick && pick.peerDeviceCount > 0) {
+					majorityHint = ` fleet_same_byte_hint=${pick.reason} writeDevices=${pick.winnerVendorUserId === write.vendorUserId ? pick.winnerDeviceCount : pick.peerDeviceCount} peerDevices=${pick.winnerVendorUserId === collision.conflictingVendorUserId ? pick.winnerDeviceCount : pick.peerDeviceCount}`;
+				}
+			}
+
+			forceSlots.push(collision.fingerPrintId);
+			forceOwners.add(collision.conflictingVendorUserId);
+			forceNotes.push(
+				sourceChecksum
+					? sameByteOnTarget
+						? `slot ${collision.fingerPrintId}: same-byte dual-owner peer ${collision.conflictingVendorUserId} — FORCE clear then write vendor ${write.vendorUserId} (unique-gap zero; never ban/wait)${majorityHint}`
+						: `slot ${collision.fingerPrintId}: different/unknown peer bytes peer ${collision.conflictingVendorUserId} — FORCE clear then write vendor ${write.vendorUserId}${majorityHint}`
+					: `slot ${collision.fingerPrintId}: no source checksum — FORCE clear peer ${collision.conflictingVendorUserId} then write vendor ${write.vendorUserId}`,
+			);
+		}
+
+		const canForceClear =
+			write.sourceEvidenceStatus === "raw_blob_present" &&
+			(write.executionEligibility === "ready_from_raw_blob" ||
+				write.executionEligibility === "blocked" ||
+				Boolean(write.sourceFingerprintTemplateChecksums?.length));
+
+		const resolvedForceSlots = [...new Set(forceSlots)];
+		const resolvedForceOwners = [...forceOwners];
 		const writeIsAdminSandbox = isAdminSandboxVendorUserId(write.vendorUserId);
 		const ownersAreAdminSandbox = owners.every((owner) =>
 			isAdminSandboxVendorUserId(owner),
 		);
-		if (
-			writeIsAdminSandbox &&
-			ownersAreAdminSandbox &&
-			// Allow force-clear even when the prior planner stage was blocked —
-			// durable progress5 evidence is the stronger signal that admin dual
-			// owners need sticky clear + rewrite (not permanent RED).
-			write.sourceEvidenceStatus === "raw_blob_present" &&
-			(write.executionEligibility === "ready_from_raw_blob" ||
-				Boolean(write.sourceFingerprintTemplateChecksums?.length))
-		) {
+
+		if (resolvedForceSlots.length > 0 && canForceClear) {
+			// Always set fleet force flags so execute clears PROD peers too.
 			retainedWrites.push({
 				...write,
 				recommended: true,
 				executionEligibility: "ready_from_raw_blob",
 				blockingReason: null,
 				recoveryStage: "ready_to_write",
-				adminSandboxForceOverwrite: true,
-				adminSandboxConflictingOwners: owners,
-				adminSandboxConflictSlots: slots,
+				fleetSameByteMajorityForceOverwrite: true,
+				fleetSameByteMajorityConflictingOwners: resolvedForceOwners,
+				fleetSameByteMajorityConflictSlots: resolvedForceSlots,
+				fleetSameByteMajorityReason: forceNotes.join("; "),
+				adminSandboxForceOverwrite:
+					writeIsAdminSandbox && ownersAreAdminSandbox
+						? true
+						: write.adminSandboxForceOverwrite,
+				adminSandboxConflictingOwners:
+					writeIsAdminSandbox && ownersAreAdminSandbox
+						? owners
+						: write.adminSandboxConflictingOwners,
+				adminSandboxConflictSlots:
+					writeIsAdminSandbox && ownersAreAdminSandbox
+						? slots
+						: write.adminSandboxConflictSlots,
 				recommendationReason:
-					`ADMIN_SANDBOX_FORCE_OVERWRITE (vendor ids 1–${ADMIN_SANDBOX_VENDOR_ID_MAX} only): target slot ${slots.join(
-						", ",
-					)} is owned by admin-band vendor ${owners.join(
-						", ",
-					)}. Clear those admin owners' conflicting fingerprint slot(s), then write richest source for vendor ${write.vendorUserId}. PROD vendor ids ${
-						ADMIN_SANDBOX_VENDOR_ID_MAX + 1
-					}+ remain dual-owner protected.`,
+					writeIsAdminSandbox && ownersAreAdminSandbox
+						? `ADMIN_SANDBOX_FORCE_OVERWRITE (vendor ids 1–${ADMIN_SANDBOX_VENDOR_ID_MAX}): target slot ${slots.join(
+								", ",
+							)} owned by admin-band ${owners.join(
+								", ",
+							)}. Auto-clear peers then write vendor ${write.vendorUserId}. ${forceNotes.join("; ")}`
+						: `AUTO_RESOLVE_DUAL_OWNER_FORCE_CLEAR: progress5 peer ${owners.join(
+								", ",
+							)} on slot ${resolvedForceSlots.join(
+								", ",
+							)} is never a permanent anti-dupe block. Clear peer slot(s) then write vendor ${write.vendorUserId} so unique FP gap can reach zero without operator wait. ${forceNotes.join("; ")}`,
 			});
 			continue;
 		}
-		// PROD (or mixed admin/PROD) progress5 peer: named anti-dupe residual.
-		// Never auto-delete the peer. Dry-run must not treat this as wouldWrite.
+
+		// Source lacks raw blob: cannot force-write, but still do not name a
+		// permanent anti-dupe RED — reclassify as custody recovery so the
+		// queue keeps exporting instead of stalling on dual-owner.
 		retainedWrites.push({
 			...write,
 			recommended: false,
 			executionEligibility: "blocked",
-			blockingReason: "device_fp_anti_dupe_peer_owner",
-			recoveryStage: "physical_identity_action_required",
+			blockingReason: "missing_raw_blob",
+			recoveryStage: "queued_source_custody_recovery",
 			recommendationReason:
-				`Device fingerprint anti-dupe (progressStatus=5) reports peer owner ${owners.join(
+				`Progress5 peer owner ${owners.join(
 					", ",
-				)} for slot ${slots.join(
+				)} on slot ${slots.join(
 					", ",
-				)} on this target. PROD vendor ids ${
-					ADMIN_SANDBOX_VENDOR_ID_MAX + 1
-				}+ never auto-clear peers. Canonical employee plus checksum equivalence is not proven; overwrite is forbidden. Reclassify as dual-biometric residual — do not re-queue as ready_from_raw_blob.`,
+				)} needs auto force-clear, but source raw fingerprint blob is missing. Queue source custody export first; dual-owner is not a permanent residual. ${
+					forceNotes.length ? `Notes: ${forceNotes.join("; ")}.` : ""
+				}`,
 		});
 	}
 
@@ -544,6 +685,29 @@ const stable = (value: unknown) => {
 	if (value instanceof Date) return value.toISOString();
 	if (value && typeof value === "object") return JSON.stringify(value);
 	return text(value);
+};
+/**
+ * Profile validity residual must not thrash on timezone encoding of the same
+ * calendar day (UTC midnight vs +08 local midnight). Compare Manila days.
+ */
+const manilaDayKey = (value: unknown): string => {
+	if (value == null || value === "") return "";
+	const date =
+		value instanceof Date
+			? value
+			: new Date(String(value).includes("T") ? String(value) : `${String(value).trim()}T00:00:00`);
+	if (!Number.isFinite(date.getTime())) return text(value);
+	return new Intl.DateTimeFormat("en-CA", {
+		timeZone: "Asia/Manila",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(date);
+};
+/** Stable key for conflict distinctness (dates → Manila calendar day). */
+const conflictStable = (field: string, value: unknown): string => {
+	if (field === "validFrom" || field === "validTo") return manilaDayKey(value);
+	return stable(value);
 };
 const credentials = (record: DeviceUserMergeRecord) =>
 	extractHikvisionCredentialSummary((record.rawPayload || {}) as any);
@@ -651,6 +815,107 @@ const normalizedFingerprintChecksums = (record: DeviceUserMergeRecord) =>
 				left.fingerPrintId - right.fingerPrintId ||
 				left.checksum.localeCompare(right.checksum),
 		);
+
+/**
+ * Across fleet inventory, who "owns" this fingerprint byte most?
+ * Count distinct devices where vendor has the checksum on any slot.
+ * Ties → most recent record timestamp → stable vendorUserId.
+ */
+export const pickFleetCanonicalVendorForFingerprintChecksum = (
+	records: DeviceUserMergeRecord[],
+	checksum: string,
+	options?: { preferVendorUserId?: string; peerVendorUserId?: string },
+): FleetChecksumCanonicalPick | null => {
+	const ck = text(checksum).toLowerCase();
+	if (!ck) return null;
+	const byVendor = new Map<
+		string,
+		{ devices: Set<string>; latestAt: number }
+	>();
+	for (const record of records) {
+		const vendorUserId = text(record.vendorUserId);
+		if (!vendorUserId) continue;
+		const hits = normalizedFingerprintChecksums(record).filter(
+			(template) => template.checksum === ck,
+		);
+		if (!hits.length) continue;
+		const entry = byVendor.get(vendorUserId) || {
+			devices: new Set<string>(),
+			latestAt: 0,
+		};
+		entry.devices.add(text(record.deviceId));
+		const ts = Date.parse(
+			String(
+				(record as any).updatedAt ||
+					(record as any).lastSeenAt ||
+					(record as any).syncedAt ||
+					(record as any).createdAt ||
+					0,
+			),
+		);
+		if (Number.isFinite(ts) && ts > entry.latestAt) entry.latestAt = ts;
+		byVendor.set(vendorUserId, entry);
+	}
+	if (!byVendor.size) return null;
+	const holders = [...byVendor.entries()]
+		.map(([vendorUserId, value]) => ({
+			vendorUserId,
+			deviceCount: value.devices.size,
+			latestAt: value.latestAt,
+		}))
+		.sort(
+			(left, right) =>
+				right.deviceCount - left.deviceCount ||
+				right.latestAt - left.latestAt ||
+				left.vendorUserId.localeCompare(right.vendorUserId),
+		);
+	const top = holders[0];
+	const second = holders[1];
+	let reason: FleetChecksumCanonicalPick["reason"] = "majority_devices";
+	if (holders.length === 1) reason = "single_holder";
+	else if (second && top.deviceCount === second.deviceCount) {
+		reason =
+			top.latestAt !== second.latestAt
+				? "tie_most_recent"
+				: "tie_stable_vendor_id";
+	}
+	if (
+		options?.preferVendorUserId &&
+		second &&
+		top.deviceCount === second.deviceCount
+	) {
+		const preferred = holders.find(
+			(h) =>
+				h.vendorUserId === options.preferVendorUserId &&
+				h.deviceCount === top.deviceCount,
+		);
+		if (preferred) {
+			const peer = holders.find(
+				(h) => h.vendorUserId === options.peerVendorUserId,
+			);
+			return {
+				checksum: ck,
+				winnerVendorUserId: preferred.vendorUserId,
+				winnerDeviceCount: preferred.deviceCount,
+				peerDeviceCount: peer?.deviceCount || 0,
+				reason:
+					preferred.latestAt !== (peer?.latestAt || 0)
+						? "tie_most_recent"
+						: "tie_stable_vendor_id",
+				holders,
+			};
+		}
+	}
+	const peer = holders.find((h) => h.vendorUserId === options?.peerVendorUserId);
+	return {
+		checksum: ck,
+		winnerVendorUserId: top.vendorUserId,
+		winnerDeviceCount: top.deviceCount,
+		peerDeviceCount: peer?.deviceCount || 0,
+		reason,
+		holders,
+	};
+};
 
 export const normalizeFingerprintCustodyEvidence = (
 	items: Array<{ fingerPrintId: number; checksum: string }>,
@@ -1712,21 +1977,24 @@ export const buildDeviceUserMergePlan = (params: {
 				return score || a.deviceId.localeCompare(b.deviceId);
 			})[0] || ordered[0];
 		const conflicts: DeviceUserMergeConflict[] = [];
-		for (const field of DEVICE_USER_MERGE_FIELDS) {
+		// Profile/metadata only — never face/fp/card count (those are credential residual).
+		for (const field of DEVICE_USER_MERGE_DECISION_FIELDS) {
 			const populated = ordered.filter(
 				(record) =>
 					valueFor(record, field) !== null &&
 					valueFor(record, field) !== undefined &&
-					stable(valueFor(record, field)) !== "",
+					conflictStable(field, valueFor(record, field)) !== "",
 			);
 			const distinct = [
-				...new Set(populated.map((record) => stable(valueFor(record, field)))),
+				...new Set(populated.map((record) => conflictStable(field, valueFor(record, field)))),
 			];
 			if (distinct.length < 2) continue;
 			const a = populated[0];
 			const b =
 				populated.find(
-					(record) => stable(valueFor(record, field)) !== stable(valueFor(a, field)),
+					(record) =>
+						conflictStable(field, valueFor(record, field)) !==
+						conflictStable(field, valueFor(a, field)),
 				) || populated[1];
 			conflicts.push({
 				field,
@@ -1884,12 +2152,203 @@ export const serializeDeviceUserMergePlanForReview = (plan: any) => ({
 	errors: plan.errors || [],
 });
 
+/** Millis for date-like conflict values; invalid → 0. */
+const dateValueMs = (value: unknown): number => {
+	if (value == null || value === "") return 0;
+	if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : 0;
+	const ms = Date.parse(String(value));
+	return Number.isFinite(ms) ? ms : 0;
+};
+
+/**
+ * Agent-owned default for "Needs decision":
+ * - validFrom / validTo → pick the **later (more recent)** date between A/B
+ * - displayName → longer/more complete name, then richest custody peer
+ * - other profile fields → richest custody between A/B
+ * Operators may still override via explicit choices / applyAll.
+ */
+export const buildRichestMergeChoices = (
+	plan: ReturnType<typeof buildDeviceUserMergePlan> | { users?: any[] },
+): Record<string, Partial<Record<DeviceUserMergeField, MergeChoice>>> => {
+	const choices: Record<string, Partial<Record<DeviceUserMergeField, MergeChoice>>> = {};
+	const richness = (record: any) => {
+		const rawFp = Number(record?.biometricEvidence?.fingerprint?.rawBlobCount || 0);
+		const rawFace = Boolean(record?.biometricEvidence?.face?.rawBlobPresent);
+		const fp = Number(
+			record?.biometricEvidence?.fingerprint?.reportedCount ||
+				(record?.rawPayload as any)?.numOfFP ||
+				0,
+		);
+		const face = Number(
+			record?.biometricEvidence?.face?.reportedCount ||
+				(record?.rawPayload as any)?.numOfFace ||
+				0,
+		);
+		const card = Number(
+			record?.biometricEvidence?.card?.reportedCount ||
+				(record?.rawPayload as any)?.numOfCard ||
+				0,
+		);
+		return rawFp * 6 + Number(rawFace) * 4 + fp * 2 + face * 2 + card * 3;
+	};
+	const pickProfileAb = (params: {
+		field: string;
+		valueA: unknown;
+		valueB: unknown;
+		recordA: any;
+		recordB: any;
+		deviceAId: string;
+		deviceBId: string;
+		richestDeviceId: string;
+	}): MergeChoice => {
+		const field = params.field;
+		// Dates: operator default = latest / most recent calendar value (not bio richness).
+		if (field === "validFrom" || field === "validTo") {
+			const msA = dateValueMs(params.valueA);
+			const msB = dateValueMs(params.valueB);
+			if (msB > msA) return "B";
+			if (msA > msB) return "A";
+		}
+		// Names: prefer the longer / more complete display string (e.g. "ernest T571774").
+		if (field === "displayName") {
+			const lenA = String(params.valueA ?? "").trim().length;
+			const lenB = String(params.valueB ?? "").trim().length;
+			if (lenB > lenA) return "B";
+			if (lenA > lenB) return "A";
+		}
+		const scoreA = richness(params.recordA);
+		const scoreB = richness(params.recordB);
+		if (scoreB > scoreA) return "B";
+		if (scoreA > scoreB) return "A";
+		if (params.deviceAId === params.richestDeviceId) return "A";
+		if (params.deviceBId === params.richestDeviceId) return "B";
+		return params.deviceAId.localeCompare(params.deviceBId) <= 0 ? "A" : "B";
+	};
+	for (const user of plan.users || []) {
+		const records = Array.isArray(user.records) ? user.records : [];
+		const richest = [...records].sort(
+			(left: any, right: any) =>
+				richness(right) - richness(left) ||
+				text(left?.deviceId).localeCompare(text(right?.deviceId)),
+		)[0];
+		const richestDeviceId = text(richest?.deviceId);
+		for (const conflict of user.conflicts || []) {
+			const field = conflict.field as DeviceUserMergeField;
+			const recordA = records.find(
+				(record: any) => text(record.deviceId) === text(conflict.deviceA?.id),
+			);
+			const recordB = records.find(
+				(record: any) => text(record.deviceId) === text(conflict.deviceB?.id),
+			);
+			// Profile fields (displayName/validFrom/validTo/...) must always pick A or B
+			// so decision residual burns via DeviceUser overlay. Never KEEP just because a
+			// third richer peer exists outside the two-sided conflict pair.
+			if (isDeviceUserMergeProfileOverlayField(String(field || ""))) {
+				const choice = pickProfileAb({
+					field: String(field || ""),
+					valueA: conflict.deviceA?.value,
+					valueB: conflict.deviceB?.value,
+					recordA,
+					recordB,
+					deviceAId: text(conflict.deviceA?.id),
+					deviceBId: text(conflict.deviceB?.id),
+					richestDeviceId,
+				});
+				choices[user.key] = { ...(choices[user.key] || {}), [field]: choice };
+				continue;
+			}
+			const rawEvidencePresent =
+				field === "fingerprint"
+					? richest?.biometricEvidence?.fingerprint?.status === "raw_blob_present"
+					: field === "face"
+						? richest?.biometricEvidence?.face?.status === "raw_blob_present"
+						: true;
+			// Card/face/FP stay KEEP without raw custody — credential mode owns those writes.
+			const choice: MergeChoice = !rawEvidencePresent
+				? "KEEP"
+				: text(conflict.deviceA?.id) === richestDeviceId
+					? "A"
+					: text(conflict.deviceB?.id) === richestDeviceId
+						? "B"
+						: "KEEP";
+			choices[user.key] = { ...(choices[user.key] || {}), [field]: choice };
+		}
+	}
+	return choices;
+};
+
+/**
+ * DeviceUser rows that need an HRIS overlay after profile A/B decisions.
+ * Does not invent physical peer creates or biometric bytes. Card/face/FP
+ * field conflicts never appear here — credential mode owns those writes.
+ */
+export const buildProfileOverlayWrites = (
+	users: Array<Pick<DeviceUserMergeGroup, "key" | "records" | "conflicts">>,
+): Array<{
+	userKey: string;
+	targetDeviceId: string;
+	fields: DeviceUserMergeProfileOverlayField[];
+	kind: "deviceuser_profile_overlay";
+}> => {
+	const writes: Array<{
+		userKey: string;
+		targetDeviceId: string;
+		fields: DeviceUserMergeProfileOverlayField[];
+		kind: "deviceuser_profile_overlay";
+	}> = [];
+	for (const user of users || []) {
+		const byTarget = new Map<string, Set<DeviceUserMergeProfileOverlayField>>();
+		for (const conflict of user.conflicts || []) {
+			if (!isDeviceUserMergeProfileOverlayField(String(conflict.field || ""))) continue;
+			if (conflict.choice !== "A" && conflict.choice !== "B") continue;
+			const selectedDeviceId =
+				conflict.choice === "B"
+					? text(conflict.deviceB?.id)
+					: text(conflict.deviceA?.id);
+			if (!selectedDeviceId) continue;
+			const selectedRecord = (user.records || []).find(
+				(record) => text(record.deviceId) === selectedDeviceId,
+			);
+			if (!selectedRecord) continue;
+			const selectedValue = conflictStable(
+				String(conflict.field || ""),
+				valueFor(selectedRecord, conflict.field),
+			);
+			for (const record of user.records || []) {
+				const targetDeviceId = text(record.deviceId);
+				if (!targetDeviceId) continue;
+				if (
+					conflictStable(String(conflict.field || ""), valueFor(record, conflict.field)) ===
+					selectedValue
+				)
+					continue;
+				const fields =
+					byTarget.get(targetDeviceId) ||
+					new Set<DeviceUserMergeProfileOverlayField>();
+				fields.add(conflict.field as DeviceUserMergeProfileOverlayField);
+				byTarget.set(targetDeviceId, fields);
+			}
+		}
+		for (const [targetDeviceId, fields] of byTarget.entries()) {
+			writes.push({
+				userKey: user.key,
+				targetDeviceId,
+				fields: [...fields].sort(),
+				kind: "deviceuser_profile_overlay",
+			});
+		}
+	}
+	return writes;
+};
+
 export const applyMergeChoices = (
 	plan: ReturnType<typeof buildDeviceUserMergePlan>,
 	params: {
 		choices?: Record<string, Record<DeviceUserMergeField, MergeChoice>>;
 		applyAll?: MergeChoice;
 		selectedUserKeys?: string[];
+		/** Default true: when choices/applyAll empty, auto-fill richest (agent-owned). */
+		autoResolveDecisions?: boolean;
 	} = {},
 ) => {
 	const unresolved: Array<{ key: string; field: DeviceUserMergeField }> = [];
@@ -1899,22 +2358,36 @@ export const applyMergeChoices = (
 	const selectedUsers = selectedUserKeys
 		? plan.users.filter((user) => selectedUserKeys.has(user.key))
 		: plan.users;
+	const hasExplicitChoices =
+		Boolean(params.applyAll) ||
+		(params.choices && Object.keys(params.choices).length > 0);
+	const autoChoices =
+		!hasExplicitChoices && params.autoResolveDecisions !== false
+			? buildRichestMergeChoices(plan)
+			: {};
+	const effectiveChoices = hasExplicitChoices ? params.choices || {} : autoChoices;
 	const resolved = selectedUsers.map((user) => ({
 		...user,
 		conflicts: user.conflicts.map((conflict) => {
 			const choice =
-				params.choices?.[user.key]?.[conflict.field] || params.applyAll || conflict.choice;
+				effectiveChoices?.[user.key]?.[conflict.field] ||
+				params.applyAll ||
+				conflict.choice;
 			if (!choice) unresolved.push({ key: user.key, field: conflict.field });
 			return { ...conflict, choice: choice || null };
 		}),
 	}));
+	// Missing-person peer creates only. Profile A/B decisions are separate
+	// DeviceUser overlays — never inflate physical plannedWrites with them.
 	const plannedWrites = (plan.plannedWrites || []).filter((write) =>
 		selectedUserKeys ? selectedUserKeys.has(write.userKey) : true,
 	);
+	const profileOverlayWrites = buildProfileOverlayWrites(resolved);
 	return {
 		...plan,
 		users: resolved,
 		plannedWrites,
+		profileOverlayWrites,
 		unresolved,
 		unresolvedDecisions: unresolved,
 		executable:
@@ -1928,6 +2401,7 @@ export const applyMergeChoices = (
 			conflicts: resolved.reduce((sum, user) => sum + user.conflicts.length, 0),
 			missing: resolved.reduce((sum, user) => sum + user.missingOnDeviceIds.length, 0),
 			missingHrisLinks: resolved.filter((user) => !user.employeeId).length,
+			profileOverlayWrites: profileOverlayWrites.length,
 		},
 	};
 };

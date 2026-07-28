@@ -245,7 +245,7 @@ describe("admin device user and log sync UI contract", () => {
 		);
 		expect(enroll).toContain('face?.status === "raw_blob_present"');
 		expect(enroll).toContain("selected unique ID");
-		expect(enroll).toContain("selected potential write");
+		expect(enroll).toContain("executable peer copy");
 		expect(enroll).toContain("Select all in scope");
 		expect(enroll).toContain("Deselect scope");
 		expect(enroll).toContain("selectedUserKeys");
@@ -254,6 +254,16 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Expected active devices");
 		expect(enroll).toContain("Unique IDs");
 		expect(enroll).toContain("Device ID records");
+		expect(enroll).toContain("Peer-copy ready");
+		expect(enroll).toContain("Needs decision");
+		expect(enroll).toContain("FP residual");
+		expect(enroll).toContain("Face residual");
+		expect(enroll).toContain("Include card residual");
+		expect(enroll).toContain("includeCardResidual");
+		expect(enroll).toContain("sdkMergeDecisionPeopleCount");
+		expect(enroll).toContain("sdkMergeMissingPeopleCount");
+		expect(enroll).toContain("MERGE_CHIP_CONTRACT");
+		expect(enroll).toContain("sdkMergeTopChips");
 		expect(enroll).toContain("duplicate source row");
 		expect(enroll).toContain("collapsed into the matching unique IDs");
 		expect(enroll).toContain("Needs review IDs");
@@ -287,19 +297,36 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Showing");
 		expect(enroll).toContain("Page {safeSdkMergePage} of {sdkMergeTotalPages}");
 		expect(enroll).toContain("Review selected merge");
-		expect(enroll).toContain("This starts a real device-write job.");
-		expect(enroll).toContain("missing raw blobs are not fabricated");
+		// Agent B Image A honesty: executable copies, not selection size
 		expect(enroll).toContain("sdkMergeSelectedWriteMatrix");
-		expect(enroll).toContain("Writes by target device");
-		expect(enroll).toContain("Sources used");
-		expect(enroll).toContain("Selected source devices for the selected IDs.");
+		expect(enroll).toContain("merge-ui-truth-counts");
+		expect(enroll).toContain("buildMergePeerCopyCta");
+		expect(enroll).toContain("sdkMergePeerCopyCta");
+		expect(enroll).toContain("sdkMergePeerCopyCta.disabled");
+		expect(enroll).toContain("sdkMergePeerCopyCta.label");
+		expect(enroll).toContain("countSdkMergeExecutablePeerCopies");
+		expect(enroll).toContain("isSdkMergeExecutablePeerCopyRow");
+		expect(enroll).toContain("sdkMergeSelectedExecutablePeerCopies");
+		expect(enroll).toContain("sdkMergeCanStartPeerCopy");
+		expect(enroll).toContain("0 executable peer copies");
+		expect(enroll).toContain("No peer copies for this selection");
+		expect(enroll).toContain("Executable peer copies");
+		expect(enroll).toContain("Physical peer creates (sum of COPY)");
+		expect(enroll).toContain("Excluded from scope");
+		expect(enroll).toContain("Peer creates by target");
+		expect(enroll).toContain("Peer creates by source");
+		expect(enroll).toContain("missing peers to create on that panel");
+		expect(enroll).toContain("peer creates leaving this source");
+		expect(enroll).toContain("formatMergeSourceDeviceTile");
+		expect(enroll).toContain("formatMergeTargetDeviceTile");
 		expect(enroll).toContain("Selected ID write matrix");
-		expect(enroll).toContain("One row per selected unique ID.");
+		expect(enroll).toContain("No-op rows (COPY 0)");
+		expect(enroll).toContain("Hide no-op IDs");
+		expect(enroll).toContain("sdkMergeShowNoOpRows");
 		expect(enroll).toContain("Physical source");
 		expect(enroll).toContain("Peer copy attempts");
 		expect(enroll).toContain("Fingerprint gaps");
 		expect(enroll).toContain("Face gaps");
-		expect(enroll).toContain("source evidence and current gaps");
 		expect(enroll).toContain("setSelectedMergeUser(row.key)");
 		expect(enroll).toContain("Locked job scope");
 		expect(enroll).toContain('"Authenticated"');
@@ -335,6 +362,13 @@ describe("admin device user and log sync UI contract", () => {
 		expect(deviceController).toContain("copyFailureSummary: job.copyFailureSummary");
 		expect(enroll).toContain("Back to review");
 		expect(enroll).toContain("Review selected merge (${sdkMergeSelectedUniqueCount})");
+		// Forbidden Image A lie: CTA labeled by selected unique ID count
+		expect(enroll).not.toContain(
+			"Start peer copy job (${sdkMergeSelectedUniqueCount} IDs)",
+		);
+		expect(enroll).not.toMatch(
+			/Start peer copy \(\$\{sdkMergeSelectedUniqueCount\}/,
+		);
 		expect(enroll).not.toContain("sdkMergePreviewOnly");
 		expect(enroll).not.toContain("Preview mode is on.");
 		expect(enroll).not.toContain("Preview only");
@@ -356,20 +390,26 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).not.toContain("Dry-run only for now");
 		expect(enroll).not.toContain("dry-run mode prevents writes");
 		expect(enroll).not.toContain("Dry run is on.");
-		expect(enroll).toContain("Potential writes");
+		expect(enroll).toContain("Peer-copy ready");
 		expect(enroll).toContain("Credential convergence");
 		expect(enroll).toContain("Fingerprint and face are planned independently");
 		expect(enroll).toContain("Select ready operations");
 		expect(enroll).toContain('"Potential operations"');
+		expect(enroll).toContain("sdkMergePotentialOperationsUiTotal");
 		expect(enroll).toContain(
 			"sdkMergePotentialOperationSummary?.totalPotentialOperations",
 		);
 		expect(enroll).toContain("sdkMergePotentialOperationSummary?.byModality?.card");
+		expect(enroll).toContain("includeCardResidual");
+		expect(enroll).toContain("modality !== \"card\"");
 		expect(enroll).toContain('"Ready now"');
 		expect(enroll).toContain('"Agent recovery"');
 		expect(enroll).toContain('"Ownership / enroll block"');
 		expect(enroll).toContain("Agent recovery: ${formatSdkMergeRecoveryStage(write)}");
 		expect(enroll).toContain("Start recovery");
+		expect(enroll).toContain("Residual left");
+		expect(enroll).toContain("credentialRecoveryStageLabel");
+		expect(enroll).toContain("job.progressLabel");
 		expect(enroll).toContain("credentialRecoveryJob.lastAdvancementAt");
 		expect(enroll).toContain("credentialRecoveryJob.activeTask");
 		expect(enroll).toContain("Observability defect");

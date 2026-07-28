@@ -3579,7 +3579,9 @@ export default function DeviceEventsPage() {
 	];
 
 	return (
-		<div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
+		<div
+			className="flex h-full min-h-0 flex-col gap-3 overflow-hidden"
+			data-testid="device-events-page">
 			<div className="flex shrink-0 flex-col gap-2 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
 				<div className="flex min-w-0 items-center gap-3">
 					<Button
@@ -3648,28 +3650,30 @@ export default function DeviceEventsPage() {
 			</div>
 
 			{viewMode === "saved" ? (
-				<DeviceLiveReadinessStrip
-					compact
-					mode="events"
-					className="w-full"
-					readiness={liveReadiness}
-					isLoading={isLiveReadinessLoading && !liveReadiness}
-					errorMessage={liveReadinessErrorMessage}
-					onProve={() => void proveLivePath({ forceReArm: true })}
-					isProving={isProvingLivePath}
-					keepReady={keepLiveReady}
-					onKeepReadyChange={setKeepLiveReadyPersisted}
-					// Never show "fixing…" on a green/safe path — only true red repair work.
-					keepReadyWorking={
-						keepLiveReady &&
-						isQuietKeepReadyRepair &&
-						(liveReadiness?.overall === "red" || liveReadiness?.safeToTap === false)
-					}
-				/>
+				<div className="shrink-0">
+					<DeviceLiveReadinessStrip
+						compact
+						mode="events"
+						className="w-full"
+						readiness={liveReadiness}
+						isLoading={isLiveReadinessLoading && !liveReadiness}
+						errorMessage={liveReadinessErrorMessage}
+						onProve={() => void proveLivePath({ forceReArm: true })}
+						isProving={isProvingLivePath}
+						keepReady={keepLiveReady}
+						onKeepReadyChange={setKeepLiveReadyPersisted}
+						// Never show "fixing…" on a green/safe path — only true red repair work.
+						keepReadyWorking={
+							keepLiveReady &&
+							isQuietKeepReadyRepair &&
+							(liveReadiness?.overall === "red" || liveReadiness?.safeToTap === false)
+						}
+					/>
+				</div>
 			) : null}
 
 			{viewMode === "saved" ? (
-				<div className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700">
+				<div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700">
 					<span className="inline-flex items-center gap-1.5 font-semibold text-slate-900">
 						<Wifi className="h-3.5 w-3.5 text-emerald-600" />
 						Device health
@@ -3772,7 +3776,7 @@ export default function DeviceEventsPage() {
 				</div>
 			) : null}
 
-			<div className="rounded-md border border-slate-200 bg-white">
+			<div className="shrink-0 rounded-md border border-slate-200 bg-white">
 				<div
 					className={
 						viewMode === "live"
@@ -3976,7 +3980,7 @@ export default function DeviceEventsPage() {
 			)}
 
 			{activeErrorIsBackgroundStaleData && activeErrorHint && (
-				<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+				<div className="shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
 					<p className="font-semibold">Showing saved rows from the last successful refresh</p>
 					<p className="mt-0.5 text-xs opacity-90">
 						A background refresh hiccuped, but the saved-event ledger data on this page is still usable. It will retry automatically.
@@ -3988,8 +3992,8 @@ export default function DeviceEventsPage() {
 				<div
 					className={
 						activeErrorHint.kind === "database"
-							? "rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
-							: "rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+							? "shrink-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950"
+							: "shrink-0 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
 					}>
 					<p className="font-semibold">{activeErrorHint.title}</p>
 					<p className="mt-0.5 text-xs opacity-90">{activeErrorHint.description}</p>
@@ -4006,8 +4010,8 @@ export default function DeviceEventsPage() {
 					aria-label="Show latest saved event row"
 					className={
 						isLatestSavedFresh
-							? "w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-sm text-emerald-900 transition hover:border-emerald-300 hover:bg-emerald-100"
-							: "w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+							? "shrink-0 w-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-sm text-emerald-900 transition hover:border-emerald-300 hover:bg-emerald-100"
+							: "shrink-0 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
 					}>
 					<div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
 						<div className="flex min-w-0 items-center gap-2">
@@ -4044,7 +4048,11 @@ export default function DeviceEventsPage() {
 				</button>
 			)}
 
-			<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-200 bg-white p-2">
+			{/* min-h so containedScroll body never collapses to 0px when outer flex chain is short.
+			    Chrome above is shrink-0; this shell owns remaining height and internal scroll. */}
+			<div
+				className="flex min-h-[22rem] flex-1 flex-col overflow-hidden rounded-md border border-slate-200 bg-white p-2"
+				data-testid="device-events-table-shell">
 				<div className="mb-2 flex shrink-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
 					<div className="min-w-0">
 						<h2 className="truncate text-sm font-semibold text-slate-950">
@@ -4071,7 +4079,7 @@ export default function DeviceEventsPage() {
 					) : null}
 				</div>
 				<DataTable<UnifiedDeviceEventRow>
-					title={viewMode === "live" ? "Events" : "Saved events"}
+					title=""
 					description=""
 					data={rows}
 					columns={columns}
