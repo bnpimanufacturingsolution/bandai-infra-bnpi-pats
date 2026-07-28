@@ -2,9 +2,11 @@ import { expect } from "chai";
 import {
 	applyMergeChoices,
 	buildDeviceUserMergePlan,
+	buildProfileOverlayWrites,
 	classifyFaceCustody,
 	extractProgress5OwnerConflictsFromWriteError,
 	fingerprintCustodyMatchesReview,
+	isDeviceUserMergeProfileOverlayField,
 	proveCanonicalDeviceIdentity,
 	proveFingerprintPhysicalReread,
 	reconcileDurableFingerprintOwnerConflicts,
@@ -156,30 +158,39 @@ describe("device user union merge", () => {
 		);
 	});
 
-	it("requires an explicit choice and supports A/B all choices", () => {
+	it("requires an explicit choice unless auto-resolve is on, and supports A/B all choices", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [record("a"), record("b", { displayName: "E. Ramos" })],
 		});
 		expect(plan.counts.conflicts).to.be.greaterThan(0);
-		expect(applyMergeChoices(plan).executable).to.equal(false);
+		// Operator opt-out: no auto richest fill → still needs A/B/KEEP.
+		expect(applyMergeChoices(plan, { autoResolveDecisions: false }).executable).to.equal(
+			false,
+		);
+		// Agent-owned default: empty choices auto-fill richest custody.
+		expect(applyMergeChoices(plan).executable).to.equal(true);
 		expect(applyMergeChoices(plan, { applyAll: "A" }).executable).to.equal(true);
 		expect(applyMergeChoices(plan, { applyAll: "B" }).executable).to.equal(true);
 	});
 
-	it("does not treat biometric counts as weaker data", () => {
+	it("does not put biometric count gaps into Needs decision conflicts", () => {
+		// Face/FP/card count mismatches are credential residual, not A/B decisions.
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [
-				record("a", { rawPayload: { numOfFP: 2 } }),
-				record("b", { rawPayload: { numOfFP: 1 } }),
+				record("a", { rawPayload: { numOfFP: 2, numOfFace: 1, numOfCard: 1 } }),
+				record("b", { rawPayload: { numOfFP: 1, numOfFace: 0, numOfCard: 0 } }),
 			],
 		});
-		const fingerprintConflict = plan.users[0].conflicts.find(
-			(conflict) => conflict.field === "fingerprint",
-		);
-		expect(fingerprintConflict?.deviceA.value).to.equal(2);
-		expect(fingerprintConflict?.deviceB.value).to.equal(1);
+		const bioFields = plan.users[0].conflicts.map((conflict) => conflict.field);
+		expect(bioFields).to.not.include("fingerprint");
+		expect(bioFields).to.not.include("face");
+		expect(bioFields).to.not.include("card");
+		// Still planned as credential gap ops (not invented as decision A/B).
+		expect(
+			plan.credentialWrites.some((write) => write.modality === "fingerprint"),
+		).to.equal(true);
 	});
 
 	it("blocks count-only credential gaps until portable bytes are reviewed", () => {
@@ -1973,6 +1984,87 @@ describe("device user union merge", () => {
 		).to.equal(false);
 	});
 
+	it("counts profile field overlays when missing_people=0 (no physical plannedWrites)", () => {
+		// Both devices already have the person; only displayName/valid* disagree.
+		// User-mode plannedWrites must stay empty (no missing-person creates), but
+		// auto-resolved A/B profile choices must produce DeviceUser overlay work so
+		// start-job does not 409 "Reviewed scope contains no writes".
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					displayName: "Ernest A",
+					validFrom: "2026-01-01",
+					validTo: "2026-12-31",
+				}),
+				record("b", {
+					displayName: "Ernest B",
+					validFrom: "2027-01-01",
+					validTo: "2027-12-31",
+				}),
+			],
+		});
+		expect(plan.counts.missing).to.equal(0);
+		expect(plan.plannedWrites).to.have.length(0);
+		expect(plan.users[0].conflicts.map((c) => c.field)).to.include.members([
+			"displayName",
+			"validFrom",
+			"validTo",
+		]);
+
+		const applied = applyMergeChoices(plan, {
+			choices: {
+				[plan.users[0].key]: {
+					displayName: "A",
+					validFrom: "B",
+					validTo: "B",
+				} as any,
+			},
+		});
+		expect(applied.executable).to.equal(true);
+		expect(applied.plannedWrites).to.have.length(0);
+		expect(applied.profileOverlayWrites.length).to.be.greaterThan(0);
+		expect(applied.counts.profileOverlayWrites).to.equal(applied.profileOverlayWrites.length);
+		// Card is not a profile overlay field — never invent card bytes from a decision.
+		expect(isDeviceUserMergeProfileOverlayField("card")).to.equal(false);
+		expect(isDeviceUserMergeProfileOverlayField("displayName")).to.equal(true);
+		expect(
+			applied.profileOverlayWrites.every((write) => write.kind === "deviceuser_profile_overlay"),
+		).to.equal(true);
+		expect(
+			applied.profileOverlayWrites.some((write) => write.fields.includes("displayName")),
+		).to.equal(true);
+
+		// KEEP produces no overlay work (already aligned for apply).
+		const kept = applyMergeChoices(plan, {
+			choices: {
+				[plan.users[0].key]: {
+					displayName: "KEEP",
+					validFrom: "KEEP",
+					validTo: "KEEP",
+				} as any,
+			},
+		});
+		expect(kept.profileOverlayWrites).to.have.length(0);
+		expect(buildProfileOverlayWrites(kept.users)).to.have.length(0);
+	});
+
+	it("does not treat card/face/fingerprint conflicts as DeviceUser profile overlays", () => {
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", { rawPayload: { numOfFP: 2, numOfFace: 1, numOfCard: 1 } }),
+				record("b", { rawPayload: { numOfFP: 1, numOfFace: 2, numOfCard: 2 } }),
+			],
+		});
+		const applied = applyMergeChoices(plan, { applyAll: "A" });
+		expect(applied.executable).to.equal(true);
+		// Present on both devices → no missing-person creates.
+		expect(applied.plannedWrites).to.have.length(0);
+		// Biometric count conflicts must not become fake profile overlays or invent bytes.
+		expect(applied.profileOverlayWrites).to.have.length(0);
+	});
+
 	it("applies only selected unique IDs when a merge preview is scoped", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b", "c"],
@@ -1992,7 +2084,7 @@ describe("device user union merge", () => {
 		expect(applied.counts.unionUsers).to.equal(1);
 	});
 
-	it("compares access, validity, card, face, and fingerprint fields", () => {
+	it("Needs decision compares profile fields only; bio counts stay credential residual", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],
 			records: [
@@ -2012,15 +2104,17 @@ describe("device user union merge", () => {
 				}),
 			],
 		});
-		expect(plan.users[0].conflicts.map((conflict) => conflict.field)).to.include.members([
+		const fields = plan.users[0].conflicts.map((conflict) => conflict.field);
+		expect(fields).to.include.members([
 			"validFrom",
 			"validTo",
 			"doorRight",
 			"accessPlan",
-			"face",
-			"fingerprint",
-			"card",
 		]);
+		expect(fields).to.not.include.members(["face", "fingerprint", "card"]);
+		expect(plan.credentialWrites.some((write) => write.modality === "card")).to.equal(
+			true,
+		);
 	});
 
 	it("serializes a compact review plan without SDK biometric payloads or duplicate aliases", () => {

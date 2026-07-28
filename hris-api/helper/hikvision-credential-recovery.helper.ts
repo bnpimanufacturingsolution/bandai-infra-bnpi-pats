@@ -57,6 +57,18 @@ export const selectObsoleteCredentialRecoverySourceTaskIds = (
 		.filter((task) => !currentTaskKeys.has(String(task.taskKey)))
 		.map((task) => String(task.id));
 
+export type CredentialRecoveryCanaryModality = "fingerprint" | "face" | "card";
+
+/** Normalize job/review canary modality; unknown values mean unscoped (all modalities). */
+export const normalizeCredentialRecoveryCanaryModality = (
+	canaryModality: unknown,
+): CredentialRecoveryCanaryModality | null => {
+	const value = String(canaryModality || "").trim();
+	return value === "fingerprint" || value === "face" || value === "card"
+		? value
+		: null;
+};
+
 export const recoveredCustodyCanUnlockWrite = (
 	modality: unknown,
 	result: Record<string, unknown> | null | undefined,
@@ -70,6 +82,15 @@ export const recoveredCustodyCanUnlockWrite = (
 			Number(result?.facePictureSize || 0) > 0 &&
 			result?.cardOwnerVerified === true &&
 			result?.identityOwnerVerified === true
+		);
+	}
+	if (String(modality) === "card") {
+		// Exact single cardNo recovered from CardInfo inventory (never invent card numbers).
+		// Prefer non-empty cardNo; cardCount===1 alone is accepted only as a legacy unlock
+		// signal when the capture path already proved uniqueness but key naming drifted.
+		return (
+			Boolean(String(result?.cardNo || "").trim()) ||
+			Number(result?.cardCount || 0) === 1
 		);
 	}
 	return false;
@@ -516,9 +537,7 @@ export const buildCredentialRecoveryPendingTaskWhere = (
 	jobId: string,
 	canaryModality: unknown,
 ) => {
-	const modality = ["fingerprint", "face"].includes(String(canaryModality || ""))
-		? String(canaryModality)
-		: null;
+	const modality = normalizeCredentialRecoveryCanaryModality(canaryModality);
 	return {
 		jobId,
 		status: { in: ["pending", "retrying"] },
@@ -830,12 +849,13 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 			);
 		};
 
-		// Agent-owned export path:
-		// 1) missing_raw_blob → capture selected source (or candidates)
+		// Agent-owned export path (not a permanent "not burnable" residual):
+		// 1) missing_raw_blob → capture selected source (or candidates) for FP/face/card
 		// 2) face/FP source_conflict with candidates → capture every highest-count
 		//    candidate (including legacy comparing_sources labels). Do not leave
 		//    blocked source_resolution when the agent can export custody.
-		// 3) card / no-candidate source_conflict remains blocked source_resolution
+		// 3) card source_conflict with multi-value equality unproven stays blocked
+		//    only after candidate CardInfo export was attempted (or no candidates).
 		if (String(write.blockingReason) === "missing_raw_blob") {
 			const captureDeviceIds =
 				sourceDeviceId
@@ -843,8 +863,14 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 					: candidateDeviceIds.length > 0
 						? candidateDeviceIds
 						: [];
-			if (["fingerprint", "face"].includes(modality) && captureDeviceIds.length) {
+			if (
+				["fingerprint", "face", "card"].includes(modality) &&
+				captureDeviceIds.length
+			) {
 				enqueueSourceCapture(captureDeviceIds);
+			} else if (modality === "card" && !captureDeviceIds.length) {
+				// Still agent work: no device id to read is an observability/plan defect.
+				enqueueBlockedSourceResolution();
 			}
 		} else if (String(write.blockingReason) === "source_conflict") {
 			const stage = String(write.recoveryStage || "");
@@ -858,6 +884,13 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 				candidateDeviceIds.length > 0 &&
 				(exportingStage || needsCandidateExport)
 			) {
+				enqueueSourceCapture(candidateDeviceIds);
+			} else if (
+				modality === "card" &&
+				candidateDeviceIds.length > 0 &&
+				(exportingStage || needsCandidateExport || stage === "comparing_sources")
+			) {
+				// Export CardInfo on every candidate so replan can prove exact value equality.
 				enqueueSourceCapture(candidateDeviceIds);
 			} else {
 				enqueueBlockedSourceResolution();
@@ -1057,9 +1090,9 @@ export const selectCredentialRecoveryReadyWrites = (params: {
 	/** Task keys that permanently consumed write budget (succeeded or non-retryable failed). */
 	attemptedTaskKeys?: Iterable<unknown> | null;
 }) => {
-	const canaryModality = ["fingerprint", "face"].includes(String(params.canaryModality || ""))
-		? String(params.canaryModality)
-		: null;
+	const canaryModality = normalizeCredentialRecoveryCanaryModality(
+		params.canaryModality,
+	);
 	const maxVerifiedWrites = Math.max(
 		0,
 		Math.min(50, Number(params.maxVerifiedWrites ?? 50) || 0),
@@ -1300,7 +1333,7 @@ export type CredentialRecoveryFullScopeCertainty = {
 };
 
 export type CredentialRecoveryExecutionPreview = {
-	canaryModality: "fingerprint" | "face" | null;
+	canaryModality: CredentialRecoveryCanaryModality | null;
 	maxVerifiedWrites: number;
 	readyTotal: number;
 	faceReady: number;
@@ -1348,9 +1381,9 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 	canaryModality?: unknown;
 	maxVerifiedWrites?: unknown;
 }): CredentialRecoveryExecutionPreview => {
-	const canaryModality = ["fingerprint", "face"].includes(String(params.canaryModality || ""))
-		? (String(params.canaryModality) as "fingerprint" | "face")
-		: null;
+	const canaryModality = normalizeCredentialRecoveryCanaryModality(
+		params.canaryModality,
+	);
 	const maxVerifiedWrites = Math.max(
 		0,
 		Math.min(50, Number(params.maxVerifiedWrites ?? 50) || 0),
@@ -1499,7 +1532,9 @@ export const buildCredentialRecoveryExecutionPreview = (params: {
 			? uniqueFace.size
 			: canaryModality === "fingerprint"
 				? uniqueFp.size
-				: uniqueFace.size + uniqueFp.size;
+				: canaryModality === "card"
+					? uniqueCard.size
+					: uniqueFace.size + uniqueFp.size + uniqueCard.size;
 	const maxUniqueClosed = Math.min(wouldWriteUniquePeople, uniqueGapForModality);
 	const willDecrease = wouldWrite.length > 0 && wouldWriteUniquePeople > 0;
 	// Full unique-gap zero in this wave only when every residual op in-scope is ready

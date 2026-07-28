@@ -205,6 +205,13 @@ describe("DeviceUser API contract", () => {
 		expect(controller).to.include(
 			"Stored face custody envelope validation failed",
 		);
+		// Unattested stored-face rows are fail-closed but must not WARN-flood per user.
+		expect(controller).to.include("stored_face_custody_unattested_summary");
+		expect(controller).to.include(
+			"Stored face custody skipped for ${unattestedStoredFaceRejectCount} user(s)",
+		);
+		expect(controller).to.include("progressPercent");
+		expect(controller).to.include("plannedWaveSize");
 		expect(controller).to.include("const authorizedCanaryTarget =");
 		expect(controller).to.include(
 			"process.env.HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID",

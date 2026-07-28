@@ -824,6 +824,23 @@ export interface CredentialRecoveryJob {
 	lastAdvancementAt?: string | null;
 	workerLeaseActive?: boolean;
 	resumeCursor: number;
+	/** Wave size locked at job start (default 20). Progress is for this wave, not full residual. */
+	plannedWaveSize?: number;
+	wouldWriteCount?: number;
+	/** 0–100 weighted progress from API (stage floors + partial in-flight weight). */
+	progressPercent?: number;
+	progressWeights?: {
+		verified?: number;
+		failed?: number;
+		writing?: number;
+		awaitingPhysicalReread?: number;
+		readyToWrite?: number;
+		recovered?: number;
+		recoveringNow?: number;
+		weightedUnits?: number;
+		waveDenominator?: number;
+		stageFloor?: number;
+	};
 	counters?: {
 		physicallyVerifiedRemaining?: number;
 		recoveryNeeded?: number;
@@ -2119,10 +2136,14 @@ class DevicesService extends APIService {
 	}
 
 	async startHikvisionSdkUserMergeJob(payload: DeviceUserMergeApplyPayload): Promise<{
-		jobId: string;
+		jobId: string | null;
 		scopeHash: string;
-		progress: DeviceUserMergeJobProgress;
+		progress?: DeviceUserMergeJobProgress;
 		review: any;
+		nothingToWrite?: boolean;
+		decisionsRecorded?: boolean;
+		pathHint?: string;
+		message?: string;
 	}> {
 		try {
 			const reviewResponse = await hrisApiClient.post<any>(
@@ -2136,11 +2157,31 @@ class DevicesService extends APIService {
 				{ ...payload, expectedScopeHash: review.scopeHash },
 			);
 			const data = response.data?.data || response.data;
+			const message =
+				response.data?.message ||
+				response.data?.data?.message ||
+				(typeof response.data === "string" ? response.data : undefined);
+			// Executable scope with zero physical peer creates and zero profile overlays
+			// (e.g. KEEP-only or biometric decisions only) returns 200 nothingToWrite —
+			// not a 409 hard failure and not a job id.
+			if (data?.nothingToWrite) {
+				return {
+					jobId: null,
+					scopeHash: String(data.scopeHash || review.scopeHash),
+					review,
+					nothingToWrite: true,
+					decisionsRecorded: data.decisionsRecorded !== false,
+					pathHint: data.pathHint,
+					message:
+						message ||
+						"Nothing physical to write; decisions are aligned or require credential-mode raw custody.",
+				};
+			}
 			if (!data?.jobId) throw new Error("Failed to start SDK user merge job");
 			if (data.scopeHash !== review.scopeHash) {
 				throw new Error("Started merge scope does not match the reviewed scope");
 			}
-			return { ...data, review };
+			return { ...data, review, message };
 		} catch (error: any) {
 			throw new Error(
 				error.data?.errors?.[0]?.message ||

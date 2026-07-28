@@ -17,8 +17,54 @@ export const DEVICE_USER_MERGE_FIELDS = [
 	"card",
 ] as const;
 
+/**
+ * Fields that inflate the "Needs decision" chip and require A/B/KEEP review.
+ *
+ * Face / fingerprint / card are intentionally excluded:
+ * - Count gaps (e.g. card 1 vs 0) already appear as credential residual + recovery.
+ * - Putting them in conflicts double-counts residual and makes "Needs decision"
+ *   look like 16 when the operator only has a few profile/name decisions.
+ * - Card is optional for many sites; never default-required for merge apply.
+ *
+ * Product default: decision = profile identity/metadata only.
+ */
+export const DEVICE_USER_MERGE_DECISION_FIELDS = [
+	"vendorUserId",
+	"employeeNo",
+	"employeeId",
+	"displayName",
+	"status",
+	"validFrom",
+	"validTo",
+	"doorRight",
+	"accessPlan",
+] as const;
+
+/**
+ * Profile / HRIS DeviceUser fields that reviewed A/B choices can overlay in the
+ * database after a user-mode merge. Biometric modalities (face/fingerprint/card)
+ * are intentionally excluded — those require credential-mode raw custody and
+ * must never invent missing_raw_blob bytes from a field conflict alone.
+ */
+export const DEVICE_USER_MERGE_PROFILE_OVERLAY_FIELDS = [
+	"employeeId",
+	"displayName",
+	"status",
+	"validFrom",
+	"validTo",
+	"doorRight",
+	"accessPlan",
+] as const;
+
 export type DeviceUserMergeField = (typeof DEVICE_USER_MERGE_FIELDS)[number];
+export type DeviceUserMergeProfileOverlayField =
+	(typeof DEVICE_USER_MERGE_PROFILE_OVERLAY_FIELDS)[number];
 export type MergeChoice = "A" | "B" | "KEEP";
+
+export const isDeviceUserMergeProfileOverlayField = (
+	field: string,
+): field is DeviceUserMergeProfileOverlayField =>
+	(DEVICE_USER_MERGE_PROFILE_OVERLAY_FIELDS as readonly string[]).includes(field);
 export type FaceCustodyKind =
 	| "sdk_template_and_picture"
 	| "fdlib_picture"
@@ -1908,7 +1954,8 @@ export const buildDeviceUserMergePlan = (params: {
 				return score || a.deviceId.localeCompare(b.deviceId);
 			})[0] || ordered[0];
 		const conflicts: DeviceUserMergeConflict[] = [];
-		for (const field of DEVICE_USER_MERGE_FIELDS) {
+		// Profile/metadata only — never face/fp/card count (those are credential residual).
+		for (const field of DEVICE_USER_MERGE_DECISION_FIELDS) {
 			const populated = ordered.filter(
 				(record) =>
 					valueFor(record, field) !== null &&
@@ -2135,6 +2182,63 @@ export const buildRichestMergeChoices = (
 	return choices;
 };
 
+/**
+ * DeviceUser rows that need an HRIS overlay after profile A/B decisions.
+ * Does not invent physical peer creates or biometric bytes. Card/face/FP
+ * field conflicts never appear here — credential mode owns those writes.
+ */
+export const buildProfileOverlayWrites = (
+	users: Array<Pick<DeviceUserMergeGroup, "key" | "records" | "conflicts">>,
+): Array<{
+	userKey: string;
+	targetDeviceId: string;
+	fields: DeviceUserMergeProfileOverlayField[];
+	kind: "deviceuser_profile_overlay";
+}> => {
+	const writes: Array<{
+		userKey: string;
+		targetDeviceId: string;
+		fields: DeviceUserMergeProfileOverlayField[];
+		kind: "deviceuser_profile_overlay";
+	}> = [];
+	for (const user of users || []) {
+		const byTarget = new Map<string, Set<DeviceUserMergeProfileOverlayField>>();
+		for (const conflict of user.conflicts || []) {
+			if (!isDeviceUserMergeProfileOverlayField(String(conflict.field || ""))) continue;
+			if (conflict.choice !== "A" && conflict.choice !== "B") continue;
+			const selectedDeviceId =
+				conflict.choice === "B"
+					? text(conflict.deviceB?.id)
+					: text(conflict.deviceA?.id);
+			if (!selectedDeviceId) continue;
+			const selectedRecord = (user.records || []).find(
+				(record) => text(record.deviceId) === selectedDeviceId,
+			);
+			if (!selectedRecord) continue;
+			const selectedValue = stable(valueFor(selectedRecord, conflict.field));
+			for (const record of user.records || []) {
+				const targetDeviceId = text(record.deviceId);
+				if (!targetDeviceId) continue;
+				if (stable(valueFor(record, conflict.field)) === selectedValue) continue;
+				const fields =
+					byTarget.get(targetDeviceId) ||
+					new Set<DeviceUserMergeProfileOverlayField>();
+				fields.add(conflict.field as DeviceUserMergeProfileOverlayField);
+				byTarget.set(targetDeviceId, fields);
+			}
+		}
+		for (const [targetDeviceId, fields] of byTarget.entries()) {
+			writes.push({
+				userKey: user.key,
+				targetDeviceId,
+				fields: [...fields].sort(),
+				kind: "deviceuser_profile_overlay",
+			});
+		}
+	}
+	return writes;
+};
+
 export const applyMergeChoices = (
 	plan: ReturnType<typeof buildDeviceUserMergePlan>,
 	params: {
@@ -2171,13 +2275,17 @@ export const applyMergeChoices = (
 			return { ...conflict, choice: choice || null };
 		}),
 	}));
+	// Missing-person peer creates only. Profile A/B decisions are separate
+	// DeviceUser overlays — never inflate physical plannedWrites with them.
 	const plannedWrites = (plan.plannedWrites || []).filter((write) =>
 		selectedUserKeys ? selectedUserKeys.has(write.userKey) : true,
 	);
+	const profileOverlayWrites = buildProfileOverlayWrites(resolved);
 	return {
 		...plan,
 		users: resolved,
 		plannedWrites,
+		profileOverlayWrites,
 		unresolved,
 		unresolvedDecisions: unresolved,
 		executable:
@@ -2191,6 +2299,7 @@ export const applyMergeChoices = (
 			conflicts: resolved.reduce((sum, user) => sum + user.conflicts.length, 0),
 			missing: resolved.reduce((sum, user) => sum + user.missingOnDeviceIds.length, 0),
 			missingHrisLinks: resolved.filter((user) => !user.employeeId).length,
+			profileOverlayWrites: profileOverlayWrites.length,
 		},
 	};
 };

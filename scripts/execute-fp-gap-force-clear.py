@@ -309,8 +309,17 @@ def main() -> int:
         print(json.dumps(report, indent=2)[:6000])
         return 8
 
-    # Poll job
-    terminal = {"completed", "failed", "cancelled", "succeeded", "done"}
+    # Poll job (API nests under data.job; durable start is often 202)
+    terminal = {
+        "completed",
+        "completed_with_attention",
+        "needs_attention",
+        "failed",
+        "cancelled",
+        "canceled",
+        "succeeded",
+        "done",
+    }
     t_end = time.time() + MAX_WAIT_SEC
     last = None
     while time.time() < t_end:
@@ -320,7 +329,7 @@ def main() -> int:
             token=token,
             timeout=60,
         )
-        data = dig(job, "data") or job or {}
+        data = dig(job, "data", "job") or dig(job, "data") or job or {}
         status = str(data.get("status") or "")
         counters = data.get("counters") or {}
         stage = data.get("currentStage") or data.get("stage")
@@ -330,14 +339,20 @@ def main() -> int:
             "stage": stage,
             "counters": counters,
             "heartbeatAt": data.get("heartbeatAt"),
-            "error": data.get("error") or data.get("lastError"),
+            "error": data.get("latestError") or data.get("error") or data.get("lastError"),
         }
         print(
             f"POLL job={job_id} status={status} stage={stage} verified={counters.get('verified')} failed={counters.get('failed')} writing={counters.get('writing')}",
             flush=True,
         )
         save(f"06-job-poll-latest.json", last)
-        if status.lower() in terminal or status in ("completed", "failed", "cancelled"):
+        if status.lower() in terminal or status in (
+            "completed",
+            "completed_with_attention",
+            "needs_attention",
+            "failed",
+            "cancelled",
+        ):
             break
         time.sleep(POLL_SEC)
 

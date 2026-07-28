@@ -8,6 +8,7 @@ import {
 	classifyCredentialRecoveryWrite,
 	describeCredentialRecoveryError,
 	isCredentialRecoveryPhysicalStage,
+	normalizeCredentialRecoveryCanaryModality,
 	planCredentialRecoveryWorkerFailure,
 	recoveredCustodyCanUnlockWrite,
 	remainingCredentialRecoveryWriteAttemptBudget,
@@ -493,6 +494,142 @@ describe("Hikvision credential recovery graph", () => {
 		expect(
 			recoveredCustodyCanUnlockWrite("fingerprint", { fingerprintCount: 1 }),
 		).to.equal(true);
+		// Card unlock requires exact CardInfo custody — never invent card numbers.
+		expect(
+			recoveredCustodyCanUnlockWrite("card", {
+				cardNo: "AABB112233",
+				cardCount: 1,
+			}),
+		).to.equal(true);
+		expect(
+			recoveredCustodyCanUnlockWrite("card", {
+				cardNo: "  ",
+				cardCount: 0,
+			}),
+		).to.equal(false);
+		expect(
+			recoveredCustodyCanUnlockWrite("card", {
+				cardCount: 1,
+			}),
+		).to.equal(true);
+		expect(
+			recoveredCustodyCanUnlockWrite("card", {
+				cardCount: 2,
+			}),
+		).to.equal(false);
+		expect(recoveredCustodyCanUnlockWrite("card", {})).to.equal(false);
+	});
+
+	it("enqueues card source_capture for missing_raw_blob (selected source or candidates)", () => {
+		const selected = buildCredentialRecoveryTaskGraph({
+			credentialWrites: [
+				{
+					id: "card-selected",
+					userKey: "vendor:42",
+					vendorUserId: "42",
+					modality: "card",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+				},
+			],
+		});
+		expect(selected.map((task) => task.taskKey)).to.deep.equal([
+			"source_capture:A:42:card",
+		]);
+		expect(selected[0]).to.include({
+			kind: "source_capture",
+			modality: "card",
+			status: "pending",
+			stage: "recovering_source_custody",
+		});
+
+		const candidates = buildCredentialRecoveryTaskGraph({
+			credentialWrites: [
+				{
+					id: "card-candidates",
+					userKey: "vendor:77",
+					vendorUserId: "77",
+					modality: "card",
+					sourceDeviceId: null,
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+					sourceCandidateDeviceIds: ["A", "D"],
+				},
+			],
+		});
+		expect(candidates.map((task) => task.taskKey).sort()).to.deep.equal(
+			["source_capture:A:77:card", "source_capture:D:77:card"].sort(),
+		);
+
+		// Unscoped (all modalities) plan still includes card capture beside face/fp.
+		const mixed = buildCredentialRecoveryTaskGraph({
+			credentialWrites: [
+				{
+					id: "fp",
+					vendorUserId: "1",
+					modality: "fingerprint",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+				},
+				{
+					id: "card",
+					vendorUserId: "2",
+					modality: "card",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+				},
+				{
+					id: "face",
+					vendorUserId: "3",
+					modality: "face",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+				},
+			],
+		});
+		expect(mixed.map((task) => task.taskKey)).to.include("source_capture:A:2:card");
+		expect(mixed.map((task) => task.modality)).to.include("card");
+	});
+
+	it("accepts canaryModality=card for pending-task filter and ready selection", () => {
+		expect(normalizeCredentialRecoveryCanaryModality("card")).to.equal("card");
+		expect(normalizeCredentialRecoveryCanaryModality("face")).to.equal("face");
+		expect(normalizeCredentialRecoveryCanaryModality("all")).to.equal(null);
+		expect(
+			buildCredentialRecoveryPendingTaskWhere("job-card", "card"),
+		).to.deep.equal({
+			jobId: "job-card",
+			status: { in: ["pending", "retrying"] },
+			kind: { in: ["source_capture", "target_owner_capture"] },
+			modality: "card",
+		});
+		const selected = selectCredentialRecoveryReadyWrites({
+			credentialWrites: [
+				{
+					id: "card-ready",
+					modality: "card",
+					recommended: true,
+					executionEligibility: "ready_from_raw_blob",
+					targetDeviceId: "B",
+					vendorUserId: "9",
+				},
+				{
+					id: "face-ready",
+					modality: "face",
+					recommended: true,
+					executionEligibility: "ready_from_raw_blob",
+					targetDeviceId: "B",
+					vendorUserId: "8",
+				},
+			],
+			canaryModality: "card",
+			maxVerifiedWrites: 10,
+		});
+		expect(selected.map((row: any) => row.id)).to.deep.equal(["card-ready"]);
 	});
 
 	it("orders fingerprint and proven face associations before speculative recovery", () => {
@@ -595,7 +732,7 @@ describe("Hikvision credential recovery graph", () => {
 					sourceCandidateDeviceIds: ["A", "D", "F"],
 				},
 				{
-					// Card / no candidates remains blocked resolution.
+					// Card with candidates is agent CardInfo export (not permanent block).
 					id: "card-compare",
 					userKey: "u99",
 					vendorUserId: "99",
@@ -605,6 +742,18 @@ describe("Hikvision credential recovery graph", () => {
 					blockingReason: "source_conflict",
 					recoveryStage: "comparing_sources",
 					sourceCandidateDeviceIds: ["A", "D"],
+				},
+				{
+					// missing_raw_blob card must enqueue source_capture (was code defect).
+					id: "card-missing-raw",
+					userKey: "u100",
+					vendorUserId: "100",
+					modality: "card",
+					sourceDeviceId: "A",
+					targetDeviceId: "B",
+					blockingReason: "missing_raw_blob",
+					recoveryStage: "queued_source_custody_recovery",
+					sourceCandidateDeviceIds: ["A"],
 				},
 			],
 		});
@@ -619,7 +768,9 @@ describe("Hikvision credential recovery graph", () => {
 				"source_capture:A:1524:fingerprint",
 				"source_capture:D:1524:fingerprint",
 				"source_capture:F:1524:fingerprint",
-				"source_resolution:u99:card",
+				"source_capture:A:99:card",
+				"source_capture:D:99:card",
+				"source_capture:A:100:card",
 			].sort(),
 		);
 		const exportCapture = tasks.find(
@@ -631,11 +782,26 @@ describe("Hikvision credential recovery graph", () => {
 			(task) => task.taskKey === "source_capture:A:1524:fingerprint",
 		);
 		expect(fpCapture?.status).to.equal("pending");
-		const blocked = tasks.find(
-			(task) => task.taskKey === "source_resolution:u99:card",
+		const cardCapture = tasks.find(
+			(task) => task.taskKey === "source_capture:A:99:card",
 		);
-		expect(blocked?.status).to.equal("blocked");
-		expect(blocked?.stage).to.equal("comparing_sources");
+		expect(cardCapture?.status).to.equal("pending");
+		expect(cardCapture?.kind).to.equal("source_capture");
+		const cardMissing = tasks.find(
+			(task) => task.taskKey === "source_capture:A:100:card",
+		);
+		expect(cardMissing?.status).to.equal("pending");
+		expect(cardMissing?.modality).to.equal("card");
+	});
+
+	it("treats recovered single cardNo as unlockable custody", () => {
+		expect(
+			recoveredCustodyCanUnlockWrite("card", { cardNo: "AABB1122", cardCount: 1 }),
+		).to.equal(true);
+		expect(recoveredCustodyCanUnlockWrite("card", { cardCount: 0 })).to.equal(false);
+		expect(
+			recoveredCustodyCanUnlockWrite("card", { cardNo: "", cardCount: 2 }),
+		).to.equal(false);
 	});
 
 	it("prunes only pending source tasks absent from the fresh safe graph", () => {
@@ -679,6 +845,12 @@ describe("Hikvision credential recovery graph", () => {
 			status: { in: ["pending", "retrying"] },
 			kind: { in: ["source_capture", "target_owner_capture"] },
 			modality: "fingerprint",
+		});
+		expect(buildCredentialRecoveryPendingTaskWhere("job-1", "card")).to.deep.equal({
+			jobId: "job-1",
+			status: { in: ["pending", "retrying"] },
+			kind: { in: ["source_capture", "target_owner_capture"] },
+			modality: "card",
 		});
 		expect(buildCredentialRecoveryPendingTaskWhere("job-1", "unknown")).to.not.have.property(
 			"modality",

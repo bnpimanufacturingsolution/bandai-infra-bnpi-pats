@@ -92,6 +92,7 @@ import deviceService, {
 	type DeviceUserExportSelection,
 	type DeviceUserImportPreviewResponse,
 	type DeviceUserImportExecuteResponse,
+	type CredentialRecoveryJob,
 } from "~/services/devices.service";
 import type { Employee } from "~/services/employees.service";
 
@@ -494,6 +495,88 @@ const DEVICE_USER_SYNC_JOB_STORAGE_KEY = "hris.device-user-sync-job";
 const CREDENTIAL_RECOVERY_JOB_STORAGE_KEY = "hris.credential-recovery-job-id";
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEFAULT_BULK_DEVICE_USER_SYNC_MODE: DeviceUserSyncMode = "needs_attention_only";
+
+/** Active recovery worker statuses — do not start another wave while these hold. */
+const CREDENTIAL_RECOVERY_ACTIVE_STATUSES = new Set([
+	"pending",
+	"recovering",
+	"retrying",
+]);
+
+/**
+ * Weighted wave progress for credential recovery.
+ * Prefer API `progressPercent` when present; otherwise client fallback so the bar
+ * leaves 0% during export/probe/write (not only at verified).
+ * Denominator is THIS WAVE (plannedWaveSize / wouldWrite), not full residual.
+ */
+const computeCredentialRecoveryProgressPercent = (
+	job: CredentialRecoveryJob | null | undefined,
+): number => {
+	if (!job) return 0;
+	const status = String(job.status || "");
+	if (
+		status === "completed" ||
+		status === "awaiting_replan" ||
+		status === "needs_attention" ||
+		status === "failed"
+	) {
+		return 100;
+	}
+	const apiPercent = Number(job.progressPercent);
+	if (Number.isFinite(apiPercent) && apiPercent >= 0) {
+		return Math.max(0, Math.min(100, Math.round(apiPercent)));
+	}
+	const counters = job.counters || {};
+	const weights = job.progressWeights;
+	const verified = Number(weights?.verified ?? counters.verified ?? 0) || 0;
+	const failed = Number(weights?.failed ?? counters.failed ?? 0) || 0;
+	const writing = Number(weights?.writing ?? counters.writing ?? 0) || 0;
+	const awaitingReread =
+		Number(weights?.awaitingPhysicalReread ?? counters.awaitingPhysicalReread ?? 0) || 0;
+	const ready = Number(weights?.readyToWrite ?? counters.readyToWrite ?? 0) || 0;
+	const recovered = Number(weights?.recovered ?? counters.recovered ?? 0) || 0;
+	const recoveringNow =
+		Number(weights?.recoveringNow ?? counters.recoveringNow ?? 0) || 0;
+	const wouldWrite = Number(job.wouldWriteCount ?? 0) || 0;
+	const waveDenom = Math.max(
+		Number(job.plannedWaveSize || 20) || 20,
+		wouldWrite,
+		verified + failed,
+		1,
+	);
+	const weighted =
+		typeof weights?.weightedUnits === "number" && Number.isFinite(weights.weightedUnits)
+			? weights.weightedUnits
+			: verified * 1 +
+				failed * 1 +
+				awaitingReread * 0.85 +
+				writing * 0.65 +
+				ready * 0.45 +
+				recovered * 0.35 +
+				recoveringNow * 0.25;
+	const stage = String(job.currentStage || status);
+	let stageFloor = 2;
+	if (/export|custody|recovering_source|owner_capture|inventory/i.test(stage)) {
+		stageFloor = 8;
+	} else if (/replan|ready|select|probe/i.test(stage)) {
+		stageFloor = 18;
+	} else if (/writ|reread|canary/i.test(stage)) {
+		stageFloor = 35;
+	} else if (status === "pending") {
+		stageFloor = 3;
+	} else if (status === "recovering" || status === "retrying") {
+		stageFloor = 6;
+	}
+	if (typeof weights?.stageFloor === "number" && Number.isFinite(weights.stageFloor)) {
+		stageFloor = Math.max(stageFloor, weights.stageFloor);
+	}
+	const denom =
+		typeof weights?.waveDenominator === "number" && weights.waveDenominator > 0
+			? weights.waveDenominator
+			: waveDenom;
+	return Math.max(stageFloor, Math.min(99, Math.round((weighted / denom) * 100)));
+};
+
 const formatDeviceUserSyncJobId = (value?: string | null) => {
 	if (!value) return "No job id";
 	return value.length > 12 ? `${value.slice(0, 8)}...${value.slice(-4)}` : value;
@@ -2643,10 +2726,77 @@ export function DeviceEnrollmentPanel({
 	const sdkMergeJobIsProcessing = effectiveSdkMergeJob?.status === "processing";
 	const sdkMergeJobProcessed = Number(effectiveSdkMergeJob?.processedWrites || 0);
 	const sdkMergeJobTotal = Math.max(Number(effectiveSdkMergeJob?.totalWrites || 1), 1);
-	const sdkMergeJobPercent = Math.min(
+	// Stage floors so inventory/snapshot work is not stuck at 0% with an empty bar.
+	const sdkMergeStageProgressFloor: Record<string, number> = {
+		queued: 3,
+		preparing: 6,
+		source_snapshot: 12,
+		source_snapshot_device: 18,
+		source_snapshot_device_done: 28,
+		exporting_source_credential: 14,
+		comparing_sources: 16,
+		resolving_richest_source: 18,
+		probing_target_capability: 20,
+		preparing_writer: 24,
+		ready_to_write: 28,
+		batch_copy_started: 35,
+		copy_started: 40,
+		credential_raw_write_started: 48,
+		writing: 52,
+		vm_copy_preflight_started: 42,
+		vm_copy_preflight_done: 45,
+		vm_copy_attempt_started: 50,
+		copy_success: 70,
+		db_merge_started: 75,
+		db_merge_done: 82,
+		user_done: 85,
+		reread_started: 88,
+		rereading_target: 90,
+		reread_done: 94,
+		physically_retained: 96,
+		completed: 100,
+		completed_with_attention: 100,
+		failed: 100,
+	};
+	const sdkMergeWritePct = Math.min(
 		100,
 		Math.round((sdkMergeJobProcessed / sdkMergeJobTotal) * 100),
 	);
+	const sdkMergeStageKey = String(effectiveSdkMergeJob?.currentStage || "");
+	const sdkMergeStageFloor = Math.max(
+		0,
+		Number(
+			sdkMergeStageProgressFloor[sdkMergeStageKey] ||
+				(sdkMergeJobIsProcessing
+					? /source_snapshot|preparing|queued/i.test(sdkMergeStageKey)
+						? 10
+						: /export|compar|resolv|probe|ready|writ|copy|reread/i.test(
+								sdkMergeStageKey,
+							)
+							? 22
+							: 5
+					: 0),
+		),
+	);
+	const sdkMergeEventBump =
+		sdkMergeJobIsProcessing &&
+		sdkMergeJobProcessed === 0 &&
+		Array.isArray(effectiveSdkMergeJob?.progressEvents)
+			? Math.min(12, effectiveSdkMergeJob.progressEvents.length)
+			: 0;
+	const sdkMergeJobPercent =
+		effectiveSdkMergeJob?.status === "completed" ||
+		effectiveSdkMergeJob?.status === "failed"
+			? 100
+			: Math.min(
+					99,
+					Math.max(
+						sdkMergeStageFloor + sdkMergeEventBump,
+						sdkMergeJobProcessed > 0
+							? Math.round(30 + (sdkMergeWritePct / 100) * 70)
+							: sdkMergeStageFloor + sdkMergeEventBump,
+					),
+				);
 	const sdkMergeJobToneClass =
 		effectiveSdkMergeJob?.status === "failed"
 			? "border-red-200 bg-red-50 text-red-950"
@@ -2956,6 +3106,53 @@ export function DeviceEnrollmentPanel({
 		}
 		return choices;
 	};
+	const selectRecommendedCredentialWrites = () => {
+		setSelectedSdkMergeCredentialWriteIds(
+			Object.fromEntries(sdkMergeSelectableCredentialWrites.map((write) => [write.id, true])),
+		);
+		setSdkMergeState((current) => ({
+			...current,
+			message: sdkMergeSelectableCredentialWrites.length
+				? `${mergePlural(sdkMergeSelectableCredentialWrites.length, "credential operation")} selected from readable raw/export evidence.`
+				: "No credential operations have readable raw/export evidence yet. Count-only rows remain blocked from UI selection.",
+		}));
+	};
+
+	const startCredentialRecovery = async (options?: { quietIfActive?: boolean }) => {
+		const planId = sdkMergeState.data?.planId;
+		if (!planId) return false;
+		const alreadyRunning =
+			CREDENTIAL_RECOVERY_ACTIVE_STATUSES.has(String(credentialRecoveryJob?.status || "")) ||
+			startHikvisionCredentialRecoveryMutation.isPending;
+		// No thrash: block while worker active or start mutation in-flight.
+		if (alreadyRunning) {
+			if (!options?.quietIfActive) {
+				toast.message("Recovery job already active — this-wave progress is updating below.");
+			}
+			return false;
+		}
+		try {
+			// Residual default 20 writes/wave (not 1). Progress counters = this wave.
+			const job = await startHikvisionCredentialRecoveryMutation.mutateAsync(planId);
+			setCredentialRecoveryJobId(job.id);
+			window.localStorage.setItem(CREDENTIAL_RECOVERY_JOB_STORAGE_KEY, job.id);
+			const wave = Number(job.plannedWaveSize ?? job.wouldWriteCount ?? 20) || 20;
+			toast.success(
+				`Credential recovery started (this wave up to ${wave}). Progress bar and Verified/Failed are THIS WAVE only — residual chips update after replan.`,
+			);
+			return true;
+		} catch (error: any) {
+			const msg = String(error?.message || "");
+			if (/already active|409/i.test(msg)) {
+				toast.message(msg || "Another recovery job is already active.");
+				return false;
+			}
+			toast.error(error?.message || "Credential recovery could not be started");
+			return false;
+		}
+	};
+
+	/** Decisions only (no recovery start). */
 	const autoResolveSdkMergeFromRichest = () => {
 		const plan = sdkMergeState.data?.plan;
 		if (!plan || sdkMergeBlockingCount > 0) return;
@@ -2972,39 +3169,87 @@ export function DeviceEnrollmentPanel({
 		}));
 		setSdkMergeFilter("decision");
 	};
+
+	/**
+	 * Primary Resolve journey:
+	 * richest choices → select ready credential ops → auto-start recovery when
+	 * ready or recovery-queued > 0 (no thrash if a wave is already active).
+	 */
+	const resolveAndStartRecoveryJourney = async () => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan || sdkMergeBlockingCount > 0) {
+			toast.error(
+				sdkMergeBlockingCount > 0
+					? `Resolve ${sdkMergeBlockingCount} device read issue(s) first`
+					: "No merge plan loaded",
+			);
+			return;
+		}
+		const choices = buildSdkMergeRichestChoices(plan);
+		const n = Object.values(choices).reduce(
+			(sum, row) => sum + Object.keys(row || {}).length,
+			0,
+		);
+		const readyWrites = sdkMergeSelectableCredentialWrites;
+		const readyCount = readyWrites.length;
+		const recoveryQueued = sdkMergeRecoveryQueuedCredentialWriteCount;
+		if (readyCount > 0) {
+			setSelectedSdkMergeCredentialWriteIds(
+				Object.fromEntries(readyWrites.map((write) => [write.id, true])),
+			);
+		}
+		const recoveryActive = CREDENTIAL_RECOVERY_ACTIVE_STATUSES.has(
+			String(credentialRecoveryJob?.status || ""),
+		);
+		const shouldAutoStart = readyCount > 0 || recoveryQueued > 0;
+		setSdkMergeState((current) => ({
+			...current,
+			applyAll: undefined,
+			choices,
+			message: [
+				`Resolved ${n} decision(s) from richest sources.`,
+				readyCount
+					? `Selected ${mergePlural(readyCount, "ready credential operation")}.`
+					: "No ready credential ops in this plan.",
+				shouldAutoStart
+					? recoveryActive || startHikvisionCredentialRecoveryMutation.isPending
+						? "Recovery already running — not starting a second wave."
+						: "Auto-starting credential recovery for this wave…"
+					: "Nothing ready/queued for recovery auto-start.",
+				"Counters/bar are THIS WAVE only; merge chips update after replan.",
+			].join(" "),
+		}));
+		setSdkMergeFilter("decision");
+		if (recoveryActive || startHikvisionCredentialRecoveryMutation.isPending) {
+			toast.message("Recovery already running — watching this-wave progress below.");
+			return;
+		}
+		if (shouldAutoStart) {
+			await startCredentialRecovery({ quietIfActive: true });
+			return;
+		}
+		toast.message(
+			"Decisions auto-resolved. No ready/queued recovery wave in this plan — review residuals or apply merge when writes exist.",
+		);
+	};
+
+	const credentialRecoveryProgressPercent =
+		computeCredentialRecoveryProgressPercent(credentialRecoveryJob);
+	const credentialRecoveryWaveTarget = Math.max(
+		Number(credentialRecoveryJob?.plannedWaveSize || 0),
+		Number(credentialRecoveryJob?.wouldWriteCount || 0),
+		Number(credentialRecoveryJob?.counters?.verified || 0) +
+			Number(credentialRecoveryJob?.counters?.failed || 0),
+		Number(credentialRecoveryJob?.progressWeights?.waveDenominator || 0),
+		20,
+	);
+	const credentialRecoveryIsActive = CREDENTIAL_RECOVERY_ACTIVE_STATUSES.has(
+		String(credentialRecoveryJob?.status || ""),
+	);
+
 	const openSdkUserMergeConfirm = () => {
 		if (!sdkMergeCanApply) return;
 		setSdkMergeConfirmOpen(true);
-	};
-	const selectRecommendedCredentialWrites = () => {
-		setSelectedSdkMergeCredentialWriteIds(
-			Object.fromEntries(sdkMergeSelectableCredentialWrites.map((write) => [write.id, true])),
-		);
-		setSdkMergeState((current) => ({
-			...current,
-			message: sdkMergeSelectableCredentialWrites.length
-				? `${mergePlural(sdkMergeSelectableCredentialWrites.length, "credential operation")} selected from readable raw/export evidence.`
-				: "No credential operations have readable raw/export evidence yet. Count-only rows remain blocked from UI selection.",
-		}));
-	};
-
-	const startCredentialRecovery = async () => {
-		const planId = sdkMergeState.data?.planId;
-		if (!planId) return;
-		try {
-			// Residual default 20 writes/wave (not 1). Progress counters = this wave.
-			const job = await startHikvisionCredentialRecoveryMutation.mutateAsync(planId);
-			setCredentialRecoveryJobId(job.id);
-			window.localStorage.setItem(CREDENTIAL_RECOVERY_JOB_STORAGE_KEY, job.id);
-			const wave =
-				Number((job as any)?.plannedWaveSize ?? (job as any)?.wouldWriteCount ?? 20) ||
-				20;
-			toast.success(
-				`Credential recovery started (wave up to ${wave} fingerprint writes). Watch Verified/Failed below — counters are this job, not full residual until replan.`,
-			);
-		} catch (error: any) {
-			toast.error(error?.message || "Credential recovery could not be started");
-		}
 	};
 	const applySdkCredentialMerge = async () => {
 		if (
@@ -3080,12 +3325,25 @@ export function DeviceEnrollmentPanel({
 				applyAll: sdkMergeState.applyAll,
 				selectedUserKeys: selectedSdkMergeKeys,
 			});
+			if (result.nothingToWrite || !result.jobId) {
+				setSdkMergeJobId(null);
+				setSdkMergeLastJob(null);
+				setSdkMergeState((current) => ({
+					...current,
+					status: "done",
+					message:
+						result.message ||
+						result.pathHint ||
+						"Nothing physical to write; reviewed decisions are aligned or need credential-mode raw custody (card/face/FP). missing_raw_blob stays blocked.",
+				}));
+				return;
+			}
 			setSdkMergeJobId(result.jobId);
 			setSdkMergeLastJob(result.progress);
 			setSdkMergeHandledJobId(null);
 			setSdkMergeDismissedJobId(null);
 			updateSearchParams((next) => {
-				next.set("mergeJobId", result.jobId);
+				next.set("mergeJobId", result.jobId as string);
 			});
 			setSdkMergeState((current) => ({
 				...current,
@@ -8816,6 +9074,28 @@ export function DeviceEnrollmentPanel({
 										</Button>
 										<Button
 											type="button"
+											onClick={() => void resolveAndStartRecoveryJourney()}
+											disabled={
+												sdkMergeJobIsProcessing ||
+												sdkMergeBlockingCount > 0 ||
+												startHikvisionCredentialRecoveryMutation.isPending ||
+												(sdkMergeConflictCount === 0 &&
+													sdkMergeSelectableCredentialWrites.length === 0 &&
+													sdkMergeRecoveryQueuedCredentialWriteCount === 0)
+											}>
+											{startHikvisionCredentialRecoveryMutation.isPending ||
+											credentialRecoveryIsActive ? (
+												<Loader2 className="h-4 w-4 animate-spin" />
+											) : (
+												<Activity className="h-4 w-4" />
+											)}
+											{credentialRecoveryIsActive
+												? "Recovery running…"
+												: "Resolve & recover"}
+										</Button>
+										<Button
+											type="button"
+											variant="outline"
 											onClick={autoResolveSdkMergeFromRichest}
 											disabled={
 												sdkMergeJobIsProcessing ||
@@ -8891,18 +9171,16 @@ export function DeviceEnrollmentPanel({
 									<div className="flex flex-wrap gap-2">
 										<Button
 											type="button"
-											onClick={startCredentialRecovery}
+											onClick={() => void startCredentialRecovery()}
 											disabled={
-												sdkMergeRecoveryQueuedCredentialWriteCount === 0 ||
+												(sdkMergeSelectableCredentialWrites.length === 0 &&
+													sdkMergeRecoveryQueuedCredentialWriteCount ===
+														0) ||
 												startHikvisionCredentialRecoveryMutation.isPending ||
-												["pending", "recovering", "retrying"].includes(
-													String(credentialRecoveryJob?.status || ""),
-												)
+												credentialRecoveryIsActive
 											}>
 											{startHikvisionCredentialRecoveryMutation.isPending ||
-											["pending", "recovering", "retrying"].includes(
-												String(credentialRecoveryJob?.status || ""),
-											) ? (
+											credentialRecoveryIsActive ? (
 												<Loader2 className="h-4 w-4 animate-spin" />
 											) : (
 												<Activity className="h-4 w-4" />
@@ -8947,33 +9225,62 @@ export function DeviceEnrollmentPanel({
 														: "not yet"}
 												</p>
 												<p className="mt-1 text-xs font-medium text-slate-700">
-													This job wave: Verified{" "}
+													THIS WAVE only (max {credentialRecoveryWaveTarget})
+													— not full residual: Verified{" "}
 													{credentialRecoveryJob.counters?.verified ?? 0}
 													{" / Failed "}
 													{credentialRecoveryJob.counters?.failed ?? 0}
+													{" · bar "}
+													{credentialRecoveryProgressPercent}%
 													{" · "}
-													status is for this job only. Merge chips (FP/face/decision)
-													update after replan when writes stick.
+													chips (FP/face/decision) refresh after replan when
+													writes stick.
 												</p>
 											</div>
-											<Badge
-												variant={
+											<div className="flex flex-col items-end gap-1">
+												<span className="text-sm font-semibold text-slate-950">
+													{credentialRecoveryProgressPercent}%
+												</span>
+												<Badge
+													variant={
+														credentialRecoveryJob.status === "failed" ||
+														credentialRecoveryJob.status === "needs_attention"
+															? "destructive"
+															: credentialRecoveryJob.status === "completed" &&
+																  (credentialRecoveryJob.counters?.verified ?? 0) > 0
+																? "success"
+																: credentialRecoveryJob.status === "completed" &&
+																	  (credentialRecoveryJob.counters?.verified ?? 0) === 0
+																	? "warning"
+																	: "warning"
+													}>
+													{credentialRecoveryJob.status}
+													{(credentialRecoveryJob.counters?.verified ?? 0) > 0
+														? ` · v${credentialRecoveryJob.counters?.verified}`
+														: ""}
+												</Badge>
+											</div>
+										</div>
+										<div className="mt-3 h-2.5 overflow-hidden rounded-full bg-white/80 ring-1 ring-slate-200">
+											<div
+												className={`h-full rounded-full transition-all duration-500 ${
 													credentialRecoveryJob.status === "failed" ||
 													credentialRecoveryJob.status === "needs_attention"
-														? "destructive"
-														: credentialRecoveryJob.status === "completed" &&
-															  (credentialRecoveryJob.counters?.verified ?? 0) > 0
-															? "success"
-															: credentialRecoveryJob.status === "completed" &&
-																  (credentialRecoveryJob.counters?.verified ?? 0) === 0
-																? "warning"
-																: "warning"
-												}>
-												{credentialRecoveryJob.status}
-												{(credentialRecoveryJob.counters?.verified ?? 0) > 0
-													? ` · v${credentialRecoveryJob.counters?.verified}`
-													: ""}
-											</Badge>
+														? "bg-red-600"
+														: credentialRecoveryJob.status === "completed"
+															? "bg-emerald-600"
+															: "bg-orange-600"
+												}`}
+												style={{
+													width: `${Math.max(
+														credentialRecoveryIsActive &&
+															credentialRecoveryProgressPercent < 2
+															? 2
+															: 0,
+														credentialRecoveryProgressPercent,
+													)}%`,
+												}}
+											/>
 										</div>
 										<div className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs">
 											<p className="font-semibold text-slate-950">
@@ -9002,6 +9309,10 @@ export function DeviceEnrollmentPanel({
 												{credentialRecoveryJob.workerLeaseActive ? "active" : "inactive"}
 												{" · resume cursor "}
 												{credentialRecoveryJob.resumeCursor ?? 0}
+												{" · wave "}
+												{credentialRecoveryJob.counters?.verified ?? 0}+
+												{credentialRecoveryJob.counters?.failed ?? 0}/
+												{credentialRecoveryWaveTarget}
 											</p>
 										</div>
 										<div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4 lg:grid-cols-7">
