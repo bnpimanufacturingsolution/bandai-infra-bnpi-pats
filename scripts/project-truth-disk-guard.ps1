@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   Historical root-full outages came from observability rolling backups, container
-  images, retained VHDX, agent /tmp artifacts, and journals on the Linux VM —
+  images, retained VHDX, agent /tmp artifacts, and journals on the Linux VM --
   not from the Windows host runtime.
 
   This script:
@@ -42,7 +42,7 @@ function Write-HostDiskReport {
     $usedGiB = [math]::Round((($_.Used) / 1GB), 1)
     Write-Host ("  {0}: free={1} GiB used={2} GiB" -f $_.Name, $freeGiB, $usedGiB)
     if ($_.Name -eq "C" -and $freeGiB -lt $WarnFreeGiBHost) {
-      Write-Warning "Host C: free space below ${WarnFreeGiBHost} GiB — VHDX import/download risk."
+      Write-Warning "Host C: free space below ${WarnFreeGiBHost} GiB -- VHDX import/download risk."
     }
   }
   $images = "C:\ProgramData\ProjectTruth\images"
@@ -79,7 +79,7 @@ if ($Install) {
 set -euo pipefail
 ROOT="${PROJECT_TRUTH_ROOT:-/opt/project-truth}"
 if [ ! -f "$ROOT/appliance/bin/project-truth-disk-guard.sh" ]; then
-  echo "MISSING $ROOT/appliance/bin/project-truth-disk-guard.sh — pull develop or copy files first" >&2
+  echo "MISSING $ROOT/appliance/bin/project-truth-disk-guard.sh -- pull develop or copy files first" >&2
   exit 1
 fi
 sudo install -m 0755 "$ROOT/appliance/bin/project-truth-disk-guard.sh" /usr/local/bin/project-truth-disk-guard
