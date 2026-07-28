@@ -16999,10 +16999,18 @@ export const controller = (prisma: PrismaClient) => {
 					credentialWrites: writeMatrix.rows,
 				};
 			} else {
+				// Default agent-owned auto-resolve: richest source per conflict
+				// unless operator sent explicit choices/applyAll or disabled it.
+				const autoResolveDecisions =
+					req.body?.autoResolveDecisions === false ||
+					req.body?.autoResolveDecisions === "false"
+						? false
+						: true;
 				selectedAppliedPlan = applyMergeChoices(stored.plan, {
 					choices,
 					applyAll,
 					selectedUserKeys,
+					autoResolveDecisions,
 				});
 				if (!selectedAppliedPlan.executable) {
 					const reason = selectedAppliedPlan.ambiguousMatches?.length

@@ -1741,14 +1741,21 @@ export function DeviceEnrollmentPanel({
 					.map((user) => [user.key, true]),
 			);
 			setSelectedSdkMergeUserKeys(actionableKeys);
+			// Default: auto-resolve Needs decision via richest custody. Operator
+			// can still Clear choices / pick A|B|KEEP manually before applying.
+			const autoChoices = buildSdkMergeRichestChoices(data.plan);
+			const autoChoiceCount = Object.values(autoChoices).reduce(
+				(sum, row) => sum + Object.keys(row || {}).length,
+				0,
+			);
 			setSdkMergeState({
 				open: true,
 				status: "review",
 				message: searchScope
-					? `Search is scoped to "${searchScope}" across ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped.`
-					: `Review conflicts from ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped.`,
+					? `Search is scoped to "${searchScope}" across ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped. ${autoChoiceCount ? `Auto-resolved ${autoChoiceCount} decision(s) from richest sources (you can still override).` : ""}`
+					: `Review from ${readableDeviceCount} readable devices. ${readFailedDeviceCount} live inventory read${readFailedDeviceCount === 1 ? "" : "s"} failed; ${skippedCount} offline or unavailable skipped. ${autoChoiceCount ? `Auto-resolved ${autoChoiceCount} decision(s) from richest sources (manual override still available).` : ""}`,
 				data,
-				choices: {},
+				choices: autoChoices as any,
 				availability: finalAvailability,
 			});
 		} catch (error: any) {
@@ -2953,12 +2960,15 @@ export function DeviceEnrollmentPanel({
 		const plan = sdkMergeState.data?.plan;
 		if (!plan || sdkMergeBlockingCount > 0) return;
 		const choices = buildSdkMergeRichestChoices(plan);
+		const n = Object.values(choices).reduce(
+			(sum, row) => sum + Object.keys(row || {}).length,
+			0,
+		);
 		setSdkMergeState((current) => ({
 			...current,
 			applyAll: undefined,
 			choices,
-			message:
-				"Recommended-source choices are filled. Review the selected IDs before starting the merge job.",
+			message: `Auto-resolved ${n} decision(s) from richest sources (default). You can still change A/B/KEEP manually before apply.`,
 		}));
 		setSdkMergeFilter("decision");
 	};
@@ -8807,7 +8817,7 @@ export function DeviceEnrollmentPanel({
 												sdkMergeConflictCount === 0
 											}>
 											<RefreshCw className="h-4 w-4" />
-											Use recommended sources
+											Re-apply auto-resolve
 										</Button>
 										{sdkMergeState.applyAll ||
 										Object.keys(sdkMergeState.choices).length ? (
@@ -8819,9 +8829,11 @@ export function DeviceEnrollmentPanel({
 														...current,
 														applyAll: undefined,
 														choices: {},
+														message:
+															"Choices cleared — pick A/B/KEEP manually, or re-apply auto-resolve.",
 													}))
 												}>
-												Clear choices
+												Manual mode (clear auto)
 											</Button>
 										) : null}
 									</div>

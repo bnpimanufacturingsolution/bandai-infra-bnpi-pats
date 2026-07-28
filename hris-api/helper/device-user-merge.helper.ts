@@ -2080,12 +2080,69 @@ export const serializeDeviceUserMergePlanForReview = (plan: any) => ({
 	errors: plan.errors || [],
 });
 
+/**
+ * Agent-owned default for "Needs decision": pick richest custody device per
+ * conflict field. Operators may still override via explicit choices / applyAll.
+ */
+export const buildRichestMergeChoices = (
+	plan: ReturnType<typeof buildDeviceUserMergePlan> | { users?: any[] },
+): Record<string, Partial<Record<DeviceUserMergeField, MergeChoice>>> => {
+	const choices: Record<string, Partial<Record<DeviceUserMergeField, MergeChoice>>> = {};
+	const richness = (record: any) => {
+		const rawFp = Number(record?.biometricEvidence?.fingerprint?.rawBlobCount || 0);
+		const rawFace = Boolean(record?.biometricEvidence?.face?.rawBlobPresent);
+		const fp = Number(
+			record?.biometricEvidence?.fingerprint?.reportedCount ||
+				(record?.rawPayload as any)?.numOfFP ||
+				0,
+		);
+		const face = Number(
+			record?.biometricEvidence?.face?.reportedCount ||
+				(record?.rawPayload as any)?.numOfFace ||
+				0,
+		);
+		const card = Number(
+			record?.biometricEvidence?.card?.reportedCount ||
+				(record?.rawPayload as any)?.numOfCard ||
+				0,
+		);
+		return rawFp * 6 + Number(rawFace) * 4 + fp * 2 + face * 2 + card * 3;
+	};
+	for (const user of plan.users || []) {
+		const records = Array.isArray(user.records) ? user.records : [];
+		const richest = [...records].sort(
+			(left: any, right: any) => richness(right) - richness(left),
+		)[0];
+		const richestDeviceId = text(richest?.deviceId);
+		for (const conflict of user.conflicts || []) {
+			const field = conflict.field as DeviceUserMergeField;
+			const rawEvidencePresent =
+				field === "fingerprint"
+					? richest?.biometricEvidence?.fingerprint?.status === "raw_blob_present"
+					: field === "face"
+						? richest?.biometricEvidence?.face?.status === "raw_blob_present"
+						: true;
+			const choice: MergeChoice = !rawEvidencePresent
+				? "KEEP"
+				: text(conflict.deviceA?.id) === richestDeviceId
+					? "A"
+					: text(conflict.deviceB?.id) === richestDeviceId
+						? "B"
+						: "KEEP";
+			choices[user.key] = { ...(choices[user.key] || {}), [field]: choice };
+		}
+	}
+	return choices;
+};
+
 export const applyMergeChoices = (
 	plan: ReturnType<typeof buildDeviceUserMergePlan>,
 	params: {
 		choices?: Record<string, Record<DeviceUserMergeField, MergeChoice>>;
 		applyAll?: MergeChoice;
 		selectedUserKeys?: string[];
+		/** Default true: when choices/applyAll empty, auto-fill richest (agent-owned). */
+		autoResolveDecisions?: boolean;
 	} = {},
 ) => {
 	const unresolved: Array<{ key: string; field: DeviceUserMergeField }> = [];
@@ -2095,11 +2152,21 @@ export const applyMergeChoices = (
 	const selectedUsers = selectedUserKeys
 		? plan.users.filter((user) => selectedUserKeys.has(user.key))
 		: plan.users;
+	const hasExplicitChoices =
+		Boolean(params.applyAll) ||
+		(params.choices && Object.keys(params.choices).length > 0);
+	const autoChoices =
+		!hasExplicitChoices && params.autoResolveDecisions !== false
+			? buildRichestMergeChoices(plan)
+			: {};
+	const effectiveChoices = hasExplicitChoices ? params.choices || {} : autoChoices;
 	const resolved = selectedUsers.map((user) => ({
 		...user,
 		conflicts: user.conflicts.map((conflict) => {
 			const choice =
-				params.choices?.[user.key]?.[conflict.field] || params.applyAll || conflict.choice;
+				effectiveChoices?.[user.key]?.[conflict.field] ||
+				params.applyAll ||
+				conflict.choice;
 			if (!choice) unresolved.push({ key: user.key, field: conflict.field });
 			return { ...conflict, choice: choice || null };
 		}),
