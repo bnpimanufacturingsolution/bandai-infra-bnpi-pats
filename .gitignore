@@ -26,6 +26,11 @@ image-factory/packer/staging/
 terraform.tfstate
 terraform.tfstate.backup
 
+# Sync Center export/import working files (may contain real biometric blobs).
+# Keep package templates out of git; regenerate under templates/ as needed.
+templates/sync-center-device-users/
+templates/
+
 # Local DM migration workbook/source payloads.
 # These are copied from HRIS-PROJECT for local/VM operations and may contain
 # client payroll, attendance, biometric, agency, or employee data.
