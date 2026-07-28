@@ -2533,4 +2533,13 @@ Status: IMPLEMENTED + PROVEN â€” Device admin UX clarity (friendly status, 
 - Final Playwright truth: admin login and Sync Center render, but Merge reports 0/8 available and Listener reports status unreachable. This is a failed exit gate, not a completed merge.
 - Focused validation: 37 API Hikvision contracts, 13 frontend device UI/events contracts, the PowerShell bridge contract, and API TypeScript typecheck passed.
 
+# Latest Task Addendum - 2026-07-28 DEV/UAT/PROD Employee Portal Recovery
+
+- Status: `FULFILLED`; evidence root `.runtime/employee-portals-recovery-20260728-122800/`.
+- Root cause: all three `hris-emp-app` pods were `ErrImageNeverPull`; the employee image was absent from K3s, leaving host ports `3300/3310/3320` closed and causing the named Cloudflare connector's exact origin dial `connection refused` errors.
+- Durable repair: governed VM ansible-pull now detects, builds, imports, and restarts the employee image in PROD/DEV/UAT; GitOps image tags and promotion coverage include the employee app; public unauthenticated employee calendar/birthday routes are exact-match guarded; biometric kiosk polling is fail-closed unless explicitly enabled.
+- Runtime schema drift in the three employee databases was repaired only after fresh full backups. PROD/DEV/UAT now expose the required benefit and payroll columns.
+- Final proof: all three VM-local origins, paired APIs, public login pages, same-host API routes, valid linked-employee logins, authenticated refresh, and logout pass. Playwright recorded zero unexpected page, console, request, CORS, mixed-content, or HTTP 5xx errors.
+- The VM-managed Cloudflare service remained enabled and active. All six Argo applications were `Synced/Healthy` at the deployed revision. Direct LAN SSH/HTTP from this Windows host timed out; the documented `ssh project-truth-hris` fallback passed and all VM-local plus public paths were independently proven.
+
 

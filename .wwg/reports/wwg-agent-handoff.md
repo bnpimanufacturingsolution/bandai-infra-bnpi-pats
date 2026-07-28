@@ -1153,4 +1153,15 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
 - Final browser proof is deliberately red: login and Sync Center pass, Merge says 0/8 available, and Listener says status unreachable. Do not reuse the earlier green browser state as current truth.
 - Required next condition for any future write is a fresh zero-read-error plan with explicit conflict adjudication and a physical canary/reread. This is not operator homework for the current run; it is an external connectivity/decision boundary.
 
+# 2026-07-28 DEV/UAT/PROD Employee Portal Recovery Handoff
+
+- Status: `FULFILLED`. Evidence root: `.runtime/employee-portals-recovery-20260728-122800/`.
+- Original failure and root cause: PROD/DEV/UAT `hris-emp-app` pods were `ErrImageNeverPull`; the employee image was missing from K3s, ports `3300/3310/3320` refused connections, and correlated `cloudflared` logs showed origin dial failures. The tunnel itself remained enabled and active.
+- Durable runtime repair: `ansible/project-truth-pull.yml` now treats `hris-emp-app` as a governed image build/import/restart target. GitOps employee image tags, promotion coverage, and cluster-scoped ownership contracts were corrected. The employee frontend now keeps biometric kiosk polling fail-closed unless explicitly enabled, and the API permits only the two exact public employee calendar/birthday routes.
+- Schema repair: fresh full custom-format backups were captured before mutation under `/var/lib/project-truth/backups/employee-portals-schema-repair-20260728-124806`. Prisma schema push then restored the required benefit/payroll columns in DEV/UAT/PROD.
+- Final runtime: all employee and API pods are Ready with zero restarts in the verification window. VM origin health/login/same-host API and public health/login/same-host API matrices pass in all environments. The final tunnel window contains no origin dial, 502, or 1033 errors.
+- Final browser: isolated headless Playwright contexts completed linked-employee login, authenticated same-host API access, refresh/session retention, and logout in PROD/DEV/UAT. There were zero unexpected console errors, page errors, failed required requests, CORS/mixed-content errors, and HTTP 5xx responses. Expected unauthenticated `/api/auth/me` 401s and navigation-aborted Cloudflare RUM requests are retained and explicitly classified in the raw evidence.
+- Deployment: employee submodule `778d16d52cfe3a549426f4579d183870ec629717`; parent repair revisions through `c0c47f9339cd944588de9efd91e9172a2ae3ae29`. GitHub Actions validation run `30332330766` passed. All six Argo applications were `Synced/Healthy` at `c0c47f9339cd944588de9efd91e9172a2ae3ae29` before truth-sync closeout.
+- Access boundary: direct LAN SSH and HTTP from this Windows host timed out. `ssh project-truth-hris` passed and provided VM-local runtime proof; public employee paths independently passed. Do not infer a VM/application outage from the host's unavailable direct LAN route.
+
 
