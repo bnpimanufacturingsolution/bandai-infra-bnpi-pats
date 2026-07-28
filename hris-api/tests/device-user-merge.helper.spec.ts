@@ -2080,6 +2080,28 @@ describe("device user union merge", () => {
 		expect(row.validTo).to.equal("B");
 	});
 
+	it("does not count same Manila calendar day validFrom/validTo encodings as Needs decision", () => {
+		// UTC midnight vs +08 local midnight for the same wall day must not residual.
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					displayName: "same person",
+					validFrom: "2026-07-14T00:00:00+08:00",
+					validTo: "2036-07-13T23:59:59+08:00",
+				}),
+				record("b", {
+					displayName: "same person",
+					// Same Manila days as A after normalization.
+					validFrom: "2026-07-13T16:00:00.000Z",
+					validTo: "2036-07-13T15:59:59.000Z",
+				}),
+			],
+		});
+		expect(plan.users[0]?.conflicts || []).to.have.length(0);
+		expect(plan.counts.conflicts).to.equal(0);
+	});
+
 	it("auto-resolve burns profile decision residual (displayName/validFrom/validTo) without inventing card", () => {
 		// Agent-owned path: empty choices + autoResolve → A/B for profile fields → overlays > 0.
 		// Five-device fleets must still pick A or B for profile (not KEEP because of a third peer).

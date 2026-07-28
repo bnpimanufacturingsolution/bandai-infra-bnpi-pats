@@ -686,6 +686,29 @@ const stable = (value: unknown) => {
 	if (value && typeof value === "object") return JSON.stringify(value);
 	return text(value);
 };
+/**
+ * Profile validity residual must not thrash on timezone encoding of the same
+ * calendar day (UTC midnight vs +08 local midnight). Compare Manila days.
+ */
+const manilaDayKey = (value: unknown): string => {
+	if (value == null || value === "") return "";
+	const date =
+		value instanceof Date
+			? value
+			: new Date(String(value).includes("T") ? String(value) : `${String(value).trim()}T00:00:00`);
+	if (!Number.isFinite(date.getTime())) return text(value);
+	return new Intl.DateTimeFormat("en-CA", {
+		timeZone: "Asia/Manila",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(date);
+};
+/** Stable key for conflict distinctness (dates → Manila calendar day). */
+const conflictStable = (field: string, value: unknown): string => {
+	if (field === "validFrom" || field === "validTo") return manilaDayKey(value);
+	return stable(value);
+};
 const credentials = (record: DeviceUserMergeRecord) =>
 	extractHikvisionCredentialSummary((record.rawPayload || {}) as any);
 
@@ -1960,16 +1983,18 @@ export const buildDeviceUserMergePlan = (params: {
 				(record) =>
 					valueFor(record, field) !== null &&
 					valueFor(record, field) !== undefined &&
-					stable(valueFor(record, field)) !== "",
+					conflictStable(field, valueFor(record, field)) !== "",
 			);
 			const distinct = [
-				...new Set(populated.map((record) => stable(valueFor(record, field)))),
+				...new Set(populated.map((record) => conflictStable(field, valueFor(record, field)))),
 			];
 			if (distinct.length < 2) continue;
 			const a = populated[0];
 			const b =
 				populated.find(
-					(record) => stable(valueFor(record, field)) !== stable(valueFor(a, field)),
+					(record) =>
+						conflictStable(field, valueFor(record, field)) !==
+						conflictStable(field, valueFor(a, field)),
 				) || populated[1];
 			conflicts.push({
 				field,
@@ -2285,11 +2310,18 @@ export const buildProfileOverlayWrites = (
 				(record) => text(record.deviceId) === selectedDeviceId,
 			);
 			if (!selectedRecord) continue;
-			const selectedValue = stable(valueFor(selectedRecord, conflict.field));
+			const selectedValue = conflictStable(
+				String(conflict.field || ""),
+				valueFor(selectedRecord, conflict.field),
+			);
 			for (const record of user.records || []) {
 				const targetDeviceId = text(record.deviceId);
 				if (!targetDeviceId) continue;
-				if (stable(valueFor(record, conflict.field)) === selectedValue) continue;
+				if (
+					conflictStable(String(conflict.field || ""), valueFor(record, conflict.field)) ===
+					selectedValue
+				)
+					continue;
 				const fields =
 					byTarget.get(targetDeviceId) ||
 					new Set<DeviceUserMergeProfileOverlayField>();

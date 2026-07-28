@@ -16398,24 +16398,29 @@ export const controller = (prisma: PrismaClient) => {
 				const validityFromRecord = selectedRecordFor("validFrom");
 				const validityToRecord = selectedRecordFor("validTo");
 				const accessRecord = selectedRecordFor("doorRight");
+				const nextDisplayName = nameRecord
+					? nameRecord.displayName
+					: targetRow.displayName;
+				const nextValidFrom = validityFromRecord
+					? validityFromRecord.validFrom
+						? new Date(validityFromRecord.validFrom)
+						: null
+					: targetRow.validFrom;
+				const nextValidTo = validityToRecord
+					? validityToRecord.validTo
+						? new Date(validityToRecord.validTo)
+						: null
+					: targetRow.validTo;
 				await (prisma as any).deviceUser.update({
 					where: { id: targetRow.id },
 					data: {
 						employeeId: employeeRecord
 							? employeeRecord.employeeId || user.employeeId || null
 							: targetRow.employeeId,
-						displayName: nameRecord ? nameRecord.displayName : targetRow.displayName,
+						displayName: nextDisplayName,
 						status: statusRecord ? statusRecord.status : targetRow.status,
-						validFrom: validityFromRecord
-							? validityFromRecord.validFrom
-								? new Date(validityFromRecord.validFrom)
-								: null
-							: targetRow.validFrom,
-						validTo: validityToRecord
-							? validityToRecord.validTo
-								? new Date(validityToRecord.validTo)
-								: null
-							: targetRow.validTo,
+						validFrom: nextValidFrom,
+						validTo: nextValidTo,
 						doorRight: accessRecord ? accessRecord.doorRight : targetRow.doorRight,
 						accessPlan: accessRecord ? accessRecord.accessPlan : targetRow.accessPlan,
 						rawPayload: {
@@ -16426,6 +16431,159 @@ export const controller = (prisma: PrismaClient) => {
 						},
 					},
 				});
+				// Panel inventory drives Needs decision residual. HRIS DeviceUser
+				// overlay alone leaves live name/date conflicts. Push reviewed
+				// profile fields via UserInfo Modify/SetUp so replan can hit 0.
+				const panelNameChanged =
+					Boolean(nameRecord) &&
+					String(targetPlanRecord?.displayName || "").trim() !==
+						String(nextDisplayName || "").trim();
+				const panelFromChanged =
+					Boolean(validityFromRecord) &&
+					String(targetPlanRecord?.validFrom || "") !== String(nextValidFrom || "");
+				const panelToChanged =
+					Boolean(validityToRecord) &&
+					String(targetPlanRecord?.validTo || "") !== String(nextValidTo || "");
+				if (panelNameChanged || panelFromChanged || panelToChanged) {
+					try {
+						emitMergeProgress?.({
+							stage: "panel_profile_align_started",
+							userKey: user.key,
+							vendorUserId: targetVendorUserId,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							fields: [
+								...(panelNameChanged ? ["displayName"] : []),
+								...(panelFromChanged ? ["validFrom"] : []),
+								...(panelToChanged ? ["validTo"] : []),
+							],
+							message: `Aligning panel UserInfo name/dates for ${targetVendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
+						let baseUserInfo: Record<string, any> = {
+							employeeNo: targetVendorUserId,
+						};
+						try {
+							const searchBody = {
+								UserInfoSearchCond: {
+									searchID: `merge-profile-align-${targetDeviceId}-${targetVendorUserId}-${Date.now()}`,
+									searchResultPosition: 0,
+									maxResults: 5,
+									EmployeeNoList: [{ employeeNo: targetVendorUserId }],
+								},
+							};
+							const searchResp = await hikvisionFetch(
+								`${hikvisionEndpoint.accessControl.userInfo.search}?format=json`,
+								{
+									method: "POST",
+									deviceId: targetDeviceId,
+									prisma,
+									request: req,
+									timeoutMs: 12_000,
+									headers: { "Content-Type": "application/json" },
+									body: searchBody,
+								},
+							);
+							const search =
+								searchResp?.UserInfoSearch ||
+								searchResp?.data?.UserInfoSearch ||
+								searchResp ||
+								{};
+							const list = Array.isArray(search?.UserInfo)
+								? search.UserInfo
+								: search?.UserInfo
+									? [search.UserInfo]
+									: [];
+							const hit =
+								list.find(
+									(row: any) =>
+										String(row?.employeeNo || row?.employeeNoString || "").trim() ===
+										targetVendorUserId,
+								) || list[0];
+							if (hit && typeof hit === "object") {
+								baseUserInfo = { ...hit };
+							}
+						} catch (searchError: any) {
+							deviceLogger.warn(
+								`UserInfo search before profile align failed for ${targetDeviceId}/${targetVendorUserId}; modifying with partial payload: ${searchError?.message || searchError}`,
+							);
+						}
+						baseUserInfo.employeeNo = targetVendorUserId;
+						if (nameRecord && nextDisplayName != null) {
+							baseUserInfo.name = String(nextDisplayName);
+						}
+						const valid = {
+							...((baseUserInfo.Valid || baseUserInfo.valid || {}) as Record<
+								string,
+								any
+							>),
+						};
+						if (valid.enable == null) valid.enable = true;
+						if (validityFromRecord && nextValidFrom) {
+							valid.beginTime = formatHikvisionManilaDateTime(new Date(nextValidFrom));
+						}
+						if (validityToRecord && nextValidTo) {
+							valid.endTime = formatHikvisionManilaDateTime(new Date(nextValidTo));
+						}
+						if (validityFromRecord || validityToRecord) {
+							baseUserInfo.Valid = valid;
+						}
+						const modifyBody = { UserInfo: baseUserInfo };
+						try {
+							await hikvisionFetch(
+								`${hikvisionEndpoint.accessControl.userInfo.modify}?format=json`,
+								{
+									method: "PUT",
+									deviceId: targetDeviceId,
+									prisma,
+									request: req,
+									timeoutMs: 15_000,
+									headers: { "Content-Type": "application/json" },
+									body: modifyBody,
+								},
+							);
+						} catch (modifyError: any) {
+							// Some firmwares only honor SetUp for profile field edits.
+							await hikvisionFetch(
+								`${hikvisionEndpoint.accessControl.userInfo.setUp}?format=json`,
+								{
+									method: "PUT",
+									deviceId: targetDeviceId,
+									prisma,
+									request: req,
+									timeoutMs: 15_000,
+									headers: { "Content-Type": "application/json" },
+									body: modifyBody,
+								},
+							);
+							deviceLogger.info(
+								`UserInfo Modify failed; SetUp succeeded for profile align ${targetDeviceId}/${targetVendorUserId}: ${modifyError?.message || modifyError}`,
+							);
+						}
+						emitMergeProgress?.({
+							stage: "panel_profile_align_done",
+							userKey: user.key,
+							vendorUserId: targetVendorUserId,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							message: `Panel UserInfo name/dates aligned for ${targetVendorUserId} on ${targetDevice.name || targetDevice.address || targetDeviceId}.`,
+						});
+					} catch (panelError: any) {
+						deviceLogger.warn(
+							`Panel profile align failed for ${targetDeviceId}/${targetVendorUserId}: ${panelError?.message || panelError}`,
+						);
+						emitMergeProgress?.({
+							stage: "panel_profile_align_error",
+							userKey: user.key,
+							vendorUserId: targetVendorUserId,
+							targetDeviceId,
+							targetDeviceName: targetDevice.name || targetDevice.address,
+							error: panelError?.message || String(panelError),
+							message: `Panel UserInfo align failed for ${targetVendorUserId}; HRIS overlay was still applied.`,
+						});
+						// HRIS overlay already applied; panel failure is not a hard job fail
+						// so remaining peers can continue. Residual will show until retry.
+					}
+				}
 				emitMergeProgress?.({
 					stage: "db_merge_done",
 					userKey: user.key,
