@@ -2992,10 +2992,16 @@ export function DeviceEnrollmentPanel({
 		const planId = sdkMergeState.data?.planId;
 		if (!planId) return;
 		try {
+			// Residual default 20 writes/wave (not 1). Progress counters = this wave.
 			const job = await startHikvisionCredentialRecoveryMutation.mutateAsync(planId);
 			setCredentialRecoveryJobId(job.id);
 			window.localStorage.setItem(CREDENTIAL_RECOVERY_JOB_STORAGE_KEY, job.id);
-			toast.success(`Credential recovery ${job.id} started`);
+			const wave =
+				Number((job as any)?.plannedWaveSize ?? (job as any)?.wouldWriteCount ?? 20) ||
+				20;
+			toast.success(
+				`Credential recovery started (wave up to ${wave} fingerprint writes). Watch Verified/Failed below — counters are this job, not full residual until replan.`,
+			);
 		} catch (error: any) {
 			toast.error(error?.message || "Credential recovery could not be started");
 		}
@@ -8940,6 +8946,15 @@ export function DeviceEnrollmentPanel({
 															)
 														: "not yet"}
 												</p>
+												<p className="mt-1 text-xs font-medium text-slate-700">
+													This job wave: Verified{" "}
+													{credentialRecoveryJob.counters?.verified ?? 0}
+													{" / Failed "}
+													{credentialRecoveryJob.counters?.failed ?? 0}
+													{" · "}
+													status is for this job only. Merge chips (FP/face/decision)
+													update after replan when writes stick.
+												</p>
 											</div>
 											<Badge
 												variant={
@@ -8949,9 +8964,15 @@ export function DeviceEnrollmentPanel({
 														: credentialRecoveryJob.status === "completed" &&
 															  (credentialRecoveryJob.counters?.verified ?? 0) > 0
 															? "success"
-															: "warning"
+															: credentialRecoveryJob.status === "completed" &&
+																  (credentialRecoveryJob.counters?.verified ?? 0) === 0
+																? "warning"
+																: "warning"
 												}>
 												{credentialRecoveryJob.status}
+												{(credentialRecoveryJob.counters?.verified ?? 0) > 0
+													? ` · v${credentialRecoveryJob.counters?.verified}`
+													: ""}
 											</Badge>
 										</div>
 										<div className="mt-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs">

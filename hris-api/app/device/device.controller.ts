@@ -306,6 +306,26 @@ const CREDENTIAL_DEVICE_LEASE_DIR = path.join(
 	PROJECT_TRUTH_RUNTIME_ROOT,
 	"credential-device-leases",
 );
+/**
+ * Residual burn defaults (override via env without code thrash):
+ * - independent devices: one source task per panel, bound by unique frozen devices
+ * - max verified writes: smaller residual waves (20) for stable feedback; hard max 50
+ */
+const CREDENTIAL_RECOVERY_INDEPENDENT_DEVICE_CONCURRENCY = Math.max(
+	1,
+	Math.min(
+		8,
+		Number(process.env.PROJECT_TRUTH_RECOVERY_INDEPENDENT_DEVICES || 5) || 5,
+	),
+);
+const CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES = Math.max(
+	1,
+	Math.min(
+		50,
+		Number(process.env.PROJECT_TRUTH_RECOVERY_MAX_VERIFIED_WRITES || 20) || 20,
+	),
+);
+const CREDENTIAL_RECOVERY_MAX_VERIFIED_WRITES_CEILING = 50;
 const DEVICE_IMPORT_JOB_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 /** Merge peer-copy can sit in one long VM batch; still treat silent processing as dead after this. */
@@ -12888,7 +12908,10 @@ export const controller = (prisma: PrismaClient) => {
 				for (const task of pending) {
 					const deviceId = String(task.sourceDeviceId || task.targetDeviceId || "");
 					if (deviceId && !independent.has(deviceId)) independent.set(deviceId, task);
-					if (independent.size >= 5) break;
+					if (
+						independent.size >= CREDENTIAL_RECOVERY_INDEPENDENT_DEVICE_CONCURRENCY
+					)
+						break;
 				}
 				await Promise.all(
 					[...independent.values()].map(async (task: any) => {
@@ -13143,7 +13166,8 @@ export const controller = (prisma: PrismaClient) => {
 				// entire custody backlog.
 				if (
 					recoveryCanaryRequested &&
-					processedThisLease >= 5 &&
+					processedThisLease >=
+						CREDENTIAL_RECOVERY_INDEPENDENT_DEVICE_CONCURRENCY &&
 					actionableCustodyRecovered
 				) {
 					break;
@@ -13167,7 +13191,13 @@ export const controller = (prisma: PrismaClient) => {
 			const request = (persistedJob?.request || {}) as any;
 			const maxVerifiedWrites = Math.max(
 				0,
-				Math.min(50, Number(request.maxVerifiedWrites || 0)),
+				Math.min(
+					CREDENTIAL_RECOVERY_MAX_VERIFIED_WRITES_CEILING,
+					Number(
+						request.maxVerifiedWrites ||
+							CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
+					),
+				),
 			);
 			const canaryModality = ["fingerprint", "face"].includes(
 				String(request.canaryModality || ""),
@@ -13853,7 +13883,9 @@ export const controller = (prisma: PrismaClient) => {
 		const executionPreview = buildCredentialRecoveryExecutionPreview({
 			plan: stored.plan,
 			canaryModality: req.body?.canaryModality,
-			maxVerifiedWrites: req.body?.maxVerifiedWrites ?? 50,
+			maxVerifiedWrites:
+				req.body?.maxVerifiedWrites ??
+				CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
 		});
 		res.status(200).json(
 			buildSuccessResponse(
@@ -13903,7 +13935,13 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const maxVerifiedWrites = Math.max(
 				0,
-				Math.min(50, Number(req.body?.maxVerifiedWrites || 0)),
+				Math.min(
+					CREDENTIAL_RECOVERY_MAX_VERIFIED_WRITES_CEILING,
+					Number(
+						req.body?.maxVerifiedWrites ||
+							CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
+					),
+				),
 			);
 			const canaryModality = ["fingerprint", "face"].includes(
 				String(req.body?.canaryModality || ""),
@@ -13913,7 +13951,10 @@ export const controller = (prisma: PrismaClient) => {
 			const executionPreview = buildCredentialRecoveryExecutionPreview({
 				plan: stored.plan,
 				canaryModality,
-				maxVerifiedWrites: maxVerifiedWrites > 0 ? maxVerifiedWrites : 50,
+				maxVerifiedWrites:
+					maxVerifiedWrites > 0
+						? maxVerifiedWrites
+						: CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES,
 			});
 			// Coerce dryRun from bool/string/query so scripts cannot accidentally
 			// create a durable recovery job and burn the single-active slot.

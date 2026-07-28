@@ -31,6 +31,12 @@ DEVICES = [
     "cmrim1zop05ik7zp4zgm2sm4k",  # F
 ]
 MAX_WAVES = int(os.environ.get("MAX_WAVES", "6"))
+# Residual default: 20 (stable). Override via PROJECT_TRUTH_RECOVERY_MAX_VERIFIED_WRITES.
+MAX_VERIFIED_WRITES = int(
+    os.environ.get("PROJECT_TRUTH_RECOVERY_MAX_VERIFIED_WRITES")
+    or os.environ.get("MAX_VERIFIED_WRITES")
+    or "20"
+)
 os.makedirs(OUT, exist_ok=True)
 
 
@@ -248,7 +254,7 @@ def main() -> int:
                         "expectedScopeHash": scope,
                         "deviceIds": DEVICES,
                         "canaryModality": "fingerprint",
-                        "maxVerifiedWrites": 50,
+                        "maxVerifiedWrites": MAX_VERIFIED_WRITES,
                         "dryRun": False,
                         "execute": True,
                     },

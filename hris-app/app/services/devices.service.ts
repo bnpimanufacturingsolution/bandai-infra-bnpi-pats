@@ -2168,26 +2168,54 @@ class DevicesService extends APIService {
 		}
 	}
 
-	async startHikvisionCredentialRecoveryJob(planId: string): Promise<CredentialRecoveryJob> {
+	async startHikvisionCredentialRecoveryJob(
+		planId: string,
+		options?: {
+			maxVerifiedWrites?: number;
+			canaryModality?: "fingerprint" | "face" | null;
+		},
+	): Promise<CredentialRecoveryJob> {
 		try {
+			// Residual default 20: stable wave size. Hard max 50 (API ceiling).
+			// Historical UI bug used 1 write/job — looked like no progress.
+			const maxVerifiedWrites = Math.max(
+				1,
+				Math.min(50, Number(options?.maxVerifiedWrites ?? 20) || 20),
+			);
+			const canaryModality =
+				options?.canaryModality === "face" || options?.canaryModality === "fingerprint"
+					? options.canaryModality
+					: "fingerprint";
 			const reviewResponse = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/recovery/review",
-				{ planId },
+				{ planId, canaryModality, maxVerifiedWrites },
 			);
 			const review = reviewResponse.data?.data || reviewResponse.data;
 			if (!review?.scopeHash) throw new Error("Recovery review returned no scope hash");
+			const wouldWrite =
+				Number(review?.executionPreview?.wouldWriteCount ?? 0) || maxVerifiedWrites;
 			const response = await hrisApiClient.post<any>(
 				"/api/device/hikvision/sdk-users/merge/recovery/jobs",
 				{
 					planId,
 					expectedScopeHash: review.scopeHash,
-					maxVerifiedWrites: 1,
-					canaryModality: "fingerprint",
+					maxVerifiedWrites,
+					canaryModality,
+					// Explicit execute (not dry-run)
+					execute: true,
+					dryRun: false,
 				},
 			);
 			const data = response.data?.data || response.data;
 			if (!data?.job?.id) throw new Error("Recovery job did not return a durable job ID");
-			return data.job as CredentialRecoveryJob;
+			const job = data.job as CredentialRecoveryJob & {
+				plannedWaveSize?: number;
+				wouldWriteCount?: number;
+			};
+			// Surface planned wave so FE progress is not misread as "full residual".
+			job.plannedWaveSize = maxVerifiedWrites;
+			job.wouldWriteCount = wouldWrite;
+			return job;
 		} catch (error: any) {
 			throw new Error(
 				error.data?.errors?.[0]?.message ||
