@@ -16852,6 +16852,11 @@ export const controller = (prisma: PrismaClient) => {
 						.map((key: unknown) => String(key || "").trim())
 						.filter(Boolean)
 				: undefined;
+			const autoResolveDecisions =
+				req.body?.autoResolveDecisions === false ||
+				req.body?.autoResolveDecisions === "false"
+					? false
+					: true;
 			const appliedPlan = applyMergeChoices(stored.plan, {
 				choices: req.body?.choices || {},
 				applyAll:
@@ -16859,6 +16864,7 @@ export const controller = (prisma: PrismaClient) => {
 						? req.body.applyAll
 						: undefined,
 				selectedUserKeys,
+				autoResolveDecisions,
 			});
 			if (!appliedPlan.executable) {
 				res.status(409).json(
