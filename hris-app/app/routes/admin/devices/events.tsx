@@ -4044,7 +4044,8 @@ export default function DeviceEventsPage() {
 				</button>
 			)}
 
-			<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-slate-200 bg-white p-2">
+			{/* min-h so containedScroll body never collapses to 0px when outer flex chain is short */}
+			<div className="flex min-h-[28rem] flex-1 flex-col overflow-hidden rounded-md border border-slate-200 bg-white p-2">
 				<div className="mb-2 flex shrink-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
 					<div className="min-w-0">
 						<h2 className="truncate text-sm font-semibold text-slate-950">

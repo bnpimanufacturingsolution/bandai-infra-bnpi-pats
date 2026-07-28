@@ -372,22 +372,25 @@ const DataTable = <T extends Record<string, any>>({
 	const containedBodyScrollRef = React.useRef<HTMLDivElement | null>(null);
 	const headerClassName = containedScroll ? "z-10 shrink-0" : undefined;
 	const desktopTableViewportClassName = containedScroll
-		? "hidden min-h-0 flex-1 flex-col md:flex"
+		? "hidden min-h-[14rem] flex-1 flex-col md:flex"
 		: "overflow-x-auto modern-scroll md:block hidden";
 	const desktopTableFrameClassName = containedScroll
-		? "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white"
+		? "flex min-h-[14rem] flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white"
 		: "overflow-x-auto rounded-lg border border-neutral-200 bg-white";
 	// Split header/body shell: body flexes to fill remaining card height (no fixed vh offset).
+	// min-h-[14rem] is mandatory: flex-1 + min-h-0 alone collapses the body to 0px when a
+	// parent in the chain lacks a definite height (Device Events saved ledger symptom:
+	// "Showing 1 to 10 of N" with blank white body while API returns 10 rows).
 	const containedTableShellClassName =
-		"hidden min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white md:flex";
+		"hidden min-h-[14rem] flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white md:flex";
 	const containedTableHeaderViewportClassName =
 		"shrink-0 overflow-hidden border-b border-neutral-200 bg-neutral-100";
 	const containedTableBodyViewportClassName =
-		"min-h-0 flex-1 overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]";
+		"min-h-[12rem] flex-1 overflow-auto overscroll-contain modern-scroll [scrollbar-gutter:stable]";
 	const mobileListViewportClassName = cn(
 		"md:hidden space-y-3 mt-6",
 		containedScroll &&
-			"min-h-0 flex-1 overflow-y-auto overscroll-contain modern-scroll pr-1",
+			"min-h-[12rem] flex-1 overflow-y-auto overscroll-contain modern-scroll pr-1",
 	);
 	const cardClassName = cn(
 		// Tighter header→toolbar spacing than default Card gap-6
