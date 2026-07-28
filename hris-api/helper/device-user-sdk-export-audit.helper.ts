@@ -127,7 +127,13 @@ const validateStatusAndBlob = (params: {
 	if (params.status === "raw_blob_present" && !params.hasValidBlob) {
 		params.reasons.push(`${params.modality}_status_present_without_valid_blob`);
 	}
-	if (params.status !== "raw_blob_present" && params.hasAnyBlob) {
+	// Fingerprint custody can be partial: a two-slot enrollment may expose one
+	// valid FPn blob and still correctly remain missing_raw_blob for the other.
+	if (
+		params.status !== "raw_blob_present" &&
+		params.hasAnyBlob &&
+		!(params.modality === "fingerprint" && params.status === "missing_raw_blob")
+	) {
 		params.reasons.push(`${params.modality}_status_${params.status}_with_blob`);
 	}
 };

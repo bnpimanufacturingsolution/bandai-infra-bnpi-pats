@@ -9044,6 +9044,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	const compactPortableDeviceUserBiometricMetadata = (row: any) => {
 		delete row._rawBiometricSource;
+		delete row._freshCredentialSummary;
 		const biometricExport = row?.rawPayload?._hrisDeviceMetadata?.biometricExport;
 		if (biometricExport && typeof biometricExport === "object") {
 			for (const key of [
@@ -9164,10 +9165,11 @@ export const controller = (prisma: PrismaClient) => {
 		includeFaces?: boolean;
 	}) => {
 		const credentialSummary =
-			params.row?.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
-			params.row?.vendorMetadata?.credentialSummary ||
+			params.row?._freshCredentialSummary ||
 			params.row?._rawBiometricSource?.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
 			params.row?._rawBiometricSource?.vendorMetadata?.credentialSummary ||
+			params.row?.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
+			params.row?.vendorMetadata?.credentialSummary ||
 			extractHikvisionCredentialSummary(params.row?.rawPayload || {});
 		const fingerprintCount = Number(credentialSummary?.fingerprintCount || 0);
 		const faceCount = Number(credentialSummary?.faceCount || 0);
@@ -9203,11 +9205,18 @@ export const controller = (prisma: PrismaClient) => {
 			) ||
 			getRawFaceFromValue(params.row?.rawPayload?._hrisDeviceMetadata?.rawFace) ||
 			getRawFaceFromValue(params.eventPayload?.rawFace);
+		// A fresh physical count of zero wins over stale saved custody. Retain
+		// stale blobs in protected DB evidence, but never export them as enrolled
+		// credentials for a device that currently reports no enrollment.
+		const exportableRawFingerprints = fingerprintCount > 0 ? rawFingerprints : [];
 		const storedFingerprintCount = Math.min(
-			rawFingerprints.length,
-			Math.max(fingerprintCount, rawFingerprints.length),
+			exportableRawFingerprints.length,
+			Math.max(fingerprintCount, exportableRawFingerprints.length),
 		);
-		const missingFingerprintCount = Math.max(fingerprintCount - rawFingerprints.length, 0);
+		const missingFingerprintCount = Math.max(
+			fingerprintCount - exportableRawFingerprints.length,
+			0,
+		);
 		const storedFaceCount = rawFace ? Math.max(faceCount, 1) : 0;
 		const missingFaceCount = Math.max(faceCount - (rawFace ? 1 : 0), 0);
 		return {
@@ -9216,16 +9225,16 @@ export const controller = (prisma: PrismaClient) => {
 					? "not_requested"
 					: fingerprintCount > 0 && missingFingerprintCount > 0
 						? "missing_raw_blob"
-						: rawFingerprints.length
+						: exportableRawFingerprints.length
 							? "raw_blob_present"
 							: fingerprintCount > 0
 								? "missing_raw_blob"
 								: "not_enrolled",
 				countReported: fingerprintCount,
-				rawBlobCount: rawFingerprints.length,
+				rawBlobCount: exportableRawFingerprints.length,
 				storedCount: storedFingerprintCount,
 				missingRawCount: missingFingerprintCount,
-				templates: params.includeFingerprints ? rawFingerprints : [],
+				templates: params.includeFingerprints ? exportableRawFingerprints : [],
 			},
 			face: {
 				status: !params.includeFaces
@@ -9663,9 +9672,16 @@ export const controller = (prisma: PrismaClient) => {
 					rawPayload,
 					vendorMetadata,
 					_rawBiometricSource: {
+						// Raw/encrypted custody remains the protected saved evidence
+						// plane. Fresh physical counts are carried separately below.
 						rawPayload: saved?.rawPayload || source?.rawPayload || null,
 						vendorMetadata: saved?.vendorMetadata || source?.vendorMetadata || null,
 					},
+					_freshCredentialSummary: source
+						? (source.rawPayload as any)?._hrisDeviceMetadata?.credentialSummary ||
+							(source.vendorMetadata as any)?.credentialSummary ||
+							extractHikvisionCredentialSummary((source.rawPayload as any) || {})
+						: null,
 				};
 			});
 			const selected = filterDeviceUserExportRows(rows, {
@@ -9689,6 +9705,7 @@ export const controller = (prisma: PrismaClient) => {
 			if (rawBiometricPackageRequested) {
 				for (const row of exportRows as any[]) {
 					const credentialSummary =
+						row._freshCredentialSummary ||
 						row.rawPayload?._hrisDeviceMetadata?.credentialSummary ||
 						row.vendorMetadata?.credentialSummary ||
 						extractHikvisionCredentialSummary(row.rawPayload || {});
@@ -9722,9 +9739,38 @@ export const controller = (prisma: PrismaClient) => {
 					const cachedEncrypted = parseCachedDeviceUserBiometricTemplates(
 						row._rawBiometricSource || row,
 					);
+					const reportedFingerprintCount = Number(
+						rawCustody.fingerprint?.countReported || 0,
+					);
+					const savedFingerprintTemplates = Array.isArray(
+						rawCustody.fingerprint?.templates,
+					)
+						? rawCustody.fingerprint.templates
+						: [];
+					const savedFingerprintSlotIds = savedFingerprintTemplates.map(
+						(template: any, index: number) =>
+							String(template?.fingerPrintId ?? template?.fingerPrintID ?? index + 1),
+					);
+					const savedFingerprintHasDuplicateSlots =
+						new Set(savedFingerprintSlotIds).size !== savedFingerprintSlotIds.length;
+					const savedFingerprintHasStaleExtras =
+						savedFingerprintTemplates.length > reportedFingerprintCount ||
+						savedFingerprintHasDuplicateSlots;
+					if (savedFingerprintHasStaleExtras) {
+						(rawCustody.fingerprint as any).staleExtraRawCount = Math.max(
+							savedFingerprintTemplates.length - reportedFingerprintCount,
+							0,
+						);
+						(rawCustody.fingerprint as any).staleDuplicateSlotIds =
+							savedFingerprintSlotIds.filter(
+								(slotId: string, index: number) =>
+									savedFingerprintSlotIds.indexOf(slotId) !== index,
+							);
+					}
 					if (
 						options.includeFingerprints &&
-						Number(rawCustody.fingerprint?.missingRawCount || 0) > 0 &&
+						(Number(rawCustody.fingerprint?.missingRawCount || 0) > 0 ||
+							savedFingerprintHasStaleExtras) &&
 						cachedEncrypted.fingerprint
 					) {
 						try {
@@ -9751,9 +9797,44 @@ export const controller = (prisma: PrismaClient) => {
 								freshUserInfoOwnerVerified: true,
 							});
 							if (recoveredTemplates.length > 0) {
-								const reported = Number(
-									rawCustody.fingerprint.countReported || 0,
+								const recoveredSlotIds = recoveredTemplates.map(
+									(template: any, index: number) =>
+										String(
+											template?.fingerPrintId ??
+												template?.fingerPrintID ??
+												index + 1,
+										),
 								);
+								const recoveredHasDuplicateSlots =
+									new Set(recoveredSlotIds).size !== recoveredSlotIds.length;
+								const recoveredHasStaleExtras =
+									recoveredTemplates.length > reportedFingerprintCount;
+								if (recoveredHasDuplicateSlots || recoveredHasStaleExtras) {
+									rawCustody.fingerprint.templates = [];
+									rawCustody.fingerprint.rawBlobCount = 0;
+									rawCustody.fingerprint.storedCount = 0;
+									rawCustody.fingerprint.missingRawCount =
+										reportedFingerprintCount;
+									rawCustody.fingerprint.status =
+										reportedFingerprintCount > 0
+											? "missing_raw_blob"
+											: "not_enrolled";
+									(rawCustody.fingerprint as any).sourceConflict =
+										recoveredHasDuplicateSlots
+											? "fresh_encrypted_bundle_duplicate_slot_ids"
+											: "fresh_encrypted_bundle_exceeds_reported_count";
+									(rawCustody.fingerprint as any).conflictingSlotIds =
+										recoveredSlotIds.filter(
+											(slotId: string, index: number) =>
+												recoveredSlotIds.indexOf(slotId) !== index,
+										);
+									throw new Error(
+										recoveredHasDuplicateSlots
+											? "Fresh encrypted fingerprint bundle contains duplicate slot IDs"
+											: "Fresh encrypted fingerprint bundle exceeds the physical reported count",
+									);
+								}
+								const reported = reportedFingerprintCount;
 								rawCustody.fingerprint.templates = recoveredTemplates.map(
 									(template: any) => ({
 										fingerPrintId: template.fingerPrintId,
@@ -9980,19 +10061,23 @@ export const controller = (prisma: PrismaClient) => {
 						fingerprintCountReported: exportRows.filter(
 							(row: any) =>
 								Number(
-									row.rawPayload?._hrisDeviceMetadata?.credentialSummary
-										?.fingerprintCount ||
-										row.vendorMetadata?.credentialSummary?.fingerprintCount ||
-										0,
+									row.rawBiometricCustody?.fingerprint?.countReported ??
+										row._freshCredentialSummary?.fingerprintCount ??
+										(row.rawPayload?._hrisDeviceMetadata?.credentialSummary
+											?.fingerprintCount ||
+											row.vendorMetadata?.credentialSummary?.fingerprintCount ||
+											0),
 								) > 0,
 						).length,
 						faceCountReported: exportRows.filter(
 							(row: any) =>
 								Number(
-									row.rawPayload?._hrisDeviceMetadata?.credentialSummary
-										?.faceCount ||
-										row.vendorMetadata?.credentialSummary?.faceCount ||
-										0,
+									row.rawBiometricCustody?.face?.countReported ??
+										row._freshCredentialSummary?.faceCount ??
+										(row.rawPayload?._hrisDeviceMetadata?.credentialSummary
+											?.faceCount ||
+											row.vendorMetadata?.credentialSummary?.faceCount ||
+											0),
 								) > 0,
 						).length,
 					},

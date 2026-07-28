@@ -577,6 +577,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("decrypted_encrypted_biometric_bundle");
 		expect(controller).to.include("projectedFromEncrypted");
 		expect(controller).to.include("encryptedPresent");
+		// Fresh device enrollment counts and protected recovered bytes are
+		// separate evidence planes: neither may mask or inflate the other.
+		expect(controller).to.include("_freshCredentialSummary");
+		expect(controller).to.include("savedFingerprintHasStaleExtras");
+		expect(controller).to.include("staleExtraRawCount");
+		expect(controller).to.include("fresh_encrypted_bundle_duplicate_slot_ids");
 		expect(controller).to.include("rawFaceBlobCount");
 		expect(controller).to.include("buildRawDeviceUserBiometricCustody");
 		expect(controller).to.include("Device-user export deviceInfo probe failed");

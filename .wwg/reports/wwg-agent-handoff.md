@@ -1207,3 +1207,24 @@ Use `.wwg/reports/agent-implementation-log.md` for implementation notes across a
   Capture and write operations keep the normal serialized device lane.
 - Evidence:
   `.wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md`.
+
+# 2026-07-28 Five-Device SDK Package Handoff
+
+- Status: `PACKAGES_AND_PREVIEWS_FULFILLED_PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARGET_DEVICE`.
+- Final accepted physical truth for B/A/F/D/E is identical: 874 unique IDs,
+  zero duplicates, 825 FP users / 1,646 slots, 806 face users, stable hash
+  `707e8800a55a44a2d106bafdc5eac2a5031bde9e9d877ebba2f96fe96b6223d1`.
+- Five independent schema-v1 packages and seven-column CSV projections are
+  protected under `.runtime/five-device-sdk-packages-final-accepted-20260728/`.
+  Every package has 874 valid rows and all 1,646 FP slots.
+- A/F/D/E contain all 806 face blobs. B contains 711 readable face blobs and 95
+  explicit `missing_raw_blob` rows caused by physical face-picture 404s.
+- Five existing-path import previews succeeded. B→A and E→B expose one
+  `displayName` conflict at ID `1616`; the other three previews are 874 matches.
+- No physical import ran: all five compatible `DS-K1T341CMFW V3.3.40` targets
+  are populated with 874 users. A new blank/frozen compatible device is required.
+- Focused backend tests (38), frontend UI contract, targeted lint, API and
+  frontend production builds, and production-build Playwright passed. API typecheck has
+  only 13 unrelated pre-existing errors and no error from this change.
+- Detailed report:
+  `.wwg/reports/sdk-device-user-export-import-20260728.md`.

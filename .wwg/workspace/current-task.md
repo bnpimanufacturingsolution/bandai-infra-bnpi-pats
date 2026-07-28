@@ -2586,3 +2586,18 @@ Status: IMPLEMENTED + PROVEN â€” Device admin UX clarity (friendly status, 
 - Evidence/report:
   `.runtime/hikvision-pagination-benchmark-20260728/` and
   `.wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md`.
+
+# 2026-07-28 — Five-device raw SDK package completion
+
+- Status: `PACKAGES_AND_PREVIEWS_FULFILLED_PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARGET_DEVICE`.
+- B/A/F/D/E each have two agreeing final 874-user inventories with 825
+  fingerprint users / 1,646 slots and 806 face users. Main E's incomplete
+  parallel read was discarded and replaced by two agreeing serialized reads.
+- Five independent schema-v1 JSON packages and exact seven-column CSV
+  projections passed full row-by-row decode/reparse audit.
+- Final raw custody: all devices have 1,646 FP slots; A/F/D/E have all 806 face
+  blobs; B has 711 readable faces and 95 explicit physical-404 face gaps.
+- All five existing-path import previews parsed the full packages. No physical
+  write ran because every compatible available target is populated with 874 users.
+- Full evidence/report:
+  `.wwg/reports/sdk-device-user-export-import-20260728.md`.

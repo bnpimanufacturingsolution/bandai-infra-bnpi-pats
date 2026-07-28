@@ -1,50 +1,102 @@
-# SDK Device-User Export / Import Evidence — 2026-07-28
+# Five-Device SDK Device-User Export / Import Evidence — 2026-07-28
 
-Status: `PARTIALLY_FULFILLED` pending a newly added compatible target device.
+Status: `PACKAGES_AND_PREVIEWS_FULFILLED_PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARGET_DEVICE`.
 
-## Product contract implemented
+## Governed contract
 
-- Existing package schema remains `project-truth.hikvision-device-users.v1`.
-- Existing export/import endpoints and `rawPackage` execute path remain authoritative.
-- CSV/Excel now project exactly:
+- Existing schema remains `project-truth.hikvision-device-users.v1`.
+- Existing Device Users export, import preview/execute, `rawPackage`, biometric
+  backfill, and physical SDK reread paths remain authoritative.
+- Each readable projection has exactly:
   `vendorUserId,displayName,userType,fingerprintStatus,rawFingerprintBlob,faceStatus,rawFaceBlob`.
-- Multiple fingerprint slots remain in one cell as `FPn("...")`.
-- Source device identity, model, firmware, serial, schema version, and export time stay at package/device-manifest level rather than repeating per user.
-- New exports omit per-user HRIS identity/link objects; import maps missing `employeeNo` from `vendorUserId` internally and continues accepting older packages/CSV rows.
-- `rawPackage` no longer reports `imported` merely because at least one fingerprint write was attempted. Fingerprint and face retention are evaluated independently, and any requested unverified modality fails the row.
-- Import preview surfaces conflicts before capped matching rows. Preview and execute now fail closed while any conflict exists.
+- Package/device metadata occurs once in the manifest. No HRIS identity columns
+  or duplicate `employeeNo` column were added.
+- Counts, URLs, status fields, and peer identities were never converted into
+  biometric bytes.
 
-## Fresh source proof
+## Final physical inventory
 
-Evidence root: `.runtime/sdk-export-import-20260728-152250/`.
+Evidence: `.runtime/five-device-final-inventory-20260728/`.
 
-- Source: Main Entrance Device B, `cmpxw13hx002h7zwso7dyedrn`, `10.184.37.20:443`.
-- Authenticated health: device API readable; SDK user inventory readable.
-- Fresh export preview source count: 874.
-- Fresh actual export source count: 874.
-- Exported rows: 874; unique SDK IDs: 874; duplicates: 0.
-- Fingerprint: 819 raw-present users, 1,634 decoded slots, 46 `not_enrolled`, 9 `missing_raw_blob`.
-- Face: 313 raw-present users, 313 decoded blobs, 68 `not_enrolled`, 493 `missing_raw_blob`.
-- Row audit: 874 valid, 0 invalid, 0 cross-modality blob reuse, 0 invalid base64.
-- The audit reads, decodes, round-trips, and hashes every full blob value. It records per-row lengths and SHA-256 without duplicating biometric bytes outside the protected package.
+Two complete agreeing reads were accepted for B/A/F/D. Main E's incomplete
+parallel read (844/874) was discarded; two new serialized reads then agreed.
 
-## Import gate
+| Device | Unique IDs | Duplicates | FP users | FP slots | Face users | Face slots | Hash |
+|---|---:|---:|---:|---:|---:|---:|---|
+| B | 874 | 0 | 825 | 1,646 | 806 | 806 | `707e8800…6223d1` |
+| A | 874 | 0 | 825 | 1,646 | 806 | 806 | `707e8800…6223d1` |
+| F | 874 | 0 | 825 | 1,646 | 806 | 806 | `707e8800…6223d1` |
+| D | 874 | 0 | 825 | 1,646 | 806 | 806 | `707e8800…6223d1` |
+| E | 874 | 0 | 825 | 1,646 | 806 | 806 | `707e8800…6223d1` |
 
-- Main Entrance A non-mutating preview of the 874-row package: 0 new, 873 match, 1 conflict.
-- Current authenticated inventory-readable Main Entrance A/B/D/E/F panels each already contain 874 users.
-- Main Entrance C, TEST A, and TEST B are not currently inventory-readable.
-- Therefore no current device is a safe blank target for the requested future-device restore. No canary or full write was started. Treating an existing populated panel as the new device would violate the conflict/overwrite gate.
+All five are `DS-K1T341CMFW`, firmware `V3.3.40`, with distinct serials.
+
+## Recovery and final packages
+
+Evidence root:
+`.runtime/five-device-sdk-packages-final-accepted-20260728/`.
+
+- Fingerprint same-device recovery completed on the exact missing scopes.
+- Face same-device recovery completed on A/F/D/E.
+- B recovered from 313 to 711 readable face blobs. Its remaining 95 rows are
+  explicit `missing_raw_blob`; the device returned physical face-picture 404s.
+  Sample IDs: `5, 6, 9, 50, 105, 147, 153, 166, 411, 432`.
+- Transient face capture failures F `916` and B `997` succeeded on exact retry.
+- A user `10` and F user `12` exposed duplicate stale FP slots. Fresh physical
+  counts were separated from saved custody; F reparsed as two unique slots and
+  A's stale count/blob was omitted because the final physical inventory reports
+  no enrollment for that stale row.
+
+| Device | Rows | Raw FP users/slots | FP missing | FP not enrolled | Raw face users | Face missing | Face not enrolled | Invalid rows |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| B | 874 | 825 / 1,646 | 0 / 0 | 49 | 711 | 95 | 68 | 0 |
+| A | 874 | 825 / 1,646 | 0 / 0 | 49 | 806 | 0 | 68 | 0 |
+| F | 874 | 825 / 1,646 | 0 / 0 | 49 | 806 | 0 | 68 | 0 |
+| D | 874 | 825 / 1,646 | 0 / 0 | 49 | 806 | 0 | 68 | 0 |
+| E | 874 | 825 / 1,646 | 0 / 0 | 49 | 806 | 0 | 68 | 0 |
+
+Every JSON row and seven-column CSV projection decoded and reparsed without
+duplicate IDs/slots, empty present blobs, invalid base64, or cross-modality
+reuse. Real packages remain ignored under `.runtime`.
+
+## Five import previews and physical boundary
+
+Evidence: `.runtime/five-device-import-previews-final-20260728/`.
+
+- B → A: 873 match, 1 display-name conflict (`1616`), 1,646 FP blobs, 711 faces.
+- A → F: 874 match, 0 conflicts, 1,646 FP blobs, 806 faces.
+- F → D: 874 match, 0 conflicts, 1,646 FP blobs, 806 faces.
+- D → E: 874 match, 0 conflicts, 1,646 FP blobs, 806 faces.
+- E → B: 873 match, 1 display-name conflict (`1616`), 1,646 FP blobs, 806 faces.
+
+All five compatible devices are populated with 874 users. No blank/frozen
+target exists, so no canary or full physical import was started. Physical import
+and target reread are correctly `BLOCKED_BY_MISSING_TARGET_DEVICE`.
 
 ## Validation
 
-- Backend SDK row-audit tests: 4 passing.
-- Backend Hikvision biometric contract: 34 passing.
-- Frontend device-user UI contract: 1 passing.
-- Targeted backend ESLint: 0 errors.
-- Targeted frontend ESLint: 0 errors; existing warnings remain.
-- Full API/app typechecks remain red on pre-existing unrelated attendance, migration, PDF, middleware, dashboard, calendar, and legacy device-service errors. No new type error remains in the SDK audit helper.
-- No real biometric blob or secret is tracked by Git.
+- Backend focused contracts: 38 passing.
+- Frontend Device Users UI contract: 1 passing.
+- Targeted backend lint and execution-script syntax: clean.
+- API production webpack build: passed (one existing protobuf dynamic-require warning).
+- Frontend production build: passed.
+- Production-build Playwright: passed for authenticated Device Users, Main
+  Entrance B, Import control, Export control, and device API traffic.
+- API typecheck: no errors from this change; repo remains red on 13 unrelated
+  pre-existing attendance, migration, PDF, and activity-logging errors.
+- No biometric bytes, runtime packages, credentials, or secrets are tracked.
 
-## Remaining physical boundary
+No new recommendation was identified. The remaining physical import is the
+explicit external target-device boundary already defined by the operator.
 
-When the additional device exists and is inventory-readable, rerun its live model/firmware compatibility probe, freeze it, back it up, preview the smallest FP/face canary, reject conflicts, execute with a fresh token and `biometricTransferMode="rawPackage"`, then physically reread fingerprint slots and face independently before full import.
+## WWG Truth Synchronization
+
+- Task mode: mixed feature repair, live-device recovery, protected export, and non-mutating import proof.
+- New truth detected: YES.
+- Wiki updated: NO; this is runtime evidence for the existing governed Device Users contract, not a new durable product principle.
+- Workspace updated: YES.
+- Governance review completed: YES; no new recommendation was identified.
+- Drift status: `PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARGET_DEVICE`.
+- Canonical files changed: Device Users export implementation, focused contracts, current task, handoff, and this report.
+- Implementation discoveries synced: fresh physical counts and protected recovered custody must remain separate evidence planes.
+- Remaining stale context: older 313-face / 1,634-FP evidence is historical and must not override this final five-device report.

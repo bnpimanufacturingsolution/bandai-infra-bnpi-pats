@@ -23,11 +23,13 @@
     ".wwg/reports/hikvision-attendance-fast-lane-20260719.md",
     ".wwg/reports/hikvision-device-events-sync-center-current-state-20260716.md",
     ".wwg/reports/hikvision-device-events-sync-center-truth-sync-20260716.md",
+    ".wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md",
     ".wwg/reports/hr-manager-lan-public-dashboard-repair-20260630.md",
     ".wwg/reports/hyperv-host-vm-bridge-state-20260709.md",
     ".wwg/reports/readme-validation.md",
     ".wwg/reports/regression-quality-report.md",
     ".wwg/reports/remote-hris-sync-drift-20260702.md",
+    ".wwg/reports/sdk-device-user-export-import-20260728.md",
     ".wwg/reports/skill-cleanup-review.md",
     ".wwg/reports/test-alignment-report.md",
     ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
@@ -71,6 +73,7 @@
     ".wwg/workspace/testing/manual-verification-checklist.md",
     ".wwg/workspace/testing/non-technical-regression-checklist.md",
     ".wwg/workspace/testing/regression-candidate-review.md",
+    "AGENT-DEPLOY.md",
     "AGENTS.md",
     "Agent-Meta-Prompt-Template v2.md",
     "Agent-Meta-Prompt-Template.md",
@@ -84,18 +87,30 @@
     "docs/00-product/AGENT-PROMPT-device-admin-ux-clarity-loop.md",
     "docs/00-product/AGENT-PROMPT-device-truth-matrix-week.md",
     "docs/00-product/AGENT-PROMPT-device-user-enroll-journey-truth.md",
+    "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+    "docs/00-product/AGENT-PROMPT-durable-credential-recovery-overnight-continuation.md",
+    "docs/00-product/AGENT-PROMPT-five-device-full-credential-convergence.md",
     "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
     "docs/00-product/AGENT-PROMPT-merge-device-users-speed-overnight-marathon.md",
     "docs/00-product/AGENT-PROMPT-merge-fast-by-1000-mandatory.md",
+    "docs/00-product/AGENT-PROMPT-merge-ui-truth-one-source-no-card.md",
     "docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md",
+    "docs/00-product/AGENT-PROMPT-overnight-agent-owned-blocker-fix-and-gap-burn.md",
+    "docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md",
     "docs/00-product/AGENT-PROMPT-overnight-local-dev-stack-recovery.md",
+    "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
     "docs/00-product/AGENT-PROMPT-overnight-usable-dev-and-safe-device-merge.md",
+    "docs/00-product/AGENT-PROMPT-richest-source-overwrite-and-fp-gap-burn.md",
+    "docs/00-product/AGENT-PROMPT-sdk-biometric-count-custody-recovery-loop.md",
     "docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md",
     "docs/00-product/AGENT-PROMPT-sync-logs-user-journey-truth.md",
+    "docs/00-product/AGENT-PROMPT-zero-gap-target-balanced-richest-multiagent.md",
     "docs/00-product/BRD-biometric-tap-truth-and-kiosk-resilience.md",
     "docs/00-product/BRD-device-enrollment.md",
     "docs/00-product/BRD-hikvision-copy-to-all-performance.md",
     "docs/00-product/BRD-hikvision-device-events-sync-center.md",
+    "docs/00-product/HIKVISION_CREDENTIAL_MERGE_EXECUTION_STANDARD.md",
+    "docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md",
     "docs/00-product/MERGE-USERS-SLOW-AND-FAILURES-ROOT-CAUSE.md",
     "docs/00-product/PRD-biometric-tap-truth-and-kiosk-resilience.md",
     "docs/00-product/PRD-device-enrollment.md",
@@ -111,8 +126,10 @@
     "docs/02-engineering/AGENT-META-PROMPT-live-headed-qa.md",
     "docs/03-roadmap/MVP-PHASES-device-enrollment.md",
     "docs/ARCHITECTURE.md",
+    "docs/BANDAI_HR_PAYROLL_PROCESS_DISCOVERY_QUESTIONS.md",
     "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
     "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+    "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
     "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
     "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
     "docs/DEVICE_EVENT_ACTIONS.md",
@@ -126,7 +143,10 @@
     "docs/HIKVISION_LINUX_TRIAL_20260701.md",
     "docs/HIKVISION_QUICK_GAP_TESTING.md",
     "docs/HIKVISION_RUNTIME_TRUTH.md",
+    "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+    "docs/HRIS_UNION_MERGE_CONFLICTS.md",
     "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
+    "docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md",
     "docs/OPERATIONS.md",
     "docs/PROJECT_TRUTH_AI_AGENT_CONTEXT_20260714.md",
     "docs/REMOTE_HRIS_SYNC_RECOVERY_PROMPT_20260702.md",
@@ -140,7 +160,9 @@
     "docs/ZKTECO_RUNTIME_TRUTH.md",
     "docs/agent-bootstrap-grok.md",
     "docs/architecture/onprem-vm-automation-and-observability.md",
-    "docs/dm-migration-workflow.md"
+    "docs/dm-migration-workflow.md",
+    "docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md",
+    "templates/sync-center-device-users/README.md"
   ],
   "classifiedFiles": [
     {
@@ -259,6 +281,11 @@
       "reason": "Report directory path."
     },
     {
+      "path": ".wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
       "path": ".wwg/reports/hr-manager-lan-public-dashboard-repair-20260630.md",
       "fileType": "report",
       "reason": "Report directory path."
@@ -280,6 +307,11 @@
     },
     {
       "path": ".wwg/reports/remote-hris-sync-drift-20260702.md",
+      "fileType": "report",
+      "reason": "Report directory path."
+    },
+    {
+      "path": ".wwg/reports/sdk-device-user-export-import-20260728.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -499,6 +531,11 @@
       "reason": "No deterministic classification signal matched."
     },
     {
+      "path": "AGENT-DEPLOY.md",
+      "fileType": "unknown",
+      "reason": "No deterministic classification signal matched."
+    },
+    {
       "path": "AGENTS.md",
       "fileType": "agent_instruction",
       "reason": "AGENTS.md files are active agent instructions."
@@ -564,6 +601,21 @@
       "reason": "Public documentation path."
     },
     {
+      "path": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-overnight-continuation.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/AGENT-PROMPT-five-device-full-credential-convergence.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
       "path": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
@@ -579,7 +631,22 @@
       "reason": "Public documentation path."
     },
     {
+      "path": "docs/00-product/AGENT-PROMPT-merge-ui-truth-one-source-no-card.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
       "path": "docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/AGENT-PROMPT-overnight-agent-owned-blocker-fix-and-gap-burn.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -589,7 +656,22 @@
       "reason": "Public documentation path."
     },
     {
+      "path": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
       "path": "docs/00-product/AGENT-PROMPT-overnight-usable-dev-and-safe-device-merge.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/AGENT-PROMPT-richest-source-overwrite-and-fp-gap-burn.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/AGENT-PROMPT-sdk-biometric-count-custody-recovery-loop.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -600,6 +682,11 @@
     },
     {
       "path": "docs/00-product/AGENT-PROMPT-sync-logs-user-journey-truth.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/AGENT-PROMPT-zero-gap-target-balanced-richest-multiagent.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -620,6 +707,16 @@
     },
     {
       "path": "docs/00-product/BRD-hikvision-device-events-sync-center.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/HIKVISION_CREDENTIAL_MERGE_EXECUTION_STANDARD.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -699,12 +796,22 @@
       "reason": "Public documentation path."
     },
     {
+      "path": "docs/BANDAI_HR_PAYROLL_PROCESS_DISCOVERY_QUESTIONS.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
       "path": "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
     {
       "path": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -774,7 +881,22 @@
       "reason": "Public documentation path."
     },
     {
+      "path": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
       "path": "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -847,6 +969,16 @@
       "path": "docs/dm-migration-workflow.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
+    },
+    {
+      "path": "docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md",
+      "fileType": "public_doc",
+      "reason": "Public documentation path."
+    },
+    {
+      "path": "templates/sync-center-device-users/README.md",
+      "fileType": "template",
+      "reason": "Template path or filename."
     }
   ],
   "skippedFiles": [
@@ -1130,6 +1262,15 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/hr-manager-lan-public-dashboard-repair-20260630.md",
       "fileType": "report",
@@ -1170,6 +1311,15 @@
       "affectedFile": ".wwg/reports/remote-hris-sync-drift-20260702.md",
       "fileType": "report",
       "affectedSection": "Validation, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/sdk-device-user-export-import-20260728.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
     },
     {
@@ -1599,6 +1749,33 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-overnight-continuation.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-full-credential-convergence.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -1626,7 +1803,34 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-merge-ui-truth-one-source-no-card.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-agent-owned-blocker-fix-and-gap-burn.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -1644,7 +1848,34 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-usable-dev-and-safe-device-merge.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-richest-source-overwrite-and-fp-gap-burn.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-sdk-biometric-count-custody-recovery-loop.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -1663,6 +1894,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-sync-logs-user-journey-truth.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-zero-gap-target-balanced-richest-multiagent.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -1701,6 +1941,24 @@
       "affectedFile": "docs/00-product/BRD-hikvision-device-events-sync-center.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_MERGE_EXECUTION_STANDARD.md",
+      "fileType": "public_doc",
+      "affectedSection": "Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md",
+      "fileType": "public_doc",
+      "affectedSection": "Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
     },
     {
@@ -1842,6 +2100,15 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BANDAI_HR_PAYROLL_PROCESS_DISCOVERY_QUESTIONS.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -1852,6 +2119,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -1977,7 +2253,34 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -2098,6 +2401,15 @@
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
     }
   ],
   "suggestions": [
@@ -2133,7 +2445,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 51,
+      "line": 55,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2142,7 +2454,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 53,
+      "line": 57,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2151,7 +2463,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 60,
+      "line": 64,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2160,7 +2472,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 68,
+      "line": 72,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2271,7 +2583,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 612,
+      "line": 755,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2280,7 +2592,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 613,
+      "line": 756,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2289,7 +2601,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 614,
+      "line": 757,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2298,7 +2610,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 625,
+      "line": 768,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2307,7 +2619,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 629,
+      "line": 772,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -2557,34 +2869,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 89,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 98,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 102,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 111,
+      "line": 9,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2594,6 +2879,33 @@
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
       "line": 115,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 124,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 128,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 137,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2610,7 +2922,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 34,
+      "line": 13,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2619,7 +2931,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 191,
+      "line": 69,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2628,7 +2940,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 193,
+      "line": 108,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2637,7 +2949,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 205,
+      "line": 268,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2646,7 +2958,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 226,
+      "line": 270,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2664,7 +2976,7 @@
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
       "affectedSection": "Latest Task Addendum - 2026-07-12 Hikvision Remote-Site Agent And Local Dev Tunnel Proof",
-      "line": 773,
+      "line": 931,
       "recommendedFix": "Fill the section or state 'Not applicable' with a short reason."
     },
     {
@@ -2681,7 +2993,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 21,
+      "line": 8,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2690,7 +3002,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 652,
+      "line": 159,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2699,7 +3011,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 818,
+      "line": 810,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2708,7 +3020,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 820,
+      "line": 976,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2717,7 +3029,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 824,
+      "line": 978,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2734,7 +3046,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 285,
+      "line": 310,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2743,7 +3055,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 410,
+      "line": 435,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2818,11 +3130,127 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 91,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 109,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 131,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 150,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 168,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-full-credential-convergence.md",
+      "fileType": "public_doc",
+      "line": 186,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
       "fileType": "public_doc",
       "line": 201,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-merge-ui-truth-one-source-no-card.md",
+      "fileType": "public_doc",
+      "line": 34,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 309,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 315,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 322,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 329,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 340,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2882,6 +3310,15 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-richest-source-overwrite-and-fp-gap-burn.md",
+      "fileType": "public_doc",
+      "line": 153,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md",
       "fileType": "public_doc",
       "line": 73,
@@ -2895,6 +3332,14 @@
       "fileType": "public_doc",
       "line": 25,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
     },
     {
       "severity": "suggestion",
@@ -2962,6 +3407,59 @@
       "severity": "suggestion",
       "code": "markdown-possible-vague-pronouns",
       "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 154,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 162,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 171,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 180,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 190,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
       "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
@@ -2972,7 +3470,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 130,
+      "line": 147,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2981,7 +3479,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 154,
+      "line": 171,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2990,7 +3488,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 279,
+      "line": 296,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -2999,7 +3497,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 301,
+      "line": 318,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3008,7 +3506,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 356,
+      "line": 373,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3211,6 +3709,24 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "line": 7,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "line": 21,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
       "line": 114,
@@ -3328,7 +3844,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/dm-migration-workflow.md",
       "fileType": "public_doc",
-      "line": 157,
+      "line": 327,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -3337,7 +3853,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/dm-migration-workflow.md",
       "fileType": "public_doc",
-      "line": 308,
+      "line": 495,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     }
   ],
@@ -3615,6 +4131,15 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/hr-manager-lan-public-dashboard-repair-20260630.md",
       "fileType": "report",
@@ -3655,6 +4180,15 @@
       "affectedFile": ".wwg/reports/remote-hris-sync-drift-20260702.md",
       "fileType": "report",
       "affectedSection": "Validation, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/sdk-device-user-export-import-20260728.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
     },
     {
@@ -4084,6 +4618,33 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-overnight-continuation.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-full-credential-convergence.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -4111,7 +4672,34 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-merge-ui-truth-one-source-no-card.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-agent-owned-blocker-fix-and-gap-burn.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -4129,7 +4717,34 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-usable-dev-and-safe-device-merge.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-richest-source-overwrite-and-fp-gap-burn.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-sdk-biometric-count-custody-recovery-loop.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -4148,6 +4763,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-sync-logs-user-journey-truth.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-zero-gap-target-balanced-richest-multiagent.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -4186,6 +4810,24 @@
       "affectedFile": "docs/00-product/BRD-hikvision-device-events-sync-center.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_MERGE_EXECUTION_STANDARD.md",
+      "fileType": "public_doc",
+      "affectedSection": "Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md",
+      "fileType": "public_doc",
+      "affectedSection": "Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
     },
     {
@@ -4327,6 +4969,15 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BANDAI_HR_PAYROLL_PROCESS_DISCOVERY_QUESTIONS.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -4337,6 +4988,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -4462,7 +5122,34 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -4580,6 +5267,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/dm-migration-workflow.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -4718,34 +5414,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 89,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 98,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 102,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 111,
+      "line": 9,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4755,6 +5424,33 @@
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
       "line": 115,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 124,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 128,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 137,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4780,7 +5476,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 34,
+      "line": 13,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4789,7 +5485,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 191,
+      "line": 69,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4798,7 +5494,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 193,
+      "line": 108,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4807,7 +5503,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 205,
+      "line": 268,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4816,7 +5512,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 226,
+      "line": 270,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4906,7 +5602,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 51,
+      "line": 55,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4915,7 +5611,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 53,
+      "line": 57,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4924,7 +5620,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 60,
+      "line": 64,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -4933,7 +5629,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 68,
+      "line": 72,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -5221,6 +5917,15 @@
     {
       "severity": "warning",
       "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
       "affectedFile": ".wwg/reports/hr-manager-lan-public-dashboard-repair-20260630.md",
       "fileType": "report",
@@ -5289,6 +5994,15 @@
       "affectedFile": ".wwg/reports/remote-hris-sync-drift-20260702.md",
       "fileType": "report",
       "affectedSection": "Validation, Files Changed or Files Reviewed",
+      "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
+    },
+    {
+      "severity": "warning",
+      "code": "report-contract-missing-sections",
+      "message": "Report is missing contract section(s): Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
+      "affectedFile": ".wwg/reports/sdk-device-user-export-import-20260728.md",
+      "fileType": "report",
+      "affectedSection": "Outcome, Evidence, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
     },
     {
@@ -5433,7 +6147,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 612,
+      "line": 755,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5442,7 +6156,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 613,
+      "line": 756,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5451,7 +6165,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 614,
+      "line": 757,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5460,7 +6174,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 625,
+      "line": 768,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5469,7 +6183,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 629,
+      "line": 772,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -5891,6 +6605,95 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 91,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 109,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 131,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 150,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 168,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-overnight-continuation.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-full-credential-convergence.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-full-credential-convergence.md",
+      "fileType": "public_doc",
+      "line": 186,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -5927,7 +6730,43 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-merge-ui-truth-one-source-no-card.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-merge-ui-truth-one-source-no-card.md",
+      "fileType": "public_doc",
+      "line": 34,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-agent-owned-blocker-fix-and-gap-burn.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -5940,6 +6779,60 @@
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 309,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 315,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 322,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 329,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 340,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
       "severity": "warning",
@@ -6007,6 +6900,33 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-richest-source-overwrite-and-fp-gap-burn.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-richest-source-overwrite-and-fp-gap-burn.md",
+      "fileType": "public_doc",
+      "line": 153,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-sdk-biometric-count-custody-recovery-loop.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -6026,6 +6946,15 @@
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-sync-logs-user-journey-truth.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-zero-gap-target-balanced-richest-multiagent.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -6074,6 +7003,32 @@
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_MERGE_EXECUTION_STANDARD.md",
+      "fileType": "public_doc",
+      "affectedSection": "Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md",
+      "fileType": "public_doc",
+      "affectedSection": "Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
     },
     {
       "severity": "warning",
@@ -6267,6 +7222,15 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BANDAI_HR_PAYROLL_PROCESS_DISCOVERY_QUESTIONS.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -6294,6 +7258,68 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 154,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 162,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 171,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 180,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 190,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
@@ -6313,7 +7339,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 130,
+      "line": 147,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6322,7 +7348,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 154,
+      "line": 171,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6331,7 +7357,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 279,
+      "line": 296,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6340,7 +7366,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 301,
+      "line": 318,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6349,7 +7375,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 356,
+      "line": 373,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6660,7 +7686,52 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "line": 7,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "line": 21,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
       "affectedFile": "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -6903,7 +7974,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/dm-migration-workflow.md",
       "fileType": "public_doc",
-      "line": 157,
+      "line": 327,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6912,8 +7983,17 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/dm-migration-workflow.md",
       "fileType": "public_doc",
-      "line": 308,
+      "line": 495,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "warning",
+      "code": "public-doc-contract-missing-sections",
+      "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
+      "affectedFile": "docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md",
+      "fileType": "public_doc",
+      "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
+      "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
     }
   ],
   "agentInstructionFindings": [
@@ -6940,7 +8020,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 285,
+      "line": 310,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6949,7 +8029,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 410,
+      "line": 435,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     }
   ],
@@ -6987,7 +8067,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 51,
+      "line": 55,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -6996,7 +8076,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 53,
+      "line": 57,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7005,7 +8085,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 60,
+      "line": 64,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7014,7 +8094,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/governance/recommendation-registry.md",
       "fileType": "governance",
-      "line": 68,
+      "line": 72,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7125,7 +8205,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 612,
+      "line": 755,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7134,7 +8214,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 613,
+      "line": 756,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7143,7 +8223,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 614,
+      "line": 757,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7152,7 +8232,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 625,
+      "line": 768,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7161,7 +8241,7 @@
       "message": "TODO/TBD appears without an owner, reason, or open-question context.",
       "affectedFile": ".wwg/reports/wwg-agent-handoff.md",
       "fileType": "report",
-      "line": 629,
+      "line": 772,
       "recommendedFix": "Add the owner, reason, or decision needed before resolving the placeholder."
     },
     {
@@ -7411,34 +8491,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
-      "line": 89,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 98,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 102,
-      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
-    },
-    {
-      "severity": "suggestion",
-      "code": "markdown-possible-stale-current-language",
-      "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": ".wwg/wiki/project-truth-summary.md",
-      "fileType": "context",
-      "line": 111,
+      "line": 9,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7448,6 +8501,33 @@
       "affectedFile": ".wwg/wiki/project-truth-summary.md",
       "fileType": "context",
       "line": 115,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 124,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 128,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": ".wwg/wiki/project-truth-summary.md",
+      "fileType": "context",
+      "line": 137,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7464,7 +8544,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 34,
+      "line": 13,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7473,7 +8553,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 191,
+      "line": 69,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7482,7 +8562,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 193,
+      "line": 108,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7491,7 +8571,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 205,
+      "line": 268,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7500,7 +8580,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/wiki/project-truth.md",
       "fileType": "context",
-      "line": 226,
+      "line": 270,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7518,7 +8598,7 @@
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
       "affectedSection": "Latest Task Addendum - 2026-07-12 Hikvision Remote-Site Agent And Local Dev Tunnel Proof",
-      "line": 773,
+      "line": 931,
       "recommendedFix": "Fill the section or state 'Not applicable' with a short reason."
     },
     {
@@ -7535,7 +8615,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 21,
+      "line": 8,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7544,7 +8624,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 652,
+      "line": 159,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7553,7 +8633,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 818,
+      "line": 810,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7562,7 +8642,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 820,
+      "line": 976,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7571,7 +8651,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": ".wwg/workspace/current-task.md",
       "fileType": "unknown",
-      "line": 824,
+      "line": 978,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7588,7 +8668,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 285,
+      "line": 310,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7597,7 +8677,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "AGENTS.md",
       "fileType": "agent_instruction",
-      "line": 410,
+      "line": 435,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7672,11 +8752,127 @@
     },
     {
       "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 91,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 109,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 131,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 150,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md",
+      "fileType": "public_doc",
+      "line": 168,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-full-credential-convergence.md",
+      "fileType": "public_doc",
+      "line": 186,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md",
       "fileType": "public_doc",
       "line": 201,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-merge-ui-truth-one-source-no-card.md",
+      "fileType": "public_doc",
+      "line": 34,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 309,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 315,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 322,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 329,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md",
+      "fileType": "public_doc",
+      "line": 340,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7736,6 +8932,15 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/00-product/AGENT-PROMPT-richest-source-overwrite-and-fp-gap-burn.md",
+      "fileType": "public_doc",
+      "line": 153,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md",
       "fileType": "public_doc",
       "line": 73,
@@ -7749,6 +8954,14 @@
       "fileType": "public_doc",
       "line": 25,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
     },
     {
       "severity": "suggestion",
@@ -7816,6 +9029,59 @@
       "severity": "suggestion",
       "code": "markdown-possible-vague-pronouns",
       "message": "File has many pronouns that may be ambiguous for agents.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 154,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 162,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 171,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 180,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
+      "fileType": "public_doc",
+      "line": 190,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-vague-pronouns",
+      "message": "File has many pronouns that may be ambiguous for agents.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
       "recommendedFix": "Replace ambiguous pronouns with explicit nouns where references may be unclear."
@@ -7826,7 +9092,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 130,
+      "line": 147,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7835,7 +9101,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 154,
+      "line": 171,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7844,7 +9110,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 279,
+      "line": 296,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7853,7 +9119,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 301,
+      "line": 318,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -7862,7 +9128,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
       "fileType": "public_doc",
-      "line": 356,
+      "line": 373,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -8065,6 +9331,24 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "line": 7,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
+      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "fileType": "public_doc",
+      "line": 21,
+      "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
+    },
+    {
+      "severity": "suggestion",
+      "code": "markdown-possible-stale-current-language",
+      "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
       "fileType": "public_doc",
       "line": 114,
@@ -8182,7 +9466,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/dm-migration-workflow.md",
       "fileType": "public_doc",
-      "line": 157,
+      "line": 327,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     },
     {
@@ -8191,7 +9475,7 @@
       "message": "Stable or active file contains phase/pass/temporary language.",
       "affectedFile": "docs/dm-migration-workflow.md",
       "fileType": "public_doc",
-      "line": 308,
+      "line": 495,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
     }
   ],
@@ -8278,23 +9562,23 @@
   ],
   "metadataPolicyApplied": "Option C: Skill Registry metadata is canonical; skill files may include lightweight metadata when beneficial, and package-side skills do not require frontmatter.",
   "summary": {
-    "checkedFileCount": 141,
+    "checkedFileCount": 163,
     "skippedFileCount": 1,
     "errorCount": 0,
-    "warningCount": 138,
-    "suggestionCount": 139,
+    "warningCount": 158,
+    "suggestionCount": 162,
     "classificationCounts": {
       "context": 11,
       "skill": 0,
       "governance": 8,
-      "report": 48,
-      "public_doc": 64,
+      "report": 50,
+      "public_doc": 82,
       "agent_instruction": 1,
       "changelog_governance": 0,
       "changelog_or_release_note": 0,
       "design_contract": 0,
-      "template": 1,
-      "unknown": 8
+      "template": 2,
+      "unknown": 9
     }
   },
   "validationStatus": "warn",

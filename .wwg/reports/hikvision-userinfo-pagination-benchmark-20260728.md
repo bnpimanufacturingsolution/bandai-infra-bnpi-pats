@@ -55,3 +55,15 @@ capture and physical writes remain serialized per device.
 - Targeted ESLint on client, controller, count probe, and benchmark: clean.
 - Hikvision tunnel plus biometric contracts: 51 passing.
 - No biometric bytes or device credentials are written to benchmark evidence.
+
+## WWG Truth Synchronization
+
+- Task mode: performance diagnosis and read-only inventory regression repair.
+- New truth detected: YES.
+- Wiki updated: NO; the adopted runtime setting and evidence are captured in workspace/handoff rather than changing durable product semantics.
+- Workspace updated: YES.
+- Governance review completed: YES; no new recommendation was identified.
+- Drift status: `CONFIRMED_WITH_SERIAL_FALLBACK`.
+- Canonical files changed: Hikvision client/controller pagination path, focused contracts, current task, handoff, and this report.
+- Implementation discoveries synced: a parallel result is valid only when rows and unique IDs both equal `totalMatches`; Main E requires discard-and-serialized fallback.
+- Remaining stale context: earlier sequential timing remains historical baseline only.
