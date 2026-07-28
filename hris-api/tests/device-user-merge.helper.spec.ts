@@ -2055,6 +2055,31 @@ describe("device user union merge", () => {
 		expect(buildProfileOverlayWrites(kept.users)).to.have.length(0);
 	});
 
+	it("auto-resolve picks later dates and longer displayName for profile defaults", () => {
+		const { buildRichestMergeChoices } = require("../helper/device-user-merge.helper") as typeof import("../helper/device-user-merge.helper");
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", {
+					displayName: "ernest",
+					validFrom: "2026-01-01T00:00:00.000Z",
+					validTo: "2036-07-08T00:00:00.000Z",
+				}),
+				record("b", {
+					displayName: "ernest T571774",
+					validFrom: "2026-07-09T00:00:00.000Z",
+					validTo: "2036-12-31T00:00:00.000Z",
+				}),
+			],
+		});
+		const choices = buildRichestMergeChoices(plan);
+		const row = choices[plan.users[0].key] || {};
+		// Longer name on B, later dates on B → all B.
+		expect(row.displayName).to.equal("B");
+		expect(row.validFrom).to.equal("B");
+		expect(row.validTo).to.equal("B");
+	});
+
 	it("auto-resolve burns profile decision residual (displayName/validFrom/validTo) without inventing card", () => {
 		// Agent-owned path: empty choices + autoResolve → A/B for profile fields → overlays > 0.
 		// Five-device fleets must still pick A or B for profile (not KEEP because of a third peer).

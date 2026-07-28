@@ -3080,6 +3080,20 @@ export function DeviceEnrollmentPanel({
 	};
 	const buildSdkMergeRichestChoices = (plan: DeviceUserMergePlanResponse["plan"]) => {
 		const choices: Record<string, Record<string, "A" | "B" | "KEEP">> = {};
+		const dateMs = (value: unknown) => {
+			if (value == null || value === "") return 0;
+			const ms = Date.parse(String(value));
+			return Number.isFinite(ms) ? ms : 0;
+		};
+		const profileFields = new Set([
+			"employeeId",
+			"displayName",
+			"status",
+			"validFrom",
+			"validTo",
+			"doorRight",
+			"accessPlan",
+		]);
 		for (const user of plan.users) {
 			const richestRecord = [...user.records].sort(
 				(left: any, right: any) =>
@@ -3087,6 +3101,38 @@ export function DeviceEnrollmentPanel({
 			)[0];
 			for (const conflict of user.conflicts) {
 				const richestDeviceId = String(richestRecord?.deviceId || "");
+				const field = String(conflict.field || "");
+				// Profile defaults: dates → later/most recent; names → longer string; else richest.
+				if (profileFields.has(field)) {
+					let choice: "A" | "B" = "A";
+					if (field === "validFrom" || field === "validTo") {
+						const msA = dateMs(conflict.deviceA?.value);
+						const msB = dateMs(conflict.deviceB?.value);
+						choice = msB > msA ? "B" : msA > msB ? "A" : "A";
+					} else if (field === "displayName") {
+						const lenA = String(conflict.deviceA?.value ?? "").trim().length;
+						const lenB = String(conflict.deviceB?.value ?? "").trim().length;
+						choice =
+							lenB > lenA
+								? "B"
+								: lenA > lenB
+									? "A"
+									: conflict.deviceA.id === richestDeviceId
+										? "A"
+										: conflict.deviceB.id === richestDeviceId
+											? "B"
+											: "A";
+					} else {
+						choice =
+							conflict.deviceA.id === richestDeviceId
+								? "A"
+								: conflict.deviceB.id === richestDeviceId
+									? "B"
+									: "A";
+					}
+					choices[user.key] = { ...(choices[user.key] || {}), [conflict.field]: choice };
+					continue;
+				}
 				const rawEvidencePresent =
 					conflict.field === "fingerprint"
 						? richestRecord?.biometricEvidence?.fingerprint?.status ===
@@ -3106,6 +3152,86 @@ export function DeviceEnrollmentPanel({
 		}
 		return choices;
 	};
+
+	/** Dry-run preview of profile A/B overlays for Resolve modal (no device writes). */
+	const sdkMergeProfileOverlayPreview = useMemo(() => {
+		const plan = sdkMergeState.data?.plan;
+		if (!plan) return [] as Array<{
+			userKey: string;
+			vendorUserId: string;
+			personLabel: string;
+			field: string;
+			fromValue: string;
+			toValue: string;
+			targetDeviceName: string;
+			impact: "high" | "medium" | "low";
+		}>;
+		const profileFields = new Set([
+			"employeeId",
+			"displayName",
+			"status",
+			"validFrom",
+			"validTo",
+			"doorRight",
+			"accessPlan",
+		]);
+		const rows: Array<{
+			userKey: string;
+			vendorUserId: string;
+			personLabel: string;
+			field: string;
+			fromValue: string;
+			toValue: string;
+			targetDeviceName: string;
+			impact: "high" | "medium" | "low";
+		}> = [];
+		for (const user of plan.users) {
+			if (!selectedSdkMergeUserKeys[user.key]) continue;
+			const vendorUserId = mergeVendorUserId(user);
+			const personLabel = mergePersonLabel(user);
+			for (const conflict of user.conflicts || []) {
+				const field = String(conflict.field || "");
+				if (!profileFields.has(field)) continue;
+				const choice =
+					sdkMergeState.applyAll ||
+					sdkMergeState.choices[user.key]?.[conflict.field as DeviceUserMergeField];
+				if (choice !== "A" && choice !== "B") continue;
+				const selected =
+					choice === "B" ? conflict.deviceB : conflict.deviceA;
+				const toValue = mergeFieldValueLabel(selected?.value);
+				for (const record of user.records || []) {
+					const current = (record as any)[field];
+					const currentLabel = mergeFieldValueLabel(current);
+					if (String(currentLabel) === String(toValue)) continue;
+					const impact: "high" | "medium" | "low" =
+						field === "displayName"
+							? "high"
+							: field === "validFrom" || field === "validTo"
+								? "medium"
+								: "low";
+					rows.push({
+						userKey: user.key,
+						vendorUserId,
+						personLabel,
+						field,
+						fromValue: String(currentLabel ?? "—"),
+						toValue: String(toValue ?? "—"),
+						targetDeviceName: mergeDeviceName(plan.devices, record.deviceId),
+						impact,
+					});
+				}
+			}
+		}
+		return rows.sort((a, b) => {
+			const rank = { high: 0, medium: 1, low: 2 };
+			return rank[a.impact] - rank[b.impact] || a.vendorUserId.localeCompare(b.vendorUserId);
+		});
+	}, [
+		sdkMergeState.data?.plan,
+		sdkMergeState.choices,
+		sdkMergeState.applyAll,
+		selectedSdkMergeUserKeys,
+	]);
 	const selectRecommendedCredentialWrites = () => {
 		setSelectedSdkMergeCredentialWriteIds(
 			Object.fromEntries(sdkMergeSelectableCredentialWrites.map((write) => [write.id, true])),
@@ -3165,7 +3291,7 @@ export function DeviceEnrollmentPanel({
 			...current,
 			applyAll: undefined,
 			choices,
-			message: `Auto-resolved ${n} decision(s) from richest sources (default). You can still change A/B/KEEP manually before apply.`,
+			message: `Auto-resolved ${n} decision(s): longer names · later/most recent dates · richest biometrics. Open Review selected merge for dry-run hits (names highlighted).`,
 		}));
 		setSdkMergeFilter("decision");
 	};
@@ -10370,7 +10496,7 @@ export function DeviceEnrollmentPanel({
 					}
 				}}
 				title="Review selected merge"
-				description="Confirm selected unique IDs, source devices, peer copy attempts, and biometric evidence before HRIS starts the job."
+				description="Dry-run preview first: who is affected and what changes. Then confirm to start the job."
 				className="max-w-5xl"
 				showCloseButton={!startHikvisionSdkUserMergeJobMutation.isPending}
 				closeOnBackdropClick={!startHikvisionSdkUserMergeJobMutation.isPending}>
@@ -10379,8 +10505,12 @@ export function DeviceEnrollmentPanel({
 						{[
 							["Selected unique IDs", sdkMergeSelectedUniqueCount],
 							["Peer copy attempts", sdkMergeSelectedPotentialWriteCount],
-							["Fingerprint gaps", sdkMergeSelectedFingerprintGapCount],
-							["Face gaps", sdkMergeSelectedFaceGapCount],
+							["Profile field hits", sdkMergeProfileOverlayPreview.length],
+							[
+								"High impact (names)",
+								sdkMergeProfileOverlayPreview.filter((r) => r.impact === "high")
+									.length,
+							],
 							[
 								"Conflicts resolved",
 								`${sdkMergeSelectedResolvedCount}/${sdkMergeSelectedConflictCount}`,
@@ -10388,7 +10518,11 @@ export function DeviceEnrollmentPanel({
 						].map(([label, value]) => (
 							<div
 								key={String(label)}
-								className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+								className={`rounded-md border px-3 py-2 ${
+									String(label).startsWith("High impact")
+										? "border-orange-300 bg-orange-50"
+										: "border-slate-200 bg-slate-50"
+								}`}>
 								<p className="text-[11px] font-medium uppercase text-slate-500">
 									{label}
 								</p>
@@ -10398,13 +10532,82 @@ export function DeviceEnrollmentPanel({
 							</div>
 						))}
 					</div>
+					{sdkMergeProfileOverlayPreview.length > 0 ? (
+						<div className="overflow-hidden rounded-md border border-orange-200 bg-orange-50/40">
+							<div className="border-b border-orange-200 bg-orange-50 px-3 py-2">
+								<p className="text-sm font-semibold text-orange-950">
+									Dry-run: profile changes that will apply (HRIS DeviceUser)
+								</p>
+								<p className="mt-0.5 text-xs text-orange-900/80">
+									Default: longer name · later/most recent dates. Highlighted rows =
+									name changes (highest operator care). Card/FP/face are not in this
+									list.
+								</p>
+							</div>
+							<div className="max-h-52 overflow-auto">
+								<div className="grid grid-cols-[64px_minmax(100px,1fr)_88px_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(100px,0.9fr)] gap-2 border-b border-orange-100 bg-white/80 px-3 py-1.5 text-[11px] font-medium uppercase text-slate-500">
+									<span>Impact</span>
+									<span>Person</span>
+									<span>Field</span>
+									<span>From</span>
+									<span>To (chosen)</span>
+									<span>Device row</span>
+								</div>
+								{sdkMergeProfileOverlayPreview.map((row, index) => (
+									<div
+										key={`${row.userKey}:${row.field}:${row.targetDeviceName}:${index}`}
+										className={`grid grid-cols-[64px_minmax(100px,1fr)_88px_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(100px,0.9fr)] gap-2 border-b border-slate-100 px-3 py-2 text-xs last:border-b-0 ${
+											row.impact === "high"
+												? "bg-orange-100/80"
+												: row.impact === "medium"
+													? "bg-amber-50/60"
+													: "bg-white"
+										}`}>
+										<span
+											className={`font-semibold uppercase ${
+												row.impact === "high"
+													? "text-orange-800"
+													: row.impact === "medium"
+														? "text-amber-800"
+														: "text-slate-600"
+											}`}>
+											{row.impact}
+										</span>
+										<span className="min-w-0 truncate font-medium text-slate-950">
+											{row.vendorUserId} · {row.personLabel}
+										</span>
+										<span className="text-slate-700">{row.field}</span>
+										<span className="min-w-0 truncate text-slate-600">
+											{row.fromValue}
+										</span>
+										<span className="min-w-0 truncate font-semibold text-slate-950">
+											{row.toValue}
+										</span>
+										<span className="min-w-0 truncate text-slate-600">
+											{row.targetDeviceName}
+										</span>
+									</div>
+								))}
+							</div>
+						</div>
+					) : (
+						<div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+							No profile field overlays in this scope (choices may still be KEEP, or
+							only peer-copy / credential work remains). Use{" "}
+							<span className="font-semibold">Resolve & recover</span> / auto-resolve
+							to pick names + latest dates first.
+						</div>
+					)}
 					<div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
-						<p className="font-semibold">This starts a real device-write job.</p>
+						<p className="font-semibold">
+							{sdkMergeSelectedPotentialWriteCount > 0
+								? "This also starts physical peer-copy writes where people are missing on a device."
+								: "Profile-only scope: updates HRIS DeviceUser rows from your A/B choices (no missing-person peer copy)."}
+						</p>
 						<p className="mt-1 text-xs leading-5 text-amber-900">
-							For each unique ID, HRIS uses the shown physical source device and
-							copies that user to the shown peer target devices. Fingerprint and face
-							columns show source evidence and current gaps, not template-write
-							counts; missing raw blobs are not fabricated.
+							Fingerprint/face/card gaps stay on the credential recovery path — this
+							modal does not invent biometric bytes. Panel name/date may still differ
+							until a device profile writer lands; HRIS rows follow the dry-run table.
 						</p>
 					</div>
 					<div className="grid gap-3 lg:grid-cols-2">

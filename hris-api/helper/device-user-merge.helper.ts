@@ -2127,9 +2127,20 @@ export const serializeDeviceUserMergePlanForReview = (plan: any) => ({
 	errors: plan.errors || [],
 });
 
+/** Millis for date-like conflict values; invalid → 0. */
+const dateValueMs = (value: unknown): number => {
+	if (value == null || value === "") return 0;
+	if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : 0;
+	const ms = Date.parse(String(value));
+	return Number.isFinite(ms) ? ms : 0;
+};
+
 /**
- * Agent-owned default for "Needs decision": pick richest custody device per
- * conflict field. Operators may still override via explicit choices / applyAll.
+ * Agent-owned default for "Needs decision":
+ * - validFrom / validTo → pick the **later (more recent)** date between A/B
+ * - displayName → longer/more complete name, then richest custody peer
+ * - other profile fields → richest custody between A/B
+ * Operators may still override via explicit choices / applyAll.
  */
 export const buildRichestMergeChoices = (
 	plan: ReturnType<typeof buildDeviceUserMergePlan> | { users?: any[] },
@@ -2155,6 +2166,39 @@ export const buildRichestMergeChoices = (
 		);
 		return rawFp * 6 + Number(rawFace) * 4 + fp * 2 + face * 2 + card * 3;
 	};
+	const pickProfileAb = (params: {
+		field: string;
+		valueA: unknown;
+		valueB: unknown;
+		recordA: any;
+		recordB: any;
+		deviceAId: string;
+		deviceBId: string;
+		richestDeviceId: string;
+	}): MergeChoice => {
+		const field = params.field;
+		// Dates: operator default = latest / most recent calendar value (not bio richness).
+		if (field === "validFrom" || field === "validTo") {
+			const msA = dateValueMs(params.valueA);
+			const msB = dateValueMs(params.valueB);
+			if (msB > msA) return "B";
+			if (msA > msB) return "A";
+		}
+		// Names: prefer the longer / more complete display string (e.g. "ernest T571774").
+		if (field === "displayName") {
+			const lenA = String(params.valueA ?? "").trim().length;
+			const lenB = String(params.valueB ?? "").trim().length;
+			if (lenB > lenA) return "B";
+			if (lenA > lenB) return "A";
+		}
+		const scoreA = richness(params.recordA);
+		const scoreB = richness(params.recordB);
+		if (scoreB > scoreA) return "B";
+		if (scoreA > scoreB) return "A";
+		if (params.deviceAId === params.richestDeviceId) return "A";
+		if (params.deviceBId === params.richestDeviceId) return "B";
+		return params.deviceAId.localeCompare(params.deviceBId) <= 0 ? "A" : "B";
+	};
 	for (const user of plan.users || []) {
 		const records = Array.isArray(user.records) ? user.records : [];
 		const richest = [...records].sort(
@@ -2175,22 +2219,16 @@ export const buildRichestMergeChoices = (
 			// so decision residual burns via DeviceUser overlay. Never KEEP just because a
 			// third richer peer exists outside the two-sided conflict pair.
 			if (isDeviceUserMergeProfileOverlayField(String(field || ""))) {
-				const scoreA = richness(recordA);
-				const scoreB = richness(recordB);
-				const choice: MergeChoice =
-					scoreB > scoreA
-						? "B"
-						: scoreA > scoreB
-							? "A"
-							: text(conflict.deviceA?.id) === richestDeviceId
-								? "A"
-								: text(conflict.deviceB?.id) === richestDeviceId
-									? "B"
-									: text(conflict.deviceA?.id).localeCompare(
-												text(conflict.deviceB?.id),
-										  ) <= 0
-										? "A"
-										: "B";
+				const choice = pickProfileAb({
+					field: String(field || ""),
+					valueA: conflict.deviceA?.value,
+					valueB: conflict.deviceB?.value,
+					recordA,
+					recordB,
+					deviceAId: text(conflict.deviceA?.id),
+					deviceBId: text(conflict.deviceB?.id),
+					richestDeviceId,
+				});
 				choices[user.key] = { ...(choices[user.key] || {}), [field]: choice };
 				continue;
 			}
