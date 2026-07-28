@@ -21,6 +21,43 @@ export type NormalizedHikvisionEvent = {
 	deviceClockSkewSeconds?: number;
 };
 
+export type HikvisionEvidenceSource =
+	| "SDK_CALLBACK"
+	| "ISAPI_LOGSEARCH"
+	| "STATE_TRANSITION_INFERRED";
+
+
+export type HikvisionLogSearchRow = {
+	index: number;
+	metaId?: string;
+	time?: string;
+	majorType?: string;
+	minorType?: string;
+	channelNo?: string;
+	localOrRemote?: string;
+	operator?: string;
+	remoteHost?: string;
+	parameter?: string;
+	information?: string;
+	employeeNo?: string;
+	rawXml: string;
+	raw: Record<string, string>;
+};
+
+export type NormalizedHikvisionEvidenceEvent = NormalizedHikvisionEvent & {
+	evidenceSource: HikvisionEvidenceSource;
+	directDeviceEvidence: boolean;
+	eventCategory: string;
+	eventAction: string;
+	eventLabel: string;
+	eventConfidence: "PROVEN" | "SUPPORTED" | "INFERRED" | "UNKNOWN";
+	rawEvidence?: unknown;
+};
+
+const MANILA_OFFSET = "+08:00";
+const FUTURE_SKEW_TOLERANCE_MS = 60 * 1000;
+
+
 const MANILA_OFFSET = "+08:00";
 const FUTURE_SKEW_TOLERANCE_MS = 60 * 1000;
 const MAX_AUTO_ADJUST_SKEW_MS = 30 * 60 * 1000;
@@ -197,6 +234,7 @@ export const normalizeHikvisionFutureSkewedEventTime = (
 	rawTime: unknown,
 	referenceDate = new Date(),
 	knownSkewSeconds?: number | null,
+	_options?: { allowStoredSkew?: boolean; allowAutoAdjust?: boolean },
 ) => {
 	const parsed = parseHikvisionEventTime(rawTime);
 	const knownSkewMs =
@@ -358,6 +396,505 @@ export const buildHikvisionDeviceEventDedupeKey = (input: {
 
 	return createHash("sha256").update(basis).digest("hex");
 };
+
+export const buildHikvisionLogSearchXml = (params: {
+	searchId: string;
+	startTime: string;
+	endTime: string;
+	maxResults: number;
+	searchResultPosition: number;
+	metaId?: string;
+}) => `<?xml version="1.0" encoding="utf-8"?>
+<CMSearchDescription version="2.0" xmlns="http://www.hikvision.com/ver20/XMLSchema">
+<searchID>${escapeXml(params.searchId)}</searchID>
+<metaId>${escapeXml(params.metaId || "log.std-cgi.com")}</metaId>
+<timeSpanList>
+<timeSpan>
+<startTime>${escapeXml(params.startTime)}</startTime>
+<endTime>${escapeXml(params.endTime)}</endTime>
+</timeSpan>
+</timeSpanList>
+<maxResults>${Math.max(1, Math.floor(Number(params.maxResults) || 20))}</maxResults>
+<searchResultPostion>${Math.max(0, Math.floor(Number(params.searchResultPosition) || 0))}</searchResultPostion>
+</CMSearchDescription>`;
+
+export const paginateHikvisionLogSearch = async (params: {
+	startPosition?: number;
+	pageSize?: number;
+	maxRows?: number;
+	fetchPage: (searchResultPosition: number, maxResults: number) => Promise<string>;
+}) => {
+	const pageSize = Math.max(1, Math.min(Math.floor(Number(params.pageSize) || 50), 200));
+	const maxRows = Math.max(1, Math.min(Math.floor(Number(params.maxRows) || 1000), 10000));
+	let position = Math.max(0, Math.floor(Number(params.startPosition) || 0));
+	const rows: HikvisionLogSearchRow[] = [];
+	const pages: Array<{
+		searchResultPosition: number;
+		maxResults: number;
+		responseStatus?: string;
+		totalMatches?: number;
+		rowCount: number;
+		rawXml: string;
+	}> = [];
+
+	while (rows.length < maxRows) {
+		const requested = Math.min(pageSize, maxRows - rows.length);
+		const rawXml = await params.fetchPage(position, requested);
+		const parsed = parseHikvisionLogSearchResponse(rawXml);
+		pages.push({
+			searchResultPosition: position,
+			maxResults: requested,
+			responseStatus: parsed.responseStatus,
+			totalMatches: parsed.totalMatches,
+			rowCount: parsed.rows.length,
+			rawXml,
+		});
+		rows.push(...parsed.rows.map((row, index) => ({ ...row, index: position + index })));
+		if (!parsed.rows.length) break;
+		position += parsed.rows.length;
+		if (parsed.totalMatches !== undefined && position >= parsed.totalMatches) break;
+		if (String(parsed.responseStatus || "").toUpperCase() !== "MORE") break;
+	}
+
+	return { rows, pages, nextSearchResultPosition: position };
+};
+
+export const parseHikvisionLogSearchResponse = (rawXml: string): {
+	rows: HikvisionLogSearchRow[];
+	totalMatches?: number;
+	responseStatus?: string;
+	rawXml: string;
+} => {
+	const xml = String(rawXml || "");
+	const responseStatus =
+		getFirstXmlTagValue(xml, "responseStatusStrg", "responseStatus", "statusString") ||
+		undefined;
+	const totalMatchesRaw = getFirstXmlTagValue(xml, "totalMatches", "numOfMatches");
+	const totalMatches = Number(totalMatchesRaw);
+	const rowXmlBlocks =
+		getXmlTagValues(xml, "matchElement").length > 0
+			? getXmlTagValues(xml, "matchElement")
+			: getXmlTagValues(xml, "searchMatchItem").length > 0
+				? getXmlTagValues(xml, "searchMatchItem")
+				: getXmlTagValues(xml, "logInfo");
+	const rows = rowXmlBlocks.map((rowXml, index) => {
+		const metaId = getFirstXmlTagValue(rowXml, "metaId");
+		const metaParts = metaId.split("/").filter(Boolean);
+		const additionInformation = unwrapCdata(
+			decodeXmlEntities(getXmlTagValue(rowXml, "additionInformation") || ""),
+		);
+		const additionJson = tryParseJson(additionInformation);
+		const logAddInfo = additionJson?.LogAddInfo || additionJson?.logAddInfo || {};
+		const raw = {
+			metaId,
+			time: getFirstXmlTagValue(rowXml, "time", "dateTime", "logTime", "eventTime", "StartDateTime"),
+			majorType:
+				getFirstXmlTagValue(rowXml, "majorType", "major", "majorTypeString") ||
+				metaParts[metaParts.length - 2] ||
+				"",
+			minorType:
+				getFirstXmlTagValue(rowXml, "minorType", "minor", "minorTypeString") ||
+				metaParts[metaParts.length - 1] ||
+				"",
+			channelNo: getFirstXmlTagValue(rowXml, "channelNo", "channel"),
+			localOrRemote: getFirstXmlTagValue(rowXml, "localOrRemote", "localRemote", "operatorType"),
+			operator: getFirstXmlTagValue(rowXml, "userName", "operator", "operatorName"),
+			remoteHost: getFirstXmlTagValue(rowXml, "remoteHost", "remoteHostAddr", "ipAddress", "deviceIP"),
+			parameter:
+				getFirstXmlTagValue(rowXml, "parameter", "param", "paraType", "localID") ||
+				"",
+			information:
+				getFirstXmlTagValue(rowXml, "information", "info", "description") ||
+				additionInformation,
+			employeeNo: getFirstXmlTagValue(
+				rowXml,
+				"employeeNo",
+				"employeeNoString",
+				"employeeID",
+				"userID",
+				"userId",
+				"cardNo",
+			) || String(logAddInfo.EmployeeNo || logAddInfo.employeeNo || "").trim(),
+		};
+		const employeeNoFromText =
+			raw.employeeNo ||
+			(raw.information.match(/\b(?:employee|user|person)\s*(?:no|id|number)?\s*[:=]?\s*([A-Za-z0-9_-]+)/i)?.[1] ||
+				raw.parameter.match(/\b(?:employee|user|person)\s*(?:no|id|number)?\s*[:=]?\s*([A-Za-z0-9_-]+)/i)?.[1] ||
+				"");
+		return {
+			index,
+			metaId: raw.metaId || undefined,
+			time: raw.time || undefined,
+			majorType: raw.majorType || undefined,
+			minorType: raw.minorType || undefined,
+			channelNo: raw.channelNo || undefined,
+			localOrRemote: raw.localOrRemote || undefined,
+			operator: raw.operator || undefined,
+			remoteHost: raw.remoteHost || undefined,
+			parameter: raw.parameter || undefined,
+			information: raw.information || undefined,
+			employeeNo: employeeNoFromText || undefined,
+			rawXml: rowXml,
+			raw,
+		};
+	});
+	return {
+		rows,
+		totalMatches: Number.isFinite(totalMatches) ? totalMatches : undefined,
+		responseStatus,
+		rawXml: xml,
+	};
+};
+
+export const classifyHikvisionLogSearchRow = (
+	row: Pick<HikvisionLogSearchRow, "metaId" | "majorType" | "minorType" | "information" | "parameter">,
+) => {
+	const metaId = normalizeVendorText(row.metaId).replace(/\s+/g, "");
+	const major = normalizeVendorText(row.majorType);
+	const minor = normalizeVendorText(row.minorType);
+	const information = normalizeVendorText(row.information);
+	const parameter = normalizeVendorText(row.parameter);
+	const haystack = [minor, information, parameter].filter(Boolean).join(" | ");
+	const vendorAction = String(row.metaId || row.minorType || "")
+		.split("/")
+		.pop()
+		?.trim()
+		.toLowerCase();
+
+	if (vendorAction === "addfpbyemployeeno" || vendorAction === "addfpbycard") {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventLabel: "Fingerprint enrolled",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (vendorAction === "adduserinfo") {
+		return {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventLabel: "Device user created",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (vendorAction === "clearuserinfo") {
+		return {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_DELETED",
+			eventLabel: "Device user deleted",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (vendorAction === "addcard") {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_ENROLLED",
+			eventLabel: "Card enrolled",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (vendorAction === "localfacedataappend") {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_ENROLLED",
+			eventLabel: "Face enrolled",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (vendorAction === "localfacedatadelete") {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_DELETED",
+			eventLabel: "Face deleted",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (vendorAction === "localfacedatamodify" || vendorAction === "localfacedataupdate") {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_UPDATED",
+			eventLabel: "Face updated",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (vendorAction === "modifyuserinfo" || vendorAction === "moduserinfo") {
+		return {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_UPDATED",
+			eventLabel: "Device user updated",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+
+	if (/\bfinger(print)?\b/.test(haystack) && /\b(add|added|enroll|enrolled|register|registered)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventLabel: "Fingerprint enrolled",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\bfinger(print)?\b/.test(haystack) && /\b(mod|modify|modified|update|updated)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_UPDATED",
+			eventLabel: "Fingerprint updated",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\bfinger(print)?\b/.test(haystack) && /\b(del|delete|deleted|clear|cleared|remove|removed)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_DELETED",
+			eventLabel: "Fingerprint deleted",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\bface\b/.test(haystack) && /\b(add|added|append|enroll|enrolled|register|registered)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_ENROLLED",
+			eventLabel: "Face enrolled",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\bface\b/.test(haystack) && /\b(mod|modify|modified|update|updated)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_UPDATED",
+			eventLabel: "Face updated",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\bface\b/.test(haystack) && /\b(del|delete|deleted|clear|cleared|remove|removed)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_DELETED",
+			eventLabel: "Face deleted",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\bcard\b/.test(haystack) && /\b(add|added|enroll|enrolled|register|registered)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_ENROLLED",
+			eventLabel: "Card enrolled",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\bcard\b/.test(haystack) && /\b(mod|modify|modified|update|updated)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_UPDATED",
+			eventLabel: "Card updated",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\bcard\b/.test(haystack) && /\b(del|delete|deleted|clear|cleared|remove|removed)\b/.test(haystack)) {
+		return {
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_DELETED",
+			eventLabel: "Card deleted",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (
+		/\b(add|added|create|created|register|registered)\b/.test(haystack) &&
+		/\b(person|user|employee)\b/.test(haystack)
+	) {
+		return {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventLabel: "Device user created",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\b(mod|modify|modified|update|updated)\b/.test(haystack) && /\b(person|user|employee)\b/.test(haystack)) {
+		return {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_UPDATED",
+			eventLabel: "Device user updated",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (/\b(del|delete|deleted|clear|cleared|remove|removed)\b/.test(haystack) && /\b(person|user|employee)\b/.test(haystack)) {
+		return {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_DELETED",
+			eventLabel: "Device user deleted",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (major || minor || metaId) {
+		return {
+			eventCategory: "UNKNOWN_VENDOR",
+			eventAction: "UNKNOWN",
+			eventLabel: row.minorType || row.information || "Hikvision log event",
+			eventConfidence: "UNKNOWN",
+		} as const;
+	}
+	return null;
+};
+
+export const normalizeHikvisionLogSearchRow = (
+	row: HikvisionLogSearchRow,
+	device?: { id?: string; address?: string | null; name?: string | null },
+): NormalizedHikvisionEvidenceEvent => {
+	const taxonomy =
+		classifyHikvisionLogSearchRow(row) || ({
+			eventCategory: "UNKNOWN_VENDOR",
+			eventAction: "UNKNOWN",
+			eventLabel: "Hikvision log event",
+			eventConfidence: "UNKNOWN",
+		} as const);
+	return {
+		deviceId: device?.id,
+		source: "HIKVISION_CALLBACK",
+		eventType: "ISAPI_LOGSEARCH",
+		major: row.majorType,
+		minor: row.minorType,
+		actionCode: row.minorType,
+		time: row.time,
+		employeeNo: row.employeeNo,
+		deviceIP: device?.address || row.remoteHost,
+		evidenceSource: "ISAPI_LOGSEARCH",
+		directDeviceEvidence: true,
+		...taxonomy,
+		rawEvidence: row,
+	};
+};
+
+const classifyHikvisionSdkEvidence = (event: NormalizedHikvisionEvent) => {
+	const actionCode = String(event.actionCode || "").trim().toUpperCase();
+	const major = String(event.major ?? "").trim();
+	const minor = String(event.minor ?? "").trim();
+	if (isHikvisionAttendancePunchEvent(event)) {
+		return {
+			eventCategory: "ATTENDANCE",
+			eventAction: "TAP",
+			eventLabel: "Attendance tap",
+			eventConfidence: "PROVEN",
+		} as const;
+	}
+	if (
+		actionCode === "MINOR_FINGERPRINT_COMPARE_FAIL" ||
+		actionCode === "MINOR_CARD_FINGERPRINT_VERIFY_FAIL" ||
+		actionCode === "MINOR_FINGERPRINT_INEXISTENCE" ||
+		String((event as any).eventKind || "").trim() === "attendance_fingerprint_failed"
+	) {
+		return {
+			eventCategory: "ATTENDANCE",
+			eventAction: "TAP_REJECTED",
+			eventLabel: "Rejected tap",
+			eventConfidence: "SUPPORTED",
+		} as const;
+	}
+	const mappings: Record<
+		string,
+		Pick<NormalizedHikvisionEvidenceEvent, "eventCategory" | "eventAction" | "eventLabel">
+	> = {
+		MINOR_ADD_FINGER_BY_CARD: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventLabel: "Fingerprint enrolled",
+		},
+		MINOR_ADD_FINGER_BY_EMPLOYEE_NO: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_ENROLLED",
+			eventLabel: "Fingerprint enrolled",
+		},
+		MINOR_MOD_FINGER_BY_CARD: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_UPDATED",
+			eventLabel: "Fingerprint updated",
+		},
+		MINOR_MOD_FINGER_BY_EMPLOYEE_NO: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_UPDATED",
+			eventLabel: "Fingerprint updated",
+		},
+		MINOR_DEL_FINGER: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FINGERPRINT_DELETED",
+			eventLabel: "Fingerprint deleted",
+		},
+		MINOR_ADD_FACE: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_ENROLLED",
+			eventLabel: "Face enrolled",
+		},
+		MINOR_FACE_DATA_APPEND: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_ENROLLED",
+			eventLabel: "Face enrolled",
+		},
+		MINOR_MOD_FACE: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_UPDATED",
+			eventLabel: "Face updated",
+		},
+		MINOR_FACE_DATA_MODIFY: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_UPDATED",
+			eventLabel: "Face updated",
+		},
+		MINOR_DEL_FACE: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_DELETED",
+			eventLabel: "Face deleted",
+		},
+		MINOR_FACE_DATA_DELETE: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "FACE_DELETED",
+			eventLabel: "Face deleted",
+		},
+		MINOR_ADD_CARD: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_ENROLLED",
+			eventLabel: "Card enrolled",
+		},
+		MINOR_ADD_CARD_INFO: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_ENROLLED",
+			eventLabel: "Card enrolled",
+		},
+		MINOR_MOD_CARD: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_UPDATED",
+			eventLabel: "Card updated",
+		},
+		MINOR_DELETE_CARD_INFO: {
+			eventCategory: "ENROLLMENT",
+			eventAction: "CARD_DELETED",
+			eventLabel: "Card deleted",
+		},
+		MINOR_ADD_USER_INFO: {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_CREATED",
+			eventLabel: "Device user created",
+		},
+		MINOR_MODIFY_USER_INFO: {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_UPDATED",
+			eventLabel: "Device user updated",
+		},
+		MINOR_CLR_USER_INFO: {
+			eventCategory: "USER_MANAGEMENT",
+			eventAction: "USER_DELETED",
+			eventLabel: "Device user deleted",
+		},
+	};
+	if (mappings[actionCode]) {
+		return { ...mappings[actionCode], eventConfidence: "SUPPORTED" as const };
+	}
+	return {
+		eventCategory: "UNKNOWN_VENDOR",
+		eventAction: "UNKNOWN",
+		eventLabel: actionCode || [major, minor].filter(Boolean).join("/") || "Hikvision SDK event",
+		eventConfidence: "UNKNOWN",
+	} as const;
+};
+
 
 /**
  * Hikvision operation logs (addUserInfo / addFpByEmployeeNo) often put a

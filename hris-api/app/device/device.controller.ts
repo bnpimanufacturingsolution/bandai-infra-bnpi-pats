@@ -8435,7 +8435,10 @@ export const controller = (prisma: PrismaClient) => {
 				startPosition,
 				pageSize,
 				maxRows,
-				fetchPage: async (searchResultPosition, maxResults) => {
+				fetchPage: async (
+					searchResultPosition: number,
+					maxResults: number,
+				): Promise<string> => {
 					const response = await hikvisionFetch("/ISAPI/ContentMgmt/logSearch", {
 						method: "POST",
 						deviceId: device.id,
@@ -8460,25 +8463,30 @@ export const controller = (prisma: PrismaClient) => {
 					return String(response?.raw || "");
 				},
 			});
-			const normalized = result.rows.map((row) =>
-				normalizeHikvisionLogSearchRow(row, device),
+			const normalized: NormalizedHikvisionEvidenceEvent[] = result.rows.map(
+				(row: unknown) =>
+					normalizeHikvisionLogSearchRow(row as any, device) as NormalizedHikvisionEvidenceEvent,
 			);
 			const countBy = (
 				key: "eventCategory" | "eventAction" | "eventConfidence" | "evidenceSource",
-			) =>
-				Object.fromEntries(
-					Array.from(
-						normalized.reduce((counts, event) => {
-							const value = String(event[key] || "UNKNOWN");
-							counts.set(value, (counts.get(value) || 0) + 1);
-							return counts;
-						}, new Map<string, number>()),
-					).sort(([left], [right]) => left.localeCompare(right)),
+			): Record<string, number> => {
+				const counts = new Map<string, number>();
+				for (const event of normalized) {
+					const value = String((event as any)[key] || "UNKNOWN");
+					counts.set(value, (counts.get(value) || 0) + 1);
+				}
+				return Object.fromEntries(
+					[...counts.entries()].sort(([left], [right]) => left.localeCompare(right)),
 				);
+			};
 			const summary = {
 				total: normalized.length,
-				mapped: normalized.filter((event) => event.eventAction !== "UNKNOWN").length,
-				unknown: normalized.filter((event) => event.eventAction === "UNKNOWN").length,
+				mapped: normalized.filter(
+					(event: NormalizedHikvisionEvidenceEvent) => event.eventAction !== "UNKNOWN",
+				).length,
+				unknown: normalized.filter(
+					(event: NormalizedHikvisionEvidenceEvent) => event.eventAction === "UNKNOWN",
+				).length,
 				byCategory: countBy("eventCategory"),
 				byAction: countBy("eventAction"),
 				byConfidence: countBy("eventConfidence"),
@@ -9689,16 +9697,16 @@ export const controller = (prisma: PrismaClient) => {
 									rawCustody.fingerprint.missingRawCount > 0
 										? "missing_raw_blob"
 										: "raw_blob_present";
-								rawCustody.fingerprint.projectedFromEncrypted = true;
+								(rawCustody.fingerprint as any).projectedFromEncrypted = true;
 							}
 						} catch (error: any) {
-							rawCustody.fingerprint.encryptedPresent = true;
-							rawCustody.fingerprint.encryptedCiphertextLength = String(
+							(rawCustody.fingerprint as any).encryptedPresent = true;
+							(rawCustody.fingerprint as any).encryptedCiphertextLength = String(
 								cachedEncrypted.fingerprint?.ciphertext ||
 									cachedEncrypted.fingerprint ||
 									"",
 							).length;
-							rawCustody.fingerprint.encryptedProjectError = String(
+							(rawCustody.fingerprint as any).encryptedProjectError = String(
 								error?.message || error,
 							).slice(0, 240);
 							deviceLogger.warn(
@@ -9738,27 +9746,30 @@ export const controller = (prisma: PrismaClient) => {
 										: null,
 									base64: facePicture,
 									faceTemplate,
+									faceURL: decryptedStoredFace?.faceURL || null,
 									source: "decrypted_encrypted_biometric_bundle",
 									capturedAt: decryptedStoredFace?.capturedAt || null,
 									cardOwnerVerified:
 										decryptedStoredFace?.cardOwnerVerified === true,
 									identityOwnerVerified:
 										decryptedStoredFace?.identityOwnerVerified === true,
+									identityAssociation:
+										decryptedStoredFace?.identityAssociation || null,
 								};
 								rawCustody.face.rawBlobPresent = true;
 								rawCustody.face.storedCount = Math.max(reported, 1);
 								rawCustody.face.missingRawCount = 0;
 								rawCustody.face.status = "raw_blob_present";
-								rawCustody.face.projectedFromEncrypted = true;
+								(rawCustody.face as any).projectedFromEncrypted = true;
 							}
 						} catch (error: any) {
-							rawCustody.face.encryptedPresent = true;
-							rawCustody.face.encryptedCiphertextLength = String(
+							(rawCustody.face as any).encryptedPresent = true;
+							(rawCustody.face as any).encryptedCiphertextLength = String(
 								cachedEncrypted.face?.ciphertext ||
 									cachedEncrypted.face ||
 									"",
 							).length;
-							rawCustody.face.encryptedProjectError = String(
+							(rawCustody.face as any).encryptedProjectError = String(
 								error?.message || error,
 							).slice(0, 240);
 							deviceLogger.warn(
@@ -9776,13 +9787,13 @@ export const controller = (prisma: PrismaClient) => {
 							faceStatus: rawCustody.face.status,
 							faceRawBlobPresent: rawCustody.face.rawBlobPresent,
 							projectedFromEncrypted: Boolean(
-								rawCustody.fingerprint.projectedFromEncrypted ||
-									rawCustody.face.projectedFromEncrypted,
+								(rawCustody.fingerprint as any).projectedFromEncrypted ||
+									(rawCustody.face as any).projectedFromEncrypted,
 							),
 							source: eventPayload
 								? "device_event_or_device_user_raw_custody"
-								: rawCustody.fingerprint.projectedFromEncrypted ||
-									  rawCustody.face.projectedFromEncrypted
+								: (rawCustody.fingerprint as any).projectedFromEncrypted ||
+									  (rawCustody.face as any).projectedFromEncrypted
 									? "decrypted_encrypted_biometric_bundle"
 									: "device_user_raw_custody",
 						});
@@ -9797,11 +9808,13 @@ export const controller = (prisma: PrismaClient) => {
 							fingerprintStatus: rawCustody.fingerprint.status,
 							faceStatus: rawCustody.face.status,
 							fingerprintEncryptedPresent: Boolean(
-								rawCustody.fingerprint.encryptedPresent,
+								(rawCustody.fingerprint as any).encryptedPresent,
 							),
-							faceEncryptedPresent: Boolean(rawCustody.face.encryptedPresent),
-							error: rawCustody.fingerprint.encryptedPresent ||
-								rawCustody.face.encryptedPresent
+							faceEncryptedPresent: Boolean(
+								(rawCustody.face as any).encryptedPresent,
+							),
+							error: (rawCustody.fingerprint as any).encryptedPresent ||
+								(rawCustody.face as any).encryptedPresent
 								? "Reported biometric enrollment has encrypted custody but raw package projection failed or is incomplete"
 								: "Reported biometric enrollment exists but no evidenced raw blob is stored",
 						});
