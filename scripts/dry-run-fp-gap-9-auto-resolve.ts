@@ -61,7 +61,7 @@ const GAP9: GapPerson[] = [
 		slot: 2,
 		peerMajority: true,
 		sameByteAsPeer: true,
-		note: "peer 10 majority same-byte → safe drop",
+		note: "peer 10 majority same-byte → still FORCE clear (unique gap zero)",
 	},
 	{
 		uid: "976",
@@ -330,17 +330,21 @@ for (const person of GAP9) {
 const report = {
 	generatedAt: new Date().toISOString(),
 	policy:
-		"progress5 dual-owner never permanent anti-dupe; force-clear or safe-drop only",
+		"unique FP gap → 0: progress5 dual-owner always force-clear + write (never ban/wait)",
 	summary: {
 		people: GAP9.length,
+		unique_fp_gap_people: GAP9.length,
+		unique_fp_can_close_this_wave: readyForce + readyNoConflict,
 		anti_dupe_blocked: antiDupeBlocked,
 		ready_force_clear: readyForce,
 		safe_drop_peer_canonical: safeDrop,
 		ready_no_conflict: readyNoConflict,
 		gap_zero_story:
-			antiDupeBlocked === 0
-				? "PASS: no permanent anti-dupe; dry-run queue can resolve all 9 edges"
-				: "FAIL: residual anti-dupe blockers remain — code defect",
+			antiDupeBlocked === 0 && safeDrop === 0 && readyForce + readyNoConflict === GAP9.length
+				? `PASS: all ${GAP9.length} unique FP people auto-ready (force or no-conflict); unique_fp can go 9→0 when execute sticks`
+				: antiDupeBlocked === 0
+					? `PARTIAL: anti_dupe=0 but force=${readyForce} drop=${safeDrop} ready=${readyNoConflict}`
+					: "FAIL: residual anti-dupe blockers remain — code defect",
 	},
 	rows,
 };

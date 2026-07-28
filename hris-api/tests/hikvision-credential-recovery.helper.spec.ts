@@ -254,7 +254,7 @@ describe("Hikvision credential recovery graph", () => {
 		).to.equal(true);
 	});
 
-	it("classifies device_fp_anti_dupe_peer_owner as physical action residual", () => {
+	it("classifies device_fp_anti_dupe_peer_owner as agent recovery (auto force-clear), not physical ban", () => {
 		expect(
 			classifyCredentialRecoveryWrite({
 				recommended: false,
@@ -262,7 +262,7 @@ describe("Hikvision credential recovery graph", () => {
 				blockingReason: "device_fp_anti_dupe_peer_owner",
 				recoveryStage: "physical_identity_action_required",
 			}),
-		).to.equal("physical_action_required");
+		).to.equal("recovery_needed");
 	});
 
 	it("marks admin-band force overwrite as elevated stickiness (clear path unproven)", () => {

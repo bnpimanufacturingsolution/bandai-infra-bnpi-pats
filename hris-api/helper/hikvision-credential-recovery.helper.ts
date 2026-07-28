@@ -544,7 +544,9 @@ export const buildExpiredCredentialRecoverySourceLeaseWhere = (
  */
 const physicalBoundaryReasons = new Set([
 	"physical_identity_adjudication_required",
-	"device_fp_anti_dupe_peer_owner",
+	// device_fp_anti_dupe_peer_owner is NO longer a physical boundary:
+	// auto force-clear + write resolves it (unique FP gap zero policy).
+	// If a plan still emits it, treat as agent_unlock residual (amber).
 	"duplicate_owner_detected",
 	"different_target_owner_detected",
 	"physical_reenrollment_required",
@@ -577,6 +579,10 @@ export const classifyCredentialRecoveryWrite = (
 		(reason === "physical_identity_adjudication_required" ||
 			stage === "physical_identity_action_required");
 	if (falsePhysicalSourceUnset) {
+		return "recovery_needed";
+	}
+	// Anti-dupe is agent force-clear work, never a red physical ban.
+	if (reason === "device_fp_anti_dupe_peer_owner") {
 		return "recovery_needed";
 	}
 	// Stage can mark dual-owner even when reason is source_conflict (duplicate slot).
@@ -645,9 +651,9 @@ const unlockNeededForWrite = (write: any): string[] => {
 			];
 		case "device_fp_anti_dupe_peer_owner":
 			return [
-				"device progressStatus=5 named a peer owner (anti-dupe) — PROD 21+ never auto-clears",
-				"prove same-canonical employee + same checksum for equivalent_owner_safe_no_write, or leave as dual-biometric residual",
-				"do not re-queue ready_from_raw_blob; wouldWrite must not claim verify",
+				"agent auto-resolve: force-clear peer fingerprint slot(s) then write recovery source",
+				"replan after reconcileDurableFingerprintOwnerConflicts (should be ready_from_raw_blob + fleet force flags)",
+				"never wait on operator dual-owner ban — unique FP gap policy is auto force-clear",
 			];
 		default:
 			return [
@@ -680,7 +686,8 @@ const ownerClassForWrite = (write: any): RecoveryOwnerClass => {
 		return "agent_unlock";
 	}
 	if (reason === "device_fp_anti_dupe_peer_owner") {
-		return "policy_or_true_physical";
+		// Auto force-clear path owns this — agent unlock, not operator ban.
+		return "agent_unlock";
 	}
 	if (classifyCredentialRecoveryWrite(write) === "physical_action_required") {
 		return "policy_or_true_physical";

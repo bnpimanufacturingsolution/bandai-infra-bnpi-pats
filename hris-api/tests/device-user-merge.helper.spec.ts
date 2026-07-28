@@ -1622,7 +1622,7 @@ describe("device user union merge", () => {
 		expect(write?.blockingReason).to.equal(null);
 	});
 
-	it("fleet same-byte majority drops write when peer is canonical holder of same checksum", () => {
+	it("fleet same-byte majority still force-clears peer so unique FP gap person is not dropped", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["source", "peerA", "peerB", "target"],
 			records: [
@@ -1705,14 +1705,19 @@ describe("device user union merge", () => {
 				item.vendorUserId === "696" &&
 				item.targetDeviceId === "target",
 		);
-		expect(write).to.equal(undefined);
+		// Unique-gap zero: even when peer 10 holds same bytes on more devices,
+		// recovery write for 696 force-clears peer — never drop/ban (operator wait).
+		expect(write?.executionEligibility).to.equal("ready_from_raw_blob");
+		expect(write?.blockingReason).to.equal(null);
+		expect(write?.fleetSameByteMajorityForceOverwrite).to.equal(true);
+		expect(write?.fleetSameByteMajorityConflictingOwners).to.deep.equal(["10"]);
 		expect(
 			(reconciled.credentialResolutions as any[]).some(
 				(item) =>
 					item.resolution === "fleet_same_byte_peer_canonical_no_write" &&
 					item.vendorUserId === "696",
 			),
-		).to.equal(true);
+		).to.equal(false);
 	});
 
 	it("proves physical retention only from exact target slots and a target-wide owner scan", () => {
