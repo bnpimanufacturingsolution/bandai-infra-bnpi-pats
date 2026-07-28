@@ -1401,6 +1401,8 @@ const readDeviceUserMergeJob = (jobId: string): DeviceUserMergeJob | null => {
  */
 const readDurableFingerprintOwnerConflicts = async (
 	organizationId: string,
+	// Must be injected: this helper is module-level and cannot see controller(prisma).
+	prismaClient: PrismaClient | any,
 ): Promise<DurableFingerprintOwnerConflictEvidence[]> => {
 	const evidence: DurableFingerprintOwnerConflictEvidence[] = [];
 	try {
@@ -1439,9 +1441,12 @@ const readDurableFingerprintOwnerConflicts = async (
 		);
 	}
 	// Credential recovery jobs store the same diagnostics on result.results and
-	// latestError.message — harvest so replan marks PROD anti-dupe residual.
+	// latestError.message — harvest so replan force-clears the real occupying peers.
 	try {
-		const recoveryJobs = await (prisma as any).credentialRecoveryJob.findMany({
+		if (!prismaClient) {
+			throw new Error("prisma_client_required_for_recovery_owner_conflict_harvest");
+		}
+		const recoveryJobs = await (prismaClient as any).credentialRecoveryJob.findMany({
 			where: { organizationId },
 			orderBy: { updatedAt: "desc" },
 			take: 50,
@@ -12537,7 +12542,7 @@ export const controller = (prisma: PrismaClient) => {
 		});
 		plan = reconcileDurableFingerprintOwnerConflicts(
 			plan,
-			await readDurableFingerprintOwnerConflicts(params.organizationId),
+			await readDurableFingerprintOwnerConflicts(params.organizationId, prisma),
 		);
 		const normalizeRecoveryStage = (write: any): HikvisionCredentialRecoveryStage => {
 			const exactStages = new Set([
@@ -14496,25 +14501,39 @@ export const controller = (prisma: PrismaClient) => {
 								isAdminSandboxVendorUserIdFn(owner),
 							);
 							const fleetForce =
-								write.fleetSameByteMajorityForceOverwrite === true;
-							const fleetOccupying =
-								fleetForce &&
-								Array.isArray(write.fleetSameByteMajorityConflictingOwners)
-									? occupyingOwners.filter((owner) =>
-											write.fleetSameByteMajorityConflictingOwners.includes(
-												owner,
-											),
+								write.fleetSameByteMajorityForceOverwrite === true ||
+								write.adminSandboxForceOverwrite === true;
+							// Live 2026-07-28: progress5 often names peers NOT in the
+							// pre-planned force list (341, 382, 696, 11, 1757). Clear
+							// every plain occupying id Progress reports so sticky can stick.
+							const progressOccupying = occupyingOwners.filter(Boolean);
+							const plannedForceOwners = [
+								...new Set(
+									[
+										...(Array.isArray(
+											write.fleetSameByteMajorityConflictingOwners,
 										)
-									: [];
-							if (fleetForce && fleetOccupying.length > 0) {
+											? write.fleetSameByteMajorityConflictingOwners
+											: []),
+										...(Array.isArray(write.adminSandboxConflictingOwners)
+											? write.adminSandboxConflictingOwners
+											: []),
+									].map(String),
+								),
+							];
+							const clearOwners =
+								progressOccupying.length > 0
+									? progressOccupying
+									: plannedForceOwners;
+							if (fleetForce && clearOwners.length > 0) {
 								deviceLogger.info(
-									`fleet_same_byte_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${fleetOccupying.join(",")}`,
+									`fleet_same_byte_fp_progress5_retry target=${write.targetDeviceId} vendor=${write.vendorUserId} occupying=${clearOwners.join(",")} planned=${plannedForceOwners.join(",")}`,
 								);
 								await clearFleetSameByteMajorityFingerprintConflictsSticky({
 									prisma,
 									req: params.req,
 									deviceId: String(write.targetDeviceId),
-									conflictingOwners: fleetOccupying,
+									conflictingOwners: clearOwners,
 									fingerPrintIds: templatesToWrite
 										.map((t: any) => Number(t.fingerPrintId || 0))
 										.filter((id: number) => id > 0),
