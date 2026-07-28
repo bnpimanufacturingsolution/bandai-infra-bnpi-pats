@@ -236,7 +236,17 @@ spec:
             - name: DATABASE_URL
               value: postgresql://postgres:postgres@hris-postgres:5432/hris
             - name: OTEL_ENABLED
-              value: "false"
+              value: "true"
+            - name: OTEL_SERVICE_NAME
+              value: hris-api-dev
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: http://10.184.37.19:4318/v1/traces
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: deployment.environment=dev,service.namespace=hris
+            - name: OTEL_TRACES_SAMPLER
+              value: parentbased_traceidratio
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "1.0"
             - name: API_ACTIVITY_LOGGING_ENABLED
               value: "true"
             - name: API_ACTIVITY_LOG_INCLUDE_READS

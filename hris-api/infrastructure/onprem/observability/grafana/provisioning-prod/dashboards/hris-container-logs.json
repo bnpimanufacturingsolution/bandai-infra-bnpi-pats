@@ -13,6 +13,17 @@
   "templating": {
     "list": [
       {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": "Loki",
+        "query": "label_values({stack=~\"hris-observability|hris-k3s\"}, environment)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".+"
+      },
+      {
         "name": "container",
         "type": "query",
         "datasource": "Loki",
@@ -33,7 +44,7 @@
       "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 },
       "targets": [
         {
-          "expr": "{stack=~\"hris-observability|hris-k3s\", container=~\"$container\"}",
+          "expr": "{stack=~\"hris-observability|hris-k3s\", environment=~\"$environment\", container=~\"$container\"}",
           "refId": "A"
         }
       ],

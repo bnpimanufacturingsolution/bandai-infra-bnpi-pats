@@ -67,6 +67,10 @@ jobs:
         shell: powershell
         run: .\scripts\project-truth.ps1 test-self-heal-contract
 
+      - name: Validate observability contract
+        shell: powershell
+        run: .\scripts\test-observability-contract.ps1
+
       - name: Prepare Packer staging inputs
         shell: powershell
         run: |

@@ -28,7 +28,7 @@
       "datasource": "Prometheus",
       "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
       "targets": [
-        { "expr": "sum(rate(container_cpu_usage_seconds_total{image!=\"\"}[5m]))", "refId": "A" }
+        { "expr": "sum(rate(container_cpu_usage_seconds_total{id=~\".*(docker-[a-f0-9]+\\\\.scope|cri-containerd-[a-f0-9]+\\\\.scope)$\"}[5m]))", "refId": "A" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -44,7 +44,7 @@
       "datasource": "Prometheus",
       "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
       "targets": [
-        { "expr": "sum(container_memory_working_set_bytes{image!=\"\"}) / 1024 / 1024 / 1024", "refId": "A" }
+        { "expr": "sum(container_memory_working_set_bytes{id=~\".*(docker-[a-f0-9]+\\\\.scope|cri-containerd-[a-f0-9]+\\\\.scope)$\"}) / 1024 / 1024 / 1024", "refId": "A" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -72,13 +72,13 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Container CPU by Service",
+      "title": "Container CPU by Runtime Cgroup",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "targets": [
         {
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{image!=\"\"}[5m]))",
-          "legendFormat": "{{name}}",
+          "expr": "sum by (id) (rate(container_cpu_usage_seconds_total{id=~\".*(docker-[a-f0-9]+\\\\.scope|cri-containerd-[a-f0-9]+\\\\.scope)$\"}[5m]))",
+          "legendFormat": "{{id}}",
           "refId": "A"
         }
       ]
@@ -86,13 +86,13 @@
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Container Memory by Service",
+      "title": "Container Memory by Runtime Cgroup",
       "datasource": "Prometheus",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "targets": [
         {
-          "expr": "sum by (name) (container_memory_working_set_bytes{image!=\"\"})",
-          "legendFormat": "{{name}}",
+          "expr": "sum by (id) (container_memory_working_set_bytes{id=~\".*(docker-[a-f0-9]+\\\\.scope|cri-containerd-[a-f0-9]+\\\\.scope)$\"})",
+          "legendFormat": "{{id}}",
           "refId": "A"
         }
       ],

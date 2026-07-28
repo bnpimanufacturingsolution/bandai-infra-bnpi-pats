@@ -31,16 +31,6 @@ groups:
           summary: "High host memory usage"
           description: "Host memory usage is above 90% for 10 minutes on {{ $labels.instance }}."
 
-      - alert: HighContainerRestartRate
-        expr: increase(container_start_time_seconds[10m]) > 3
-        for: 5m
-        labels:
-          severity: warning
-          team: platform
-        annotations:
-          summary: "High container restart rate"
-          description: "Container {{ $labels.name }} restarted frequently over the last 10 minutes."
-
       - alert: BlackboxProbeFailing
         expr: probe_success == 0
         for: 2m

@@ -120,6 +120,8 @@ services:
       - "${BLACKBOX_HOST_PORT:-9115}:9115"
     volumes:
       - ./blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     networks:
       - observability

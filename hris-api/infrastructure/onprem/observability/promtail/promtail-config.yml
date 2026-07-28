@@ -63,8 +63,12 @@ scrape_configs:
       - regex:
           source: filename
           expression: '/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/.*\.log'
+      - template:
+          source: environment
+          template: '{{ .namespace }}'
       - labels:
           namespace:
+          environment:
           pod:
           container:
           job:

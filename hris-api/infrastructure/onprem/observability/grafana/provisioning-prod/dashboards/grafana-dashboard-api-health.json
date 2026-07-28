@@ -57,9 +57,9 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "sum(rate(hris_api_http_requests_total[5m])) by (status_code)",
+          "expr": "sum(rate(hris_api_http_requests_total{environment=~\"$environment\"}[$range])) by (environment, status_code)",
           "refId": "A",
-          "legendFormat": "{{ status_code }}"
+          "legendFormat": "{{ environment }} {{ status_code }}"
         }
       ],
       "title": "HTTP Request Status Distribution",
@@ -70,7 +70,7 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "auto"
+            "mode": "palette-classic"
           },
           "custom": {
             "axisLabel": "",
@@ -138,13 +138,13 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(hris_api_http_request_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p95",
+          "expr": "histogram_quantile(0.95, sum(rate(hris_api_http_request_duration_seconds_bucket{environment=~\"$environment\"}[$range])) by (le, environment))",
+          "legendFormat": "{{ environment }} p95",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(hris_api_http_request_duration_seconds_bucket[5m])) by (le))",
-          "legendFormat": "p99",
+          "expr": "histogram_quantile(0.99, sum(rate(hris_api_http_request_duration_seconds_bucket{environment=~\"$environment\"}[$range])) by (le, environment))",
+          "legendFormat": "{{ environment }} p99",
           "refId": "B"
         }
       ],
@@ -220,8 +220,8 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "sum(rate(hris_api_http_requests_total[5m])) by (route)",
-          "legendFormat": "{{ route }}",
+          "expr": "sum(rate(hris_api_http_requests_total{environment=~\"$environment\"}[$range])) by (environment, route)",
+          "legendFormat": "{{ environment }} {{ route }}",
           "refId": "A"
         }
       ],
@@ -297,8 +297,8 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "hris_api_http_in_flight_requests",
-          "legendFormat": "{{ method }} {{ route }}",
+          "expr": "hris_api_http_in_flight_requests{environment=~\"$environment\"}",
+          "legendFormat": "{{ environment }} {{ method }} {{ route }}",
           "refId": "A"
         }
       ],
@@ -378,8 +378,8 @@
       "pluginVersion": "9.0.0",
       "targets": [
         {
-          "expr": "sum(rate(hris_api_http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(hris_api_http_requests_total[5m])) * 100",
-          "legendFormat": "Error Rate",
+          "expr": "sum by (environment) (rate(hris_api_http_requests_total{environment=~\"$environment\",status_code=~\"5..\"}[$range])) / sum by (environment) (rate(hris_api_http_requests_total{environment=~\"$environment\"}[$range])) * 100",
+          "legendFormat": "{{ environment }} Error Rate",
           "refId": "A"
         }
       ],
@@ -392,6 +392,22 @@
   "tags": ["api", "health", "hris"],
   "templating": {
     "list": [
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": "Prometheus",
+        "query": "label_values(hris_api_http_requests_total, environment)",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": ["All"],
+          "value": ["$__all"]
+        }
+      },
       {
         "allValue": null,
         "allValueIsRegex": false,

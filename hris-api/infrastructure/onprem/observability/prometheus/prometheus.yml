@@ -57,11 +57,17 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets:
-          - hris-api-dev:3001
-          - hris-api-uat:3001
           - host.docker.internal:3001
+        labels:
+          environment: prod
+      - targets:
           - host.docker.internal:3101
+        labels:
+          environment: dev
+      - targets:
           - host.docker.internal:3201
+        labels:
+          environment: uat
 
   - job_name: blackbox_http
     metrics_path: /probe
@@ -69,14 +75,23 @@ scrape_configs:
       module: [http_2xx]
     static_configs:
       - targets:
-          - http://hris-api-dev:3001/health
-          - http://hris-api-uat:3001/health
-          - http://hris-app-dev:3000/health
-          - http://hris-app-uat:3000/health
           - http://host.docker.internal:3001/health
+          - http://host.docker.internal:3000/health
+          - http://host.docker.internal:3300/health
+        labels:
+          environment: prod
+      - targets:
           - http://host.docker.internal:3101/health
+          - http://host.docker.internal:3100/health
+          - http://host.docker.internal:3310/health
+        labels:
+          environment: dev
+      - targets:
           - http://host.docker.internal:3201/health
-          - http://host.docker.internal:58001/health
+          - http://host.docker.internal:3200/health
+          - http://host.docker.internal:3320/health
+        labels:
+          environment: uat
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
