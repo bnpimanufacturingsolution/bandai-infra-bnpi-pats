@@ -82,6 +82,7 @@ Assert-Contract ($backup.Contains('.partial.$$')) 'backup archives must be built
 Assert-Contract ($backup.Contains('backup_dump_failed=')) 'dump failures must be named and must not publish a backup'
 
 $compose = Read-RepoFile 'hris-api/infrastructure/onprem/observability/docker-compose.yml'
+Assert-Contract ($compose.Contains('image: grafana/tempo:2.10.5')) 'Tempo must remain on the repaired supported 2.x runtime'
 Assert-Contract ($compose.Contains('image: postgres:16-alpine')) 'backup must include PostgreSQL client tooling'
 Assert-Contract ($compose.Contains('PGDATABASE=${POSTGRES_GRAFANA_DB:-grafana}')) 'backup must target the Grafana database'
 foreach ($source in @('/data/prometheus', '/data/loki', '/data/tempo', '/data/alertmanager')) {

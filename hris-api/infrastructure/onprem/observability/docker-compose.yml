@@ -18,7 +18,9 @@ services:
       - observability
 
   tempo:
-    image: grafana/tempo:2.6.1
+    # 2.6.1 repeatedly raced local-backend compaction with blocklist polling.
+    # Keep the current supported 2.x line: existing data is vParquet4.
+    image: grafana/tempo:2.10.5
     container_name: hris-tempo
     user: "0"
     command:

@@ -108,7 +108,7 @@ docker compose logs --tail 100 backup-replicator
 - Loki retention + ingestion/query limits
 - Promtail labels for container/service/project for better log filtering
 - Auto-provisioned Grafana datasources (Prometheus, Loki, Alertmanager)
-- Automated rolling and full backups with retention pruning
+- Automated Grafana PostgreSQL rolling and full backups with retention pruning
 
 ## Operations
 Reload Prometheus config/rules without restart:
