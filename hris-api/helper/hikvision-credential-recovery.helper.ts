@@ -905,11 +905,61 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 		}
 	}
 
+	// Target owner capture is export work. Fleet-wide missing lists can be 20–100+
+	// owners and dominate wall-clock even when only a few residual writes remain.
+	// Prefer owners that actually unlock fingerprint writes / force-clear peers.
+	const ownerCaptureNeededByTarget = new Map<string, Set<string>>();
+	const readyFpTargets = new Set<string>();
+	for (const write of writes) {
+		if (text(write.modality) !== "fingerprint") continue;
+		const targetDeviceId = text(write.targetDeviceId);
+		if (!targetDeviceId) continue;
+		const classification = classifyCredentialRecoveryWrite(write);
+		if (classification === "ready_to_write") {
+			readyFpTargets.add(targetDeviceId);
+		}
+		const needed = ownerCaptureNeededByTarget.get(targetDeviceId) || new Set<string>();
+		const vendorUserId = text(write.vendorUserId);
+		if (
+			classification === "ready_to_write" ||
+			String(write.blockingReason) === "target_owner_scan_incomplete"
+		) {
+			if (vendorUserId) needed.add(vendorUserId);
+		}
+		for (const owner of [
+			...(Array.isArray(write.fleetSameByteMajorityConflictingOwners)
+				? write.fleetSameByteMajorityConflictingOwners
+				: []),
+			...(Array.isArray(write.adminSandboxConflictingOwners)
+				? write.adminSandboxConflictingOwners
+				: []),
+		]) {
+			const ownerId = text(owner);
+			if (ownerId) needed.add(ownerId);
+		}
+		if (needed.size) ownerCaptureNeededByTarget.set(targetDeviceId, needed);
+	}
+
 	for (const scan of Array.isArray(plan?.fingerprintTargetOwnerScans)
 		? plan.fingerprintTargetOwnerScans
 		: []) {
-		for (const vendorUserId of scan?.missingVendorUserIds || []) {
-			const targetDeviceId = text(scan.targetDeviceId);
+		const targetDeviceId = text(scan.targetDeviceId);
+		if (!targetDeviceId) continue;
+		// Scope owner export to write-relevant vendors only (force peers + residual
+		// ids). Full fleet missingVendorUserIds dumps made residual waves 2–6 min.
+		const needed = ownerCaptureNeededByTarget.get(targetDeviceId);
+		const missing = Array.isArray(scan?.missingVendorUserIds)
+			? scan.missingVendorUserIds.map((id: unknown) => text(id)).filter(Boolean)
+			: [];
+		let toCapture: string[] = [];
+		if (needed && needed.size > 0) {
+			toCapture = missing.filter((id: string) => needed.has(id));
+		} else if (!readyFpTargets.has(targetDeviceId)) {
+			toCapture = [];
+		} else {
+			toCapture = missing.slice(0, 5);
+		}
+		for (const vendorUserId of toCapture) {
 			const taskKey = key(
 				"target_owner_capture",
 				targetDeviceId,
@@ -926,8 +976,12 @@ export const buildCredentialRecoveryTaskGraph = (plan: any): CredentialRecoveryT
 				status: "pending",
 				stage: "recovering_target_owner_custody",
 				priority: 9_000,
-				unlockCount: Number(scan.missingCount || 1),
-				payload: { evidenceHash: scan.evidenceHash },
+				unlockCount: 1,
+				payload: {
+					evidenceHash: scan.evidenceHash,
+					scopedOwnerCapture: true,
+					fleetMissingCount: Number(scan.missingCount || missing.length || 0),
+				},
 			});
 		}
 	}

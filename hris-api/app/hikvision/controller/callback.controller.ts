@@ -169,25 +169,44 @@ export const controller = (prisma: PrismaClient) => {
 			}
 		}
 
-		const eventRecord = await eventClient.create({
-			data: {
-				organizationId: data.device.organizationId,
-				deviceId: data.device.id,
-				eventTime: data.eventTime,
-				employeeNo: data.employeeNo || null,
-				source: data.source,
-				status: "RECEIVED",
-				eventType: data.event.eventType ? String(data.event.eventType) : null,
-				major: data.event.major ? String(data.event.major) : null,
-				minor: data.event.minor ? String(data.event.minor) : null,
-				doorNo: data.event.doorNo ? String(data.event.doorNo) : null,
-				verifyMode: data.event.verifyMode ? String(data.event.verifyMode) : null,
-				dedupeKey: data.dedupeKey,
-				payload: data.payload,
-			},
-		});
-
-		return { eventRecord, isDuplicate: false };
+		try {
+			const eventRecord = await eventClient.create({
+				data: {
+					organizationId: data.device.organizationId,
+					deviceId: data.device.id,
+					eventTime: data.eventTime,
+					employeeNo: data.employeeNo || null,
+					source: data.source,
+					status: "RECEIVED",
+					eventType: data.event.eventType ? String(data.event.eventType) : null,
+					major: data.event.major ? String(data.event.major) : null,
+					minor: data.event.minor ? String(data.event.minor) : null,
+					doorNo: data.event.doorNo ? String(data.event.doorNo) : null,
+					verifyMode: data.event.verifyMode
+						? String(data.event.verifyMode)
+						: null,
+					dedupeKey: data.dedupeKey,
+					payload: data.payload,
+				},
+			});
+			return { eventRecord, isDuplicate: false };
+		} catch (error: any) {
+			// Concurrent callbacks can race past findFirst → P2002 on dedupeKey.
+			// Treat as duplicate success so SDK callback does not 500.
+			const code = String(error?.code || "");
+			if (code === "P2002") {
+				const raced = await eventClient.findFirst({
+					where: {
+						organizationId: data.device.organizationId,
+						dedupeKey: data.dedupeKey,
+					},
+				});
+				if (raced) {
+					return { eventRecord: raced, isDuplicate: true };
+				}
+			}
+			throw error;
+		}
 	};
 
 	const updateDeviceEventStatus = async (
