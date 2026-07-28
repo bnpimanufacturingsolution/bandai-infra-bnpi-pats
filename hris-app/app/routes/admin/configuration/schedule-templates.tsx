@@ -75,11 +75,9 @@ import { useDebouncedGeneratedCodeField } from "~/lib/ui/admin-configuration-cod
 import schedulesService from "~/services/schedules.service";
 import {
 	AdminConfigCodeChip,
-	AdminConfigLongText,
 	AdminConfigMutedDash,
 	AdminConfigPolicyChip,
 	AdminConfigPrimaryCell,
-	AdminConfigStatusBadge,
 } from "~/lib/ui/admin-configuration-table";
 
 const SCHEDULE_MODAL_WIDE_CLASS = `sm:max-w-[820px] ${HR_MODAL_BASE_CLASS}`;
@@ -1179,56 +1177,80 @@ SPLIT0800,Split 8 Hour,8,WORK(8:00AM-12:00PM);BREAK(12:00PM-1:00PM);WORK(1:00PM-
 	};
 
 	const items = data?.scheduleTemplates || [];
+	const metricCellClassName = "px-3 py-3 whitespace-nowrap align-middle";
 	const columns: Column<any>[] = [
 		{
 			key: "name",
 			label: "Template",
+			// Prefer name width without starving metric columns of readable space.
+			width: "42%",
 			required: true,
 			priority: "critical",
+			className: "px-3 py-3 align-middle min-w-[14rem]",
+			headerClassName: "min-w-[14rem]",
 			render: (_value, item) => (
 				<AdminConfigPrimaryCell
 					primary={item.name}
 					secondary={item.code ? <AdminConfigCodeChip>{item.code}</AdminConfigCodeChip> : null}
 					title={item.name}
+					truncate={false}
 				/>
 			),
 		},
 		{
 			key: "cycleDays",
 			label: "Cycle",
+			width: "8.5rem",
 			required: true,
 			priority: "high",
+			className: metricCellClassName,
+			headerClassName: metricCellClassName,
 			render: (value) => <AdminConfigPolicyChip>{value} days</AdminConfigPolicyChip>,
 		},
 		{
 			key: "pattern",
 			label: "Pattern",
+			width: "10.5rem",
 			priority: "medium",
 			hideBelow: "lg",
-			render: (value) => (
-				<AdminConfigLongText>
-					{Array.isArray(value) ? `${value.length} assigned days` : "0 assigned days"}
-				</AdminConfigLongText>
-			),
+			className: metricCellClassName,
+			headerClassName: metricCellClassName,
+			render: (value) => {
+				const assignedDays = Array.isArray(value) ? value.length : 0;
+				return (
+					<AdminConfigPolicyChip title={`${assignedDays} assigned days`}>
+						{assignedDays} assigned days
+					</AdminConfigPolicyChip>
+				);
+			},
 		},
 		{
 			key: "totalDay",
 			label: "Work Days",
+			width: "8rem",
 			priority: "medium",
 			hideBelow: "xl",
+			className: metricCellClassName,
+			headerClassName: metricCellClassName,
 			render: (value) => <AdminConfigCodeChip>{Number(value || 0)}</AdminConfigCodeChip>,
 		},
 		{
 			key: "totalHour",
 			label: "Total Hours",
+			width: "8.5rem",
 			priority: "high",
+			className: metricCellClassName,
+			headerClassName: metricCellClassName,
 			render: (value) => <AdminConfigCodeChip>{formatHour(value)}</AdminConfigCodeChip>,
 		},
 		{
 			key: "isActive",
 			label: "Status",
+			width: "8rem",
 			required: true,
 			priority: "critical",
+			className: metricCellClassName,
+			headerClassName: metricCellClassName,
 			render: (value) => <CategoricalText value={value ? "Active" : "Inactive"} />,
 		},
 	];
@@ -1302,6 +1324,7 @@ SPLIT0800,Split 8 Hour,8,WORK(8:00AM-12:00PM);BREAK(12:00PM-1:00PM);WORK(1:00PM-
 				data={items}
 				columns={columns}
 				filters={filterOptions}
+				actionColumnWidth="5.5rem"
 				titleActions={
 					<Button
 						type="button"

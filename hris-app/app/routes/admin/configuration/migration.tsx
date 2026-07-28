@@ -2288,6 +2288,19 @@ export default function AdminMigrationPage() {
 	const [dm3MassUploadFile, setDm3MassUploadFile] = useState<File | null>(null);
 	const [isImportingDm3MassUpload, setIsImportingDm3MassUpload] = useState(false);
 	const [dm3MassUploadDrag, setDm3MassUploadDrag] = useState(false);
+	const [dm3DatabankProgress, setDm3DatabankProgress] = useState<{
+		jobId?: string;
+		phase?: string;
+		status?: string;
+		message: string;
+		percent: number;
+		processed: number;
+		total: number;
+		created: number;
+		updated: number;
+		failed: number;
+		sheetName?: string;
+	} | null>(null);
 	const dm3MassUploadInputRef = useRef<HTMLInputElement | null>(null);
 	const [downloadingReportRunIds, setDownloadingReportRunIds] = useState<Set<string>>(
 		() => new Set(),
@@ -3807,9 +3820,11 @@ export default function AdminMigrationPage() {
 		(workbookUploadKind === "biometrics" || workbookUploadKind === "overtime")
 			? workbookUploadKind
 			: null;
-	const dm3MassUploadRole: "compensation" | "deduction" | null =
+	const dm3MassUploadRole: "compensation" | "deduction" | "manpower-databank" | null =
 		activeWorkbookGroup?.id === "dm3" &&
-		(workbookUploadKind === "compensation" || workbookUploadKind === "deduction")
+		(workbookUploadKind === "compensation" ||
+			workbookUploadKind === "deduction" ||
+			workbookUploadKind === "manpower-databank")
 			? workbookUploadKind
 			: null;
 	const isDm3WorkbookUploadModal =
@@ -6885,8 +6900,180 @@ export default function AdminMigrationPage() {
 		);
 	};
 
+	const extractManpowerDatabankJobId = (payload: any): string => {
+		const candidates = [
+			payload?.jobId,
+			payload?.data?.jobId,
+			payload?.data?.data?.jobId,
+			payload?.progress?.jobId,
+		];
+		for (const value of candidates) {
+			const jobId = String(value || "").trim();
+			if (jobId) return jobId;
+		}
+		return "";
+	};
+
+	const pollManpowerDatabankJob = async (jobId: string) => {
+		// Reuse the same persistent sonner pattern as DM workbook imports.
+		const toastId = getWorkbookImportProgressToastId("dm3-databank");
+		const startedAt = Date.now();
+		const maxWaitMs = 30 * 60 * 1000;
+
+		const pushProgressUi = (next: {
+			phase?: string;
+			status?: string;
+			message: string;
+			percent: number;
+			processed: number;
+			total: number;
+			created: number;
+			updated: number;
+			failed: number;
+			sheetName?: string;
+		}) => {
+			setDm3DatabankProgress({ jobId, ...next });
+			toast.loading(`DM3 databank import in progress`, {
+				id: toastId,
+				description: next.message,
+				duration: Infinity,
+			});
+			appendWorkbookLiveEvent("dm3", {
+				sheetName: next.sheetName || "Manpower Databank",
+				status: "Importing",
+				message: next.message,
+				rowCount: next.total || undefined,
+			});
+		};
+
+		pushProgressUi({
+			phase: "starting",
+			status: "processing",
+			message: "Job accepted — waiting for first progress update…",
+			percent: 0,
+			processed: 0,
+			total: 0,
+			created: 0,
+			updated: 0,
+			failed: 0,
+		});
+
+		while (Date.now() - startedAt < maxWaitMs) {
+			const response = await hrisApiClient.get<any>(
+				`/api/migration/dm3/import-manpower-databank/progress/${jobId}`,
+			);
+			const payload = (response as any)?.data?.data || (response as any)?.data || response;
+			const progress = payload?.progress || payload || {};
+			const status = String(progress.status || "").toLowerCase();
+			const phase = String(progress.phase || "");
+			const total = Number(progress.total || 0);
+			const processed = Number(progress.processed || 0);
+			const created = Number(progress.created || 0);
+			const updated = Number(progress.updated || 0);
+			const failed = Number(progress.failed || 0);
+			const sheetName = String(progress.sheetName || "").trim();
+			const percent =
+				typeof progress.percent === "number"
+					? progress.percent
+					: total > 0
+						? Math.min(100, Math.round((processed / total) * 100))
+						: phase === "parsing"
+							? 5
+							: 0;
+			const sheetNote = sheetName ? ` · sheet ${sheetName}` : "";
+			const message =
+				String(progress.message || "").trim() ||
+				(phase === "parsing"
+					? "Reading Manpower Databank workbook…"
+					: `Importing ${processed}/${total || "?"}${sheetNote}`);
+			const description =
+				total > 0
+					? `${message} (${percent}%) · ${created} new · ${updated} updated · ${failed} failed`
+					: message;
+
+			if (status === "completed") {
+				const doneMessage =
+					failed > 0
+						? `Databank import done${sheetNote}: ${created} created, ${updated} updated, ${failed} failed.`
+						: `Databank import done${sheetNote}: ${created} created, ${updated} updated.`;
+				setDm3DatabankProgress({
+					jobId,
+					phase: "completed",
+					status: "completed",
+					message: doneMessage,
+					percent: 100,
+					processed: total || processed,
+					total,
+					created,
+					updated,
+					failed,
+					sheetName,
+				});
+				toast.success(`DM3 databank import completed`, {
+					id: toastId,
+					description: doneMessage,
+					duration: 8_000,
+				});
+				appendWorkbookLiveEvent("dm3", {
+					sheetName: sheetName || "Manpower Databank",
+					status: failed > 0 ? "Completed with warnings" : "Completed",
+					message: doneMessage,
+					rowCount: total || undefined,
+				});
+				return { created, updated, failed, total, sheetName, label: "Employee databank" };
+			}
+			if (status === "failed") {
+				const errMsg =
+					progress.errors?.[0]?.message ||
+					progress.message ||
+					"Employee databank import failed.";
+				setDm3DatabankProgress({
+					jobId,
+					phase: "failed",
+					status: "failed",
+					message: errMsg,
+					percent,
+					processed,
+					total,
+					created,
+					updated,
+					failed,
+					sheetName,
+				});
+				toast.error(`DM3 databank import failed`, {
+					id: toastId,
+					description: errMsg,
+					duration: 10_000,
+				});
+				throw new Error(errMsg);
+			}
+
+			pushProgressUi({
+				phase,
+				status: status || "processing",
+				message: description,
+				percent,
+				processed,
+				total,
+				created,
+				updated,
+				failed,
+				sheetName,
+			});
+			await new Promise((resolve) => setTimeout(resolve, 500));
+		}
+
+		const timeoutMsg = "Employee databank import timed out while waiting for progress.";
+		toast.error(`DM3 databank import failed`, {
+			id: toastId,
+			description: timeoutMsg,
+			duration: 10_000,
+		});
+		throw new Error(timeoutMsg);
+	};
+
 	const importDm3MassUploadFile = async (
-		role: "compensation" | "deduction",
+		role: "compensation" | "deduction" | "manpower-databank",
 		file: File,
 	) => {
 		if (!organizationId) {
@@ -6898,75 +7085,203 @@ export default function AdminMigrationPage() {
 			return;
 		}
 
-		const label = role === "compensation" ? "Compensation" : "Deduction";
+		const label =
+			role === "compensation"
+				? "Compensation"
+				: role === "deduction"
+					? "Deduction"
+					: "Employee databank";
 		const formData = new FormData();
 		formData.append("file", file);
+		// Send both shapes so backend multipart parsers always see organizationId.
+		formData.append("organizationId", organizationId);
 		formData.append("data", JSON.stringify({ organizationId }));
 		const endpoint =
 			role === "compensation"
 				? "/api/migration/dm3/import-compensation-mass-upload"
-				: "/api/migration/dm3/import-deduction-mass-upload";
+				: role === "deduction"
+					? "/api/migration/dm3/import-deduction-mass-upload"
+					: "/api/migration/dm3/import-manpower-databank";
 
 		setIsImportingDm3MassUpload(true);
-		const importPromise = (async () => {
-			const response = await hrisApiClient.post<{
-				data?: {
-					summary?: {
-						total?: number;
-						created?: number;
-						updated?: number;
-						failed?: number;
-						sheetName?: string;
-						errors?: Array<{ row: number; message: string }>;
-					};
-				};
-				summary?: {
-					total?: number;
-					created?: number;
-					updated?: number;
-					failed?: number;
-					sheetName?: string;
-				};
-			}>(endpoint, formData, { timeoutMs: 300_000 });
-			const payload = (response as any)?.data?.data || (response as any)?.data || response;
-			const summary = payload?.summary || {};
-			const created = Number(summary.created || 0);
-			const updated = Number(summary.updated || 0);
-			const failed = Number(summary.failed || 0);
-			const total = Number(summary.total || 0);
-			const sheetName = String(summary.sheetName || "").trim();
-			if (failed > 0 && created + updated === 0) {
-				throw new Error(
-					`${label} import failed for all ${total || failed} row(s).`,
-				);
-			}
-			return { created, updated, failed, total, label, sheetName };
-		})();
-
-		toast.promise(importPromise, {
-			loading: `Importing ${label.toLowerCase()} mass upload…`,
-			success: (result) => {
-				const sheetNote = result.sheetName ? ` from sheet "${result.sheetName}"` : "";
-				if (result.failed > 0) {
-					return `Imported ${result.created + result.updated} ${result.label.toLowerCase()} row(s)${sheetNote} (${result.created} new, ${result.updated} updated); ${result.failed} failed.`;
-				}
-				return `Imported ${result.created + result.updated} ${result.label.toLowerCase()} row(s)${sheetNote} (${result.created} new, ${result.updated} updated).`;
-			},
-			error: (error: any) =>
-				error?.data?.errors?.[0]?.message ||
-				error?.message ||
-				`Failed to import ${label.toLowerCase()}.`,
-		});
 
 		try {
-			await importPromise;
+			if (role === "manpower-databank") {
+				const toastId = getWorkbookImportProgressToastId("dm3-databank");
+				// Show toast immediately (before large file upload finishes).
+				setDm3DatabankProgress({
+					phase: "uploading",
+					status: "processing",
+					message: `Uploading ${file.name}…`,
+					percent: 0,
+					processed: 0,
+					total: 0,
+					created: 0,
+					updated: 0,
+					failed: 0,
+				});
+				toast.loading("DM3 databank import in progress", {
+					id: toastId,
+					description: `Uploading ${file.name}…`,
+					duration: Infinity,
+				});
+				appendWorkbookLiveEvent("dm3", {
+					sheetName: "Manpower Databank",
+					status: "Importing",
+					message: `Uploading employee databank: ${file.name}`,
+				});
+
+				const startResponse = await hrisApiClient.post<any>(endpoint, formData, {
+					timeoutMs: 300_000,
+				});
+				const startPayload =
+					(startResponse as any)?.data?.data ||
+					(startResponse as any)?.data ||
+					startResponse;
+
+				// Legacy sync response (no job): treat summary as finished.
+				const legacySummary = startPayload?.summary || startResponse?.summary;
+				if (legacySummary && !extractManpowerDatabankJobId(startPayload) && !extractManpowerDatabankJobId(startResponse)) {
+					const created = Number(legacySummary.created || 0);
+					const updated = Number(legacySummary.updated || 0);
+					const failed = Number(legacySummary.failed || 0);
+					const total = Number(legacySummary.total || 0);
+					const sheetName = String(legacySummary.sheetName || "").trim();
+					const doneMessage = `Databank import done${sheetName ? ` · sheet ${sheetName}` : ""}: ${created} created, ${updated} updated${failed ? `, ${failed} failed` : ""}.`;
+					setDm3DatabankProgress({
+						phase: "completed",
+						status: "completed",
+						message: doneMessage,
+						percent: 100,
+						processed: total,
+						total,
+						created,
+						updated,
+						failed,
+						sheetName,
+					});
+					toast.success("DM3 databank import completed", {
+						id: toastId,
+						description: doneMessage,
+						duration: 8_000,
+					});
+				} else {
+					const jobId =
+						extractManpowerDatabankJobId(startPayload) ||
+						extractManpowerDatabankJobId(startResponse);
+					if (!jobId) {
+						const errMsg =
+							"Manpower databank import did not return a jobId. Restart the API so the async progress endpoint is live.";
+						toast.error("DM3 databank import failed", {
+							id: toastId,
+							description: errMsg,
+							duration: 10_000,
+						});
+						throw new Error(errMsg);
+					}
+					await pollManpowerDatabankJob(jobId);
+				}
+			} else {
+				const importPromise = (async () => {
+					const response = await hrisApiClient.post<{
+						data?: {
+							summary?: {
+								total?: number;
+								created?: number;
+								updated?: number;
+								failed?: number;
+								sheetName?: string;
+								errors?: Array<{ row: number; message: string }>;
+							};
+						};
+						summary?: {
+							total?: number;
+							created?: number;
+							updated?: number;
+							failed?: number;
+							sheetName?: string;
+						};
+					}>(endpoint, formData, { timeoutMs: 600_000 });
+					const payload =
+						(response as any)?.data?.data || (response as any)?.data || response;
+					const summary = payload?.summary || {};
+					const created = Number(summary.created || 0);
+					const updated = Number(summary.updated || 0);
+					const failed = Number(summary.failed || 0);
+					const total = Number(summary.total || 0);
+					const sheetName = String(summary.sheetName || "").trim();
+					if (failed > 0 && created + updated === 0) {
+						throw new Error(
+							`${label} import failed for all ${total || failed} row(s).`,
+						);
+					}
+					return { created, updated, failed, total, label, sheetName };
+				})();
+
+				toast.promise(importPromise, {
+					loading: `Importing ${label.toLowerCase()} mass upload…`,
+					success: (result) => {
+						const sheetNote = result.sheetName
+							? ` from sheet "${result.sheetName}"`
+							: "";
+						if (result.failed > 0) {
+							return `Imported ${result.created + result.updated} ${result.label.toLowerCase()} row(s)${sheetNote} (${result.created} new, ${result.updated} updated); ${result.failed} failed.`;
+						}
+						return `Imported ${result.created + result.updated} ${result.label.toLowerCase()} row(s)${sheetNote} (${result.created} new, ${result.updated} updated).`;
+					},
+					error: (error: any) =>
+						error?.data?.errors?.[0]?.message ||
+						error?.message ||
+						`Failed to import ${label.toLowerCase()}.`,
+				});
+
+				await importPromise;
+			}
+
 			void queryClient.invalidateQueries({
 				queryKey: ["migration-workbook-reports", organizationId],
 			});
+			void queryClient.invalidateQueries({ queryKey: ["employees"] });
 			setDm3MassUploadFile(null);
-			closeWorkbookUploadModal();
-		} catch {
-			// Error toast is handled by toast.promise.
+			// Keep modal open briefly so in-modal progress is readable for databank.
+			if (role !== "manpower-databank") {
+				closeWorkbookUploadModal();
+			} else {
+				window.setTimeout(() => {
+					closeWorkbookUploadModal();
+					setDm3DatabankProgress(null);
+				}, 1_500);
+			}
+		} catch (error: any) {
+			const message =
+				error?.data?.errors?.[0]?.message ||
+				error?.message ||
+				`Failed to import ${label.toLowerCase()}.`;
+			if (role === "manpower-databank") {
+				const toastId = getWorkbookImportProgressToastId("dm3-databank");
+				toast.error("DM3 databank import failed", {
+					id: toastId,
+					description: message,
+					duration: 10_000,
+				});
+				setDm3DatabankProgress((prev) =>
+					prev
+						? { ...prev, status: "failed", phase: "failed", message }
+						: {
+								status: "failed",
+								phase: "failed",
+								message,
+								percent: 0,
+								processed: 0,
+								total: 0,
+								created: 0,
+								updated: 0,
+								failed: 0,
+							},
+				);
+			} else {
+				// compensation/deduction errors already toast via toast.promise
+			}
 		} finally {
 			setIsImportingDm3MassUpload(false);
 			if (dm3MassUploadInputRef.current) {
@@ -6975,17 +7290,26 @@ export default function AdminMigrationPage() {
 		}
 	};
 
-	const renderDm3MassUploadPanel = (role: "compensation" | "deduction") => {
+	const renderDm3MassUploadPanel = (
+		role: "compensation" | "deduction" | "manpower-databank",
+	) => {
 		const isCompensation = role === "compensation";
-		const sampleName = isCompensation
-			? "Compensation Mass Upload 07.15.26.xlsx"
-			: "Deduction Mass Upload 07.15.26.xlsx";
-		const expectedHeaders = isCompensation
-			? "COMCODE, Amount, EmployeeID, EmployeeName, StartPayDate"
-			: "DEDCODE, Amount, Payment, EmployeeID, EmployeeName, StartPayment";
-		const dropLabel = isCompensation
-			? "Drop compensation mass upload .xlsx"
-			: "Drop deduction mass upload .xlsx";
+		const isDatabank = role === "manpower-databank";
+		const sampleName = isDatabank
+			? "2026_07_July Manpower Databank.xlsx"
+			: isCompensation
+				? "Compensation Mass Upload 07.15.26.xlsx"
+				: "Deduction Mass Upload 07.15.26.xlsx";
+		const expectedHeaders = isDatabank
+			? "ID No., Employee Name, Department, Section, Position, Status (latest day sheet auto-selected)"
+			: isCompensation
+				? "COMCODE, Amount, EmployeeID, EmployeeName, StartPayDate"
+				: "DEDCODE, Amount, Payment, EmployeeID, EmployeeName, StartPayment";
+		const dropLabel = isDatabank
+			? "Drop employee manpower databank .xlsx"
+			: isCompensation
+				? "Drop compensation mass upload .xlsx"
+				: "Drop deduction mass upload .xlsx";
 
 		return (
 			<div className="space-y-3">
@@ -7043,6 +7367,45 @@ export default function AdminMigrationPage() {
 						Columns: {expectedHeaders}
 					</span>
 				</button>
+
+				{isDatabank && dm3DatabankProgress ? (
+					<div className="rounded-lg border border-orange-200 bg-orange-50/70 px-3 py-2.5">
+						<div className="flex items-center justify-between gap-2 text-xs font-medium text-orange-900">
+							<span>
+								{dm3DatabankProgress.status === "completed"
+									? "Import completed"
+									: dm3DatabankProgress.status === "failed"
+										? "Import failed"
+										: "Import in progress"}
+							</span>
+							<span>
+								{dm3DatabankProgress.total > 0
+									? `${dm3DatabankProgress.processed}/${dm3DatabankProgress.total} · ${dm3DatabankProgress.percent}%`
+									: `${dm3DatabankProgress.percent}%`}
+							</span>
+						</div>
+						<div className="mt-2 h-2 overflow-hidden rounded-full bg-orange-100">
+							<div
+								className="h-full rounded-full bg-orange-500 transition-all duration-300"
+								style={{
+									width: `${Math.max(2, Math.min(100, dm3DatabankProgress.percent || 0))}%`,
+								}}
+							/>
+						</div>
+						<p className="mt-2 text-xs text-orange-900/90">{dm3DatabankProgress.message}</p>
+						{(dm3DatabankProgress.created > 0 ||
+							dm3DatabankProgress.updated > 0 ||
+							dm3DatabankProgress.failed > 0) && (
+							<p className="mt-1 text-[11px] text-orange-800/80">
+								{dm3DatabankProgress.created} created · {dm3DatabankProgress.updated}{" "}
+								updated · {dm3DatabankProgress.failed} failed
+								{dm3DatabankProgress.sheetName
+									? ` · sheet ${dm3DatabankProgress.sheetName}`
+									: ""}
+							</p>
+						)}
+					</div>
+				) : null}
 
 				<div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-3">
 					<div className="min-w-0 text-xs text-gray-600">
@@ -7534,7 +7897,7 @@ export default function AdminMigrationPage() {
 								{isDm4
 									? "Import biometrics punches for attendance, then approved overtime for OT/ND/holiday pay buckets (separate sources)."
 									: group.id === "dm3"
-										? "Import the employee workbook, then optional compensation and deduction mass uploads."
+										? "Import the employee workbook, optional manpower databank roster refresh, then compensation and deduction mass uploads."
 										: "Upload one Excel workbook to import all sheets in order."}
 							</p>
 						</div>
@@ -7675,11 +8038,20 @@ export default function AdminMigrationPage() {
 									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
 										1
 									</span>
-									<span>Upload the DM3 employee workbook</span>
+									<span>Upload the DM3 employee workbook (full multi-sheet import)</span>
 								</li>
 								<li className="flex gap-2">
 									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
 										2
+									</span>
+									<span>
+										Optional: upload employee manpower databank to create/update roster
+										master data without rebuilding DM3
+									</span>
+								</li>
+								<li className="flex gap-2">
+									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
+										3
 									</span>
 									<span>
 										Upload compensation mass upload (allowances / benefits for the
@@ -7688,7 +8060,7 @@ export default function AdminMigrationPage() {
 								</li>
 								<li className="flex gap-2">
 									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
-										3
+										4
 									</span>
 									<span>
 										Upload deduction mass upload (loan payments / deductions)
@@ -7696,6 +8068,24 @@ export default function AdminMigrationPage() {
 								</li>
 							</ol>
 							<div className="flex flex-wrap gap-2">
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={isImportingDm3MassUpload}
+									onClick={() => {
+										setDm3MassUploadFile(null);
+										openWorkbookUploadModal("manpower-databank");
+									}}>
+									{isImportingDm3MassUpload &&
+									dm3MassUploadRole === "manpower-databank" ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Upload className="mr-1.5 h-4 w-4" />
+									)}
+									Upload employee databank
+								</Button>
 								<Button
 									type="button"
 									size="sm"
@@ -8197,9 +8587,11 @@ return (
 								? "Upload compensation mass upload"
 								: dm3MassUploadRole === "deduction"
 									? "Upload deduction mass upload"
-									: activeWorkbookGroup
-										? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
-										: "Upload workbook"
+									: dm3MassUploadRole === "manpower-databank"
+										? "Upload employee databank"
+										: activeWorkbookGroup
+											? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
+											: "Upload workbook"
 				}
 				description={
 					dm4UploadRole === "biometrics"
@@ -8210,7 +8602,9 @@ return (
 								? "BNPI Compensation Mass Upload (COMCODE / Amount / EmployeeID / StartPayDate)."
 								: dm3MassUploadRole === "deduction"
 									? "BNPI Deduction Mass Upload (DEDCODE / Payment / EmployeeID / StartPayment)."
-									: "Select the .xlsx workbook for this migration stage."
+									: dm3MassUploadRole === "manpower-databank"
+										? "BNPI Manpower Databank roster refresh with live progress (like DM employee import). Creates/updates EMP_IDs; multi-day files use the latest day sheet. Does not wipe salary, email, or statutory IDs."
+										: "Select the .xlsx workbook for this migration stage."
 				}
 				className={HR_MODAL_STANDARD_CLASS}>
 				{dm4UploadRole

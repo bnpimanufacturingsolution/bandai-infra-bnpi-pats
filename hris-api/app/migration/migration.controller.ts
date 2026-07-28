@@ -50,6 +50,10 @@ import {
 	importCompensationMassUpload,
 	importDeductionMassUpload,
 } from "./bnpi-mass-upload-import.service";
+import {
+	getManpowerDatabankJobProgress,
+	startManpowerDatabankImport,
+} from "./bnpi-manpower-databank-import.service";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 
@@ -3345,6 +3349,123 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const importDm3ManpowerDatabank = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const uploadedFile = resolveUploadedMigrationFile(req);
+			if (!uploadedFile?.buffer) {
+				res.status(400).json(
+					buildErrorResponse(
+						"File is required. Upload Manpower Databank .xlsx as multipart field 'file'.",
+						400,
+					),
+				);
+				return;
+			}
+			const parsedBody = parseMultipartJsonBody(req);
+			if (parsedBody.error) {
+				res.status(400).json(buildErrorResponse(parsedBody.error, 400));
+				return;
+			}
+			const organizationId = String(
+				parsedBody.body?.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+
+			// DM-style async job: return jobId immediately and poll progress.
+			const started = startManpowerDatabankImport({
+				prisma,
+				organizationId,
+				buffer: uploadedFile.buffer,
+				sourceFileName: uploadedFile.originalname || "manpower-databank.xlsx",
+			});
+
+			res.setHeader(
+				"Location",
+				`/api/migration/dm3/import-manpower-databank/progress/${started.jobId}`,
+			);
+			res.setHeader("Retry-After", "1");
+			res.status(202).json(
+				buildSuccessResponse(
+					"Manpower databank import started",
+					{
+						jobId: started.jobId,
+						message: "Import started",
+					},
+					202,
+				),
+			);
+		} catch (error: any) {
+			migrationLogger.error(
+				`DM3 manpower databank import failed: ${error?.message || "Unknown error"}`,
+				{ error },
+			);
+			res.status(500).json(
+				buildErrorResponse(
+					`Manpower databank import failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
+	const getDm3ManpowerDatabankProgress = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const jobId = String(req.params.jobId || "").trim();
+			if (!jobId) {
+				res.status(400).json(buildErrorResponse("Job ID is required", 400));
+				return;
+			}
+			const progress = getManpowerDatabankJobProgress(jobId);
+			if (!progress) {
+				res.status(404).json(
+					buildErrorResponse("Manpower databank import job not found or expired", 404),
+				);
+				return;
+			}
+			const payload = {
+				...progress,
+				startedAt: progress.startedAt?.toISOString?.() || progress.startedAt,
+				completedAt: progress.completedAt?.toISOString?.() || progress.completedAt || null,
+				durationMs: progress.completedAt
+					? progress.completedAt.getTime() - progress.startedAt.getTime()
+					: Date.now() - progress.startedAt.getTime(),
+				percent:
+					progress.total > 0
+						? Math.min(100, Math.round((progress.processed / progress.total) * 100))
+						: progress.phase === "parsing"
+							? 0
+							: progress.status === "completed"
+								? 100
+								: 0,
+			};
+			res.status(200).json(
+				buildSuccessResponse("Manpower databank import progress loaded", { progress: payload }, 200),
+			);
+		} catch (error: any) {
+			migrationLogger.error(
+				`DM3 manpower databank progress failed: ${error?.message || "Unknown error"}`,
+				{ error },
+			);
+			res.status(500).json(
+				buildErrorResponse(
+					`Manpower databank progress failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
 	const importDm3EmployeeBenefitsLoans = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const uploadedFile = resolveUploadedMigrationFile(req);
@@ -5002,6 +5123,8 @@ export const controller = (prisma: PrismaClient) => {
 		importDm3EmployeeBenefitsLoans,
 		importDm3CompensationMassUpload,
 		importDm3DeductionMassUpload,
+		importDm3ManpowerDatabank,
+		getDm3ManpowerDatabankProgress,
 		finalizeDm3EmployeeImport,
 		recoverDm3EmployeePostActions,
 		getDm3EmployeePostActionsJob,

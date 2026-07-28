@@ -115,7 +115,7 @@ describe("admin migration route contract", () => {
 		expect(closed.has("upload")).toBe(false);
 	});
 
-	it("opens DM3 compensation and deduction mass-upload modals via dedicated upload kinds", () => {
+	it("opens DM3 compensation, deduction, and manpower-databank modals via dedicated upload kinds", () => {
 		const dm3 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm3");
 		const compensation = buildOpenWorkbookUploadSearchParams(dm3, "compensation");
 		expect(compensation.get("workbook")).toBe("dm3");
@@ -125,6 +125,10 @@ describe("admin migration route contract", () => {
 		const deduction = buildOpenWorkbookUploadSearchParams(dm3, "deduction");
 		expect(deduction.get("upload")).toBe("deduction");
 		expect(getWorkbookUploadKind(deduction)).toBe("deduction");
+
+		const databank = buildOpenWorkbookUploadSearchParams(dm3, "manpower-databank");
+		expect(databank.get("upload")).toBe("manpower-databank");
+		expect(getWorkbookUploadKind(databank)).toBe("manpower-databank");
 
 		// Statutory / monthly-payment register is not a DM3 UI upload kind.
 		// Benefits and deductions come from compensation + deduction mass uploads.

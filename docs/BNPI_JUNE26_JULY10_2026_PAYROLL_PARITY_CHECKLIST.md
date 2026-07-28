@@ -66,6 +66,7 @@ Already implemented:
 |---|---|
 | DM1–DM3 import | `/admin/configuration/migration` |
 | Compensation / deduction mass upload | DM3 UI + `POST /api/migration/dm3/import-*-mass-upload` (covers **all** cutoff benefits and deductions) |
+| Employee manpower databank (roster refresh) | DM3 UI **Upload employee databank** + `POST /api/migration/dm3/import-manpower-databank` (create/update master data only; not a salary source) |
 | Statutory / monthly payment register import | **Removed from DM3 UI and HTTP.** Do not use April statutory board as a migration step; loans/deductions belong in the cutoff deduction mass upload. Offline helper only: `hris-api/helper/bnpi-statutory-benefits-import.helper.ts` |
 | DM4 biometrics + approved OT materialization | DM4 durable migration run |
 | Contribution schedule period 1 full / period 2 zero | `payroll-period.helper.ts` → `BNPI_FIRST_CUTOFF_FULL_SECOND_CUTOFF_NONE` |

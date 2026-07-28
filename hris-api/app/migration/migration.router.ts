@@ -17,6 +17,8 @@ interface IMigrationController {
 	importDm3EmployeeBenefitsLoans(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3CompensationMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3DeductionMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
+	importDm3ManpowerDatabank(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDm3ManpowerDatabankProgress(req: Request, res: Response, next: NextFunction): Promise<void>;
 	finalizeDm3EmployeeImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	recoverDm3EmployeePostActions(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDm3EmployeePostActionsJob(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -330,10 +332,20 @@ export const router = (route: Router, controller: IMigrationController): Router 
 		uploadImportFile,
 		controller.importDm3DeductionMassUpload,
 	);
+	routes.post(
+		"/dm3/import-manpower-databank",
+		uploadImportFile,
+		controller.importDm3ManpowerDatabank,
+	);
+	routes.get(
+		"/dm3/import-manpower-databank/progress/:jobId",
+		controller.getDm3ManpowerDatabankProgress,
+	);
 	// Statutory / monthly-payment register upload is intentionally not exposed.
 	// BNPI benefits and deductions for a cutoff are imported via compensation +
 	// deduction mass upload only (`import-compensation-mass-upload` /
 	// `import-deduction-mass-upload`).
+	// Manpower Databank is a separate DM3 roster refresh path (create/update employees).
 	routes.post(
 		"/dm3/finalize-employee-import",
 		uploadImportFile,

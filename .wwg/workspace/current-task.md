@@ -1,5 +1,17 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-27 DM3 Upload employee databank
+
+- Task mode: product feature (DM3 migration UX + import service).
+- Finish line: `/admin/configuration/migration?workbook=dm3` has
+  **Upload employee databank** that create/updates employees from BNPI
+  Manpower Databank `.xlsx` without requiring a full DM3 re-upload.
+- Behavior: auto-pick latest day sheet (or sheet named Manpower Databank);
+  match `ID No.` → `EMP_ID`; create missing + update existing; preserve
+  `basicSalary` / email / statutory IDs; no delete of missing IDs.
+- Code: helper/service/API + DM3 UI button/modal; docs in
+  `docs/dm-migration-workflow.md`.
+
 ## Latest Task Addendum - 2026-07-27 Confirm DM4 OT upload still required
 
 - Operator hypothesis: overtime upload can be removed because OT is already in

@@ -117,12 +117,14 @@ export function AdminConfigPriorityChip({
 export function AdminConfigPolicyChip({
 	children,
 	className,
+	title,
 }: {
 	children: ReactNode;
 	className?: string;
+	title?: string;
 }) {
 	return (
-		<AdminConfigChip kind="policy" className={className}>
+		<AdminConfigChip kind="policy" className={className} title={title}>
 			{children}
 		</AdminConfigChip>
 	);
@@ -158,15 +160,23 @@ export function AdminConfigPrimaryCell({
 	secondary,
 	title,
 	className,
+	truncate = true,
 }: {
 	primary: ReactNode;
 	secondary?: ReactNode;
 	title?: string;
 	className?: string;
+	/** When false, primary text wraps instead of ellipsis truncation. Default true. */
+	truncate?: boolean;
 }) {
 	return (
 		<div className={cn("min-w-0", className)}>
-			<div className="truncate font-medium text-gray-900" title={title}>
+			<div
+				className={cn(
+					"font-medium text-gray-900",
+					truncate ? "truncate" : "whitespace-normal break-words",
+				)}
+				title={title}>
 				{primary}
 			</div>
 			{secondary ? (
