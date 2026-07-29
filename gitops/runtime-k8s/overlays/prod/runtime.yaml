@@ -202,7 +202,7 @@ spec:
             - name: APP_ENV
               value: prod
             - name: NODE_OPTIONS
-              value: --max-old-space-size=2048
+              value: --max-old-space-size=2304
             - name: JWT_SECRET
               value: project-truth-local-appliance-jwt-secret-change-me
             - name: PORT
@@ -429,10 +429,10 @@ spec:
           resources:
             requests:
               cpu: "50m"
-              memory: 64Mi
+              memory: 96Mi
             limits:
-              cpu: "250m"
-              memory: 256Mi
+              cpu: "300m"
+              memory: 384Mi
           env:
             - name: NODE_HOST_IP
               valueFrom:

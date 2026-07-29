@@ -90,11 +90,11 @@ spec:
           imagePullPolicy: Never
           resources:
             requests:
-              cpu: "250m"
-              memory: 512Mi
+              cpu: "200m"
+              memory: 384Mi
             limits:
               cpu: "800m"
-              memory: 1536Mi
+              memory: 1280Mi
           envFrom:
             - secretRef:
                 name: hris-postgres-env
@@ -207,18 +207,18 @@ spec:
           imagePullPolicy: Never
           resources:
             requests:
-              cpu: "250m"
-              memory: 512Mi
+              cpu: "200m"
+              memory: 384Mi
             limits:
-              cpu: "1500m"
-              memory: 2048Mi
+              cpu: "1250m"
+              memory: 1536Mi
           env:
             - name: NODE_ENV
               value: development
             - name: APP_ENV
               value: dev
             - name: NODE_OPTIONS
-              value: --max-old-space-size=1536
+              value: --max-old-space-size=1152
             - name: JWT_SECRET
               value: project-truth-local-appliance-jwt-secret-change-me
             - name: PORT

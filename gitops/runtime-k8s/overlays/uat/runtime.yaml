@@ -93,8 +93,8 @@ spec:
               cpu: "300m"
               memory: 512Mi
             limits:
-              cpu: "800m"
-              memory: 1024Mi
+              cpu: "1000m"
+              memory: 1536Mi
           envFrom:
             - secretRef:
                 name: hris-postgres-env
@@ -192,17 +192,17 @@ spec:
           resources:
             requests:
               cpu: "500m"
-              memory: 768Mi
+              memory: 1024Mi
             limits:
-              cpu: "1000m"
-              memory: 1536Mi
+              cpu: "1500m"
+              memory: 2048Mi
           env:
             - name: NODE_ENV
               value: production
             - name: APP_ENV
               value: uat
             - name: NODE_OPTIONS
-              value: --max-old-space-size=1024
+              value: --max-old-space-size=1536
             - name: JWT_SECRET
               value: project-truth-local-appliance-jwt-secret-change-me
             - name: PORT
@@ -431,7 +431,7 @@ spec:
               cpu: "50m"
               memory: 64Mi
             limits:
-              cpu: "200m"
+              cpu: "250m"
               memory: 256Mi
           env:
             - name: NODE_HOST_IP
