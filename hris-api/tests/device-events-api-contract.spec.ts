@@ -33,6 +33,12 @@ describe("Device events API contract", () => {
 		expect(controllerSource).to.contain("usePageOnlySummary");
 	});
 
+	it("uses slim device_events-only FROM for id-page/count when not searching", () => {
+		expect(controllerSource).to.contain("slimEventsFromSql");
+		expect(controllerSource).to.contain("FROM device_events de");
+		expect(controllerSource).to.contain("needsDeviceJoinForSort");
+	});
+
 	it("filters saved rows by evidence, confidence, and HRIS match result", () => {
 		expect(controllerSource).to.contain("req.query.evidenceSource");
 		expect(controllerSource).to.contain("req.query.eventConfidence");

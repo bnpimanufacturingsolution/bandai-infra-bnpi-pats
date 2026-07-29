@@ -26764,8 +26764,17 @@ export const controller = (prisma: PrismaClient) => {
 				${employeeJoinSql}
 			`;
 			const searchFromSql = Prisma.sql`${fromSql} ${searchMatchJoinSql}`;
-			const pageFromSql = hasQuery ? searchFromSql : baseFromSql;
-			const aggregateFromSql = hasQuery ? fromSql : baseFromSql;
+			// Id-page / count must NOT fan-out device_user + employee joins across ~37k rows.
+			// Those joins only belong on the outer SELECT for the limited page ids.
+			// (Pool starvation + 10–45s list latency came from ordering through heavy joins.)
+			const slimEventsFromSql = Prisma.sql`FROM device_events de`;
+			const needsDeviceJoinForSort = sort === "deviceName";
+			const pageFromSql = hasQuery
+				? searchFromSql
+				: needsDeviceJoinForSort
+					? baseFromSql
+					: slimEventsFromSql;
+			const aggregateFromSql = hasQuery ? fromSql : slimEventsFromSql;
 			const orderColumnSqlBySort: Record<string, Prisma.Sql> = {
 				deviceName: Prisma.sql`d."name"`,
 				eventTime: Prisma.sql`de."eventTime"`,
