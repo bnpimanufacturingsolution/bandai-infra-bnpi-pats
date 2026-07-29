@@ -39,6 +39,18 @@ describe("Device events API contract", () => {
 		expect(controllerSource).to.contain("needsDeviceJoinForSort");
 	});
 
+	it("drives outer detail SELECT from page_events ids first (no full-table employee joins)", () => {
+		expect(controllerSource).to.contain("outerDetailFromSql");
+		expect(controllerSource).to.contain("FROM page_events page_event");
+		expect(controllerSource).to.contain(
+			"INNER JOIN device_events de ON de.id = page_event.id",
+		);
+		// Must not reintroduce trailing page filter after full fromSql fan-out.
+		expect(controllerSource).not.to.match(
+			/\$\{hasQuery \? searchFromSql : fromSql\}\s*\n\s*INNER JOIN page_events/,
+		);
+	});
+
 	it("filters saved rows by evidence, confidence, and HRIS match result", () => {
 		expect(controllerSource).to.contain("req.query.evidenceSource");
 		expect(controllerSource).to.contain("req.query.eventConfidence");

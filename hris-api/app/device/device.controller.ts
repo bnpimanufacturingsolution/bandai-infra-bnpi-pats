@@ -6416,15 +6416,29 @@ export const controller = (prisma: PrismaClient) => {
 		);
 	};
 
+	// Process-local schema probes — information_schema every list request is wasteful
+	// and under pool pressure adds avoidable queries. Columns/tables do not flip mid-pod.
+	let deviceUserTableCache: boolean | null = null;
+	let deviceEventColumnPresenceCache: {
+		deviceUserId: boolean;
+		eventCategory: boolean;
+		eventAction: boolean;
+		eventLabel: boolean;
+		eventConfidence: boolean;
+	} | null = null;
+
 	const hasDeviceUserTable = async () => {
+		if (deviceUserTableCache !== null) return deviceUserTableCache;
 		try {
 			const rows =
 				(await prisma.$queryRaw<
 					Array<{ device_users?: string | null }>
 				>`SELECT to_regclass('public.device_users')::text AS device_users`) || [];
-			return Boolean(rows[0]?.device_users);
+			deviceUserTableCache = Boolean(rows[0]?.device_users);
+			return deviceUserTableCache;
 		} catch (error) {
 			if (isMissingDeviceUserTableError(error)) {
+				deviceUserTableCache = false;
 				return false;
 			}
 			throw error;
@@ -6447,6 +6461,7 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	const getDeviceEventColumnPresence = async () => {
+		if (deviceEventColumnPresenceCache) return deviceEventColumnPresenceCache;
 		const rows =
 			(await prisma.$queryRaw<
 				Array<{
@@ -6494,13 +6509,14 @@ export const controller = (prisma: PrismaClient) => {
 						AND column_name = 'eventConfidence'
 				) AS "eventConfidence"
 		`) || [];
-		return {
+		deviceEventColumnPresenceCache = {
 			deviceUserId: rows[0]?.deviceUserId === true,
 			eventCategory: rows[0]?.eventCategory === true,
 			eventAction: rows[0]?.eventAction === true,
 			eventLabel: rows[0]?.eventLabel === true,
 			eventConfidence: rows[0]?.eventConfidence === true,
 		};
+		return deviceEventColumnPresenceCache;
 	};
 
 	const findLatestCompletedDeviceLogRun = async (
@@ -26792,6 +26808,18 @@ export const controller = (prisma: PrismaClient) => {
 			};
 			const orderColumnSql = orderColumnSqlBySort[sort] || Prisma.sql`de."receivedAt"`;
 			const orderDirectionSql = Prisma.raw(order === "asc" ? "ASC" : "DESC");
+			// Drive outer SELECT from page ids first. Joining page_events last made
+			// Postgres apply device_user + 4 employee laterals to all ~37k rows
+			// (~4s + multi-second JIT) then hash-filter to 10. Nested-loop from
+			// page_events keeps enrichment on the limited page only.
+			const outerDetailFromSql = Prisma.sql`
+				FROM page_events page_event
+				INNER JOIN device_events de ON de.id = page_event.id
+				LEFT JOIN "Device" d ON d.id = de."deviceId"
+				${deviceUserJoinSql}
+				${employeeJoinSql}
+				${hasQuery ? searchMatchJoinSql : Prisma.sql``}
+			`;
 			const eventsSql = Prisma.sql`
 				WITH page_events AS (
 					SELECT de.id${hasQuery ? Prisma.sql`, search_match.rank AS search_rank` : Prisma.sql``}
@@ -26876,8 +26904,7 @@ export const controller = (prisma: PrismaClient) => {
 							)
 						)
 					END AS employee
-				${hasQuery ? searchFromSql : fromSql}
-				INNER JOIN page_events page_event ON page_event.id = de.id
+				${outerDetailFromSql}
 				ORDER BY ${hasQuery ? Prisma.sql`page_event.search_rank ASC,` : Prisma.sql``} ${orderColumnSql} ${orderDirectionSql}, de."receivedAt" DESC, de."createdAt" DESC
 			`;
 			const countSql = Prisma.sql`
