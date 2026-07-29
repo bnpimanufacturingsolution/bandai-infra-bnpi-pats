@@ -12,7 +12,7 @@ via `/api/hikvision/callback`.
 
 ```text
 Host SDK listener (systemd, HCNetSDK)
-  → prefers http://127.0.0.1:3108  (NodePort)
+  → prefers http://127.0.0.1:30108  (NodePort)
 K3s watcher (hris-hikvision-watcher)
   → http://hris-callback-outbox:8080
         │
@@ -39,7 +39,7 @@ So producers do not need a new contract.
 
 ## Status
 
-`GET http://127.0.0.1:3108/status` → pending / done / dead counts + recent rows.
+`GET http://127.0.0.1:30108/status` → pending / done / dead counts + recent rows.
 
 ## Not this
 

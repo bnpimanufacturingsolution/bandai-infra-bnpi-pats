@@ -33,7 +33,7 @@ K3s hris-hikvision-watcher  ───┘         │
 Manifest lives in `gitops/runtime-k8s/overlays/dev/runtime.yaml`:
 
 - Deployment `hris-callback-outbox`
-- Service ClusterIP + NodePort **3108** (host listener can use `http://127.0.0.1:3108`)
+- Service ClusterIP + NodePort **30108** (host listener can use `http://127.0.0.1:30108`)
 - hostPath `/var/lib/project-truth/callback-outbox`
 
 ## Build / import

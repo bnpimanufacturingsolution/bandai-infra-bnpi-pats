@@ -441,7 +441,8 @@ spec:
     - name: http
       port: 8080
       targetPort: 8080
-      nodePort: 3108
+      # Host SDK listener uses http://127.0.0.1:30108 (K3s NodePort range 30000-32767).
+      nodePort: 30108
 ---
 apiVersion: apps/v1
 kind: Deployment
