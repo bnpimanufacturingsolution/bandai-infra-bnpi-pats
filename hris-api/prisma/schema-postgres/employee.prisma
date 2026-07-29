@@ -136,6 +136,8 @@ model Employee {
 
   employeePayrolls             EmployeePayroll[]
   payrollCorrections           PayrollCorrection[]
+  specialPayrollLines          SpecialPayrollLine[]
+  specialPayrollPayslips       SpecialPayrollPayslip[]
   processedPayrollPeriods      PayrollPeriod[]       @relation("PayrollPeriodProcessedBy")
   employeeBenefits             EmployeeBenefit[]
   employeeLoans                EmployeeLoan[]

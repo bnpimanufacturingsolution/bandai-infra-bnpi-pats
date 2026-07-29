@@ -1,4 +1,5 @@
 import type { MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import { Download, ChevronRight, FileText, Filter } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
@@ -9,6 +10,10 @@ import { Badge } from "~/components/atoms/Badge";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useEmployeePayrolls, useDownloadPayslip } from "~/lib/hooks/useEmployeePayroll";
 import { Skeleton } from "~/components/ui/skeleton";
+import {
+	specialPayrollService,
+	type SpecialPayrollPayslip,
+} from "~/services/special-payroll.service";
 
 interface EmployeePayrollDashboardProps {
 	employeeIdOverride?: string;
@@ -144,9 +149,30 @@ export default function EmployeePayrollDashboard({
 	});
 
 	const items = (payrollsData as any)?.employeePayrolls || [];
+	const [specialPayslips, setSpecialPayslips] = useState<SpecialPayrollPayslip[]>([]);
+
+	useEffect(() => {
+		if (!employeeId) {
+			setSpecialPayslips([]);
+			return;
+		}
+		let cancelled = false;
+		specialPayrollService
+			.listMyPayslips(employeeId)
+			.then((result) => {
+				if (!cancelled) setSpecialPayslips(result.payslips || []);
+			})
+			.catch(() => {
+				if (!cancelled) setSpecialPayslips([]);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [employeeId]);
 
 	// Calculate Summary Data (from available items)
 	// In a real app, this should come from a dedicated "year-to-date" endpoint
+	// Regular payroll YTD only — special payroll is intentionally excluded from regular totals.
 	const currentYear = new Date().getFullYear();
 	const thisYearItems = items.filter((item: any) => {
 		const endDate = item?.payrollPeriod?.endDate;
@@ -199,6 +225,21 @@ export default function EmployeePayrollDashboard({
 		});
 	};
 
+	const handleSpecialDownload = async (e: MouseEvent, payslip: SpecialPayrollPayslip) => {
+		e.stopPropagation();
+		try {
+			const blob = await specialPayrollService.downloadPayslipPdf(payslip.id);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `${payslip.payslipNumber || "special-payslip"}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch {
+			// swallow — user can open detail route
+		}
+	};
+
 	if (employeeId && isLoading) {
 		return <EmployeePayrollDashboardSkeleton />;
 	}
@@ -233,6 +274,79 @@ export default function EmployeePayrollDashboard({
 					</div>
 
 					<div className="space-y-4">
+						{specialPayslips.map((payslip) => {
+							const payDate = payslip.run?.contextPayDate || payslip.releasedAt;
+							const periodDay = payDate ? new Date(payDate).getDate() : null;
+							return (
+								<div
+									key={`special-${payslip.id}`}
+									onClick={() => {
+										if (!employeeId) return;
+										navigate(
+											`/employee/${employeeId}/special-payslip/${payslip.id}`,
+										);
+									}}
+									className="group bg-white rounded-xl p-5 border border-orange-200 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+									data-testid="special-payslip-row">
+									<div className="flex items-center gap-4">
+										<div className="bg-orange-50 rounded-lg p-3 text-center min-w-[60px]">
+											<div className="text-xs font-bold text-orange-600 uppercase">
+												{safeFormatDate(payDate, "MMM")}
+											</div>
+											<div className="text-xl font-bold text-gray-900 leading-none mt-0.5">
+												{periodDay && !Number.isNaN(periodDay) ? periodDay : "—"}
+											</div>
+										</div>
+										<div>
+											<div className="flex items-center gap-2 mb-1">
+												<h3 className="font-semibold text-gray-900">
+													{payslip.run?.label || "Special Payroll"}
+												</h3>
+												<Badge className="bg-orange-500 text-white text-[10px] uppercase tracking-wide">
+													Special Payroll
+												</Badge>
+											</div>
+											<p className="text-xs text-gray-500">
+												{safeFormatDate(payslip.run?.contextStartDate)} -{" "}
+												{safeFormatDate(payslip.run?.contextEndDate)}
+												{payslip.payslipNumber
+													? ` · ${payslip.payslipNumber}`
+													: ""}
+											</p>
+										</div>
+									</div>
+									<div className="flex items-center justify-between md:justify-end gap-8 flex-1">
+										<div className="text-right">
+											<div className="text-[10px] text-gray-400 uppercase font-medium">
+												Gross
+											</div>
+											<div className="text-sm font-medium text-gray-600">
+												{formatCurrency(Number(payslip.grossPay || 0))}
+											</div>
+										</div>
+										<div className="text-right min-w-[100px]">
+											<div className="text-[10px] text-gray-400 uppercase font-medium">
+												Net Pay
+											</div>
+											<div className="text-lg font-bold text-gray-900">
+												{formatCurrency(Number(payslip.netPay || 0))}
+											</div>
+										</div>
+										<div className="flex items-center gap-2">
+											<Button
+												variant="ghost"
+												size="icon"
+												className="h-8 w-8 text-gray-400 hover:text-orange-600"
+												onClick={(e) => handleSpecialDownload(e, payslip)}>
+												<Download className="h-4 w-4" />
+											</Button>
+											<ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-orange-500 transition-colors" />
+										</div>
+									</div>
+								</div>
+							);
+						})}
+
 						{items.map((item: any) => {
 							const employeeRecordId = item?.employee?.id || employeeId;
 							const periodEnd = item?.payrollPeriod?.endDate;
@@ -304,7 +418,7 @@ export default function EmployeePayrollDashboard({
 							);
 						})}
 
-						{items.length === 0 && (
+						{items.length === 0 && specialPayslips.length === 0 && (
 							<div className="text-center py-10 text-gray-500 bg-white rounded-xl border border-dashed">
 								No payslips found.
 							</div>

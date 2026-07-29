@@ -44,6 +44,8 @@ import {
 	employeePayrollQueryKeys,
 	useEmployeePayrolls,
 } from "~/lib/hooks/useEmployeePayroll";
+import { useBenefitTypes } from "~/lib/hooks/useBenefitTypes";
+import { useEmployees } from "~/lib/hooks/useEmployees";
 import { formatDate, formatDateForInput } from "~/lib/utils/text-utils";
 import type { EmployeeBenefit } from "~/services/employee-benefit.service";
 import type {
@@ -51,6 +53,11 @@ import type {
 	TimesheetPayrollPreviewEmployee,
 	TimesheetPayrollSourceDetail,
 } from "~/services/payroll-periods.service";
+import { SpecialPayrollModal } from "~/components/organisms/special-payroll-modal";
+import {
+	specialPayrollService,
+	type SpecialPayrollRun,
+} from "~/services/special-payroll.service";
 import {
 	Calendar,
 	AlertTriangle,
@@ -75,6 +82,7 @@ import {
 	HelpCircle,
 	ChevronDown,
 	Search,
+	Gift,
 } from "lucide-react";
 
 // Philippine Peso Icon Component
@@ -159,6 +167,9 @@ export function RunPayrollTemplate() {
 	const [selectedPreviewEmployee, setSelectedPreviewEmployee] =
 		useState<PreviewPayrollRow | null>(null);
 	const [expandedAdjustmentId, setExpandedAdjustmentId] = useState<string | null>(null);
+	const [specialPayrollOpen, setSpecialPayrollOpen] = useState(false);
+	const [specialPayrollRuns, setSpecialPayrollRuns] = useState<SpecialPayrollRun[]>([]);
+	const [specialPayrollHistoryLoading, setSpecialPayrollHistoryLoading] = useState(false);
 	const { data: cycleConfig } = usePayrollCycleConfig();
 	const activeFrequency = cycleConfig?.defaultPayFrequency || "SEMI_MONTHLY";
 	const { data: departmentsData } = useDepartments({ page: 1, limit: 1000, count: true });
@@ -395,6 +406,86 @@ export function RunPayrollTemplate() {
 
 	const { data: payrollRunSummaryData, isLoading: payrollRunSummaryLoading } =
 		usePayrollRunSummary(payrollPeriodId, true, payrollScope);
+
+	const { data: specialCompensationTypesData } = useBenefitTypes({
+		page: 1,
+		limit: 500,
+		filter: "isActive:true,payrollDirection:COMPENSATION",
+	});
+	const { data: specialActiveEmployeesData } = useEmployees(
+		{
+			page: 1,
+			limit: 500,
+			filter: "employmentStatus:ACTIVE",
+			fields: [
+				"id",
+				"employeeId",
+				"person.personalInfo.firstName",
+				"person.personalInfo.middleName",
+				"person.personalInfo.lastName",
+			],
+		},
+		{ enabled: specialPayrollOpen },
+	);
+
+	const specialCompensationTypes = useMemo(() => {
+		const list =
+			(specialCompensationTypesData as any)?.benefitTypes ||
+			(specialCompensationTypesData as any)?.data ||
+			(Array.isArray(specialCompensationTypesData)
+				? specialCompensationTypesData
+				: []);
+		return (list as any[])
+			.filter((b) => b?.code && b?.isActive !== false)
+			.map((b) => ({
+				id: String(b.id),
+				code: String(b.code),
+				name: String(b.name || b.code),
+			}));
+	}, [specialCompensationTypesData]);
+
+	const specialActiveEmployees = useMemo(() => {
+		const list =
+			(specialActiveEmployeesData as any)?.employees ||
+			(specialActiveEmployeesData as any)?.data ||
+			(Array.isArray(specialActiveEmployeesData) ? specialActiveEmployeesData : []);
+		return (list as any[]).map((e) => {
+			const info = e?.person?.personalInfo || {};
+			const name =
+				[info.lastName, info.firstName].filter(Boolean).join(", ") ||
+				e.employeeId ||
+				e.id;
+			return {
+				id: String(e.id),
+				employeeId: String(e.employeeId || ""),
+				name: String(name),
+			};
+		});
+	}, [specialActiveEmployeesData]);
+
+	useEffect(() => {
+		if (!payrollPeriodId) {
+			setSpecialPayrollRuns([]);
+			return;
+		}
+		let cancelled = false;
+		setSpecialPayrollHistoryLoading(true);
+		specialPayrollService
+			.listRuns({ contextPayrollPeriodId: payrollPeriodId, limit: 20 })
+			.then((result) => {
+				if (!cancelled) setSpecialPayrollRuns(result.runs || []);
+			})
+			.catch(() => {
+				if (!cancelled) setSpecialPayrollRuns([]);
+			})
+			.finally(() => {
+				if (!cancelled) setSpecialPayrollHistoryLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [payrollPeriodId]);
+
 	const { data: payrollAdjustmentsData, isLoading: payrollAdjustmentsLoading } =
 		useEmployeeBenefits({
 			filter: payrollPeriodId
@@ -3127,6 +3218,60 @@ export function RunPayrollTemplate() {
 								</Button>
 							)}
 
+							{/* Special Payroll — separate one-time compensation (never regular payroll) */}
+							<div className="mt-3 space-y-2">
+								<Button
+									type="button"
+									variant="outline"
+									onClick={() => setSpecialPayrollOpen(true)}
+									className="w-full border-orange-200 text-orange-700 hover:bg-orange-50 font-semibold py-5 text-base gap-2"
+									data-testid="special-payroll-open">
+									<Gift className="w-5 h-5" />
+									Special Payroll
+								</Button>
+								<p className="text-xs text-gray-500 px-1">
+									One-time compensation with separate payslips. Uses this period
+									only as a date label — does not wait for or enter regular payroll.
+								</p>
+								{(specialPayrollHistoryLoading || specialPayrollRuns.length > 0) && (
+									<div className="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+										<p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+											Special Payroll history
+										</p>
+										{specialPayrollHistoryLoading ? (
+											<p className="text-xs text-gray-500">Loading…</p>
+										) : (
+											<ul className="space-y-1.5">
+												{specialPayrollRuns.slice(0, 5).map((run) => (
+													<li
+														key={run.id}
+														className="flex items-start justify-between gap-2 text-xs">
+														<div className="min-w-0">
+															<p className="font-medium text-gray-900 truncate">
+																{run.label}
+															</p>
+															<p className="text-gray-500 font-mono">
+																{run.runCode}
+															</p>
+														</div>
+														<span
+															className={
+																run.status === "RELEASED"
+																	? "text-emerald-700 font-medium"
+																	: run.status === "CANCELLED"
+																		? "text-gray-400"
+																		: "text-orange-700 font-medium"
+															}>
+															{run.status}
+														</span>
+													</li>
+												))}
+											</ul>
+										)}
+									</div>
+								)}
+							</div>
+
 							{/* Payroll Details */}
 							<div className="mt-5 space-y-3">
 								{/* Due Date */}
@@ -4697,6 +4842,37 @@ export function RunPayrollTemplate() {
 					)}
 				</div>
 			</Modal>
+
+			<SpecialPayrollModal
+				open={specialPayrollOpen}
+				onOpenChange={setSpecialPayrollOpen}
+				period={
+					selectedPeriodCard
+						? {
+								id: selectedPeriodCard.id,
+								code: selectedPeriodCard.code,
+								name: selectedPeriodCard.name,
+								startDate: selectedPeriodCard.startDate
+									? String(selectedPeriodCard.startDate)
+									: null,
+								endDate: selectedPeriodCard.endDate
+									? String(selectedPeriodCard.endDate)
+									: null,
+								payDate: selectedPeriodCard.payDate
+									? String(selectedPeriodCard.payDate)
+									: null,
+							}
+						: null
+				}
+				compensationTypes={specialCompensationTypes}
+				activeEmployees={specialActiveEmployees}
+				onCompleted={(run) => {
+					setSpecialPayrollRuns((prev) => {
+						const without = prev.filter((r) => r.id !== run.id);
+						return [run, ...without];
+					});
+				}}
+			/>
 		</div>
 	);
 }

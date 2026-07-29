@@ -1,5 +1,24 @@
 ﻿# WWG Agent Handoff
 
+## 2026-07-29 - Special Payroll one-time compensation (implemented)
+
+- Status: `IMPLEMENTED_LOCAL_AWAITING_DB_MIGRATE`.
+- Plan: `docs/00-product/AGENT-PROMPT-special-payroll-one-time.md`.
+- Backend: Prisma models `SpecialPayrollRun|Line|Payslip`, routes under
+  `/api/special-payroll/*`, pure normalization helper, create/release/cancel
+  service with idempotency + once-per-period uniqueness. Does **not** touch
+  regular `EmployeePayroll` generation.
+- Frontend: secondary **Special Payroll** control on Run Payroll card; modal
+  (Manual Entry + Mass Upload); employee history Special Payroll badge + detail
+  route; special PDF helper.
+- Validation: helper+service specs **10 passing**. Full API typecheck still has
+  pre-existing unrelated errors; no special-payroll TS errors after
+  `buildSuccessResponse(message, data)` fix.
+- Open: apply `20260729_add_special_payroll_tables.sql` when DEV Postgres
+  `127.0.0.1:55435` is up; Playwright/live API proof after migrate; truth doc
+  polish in wiki terminology if product names need promotion.
+- No confidential workbook was imported into the repo.
+
 ## 2026-07-28 - Shared observability recovered for PROD/DEV/UAT
 
 - Status: `FULFILLED`.

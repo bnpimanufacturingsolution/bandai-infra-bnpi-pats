@@ -121,6 +121,10 @@ const employeeRoutes = [
 	route(":id/attendance", "routes/employee/$id.attendance.tsx"),
 	route(":id/payroll", "routes/employee/$id.payroll.tsx"),
 	route(":id/payroll/:payslipId", "routes/employee/$id.payroll.$payslipId.tsx"),
+	route(
+		":id/special-payslip/:payslipId",
+		"routes/employee/$id.special-payslip.$payslipId.tsx",
+	),
 ];
 
 // HR-specific routes (HR Manager + HR User - role-gated in components)

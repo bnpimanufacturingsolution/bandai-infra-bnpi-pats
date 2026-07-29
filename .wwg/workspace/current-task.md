@@ -1,5 +1,22 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-07-29 Special Payroll one-time compensation
+
+- Task mode: product feature (dedicated Special Payroll, separate from regular).
+- Plan: `docs/00-product/AGENT-PROMPT-special-payroll-one-time.md` (`PLAN_ACCEPTED`).
+- Finish line: dedicated `SpecialPayrollRun` / `Line` / `Payslip` records; preview →
+  create → release/cancel; manual + `.xlsx` mass upload; separate employee payslips
+  with Special Payroll badge; regular payroll generation unchanged.
+- Code surfaces:
+  - API: `hris-api/app/specialPayroll/*`, helper/zod, additive SQL migration
+    `20260729_add_special_payroll_tables.sql`
+  - App: Special Payroll button/modal on Run Payroll, history chip, employee
+    payroll history badge + `/employee/:id/special-payslip/:payslipId`
+- Boundary: production migration application is out of scope for this pass; local
+  DEV DB `55435` was not reachable at implement time so table apply is deferred.
+- Tests: `tests/special-payroll.helper.spec.ts`, `tests/special-payroll.service.spec.ts`
+  (10 passing).
+
 ## Latest Task Addendum - 2026-07-28 shared observability recovery
 
 - Task mode: production/runtime regression repair and audit.
