@@ -64,6 +64,7 @@ import {
 	Users,
 	Clock,
 	ChevronLeft,
+	ChevronRight,
 	Wallet,
 	FileText,
 	CheckCircle,
@@ -815,6 +816,8 @@ export function RunPayrollTemplate() {
 		return `/hr/hr-payroll?tab=past&periodId=${encodeURIComponent(String(periodId))}`;
 	};
 
+	const periodScrollRef = useRef<HTMLDivElement | null>(null);
+
 	const formatMonthYearUpper = (date: Date | string | null | undefined) => {
 		if (!date) return "—";
 		const safe = formatDateForInput(date);
@@ -822,6 +825,13 @@ export function RunPayrollTemplate() {
 		const [y, m, d] = safe.split("-").map(Number);
 		const dt = new Date(y, (m || 1) - 1, d || 1);
 		return `${dt.toLocaleString("en-US", { month: "long" }).toUpperCase()} ${dt.getFullYear()}`;
+	};
+
+	const scrollPeriods = (direction: "left" | "right") => {
+		const el = periodScrollRef.current;
+		if (!el) return;
+		const amount = 420; // ~3 cards at 132px + gaps
+		el.scrollBy({ left: direction === "left" ? -amount : amount, behavior: "smooth" });
 	};
 
 	const employeesWithMissingInfo: MissingInfoEmployee[] = useMemo(
@@ -2256,92 +2266,111 @@ export function RunPayrollTemplate() {
 					</button>
 				</div>
 
-				{/* Pay Period Cards — fixed card grid (not soft chips) */}
-				<div
-					className="grid w-full grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
-					data-testid="payroll-period-grid">
-					{payPeriods.length > 0 ? (
-						payPeriods.map((p: any) => {
-							const isSelected =
-								p.code === selectedPeriodCode ||
-								(!selectedPeriodCode && p.id === currentPayrollPeriod?.id);
-							const isCurrent = p.id === currentPayrollPeriod?.id;
-							const isCompleted = p.status === "COMPLETED";
+				{/* Pay Period Cards — horizontal carousel */}
+				<div className="flex items-center gap-3" data-testid="payroll-period-carousel">
+					<button
+						type="button"
+						onClick={() => scrollPeriods("left")}
+						className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
+						aria-label="Scroll periods left">
+						<ChevronLeft className="h-5 w-5 text-gray-600" />
+					</button>
 
-							// Use shared util to avoid timezone-shifted days
-							const endInput = formatDateForInput(p.endDate);
-							const endLabel = endInput
-								? new Date(
-										Number(endInput.slice(0, 4)),
-										Number(endInput.slice(5, 7)) - 1,
-										Number(endInput.slice(8, 10)),
-									)
-								: null;
+					<div
+						ref={periodScrollRef}
+						className="hover-show-scroll flex min-w-0 flex-1 gap-3 overflow-x-auto scroll-smooth pb-1"
+						style={{ scrollBehavior: "smooth" }}>
+						{payPeriods.length > 0 ? (
+							payPeriods.map((p: any) => {
+								const isSelected =
+									p.code === selectedPeriodCode ||
+									(!selectedPeriodCode && p.id === currentPayrollPeriod?.id);
+								const isCurrent = p.id === currentPayrollPeriod?.id;
+								const isCompleted = p.status === "COMPLETED";
 
-							// Derive period info from endDate
-							const periodMonth = endLabel
-								? endLabel
-										.toLocaleString("en-US", { month: "short" })
-										.toUpperCase()
-								: "—";
-							const periodDay = endLabel ? endLabel.getDate() : "—";
-							const periodDayOfWeek = endLabel
-								? endLabel.toLocaleString("en-US", { weekday: "short" })
-								: "";
+								// Use shared util to avoid timezone-shifted days
+								const endInput = formatDateForInput(p.endDate);
+								const endLabel = endInput
+									? new Date(
+											Number(endInput.slice(0, 4)),
+											Number(endInput.slice(5, 7)) - 1,
+											Number(endInput.slice(8, 10)),
+										)
+									: null;
 
-							return (
-								<button
-									key={p.id}
-									type="button"
-									onClick={() => handlePeriodChange(p.code)}
-									className={`box-border flex w-full min-w-0 flex-col overflow-hidden rounded-xl border-2 p-0 text-left shadow-sm transition-all ${
-										isSelected
-											? "border-orange-500 bg-orange-50 shadow-orange-100"
-											: "border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50/40"
-									}`}>
-									<div
-										className={`w-full px-2 py-1.5 text-center text-[11px] font-semibold tracking-wide ${
+								// Derive period info from endDate
+								const periodMonth = endLabel
+									? endLabel
+											.toLocaleString("en-US", { month: "short" })
+											.toUpperCase()
+									: "—";
+								const periodDay = endLabel ? endLabel.getDate() : "—";
+								const periodDayOfWeek = endLabel
+									? endLabel.toLocaleString("en-US", { weekday: "short" })
+									: "";
+
+								return (
+									<button
+										key={p.id}
+										type="button"
+										onClick={() => handlePeriodChange(p.code)}
+										style={{ width: 132, minWidth: 132, flexShrink: 0 }}
+										className={`box-border flex flex-col overflow-hidden rounded-xl border-2 p-0 text-left transition-all ${
 											isSelected
-												? "bg-orange-500 text-white"
-												: isCurrent
-													? "bg-emerald-700 text-white"
-													: isCompleted
-														? "bg-orange-600 text-white"
-														: "bg-gray-100 text-gray-600"
+												? "border-orange-500 bg-orange-50"
+												: "border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50/50"
 										}`}>
-										{periodMonth}
-									</div>
-									<div className="flex flex-1 flex-col items-center justify-center bg-inherit px-2 py-3 text-center">
 										<div
-											className={`text-2xl font-bold leading-none tabular-nums ${
-												isSelected ? "text-orange-600" : "text-gray-900"
+											className={`w-full px-2 py-1.5 text-center text-[11px] font-semibold ${
+												isSelected
+													? "bg-orange-500 text-white"
+													: isCurrent
+														? "bg-emerald-700 text-white"
+														: isCompleted
+															? "bg-orange-600 text-white"
+															: "bg-gray-100 text-gray-600"
 											}`}>
-											{periodDay}
+											{periodMonth}
 										</div>
-										<div className="mt-1 truncate text-[11px] text-gray-500">
-											{periodDayOfWeek}
+										<div className="bg-inherit py-3 text-center">
+											<div
+												className={`text-2xl font-bold leading-none tabular-nums ${
+													isSelected ? "text-orange-600" : "text-gray-900"
+												}`}>
+												{periodDay}
+											</div>
+											<div className="mt-1 truncate px-2 text-[11px] text-gray-500">
+												{periodDayOfWeek}
+											</div>
 										</div>
+									</button>
+								);
+							})
+						) : showInitialSkeleton ? (
+							Array.from({ length: 5 }).map((_, index) => (
+								<div
+									key={`payroll-period-skeleton-${index}`}
+									style={{ width: 132, minWidth: 132, flexShrink: 0 }}
+									className="box-border overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
+									<div className="h-7 w-full animate-pulse bg-gray-100" />
+									<div className="space-y-2 px-4 py-3">
+										<div className="mx-auto h-7 w-10 animate-pulse rounded bg-gray-100" />
+										<div className="mx-auto h-3 w-14 animate-pulse rounded bg-gray-100" />
 									</div>
-								</button>
-							);
-						})
-					) : showInitialSkeleton ? (
-						Array.from({ length: 8 }).map((_, index) => (
-							<div
-								key={`payroll-period-skeleton-${index}`}
-								className="box-border w-full overflow-hidden rounded-xl border-2 border-gray-200 bg-white shadow-sm">
-								<div className="h-7 w-full bg-gray-100 animate-pulse" />
-								<div className="space-y-2 px-4 py-3">
-									<div className="mx-auto h-7 w-10 rounded bg-gray-100 animate-pulse" />
-									<div className="mx-auto h-3 w-14 rounded bg-gray-100 animate-pulse" />
 								</div>
-							</div>
-						))
-					) : (
-						<div className="col-span-full text-sm text-gray-500">
-							No payroll periods found.
-						</div>
-					)}
+							))
+						) : (
+							<div className="text-sm text-gray-500">No payroll periods found.</div>
+						)}
+					</div>
+
+					<button
+						type="button"
+						onClick={() => scrollPeriods("right")}
+						className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
+						aria-label="Scroll periods right">
+						<ChevronRight className="h-5 w-5 text-gray-600" />
+					</button>
 				</div>
 			</div>
 
