@@ -180,19 +180,33 @@ AGENT_DONE | role=A-MON | id=ROOT | status=root_fallback | deliverable=<path>
 
 Root synthesizes `00-ROOT-STATUS.md` each cycle (G1 table + agent roster status + MANIFEST path + last A-DRIFT verdict).
 
-### A-DRIFT — prompt status / anti-drift (hard)
+### A-DRIFT — prompt status / anti-drift (hard, **non-stop loop**)
 
 **Purpose:** A-MON watches **DEV product health**. A-DRIFT watches **whether this job card is being followed** and whether the goal is stalling.
 
-**When it must run**
+**Critical operator complaint we fix here:** Subagents must **not** fire once and disappear. A-DRIFT + the **manager loop** keep the job alive until the goal **holds**.
+
+**Persistent manager (required while goal not held):**
+
+```powershell
+# Does not exit on first green. Holds HoldGreenCycles then may stop.
+# While red/drift: rewrites MANAGER-NEXT-SPAWNS.md every cycle (root must spawn those roles).
+powershell -File scripts/loop-device-events-manager.ps1 -IntervalSeconds 60 -HoldGreenCycles 5 -MaxHours 24
+# Optional full realtime gate:
+# powershell -File scripts/loop-device-events-manager.ps1 -RequireG2 -HoldGreenCycles 3 -MaxHours 48
+```
+
+Root **must** start this loop in cycle 1 (background process or scheduler). If the loop is dead and goal not held → **protocol red** (D-LOOP).
+
+**When A-DRIFT / manager must run**
 
 | Trigger | Action |
 |---|---|
-| Cycle 1 | Always spawn with A-OBS/A-CLASS/A-MON |
-| Every major root cycle while G1 EXIT GATE incomplete | Re-run A-DRIFT (or `scripts/check-device-events-prompt-drift.ps1`) |
-| After any SPAWNED batch | Optional quick drift check |
-| Operator says “nothing spawning” / “drifting” | Spawn A-DRIFT + A-PROMPT immediately |
-| G1 fully green | A-DRIFT final pass → `goalReached=true` in MANIFEST; then may stop |
+| Cycle 1 | Always spawn A-DRIFT + start `loop-device-events-manager.ps1` |
+| Every manager interval while goal not held | Re-run drift script; rewrite `MANAGER-NEXT-SPAWNS.md`; root re-spawns listed roles |
+| Subagent completes | **Do not treat as job done** — only manager `GOAL-HELD.flag` or EXIT GATE table all PASS + hold cycles |
+| Operator says “nothing spawning” / “drifting” | Spawn A-DRIFT + A-PROMPT + restart manager loop immediately |
+| Goal held (HoldGreenCycles) | Manager writes `GOAL-HELD.flag`; A-DRIFT final compliant pass; then may stop |
 
 **Checks (fail closed → DRIFT_ALERT)**
 
@@ -209,22 +223,34 @@ Root synthesizes `00-ROOT-STATUS.md` each cycle (G1 table + agent roster status 
 | D9 | `pathReady`/live-readiness regression vs last GREEN snapshot | yellow/red |
 | D10 | Watcher miss / ghost active reappeared | red → A-FIX-RT |
 
-**Script (preferred machine-check):**
+**Scripts:**
 
 ```powershell
+# One-shot compliance (also called every manager cycle)
 powershell -File scripts/check-device-events-prompt-drift.ps1 -StampDir <stamp>
-# writes 06-drift-compliance.md + .json; exit 0 = compliant, 2 = drift
+# exit 0 = compliant/goal_reached, 2 = drift
+
+# Persistent manager (preferred — does not die when a subagent exits)
+powershell -File scripts/loop-device-events-manager.ps1 -IntervalSeconds 60 -HoldGreenCycles 5 -MaxHours 24
 ```
 
-**A-DRIFT chat lines**
+**A-DRIFT / manager chat lines**
 
 ```text
 SPAWNED | A-DRIFT=<id> | stamp=<path>
+SPAWNED | MANAGER_LOOP=running | pid=<optional> | stamp=<path>
 DRIFT_ALERT | severity=red | item=D1 | next=write_MANIFEST
+MANAGER | cycle=N | g1=pass|fail | drift=... | consecGreen=k/H | next=see MANAGER-NEXT-SPAWNS.md
 AGENT_DONE | role=A-DRIFT | id=<id> | status=completed | deliverable=06-drift-compliance.md | verdict=compliant|drift
 ```
 
-**A-DRIFT must not** silently fix product bugs itself — it **orders** root to spawn A-FIX-BE / A-FIX-RT / A-VERIFY / A-PROMPT.
+**Banned:** Treating a single `AGENT_DONE` as job complete. Job complete only when:
+
+1. G1 table all PASS (and G2 if in scope), **and**
+2. Manager `consecutiveGreen >= HoldGreenCycles` **or** `GOAL-HELD.flag` present, **and**
+3. Latest A-DRIFT verdict is `compliant` or `goal_reached` (not `drift`).
+
+**A-DRIFT must not** silently fix product bugs itself — it **orders** root to spawn A-FIX-BE / A-FIX-RT / A-VERIFY / A-PROMPT via `MANAGER-NEXT-SPAWNS.md`.
 
 ### Heartbeat (every major cycle)
 
