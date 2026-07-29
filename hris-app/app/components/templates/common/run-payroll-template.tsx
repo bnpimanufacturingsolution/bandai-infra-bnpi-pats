@@ -2312,24 +2312,30 @@ export function RunPayrollTemplate() {
 								return (
 									<button
 										key={p.id}
+										type="button"
 										onClick={() => handlePeriodChange(p.code)}
-										className={`flex-shrink-0 rounded-xl border-2 bg-white transition-all w-[132px] ${
+										className={`flex-shrink-0 rounded-xl border-2 transition-all w-[132px] ${
 											isSelected
-												? "border-orange-500"
-												: "border-gray-200 hover:border-orange-300 hover:bg-orange-50/50"
+												? "border-orange-500 bg-orange-50"
+												: "border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50/50"
 										}`}>
 										<div
 											className={`text-[11px] font-semibold py-1.5 px-2 rounded-t-lg text-center ${
-												isCurrent
-													? "bg-emerald-700 text-white"
-													: isCompleted
-														? "bg-orange-600 text-white"
-														: "bg-gray-100 text-gray-600"
+												isSelected
+													? "bg-orange-500 text-white"
+													: isCurrent
+														? "bg-emerald-700 text-white"
+														: isCompleted
+															? "bg-orange-600 text-white"
+															: "bg-gray-100 text-gray-600"
 											}`}>
 											{periodMonth}
 										</div>
 										<div className="py-3 text-center">
-											<div className="text-2xl font-bold text-gray-900">
+											<div
+												className={`text-2xl font-bold ${
+													isSelected ? "text-orange-600" : "text-gray-900"
+												}`}>
 												{periodDay}
 											</div>
 											<div className="text-[11px] text-gray-500 truncate px-2">
