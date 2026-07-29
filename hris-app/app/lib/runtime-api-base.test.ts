@@ -1,91 +1,73 @@
-import { describe, expect, it } from "vitest";
-import { resolveRuntimeApiBase } from "./runtime-api-base";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { getRuntimeApiBase } from "./runtime-api-base";
 
-const locationFor = (url: string): Pick<Location, "protocol" | "hostname" | "port"> => {
-	const parsed = new URL(url);
-	return {
-		protocol: parsed.protocol,
-		hostname: parsed.hostname,
-		port: parsed.port,
+describe("getRuntimeApiBase", () => {
+	const originalWindow = globalThis.window;
+
+	beforeEach(() => {
+		// Local .env sets VITE_API_BASE_URL; clear so host routing is tested.
+		vi.stubEnv("VITE_API_BASE_URL", "");
+	});
+
+	afterEach(() => {
+		vi.unstubAllEnvs();
+		if (originalWindow) {
+			// @ts-expect-error restore
+			globalThis.window = originalWindow;
+		}
+	});
+
+	const mockHost = (hostname: string, port = "", protocol = "https:") => {
+		// @ts-expect-error test mock
+		globalThis.window = {
+			location: {
+				hostname,
+				host: port ? `${hostname}:${port}` : hostname,
+				port,
+				protocol,
+				origin: port ? `${protocol}//${hostname}:${port}` : `${protocol}//${hostname}`,
+			},
+		};
 	};
-};
 
-describe("runtime API base resolver", () => {
-	it("keeps prod, dev, and UAT LAN app ports isolated from each other", () => {
-		expect(resolveRuntimeApiBase(locationFor("http://192.168.100.79:3000"))).toBe(
-			"http://192.168.100.79:3001",
-		);
-		expect(resolveRuntimeApiBase(locationFor("http://192.168.100.79:3100"))).toBe(
-			"http://192.168.100.79:3101",
-		);
-		expect(resolveRuntimeApiBase(locationFor("http://192.168.100.79:3200"))).toBe(
-			"http://192.168.100.79:3201",
-		);
+	it("does not send bnpi-hris.dev browser traffic to Cloud Run", () => {
+		mockHost("dev.bnpi-hris.tech");
+		const base = getRuntimeApiBase();
+		expect(base).not.toContain("run.app");
+		expect(base).toBe("https://dev.bnpi-hris.tech");
 	});
 
-	it("keeps localhost prod, dev, and UAT app ports isolated from each other", () => {
-		expect(resolveRuntimeApiBase(locationFor("http://localhost:3000"))).toBe(
-			"http://localhost:3001",
-		);
-		expect(resolveRuntimeApiBase(locationFor("http://localhost:3100"))).toBe(
-			"http://localhost:3101",
-		);
-		expect(resolveRuntimeApiBase(locationFor("http://localhost:3200"))).toBe(
-			"http://localhost:3201",
-		);
+	it("maps uat.bnpi-hris.tech to same origin not Cloud Run", () => {
+		mockHost("uat.bnpi-hris.tech");
+		expect(getRuntimeApiBase()).toBe("https://uat.bnpi-hris.tech");
+		expect(getRuntimeApiBase()).not.toContain("run.app");
 	});
 
-	it("keeps localhost browser sessions on the paired localhost API when a stale remote env base is set", () => {
-		expect(
-			resolveRuntimeApiBase(
-				locationFor("http://localhost:5175"),
-				"http://10.184.37.19:3101/api",
-			),
-		).toBe("http://localhost:3001");
+	it("maps app.bnpi-hris.tech to same origin not Cloud Run", () => {
+		mockHost("app.bnpi-hris.tech");
+		expect(getRuntimeApiBase()).toBe("https://app.bnpi-hris.tech");
+		expect(getRuntimeApiBase()).not.toContain("run.app");
 	});
 
-	it("honors an explicit non-local API base", () => {
-		expect(
-			resolveRuntimeApiBase(
-				locationFor("http://192.168.100.79:3100"),
-				"https://api.example.test",
-			),
-		).toBe("https://api.example.test");
+	it("uses localhost:3001 for local dev", () => {
+		mockHost("localhost", "5175", "http:");
+		expect(getRuntimeApiBase()).toBe("http://localhost:3001");
 	});
 
-	it("maps relative API bases to the paired LAN API port", () => {
-		expect(resolveRuntimeApiBase(locationFor("http://10.184.38.61:3000"), "/api")).toBe(
-			"http://10.184.38.61:3001",
-		);
+	it("honors VITE_API_BASE_URL override", () => {
+		vi.stubEnv("VITE_API_BASE_URL", "https://custom.example/api");
+		mockHost("dev.bnpi-hris.tech");
+		expect(getRuntimeApiBase()).toBe("https://custom.example/api");
 	});
 
-	it("uses same-host API routing for production bnpi Cloudflare tunnel hosts", () => {
-		expect(resolveRuntimeApiBase(locationFor("https://bnpi-hris.tech/auth/login"))).toBe(
-			"/api",
-		);
-		expect(resolveRuntimeApiBase(locationFor("https://www.bnpi-hris.tech/auth/login"))).toBe(
-			"/api",
-		);
-		expect(resolveRuntimeApiBase(locationFor("https://app.bnpi-hris.tech/auth/login"))).toBe(
-			"/api",
-		);
+	it("maps LAN DEV app port 3100 to API 3101", () => {
+		mockHost("10.184.37.19", "3100", "http:");
+		expect(getRuntimeApiBase()).toBe("http://10.184.37.19:3101");
 	});
 
-	it("uses same-host API routing for dev and UAT public app hosts", () => {
-		expect(resolveRuntimeApiBase(locationFor("https://dev.bnpi-hris.tech/auth/login"))).toBe(
-			"/api",
-		);
-		expect(resolveRuntimeApiBase(locationFor("https://uat.bnpi-hris.tech/auth/login"))).toBe(
-			"/api",
-		);
-	});
-
-	it("maps relative API bases to the paired LAN API port for direct LAN hosts", () => {
-		expect(
-			resolveRuntimeApiBase(
-				{ protocol: "http:", hostname: "10.184.37.19", port: "3100" },
-				"/api",
-			),
-		).toBe("http://10.184.37.19:3101");
+	it("keeps Firebase DEV host on legacy Cloud Run only", () => {
+		mockHost("hris-workforce-dev-20260416-app.web.app");
+		expect(getRuntimeApiBase()).toContain("run.app");
+		expect(getRuntimeApiBase()).toContain("hris-api-dev");
 	});
 });
