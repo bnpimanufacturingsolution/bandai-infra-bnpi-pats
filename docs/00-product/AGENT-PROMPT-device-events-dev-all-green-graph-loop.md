@@ -160,3 +160,12 @@ Browser https://dev.bnpi-hris.tech
 ## Exit gate
 
 Do not stop until G1 checklist is green with evidence under `.runtime/`, or Real Stop Condition with 3 failed recoveries. Prefer commit/push `develop` when code changed and tests pass.
+
+---
+
+## Superseding multi-agent card
+
+For full non-assuming multi-agent root coordination, restart resilience, and observability-driven EXIT GATE, use:
+
+**`docs/00-product/AGENT-PROMPT-device-events-multiagent-all-green-non-assuming.md`**
+
