@@ -30,14 +30,45 @@ const READ_ONLY_METHODS = new Set([
 	"queryRawUnsafe",
 ]);
 
-const createPrismaClient = (datasourceUrl?: string) =>
-	new PrismaClient({
-		...(datasourceUrl ? { datasources: { db: { url: datasourceUrl } } } : {}),
+/**
+ * Ensure Prisma pool is large enough for Device Events (list + facets + readiness)
+ * and concurrent admin traffic. Default Prisma limit is ~num_cpus*2+1 (often 5–9
+ * in a small k8s pod), which starves when one GET /device/events fans out queries.
+ * URL params win if already set; we only fill missing keys.
+ */
+const withPrismaPoolDefaults = (rawUrl?: string): string | undefined => {
+	const value = String(rawUrl || "").trim();
+	if (!value) return undefined;
+	try {
+		const url = new URL(value);
+		if (!url.searchParams.has("connection_limit")) {
+			url.searchParams.set(
+				"connection_limit",
+				String(config.prismaConnectionLimit || 30),
+			);
+		}
+		if (!url.searchParams.has("pool_timeout")) {
+			url.searchParams.set(
+				"pool_timeout",
+				String(config.prismaPoolTimeoutSeconds || 20),
+			);
+		}
+		return url.toString();
+	} catch {
+		return value;
+	}
+};
+
+const createPrismaClient = (datasourceUrl?: string) => {
+	const url = withPrismaPoolDefaults(datasourceUrl);
+	return new PrismaClient({
+		...(url ? { datasources: { db: { url } } } : {}),
 		transactionOptions: {
 			maxWait: config.prismaTransactionMaxWaitMs,
 			timeout: config.prismaTransactionTimeoutMs,
 		},
 	});
+};
 
 type ReadReplicaState = {
 	id: string;

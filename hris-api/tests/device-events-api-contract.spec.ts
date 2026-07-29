@@ -1,4 +1,5 @@
 import { expect } from "chai";
+import { describe, it } from "mocha";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -9,37 +10,49 @@ describe("Device events API contract", () => {
 	);
 
 	it("accepts event category and action filters as the primary event contract", () => {
-		expect(controllerSource).to.contain('req.query.eventCategory');
-		expect(controllerSource).to.contain('req.query.eventAction');
-		expect(controllerSource).to.contain('de."eventCategory" = ${eventCategory}::"DeviceEventCategory"');
-		expect(controllerSource).to.contain('de."eventAction" = ${eventAction}::"DeviceEventAction"');
-		});
+		expect(controllerSource).to.contain("req.query.eventCategory");
+		expect(controllerSource).to.contain("req.query.eventAction");
+		expect(controllerSource).to.contain(
+			'de."eventCategory" = ${eventCategory}::"DeviceEventCategory"',
+		);
+		expect(controllerSource).to.contain(
+			'de."eventAction" = ${eventAction}::"DeviceEventAction"',
+		);
+	});
 
 	it("supports summaryScope=facets so dropdown counts ignore taxonomy leaf filters", () => {
-		expect(controllerSource).to.contain('req.query.summaryScope');
+		expect(controllerSource).to.contain("req.query.summaryScope");
 		expect(controllerSource).to.contain('summaryScope === "facets"');
 		expect(controllerSource).to.contain("facetWhereConditions");
 		expect(controllerSource).to.contain("facetWhereSql");
 	});
 
-		it("filters saved rows by evidence, confidence, and HRIS match result", () => {
-			expect(controllerSource).to.contain("req.query.evidenceSource");
-			expect(controllerSource).to.contain("req.query.eventConfidence");
-			expect(controllerSource).to.contain("req.query.status");
-			expect(controllerSource).to.contain("de.payload->>'evidenceSource'");
-			expect(controllerSource).to.contain('de."eventConfidence" = ${eventConfidence}::"DeviceEventConfidence"');
-		});
+	it("supports summaryScope=page/none so soft-poll uses page+count only (pool safety)", () => {
+		expect(controllerSource).to.contain('summaryScope === "none"');
+		expect(controllerSource).to.contain('summaryScope === "page"');
+		expect(controllerSource).to.contain("usePageOnlySummary");
+	});
 
-		it("returns event-first summaries while keeping raw source/status aliases compatible", () => {
+	it("filters saved rows by evidence, confidence, and HRIS match result", () => {
+		expect(controllerSource).to.contain("req.query.evidenceSource");
+		expect(controllerSource).to.contain("req.query.eventConfidence");
+		expect(controllerSource).to.contain("req.query.status");
+		expect(controllerSource).to.contain("de.payload->>'evidenceSource'");
+		expect(controllerSource).to.contain(
+			'de."eventConfidence" = ${eventConfidence}::"DeviceEventConfidence"',
+		);
+	});
+
+	it("returns event-first summaries while keeping raw source/status aliases compatible", () => {
 		expect(controllerSource).to.contain("byCategory");
 		expect(controllerSource).to.contain("byAction");
 		expect(controllerSource).to.contain("byActionCategory");
 		expect(controllerSource).to.contain("byProcessingResult");
-			expect(controllerSource).to.contain("byRuntimePath");
-			expect(controllerSource).to.contain("byEvidenceSource");
-			expect(controllerSource).to.contain("byConfidence");
-			expect(controllerSource).to.contain("directEvidence");
-			expect(controllerSource).to.contain("needsEmployeeMatch");
+		expect(controllerSource).to.contain("byRuntimePath");
+		expect(controllerSource).to.contain("byEvidenceSource");
+		expect(controllerSource).to.contain("byConfidence");
+		expect(controllerSource).to.contain("directEvidence");
+		expect(controllerSource).to.contain("needsEmployeeMatch");
 		expect(controllerSource).to.contain("byStatus: byProcessingResult");
 		expect(controllerSource).to.contain("bySource: byRuntimePath");
 	});
@@ -60,12 +73,12 @@ describe("Device events API contract", () => {
 		expect(controllerSource).to.contain('eventConfidence: "INFERRED"');
 		expect(controllerSource).to.contain("device-events.json");
 		expect(controllerSource).to.contain("await prisma.$transaction");
-		});
-
-		it("persists one correlated runtime event per sync run", () => {
-			expect(controllerSource).to.contain("const persistDeviceRuntimeEvent = async");
-			expect(controllerSource).to.contain('evidenceSource: "RUNTIME_PROCESS"');
-			expect(controllerSource).to.contain("correlationId: params.correlationId");
-			expect(controllerSource).to.contain('action: "SYNC_IMPORTED"');
-		});
 	});
+
+	it("persists one correlated runtime event per sync run", () => {
+		expect(controllerSource).to.contain("const persistDeviceRuntimeEvent = async");
+		expect(controllerSource).to.contain('evidenceSource: "RUNTIME_PROCESS"');
+		expect(controllerSource).to.contain("correlationId: params.correlationId");
+		expect(controllerSource).to.contain('action: "SYNC_IMPORTED"');
+	});
+});

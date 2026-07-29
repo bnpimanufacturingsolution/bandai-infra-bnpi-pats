@@ -319,6 +319,22 @@ const getAsyncErrorMessage = (error: unknown, fallback: string) => {
 /** Map flaky auth/DB middleware copy into an operator-actionable recovery hint. */
 const getDeviceEventsRecoveryHint = (error: unknown) => {
 	const message = getAsyncErrorMessage(error, "").toLowerCase();
+	// Pool starvation is NOT "Postgres is down" — common when Device Events fans out
+	// many concurrent queries. Keep ready "repairing" will not fix this.
+	if (
+		message.includes("connection pool") ||
+		message.includes("timed out fetching a new connection") ||
+		message.includes("pool timeout") ||
+		message.includes("too many clients") ||
+		message.includes("remaining connection slots")
+	) {
+		return {
+			title: "API database pool busy (not a dead database)",
+			description:
+				"Postgres is up but the API ran out of free DB connections (heavy Device Events queries stacked). The page will retry. This is not a permanent outage and Keep ready cannot fix pool pressure by restarting the listener.",
+			kind: "database" as const,
+		};
+	}
 	if (
 		message.includes("authentication is temporarily unavailable") ||
 		message.includes("database is temporarily unreachable") ||
@@ -1555,10 +1571,11 @@ export default function DeviceEventsPage() {
 		viewMode === "saved" &&
 		(source === "all" || source === "EN_HCNETSDK_ALARM") &&
 		(deviceId === "all" || isHikvisionDevice(selectedDevice));
-	// Socket is canonical. Soft-poll every 2s on this page so UI hits ~1–2s even if a
-	// socket frame is dropped (placeholderData keeps rows stable; no "Updating filters").
+	// Socket is canonical. Soft-poll is a fallback only — every poll used to fan out
+	// ~10 SQL queries and starve Prisma (limit 9) → false "DB down" + Keep ready thrash.
+	// 8s + summaryScope=page keeps ledger fresh without pool exhaustion.
 	const shouldPollSavedEvents = viewMode === "saved" && isSdkAlarmSavedScope;
-	const savedEventsRefetchInterval = shouldPollSavedEvents ? 2_000 : false;
+	const savedEventsRefetchInterval = shouldPollSavedEvents ? 8_000 : false;
 	// Listener status must load on the saved SDK ledger too — otherwise the mid
 	// panel says "Live capture offline" while the readiness strip says "armed"
 	// (readiness fetches listener separately; the panel used to only load when
@@ -1762,6 +1779,9 @@ export default function DeviceEventsPage() {
 		dateField: viewMode === "saved" ? "eventTime" : undefined,
 		from,
 		to,
+		// Page rows + total only. Facet/group chips come from summaryScope=facets.
+		// Avoids 10-way Promise.all every poll (was exhausting Prisma pool of 9).
+		summaryScope: "page",
 	};
 	// Facet dropdowns: backend summaryScope=facets omits eventCategory/eventAction from
 	// groupBy so byAction still has USER_CREATED while the table is leaf-filtered.
@@ -2185,7 +2205,9 @@ export default function DeviceEventsPage() {
 					maxRealtimeRows: limitParam,
 				});
 	const activeEvent = action === "view-event" ? rows.find((row) => row.id === activeEventId) : null;
-	const savedSummary = data?.summary || {
+	// Table request is summaryScope=page (total only). Chip/facet counts come from
+	// the dedicated facets request so soft-poll cannot starve the DB pool.
+	const savedSummary = {
 		total: 0,
 		byCategory: {},
 		byAction: {},
@@ -2202,6 +2224,11 @@ export default function DeviceEventsPage() {
 		failed: 0,
 		byStatus: {},
 		bySource: {},
+		...(data?.summary || {}),
+		...(savedFacetSummary || {}),
+		total:
+			Number(data?.pagination?.total ?? data?.summary?.total ?? savedFacetSummary?.total ?? 0) ||
+			0,
 	};
 	const savedStatusCounts = savedSummary.byStatus || {};
 	const sdkSummary = (selectedDevice as any)?.config?.zktecoSdkSummary || null;

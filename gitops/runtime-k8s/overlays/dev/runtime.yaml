@@ -230,11 +230,15 @@ spec:
             - name: PROJECT_TRUTH_RUNTIME_ROOT
               value: /app/uploads/project-truth-runtime
             - name: PG_DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris?connection_limit=30&pool_timeout=20
             - name: WRITE_DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris?connection_limit=30&pool_timeout=20
             - name: DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris?connection_limit=30&pool_timeout=20
+            - name: PRISMA_CONNECTION_LIMIT
+              value: "30"
+            - name: PRISMA_POOL_TIMEOUT_SECONDS
+              value: "20"
             - name: OTEL_ENABLED
               value: "true"
             - name: OTEL_SERVICE_NAME
@@ -414,11 +418,11 @@ spec:
             - name: HIKVISION_WATCH_RETRY_SECONDS
               value: "15"
             - name: PG_DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris?connection_limit=15&pool_timeout=20
             - name: WRITE_DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris?connection_limit=15&pool_timeout=20
             - name: DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@hris-postgres:5432/hris?connection_limit=15&pool_timeout=20
 ---
 apiVersion: apps/v1
 kind: Deployment

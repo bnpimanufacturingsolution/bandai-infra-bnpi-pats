@@ -26454,6 +26454,10 @@ export const controller = (prisma: PrismaClient) => {
 				.trim()
 				.toLowerCase();
 			const useFacetSummaryScope = summaryScope === "facets";
+			// Soft-poll / socket-fallback: page rows + total only. Full facet group-bys
+			// are 8 extra queries and were starving Prisma's default pool (limit 9).
+			const usePageOnlySummary =
+				summaryScope === "none" || summaryScope === "page" || summaryScope === "rows";
 			const query = String(req.query.query || req.query.search || "").trim();
 			const searchTerms = buildDeviceEventSearchTerms(query);
 			const from = String(req.query.from || "").trim();
@@ -26927,53 +26931,89 @@ export const controller = (prisma: PrismaClient) => {
 				${whereSql}
 			`;
 
-			const [
-				events,
-				totalRows,
-				statusGroups,
-				sourceGroups,
-				categoryGroups,
-				actionGroups,
-				actionCategoryGroups,
-				confidenceGroups,
-				evidenceGroups,
-				evidenceTotals,
-			] = await Promise.all([
-				prisma.$queryRaw<any[]>(eventsSql),
-				prisma.$queryRaw<Array<{ total: bigint | number }>>(countSql),
-				prisma.$queryRaw<Array<{ status: string; count: bigint | number }>>(
-					statusGroupsSql,
-				),
-				prisma.$queryRaw<Array<{ source: string; count: bigint | number }>>(
-					sourceGroupsSql,
-				),
-				prisma.$queryRaw<Array<{ eventCategory: string; count: bigint | number }>>(
-					categoryGroupsSql,
-				),
-				prisma.$queryRaw<Array<{ eventAction: string; count: bigint | number }>>(
-					actionGroupsSql,
-				),
-				prisma.$queryRaw<
-					Array<{
-						eventAction: string;
-						eventCategory: string;
-						count: bigint | number;
-					}>
-				>(actionCategoryGroupsSql),
-				prisma.$queryRaw<Array<{ eventConfidence: string; count: bigint | number }>>(
-					confidenceGroupsSql,
-				),
-				prisma.$queryRaw<Array<{ evidenceSource: string; count: bigint | number }>>(
-					evidenceGroupsSql,
-				),
-				prisma.$queryRaw<
-					Array<{
-						direct: bigint | number;
-						inferred: bigint | number;
-						unknown: bigint | number;
-					}>
-				>(evidenceTotalsSql),
-			]);
+			type StatusGroup = { status: string; count: bigint | number };
+			type SourceGroup = { source: string; count: bigint | number };
+			type CategoryGroup = { eventCategory: string; count: bigint | number };
+			type ActionGroup = { eventAction: string; count: bigint | number };
+			type ActionCategoryGroup = {
+				eventAction: string;
+				eventCategory: string;
+				count: bigint | number;
+			};
+			type ConfidenceGroup = { eventConfidence: string; count: bigint | number };
+			type EvidenceGroup = { evidenceSource: string; count: bigint | number };
+			type EvidenceTotals = {
+				direct: bigint | number;
+				inferred: bigint | number;
+				unknown: bigint | number;
+			};
+
+			let events: any[] = [];
+			let totalRows: Array<{ total: bigint | number }> = [{ total: 0 }];
+			let statusGroups: StatusGroup[] = [];
+			let sourceGroups: SourceGroup[] = [];
+			let categoryGroups: CategoryGroup[] = [];
+			let actionGroups: ActionGroup[] = [];
+			let actionCategoryGroups: ActionCategoryGroup[] = [];
+			let confidenceGroups: ConfidenceGroup[] = [];
+			let evidenceGroups: EvidenceGroup[] = [];
+			let evidenceTotals: EvidenceTotals[] = [{ direct: 0, inferred: 0, unknown: 0 }];
+
+			if (usePageOnlySummary) {
+				// Soft-poll path: 2 connections max (was 10 and blew the default pool of 9).
+				[events, totalRows] = await Promise.all([
+					prisma.$queryRaw<any[]>(eventsSql),
+					prisma.$queryRaw<Array<{ total: bigint | number }>>(countSql),
+				]);
+			} else if (useFacetSummaryScope) {
+				// Facet dropdowns: aggregates only. Skip heavy page_events + employee joins.
+				[
+					totalRows,
+					statusGroups,
+					sourceGroups,
+					categoryGroups,
+					actionGroups,
+					actionCategoryGroups,
+					confidenceGroups,
+					evidenceGroups,
+					evidenceTotals,
+				] = await Promise.all([
+					prisma.$queryRaw<Array<{ total: bigint | number }>>(countSql),
+					prisma.$queryRaw<StatusGroup[]>(statusGroupsSql),
+					prisma.$queryRaw<SourceGroup[]>(sourceGroupsSql),
+					prisma.$queryRaw<CategoryGroup[]>(categoryGroupsSql),
+					prisma.$queryRaw<ActionGroup[]>(actionGroupsSql),
+					prisma.$queryRaw<ActionCategoryGroup[]>(actionCategoryGroupsSql),
+					prisma.$queryRaw<ConfidenceGroup[]>(confidenceGroupsSql),
+					prisma.$queryRaw<EvidenceGroup[]>(evidenceGroupsSql),
+					prisma.$queryRaw<EvidenceTotals[]>(evidenceTotalsSql),
+				]);
+				events = [];
+			} else {
+				[
+					events,
+					totalRows,
+					statusGroups,
+					sourceGroups,
+					categoryGroups,
+					actionGroups,
+					actionCategoryGroups,
+					confidenceGroups,
+					evidenceGroups,
+					evidenceTotals,
+				] = await Promise.all([
+					prisma.$queryRaw<any[]>(eventsSql),
+					prisma.$queryRaw<Array<{ total: bigint | number }>>(countSql),
+					prisma.$queryRaw<StatusGroup[]>(statusGroupsSql),
+					prisma.$queryRaw<SourceGroup[]>(sourceGroupsSql),
+					prisma.$queryRaw<CategoryGroup[]>(categoryGroupsSql),
+					prisma.$queryRaw<ActionGroup[]>(actionGroupsSql),
+					prisma.$queryRaw<ActionCategoryGroup[]>(actionCategoryGroupsSql),
+					prisma.$queryRaw<ConfidenceGroup[]>(confidenceGroupsSql),
+					prisma.$queryRaw<EvidenceGroup[]>(evidenceGroupsSql),
+					prisma.$queryRaw<EvidenceTotals[]>(evidenceTotalsSql),
+				]);
+			}
 			const total = Number(totalRows[0]?.total || 0);
 			// Resolve opaque person tokens for display + heal saved rows when map exists.
 			const { isOpaqueHikvisionPersonToken } =

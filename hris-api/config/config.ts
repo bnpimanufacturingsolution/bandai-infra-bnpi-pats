@@ -82,6 +82,10 @@ export const config = {
 	enableRateLimit: process.env.ENABLE_RATE_LIMIT === "true",
 	prismaTransactionTimeoutMs: parseInteger(process.env.PRISMA_TRANSACTION_TIMEOUT_MS, 30000),
 	prismaTransactionMaxWaitMs: parseInteger(process.env.PRISMA_TRANSACTION_MAX_WAIT_MS, 15000),
+	/** Prisma client pool size (default was ~5–9 in small pods → Device Events red flaps). */
+	prismaConnectionLimit: parseInteger(process.env.PRISMA_CONNECTION_LIMIT, 30),
+	/** Seconds to wait for a free pool connection before erroring. */
+	prismaPoolTimeoutSeconds: parseInteger(process.env.PRISMA_POOL_TIMEOUT_SECONDS, 20),
 	writeDatabaseUrl:
 		process.env.WRITE_DATABASE_URL?.trim() ||
 		process.env.PG_DATABASE_URL?.trim() ||
