@@ -70,3 +70,12 @@ Order: **DEV < UAT < PROD**.
 
 Guest ~19 Gi / K3s ~13 Gi allocatable. Sum of **limits** will overcommit (normal).  
 Scheduler uses **requests**. Keep request totals well under allocatable.
+
+---
+
+## LIVE APPLIED (2026-07-29)
+
+- Commit: `3606339`
+- Live prove: `.runtime/resource-ladder-20260729-145307/04-live-limits.md`
+- G4: all workloads match EXPECTED (±5%)
+- Cloudflare: active/enabled (not stopped)
