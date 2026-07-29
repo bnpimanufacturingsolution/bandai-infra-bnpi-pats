@@ -67,27 +67,171 @@ Paste into a high-budget agent (`--max-turns` high enough for multi-hour work).
 ### Root (you)
 
 - Own EXIT GATE, heartbeats, merge decisions, commit/push when green.
-- Spawn agents in parallel; never wait idle on one blocked path.
+- **You MUST spawn child agents with the tool API** (`spawn_subagent` / Task / equivalent). Doing all work only in root is a **prompt violation** unless a tool outage is evidenced in MANIFEST + chat (`tool_unavailable` / `ROOT_FALLBACK`).
+- **You MUST print SPAWNED and AGENT_DONE lines in chat** every time (see Operator visibility). Tool-only spawns are not enough.
+- Never wait idle on one blocked path — spawn others.
 - Resolve `CONFLICTING` evidence yourself (do not pick the convenient side).
 
-### Spawn these agents (parallel when possible)
+### Hard multi-agent protocol (anti “nothing is spawning”)
+
+**HARD — not optional.** Silent solo root work is a **prompt violation**.  
+“Spawn when possible” / “background only” / “I did it myself for speed” are **banned** without a recorded tool-outage path below.
+
+Root **must** do all of the following in **cycle 1** (before claiming progress):
+
+1. Create stamp dir `.runtime/device-events-allgreen-<stamp>/` and write `LATEST` pointer.
+2. **MUST-SPAWN in parallel in one turn (cycle 1):** **A-OBS**, **A-CLASS**, **A-MON**, **A-DRIFT**  
+   (add A-FIX-BE / A-FIX-RT / A-VERIFY as soon as defects or verify phase starts; spawn **A-PROMPT** if multi-agent visibility or this card is broken).
+3. Immediately write `MULTI-AGENT-MANIFEST.json` under the stamp dir (exact filename):
+
+```json
+{
+  "stampDir": ".runtime/device-events-allgreen-<stamp>/",
+  "spawnedAt": "<iso>",
+  "mode": "multi_agent",
+  "goalReached": false,
+  "agents": [
+    { "role": "A-OBS", "subagent_id": "<id>", "status": "running", "deliverable": "01-obs.md" },
+    { "role": "A-CLASS", "subagent_id": "<id>", "status": "running", "deliverable": "02-error-classification.md" },
+    { "role": "A-MON", "subagent_id": "<id>", "status": "running", "deliverable": "05-monitor.md" },
+    { "role": "A-DRIFT", "subagent_id": "<id>", "status": "running", "deliverable": "06-drift-compliance.md" }
+  ]
+}
+```
+
+4. **Chat-visible SPAWNED line** (required in root reply text every spawn — not only tool logs):
+
+```text
+SPAWNED | A-OBS=<id> | A-CLASS=<id> | A-MON=<id> | A-DRIFT=<id> | stamp=<path>
+```
+
+5. Update manifest when each agent completes (`status=completed|failed|root_fallback`, `output_path`, `finishedAt`).
+6. **Re-spawn on missing deliverable:** if a child fails to write its deliverable within a reasonable cycle → **re-spawn that role once**, then root fills the file with evidence and labels the agent row `ROOT_FALLBACK` in both chat and manifest.
+7. Root may do probes **in parallel with** children, but root must **not** replace spawning when spawn tools work.
+
+### Operator visibility (hard — chat must show multi-agent)
+
+Root **must print these lines in the visible chat reply every time** (operators cannot see tool-only background spawns):
+
+| When | Required chat line |
+|---|---|
+| After every successful spawn batch | `SPAWNED \| A-OBS=<id> \| A-CLASS=<id> \| A-MON=<id> \| A-DRIFT=<id> \| stamp=<path>` |
+| After any additional spawn | `SPAWNED \| <ROLE>=<id> \| stamp=<path>` |
+| When a child finishes (success or fail) | `AGENT_DONE \| role=<ROLE> \| id=<id> \| status=completed\|failed\|root_fallback \| deliverable=<path>` |
+| When A-DRIFT finds protocol drift | `DRIFT_ALERT \| severity=<red\|yellow> \| item=<code> \| next=<spawn role or fix>` |
+| When re-spawning | `SPAWNED \| <ROLE>=<id> \| reason=re-spawn_missing_deliverable \| stamp=<path>` |
+| When tools unavailable (see below) | `SPAWNED \| mode=ROOT_FALLBACK \| reason=tool_unavailable \| stamp=<path>` then still emit `AGENT_DONE` per role when that deliverable is written by root |
+
+Also keep `MULTI-AGENT-MANIFEST.json` in sync with every SPAWNED / AGENT_DONE event.  
+If the operator cannot see SPAWNED / AGENT_DONE in chat, the multi-agent protocol **failed** even if background work ran.
+
+### Failure mode: agent tools unavailable (never silent solo)
+
+If `spawn_subagent` / Task / equivalent agent tools are **missing, erroring, or return no id**:
+
+1. **Do not** continue as silent solo. Explain once in chat with evidence (tool error text or “no spawn API”).
+2. Write / update `MULTI-AGENT-MANIFEST.json` immediately with:
+
+```json
+{
+  "stampDir": ".runtime/device-events-allgreen-<stamp>/",
+  "spawnedAt": "<iso>",
+  "mode": "ROOT_FALLBACK",
+  "toolStatus": "tool_unavailable",
+  "toolEvidence": "<error or missing-tool description>",
+  "agents": [
+    { "role": "A-OBS", "subagent_id": null, "status": "tool_unavailable", "deliverable": "01-obs.md", "owner": "ROOT_FALLBACK" },
+    { "role": "A-CLASS", "subagent_id": null, "status": "tool_unavailable", "deliverable": "02-error-classification.md", "owner": "ROOT_FALLBACK" },
+    { "role": "A-MON", "subagent_id": null, "status": "tool_unavailable", "deliverable": "05-monitor.md", "owner": "ROOT_FALLBACK" }
+  ]
+}
+```
+
+3. Still produce **all mandatory deliverables** under the stamp dir as **ROOT_FALLBACK** (root executes the same jobs A-OBS / A-CLASS / A-MON would have done).
+4. Print chat lines:
+
+```text
+SPAWNED | mode=ROOT_FALLBACK | reason=tool_unavailable | stamp=<path>
+AGENT_DONE | role=A-OBS | id=ROOT | status=root_fallback | deliverable=<path>
+AGENT_DONE | role=A-CLASS | id=ROOT | status=root_fallback | deliverable=<path>
+AGENT_DONE | role=A-MON | id=ROOT | status=root_fallback | deliverable=<path>
+```
+
+5. Optionally spawn **A-PROMPT** (or root-edit this card) only to document the tool gap — do **not** invent that multi-agent ran.
+
+**Banned:** claiming multi-agent progress with empty/missing MANIFEST, or solo EXIT GATE work with no `tool_unavailable` record.
+
+### Spawn these agents (mandatory roster)
 
 | Agent | Type | Job | Deliverable |
 |---|---|---|---|
-| **A-OBS** | explore/execute | Collect health, live-readiness, pod status, systemd, watcher/API/listener logs, Loki/Grafana if up | `.runtime/device-events-allgreen-<stamp>/01-obs.md` + JSON |
-| **A-CLASS** | explore | Classify every distinct error (bucket table: class, layer, recurring, fix) | `02-error-classification.md` |
-| **A-FIX-BE** | general-purpose | Code/config fixes: socket union, readiness pathOk, watcher skip no-creds, ghost soft-delete SQL | PR-ready code + tests |
-| **A-FIX-RT** | general-purpose | Runtime: restart units safely, roll pods, rebuild/import image if SHA stale | `03-runtime-actions.md` |
-| **A-VERIFY** | general-purpose | API prove + Playwright Device Events + restart bounce test | `04-verify.md` + screenshots |
-| **A-MON** | general-purpose | Start/keep `scripts/monitor-hikvision-device-events-health.ps1` or equivalent loop; min 10 green cycles | `05-monitor.md` |
+| **A-OBS** | general-purpose (execute) | Collect health, live-readiness, pod status, systemd, watcher/API/listener logs, Loki/Grafana if up | `01-obs.md` + JSON |
+| **A-CLASS** | explore or general | Classify every distinct error (bucket table) | `02-error-classification.md` |
+| **A-FIX-BE** | general-purpose | Code/config fixes only when OPEN code defects | code + tests |
+| **A-FIX-RT** | general-purpose | Runtime bounce, image roll, ghost SQL | `03-runtime-actions.md` |
+| **A-VERIFY** | general-purpose | API prove + Playwright + restart bounce | `04-verify.md` + screenshots |
+| **A-MON** | general-purpose | 12+ **product** health cycles (API pathReady / listener / watcher) writing HEARTBEAT lines | `05-monitor.md` |
+| **A-DRIFT** | general-purpose (compliance) | **Prompt + roster compliance cop.** Runs from cycle 1 and **re-runs every cycle while EXIT GATE not green**. Detects root solo drift, missing SPAWNED/MANIFEST/deliverables, goal stall | `06-drift-compliance.md` + `06-drift-compliance.json` |
+| **A-PROMPT** | general-purpose (prompt writer) | **Must** be spawnable when multi-agent is invisible, SPAWNED lines missing, or this job card is soft/broken; revises hard protocol only | updated job card under `docs/00-product/` |
 
-Root synthesizes `00-ROOT-STATUS.md` each cycle.
+**Cycle-1 must-spawn:** A-OBS + A-CLASS + A-MON + **A-DRIFT** (parallel).  
+**A-DRIFT re-spawn rule:** while `goalReached=false` (G1 incomplete), root **must** keep A-DRIFT running or re-spawn it at least every cycle (or use the drift script loop).  
+**A-PROMPT:** not required every run; **required** when A-DRIFT severity=red on protocol, or operator reports spawn invisibility.
+
+Root synthesizes `00-ROOT-STATUS.md` each cycle (G1 table + agent roster status + MANIFEST path + last A-DRIFT verdict).
+
+### A-DRIFT — prompt status / anti-drift (hard)
+
+**Purpose:** A-MON watches **DEV product health**. A-DRIFT watches **whether this job card is being followed** and whether the goal is stalling.
+
+**When it must run**
+
+| Trigger | Action |
+|---|---|
+| Cycle 1 | Always spawn with A-OBS/A-CLASS/A-MON |
+| Every major root cycle while G1 EXIT GATE incomplete | Re-run A-DRIFT (or `scripts/check-device-events-prompt-drift.ps1`) |
+| After any SPAWNED batch | Optional quick drift check |
+| Operator says “nothing spawning” / “drifting” | Spawn A-DRIFT + A-PROMPT immediately |
+| G1 fully green | A-DRIFT final pass → `goalReached=true` in MANIFEST; then may stop |
+
+**Checks (fail closed → DRIFT_ALERT)**
+
+| Code | Check | Severity if fail |
+|---|---|---|
+| D1 | `MULTI-AGENT-MANIFEST.json` exists in stamp | red |
+| D2 | MANIFEST lists A-OBS, A-CLASS, A-MON, A-DRIFT (or tool_unavailable fallback) | red |
+| D3 | Heartbeats file has recent lines (not silent > 2 cycles) | yellow/red |
+| D4 | Deliverables exist for completed roles: `01-obs.md`, `02-error-classification.md`, `05-monitor.md` | red if role claimed done |
+| D5 | `00-ROOT-STATUS.md` exists and has G1 table | yellow |
+| D6 | G1 open items have a **next agent action** (not only “operator should…”) | red |
+| D7 | No solo root EXIT GATE without `mode=ROOT_FALLBACK` + tool evidence | red |
+| D8 | Goal stall: same G1 fail set for ≥3 heartbeats with no new SPAWNED/fix | red → spawn A-FIX-* |
+| D9 | `pathReady`/live-readiness regression vs last GREEN snapshot | yellow/red |
+| D10 | Watcher miss / ghost active reappeared | red → A-FIX-RT |
+
+**Script (preferred machine-check):**
+
+```powershell
+powershell -File scripts/check-device-events-prompt-drift.ps1 -StampDir <stamp>
+# writes 06-drift-compliance.md + .json; exit 0 = compliant, 2 = drift
+```
+
+**A-DRIFT chat lines**
+
+```text
+SPAWNED | A-DRIFT=<id> | stamp=<path>
+DRIFT_ALERT | severity=red | item=D1 | next=write_MANIFEST
+AGENT_DONE | role=A-DRIFT | id=<id> | status=completed | deliverable=06-drift-compliance.md | verdict=compliant|drift
+```
+
+**A-DRIFT must not** silently fix product bugs itself — it **orders** root to spawn A-FIX-BE / A-FIX-RT / A-VERIFY / A-PROMPT.
 
 ### Heartbeat (every major cycle)
 
 ```text
 HEARTBEAT | cycle=<N> | checklist=<done>/<total> | g1=<pass|fail> | g2=<pass|fail|n/a> |
-  last_proof=<path|fail> | watcher_miss_15m=<n> | db=<ok|down> | listener=<state> | next=<one action>
+  agents=<running|done ids> | last_proof=<path|fail> | watcher_miss_15m=<n> |
+  db=<ok|down> | listener=<state> | next=<one action>
 ```
 
 Minimum **20** heartbeats for multi-surface work or full EXIT GATE — do not self-stop at 5–10 minutes.
@@ -300,18 +444,22 @@ Or agent-internal loop writing `.runtime/hikvision-health-monitor/health-YYYYMMD
 
 ```text
 Root cycle N:
-  1. Spawn A-OBS + A-CLASS (read)
-  2. On open defects → spawn A-FIX-BE and/or A-FIX-RT (write/execute)
-  3. Spawn A-VERIFY
-  4. Keep A-MON running
-  5. Merge into 00-ROOT-STATUS.md table:
+  1. Cycle 1: MUST spawn A-OBS + A-CLASS + A-MON in parallel; write MANIFEST;
+     print SPAWNED chat line (or ROOT_FALLBACK if tools unavailable)
+  2. On open defects → spawn A-FIX-BE and/or A-FIX-RT (write/execute); print SPAWNED
+  3. Spawn A-VERIFY; print SPAWNED
+  4. Keep A-MON running; print AGENT_DONE when each role finishes
+  5. Missing deliverable → re-spawn once → else ROOT_FALLBACK file + AGENT_DONE
+  6. Merge into 00-ROOT-STATUS.md table:
        | Item | Before | Now | Green? | Evidence | Next |
-  6. If G1 incomplete and not real-stop → next cycle
-  7. If G1 green and G2 in scope incomplete → physical tap path only
-  8. Commit/push when code green
+  7. If G1 incomplete and not real-stop → next cycle
+  8. If G1 green and G2 in scope incomplete → physical tap path only
+  9. Commit/push when code green
 ```
 
 **Conflict rule:** if UI red and API green → capture both; prefer API+pod Ready timestamps; hard-refresh path is agent-owned (Playwright), not homework for human.
+
+**Visibility rule:** every spawn and completion must be visible as `SPAWNED` / `AGENT_DONE` in chat **and** in `MULTI-AGENT-MANIFEST.json` — tool-only background work without those lines is a protocol fail.
 
 ---
 
@@ -329,12 +477,14 @@ Root cycle N:
 
 | File | Content |
 |---|---|
-| `.runtime/device-events-allgreen-<stamp>/00-ROOT-STATUS.md` | Done/open table |
-| `01-obs.md` + JSON probes | Raw measurements |
-| `02-error-classification.md` | Full bucket table |
+| `.runtime/device-events-allgreen-<stamp>/MULTI-AGENT-MANIFEST.json` | Spawn roster, ids, status, tool_unavailable / ROOT_FALLBACK if any |
+| `.runtime/device-events-allgreen-<stamp>/00-ROOT-STATUS.md` | Done/open table + agent roster |
+| `01-obs.md` + JSON probes | Raw measurements (child or ROOT_FALLBACK) |
+| `02-error-classification.md` | Full bucket table (child or ROOT_FALLBACK) |
 | `03-runtime-actions.md` | What was bounced/deleted/rebuilt |
 | `04-verify.md` | API + Playwright + restart bounce |
-| `05-monitor.md` | Heartbeat path + last GREEN |
+| `05-monitor.md` | Heartbeat path + last GREEN (child or ROOT_FALLBACK) |
+| Chat transcript | SPAWNED + AGENT_DONE lines for every role |
 | Git | commit/push `develop` if code changed |
 
 ---
