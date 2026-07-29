@@ -491,9 +491,25 @@ class PayrollPeriodsService extends APIService {
 		const response = await hrisApiClient.get<any>(
 			`/api/payrollperiod/${id}/generate-timesheet/progress`,
 		);
-		if (!response?.data) throw new Error("Invalid active payroll generation progress response");
-		const payload = response.data?.data ?? null;
-		return payload as PayrollGenerationProgress | null;
+		// hrisApiClient may return either the envelope { data: progress|null } or already-unwrapped progress.
+		// Prefer nested data when present; otherwise use the body itself when it looks like a job.
+		const body = response?.data;
+		if (body == null) {
+			throw new Error("Invalid active payroll generation progress response");
+		}
+		const nested = body?.data;
+		if (nested === null) return null; // explicit no active job
+		if (nested && typeof nested === "object" && (nested.jobId || nested.status)) {
+			return nested as PayrollGenerationProgress;
+		}
+		if (typeof body === "object" && (body.jobId || body.status === "processing")) {
+			return body as PayrollGenerationProgress;
+		}
+		// Envelope with data: null already handled; empty success without job
+		if (body.status === "success" && (body.data === null || body.data === undefined)) {
+			return null;
+		}
+		return (nested ?? null) as PayrollGenerationProgress | null;
 	}
 
 	async getPayrollCycleConfig(): Promise<PayrollCycleConfig> {

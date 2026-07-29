@@ -558,47 +558,82 @@ export function RunPayrollTemplate() {
 		isError: isActiveProgressError,
 	} = useActiveTimesheetPayrollProgress(
 		payrollPeriodId,
-		Boolean(payrollPeriodId && isSelectedPeriodProcessing && !payrollJobId),
+		// Always watch active job for PROCESSING periods so leave/return rediscovers
+		// the background run even when URL lost payrollJobId.
+		Boolean(payrollPeriodId && isSelectedPeriodProcessing),
 	);
 	const payrollProgress =
 		payrollJobId && payrollProgressQuery?.jobId === payrollJobId ? payrollProgressQuery : null;
+	// Period-scoped active endpoint already filters by period id — do not drop
+	// the job when periodId is missing on the payload (legacy) or only on job.
 	const activePayrollProgressForSelectedPeriod =
 		isSelectedPeriodProcessing &&
 		activePayrollProgress?.status === "processing" &&
-		activePayrollProgress?.periodId === payrollPeriodId
+		Boolean(activePayrollProgress?.jobId) &&
+		(!activePayrollProgress.periodId ||
+			!payrollPeriodId ||
+			activePayrollProgress.periodId === payrollPeriodId)
 			? activePayrollProgress
 			: null;
-	const savedPayrollGenerationProgress: PayrollGenerationProgress | null =
-		lastPayrollGenerationSnapshot?.jobId &&
-		(!isSelectedPeriodProcessing || lastPayrollGenerationSnapshot.status !== "processing")
-			? {
-					jobId: lastPayrollGenerationSnapshot.jobId,
-					periodId: payrollPeriodId,
-					status:
-						lastPayrollGenerationSnapshot.status === "failed" ||
-						lastPayrollGenerationSnapshot.status === "paused" ||
-						lastPayrollGenerationSnapshot.status === "cancelled" ||
-						lastPayrollGenerationSnapshot.status === "completed"
-							? lastPayrollGenerationSnapshot.status
-							: "completed",
-					total: Number(lastPayrollGenerationSnapshot.total || 0),
-					processed: Number(lastPayrollGenerationSnapshot.processed || 0),
-					success: Number(lastPayrollGenerationSnapshot.success || 0),
-					failed: Number(lastPayrollGenerationSnapshot.failed || 0),
-					errors: [],
-					startedAt: lastPayrollGenerationSnapshot.startedAt || "",
-					completedAt:
-						lastPayrollGenerationSnapshot.completedAt ||
-						lastPayrollGenerationSnapshot.updatedAt,
-					message: lastPayrollGenerationSnapshot.message,
-					cancellationRequested: lastPayrollGenerationSnapshot.cancellationRequested,
-					cancellationRequestedAt: lastPayrollGenerationSnapshot.cancellationRequestedAt,
-					pauseRequested: lastPayrollGenerationSnapshot.pauseRequested,
-					pauseRequestedAt: lastPayrollGenerationSnapshot.pauseRequestedAt,
-				}
-			: null;
+	/** Snapshot from DB generationMetadata — includes in-flight processing for reattach */
+	const metadataPayrollProgress: PayrollGenerationProgress | null = (() => {
+		const snap = lastPayrollGenerationSnapshot;
+		if (!snap?.jobId || !payrollPeriodId) return null;
+		const snapStatus = String(snap.status || "");
+		const isTerminal =
+			snapStatus === "failed" ||
+			snapStatus === "paused" ||
+			snapStatus === "cancelled" ||
+			snapStatus === "completed";
+		// While period is PROCESSING, prefer live active/query; metadata is fallback for jobId + last known counts
+		if (isSelectedPeriodProcessing && snapStatus === "processing") {
+			return {
+				jobId: snap.jobId,
+				periodId: payrollPeriodId,
+				status: "processing" as const,
+				total: Number(snap.total || 0),
+				processed: Number(snap.processed || 0),
+				success: Number(snap.success || 0),
+				failed: Number(snap.failed || 0),
+				errors: [],
+				startedAt: snap.startedAt || "",
+				updatedAt: snap.updatedAt,
+				completedAt: snap.completedAt || undefined,
+				message: snap.message,
+				cancellationRequested: snap.cancellationRequested,
+				cancellationRequestedAt: snap.cancellationRequestedAt,
+				pauseRequested: snap.pauseRequested,
+				pauseRequestedAt: snap.pauseRequestedAt,
+			};
+		}
+		if (!isSelectedPeriodProcessing && isTerminal) {
+			return {
+				jobId: snap.jobId,
+				periodId: payrollPeriodId,
+				status: snapStatus as PayrollGenerationProgress["status"],
+				total: Number(snap.total || 0),
+				processed: Number(snap.processed || 0),
+				success: Number(snap.success || 0),
+				failed: Number(snap.failed || 0),
+				errors: [],
+				startedAt: snap.startedAt || "",
+				updatedAt: snap.updatedAt,
+				completedAt: snap.completedAt || snap.updatedAt,
+				message: snap.message,
+				cancellationRequested: snap.cancellationRequested,
+				cancellationRequestedAt: snap.cancellationRequestedAt,
+				pauseRequested: snap.pauseRequested,
+				pauseRequestedAt: snap.pauseRequestedAt,
+			};
+		}
+		return null;
+	})();
+	const savedPayrollGenerationProgress = metadataPayrollProgress;
 	const visiblePayrollProgress =
-		payrollProgress || activePayrollProgressForSelectedPeriod || savedPayrollGenerationProgress;
+		payrollProgress ||
+		activePayrollProgressForSelectedPeriod ||
+		// Prefer live active over stale metadata counts when both exist
+		savedPayrollGenerationProgress;
 
 	const blockers = useMemo(
 		() =>
@@ -1483,11 +1518,46 @@ export function RunPayrollTemplate() {
 		setHandledPayrollJobId(null);
 	}, [payrollJobId, payrollJobIdParam]);
 
+	// Leave/return reattach: period PROCESSING + active (or metadata) job → restore jobId + URL
+	// so user can reopen progress without the original session.
 	useEffect(() => {
-		if (!activePayrollProgressForSelectedPeriod?.jobId || payrollJobId) return;
-		setPayrollJobId(activePayrollProgressForSelectedPeriod.jobId);
+		const reattachId =
+			activePayrollProgressForSelectedPeriod?.jobId ||
+			(isSelectedPeriodProcessing &&
+			lastPayrollGenerationSnapshot?.status === "processing" &&
+			lastPayrollGenerationSnapshot?.jobId
+				? lastPayrollGenerationSnapshot.jobId
+				: null);
+		if (!reattachId) return;
+		if (payrollJobId === reattachId) {
+			// Keep URL shareable when state already has the job
+			if (payrollJobIdParam !== reattachId) {
+				updateSearchParams((next) => {
+					next.set("payrollJobId", reattachId);
+				});
+			}
+			return;
+		}
+		if (payrollJobId && payrollJobId !== reattachId) return;
+		setPayrollJobId(reattachId);
 		setHandledPayrollJobId(null);
-	}, [activePayrollProgressForSelectedPeriod?.jobId, payrollJobId, showProgressModal]);
+		updateSearchParams((next) => {
+			next.set("payrollJobId", reattachId);
+		});
+		// Auto-open progress when returning to a PROCESSING period with a live job
+		// so "switch page and come back" restores the session without hunting.
+		if (isSelectedPeriodProcessing) {
+			setShowProgressModal(true);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [
+		activePayrollProgressForSelectedPeriod?.jobId,
+		isSelectedPeriodProcessing,
+		lastPayrollGenerationSnapshot?.jobId,
+		lastPayrollGenerationSnapshot?.status,
+		payrollJobId,
+		payrollJobIdParam,
+	]);
 
 	useEffect(() => {
 		if (!payrollProgress?.jobId) return;

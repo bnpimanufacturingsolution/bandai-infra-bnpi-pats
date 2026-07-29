@@ -343,12 +343,16 @@ export const useActiveTimesheetPayrollProgress = (
 		enabled: enabled && !!payrollPeriodId,
 		refetchInterval: (query) => {
 			const data = query.state.data as PayrollGenerationProgress | null | undefined;
-			if (!data) return false;
-			if (data.status !== "processing") return false;
-			return 1000;
+			// Keep looking for an active background job while this query is enabled
+			// (period is PROCESSING). Do not stop after a single null — user may
+			// return to the page after starting a run on another tab/session.
+			if (data?.status === "processing") return 1000;
+			if (data == null) return 2000;
+			return false;
 		},
-		retry: false,
+		retry: 1,
 		refetchOnWindowFocus: true,
+		refetchOnMount: "always",
 	});
 };
 
