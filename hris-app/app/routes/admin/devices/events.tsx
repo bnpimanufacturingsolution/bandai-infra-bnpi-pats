@@ -2207,8 +2207,9 @@ export default function DeviceEventsPage() {
 	const activeEvent = action === "view-event" ? rows.find((row) => row.id === activeEventId) : null;
 	// Table request is summaryScope=page (total only). Chip/facet counts come from
 	// the dedicated facets request so soft-poll cannot starve the DB pool.
+	const savedSummaryTotal =
+		Number(data?.pagination?.total ?? data?.summary?.total ?? savedFacetSummary?.total ?? 0) || 0;
 	const savedSummary = {
-		total: 0,
 		byCategory: {},
 		byAction: {},
 		byProcessingResult: {},
@@ -2226,9 +2227,8 @@ export default function DeviceEventsPage() {
 		bySource: {},
 		...(data?.summary || {}),
 		...(savedFacetSummary || {}),
-		total:
-			Number(data?.pagination?.total ?? data?.summary?.total ?? savedFacetSummary?.total ?? 0) ||
-			0,
+		// Single `total` after spreads (TS forbids duplicate keys in the literal).
+		total: savedSummaryTotal,
 	};
 	const savedStatusCounts = savedSummary.byStatus || {};
 	const sdkSummary = (selectedDevice as any)?.config?.zktecoSdkSummary || null;
