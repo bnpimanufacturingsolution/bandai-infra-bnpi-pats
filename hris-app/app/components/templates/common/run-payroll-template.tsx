@@ -2182,14 +2182,14 @@ export function RunPayrollTemplate() {
 	}
 
 	return (
-		<div className="space-y-4">
+		<div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
 			{/* Header */}
-			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-3">
-					<div className="p-2 bg-orange-100 rounded-lg">
+			<div className="flex min-w-0 items-center justify-between gap-3">
+				<div className="flex min-w-0 items-center gap-3">
+					<div className="shrink-0 p-2 bg-orange-100 rounded-lg">
 						<PesoIcon className="w-6 h-6 text-orange-600" />
 					</div>
-					<div>
+					<div className="min-w-0">
 						<h1 className="text-2xl font-bold text-gray-900">Run Payroll</h1>
 						<p className="text-sm text-gray-500">
 							{formatDate(selectedPeriodCard?.startDate, "short")} -{" "}
@@ -2197,7 +2197,7 @@ export function RunPayrollTemplate() {
 						</p>
 					</div>
 				</div>
-				<div className="flex items-center gap-2">
+				<div className="flex shrink-0 items-center gap-2">
 					<Button
 						variant="outline"
 						className="gap-2"
@@ -2208,11 +2208,11 @@ export function RunPayrollTemplate() {
 				</div>
 			</div>
 
-			{/* Pay Period Selector */}
-			<div className="bg-white rounded-xl border border-gray-200 p-4">
+			{/* Pay Period Selector — constrain width so carousel never expands the page */}
+			<div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
 				{/* Month/Year Headers */}
-				<div className="flex items-center gap-2 mb-3">
-					<span className="text-sm font-medium text-gray-500 uppercase tracking-wide">
+				<div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
+					<span className="text-sm font-medium uppercase tracking-wide text-gray-500">
 						{formatMonthYearUpper(
 							selectedEndDate || selectedStartDate || selectedPeriodCard?.endDate,
 						)}
@@ -2230,7 +2230,7 @@ export function RunPayrollTemplate() {
 				</div>
 
 				{/* Toggle to show past periods */}
-				<div className="mb-2 flex items-center justify-end gap-2">
+				<div className="mb-2 flex min-w-0 flex-wrap items-center justify-end gap-2">
 					{hasPayrollStatusResume && (
 						<Button
 							type="button"
@@ -2266,108 +2266,113 @@ export function RunPayrollTemplate() {
 					</button>
 				</div>
 
-				{/* Pay Period Cards — horizontal carousel */}
-				<div className="flex items-center gap-3" data-testid="payroll-period-carousel">
+				{/* Pay Period Cards — horizontal carousel (scroll contained here only) */}
+				<div
+					className="flex min-w-0 w-full max-w-full items-center gap-2 sm:gap-3"
+					data-testid="payroll-period-carousel">
 					<button
 						type="button"
 						onClick={() => scrollPeriods("left")}
-						className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
+						className="shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
 						aria-label="Scroll periods left">
 						<ChevronLeft className="h-5 w-5 text-gray-600" />
 					</button>
 
 					<div
 						ref={periodScrollRef}
-						className="hover-show-scroll flex min-w-0 flex-1 gap-3 overflow-x-auto scroll-smooth pb-1"
+						className="hover-show-scroll min-w-0 max-w-full flex-1 overflow-x-auto overscroll-x-contain scroll-smooth pb-1"
 						style={{ scrollBehavior: "smooth" }}>
-						{payPeriods.length > 0 ? (
-							payPeriods.map((p: any) => {
-								const isSelected =
-									p.code === selectedPeriodCode ||
-									(!selectedPeriodCode && p.id === currentPayrollPeriod?.id);
-								const isCurrent = p.id === currentPayrollPeriod?.id;
-								const isCompleted = p.status === "COMPLETED";
+						{/* Inner row keeps cards in one line; outer clips so the page never grows sideways */}
+						<div className="flex w-max flex-nowrap gap-3">
+							{payPeriods.length > 0 ? (
+								payPeriods.map((p: any) => {
+									const isSelected =
+										p.code === selectedPeriodCode ||
+										(!selectedPeriodCode && p.id === currentPayrollPeriod?.id);
+									const isCurrent = p.id === currentPayrollPeriod?.id;
+									const isCompleted = p.status === "COMPLETED";
 
-								// Use shared util to avoid timezone-shifted days
-								const endInput = formatDateForInput(p.endDate);
-								const endLabel = endInput
-									? new Date(
-											Number(endInput.slice(0, 4)),
-											Number(endInput.slice(5, 7)) - 1,
-											Number(endInput.slice(8, 10)),
-										)
-									: null;
+									// Use shared util to avoid timezone-shifted days
+									const endInput = formatDateForInput(p.endDate);
+									const endLabel = endInput
+										? new Date(
+												Number(endInput.slice(0, 4)),
+												Number(endInput.slice(5, 7)) - 1,
+												Number(endInput.slice(8, 10)),
+											)
+										: null;
 
-								// Derive period info from endDate
-								const periodMonth = endLabel
-									? endLabel
-											.toLocaleString("en-US", { month: "short" })
-											.toUpperCase()
-									: "—";
-								const periodDay = endLabel ? endLabel.getDate() : "—";
-								const periodDayOfWeek = endLabel
-									? endLabel.toLocaleString("en-US", { weekday: "short" })
-									: "";
+									// Derive period info from endDate
+									const periodMonth = endLabel
+										? endLabel
+												.toLocaleString("en-US", { month: "short" })
+												.toUpperCase()
+										: "—";
+									const periodDay = endLabel ? endLabel.getDate() : "—";
+									const periodDayOfWeek = endLabel
+										? endLabel.toLocaleString("en-US", { weekday: "short" })
+										: "";
 
-								return (
-									<button
-										key={p.id}
-										type="button"
-										onClick={() => handlePeriodChange(p.code)}
-										style={{ width: 132, minWidth: 132, flexShrink: 0 }}
-										className={`box-border flex flex-col overflow-hidden rounded-xl border-2 p-0 text-left transition-all ${
-											isSelected
-												? "border-orange-500 bg-orange-50"
-												: "border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50/50"
-										}`}>
-										<div
-											className={`w-full px-2 py-1.5 text-center text-[11px] font-semibold ${
+									return (
+										<button
+											key={p.id}
+											type="button"
+											onClick={() => handlePeriodChange(p.code)}
+											style={{ width: 132, minWidth: 132, flexShrink: 0 }}
+											className={`box-border flex flex-col overflow-hidden rounded-xl border-2 p-0 text-left transition-all ${
 												isSelected
-													? "bg-orange-500 text-white"
-													: isCurrent
-														? "bg-emerald-700 text-white"
-														: isCompleted
-															? "bg-orange-600 text-white"
-															: "bg-gray-100 text-gray-600"
+													? "border-orange-500 bg-orange-50"
+													: "border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50/50"
 											}`}>
-											{periodMonth}
-										</div>
-										<div className="bg-inherit py-3 text-center">
 											<div
-												className={`text-2xl font-bold leading-none tabular-nums ${
-													isSelected ? "text-orange-600" : "text-gray-900"
+												className={`w-full px-2 py-1.5 text-center text-[11px] font-semibold ${
+													isSelected
+														? "bg-orange-500 text-white"
+														: isCurrent
+															? "bg-emerald-700 text-white"
+															: isCompleted
+																? "bg-orange-600 text-white"
+																: "bg-gray-100 text-gray-600"
 												}`}>
-												{periodDay}
+												{periodMonth}
 											</div>
-											<div className="mt-1 truncate px-2 text-[11px] text-gray-500">
-												{periodDayOfWeek}
+											<div className="bg-inherit py-3 text-center">
+												<div
+													className={`text-2xl font-bold leading-none tabular-nums ${
+														isSelected ? "text-orange-600" : "text-gray-900"
+													}`}>
+													{periodDay}
+												</div>
+												<div className="mt-1 truncate px-2 text-[11px] text-gray-500">
+													{periodDayOfWeek}
+												</div>
 											</div>
+										</button>
+									);
+								})
+							) : showInitialSkeleton ? (
+								Array.from({ length: 5 }).map((_, index) => (
+									<div
+										key={`payroll-period-skeleton-${index}`}
+										style={{ width: 132, minWidth: 132, flexShrink: 0 }}
+										className="box-border overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
+										<div className="h-7 w-full animate-pulse bg-gray-100" />
+										<div className="space-y-2 px-4 py-3">
+											<div className="mx-auto h-7 w-10 animate-pulse rounded bg-gray-100" />
+											<div className="mx-auto h-3 w-14 animate-pulse rounded bg-gray-100" />
 										</div>
-									</button>
-								);
-							})
-						) : showInitialSkeleton ? (
-							Array.from({ length: 5 }).map((_, index) => (
-								<div
-									key={`payroll-period-skeleton-${index}`}
-									style={{ width: 132, minWidth: 132, flexShrink: 0 }}
-									className="box-border overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
-									<div className="h-7 w-full animate-pulse bg-gray-100" />
-									<div className="space-y-2 px-4 py-3">
-										<div className="mx-auto h-7 w-10 animate-pulse rounded bg-gray-100" />
-										<div className="mx-auto h-3 w-14 animate-pulse rounded bg-gray-100" />
 									</div>
-								</div>
-							))
-						) : (
-							<div className="text-sm text-gray-500">No payroll periods found.</div>
-						)}
+								))
+							) : (
+								<div className="text-sm text-gray-500">No payroll periods found.</div>
+							)}
+						</div>
 					</div>
 
 					<button
 						type="button"
 						onClick={() => scrollPeriods("right")}
-						className="flex-shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
+						className="shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
 						aria-label="Scroll periods right">
 						<ChevronRight className="h-5 w-5 text-gray-600" />
 					</button>
