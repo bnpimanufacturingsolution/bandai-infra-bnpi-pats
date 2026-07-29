@@ -10,7 +10,7 @@
 # Exit codes:
 #   0 = stopped after MaxHours with last state green
 #   2 = stopped after MaxHours still not green / drift
-#   (does not exit early on single green — requires HoldGreenCycles)
+#   (does not exit early on single green - requires HoldGreenCycles)
 
 param(
   [string]$StampDir = "",
@@ -145,6 +145,12 @@ while ((Get-Date) -lt $deadline) {
   if ($driftVerdict -eq "drift") { $next.Add("SPAWN A-DRIFT follow-up + fix D* items in 06-drift-compliance.md") | Out-Null }
   if ($next.Count -eq 0) { $next.Add("HOLD | re-probe next cycle; no spawn required if still green") | Out-Null }
 
+  if ($goal -and $driftVerdict -ne "drift") {
+    $consecutiveGreen++
+  } else {
+    $consecutiveGreen = 0
+  }
+
   $todoMd = @(
     "# MANAGER-NEXT-SPAWNS (auto; do not stop until goal holds)"
     ""
@@ -163,15 +169,9 @@ while ((Get-Date) -lt $deadline) {
     $i++
   }
   $todoMd += ""
-  $todoMd += "Root **must not exit** while consecutiveGreen < HoldGreenCycles or while driftVerdict=drift."
+  $todoMd += "Root must not exit while consecutiveGreen < HoldGreenCycles or while driftVerdict=drift."
   $todoMd += "Re-open this file every cycle. Re-spawn A-DRIFT if missing from MANIFEST."
   $todoMd -join "`n" | Set-Content $todo -Encoding UTF8
-
-  if ($goal -and $driftVerdict -ne "drift") {
-    $consecutiveGreen++
-  } else {
-    $consecutiveGreen = 0
-  }
 
   Write-Hb "g1=$g1 g2=$g2 overall=$($g.overall) pathReady=$($g.pathReady) db=$($g.db) armed=$($g.armed) pathOk=$($g.pathOk) tap=$($g.tap) enroll=$($g.enroll) drift=$driftVerdict consecGreen=$consecutiveGreen/$HoldGreenCycles error=$($g.error)"
 
@@ -189,10 +189,14 @@ while ((Get-Date) -lt $deadline) {
     at = (Get-Date).ToUniversalTime().ToString("o")
   } | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $StampDir "MANAGER-STATE.json") -Encoding UTF8
 
-  if ($Once) { break }
+  if ($Once) {
+    Write-Hb "MANAGER_ONCE done g1=$g1 drift=$driftVerdict"
+    if ($goal -and $driftVerdict -ne "drift") { exit 0 }
+    exit 2
+  }
 
   if ($consecutiveGreen -ge $HoldGreenCycles) {
-    Write-Hb "GOAL_HELD consecutiveGreen=$consecutiveGreen — manager may stop (goal sticky)"
+    Write-Hb "GOAL_HELD consecutiveGreen=$consecutiveGreen - manager may stop (goal sticky)"
     "goal_held=true cycles=$consecutiveGreen $(Get-Date -Format o)" | Set-Content (Join-Path $StampDir "GOAL-HELD.flag") -Encoding UTF8
     exit 0
   }
