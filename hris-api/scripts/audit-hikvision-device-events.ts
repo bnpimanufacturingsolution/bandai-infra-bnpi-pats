@@ -209,6 +209,7 @@ const resolveAuditDevice = async (options: Record<string, string | boolean>) => 
 		port: true,
 		protocol: true,
 		config: true,
+		access: true,
 	};
 	const candidates = [
 		deviceId ? { id: deviceId, isDeleted: false } : null,
@@ -245,6 +246,20 @@ const resolveAuditDevice = async (options: Record<string, string | boolean>) => 
 	);
 };
 
+const deviceHasAccessCredentials = (device: { access?: unknown; config?: unknown }) => {
+	const access =
+		device?.access && typeof device.access === "object" ? (device.access as any) : {};
+	const config =
+		device?.config && typeof device.config === "object" ? (device.config as any) : {};
+	const username = String(
+		access.username || config.username || config.userName || "",
+	).trim();
+	const password = String(
+		access.password || config.password || config.passWord || "",
+	).trim();
+	return Boolean(username && password);
+};
+
 const resolveAuditDevices = async (options: Record<string, string | boolean>) => {
 	const allHikvision = options["all-hikvision"] === true || options.allHikvision === true;
 	if (!allHikvision) return [await resolveAuditDevice(options)];
@@ -259,6 +274,7 @@ const resolveAuditDevices = async (options: Record<string, string | boolean>) =>
 			port: true,
 			protocol: true,
 			config: true,
+			access: true,
 		},
 		orderBy: { name: "asc" },
 	});
@@ -266,7 +282,39 @@ const resolveAuditDevices = async (options: Record<string, string | boolean>) =>
 	if (hikvisionDevices.length === 0) {
 		throw new Error("No configured Hikvision devices found in HRIS device config.");
 	}
-	return hikvisionDevices;
+
+	// Skip credential-less / ghost rows so the DEV watcher cannot spin forever on
+	// 400 "Selected device is missing access credentials" (seen for stale
+	// "Main Entrance Device" cmry9tvve000gnr3oqo2zhzgw).
+	const withCreds: typeof hikvisionDevices = [];
+	const skipped: Array<{ id: string; name: string; reason: string }> = [];
+	for (const device of hikvisionDevices) {
+		if (!deviceHasAccessCredentials(device)) {
+			skipped.push({
+				id: device.id,
+				name: String(device.name || ""),
+				reason: "missing_access_credentials",
+			});
+			continue;
+		}
+		withCreds.push(device);
+	}
+	if (skipped.length > 0) {
+		console.warn(
+			JSON.stringify({
+				event: "hikvision_audit_devices_skipped",
+				skippedCount: skipped.length,
+				keptCount: withCreds.length,
+				skipped,
+			}),
+		);
+	}
+	if (withCreds.length === 0) {
+		throw new Error(
+			"No Hikvision devices with access credentials found. All Hikvision rows were skipped.",
+		);
+	}
+	return withCreds;
 };
 
 const runAuditForDevice = async (
@@ -283,6 +331,35 @@ const runAuditForDevice = async (
 
 	if (!options.organizationId) {
 		options.organizationId = device.organizationId;
+	}
+
+	// Per-device guard (single-device mode may still select a credential-less row).
+	if (!deviceHasAccessCredentials(device as any)) {
+		return {
+			mode: apply ? "apply" : "dry-run",
+			checkedAt: new Date().toISOString(),
+			skipped: true,
+			skipReason: "missing_access_credentials",
+			device: {
+				id: device.id,
+				organizationId: device.organizationId,
+				name: device.name,
+				address: device.address,
+				port: device.port,
+				protocol: device.protocol,
+			},
+			live: { total: 0, withEmployeeNo: 0, withoutEmployeeNo: 0 },
+			saved: { matchingBeforeApply: 0, matchingAfterApply: 0 },
+			gap: {
+				missing: 0,
+				missingWithEmployeeNo: 0,
+				missingVisibleBiometric: 0,
+				missingEmployeeNo: 0,
+				needsClockNormalization: 0,
+				sample: [],
+			},
+			applied: [],
+		};
 	}
 
 	const livePayload = await loadLivePayload(options, deviceId);
@@ -526,13 +603,17 @@ const runAudit = async (options: Record<string, string | boolean>) => {
 	}
 	const totals = reports.reduce(
 		(acc, report) => {
+			if ((report as any).skipped) {
+				acc.skipped += 1;
+				return acc;
+			}
 			acc.live += report.live.total;
 			acc.missing += report.gap.missing;
 			acc.missingWithEmployeeNo += report.gap.missingWithEmployeeNo;
 			acc.applied += report.applied.length;
 			return acc;
 		},
-		{ live: 0, missing: 0, missingWithEmployeeNo: 0, applied: 0 },
+		{ live: 0, missing: 0, missingWithEmployeeNo: 0, applied: 0, skipped: 0 },
 	);
 
 	return {
