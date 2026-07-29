@@ -407,8 +407,9 @@ spec:
               value: development
             - name: APP_ENV
               value: dev
+            # Watcher gap-fill → outbox (SQLite) → hris-api callback (survives API blips).
             - name: HIKVISION_CALLBACK_URL
-              value: http://hris-api:3001/api/hikvision/callback
+              value: http://hris-callback-outbox:8080/api/hikvision/callback
             - name: HIKVISION_EVENT_LIMIT
               value: "50"
             - name: HIKVISION_WATCH_INTERVAL_SECONDS
@@ -423,6 +424,93 @@ spec:
               value: postgresql://postgres:postgres@hris-postgres:5432/hris?connection_limit=15&pool_timeout=20
             - name: DATABASE_URL
               value: postgresql://postgres:postgres@hris-postgres:5432/hris?connection_limit=15&pool_timeout=20
+---
+# SQLite callback outbox (K3s). Drop-in /api/hikvision/callback → drain → hris-api.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hris-callback-outbox
+  labels:
+    app.kubernetes.io/name: hris-callback-outbox
+    app.kubernetes.io/part-of: project-truth
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: hris-callback-outbox
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      nodePort: 3108
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hris-callback-outbox
+  labels:
+    app.kubernetes.io/name: hris-callback-outbox
+    app.kubernetes.io/part-of: project-truth
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: hris-callback-outbox
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: hris-callback-outbox
+        app.kubernetes.io/part-of: project-truth
+    spec:
+      priorityClassName: project-truth-dev
+      containers:
+        - name: outbox
+          image: hris-callback-outbox:develop
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: PORT
+              value: "8080"
+            - name: OUTBOX_DB
+              value: /data/outbox.db
+            - name: DRAIN_CALLBACK_URL
+              value: http://hris-api:3001/api/hikvision/callback
+            - name: DRAIN_INTERVAL_SEC
+              value: "2"
+            - name: IMMEDIATE_DRAIN
+              value: "1"
+            - name: MAX_ATTEMPTS
+              value: "30"
+          volumeMounts:
+            - name: outbox-data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "50m"
+              memory: 64Mi
+            limits:
+              cpu: "250m"
+              memory: 256Mi
+      volumes:
+        - name: outbox-data
+          hostPath:
+            path: /var/lib/project-truth/callback-outbox
+            type: DirectoryOrCreate
 ---
 apiVersion: apps/v1
 kind: Deployment

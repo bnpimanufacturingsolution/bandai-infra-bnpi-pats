@@ -10,6 +10,8 @@ SOURCE_ROOT=${HIKVISION_HOT_RELOAD_SOURCE_ROOT:-/opt/project-truth/vendor/hikvis
 # Prefer healthy host reverse unless HIKVISION_HOT_RELOAD_FORCE_API_BASE=1.
 HOST_REVERSE_API_BASE=${HIKVISION_HOST_REVERSE_API_BASE:-http://127.0.0.1:53001}
 VM_DEV_API_BASE=${HIKVISION_VM_DEV_API_BASE:-http://localhost:3101}
+# K3s SQLite outbox NodePort (hris-callback-outbox). Drop-in for /api/hikvision/callback.
+OUTBOX_API_BASE=${HIKVISION_CALLBACK_OUTBOX_BASE:-http://127.0.0.1:3108}
 POSTGRES_CONTAINER=${HIKVISION_POSTGRES_CONTAINER:-hris-postgres-dev}
 DEVICE_SOURCE=${HIKVISION_HOT_RELOAD_DEVICE_SOURCE:-postgres}
 DEVICE_FETCH_LIMIT=${HIKVISION_HOT_RELOAD_DEVICE_FETCH_LIMIT:-200}
@@ -27,6 +29,8 @@ resolve_local_api_base() {
   local force="${HIKVISION_HOT_RELOAD_FORCE_API_BASE:-0}"
   local host_base="$HOST_REVERSE_API_BASE"
   local vm_base="$VM_DEV_API_BASE"
+  local outbox_base="$OUTBOX_API_BASE"
+  local prefer_outbox="${HIKVISION_PREFER_CALLBACK_OUTBOX:-1}"
 
   if [[ "$force" == "1" || "$force" == "true" || "$force" == "yes" ]]; then
     if [[ -n "$preferred" ]]; then
@@ -35,7 +39,17 @@ resolve_local_api_base() {
     fi
   fi
 
-  # When host reverse is live, always use it — blocks accidental 3101 drift from unit/env defaults.
+  # Prefer K3s SQLite outbox when healthy so ACS posts survive brief hris-api blips.
+  # C++ posts to {base}/api/hikvision/callback — outbox implements that drop-in path.
+  if [[ "$prefer_outbox" == "1" || "$prefer_outbox" == "true" || "$prefer_outbox" == "yes" ]]; then
+    if api_health_ok "$outbox_base"; then
+      echo "INFO: using callback outbox $outbox_base (SQLite drain → hris-api)" >&2
+      echo "$outbox_base"
+      return 0
+    fi
+  fi
+
+  # When host reverse is live, use it — host browser socket path.
   if api_health_ok "$host_base"; then
     if [[ -n "$preferred" && "$preferred" != "$host_base" && "$preferred" != "http://localhost:53001" ]]; then
       echo "WARN: ignoring HIKVISION_HOT_RELOAD_API_BASE=$preferred; $host_base is healthy (host socket path). Set HIKVISION_HOT_RELOAD_FORCE_API_BASE=1 to force." >&2
@@ -60,9 +74,8 @@ resolve_local_api_base() {
     return 0
   fi
 
-  # Nothing is healthy yet. Retain the configured/default target so the daemon
-  # can retry without silently changing an explicitly prepared startup path.
-  echo "${preferred:-$host_base}"
+  # Nothing is healthy yet. Prefer outbox base if configured so spool/outbox is first.
+  echo "${preferred:-$outbox_base}"
 }
 
 LOCAL_API_BASE="$(resolve_local_api_base)"

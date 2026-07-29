@@ -16,3 +16,5 @@ images:
     newTag: develop
   - name: hris-emp-app-local
     newTag: develop
+  - name: hris-callback-outbox
+    newTag: develop
