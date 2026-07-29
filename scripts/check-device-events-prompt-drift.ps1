@@ -185,7 +185,7 @@ $md += ""
 $md += "| Code | Severity | Detail | Next |"
 $md += "|---|---|---|---|"
 if ($alerts.Count -eq 0) {
-  $md += "| — | — | No drift alerts | continue_or_close |"
+  $md += "| - | - | No drift alerts | continue_or_close |"
 } else {
   foreach ($a in $alerts) {
     $md += "| $($a.code) | $($a.severity) | $($a.detail) | $($a.next) |"
