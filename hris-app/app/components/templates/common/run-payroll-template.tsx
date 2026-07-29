@@ -2068,12 +2068,21 @@ export function RunPayrollTemplate() {
 			visiblePayrollProgress?.cancellationRequestedAt ||
 			null,
 	);
+	const isPayrollProgressOrphaned =
+		Boolean(visiblePayrollProgress?.orphaned) ||
+		(Boolean(visiblePayrollProgress?.status === "failed") &&
+			Boolean(isSelectedPeriodProcessing) &&
+			/worker|restart|orphaned|not running|Resume processing/i.test(
+				String(visiblePayrollProgress?.message || ""),
+			));
+	// Stuck = period locked PROCESSING but no live worker to poll (404, orphan after API restart, etc.)
 	const isPayrollProgressUnavailable =
 		isSelectedPeriodProcessing &&
-		!visiblePayrollProgress &&
-		!isActiveProgressLoading &&
-		!isActiveProgressFetching &&
-		(!payrollJobId || isActiveProgressError || isProgressError || !isProgressLoading);
+		(isPayrollProgressOrphaned ||
+			(!visiblePayrollProgress &&
+				!isActiveProgressLoading &&
+				!isActiveProgressFetching &&
+				(!payrollJobId || isActiveProgressError || isProgressError || !isProgressLoading)));
 	const isPayrollActionPending =
 		generatePayrollMutation.isPending ||
 		requestPausePayrollMutation.isPending ||

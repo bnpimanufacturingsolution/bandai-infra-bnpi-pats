@@ -823,6 +823,7 @@ const controller = (prisma) => {
             });
             const expectedTotal = scopedDryRun.summary.includedEmployeesCount;
             const jobId = payroll_generation_job_service_1.PayrollGenerationJobService.createJob({ total: expectedTotal, periodId: payrollPeriodId });
+            payroll_generation_job_service_1.PayrollGenerationJobService.attachLiveWorker(jobId);
             yield prisma.payrollPeriod.update({
                 where: { id: payrollPeriodId },
                 data: {
@@ -831,8 +832,11 @@ const controller = (prisma) => {
                     processedAt: null,
                 },
             });
+            // Fire-and-forget worker: survives FE page navigation; progress is
+            // persisted on PayrollPeriod.generationMetadata.payrollGeneration.
             (() => __awaiter(void 0, void 0, void 0, function* () {
                 try {
+                    payroll_generation_job_service_1.PayrollGenerationJobService.attachLiveWorker(jobId);
                     const result = yield (0, payroll_period_helper_1.generatePayrollFromTimesheets)(prisma, payrollPeriodId, organizationId, req.userId, {
                         onStart: ({ total }) => {
                             payroll_generation_job_service_1.PayrollGenerationJobService.updateJob(jobId, { total });
@@ -925,6 +929,10 @@ const controller = (prisma) => {
                         error: error instanceof Error ? error.message : String(error),
                     });
                     payroll_generation_job_service_1.PayrollGenerationJobService.markFailed(jobId, error instanceof Error ? error.message : "Payroll generation failed");
+                }
+                finally {
+                    // Worker loop ended for this process (success, pause, cancel, or crash).
+                    payroll_generation_job_service_1.PayrollGenerationJobService.detachLiveWorker(jobId);
                 }
             }))();
             const responseData = {
@@ -1033,13 +1041,20 @@ const controller = (prisma) => {
                 res.status(400).json(errorResponse);
                 return;
             }
-            const progress = payroll_generation_job_service_1.PayrollGenerationJobService.getJobProgress(jobId);
+            const progress = yield payroll_generation_job_service_1.PayrollGenerationJobService.getJobProgressAsync(jobId);
             if (!progress) {
                 const errorResponse = (0, error_handler_1.buildErrorResponse)("Payroll generation job not found or expired", 404);
                 res.status(404).json(errorResponse);
                 return;
             }
-            const successResponse = (0, success_handler_helper_1.buildSuccessResponse)("Payroll generation progress retrieved successfully", progress, 200);
+            // Serialize dates for FE; include orphaned so stuck UX can resume.
+            const payload = Object.assign({}, progress, {
+                startedAt: progress.startedAt,
+                updatedAt: progress.updatedAt || progress.startedAt,
+                completedAt: progress.completedAt,
+                orphaned: Boolean(progress.orphaned),
+            });
+            const successResponse = (0, success_handler_helper_1.buildSuccessResponse)("Payroll generation progress retrieved successfully", payload, 200);
             res.status(200).json(successResponse);
         }
         catch (error) {
@@ -1052,7 +1067,7 @@ const controller = (prisma) => {
         var _a;
         try {
             const { id: payrollPeriodId } = req.params;
-            const progress = payroll_generation_job_service_1.PayrollGenerationJobService.getActiveJobForPeriod(payrollPeriodId);
+            const progress = yield payroll_generation_job_service_1.PayrollGenerationJobService.getActiveJobForPeriodAsync(payrollPeriodId);
             (0, activityLogger_1.logActivity)(req, {
                 userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
                 action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.GET_ACTIVE_GENERATION_PROGRESS,

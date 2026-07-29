@@ -128,12 +128,19 @@ export interface PayrollGenerationProgress {
 	failed: number;
 	errors: Array<{ row: number; employeeId: string; error: string }>;
 	startedAt: string;
+	/** Heartbeat timestamp while job runs — survives navigation when persisted */
+	updatedAt?: string;
 	completedAt?: string;
 	message?: string;
 	cancellationRequested?: boolean;
 	cancellationRequestedAt?: string;
 	pauseRequested?: boolean;
 	pauseRequestedAt?: string;
+	/**
+	 * True when the API process no longer owns a live worker for this job
+	 * (e.g. pod restart). Period may still be PROCESSING — use Resume.
+	 */
+	orphaned?: boolean;
 }
 
 export type PayrollBusinessDayRule = "NONE" | "NEXT_BUSINESS_DAY";
@@ -462,13 +469,20 @@ class PayrollPeriodsService extends APIService {
 
 	async getGenerateTimesheetPayrollProgress(
 		jobId: string,
-	): Promise<PayrollGenerationProgress> {
-		const response = await hrisApiClient.get<any>(
-			`/api/payrollperiod/generate-timesheet/progress/${jobId}`,
-		);
-		if (!response?.data) throw new Error("Invalid payroll generation progress response");
-		const payload = response.data?.data || response.data;
-		return payload as PayrollGenerationProgress;
+	): Promise<PayrollGenerationProgress | null> {
+		try {
+			const response = await hrisApiClient.get<any>(
+				`/api/payrollperiod/generate-timesheet/progress/${jobId}`,
+			);
+			if (!response?.data) throw new Error("Invalid payroll generation progress response");
+			const payload = response.data?.data || response.data;
+			return payload as PayrollGenerationProgress;
+		} catch (error: any) {
+			// 404 = job never existed / TTL expired / not hydrated. FE treats as stuck when period is PROCESSING.
+			const status = error?.response?.status ?? error?.status;
+			if (status === 404) return null;
+			throw error;
+		}
 	}
 
 	async getActiveTimesheetPayrollProgress(

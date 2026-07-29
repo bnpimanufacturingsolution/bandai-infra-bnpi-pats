@@ -311,7 +311,9 @@ export const useGenerateTimesheetPayrollProgress = (
 		enabled: enabled && !!jobId,
 		refetchInterval: (query) => {
 			const data = query.state.data as PayrollGenerationProgress | null | undefined;
-			if (!data) return 500;
+			// null after 404 or missing job — stop hammering; stuck UI uses period PROCESSING
+			if (!data) return false;
+			if (data.orphaned) return false;
 			if (
 				data.status === "completed" ||
 				data.status === "failed" ||
@@ -320,10 +322,11 @@ export const useGenerateTimesheetPayrollProgress = (
 			) {
 				return false;
 			}
-			return 500;
+			// Background worker continues server-side; poll while page is open
+			return 1000;
 		},
 		retry: false,
-		refetchOnWindowFocus: false,
+		refetchOnWindowFocus: true,
 	});
 };
 
