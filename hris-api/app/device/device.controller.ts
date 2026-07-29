@@ -25364,6 +25364,10 @@ export const controller = (prisma: PrismaClient) => {
 					`sudo tail -n ${HIKVISION_LISTENER_STATUS_EVIDENCE_LINES} /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null || true`,
 					`echo '---KEYLOG---'`,
 					`sudo tail -n 3000 /var/log/project-truth/hikvision-hot-reload-listener.jsonl 2>/dev/null | grep -E 'device_config_loaded|sdk_login|sdk_alarm_arm|device_armed|device_arming_failed_after_retries|device_login_locked_backoff|device_login_auth_failed_backoff|acs_alarm_received|hikvision_callback_post|hikvision_callback_post_result|hikvision_callback_spool_replay_result|hris_contract_post|sdk_callback_register' | tail -n ${HIKVISION_LISTENER_STATUS_KEY_EVENT_LINES} || true`,
+					// G1: non-destructive VM callback reverse probe (no invented attendance events).
+					// Prefer host reverse :53001 → host :3001; accept in-cluster :3101 for K3s.
+					`echo '---CALLBACK---'`,
+					`if curl -fsS --max-time 3 http://127.0.0.1:53001/health >/dev/null 2>&1; then printf 'CALLBACK_PATH_OK'; elif curl -fsS --max-time 3 http://127.0.0.1:3101/health >/dev/null 2>&1; then printf 'CALLBACK_PATH_OK'; else printf 'CALLBACK_PATH_DOWN'; fi`,
 				].join("; "),
 			],
 			HIKVISION_LISTENER_STATUS_TIMEOUT_MS,
@@ -25380,8 +25384,15 @@ export const controller = (prisma: PrismaClient) => {
 			? raw.split("---LOG---")[1]?.split("---KEYLOG---")[0] || ""
 			: "";
 		const keyLogChunk = raw.includes("---KEYLOG---")
-			? raw.split("---KEYLOG---").slice(1).join("---KEYLOG---")
+			? (raw.split("---KEYLOG---")[1] || "").split("---CALLBACK---")[0] || ""
 			: "";
+		// true/false when SSH+probe ran; null when SSH failed before the marker.
+		let callbackPostPathOk: boolean | null = null;
+		if (raw.includes("---CALLBACK---")) {
+			const cbChunk = raw.split("---CALLBACK---").slice(1).join("---CALLBACK---");
+			if (/CALLBACK_PATH_OK/.test(cbChunk)) callbackPostPathOk = true;
+			else if (/CALLBACK_PATH_DOWN/.test(cbChunk)) callbackPostPathOk = false;
+		}
 		const activeMatch = raw.match(/ACTIVE=([^\r\n]*)/);
 		const activeText = String(activeMatch?.[1] || "").trim();
 		const show = parseSystemctlShow(showChunk);
@@ -25528,6 +25539,8 @@ export const controller = (prisma: PrismaClient) => {
 			running,
 			status: running ? "running" : activeState === "inactive" ? "stopped" : activeState,
 			sdk,
+			/** VM curl :53001/health (or :3101). null = SSH/status did not reach the probe. */
+			callbackPostPathOk,
 			activeState,
 			subState,
 			mainPid: mainPid || null,
@@ -25552,42 +25565,69 @@ export const controller = (prisma: PrismaClient) => {
 	};
 
 	/**
-	 * Non-destructive probe: can this API (or reverse target) answer /health so
-	 * C++ listener posts can land. Tries self port first, then 53001/3101/3001.
+	 * Non-destructive G1 path probe: can the VM reach HRIS /health for C++ posts?
+	 * Prefer evidence already bundled into listener status (one SSH). Fall back to a
+	 * dedicated VM curl of :53001 then :3101. Never invent attendance events.
+	 * Never claim true from host self-/health alone on Windows (that ignores reverse).
 	 */
-	const probeHikvisionCallbackPostPath = async (): Promise<boolean | null> => {
-		const port = String(process.env.PORT || process.env.API_PORT || "3001").trim();
-		const candidates = [
-			process.env.HIKVISION_CALLBACK_PROBE_URL,
-			process.env.HIKVISION_HOT_RELOAD_API_BASE,
-			`http://127.0.0.1:${port}`,
-			"http://127.0.0.1:3101",
-			"http://127.0.0.1:53001",
-			"http://127.0.0.1:3001",
-		]
-			.map((v) => String(v || "").trim().replace(/\/+$/, ""))
-			.filter(Boolean);
-		const seen = new Set<string>();
-		for (const base of candidates) {
-			if (seen.has(base)) continue;
-			seen.add(base);
-			const url = base.endsWith("/health") ? base : `${base}/health`;
+	const probeHikvisionCallbackPostPath = async (options?: {
+		listener?: { callbackPostPathOk?: boolean | null } | null;
+	}): Promise<boolean | null> => {
+		const fromListener = options?.listener?.callbackPostPathOk;
+		if (fromListener === true || fromListener === false) return fromListener;
+
+		try {
+			const result = await runHikvisionListenerVmCommand(
+				[
+					"bash",
+					"-lc",
+					[
+						"if curl -fsS --max-time 3 http://127.0.0.1:53001/health >/dev/null 2>&1; then",
+						"  printf 'CALLBACK_PATH_OK'",
+						"elif curl -fsS --max-time 3 http://127.0.0.1:3101/health >/dev/null 2>&1; then",
+						"  printf 'CALLBACK_PATH_OK'",
+						"else",
+						"  printf 'CALLBACK_PATH_DOWN'",
+						"fi",
+					].join("; "),
+				],
+				10_000,
+			);
+			const out = `${result.stdout || ""}\n${result.stderr || ""}`;
+			if (/CALLBACK_PATH_OK/.test(out)) return true;
+			if (/CALLBACK_PATH_DOWN/.test(out)) return false;
+			// SSH/transport failure — not probed (do not invent false path-down).
+			if (
+				result.exitCode === 255 ||
+				result.exitCode === 124 ||
+				/No Hikvision VM target|timed out|timeout|Connection refused|Could not resolve/i.test(
+					out,
+				)
+			) {
+				return null;
+			}
+		} catch {
+			// fall through
+		}
+
+		// In-pod / Linux API (K3s): listener often posts to the same process; self health
+		// is valid. On Windows host-local API, self health does NOT prove VM reverse.
+		if (process.platform !== "win32") {
+			const port = String(process.env.PORT || process.env.API_PORT || "3001").trim();
 			try {
 				const controller = new AbortController();
-				const timer = setTimeout(() => controller.abort(), 2000);
-				const response = await fetch(url, {
+				const timer = setTimeout(() => controller.abort(), 1500);
+				const response = await fetch(`http://127.0.0.1:${port}/health`, {
 					method: "GET",
 					signal: controller.signal,
 				} as any);
 				clearTimeout(timer);
 				if (response && (response as any).ok) return true;
 			} catch {
-				// try next
+				// ignore
 			}
 		}
-		// Serving live-readiness means at least this API process is up — weak true
-		// so boot is not stuck red solely because loopback hostPort differs in-pod.
-		return true;
+		return null;
 	};
 
 	const readHikvisionListenerStatus = async (options: { force?: boolean } = {}) => {
@@ -25698,7 +25738,9 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
-			const callbackPostPathOk = await probeHikvisionCallbackPostPath();
+			const callbackPostPathOk = await probeHikvisionCallbackPostPath({
+				listener: listener as { callbackPostPathOk?: boolean | null } | null,
+			});
 
 			const readiness = buildDeviceLiveReadiness({
 				databaseOk,
@@ -26043,14 +26085,18 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
-			const callbackPostPathOk = await probeHikvisionCallbackPostPath();
+			const callbackPostPathOk = await probeHikvisionCallbackPostPath({
+				listener: listener as { callbackPostPathOk?: boolean | null } | null,
+			});
 			steps.push({
 				step: "callback_path_probe",
 				ok: callbackPostPathOk === true,
 				detail:
 					callbackPostPathOk === true
-						? "Callback API health probe succeeded (self/53001/3101/3001)"
-						: "Callback API health probe failed on all candidate bases",
+						? "Callback path probe OK (listener SSH marker or VM :53001/:3101)"
+						: callbackPostPathOk === false
+							? "Callback path DOWN on VM :53001 and :3101"
+							: "Callback path not probed (SSH/transport incomplete)",
 			});
 
 			const readiness = buildDeviceLiveReadiness({

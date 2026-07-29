@@ -1,12 +1,38 @@
 # Agent job card — Device Events multi-agent all-green (non-assuming)
 
-**Mode:** execution · owner-operator · non-stop until EXIT GATE  
+**Mode:** execution · owner-operator · **100% agent-owned** · non-stop until EXIT GATE  
 **Primary UI:** `https://dev.bnpi-hris.tech/admin/configuration/devices/events?view=saved`  
 **Primary API:** `https://dev-api.bnpi-hris.tech`  
 **Actor:** `admin@bandai.local` / `password123` / `appCode='hris'` (hris-admin)
 
 Paste into a high-budget agent (`--max-turns` high enough for multi-hour work).  
 **Do not invent.** Every claim needs opened WWG/code/runtime/API/SSH/log evidence or label `NEEDS_CONFIRMATION` / `CONFLICTING` / `STALE`.
+
+### Agent-owned hard ban (no human homework)
+
+Root and all children **own every recoverable step**. Forbidden exit patterns:
+
+- "you should hard-refresh / open Device Events / click Prove"
+- "restart the API and try again"
+- "I will continue later" / "ready for you to verify"
+- ending with only a SPAWNED list while EXIT GATE open
+
+**Required agent ownership map**
+
+| Need | Agent does (never asks human) |
+|---|---|
+| API / pod down | restart deploy, wait Ready, re-probe |
+| DB down | recover postgres / re-probe live-readiness |
+| Listener inactive / login_failed | systemctl status/start/restart (no thrash when armed quiet) |
+| Watcher 400 / ghost | soft-delete NO_ACCESS ghost; deploy skip-guard; bounce watcher |
+| pathReady / pathOk missing | wire probe; rebuild/import image; roll DEV |
+| Socket All-devices miss | UNION emit fix + unit tests |
+| UI vs API red | Playwright login + settle; fix auth if code defect |
+| Manager loop dead | restart `loop-device-events-manager.ps1` |
+| Code defect | implement + unit test + commit/push develop |
+| Dirty recoverable git | focused commit + push |
+
+**Physical only (not agent-fakeable):** major-5 attendance tap for G2 liveReceiving / ENROLL YES. Everything else is agent-owned.
 
 ---
 
@@ -384,18 +410,43 @@ Every distinct failure:
 
 ---
 
-## 5. Fix loop (mutate only after classify)
+## 5. Fix loop (mutate only after classify) — **all agent-owned**
 
-### Priority order
+### Priority order (root/A-FIX execute; never hand off)
 
-1. **DB / API Ready** — no green without postgres + hris-api Ready  
-2. **Ghost / watcher spam** — stop 400 loops (soft-delete + skip code deployed)  
-3. **Listener armed** — systemd active; login_failed → credentials/network (3 tries)  
-4. **pathOk probe + pathReady** — code present **and** running image SHA contains it  
+1. **DB / API Ready** — no green without postgres + hris-api Ready (agent restarts pods)  
+2. **Ghost / watcher spam** — soft-delete NO_ACCESS ghost; ensure skip-guard in image; bounce watcher  
+3. **Listener armed** — systemd active; login_failed → credentials/network (3 tries, agent-owned)  
+4. **pathOk probe + pathReady** — code + live image SHA; rebuild/import if lag  
 5. **Socket union** — unit tests green; live image has helper  
-6. **Restart resilience** — bounce watcher; re-check G1  
-7. **G2 tap** — only if task requires realtime receiving green  
-8. **Commit/push develop** when code changed and tests pass  
+6. **Start manager loop** — `loop-device-events-manager.ps1` always on until GOAL-HELD  
+7. **Restart resilience** — bounce watcher (+ optional API); re-prove G1  
+8. **UI settle** — Playwright login/auth fix if G1.8 open (agent-owned)  
+9. **G2 tap** — physical only if in scope; do not invent attendance  
+10. **Commit/push develop** when code changed and tests pass  
+
+### Graph engineering loop (agent-owned continuous)
+
+```text
+[manager loop always running]
+    │
+    ├─► probe G1 (API) + drift script every interval
+    ├─► write MANAGER-NEXT-SPAWNS.md
+    │
+    ▼
+[root reads NEXT-SPAWNS — no human]
+    │
+    ├─► spawn A-FIX-BE for code_defect
+    ├─► spawn A-FIX-RT for ops/runtime
+    ├─► spawn A-VERIFY for prove/Playwright/bounce
+    ├─► spawn A-DRIFT every cycle until goal held
+    │
+    ▼
+[implement → test → commit/push → roll image if needed]
+    │
+    ▼
+[re-probe until HoldGreenCycles — only then stop]
+```
 
 ### Restart resilience script (must pass)
 
