@@ -22,6 +22,13 @@ export type ReadinessCheck = {
 export type DeviceLiveReadiness = {
 	checkedAt: string;
 	overall: ReadinessLevel;
+	/**
+	 * G1 infrastructure green: DB + listener armed/running + callback path not hard-down.
+	 * True at boot without requiring a human tap. Does not mean enroll/receiving green.
+	 */
+	pathReady: boolean;
+	/** G2 live green: receiving + post path healthy (same as overall green enroll path). */
+	liveReceiving: boolean;
 	headline: string;
 	safeToTap: boolean;
 	safeToEnroll: boolean;
@@ -315,6 +322,19 @@ export const buildDeviceLiveReadiness = (input: {
 		callbackPathHealthy &&
 		(postFresh || callbackPostPathOk === true);
 
+	// G1: infrastructure ready without requiring a human tap.
+	const pathReady =
+		databaseOk &&
+		listenerRunning &&
+		listenerArmed &&
+		!callbackPathDown &&
+		// Prefer explicit path probe; if not probed, still pathReady when armed+DB
+		// so boot is not stuck yellow solely because pathOk was never set.
+		(callbackPostPathOk === true || callbackPostPathOk === null || postFresh);
+
+	const liveReceiving =
+		listenerReceiving && callbackPathHealthy && (postFresh || callbackPostPathOk === true);
+
 	const checksFinal = [databaseCheck, liveCaptureCheck, callbackPostCheck, eventProofCheck];
 	const hasRedFinal = checksFinal.some((c) => c.level === "red");
 	const allGreen = checksFinal.every((c) => c.level === "green");
@@ -322,21 +342,33 @@ export const buildDeviceLiveReadiness = (input: {
 	let overall: ReadinessLevel = "yellow";
 	if (!databaseOk || !listenerRunning || hasRedFinal) overall = "red";
 	else if (allGreen && listenerReceiving && callbackPathHealthy) overall = "green";
-	else overall = "yellow";
+	// G1 overall: services up + path not hard-down + armed quiet with path probe OK
+	// is path-green (not enroll-green). Operators asked for all-green on startup when
+	// services are healthy — surface that as overall green when pathReady and no reds.
+	else if (pathReady && callbackPostPathOk === true && !listenerReceiving) {
+		overall = "green";
+	} else overall = "yellow";
 
 	const reasons: string[] = [];
 	for (const check of checksFinal) {
 		if (check.level !== "green") reasons.push(`${check.label}: ${check.detail}`);
 	}
-	if (overall === "green") {
+	if (overall === "green" && liveReceiving) {
 		reasons.push(
 			"DB ok + SDK receiving + HRIS callback post path healthy — safe for realtime truth.",
+		);
+	} else if (overall === "green" && pathReady) {
+		reasons.push(
+			"Path ready at boot: DB + listener armed + callback path open. Tap once for live receiving / enroll green.",
 		);
 	}
 
 	let headline: string;
-	if (overall === "green") {
+	if (overall === "green" && liveReceiving) {
 		headline = "Safe to tap and enroll — live path is receiving and posting";
+	} else if (overall === "green" && pathReady) {
+		headline =
+			"Services path green — listener armed, callback path open (tap once for live receiving)";
 	} else if (!databaseOk) {
 		headline = "Not safe — database tunnel/path is down (events/auth will fail)";
 	} else if (callbackPathDown) {
@@ -359,6 +391,8 @@ export const buildDeviceLiveReadiness = (input: {
 	return {
 		checkedAt: now.toISOString(),
 		overall,
+		pathReady,
+		liveReceiving,
 		headline,
 		safeToTap,
 		safeToEnroll,

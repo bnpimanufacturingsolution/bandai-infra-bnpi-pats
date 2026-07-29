@@ -79,7 +79,7 @@ describe("device-live-readiness helper", () => {
 		expect(readiness.checks.find((c) => c.id === "callbackPost")?.level).to.equal("yellow");
 	});
 
-	it("is yellow when armed but 0 receiving (0/1/6 pattern)", () => {
+	it("is path-ready green when armed but 0 receiving (0/1/6 pattern) with pathOk", () => {
 		const readiness = buildDeviceLiveReadiness({
 			databaseOk: true,
 			listenerRunning: true,
@@ -91,7 +91,8 @@ describe("device-live-readiness helper", () => {
 			lastSdkEventAt: "2026-07-17T06:05:00.000Z",
 			now,
 		});
-		expect(readiness.overall).to.equal("yellow");
+		expect(readiness.pathReady).to.equal(true);
+		expect(readiness.overall).to.equal("green");
 		expect(readiness.safeToTap).to.equal(true);
 		expect(readiness.safeToEnroll).to.equal(false);
 		expect(readiness.checks.find((c) => c.id === "liveCapture")?.level).to.equal("yellow");
@@ -144,11 +145,12 @@ describe("device-live-readiness helper", () => {
 			now,
 		});
 		expect(readiness.proof.lastSdkEventAt).to.equal("2026-07-17T06:09:00.000Z");
-		expect(readiness.overall).to.equal("yellow");
+		expect(readiness.pathReady).to.equal(true);
+		expect(readiness.overall).to.equal("green");
 		expect(readiness.safeToEnroll).to.equal(false);
 	});
 
-	it("treats armed-but-quiet-without-fresh-proof as ready for tap proof, not broken", () => {
+	it("treats armed-but-quiet-without-fresh-proof as path-ready green (boot), not broken", () => {
 		const readiness = buildDeviceLiveReadiness({
 			databaseOk: true,
 			listenerRunning: true,
@@ -162,8 +164,11 @@ describe("device-live-readiness helper", () => {
 		expect(readiness.proof.stale).to.equal(true);
 		expect(readiness.safeToTap).to.equal(true);
 		expect(readiness.safeToEnroll).to.equal(false);
-		expect(readiness.overall).to.equal("yellow");
-		expect(readiness.headline).to.match(/ready for tap proof/i);
+		// G1: services + path open → overall green at boot without a human tap.
+		expect(readiness.pathReady).to.equal(true);
+		expect(readiness.liveReceiving).to.equal(false);
+		expect(readiness.overall).to.equal("green");
+		expect(readiness.headline).to.match(/path green|services path green|armed/i);
 		expect(readiness.checks.find((c) => c.id === "eventProof")?.level).to.equal("yellow");
 		expect(readiness.checks.find((c) => c.id === "eventProof")?.label).to.equal(
 			"Ready for tap proof",
@@ -186,6 +191,25 @@ describe("device-live-readiness helper", () => {
 		expect(readiness.proof.stale).to.equal(false);
 		expect(readiness.safeToTap).to.equal(true);
 		expect(readiness.safeToEnroll).to.equal(false);
+		expect(readiness.pathReady).to.equal(true);
+		expect(readiness.overall).to.equal("green");
+	});
+
+	it("stays pathReady yellow when callback path was never probed and posts are stale", () => {
+		const readiness = buildDeviceLiveReadiness({
+			databaseOk: true,
+			listenerRunning: true,
+			listenerArmed: true,
+			listenerReceiving: false,
+			callbackPostPathOk: null,
+			lastPostAt: "2026-07-17T04:00:00.000Z",
+			lastAlarmAt: "2026-07-17T04:00:00.000Z",
+			lastSdkEventAt: "2026-07-17T04:00:00.000Z",
+			now,
+		});
+		// pathReady still true when pathOk null (boot not stuck solely by missing probe)
+		expect(readiness.pathReady).to.equal(true);
+		// overall stays yellow without explicit pathOk=true so operators still see "need probe/tap"
 		expect(readiness.overall).to.equal("yellow");
 	});
 });
