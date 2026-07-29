@@ -54,7 +54,12 @@ export default function UnifiedLayout() {
 				<NotificationProvider>
 					<ProductTourProvider>
 						<ProductTourHost />
-						<div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
+						{/*
+						  Root is a row flex on lg. The main column MUST use min-w-0 (not w-full)
+						  or flex min-content width from wide children (e.g. period carousels)
+						  expands the page and creates a document horizontal scrollbar.
+						*/}
+						<div className="flex min-h-screen max-w-[100vw] flex-col overflow-x-hidden bg-gray-50 lg:flex-row">
 							{/* Mobile Sidebar Overlay */}
 							{sidebarOpen && (
 								<div
@@ -66,15 +71,15 @@ export default function UnifiedLayout() {
 							{/* Sidebar - Fixed on Desktop */}
 							<div
 								className={`
-            fixed inset-y-0 left-0 z-50 w-64 bg-white transform transition-transform duration-300 ease-in-out border-r border-gray-200
+            fixed inset-y-0 left-0 z-50 w-64 shrink-0 bg-white transform transition-transform duration-300 ease-in-out border-r border-gray-200
             lg:sticky lg:top-0 lg:translate-x-0 lg:z-30 lg:h-screen lg:border-r lg:border-gray-200
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           `}>
 								<Sidebar onClose={() => setSidebarOpen(false)} />
 							</div>
 
-							{/* Main Content Area */}
-							<div className="flex-1 flex flex-col w-full">
+							{/* Main Content Area — min-w-0 lets this column shrink inside the row flex */}
+							<div className="flex min-w-0 flex-1 flex-col">
 								{/* Top Navbar */}
 								<TopNavbar
 									sidebarOpen={sidebarOpen}
@@ -85,9 +90,9 @@ export default function UnifiedLayout() {
 									)}
 								/>
 
-								{/* Main Content */}
-								<main className="flex-1 overflow-auto">
-									<div className="container mx-auto py-6 px-4 lg:px-6 max-w-7xl">
+								{/* Main Content — keep page-level X overflow off; allow vertical scroll */}
+								<main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+									<div className="container mx-auto min-w-0 max-w-7xl px-4 py-6 lg:px-6">
 										<Outlet />
 									</div>
 								</main>

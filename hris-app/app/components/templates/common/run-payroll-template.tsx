@@ -2182,7 +2182,7 @@ export function RunPayrollTemplate() {
 	}
 
 	return (
-		<div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
+		<div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden">
 			{/* Header */}
 			<div className="flex min-w-0 items-center justify-between gap-3">
 				<div className="flex min-w-0 items-center gap-3">
