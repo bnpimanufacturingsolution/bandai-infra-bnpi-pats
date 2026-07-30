@@ -101,6 +101,7 @@ import {
 } from "../../helper/hikvision-fdlib-face.helper";
 import { withCredentialDeviceLeases } from "../../helper/credential-device-lease.helper";
 import { buildHikvisionCredentialOperationTelemetry } from "../../helper/hikvision-credential-operation-telemetry.helper";
+import { isHikvisionManualCopyAttemptSuccess } from "../../helper/hikvision-manual-copy-success.helper";
 import { resolveHikvisionDeviceSuppliedPath } from "../../helper/device-user-raw-fingerprint.helper";
 import {
 	buildCredentialRecoveryExecutionPreview,
@@ -2828,6 +2829,20 @@ export const controller = (prisma: PrismaClient) => {
 					completed,
 				};
 			};
+			// Peer person create success gate: see hikvision-manual-copy-success.helper.ts
+			// (userOk wins for mode=users; faceOk=false must not fail peer create).
+			const isManualCopyAttemptSuccess = (proof: {
+				exitCode: number;
+				peerUserWriteOk: boolean;
+				completed: boolean;
+				fingerprintWriteOk: boolean;
+				faceWriteOk: boolean;
+				cardWriteOk: boolean;
+			}) =>
+				isHikvisionManualCopyAttemptSuccess(proof, {
+					credentialOnly: params.credentialOnly === true,
+					includeFingerprints: params.includeFingerprints === true,
+				});
 			for (const strategy of strategies) {
 				emitManualCopyProgress({
 					stage: "vm_copy_attempt_started",
@@ -2845,11 +2860,10 @@ export const controller = (prisma: PrismaClient) => {
 					const events = parseJsonLines(result.stdout);
 					const eventProof = evaluateManualCopyEvents(events);
 					if (
-						eventProof.peerUserWriteOk &&
-						eventProof.completed &&
-						eventProof.fingerprintWriteOk &&
-						eventProof.faceWriteOk
-						&& eventProof.cardWriteOk
+						isManualCopyAttemptSuccess({
+							exitCode: 0,
+							...eventProof,
+						})
 					) {
 						return {
 							waitSeconds,
@@ -2903,12 +2917,14 @@ export const controller = (prisma: PrismaClient) => {
 				} =
 					evaluateManualCopyEvents(events);
 				if (
-					result.exitCode === 0 &&
-					peerUserWriteOk &&
-					completed &&
-					fingerprintWriteOk &&
-					faceWriteOk &&
-					cardWriteOk
+					isManualCopyAttemptSuccess({
+						exitCode: result.exitCode,
+						peerUserWriteOk,
+						completed,
+						fingerprintWriteOk,
+						faceWriteOk,
+						cardWriteOk,
+					})
 				) {
 					return {
 						waitSeconds,
@@ -2916,6 +2932,15 @@ export const controller = (prisma: PrismaClient) => {
 						stdout: result.stdout,
 						stderr: result.stderr,
 						events,
+						// Surface partial modality truth for observability without failing peer create.
+						partialModality:
+							params.credentialOnly === true
+								? null
+								: {
+										fingerprintOk: fingerprintWriteOk,
+										faceOk: faceWriteOk,
+										cardOk: cardWriteOk,
+									},
 					};
 				}
 				const sdkFailureMessage =
