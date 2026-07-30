@@ -153,32 +153,44 @@ any_active_jobs() {
   running=$(jq -r '.data.running // 0' "$out" 2>/dev/null || echo 0)
   rm -f "$out"
   out=$(mktemp)
-  code=$(auth_curl GET '/api/device/hikvision/sdk-users/merge/recovery/jobs' '' "$out" 30)
+  code=$(auth_curl GET '/api/device/hikvision/sdk-users/merge/recovery/jobs?limit=20' '' "$out" 30)
   # Only truly in-flight statuses count as active.
-  # needs_attention / awaiting_replan / completed / failed are terminal for the supervisor
-  # (old code treated needs_attention as active and re-polled finished partial-success jobs).
+  # needs_attention / awaiting_replan / completed / failed are terminal for the supervisor.
+  # Keep jq simple (no def) — some appliance jq builds mishandle nested defs here.
   recovery_running=$(jq -r '
-    def is_active:
-      (.//"") as $s
-      | ($s=="recovering" or $s=="running" or $s=="queued" or $s=="pending"
-         or $s=="in_progress" or $s=="writing" or $s=="starting");
-    if (.data.activeJobId // .data.activeJob.id // empty) != "" then 1
-    elif (.data.running|type)=="number" then .data.running
-    elif (.data.jobs|type)=="array" then
-      ([.data.jobs[]|select(.status|is_active)]|length)
-    elif ((.data//[])|type)=="array" then
-      ([.data[]|select(.status|is_active)]|length)
-    else 0 end
+    [
+      (.data.jobs // [])[]
+      | select(
+          .status=="recovering" or .status=="running" or .status=="queued"
+          or .status=="pending" or .status=="in_progress" or .status=="writing"
+          or .status=="starting"
+        )
+    ] | length
   ' "$out" 2>/dev/null || echo 0)
   active_id=$(jq -r '
-    def is_active:
-      (.//"") as $s
-      | ($s=="recovering" or $s=="running" or $s=="queued" or $s=="pending"
-         or $s=="in_progress" or $s=="writing" or $s=="starting");
-    .data.activeJobId // .data.activeJob.id //
-    ([.data.jobs[]?|select(.status|is_active)|.id]|first) // empty
+    (.data.activeJobId // .data.activeJob.id // empty) as $aid
+    | if ($aid|tostring|length) > 0 then $aid
+      else
+        (
+          [
+            (.data.jobs // [])[]
+            | select(
+                .status=="recovering" or .status=="running" or .status=="queued"
+                or .status=="pending" or .status=="in_progress" or .status=="writing"
+                or .status=="starting"
+              )
+            | .id
+          ]
+          | first
+        ) // empty
+      end
   ' "$out" 2>/dev/null || true)
+  # last-resort: scrape "already active" style id from raw if counters missing
+  if [[ -z "${active_id:-}" && "${recovery_running:-0}" -gt 0 ]]; then
+    active_id=$(jq -r '[.data.jobs[]?|select(.status=="recovering")|.id]|first // empty' "$out" 2>/dev/null || true)
+  fi
   rm -f "$out"
+  log "ACTIVE_PROBE merge=${running:-0} recovery=${recovery_running:-0} active=${active_id:-} code=$code"
   if [[ "${running:-0}" -gt 0 || "${recovery_running:-0}" -gt 0 ]]; then
     echo "merge=$running recovery=$recovery_running active=${active_id:-}"
     return 0
