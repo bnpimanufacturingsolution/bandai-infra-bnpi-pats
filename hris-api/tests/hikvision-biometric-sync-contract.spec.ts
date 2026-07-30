@@ -433,6 +433,14 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include("cannot apply profile overlay");
 		// Card/biometric decisions stay out of user-mode invent-bytes path.
 		expect(controller).to.include("missing_raw_blob stays blocked");
+		// Panel UserInfo Valid beginTime must not use +08:00 (Device E badJsonContent).
+		expect(controller).to.include("formatHikvisionUserInfoLocalDateTime");
+		expect(controller).to.include("stripHikvisionUserInfoTimeOffset");
+		expect(controller).to.include('timeType = valid.timeType || "local"');
+		// ACS search may still use Manila+offset; profile align must not call it for beginTime.
+		expect(controller).to.match(
+			/valid\.beginTime\s*=\s*[\s\S]*?formatHikvisionUserInfoLocalDateTime/,
+		);
 	});
 
 	it("exposes durable recovery jobs instead of a planner-only queue", () => {

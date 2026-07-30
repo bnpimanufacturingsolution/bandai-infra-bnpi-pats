@@ -4932,13 +4932,39 @@ export const controller = (prisma: PrismaClient) => {
 			minute: "2-digit",
 			second: "2-digit",
 			hour12: false,
-		})
+			// Force 00-23; some ICU builds emit hour "24" for midnight with hour12:false alone.
+			hourCycle: "h23",
+		} as Intl.DateTimeFormatOptions)
 			.formatToParts(date)
 			.reduce<Record<string, string>>((acc, part) => {
 				if (part.type !== "literal") acc[part.type] = part.value;
 				return acc;
 			}, {});
+		// ACS event search windows accept +08:00. UserInfo Valid beginTime/endTime do NOT —
+		// see formatHikvisionUserInfoLocalDateTime (Device E returns badJsonContent on offset).
 		return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+08:00`;
+	};
+
+	/**
+	 * UserInfo Valid.beginTime / endTime for Modify/SetUp.
+	 * Proven on Main Entrance Device E (2026-07-30):
+	 * - "2026-07-09T16:00:00" → HTTP 200
+	 * - "2026-07-09T16:00:00+08:00" → 400 badJsonContent errorMsg=beginTime
+	 * Postman fixtures use no-offset local + timeType:"local".
+	 * Device-local strings are parsed via `new Date("…T…")` (no Z) which on UTC
+	 * hosts becomes the same instant as `…Z`; re-emit UTC wall clock so we do not
+	 * Manila-shift 08:00 → 16:00 and create new conflicts.
+	 */
+	const formatHikvisionUserInfoLocalDateTime = (date: Date) => {
+		const pad = (n: number) => String(n).padStart(2, "0");
+		return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}T${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+	};
+
+	const stripHikvisionUserInfoTimeOffset = (value: unknown): string | null => {
+		const text = String(value || "").trim();
+		if (!text) return null;
+		// Drop trailing Z or ±HH:MM so firmware that rejects offsets still accepts.
+		return text.replace(/(Z|[+-]\d{2}:\d{2})$/i, "");
 	};
 
 	const getProjectRuntimeRoot = () => {
@@ -17013,16 +17039,59 @@ export const controller = (prisma: PrismaClient) => {
 							>),
 						};
 						if (valid.enable == null) valid.enable = true;
+						// Firmware requires timeType local + no-offset begin/end (see canary).
+						valid.timeType = valid.timeType || "local";
+						// Prefer source panel's native beginTime/endTime strings when present so
+						// we do not re-encode through Manila and invent a new wall clock.
+						const sourceBeginNative = stripHikvisionUserInfoTimeOffset(
+							validityFromRecord?.rawPayload?.Valid?.beginTime ||
+								validityFromRecord?.rawPayload?.valid?.beginTime ||
+								null,
+						);
+						const sourceEndNative = stripHikvisionUserInfoTimeOffset(
+							validityToRecord?.rawPayload?.Valid?.endTime ||
+								validityToRecord?.rawPayload?.valid?.endTime ||
+								null,
+						);
 						if (validityFromRecord && nextValidFrom) {
-							valid.beginTime = formatHikvisionManilaDateTime(new Date(nextValidFrom));
+							valid.beginTime =
+								sourceBeginNative ||
+								formatHikvisionUserInfoLocalDateTime(new Date(nextValidFrom));
+						} else if (valid.beginTime) {
+							valid.beginTime =
+								stripHikvisionUserInfoTimeOffset(valid.beginTime) || valid.beginTime;
 						}
 						if (validityToRecord && nextValidTo) {
-							valid.endTime = formatHikvisionManilaDateTime(new Date(nextValidTo));
+							valid.endTime =
+								sourceEndNative ||
+								formatHikvisionUserInfoLocalDateTime(new Date(nextValidTo));
+						} else if (valid.endTime) {
+							valid.endTime =
+								stripHikvisionUserInfoTimeOffset(valid.endTime) || valid.endTime;
 						}
-						if (validityFromRecord || validityToRecord) {
+						if (validityFromRecord || validityToRecord || panelNameChanged) {
 							baseUserInfo.Valid = valid;
 						}
-						const modifyBody = { UserInfo: baseUserInfo };
+						// Prefer a minimal known-good UserInfo shape: full search hits can
+						// carry read-only / firmware-specific keys that break Modify.
+						const modifyBody = {
+							UserInfo: {
+								employeeNo: targetVendorUserId,
+								...(baseUserInfo.name != null ? { name: baseUserInfo.name } : {}),
+								userType: baseUserInfo.userType || "normal",
+								Valid: valid,
+								...(baseUserInfo.doorRight != null
+									? { doorRight: baseUserInfo.doorRight }
+									: { doorRight: "1" }),
+								...(Array.isArray(baseUserInfo.RightPlan)
+									? { RightPlan: baseUserInfo.RightPlan }
+									: Array.isArray(baseUserInfo.rightPlan)
+										? { RightPlan: baseUserInfo.rightPlan }
+										: {
+												RightPlan: [{ doorNo: 1, planTemplateNo: "1" }],
+											}),
+							},
+						};
 						try {
 							await hikvisionFetch(
 								`${hikvisionEndpoint.accessControl.userInfo.modify}?format=json`,
