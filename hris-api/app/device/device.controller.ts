@@ -634,6 +634,14 @@ type DeviceUserMergeJob = {
 	stale?: boolean;
 	/** Disk snapshot path for agent recovery (relative or absolute). */
 	snapshotPath?: string | null;
+	/**
+	 * Scope keys frozen at job start so a supervisor can restart remaining work
+	 * after failed_stale (API restart kills the in-process worker).
+	 */
+	selectedUserKeys?: string[];
+	selectedCredentialWriteIds?: string[];
+	/** Keys not yet successful when job was marked stale/failed mid-flight. */
+	remainingUserKeys?: string[];
 	startedAt: Date;
 	updatedAt?: Date;
 	completedAt?: Date;
@@ -1599,15 +1607,35 @@ const isDeviceUserMergeJobStale = (job: DeviceUserMergeJob) => {
 	);
 };
 
+const computeRemainingMergeUserKeys = (job: DeviceUserMergeJob): string[] => {
+	const selected = Array.isArray(job.selectedUserKeys)
+		? job.selectedUserKeys.map((k) => String(k || "").trim()).filter(Boolean)
+		: [];
+	if (selected.length === 0) return [];
+	const done = new Set<string>();
+	for (const row of Array.isArray(job.results) ? job.results : []) {
+		const status = String(row?.status || "").toLowerCase();
+		const key = String(row?.userKey || "").trim();
+		// Only treat true success / already_converged as done. Errors and
+		// face-gate false fails may still need re-check; supervisor re-plans.
+		if (key && (status === "success" || status === "already_converged")) {
+			done.add(key);
+		}
+	}
+	return selected.filter((key) => !done.has(key));
+};
+
 const markDeviceUserMergeJobStale = (
 	job: DeviceUserMergeJob,
 	message?: string,
 ): DeviceUserMergeJob => {
 	const now = new Date();
+	const remainingUserKeys = computeRemainingMergeUserKeys(job);
 	const staleJob: DeviceUserMergeJob = {
 		...job,
 		status: "failed",
 		stale: true,
+		remainingUserKeys,
 		message:
 			message ||
 			job.message ||
@@ -18204,6 +18232,18 @@ export const controller = (prisma: PrismaClient) => {
 					mode === "credentials" ? stored.plan : selectedAppliedPlan,
 				),
 				stale: false,
+				// Persist scope so failed_stale / supervisor can resume unfinished keys.
+				selectedUserKeys: Array.isArray(selectedUserKeys)
+					? selectedUserKeys.map((k) => String(k || "").trim()).filter(Boolean)
+					: [],
+				selectedCredentialWriteIds: Array.isArray(selectedCredentialWriteIds)
+					? selectedCredentialWriteIds
+							.map((k) => String(k || "").trim())
+							.filter(Boolean)
+					: [],
+				remainingUserKeys: Array.isArray(selectedUserKeys)
+					? selectedUserKeys.map((k) => String(k || "").trim()).filter(Boolean)
+					: [],
 				startedAt: new Date(),
 				updatedAt: new Date(),
 			};
@@ -18286,9 +18326,16 @@ export const controller = (prisma: PrismaClient) => {
 					durable: true,
 					// Explicit agent recovery flags so poll scripts never invent "still processing".
 					workerActive: job.status === "processing" && !job.stale,
+					remainingUserKeys:
+						Array.isArray(job.remainingUserKeys) && job.remainingUserKeys.length > 0
+							? job.remainingUserKeys
+							: computeRemainingMergeUserKeys(job),
+					selectedUserKeys: Array.isArray(job.selectedUserKeys)
+						? job.selectedUserKeys
+						: [],
 					recoveryHint:
 						job.stale || job.status === "failed"
-							? "Do not poll this job as active. Use failure ledger / remaining plan and start a fresh merge job for unfinished rows only."
+							? "Do not poll this job as active. Re-plan Main A-F, or start a fresh merge/jobs with remainingUserKeys/selectedUserKeys for unfinished rows only. A VM supervisor (project-truth-af-burn-loop) does this automatically."
 							: job.status === "completed"
 								? "Job finished; use results and ledger tallies."
 								: "Job worker is active in this API process; continue polling.",
