@@ -206,15 +206,17 @@ JSON
     continue
   fi
 
-  # Prefer E missing keys without conflicts
+  # Prefer E missing keys without conflicts; never mix unresolved decision rows first
   KEYS_FILE=$(mktemp)
+  AMBIG=$(jq -r '(.data.plan.ambiguousMatches//[])|length' "$PLAN_OUT")
+  PERR=$(jq -r '((.data.plan.errors//[])|length)' "$PLAN_OUT")
+  log "plan_ambiguous=$AMBIG plan_errors=$PERR"
   jq -c --arg e "$E_ID" --argjson n "$WAVE_SIZE" '
     .data.plan.users as $u
     | (
         [$u[]|select(.missingOnDeviceIds!=null and (.missingOnDeviceIds|index($e)) and ((.conflicts//[])|length)==0)|.key]
-        + [$u[]|select(.missingOnDeviceIds!=null and (.missingOnDeviceIds|index($e)))|.key]
         + [$u[]|select(.missingOnDeviceIds!=null and (.missingOnDeviceIds|length>0) and ((.conflicts//[])|length)==0)|.key]
-        + [$u[]|select(.missingOnDeviceIds!=null and (.missingOnDeviceIds|length>0))|.key]
+        + [$u[]|select(.missingOnDeviceIds!=null and (.missingOnDeviceIds|index($e)))|.key]
       ) | unique | .[0:$n]
   ' "$PLAN_OUT" >"$KEYS_FILE"
   WAVE_N=$(jq 'length' "$KEYS_FILE")
@@ -228,13 +230,32 @@ JSON
 
   REV_BODY=$(mktemp)
   REV_OUT=$(mktemp)
+  # applyAll A + autoResolve: make subset review executable even with profile conflicts
   jq -n --arg p "$PLAN_ID" --slurpfile k "$KEYS_FILE" \
-    '{planId:$p, selectedUserKeys:$k[0], autoResolveDecisions:true}' >"$REV_BODY"
+    '{planId:$p, selectedUserKeys:$k[0], autoResolveDecisions:true, applyAll:"A"}' >"$REV_BODY"
   code=$(auth_curl POST '/api/device/hikvision/sdk-users/merge/review' "$REV_BODY" "$REV_OUT" 180)
   rm -f "$REV_BODY"
   if [[ "$code" != "200" && "$code" != "201" ]]; then
-    log "REVIEW_FAIL code=$code $(head -c 200 "$REV_OUT")"
+    log "REVIEW_FAIL code=$code $(head -c 280 "$REV_OUT")"
+    # Retry once with only zero-conflict keys if first wave mixed
+    jq -c --arg e "$E_ID" --argjson n "$WAVE_SIZE" '
+      [.data.plan.users[]|select(.missingOnDeviceIds!=null and (.missingOnDeviceIds|index($e)) and ((.conflicts//[])|length)==0)|.key][0:$n]
+    ' "$PLAN_OUT" >"$KEYS_FILE"
+    WAVE_N=$(jq 'length' "$KEYS_FILE")
+    log "REVIEW retry WAVE_N=$WAVE_N zero-conflict only"
+    if [[ "${WAVE_N:-0}" -gt 0 ]]; then
+      REV_BODY=$(mktemp)
+      jq -n --arg p "$PLAN_ID" --slurpfile k "$KEYS_FILE" \
+        '{planId:$p, selectedUserKeys:$k[0], autoResolveDecisions:true, applyAll:"A"}' >"$REV_BODY"
+      code=$(auth_curl POST '/api/device/hikvision/sdk-users/merge/review' "$REV_BODY" "$REV_OUT" 180)
+      rm -f "$REV_BODY"
+    fi
+  fi
+  if [[ "$code" != "200" && "$code" != "201" ]]; then
+    log "REVIEW_FAIL final code=$code $(head -c 280 "$REV_OUT")"
     rm -f "$PLAN_OUT" "$KEYS_FILE" "$REV_OUT"
+    write_status "$cycle" "$E_FROM" "$MISSING_ANY" "review_fail" "code=$code ambig=$AMBIG"
+    hb "cycle=$cycle review_fail code=$code ambig=$AMBIG"
     sleep "$SLEEP_SEC"
     continue
   fi
@@ -246,7 +267,7 @@ JSON
   JOB_BODY=$(mktemp)
   JOB_OUT=$(mktemp)
   jq -n --arg p "$PLAN_ID" --arg s "$SCOPE" --slurpfile k "$KEYS_FILE" \
-    '{planId:$p, mode:"users", selectedUserKeys:$k[0], autoResolveDecisions:true, expectedScopeHash:$s, dryRun:false}' >"$JOB_BODY"
+    '{planId:$p, mode:"users", selectedUserKeys:$k[0], autoResolveDecisions:true, applyAll:"A", expectedScopeHash:$s, dryRun:false}' >"$JOB_BODY"
   code=$(auth_curl POST '/api/device/hikvision/sdk-users/merge/jobs' "$JOB_BODY" "$JOB_OUT" 180)
   rm -f "$JOB_BODY" "$KEYS_FILE"
   if [[ "$code" != "200" && "$code" != "201" && "$code" != "202" ]]; then

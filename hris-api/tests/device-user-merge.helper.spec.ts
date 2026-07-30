@@ -2158,6 +2158,36 @@ describe("device user union merge", () => {
 		expect(isDeviceUserMergeProfileOverlayField("card")).to.equal(false);
 	});
 
+	it("selectedUserKeys subset stays executable even when plan has plan-level ambiguousMatches", () => {
+		// Whole-plan ambiguous rows must not block peer-create review for a clean subset
+		// (Main A-F burn supervisor 409 defect 2026-07-30).
+		const plan = buildDeviceUserMergePlan({
+			deviceIds: ["a", "b"],
+			records: [
+				record("a", { vendorUserId: "100", displayName: "On A" }),
+				record("b", { vendorUserId: "100", displayName: "On B" }),
+			],
+		});
+		expect(plan.users.length).to.be.greaterThan(0);
+		const cleanKey = plan.users[0].key;
+		// Inject plan-level ambiguity that does not belong to the selected subset.
+		(plan as any).ambiguousMatches = [
+			{
+				key: "ambiguous-other",
+				reason: "test_plan_level_block",
+			},
+		];
+		const full = applyMergeChoices(plan, { autoResolveDecisions: true });
+		expect(full.executable).to.equal(false);
+		const subset = applyMergeChoices(plan, {
+			selectedUserKeys: [cleanKey],
+			autoResolveDecisions: true,
+		});
+		expect(subset.executable).to.equal(true);
+		expect(subset.unresolved).to.have.length(0);
+		expect(subset.users).to.have.length(1);
+	});
+
 	it("does not treat card/face/fingerprint conflicts as DeviceUser profile overlays", () => {
 		const plan = buildDeviceUserMergePlan({
 			deviceIds: ["a", "b"],

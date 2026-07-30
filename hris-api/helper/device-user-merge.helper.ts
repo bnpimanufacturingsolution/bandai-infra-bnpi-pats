@@ -2383,6 +2383,13 @@ export const applyMergeChoices = (
 		selectedUserKeys ? selectedUserKeys.has(write.userKey) : true,
 	);
 	const profileOverlayWrites = buildProfileOverlayWrites(resolved);
+	// When a subset is selected, only that subset's unresolved choices block
+	// review. Whole-plan ambiguousMatches/errors must not 409 peer-create waves
+	// for clean missing-on-device keys (Main E burn defect 2026-07-30).
+	const planLevelBlocksExecutable =
+		!selectedUserKeys &&
+		((plan.ambiguousMatches || []).length > 0 ||
+			(((plan as any).errors || []) as unknown[]).length > 0);
 	return {
 		...plan,
 		users: resolved,
@@ -2391,10 +2398,7 @@ export const applyMergeChoices = (
 		unresolved,
 		unresolvedDecisions: unresolved,
 		executable:
-			resolved.length > 0 &&
-			unresolved.length === 0 &&
-			plan.ambiguousMatches.length === 0 &&
-			((plan as any).errors || []).length === 0,
+			resolved.length > 0 && unresolved.length === 0 && !planLevelBlocksExecutable,
 		counts: {
 			...plan.counts,
 			unionUsers: resolved.length,
