@@ -345,6 +345,30 @@ const CREDENTIAL_RECOVERY_DEFAULT_MAX_VERIFIED_WRITES = Math.max(
 	),
 );
 const CREDENTIAL_RECOVERY_MAX_VERIFIED_WRITES_CEILING = 50;
+/**
+ * Worker lease for credential recovery jobs.
+ * 60s was too short for FP raw write + reread waves: API restart or a blocked
+ * event loop let leaseExpiresAt pass while currentStage was still physical,
+ * and GET then fenced the job as expired_physical_stage_requires_adjudication
+ * with verified=0 even when partial work had already landed on panels.
+ * Default 5m (job) / 10m (physical claim); override via env.
+ */
+const CREDENTIAL_RECOVERY_JOB_LEASE_MS = Math.max(
+	60_000,
+	Math.min(
+		15 * 60_000,
+		Number(process.env.PROJECT_TRUTH_RECOVERY_JOB_LEASE_MS || 5 * 60_000) ||
+			5 * 60_000,
+	),
+);
+const CREDENTIAL_RECOVERY_PHYSICAL_LEASE_MS = Math.max(
+	CREDENTIAL_RECOVERY_JOB_LEASE_MS,
+	Math.min(
+		30 * 60_000,
+		Number(process.env.PROJECT_TRUTH_RECOVERY_PHYSICAL_LEASE_MS || 10 * 60_000) ||
+			10 * 60_000,
+	),
+);
 const DEVICE_IMPORT_JOB_PROCESSING_STALE_MS = 30 * 60 * 1000;
 const DEVICE_USER_SYNC_PROCESSING_STALE_MS = 30 * 60 * 1000;
 /** Merge peer-copy can sit in one long VM batch; still treat silent processing as dead after this. */
@@ -13438,7 +13462,7 @@ export const controller = (prisma: PrismaClient) => {
 				status: "recovering",
 				currentStage: "recovering_source_custody",
 				leaseOwner,
-				leaseExpiresAt: new Date(Date.now() + 60_000),
+				leaseExpiresAt: new Date(Date.now() + CREDENTIAL_RECOVERY_JOB_LEASE_MS),
 				heartbeatAt: now,
 				startedAt: now,
 			},
@@ -13462,11 +13486,14 @@ export const controller = (prisma: PrismaClient) => {
 			return updated;
 		};
 
-		const heartbeat = async (patch: Record<string, unknown> = {}) =>
+		const heartbeat = async (
+			patch: Record<string, unknown> = {},
+			leaseMs: number = CREDENTIAL_RECOVERY_JOB_LEASE_MS,
+		) =>
 			updateOwnedJob({
 				...patch,
 				heartbeatAt: new Date(),
-				leaseExpiresAt: new Date(Date.now() + 60_000),
+				leaseExpiresAt: new Date(Date.now() + leaseMs),
 			});
 
 		const refreshLiveCounters = async () => {
@@ -13571,7 +13598,9 @@ export const controller = (prisma: PrismaClient) => {
 								stage: task.stage || "recovering_source_custody",
 								attempts: { increment: 1 },
 								leaseOwner,
-								leaseExpiresAt: new Date(Date.now() + 60_000),
+								leaseExpiresAt: new Date(
+									Date.now() + CREDENTIAL_RECOVERY_JOB_LEASE_MS,
+								),
 								startedAt,
 							},
 						});
@@ -14215,7 +14244,9 @@ export const controller = (prisma: PrismaClient) => {
 							stage: "credential_write_claimed",
 							attempts: { increment: 1 },
 							leaseOwner,
-							leaseExpiresAt: new Date(Date.now() + 60_000),
+							leaseExpiresAt: new Date(
+								Date.now() + CREDENTIAL_RECOVERY_PHYSICAL_LEASE_MS,
+							),
 							startedAt: new Date(),
 							completedAt: null,
 							error: Prisma.JsonNull,
@@ -14267,7 +14298,9 @@ export const controller = (prisma: PrismaClient) => {
 								stage: "credential_write_claimed",
 								attempts: { increment: 1 },
 								leaseOwner,
-								leaseExpiresAt: new Date(Date.now() + 60_000),
+								leaseExpiresAt: new Date(
+									Date.now() + CREDENTIAL_RECOVERY_PHYSICAL_LEASE_MS,
+								),
 								startedAt: new Date(),
 								completedAt: null,
 							},
@@ -14378,7 +14411,9 @@ export const controller = (prisma: PrismaClient) => {
 						});
 					};
 					const physicalHeartbeat = setInterval(() => {
-						heartbeat().catch(
+						// Long physical FP/face waves: extend lease with physical TTL so a
+						// slow reread does not fence the job as expired_physical_stage.
+						heartbeat({}, CREDENTIAL_RECOVERY_PHYSICAL_LEASE_MS).catch(
 							(error: unknown) =>
 								deviceLogger.warn(
 									`Credential recovery job ${params.jobId} physical-stage heartbeat failed: ${error}`,
@@ -14925,6 +14960,17 @@ export const controller = (prisma: PrismaClient) => {
 			const physicalStageMayHaveMutatedDevice =
 				isCredentialRecoveryPhysicalStage(job.currentStage);
 			if (physicalStageMayHaveMutatedDevice) {
+				// Count durable task outcomes so UI/supervisor do not show verified=0
+				// when panels already retained some writes before the lease died.
+				const [succeededTasks, failedTasks] = await Promise.all([
+					(prisma as any).credentialRecoveryTask.count({
+						where: { jobId: job.id, status: "succeeded" },
+					}),
+					(prisma as any).credentialRecoveryTask.count({
+						where: { jobId: job.id, status: "failed" },
+					}),
+				]);
+				const priorCounters = (job.counters || {}) as Record<string, unknown>;
 				await (prisma as any).credentialRecoveryJob.updateMany({
 					where: {
 						id: job.id,
@@ -14934,13 +14980,35 @@ export const controller = (prisma: PrismaClient) => {
 					data: {
 						status: "needs_attention",
 						currentStage: "expired_physical_stage_requires_adjudication",
+						counters: {
+							...priorCounters,
+							verified: Math.max(
+								Number(priorCounters.verified || 0) || 0,
+								Number(succeededTasks) || 0,
+							),
+							failed: Math.max(
+								Number(priorCounters.failed || 0) || 0,
+								Number(failedTasks) || 0,
+							),
+							recovered: Math.max(
+								Number(priorCounters.recovered || 0) || 0,
+								Number(succeededTasks) || 0,
+							),
+						},
 						latestError: {
 							code: "expired_physical_stage",
 							classification: "worker_lease_fencing",
 							retryable: false,
+							// Operator/agent path: replan + start a NEW recovery job for
+							// remaining ready ops. Do not invent success; physical reread
+							// on replan is the proof.
+							recoveryHint:
+								"Do not auto-resume this job. Replan A/B/D/E/F and start a new modality-scoped recovery wave for remaining ready writes. Partial verified is in counters when tasks completed.",
 							message:
-								"The worker lease expired during a physical write or reread stage. Automatic resume is forbidden until the target is physically reread and the write attempt is adjudicated.",
+								"The worker lease expired during a physical write or reread stage (often API restart or lease TTL too short for FP). Automatic resume is forbidden; replan and start a fresh wave after physical inventory re-read.",
 							stage: String(job.currentStage || "unknown_physical_stage"),
+							succeededTasks: Number(succeededTasks) || 0,
+							failedTasks: Number(failedTasks) || 0,
 							at: new Date().toISOString(),
 						},
 						leaseOwner: null,

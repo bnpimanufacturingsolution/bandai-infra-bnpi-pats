@@ -471,8 +471,12 @@ describe("Hikvision biometric sync contract", () => {
 		expect(controller).to.include('status: recoveryDecision.shouldRetry ? "retrying" : "failed"');
 		expect(controller).to.include('status: "processing"');
 		expect(controller).to.include("expired_physical_stage_requires_adjudication");
+		expect(controller).to.include("CREDENTIAL_RECOVERY_JOB_LEASE_MS");
+		expect(controller).to.include("CREDENTIAL_RECOVERY_PHYSICAL_LEASE_MS");
+		expect(controller).to.include("recoveryHint");
+		expect(controller).to.include("succeededTasks");
 		expect(controller).to.include(
-			"Automatic resume is forbidden until the target is physically reread",
+			"replan and start a fresh wave after physical inventory re-read",
 		);
 		expect(controller).to.include("successfulOperationIds");
 		expect(controller).to.include("verified !== readyWrites.length");
