@@ -11,10 +11,15 @@ EMAIL="${PT_EMAIL:-admin@bandai.local}"
 PASSWORD="${PT_PASSWORD:-password123}"
 APP_CODE="${PT_APP_CODE:-hris}"
 WAVE_MAX="${PT_WAVE_MAX:-50}"
-SLEEP_SEC="${PT_SLEEP_SEC:-45}"
-IDLE_SLEEP_SEC="${PT_IDLE_SLEEP_SEC:-120}"
-POLL_MAX="${PT_POLL_MAX:-40}"
-POLL_SLEEP="${PT_POLL_SLEEP:-12}"
+SLEEP_SEC="${PT_SLEEP_SEC:-20}"
+IDLE_SLEEP_SEC="${PT_IDLE_SLEEP_SEC:-90}"
+# FP waves with replan+serial physical write often need 15–25 min.
+# Old defaults POLL_MAX=40 * POLL_SLEEP=12 ≈ 8 min caused premature timeout
+# while job was still recovering (verified still climbing after poll end).
+POLL_MAX="${PT_POLL_MAX:-150}"
+POLL_SLEEP="${PT_POLL_SLEEP:-10}"
+# Hard ceiling so one stuck job cannot block forever (~50 min at 10s).
+POLL_HARD_MAX="${PT_POLL_HARD_MAX:-300}"
 
 # Main A/B/D/E/F only — hard skip Main C + TEST
 A_ID=cmrht5s2w00ei7zgsre8y3o5n
@@ -149,23 +154,30 @@ any_active_jobs() {
   rm -f "$out"
   out=$(mktemp)
   code=$(auth_curl GET '/api/device/hikvision/sdk-users/merge/recovery/jobs' '' "$out" 30)
-  # Prefer explicit activeJob / running flags; fall back to non-terminal job rows
+  # Only truly in-flight statuses count as active.
+  # needs_attention / awaiting_replan / completed / failed are terminal for the supervisor
+  # (old code treated needs_attention as active and re-polled finished partial-success jobs).
   recovery_running=$(jq -r '
+    def is_active:
+      (.//"") as $s
+      | ($s=="recovering" or $s=="running" or $s=="queued" or $s=="pending"
+         or $s=="in_progress" or $s=="writing" or $s=="starting");
     if (.data.activeJobId // .data.activeJob.id // empty) != "" then 1
     elif (.data.running|type)=="number" then .data.running
     elif (.data.jobs|type)=="array" then
-      ([.data.jobs[]|select(
-        (.status//"") as $s
-        | ($s!="completed" and $s!="failed" and $s!="cancelled" and $s!="")
-      )]|length)
+      ([.data.jobs[]|select(.status|is_active)]|length)
     elif ((.data//[])|type)=="array" then
-      ([.data[]|select(
-        (.status//"") as $s
-        | ($s!="completed" and $s!="failed" and $s!="cancelled" and $s!="")
-      )]|length)
+      ([.data[]|select(.status|is_active)]|length)
     else 0 end
   ' "$out" 2>/dev/null || echo 0)
-  active_id=$(jq -r '.data.activeJobId // .data.activeJob.id // .data.jobs[0].id // empty' "$out" 2>/dev/null || true)
+  active_id=$(jq -r '
+    def is_active:
+      (.//"") as $s
+      | ($s=="recovering" or $s=="running" or $s=="queued" or $s=="pending"
+         or $s=="in_progress" or $s=="writing" or $s=="starting");
+    .data.activeJobId // .data.activeJob.id //
+    ([.data.jobs[]?|select(.status|is_active)|.id]|first) // empty
+  ' "$out" 2>/dev/null || true)
   rm -f "$out"
   if [[ "${running:-0}" -gt 0 || "${recovery_running:-0}" -gt 0 ]]; then
     echo "merge=$running recovery=$recovery_running active=${active_id:-}"
@@ -206,8 +218,11 @@ poll_merge_job() {
 }
 
 poll_recovery_job() {
-  local job_id="$1" label="${2:-recovery}" would="${3:-0}" i ST VER FAIL TOT STAGE code POLL
-  for i in $(seq 1 "$POLL_MAX"); do
+  local job_id="$1" label="${2:-recovery}" would="${3:-0}" i ST VER FAIL TOT STAGE PHASE code POLL
+  local last_ver=-1 stagnant=0 soft_max="$POLL_MAX"
+  i=0
+  while [[ "$i" -lt "$POLL_HARD_MAX" ]]; do
+    i=$((i + 1))
     sleep "$POLL_SLEEP"
     POLL=$(mktemp)
     code=$(auth_curl GET "/api/device/hikvision/sdk-users/merge/recovery/jobs/$job_id" '' "$POLL" 60)
@@ -216,22 +231,59 @@ poll_recovery_job() {
       rm -f "$POLL"
       continue
     fi
-    # job payload may be nested under .data.job or flat under .data
+    # Prefer counters.verified (live durable job shape). Fall back to legacy fields.
     ST=$(jq -r '.data.job.status // .data.status // empty' "$POLL")
-    VER=$(jq -r '.data.job.verifiedWrites // .data.verifiedWrites // .data.job.successfulWrites // .data.successfulWrites // 0' "$POLL")
-    FAIL=$(jq -r '.data.job.failedWrites // .data.failedWrites // 0' "$POLL")
-    TOT=$(jq -r '.data.job.totalWrites // .data.totalWrites // .data.job.plannedWrites // .data.plannedWrites // 0' "$POLL")
+    VER=$(jq -r '
+      .data.job.counters.verified // .data.counters.verified //
+      .data.job.verifiedWrites // .data.verifiedWrites //
+      .data.job.successfulWrites // .data.successfulWrites // 0
+    ' "$POLL")
+    FAIL=$(jq -r '
+      .data.job.counters.failed // .data.counters.failed //
+      .data.job.failedWrites // .data.failedWrites // 0
+    ' "$POLL")
+    TOT=$(jq -r '
+      .data.job.counters.recoveringNow // .data.counters.recoveringNow //
+      .data.job.totalWrites // .data.totalWrites //
+      .data.job.plannedWrites // .data.plannedWrites // 0
+    ' "$POLL")
     STAGE=$(jq -r '.data.job.currentStage // .data.currentStage // empty' "$POLL")
-    log "poll_$label=$i job=$job_id status=$ST verified=$VER fail=$FAIL tot=$TOT stage=$STAGE would=$would"
-    hb "cycle=$cycle poll=$i kind=$label job=$job_id status=$ST verified=$VER fail=$FAIL would=$would"
+    PHASE=$(jq -r '.data.job.counters.phase // .data.counters.phase // empty' "$POLL")
+    log "poll_$label=$i job=$job_id status=$ST verified=$VER fail=$FAIL tot=$TOT stage=$STAGE phase=$PHASE would=$would"
+    hb "cycle=$cycle poll=$i kind=$label job=$job_id status=$ST verified=$VER fail=$FAIL would=$would phase=$PHASE"
     cp "$POLL" "$LOG_DIR/recovery-poll-latest.json"
     rm -f "$POLL"
     if [[ "$ST" == "completed" || "$ST" == "failed" || "$ST" == "needs_attention" || "$ST" == "awaiting_replan" ]]; then
       echo "$ST verified=$VER fail=$FAIL"
       return 0
     fi
+    # Adaptive soft budget: if still recovering and verified is moving, keep going.
+    if [[ "$ST" == "recovering" || "$ST" == "running" || "$ST" == "writing" ]]; then
+      if [[ "$VER" != "$last_ver" ]]; then
+        stagnant=0
+        last_ver=$VER
+        # extend soft ceiling while progress is real
+        if [[ "$i" -ge "$soft_max" && "$soft_max" -lt "$POLL_HARD_MAX" ]]; then
+          soft_max=$((soft_max + 60))
+          if [[ "$soft_max" -gt "$POLL_HARD_MAX" ]]; then soft_max=$POLL_HARD_MAX; fi
+          log "POLL_$label extend soft_max=$soft_max verified=$VER"
+        fi
+      else
+        stagnant=$((stagnant + 1))
+      fi
+    fi
+    # Soft timeout only when no progress for long after soft_max, or hard max hit
+    if [[ "$i" -ge "$soft_max" ]]; then
+      # still writing with progress recently? keep until hard max
+      if [[ "$stagnant" -lt 30 && ( "$ST" == "recovering" || "$ST" == "running" || "$ST" == "writing" ) ]]; then
+        continue
+      fi
+      log "POLL_$label soft_timeout i=$i stagnant=$stagnant verified=$VER"
+      echo "timeout verified=$VER fail=$FAIL"
+      return 1
+    fi
   done
-  echo "timeout"
+  echo "timeout verified=${VER:-0} fail=${FAIL:-0}"
   return 1
 }
 
