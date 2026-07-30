@@ -1,5 +1,26 @@
-# Project Truth LAN reverse proxy GÇö same-origin /api path routing
-# Public Cloudflare *.bnpi-hris.tech is separate and must stay active.
+# Project Truth LAN reverse proxy â€” one-to-one with public *.bnpi-hris.tech
+# Zone: *.bnpi-hris.lan (not .local)
+# HTTPS: Caddy tls internal (local CA). HTTP also served.
+# Public Cloudflare tunnel is separate and must stay active.
+
+{
+	auto_https disable_redirects
+	local_certs
+}
+
+# DEV app + same-origin API
+dev.bnpi-hris.lan {
+	tls internal
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3101
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3101
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3100
+	}
+}
 
 http://dev.bnpi-hris.lan {
 	handle /api/* {
@@ -13,8 +34,27 @@ http://dev.bnpi-hris.lan {
 	}
 }
 
+dev-api.bnpi-hris.lan {
+	tls internal
+	reverse_proxy 127.0.0.1:3101
+}
+
 http://dev-api.bnpi-hris.lan {
 	reverse_proxy 127.0.0.1:3101
+}
+
+# UAT
+uat.bnpi-hris.lan {
+	tls internal
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3201
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3201
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3200
+	}
 }
 
 http://uat.bnpi-hris.lan {
@@ -29,11 +69,18 @@ http://uat.bnpi-hris.lan {
 	}
 }
 
+uat-api.bnpi-hris.lan {
+	tls internal
+	reverse_proxy 127.0.0.1:3201
+}
+
 http://uat-api.bnpi-hris.lan {
 	reverse_proxy 127.0.0.1:3201
 }
 
-http://app.bnpi-hris.lan, http://bnpi-hris.lan {
+# PROD apex + www + app
+bnpi-hris.lan, www.bnpi-hris.lan, app.bnpi-hris.lan {
+	tls internal
 	handle /api/* {
 		reverse_proxy 127.0.0.1:3001
 	}
@@ -45,8 +92,106 @@ http://app.bnpi-hris.lan, http://bnpi-hris.lan {
 	}
 }
 
+http://bnpi-hris.lan, http://www.bnpi-hris.lan, http://app.bnpi-hris.lan {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}
+
+api.bnpi-hris.lan {
+	tls internal
+	reverse_proxy 127.0.0.1:3001
+}
+
 http://api.bnpi-hris.lan {
 	reverse_proxy 127.0.0.1:3001
+}
+
+# Employee apps
+emp.bnpi-hris.lan {
+	tls internal
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3300
+	}
+}
+
+http://emp.bnpi-hris.lan {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3300
+	}
+}
+
+dev-emp.bnpi-hris.lan {
+	tls internal
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3101
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3101
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3310
+	}
+}
+
+http://dev-emp.bnpi-hris.lan {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3101
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3101
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3310
+	}
+}
+
+uat-emp.bnpi-hris.lan {
+	tls internal
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3201
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3201
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3320
+	}
+}
+
+http://uat-emp.bnpi-hris.lan {
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3201
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:3201
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3320
+	}
+}
+
+grafana.bnpi-hris.lan {
+	tls internal
+	reverse_proxy 127.0.0.1:53000
 }
 
 http://grafana.bnpi-hris.lan {

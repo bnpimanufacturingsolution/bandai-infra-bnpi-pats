@@ -89,6 +89,22 @@ emit_os_sync_summary() {
 
 emit_hris_rows() {
   local ip_addr="$1"
+  # Prefer clean LAN hostnames (dnsmasq + Caddy). Port URLs remain as fallback.
+  echo "  Prefer clean LAN names (no ports) when DNS= ${ip_addr} or hosts file:"
+  printf '  %-5s %-7s %s\n' "DEV" "login" "https://dev.bnpi-hris.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "DEV" "api" "https://dev-api.bnpi-hris.lan/health"
+  printf '  %-5s %-7s %s\n' "DEV" "emp" "https://dev-emp.bnpi-hris.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "UAT" "login" "https://uat.bnpi-hris.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "UAT" "api" "https://uat-api.bnpi-hris.lan/health"
+  printf '  %-5s %-7s %s\n' "UAT" "emp" "https://uat-emp.bnpi-hris.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "PROD" "login" "https://bnpi-hris.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "PROD" "app" "https://app.bnpi-hris.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "PROD" "api" "https://api.bnpi-hris.lan/health"
+  printf '  %-5s %-7s %s\n' "PROD" "emp" "https://emp.bnpi-hris.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "OBS" "grafana" "https://grafana.bnpi-hris.lan"
+  echo "  HTTP also works (http://dev.bnpi-hris.lan). Trust LAN CA once:"
+  echo "    /etc/project-truth/lan-ca/caddy-local-root.crt"
+  echo "  Port fallbacks (direct NodePort):"
   printf '  %-5s %-5s http://%s:%s/auth/login\n' "PROD" "login" "$ip_addr" "3000"
   printf '  %-5s %-5s http://%s:%s/health\n' "PROD" "api" "$ip_addr" "3001"
   printf '  %-5s %-5s http://%s:%s/auth/login\n' "PROD" "emp" "$ip_addr" "3300"
@@ -98,6 +114,24 @@ emit_hris_rows() {
   printf '  %-5s %-5s http://%s:%s/auth/login\n' "UAT" "login" "$ip_addr" "3200"
   printf '  %-5s %-5s http://%s:%s/health\n' "UAT" "api" "$ip_addr" "3201"
   printf '  %-5s %-5s http://%s:%s/auth/login\n' "UAT" "emp" "$ip_addr" "3320"
+}
+
+emit_lan_dns_rows() {
+  local ip_addr="$1"
+  echo "LAN DNS + reverse proxy (*.bnpi-hris.lan)"
+  echo "  zone: bnpi-hris.lan  (not .local)"
+  echo "  DNS server: ${ip_addr}  (dnsmasq)"
+  echo "  proxy: Caddy :80 + :443 (tls internal CA)"
+  if command -v systemctl >/dev/null 2>&1; then
+    echo "  dnsmasq: $(systemctl is-active dnsmasq 2>/dev/null || echo unknown)"
+    echo "  caddy:   $(systemctl is-active caddy 2>/dev/null || echo unknown)"
+  fi
+  echo "  DEV:     https://dev.bnpi-hris.lan   | https://dev-api.bnpi-hris.lan/health"
+  echo "  UAT:     https://uat.bnpi-hris.lan   | https://uat-api.bnpi-hris.lan/health"
+  echo "  PROD:    https://bnpi-hris.lan       | https://api.bnpi-hris.lan/health"
+  echo "  Grafana: https://grafana.bnpi-hris.lan"
+  echo "  CA trust: /etc/project-truth/lan-ca/caddy-local-root.crt"
+  echo "  reinstall: sudo bash /usr/local/share/project-truth/lan-dns-proxy/install.sh"
 }
 
 emit_observability_rows() {
@@ -251,6 +285,8 @@ write_summary() {
       echo "  ${ip_addr}"
       echo
       echo "Open these from your host browser"
+      emit_lan_dns_rows "$ip_addr"
+      echo
       emit_hris_rows "$ip_addr"
       echo
       emit_named_cloudflare_rows "$ip_addr"
@@ -507,13 +543,17 @@ fi
   echo "Project Truth HRIS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
-    echo "Open: http://${ip_addr}:3000/auth/login"
-    echo "Employee: http://${ip_addr}:3300/auth/login"
-    echo "Cloudflare: https://bnpi-hris.tech/auth/login"
-    echo "Tunnel: $(cloudflare_tunnel_mode) bnpi-hris -> http://${ip_addr}:3000"
-    echo "SSH: ssh infra@${ip_addr}"
-    echo "Cloudflare SSH: ssh project-truth-hris"
-    echo "Client summary: project-truth-lan-summary --screen"
+    echo "DEV:  https://dev.bnpi-hris.lan/auth/login"
+    echo "DEV:  https://dev-api.bnpi-hris.lan/health"
+    echo "UAT:  https://uat.bnpi-hris.lan/auth/login"
+    echo "PROD: https://bnpi-hris.lan/auth/login"
+    echo "Grafana: https://grafana.bnpi-hris.lan"
+    echo "LAN DNS: ${ip_addr}  zone: bnpi-hris.lan"
+    echo "Port fallback DEV: http://${ip_addr}:3100/auth/login"
+    echo "Cloudflare: https://dev.bnpi-hris.tech/auth/login"
+    echo "Tunnel: $(cloudflare_tunnel_mode) bnpi-hris"
+    echo "SSH: ssh infra@${ip_addr}  |  ssh project-truth-hris"
+    echo "Summary: project-truth-lan-summary --screen-overview"
     if [ -r "$sync_state_file" ]; then
       commit="$(awk -F= '$1 == "commit" { print substr($2, 1, 12) }' "$sync_state_file")"
       branch="$(awk -F= '$1 == "branch" { print $2 }' "$sync_state_file")"
@@ -535,9 +575,16 @@ fi
   else
     echo "LAN IP: NOT DETECTED"
   fi
-  echo "Cloudflare:"
+  echo "LAN clean URLs (DNS ${ip_addr:-?} / hosts):"
+  echo "  DEV  https://dev.bnpi-hris.lan/auth/login"
+  echo "  DEV  https://dev-api.bnpi-hris.lan/health"
+  echo "  UAT  https://uat.bnpi-hris.lan/auth/login"
+  echo "  PROD https://bnpi-hris.lan/auth/login"
+  echo "  Grafana https://grafana.bnpi-hris.lan"
+  echo "Cloudflare (public):"
+  echo "  https://dev.bnpi-hris.tech/auth/login"
+  echo "  https://dev-api.bnpi-hris.tech/health"
   echo "  https://bnpi-hris.tech/auth/login"
-  echo "  https://api.bnpi-hris.tech/health"
   echo "SSH:"
   if [ -n "$ip_addr" ]; then
     echo "  OpenSSH: ssh infra@${ip_addr}"

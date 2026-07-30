@@ -1,14 +1,14 @@
 /**
  * Resolve which API origin the browser should call.
  *
- * Project Truth public hosts (`*.bnpi-hris.tech`) must use the Cloudflare
- * tunnel → Hyper-V/K3s path, NOT the legacy Cloud Run DEV/UAT URLs.
- * Cloud Run currently fails login when Cloud SQL is unreachable
- * (Prisma: Can't reach database server at /cloudsql/...).
+ * Project Truth public hosts (`*.bnpi-hris.tech`) and LAN hosts
+ * (`*.bnpi-hris.lan`) must use same-origin `/api` via Cloudflare or Caddy,
+ * NOT the legacy Cloud Run DEV/UAT URLs.
  *
  * Tunnel config (`cloudflared-bnpi-hris.yml`):
  *   dev.bnpi-hris.tech/api/*  → 10.184.37.19:3101
- *   dev-api.bnpi-hris.tech    → 10.184.37.19:3101
+ * LAN Caddy:
+ *   dev.bnpi-hris.lan/api/*   → 127.0.0.1:3101
  */
 const LEGACY_CLOUD_RUN_DEV =
 	"https://hris-api-dev-161377059311.asia-southeast1.run.app";
@@ -49,28 +49,24 @@ export const getRuntimeApiBase = (): string => {
 		return LOCAL_API_BASE;
 	}
 
-	// Project Truth public / tunnel hosts → same origin (Cloudflare routes /api)
-	if (host === "dev.bnpi-hris.tech" || host.endsWith(".dev.bnpi-hris.tech")) {
+	// Project Truth public (.tech) and LAN (.lan) hosts → same origin.
+	// Cloudflare routes /api on .tech; Caddy routes /api on .lan.
+	const isLanZone = host === "bnpi-hris.lan" || host.endsWith(".bnpi-hris.lan");
+	const isTechZone = host === "bnpi-hris.tech" || host.endsWith(".bnpi-hris.tech");
+	if (isLanZone || isTechZone) {
+		// API-only hostnames still use absolute origin (same host is the API).
+		if (
+			host === "dev-api.bnpi-hris.tech" ||
+			host === "uat-api.bnpi-hris.tech" ||
+			host === "api.bnpi-hris.tech" ||
+			host === "dev-api.bnpi-hris.lan" ||
+			host === "uat-api.bnpi-hris.lan" ||
+			host === "api.bnpi-hris.lan"
+		) {
+			return sameOriginApiBase();
+		}
+		// App / emp hosts: same-origin so /api hits tunnel or LAN Caddy (no CORS).
 		return sameOriginApiBase();
-	}
-	if (host === "uat.bnpi-hris.tech" || host.endsWith(".uat.bnpi-hris.tech")) {
-		return sameOriginApiBase();
-	}
-	if (
-		host === "bnpi-hris.tech" ||
-		host === "www.bnpi-hris.tech" ||
-		host === "app.bnpi-hris.tech"
-	) {
-		return sameOriginApiBase();
-	}
-	if (host === "dev-api.bnpi-hris.tech") {
-		return "https://dev-api.bnpi-hris.tech";
-	}
-	if (host === "uat-api.bnpi-hris.tech") {
-		return "https://uat-api.bnpi-hris.tech";
-	}
-	if (host === "api.bnpi-hris.tech") {
-		return "https://api.bnpi-hris.tech";
 	}
 
 	// LAN appliance IPs / hostnames → paired API port when opened on app port

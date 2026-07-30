@@ -49,6 +49,19 @@ describe("getRuntimeApiBase", () => {
 		expect(getRuntimeApiBase()).not.toContain("run.app");
 	});
 
+	it("maps dev.bnpi-hris.lan to same origin (LAN Caddy /api)", () => {
+		mockHost("dev.bnpi-hris.lan");
+		expect(getRuntimeApiBase()).toBe("https://dev.bnpi-hris.lan");
+		expect(getRuntimeApiBase()).not.toContain("run.app");
+	});
+
+	it("maps uat.bnpi-hris.lan and bnpi-hris.lan to same origin", () => {
+		mockHost("uat.bnpi-hris.lan");
+		expect(getRuntimeApiBase()).toBe("https://uat.bnpi-hris.lan");
+		mockHost("bnpi-hris.lan");
+		expect(getRuntimeApiBase()).toBe("https://bnpi-hris.lan");
+	});
+
 	it("uses localhost:3001 for local dev", () => {
 		mockHost("localhost", "5175", "http:");
 		expect(getRuntimeApiBase()).toBe("http://localhost:3001");

@@ -264,7 +264,7 @@ spec:
             - name: CORS_CREDENTIALS
               value: "true"
             - name: CORS_ORIGINS
-              value: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3100,http://127.0.0.1:3100,http://localhost:3200,http://127.0.0.1:3200,http://localhost:5175,http://127.0.0.1:5175,https://bnpi-hris.tech,https://www.bnpi-hris.tech,https://app.bnpi-hris.tech,https://dev.bnpi-hris.tech,https://uat.bnpi-hris.tech,https://emp.bnpi-hris.tech,https://dev-emp.bnpi-hris.tech,https://uat-emp.bnpi-hris.tech
+              value: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3100,http://127.0.0.1:3100,http://localhost:3200,http://127.0.0.1:3200,http://localhost:5175,http://127.0.0.1:5175,https://bnpi-hris.tech,https://www.bnpi-hris.tech,https://app.bnpi-hris.tech,https://dev.bnpi-hris.tech,https://uat.bnpi-hris.tech,https://emp.bnpi-hris.tech,https://dev-emp.bnpi-hris.tech,https://uat-emp.bnpi-hris.tech,http://bnpi-hris.lan,https://bnpi-hris.lan,http://www.bnpi-hris.lan,https://www.bnpi-hris.lan,http://app.bnpi-hris.lan,https://app.bnpi-hris.lan,http://api.bnpi-hris.lan,https://api.bnpi-hris.lan,http://dev.bnpi-hris.lan,https://dev.bnpi-hris.lan,http://dev-api.bnpi-hris.lan,https://dev-api.bnpi-hris.lan,http://uat.bnpi-hris.lan,https://uat.bnpi-hris.lan,http://uat-api.bnpi-hris.lan,https://uat-api.bnpi-hris.lan,http://emp.bnpi-hris.lan,https://emp.bnpi-hris.lan,http://dev-emp.bnpi-hris.lan,https://dev-emp.bnpi-hris.lan,http://uat-emp.bnpi-hris.lan,https://uat-emp.bnpi-hris.lan,http://grafana.bnpi-hris.lan,https://grafana.bnpi-hris.lan
             - name: NODE_HOST_IP
               valueFrom:
                 fieldRef:
