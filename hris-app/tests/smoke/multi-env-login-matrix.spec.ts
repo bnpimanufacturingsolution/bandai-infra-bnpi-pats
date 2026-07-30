@@ -1,7 +1,7 @@
 /**
  * Multi-env login matrix: HRIS admin + Employee apps on DEV / UAT / PROD public hosts.
  * Uses Cloudflare *.bnpi-hris.tech (reachable from this workstation).
- * LAN *.bnpi-hris.lan is proven separately on-VM when L3 path is unavailable.
+ * Employee kiosk: click "Manual Login" before filling the form.
  */
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 import fs from "node:fs";
@@ -35,7 +35,6 @@ type LoginResult = {
 	consoleErrors: string[];
 	pageErrors: string[];
 	failedResponses: string[];
-	badApi: string[];
 	finalUrl: string;
 	credentialUsed: string;
 	pass: boolean;
@@ -53,25 +52,26 @@ const summaryRows: Array<{
 	credential: string;
 }> = [];
 
-async function fillAndSubmit(page: Page, emailVal: string, passwordVal: string) {
-	const email = page
-		.getByPlaceholder(/email|EMP-HR|@/i)
-		.or(page.locator('input[type="email"]'))
-		.or(page.locator('input[name="email"]'))
-		.first();
-	const password = page
-		.getByPlaceholder(/password/i)
-		.or(page.locator('input[type="password"]'))
-		.first();
-	const submit = page
-		.getByRole("button", { name: /sign in|log in|login|continue/i })
-		.or(page.locator('button[type="submit"]'))
-		.first();
-
-	await email.waitFor({ state: "visible", timeout: 30_000 });
-	await email.fill(emailVal);
-	await password.fill(passwordVal);
-	await submit.click();
+async function openManualLoginIfNeeded(page: Page) {
+	const emailInput = page.locator('input[type="email"]').first();
+	const manual = page.getByRole("button", { name: /manual login/i });
+	// Prefer first visible of email form (HRIS) or Manual Login (employee kiosk).
+	const deadline = Date.now() + 20_000;
+	while (Date.now() < deadline) {
+		if (await emailInput.isVisible().catch(() => false)) return;
+		if (await manual.isVisible().catch(() => false)) {
+			await manual.click();
+			await emailInput.waitFor({ state: "visible", timeout: 10_000 });
+			return;
+		}
+		const altEmail = page
+			.getByPlaceholder(/email|EMP-HR|@/i)
+			.or(page.locator('input[name="email"]'))
+			.first();
+		if (await altEmail.isVisible().catch(() => false)) return;
+		await page.waitForTimeout(200);
+	}
+	throw new Error("login form not visible (no email field / Manual Login)");
 }
 
 async function attemptLogin(
@@ -83,62 +83,120 @@ async function attemptLogin(
 	const consoleErrors: string[] = [];
 	const pageErrors: string[] = [];
 	const failedResponses: string[] = [];
+	let loginStatus: number | null = null;
 
-	const onConsole = (msg: { type: () => string; text: () => string }) => {
+	page.on("console", (msg) => {
 		if (msg.type() === "error") consoleErrors.push(msg.text());
-	};
-	const onPageError = (err: Error) => pageErrors.push(String(err));
-	const onResponse = (res: { status: () => number; url: () => string }) => {
-		if (res.status() >= 400 && res.url().includes("/api/")) {
-			failedResponses.push(`${res.status()} ${res.url()}`);
+	});
+	page.on("pageerror", (err) => pageErrors.push(String(err)));
+	page.on("response", (res) => {
+		const url = res.url();
+		if (url.includes("/api/") && res.status() >= 400) {
+			failedResponses.push(`${res.status()} ${url}`);
 		}
-	};
-
-	page.on("console", onConsole);
-	page.on("pageerror", onPageError);
-	page.on("response", onResponse);
+		if (url.includes("/api/auth/login") && res.request().method() === "POST") {
+			loginStatus = res.status();
+		}
+	});
 
 	try {
-		await page.goto(`${base}/auth/login`, { waitUntil: "domcontentloaded", timeout: 60_000 });
-		await fillAndSubmit(page, emailVal, passwordVal);
+		// Avoid networkidle — employee kiosk polls biometrics continuously.
+		await page.goto(`${base}/auth/login`, {
+			waitUntil: "domcontentloaded",
+			timeout: 45_000,
+		});
+		await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {});
 
-		try {
-			await page.waitForURL((url) => !url.pathname.includes("/auth/login"), {
-				timeout: 45_000,
-			});
-			const badApi = failedResponses.filter(
-				(line) => / (5\d\d|0) /.test(line) || line.includes("CORS"),
-			);
-			return {
-				consoleErrors,
-				pageErrors,
-				failedResponses,
-				badApi,
-				finalUrl: page.url(),
-				credentialUsed: emailVal,
-				pass: true,
-				page,
-			};
-		} catch (err) {
-			const badApi = failedResponses.filter(
-				(line) => / (5\d\d|0) /.test(line) || line.includes("CORS"),
-			);
-			return {
-				consoleErrors,
-				pageErrors,
-				failedResponses,
-				badApi,
-				finalUrl: page.url(),
-				credentialUsed: emailVal,
-				pass: false,
-				error: String(err),
-				page,
-			};
+		await openManualLoginIfNeeded(page);
+
+		const email = page
+			.locator('input[type="email"]')
+			.or(page.getByPlaceholder(/email|EMP-HR|employee@|@/i))
+			.or(page.locator('input[name="email"]'))
+			.first();
+		const password = page
+			.locator('input[type="password"]')
+			.or(page.getByPlaceholder(/password/i))
+			.first();
+		// Prefer real submit — do NOT match kiosk "Manual Login" button.
+		const submit = page.locator('form button[type="submit"], button[type="submit"]').first();
+
+		await email.fill(emailVal);
+		await password.fill(passwordVal);
+		await submit.click();
+
+		// Wait for either navigation away from login OR a failed login API response
+		const deadline = Date.now() + 12_000;
+		while (Date.now() < deadline) {
+			if (!page.url().includes("/auth/login")) {
+				// Settle home shell so screenshots show linked profile (not blank flash).
+				await page
+					.getByRole("button", { name: /log out/i })
+					.waitFor({ state: "visible", timeout: 8_000 })
+					.catch(() => {});
+				await page.waitForTimeout(400);
+				return {
+					consoleErrors,
+					pageErrors,
+					failedResponses,
+					finalUrl: page.url(),
+					credentialUsed: emailVal,
+					pass: true,
+					page,
+				};
+			}
+			if (loginStatus !== null && loginStatus >= 400) {
+				return {
+					consoleErrors,
+					pageErrors,
+					failedResponses,
+					finalUrl: page.url(),
+					credentialUsed: emailVal,
+					pass: false,
+					error: `auth login HTTP ${loginStatus}`,
+					page,
+				};
+			}
+			const inlineErr = page.locator(".employee-login-kiosk-error");
+			if (await inlineErr.isVisible().catch(() => false)) {
+				const text = (await inlineErr.textContent())?.trim() || "inline auth error";
+				return {
+					consoleErrors,
+					pageErrors,
+					failedResponses,
+					finalUrl: page.url(),
+					credentialUsed: emailVal,
+					pass: false,
+					error: text,
+					page,
+				};
+			}
+			await page.waitForTimeout(250);
 		}
-	} finally {
-		page.off("console", onConsole);
-		page.off("pageerror", onPageError);
-		page.off("response", onResponse);
+
+		return {
+			consoleErrors,
+			pageErrors,
+			failedResponses,
+			finalUrl: page.url(),
+			credentialUsed: emailVal,
+			pass: !page.url().includes("/auth/login"),
+			error: page.url().includes("/auth/login")
+				? "timeout waiting to leave /auth/login"
+				: undefined,
+			page,
+		};
+	} catch (err) {
+		return {
+			consoleErrors,
+			pageErrors,
+			failedResponses,
+			finalUrl: page.url(),
+			credentialUsed: emailVal,
+			pass: false,
+			error: String(err),
+			page,
+		};
 	}
 }
 
@@ -146,22 +204,22 @@ async function loginWithFallback(
 	context: BrowserContext,
 	target: Target,
 ): Promise<LoginResult> {
-	const attempts: Array<{ email: string; password: string }> = [
-		{ email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
-	];
-	if (target.kind === "emp") {
-		attempts.push(
-			{ email: EMP_SEED_EMAIL, password: EMP_SEED_PASSWORD },
-			{ email: HR_SEED_EMAIL, password: HR_SEED_PASSWORD },
-		);
-	}
+	// HRIS admin app: admin only. Employee kiosk: prefer employee seed first
+	// (admin often lands with "No employee profile linked" / role-blocked).
+	const attempts: Array<{ email: string; password: string }> =
+		target.kind === "emp"
+			? [
+					{ email: EMP_SEED_EMAIL, password: EMP_SEED_PASSWORD },
+					{ email: HR_SEED_EMAIL, password: HR_SEED_PASSWORD },
+					{ email: ADMIN_EMAIL, password: ADMIN_PASSWORD },
+				]
+			: [{ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }];
 
 	const failures: LoginResult[] = [];
 	for (const cred of attempts) {
 		const page = await context.newPage();
 		const result = await attemptLogin(page, target.base, cred.email, cred.password);
 		if (result.pass) {
-			// Close failed attempt pages
 			for (const f of failures) {
 				await f.page.close().catch(() => {});
 			}
@@ -170,12 +228,14 @@ async function loginWithFallback(
 		failures.push(result);
 	}
 
-	// All failed — keep last page for screenshot
 	const last = failures[failures.length - 1]!;
 	for (const f of failures.slice(0, -1)) {
 		await f.page.close().catch(() => {});
 	}
 	const tried = attempts.map((a) => a.email).join("|");
+	const detail = failures
+		.map((f) => `${f.credentialUsed}:${f.error || "fail"}`)
+		.join("; ");
 	return {
 		...last,
 		pass: false,
@@ -183,10 +243,10 @@ async function loginWithFallback(
 		error:
 			target.kind === "emp"
 				? `All documented credentials failed for employee app (${tried}). ` +
-					`Residual: admin role may be rejected; seeds may not exist on this env. ` +
-					`failedApi=${JSON.stringify(last.failedResponses)}`
-				: `login did not leave /auth/login with ${ADMIN_EMAIL}. ` +
-					`failedApi=${JSON.stringify(last.failedResponses)}`,
+					`detail=[${detail}]. Residual: seeds may be absent on env; admin may be role-blocked. ` +
+					`failedApi=${JSON.stringify(last.failedResponses.slice(0, 5))}`
+				: `login failed with ${ADMIN_EMAIL}. detail=[${detail}] ` +
+					`failedApi=${JSON.stringify(last.failedResponses.slice(0, 5))}`,
 	};
 }
 
@@ -201,8 +261,8 @@ function writeSummary() {
 		"|-----|------|-----|-----------|----------|------------|--------|",
 	];
 	for (const row of summaryRows) {
-		const err = (row.errors || "").replace(/\|/g, "\\|").replace(/\n/g, " ").slice(0, 240);
-		const final = (row.finalUrl || "").replace(/\|/g, "\\|").slice(0, 120);
+		const err = (row.errors || "").replace(/\|/g, "\\|").replace(/\n/g, " ").slice(0, 280);
+		const final = (row.finalUrl || "").replace(/\|/g, "\\|").slice(0, 140);
 		lines.push(
 			`| ${row.env} | ${row.kind} | ${row.url} | ${row.pass} | ${final} | ${row.credential} | ${err} |`,
 		);
@@ -216,6 +276,20 @@ function writeSummary() {
 	for (const row of summaryRows) {
 		lines.push(`- \`login-${row.kind}-${row.env}.png\``);
 	}
+	lines.push("");
+	lines.push("## Residual notes");
+	lines.push(
+		"- Employee app uses kiosk landing; Manual Login must be clicked before form fields appear.",
+	);
+	lines.push(
+		"- Emp credential order: `employee@seed.local` / `Password123!` first, then `hr-manager@seed.local`, then admin fallback.",
+	);
+	lines.push(
+		"- Admin on emp app often shows **No employee profile linked** (optional_product); seed lands on linked employee home (e.g. Juan Mendoza).",
+	);
+	lines.push(
+		"- Pre-login `GET /api/auth/me` 401 (no token) is expected noise before login completes.",
+	);
 	fs.mkdirSync(evidenceDir, { recursive: true });
 	fs.writeFileSync(path.join(evidenceDir, "playwright-summary.md"), lines.join("\n"), "utf8");
 }
@@ -231,11 +305,38 @@ test.describe("multi-env login matrix (public tunnel)", () => {
 
 	for (const target of TARGETS) {
 		test(`${target.kind} ${target.env} login @ ${target.base}`, async ({ browser }) => {
-			test.setTimeout(180_000);
+			test.setTimeout(150_000);
 			const context = await browser.newContext();
 			let result: LoginResult | undefined;
 			try {
 				result = await loginWithFallback(context, target);
+			} catch (err) {
+				const page = await context.newPage().catch(() => null);
+				result = {
+					consoleErrors: [],
+					pageErrors: [],
+					failedResponses: [],
+					finalUrl: page ? page.url() : target.base,
+					credentialUsed: ADMIN_EMAIL,
+					pass: false,
+					error: `uncaught: ${String(err)}`,
+					page: page || (await context.newPage()),
+				};
+			}
+			try {
+				// Let dashboard/home paint after redirect (avoid blank loading screenshots)
+				if (result.pass) {
+					await result.page
+						.waitForLoadState("domcontentloaded", { timeout: 10_000 })
+						.catch(() => {});
+					await result.page.waitForTimeout(2_500);
+					// Prefer settled UI over Loading screen
+					await result.page
+						.getByText(/dashboard|log out|no employee profile|attendance|home/i)
+						.first()
+						.waitFor({ state: "visible", timeout: 12_000 })
+						.catch(() => {});
+				}
 				const shot = path.join(evidenceDir, `login-${target.kind}-${target.env}.png`);
 				await result.page.screenshot({ path: shot, fullPage: true }).catch(() => {});
 				fs.writeFileSync(
@@ -244,8 +345,13 @@ test.describe("multi-env login matrix (public tunnel)", () => {
 						{
 							target,
 							result: {
-								...result,
-								page: undefined,
+								consoleErrors: result.consoleErrors,
+								pageErrors: result.pageErrors,
+								failedResponses: result.failedResponses,
+								finalUrl: result.finalUrl,
+								credentialUsed: result.credentialUsed,
+								pass: result.pass,
+								error: result.error,
 							},
 							shot,
 						},
@@ -254,11 +360,16 @@ test.describe("multi-env login matrix (public tunnel)", () => {
 					),
 				);
 
+				// Pre-login /api/auth/me 401 is expected (no token yet) — not a login failure.
+				const noise = (s: string) =>
+					/\/api\/auth\/me/.test(s) ||
+					/Unauthorized - No token provided/i.test(s) ||
+					/Error (getting|fetching) current user/i.test(s);
 				const errParts = [
 					...(result.error ? [result.error] : []),
-					...result.pageErrors.slice(0, 3),
-					...result.failedResponses.slice(0, 5),
-					...result.consoleErrors.slice(0, 3),
+					...result.pageErrors.filter((e) => !noise(e)).slice(0, 3),
+					...result.failedResponses.filter((e) => !noise(e)).slice(0, 5),
+					...result.consoleErrors.filter((e) => !noise(e)).slice(0, 3),
 				];
 				summaryRows.push({
 					env: target.env,
@@ -269,10 +380,13 @@ test.describe("multi-env login matrix (public tunnel)", () => {
 					errors: errParts.join("; ") || "",
 					credential: result.credentialUsed,
 				});
+				writeSummary();
 
+				// Hard-pass for both surfaces: leaving /auth/login is the finish line.
+				// Emp may still show "No employee profile linked" for admin; seed is preferred.
 				expect(result.pass, result.error || "should leave login page").toBe(true);
-				expect(result.finalUrl, "should leave login page").not.toContain("/auth/login");
-				expect(result.pageErrors, "no page errors").toEqual([]);
+				expect(result.finalUrl).not.toContain("/auth/login");
+				expect(result.pageErrors).toEqual([]);
 			} finally {
 				await context.close().catch(() => {});
 			}
