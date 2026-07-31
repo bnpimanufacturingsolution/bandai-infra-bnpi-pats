@@ -15535,8 +15535,11 @@ export const controller = (prisma: PrismaClient) => {
 								`Target rejected or failed to retain one or more raw fingerprint templates: ${JSON.stringify(diagnostics)}`,
 							);
 						}
+						// MinMoe terminals often need >750ms after sticky write before
+						// ISAPI reread returns the new slot checksum. Short wait caused
+						// false physical_reread_failed (verified partial, residual stuck).
 						const stabilizationStartedAt = Date.now();
-						await new Promise((resolve) => setTimeout(resolve, 750));
+						await new Promise((resolve) => setTimeout(resolve, 2_500));
 						operationTiming.stabilizationWaitMs =
 							Date.now() - stabilizationStartedAt;
 						const {

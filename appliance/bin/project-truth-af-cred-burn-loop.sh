@@ -21,9 +21,12 @@ POLL_SLEEP="${PT_POLL_SLEEP:-10}"
 # Hard ceiling so one stuck job cannot block forever (~50 min at 10s).
 POLL_HARD_MAX="${PT_POLL_HARD_MAX:-300}"
 
-# Main A/B/D/E/F only — hard skip Main C + TEST
+# Main A/B/D/E/F always. Main C is included only when live From is readable
+# (source_unavailable → skip C; face residual to C burns when C returns).
+# TEST A/B always excluded.
 A_ID=cmrht5s2w00ei7zgsre8y3o5n
 B_ID=cmpxw13hx002h7zwso7dyedrn
+C_ID=cmripjwbx00ewl001ihcke210
 D_ID=cmripjwkw00ffl0013lfxcbxw
 E_ID=cmriu5ab102goi001x9o7nfct
 F_ID=cmrim1zop05ik7zp4zgm2sm4k
@@ -111,7 +114,7 @@ write_status() {
 Updated: $(date -Is)
 PID: $$
 API: $API_BASE
-Devices: A B D E F (skip C)
+Devices: A B D E F + C-if-readable
 Cycle: $1
 decision: $2
 uFace: $3
@@ -120,13 +123,45 @@ faceReady: $5
 fpReady: $6
 job: $7
 note: $8
+includeC: ${INCLUDE_C:-false}
 
 Watch:
   tail -f $HBF
   tail -f $LOGF
+  cat $STATUSF
 Stop:
   kill \$(cat $PIDF); rmdir $LOCK 2>/dev/null
 EOF
+}
+
+# Returns deviceIds JSON array. Sets INCLUDE_C=true|false.
+build_device_ids_json() {
+  local out code include_c=false
+  out=$(mktemp)
+  code=$(auth_curl GET '/api/device/sync-preview?quick=true' '' "$out" 90)
+  if [[ "$code" == "200" ]]; then
+    local c_from c_status
+    c_from=$(jq -r --arg id "$C_ID" '
+      (.data.devices//[])[]
+      | select((.deviceId//.id)==$id or (.name|test("Device C$")))
+      | .vendorUserCount // empty
+    ' "$out" 2>/dev/null | head -1)
+    c_status=$(jq -r --arg id "$C_ID" '
+      (.data.devices//[])[]
+      | select((.deviceId//.id)==$id or (.name|test("Device C$")))
+      | .status // empty
+    ' "$out" 2>/dev/null | head -1)
+    if [[ "$c_status" == "user_count_ready" && -n "${c_from:-}" && "${c_from}" =~ ^[0-9]+$ && "$c_from" -ge 800 ]]; then
+      include_c=true
+    fi
+  fi
+  rm -f "$out"
+  INCLUDE_C=$include_c
+  if [[ "$include_c" == "true" ]]; then
+    echo "[\"$A_ID\",\"$B_ID\",\"$C_ID\",\"$D_ID\",\"$E_ID\",\"$F_ID\"]"
+  else
+    echo "[\"$A_ID\",\"$B_ID\",\"$D_ID\",\"$E_ID\",\"$F_ID\"]"
+  fi
 }
 
 write_blocker() {
@@ -492,8 +527,9 @@ DECISIONS=0
 UFACE=0
 UFP=0
 
-log "START pid=$$ api=$API_BASE wave_max=$WAVE_MAX devices=A,B,D,E,F"
-hb "start pid=$$ api=$API_BASE devices=A,B,D,E,F"
+INCLUDE_C=false
+log "START pid=$$ api=$API_BASE wave_max=$WAVE_MAX devices=A,B,D,E,F+C-if-readable"
+hb "start pid=$$ api=$API_BASE devices=A,B,D,E,F+C-if-readable"
 write_status 0 "?" "?" "?" "?" "?" "none" "starting"
 
 while true; do
@@ -532,13 +568,12 @@ while true; do
     fi
   fi
 
-  # PLAN A/B/D/E/F only
+  # PLAN A/B/D/E/F (+ C when live From readable)
   PLAN_BODY=$(mktemp)
   PLAN_OUT=$(mktemp)
-  cat >"$PLAN_BODY" <<JSON
-{"deviceIds":["$A_ID","$B_ID","$D_ID","$E_ID","$F_ID"]}
-JSON
-  log "PLAN start"
+  IDS_JSON=$(build_device_ids_json)
+  printf '{"deviceIds":%s}\n' "$IDS_JSON" >"$PLAN_BODY"
+  log "PLAN start includeC=$INCLUDE_C ids=$IDS_JSON"
   code=$(auth_curl POST '/api/device/hikvision/sdk-users/merge/plan' "$PLAN_BODY" "$PLAN_OUT" 500)
   rm -f "$PLAN_BODY"
   if [[ "$code" != "200" && "$code" != "201" ]]; then
@@ -616,9 +651,8 @@ JSON
     # replan after decision job so recovery uses fresh plan
     if [[ "$LAST_JOB" == decision:* ]]; then
       PLAN_BODY=$(mktemp)
-      cat >"$PLAN_BODY" <<JSON
-{"deviceIds":["$A_ID","$B_ID","$D_ID","$E_ID","$F_ID"]}
-JSON
+      IDS_JSON=$(build_device_ids_json)
+      printf '{"deviceIds":%s}\n' "$IDS_JSON" >"$PLAN_BODY"
       code=$(auth_curl POST '/api/device/hikvision/sdk-users/merge/plan' "$PLAN_BODY" "$PLAN_OUT" 500)
       rm -f "$PLAN_BODY"
       if [[ "$code" == "200" || "$code" == "201" ]]; then
