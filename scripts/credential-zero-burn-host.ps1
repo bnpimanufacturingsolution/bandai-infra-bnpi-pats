@@ -232,7 +232,6 @@ while ($true) {
   # Device quick scope
   $prev = Invoke-Api GET '/api/device/sync-preview?quick=true' -Token $token -TimeoutSec 120
   $devLines = @()
-  $readableIds = New-Object System.Collections.Generic.List[string]
   $includeC = $false
   if ($prev.code -eq 200) {
     foreach ($letter in @('A','B','C','D','E','F')) {
@@ -243,22 +242,12 @@ while ($true) {
       $from = $row.vendorUserCount
       $status = $row.status
       $devLines += "| $letter | $from | $($row.hrisUserCount) | $status |"
-      if ($letter -eq 'C') {
-        if ($status -eq 'user_count_ready' -and [int]$from -ge 800) {
-          $includeC = $true
-          $readableIds.Add($id) | Out-Null
-        }
-      } else {
-        if ($status -eq 'user_count_ready' -or [int]$from -gt 0) {
-          $readableIds.Add($id) | Out-Null
-        } else {
-          # still include known online letters A B D E F by default for plan stability
-          if ($letter -in @('A','B','D','E','F')) { $readableIds.Add($id) | Out-Null }
-        }
+      if ($letter -eq 'C' -and $status -eq 'user_count_ready') {
+        $fromN = 0
+        [void][int]::TryParse([string]$from, [ref]$fromN)
+        if ($fromN -ge 800) { $includeC = $true }
       }
     }
-  } else {
-    foreach ($letter in @('A','B','D','E','F')) { $readableIds.Add($Devices[$letter]) | Out-Null }
   }
   $deviceTable = (@('| Letter | From | Saved | Status |', '|---|---:|---:|---|') + $devLines) -join "`n"
 
@@ -267,114 +256,145 @@ while ($true) {
   if ($activeId) {
     Write-Log "WAIT_ACTIVE $activeId"
     Write-Hb "cycle=$script:cycle wait_active=$($activeId.Substring(0,8))"
-    $lastJob = "active:$activeId $(Wait-RecoveryJob $token $activeId 0)"
+    $pollResult = Wait-RecoveryJob $token $activeId 0
+    $lastJob = ('active:{0} {1}' -f $activeId, $pollResult)
     Start-Sleep -Seconds 5
   }
 
-  # Plan
-  $ids = @($readableIds | Select-Object -Unique)
-  if ($ids.Count -lt 2) {
-    Write-Log 'PLAN skip <2 devices'
-    Start-Sleep -Seconds $IdleSleepSec
-    continue
-  }
-  Write-Log "PLAN devices=$($ids.Count) includeC=$includeC"
-  $plan = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/plan' -Token $token -Body @{ deviceIds = $ids } -TimeoutSec 900
-  if ($plan.code -notin 200, 201) {
-    Write-Log "PLAN_FAIL code=$($plan.code) err=$($plan.error) msg=$($plan.body.message)"
-    Write-Hb "cycle=$script:cycle plan_fail code=$($plan.code)"
-    Write-OperatorNow @{ decision='?'; missing='?'; uFace='?'; uFp='?'; faceReadyOps='?'; fpReadyOps='?'; planId='' } $lastJob "plan_fail code=$($plan.code)" $script:cycle $deviceTable
-    Start-Sleep -Seconds $IdleSleepSec
-    continue
-  }
-  $matrix = Build-Matrix $plan.body
-  $matrix | ConvertTo-Json -Depth 6 | Set-Content $MatrixPath -Encoding utf8
-  $plan.body | ConvertTo-Json -Depth 8 -Compress | Set-Content (Join-Path $StampDir ("cycle-{0:D3}-plan-summary.json" -f $script:cycle)) -Encoding utf8
-  # store only matrix + light summary (full plan is multi-MB)
-  $matrix | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $StampDir ("cycle-{0:D3}-matrix.json" -f $script:cycle)) -Encoding utf8
-  Write-Log ("MATRIX decision={0} missing={1} uFace={2} uFp={3} faceReady={4} fpReady={5} plan={6}" -f `
-    $matrix.decision, $matrix.missing, $matrix.uFace, $matrix.uFp, $matrix.faceReadyOps, $matrix.fpReadyOps, $matrix.planId)
-  Write-Hb ("cycle={0} plan={1} decision={2} missing={3} uFace={4} uFp={5} faceReady={6} fpReady={7} includeC={8}" -f `
-    $script:cycle, $matrix.planId, $matrix.decision, $matrix.missing, $matrix.uFace, $matrix.uFp, $matrix.faceReadyOps, $matrix.fpReadyOps, $includeC)
-  Write-OperatorNow $matrix $lastJob 'planned' $script:cycle $deviceTable
+  # Split scopes for public-API plan latency:
+  #  1) A/B/D/E/F always for FP + decision residual (C often dominates face)
+  #  2) E+C (or B+C) only when C readable for face peer-copy
+  $fpIds = @($Devices.A, $Devices.B, $Devices.D, $Devices.E, $Devices.F)
+  $faceIds = @($Devices.E, $Devices.C)
+  $scopes = @(
+    @{ name = 'fp-abdef'; ids = $fpIds; mods = @('fingerprint') },
+    @{ name = 'face-ec'; ids = $faceIds; mods = @('face'); requireC = $true }
+  )
 
-  # EXIT if all green for A-F readable scope
-  if ([int]$matrix.decision -eq 0 -and [int]$matrix.missing -eq 0 -and [int]$matrix.uFace -eq 0 -and [int]$matrix.uFp -eq 0) {
-    Write-Log 'EXIT_GATE residual zero on planned scope'
-    Write-Hb "cycle=$script:cycle EXIT residual_zero includeC=$includeC"
-    Write-OperatorNow $matrix $lastJob 'EXIT residual zero — supervisor idling' $script:cycle $deviceTable
+  $combined = [ordered]@{
+    planId = ''
+    decision = 0
+    missing = 0
+    uFace = 0
+    uFp = 0
+    faceReadyOps = 0
+    fpReadyOps = 0
+  }
+
+  foreach ($scopeDef in $scopes) {
+    if ($scopeDef.requireC -and -not $includeC) {
+      Write-Log 'SKIP face-ec scope (C not readable)'
+      Write-Hb "cycle=$script:cycle skip_face_ec c_offline"
+      continue
+    }
+
+    $ids = @($scopeDef.ids)
+    Write-Log ("PLAN scope={0} devices={1}" -f $scopeDef.name, $ids.Count)
+    Write-Hb ("cycle={0} plan_start scope={1}" -f $script:cycle, $scopeDef.name)
+    $plan = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/plan' -Token $token -Body @{ deviceIds = $ids } -TimeoutSec 600
+    if ($plan.code -notin 200, 201) {
+      Write-Log ("PLAN_FAIL scope={0} code={1} err={2} msg={3}" -f $scopeDef.name, $plan.code, $plan.error, $plan.body.message)
+      Write-Hb ("cycle={0} plan_fail scope={1} code={2}" -f $script:cycle, $scopeDef.name, $plan.code)
+      continue
+    }
+
+    $matrix = Build-Matrix $plan.body
+    $matrix | ConvertTo-Json -Depth 6 | Set-Content $MatrixPath -Encoding utf8
+    $matrix | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $StampDir ("cycle-{0:D3}-{1}-matrix.json" -f $script:cycle, $scopeDef.name)) -Encoding utf8
+    Write-Log ("MATRIX scope={0} decision={1} missing={2} uFace={3} uFp={4} faceReady={5} fpReady={6} plan={7}" -f `
+      $scopeDef.name, $matrix.decision, $matrix.missing, $matrix.uFace, $matrix.uFp, $matrix.faceReadyOps, $matrix.fpReadyOps, $matrix.planId)
+    Write-Hb ("cycle={0} plan={1} scope={2} decision={3} missing={4} uFace={5} uFp={6} faceReady={7} fpReady={8}" -f `
+      $script:cycle, $matrix.planId, $scopeDef.name, $matrix.decision, $matrix.missing, $matrix.uFace, $matrix.uFp, $matrix.faceReadyOps, $matrix.fpReadyOps)
+
+    if ($scopeDef.name -eq 'fp-abdef') {
+      $combined.decision = $matrix.decision
+      $combined.missing = $matrix.missing
+      $combined.uFp = $matrix.uFp
+      $combined.fpReadyOps = $matrix.fpReadyOps
+      $combined.planId = $matrix.planId
+    } else {
+      $combined.uFace = $matrix.uFace
+      $combined.faceReadyOps = $matrix.faceReadyOps
+      if (-not $combined.planId) { $combined.planId = $matrix.planId }
+    }
+    Write-OperatorNow $combined $lastJob ("planned {0}" -f $scopeDef.name) $script:cycle $deviceTable
+
+    $planId = [string]$matrix.planId
+    foreach ($mod in @($scopeDef.mods)) {
+      $activeId = Get-ActiveRecoveryId $token
+      if ($activeId) {
+        $pollResult = Wait-RecoveryJob $token $activeId 0
+        $lastJob = ('active:{0} {1}' -f $activeId, $pollResult)
+        break
+      }
+
+      $readyKey = if ($mod -eq 'face') { [int]$matrix.faceReadyOps } else { [int]$matrix.fpReadyOps }
+      if ($readyKey -le 0 -and $mod -eq 'face' -and -not $includeC) { continue }
+
+      $rev = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/recovery/review' -Token $token -Body @{
+        planId = $planId; canaryModality = $mod; maxVerifiedWrites = $WaveMax
+      } -TimeoutSec 120
+      if ($rev.code -ne 200) {
+        Write-Log ("REVIEW_FAIL mod={0} code={1} {2}" -f $mod, $rev.code, $rev.body.message)
+        continue
+      }
+      $scopeHash = [string]$rev.body.data.scopeHash
+      $would = [int]$rev.body.data.executionPreview.wouldWriteCount
+      Write-Log ("REVIEW mod={0} would={1}" -f $mod, $would)
+      Write-Hb ("cycle={0} review mod={1} would={2} scope={3}" -f $script:cycle, $mod, $would, $scopeDef.name)
+
+      $dry = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/recovery/jobs' -Token $token -Body @{
+        planId = $planId; expectedScopeHash = $scopeHash; canaryModality = $mod
+        maxVerifiedWrites = $WaveMax; dryRun = $true; execute = $false
+      } -TimeoutSec 120
+      $would = [int]$dry.body.data.executionPreview.wouldWriteCount
+      if ($would -le 0) {
+        Write-Log ("SKIP write mod={0} would=0" -f $mod)
+        $blockerPath = Join-Path $StampDir ("blocker-{0}-latest.json" -f $mod)
+        $dry.body | ConvertTo-Json -Depth 6 | Set-Content $blockerPath -Encoding utf8
+        continue
+      }
+
+      $ex = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/recovery/jobs' -Token $token -Body @{
+        planId = $planId; expectedScopeHash = $scopeHash; canaryModality = $mod
+        maxVerifiedWrites = $WaveMax; dryRun = $false; execute = $true
+      } -TimeoutSec 120
+      if ($ex.code -eq 409) {
+        $msg = [string]$ex.body.message
+        if ($msg -match 'job ([a-z0-9]+) is already active') {
+          $jid = $Matches[1]
+          $pollResult = Wait-RecoveryJob $token $jid $would
+          $lastJob = ('busy:{0} {1}' -f $jid, $pollResult)
+        } else {
+          Write-Log ("JOB 409 {0}" -f $msg)
+        }
+        break
+      }
+      if ($ex.code -notin 200, 201, 202) {
+        Write-Log ("JOB_FAIL mod={0} code={1} {2}" -f $mod, $ex.code, $ex.body.message)
+        continue
+      }
+      $job = $ex.body.data.job; if (-not $job) { $job = $ex.body.data }
+      $jobId = [string]$job.id
+      Write-Log ("JOB_START mod={0} id={1} would={2}" -f $mod, $jobId, $would)
+      $pollResult = Wait-RecoveryJob $token $jobId $would
+      $lastJob = ('rec-{0}:{1} {2}' -f $mod, $jobId, $pollResult)
+      Write-OperatorNow $combined $lastJob ("finished {0} wave" -f $mod) $script:cycle $deviceTable
+      break
+    }
+  }
+
+  # Combined exit gate (best-effort from last matrices)
+  if ([int]$combined.decision -eq 0 -and [int]$combined.missing -eq 0 -and [int]$combined.uFace -eq 0 -and [int]$combined.uFp -eq 0 -and $includeC) {
+    Write-Log 'EXIT_GATE residual zero (C included)'
+    Write-Hb "cycle=$script:cycle EXIT residual_zero"
+    Write-OperatorNow $combined $lastJob 'EXIT residual zero - supervisor idling' $script:cycle $deviceTable
     Start-Sleep -Seconds ([Math]::Max($IdleSleepSec, 120))
     continue
   }
-
-  $planId = [string]$matrix.planId
-
-  # Prefer face when ready and C included; else FP
-  $mods = @()
-  if ([int]$matrix.faceReadyOps -gt 0 -and $includeC) { $mods += 'face' }
-  if ([int]$matrix.fpReadyOps -gt 0) { $mods += 'fingerprint' }
-  if ($mods.Count -eq 0) {
-    # still try both reviews for wouldWrite discovery
-    if ($includeC) { $mods = @('face','fingerprint') } else { $mods = @('fingerprint') }
-  }
-
-  foreach ($mod in $mods) {
-    $activeId = Get-ActiveRecoveryId $token
-    if ($activeId) {
-      $lastJob = "active:$activeId $(Wait-RecoveryJob $token $activeId 0)"
-      break
-    }
-
-    $rev = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/recovery/review' -Token $token -Body @{
-      planId = $planId; canaryModality = $mod; maxVerifiedWrites = $WaveMax
-    } -TimeoutSec 120
-    if ($rev.code -ne 200) {
-      Write-Log "REVIEW_FAIL mod=$mod code=$($rev.code) $($rev.body.message)"
-      continue
-    }
-    $scope = [string]$rev.body.data.scopeHash
-    $would = [int]$rev.body.data.executionPreview.wouldWriteCount
-    Write-Log "REVIEW mod=$mod would=$would"
-    Write-Hb "cycle=$script:cycle review mod=$mod would=$would"
-
-    $dry = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/recovery/jobs' -Token $token -Body @{
-      planId = $planId; expectedScopeHash = $scope; canaryModality = $mod
-      maxVerifiedWrites = $WaveMax; dryRun = $true; execute = $false
-    } -TimeoutSec 120
-    $would = [int]$dry.body.data.executionPreview.wouldWriteCount
-    if ($would -le 0) {
-      Write-Log ("SKIP write mod={0} would=0 (blocker - replan next cycle)" -f $mod)
-      $blockerPath = Join-Path $StampDir ("blocker-{0}-latest.json" -f $mod)
-      $dry.body | ConvertTo-Json -Depth 6 | Set-Content $blockerPath -Encoding utf8
-      continue
-    }
-
-    $ex = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/recovery/jobs' -Token $token -Body @{
-      planId = $planId; expectedScopeHash = $scope; canaryModality = $mod
-      maxVerifiedWrites = $WaveMax; dryRun = $false; execute = $true
-    } -TimeoutSec 120
-    if ($ex.code -eq 409) {
-      $msg = [string]$ex.body.message
-      if ($msg -match 'job ([a-z0-9]+) is already active') {
-        $jid = $Matches[1]
-        $pollResult = Wait-RecoveryJob $token $jid $would
-        $lastJob = ('busy:{0} {1}' -f $jid, $pollResult)
-      } else {
-        Write-Log ("JOB 409 {0}" -f $msg)
-      }
-      break
-    }
-    if ($ex.code -notin 200, 201, 202) {
-      Write-Log ("JOB_FAIL mod={0} code={1} {2}" -f $mod, $ex.code, $ex.body.message)
-      continue
-    }
-    $job = $ex.body.data.job; if (-not $job) { $job = $ex.body.data }
-    $jobId = [string]$job.id
-    Write-Log ("JOB_START mod={0} id={1} would={2}" -f $mod, $jobId, $would)
-    $pollResult = Wait-RecoveryJob $token $jobId $would
-    $lastJob = ('rec-{0}:{1} {2}' -f $mod, $jobId, $pollResult)
-    Write-OperatorNow $matrix $lastJob ("finished {0} wave" -f $mod) $script:cycle $deviceTable
-    break  # one modality write per cycle then replan
+  if ([int]$combined.decision -eq 0 -and [int]$combined.missing -eq 0 -and [int]$combined.uFp -eq 0 -and -not $includeC) {
+    Write-Log 'PARTIAL_EXIT FP/decision zero; face blocked by C offline'
+    Write-Hb "cycle=$script:cycle partial_exit c_offline face_pending"
   }
 
   Start-Sleep -Seconds 8
