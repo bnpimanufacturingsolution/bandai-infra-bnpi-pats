@@ -130,10 +130,8 @@ $DeviceLines
 
 ## Watch
 
-``````
-Get-Content .runtime\cred-zero-burn\HEARTBEATS.log -Tail 30 -Wait
-Get-Content .runtime\cred-zero-burn\OPERATOR-NOW.md
-``````
+    Get-Content .runtime\cred-zero-burn\HEARTBEATS.log -Tail 30 -Wait
+    Get-Content .runtime\cred-zero-burn\OPERATOR-NOW.md
 
 ## Defect classes (live)
 
@@ -345,8 +343,9 @@ while ($true) {
     } -TimeoutSec 120
     $would = [int]$dry.body.data.executionPreview.wouldWriteCount
     if ($would -le 0) {
-      Write-Log "SKIP write mod=$mod would=0 (blocker — replan next cycle)"
-      $dry.body | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $StampDir "blocker-$mod-latest.json") -Encoding utf8
+      Write-Log ("SKIP write mod={0} would=0 (blocker - replan next cycle)" -f $mod)
+      $blockerPath = Join-Path $StampDir ("blocker-{0}-latest.json" -f $mod)
+      $dry.body | ConvertTo-Json -Depth 6 | Set-Content $blockerPath -Encoding utf8
       continue
     }
 
@@ -358,21 +357,23 @@ while ($true) {
       $msg = [string]$ex.body.message
       if ($msg -match 'job ([a-z0-9]+) is already active') {
         $jid = $Matches[1]
-        $lastJob = "busy:$jid $(Wait-RecoveryJob $token $jid $would)"
+        $pollResult = Wait-RecoveryJob $token $jid $would
+        $lastJob = ('busy:{0} {1}' -f $jid, $pollResult)
       } else {
-        Write-Log "JOB 409 $msg"
+        Write-Log ("JOB 409 {0}" -f $msg)
       }
       break
     }
     if ($ex.code -notin 200, 201, 202) {
-      Write-Log "JOB_FAIL mod=$mod code=$($ex.code) $($ex.body.message)"
+      Write-Log ("JOB_FAIL mod={0} code={1} {2}" -f $mod, $ex.code, $ex.body.message)
       continue
     }
     $job = $ex.body.data.job; if (-not $job) { $job = $ex.body.data }
     $jobId = [string]$job.id
-    Write-Log "JOB_START mod=$mod id=$jobId would=$would"
-    $lastJob = "rec-$mod`:$jobId $(Wait-RecoveryJob $token $jobId $would)"
-    Write-OperatorNow $matrix $lastJob "finished $mod wave" $script:cycle $deviceTable
+    Write-Log ("JOB_START mod={0} id={1} would={2}" -f $mod, $jobId, $would)
+    $pollResult = Wait-RecoveryJob $token $jobId $would
+    $lastJob = ('rec-{0}:{1} {2}' -f $mod, $jobId, $pollResult)
+    Write-OperatorNow $matrix $lastJob ("finished {0} wave" -f $mod) $script:cycle $deviceTable
     break  # one modality write per cycle then replan
   }
 
