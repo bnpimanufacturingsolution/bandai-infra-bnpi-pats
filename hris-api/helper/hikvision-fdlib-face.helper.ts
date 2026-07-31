@@ -27,11 +27,28 @@ export type HikvisionFdlibTargetClassification = {
 		| "build_attestation_missing"
 		| "build_attestation_mismatch"
 		| "target_attestation_invalid"
-		| "authorized_canary_ready";
+		| "authorized_canary_ready"
+		| "fleet_capability_match_ready";
 	fdId: string | null;
 	faceLibType: "blackFD" | "staticFD" | null;
 	allowedRequesterAddresses: string[];
 	capabilityEvidenceSha256: string;
+};
+
+/**
+ * When a peer device already has a reread-proven FDLib picture writer for the
+ * same capability payload + exact build, a newly online sibling with matching
+ * live capability evidence becomes actionable without waiting for a second
+ * serial canary. Requester addresses must still be the physical target.
+ */
+export type HikvisionFdlibFleetProvenAttestation = {
+	capabilityEvidenceSha256?: unknown;
+	testedBuildAttestation?: unknown;
+	fdId?: unknown;
+	faceLibType?: unknown;
+	status?: unknown;
+	endpoint?: unknown;
+	uploadMode?: unknown;
 };
 
 export type ValidatedFacePicture = {
@@ -138,6 +155,17 @@ export const classifyHikvisionFdlibPictureTarget = (params: {
 	};
 	attestation?: HikvisionFdlibFaceWriterAttestation | null;
 	currentBuildAttestation?: unknown;
+	/**
+	 * Optional fleet-proven peer attestation (same capabilityEvidenceSha256 +
+	 * exact build). Unlocks a sibling target that already passes the live
+	 * capability probe without re-running a serial canary.
+	 */
+	fleetProvenAttestation?: HikvisionFdlibFleetProvenAttestation | null;
+	/**
+	 * Physical target address used when fleet-unlocking so picture delivery
+	 * still binds to this device only.
+	 */
+	targetRequesterAddresses?: unknown;
 	authorizedCanary?: {
 		authorized?: unknown;
 		fdId?: unknown;
@@ -232,11 +260,43 @@ export const classifyHikvisionFdlibPictureTarget = (params: {
 	}
 	const attestation = params.attestation || {};
 	const testedBuildAttestation = text(attestation.testedBuildAttestation);
+	const targetRequesterAddresses = normalizeRequesterAddresses(
+		params.targetRequesterAddresses,
+	);
 	if (
 		text(attestation.status).toLowerCase() !== "tested" ||
 		text(attestation.endpoint) !== HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT ||
 		text(attestation.uploadMode).toLowerCase() !== "url"
 	) {
+		// Fleet reuse: same live capability hash + peer proven on this build.
+		const fleet = params.fleetProvenAttestation || {};
+		const fleetSha = text(fleet.capabilityEvidenceSha256);
+		const fleetBuild = text(fleet.testedBuildAttestation);
+		const fleetFdId = text(fleet.fdId);
+		const fleetFaceLibType = text(fleet.faceLibType);
+		const fleetReady =
+			text(fleet.status).toLowerCase() === "tested" &&
+			text(fleet.endpoint) === HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT &&
+			text(fleet.uploadMode).toLowerCase() === "url" &&
+			Boolean(fleetSha) &&
+			fleetSha === capabilityEvidenceSha256 &&
+			Boolean(fleetBuild) &&
+			fleetBuild === currentBuildAttestation &&
+			Boolean(fleetFdId) &&
+			Buffer.byteLength(fleetFdId) <= 63 &&
+			(fleetFaceLibType === "blackFD" || fleetFaceLibType === "staticFD") &&
+			targetRequesterAddresses.length > 0;
+		if (fleetReady) {
+			return {
+				actionable: true,
+				writer: "fdlib_picture_import",
+				reason: "fleet_capability_match_ready",
+				fdId: fleetFdId,
+				faceLibType: fleetFaceLibType as "blackFD" | "staticFD",
+				allowedRequesterAddresses: targetRequesterAddresses,
+				capabilityEvidenceSha256,
+			};
+		}
 		return {
 			...base,
 			actionable: false,

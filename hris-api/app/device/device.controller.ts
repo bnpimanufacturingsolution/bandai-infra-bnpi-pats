@@ -12067,10 +12067,47 @@ export const controller = (prisma: PrismaClient) => {
 						status: classifyHikvisionProbeError(error),
 					};
 				}
+				// Fleet FDLib unlock: a peer with reread-proven fdlibPictureWriter
+				// on this exact build supplies fdId/faceLibType when this target's
+				// live capability hash matches that peer's stored capability hash.
+				// Avoids permanent target_attestation_invalid on a newly-online
+				// sibling (e.g. Main C) after A/B/D/E/F already proved FDLib.
+				const fleetProvenPeer = devices
+					.filter((peer) => String(peer.id) !== String(device.id))
+					.map((peer) => {
+						const peerConfig = ((peer.config as any) || {}) as Record<string, any>;
+						const peerAttestation = peerConfig.fdlibPictureWriter || null;
+						const peerCap =
+							peerConfig.hikvisionCredentialCapabilityEvidence
+								?.fdlibPictureWriter || null;
+						return {
+							capabilityEvidenceSha256: peerCap?.capabilityEvidenceSha256,
+							testedBuildAttestation:
+								peerAttestation?.testedBuildAttestation ||
+								peerCap?.buildAttestation,
+							fdId: peerAttestation?.fdId,
+							faceLibType: peerAttestation?.faceLibType,
+							status: peerAttestation?.status,
+							endpoint: peerAttestation?.endpoint,
+							uploadMode: peerAttestation?.uploadMode,
+						};
+					})
+					.find(
+						(peer) =>
+							String(peer.status || "").toLowerCase() === "tested" &&
+							String(peer.testedBuildAttestation || "") ===
+								String(currentBuildAttestation || "") &&
+							Boolean(peer.capabilityEvidenceSha256) &&
+							Boolean(peer.fdId),
+					);
 				const fdlibClassification = classifyHikvisionFdlibPictureTarget({
 					capabilityProbe,
 					attestation: (device.config as any)?.fdlibPictureWriter,
 					currentBuildAttestation,
+					fleetProvenAttestation: fleetProvenPeer || null,
+					targetRequesterAddresses: [String(device.address || "")].filter(
+						Boolean,
+					),
 					authorizedCanary: isAuthorizedHikvisionFaceCanaryDevice(device.id)
 						? {
 								authorized: true,

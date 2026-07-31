@@ -107,6 +107,75 @@ describe("Hikvision FDLib picture face contract", () => {
 		).to.equal("build_attestation_mismatch");
 	});
 
+	it("unlocks a sibling target when live capability hash matches a fleet-proven peer", () => {
+		const peerReady = classifyHikvisionFdlibPictureTarget({
+			capabilityProbe: {
+				status: "supported",
+				response: {
+					supportFDFunction: "post,delete,put,get,setUp",
+					faceURLLen: 1024,
+				},
+			},
+			attestation: testedTarget({
+				allowedRequesterAddresses: ["10.184.37.24"],
+			}),
+			currentBuildAttestation: "build-123",
+		});
+		expect(peerReady.actionable).to.equal(true);
+		const sibling = classifyHikvisionFdlibPictureTarget({
+			capabilityProbe: {
+				status: "supported",
+				response: {
+					supportFDFunction: "post,delete,put,get,setUp",
+					faceURLLen: 1024,
+				},
+			},
+			attestation: null,
+			currentBuildAttestation: "build-123",
+			fleetProvenAttestation: {
+				capabilityEvidenceSha256: peerReady.capabilityEvidenceSha256,
+				testedBuildAttestation: "build-123",
+				fdId: "1",
+				faceLibType: "blackFD",
+				status: "tested",
+				endpoint: HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT,
+				uploadMode: "url",
+			},
+			targetRequesterAddresses: ["10.184.37.22"],
+		});
+		expect(sibling).to.include({
+			actionable: true,
+			writer: "fdlib_picture_import",
+			reason: "fleet_capability_match_ready",
+			fdId: "1",
+			faceLibType: "blackFD",
+		});
+		expect(sibling.allowedRequesterAddresses).to.deep.equal(["10.184.37.22"]);
+		expect(
+			classifyHikvisionFdlibPictureTarget({
+				capabilityProbe: {
+					status: "supported",
+					response: {
+						supportFDFunction: "post,delete,put,get,setUp",
+						faceURLLen: 1024,
+					},
+				},
+				attestation: null,
+				currentBuildAttestation: "build-123",
+				fleetProvenAttestation: {
+					capabilityEvidenceSha256: "deadbeef",
+					testedBuildAttestation: "build-123",
+					fdId: "1",
+					faceLibType: "blackFD",
+					status: "tested",
+					endpoint: HIKVISION_FDLIB_FACE_DATA_RECORD_ENDPOINT,
+					uploadMode: "url",
+				},
+				targetRequesterAddresses: ["10.184.37.22"],
+			}).reason,
+		).to.equal("target_attestation_invalid");
+	});
+
 	it("validates canonical bounded image bytes and rejects HTML masquerading as a face", () => {
 		const picture = validateHikvisionFdlibFacePicture(jpegBase64());
 		expect(picture.contentType).to.equal("image/jpeg");
