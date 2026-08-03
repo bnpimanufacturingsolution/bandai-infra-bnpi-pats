@@ -10835,22 +10835,38 @@ export const controller = (prisma: PrismaClient) => {
 								const importedValue =
 									field === "employeeNo"
 										? employeeNo
-										: String(user?.[field] || "").trim();
-								return String(current?.[field] || "").trim() !== importedValue;
+										: String(user?.[field] || user?.name || "").trim();
+								const currentValue =
+									field === "displayName"
+										? String(current?.displayName || current?.name || "").trim()
+										: String(current?.[field] || "").trim();
+								return currentValue !== importedValue;
 							},
 						)
 					: [];
+				// Auto-resolve soft conflicts (name/type) so biometric package import can
+				// proceed as an overwrite/match for the same vendorUserId/employeeNo.
+				// Hard conflict remains employeeNo mismatch against an existing panel user.
+				const hardConflictFields = conflictFields.filter((field) => field === "employeeNo");
+				const softOnly =
+					conflictFields.length > 0 && hardConflictFields.length === 0;
+				const action = current
+					? hardConflictFields.length
+						? "review_conflict"
+						: softOnly
+							? "match"
+							: conflictFields.length
+								? "review_conflict"
+								: "match"
+					: "create_preview";
 				return {
 					vendorUserId,
 					employeeNo,
 					sourceDeviceId: user.sourceDeviceId,
 					sourceDeviceName: user.sourceDeviceName,
-					action: current
-						? conflictFields.length
-							? "review_conflict"
-							: "match"
-						: "create_preview",
-					conflictFields,
+					action,
+					conflictFields: action === "review_conflict" ? conflictFields : softOnly ? [] : conflictFields,
+					autoResolvedConflicts: softOnly ? conflictFields : [],
 					missingEmployee: employeeNo ? !employeeKeys.has(employeeNo) : true,
 					currentDeviceUserId: current?.id || null,
 					credentialGap: {
@@ -11043,22 +11059,32 @@ export const controller = (prisma: PrismaClient) => {
 							const importedValue =
 								field === "employeeNo"
 									? employeeNo
-									: String(user?.[field] || "").trim();
-							return String(current?.[field] || "").trim() !== importedValue;
+									: String(user?.[field] || user?.name || "").trim();
+							const currentValue =
+								field === "displayName"
+									? String(current?.displayName || current?.name || "").trim()
+									: String(current?.[field] || "").trim();
+							return currentValue !== importedValue;
 						},
 					)
 				: [];
+			// Same auto-resolve as preview: name/type-only diffs become match so
+			// rawPackage can overwrite biometrics for the existing employeeNo.
+			const hardConflictFields = conflictFields.filter((field) => field === "employeeNo");
+			const softOnly = conflictFields.length > 0 && hardConflictFields.length === 0;
+			const action = current
+				? hardConflictFields.length
+					? "review_conflict"
+					: "match"
+				: "create_preview";
 			return {
 				vendorUserId,
 				employeeNo,
 				sourceDeviceId: user.sourceDeviceId || null,
 				sourceDeviceName: user.sourceDeviceName || null,
-				action: current
-					? conflictFields.length
-						? "review_conflict"
-						: "match"
-					: "create_preview",
-				conflictFields,
+				action,
+				conflictFields: action === "review_conflict" ? conflictFields : [],
+				autoResolvedConflicts: softOnly ? conflictFields : [],
 				currentDeviceUserId: current?.id || null,
 				rawUser: user,
 			};
@@ -11068,7 +11094,7 @@ export const controller = (prisma: PrismaClient) => {
 		);
 		if (conflictPlanRows.length > 0) {
 			throw deviceUserImportRequestError(
-				`Import execute refused ${conflictPlanRows.length} conflict row(s); resolve or remove them and run a fresh preview.`,
+				`Import execute refused ${conflictPlanRows.length} hard conflict row(s) (employeeNo mismatch); resolve or remove them and run a fresh preview.`,
 			);
 		}
 		const expectedPreviewToken = buildDeviceUserImportPreviewToken({
