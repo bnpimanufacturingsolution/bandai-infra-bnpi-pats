@@ -26,4 +26,10 @@ describe("Project Truth runtime storage", () => {
 			path.resolve("/workspace/.runtime"),
 		);
 	});
+
+	it("avoids unwritable /.runtime when cwd is /app without upload env", () => {
+		const resolved = resolveProjectTruthRuntimeRoot({}, "/app");
+		expect(resolved).to.not.equal(path.resolve("/.runtime"));
+		expect(resolved.includes("project-truth-runtime")).to.equal(true);
+	});
 });

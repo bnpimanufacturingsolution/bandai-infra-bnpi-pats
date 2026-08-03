@@ -11079,10 +11079,9 @@ export const controller = (prisma: PrismaClient) => {
 			});
 		}
 
+		// Use writable runtime root (not cwd/../.runtime which becomes /.runtime in k8s pods).
 		const backupDir = path.join(
-			process.cwd(),
-			"..",
-			".runtime",
+			PROJECT_TRUTH_RUNTIME_ROOT,
 			"backups",
 			`device-user-import-${new Date().toISOString().replace(/[:.]/g, "-")}`,
 		);
