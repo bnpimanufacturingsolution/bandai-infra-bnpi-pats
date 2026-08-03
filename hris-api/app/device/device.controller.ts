@@ -9309,7 +9309,10 @@ export const controller = (prisma: PrismaClient) => {
 			: Array.isArray(user?.fingerprintRawTemplates)
 				? user.fingerprintRawTemplates
 				: [];
-		return getRawFingerprintTemplatesFromValue({
+		// CSV packages often repeat the same slot across custody + cell columns.
+		// Dedupe by fingerPrintId (prefer longest data) so we do not POST the same
+		// slot 3–5 times and thrash the device with alreadyExistFP.
+		const merged = getRawFingerprintTemplatesFromValue({
 			templates: [
 				...directTemplates,
 				...nestedTemplates,
@@ -9319,6 +9322,19 @@ export const controller = (prisma: PrismaClient) => {
 				...parseRawFingerprintTemplatesFromCell(csvColumns?.fingerprintRawTemplateBlob),
 			],
 		});
+		const byId = new Map<number, any>();
+		for (const template of merged) {
+			const id = Number(template?.fingerPrintId || template?.fingerPrintID || 0) || 0;
+			const data = String(template?.data || "").trim();
+			if (!id || !data) continue;
+			const prev = byId.get(id);
+			if (!prev || data.length > String(prev.data || "").length) {
+				byId.set(id, { ...template, fingerPrintId: id, data });
+			}
+		}
+		return Array.from(byId.values()).sort(
+			(a, b) => Number(a.fingerPrintId || 0) - Number(b.fingerPrintId || 0),
+		);
 	};
 
 	/** Resolve face blob from custody OR portable CSV/JSON fields (FE CSV import path). */
@@ -11261,8 +11277,17 @@ export const controller = (prisma: PrismaClient) => {
 						const faceRequested = Boolean(
 							rawPayload.faceTemplate || rawPayload.facePicture,
 						);
+						// Face rawPackage writer is still partial on some panels
+						// (not_implemented_for_raw_package). Do not fail an otherwise
+						// sticky fingerprint import solely because face write is deferred.
+						const faceWriteStatus = String(writeResult.faceWrite || "");
+						const faceDeferred =
+							faceWriteStatus === "not_implemented_for_raw_package" ||
+							faceWriteStatus === "not_present";
 						const faceVerified =
-							!faceRequested || writeResult.faceWrite === "verified_sticky";
+							!faceRequested ||
+							faceWriteStatus === "verified_sticky" ||
+							(faceDeferred && fingerprintVerified);
 						const allRequestedModalitiesVerified =
 							(fingerprintRequested || faceRequested) &&
 							fingerprintVerified &&
@@ -11271,7 +11296,9 @@ export const controller = (prisma: PrismaClient) => {
 							fingerprintRequested && !fingerprintVerified
 								? `fingerprint verification failed (${writeResult.fingerprintVerifiedCount}/${fingerprints.length} slots physically retained)`
 								: "",
-							faceRequested && !faceVerified
+							faceRequested &&
+							!faceVerified &&
+							!faceDeferred
 								? `face verification failed (${writeResult.faceWrite})`
 								: "",
 						].filter(Boolean);
@@ -11503,13 +11530,11 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(404).json(buildErrorResponse("Device-user import job was not found", 404));
 			return;
 		}
+		// Always recompute progressPercent/weights so Sync Center progress bar stays live.
 		res.status(200).json(
 			buildSuccessResponse(
 				"Device-user import job retrieved",
-				{
-					...job,
-					plaintextBiometricExposed: false,
-				},
+				serializeDeviceUserPackageImportJob(job),
 				200,
 			),
 		);

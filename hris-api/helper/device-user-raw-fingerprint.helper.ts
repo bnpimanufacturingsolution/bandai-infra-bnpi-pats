@@ -1102,6 +1102,14 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 	let writeResponse: any = null;
 	let writeOk = false;
 	const downloadStartedAt = Date.now();
+	const isAlreadyExistFingerprintError = (value: unknown) => {
+		const text = String(value || "").toLowerCase();
+		return (
+			text.includes("alreadyexistfp") ||
+			text.includes("already exist fp") ||
+			text.includes("0x6000601c")
+		);
+	};
 	try {
 		writeResponse = await hikvisionFetch(
 			"/ISAPI/AccessControl/FingerPrintDownload?format=json",
@@ -1117,10 +1125,16 @@ export const writeAndVerifyFingerprintOnDevice = async (params: {
 		writeOk =
 			Number(writeResponse?.statusCode) === 1 ||
 			String(writeResponse?.statusString || "").toUpperCase() === "OK" ||
-			String(writeResponse?.subStatusCode || "").toLowerCase() === "ok";
+			String(writeResponse?.subStatusCode || "").toLowerCase() === "ok" ||
+			// Device already holds this slot — continue to sticky reread gate.
+			isAlreadyExistFingerprintError(
+				`${writeResponse?.subStatusCode || ""} ${writeResponse?.errorMsg || ""} ${writeResponse?.statusString || ""}`,
+			);
 	} catch (error: any) {
-		writeResponse = { error: String(error?.message || error) };
-		writeOk = false;
+		const message = String(error?.message || error);
+		writeResponse = { error: message };
+		// alreadyExistFP is a successful physical state for import idempotency.
+		writeOk = isAlreadyExistFingerprintError(message);
 	}
 	const downloadMs = Date.now() - downloadStartedAt;
 
