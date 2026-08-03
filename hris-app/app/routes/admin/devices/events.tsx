@@ -22,6 +22,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { hikvisionObservedAddressMatchesDevice } from "../../../lib/hikvision-device-address";
+import { formatDeviceDisplayAddressLine } from "~/lib/device-display-address";
 import { Badge } from "~/components/atoms/Badge";
 import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
@@ -4952,8 +4953,11 @@ export default function DeviceEventsPage() {
 													<p className="truncate text-sm font-semibold text-slate-950">
 														{getSyncDeviceTitle(device.vendor, device.name, device.address)}
 													</p>
-													<p className="truncate text-xs text-slate-500">
-														{device.address}:{device.port}
+													<p
+														className="truncate text-xs text-slate-500"
+														data-testid="device-display-address"
+														title={formatDeviceDisplayAddressLine(device)}>
+														{formatDeviceDisplayAddressLine(device)}
 													</p>
 													{deviceBlockReason ? (
 														<p className="mt-1 text-xs font-medium text-red-700">{deviceBlockReason}</p>

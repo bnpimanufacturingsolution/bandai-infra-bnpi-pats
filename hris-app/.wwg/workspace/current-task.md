@@ -4,25 +4,37 @@
 done
 
 ## Summary
-Sync Center Device Users import: default `biometricTransferMode` to `rawPackage` when a loaded CSV contains FP1( fingerprint cells or long base64-looking face/fp blobs. Labels show "Package data (rawPackage)". React Query preview/execute mutations unchanged.
+Device list/detail UX: show physical Device IP primary for reverse-tunneled panels; tunnel/runtime endpoint secondary. Do not change stored `address`/`port` used for API health/connectivity.
 
 ## Category
 ui-ux
 
 ## Packages
 - bandai-infra/hris-app
-- Dual-app: **HR/emp-only (no counterpart)** — Sync Center device import is admin-only
+- Dual-app: **HR/emp-only (no counterpart)** — admin devices manage/enroll only
 
 ## Changes
-- `app/routes/admin/devices/enroll.tsx` — `looksLikeCsvRawBiometricPackageText` + `inferDeviceUserImportBiometricTransferMode`; set mode on CSV file load and after preview when package has raw blobs; option/plan labels "Package data (rawPackage)"
-- `app/routes/admin/devices/device-user-ui-contract.test.ts` — contract expectations for rawPackage default path and hooks
-- `app/lib/hooks/useDevices.ts` — no code change (usePreviewDeviceUserImport / useExecuteDeviceUserImport already present; covered by contract test)
+- `app/lib/device-display-address.ts` — shared resolver: `config.physicalAddress` → name-embedded IPv4 → stored address; secondary `via reverse tunnel host:port`
+- `app/lib/device-display-address.test.ts` — unit coverage for Import Target tunnel publish + loopback reverse-forward + fallbacks
+- `app/routes/admin/devices/manage.tsx` — Device IP column + Connection/view modal; removed local partial helper
+- `app/routes/admin/devices/manage.$id.tsx` — header Device IP + tunnel subtitle
+- `app/routes/admin/devices/enroll.tsx` — Sync Center rows, pickers, merge tiles use display helper
+- `app/routes/admin/devices/events.tsx` — sync device row address line uses same helper
+
+## Display rules (CONFIRMED)
+1. Primary **Device IP** = `config.physicalAddress` (+ `physicalPort` / `physicalHttpPort`) when present
+2. Else IPv4 embedded in `name` (prefer parentheses, e.g. `Import Target A CSV (192.168.18.35)`)
+3. Else stored `device.address`[:`port`]
+4. When primary host ≠ runtime/tunnel host, show secondary: `via reverse tunnel {runtime}`
+5. Runtime host = stored address when it differs from physical; else configured `hikvisionRuntimeAddress` / SDK runtime when it differs from physical
+6. Stored address/port unchanged for API connectivity/health
 
 ## Truth delta
-YES (CONFIRMED) — Device-user CSV import with raw biometric cells defaults the UI transfer mode to `rawPackage` (package data write path) instead of `sdkPeerCopy`.
+YES (CONFIRMED) — Operator UI must prefer physical panel IP over tunnel publish IP for reverse-tunneled device rows.
 
 ## Drift
-NONE (docs updated via this task note; no broader project-truth rewrite required for admin-only default)
+NONE (docs via this task note; no broader project-truth rewrite required)
 
 ## Verification
-- `npx vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` (from bandai-infra/hris-app) — pass
+- `npx vitest run app/lib/device-display-address.test.ts` — pass (6)
+- Dual-app: single-app exception (admin devices; no emp counterpart)

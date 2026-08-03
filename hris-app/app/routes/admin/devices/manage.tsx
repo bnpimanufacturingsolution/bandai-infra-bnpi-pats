@@ -58,6 +58,7 @@ import {
 	getDeviceReachabilityBadgeClass,
 	getDeviceReachabilityDotClass,
 } from "~/lib/device-reachability";
+import { resolveDeviceDisplayAddress } from "~/lib/device-display-address";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -278,46 +279,6 @@ const getDeviceConfigValue = (device: Device | undefined, key: string) => {
 	const value = config[key];
 	if (value === undefined || value === null || value === "") return "-";
 	return String(value);
-};
-
-/** Operator-facing endpoints: physical panel IP first; reverse-tunnel/runtime second. */
-const resolveDeviceDisplayEndpoints = (device?: Device | null) => {
-	const config = getDeviceConfigRecord(device?.config);
-	const physicalHost = String(
-		config.physicalAddress || config.physicalHost || config.deviceLanAddress || "",
-	).trim();
-	const physicalPort = Number(
-		config.physicalHttpPort || config.physicalPort || 0,
-	);
-	const runtimeHost = String(
-		config.hikvisionRuntimeAddress ||
-			config.runtimeAddress ||
-			device?.address ||
-			"",
-	).trim();
-	const runtimePort = Number(
-		config.hikvisionRuntimePort || config.runtimePort || device?.port || 0,
-	);
-	const stored = `${device?.address || "-"}:${device?.port ?? "-"}`;
-	const physical =
-		physicalHost
-			? `${physicalHost}${physicalPort ? `:${physicalPort}` : ""}`
-			: stored;
-	const viaTunnel =
-		Boolean(config.reverseTunnel) ||
-		(physicalHost &&
-			runtimeHost &&
-			physicalHost !== runtimeHost);
-	const tunnel =
-		viaTunnel && runtimeHost
-			? `${runtimeHost}${runtimePort ? `:${runtimePort}` : ""}`
-			: null;
-	return {
-		primary: physical,
-		tunnel,
-		viaTunnel: Boolean(tunnel && tunnel !== physical),
-		stored,
-	};
 };
 
 const isHikvisionDevice = (device?: Device) => {
@@ -668,18 +629,18 @@ function DeviceConsolePage({
 				</div>
 				<div className="grid gap-3 px-4 py-4 md:grid-cols-2 xl:grid-cols-4">
 					{(() => {
-						const endpoints = resolveDeviceDisplayEndpoints(device);
+						const display = resolveDeviceDisplayAddress(device);
 						return (
 							<>
 								<DeviceFact
-									label="Device IP (physical)"
-									value={endpoints.primary}
+									label="Device IP"
+									value={display.primaryEndpoint}
 									mono
 								/>
-								{endpoints.viaTunnel ? (
+								{display.usesReverseTunnelDisplay ? (
 									<DeviceFact
-										label="Via reverse tunnel"
-										value={endpoints.tunnel}
+										label="Runtime / tunnel"
+										value={display.runtimeEndpoint}
 										mono
 									/>
 								) : (
@@ -691,6 +652,19 @@ function DeviceConsolePage({
 					<DeviceFact label="Protocol" value={device.protocol.toUpperCase()} />
 					<DeviceFact label="Vendor" value={getDeviceConfigValue(device, "vendor")} />
 				</div>
+				{(() => {
+					const display = resolveDeviceDisplayAddress(device);
+					if (!display.tunnelLabel) return null;
+					return (
+						<p
+							className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500"
+							data-testid="device-connection-tunnel-hint"
+							title="Stored address/port remain the API connectivity endpoint; Device IP is the physical panel.">
+							{display.tunnelLabel}
+							{` · API connectivity ${device.address}:${device.port}`}
+						</p>
+					);
+				})()}
 				<div className="flex flex-wrap gap-2 border-t border-slate-200 px-4 py-3">
 					<Button type="button" variant="outline" size="sm" onClick={() => onEvents(device)}>
 						<ExternalLink className="mr-2 h-4 w-4" />
@@ -856,25 +830,38 @@ export default function DevicesManagePage() {
 		},
 		{
 			key: "address",
-			label: "Address",
+			label: "Device IP",
 			width: "220px",
 			required: true,
 			priority: "high",
 			render: (_value, device) => {
-				const endpoints = resolveDeviceDisplayEndpoints(device);
-				if (!endpoints.primary || endpoints.primary === "-:-") {
+				const display = resolveDeviceDisplayAddress(device);
+				if (!display.primaryHost && display.primaryEndpoint === "-") {
 					return <AdminConfigMutedDash />;
 				}
 				return (
-					<div className="min-w-0 space-y-0.5" data-testid="device-address-display">
-						<AdminConfigCodeChip>{endpoints.primary}</AdminConfigCodeChip>
-						{endpoints.viaTunnel && endpoints.tunnel ? (
-							<p
-								className="truncate text-[11px] text-slate-500"
-								title={`HRIS reaches panel via reverse tunnel ${endpoints.tunnel}`}>
-								via tunnel {endpoints.tunnel}
-							</p>
-						) : null}
+					<div
+						className="min-w-0"
+						title={display.title}
+						data-testid="device-display-address"
+						data-primary-source={display.primarySource}
+						data-uses-tunnel={display.usesReverseTunnelDisplay ? "true" : "false"}>
+						<AdminConfigPrimaryCell
+							primary={
+								<AdminConfigCodeChip>{display.primaryEndpoint}</AdminConfigCodeChip>
+							}
+							secondary={
+								display.tunnelLabel ? (
+									<span
+										className="max-w-full truncate text-[11px] font-medium text-slate-500"
+										data-testid="device-display-tunnel-label">
+										{display.tunnelLabel}
+									</span>
+								) : null
+							}
+							title={display.title}
+							truncate={false}
+						/>
 					</div>
 				);
 			},
@@ -1544,33 +1531,33 @@ export default function DevicesManagePage() {
 							</div>
 						</div>
 						{(() => {
-							const endpoints = resolveDeviceDisplayEndpoints(activeDevice);
+							const display = resolveDeviceDisplayAddress(activeDevice);
 							return (
 								<div className="grid grid-cols-2 gap-4">
 									<div>
 										<p className="block text-sm font-medium text-gray-700 mb-1">
-											Device IP (physical)
+											Device IP
 										</p>
 										<div className="p-3 bg-gray-50 rounded-md border font-mono text-sm">
-											{endpoints.primary}
+											{display.primaryEndpoint}
 										</div>
 									</div>
 									<div>
 										<p className="block text-sm font-medium text-gray-700 mb-1">
-											{endpoints.viaTunnel
-												? "Via reverse tunnel (HRIS path)"
+											{display.usesReverseTunnelDisplay
+												? "Runtime / tunnel"
 												: "Port"}
 										</p>
 										<div className="p-3 bg-gray-50 rounded-md border font-mono text-sm">
-											{endpoints.viaTunnel
-												? endpoints.tunnel
+											{display.usesReverseTunnelDisplay
+												? display.runtimeEndpoint
 												: activeDevice.port}
 										</div>
-										{endpoints.viaTunnel ? (
+										{display.tunnelLabel ? (
 											<p className="mt-1 text-xs text-slate-500">
-												Stored API endpoint {endpoints.stored} is for
-												connectivity only; operators should read the physical
-												IP first.
+												{display.tunnelLabel}. Stored API endpoint{" "}
+												{activeDevice.address}:{activeDevice.port} is for
+												connectivity only.
 											</p>
 										) : null}
 									</div>

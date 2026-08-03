@@ -50,7 +50,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("<Tabs");
 		expect(enroll).toContain("Device Users");
 		expect(enroll).toContain("<span>Device</span>");
-		expect(enroll).toContain("<span>Address</span>");
+		expect(enroll).toContain("<span>Device IP</span>");
 		expect(enroll).toContain("<span>Status</span>");
 		expect(enroll).toContain("<span>Source users</span>");
 		expect(enroll).toContain("<span>HRIS users</span>");
@@ -518,12 +518,26 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("raw_evidenced_blobs_allowed_for_admin_device_user_sync_package");
 		expect(enroll).toContain("Missing cells must stay explicit");
 		expect(enroll).toContain("The SDK export has exactly five user columns");
+		expect(enroll).toContain("drag &amp; drop (or choose) a 5-column CSV");
 		expect(enroll).toContain("Package data (rawPackage)");
 		expect(enroll).toContain("Preview import");
 		expect(enroll).toContain("Drag & drop CSV here");
 		expect(enroll).toContain("device-user-import-dropzone");
 		expect(enroll).toContain("onDrop");
+		expect(enroll).toContain("onDragOver");
 		expect(enroll).toContain("dataTransfer");
+		expect(enroll).toContain("dataTransfer?.files");
+		expect(enroll).toContain("applyDeviceUserImportFile");
+		expect(enroll).toContain("isDeviceUserImportDragging");
+		expect(enroll).toContain("five columns:");
+		expect(enroll).not.toContain("seven-column");
+		// Template columns are exactly 5 — no status columns in DEVICE_USER_SDK_CSV_COLUMNS.
+		expect(enroll).not.toMatch(
+			/const DEVICE_USER_SDK_CSV_COLUMNS = \[[^\]]*fingerprintStatus/,
+		);
+		expect(enroll).not.toMatch(
+			/const DEVICE_USER_SDK_CSV_COLUMNS = \[[^\]]*faceStatus/,
+		);
 		expect(enroll).toContain("Package JSON");
 		expect(enroll).toContain("CSV template");
 		expect(enroll).toContain("buildDeviceUserImportPayloadFromCsv");
@@ -540,16 +554,22 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("packageHasRawBlobs");
 		expect(enroll).toContain('? "rawPackage"');
 		expect(enroll).toContain("payload?.rawBiometricPackage?.present");
+		// Execute forces rawPackage when the package carries raw biometric blobs.
+		expect(enroll).toContain(
+			"Drag-drop CSV with FP/face blobs always writes via rawPackage (not sdkPeerCopy).",
+		);
 		expect(deviceHooks).toContain("usePreviewDeviceUserImport");
 		expect(deviceHooks).toContain("useExecuteDeviceUserImport");
 		expect(enroll).not.toContain("Encrypted bundle passphrase");
 		expect(enroll).toContain("Type IMPORT DEVICE USERS");
 		expect(enroll).toContain("Run execute as background job");
-		expect(enroll).toContain("Import job queued");
-		expect(enroll).toContain("Poll:");
+		expect(enroll).toContain("device-user-import-job-progress");
+		expect(enroll).toContain("Import job running");
+		expect(enroll).toContain("useDeviceUserImportJob");
+		expect(enroll).toContain("Writing biometrics");
 		expect(enroll).toContain("executeDeviceUserImport");
 		expect(enroll).toContain("previewToken");
-		expect(enroll).toContain("Package data used");
+		expect(enroll).toContain("package data used");
 		expect(enroll).toContain("rawBiometricTemplateBytes");
 		expect(enroll).toContain("previewDeviceUserExport");
 		expect(enroll).toContain("previewDeviceUserImport");

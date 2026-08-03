@@ -1592,7 +1592,15 @@ export interface DeviceUserImportJobResponse {
 	imported: number;
 	failed: number;
 	skipped: number;
+	processed?: number;
 	message: string;
+	progressLabel?: string | null;
+	progressPercent?: number | null;
+	progressWeights?: {
+		waveNumerator?: number;
+		waveDenominator?: number;
+		stages?: Array<{ key: string; weight: number; label: string }>;
+	} | null;
 	backupDir?: string | null;
 	plaintextBiometricExposed: false;
 	results: Array<Record<string, unknown>>;

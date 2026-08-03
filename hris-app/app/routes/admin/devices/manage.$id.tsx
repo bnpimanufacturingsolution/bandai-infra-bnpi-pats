@@ -7,6 +7,7 @@ import { useDevice } from "~/lib/hooks/useDevices";
 import { useHikvisionUserSearch, useAcsEvents } from "~/lib/hooks/use-hikvision";
 import { Monitor, Users, Activity, ArrowLeft, Calendar } from "lucide-react";
 import { formatDateTime } from "~/lib/utils/text-utils";
+import { resolveDeviceDisplayAddress } from "~/lib/device-display-address";
 import type { UserInfoTableData, AcsEventTableData } from "~/types/hikvision";
 import { format, subDays } from "date-fns";
 
@@ -536,13 +537,23 @@ export default function DeviceDetailPage() {
 			</div>
 
 			{/* Device Info */}
-			<div className="flex items-center gap-8 text-sm">
-				<div>
-					<span className="text-gray-500">Address: </span>
-					<span className="font-medium text-gray-900">
-						{device.address}:{device.port}
-					</span>
-				</div>
+			<div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
+				{(() => {
+					const display = resolveDeviceDisplayAddress(device);
+					return (
+						<div className="min-w-0" title={display.title} data-testid="device-display-address">
+							<span className="text-gray-500">Device IP: </span>
+							<span className="font-medium font-mono text-gray-900">
+								{display.primaryEndpoint}
+							</span>
+							{display.tunnelLabel ? (
+								<span className="ml-2 text-xs text-gray-500" data-testid="device-display-tunnel-label">
+									{display.tunnelLabel}
+								</span>
+							) : null}
+						</div>
+					);
+				})()}
 				<div>
 					<span className="text-gray-500">Protocol: </span>
 					<span className="font-medium text-gray-900">

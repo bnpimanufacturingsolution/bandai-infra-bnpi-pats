@@ -481,7 +481,15 @@ type DeviceUserPackageImportJob = {
 	imported: number;
 	failed: number;
 	skipped: number;
+	processed?: number;
 	message: string;
+	progressLabel?: string | null;
+	progressPercent?: number | null;
+	progressWeights?: {
+		waveNumerator?: number;
+		waveDenominator?: number;
+		stages?: Array<{ key: string; weight: number; label: string }>;
+	} | null;
 	backupDir?: string | null;
 	plaintextBiometricExposed: false;
 	results: any[];
@@ -492,13 +500,61 @@ type DeviceUserPackageImportJob = {
 
 const deviceUserPackageImportJobs = new Map<string, DeviceUserPackageImportJob>();
 
-const serializeDeviceUserPackageImportJob = (job: DeviceUserPackageImportJob) => ({
-	...job,
-	startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
-	completedAt:
-		job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt || null,
-	plaintextBiometricExposed: false,
-});
+const buildDeviceUserPackageImportProgress = (job: DeviceUserPackageImportJob) => {
+	const planned = Math.max(0, Number(job.planned || 0));
+	const processed = Math.max(
+		0,
+		Number(
+			job.processed ??
+				Number(job.imported || 0) + Number(job.failed || 0) + Number(job.skipped || 0),
+		),
+	);
+	const stages = [
+		{ key: "queue", weight: 5, label: "Queued" },
+		{ key: "write", weight: 85, label: "Writing biometrics" },
+		{ key: "finalize", weight: 10, label: "Finalizing" },
+	];
+	let progressPercent = 2;
+	if (job.status === "completed") {
+		progressPercent = 100;
+	} else if (job.status === "failed") {
+		progressPercent = Math.min(99, Math.max(8, planned > 0 ? Math.round((processed / planned) * 100) : 8));
+	} else if (planned > 0) {
+		// Weighted: 5% queue + up to 85% write progress + 5% soft finalize while processing
+		const writeShare = Math.min(1, processed / planned);
+		progressPercent = Math.min(95, Math.round(5 + writeShare * 85 + (processed > 0 ? 2 : 0)));
+	}
+	const progressLabel =
+		job.status === "completed"
+			? "Import complete"
+			: job.status === "failed"
+				? "Import failed"
+				: planned > 0
+					? `Writing ${processed} of ${planned} users`
+					: job.message || "Import running";
+	return {
+		processed,
+		progressPercent,
+		progressLabel,
+		progressWeights: {
+			waveNumerator: processed,
+			waveDenominator: planned || 1,
+			stages,
+		},
+	};
+};
+
+const serializeDeviceUserPackageImportJob = (job: DeviceUserPackageImportJob) => {
+	const progress = buildDeviceUserPackageImportProgress(job);
+	return {
+		...job,
+		...progress,
+		startedAt: job.startedAt instanceof Date ? job.startedAt.toISOString() : job.startedAt,
+		completedAt:
+			job.completedAt instanceof Date ? job.completedAt.toISOString() : job.completedAt || null,
+		plaintextBiometricExposed: false,
+	};
+};
 
 const persistDeviceUserPackageImportJob = (job: DeviceUserPackageImportJob) => {
 	try {
@@ -11268,11 +11324,19 @@ export const controller = (prisma: PrismaClient) => {
 			if (jobId) {
 				const imported = results.filter((item: any) => item.status === "imported").length;
 				const failed = results.filter((item: any) => item.status === "failed").length;
+				const skipped = results.length - imported - failed;
 				updateDeviceUserPackageImportJob(jobId, {
+					planned: planRows.length,
 					imported,
 					failed,
-					skipped: results.length - imported - failed,
+					skipped,
+					processed: results.length,
 					message: `Processed ${results.length} of ${planRows.length} device users`,
+					progressLabel: `Writing ${results.length} of ${planRows.length} users`,
+					progressPercent: Math.min(
+						95,
+						Math.round(5 + (results.length / Math.max(1, planRows.length)) * 85),
+					),
 					results,
 				});
 			}

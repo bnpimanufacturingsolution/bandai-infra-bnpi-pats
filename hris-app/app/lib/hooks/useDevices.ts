@@ -16,6 +16,7 @@ import devicesService, {
 	type DeviceUserExportRequest,
 	type DeviceUserImportPreviewRequest,
 	type DeviceUserImportExecuteRequest,
+	type DeviceUserImportJobResponse,
 	type DeviceUsersResponse,
 	type DeleteDeviceUserRequest,
 	type DeleteDeviceUsersRequest,
@@ -51,6 +52,8 @@ export const queryKeys = {
 		syncPreview: (params?: { deviceId?: string; source?: string; quick?: boolean }) =>
 			[...queryKeys.devices.all, "sync-preview", { params }] as const,
 		importJob: (jobId?: string) => [...queryKeys.devices.all, "import-job", jobId] as const,
+		deviceUserImportJob: (jobId?: string) =>
+			[...queryKeys.devices.all, "device-user-import-job", jobId] as const,
 		users: (
 			deviceId?: string,
 			params?: {
@@ -695,14 +698,35 @@ export const useExecuteDeviceUserImport = () => {
 		mutationFn: async (payload: DeviceUserImportExecuteRequest) => {
 			return await devicesService.executeDeviceUserImport(payload);
 		},
-		onSuccess: () => {
+		onSuccess: (data) => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
 			queryClient.invalidateQueries({ queryKey: ["hikvision", "device-users"] });
-			sonnerToast.success("Device-user import executed");
+			if (data?.mode === "job" && data?.jobId) {
+				queryClient.invalidateQueries({
+					queryKey: queryKeys.devices.deviceUserImportJob(data.jobId),
+				});
+				sonnerToast.message("Device-user import job started — progress updates below");
+			} else {
+				sonnerToast.success("Device-user import executed");
+			}
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to execute device-user import");
 		},
+	});
+};
+
+export const useDeviceUserImportJob = (jobId?: string | null, enabled = true) => {
+	return useQuery<DeviceUserImportJobResponse>({
+		queryKey: queryKeys.devices.deviceUserImportJob(jobId || undefined),
+		queryFn: () => devicesService.getDeviceUserImportJob(String(jobId || "")),
+		enabled: Boolean(enabled && jobId),
+		refetchInterval: (query) => {
+			const status = String(query.state.data?.status || "").toLowerCase();
+			if (status === "completed" || status === "failed") return false;
+			return 2000;
+		},
+		staleTime: 0,
 	});
 };
 

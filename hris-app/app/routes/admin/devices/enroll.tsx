@@ -7,6 +7,10 @@ import { Select } from "~/components/atoms/Select";
 import { EmployeePickerSelect } from "~/components/molecules/employee/EmployeePickerSelect";
 import { formatDateTime } from "~/lib/utils/text-utils";
 import {
+	formatDeviceDisplayAddressLine,
+	resolveDeviceDisplayAddress,
+} from "~/lib/device-display-address";
+import {
 	MERGE_CHIP_CONTRACT,
 	buildMergePeerCopyCta,
 	buildMergeReviewOpenCta,
@@ -71,6 +75,7 @@ import {
 	useExportDeviceUsers,
 	usePreviewDeviceUserImport,
 	useExecuteDeviceUserImport,
+	useDeviceUserImportJob,
 	useUnlinkDeviceUser,
 	useDeleteDeviceUser,
 	useDeleteDeviceUsers,
@@ -1111,6 +1116,33 @@ export function DeviceEnrollmentPanel({
 		biometricTransferMode: "rawPackage",
 		runAsJob: true,
 	});
+	const activeDeviceUserImportJobId =
+		deviceUserImportState.result?.mode === "job"
+			? String(deviceUserImportState.result.jobId || "").trim() || null
+			: null;
+	const { data: deviceUserImportJob } = useDeviceUserImportJob(
+		activeDeviceUserImportJobId,
+		Boolean(activeDeviceUserImportJobId && deviceUserImportState.open),
+	);
+	const deviceUserImportJobProgressPercent = (() => {
+		const job = deviceUserImportJob;
+		if (!job) return 0;
+		const api = Number(job.progressPercent);
+		if (Number.isFinite(api) && api >= 0) return Math.min(100, Math.max(0, api));
+		const planned = Math.max(1, Number(job.planned || 0));
+		const processed = Math.max(
+			0,
+			Number(
+				job.processed ??
+					Number(job.imported || 0) + Number(job.failed || 0) + Number(job.skipped || 0),
+			),
+		);
+		if (String(job.status).toLowerCase() === "completed") return 100;
+		if (String(job.status).toLowerCase() === "failed") {
+			return Math.min(99, Math.max(8, Math.round((processed / planned) * 100)));
+		}
+		return Math.min(95, Math.round((processed / planned) * 90) + 5);
+	})();
 	const [isDeviceUserImportDragging, setIsDeviceUserImportDragging] = useState(false);
 	const [selectedExportVendorUserIds, setSelectedExportVendorUserIds] = useState<string[]>([]);
 	const [isCopyDeviceUserSubmitting, setIsCopyDeviceUserSubmitting] = useState(false);
@@ -4097,7 +4129,9 @@ export function DeviceEnrollmentPanel({
 				)
 				.map((device: any) => ({
 					value: device.id,
-					label: device.name || `${device.address || "-"}:${device.port || "-"}`,
+					label:
+						device.name ||
+						formatDeviceDisplayAddressLine(device, { includeTunnel: false }),
 				})),
 		[devices, selectedDeviceId],
 	);
@@ -6394,7 +6428,7 @@ export function DeviceEnrollmentPanel({
 			return {
 				deviceId: String(device.id || ""),
 				deviceName: device.name || "Unnamed device",
-				address: `${device.address || "-"}:${device.port || "-"}`,
+				address: formatDeviceDisplayAddressLine(device),
 				isCurrentDevice: Boolean(options.isCurrentDevice),
 				found: Boolean(deviceUser),
 				status: deviceUser?.status || "Missing",
@@ -6608,7 +6642,7 @@ export function DeviceEnrollmentPanel({
 							<div className="overflow-hidden rounded-md border border-slate-200 bg-white">
 								<div className="hidden grid-cols-[minmax(190px,1.45fr)_124px_128px_150px_156px_112px_96px] gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600 xl:grid">
 									<span>Device</span>
-									<span>Address</span>
+									<span>Device IP</span>
 									<span>Status</span>
 									<span>Source users</span>
 									<span>HRIS users</span>
@@ -6687,12 +6721,27 @@ export function DeviceEnrollmentPanel({
 														</p>
 													) : null}
 												</div>
-												<div className="min-w-0 font-mono text-xs text-slate-700">
-													<span className="mr-1 font-sans text-slate-500 xl:hidden">
-														Address
-													</span>
-													{device.address || "-"}:{device.port || "-"}
-												</div>
+												{(() => {
+													const display = resolveDeviceDisplayAddress(device);
+													return (
+														<div
+															className="min-w-0 text-xs text-slate-700"
+															title={display.title}
+															data-testid="device-display-address">
+															<span className="mr-1 font-sans text-slate-500 xl:hidden">
+																Device IP
+															</span>
+															<span className="font-mono">
+																{display.primaryEndpoint}
+															</span>
+															{display.tunnelLabel ? (
+																<p className="mt-0.5 truncate text-[11px] text-slate-500">
+																	{display.tunnelLabel}
+																</p>
+															) : null}
+														</div>
+													);
+												})()}
 												<div>
 													<span className="mr-1 text-slate-500 xl:hidden">
 														Status
@@ -7051,8 +7100,11 @@ export function DeviceEnrollmentPanel({
 												<p className="truncate font-medium text-slate-950">
 													{device.name || "Unnamed device"}
 												</p>
-												<p className="truncate text-xs text-slate-500">
-													{device.address || "-"}:{device.port || "-"}
+												<p
+													className="truncate text-xs text-slate-500"
+													title={resolveDeviceDisplayAddress(device).title}
+													data-testid="device-display-address">
+													{formatDeviceDisplayAddressLine(device)}
 												</p>
 											</div>
 											<div className="flex items-center justify-between gap-2 lg:block">
@@ -7267,7 +7319,10 @@ export function DeviceEnrollmentPanel({
 											(item) => item.device.id === device.id,
 										)?.preview;
 										const labelBase =
-											device.name || `${device.address}:${device.port}`;
+											device.name ||
+											formatDeviceDisplayAddressLine(device, {
+												includeTunnel: false,
+											});
 										const sourceCount = preview?.vendorUserCount;
 										return {
 											value: device.id,
@@ -8639,8 +8694,11 @@ export function DeviceEnrollmentPanel({
 											<p className="truncate font-medium text-slate-950">
 												{device.name || "Unnamed device"}
 											</p>
-											<p className="truncate text-xs text-slate-500">
-												{device.address || "-"}:{device.port || "-"}
+											<p
+												className="truncate text-xs text-slate-500"
+												title={resolveDeviceDisplayAddress(device).title}
+												data-testid="device-display-address">
+												{formatDeviceDisplayAddressLine(device)}
 											</p>
 											{Number(peerDriftCount || 0) > 0 &&
 											preview?.peerBaselineDeviceName ? (
@@ -10199,8 +10257,10 @@ export function DeviceEnrollmentPanel({
 													{device.name || device.address || device.id}
 												</span>
 												<span
-													className={`block truncate text-xs font-normal ${selectedMergeDeviceId === device.id ? "text-orange-900" : "text-slate-700"}`}>
-													{device.address || device.id}
+													className={`block truncate text-xs font-normal ${selectedMergeDeviceId === device.id ? "text-orange-900" : "text-slate-700"}`}
+													title={resolveDeviceDisplayAddress(device).title}
+													data-testid="device-display-address">
+													{formatDeviceDisplayAddressLine(device)}
 												</span>
 												{readFailed ? (
 													<span className="mt-0.5 block truncate text-xs font-medium text-amber-800">
@@ -13106,43 +13166,54 @@ export function DeviceEnrollmentPanel({
 							onDragEnter={(event) => {
 								event.preventDefault();
 								event.stopPropagation();
+								setIsDeviceUserImportDragging(true);
 							}}
 							onDragOver={(event) => {
 								event.preventDefault();
 								event.stopPropagation();
+								setIsDeviceUserImportDragging(true);
+							}}
+							onDragLeave={(event) => {
+								event.preventDefault();
+								if (
+									!event.currentTarget.contains(
+										event.relatedTarget as Node | null,
+									)
+								) {
+									setIsDeviceUserImportDragging(false);
+								}
 							}}
 							onDrop={(event) => {
 								event.preventDefault();
 								event.stopPropagation();
+								setIsDeviceUserImportDragging(false);
 								const file = event.dataTransfer?.files?.[0];
 								if (!file) return;
-								void file.text().then((text) =>
-									setDeviceUserImportState((current) => ({
-										...current,
-										rawText: text,
-										fileName: file.name,
-										payload: null,
-										parseError: "",
-										preview: null,
-										result: null,
-										// CSV blob packages (FP1( / long base64) default to package data write path
-										biometricTransferMode:
-											inferDeviceUserImportBiometricTransferMode(
-												text,
-												current.format,
-											),
-									})),
-								);
+								const lower = file.name.toLowerCase();
+								const looksCsv =
+									lower.endsWith(".csv") || file.type.includes("csv");
+								// CSV path (tab or .csv drop) always sets format csv + rawPackage infer.
+								const resolvedFormat: DeviceUserImportFormat =
+									deviceUserImportState.format === "csv" || looksCsv
+										? "csv"
+										: "json";
+								applyDeviceUserImportFile(file, resolvedFormat);
 							}}
-							className="rounded-md border border-dashed border-slate-300 bg-white px-3 py-3 text-sm transition hover:border-orange-300 hover:bg-orange-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
+							className={`rounded-md border-2 border-dashed px-3 py-3 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 ${
+								isDeviceUserImportDragging
+									? "border-orange-400 bg-orange-50"
+									: "border-slate-300 bg-white hover:border-orange-300 hover:bg-orange-50/40"
+							}`}>
 							<label className="block cursor-pointer">
 								<span className="block font-medium text-slate-800">
-									{deviceUserImportState.format === "csv"
-										? "Drag & drop CSV here"
-										: "Drag & drop package JSON here"}
+									{isDeviceUserImportDragging
+										? "Drop your file here"
+										: deviceUserImportState.format === "csv"
+											? "Drag & drop CSV here"
+											: "Drag & drop package JSON here"}
 								</span>
 								<span className="mt-0.5 block text-xs text-slate-500">
-									or click to choose a file · columns:
+									or click to choose a file · five columns:
 									vendorUserId, displayName, userType, rawFingerprintBlob,
 									rawFaceBlob
 								</span>
@@ -13157,23 +13228,12 @@ export function DeviceEnrollmentPanel({
 									onChange={(event) => {
 										const file = event.target.files?.[0];
 										if (!file) return;
-										void file.text().then((text) =>
-											setDeviceUserImportState((current) => ({
-												...current,
-												rawText: text,
-												fileName: file.name,
-												payload: null,
-												parseError: "",
-												preview: null,
-												result: null,
-												// CSV blob packages (FP1( / long base64) default to package data write path
-												biometricTransferMode:
-													inferDeviceUserImportBiometricTransferMode(
-														text,
-														current.format,
-													),
-											})),
+										applyDeviceUserImportFile(
+											file,
+											deviceUserImportState.format,
 										);
+										// Allow re-selecting the same file after clear/reload.
+										event.target.value = "";
 									}}
 								/>
 							</label>
@@ -13390,15 +13450,72 @@ export function DeviceEnrollmentPanel({
 						</div>
 					) : null}
 					{deviceUserImportState.result ? (
-						<div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+						<div
+							className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
+							data-testid="device-user-import-job-progress">
 							{deviceUserImportState.result.mode === "job" ? (
 								<>
 									<p className="font-semibold">
-										Import job queued: {deviceUserImportState.result.jobId}
+										{deviceUserImportJob?.status === "completed"
+											? "Import job complete"
+											: deviceUserImportJob?.status === "failed"
+												? "Import job failed"
+												: "Import job running"}
+										{deviceUserImportState.result.jobId
+											? `: ${deviceUserImportState.result.jobId}`
+											: ""}
 									</p>
-									<p className="mt-1 break-all text-xs text-emerald-900">
-										Poll: {deviceUserImportState.result.pollUrl}
+									<p className="text-xs text-emerald-900">
+										{deviceUserImportJob?.progressLabel ||
+											deviceUserImportJob?.message ||
+											deviceUserImportState.result.message ||
+											"Background job accepted — waiting for first progress tick…"}
 									</p>
+									<div className="mt-1">
+										<div className="mb-1 flex items-center justify-between text-[11px] font-medium text-emerald-900">
+											<span>
+												{metricValue(deviceUserImportJob?.imported ?? 0)} imported ·{" "}
+												{metricValue(deviceUserImportJob?.failed ?? 0)} failed ·{" "}
+												{metricValue(deviceUserImportJob?.skipped ?? 0)} skipped
+											</span>
+											<span>{deviceUserImportJobProgressPercent}%</span>
+										</div>
+										<div
+											className="h-2.5 w-full overflow-hidden rounded-full bg-emerald-100"
+											role="progressbar"
+											aria-valuemin={0}
+											aria-valuemax={100}
+											aria-valuenow={deviceUserImportJobProgressPercent}
+											aria-label="Device user import job progress">
+											<div
+												className={`h-full rounded-full transition-[width] duration-500 ease-out ${
+													deviceUserImportJob?.status === "failed"
+														? "bg-red-500"
+														: deviceUserImportJob?.status === "completed"
+															? "bg-emerald-600"
+															: "bg-orange-500"
+												}`}
+												style={{
+													width: `${deviceUserImportJobProgressPercent}%`,
+												}}
+											/>
+										</div>
+										{deviceUserImportJob?.progressWeights?.stages?.length ? (
+											<p className="mt-1 text-[10px] text-emerald-800">
+												Weights:{" "}
+												{deviceUserImportJob.progressWeights.stages
+													.map((s) => `${s.label} ${s.weight}%`)
+													.join(" · ")}
+											</p>
+										) : (
+											<p className="mt-1 text-[10px] text-emerald-800">
+												Weights: Queued 5% · Writing biometrics 85% · Finalizing 10%
+											</p>
+										)}
+									</div>
+									{deviceUserImportJob?.error ? (
+										<p className="text-xs text-red-700">{deviceUserImportJob.error}</p>
+									) : null}
 								</>
 							) : (
 								<>
@@ -13415,8 +13532,11 @@ export function DeviceEnrollmentPanel({
 								</>
 							)}
 							<p className="mt-1 text-xs text-emerald-900">
-								Package data used:{" "}
-								{String(deviceUserImportState.result.plaintextBiometricExposed)}
+								Transfer: rawPackage (CSV package data) · package data used:{" "}
+								{String(
+									deviceUserImportState.result.plaintextBiometricExposed ??
+										deviceUserImportState.biometricTransferMode === "rawPackage",
+								)}
 							</p>
 						</div>
 					) : null}
