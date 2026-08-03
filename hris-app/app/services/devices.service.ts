@@ -2078,7 +2078,9 @@ class DevicesService extends APIService {
 				previewToken: payload.previewToken,
 				confirmation: payload.confirmation,
 				execute: true,
-				biometricTransferMode: payload.biometricTransferMode || "sdkPeerCopy",
+				biometricTransferMode:
+					payload.biometricTransferMode ||
+					(payload.payload?.rawBiometricPackage?.present ? "rawPackage" : "sdkPeerCopy"),
 				runAsJob: payload.runAsJob === true,
 			});
 			const data = response.data?.data || response.data;

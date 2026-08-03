@@ -493,13 +493,13 @@ type CopyDeviceUserState = {
 
 type DeviceUserExportFormat = "csv" | "excel" | "json";
 type DeviceUserImportFormat = "csv" | "json";
+// Portable CSV projection: enrollment state lives in blob cells
+// (FPn("...") / face base64 / not_enrolled / missing_raw_blob) — no status columns.
 const DEVICE_USER_SDK_CSV_COLUMNS = [
 	"vendorUserId",
 	"displayName",
 	"userType",
-	"fingerprintStatus",
 	"rawFingerprintBlob",
-	"faceStatus",
 	"rawFaceBlob",
 ] as const;
 const DEVICE_USER_BIOMETRIC_CSV_COLUMNS = ["rawFingerprintBlob", "rawFaceBlob"] as const;
@@ -1107,9 +1107,11 @@ export function DeviceEnrollmentPanel({
 		preview: null,
 		result: null,
 		confirmation: "",
-		biometricTransferMode: "sdkPeerCopy",
+		// CSV packages with FP1(/face blobs must use rawPackage; sdkPeerCopy only for live peer devices.
+		biometricTransferMode: "rawPackage",
 		runAsJob: true,
 	});
+	const [isDeviceUserImportDragging, setIsDeviceUserImportDragging] = useState(false);
 	const [selectedExportVendorUserIds, setSelectedExportVendorUserIds] = useState<string[]>([]);
 	const [isCopyDeviceUserSubmitting, setIsCopyDeviceUserSubmitting] = useState(false);
 	const [copyDeviceUserStatusMessage, setCopyDeviceUserStatusMessage] = useState("");
@@ -5683,8 +5685,8 @@ export function DeviceEnrollmentPanel({
 				data: normalizeRawBiometricBlobValue(template?.data || template?.fingerData || ""),
 			}))
 			.filter((template) => template.data);
-		if (rawTemplates.length === 1) return rawTemplates[0].data;
-		if (rawTemplates.length > 1) {
+		// Always FPn("…") — including single-slot — so import CSV cells stay uniform.
+		if (rawTemplates.length >= 1) {
 			return rawTemplates
 				.map((template, index) => {
 					const fingerPrintId = Number(template.fingerPrintId || index + 1) || index + 1;
@@ -5709,6 +5711,27 @@ export function DeviceEnrollmentPanel({
 		if (raw) return raw;
 		void credentialCount;
 		return "";
+	};
+	/** CSV package with FP1("…") cells or long base64 face/fp blobs → default transfer to rawPackage. */
+	const looksLikeCsvRawBiometricPackageText = (text: string) => {
+		const raw = String(text || "");
+		if (!raw.trim()) return false;
+		// Multi-finger export: FP1("base64…");FP2("…")
+		if (/FP\d+\s*\(/i.test(raw)) return true;
+		// Single fingerprint template or face photo: long base64-looking cell values
+		if (/(?:^|[,;\n\r"])[A-Za-z0-9+/]{64,}={0,2}(?:$|[,;\n\r"])/m.test(raw)) {
+			return true;
+		}
+		return false;
+	};
+	const inferDeviceUserImportBiometricTransferMode = (
+		text: string,
+		format: DeviceUserImportFormat,
+	): "sdkPeerCopy" | "metadataOnly" | "rawPackage" => {
+		if (format === "csv" && looksLikeCsvRawBiometricPackageText(text)) {
+			return "rawPackage";
+		}
+		return "sdkPeerCopy";
 	};
 	const decodeRawBiometricBlobCell = (value: unknown) => {
 		const raw = String(value || "").trim();
@@ -6170,6 +6193,27 @@ export function DeviceEnrollmentPanel({
 			);
 		}
 	};
+	/** Shared file load for picker + drag-and-drop (CSV defaults transfer to rawPackage for blob packages). */
+	const applyDeviceUserImportFile = (file: File, format: DeviceUserImportFormat) => {
+		void file.text().then((text) =>
+			setDeviceUserImportState((current) => ({
+				...current,
+				// Dropped/picked CSV always stays on the CSV path so blob cells map to rawPackage.
+				format,
+				rawText: text,
+				fileName: file.name,
+				payload: null,
+				parseError: "",
+				preview: null,
+				result: null,
+				// CSV blob packages (FP1( / long base64) default to package data write path
+				biometricTransferMode: inferDeviceUserImportBiometricTransferMode(
+					text,
+					format,
+				),
+			})),
+		);
+	};
 	const previewDeviceUserImport = async () => {
 		if (!selectedDeviceId) {
 			toast.error("Select a target device before importing users");
@@ -6202,12 +6246,21 @@ export function DeviceEnrollmentPanel({
 			targetDeviceId: selectedDeviceId,
 			payload,
 		});
+		const packageHasRawBlobs = Boolean(
+			payload?.rawBiometricPackage?.present ||
+				(deviceUserImportState.format === "csv" &&
+					looksLikeCsvRawBiometricPackageText(deviceUserImportState.rawText)),
+		);
 		setDeviceUserImportState((current) => ({
 			...current,
 			payload,
 			parseError: "",
 			preview,
 			result: null,
+			// Keep UI transfer mode aligned with CSV/package blob presence after preview.
+			biometricTransferMode: packageHasRawBlobs
+				? "rawPackage"
+				: current.biometricTransferMode,
 		}));
 	};
 	const executeDeviceUserImport = async () => {
@@ -6217,13 +6270,21 @@ export function DeviceEnrollmentPanel({
 			toast.error("Run import preview before execute");
 			return;
 		}
+		const packageHasRawBlobs = Boolean(
+			payload?.rawBiometricPackage?.present ||
+				(deviceUserImportState.format === "csv" &&
+					looksLikeCsvRawBiometricPackageText(deviceUserImportState.rawText)),
+		);
 		const result = await executeDeviceUserImportMutation.mutateAsync({
 			targetDeviceId: selectedDeviceId,
 			payload,
 			previewToken: preview.previewToken,
 			confirmation: deviceUserImportState.confirmation,
 			execute: true,
-			biometricTransferMode: deviceUserImportState.biometricTransferMode,
+			// Drag-drop CSV with FP/face blobs always writes via rawPackage (not sdkPeerCopy).
+			biometricTransferMode: packageHasRawBlobs
+				? "rawPackage"
+				: deviceUserImportState.biometricTransferMode,
 			runAsJob: deviceUserImportState.runAsJob,
 		});
 		setDeviceUserImportState((current) => ({ ...current, result }));
@@ -12805,9 +12866,11 @@ export function DeviceEnrollmentPanel({
 					<div className="rounded-md border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-950">
 						<p className="font-semibold">Biometric handling</p>
 						<p className="mt-1 text-cyan-900">
-							The SDK export has exactly seven user columns. Raw fingerprint slots stay
-							in one FPn cell, face bytes stay separate, and unavailable custody remains
-							an explicit status instead of a fabricated blob.
+							The SDK export has exactly five user columns
+							(vendorUserId, displayName, userType, rawFingerprintBlob, rawFaceBlob).
+							Fingerprint slots stay in one FPn("…") cell; face bytes stay separate;
+							unavailable custody is an explicit sentinel in the blob cell
+							(not_enrolled / missing_raw_blob) — never a fabricated template.
 						</p>
 					</div>
 					<div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -12986,8 +13049,11 @@ export function DeviceEnrollmentPanel({
 							Target: {selectedDevice?.name || "Select device"}
 						</p>
 						<p className="mt-1 text-xs text-slate-600">
-							Package JSON is authoritative for restore. CSV is the seven-column readable
-							projection and remains accepted for backward-compatible preview.
+							<strong>Journey:</strong> drag &amp; drop (or choose) a 5-column CSV →
+							Preview (no writes) → confirm{" "}
+							<code className="rounded bg-white px-1">IMPORT DEVICE USERS</code> →
+							Execute. CSV blobs write with{" "}
+							<strong>Package data (rawPackage)</strong> — not peer device copy.
 						</p>
 					</div>
 					<div className="grid gap-2 sm:grid-cols-2">
@@ -13028,37 +13094,95 @@ export function DeviceEnrollmentPanel({
 						))}
 					</div>
 					<div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-						<label className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
-							<span className="block font-medium text-slate-800">
-								{deviceUserImportState.format === "csv"
-									? "Import CSV file"
-									: "Import package JSON file"}
-							</span>
-							<input
-								type="file"
-								accept={
-									deviceUserImportState.format === "csv"
-										? "text/csv,.csv"
-										: "application/json,.json"
-								}
-								className="mt-2 block w-full text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-700"
-								onChange={(event) => {
-									const file = event.target.files?.[0];
-									if (!file) return;
-									void file.text().then((text) =>
-										setDeviceUserImportState((current) => ({
-											...current,
-											rawText: text,
-											fileName: file.name,
-											payload: null,
-											parseError: "",
-											preview: null,
-											result: null,
-										})),
-									);
-								}}
-							/>
-						</label>
+						<div
+							data-testid="device-user-import-dropzone"
+							role="button"
+							tabIndex={0}
+							aria-label={
+								deviceUserImportState.format === "csv"
+									? "Drag and drop CSV file to import device users"
+									: "Drag and drop package JSON file to import device users"
+							}
+							onDragEnter={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+							}}
+							onDragOver={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+							}}
+							onDrop={(event) => {
+								event.preventDefault();
+								event.stopPropagation();
+								const file = event.dataTransfer?.files?.[0];
+								if (!file) return;
+								void file.text().then((text) =>
+									setDeviceUserImportState((current) => ({
+										...current,
+										rawText: text,
+										fileName: file.name,
+										payload: null,
+										parseError: "",
+										preview: null,
+										result: null,
+										// CSV blob packages (FP1( / long base64) default to package data write path
+										biometricTransferMode:
+											inferDeviceUserImportBiometricTransferMode(
+												text,
+												current.format,
+											),
+									})),
+								);
+							}}
+							className="rounded-md border border-dashed border-slate-300 bg-white px-3 py-3 text-sm transition hover:border-orange-300 hover:bg-orange-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
+							<label className="block cursor-pointer">
+								<span className="block font-medium text-slate-800">
+									{deviceUserImportState.format === "csv"
+										? "Drag & drop CSV here"
+										: "Drag & drop package JSON here"}
+								</span>
+								<span className="mt-0.5 block text-xs text-slate-500">
+									or click to choose a file · columns:
+									vendorUserId, displayName, userType, rawFingerprintBlob,
+									rawFaceBlob
+								</span>
+								<input
+									type="file"
+									accept={
+										deviceUserImportState.format === "csv"
+											? "text/csv,.csv"
+											: "application/json,.json"
+									}
+									className="mt-2 block w-full text-xs text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-slate-700"
+									onChange={(event) => {
+										const file = event.target.files?.[0];
+										if (!file) return;
+										void file.text().then((text) =>
+											setDeviceUserImportState((current) => ({
+												...current,
+												rawText: text,
+												fileName: file.name,
+												payload: null,
+												parseError: "",
+												preview: null,
+												result: null,
+												// CSV blob packages (FP1( / long base64) default to package data write path
+												biometricTransferMode:
+													inferDeviceUserImportBiometricTransferMode(
+														text,
+														current.format,
+													),
+											})),
+										);
+									}}
+								/>
+							</label>
+							{deviceUserImportState.fileName ? (
+								<p className="mt-2 break-all text-xs font-medium text-emerald-800">
+									Loaded: {deviceUserImportState.fileName}
+								</p>
+							) : null}
+						</div>
 						<div className="flex flex-col gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-950">
 							<p className="font-semibold">Preview first</p>
 							<p className="text-emerald-900">
@@ -13190,7 +13314,7 @@ export function DeviceEnrollmentPanel({
 													</td>
 													<td className="px-3 py-2 text-slate-700">
 														{row.transferMode === "rawPackage"
-															? "Package data"
+															? "Package data (rawPackage)"
 															: row.transferMode === "sdkPeerCopy"
 																? "Reachable source copy"
 																: "Metadata only"}
@@ -13219,7 +13343,9 @@ export function DeviceEnrollmentPanel({
 									}
 									className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-200">
 									<option value="sdkPeerCopy">Reachable source copy</option>
-									<option value="rawPackage">Package data</option>
+									<option value="rawPackage">
+										Package data (rawPackage)
+									</option>
 									<option value="metadataOnly">Metadata only</option>
 								</select>
 							</label>

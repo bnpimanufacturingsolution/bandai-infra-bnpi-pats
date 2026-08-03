@@ -4,9 +4,7 @@ export const DEVICE_USER_SDK_EXPORT_COLUMNS = [
 	"vendorUserId",
 	"displayName",
 	"userType",
-	"fingerprintStatus",
 	"rawFingerprintBlob",
-	"faceStatus",
 	"rawFaceBlob",
 ] as const;
 

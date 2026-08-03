@@ -1,13 +1,15 @@
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 
+// Compact portable CSV: status is encoded in the blob cells themselves.
+// - present: FPn("base64") / face base64
+// - not enrolled: not_enrolled
+// - enrolled but no exportable bytes: missing_raw_blob
 const HEADERS = Object.freeze([
 	"vendorUserId",
 	"displayName",
 	"userType",
-	"fingerprintStatus",
 	"rawFingerprintBlob",
-	"faceStatus",
 	"rawFaceBlob",
 ]);
 const ALLOWED_STATUSES = new Set([
@@ -52,17 +54,18 @@ const assertBase64 = (value, label) => {
 };
 const fingerprintCell = (templates, label) => {
 	const normalized = templates.map((template, index) => ({
-		slotId: Number(template?.fingerPrintId ?? template?.fingerPrintID ?? index + 1),
+		slotId: Number(template?.fingerPrintId ?? template?.fingerPrintID ?? index + 1) || index + 1,
 		data: assertBase64(template?.data || template?.fingerData, `${label} FP slot ${index + 1}`),
 	}));
 	const slotIds = normalized.map((template) => template.slotId);
 	if (new Set(slotIds).size !== slotIds.length) {
 		throw new Error(`${label} contains duplicate fingerprint slot IDs`);
 	}
-	if (normalized.length === 1) return normalized[0].data;
+	// Always emit FPn("base64") — including single-slot rows — so package cells are uniform.
+	// Import accepts both plain base64 and FPn wrappers; generation must not mix them.
 	return normalized
 		.map((template) => `FP${template.slotId}("${escapeFingerprintValue(template.data)}")`)
-		.join(" ");
+		.join(";");
 };
 
 const main = async () => {
@@ -89,24 +92,43 @@ const main = async () => {
 				throw new Error(`${label} has an unsupported biometric status`);
 			}
 			const templates = Array.isArray(fingerprint.templates) ? fingerprint.templates : [];
-			const rawFingerprintBlob = templates.length ? fingerprintCell(templates, label) : "";
 			const faceValue = String(
 				face?.blob?.base64 || face?.blob?.facePicture || face?.blob?.faceTemplate || "",
 			).trim();
-			const rawFaceBlob = faceValue ? assertBase64(faceValue, `${label} face`) : "";
-			if ((fingerprintStatus === "raw_blob_present") !== Boolean(rawFingerprintBlob)) {
+			// Status columns stay in the governed 7-col schema (present / not_enrolled /
+			// missing_raw_blob). Blob cells carry either FPn("...") bytes or the same
+			// status sentinel — never leave blank when status is non-present.
+			const rawFingerprintBlob =
+				fingerprintStatus === "raw_blob_present"
+					? fingerprintCell(templates, label)
+					: fingerprintStatus;
+			const rawFaceBlob =
+				faceStatus === "raw_blob_present"
+					? assertBase64(faceValue, `${label} face`)
+					: faceStatus;
+			if (
+				fingerprintStatus === "raw_blob_present" &&
+				(!templates.length || !rawFingerprintBlob.startsWith("FP"))
+			) {
 				throw new Error(`${label} fingerprint status does not agree with bytes`);
 			}
-			if ((faceStatus === "raw_blob_present") !== Boolean(rawFaceBlob)) {
+			if (faceStatus === "raw_blob_present" && !faceValue) {
 				throw new Error(`${label} face status does not agree with bytes`);
+			}
+			if (
+				fingerprintStatus !== "raw_blob_present" &&
+				rawFingerprintBlob !== fingerprintStatus
+			) {
+				throw new Error(`${label} fingerprint sentinel does not match status`);
+			}
+			if (faceStatus !== "raw_blob_present" && rawFaceBlob !== faceStatus) {
+				throw new Error(`${label} face sentinel does not match status`);
 			}
 			return {
 				vendorUserId: user.vendorUserId,
 				displayName: user.displayName || "",
 				userType: user.userType || "",
-				fingerprintStatus,
 				rawFingerprintBlob,
-				faceStatus,
 				rawFaceBlob,
 			};
 		});
@@ -123,9 +145,15 @@ const main = async () => {
 			projection: basename(csvName),
 			rows: rows.length,
 			columns: HEADERS.length,
-			fingerprintRawRows: rows.filter((row) => row.fingerprintStatus === "raw_blob_present")
-				.length,
-			faceRawRows: rows.filter((row) => row.faceStatus === "raw_blob_present").length,
+			fingerprintRawRows: rows.filter((row) =>
+				String(row.rawFingerprintBlob || "").startsWith("FP"),
+			).length,
+			faceRawRows: rows.filter(
+				(row) =>
+					row.rawFaceBlob &&
+					row.rawFaceBlob !== "not_enrolled" &&
+					row.rawFaceBlob !== "missing_raw_blob",
+			).length,
 		});
 	}
 	process.stdout.write(`${JSON.stringify({ inputDir, outputDir, headers: HEADERS, results }, null, 2)}\n`);

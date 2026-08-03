@@ -280,6 +280,46 @@ const getDeviceConfigValue = (device: Device | undefined, key: string) => {
 	return String(value);
 };
 
+/** Operator-facing endpoints: physical panel IP first; reverse-tunnel/runtime second. */
+const resolveDeviceDisplayEndpoints = (device?: Device | null) => {
+	const config = getDeviceConfigRecord(device?.config);
+	const physicalHost = String(
+		config.physicalAddress || config.physicalHost || config.deviceLanAddress || "",
+	).trim();
+	const physicalPort = Number(
+		config.physicalHttpPort || config.physicalPort || 0,
+	);
+	const runtimeHost = String(
+		config.hikvisionRuntimeAddress ||
+			config.runtimeAddress ||
+			device?.address ||
+			"",
+	).trim();
+	const runtimePort = Number(
+		config.hikvisionRuntimePort || config.runtimePort || device?.port || 0,
+	);
+	const stored = `${device?.address || "-"}:${device?.port ?? "-"}`;
+	const physical =
+		physicalHost
+			? `${physicalHost}${physicalPort ? `:${physicalPort}` : ""}`
+			: stored;
+	const viaTunnel =
+		Boolean(config.reverseTunnel) ||
+		(physicalHost &&
+			runtimeHost &&
+			physicalHost !== runtimeHost);
+	const tunnel =
+		viaTunnel && runtimeHost
+			? `${runtimeHost}${runtimePort ? `:${runtimePort}` : ""}`
+			: null;
+	return {
+		primary: physical,
+		tunnel,
+		viaTunnel: Boolean(tunnel && tunnel !== physical),
+		stored,
+	};
+};
+
 const isHikvisionDevice = (device?: Device) => {
 	const config = getDeviceConfigRecord(device?.config);
 	const vendor = String(config.vendor || config.source || device?.name || "").toLowerCase();
@@ -627,8 +667,27 @@ function DeviceConsolePage({
 					<h2 className="text-sm font-semibold text-slate-950">Connection</h2>
 				</div>
 				<div className="grid gap-3 px-4 py-4 md:grid-cols-2 xl:grid-cols-4">
-					<DeviceFact label="Address" value={device.address} mono />
-					<DeviceFact label="Port" value={device.port} />
+					{(() => {
+						const endpoints = resolveDeviceDisplayEndpoints(device);
+						return (
+							<>
+								<DeviceFact
+									label="Device IP (physical)"
+									value={endpoints.primary}
+									mono
+								/>
+								{endpoints.viaTunnel ? (
+									<DeviceFact
+										label="Via reverse tunnel"
+										value={endpoints.tunnel}
+										mono
+									/>
+								) : (
+									<DeviceFact label="Port" value={device.port} />
+								)}
+							</>
+						);
+					})()}
 					<DeviceFact label="Protocol" value={device.protocol.toUpperCase()} />
 					<DeviceFact label="Vendor" value={getDeviceConfigValue(device, "vendor")} />
 				</div>
@@ -798,10 +857,27 @@ export default function DevicesManagePage() {
 		{
 			key: "address",
 			label: "Address",
-			width: "150px",
+			width: "220px",
 			required: true,
 			priority: "high",
-			render: (value) => (value ? <AdminConfigCodeChip>{value}</AdminConfigCodeChip> : <AdminConfigMutedDash />),
+			render: (_value, device) => {
+				const endpoints = resolveDeviceDisplayEndpoints(device);
+				if (!endpoints.primary || endpoints.primary === "-:-") {
+					return <AdminConfigMutedDash />;
+				}
+				return (
+					<div className="min-w-0 space-y-0.5" data-testid="device-address-display">
+						<AdminConfigCodeChip>{endpoints.primary}</AdminConfigCodeChip>
+						{endpoints.viaTunnel && endpoints.tunnel ? (
+							<p
+								className="truncate text-[11px] text-slate-500"
+								title={`HRIS reaches panel via reverse tunnel ${endpoints.tunnel}`}>
+								via tunnel {endpoints.tunnel}
+							</p>
+						) : null}
+					</div>
+				);
+			},
 		},
 		{
 			// Synthetic key: reachability comes from GET /api/device/:id/health, not a Device column.
@@ -1467,24 +1543,40 @@ export default function DevicesManagePage() {
 								</div>
 							</div>
 						</div>
-						<div className="grid grid-cols-2 gap-4">
-							<div>
-								<p className="block text-sm font-medium text-gray-700 mb-1">
-									Address
-								</p>
-								<div className="p-3 bg-gray-50 rounded-md border font-mono">
-									{activeDevice.address}
+						{(() => {
+							const endpoints = resolveDeviceDisplayEndpoints(activeDevice);
+							return (
+								<div className="grid grid-cols-2 gap-4">
+									<div>
+										<p className="block text-sm font-medium text-gray-700 mb-1">
+											Device IP (physical)
+										</p>
+										<div className="p-3 bg-gray-50 rounded-md border font-mono text-sm">
+											{endpoints.primary}
+										</div>
+									</div>
+									<div>
+										<p className="block text-sm font-medium text-gray-700 mb-1">
+											{endpoints.viaTunnel
+												? "Via reverse tunnel (HRIS path)"
+												: "Port"}
+										</p>
+										<div className="p-3 bg-gray-50 rounded-md border font-mono text-sm">
+											{endpoints.viaTunnel
+												? endpoints.tunnel
+												: activeDevice.port}
+										</div>
+										{endpoints.viaTunnel ? (
+											<p className="mt-1 text-xs text-slate-500">
+												Stored API endpoint {endpoints.stored} is for
+												connectivity only; operators should read the physical
+												IP first.
+											</p>
+										) : null}
+									</div>
 								</div>
-							</div>
-							<div>
-								<p className="block text-sm font-medium text-gray-700 mb-1">
-									Port
-								</p>
-								<div className="p-3 bg-gray-50 rounded-md border">
-									{activeDevice.port}
-								</div>
-							</div>
-						</div>
+							);
+						})()}
 						{activeDevice.access && (
 							<div className="grid grid-cols-2 gap-4">
 								<div>

@@ -8,14 +8,12 @@ const jpegBase64 = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x01]).toString("base64"
 const fingerprintBase64 = Buffer.from("fingerprint-template").toString("base64");
 
 describe("Device-user SDK export row audit", () => {
-	it("keeps the product projection locked to seven SDK columns", () => {
+	it("keeps the product projection locked to five SDK columns (status lives in blob cells)", () => {
 		expect(DEVICE_USER_SDK_EXPORT_COLUMNS).to.deep.equal([
 			"vendorUserId",
 			"displayName",
 			"userType",
-			"fingerprintStatus",
 			"rawFingerprintBlob",
-			"faceStatus",
 			"rawFaceBlob",
 		]);
 	});

@@ -9248,15 +9248,51 @@ export const controller = (prisma: PrismaClient) => {
 			? rawCustody.fingerprint.templates
 			: [];
 		const csvColumns = user?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns || {};
+		const nestedTemplates = Array.isArray(csvColumns?.fingerprintRawTemplates)
+			? csvColumns.fingerprintRawTemplates
+			: Array.isArray(user?.fingerprintRawTemplates)
+				? user.fingerprintRawTemplates
+				: [];
 		return getRawFingerprintTemplatesFromValue({
 			templates: [
 				...directTemplates,
+				...nestedTemplates,
 				...parseRawFingerprintTemplatesFromCell(user?.rawFingerprintBlob),
 				...parseRawFingerprintTemplatesFromCell(user?.fingerprintRawTemplateBlob),
 				...parseRawFingerprintTemplatesFromCell(csvColumns?.rawFingerprintBlob),
 				...parseRawFingerprintTemplatesFromCell(csvColumns?.fingerprintRawTemplateBlob),
 			],
 		});
+	};
+
+	/** Resolve face blob from custody OR portable CSV/JSON fields (FE CSV import path). */
+	const normalizeRawPackageFaceBlob = (user: any): any | null => {
+		const rawCustody = user?.rawBiometricCustody || {};
+		const fromCustody = getRawFaceFromValue(rawCustody?.face?.blob);
+		if (fromCustody) return fromCustody;
+		const csvColumns = user?.rawPayload?._hrisDeviceMetadata?.biometricCsvColumns || {};
+		const candidates = [
+			user?.faceRawTemplateBlob,
+			user?.rawFaceBlob,
+			csvColumns?.faceRawTemplateBlob,
+			csvColumns?.rawFaceBlob,
+		];
+		for (const candidate of candidates) {
+			const raw = String(candidate || "").trim();
+			if (!raw || isRawBiometricStatusValue(raw)) continue;
+			const face = getRawFaceFromValue({ base64: raw, contentType: "image/jpeg" });
+			if (face) return face;
+		}
+		return null;
+	};
+
+	const userHasPortableRawPackageBlobs = (user: any): boolean =>
+		normalizeRawPackageFingerprintTemplates(user).length > 0 ||
+		Boolean(normalizeRawPackageFaceBlob(user));
+
+	const isPortableCsvImportSourceId = (sourceDeviceId: unknown) => {
+		const id = String(sourceDeviceId || "").trim().toLowerCase();
+		return !id || id === "csv-import" || id.startsWith("csv") || id.includes("import");
 	};
 
 	const getRawFaceFromValue = (value: any) => {
@@ -10750,12 +10786,24 @@ export const controller = (prisma: PrismaClient) => {
 						fingerprint: false,
 						face: false,
 					},
-					transferMode:
-						user.sourceDeviceId && user.sourceDeviceId !== targetDevice.id
-							? "sdkPeerCopy"
-							: payload?.rawBiometricPackage?.present || user?.rawBiometricCustody
-								? "rawPackage"
-								: "metadataOnly",
+					// Portable CSV/package rows must not be forced into sdkPeerCopy just because
+					// sourceDeviceId is a synthetic "csv-import" id (≠ target). Prefer rawPackage
+					// whenever evidenced blobs are present on the row or package.
+					transferMode: (() => {
+						const hasRawBlobs =
+							userHasPortableRawPackageBlobs(user) ||
+							Boolean(payload?.rawBiometricPackage?.present);
+						if (hasRawBlobs) return "rawPackage";
+						const sourceId = String(user.sourceDeviceId || "").trim();
+						if (
+							sourceId &&
+							sourceId !== targetDevice.id &&
+							!isPortableCsvImportSourceId(sourceId)
+						) {
+							return "sdkPeerCopy";
+						}
+						return "metadataOnly";
+					})(),
 				};
 			});
 			const unsupportedCredentialTypes = Array.from(
@@ -10780,13 +10828,14 @@ export const controller = (prisma: PrismaClient) => {
 				);
 				return;
 			}
+			// Count portable blobs from custody OR CSV/FE flat fields (rawFingerprintBlob / FPn cells).
 			const rawFingerprintBlobCount = importedUsers.reduce(
 				(sum: number, user: any) =>
-					sum + Number(user?.rawBiometricCustody?.fingerprint?.templates?.length || 0),
+					sum + Number(normalizeRawPackageFingerprintTemplates(user).length || 0),
 				0,
 			);
-			const rawFaceBlobCount = importedUsers.filter(
-				(user: any) => user?.rawBiometricCustody?.face?.blob,
+			const rawFaceBlobCount = importedUsers.filter((user: any) =>
+				Boolean(normalizeRawPackageFaceBlob(user)),
 			).length;
 			const conflictPlanRows = planRows.filter(
 				(row: any) => row.action === "review_conflict",
@@ -11124,9 +11173,8 @@ export const controller = (prisma: PrismaClient) => {
 					}
 				}
 			} else if (biometricTransferMode === "rawPackage") {
-				const rawCustody = row.rawUser?.rawBiometricCustody || {};
 				const fingerprints = normalizeRawPackageFingerprintTemplates(row.rawUser);
-				const face = rawCustody?.face?.blob || null;
+				const face = normalizeRawPackageFaceBlob(row.rawUser);
 				if (!fingerprints.length && !face) {
 					results.push(
 						buildDeviceUserImportResultRow(row, {

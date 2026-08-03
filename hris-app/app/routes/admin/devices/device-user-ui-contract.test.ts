@@ -490,7 +490,7 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("rawBiometricPackage");
 		expect(enroll).toContain("Biometric custody package");
 		expect(enroll).toMatch(
-			/const DEVICE_USER_SDK_CSV_COLUMNS = \[\s*"vendorUserId",\s*"displayName",\s*"userType",\s*"fingerprintStatus",\s*"rawFingerprintBlob",\s*"faceStatus",\s*"rawFaceBlob",?\s*\] as const;/,
+			/const DEVICE_USER_SDK_CSV_COLUMNS = \[\s*"vendorUserId",\s*"displayName",\s*"userType",\s*"rawFingerprintBlob",\s*"rawFaceBlob",?\s*\] as const;/,
 		);
 		expect(enroll).toContain(
 			"const getDeviceUserCsvHeaders = () => [...DEVICE_USER_SDK_CSV_COLUMNS];",
@@ -517,10 +517,13 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("biometricCsvColumns");
 		expect(enroll).toContain("raw_evidenced_blobs_allowed_for_admin_device_user_sync_package");
 		expect(enroll).toContain("Missing cells must stay explicit");
-		expect(enroll).toContain("The SDK export has exactly seven user columns");
-		expect(enroll).toContain("Package JSON is authoritative for restore");
+		expect(enroll).toContain("The SDK export has exactly five user columns");
+		expect(enroll).toContain("Package data (rawPackage)");
 		expect(enroll).toContain("Preview import");
-		expect(enroll).toContain("Import CSV file");
+		expect(enroll).toContain("Drag & drop CSV here");
+		expect(enroll).toContain("device-user-import-dropzone");
+		expect(enroll).toContain("onDrop");
+		expect(enroll).toContain("dataTransfer");
 		expect(enroll).toContain("Package JSON");
 		expect(enroll).toContain("CSV template");
 		expect(enroll).toContain("buildDeviceUserImportPayloadFromCsv");
@@ -528,6 +531,17 @@ describe("admin device user and log sync UI contract", () => {
 		expect(enroll).toContain("Transfer mode");
 		expect(enroll).toContain("Reachable source copy");
 		expect(enroll).toContain("Package data");
+		// CSV blob packages (FP1( / long base64 face) default UI transfer mode to rawPackage.
+		expect(enroll).toContain("Package data (rawPackage)");
+		expect(enroll).toContain("looksLikeCsvRawBiometricPackageText");
+		expect(enroll).toContain("inferDeviceUserImportBiometricTransferMode");
+		expect(enroll).toContain("/FP\\d+\\s*\\(/i");
+		expect(enroll).toContain("CSV blob packages (FP1( / long base64) default to package data write path");
+		expect(enroll).toContain("packageHasRawBlobs");
+		expect(enroll).toContain('? "rawPackage"');
+		expect(enroll).toContain("payload?.rawBiometricPackage?.present");
+		expect(deviceHooks).toContain("usePreviewDeviceUserImport");
+		expect(deviceHooks).toContain("useExecuteDeviceUserImport");
 		expect(enroll).not.toContain("Encrypted bundle passphrase");
 		expect(enroll).toContain("Type IMPORT DEVICE USERS");
 		expect(enroll).toContain("Run execute as background job");

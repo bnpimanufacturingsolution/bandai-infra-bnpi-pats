@@ -4,25 +4,25 @@
 done
 
 ## Summary
-Synced SummaryCard minimal white bg (keep themed borders) from standalone hris-app into bandai-infra/hris-app.
+Sync Center Device Users import: default `biometricTransferMode` to `rawPackage` when a loaded CSV contains FP1( fingerprint cells or long base64-looking face/fp blobs. Labels show "Package data (rawPackage)". React Query preview/execute mutations unchanged.
 
 ## Category
 ui-ux
 
 ## Packages
 - bandai-infra/hris-app
-- Dual-app: **HR/emp-only (no counterpart)**
-- Source: standalone `hris-app` (already applied)
+- Dual-app: **HR/emp-only (no counterpart)** — Sync Center device import is admin-only
 
 ## Changes
-- `app/components/atoms/SummaryCard.tsx` — default colorVariants bg → white; borders unchanged
-- `app/components/atoms/SummaryCard.test.tsx` — assert white bg + themed border
+- `app/routes/admin/devices/enroll.tsx` — `looksLikeCsvRawBiometricPackageText` + `inferDeviceUserImportBiometricTransferMode`; set mode on CSV file load and after preview when package has raw blobs; option/plan labels "Package data (rawPackage)"
+- `app/routes/admin/devices/device-user-ui-contract.test.ts` — contract expectations for rawPackage default path and hooks
+- `app/lib/hooks/useDevices.ts` — no code change (usePreviewDeviceUserImport / useExecuteDeviceUserImport already present; covered by contract test)
 
 ## Truth delta
-NO — presentation only
+YES (CONFIRMED) — Device-user CSV import with raw biometric cells defaults the UI transfer mode to `rawPackage` (package data write path) instead of `sdkPeerCopy`.
 
 ## Drift
-NONE
+NONE (docs updated via this task note; no broader project-truth rewrite required for admin-only default)
 
 ## Verification
-- `npx vitest run app/components/atoms/SummaryCard.test.tsx` (from bandai-infra/hris-app)
+- `npx vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` (from bandai-infra/hris-app) — pass
