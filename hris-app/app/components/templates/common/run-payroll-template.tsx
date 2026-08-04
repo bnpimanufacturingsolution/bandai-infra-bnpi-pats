@@ -38,6 +38,7 @@ import {
 	payrollPeriodsQueryKeys,
 	usePayrollCycleConfig,
 } from "~/lib/hooks/usePayrollPeriods";
+import type { PayrollOtReadinessPerson } from "~/services/payroll-periods.service";
 import {
 	Accordion,
 	AccordionContent,
@@ -53,6 +54,7 @@ import {
 } from "~/lib/hooks/useEmployeePayroll";
 import { useBenefitTypes } from "~/lib/hooks/useBenefitTypes";
 import { useEmployees } from "~/lib/hooks/useEmployees";
+import { useTimesheet } from "~/lib/hooks/useTimesheets";
 import { formatDate, formatDateForInput } from "~/lib/utils/text-utils";
 import type { EmployeeBenefit } from "~/services/employee-benefit.service";
 import type {
@@ -60,6 +62,9 @@ import type {
 	TimesheetPayrollPreviewEmployee,
 	TimesheetPayrollSourceDetail,
 } from "~/services/payroll-periods.service";
+import type { Timesheet } from "~/services/timesheet.service";
+import { resolveBenefitDisplay } from "~/lib/utils/bnpi-comcode-catalog";
+import { TimesheetViewModal } from "~/components/organisms/TimesheetViewModal";
 import { SpecialPayrollModal } from "~/components/organisms/special-payroll-modal";
 import {
 	specialPayrollService,
@@ -174,6 +179,9 @@ export function RunPayrollTemplate() {
 	const [selectedPreviewEmployee, setSelectedPreviewEmployee] =
 		useState<PreviewPayrollRow | null>(null);
 	const [expandedAdjustmentId, setExpandedAdjustmentId] = useState<string | null>(null);
+	/** Open real TimesheetViewModal for OT person (DB fetch via useTimesheet — not precomputed list). */
+	const [selectedOtPerson, setSelectedOtPerson] =
+		useState<PayrollOtReadinessPerson | null>(null);
 	const [specialPayrollOpen, setSpecialPayrollOpen] = useState(false);
 	const [specialPayrollRuns, setSpecialPayrollRuns] = useState<SpecialPayrollRun[]>([]);
 	const [specialPayrollHistoryLoading, setSpecialPayrollHistoryLoading] = useState(false);
@@ -516,6 +524,107 @@ export function RunPayrollTemplate() {
 		{ page: 1, limit: 20, onlyWithOt: true },
 		Boolean(payrollPeriodId),
 	);
+	// Real TimesheetViewModal (same atoms as HR timesheets). Filter breakdown to OT days only.
+	const selectedOtTimesheetId = selectedOtPerson?.timesheetId || "";
+	const isOtTimesheetModalOpen = Boolean(selectedOtTimesheetId);
+	const {
+		data: otTimesheetFromDb,
+		isLoading: otTimesheetLoading,
+		isFetching: otTimesheetFetching,
+		error: otTimesheetError,
+	} = useTimesheet(selectedOtTimesheetId, {
+		enabled: isOtTimesheetModalOpen,
+		staleTime: 0,
+		refetchOnMount: "always",
+	});
+	/**
+	 * OT-focused modal: show days with line OT that is report-backed when possible.
+	 * Do NOT treat top-level metadata.source=BNPI_DM4_DEMO as kill-switch when
+	 * bandaiPayrollSourceRepair exists (repair overwrites OT from rptOvertimeDetails).
+	 */
+	const otOnlyTimesheet = useMemo((): Timesheet | null => {
+		if (!otTimesheetFromDb) return null;
+		const breakdown = Array.isArray(otTimesheetFromDb.breakdown)
+			? otTimesheetFromDb.breakdown
+			: Array.isArray((otTimesheetFromDb as any).timesheetlines)
+				? (otTimesheetFromDb as any).timesheetlines
+				: [];
+		const parseOtMinutes = (value: unknown) => {
+			const raw = String(value || "").trim();
+			if (!raw || raw === "0" || raw === "0:00" || raw === "00:00") return 0;
+			if (raw.includes(":")) {
+				const [h, m] = raw.split(":").map(Number);
+				return (h || 0) * 60 + (m || 0);
+			}
+			const n = Number(raw);
+			return Number.isFinite(n) && n > 0 ? Math.round(n * 60) : 0;
+		};
+		const isDemoOnly = (day: any) => {
+			const meta = day?.metadata || {};
+			const repair = meta?.bandaiPayrollSourceRepair;
+			// Report apply wins: keep day if repair buckets/source exist.
+			if (repair && typeof repair === "object") {
+				const repairSrc = String(repair.source || "");
+				if (/demo/i.test(repairSrc)) return true;
+				return false;
+			}
+			// No repair: drop pure demo seed days so we never show fake 16h OT.
+			const topSrc =
+				typeof meta.source === "string"
+					? meta.source
+					: typeof meta.source === "object" && meta.source
+						? String((meta.source as any).type || (meta.source as any).id || "")
+						: "";
+			return /demo/i.test(topSrc) || /BNPI_DM4_DEMO/i.test(topSrc);
+		};
+		const otDays = breakdown.filter((day: any) => {
+			const otMin = parseOtMinutes(
+				day?.overtimeHours ?? day?.overtime ?? day?.totalOvertimeHours,
+			);
+			if (otMin <= 0) return false;
+			if (isDemoOnly(day)) return false;
+			return true;
+		});
+		const otMinutes = otDays.reduce(
+			(sum: number, day: any) =>
+				sum +
+				parseOtMinutes(day?.overtimeHours ?? day?.overtime ?? day?.totalOvertimeHours),
+			0,
+		);
+		const otHhMm = `${Math.floor(otMinutes / 60)}:${String(otMinutes % 60).padStart(2, "0")}`;
+		// Prefer list chip hours when filter unexpectedly empty but readiness said OT exists.
+		const fallbackOt =
+			selectedOtPerson?.lineOtHours &&
+			parseOtMinutes(selectedOtPerson.lineOtHours) > 0 &&
+			otDays.length === 0
+				? String(selectedOtPerson.lineOtHours)
+				: otHhMm;
+		// If we still have zero days but list claims OT, show full breakdown (not empty calendar).
+		const safeBreakdown =
+			otDays.length > 0
+				? otDays
+				: parseOtMinutes(selectedOtPerson?.lineOtHours) > 0
+					? breakdown.filter(
+							(day: any) =>
+								parseOtMinutes(day?.overtimeHours ?? day?.overtime) > 0,
+						)
+					: otDays;
+		const finalOtMinutes =
+			safeBreakdown.length > 0
+				? safeBreakdown.reduce(
+						(sum: number, day: any) =>
+							sum + parseOtMinutes(day?.overtimeHours ?? day?.overtime),
+						0,
+					)
+				: parseOtMinutes(fallbackOt);
+		const finalOtHhMm = `${Math.floor(finalOtMinutes / 60)}:${String(finalOtMinutes % 60).padStart(2, "0")}`;
+		return {
+			...otTimesheetFromDb,
+			breakdown: safeBreakdown,
+			// Header OVERTIME must match list chip / line OT (not misleading 0h).
+			totalOvertimeHours: finalOtHhMm,
+		} as Timesheet;
+	}, [otTimesheetFromDb, selectedOtPerson?.lineOtHours]);
 	const { data: generatedPayrollRowsData, isLoading: generatedPayrollRowsLoading } =
 		useEmployeePayrolls({
 			filter: payrollPeriodId ? `payrollPeriodId:${payrollPeriodId}` : undefined,
@@ -1017,72 +1126,49 @@ export function RunPayrollTemplate() {
 	}, [generatedPayrollRows]);
 	const getAdjustmentDirection = (benefit: EmployeeBenefit) =>
 		benefit.benefitType?.payrollDirection === "DEDUCTION" ? "DEDUCTION" : "COMPENSATION";
+	/** CODE · description from DB name / BNPI ComCode catalog (never "MTX · MTX"). */
+	const getAdjustmentDisplay = (benefit: EmployeeBenefit) =>
+		resolveBenefitDisplay({
+			code: benefit.benefitType?.code,
+			typeName: benefit.benefitType?.name,
+			typeDescription: (benefit.benefitType as any)?.description,
+			enrollmentName: benefit.name,
+		});
 	const getAdjustmentSource = (benefit: EmployeeBenefit) => {
-		const code = String(benefit.benefitType?.code || "").toUpperCase();
+		const display = getAdjustmentDisplay(benefit);
+		const code = display.code;
 		const text = [
 			benefit.benefitType?.name,
 			benefit.name,
 			benefit.notes,
 			benefit.description,
+			display.description,
 		]
 			.filter(Boolean)
 			.join(" ")
 			.toLowerCase();
+		// Prefer catalog filter; refine loans / direction fallbacks.
+		if (display.fromCatalog && display.filter !== "other") {
+			return { label: display.sourceLabel, filter: display.filter, display };
+		}
 		if (code === "PFA" || text.includes("perfect attendance")) {
-			return { label: "Perfect Attendance", filter: "attendance" as const };
+			return { label: "Perfect Attendance", filter: "attendance" as const, display };
 		}
-		if (code === "LLA" || text.includes("line leader")) {
-			return { label: "Line Leader Allowance", filter: "allowance" as const };
-		}
-		if (code === "TSA" || text.includes("technical skills")) {
-			return { label: "Technical Skills Allowance", filter: "allowance" as const };
-		}
-		if (code === "HYS" || text.includes("hys")) {
-			return { label: "HYS Allowance", filter: "allowance" as const };
-		}
-		if (code === "OBA" || text.includes("ob allowance")) {
-			return { label: "OB Allowance", filter: "allowance" as const };
-		}
-		if (code === "OTM" || text.includes("ot meal") || text.includes("overtime meal")) {
-			return { label: "OT Meal Allowance", filter: "allowance" as const };
-		}
-		if (code === "MLA" || text.includes("meal allowance")) {
-			return { label: "Meal Allowance", filter: "allowance" as const };
-		}
-		if (code === "DMA" || text.includes("de minimis")) {
-			return { label: "De Minimis", filter: "allowance" as const };
-		}
-		if (code === "AON" || text.includes("adjustment ot")) {
-			return { label: "Adjustment OT", filter: "overtime" as const };
-		}
-		if (code === "INC" || text.includes("incentive")) {
-			return { label: "Incentive", filter: "other" as const };
-		}
-		if (code === "ARP" || text.includes("attendance recognition")) {
-			return { label: "Attendance Recognition", filter: "attendance" as const };
-		}
-		if (code === "OAD" || text.includes("other adjustment")) {
-			return { label: "Other Adjustment", filter: "other" as const };
-		}
-		if (code === "ABS" || text.includes("absent")) {
-			return { label: "Absence Adjustment", filter: "other" as const };
-		}
-		if (code === "MTX") {
-			return { label: "Matrix / Other Comp", filter: "other" as const };
-		}
-		if (code === "LVP" || text.includes("acl") || text.includes("vl conversion")) {
-			return { label: "ACL VL Conversion", filter: "allowance" as const };
-		}
-		if (code === "UFD" || text.includes("uniform")) {
-			return { label: "Uniform Deduction", filter: "deduction" as const };
-		}
-		if (code === "MHDMF2" || text.includes("modified hdmf")) {
-			return { label: "Statutory Deduction", filter: "deduction" as const };
+		if (text.includes("loan")) {
+			return { label: display.sourceLabel || "Loan", filter: "loan" as const, display };
 		}
 		if (getAdjustmentDirection(benefit) === "DEDUCTION") {
-			return { label: "Deduction Adjustment", filter: "deduction" as const };
+			return {
+				label: display.sourceLabel || "Deduction",
+				filter: "deduction" as const,
+				display,
+			};
 		}
-		return { label: "Other Adjustment", filter: "other" as const };
+		return {
+			label: display.sourceLabel || "Other Adjustment",
+			filter: display.filter || ("other" as const),
+			display,
+		};
 	};
 	const payrollAdjustmentSummary = useMemo(
 		() =>
@@ -1131,11 +1217,17 @@ export function RunPayrollTemplate() {
 				const employeeRecordId = String(employee?.id || benefit.employeeId || "");
 				const employeeCode = String(employee?.employeeId || "");
 				const source = getAdjustmentSource(benefit);
+				const display = source.display || getAdjustmentDisplay(benefit);
 				const generatedPayroll = generatedPayrollByEmployeeId.get(employeeRecordId);
 				return {
 					benefit,
 					direction: getAdjustmentDirection(benefit),
 					source,
+					display,
+					/** Primary title: CODE · human description */
+					displayTitle: display.title,
+					displayDescription: display.description,
+					displayCode: display.code,
 					employeeName: getAdjustmentEmployeeName(benefit),
 					employeeId: employeeRecordId,
 					employeeCode,
@@ -1169,6 +1261,9 @@ export function RunPayrollTemplate() {
 					row.employeeCode,
 					row.employeeId,
 					row.source.label,
+					row.displayTitle,
+					row.displayDescription,
+					row.displayCode,
 					row.benefit.benefitType?.name,
 					row.benefit.benefitType?.code,
 					row.benefit.benefitType?.category,
@@ -1398,7 +1493,16 @@ export function RunPayrollTemplate() {
 	};
 	const buildEmployeeAdjustmentUrl = (row: (typeof payrollAdjustmentRows)[number]) => {
 		const params = buildPayrollAdjustmentParams();
-		// Deep-link into benefits list with employee + code filters (edit modal when id supported).
+		// Payroll adjustments = employee benefits enrollments (Benefits Management).
+		// Open type drawer + edit enrollment modal for this benefit row.
+		const typeId =
+			row.benefit.benefitTypeId ||
+			row.benefit.benefitType?.id ||
+			"";
+		if (typeId) {
+			params.set("typeId", typeId);
+			params.set("benefitTypeId", typeId);
+		}
 		params.set("action", "edit");
 		params.set("id", row.benefit.id);
 		params.set("employeeId", row.employeeId || "");
@@ -1409,7 +1513,12 @@ export function RunPayrollTemplate() {
 			params.set("code", row.benefit.benefitType.code);
 		}
 		params.set("direction", row.direction);
-		params.set("query", row.employeeCode || row.employeeName || "");
+		// Seeds enrollment search in the benefits drawer.
+		params.set(
+			"employeeSearch",
+			row.employeeCode || row.employeeName || "",
+		);
+		params.set("search", row.benefit.benefitType?.name || row.benefit.benefitType?.code || "");
 		return `/hr/benefits-management?${params.toString()}`;
 	};
 	const openAdjustmentEmployeeProfile = (employeeId?: string | null) => {
@@ -3066,10 +3175,20 @@ export function RunPayrollTemplate() {
 							{/* Dense single-line rows; page size keeps panel short */}
 							<div className="mt-1.5 max-h-[min(220px,32vh)] overflow-y-auto overscroll-contain rounded border border-gray-200 divide-y divide-gray-100 modern-scroll">
 								{payrollAdjustmentsLoading || generatedPayrollRowsLoading ? (
-									<div className="space-y-1.5 p-2">
-										<Skeleton className="h-7 w-full" />
-										<Skeleton className="h-7 w-5/6" />
-									</div>
+									<>
+										{Array.from({ length: 6 }).map((_, i) => (
+											<div
+												key={`adj-skel-${i}`}
+												className="flex h-9 items-center gap-1.5 px-2">
+												<Skeleton className="h-6 w-6 shrink-0 rounded-full" />
+												<div className="min-w-0 flex-1 space-y-1">
+													<Skeleton className="h-3 w-2/3" />
+													<Skeleton className="h-2.5 w-1/2" />
+												</div>
+												<Skeleton className="h-3 w-12 shrink-0" />
+											</div>
+										))}
+									</>
 								) : visiblePayrollAdjustments.length > 0 ? (
 									visiblePayrollAdjustments.map((row) => {
 										const {
@@ -3081,14 +3200,12 @@ export function RunPayrollTemplate() {
 											generatedPayroll,
 											hasGeneratedPayrollRow,
 											source,
+											displayTitle,
+											displayDescription,
+											displayCode,
 										} = row;
 										const isExpanded = expandedAdjustmentId === benefit.id;
-										const adjustmentDisplayName =
-											String(benefit.name || "").trim() ||
-											String(benefit.benefitType?.name || "").trim() ||
-											source.label ||
-											"Payroll adjustment";
-										const code = benefit.benefitType?.code || "";
+										const code = displayCode || benefit.benefitType?.code || "";
 										return (
 											<div key={benefit.id} className="bg-white">
 												<div className="flex h-9 items-center gap-1.5 px-2 hover:bg-orange-50/40">
@@ -3123,13 +3240,19 @@ export function RunPayrollTemplate() {
 														</span>
 														<span className="min-w-0 flex-1">
 															<span className="block truncate text-xs font-medium leading-tight text-gray-900">
-																{adjustmentDisplayName}
 																{code ? (
-																	<span className="font-normal text-gray-400">
-																		{" "}
-																		· {code}
-																	</span>
-																) : null}
+																	<>
+																		<span className="font-semibold text-gray-800">
+																			{code}
+																		</span>
+																		<span className="font-normal text-gray-500">
+																			{" "}
+																			· {displayDescription}
+																		</span>
+																	</>
+																) : (
+																	displayTitle
+																)}
 															</span>
 															<span className="block truncate text-[10px] leading-tight text-gray-500">
 																{employeeName}
@@ -3159,11 +3282,13 @@ export function RunPayrollTemplate() {
 												{isExpanded && (
 													<div className="border-t border-gray-100 bg-gray-50/70 px-2 py-1.5 text-[10px] text-gray-600">
 														<span className="font-medium text-gray-800">
-															{employeeName}
-															{employeeCode ? ` / ${employeeCode}` : ""}
+															{code || "—"} · {displayDescription}
 														</span>
 														{" · "}
-														{code || "no code"} · {direction}
+														{employeeName}
+														{employeeCode ? ` / ${employeeCode}` : ""}
+														{" · "}
+														{direction}
 														{" · "}
 														{benefit.payrollPeriod?.code ||
 															selectedPeriodCard?.code ||
@@ -3172,11 +3297,15 @@ export function RunPayrollTemplate() {
 														{hasGeneratedPayrollRow
 															? `${generatedPayroll?.isPaid ? "Paid" : "Generated"} net ${formatCurrency(generatedPayroll?.netPay || 0)}`
 															: "No payroll row yet"}
+														{" · "}
+														<span className="text-gray-500">
+															Benefits management enrollment
+														</span>
 														<button
 															type="button"
 															onClick={() => navigate(buildEmployeeAdjustmentUrl(row))}
 															className="ml-2 font-medium text-orange-700 underline-offset-2 hover:underline">
-															Open source
+															Open in benefits
 														</button>
 													</div>
 												)}
@@ -3192,31 +3321,38 @@ export function RunPayrollTemplate() {
 
 							<div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5">
 								<p className="text-[10px] text-gray-500">
-									p.{formatCount(safeAdjustmentPage)}/{formatCount(adjustmentTotalPages)} ·{" "}
-									{formatCount(visiblePayrollAdjustments.length)} shown ·{" "}
-									{formatCount(filteredPayrollAdjustmentRows.length)} filtered ·{" "}
-									{formatCount(payrollAdjustmentsTotal)} scoped
+									{formatCount(visiblePayrollAdjustments.length)} of{" "}
+									{formatCount(filteredPayrollAdjustmentRows.length)} · employee
+									benefits for this period
 								</p>
 								<div className="flex items-center gap-1">
-									<button
-										type="button"
-										disabled={safeAdjustmentPage <= 1}
-										onClick={() => setAdjustmentPage(safeAdjustmentPage - 1)}
-										className="h-6 rounded border border-gray-200 bg-white px-1.5 text-[10px] font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50">
-										Prev
-									</button>
-									<button
-										type="button"
-										disabled={safeAdjustmentPage >= adjustmentTotalPages}
-										onClick={() => setAdjustmentPage(safeAdjustmentPage + 1)}
-										className="h-6 rounded border border-gray-200 bg-white px-1.5 text-[10px] font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50">
-										Next
-									</button>
+									{adjustmentTotalPages > 1 ? (
+										<>
+											<button
+												type="button"
+												disabled={safeAdjustmentPage <= 1}
+												onClick={() => setAdjustmentPage(safeAdjustmentPage - 1)}
+												className="h-6 rounded border border-gray-200 bg-white px-1.5 text-[10px] font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50">
+												Prev
+											</button>
+											<span className="px-0.5 text-[10px] tabular-nums text-gray-400">
+												{safeAdjustmentPage}/{adjustmentTotalPages}
+											</span>
+											<button
+												type="button"
+												disabled={safeAdjustmentPage >= adjustmentTotalPages}
+												onClick={() => setAdjustmentPage(safeAdjustmentPage + 1)}
+												className="h-6 rounded border border-gray-200 bg-white px-1.5 text-[10px] font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50">
+												Next
+											</button>
+										</>
+									) : null}
 									<button
 										type="button"
 										onClick={() => navigate(buildAdjustmentCategoryUrl())}
-										className="inline-flex h-6 items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 text-[10px] font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-700">
-										View all
+										className="inline-flex h-6 items-center gap-0.5 rounded border border-orange-200 bg-orange-50 px-1.5 text-[10px] font-medium text-orange-800 hover:bg-orange-100"
+										title="Open Benefits Management (source of payroll adjustments)">
+										Benefits management
 										<ExternalLink className="h-3 w-3" />
 									</button>
 								</div>
@@ -3233,7 +3369,7 @@ export function RunPayrollTemplate() {
 												Approved OT
 											</span>
 											<span className="hidden truncate text-[11px] text-gray-400 sm:inline">
-												timesheet lines → payroll Reg OT
+												payable line OT · click row for days
 											</span>
 										</div>
 										<div className="flex shrink-0 items-center gap-1.5">
@@ -3241,15 +3377,19 @@ export function RunPayrollTemplate() {
 												<Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
 											) : (
 												<>
-													<span className="text-[11px] tabular-nums text-gray-600">
+													<span className="text-[11px] tabular-nums text-emerald-700">
 														{formatCount(
-															payrollOtReadiness?.summary.peopleWithLineOt || 0,
+															payrollOtReadiness?.summary.peopleWithApprovedOt ??
+																payrollOtReadiness?.summary.timesheetsApproved ??
+																0,
 														)}{" "}
-														people
+														approved
 													</span>
 													<Badge className="rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-800">
 														{Number(
-															payrollOtReadiness?.summary.totalLineOtHours || 0,
+															payrollOtReadiness?.summary.totalApprovedLineOtHours ??
+																payrollOtReadiness?.summary.totalLineOtHours ??
+																0,
 														).toLocaleString(undefined, {
 															maximumFractionDigits: 1,
 														})}{" "}
@@ -3262,54 +3402,65 @@ export function RunPayrollTemplate() {
 								</AccordionTrigger>
 								<AccordionContent className="px-1 pb-2 pt-0">
 									<p className="mb-2 text-[11px] leading-relaxed text-gray-500">
-										Payable OT is on effective timesheet lines (from approved OT
-										workbook), not raw biometric punches. Attendance OT fields are
-										shown only for comparison.
+										<strong className="font-medium text-gray-700">Approved OT</strong> =
+										hours from the{" "}
+										<strong className="font-medium text-gray-700">rptOvertimeDetails</strong>{" "}
+										workbook applied to timesheet lines (not demo/biometric alone). Click a
+										person to open the timesheet calendar (OT days only).
 									</p>
 									<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-4">
 										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
-											<p className="truncate text-[11px] text-gray-500">Timesheets</p>
-											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
+											<p className="truncate text-[11px] text-gray-500">Approved people</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-emerald-800">
 												{formatCount(
-													payrollOtReadiness?.summary.timesheetsTotal || 0,
+													payrollOtReadiness?.summary.peopleWithApprovedOt ?? 0,
 												)}
 											</p>
 										</div>
 										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
-											<p className="truncate text-[11px] text-gray-500">With line OT</p>
-											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
-												{formatCount(
-													payrollOtReadiness?.summary.peopleWithLineOt || 0,
-												)}
-											</p>
-										</div>
-										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
-											<p className="truncate text-[11px] text-gray-500">Line OT hrs</p>
+											<p className="truncate text-[11px] text-gray-500">Approved OT hrs</p>
 											<p className="mt-0.5 text-xs font-semibold tabular-nums text-orange-800">
+												{Number(
+													payrollOtReadiness?.summary.totalApprovedLineOtHours ?? 0,
+												).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+											</p>
+										</div>
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">Total OT hrs</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
 												{Number(
 													payrollOtReadiness?.summary.totalLineOtHours || 0,
 												).toLocaleString(undefined, { maximumFractionDigits: 1 })}
 											</p>
 										</div>
 										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
-											<p className="truncate text-[11px] text-gray-500">No line OT</p>
-											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
+											<p className="truncate text-[11px] text-gray-500">Pending approval</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-amber-800">
 												{formatCount(
-													payrollOtReadiness?.summary.peopleWithoutOt || 0,
+													payrollOtReadiness?.summary.peopleWithPendingOtApproval ?? 0,
 												)}
 											</p>
 										</div>
 									</div>
 
+									{payrollOtReadinessLoading && !payrollOtReadiness ? (
+										<p className="mt-1.5 text-[11px] text-gray-400">Loading…</p>
+									) : null}
 									<div className="mt-2 max-h-[min(180px,28vh)] overflow-y-auto overscroll-contain divide-y divide-gray-100 rounded-lg border border-gray-200 modern-scroll">
 										{payrollOtReadinessLoading && !payrollOtReadiness ? (
-											<div className="space-y-2 p-3">
-												<Skeleton className="h-4 w-2/3" />
-												<Skeleton className="h-4 w-1/2" />
-												<p className="text-[11px] text-gray-400">
-													Loading OT summary (headers only — should be under a few seconds)…
-												</p>
-											</div>
+											<>
+												{Array.from({ length: 6 }).map((_, i) => (
+													<div
+														key={`ot-skel-${i}`}
+														className="flex h-9 items-center gap-2 px-2">
+														<div className="min-w-0 flex-1 space-y-1">
+															<Skeleton className="h-3 w-2/3" />
+															<Skeleton className="h-2.5 w-1/3" />
+														</div>
+														<Skeleton className="h-3 w-8 shrink-0" />
+													</div>
+												))}
+											</>
 										) : payrollOtReadinessError ? (
 											<div className="px-3 py-3 text-xs text-amber-800">
 												Could not load OT readiness
@@ -3319,54 +3470,109 @@ export function RunPayrollTemplate() {
 												repair-bandai-payroll-source-timesheet-lines.
 											</div>
 										) : (payrollOtReadiness?.people || []).length > 0 ? (
-											(payrollOtReadiness?.people || []).map((person) => (
-												<div
-													key={person.timesheetId}
-													className="flex h-9 items-center gap-2 px-2 hover:bg-orange-50/30">
-													<div className="min-w-0 flex-1">
-														<p className="truncate text-xs font-medium text-gray-900">
-															{person.name}
-															{person.employeeCode ? (
-																<span className="font-normal text-gray-500">
-																	{" "}
-																	· {person.employeeCode}
+											(payrollOtReadiness?.people || []).map((person) => {
+												const label =
+													person.approvalLabel ||
+													(person.timesheetStatus === "APPROVED"
+														? "Approved"
+														: "Needs timesheet approval");
+												const isPayable =
+													person.isPayableApproved ??
+													(person.timesheetStatus === "APPROVED" &&
+														person.lineOtMinutes > 0);
+												return (
+													<button
+														key={person.timesheetId}
+														type="button"
+														onClick={() => setSelectedOtPerson(person)}
+														className="flex h-9 w-full items-center gap-2 px-2 text-left hover:bg-orange-50/50 focus:outline-none focus-visible:bg-orange-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300">
+														<div className="min-w-0 flex-1">
+															<p className="truncate text-xs font-medium text-gray-900">
+																{person.name}
+																{person.employeeCode ? (
+																	<span className="font-normal text-gray-500">
+																		{" "}
+																		· {person.employeeCode}
+																	</span>
+																) : null}
+															</p>
+															<p className="truncate text-[10px] text-gray-500">
+																<span
+																	className={
+																		isPayable
+																			? "text-emerald-700"
+																			: "text-amber-700"
+																	}>
+																	{label}
 																</span>
-															) : null}
-														</p>
-														<p className="truncate text-[10px] text-gray-500">
-															{person.timesheetStatus}
-															{person.lineDaysWithOt
-																? ` · ${person.lineDaysWithOt} OT days`
-																: ""}
-															{person.blockerClass !== "ok"
-																? ` · ${person.blockerClass}`
-																: ""}
-														</p>
-													</div>
-													<span className="shrink-0 text-xs font-semibold tabular-nums text-orange-800">
-														{person.lineOtHours}
-													</span>
-												</div>
-											))
+																{person.lineDaysWithOt
+																	? ` · ${person.lineDaysWithOt} OT days`
+																	: ""}
+															</p>
+														</div>
+														<span className="shrink-0 text-xs font-semibold tabular-nums text-orange-800">
+															{person.lineOtHours}
+														</span>
+														<ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-300" />
+													</button>
+												);
+											})
 										) : (
-											<div className="px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+											<div className="space-y-2 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
 												{Number(payrollOtReadiness?.summary?.timesheetsTotal || 0) === 0 ? (
-													<>
+													<p>
 														<strong className="text-gray-800">0 timesheets</strong> for
 														this period — Approved OT has nothing to attach to. Seed
 														timesheets (DM4 biometrics) for this cutoff first, then apply
-														rptOvertimeDetails. Opening a June period already mapped shows
-														non-zero OT.
-													</>
+														rptOvertimeDetails.
+													</p>
 												) : (
 													<>
-														{formatCount(
-															payrollOtReadiness?.summary?.timesheetsTotal || 0,
-														)}{" "}
-														timesheets but{" "}
-														<strong className="text-gray-800">0 with OT hours</strong>.
-														Apply approved OT workbook for this periodCode (not raw
-														biometrics alone).
+														<p>
+															{formatCount(
+																payrollOtReadiness?.summary?.timesheetsTotal || 0,
+															)}{" "}
+															timesheets but{" "}
+															<strong className="text-gray-800">
+																0 report-backed OT
+															</strong>{" "}
+															for{" "}
+															<code className="rounded bg-gray-100 px-1 text-[10px]">
+																{selectedPeriodCode || "this period"}
+															</code>
+															. Demo/biometric OT alone does not count — need{" "}
+															<code className="rounded bg-gray-100 px-1 text-[10px]">
+																rptOvertimeDetails
+															</code>{" "}
+															applied to lines for this cutoff.
+														</p>
+														{/* Known BNPI cutoffs with workbooks in docs/new-cutoff */}
+														{(selectedPeriodCode === "PP-20260526-20260611" ||
+															Number(
+																payrollOtReadiness?.summary?.peopleWithLineOt || 0,
+															) === 0) && (
+															<div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+																<span className="text-[10px] text-gray-500">
+																	Open a cutoff with applied OT:
+																</span>
+																<button
+																	type="button"
+																	onClick={() =>
+																		handlePeriodChange("PP-20260611-20260626")
+																	}
+																	className="h-6 rounded border border-orange-200 bg-orange-50 px-1.5 text-[10px] font-medium text-orange-800 hover:bg-orange-100">
+																	June 11–25
+																</button>
+																<button
+																	type="button"
+																	onClick={() =>
+																		handlePeriodChange("PP-20260626-20260711")
+																	}
+																	className="h-6 rounded border border-orange-200 bg-orange-50 px-1.5 text-[10px] font-medium text-orange-800 hover:bg-orange-100">
+																	June 26–Jul 10
+																</button>
+															</div>
+														)}
 													</>
 												)}
 											</div>
@@ -3380,7 +3586,7 @@ export function RunPayrollTemplate() {
 											{formatCount(
 												payrollOtReadiness?.pagination?.totalItems || 0,
 											)}{" "}
-											people with OT signal
+											people · click OT days (DB)
 										</p>
 										<Button
 											variant="ghost"
@@ -5078,6 +5284,28 @@ export function RunPayrollTemplate() {
 					)}
 				</div>
 			</Modal>
+
+			{/* Same TimesheetViewModal atoms as HR timesheets; breakdown filtered to OT days only. */}
+			<TimesheetViewModal
+				isOpen={isOtTimesheetModalOpen}
+				onClose={() => setSelectedOtPerson(null)}
+				timesheet={otOnlyTimesheet}
+				isLoading={otTimesheetLoading || otTimesheetFetching}
+				error={otTimesheetError}
+				showActions={false}
+				title={
+					selectedOtPerson
+						? `Approved OT · ${selectedOtPerson.name}${
+								selectedOtPerson.employeeCode
+									? ` · ${selectedOtPerson.employeeCode}`
+									: ""
+							}`
+						: "Approved OT"
+				}
+				approvedEditedDaysSummary={
+					(otTimesheetFromDb as any)?.approvedEditedDaysSummary ?? null
+				}
+			/>
 
 			<SpecialPayrollModal
 				open={specialPayrollOpen}

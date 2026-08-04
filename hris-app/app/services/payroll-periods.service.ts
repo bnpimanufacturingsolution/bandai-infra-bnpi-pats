@@ -315,6 +315,8 @@ export interface TimesheetPayrollPreviewPagination {
 	hasPreviousPage: boolean;
 }
 
+export type OtApprovalSource = "system" | "manager" | "none";
+
 export interface PayrollOtReadinessPerson {
 	employeeId: string;
 	employeeCode: string | null;
@@ -331,6 +333,11 @@ export interface PayrollOtReadinessPerson {
 	deltaMinutes: number;
 	deltaHours: number;
 	lineDaysWithOt: number;
+	isPayableApproved?: boolean;
+	approvalSource?: OtApprovalSource;
+	approvedBy?: string | null;
+	approvalDate?: string | null;
+	approvalLabel?: string;
 	blockerClass:
 		| "ok"
 		| "ot_on_lines_only"
@@ -338,6 +345,42 @@ export interface PayrollOtReadinessPerson {
 		| "no_ot"
 		| "timesheet_not_approved";
 	nextStep: string;
+}
+
+export interface PayrollOtDayDetail {
+	lineId: string;
+	date: string;
+	status: string | null;
+	overtimeHours: string;
+	overtimeMinutes: number;
+	regularHours: string | null;
+	hoursWorked: string | null;
+	primaryMarker: string | null;
+	approvedBuckets: Record<string, number> | null;
+	sourceRow: number | null;
+	sourceLabel: string | null;
+	appliedAt: string | null;
+}
+
+export interface PayrollOtPersonDetail {
+	employeeId: string;
+	employeeCode: string | null;
+	name: string;
+	department: string | null;
+	timesheetId: string;
+	timesheetStatus: string;
+	approvalSource: OtApprovalSource;
+	approvalLabel: string;
+	approvedBy: string | null;
+	approvalDate: string | null;
+	totalLineOtHours: string;
+	totalLineOtMinutes: number;
+	otDayCount: number;
+	days: PayrollOtDayDetail[];
+	truth: {
+		note: string;
+		payableWhen: string;
+	};
 }
 
 export interface PayrollOtReadinessResponse {
@@ -359,10 +402,14 @@ export interface PayrollOtReadinessResponse {
 		timesheetsTotal: number;
 		timesheetsApproved: number;
 		peopleWithLineOt: number;
+		peopleWithApprovedOt?: number;
+		peopleWithPendingOtApproval?: number;
 		peopleWithTimesheetOtSummary: number;
 		peopleWithoutOt: number;
 		totalLineOtMinutes: number;
 		totalLineOtHours: number;
+		totalApprovedLineOtMinutes?: number;
+		totalApprovedLineOtHours?: number;
 		totalAttendanceOtMinutes: number;
 		totalAttendanceOtHours: number;
 		totalDeltaMinutes: number;
@@ -548,6 +595,20 @@ class PayrollPeriodsService extends APIService {
 		if (!response?.data) throw new Error("Invalid payroll OT readiness response");
 		const payload = response.data?.data || response.data;
 		return payload as PayrollOtReadinessResponse;
+	}
+
+	async getOtPersonDetail(
+		periodId: string,
+		timesheetId: string,
+	): Promise<PayrollOtPersonDetail> {
+		const response = await hrisApiClient.get<any>(
+			`/api/payrollperiod/${periodId}/ot-readiness/person/${timesheetId}`,
+			undefined,
+			{ timeoutMs: 30_000 },
+		);
+		if (!response?.data) throw new Error("Invalid payroll OT person detail response");
+		const payload = response.data?.data || response.data;
+		return payload as PayrollOtPersonDetail;
 	}
 
 	async getGenerateTimesheetPayrollProgress(

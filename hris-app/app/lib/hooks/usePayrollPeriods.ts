@@ -290,6 +290,28 @@ export const usePayrollOtReadiness = (
 	});
 };
 
+/** Compact OT day detail for one employee timesheet (Run Payroll modal). Always live DB. */
+export const usePayrollOtPersonDetail = (
+	periodId: string | null | undefined,
+	timesheetId: string | null | undefined,
+	enabled: boolean = true,
+) => {
+	return useQuery({
+		queryKey: ["payrollOtPersonDetail", periodId, timesheetId],
+		queryFn: () => {
+			if (!periodId || !timesheetId) return null;
+			return payrollPeriodsService.getOtPersonDetail(periodId, timesheetId);
+		},
+		enabled: Boolean(periodId) && Boolean(timesheetId) && enabled,
+		// Always re-query lines from DB when modal opens — not a precomputed list cache.
+		staleTime: 0,
+		gcTime: 60_000,
+		refetchOnMount: "always",
+		refetchOnWindowFocus: false,
+		retry: 1,
+	});
+};
+
 /** Honest empty-state copy when OT readiness fails or times out (accordion-safe). */
 export function payrollOtReadinessErrorMessage(error: unknown): string {
 	const status = (error as any)?.status ?? (error as any)?.response?.status;

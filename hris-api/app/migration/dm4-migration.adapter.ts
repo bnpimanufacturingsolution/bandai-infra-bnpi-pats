@@ -556,9 +556,13 @@ export class Dm4MigrationAdapter {
 				plannedLineUpdates: Number(report.plannedLineUpdates || 0),
 				touchedTimesheets: Number(report.touchedTimesheets || 0),
 				missingSourceRows: Number(report.missingSourceRows || 0),
+				autoApprovedTimesheets: Number(report.autoApprovedTimesheets || 0),
+				autoApproveSkipped: Number(report.autoApproveSkipped || 0),
 			},
 			metadata: {
 				periodCode: input.periodCode,
+				autoApproveEnabled: report.autoApproveEnabled !== false,
+				autoApproveWithOt: Boolean(report.autoApproveWithOt),
 				stderr: result.stderr ? result.stderr.slice(0, 2000) : undefined,
 			},
 		});

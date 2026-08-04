@@ -1,7 +1,12 @@
 import "dotenv/config";
 import path from "node:path";
 import * as XLSX from "xlsx";
-import { PrismaClient } from "../generated/prisma";
+import { Prisma, PrismaClient } from "../generated/prisma";
+import {
+	AUTO_APPROVED_BY,
+	AUTO_APPROVED_REASON,
+	shouldAutoApproveTimesheetStatus,
+} from "../helper/bandai-payroll-ot-auto-approve.helper";
 
 const prisma = new PrismaClient();
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -12,6 +17,12 @@ const readArg = (name: string, fallback?: string) => {
 };
 
 const apply = process.argv.includes("--apply");
+// Default ON in apply mode so past approved OT import unblocks Run Payroll OT readiness.
+// Pass --no-auto-approve to leave timesheet workflow status unchanged.
+const autoApproveEnabled = apply && !process.argv.includes("--no-auto-approve");
+// Optional backfill: also approve period timesheets that already have line OT > 0
+// (even when no line patches are planned this run).
+const autoApproveWithOt = process.argv.includes("--auto-approve-with-ot");
 const periodCode = readArg("--periodCode", "PP-20260426-20260511")!;
 const overtimeWorkbookPath = path.resolve(
 	readArg(
@@ -425,6 +436,103 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 	}, { maxWait: 10000, timeout: 120000 });
 }
 
+/**
+ * Batch auto-approve timesheets after approved OT was applied to lines.
+ * Only flips non-APPROVED rows; merges bandaiPayrollSourceRepair auto-approve markers.
+ */
+async function autoApproveTimesheetsWithRawSql(timesheetIds: string[]): Promise<{
+	autoApprovedTimesheets: number;
+	autoApproveSkipped: number;
+}> {
+	const uniqueIds = Array.from(new Set(timesheetIds.filter(Boolean)));
+	if (!uniqueIds.length) {
+		return { autoApprovedTimesheets: 0, autoApproveSkipped: 0 };
+	}
+
+	const existing = await prisma.timesheet.findMany({
+		where: { id: { in: uniqueIds }, isDeleted: false },
+		select: { id: true, status: true },
+	});
+	const eligibleIds = existing
+		.filter((row) => shouldAutoApproveTimesheetStatus(String(row.status || "")))
+		.map((row) => row.id);
+	const autoApproveSkipped = uniqueIds.length - eligibleIds.length;
+	if (!eligibleIds.length) {
+		return { autoApprovedTimesheets: 0, autoApproveSkipped };
+	}
+
+	const idsSql = Prisma.join(eligibleIds.map((id) => Prisma.sql`${id}`));
+	const updated = await prisma.$executeRaw`
+		UPDATE timesheets timesheet
+		SET
+			status = 'APPROVED',
+			"approvalDate" = now(),
+			"approvedBy" = ${AUTO_APPROVED_BY},
+			"rejectionReason" = NULL,
+			metadata = COALESCE(timesheet.metadata, '{}'::jsonb) || jsonb_build_object(
+				'bandaiPayrollSourceRepair',
+				COALESCE(timesheet.metadata->'bandaiPayrollSourceRepair', '{}'::jsonb) || jsonb_build_object(
+					'autoApprovedAt', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+					'autoApprovedReason', ${AUTO_APPROVED_REASON}
+				)
+			),
+			"updatedAt" = now()
+		WHERE timesheet.id IN (${idsSql})
+			AND timesheet."isDeleted" = false
+			AND timesheet.status <> 'APPROVED'
+	`;
+
+	return {
+		autoApprovedTimesheets: Number(updated || 0),
+		autoApproveSkipped,
+	};
+}
+
+/**
+ * Timesheets that already have approved OT workbook applied on lines
+ * (bandaiPayrollSourceRepair). Used by --auto-approve-with-ot.
+ * Does NOT include demo/biometric-only OT (e.g. BNPI_DM4_DEMO_PROOF).
+ */
+async function loadTimesheetIdsWithLineOt(params: {
+	organizationId: string;
+	payrollPeriodId: string;
+	employeeCodes?: Set<string>;
+}): Promise<string[]> {
+	const rows = await prisma.$queryRaw<Array<{ timesheetId: string }>>`
+		SELECT DISTINCT l."timesheetId" AS "timesheetId"
+		FROM timesheet_lines l
+		JOIN timesheets t ON t.id = l."timesheetId"
+		JOIN employees e ON e.id = t."employeeId"
+		WHERE l."organizationId" = ${params.organizationId}
+			AND l."payrollPeriodId" = ${params.payrollPeriodId}
+			AND l."isDeleted" = false
+			AND l."isEffective" = true
+			AND t."isDeleted" = false
+			AND l.metadata ? 'bandaiPayrollSourceRepair'
+			AND COALESCE(l.metadata->>'source', '') NOT ILIKE '%DEMO%'
+			AND l."overtimeHours" IS NOT NULL
+			AND btrim(l."overtimeHours") <> ''
+			AND btrim(l."overtimeHours") NOT IN ('0:00', '0', '00:00')
+			AND (
+				CASE
+					WHEN l."overtimeHours" LIKE '%:%' THEN
+						COALESCE(NULLIF(split_part(l."overtimeHours", ':', 1), '')::int, 0) * 60
+						+ COALESCE(NULLIF(split_part(l."overtimeHours", ':', 2), '')::int, 0)
+					ELSE
+						ROUND(COALESCE(NULLIF(regexp_replace(l."overtimeHours", '[^0-9.\\-]', '', 'g'), '')::numeric, 0) * 60)::int
+				END
+			) > 0
+			${
+				params.employeeCodes && params.employeeCodes.size
+					? Prisma.sql`AND e."employeeId" IN (${Prisma.join(
+							Array.from(params.employeeCodes).map((code) => Prisma.sql`${code}`),
+						)})`
+					: Prisma.empty
+			}
+	`;
+	return rows.map((row) => row.timesheetId);
+}
+
 async function main() {
 	const period = await prisma.payrollPeriod.findFirst({
 		where: { code: periodCode, isDeleted: false },
@@ -518,8 +626,29 @@ async function main() {
 		}
 	}
 
+	let autoApprovedTimesheets = 0;
+	let autoApproveSkipped = 0;
+
 	if (apply) {
 		await applyLinePatchesWithRawSql(linePatches);
+
+		if (autoApproveEnabled) {
+			const approveCandidates = new Set<string>(touchedTimesheets);
+			if (autoApproveWithOt) {
+				const withLineOt = await loadTimesheetIdsWithLineOt({
+					organizationId: period.organizationId,
+					payrollPeriodId: period.id,
+					employeeCodes: normalizedEmployeeFilter.size
+						? normalizedEmployeeFilter
+						: undefined,
+				});
+				for (const id of withLineOt) approveCandidates.add(id);
+			}
+
+			const result = await autoApproveTimesheetsWithRawSql(Array.from(approveCandidates));
+			autoApprovedTimesheets = result.autoApprovedTimesheets;
+			autoApproveSkipped = result.autoApproveSkipped;
+		}
 	}
 
 	const byReason: Record<string, number> = {};
@@ -537,11 +666,17 @@ async function main() {
 		plannedLineUpdates: planned.length,
 		touchedTimesheets: touchedTimesheets.size,
 		missingSourceRows,
+		autoApproveEnabled,
+		autoApproveWithOt,
+		autoApprovedTimesheets,
+		autoApproveSkipped,
 		byReason,
 		sample: planned.slice(0, 25),
 		next: apply
-			? "Re-run npx tsx scripts/dry-run-bandai-payroll-comparison.ts and show-bandai-payroll-comparison.ts --payslip-only --top=8."
-			: "Run with --apply to update effective Timesheetline snapshots and recalculate touched timesheet summaries.",
+			? autoApproveEnabled
+				? "Timesheets that received approved OT were auto-approved when not already APPROVED. Re-check Run Payroll OT readiness."
+				: "Re-run npx tsx scripts/dry-run-bandai-payroll-comparison.ts and show-bandai-payroll-comparison.ts --payslip-only --top=8."
+			: "Run with --apply to update effective Timesheetline snapshots, recalculate touched timesheet summaries, and auto-approve touched timesheets (use --no-auto-approve to skip approval).",
 	}, null, 2));
 }
 

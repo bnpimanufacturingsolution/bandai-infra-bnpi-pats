@@ -137,6 +137,11 @@ export function BenefitsManagement({
 			? rawDirectionParam
 			: "";
 	const returnToParam = searchParams.get("returnTo") || "";
+	const employeeSearchParam =
+		searchParams.get("employeeSearch") ||
+		searchParams.get("employeeCode") ||
+		searchParams.get("query") ||
+		"";
 	const action = searchParams.get("action");
 	const id = searchParams.get("id");
 	const pageParam = Number(searchParams.get("page")) || 1;
@@ -145,6 +150,13 @@ export function BenefitsManagement({
 		action === "edit" || action === "viewEnrollment" || action === "delete" ? id : null;
 	const isEditing = action === "edit";
 	const drawerOpen = Boolean(typeIdParam);
+
+	// Deep-link from Run Payroll: seed enrollment search (employee code/name)
+	useEffect(() => {
+		if (employeeSearchParam) {
+			setEmployeeSearch(employeeSearchParam);
+		}
+	}, [employeeSearchParam]);
 
 	// Legacy deep link: ?action=create → dedicated create page
 	useEffect(() => {

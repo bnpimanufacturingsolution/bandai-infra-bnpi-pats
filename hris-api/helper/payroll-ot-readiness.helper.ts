@@ -45,6 +45,8 @@ const LINE_OT_MINUTES_SQL = Prisma.sql`
   END
 `;
 
+export type OtApprovalSource = "system" | "manager" | "none";
+
 export type PayrollOtReadinessPerson = {
 	employeeId: string;
 	employeeCode: string | null;
@@ -61,6 +63,14 @@ export type PayrollOtReadinessPerson = {
 	deltaMinutes: number;
 	deltaHours: number;
 	lineDaysWithOt: number;
+	/** True when timesheet is APPROVED and has payable line OT (Run Payroll ready). */
+	isPayableApproved: boolean;
+	/** How OT timesheet approval was recorded. */
+	approvalSource: OtApprovalSource;
+	approvedBy: string | null;
+	approvalDate: string | null;
+	/** Short UI label: "System approved OT" | "Manager approved" | "Needs timesheet approval" */
+	approvalLabel: string;
 	blockerClass:
 		| "ok"
 		| "ot_on_lines_only"
@@ -68,6 +78,43 @@ export type PayrollOtReadinessPerson = {
 		| "no_ot"
 		| "timesheet_not_approved";
 	nextStep: string;
+};
+
+export type PayrollOtDayDetail = {
+	lineId: string;
+	date: string;
+	status: string | null;
+	overtimeHours: string;
+	overtimeMinutes: number;
+	regularHours: string | null;
+	hoursWorked: string | null;
+	primaryMarker: string | null;
+	/** Buckets from approved OT workbook metadata when present. */
+	approvedBuckets: Record<string, number> | null;
+	sourceRow: number | null;
+	sourceLabel: string | null;
+	appliedAt: string | null;
+};
+
+export type PayrollOtPersonDetail = {
+	employeeId: string;
+	employeeCode: string | null;
+	name: string;
+	department: string | null;
+	timesheetId: string;
+	timesheetStatus: string;
+	approvalSource: OtApprovalSource;
+	approvalLabel: string;
+	approvedBy: string | null;
+	approvalDate: string | null;
+	totalLineOtHours: string;
+	totalLineOtMinutes: number;
+	otDayCount: number;
+	days: PayrollOtDayDetail[];
+	truth: {
+		note: string;
+		payableWhen: string;
+	};
 };
 
 export type PayrollOtReadinessResult = {
@@ -81,18 +128,25 @@ export type PayrollOtReadinessResult = {
 		status: string;
 	};
 	truth: {
-		payableSource: "timesheetline.overtimeHours (effective) / timesheet.totalOvertimeHours";
-		rawAttendanceRole: "punch evidence only ΓÇö not payable OT without approved OT ΓåÆ lines";
+		payableSource: string;
+		rawAttendanceRole: string;
 		note: string;
 	};
 	summary: {
 		timesheetsTotal: number;
 		timesheetsApproved: number;
 		peopleWithLineOt: number;
+		/** People with line OT whose timesheet is APPROVED (payable for Run Payroll). */
+		peopleWithApprovedOt: number;
+		/** People with line OT still blocked on timesheet approval. */
+		peopleWithPendingOtApproval: number;
 		peopleWithTimesheetOtSummary: number;
 		peopleWithoutOt: number;
 		totalLineOtMinutes: number;
 		totalLineOtHours: number;
+		/** Line OT minutes only for APPROVED timesheets (truthful "Approved OT hrs"). */
+		totalApprovedLineOtMinutes: number;
+		totalApprovedLineOtHours: number;
 		totalAttendanceOtMinutes: number;
 		totalAttendanceOtHours: number;
 		totalDeltaMinutes: number;
@@ -112,6 +166,8 @@ export type PayrollOtReadinessResult = {
 		lightTimesheets: number;
 		lineAggRows: number;
 		deepLoaded: number;
+		anyLineOtPeople?: number;
+		approvedSourceOtPeople?: number;
 	};
 };
 
@@ -123,7 +179,8 @@ function employeeDisplayName(employee: any): string {
 	return parts.join(" ") || employee?.employeeId || "Employee";
 }
 
-function classifyPerson(input: {
+/** Exported for unit tests and OT auto-approve regression coverage. */
+export function classifyPerson(input: {
 	status: string;
 	summaryMin: number;
 	lineOtMinutes: number;
@@ -159,28 +216,113 @@ function classifyPerson(input: {
 	return { blockerClass, nextStep, deltaMinutes };
 }
 
+const SYSTEM_OT_APPROVER = "system:approved_ot_import";
+
+/** Resolve how a timesheet's OT approval should be labeled in Run Payroll UI. */
+export function resolveOtApprovalMeta(input: {
+	status: string;
+	approvedBy?: string | null;
+	metadata?: unknown;
+}): {
+	approvalSource: OtApprovalSource;
+	approvalLabel: string;
+	approvedBy: string | null;
+	approvalDate: string | null;
+} {
+	const status = String(input.status || "").toUpperCase();
+	const approvedBy = input.approvedBy ? String(input.approvedBy) : null;
+	const meta =
+		input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+			? (input.metadata as Record<string, unknown>)
+			: {};
+	const repair =
+		meta.bandaiPayrollSourceRepair &&
+		typeof meta.bandaiPayrollSourceRepair === "object" &&
+		!Array.isArray(meta.bandaiPayrollSourceRepair)
+			? (meta.bandaiPayrollSourceRepair as Record<string, unknown>)
+			: {};
+	const autoReason = String(repair.autoApprovedReason || "");
+	const autoAt = repair.autoApprovedAt ? String(repair.autoApprovedAt) : null;
+	const approvalDateRaw = (meta as any).approvalDate; // not used; prefer column
+	void approvalDateRaw;
+
+	if (status !== "APPROVED") {
+		return {
+			approvalSource: "none",
+			approvalLabel: "Needs timesheet approval",
+			approvedBy,
+			approvalDate: null,
+		};
+	}
+	if (
+		approvedBy === SYSTEM_OT_APPROVER ||
+		autoReason === "approved_ot_import" ||
+		Boolean(autoAt)
+	) {
+		return {
+			approvalSource: "system",
+			approvalLabel: "System approved OT",
+			approvedBy: approvedBy || SYSTEM_OT_APPROVER,
+			approvalDate: autoAt,
+		};
+	}
+	if (approvedBy) {
+		return {
+			approvalSource: "manager",
+			approvalLabel: "Manager approved",
+			approvedBy,
+			approvalDate: null,
+		};
+	}
+	return {
+		approvalSource: "manager",
+		approvalLabel: "Approved",
+		approvedBy: null,
+		approvalDate: null,
+	};
+}
+
 type LineAgg = {
 	timesheetId: string;
 	lineOtMinutes: number;
 	lineDaysWithOt: number;
+	/** Minutes from rptOvertimeDetails / bandaiPayrollSourceRepair only (payable approved OT). */
+	approvedSourceOtMinutes: number;
+	approvedSourceOtDays: number;
 };
+
+/**
+ * Line OT from approved OT workbook apply (bandaiPayrollSourceRepair).
+ * Do not use jsonb `?` operator inside Prisma.sql (can break composition).
+ * Top-level metadata.source is often an object (attendance obligation) — ignore it.
+ */
+const APPROVED_OT_SOURCE_SQL = Prisma.sql`
+	(l.metadata->'bandaiPayrollSourceRepair') IS NOT NULL
+	AND jsonb_typeof(l.metadata->'bandaiPayrollSourceRepair') = 'object'
+	AND COALESCE(l.metadata->'bandaiPayrollSourceRepair'->>'source', '') NOT ILIKE '%DEMO%'
+`;
 
 async function loadLineOtAggregates(
 	prisma: PrismaClient,
 	params: { organizationId: string; payrollPeriodId: string },
 ): Promise<Map<string, LineAgg>> {
-	// Only rows that may carry OT ΓÇö skip empty day lines (~15├ù smaller than full hydrate).
+	// Only rows that may carry OT — skip empty day lines (~15x smaller than full hydrate).
+	// Split any-line OT vs approved-source OT (rptOvertimeDetails repair).
 	const rows = await prisma.$queryRaw<
 		Array<{
 			timesheetId: string;
 			lineOtMinutes: number | bigint;
 			lineDaysWithOt: number | bigint;
+			approvedSourceOtMinutes: number | bigint;
+			approvedSourceOtDays: number | bigint;
 		}>
 	>`
 		SELECT
 			l."timesheetId" AS "timesheetId",
 			COALESCE(SUM(${LINE_OT_MINUTES_SQL}), 0)::int AS "lineOtMinutes",
-			COUNT(*) FILTER (WHERE (${LINE_OT_MINUTES_SQL}) > 0)::int AS "lineDaysWithOt"
+			COUNT(*) FILTER (WHERE (${LINE_OT_MINUTES_SQL}) > 0)::int AS "lineDaysWithOt",
+			COALESCE(SUM(${LINE_OT_MINUTES_SQL}) FILTER (WHERE ${APPROVED_OT_SOURCE_SQL}), 0)::int AS "approvedSourceOtMinutes",
+			COUNT(*) FILTER (WHERE (${LINE_OT_MINUTES_SQL}) > 0 AND ${APPROVED_OT_SOURCE_SQL})::int AS "approvedSourceOtDays"
 		FROM timesheet_lines l
 		WHERE l."organizationId" = ${params.organizationId}
 			AND l."payrollPeriodId" = ${params.payrollPeriodId}
@@ -197,6 +339,8 @@ async function loadLineOtAggregates(
 			timesheetId: row.timesheetId,
 			lineOtMinutes: Number(row.lineOtMinutes || 0),
 			lineDaysWithOt: Number(row.lineDaysWithOt || 0),
+			approvedSourceOtMinutes: Number(row.approvedSourceOtMinutes || 0),
+			approvedSourceOtDays: Number(row.approvedSourceOtDays || 0),
 		});
 	}
 	return map;
@@ -266,7 +410,7 @@ export async function getPayrollPeriodOtReadiness(
 		throw new Error(`Payroll period not found: ${params.payrollPeriodId}`);
 	}
 
-	// Phase 1: light timesheets ΓÇö prefer totalOvertimeHours for list filtering.
+	// Phase 1: light timesheets — prefer totalOvertimeHours for list filtering.
 	const timesheets = await prisma.timesheet.findMany({
 		where: {
 			organizationId: params.organizationId,
@@ -278,6 +422,9 @@ export async function getPayrollPeriodOtReadiness(
 			status: true,
 			totalOvertimeHours: true,
 			employeeId: true,
+			approvedBy: true,
+			approvalDate: true,
+			metadata: true,
 			employee: {
 				select: {
 					id: true,
@@ -304,8 +451,15 @@ export async function getPayrollPeriodOtReadiness(
 		timesheetId: string;
 		timesheetStatus: string;
 		summaryMin: number;
+		/** Any effective line OT (includes demo/biometric) — diagnostic only. */
 		lineOtMinutes: number;
 		lineDaysWithOt: number;
+		/** Payable approved OT from rptOvertimeDetails apply (bandaiPayrollSourceRepair). */
+		approvedSourceOtMinutes: number;
+		approvedSourceOtDays: number;
+		approvedBy: string | null;
+		approvalDate: Date | null;
+		metadata: unknown;
 	};
 
 	const light: Light[] = timesheets.map((ts) => {
@@ -320,6 +474,11 @@ export async function getPayrollPeriodOtReadiness(
 			summaryMin: parseDurationToMinutes(ts.totalOvertimeHours),
 			lineOtMinutes: agg?.lineOtMinutes ?? 0,
 			lineDaysWithOt: agg?.lineDaysWithOt ?? 0,
+			approvedSourceOtMinutes: agg?.approvedSourceOtMinutes ?? 0,
+			approvedSourceOtDays: agg?.approvedSourceOtDays ?? 0,
+			approvedBy: ts.approvedBy ? String(ts.approvedBy) : null,
+			approvalDate: ts.approvalDate || null,
+			metadata: ts.metadata,
 		};
 	});
 
@@ -337,16 +496,20 @@ export async function getPayrollPeriodOtReadiness(
 		return hay.includes(query);
 	});
 
-	const withLineOt = light.filter((p) => p.lineOtMinutes > 0);
+	// Approved OT panel truth = report-backed line OT only (not BNPI_DM4_DEMO / raw punches).
+	const withLineOt = light.filter((p) => p.approvedSourceOtMinutes > 0);
+	const withAnyLineOt = light.filter((p) => p.lineOtMinutes > 0);
 	const withSummaryOt = light.filter((p) => p.summaryMin > 0);
 	const listSource = onlyWithOt
-		? filtered.filter((p) => p.lineOtMinutes > 0 || p.summaryMin > 0)
+		? filtered.filter((p) => p.approvedSourceOtMinutes > 0)
 		: filtered;
 
-	// Prefer people with line OT first, then summary OT, then code.
+	// Prefer highest approved-source OT first.
 	listSource.sort((a, b) => {
+		if (b.approvedSourceOtMinutes !== a.approvedSourceOtMinutes) {
+			return b.approvedSourceOtMinutes - a.approvedSourceOtMinutes;
+		}
 		if (b.lineOtMinutes !== a.lineOtMinutes) return b.lineOtMinutes - a.lineOtMinutes;
-		if (b.summaryMin !== a.summaryMin) return b.summaryMin - a.summaryMin;
 		return String(a.employeeCode || "").localeCompare(String(b.employeeCode || ""));
 	});
 
@@ -362,12 +525,23 @@ export async function getPayrollPeriodOtReadiness(
 
 	const people: PayrollOtReadinessPerson[] = pageLight.map((person) => {
 		const attendanceOtMinutes = pageAttOt.get(person.timesheetId) || 0;
+		// Payable OT for this panel = approved-source minutes (rptOvertimeDetails).
+		const payableOtMinutes = person.approvedSourceOtMinutes;
 		const { blockerClass, nextStep, deltaMinutes } = classifyPerson({
 			status: person.timesheetStatus,
 			summaryMin: person.summaryMin,
-			lineOtMinutes: person.lineOtMinutes,
+			lineOtMinutes: payableOtMinutes,
 			attendanceOtMinutes,
 		});
+		const approval = resolveOtApprovalMeta({
+			status: person.timesheetStatus,
+			approvedBy: person.approvedBy,
+			metadata: person.metadata,
+		});
+		const approvalDateIso =
+			person.approvalDate?.toISOString?.() || approval.approvalDate || null;
+		const isPayableApproved =
+			person.timesheetStatus === "APPROVED" && payableOtMinutes > 0;
 		return {
 			employeeId: person.employeeId,
 			employeeCode: person.employeeCode,
@@ -377,19 +551,34 @@ export async function getPayrollPeriodOtReadiness(
 			timesheetStatus: person.timesheetStatus,
 			timesheetOtHours: formatMinutesAsHhMm(person.summaryMin),
 			timesheetOtMinutes: person.summaryMin,
-			lineOtHours: formatMinutesAsHhMm(person.lineOtMinutes),
-			lineOtMinutes: person.lineOtMinutes,
+			// Expose approved-source OT as the line OT the UI pays on.
+			lineOtHours: formatMinutesAsHhMm(payableOtMinutes),
+			lineOtMinutes: payableOtMinutes,
 			attendanceOtHours: formatMinutesAsHhMm(attendanceOtMinutes),
 			attendanceOtMinutes,
 			deltaMinutes,
 			deltaHours: minutesToHours(deltaMinutes),
-			lineDaysWithOt: person.lineDaysWithOt,
+			lineDaysWithOt: person.approvedSourceOtDays,
+			isPayableApproved,
+			approvalSource: approval.approvalSource,
+			approvedBy: approval.approvedBy,
+			approvalDate: approvalDateIso,
+			approvalLabel: approval.approvalLabel,
 			blockerClass,
 			nextStep,
 		};
 	});
 
-	const totalLineOtMinutes = light.reduce((sum, p) => sum + p.lineOtMinutes, 0);
+	const totalLineOtMinutes = light.reduce(
+		(sum, p) => sum + p.approvedSourceOtMinutes,
+		0,
+	);
+	const approvedWithLineOt = withLineOt.filter((p) => p.timesheetStatus === "APPROVED");
+	const pendingWithLineOt = withLineOt.filter((p) => p.timesheetStatus !== "APPROVED");
+	const totalApprovedLineOtMinutes = approvedWithLineOt.reduce(
+		(sum, p) => sum + p.approvedSourceOtMinutes,
+		0,
+	);
 	// Page-scoped attendance sum is not period total; keep period attendance as 0 unless
 	// we deep-load all (expensive). Summary truth for pay is line OT.
 	const totalAttendanceOtMinutes = 0;
@@ -408,17 +597,21 @@ export async function getPayrollPeriodOtReadiness(
 			payableSource:
 				"timesheetline.overtimeHours (effective) / timesheet.totalOvertimeHours",
 			rawAttendanceRole:
-				"punch evidence only ΓÇö not payable OT without approved OT ΓåÆ lines",
-			note: "BNPI: import biometrics then approved OT workbook into timesheet lines before Run Payroll. List uses timesheet summary first; line OT via SQL aggregate of non-empty lines only.",
+				"punch evidence only - not payable OT without approved OT -> lines",
+			note: "BNPI: import biometrics then approved OT workbook into timesheet lines before Run Payroll. Past OT import auto-approves timesheets. Header chips: Approved OT = APPROVED timesheets with line OT; Total OT = all line OT.",
 		},
 		summary: {
 			timesheetsTotal: light.length,
 			timesheetsApproved: light.filter((p) => p.timesheetStatus === "APPROVED").length,
 			peopleWithLineOt: withLineOt.length,
+			peopleWithApprovedOt: approvedWithLineOt.length,
+			peopleWithPendingOtApproval: pendingWithLineOt.length,
 			peopleWithTimesheetOtSummary: withSummaryOt.length,
 			peopleWithoutOt: Math.max(0, light.length - withLineOt.length),
 			totalLineOtMinutes,
 			totalLineOtHours: minutesToHours(totalLineOtMinutes),
+			totalApprovedLineOtMinutes,
+			totalApprovedLineOtHours: minutesToHours(totalApprovedLineOtMinutes),
 			totalAttendanceOtMinutes,
 			totalAttendanceOtHours: minutesToHours(totalAttendanceOtMinutes),
 			totalDeltaMinutes: totalLineOtMinutes - totalAttendanceOtMinutes,
@@ -438,6 +631,166 @@ export async function getPayrollPeriodOtReadiness(
 			lightTimesheets: timesheets.length,
 			lineAggRows: lineAgg.size,
 			deepLoaded: pageIds.length,
+			// Diagnostic: any line OT vs report-backed OT (demo seed often has any-line only).
+			anyLineOtPeople: withAnyLineOt.length,
+			approvedSourceOtPeople: withLineOt.length,
+		},
+	};
+}
+
+/**
+ * Compact person OT day detail for Run Payroll modal.
+ * Source of truth: direct DB query of effective timesheet_lines with OT only.
+ * No full timesheet hydrate, no attendance recompute, no calendar materialization.
+ */
+export async function getPayrollPeriodOtPersonDetail(
+	prisma: PrismaClient,
+	params: {
+		payrollPeriodId: string;
+		organizationId: string;
+		timesheetId: string;
+	},
+): Promise<PayrollOtPersonDetail> {
+	// Phase 1: header only (tiny)
+	const timesheet = await prisma.timesheet.findFirst({
+		where: {
+			id: params.timesheetId,
+			organizationId: params.organizationId,
+			payrollPeriodId: params.payrollPeriodId,
+			isDeleted: false,
+		},
+		select: {
+			id: true,
+			status: true,
+			approvedBy: true,
+			approvalDate: true,
+			metadata: true,
+			employeeId: true,
+			employee: {
+				select: {
+					id: true,
+					employeeId: true,
+					person: { select: { personalInfo: true } },
+					department: { select: { name: true } },
+				},
+			},
+		},
+	});
+	if (!timesheet) {
+		throw new Error(`Timesheet not found for OT detail: ${params.timesheetId}`);
+	}
+
+	// Phase 2: approved-source OT days only (rptOvertimeDetails apply), not demo/biometric alone
+	const lineRows = await prisma.$queryRaw<
+		Array<{
+			lineId: string;
+			date: Date;
+			status: string | null;
+			overtimeHours: string | null;
+			regularHours: string | null;
+			hoursWorked: string | null;
+			primaryMarker: string | null;
+			metadata: unknown;
+		}>
+	>`
+		SELECT
+			l.id AS "lineId",
+			l.date AS date,
+			l.status AS status,
+			l."overtimeHours" AS "overtimeHours",
+			l."regularHours" AS "regularHours",
+			l."hoursWorked" AS "hoursWorked",
+			l."primaryMarker" AS "primaryMarker",
+			l.metadata AS metadata
+		FROM timesheet_lines l
+		WHERE l."timesheetId" = ${params.timesheetId}
+			AND l."organizationId" = ${params.organizationId}
+			AND l."payrollPeriodId" = ${params.payrollPeriodId}
+			AND l."isDeleted" = false
+			AND l."isEffective" = true
+			AND l."overtimeHours" IS NOT NULL
+			AND btrim(l."overtimeHours") <> ''
+			AND btrim(l."overtimeHours") NOT IN ('0:00', '0', '00:00')
+			AND (${LINE_OT_MINUTES_SQL}) > 0
+			AND ${APPROVED_OT_SOURCE_SQL}
+		ORDER BY l.date ASC
+	`;
+
+	const approval = resolveOtApprovalMeta({
+		status: String(timesheet.status || ""),
+		approvedBy: timesheet.approvedBy,
+		metadata: timesheet.metadata,
+	});
+	const approvalDateIso =
+		timesheet.approvalDate?.toISOString?.() || approval.approvalDate || null;
+
+	const days: PayrollOtDayDetail[] = [];
+	let totalLineOtMinutes = 0;
+	for (const line of lineRows) {
+		const otMin = parseDurationToMinutes(line.overtimeHours);
+		if (otMin <= 0) continue;
+		totalLineOtMinutes += otMin;
+		const meta =
+			line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
+				? (line.metadata as Record<string, any>)
+				: {};
+		const repair =
+			meta.bandaiPayrollSourceRepair &&
+			typeof meta.bandaiPayrollSourceRepair === "object"
+				? meta.bandaiPayrollSourceRepair
+				: {};
+		const buckets =
+			repair.approvedBuckets && typeof repair.approvedBuckets === "object"
+				? (repair.approvedBuckets as Record<string, number>)
+				: null;
+		const dateVal =
+			line.date instanceof Date
+				? line.date.toISOString().slice(0, 10)
+				: String(line.date || "").slice(0, 10);
+		days.push({
+			lineId: line.lineId,
+			date: dateVal,
+			status: line.status ? String(line.status) : null,
+			overtimeHours: formatMinutesAsHhMm(otMin),
+			overtimeMinutes: otMin,
+			regularHours: line.regularHours ? String(line.regularHours) : null,
+			hoursWorked: line.hoursWorked ? String(line.hoursWorked) : null,
+			primaryMarker: line.primaryMarker ? String(line.primaryMarker) : null,
+			approvedBuckets: buckets,
+			sourceRow:
+				typeof repair.sourceRow === "number"
+					? repair.sourceRow
+					: repair.sourceRow
+						? Number(repair.sourceRow)
+						: null,
+			sourceLabel: repair.source ? String(repair.source) : null,
+			appliedAt: repair.appliedAt ? String(repair.appliedAt) : null,
+		});
+	}
+
+	return {
+		employeeId: timesheet.employeeId,
+		employeeCode: timesheet.employee?.employeeId || null,
+		name: employeeDisplayName(timesheet.employee),
+		department: timesheet.employee?.department?.name || null,
+		timesheetId: timesheet.id,
+		timesheetStatus: String(timesheet.status || ""),
+		approvalSource: approval.approvalSource,
+		approvalLabel: approval.approvalLabel,
+		approvedBy: approval.approvedBy,
+		approvalDate: approvalDateIso,
+		totalLineOtHours: formatMinutesAsHhMm(totalLineOtMinutes),
+		totalLineOtMinutes,
+		otDayCount: days.length,
+		days,
+		truth: {
+			note:
+				approval.approvalSource === "system"
+					? "Past approved OT import: system approved this timesheet so Run Payroll can pay line OT."
+					: approval.approvalSource === "manager"
+						? "Timesheet was approved in the normal workflow; OT days below are effective line OT."
+						: "Timesheet is not APPROVED yet — line OT is mapped but not payable until approved (import auto-approves past OT).",
+			payableWhen: "Timesheet status APPROVED + effective timesheet_lines.overtimeHours",
 		},
 	};
 }

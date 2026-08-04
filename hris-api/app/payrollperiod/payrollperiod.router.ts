@@ -21,6 +21,7 @@ interface IController {
 		next: NextFunction,
 	): Promise<void>;
 	getOtReadiness(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getOtPersonDetail(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	updateConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	bulkGenerate(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -478,6 +479,18 @@ export const router = (route: Router, controller: IController): Router => {
 			label: "payrollperiod:ot-readiness",
 		}),
 		controller.getOtReadiness,
+	);
+
+	/**
+	 * Compact OT day detail for one timesheet (Run Payroll employee modal).
+	 */
+	routes.get(
+		"/:id/ot-readiness/person/:timesheetId",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "payrollperiod:ot-person-detail",
+		}),
+		controller.getOtPersonDetail,
 	);
 
 	routes.get("/:id/generate-timesheet/progress", controller.getActiveTimesheetGenerationProgress);

@@ -1066,6 +1066,27 @@ const controller = (prisma) => {
             res.status(error instanceof Error && /not found/i.test(error.message) ? 404 : 500).json((0, error_handler_1.buildErrorResponse)(error instanceof Error ? error.message : constant_1.config.ERROR.COMMON.INTERNAL_SERVER_ERROR, error instanceof Error && /not found/i.test(error.message) ? 404 : 500));
         }
     });
+    const getOtPersonDetail = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        const { id: payrollPeriodId, timesheetId } = req.params;
+        const organizationId = req.organizationId;
+        try {
+            if (!payrollPeriodId || !organizationId || !timesheetId) {
+                res.status(400).json((0, error_handler_1.buildErrorResponse)("payrollPeriodId, timesheetId and organizationId are required", 400));
+                return;
+            }
+            const { getPayrollPeriodOtPersonDetail } = require("../../helper/payroll-ot-readiness.helper");
+            const detail = yield getPayrollPeriodOtPersonDetail(prisma, {
+                payrollPeriodId,
+                organizationId,
+                timesheetId,
+            });
+            res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll OT person detail retrieved successfully", detail, 200));
+        }
+        catch (error) {
+            payrollPeriodLogger.error(`Failed to load payroll OT person detail: ${error}`);
+            res.status(error instanceof Error && /not found/i.test(error.message) ? 404 : 500).json((0, error_handler_1.buildErrorResponse)(error instanceof Error ? error.message : constant_1.config.ERROR.COMMON.INTERNAL_SERVER_ERROR, error instanceof Error && /not found/i.test(error.message) ? 404 : 500));
+        }
+    });
     const getTimesheetGenerationProgress = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
         try {
             const { jobId } = req.params;
@@ -1736,6 +1757,7 @@ const controller = (prisma) => {
         requestPauseTimesheetPayroll,
         requestStopTimesheetPayroll,
         getOtReadiness,
+        getOtPersonDetail,
         getConfig,
         updateConfig,
         bulkGenerate,

@@ -185,7 +185,7 @@ class EmployeeBenefitService extends APIService {
 
 			const finalQueryString = this.getQueryString();
 			const defaultFields =
-				"id,organizationId,employeeId,benefitTypeId,name,description,amount,startDate,endDate,scheduleMode,recurrenceFrequency,totalInstallments,attendanceBased,attendanceAmountBasis,payrollPeriodId,status,isActive,notes,employee.id,employee.employeeId,employee.person.personalInfo,employee.position.title,benefitType.id,benefitType.code,benefitType.name,benefitType.category,benefitType.payrollDirection,payrollPeriod.id,payrollPeriod.name,payrollPeriod.code,payrollPeriod.startDate,payrollPeriod.endDate";
+				"id,organizationId,employeeId,benefitTypeId,name,description,amount,startDate,endDate,scheduleMode,recurrenceFrequency,totalInstallments,attendanceBased,attendanceAmountBasis,payrollPeriodId,status,isActive,notes,employee.id,employee.employeeId,employee.person.personalInfo,employee.position.title,benefitType.id,benefitType.code,benefitType.name,benefitType.description,benefitType.category,benefitType.payrollDirection,payrollPeriod.id,payrollPeriod.name,payrollPeriod.code,payrollPeriod.startDate,payrollPeriod.endDate";
 			// Note: eligibilityMode / disqualify flags require regenerated Prisma client + migration.
 			const endpoint = finalQueryString.includes("fields=")
 				? `/api/employeeBenefit${finalQueryString}`

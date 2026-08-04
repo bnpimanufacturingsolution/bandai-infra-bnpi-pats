@@ -58,6 +58,7 @@ export const useEmployeeBenefits = (params?: ApiQueryParams) => {
 					"benefitType.id",
 					"benefitType.code",
 					"benefitType.name",
+					"benefitType.description",
 					"benefitType.category",
 					"benefitType.payrollDirection",
 					"benefitType.provider",
