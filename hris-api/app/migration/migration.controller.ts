@@ -52,7 +52,12 @@ import {
 	getMassUploadImportLog,
 	importCompensationMassUpload,
 	importDeductionMassUpload,
+	isKnownUploadActivityKind,
 	listMassUploadImportLogs,
+	persistDm3ImportActivityLog,
+	resolveMassUploadImportStatus,
+	resolveUploadActivityKindsForWorkbook,
+	type Dm3ImportActivityKind,
 } from "./bnpi-mass-upload-import.service";
 import {
 	getManpowerDatabankJobProgress,
@@ -3481,16 +3486,15 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 			const kindRaw = String(req.query.kind || "").trim().toLowerCase();
-			const kind =
-				kindRaw === "compensation" ||
-				kindRaw === "deduction" ||
-				kindRaw === "workbook" ||
-				kindRaw === "manpower-databank"
-					? (kindRaw as
-							| "compensation"
-							| "deduction"
-							| "workbook"
-							| "manpower-databank")
+			const kind = isKnownUploadActivityKind(kindRaw) ? kindRaw : null;
+			const workbookScope = String(
+				req.query.workbookId || req.query.workbookScope || "",
+			)
+				.trim()
+				.toLowerCase();
+			const kinds =
+				!kind && workbookScope
+					? resolveUploadActivityKindsForWorkbook(workbookScope)
 					: null;
 			const migrationRunId = String(req.query.migrationRunId || req.query.runId || "").trim() || null;
 			const limit = Number(req.query.limit || 50);
@@ -3498,6 +3502,7 @@ export const controller = (prisma: PrismaClient) => {
 				prisma,
 				organizationId,
 				kind,
+				kinds,
 				migrationRunId,
 				limit,
 			});
@@ -4704,10 +4709,88 @@ export const controller = (prisma: PrismaClient) => {
 				},
 			});
 
+			// DM1/DM2 client-side workbook imports: durable Upload activity on end.
+			// DM3/DM4 durable runs write activity from MigrationRunService.finishRun.
+			let uploadActivityLogId: string | null = null;
+			if (
+				event === "end" &&
+				organizationId &&
+				(workbookId === "dm1" || workbookId === "dm2")
+			) {
+				const totals = body.totals || {};
+				const total = Number(totals.totalRows ?? totals.total ?? 0);
+				const created = Number(totals.created ?? 0);
+				const updated = Number(totals.updated ?? 0);
+				const skipped = Number(totals.skipped ?? 0);
+				const failed = Number(totals.failed ?? 0) + Number(totals.blocked ?? 0);
+				const statusText = String(body.status || "").toLowerCase();
+				const status =
+					statusText.includes("fail") || statusText === "blocked"
+						? failed > 0 && created + updated > 0
+							? ("partial" as const)
+							: ("failed" as const)
+						: resolveMassUploadImportStatus({ total, created, updated, failed });
+				const kind: Dm3ImportActivityKind =
+					workbookId === "dm1" ? "dm1-workbook" : "dm2-workbook";
+				const reportSheets = Array.isArray(report?.sheets) ? report.sheets : [];
+				const results = reportSheets.map((sheet: any, index: number) => ({
+					row: index + 1,
+					code: String(sheet?.sheetName || `sheet-${index + 1}`),
+					action:
+						String(sheet?.status || "").toLowerCase() === "imported" ||
+						String(sheet?.status || "").toLowerCase() === "completed"
+							? ("updated" as const)
+							: Number(sheet?.failed || 0) + Number(sheet?.blocked || 0) > 0
+								? ("failed" as const)
+								: ("skipped" as const),
+					message: `${sheet?.sheetName || "Sheet"}: ${Number(sheet?.created || 0)} created, ${Number(sheet?.updated || 0)} updated, ${Number(sheet?.failed || 0)} failed`,
+				}));
+				const errors = reportSheets
+					.filter(
+						(sheet: any) =>
+							Number(sheet?.failed || 0) + Number(sheet?.blocked || 0) > 0 ||
+							["Failed", "Blocked", "Needs recovery"].includes(String(sheet?.status || "")),
+					)
+					.map((sheet: any, index: number) => ({
+						row: index + 1,
+						code: String(sheet?.sheetName || ""),
+						field: "sheet",
+						message:
+							String(sheet?.firstError || "").trim() ||
+							`${sheet?.sheetName || "Sheet"} finished with issues`,
+					}));
+				const startedAt = body.startedAt ? new Date(body.startedAt) : new Date();
+				const finishedAt = body.finishedAt ? new Date(body.finishedAt) : new Date();
+				const log = await persistDm3ImportActivityLog({
+					prisma,
+					organizationId,
+					kind,
+					sourceFilename: sourceFilename || `${workbookId}-workbook.xlsx`,
+					migrationRunId: runId,
+					startedByUserId: actorUserId || null,
+					startedAt: Number.isNaN(startedAt.getTime()) ? new Date() : startedAt,
+					finishedAt: Number.isNaN(finishedAt.getTime()) ? new Date() : finishedAt,
+					total,
+					created,
+					updated,
+					skipped,
+					failed,
+					status,
+					errors,
+					results,
+					summaryExtra: {
+						workbookId,
+						runStatus: body.status || null,
+						totals,
+					},
+				});
+				uploadActivityLogId = log?.id || null;
+			}
+
 			res.status(200).json(
 				buildSuccessResponse(
 					"Workbook migration audit event logged.",
-					{ logged: true, runId, event },
+					{ logged: true, runId, event, importLogId: uploadActivityLogId },
 					200,
 				),
 			);

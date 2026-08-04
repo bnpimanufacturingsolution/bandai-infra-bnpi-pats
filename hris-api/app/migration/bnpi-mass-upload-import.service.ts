@@ -323,16 +323,59 @@ function resultsForPersist(allResults: MassUploadRowResult[]): {
 	return { results: [...head, ...tail], truncated: true };
 }
 
-/** All DM3 operator uploads that appear in the unified Upload activity feed. */
+/**
+ * Operator upload activity kinds stored in mass_upload_import_logs.
+ * DM3 uses workbook/databank/comp/deduction; DM1/DM2/DM4 use stage workbook kinds.
+ */
 export type Dm3ImportActivityKind =
 	| "workbook"
 	| "manpower-databank"
 	| "compensation"
-	| "deduction";
+	| "deduction"
+	| "dm1-workbook"
+	| "dm2-workbook"
+	| "dm4-workbook"
+	| "dm4-overtime";
+
+/** @deprecated Prefer MigrationUploadActivityKind alias — kept for call-site compatibility. */
+export type MigrationUploadActivityKind = Dm3ImportActivityKind;
+
+export const DM_UPLOAD_ACTIVITY_KINDS_BY_WORKBOOK: Record<string, Dm3ImportActivityKind[]> = {
+	dm1: ["dm1-workbook"],
+	dm2: ["dm2-workbook"],
+	dm3: ["workbook", "manpower-databank", "compensation", "deduction"],
+	dm4: ["dm4-workbook", "dm4-overtime"],
+};
+
+export function resolveUploadActivityKindsForWorkbook(
+	workbookId?: string | null,
+): Dm3ImportActivityKind[] | null {
+	const key = String(workbookId || "")
+		.trim()
+		.toLowerCase();
+	if (!key) return null;
+	return DM_UPLOAD_ACTIVITY_KINDS_BY_WORKBOOK[key] || null;
+}
+
+export function isKnownUploadActivityKind(kind?: string | null): kind is Dm3ImportActivityKind {
+	const value = String(kind || "")
+		.trim()
+		.toLowerCase();
+	return (
+		value === "workbook" ||
+		value === "manpower-databank" ||
+		value === "compensation" ||
+		value === "deduction" ||
+		value === "dm1-workbook" ||
+		value === "dm2-workbook" ||
+		value === "dm4-workbook" ||
+		value === "dm4-overtime"
+	);
+}
 
 /**
- * Durable operator activity for any DM3 expected upload (workbook, databank,
- * compensation, deduction). Best-effort: never throws into the import path.
+ * Durable operator activity for migration uploads (DM1–DM4).
+ * Best-effort: never throws into the import path.
  */
 export async function persistDm3ImportActivityLog(params: {
 	prisma: PrismaClient;
@@ -518,6 +561,8 @@ export async function listMassUploadImportLogs(params: {
 	prisma: PrismaClient;
 	organizationId: string;
 	kind?: Dm3ImportActivityKind | null;
+	/** When set (and kind not set), filter to all kinds for that DM stage. */
+	kinds?: Dm3ImportActivityKind[] | null;
 	migrationRunId?: string | null;
 	limit?: number;
 }) {
@@ -530,7 +575,11 @@ export async function listMassUploadImportLogs(params: {
 		organizationId: params.organizationId,
 		isDeleted: false,
 	};
-	if (params.kind) where.kind = params.kind;
+	if (params.kind) {
+		where.kind = params.kind;
+	} else if (params.kinds && params.kinds.length > 0) {
+		where.kind = { in: params.kinds };
+	}
 	if (params.migrationRunId) where.migrationRunId = params.migrationRunId;
 
 	try {

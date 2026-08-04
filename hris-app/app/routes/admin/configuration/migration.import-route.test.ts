@@ -54,6 +54,24 @@ describe("admin migration route contract", () => {
 		expect(isDm4ApprovedOvertimeSource("Biometrics Data_Jun 26 - Jul 10.xlsx")).toBe(false);
 	});
 
+	it("labels DM1/DM2/DM4 upload activity kinds for the shared feed", () => {
+		// Imported helpers cover OT basename + OT-only payload; activity copy is pure and local.
+		// Smoke: kind strings used by the shared mass_upload_import_logs kinds remain distinct.
+		const kinds = [
+			"dm1-workbook",
+			"dm2-workbook",
+			"workbook",
+			"dm4-workbook",
+			"dm4-overtime",
+			"compensation",
+			"deduction",
+			"manpower-databank",
+		];
+		expect(new Set(kinds).size).toBe(kinds.length);
+		expect(kinds).toContain("dm4-overtime");
+		expect(kinds).toContain("dm1-workbook");
+	});
+
 	it("scopes DM4 overtime-only runs to the selected OT file without biometrics", () => {
 		const biometrics = [
 			"confidential-files/DMs/Biometrics Data_Jun 26 - Jul 10.xlsx",

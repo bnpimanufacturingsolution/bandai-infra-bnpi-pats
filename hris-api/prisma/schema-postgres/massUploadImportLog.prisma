@@ -7,6 +7,7 @@ model MassUploadImportLog {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   /// workbook | manpower-databank | compensation | deduction
+  /// | dm1-workbook | dm2-workbook | dm4-workbook | dm4-overtime
   kind   String
   /// completed | partial | failed
   status String

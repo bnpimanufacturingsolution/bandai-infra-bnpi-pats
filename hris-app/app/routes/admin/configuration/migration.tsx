@@ -470,9 +470,13 @@ type Dm3UploadActivityKind =
 	| "workbook"
 	| "manpower-databank"
 	| "compensation"
-	| "deduction";
+	| "deduction"
+	| "dm1-workbook"
+	| "dm2-workbook"
+	| "dm4-workbook"
+	| "dm4-overtime";
 
-/** Compact one-line activity label for the DM3 feed (details live in the modal). */
+/** Compact one-line activity label for the Upload activity feed (details live in the modal). */
 function formatMassUploadUserActivityMessage(params: {
 	kind: Dm3UploadActivityKind | string;
 	sourceFilename?: string | null;
@@ -492,7 +496,15 @@ function formatMassUploadUserActivityMessage(params: {
 					? "Deduction"
 					: kind === "compensation"
 						? "Compensation"
-						: "Upload";
+						: kind === "dm1-workbook"
+							? "DM1 workbook"
+							: kind === "dm2-workbook"
+								? "DM2 workbook"
+								: kind === "dm4-workbook"
+									? "DM4 attendance"
+									: kind === "dm4-overtime"
+										? "DM4 overtime"
+										: "Upload";
 	const ok = Number(params.created || 0) + Number(params.updated || 0);
 	const failed = Number(params.failed || 0);
 	return `${title} · ${ok} ok · ${failed} fail`;
@@ -504,8 +516,55 @@ function dm3UploadActivityKindLabel(kind?: string | null): string {
 	if (k === "manpower-databank") return "Employee databank";
 	if (k === "deduction") return "Deduction";
 	if (k === "compensation") return "Compensation";
+	if (k === "dm1-workbook") return "DM1 workbook";
+	if (k === "dm2-workbook") return "DM2 workbook";
+	if (k === "dm4-workbook") return "DM4 attendance";
+	if (k === "dm4-overtime") return "DM4 overtime";
 	return "Upload";
 }
+
+function parseUploadActivityKind(raw?: string | null): Dm3UploadActivityKind {
+	const value = String(raw || "").toLowerCase().trim();
+	if (
+		value === "workbook" ||
+		value === "manpower-databank" ||
+		value === "deduction" ||
+		value === "compensation" ||
+		value === "dm1-workbook" ||
+		value === "dm2-workbook" ||
+		value === "dm4-workbook" ||
+		value === "dm4-overtime"
+	) {
+		return value;
+	}
+	return "workbook";
+}
+
+const UPLOAD_ACTIVITY_FILTERS_BY_WORKBOOK: Record<
+	string,
+	Array<{ value: "all" | Dm3UploadActivityKind; label: string }>
+> = {
+	dm1: [
+		{ value: "all", label: "All" },
+		{ value: "dm1-workbook", label: "Workbook" },
+	],
+	dm2: [
+		{ value: "all", label: "All" },
+		{ value: "dm2-workbook", label: "Workbook" },
+	],
+	dm3: [
+		{ value: "all", label: "All" },
+		{ value: "workbook", label: "DM3" },
+		{ value: "manpower-databank", label: "Databank" },
+		{ value: "compensation", label: "Comp" },
+		{ value: "deduction", label: "Ded" },
+	],
+	dm4: [
+		{ value: "all", label: "All" },
+		{ value: "dm4-workbook", label: "Attendance" },
+		{ value: "dm4-overtime", label: "Overtime" },
+	],
+};
 
 function massUploadHistoryStatusToSheetStatus(status?: string | null): WorkbookSheetStatus {
 	const normalized = String(status || "").toLowerCase();
@@ -2566,22 +2625,36 @@ export default function AdminMigrationPage() {
 			},
 			staleTime: 60_000,
 		});
+	const uploadActivityWorkbookId =
+		workbookParam === "dm1" ||
+		workbookParam === "dm2" ||
+		workbookParam === "dm3" ||
+		workbookParam === "dm4"
+			? workbookParam
+			: null;
+	// Reset activity filter when switching DM stages so a DM3-only kind is not left selected on DM4.
+	useEffect(() => {
+		setDm3MassUploadHistoryKind("all");
+	}, [uploadActivityWorkbookId]);
 	const { data: dm3MassUploadHistoryData, isLoading: isLoadingDm3MassUploadHistory } = useQuery({
 		queryKey: [
 			"dm3-mass-upload-imports",
 			organizationId,
+			uploadActivityWorkbookId,
 			dm3MassUploadHistoryKind,
-			workbookParam === "dm3" ? runIdParam || "" : "",
 		],
 		queryFn: async () => {
 			const params: Record<string, string | number> = {
 				organizationId,
 				limit: 50,
 			};
+			if (uploadActivityWorkbookId) {
+				params.workbookId = uploadActivityWorkbookId;
+			}
 			if (dm3MassUploadHistoryKind !== "all") {
 				params.kind = dm3MassUploadHistoryKind;
 			}
-			// Prefer org-wide history; optional run filter is available via kind "all" + future UI.
+			// Same durable log table as DM3 mass uploads; scoped by workbookId for DM1–DM4.
 			const response = await hrisApiClient.get<{
 				items?: Array<{
 					id: string;
@@ -2607,7 +2680,7 @@ export default function AdminMigrationPage() {
 				total: Number(payload?.total || 0),
 			};
 		},
-		enabled: Boolean(organizationId && workbookParam === "dm3"),
+		enabled: Boolean(organizationId && uploadActivityWorkbookId),
 		staleTime: 15_000,
 	});
 	const { data: latestDm3RunData, isLoading: isLoadingLatestDm3Run } = useQuery({
@@ -2771,6 +2844,10 @@ export default function AdminMigrationPage() {
 		if (!DM3_RUN_TERMINAL_STATUSES.includes(dm4RunProgressData.status)) return;
 		void queryClient.invalidateQueries({
 			queryKey: ["migration-run-latest", "dm4", organizationId],
+		});
+		// DM4 durable run writes Upload activity on finish.
+		void queryClient.invalidateQueries({
+			queryKey: ["dm3-mass-upload-imports", organizationId],
 		});
 		setDm4ActiveRunId(null);
 	}, [dm4ActiveRunId, dm4RunProgressData, organizationId, queryClient]);
@@ -3626,55 +3703,45 @@ export default function AdminMigrationPage() {
 	const activeWorkbookReportErrors = activeWorkbookReport
 		? activeWorkbookReport.sheets.flatMap((sheet) => sheet.errors)
 		: [];
-	const dm3UserMassUploadEvents: MigrationLiveEvent[] =
-		activeWorkbookGroup?.id === "dm3"
-			? (dm3MassUploadHistoryData?.items || []).map((item) => {
-					const rawKind = String(item.kind || "").toLowerCase();
-					const kind: Dm3UploadActivityKind =
-						rawKind === "workbook" ||
-						rawKind === "manpower-databank" ||
-						rawKind === "deduction" ||
-						rawKind === "compensation"
-							? rawKind
-							: "compensation";
-					const actor =
-						item.startedByUser?.userName ||
-						item.startedByUser?.email ||
-						"User";
-					return {
-						id: `mass-upload-${item.id}`,
-						at: item.finishedAt || item.createdAt || new Date().toISOString(),
-						sheetName: dm3UploadActivityKindLabel(kind),
-						status: massUploadHistoryStatusToSheetStatus(item.status),
-						message: formatMassUploadUserActivityMessage({
-							kind,
-							sourceFilename: item.sourceFilename,
-							created: item.created,
-							updated: item.updated,
-							failed: item.failed,
-							total: item.total,
-							status: item.status,
-						}),
-						eventType: "USER_MASS_UPLOAD",
-						importLogId: item.id,
-						actorLabel: actor,
-						isUserActivity: true,
-						metadata: {
-							importLogId: item.id,
-							kind,
-							sourceFilename: item.sourceFilename,
-							status: item.status,
-							created: item.created,
-							updated: item.updated,
-							failed: item.failed,
-							total: item.total,
-						},
-					};
-				})
-			: [];
+	const dm3UserMassUploadEvents: MigrationLiveEvent[] = (
+		dm3MassUploadHistoryData?.items || []
+	).map((item) => {
+		const kind = parseUploadActivityKind(item.kind);
+		const actor =
+			item.startedByUser?.userName || item.startedByUser?.email || "User";
+		return {
+			id: `mass-upload-${item.id}`,
+			at: item.finishedAt || item.createdAt || new Date().toISOString(),
+			sheetName: dm3UploadActivityKindLabel(kind),
+			status: massUploadHistoryStatusToSheetStatus(item.status),
+			message: formatMassUploadUserActivityMessage({
+				kind,
+				sourceFilename: item.sourceFilename,
+				created: item.created,
+				updated: item.updated,
+				failed: item.failed,
+				total: item.total,
+				status: item.status,
+			}),
+			eventType: "USER_MASS_UPLOAD",
+			importLogId: item.id,
+			actorLabel: actor,
+			isUserActivity: true,
+			metadata: {
+				importLogId: item.id,
+				kind,
+				sourceFilename: item.sourceFilename,
+				status: item.status,
+				created: item.created,
+				updated: item.updated,
+				failed: item.failed,
+				total: item.total,
+			},
+		};
+	});
 	const activeWorkbookLiveEvents = activeWorkbookGroup
 		? [
-				// User mass-upload actions first in the feed for DM3 (operator-facing activity).
+				// Operator upload activity first (DM1–DM4 clickable history).
 				...dm3UserMassUploadEvents,
 				...(activeWorkbookReport?.events || []),
 				...(workbookLiveEvents[activeWorkbookGroup.id] || []),
@@ -3690,16 +3757,13 @@ export default function AdminMigrationPage() {
 						) === index,
 				)
 				.sort((left, right) => {
-					// Prefer user mass-upload activity over system sheet progress for DM3.
-					if (activeWorkbookGroup.id === "dm3") {
-						const userDelta = Number(right.isUserActivity) - Number(left.isUserActivity);
-						if (userDelta !== 0) return userDelta;
-						return getReportTimeMs(right.at) - getReportTimeMs(left.at);
+					const userDelta = Number(right.isUserActivity) - Number(left.isUserActivity);
+					if (userDelta !== 0) return userDelta;
+					if (["dm3", "dm4"].includes(activeWorkbookGroup.id)) {
+						const evidenceDelta =
+							Number(isRowEvidenceEvent(right)) - Number(isRowEvidenceEvent(left));
+						if (evidenceDelta !== 0) return evidenceDelta;
 					}
-					if (!["dm3", "dm4"].includes(activeWorkbookGroup.id)) return 0;
-					const evidenceDelta =
-						Number(isRowEvidenceEvent(right)) - Number(isRowEvidenceEvent(left));
-					if (evidenceDelta !== 0) return evidenceDelta;
 					return getReportTimeMs(right.at) - getReportTimeMs(left.at);
 				})
 				.slice(0, 200)
@@ -6086,6 +6150,10 @@ export default function AdminMigrationPage() {
 				await queryClient.invalidateQueries({
 					queryKey: ["migration-workbook-reports", organizationId],
 				});
+				// DM1/DM2 end events also write durable Upload activity server-side.
+				await queryClient.invalidateQueries({
+					queryKey: ["dm3-mass-upload-imports", organizationId],
+				});
 			}
 		} catch (error) {
 			console.warn("Migration audit log failed", error);
@@ -7408,16 +7476,9 @@ export default function AdminMigrationPage() {
 			} as any);
 			const payload = (response as any)?.data || response;
 			const summary = payload?.summary || {};
-			const rawKind = String(summary.kind || payload?.importLog?.kind || "compensation")
-				.toLowerCase()
-				.trim();
-			const kind: Dm3UploadActivityKind =
-				rawKind === "workbook" ||
-				rawKind === "manpower-databank" ||
-				rawKind === "deduction" ||
-				rawKind === "compensation"
-					? rawKind
-					: "compensation";
+			const kind = parseUploadActivityKind(
+				summary.kind || payload?.importLog?.kind || "workbook",
+			);
 			setDm3MassUploadResult({
 				kind,
 				label: dm3UploadActivityKindLabel(kind),
@@ -7442,13 +7503,16 @@ export default function AdminMigrationPage() {
 					resultsTruncated: Boolean(summary.resultsTruncated),
 				},
 			});
-			// Result modal reuses mass-upload shell; map workbook → compensation kind for URL.
+			// Result modal: mass-upload kinds keep their shells; workbook/DM1/DM2/DM4 use
+			// compensation shell only as a host for the shared result tables.
 			const modalKind: WorkbookUploadKind =
-				kind === "workbook"
-					? "compensation"
-					: kind === "manpower-databank"
-						? "manpower-databank"
-						: kind;
+				kind === "manpower-databank"
+					? "manpower-databank"
+					: kind === "deduction"
+						? "deduction"
+						: kind === "compensation"
+							? "compensation"
+							: "compensation";
 			openWorkbookUploadModal(modalKind);
 		} catch (error: any) {
 			toast.error(
@@ -7886,13 +7950,18 @@ export default function AdminMigrationPage() {
 			: isCompensation
 				? "Drop compensation mass upload .xlsx"
 				: "Drop deduction mass upload .xlsx";
-		// Show durable activity result for any DM3 upload kind (workbook/databank/comp/ded).
+		// Show durable activity result for mass-upload kinds and DM1–DM4 workbook history.
+		// Compensation shell hosts workbook / dm1 / dm2 / dm4 result tables.
 		const resultForRole =
 			dm3MassUploadResult &&
 			(dm3MassUploadResult.kind === role ||
 				(role === "compensation" &&
 					(dm3MassUploadResult.kind === "workbook" ||
-						dm3MassUploadResult.kind === "compensation")) ||
+						dm3MassUploadResult.kind === "compensation" ||
+						dm3MassUploadResult.kind === "dm1-workbook" ||
+						dm3MassUploadResult.kind === "dm2-workbook" ||
+						dm3MassUploadResult.kind === "dm4-workbook" ||
+						dm3MassUploadResult.kind === "dm4-overtime")) ||
 				(role === "manpower-databank" &&
 					dm3MassUploadResult.kind === "manpower-databank") ||
 				(role === "deduction" && dm3MassUploadResult.kind === "deduction"))
@@ -8236,6 +8305,82 @@ export default function AdminMigrationPage() {
 						</div>
 					</>
 				) : null}
+			</div>
+		);
+	};
+
+	const renderUploadActivityPanel = (workbookId: string) => {
+		const filters = UPLOAD_ACTIVITY_FILTERS_BY_WORKBOOK[workbookId] || [
+			{ value: "all" as const, label: "All" },
+		];
+		return (
+			<div className="rounded-lg border border-gray-200 bg-white">
+				<div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
+					<p className="text-xs font-semibold text-gray-900">Upload activity</p>
+					<div className="flex flex-wrap justify-end gap-1">
+						{filters.map(({ value, label: filterLabel }) => (
+							<button
+								key={value}
+								type="button"
+								onClick={() => setDm3MassUploadHistoryKind(value)}
+								className={`rounded px-2 py-0.5 text-[10px] font-medium ${
+									dm3MassUploadHistoryKind === value
+										? "bg-orange-50 text-orange-800"
+										: "text-gray-500 hover:bg-gray-50"
+								}`}>
+								{filterLabel}
+							</button>
+						))}
+					</div>
+				</div>
+				<div className="max-h-40 overflow-auto">
+					{isLoadingDm3MassUploadHistory ? (
+						<div className="px-3 py-2 text-[11px] text-gray-500">Loading…</div>
+					) : dm3UserActivityFeed.length === 0 ? (
+						<p className="px-3 py-2 text-[11px] text-gray-500">No uploads yet</p>
+					) : (
+						<ul className="divide-y divide-gray-100">
+							{dm3UserActivityFeed.map((event, index) => {
+								const clickable = Boolean(event.importLogId);
+								const isLatest = index === 0;
+								return (
+									<li key={event.id}>
+										<button
+											type="button"
+											disabled={!clickable}
+											title={
+												event.metadata?.sourceFilename
+													? String(event.metadata.sourceFilename)
+													: event.message
+											}
+											onClick={() => {
+												if (event.importLogId) {
+													void openMassUploadImportLog(
+														String(event.importLogId),
+													);
+												}
+											}}
+											className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] ${
+												clickable ? "hover:bg-gray-50" : "cursor-default"
+											} ${isLatest ? "bg-orange-50/40" : ""}`}>
+											<span className="shrink-0 tabular-nums text-gray-400">
+												{formatReportTimestamp(event.at)}
+											</span>
+											<span
+												className={`min-w-0 flex-1 truncate ${
+													Number(event.metadata?.failed || 0) > 0
+														? "text-red-700"
+														: "text-gray-900"
+												}`}>
+												{event.message}
+											</span>
+										</button>
+									</li>
+								);
+							})}
+						</ul>
+					)}
+				</div>
 			</div>
 		);
 	};
@@ -8827,6 +8972,7 @@ export default function AdminMigrationPage() {
 									Upload overtime
 								</Button>
 							</div>
+							{renderUploadActivityPanel("dm4")}
 						</div>
 					) : group.id === "dm3" ? (
 						<div className="mt-2 space-y-4">
@@ -8957,82 +9103,7 @@ export default function AdminMigrationPage() {
 								</Button>
 							</div>
 
-							<div className="rounded-lg border border-gray-200 bg-white">
-								<div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
-									<p className="text-xs font-semibold text-gray-900">Upload activity</p>
-									<div className="flex flex-wrap justify-end gap-1">
-										{(
-											[
-												["all", "All"],
-												["workbook", "DM3"],
-												["manpower-databank", "Databank"],
-												["compensation", "Comp"],
-												["deduction", "Ded"],
-											] as const
-										).map(([value, filterLabel]) => (
-											<button
-												key={value}
-												type="button"
-												onClick={() => setDm3MassUploadHistoryKind(value)}
-												className={`rounded px-2 py-0.5 text-[10px] font-medium ${
-													dm3MassUploadHistoryKind === value
-														? "bg-orange-50 text-orange-800"
-														: "text-gray-500 hover:bg-gray-50"
-												}`}>
-												{filterLabel}
-											</button>
-										))}
-									</div>
-								</div>
-								<div className="max-h-40 overflow-auto">
-									{isLoadingDm3MassUploadHistory ? (
-										<div className="px-3 py-2 text-[11px] text-gray-500">Loading…</div>
-									) : dm3UserActivityFeed.length === 0 ? (
-										<p className="px-3 py-2 text-[11px] text-gray-500">No uploads yet</p>
-									) : (
-										<ul className="divide-y divide-gray-100">
-											{dm3UserActivityFeed.map((event, index) => {
-												const clickable = Boolean(event.importLogId);
-												const isLatest = index === 0;
-												return (
-													<li key={event.id}>
-														<button
-															type="button"
-															disabled={!clickable}
-															title={
-																event.metadata?.sourceFilename
-																	? String(event.metadata.sourceFilename)
-																	: event.message
-															}
-															onClick={() => {
-																if (event.importLogId) {
-																	void openMassUploadImportLog(
-																		String(event.importLogId),
-																	);
-																}
-															}}
-															className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] ${
-																clickable ? "hover:bg-gray-50" : "cursor-default"
-															} ${isLatest ? "bg-orange-50/40" : ""}`}>
-															<span className="shrink-0 tabular-nums text-gray-400">
-																{formatReportTimestamp(event.at)}
-															</span>
-															<span
-																className={`min-w-0 flex-1 truncate ${
-																	Number(event.metadata?.failed || 0) > 0
-																		? "text-red-700"
-																		: "text-gray-900"
-																}`}>
-																{event.message}
-															</span>
-														</button>
-													</li>
-												);
-											})}
-										</ul>
-									)}
-								</div>
-							</div>
+							{renderUploadActivityPanel("dm3")}
 						</div>
 					) : (
 						<div className="mt-2 space-y-4">
@@ -9089,6 +9160,9 @@ export default function AdminMigrationPage() {
 									Upload workbook
 								</Button>
 							</div>
+							{group.id === "dm1" || group.id === "dm2"
+								? renderUploadActivityPanel(group.id)
+								: null}
 						</div>
 					)}
 				</section>
@@ -9544,18 +9618,27 @@ return (
 											: "Select the .xlsx workbook for this migration stage."
 				}
 				className={HR_MODAL_STANDARD_CLASS}>
-				{dm4UploadRole
-					? renderDm4SourceUploadPanel(dm4UploadRole)
-					: dm3MassUploadRole
-						? renderDm3MassUploadPanel(dm3MassUploadRole)
-						: activeWorkbookGroup &&
-							  (isDm3WorkbookUploadModal || isStandardWorkbookUploadModal)
-							? renderWorkbookUploadPanel(activeWorkbookGroup)
+				{dm3MassUploadResult
+					? // Clickable Upload activity history (DM1–DM4) + mass-upload results.
+						renderDm3MassUploadPanel(
+							dm3MassUploadResult.kind === "deduction"
+								? "deduction"
+								: dm3MassUploadResult.kind === "manpower-databank"
+									? "manpower-databank"
+									: "compensation",
+						)
+					: dm4UploadRole
+						? renderDm4SourceUploadPanel(dm4UploadRole)
+						: dm3MassUploadRole
+							? renderDm3MassUploadPanel(dm3MassUploadRole)
 							: activeWorkbookGroup &&
-								  activeWorkbookGroup.id !== "dm4" &&
-								  workbookUploadKind === "workbook"
+								  (isDm3WorkbookUploadModal || isStandardWorkbookUploadModal)
 								? renderWorkbookUploadPanel(activeWorkbookGroup)
-								: null}
+								: activeWorkbookGroup &&
+									  activeWorkbookGroup.id !== "dm4" &&
+									  workbookUploadKind === "workbook"
+									? renderWorkbookUploadPanel(activeWorkbookGroup)
+									: null}
 			</Modal>
 
 

@@ -957,12 +957,19 @@ export class MigrationRunService {
 					errorJson: { message: failMessage },
 				},
 			});
-			if (current?.workbookId === "dm3" && current.organizationId) {
+			if (
+				current?.organizationId &&
+				(current.workbookId === "dm3" || current.workbookId === "dm4")
+			) {
+				const kind =
+					current.workbookId === "dm4" ? ("dm4-workbook" as const) : ("workbook" as const);
 				await persistDm3ImportActivityLog({
 					prisma: this.prisma,
 					organizationId: current.organizationId,
-					kind: "workbook",
-					sourceFilename: current.sourceFilename || "dm3-workbook.xlsx",
+					kind,
+					sourceFilename:
+						current.sourceFilename ||
+						(current.workbookId === "dm4" ? "dm4-sources.xlsx" : "dm3-workbook.xlsx"),
 					migrationRunId: runId,
 					startedByUserId: current.startedByUserId || null,
 					startedAt: current.startedAt || current.createdAt || finishedAt,
@@ -974,7 +981,7 @@ export class MigrationRunService {
 					failed: 1,
 					status: "failed",
 					errors: [{ row: 0, message: failMessage }],
-					summaryExtra: { runStatus: "FAILED" },
+					summaryExtra: { runStatus: "FAILED", workbookId: current.workbookId },
 				});
 			}
 		}
@@ -1017,14 +1024,35 @@ export class MigrationRunService {
 			counts: result.counts || null,
 		});
 
-		// DM3 workbook upload: durable operator activity (same feed as mass uploads).
-		if (!dryRun && current?.workbookId === "dm3" && current.organizationId) {
+		// DM3/DM4 durable runs: operator Upload activity (clickable history, same table as mass uploads).
+		if (
+			!dryRun &&
+			current?.organizationId &&
+			(current.workbookId === "dm3" || current.workbookId === "dm4")
+		) {
 			const counts = (result.counts || {}) as Record<string, any>;
+			const proof = (result.proofJson || {}) as Record<string, any>;
+			const otOnly = Boolean(
+				proof?.guardrails?.otOnly ||
+					proof?.mode === "OT_ONLY_SKIP_ATTENDANCE" ||
+					(Number(counts.attendanceWorkbookCount || 0) === 0 &&
+						Number(counts.approvedOvertimeWorkbookCount || 0) > 0),
+			);
 			const total = Number(
-				counts.totalRows ?? counts.total ?? counts.rows ?? counts.processed ?? 0,
+				counts.totalRows ??
+					counts.total ??
+					counts.rows ??
+					counts.processed ??
+					counts.sourceWorkbookCount ??
+					0,
 			);
 			const created = Number(counts.created ?? counts.success ?? 0);
-			const updated = Number(counts.updated ?? 0);
+			const updated = Number(
+				counts.updated ??
+					counts.plannedLineUpdates ??
+					proof?.approvedOvertimeRepair?.plannedLineUpdates ??
+					0,
+			);
 			const skipped = Number(counts.skipped ?? 0);
 			const failed = Number(counts.failed ?? counts.failures ?? 0);
 			const blocked = Number(counts.blocked ?? 0);
@@ -1035,36 +1063,67 @@ export class MigrationRunService {
 						? ("partial" as const)
 						: ("failed" as const)
 					: resolveMassUploadImportStatus({
-							total,
+							total: total || created + updated + failed + blocked,
 							created,
 							updated,
 							failed: failed + blocked,
 						});
+			const kind =
+				current.workbookId === "dm4"
+					? otOnly
+						? ("dm4-overtime" as const)
+						: ("dm4-workbook" as const)
+					: ("workbook" as const);
+			const defaultName =
+				kind === "dm4-overtime"
+					? "dm4-overtime.xlsx"
+					: kind === "dm4-workbook"
+						? "dm4-sources.xlsx"
+						: "dm3-workbook.xlsx";
 			const errorMessage =
 				(result.errorJson as any)?.message ||
-				(status === "failed" ? "DM3 workbook import failed or blocked." : undefined);
+				(status === "failed"
+					? `${String(current.workbookId).toUpperCase()} import failed or blocked.`
+					: undefined);
+			const results =
+				current.workbookId === "dm4"
+					? [
+							{
+								row: 1,
+								code: otOnly ? "DM4.3" : "DM4",
+								action:
+									status === "failed"
+										? ("failed" as const)
+										: ("updated" as const),
+								message: otOnly
+									? `Approved overtime only · ${updated} line update(s)`
+									: `Attendance/timesheet proof · ${created} created · ${updated} updated`,
+							},
+						]
+					: [];
 			await persistDm3ImportActivityLog({
 				prisma: this.prisma,
 				organizationId: current.organizationId,
-				kind: "workbook",
-				sourceFilename: current.sourceFilename || "dm3-workbook.xlsx",
+				kind,
+				sourceFilename: current.sourceFilename || defaultName,
 				migrationRunId: runId,
 				startedByUserId: current.startedByUserId || null,
 				startedAt: current.startedAt || current.createdAt || finishedAt,
 				finishedAt,
-				total,
+				total: total || created + updated + failed + blocked,
 				created,
 				updated,
 				skipped,
 				failed: failed + blocked,
 				status,
-				errors: errorMessage
-					? [{ row: 0, message: String(errorMessage) }]
-					: [],
+				errors: errorMessage ? [{ row: 0, message: String(errorMessage) }] : [],
+				results,
 				summaryExtra: {
 					runStatus: result.status,
 					phase: result.phase || result.status,
 					counts,
+					workbookId: current.workbookId,
+					otOnly,
 				},
 			});
 		}
