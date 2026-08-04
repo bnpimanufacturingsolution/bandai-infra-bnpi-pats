@@ -1,13 +1,13 @@
 /**
- * Period OT readiness — keep Run Payroll Approved OT panel responsive.
+ * Period OT readiness ΓÇö approved OT on effective timesheet lines / timesheet totals.
  *
- * Fast path (default):
- * - List + summary chips from timesheets.totalOvertimeHours (no full line hydrate)
- * - Deep-load line OT only for current page (limit)
+ * Perf strategy (Run Payroll accordion must not hang on ~800 timesheets ├ù N lines):
+ * 1) Light timesheet list (status + totalOvertimeHours + employee) ΓÇö no nested lines
+ * 2) SQL aggregate only effective lines that carry OT (skips empty day rows)
+ * 3) Attendance OT compared only for the current page (optional deep-load)
  *
- * Optional accuracy: OT_READINESS_FULL_LINE_TOTALS=true runs period-wide line aggregates.
- *
- * Payable source remains timesheetline.overtimeHours after approved OT import.
+ * Payable source: timesheet_lines.overtimeHours (effective). Fallback: timesheets.totalOvertimeHours.
+ * Raw attendance is evidence only.
  */
 import type { PrismaClient } from "../generated/prisma";
 import { Prisma } from "../generated/prisma";
@@ -33,6 +33,7 @@ function formatMinutesAsHhMm(minutes: number): string {
 	return `${h}:${String(m).padStart(2, "0")}`;
 }
 
+/** HH:MM or decimal hours ΓåÆ minutes (Postgres). Column: l."overtimeHours" */
 const LINE_OT_MINUTES_SQL = Prisma.sql`
   CASE
     WHEN l."overtimeHours" IS NULL OR btrim(l."overtimeHours") = '' THEN 0
@@ -81,7 +82,7 @@ export type PayrollOtReadinessResult = {
 	};
 	truth: {
 		payableSource: "timesheetline.overtimeHours (effective) / timesheet.totalOvertimeHours";
-		rawAttendanceRole: "punch evidence only — not payable OT without approved OT → lines";
+		rawAttendanceRole: "punch evidence only ΓÇö not payable OT without approved OT ΓåÆ lines";
 		note: string;
 	};
 	summary: {
@@ -95,7 +96,6 @@ export type PayrollOtReadinessResult = {
 		totalAttendanceOtMinutes: number;
 		totalAttendanceOtHours: number;
 		totalDeltaMinutes: number;
-		lineTotalsApproximate?: boolean;
 	};
 	people: PayrollOtReadinessPerson[];
 	pagination: {
@@ -106,12 +106,12 @@ export type PayrollOtReadinessResult = {
 		hasNextPage: boolean;
 	};
 	queryMeta?: {
-		strategy: "summary_first_page_deep_lines";
+		strategy: "summary_first_sql_line_agg_page";
 		pageLimit: number;
 		onlyWithOt: boolean;
 		lightTimesheets: number;
+		lineAggRows: number;
 		deepLoaded: number;
-		fullLineTotals: boolean;
 	};
 };
 
@@ -138,7 +138,7 @@ function classifyPerson(input: {
 	const deltaMinutes = lineOtMinutes - attendanceOtMinutes;
 	let blockerClass: PayrollOtReadinessPerson["blockerClass"] = "no_ot";
 	let nextStep =
-		"No OT on effective lines — import approved OT workbook (DM4.3) if expected.";
+		"No OT on effective lines ΓÇö import approved OT workbook (DM4.3) if expected.";
 	if (payableMinutes > 0 && status === "APPROVED") {
 		blockerClass =
 			attendanceOtMinutes > 0 && Math.abs(deltaMinutes) > 1
@@ -147,16 +147,86 @@ function classifyPerson(input: {
 		nextStep =
 			blockerClass === "ok"
 				? "Payable OT on lines; ready for Run Payroll OT pay."
-				: "Line OT differs from attendance.overtimeHours — payroll uses lines (approved OT), not raw punches.";
+				: "Line OT differs from attendance.overtimeHours ΓÇö payroll uses lines (approved OT), not raw punches.";
 	} else if (payableMinutes > 0 && status !== "APPROVED") {
 		blockerClass = "timesheet_not_approved";
-		nextStep = `Timesheet status ${status || "UNKNOWN"} — approve timesheet before payroll pays OT.`;
+		nextStep = `Timesheet status ${status || "UNKNOWN"} ΓÇö approve timesheet before payroll pays OT.`;
 	} else if (attendanceOtMinutes > 0 && payableMinutes === 0) {
 		blockerClass = "attendance_ot_without_line";
 		nextStep =
-			"Attendance has overtimeHours but lines are empty — apply approved OT report to timesheet lines.";
+			"Attendance has overtimeHours but lines are empty ΓÇö apply approved OT report to timesheet lines.";
 	}
 	return { blockerClass, nextStep, deltaMinutes };
+}
+
+type LineAgg = {
+	timesheetId: string;
+	lineOtMinutes: number;
+	lineDaysWithOt: number;
+};
+
+async function loadLineOtAggregates(
+	prisma: PrismaClient,
+	params: { organizationId: string; payrollPeriodId: string },
+): Promise<Map<string, LineAgg>> {
+	// Only rows that may carry OT ΓÇö skip empty day lines (~15├ù smaller than full hydrate).
+	const rows = await prisma.$queryRaw<
+		Array<{
+			timesheetId: string;
+			lineOtMinutes: number | bigint;
+			lineDaysWithOt: number | bigint;
+		}>
+	>`
+		SELECT
+			l."timesheetId" AS "timesheetId",
+			COALESCE(SUM(${LINE_OT_MINUTES_SQL}), 0)::int AS "lineOtMinutes",
+			COUNT(*) FILTER (WHERE (${LINE_OT_MINUTES_SQL}) > 0)::int AS "lineDaysWithOt"
+		FROM timesheet_lines l
+		WHERE l."organizationId" = ${params.organizationId}
+			AND l."payrollPeriodId" = ${params.payrollPeriodId}
+			AND l."isDeleted" = false
+			AND l."isEffective" = true
+			AND l."overtimeHours" IS NOT NULL
+			AND btrim(l."overtimeHours") <> ''
+			AND btrim(l."overtimeHours") NOT IN ('0:00', '0', '00:00')
+		GROUP BY l."timesheetId"
+	`;
+	const map = new Map<string, LineAgg>();
+	for (const row of rows) {
+		map.set(row.timesheetId, {
+			timesheetId: row.timesheetId,
+			lineOtMinutes: Number(row.lineOtMinutes || 0),
+			lineDaysWithOt: Number(row.lineDaysWithOt || 0),
+		});
+	}
+	return map;
+}
+
+async function loadPageAttendanceOt(
+	prisma: PrismaClient,
+	timesheetIds: string[],
+): Promise<Map<string, number>> {
+	const map = new Map<string, number>();
+	if (timesheetIds.length === 0) return map;
+
+	const lines = await prisma.timesheetline.findMany({
+		where: {
+			timesheetId: { in: timesheetIds },
+			isDeleted: false,
+			isEffective: true,
+			attendanceId: { not: null },
+		},
+		select: {
+			timesheetId: true,
+			attendance: { select: { overtimeHours: true } },
+		},
+	});
+	for (const line of lines) {
+		const add = parseDurationToMinutes(line.attendance?.overtimeHours);
+		if (add <= 0) continue;
+		map.set(line.timesheetId, (map.get(line.timesheetId) || 0) + add);
+	}
+	return map;
 }
 
 export async function getPayrollPeriodOtReadiness(
@@ -175,10 +245,6 @@ export async function getPayrollPeriodOtReadiness(
 		params.limit && params.limit > 0 ? Math.min(Math.floor(params.limit), 100) : 25;
 	const query = String(params.query || "").trim().toLowerCase();
 	const onlyWithOt = params.onlyWithOt !== false;
-	const fullLineTotals =
-		String(process.env.OT_READINESS_FULL_LINE_TOTALS || "")
-			.trim()
-			.toLowerCase() === "true";
 
 	const period = await prisma.payrollPeriod.findFirst({
 		where: {
@@ -200,220 +266,133 @@ export async function getPayrollPeriodOtReadiness(
 		throw new Error(`Payroll period not found: ${params.payrollPeriodId}`);
 	}
 
-	const periodId = period.id;
-	const orgId = params.organizationId;
-
-	// One SQL round-trip for light timesheet list (no relations).
-	const timesheets = await prisma.$queryRaw<
-		Array<{
-			id: string;
-			status: string;
-			totalOvertimeHours: string | null;
-			employeeId: string;
-		}>
-	>`
-		SELECT
-			t.id,
-			t.status::text AS status,
-			t."totalOvertimeHours" AS "totalOvertimeHours",
-			t."employeeId" AS "employeeId"
-		FROM timesheets t
-		WHERE t."organizationId" = ${orgId}
-			AND t."payrollPeriodId" = ${periodId}
-			AND t."isDeleted" = false
-		ORDER BY t."employeeId" ASC
-	`;
-
-	type Light = {
-		timesheetId: string;
-		employeeId: string;
-		employeeCode: string | null;
-		status: string;
-		summaryMin: number;
-	};
-
-	const light: Light[] = timesheets.map((ts) => ({
-		timesheetId: ts.id,
-		employeeId: ts.employeeId,
-		employeeCode: null,
-		status: String(ts.status || ""),
-		summaryMin: parseDurationToMinutes(ts.totalOvertimeHours),
-	}));
-
-	const withSummaryOt = light.filter((p) => p.summaryMin > 0);
-	const totalSummaryOtMinutes = light.reduce((sum, p) => sum + p.summaryMin, 0);
-
-	let peopleWithLineOt = withSummaryOt.length;
-	let totalLineOtMinutes = totalSummaryOtMinutes;
-	let lineTotalsApproximate = true;
-
-	if (fullLineTotals) {
-		const periodLineAgg = await prisma.$queryRaw<
-			Array<{ people_with_line_ot: bigint; total_line_ot_minutes: bigint }>
-		>`
-			SELECT
-				COUNT(DISTINCT l."timesheetId")::bigint AS people_with_line_ot,
-				COALESCE(SUM(${LINE_OT_MINUTES_SQL}), 0)::bigint AS total_line_ot_minutes
-			FROM timesheet_lines l
-			WHERE l."organizationId" = ${orgId}
-				AND l."payrollPeriodId" = ${periodId}
-				AND l."isDeleted" = false
-				AND l."isEffective" = true
-				AND l."overtimeHours" IS NOT NULL
-				AND btrim(l."overtimeHours") <> ''
-				AND btrim(l."overtimeHours") NOT IN ('0:00', '0', '00:00')
-		`;
-		peopleWithLineOt = Number(periodLineAgg[0]?.people_with_line_ot || 0);
-		totalLineOtMinutes = Number(periodLineAgg[0]?.total_line_ot_minutes || 0);
-		lineTotalsApproximate = false;
-	}
-
-	let listSource = light;
-	if (query) {
-		// Codes not on light rows; filter by status/id, or load codes when searching.
-		const empIds = [...new Set(listSource.map((p) => p.employeeId))];
-		const codes =
-			empIds.length > 0
-				? await prisma.employee.findMany({
-						where: { id: { in: empIds } },
-						select: { id: true, employeeId: true },
-					})
-				: [];
-		const codeMap = new Map(codes.map((e) => [e.id, e.employeeId]));
-		listSource = listSource
-			.map((p) => ({ ...p, employeeCode: codeMap.get(p.employeeId) || null }))
-			.filter((p) => {
-				const hay = [p.employeeCode, p.status, p.timesheetId]
-					.filter(Boolean)
-					.join(" ")
-					.toLowerCase();
-				return hay.includes(query);
-			});
-	}
-
-	if (onlyWithOt) {
-		const summaryList = listSource.filter((p) => p.summaryMin > 0);
-		const summaryCoverage =
-			light.length > 0 ? summaryList.length / light.length : 0;
-		if (summaryList.length > 0 && summaryCoverage >= 0.05) {
-			listSource = summaryList;
-		} else {
-			const lineIds = await prisma.$queryRaw<Array<{ timesheet_id: string }>>`
-				SELECT DISTINCT l."timesheetId" AS timesheet_id
-				FROM timesheet_lines l
-				WHERE l."organizationId" = ${orgId}
-					AND l."payrollPeriodId" = ${periodId}
-					AND l."isDeleted" = false
-					AND l."isEffective" = true
-					AND l."overtimeHours" IS NOT NULL
-					AND btrim(l."overtimeHours") <> ''
-					AND btrim(l."overtimeHours") NOT IN ('0:00', '0', '00:00')
-			`;
-			const idSet = new Set(lineIds.map((r) => r.timesheet_id));
-			if (idSet.size > 0) {
-				listSource = listSource.filter(
-					(p) => idSet.has(p.timesheetId) || p.summaryMin > 0,
-				);
-				if (!fullLineTotals) {
-					peopleWithLineOt = idSet.size;
-					lineTotalsApproximate = true;
-				}
-			} else {
-				listSource = summaryList;
-			}
-		}
-	}
-
-	listSource = [...listSource].sort((a, b) => {
-		if (b.summaryMin !== a.summaryMin) return b.summaryMin - a.summaryMin;
-		return String(a.employeeId).localeCompare(String(b.employeeId));
+	// Phase 1: light timesheets ΓÇö prefer totalOvertimeHours for list filtering.
+	const timesheets = await prisma.timesheet.findMany({
+		where: {
+			organizationId: params.organizationId,
+			payrollPeriodId: params.payrollPeriodId,
+			isDeleted: false,
+		},
+		select: {
+			id: true,
+			status: true,
+			totalOvertimeHours: true,
+			employeeId: true,
+			employee: {
+				select: {
+					id: true,
+					employeeId: true,
+					person: { select: { personalInfo: true } },
+					department: { select: { name: true } },
+				},
+			},
+		},
+		orderBy: [{ employeeId: "asc" }],
 	});
 
-	const listTotal = listSource.length;
-	const totalPages = Math.max(1, Math.ceil(Math.max(listTotal, 1) / limit));
+	// Phase 2: SQL aggregate of non-empty line OT only (no attendance join).
+	const lineAgg = await loadLineOtAggregates(prisma, {
+		organizationId: params.organizationId,
+		payrollPeriodId: params.payrollPeriodId,
+	});
+
+	type Light = {
+		employeeId: string;
+		employeeCode: string | null;
+		name: string;
+		department: string | null;
+		timesheetId: string;
+		timesheetStatus: string;
+		summaryMin: number;
+		lineOtMinutes: number;
+		lineDaysWithOt: number;
+	};
+
+	const light: Light[] = timesheets.map((ts) => {
+		const agg = lineAgg.get(ts.id);
+		return {
+			employeeId: ts.employeeId,
+			employeeCode: ts.employee?.employeeId || null,
+			name: employeeDisplayName(ts.employee),
+			department: ts.employee?.department?.name || null,
+			timesheetId: ts.id,
+			timesheetStatus: String(ts.status || ""),
+			summaryMin: parseDurationToMinutes(ts.totalOvertimeHours),
+			lineOtMinutes: agg?.lineOtMinutes ?? 0,
+			lineDaysWithOt: agg?.lineDaysWithOt ?? 0,
+		};
+	});
+
+	const filtered = light.filter((person) => {
+		if (!query) return true;
+		const hay = [
+			person.name,
+			person.employeeCode,
+			person.department,
+			person.timesheetStatus,
+		]
+			.filter(Boolean)
+			.join(" ")
+			.toLowerCase();
+		return hay.includes(query);
+	});
+
+	const withLineOt = light.filter((p) => p.lineOtMinutes > 0);
+	const withSummaryOt = light.filter((p) => p.summaryMin > 0);
+	const listSource = onlyWithOt
+		? filtered.filter((p) => p.lineOtMinutes > 0 || p.summaryMin > 0)
+		: filtered;
+
+	// Prefer people with line OT first, then summary OT, then code.
+	listSource.sort((a, b) => {
+		if (b.lineOtMinutes !== a.lineOtMinutes) return b.lineOtMinutes - a.lineOtMinutes;
+		if (b.summaryMin !== a.summaryMin) return b.summaryMin - a.summaryMin;
+		return String(a.employeeCode || "").localeCompare(String(b.employeeCode || ""));
+	});
+
+	const totalItems = listSource.length;
+	const totalPages = Math.max(1, Math.ceil(Math.max(totalItems, 1) / limit));
 	const safePage = Math.min(page, totalPages);
 	const skip = (safePage - 1) * limit;
 	const pageLight = listSource.slice(skip, skip + limit);
-	const pageTsIds = pageLight.map((p) => p.timesheetId);
 
-	// Page line OT only (capped).
-	type PageAgg = {
-		timesheet_id: string;
-		line_ot_minutes: number;
-		line_days_with_ot: number;
-	};
-	const pageAgg = new Map<string, PageAgg>();
-	if (pageTsIds.length > 0) {
-		const rows = await prisma.$queryRaw<PageAgg[]>`
-			SELECT
-				l."timesheetId" AS timesheet_id,
-				COALESCE(SUM(${LINE_OT_MINUTES_SQL}), 0)::int AS line_ot_minutes,
-				COUNT(*) FILTER (WHERE (${LINE_OT_MINUTES_SQL}) > 0)::int AS line_days_with_ot
-			FROM timesheet_lines l
-			WHERE l."timesheetId" IN (${Prisma.join(pageTsIds)})
-				AND l."isDeleted" = false
-				AND l."isEffective" = true
-				AND l."overtimeHours" IS NOT NULL
-				AND btrim(l."overtimeHours") <> ''
-			GROUP BY l."timesheetId"
-		`;
-		for (const r of rows) {
-			pageAgg.set(r.timesheet_id, {
-				timesheet_id: r.timesheet_id,
-				line_ot_minutes: Number(r.line_ot_minutes || 0),
-				line_days_with_ot: Number(r.line_days_with_ot || 0),
-			});
-		}
-	}
+	// Phase 3: attendance OT only for current page (capped).
+	const pageIds = pageLight.map((p) => p.timesheetId);
+	const pageAttOt = await loadPageAttendanceOt(prisma, pageIds);
 
-	const pageEmpIds = [...new Set(pageLight.map((p) => p.employeeId))];
-	const employees =
-		pageEmpIds.length > 0
-			? await prisma.employee.findMany({
-					where: { id: { in: pageEmpIds } },
-					select: {
-						id: true,
-						employeeId: true,
-						person: { select: { personalInfo: true } },
-						department: { select: { name: true } },
-					},
-				})
-			: [];
-	const empMap = new Map(employees.map((e) => [e.id, e]));
-
-	const people: PayrollOtReadinessPerson[] = pageLight.map((p) => {
-		const emp = empMap.get(p.employeeId);
-		const agg = pageAgg.get(p.timesheetId);
-		const lineOtMinutes = agg?.line_ot_minutes ?? 0;
-		const summaryMin = p.summaryMin;
-		const displayLineMin = lineOtMinutes > 0 ? lineOtMinutes : summaryMin;
-		const attendanceOtMinutes = 0;
+	const people: PayrollOtReadinessPerson[] = pageLight.map((person) => {
+		const attendanceOtMinutes = pageAttOt.get(person.timesheetId) || 0;
 		const { blockerClass, nextStep, deltaMinutes } = classifyPerson({
-			status: p.status,
-			summaryMin,
-			lineOtMinutes: displayLineMin,
+			status: person.timesheetStatus,
+			summaryMin: person.summaryMin,
+			lineOtMinutes: person.lineOtMinutes,
 			attendanceOtMinutes,
 		});
 		return {
-			employeeId: p.employeeId,
-			employeeCode: emp?.employeeId || p.employeeCode,
-			name: employeeDisplayName(emp),
-			department: emp?.department?.name || null,
-			timesheetId: p.timesheetId,
-			timesheetStatus: p.status,
-			timesheetOtHours: formatMinutesAsHhMm(summaryMin),
-			timesheetOtMinutes: summaryMin,
-			lineOtHours: formatMinutesAsHhMm(displayLineMin),
-			lineOtMinutes: displayLineMin,
-			attendanceOtHours: "0:00",
-			attendanceOtMinutes: 0,
+			employeeId: person.employeeId,
+			employeeCode: person.employeeCode,
+			name: person.name,
+			department: person.department,
+			timesheetId: person.timesheetId,
+			timesheetStatus: person.timesheetStatus,
+			timesheetOtHours: formatMinutesAsHhMm(person.summaryMin),
+			timesheetOtMinutes: person.summaryMin,
+			lineOtHours: formatMinutesAsHhMm(person.lineOtMinutes),
+			lineOtMinutes: person.lineOtMinutes,
+			attendanceOtHours: formatMinutesAsHhMm(attendanceOtMinutes),
+			attendanceOtMinutes,
 			deltaMinutes,
 			deltaHours: minutesToHours(deltaMinutes),
-			lineDaysWithOt: agg?.line_days_with_ot ?? 0,
+			lineDaysWithOt: person.lineDaysWithOt,
 			blockerClass,
 			nextStep,
 		};
 	});
+
+	const totalLineOtMinutes = light.reduce((sum, p) => sum + p.lineOtMinutes, 0);
+	// Page-scoped attendance sum is not period total; keep period attendance as 0 unless
+	// we deep-load all (expensive). Summary truth for pay is line OT.
+	const totalAttendanceOtMinutes = 0;
 
 	return {
 		period: {
@@ -429,39 +408,36 @@ export async function getPayrollPeriodOtReadiness(
 			payableSource:
 				"timesheetline.overtimeHours (effective) / timesheet.totalOvertimeHours",
 			rawAttendanceRole:
-				"punch evidence only — not payable OT without approved OT → lines",
-			note: lineTotalsApproximate
-				? "Fast path: list/summary from timesheet.totalOvertimeHours; page deep-loads line OT. Set OT_READINESS_FULL_LINE_TOTALS=true for exact period line aggregates."
-				: "Full line OT period totals enabled via OT_READINESS_FULL_LINE_TOTALS.",
+				"punch evidence only ΓÇö not payable OT without approved OT ΓåÆ lines",
+			note: "BNPI: import biometrics then approved OT workbook into timesheet lines before Run Payroll. List uses timesheet summary first; line OT via SQL aggregate of non-empty lines only.",
 		},
 		summary: {
 			timesheetsTotal: light.length,
-			timesheetsApproved: light.filter((p) => p.status === "APPROVED").length,
-			peopleWithLineOt,
+			timesheetsApproved: light.filter((p) => p.timesheetStatus === "APPROVED").length,
+			peopleWithLineOt: withLineOt.length,
 			peopleWithTimesheetOtSummary: withSummaryOt.length,
-			peopleWithoutOt: Math.max(0, light.length - peopleWithLineOt),
+			peopleWithoutOt: Math.max(0, light.length - withLineOt.length),
 			totalLineOtMinutes,
 			totalLineOtHours: minutesToHours(totalLineOtMinutes),
-			totalAttendanceOtMinutes: 0,
-			totalAttendanceOtHours: 0,
-			totalDeltaMinutes: totalLineOtMinutes,
-			lineTotalsApproximate,
+			totalAttendanceOtMinutes,
+			totalAttendanceOtHours: minutesToHours(totalAttendanceOtMinutes),
+			totalDeltaMinutes: totalLineOtMinutes - totalAttendanceOtMinutes,
 		},
 		people,
 		pagination: {
 			page: safePage,
 			limit,
-			totalItems: listTotal,
+			totalItems,
 			totalPages,
 			hasNextPage: safePage < totalPages,
 		},
 		queryMeta: {
-			strategy: "summary_first_page_deep_lines",
+			strategy: "summary_first_sql_line_agg_page",
 			pageLimit: limit,
 			onlyWithOt,
-			lightTimesheets: light.length,
-			deepLoaded: pageTsIds.length,
-			fullLineTotals,
+			lightTimesheets: timesheets.length,
+			lineAggRows: lineAgg.size,
+			deepLoaded: pageIds.length,
 		},
 	};
 }

@@ -990,7 +990,7 @@ export function RunPayrollTemplate() {
 			if (start > periodEnd) return false;
 			if (end && !Number.isNaN(end.getTime()) && end < periodStart) return false;
 			// Prefer BNPI mass-upload / recurring enrollment signals when period is not linked.
-			const notes = String(benefit.notes || benefit.remarks || "").toLowerCase();
+			const notes = String(benefit.notes || "").toLowerCase();
 			const isMassUpload = notes.includes("mass upload") || notes.includes("comcode");
 			const isRecurring =
 				String(benefit.scheduleMode || "").toUpperCase() === "RECURRING" ||
@@ -3118,7 +3118,7 @@ export function RunPayrollTemplate() {
 																.split(/\s+/)
 																.filter(Boolean)
 																.slice(0, 2)
-																.map((p) => p[0]?.toUpperCase() || "")
+																.map((part: string) => part[0]?.toUpperCase() || "")
 																.join("") || "?"}
 														</span>
 														<span className="min-w-0 flex-1">
