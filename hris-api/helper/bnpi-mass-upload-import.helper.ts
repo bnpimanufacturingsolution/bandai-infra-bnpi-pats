@@ -46,6 +46,18 @@ export const DEDUCTION_CODE_TO_BENEFIT_CODE: Record<string, string> = {
 	NEGADJ: "NEGADJ",
 	UFD: "UFD",
 	MHDMF2: "MHDMF2",
+	/** Client mass-upload alias for Modified HDMF / MP2 voluntary. */
+	HDMFMP2: "MHDMF2",
+	/** Unidentified / generic one-period deduction. */
+	UNIDED: "UNIDED",
+};
+
+/** Display names when auto-creating deduction benefit types from mass upload. */
+export const DEDUCTION_BENEFIT_CODE_LABELS: Record<string, string> = {
+	NEGADJ: "Negative Adjustment",
+	UFD: "Uniform Deduction",
+	MHDMF2: "Modified HDMF 2",
+	UNIDED: "Unidentified Deduction",
 };
 
 export function detectMassUploadKindFromHeaders(headers: string[]): MassUploadKind | null {

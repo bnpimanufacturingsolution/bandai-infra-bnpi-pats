@@ -86,15 +86,43 @@ export function parseBenefitImportAmount(value: unknown): number | null {
 	return Number.isFinite(n) ? n : null;
 }
 
+const PH_BUSINESS_TIME_ZONE = "Asia/Manila";
+
+/** Calendar Y-M-D in Asia/Manila as UTC midnight (date-only storage). */
+export function calendarDateUtcInTimeZone(
+	value: Date,
+	timeZone: string = PH_BUSINESS_TIME_ZONE,
+): Date | null {
+	if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+	const parts = new Intl.DateTimeFormat("en-CA", {
+		timeZone,
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).formatToParts(value);
+	const year = Number(parts.find((p) => p.type === "year")?.value);
+	const month = Number(parts.find((p) => p.type === "month")?.value);
+	const day = Number(parts.find((p) => p.type === "day")?.value);
+	if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+		return null;
+	}
+	if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+	return new Date(Date.UTC(year, month - 1, day));
+}
+
 /**
  * Parse import dates for PH HR sheets.
  * Supports: Date, Excel serial, YYYY-MM-DD, DD/MM/YYYY (preferred slash), ISO strings.
+ *
+ * Excel `cellDates:true` often yields local midnight as a UTC-offset instant
+ * (e.g. 2026-07-11 00:00 Asia/Manila → 2026-07-10T16:00:00.000Z). Using UTC
+ * Y-M-D would store the wrong calendar day; Asia/Manila calendar is required.
  */
 export function parseBenefitImportDate(value: unknown): Date | null {
 	if (value === null || value === undefined || value === "") return null;
 
 	if (value instanceof Date && !Number.isNaN(value.getTime())) {
-		return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+		return calendarDateUtcInTimeZone(value);
 	}
 
 	if (typeof value === "number" && Number.isFinite(value)) {
@@ -137,9 +165,8 @@ export function parseBenefitImportDate(value: unknown): Date | null {
 
 	const parsed = new Date(text);
 	if (Number.isNaN(parsed.getTime())) return null;
-	return new Date(
-		Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()),
-	);
+	// Prefer Manila calendar for free-form parse results (same Excel/local offset issue).
+	return calendarDateUtcInTimeZone(parsed);
 }
 
 export function parseBenefitImportIsActive(value: unknown): boolean {

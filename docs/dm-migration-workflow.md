@@ -423,6 +423,17 @@ The HR-facing journey for the wired DM3 workbook is:
    (allowances, loan payments, and other period deductions). A separate
    statutory / monthly payment register upload is **not** offered in the UI
    and is not required after compensation and deduction files are imported.
+   **Period pin contract:** each mass-upload row resolves
+   `StartPayDate` / `StartPayment` to a payroll period (prefer exact period
+   start calendar day in Asia/Manila) and writes `EmployeeBenefit.payrollPeriodId`
+   with `startDate`/`endDate` equal to that period’s bounds (one cutoff only).
+   Run Payroll Adjustments (`/hr/run-payroll`) lists benefits with
+   `filter=payrollPeriodId:{periodId}`; unpinned enrollments do **not** appear
+   there. Loans from the deduction file still create `EmployeeLoan` rows and are
+   not listed in the Adjustments panel. Deduction code aliases:
+   `HDMFMP2` → benefit `MHDMF2`, `UNIDED` → benefit `UNIDED`. Re-upload a cutoff
+   file after this importer change so older unpinned rows are superseded for that
+   period key.
 7. HR verifies a sampled employee in the employee profile/compliance surfaces:
    `Person.identification.statutoryIds.pagibig`, `Employee.basicSalary`,
    `Employee.embeddedSchedule`, `EmployeeScheduleHistory`, `Employee.reportToId`,

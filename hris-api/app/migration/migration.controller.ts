@@ -26,6 +26,7 @@ import {
 } from "../../helper/schedule-normalization.helper";
 
 import { config } from "../../config/constant";
+import { config as appConfig } from "../../config/config";
 import { getLogger } from "../../helper/logger.helper";
 import { buildSuccessResponse } from "../../helper/success-handler.helper";
 import {
@@ -3245,11 +3246,29 @@ export const controller = (prisma: PrismaClient) => {
 		);
 	};
 
+	/** BNPI mass uploads can exceed default 120s socket idle timeout on large workbooks. */
+	const armHeavyMassUploadTimeouts = (req: Request, res: Response) => {
+		const heavyMs =
+			Number((appConfig as any).heavyRequestTimeoutMs) > 0
+				? Number((appConfig as any).heavyRequestTimeoutMs)
+				: 300000;
+		try {
+			if (typeof (req as any).setTimeout === "function") (req as any).setTimeout(heavyMs);
+			if (typeof res.setTimeout === "function") res.setTimeout(heavyMs);
+			if (req.socket && typeof req.socket.setTimeout === "function") {
+				req.socket.setTimeout(heavyMs);
+			}
+		} catch {
+			// best-effort; import still runs
+		}
+	};
+
 	const importDm3CompensationMassUpload = async (
 		req: Request,
 		res: Response,
 		_next: NextFunction,
 	) => {
+		armHeavyMassUploadTimeouts(req, res);
 		try {
 			const uploadedFile = resolveUploadedMigrationFile(req);
 			if (!uploadedFile?.buffer) {
@@ -3302,6 +3321,7 @@ export const controller = (prisma: PrismaClient) => {
 		res: Response,
 		_next: NextFunction,
 	) => {
+		armHeavyMassUploadTimeouts(req, res);
 		try {
 			const uploadedFile = resolveUploadedMigrationFile(req);
 			if (!uploadedFile?.buffer) {
