@@ -4,37 +4,41 @@
 done
 
 ## Summary
-Device list/detail UX: show physical Device IP primary for reverse-tunneled panels; tunnel/runtime endpoint secondary. Do not change stored `address`/`port` used for API health/connectivity.
+Confirm device-user CSV/package import job progress path (hris-app) + import conflict auto-resolve capabilities (hris-api) + getDeviceUserImportJob serialization.
 
 ## Category
-ui-ux
+docs-only (verification; no product code change this session)
 
 ## Packages
 - bandai-infra/hris-app
-- Dual-app: **HR/emp-only (no counterpart)** — admin devices manage/enroll only
+- bandai-infra/hris-api
+- Dual-app: **HR-only (no counterpart)** — admin device users Sync Center
 
-## Changes
-- `app/lib/device-display-address.ts` — shared resolver: `config.physicalAddress` → name-embedded IPv4 → stored address; secondary `via reverse tunnel host:port`
-- `app/lib/device-display-address.test.ts` — unit coverage for Import Target tunnel publish + loopback reverse-forward + fallbacks
-- `app/routes/admin/devices/manage.tsx` — Device IP column + Connection/view modal; removed local partial helper
-- `app/routes/admin/devices/manage.$id.tsx` — header Device IP + tunnel subtitle
-- `app/routes/admin/devices/enroll.tsx` — Sync Center rows, pickers, merge tiles use display helper
-- `app/routes/admin/devices/events.tsx` — sync device row address line uses same helper
+## Verification results
 
-## Display rules (CONFIRMED)
-1. Primary **Device IP** = `config.physicalAddress` (+ `physicalPort` / `physicalHttpPort`) when present
-2. Else IPv4 embedded in `name` (prefer parentheses, e.g. `Import Target A CSV (192.168.18.35)`)
-3. Else stored `device.address`[:`port`]
-4. When primary host ≠ runtime/tunnel host, show secondary: `via reverse tunnel {runtime}`
-5. Runtime host = stored address when it differs from physical; else configured `hikvisionRuntimeAddress` / SDK runtime when it differs from physical
-6. Stored address/port unchanged for API connectivity/health
+### 1) UI import job progress path (hris-app) — COMPLETE
+- `enroll.tsx`: `data-testid="device-user-import-job-progress"`, progress bar, weights stages, API `progressPercent` with client fallback
+- `useDeviceUserImportJob`: polls every 2s until completed/failed
+- `devices.service.ts` `DeviceUserImportJobResponse`: `progressPercent`, `progressWeights` typed
+- Vitest: `device-user-ui-contract.test.ts` + `device-display-address.test.ts` — **7 passed**
+- Playwright smoke: `admin-device-user-csv-import-job-progress.spec.ts` — **1 passed**
 
-## Truth delta
-YES (CONFIRMED) — Operator UI must prefer physical panel IP over tunnel publish IP for reverse-tunneled device rows.
+### 2) Import conflict handling (hris-api device.controller)
+- `review_conflict` when hard conflict = **employeeNo** mismatch on existing vendorUserId
+- Soft conflicts (**displayName**, **userType** only) auto-downgrade to `action: "match"` with `conflictFields: []` and `autoResolvedConflicts` populated
+- Same employeeNo/vendorUserId can proceed as match and write biometrics (rawPackage / sdkPeerCopy); metadataOnly → `matched_metadata_only`
+- **No** import body flags: `forceOverwrite`, `overwrite`, `resolveConflict`, `conflictStrategy`, `autoResolve`
+- Execute body: `execute=true`, `confirmation`, `previewToken`, `targetDeviceId`, payload, `biometricTransferMode`, `runAsJob`/`jobMode`/`async`
+- Note: `autoResolveDecisions` exists only on **merge** apply endpoints, not device-user import
+
+### 3) getDeviceUserImportJob
+- Uses `serializeDeviceUserPackageImportJob(job)` which always merges `buildDeviceUserPackageImportProgress` → `progressPercent`, `progressLabel`, `progressWeights` always present
+
+## Code changes this session
+none (truth already in code; verification only)
 
 ## Drift
-NONE (docs via this task note; no broader project-truth rewrite required)
+NONE
 
-## Verification
-- `npx vitest run app/lib/device-display-address.test.ts` — pass (6)
-- Dual-app: single-app exception (admin devices; no emp counterpart)
+## Dual-app
+HR-only (no emp-app counterpart)

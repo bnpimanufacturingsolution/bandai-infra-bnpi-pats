@@ -27,21 +27,54 @@ import {
 
 const logger = getLogger().child({ module: "specialPayroll" });
 
-const HR_ROLES = new Set(["hris-hr-manager", "hris-hr-user", "hris-admin"]);
+/** Roles allowed to manage Special Payroll (HR run-payroll surfaces). */
+const HR_ROLES = new Set([
+	"hris-hr-manager",
+	"hris-hr-user",
+	"hris-admin",
+	// Align with payroll-period policy managers / global access roles.
+	"admin",
+	"super_admin",
+	"superadmin",
+]);
 
-function getAuthContext(req: Request) {
-	const user = (req as any).user || {};
-	const organizationId =
-		user.organizationId || (req as any).organizationId || null;
-	const userId = user.id || user.userId || null;
-	const role = user.role || user.appRole || null;
-	const employeeId = user.employeeId || user.employee?.id || null;
+/**
+ * Resolve auth from verifyToken middleware fields (req.role, req.userId,
+ * req.organizationId, req.metadata.employee) with optional req.user fallback.
+ *
+ * Bug root cause (CONFIRMED): prior implementation only read req.user.*,
+ * but verifyToken attaches JWT claims on req itself — so role was always null
+ * and every HR endpoint returned 403 "HR access required".
+ */
+export function getAuthContext(req: Request) {
+	const r = req as Request & {
+		role?: string | null;
+		userId?: string | null;
+		organizationId?: string | null;
+		metadata?: { employee?: { id?: string | null } | null } | null;
+		user?: {
+			id?: string | null;
+			userId?: string | null;
+			role?: string | null;
+			appRole?: string | null;
+			organizationId?: string | null;
+			employeeId?: string | null;
+			employee?: { id?: string | null } | null;
+		} | null;
+	};
+	const user = r.user || {};
+	const organizationId = r.organizationId || user.organizationId || null;
+	const userId = r.userId || user.id || user.userId || null;
+	const role = r.role || user.role || user.appRole || null;
+	const employeeId =
+		r.metadata?.employee?.id || user.employeeId || user.employee?.id || null;
+	const roleStr = role ? String(role) : null;
 	return {
 		organizationId: organizationId ? String(organizationId) : null,
 		userId: userId ? String(userId) : null,
-		role: role ? String(role) : null,
+		role: roleStr,
 		employeeId: employeeId ? String(employeeId) : null,
-		isHr: role ? HR_ROLES.has(String(role)) : false,
+		isHr: roleStr ? HR_ROLES.has(roleStr) : false,
 	};
 }
 

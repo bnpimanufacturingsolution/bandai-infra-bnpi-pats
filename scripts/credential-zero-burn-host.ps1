@@ -229,10 +229,9 @@ while ($true) {
     continue
   }
 
-  # Device quick scope
+  # Device quick scope (status only — never gates which devices are burned)
   $prev = Invoke-Api GET '/api/device/sync-preview?quick=true' -Token $token -TimeoutSec 120
   $devLines = @()
-  $includeC = $false
   if ($prev.code -eq 200) {
     foreach ($letter in @('A','B','C','D','E','F')) {
       $id = $Devices[$letter]
@@ -242,11 +241,6 @@ while ($true) {
       $from = $row.vendorUserCount
       $status = $row.status
       $devLines += "| $letter | $from | $($row.hrisUserCount) | $status |"
-      if ($letter -eq 'C' -and $status -eq 'user_count_ready') {
-        $fromN = 0
-        [void][int]::TryParse([string]$from, [ref]$fromN)
-        if ($fromN -ge 800) { $includeC = $true }
-      }
     }
   }
   $deviceTable = (@('| Letter | From | Saved | Status |', '|---|---:|---:|---|') + $devLines) -join "`n"
@@ -261,14 +255,12 @@ while ($true) {
     Start-Sleep -Seconds 5
   }
 
-  # Split scopes for public-API plan latency:
-  #  1) A/B/D/E/F always for FP + decision residual (C often dominates face)
-  #  2) E+C (or B+C) only when C readable for face peer-copy
-  $fpIds = @($Devices.A, $Devices.B, $Devices.D, $Devices.E, $Devices.F)
-  $faceIds = @($Devices.E, $Devices.C)
+  # ALWAYS include A/B/C/D/E/F — never hard-skip C.
+  # C owns most residual finger/face gaps in Sync Center; excluding it freezes gap-zero.
+  # API/plan degrades gracefully when a device is source_unavailable.
+  $allIds = @($Devices.A, $Devices.B, $Devices.C, $Devices.D, $Devices.E, $Devices.F)
   $scopes = @(
-    @{ name = 'fp-abdef'; ids = $fpIds; mods = @('fingerprint') },
-    @{ name = 'face-ec'; ids = $faceIds; mods = @('face'); requireC = $true }
+    @{ name = 'af-all'; ids = $allIds; mods = @('fingerprint', 'face') }
   )
 
   $combined = [ordered]@{
@@ -282,15 +274,9 @@ while ($true) {
   }
 
   foreach ($scopeDef in $scopes) {
-    if ($scopeDef.requireC -and -not $includeC) {
-      Write-Log 'SKIP face-ec scope (C not readable)'
-      Write-Hb "cycle=$script:cycle skip_face_ec c_offline"
-      continue
-    }
-
     $ids = @($scopeDef.ids)
-    Write-Log ("PLAN scope={0} devices={1}" -f $scopeDef.name, $ids.Count)
-    Write-Hb ("cycle={0} plan_start scope={1}" -f $script:cycle, $scopeDef.name)
+    Write-Log ("PLAN scope={0} devices={1} includeC=true" -f $scopeDef.name, $ids.Count)
+    Write-Hb ("cycle={0} plan_start scope={1} includeC=true" -f $script:cycle, $scopeDef.name)
     $plan = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/plan' -Token $token -Body @{ deviceIds = $ids } -TimeoutSec 600
     if ($plan.code -notin 200, 201) {
       Write-Log ("PLAN_FAIL scope={0} code={1} err={2} msg={3}" -f $scopeDef.name, $plan.code, $plan.error, $plan.body.message)
@@ -306,17 +292,13 @@ while ($true) {
     Write-Hb ("cycle={0} plan={1} scope={2} decision={3} missing={4} uFace={5} uFp={6} faceReady={7} fpReady={8}" -f `
       $script:cycle, $matrix.planId, $scopeDef.name, $matrix.decision, $matrix.missing, $matrix.uFace, $matrix.uFp, $matrix.faceReadyOps, $matrix.fpReadyOps)
 
-    if ($scopeDef.name -eq 'fp-abdef') {
-      $combined.decision = $matrix.decision
-      $combined.missing = $matrix.missing
-      $combined.uFp = $matrix.uFp
-      $combined.fpReadyOps = $matrix.fpReadyOps
-      $combined.planId = $matrix.planId
-    } else {
-      $combined.uFace = $matrix.uFace
-      $combined.faceReadyOps = $matrix.faceReadyOps
-      if (-not $combined.planId) { $combined.planId = $matrix.planId }
-    }
+    $combined.decision = $matrix.decision
+    $combined.missing = $matrix.missing
+    $combined.uFp = $matrix.uFp
+    $combined.fpReadyOps = $matrix.fpReadyOps
+    $combined.uFace = $matrix.uFace
+    $combined.faceReadyOps = $matrix.faceReadyOps
+    $combined.planId = $matrix.planId
     Write-OperatorNow $combined $lastJob ("planned {0}" -f $scopeDef.name) $script:cycle $deviceTable
 
     $planId = [string]$matrix.planId
@@ -329,7 +311,10 @@ while ($true) {
       }
 
       $readyKey = if ($mod -eq 'face') { [int]$matrix.faceReadyOps } else { [int]$matrix.fpReadyOps }
-      if ($readyKey -le 0 -and $mod -eq 'face' -and -not $includeC) { continue }
+      if ($readyKey -le 0) {
+        Write-Log ("SKIP write mod={0} readyOps=0" -f $mod)
+        continue
+      }
 
       $rev = Invoke-Api POST '/api/device/hikvision/sdk-users/merge/recovery/review' -Token $token -Body @{
         planId = $planId; canaryModality = $mod; maxVerifiedWrites = $WaveMax
@@ -384,17 +369,13 @@ while ($true) {
     }
   }
 
-  # Combined exit gate (best-effort from last matrices)
-  if ([int]$combined.decision -eq 0 -and [int]$combined.missing -eq 0 -and [int]$combined.uFace -eq 0 -and [int]$combined.uFp -eq 0 -and $includeC) {
-    Write-Log 'EXIT_GATE residual zero (C included)'
-    Write-Hb "cycle=$script:cycle EXIT residual_zero"
+  # Exit gate only when residual is truly zero across A–F (C always in plan)
+  if ([int]$combined.decision -eq 0 -and [int]$combined.missing -eq 0 -and [int]$combined.uFace -eq 0 -and [int]$combined.uFp -eq 0) {
+    Write-Log 'EXIT_GATE residual zero (A-F always include C)'
+    Write-Hb "cycle=$script:cycle EXIT residual_zero includeC=true"
     Write-OperatorNow $combined $lastJob 'EXIT residual zero - supervisor idling' $script:cycle $deviceTable
     Start-Sleep -Seconds ([Math]::Max($IdleSleepSec, 120))
     continue
-  }
-  if ([int]$combined.decision -eq 0 -and [int]$combined.missing -eq 0 -and [int]$combined.uFp -eq 0 -and -not $includeC) {
-    Write-Log 'PARTIAL_EXIT FP/decision zero; face blocked by C offline'
-    Write-Hb "cycle=$script:cycle partial_exit c_offline face_pending"
   }
 
   Start-Sleep -Seconds 8

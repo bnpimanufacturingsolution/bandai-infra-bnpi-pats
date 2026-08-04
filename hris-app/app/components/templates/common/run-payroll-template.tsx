@@ -245,17 +245,6 @@ export function RunPayrollTemplate() {
 			),
 		[sections, selectedDepartmentId],
 	);
-	const selectedDepartmentName =
-		selectedDepartmentId === "all"
-			? "All departments"
-			: departments.find((department: any) => String(department.id) === selectedDepartmentId)
-					?.name || "Selected department";
-	const selectedSectionName =
-		selectedSectionId === "all"
-			? "All sections"
-			: sections.find((section: any) => String(section.id) === selectedSectionId)?.name ||
-				"Selected section";
-
 	// Calculate date range: Only fetch current and future periods (no past cutoffs)
 	// endDate >= today (periods that haven't ended yet)
 	// endDate <= 6 months from today (limit to 6 months ahead = 12 semi-monthly periods)
@@ -4133,10 +4122,14 @@ export function RunPayrollTemplate() {
 				}}
 				showCloseButton={!isPayrollActionPending}
 				closeOnBackdropClick={!isPayrollActionPending}
-				className="max-h-[90vh] max-w-3xl gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-4xl">
+				className={
+					showPayrollProgressContent
+						? "max-h-[90vh] max-w-2xl gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-3xl"
+						: "max-h-[90vh] max-w-lg gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-xl"
+				}>
 				<div className="flex min-h-0 max-h-[90vh] flex-col">
-					{/* Header */}
-					<div className="shrink-0 border-b border-neutral-100 px-6 py-5 pr-12">
+					{/* Header — title only, no subdescription */}
+					<div className="shrink-0 border-b border-neutral-100 px-5 py-4 pr-12">
 						<h2 className="text-base font-semibold tracking-tight text-neutral-900">
 							{showPayrollProgressContent
 								? isPayrollProgressUnavailable
@@ -4153,18 +4146,9 @@ export function RunPayrollTemplate() {
 														? "Payroll cancelled"
 														: "Payroll progress"
 								: isSelectedPeriodProcessing
-									? "View Payroll Progress"
-									: "Start Payroll Processing"}
+									? "View Progress"
+									: "Start Payroll"}
 						</h2>
-						<p className="mt-1 text-sm text-neutral-500">
-							{showPayrollProgressContent
-								? "You can close this window and reopen progress from Run Payroll."
-								: isSelectedPeriodProcessing
-									? "This period is marked processing. Open the active background job before taking another action."
-									: payrollCoverageLabel !== "N/A"
-										? `Start payroll for ${payrollCoverageLabel}`
-										: "Processing payroll..."}
-						</p>
 					</div>
 
 					{showPayrollProgressContent ? (
@@ -4679,223 +4663,139 @@ export function RunPayrollTemplate() {
 						</>
 					) : (
 						<>
-							{/* Confirm body — horizontal: scope / alerts + summary */}
-							<div className="grid grid-cols-1 divide-y divide-neutral-100 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] md:divide-x md:divide-y-0">
-								{/* Left panel — scope & alerts */}
-								<div className="flex flex-col gap-5 p-6">
-									{!isSelectedPeriodProcessing && (
-										<div className="space-y-4">
-											<div>
-												<p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400">
-													Run scope
-												</p>
-												<p className="mt-1 text-sm text-neutral-500">
-													Limit this run to a department or section.
-												</p>
-											</div>
-											<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-1">
-												<div className="space-y-1.5">
-													<label className="block text-xs font-medium text-neutral-600">
-														Department
-													</label>
-													<Select
-														value={selectedDepartmentId}
-														onValueChange={handlePayrollDepartmentChange}>
-														<SelectTrigger className="h-10 w-full rounded-lg border-neutral-200 bg-white text-sm shadow-none focus:ring-1 focus:ring-neutral-300">
-															<SelectValue placeholder="All departments" />
-														</SelectTrigger>
-														<SelectContent>
-															<SelectItem value="all">All departments</SelectItem>
-															{departments.map((department: any) => (
-																<SelectItem
-																	key={department.id}
-																	value={department.id}>
-																	{department.name}
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-												</div>
-												<div className="space-y-1.5">
-													<label className="block text-xs font-medium text-neutral-600">
-														Section
-													</label>
-													<Select
-														value={selectedSectionId}
-														onValueChange={handlePayrollSectionChange}>
-														<SelectTrigger className="h-10 w-full rounded-lg border-neutral-200 bg-white text-sm shadow-none focus:ring-1 focus:ring-neutral-300">
-															<SelectValue placeholder="All sections" />
-														</SelectTrigger>
-														<SelectContent>
-															<SelectItem value="all">All sections</SelectItem>
-															{scopedSections.map((section: any) => (
-																<SelectItem key={section.id} value={section.id}>
-																	{section.name}
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-												</div>
-											</div>
-											<div className="rounded-lg border border-neutral-100 bg-neutral-50/80 px-3 py-2.5">
-												<p className="text-[11px] font-medium uppercase tracking-[0.06em] text-neutral-400">
-													Active scope
-												</p>
-												<p className="mt-0.5 text-sm font-medium text-neutral-800">
-													{selectedDepartmentName}
-													<span className="mx-1.5 text-neutral-300">/</span>
-													{selectedSectionName}
-												</p>
-											</div>
-										</div>
-									)}
-
-									{isSelectedPeriodProcessing && (
-										<div className="flex items-start gap-3 rounded-xl border border-amber-200/80 bg-amber-50/70 p-4">
-											<div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100">
-												<AlertCircle className="h-4 w-4 text-amber-700" />
-											</div>
-											<div className="min-w-0">
-												<p className="text-sm font-medium text-amber-900">
-													Verify the current job first
-												</p>
-												<p className="mt-1 text-xs leading-relaxed text-amber-800/80">
-													Open progress to confirm whether there is an active job
-													or a stale processing state that needs to be reopened.
-												</p>
-											</div>
-										</div>
-									)}
-
-									{!isSelectedPeriodProcessing &&
-										payrollIssues.employeeCount > 0 && (
-											<div className="flex flex-col gap-3 rounded-xl border border-orange-200/80 bg-orange-50/60 p-4">
-												<div className="flex items-start gap-3">
-													<div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-100">
-														<AlertTriangle className="h-4 w-4 text-orange-700" />
-													</div>
-													<div className="min-w-0">
-														<p className="text-sm font-medium text-orange-900">
-															{payrollIssues.employeeCount} employees are not
-															payroll-ready
-														</p>
-														<p className="mt-1 text-xs leading-relaxed text-orange-800/80">
-															Resolve missing payroll data or unsubmitted
-															timesheets before processing.
-														</p>
-													</div>
-												</div>
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													onClick={() => updateURL("issues", "all")}
-													className="h-8 w-full rounded-lg border-orange-300 bg-white text-xs font-medium text-orange-800 shadow-none hover:bg-orange-100 hover:text-orange-900">
-													View Issues
-													<ExternalLink className="ml-1.5 h-3 w-3" />
-												</Button>
-											</div>
-										)}
-
-									{!isSelectedPeriodProcessing &&
-										payrollIssues.employeeCount === 0 && (
-											<div className="mt-auto flex items-center gap-2.5 rounded-xl border border-neutral-100 bg-neutral-50/60 px-3.5 py-3">
-												<div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-emerald-50">
-													<CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-												</div>
-												<p className="text-xs leading-relaxed text-neutral-500">
-													All scoped employees are payroll-ready.
-												</p>
-											</div>
-										)}
-								</div>
-
-								{/* Right panel — summary metrics */}
-								<div className="flex flex-col gap-4 bg-neutral-50/50 p-6">
-									<div>
-										<p className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-400">
-											Payroll summary
-										</p>
-										<p className="mt-1 text-sm text-neutral-500">
-											Review coverage and headcount before confirming.
-										</p>
-									</div>
-
-									<div className="grid grid-cols-2 gap-3">
-										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
-											<div className="flex items-center gap-2 text-neutral-400">
-												<Calendar className="h-3.5 w-3.5" />
-												<p className="text-[11px] font-medium uppercase tracking-[0.06em]">
-													Coverage
-												</p>
-											</div>
-											<p className="mt-2 text-sm font-semibold tracking-tight text-neutral-900">
+							{/* Confirm body — compact, scrollable so footer stays visible */}
+							<div className="min-h-0 flex-1 overflow-y-auto modern-scroll px-5 py-4">
+								<div className="space-y-4">
+									{/* Period snapshot */}
+									<div className="grid grid-cols-2 gap-2">
+										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
+											<p className="text-[11px] text-neutral-400">Coverage</p>
+											<p className="mt-0.5 text-sm font-medium text-neutral-900">
 												{payrollCoverageLabel}
 											</p>
 										</div>
-										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
-											<div className="flex items-center gap-2 text-neutral-400">
-												<Clock className="h-3.5 w-3.5" />
-												<p className="text-[11px] font-medium uppercase tracking-[0.06em]">
-													Pay date
-												</p>
-											</div>
-											<p className="mt-2 text-sm font-semibold tracking-tight text-neutral-900">
+										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
+											<p className="text-[11px] text-neutral-400">Pay date</p>
+											<p className="mt-0.5 text-sm font-medium text-neutral-900">
 												{period
 													? `${period.dayOfWeek}, ${getMonthName(period.month).slice(0, 3)} ${period.day}`
 													: "N/A"}
 											</p>
 										</div>
-										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
-											<div className="flex items-center gap-2 text-neutral-400">
-												<Users className="h-3.5 w-3.5" />
-												<p className="text-[11px] font-medium uppercase tracking-[0.06em]">
-													{isSelectedPeriodProcessing ? "Status" : "Included"}
-												</p>
-											</div>
+										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
+											<p className="text-[11px] text-neutral-400">
+												{isSelectedPeriodProcessing ? "Status" : "Included"}
+											</p>
 											{isSelectedPeriodProcessing ? (
-												<p className="mt-2 text-sm font-semibold tracking-tight text-amber-700">
+												<p className="mt-0.5 text-sm font-medium text-amber-700">
 													{selectedPeriod?.status || "PROCESSING"}
 												</p>
 											) : (
 												<button
 													type="button"
 													onClick={handlePreviewPayroll}
-													className="mt-2 text-left text-sm font-semibold tracking-tight text-emerald-700 underline-offset-2 transition-colors hover:text-emerald-800 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-2">
+													className="mt-0.5 text-left text-sm font-medium text-emerald-700 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40">
 													{payableEmployeesCount} employees
 												</button>
 											)}
 										</div>
-										<div className="rounded-xl border border-neutral-200/80 bg-white px-4 py-3.5">
-											<div className="flex items-center gap-2 text-neutral-400">
-												{isSelectedPeriodProcessing ? (
-													<RefreshCw className="h-3.5 w-3.5" />
-												) : (
-													<AlertTriangle className="h-3.5 w-3.5" />
-												)}
-												<p className="text-[11px] font-medium uppercase tracking-[0.06em]">
-													{isSelectedPeriodProcessing ? "Next" : "Excluded"}
-												</p>
-											</div>
+										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
+											<p className="text-[11px] text-neutral-400">
+												{isSelectedPeriodProcessing ? "Next" : "Excluded"}
+											</p>
 											{isSelectedPeriodProcessing ? (
-												<p className="mt-2 text-sm font-semibold tracking-tight text-amber-700">
+												<p className="mt-0.5 text-sm font-medium text-amber-700">
 													Open progress
 												</p>
 											) : (
 												<button
 													type="button"
 													onClick={() => updateURL("issues", "all")}
-													className="mt-2 text-left text-sm font-semibold tracking-tight text-red-600 underline-offset-2 transition-colors hover:text-red-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40 focus-visible:ring-offset-2">
+													className="mt-0.5 text-left text-sm font-medium text-red-600 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/40">
 													{payrollIssues.employeeCount} employees
 												</button>
 											)}
 										</div>
 									</div>
+
+									{/* Department / section filters only */}
+									{!isSelectedPeriodProcessing && (
+										<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+											<div className="space-y-1.5">
+												<label className="block text-xs font-medium text-neutral-600">
+													Department
+												</label>
+												<Select
+													value={selectedDepartmentId}
+													onValueChange={handlePayrollDepartmentChange}>
+													<SelectTrigger className="h-9 w-full rounded-lg border-neutral-200 bg-white text-sm shadow-none focus:ring-1 focus:ring-neutral-300">
+														<SelectValue placeholder="All departments" />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="all">All departments</SelectItem>
+														{departments.map((department: any) => (
+															<SelectItem
+																key={department.id}
+																value={department.id}>
+																{department.name}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</div>
+											<div className="space-y-1.5">
+												<label className="block text-xs font-medium text-neutral-600">
+													Section
+												</label>
+												<Select
+													value={selectedSectionId}
+													onValueChange={handlePayrollSectionChange}>
+													<SelectTrigger className="h-9 w-full rounded-lg border-neutral-200 bg-white text-sm shadow-none focus:ring-1 focus:ring-neutral-300">
+														<SelectValue placeholder="All sections" />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="all">All sections</SelectItem>
+														{scopedSections.map((section: any) => (
+															<SelectItem key={section.id} value={section.id}>
+																{section.name}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+											</div>
+										</div>
+									)}
+
+									{isSelectedPeriodProcessing && (
+										<div className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+											<AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+											<p className="text-sm text-amber-900">
+												This period is already processing. Open progress to continue.
+											</p>
+										</div>
+									)}
+
+									{!isSelectedPeriodProcessing &&
+										payrollIssues.employeeCount > 0 && (
+											<div className="flex items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5">
+												<p className="text-sm text-orange-900">
+													{payrollIssues.employeeCount} not payroll-ready
+												</p>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={() => updateURL("issues", "all")}
+													className="h-7 shrink-0 rounded-md border-orange-300 bg-white px-2.5 text-xs font-medium text-orange-800 shadow-none hover:bg-orange-100">
+													View issues
+												</Button>
+											</div>
+										)}
 								</div>
 							</div>
 
-							{/* Confirm footer */}
-							<div className="flex items-center justify-end gap-2.5 border-t border-neutral-100 bg-white px-6 py-4">
+							{/* Confirm footer — always pinned */}
+							<div className="flex shrink-0 items-center justify-end gap-2 border-t border-neutral-100 bg-white px-5 py-3">
 								<Button
 									variant="outline"
 									onClick={() => {
@@ -4927,7 +4827,7 @@ export function RunPayrollTemplate() {
 										? "Processing..."
 										: isSelectedPeriodProcessing
 											? "Open Progress"
-											: "Confirm & Start Payroll"}
+											: "Start Payroll"}
 								</Button>
 							</div>
 						</>
