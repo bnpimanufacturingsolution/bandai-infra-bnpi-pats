@@ -315,6 +315,68 @@ export interface TimesheetPayrollPreviewPagination {
 	hasPreviousPage: boolean;
 }
 
+export interface PayrollOtReadinessPerson {
+	employeeId: string;
+	employeeCode: string | null;
+	name: string;
+	department: string | null;
+	timesheetId: string;
+	timesheetStatus: string;
+	timesheetOtHours: string;
+	timesheetOtMinutes: number;
+	lineOtHours: string;
+	lineOtMinutes: number;
+	attendanceOtHours: string;
+	attendanceOtMinutes: number;
+	deltaMinutes: number;
+	deltaHours: number;
+	lineDaysWithOt: number;
+	blockerClass:
+		| "ok"
+		| "ot_on_lines_only"
+		| "attendance_ot_without_line"
+		| "no_ot"
+		| "timesheet_not_approved";
+	nextStep: string;
+}
+
+export interface PayrollOtReadinessResponse {
+	period: {
+		id: string;
+		code: string | null;
+		name: string | null;
+		startDate: string;
+		endDate: string;
+		periodNumber: number | null;
+		status: string;
+	};
+	truth: {
+		payableSource: string;
+		rawAttendanceRole: string;
+		note: string;
+	};
+	summary: {
+		timesheetsTotal: number;
+		timesheetsApproved: number;
+		peopleWithLineOt: number;
+		peopleWithTimesheetOtSummary: number;
+		peopleWithoutOt: number;
+		totalLineOtMinutes: number;
+		totalLineOtHours: number;
+		totalAttendanceOtMinutes: number;
+		totalAttendanceOtHours: number;
+		totalDeltaMinutes: number;
+	};
+	people: PayrollOtReadinessPerson[];
+	pagination: {
+		page: number;
+		limit: number;
+		totalItems: number;
+		totalPages: number;
+		hasNextPage: boolean;
+	};
+}
+
 export interface TimesheetPayrollPreviewParams {
 	page?: number;
 	limit?: number;
@@ -465,6 +527,27 @@ class PayrollPeriodsService extends APIService {
 		if (!response?.data) throw new Error("Invalid timesheet payroll preview response");
 		const payload = response.data?.data || response.data;
 		return payload as TimesheetPayrollPreviewResponse;
+	}
+
+	async getOtReadiness(
+		id: string,
+		params?: { page?: number; limit?: number; query?: string; onlyWithOt?: boolean },
+	): Promise<PayrollOtReadinessResponse> {
+		const query = new URLSearchParams();
+		if (params?.page) query.set("page", String(params.page));
+		if (params?.limit) query.set("limit", String(params.limit));
+		if (params?.query) query.set("query", params.query);
+		if (params?.onlyWithOt === false) query.set("onlyWithOt", "false");
+		const queryString = query.toString();
+		// Cap client wait so Run Payroll accordion never spins forever if API is slow/down.
+		const response = await hrisApiClient.get<any>(
+			`/api/payrollperiod/${id}/ot-readiness${queryString ? `?${queryString}` : ""}`,
+			undefined,
+			{ timeoutMs: 45_000 },
+		);
+		if (!response?.data) throw new Error("Invalid payroll OT readiness response");
+		const payload = response.data?.data || response.data;
+		return payload as PayrollOtReadinessResponse;
 	}
 
 	async getGenerateTimesheetPayrollProgress(

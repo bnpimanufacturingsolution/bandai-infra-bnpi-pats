@@ -34,9 +34,16 @@ import {
 	useGenerateTimesheetPayrollProgress,
 	useActiveTimesheetPayrollProgress,
 	useGenerateTimesheetPayrollPreview,
+	usePayrollOtReadiness,
 	payrollPeriodsQueryKeys,
 	usePayrollCycleConfig,
 } from "~/lib/hooks/usePayrollPeriods";
+import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "~/components/ui/accordion";
 import { useDepartments } from "~/lib/hooks/useDepartments";
 import { useSections } from "~/lib/hooks/useSections";
 import { useEmployeeBenefits } from "~/lib/hooks/useEmployeeBenefits";
@@ -486,11 +493,11 @@ export function RunPayrollTemplate() {
 		};
 	}, [payrollPeriodId]);
 
+	// Mass-upload compensations often set startDate only (payrollPeriodId null).
+	// Load active enrollments and scope client-side to this period window + explicit period link.
 	const { data: payrollAdjustmentsData, isLoading: payrollAdjustmentsLoading } =
 		useEmployeeBenefits({
-			filter: payrollPeriodId
-				? `payrollPeriodId:${payrollPeriodId},isActive:true`
-				: undefined,
+			filter: payrollPeriodId ? `isActive:true` : undefined,
 			page: 1,
 			limit: 5000,
 			sort: "createdAt",
@@ -498,6 +505,17 @@ export function RunPayrollTemplate() {
 			count: true,
 			enabled: Boolean(payrollPeriodId),
 		});
+	const {
+		data: payrollOtReadiness,
+		isLoading: payrollOtReadinessLoading,
+		isFetching: payrollOtReadinessFetching,
+		isError: payrollOtReadinessError,
+		error: payrollOtReadinessErrorObj,
+	} = usePayrollOtReadiness(
+		payrollPeriodId,
+		{ page: 1, limit: 20, onlyWithOt: true },
+		Boolean(payrollPeriodId),
+	);
 	const { data: generatedPayrollRowsData, isLoading: generatedPayrollRowsLoading } =
 		useEmployeePayrolls({
 			filter: payrollPeriodId ? `payrollPeriodId:${payrollPeriodId}` : undefined,
@@ -949,10 +967,42 @@ export function RunPayrollTemplate() {
 		missingInfoAndNotSubmittedCount > 0
 			? `${formatCount(missingInfoAndNotSubmittedCount)} also not submitted`
 			: "Required payroll fields incomplete";
-	const payrollAdjustments = useMemo(
-		() => payrollAdjustmentsData?.employeeBenefits || [],
-		[payrollAdjustmentsData?.employeeBenefits],
-	);
+	const payrollAdjustments = useMemo(() => {
+		const rows = (payrollAdjustmentsData?.employeeBenefits || []) as EmployeeBenefit[];
+		if (!payrollPeriodId) return [];
+		const periodStart = selectedPeriodCard?.startDate
+			? new Date(selectedPeriodCard.startDate)
+			: null;
+		const periodEnd = selectedPeriodCard?.endDate
+			? new Date(selectedPeriodCard.endDate)
+			: null;
+		if (periodStart) periodStart.setHours(0, 0, 0, 0);
+		if (periodEnd) periodEnd.setHours(23, 59, 59, 999);
+		return rows.filter((benefit) => {
+			const linkedPeriodId = String(benefit.payrollPeriodId || "");
+			if (linkedPeriodId && linkedPeriodId === String(payrollPeriodId)) return true;
+			// Open-horizon / mass-upload rows: active when start falls on/before period end
+			// and end is empty or after period start.
+			if (!periodStart || !periodEnd) return false;
+			const start = benefit.startDate ? new Date(benefit.startDate) : null;
+			const end = benefit.endDate ? new Date(benefit.endDate) : null;
+			if (!start || Number.isNaN(start.getTime())) return false;
+			if (start > periodEnd) return false;
+			if (end && !Number.isNaN(end.getTime()) && end < periodStart) return false;
+			// Prefer BNPI mass-upload / recurring enrollment signals when period is not linked.
+			const notes = String(benefit.notes || benefit.remarks || "").toLowerCase();
+			const isMassUpload = notes.includes("mass upload") || notes.includes("comcode");
+			const isRecurring =
+				String(benefit.scheduleMode || "").toUpperCase() === "RECURRING" ||
+				String(benefit.recurrenceFrequency || "").length > 0;
+			return isMassUpload || isRecurring || !linkedPeriodId;
+		});
+	}, [
+		payrollAdjustmentsData?.employeeBenefits,
+		payrollPeriodId,
+		selectedPeriodCard?.endDate,
+		selectedPeriodCard?.startDate,
+	]);
 	const generatedPayrollRows = useMemo(
 		() => ((generatedPayrollRowsData as any)?.employeePayrolls || []) as any[],
 		[generatedPayrollRowsData],
@@ -1004,6 +1054,21 @@ export function RunPayrollTemplate() {
 		}
 		if (code === "AON" || text.includes("adjustment ot")) {
 			return { label: "Adjustment OT", filter: "overtime" as const };
+		}
+		if (code === "INC" || text.includes("incentive")) {
+			return { label: "Incentive", filter: "other" as const };
+		}
+		if (code === "ARP" || text.includes("attendance recognition")) {
+			return { label: "Attendance Recognition", filter: "attendance" as const };
+		}
+		if (code === "OAD" || text.includes("other adjustment")) {
+			return { label: "Other Adjustment", filter: "other" as const };
+		}
+		if (code === "ABS" || text.includes("absent")) {
+			return { label: "Absence Adjustment", filter: "other" as const };
+		}
+		if (code === "MTX") {
+			return { label: "Matrix / Other Comp", filter: "other" as const };
 		}
 		if (code === "LVP" || text.includes("acl") || text.includes("vl conversion")) {
 			return { label: "ACL VL Conversion", filter: "allowance" as const };
@@ -1134,7 +1199,30 @@ export function RunPayrollTemplate() {
 			payrollAdjustmentRows,
 		],
 	);
-	const visiblePayrollAdjustments = filteredPayrollAdjustmentRows.slice(0, 12);
+	// Compact viewport page: never dump hundreds of rows into page scroll.
+	const adjustmentPageSize = 6;
+	const adjustmentPageParam = Number(searchParams.get("adjPage"));
+	const adjustmentPage =
+		Number.isFinite(adjustmentPageParam) && adjustmentPageParam > 0
+			? Math.floor(adjustmentPageParam)
+			: 1;
+	const adjustmentTotalPages = Math.max(
+		1,
+		Math.ceil(filteredPayrollAdjustmentRows.length / adjustmentPageSize),
+	);
+	const safeAdjustmentPage = Math.min(adjustmentPage, adjustmentTotalPages);
+	const visiblePayrollAdjustments = filteredPayrollAdjustmentRows.slice(
+		(safeAdjustmentPage - 1) * adjustmentPageSize,
+		safeAdjustmentPage * adjustmentPageSize,
+	);
+	const setAdjustmentPage = (page: number) => {
+		updateSearchParams((next) => {
+			const clamped = Math.max(1, Math.min(adjustmentTotalPages, page));
+			if (clamped <= 1) next.delete("adjPage");
+			else next.set("adjPage", String(clamped));
+		});
+		setExpandedAdjustmentId(null);
+	};
 	const selectedAdjustmentSummary = useMemo(
 		() =>
 			filteredPayrollAdjustmentRows.reduce(
@@ -1310,19 +1398,27 @@ export function RunPayrollTemplate() {
 	};
 	const buildEmployeeAdjustmentUrl = (row: (typeof payrollAdjustmentRows)[number]) => {
 		const params = buildPayrollAdjustmentParams();
+		// Deep-link into benefits list with employee + code filters (edit modal when id supported).
 		params.set("action", "edit");
 		params.set("id", row.benefit.id);
+		params.set("employeeId", row.employeeId || "");
+		if (row.employeeCode) params.set("employeeCode", row.employeeCode);
 		params.set("adjustment", row.source.filter);
 		params.set("sourceCategory", row.source.filter);
 		if (row.benefit.benefitType?.code) {
 			params.set("code", row.benefit.benefitType.code);
 		}
 		params.set("direction", row.direction);
+		params.set("query", row.employeeCode || row.employeeName || "");
 		return `/hr/benefits-management?${params.toString()}`;
 	};
 	const openAdjustmentEmployeeProfile = (employeeId?: string | null) => {
 		if (!employeeId) return;
-		navigate(`/employee/${employeeId}`);
+		// Prefer employee profile benefits/compensation surface with return context.
+		const params = buildPayrollAdjustmentParams();
+		params.set("tab", "benefits");
+		params.set("from", "run-payroll");
+		navigate(`/employee/${employeeId}?${params.toString()}`);
 	};
 	const previewIncludedEmployees = useMemo(
 		() => timesheetPayrollPreview?.includedEmployees || [],
@@ -2829,43 +2925,44 @@ export function RunPayrollTemplate() {
 							</div>
 						)}
 
-						{/* Payroll Adjustments Section */}
-						<div className="rounded-lg border border-gray-200 bg-white p-3">
-							<div className="mb-2 flex items-center justify-between gap-3">
-								<div className="flex min-w-0 items-center gap-2">
-									<CreditCard className="h-4 w-4 shrink-0 text-gray-500" />
-									<h3 className="truncate text-sm font-semibold text-gray-900">
-										Payroll Adjustments
-									</h3>
-								</div>
-								<Badge className="shrink-0 rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-700">
-									{formatCount(payrollAdjustmentsTotal)}
-								</Badge>
-							</div>
-
-							<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200">
-								<div className="min-w-0 bg-gray-50 px-3 py-2">
-									<p className="truncate text-[11px] text-gray-500">Compensation</p>
-									<p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-gray-900">
-										{formatCurrency(payrollAdjustmentSummary.compensationAmount)}
-									</p>
-								</div>
-								<div className="min-w-0 bg-gray-50 px-3 py-2">
-									<p className="truncate text-[11px] text-gray-500">Deductions</p>
-									<p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-gray-900">
-										{formatCurrency(payrollAdjustmentSummary.deductionAmount)}
-									</p>
-								</div>
-							</div>
-
-							<div className="mt-2 grid gap-2 lg:grid-cols-[minmax(0,1fr)_152px_160px]">
-								<div className="relative min-w-0">
-									<Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+						{/* Payroll Adjustments + Approved OT (compact accordion stack) */}
+						<div className="rounded-lg border border-gray-200 bg-white p-2">
+							<Accordion
+								type="multiple"
+								defaultValue={["payroll-adjustments", "approved-ot"]}
+								className="w-full">
+							<AccordionItem value="payroll-adjustments" className="border-none">
+								<AccordionTrigger className="rounded-md px-2 py-2.5 hover:no-underline hover:bg-gray-50/80">
+									<div className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-2">
+										<div className="flex min-w-0 items-center gap-2">
+											<CreditCard className="h-4 w-4 shrink-0 text-gray-500" />
+											<span className="truncate text-sm font-semibold text-gray-900">
+												Payroll Adjustments
+											</span>
+										</div>
+										<div className="flex shrink-0 items-center gap-1.5">
+											<span className="hidden text-[11px] tabular-nums text-emerald-700 sm:inline">
+												+{formatCurrency(payrollAdjustmentSummary.compensationAmount)}
+											</span>
+											<span className="hidden text-[11px] tabular-nums text-red-700 sm:inline">
+												−{formatCurrency(payrollAdjustmentSummary.deductionAmount)}
+											</span>
+											<Badge className="rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700">
+												{formatCount(payrollAdjustmentsTotal)}
+											</Badge>
+										</div>
+									</div>
+								</AccordionTrigger>
+								<AccordionContent className="px-1 pb-2 pt-0">
+							{/* Dense toolbar: always one horizontal flex wrap (not stacked selects) */}
+							<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+								<div className="relative min-w-[140px] flex-1 basis-[160px]">
+									<Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
 									<Input
 										value={adjustmentQueryParam}
 										onChange={(event) => updateAdjustmentQuery(event.target.value)}
-										placeholder="Search employee, code, source"
-										className="h-8 pl-8 text-sm"
+										placeholder="Search employee, code…"
+										className="h-7 pl-7 text-xs"
 									/>
 								</div>
 								<Select
@@ -2873,7 +2970,7 @@ export function RunPayrollTemplate() {
 									onValueChange={(value) =>
 										updateAdjustmentDirection(value as AdjustmentDirectionFilter)
 									}>
-									<SelectTrigger className="h-8 text-sm">
+									<SelectTrigger className="h-7 w-auto min-w-[118px] shrink-0 px-2 text-xs">
 										<SelectValue placeholder="Direction" />
 									</SelectTrigger>
 									<SelectContent>
@@ -2889,8 +2986,8 @@ export function RunPayrollTemplate() {
 											value as AdjustmentPayrollStatusFilter,
 										)
 									}>
-									<SelectTrigger className="h-8 text-sm">
-										<SelectValue placeholder="Payroll row" />
+									<SelectTrigger className="h-7 w-auto min-w-[124px] shrink-0 px-2 text-xs">
+										<SelectValue placeholder="Payroll state" />
 									</SelectTrigger>
 									<SelectContent>
 										<SelectItem value="all">All payroll states</SelectItem>
@@ -2900,7 +2997,7 @@ export function RunPayrollTemplate() {
 								</Select>
 							</div>
 
-							<div className="mt-2 flex gap-1.5 overflow-x-auto pb-1">
+							<div className="mt-1.5 flex items-center gap-1 overflow-x-auto pb-0.5">
 								{adjustmentFilters.map((filter) => {
 									const isActive = adjustmentFilter === filter.value;
 									return (
@@ -2908,7 +3005,7 @@ export function RunPayrollTemplate() {
 											key={filter.value}
 											type="button"
 											onClick={() => updateAdjustmentFilter(filter.value)}
-											className={`h-7 shrink-0 rounded-md border px-2.5 text-xs font-medium transition-colors ${
+											className={`h-6 shrink-0 rounded border px-2 text-[11px] font-medium transition-colors ${
 												isActive
 													? "border-orange-300 bg-orange-50 text-orange-700"
 													: "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
@@ -2921,97 +3018,57 @@ export function RunPayrollTemplate() {
 									<button
 										type="button"
 										onClick={clearAdjustmentControls}
-										className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
-										<X className="h-3.5 w-3.5" />
+										className="inline-flex h-6 shrink-0 items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 text-[11px] font-medium text-gray-600 hover:bg-gray-50">
+										<X className="h-3 w-3" />
 										Clear
 									</button>
 								)}
 							</div>
 
-							<div className="mt-1.5 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-5">
-								<div className="min-w-0 bg-white px-2.5 py-2">
-									<p className="truncate text-[11px] text-gray-500">
-										{selectedAdjustmentLabel}
-									</p>
-									<p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-gray-900">
-										{formatCount(selectedAdjustmentSummary.count)} rows
-									</p>
-								</div>
-								<div className="min-w-0 bg-white px-2.5 py-2">
-									<p className="truncate text-[11px] text-gray-500">Employees</p>
-									<p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-gray-900">
-										{formatCount(selectedAdjustmentSummary.employees.size)}
-									</p>
-								</div>
-								<div className="min-w-0 bg-white px-2.5 py-2">
-									<p className="truncate text-[11px] text-gray-500">Sources</p>
-									<p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-gray-900">
-										{formatCount(selectedAdjustmentSummary.sources.size)}
-									</p>
-								</div>
-								<div className="min-w-0 bg-white px-2.5 py-2">
-									<p className="truncate text-[11px] text-gray-500">
-										Compensation
-									</p>
-									<p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-gray-900">
-										{formatCurrency(selectedAdjustmentSummary.compensationAmount)}
-									</p>
-								</div>
-								<div className="min-w-0 bg-white px-2.5 py-2">
-									<p className="truncate text-[11px] text-gray-500">Deductions</p>
-									<p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-gray-900">
-										{formatCurrency(selectedAdjustmentSummary.deductionAmount)}
-									</p>
-								</div>
-							</div>
-							<div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-gray-500">
+							{/* One-line stats strip (no tall cards) */}
+							<div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-gray-100 bg-gray-50/80 px-2 py-1 text-[11px] text-gray-600">
 								<span>
-									Showing {formatCount(selectedAdjustmentSummary.count)} of{" "}
-									{formatCount(payrollAdjustmentTotalAvailable)} source rows
+									<span className="font-semibold tabular-nums text-gray-900">
+										{formatCount(selectedAdjustmentSummary.count)}
+									</span>{" "}
+									rows
 								</span>
-								<span className="flex shrink-0 items-center gap-2">
-									<span className="font-medium text-gray-700">
-										Filtered total {formatCurrency(selectedAdjustmentNetAmount)}
+								<span className="text-gray-300">·</span>
+								<span>
+									<span className="font-semibold tabular-nums text-gray-900">
+										{formatCount(selectedAdjustmentSummary.employees.size)}
+									</span>{" "}
+									emps
+								</span>
+								<span className="text-gray-300">·</span>
+								<span className="tabular-nums text-emerald-700">
+									+{formatCurrency(selectedAdjustmentSummary.compensationAmount)}
+								</span>
+								<span className="tabular-nums text-red-700">
+									−{formatCurrency(selectedAdjustmentSummary.deductionAmount)}
+								</span>
+								<span className="text-gray-300">·</span>
+								<span className="font-medium tabular-nums text-gray-800">
+									net {formatCurrency(selectedAdjustmentNetAmount)}
+								</span>
+								{payrollAdjustmentSourceTotals.slice(0, 3).map((source) => (
+									<span
+										key={source.label}
+										className="inline-flex max-w-[140px] items-center gap-1 truncate rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] text-gray-600">
+										<span className="truncate">{source.label}</span>
+										<span className="shrink-0 tabular-nums text-gray-400">
+											{formatCount(source.count)}
+										</span>
 									</span>
-									{selectedAdjustmentSummary.count > 0 && (
-										<button
-											type="button"
-											onClick={() => navigate(buildAdjustmentCategoryUrl())}
-											className="inline-flex h-7 items-center gap-1 rounded-md border border-gray-200 bg-white px-2 text-[11px] font-medium text-gray-700 transition-colors hover:bg-orange-50 hover:text-orange-700">
-											View all
-											<ExternalLink className="h-3.5 w-3.5" />
-										</button>
-									)}
-								</span>
+								))}
 							</div>
 
-							{payrollAdjustmentSourceTotals.length > 0 && (
-								<div className="mt-2 grid gap-1.5 sm:grid-cols-2">
-									{payrollAdjustmentSourceTotals.slice(0, 4).map((source) => (
-										<div
-											key={source.label}
-											className="min-w-0 rounded-md border border-gray-200 bg-white px-2.5 py-1.5">
-											<div className="flex items-center justify-between gap-2">
-												<p className="truncate text-xs font-medium text-gray-700">
-													{source.label}
-												</p>
-												<span className="shrink-0 text-[11px] text-gray-400">
-													{formatCount(source.count)}
-												</span>
-											</div>
-											<p className="mt-0.5 truncate text-xs font-semibold tabular-nums text-gray-900">
-												{formatCurrency(source.amount)}
-											</p>
-										</div>
-									))}
-								</div>
-							)}
-
-							<div className="mt-3 divide-y divide-gray-100 rounded-lg border border-gray-200">
+							{/* Dense single-line rows; page size keeps panel short */}
+							<div className="mt-1.5 max-h-[min(220px,32vh)] overflow-y-auto overscroll-contain rounded border border-gray-200 divide-y divide-gray-100 modern-scroll">
 								{payrollAdjustmentsLoading || generatedPayrollRowsLoading ? (
-									<div className="space-y-2 p-3">
-										<Skeleton className="h-4 w-2/3" />
-										<Skeleton className="h-4 w-1/2" />
+									<div className="space-y-1.5 p-2">
+										<Skeleton className="h-7 w-full" />
+										<Skeleton className="h-7 w-5/6" />
 									</div>
 								) : visiblePayrollAdjustments.length > 0 ? (
 									visiblePayrollAdjustments.map((row) => {
@@ -3026,230 +3083,317 @@ export function RunPayrollTemplate() {
 											source,
 										} = row;
 										const isExpanded = expandedAdjustmentId === benefit.id;
-										const isSourceFilterContext =
-											adjustmentFilter !== "all" && adjustmentFilter === source.filter;
 										const adjustmentDisplayName =
 											String(benefit.name || "").trim() ||
 											String(benefit.benefitType?.name || "").trim() ||
 											source.label ||
 											"Payroll adjustment";
-										const adjustmentCategoryName =
-											String(benefit.benefitType?.name || "").trim() || null;
-										const sourceMetaParts = [
-											adjustmentCategoryName &&
-											adjustmentCategoryName.toLowerCase() !==
-												adjustmentDisplayName.toLowerCase()
-												? adjustmentCategoryName
-												: null,
-											isSourceFilterContext ? null : source.label !== adjustmentDisplayName
-												? source.label
-												: null,
-											benefit.benefitType?.code,
-											hasGeneratedPayrollRow ? "Generated row" : "Source only",
-										].filter(Boolean);
+										const code = benefit.benefitType?.code || "";
 										return (
-											<div
-												key={benefit.id}
-												className="bg-white">
-												<div
-													role={employeeId ? "button" : undefined}
-													tabIndex={employeeId ? 0 : undefined}
-													onClick={() => openAdjustmentEmployeeProfile(employeeId)}
-													onKeyDown={(event) => {
-														if (!employeeId) return;
-														if (event.key === "Enter" || event.key === " ") {
-															event.preventDefault();
-															openAdjustmentEmployeeProfile(employeeId);
-														}
-													}}
-													className={`grid gap-2 px-3 py-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start ${
-														employeeId ? "cursor-pointer hover:bg-orange-50/35" : ""
-													}`}>
-													<div className="grid min-w-0 grid-cols-[18px_40px_minmax(0,1fr)] items-start gap-2">
+											<div key={benefit.id} className="bg-white">
+												<div className="flex h-9 items-center gap-1.5 px-2 hover:bg-orange-50/40">
 													<button
 														type="button"
-														onClick={(event) => {
-															event.stopPropagation();
-															setExpandedAdjustmentId(isExpanded ? null : benefit.id);
-														}}
+														onClick={() =>
+															setExpandedAdjustmentId(isExpanded ? null : benefit.id)
+														}
 														aria-expanded={isExpanded}
-														className="rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
+														className="shrink-0 rounded p-0.5 text-gray-400 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
 														<ChevronDown
-															className={`mt-0.5 h-4 w-4 shrink-0 text-gray-400 transition-transform ${
+															className={`h-3.5 w-3.5 transition-transform ${
 																isExpanded ? "rotate-180" : ""
 															}`}
 														/>
 														<span className="sr-only">
-															{isExpanded ? "Collapse adjustment details" : "Expand adjustment details"}
+															{isExpanded ? "Collapse" : "Expand"}
 														</span>
 													</button>
-													<ProfileInitialsAvatar
-														name={employeeName}
-														size="sm"
-														variant="default"
-														className="h-9 w-9 shrink-0 text-xs"
-													/>
-														<span className="min-w-0">
-															<span className="block truncate text-sm font-medium text-gray-900">
+													<button
+														type="button"
+														onClick={() => openAdjustmentEmployeeProfile(employeeId)}
+														disabled={!employeeId}
+														className="flex min-w-0 flex-1 items-center gap-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300 disabled:cursor-default">
+														<span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-500 text-[10px] font-semibold leading-none text-white">
+															{(employeeName || "?")
+																.split(/\s+/)
+																.filter(Boolean)
+																.slice(0, 2)
+																.map((p) => p[0]?.toUpperCase() || "")
+																.join("") || "?"}
+														</span>
+														<span className="min-w-0 flex-1">
+															<span className="block truncate text-xs font-medium leading-tight text-gray-900">
 																{adjustmentDisplayName}
+																{code ? (
+																	<span className="font-normal text-gray-400">
+																		{" "}
+																		· {code}
+																	</span>
+																) : null}
 															</span>
-															<span className="mt-0.5 block truncate text-xs text-gray-500">
+															<span className="block truncate text-[10px] leading-tight text-gray-500">
 																{employeeName}
 																{employeeCode ? ` · ${employeeCode}` : ""}
-															</span>
-															<span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-[11px] text-gray-400">
-																{sourceMetaParts.map((part, partIndex) => (
-																	<span
-																		key={`${benefit.id}-${part}`}
-																		className="contents">
-																		{partIndex > 0 && (
-																			<span className="text-gray-300">|</span>
-																		)}
-																		<span className="truncate">{part}</span>
-																	</span>
-																))}
+																{" · "}
+																{hasGeneratedPayrollRow ? "Generated" : "Source only"}
 															</span>
 														</span>
-													</div>
-													<div className="flex items-start justify-between gap-2 sm:justify-end">
-														<div className="shrink-0 text-right">
-															<p
-																className={
-																	direction === "DEDUCTION"
-																		? "text-sm font-semibold text-red-700"
-																		: "text-sm font-semibold text-emerald-700"
-																}>
-																{direction === "DEDUCTION" ? "-" : "+"}
-																{formatCurrency(benefit.amount)}
-															</p>
-															<p className="text-xs text-gray-400">
-																{direction === "DEDUCTION"
-																	? "Deduction"
-																	: "Compensation"}
-															</p>
-														</div>
-														<Button
-															variant="ghost"
-															size="sm"
-															onClick={(event) => {
-																event.stopPropagation();
-																openAdjustmentEmployeeProfile(employeeId);
-															}}
-															disabled={!employeeId}
-															className="h-8 px-2 text-gray-500 hover:bg-orange-50 hover:text-orange-600">
-															<ExternalLink className="h-4 w-4" />
-															<span className="sr-only">Open employee profile</span>
-														</Button>
-													</div>
+													</button>
+													<span
+														className={`shrink-0 tabular-nums text-xs font-semibold ${
+															direction === "DEDUCTION"
+																? "text-red-700"
+																: "text-emerald-700"
+														}`}>
+														{direction === "DEDUCTION" ? "−" : "+"}
+														{formatCurrency(benefit.amount)}
+													</span>
+													<button
+														type="button"
+														onClick={() => navigate(buildEmployeeAdjustmentUrl(row))}
+														className="shrink-0 rounded p-1 text-gray-400 hover:bg-orange-50 hover:text-orange-600"
+														title="Open source adjustment">
+														<ExternalLink className="h-3.5 w-3.5" />
+													</button>
 												</div>
 												{isExpanded && (
-													<div className="border-t border-gray-100 bg-gray-50/60 px-3 py-2.5">
-														<div className="grid gap-x-4 gap-y-2 text-xs sm:grid-cols-2">
-															<div className="min-w-0">
-																<p className="text-[11px] text-gray-500">Employee</p>
-																<p className="truncate font-medium text-gray-800">
-																	{employeeName}
-																	{employeeCode ? ` / ${employeeCode}` : ""}
-																</p>
-															</div>
-															<div className="min-w-0">
-																<p className="text-[11px] text-gray-500">Payroll period</p>
-																<p className="truncate font-medium text-gray-800">
-																	{benefit.payrollPeriod?.code ||
-																		selectedPeriodCard?.code ||
-																		"Selected period"}
-																</p>
-															</div>
-															<div className="min-w-0">
-																<p className="text-[11px] text-gray-500">Source table</p>
-																<p className="truncate font-medium text-gray-800">
-																	employee_benefits
-																</p>
-															</div>
-															<div className="min-w-0">
-																<p className="text-[11px] text-gray-500">Source id</p>
-																<p className="truncate font-mono text-[11px] text-gray-700">
-																	{benefit.id}
-																</p>
-															</div>
-															<div className="min-w-0">
-																<p className="text-[11px] text-gray-500">
-																	Type / category
-																</p>
-																<p className="truncate font-medium text-gray-800">
-																	{benefit.benefitType?.code || "No code"} /{" "}
-																	{benefit.benefitType?.category || "OTHER"}
-																</p>
-															</div>
-															<div className="min-w-0">
-																<p className="text-[11px] text-gray-500">
-																	Classification
-																</p>
-																<p className="truncate font-medium text-gray-800">
-																	{direction}
-																	{benefit.benefitType?.payrollDirection
-																		? " from benefit type"
-																		: ""}
-																</p>
-															</div>
-															<div className="min-w-0">
-																<p className="text-[11px] text-gray-500">
-																	Reconciliation
-																</p>
-																<p className="truncate font-medium text-gray-800">
-																	{(benefit.benefitType as any)?.reconciliationAction ||
-																		"Not tagged"}
-																</p>
-															</div>
-															<div className="min-w-0">
-																<p className="text-[11px] text-gray-500">Payroll row</p>
-																<p className="truncate font-medium text-gray-800">
-																	{hasGeneratedPayrollRow
-																		? `${generatedPayroll?.isPaid ? "Paid" : "Generated"} / ${formatCurrency(
-																				generatedPayroll?.netPay || 0,
-																			)} net`
-																		: "No generated row for employee"}
-																</p>
-															</div>
-															<div className="min-w-0 sm:col-span-2">
-																<Button
-																	variant="outline"
-																	size="sm"
-																	onClick={() => navigate(buildEmployeeAdjustmentUrl(row))}
-																	className="h-8 border-gray-200 bg-white px-2.5 text-xs text-gray-700 hover:bg-orange-50 hover:text-orange-700">
-																	<ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-																	Open source adjustment
-																</Button>
-															</div>
-														</div>
+													<div className="border-t border-gray-100 bg-gray-50/70 px-2 py-1.5 text-[10px] text-gray-600">
+														<span className="font-medium text-gray-800">
+															{employeeName}
+															{employeeCode ? ` / ${employeeCode}` : ""}
+														</span>
+														{" · "}
+														{code || "no code"} · {direction}
+														{" · "}
+														{benefit.payrollPeriod?.code ||
+															selectedPeriodCard?.code ||
+															"period"}
+														{" · "}
+														{hasGeneratedPayrollRow
+															? `${generatedPayroll?.isPaid ? "Paid" : "Generated"} net ${formatCurrency(generatedPayroll?.netPay || 0)}`
+															: "No payroll row yet"}
+														<button
+															type="button"
+															onClick={() => navigate(buildEmployeeAdjustmentUrl(row))}
+															className="ml-2 font-medium text-orange-700 underline-offset-2 hover:underline">
+															Open source
+														</button>
 													</div>
 												)}
 											</div>
 										);
 									})
 								) : (
-									<div className="px-3 py-3 text-sm text-gray-500">
+									<div className="px-2 py-2 text-xs text-gray-500">
 										No source rows match these controls.
 									</div>
 								)}
 							</div>
 
-							<div className="mt-3 flex items-center justify-between gap-3">
-								<p className="truncate text-xs text-gray-500">
-									Period rows come from employee benefit enrollments.
+							<div className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5">
+								<p className="text-[10px] text-gray-500">
+									p.{formatCount(safeAdjustmentPage)}/{formatCount(adjustmentTotalPages)} ·{" "}
+									{formatCount(visiblePayrollAdjustments.length)} shown ·{" "}
+									{formatCount(filteredPayrollAdjustmentRows.length)} filtered ·{" "}
+									{formatCount(payrollAdjustmentsTotal)} scoped
 								</p>
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={() => {
-										const params = buildPayrollAdjustmentParams();
-										navigate(`/hr/benefits-management/new?${params.toString()}`);
-									}}
-									className="shrink-0 text-gray-700 hover:bg-orange-50 hover:text-orange-600">
-									<ExternalLink className="mr-2 h-4 w-4" />
-									Enroll employees
-								</Button>
+								<div className="flex items-center gap-1">
+									<button
+										type="button"
+										disabled={safeAdjustmentPage <= 1}
+										onClick={() => setAdjustmentPage(safeAdjustmentPage - 1)}
+										className="h-6 rounded border border-gray-200 bg-white px-1.5 text-[10px] font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50">
+										Prev
+									</button>
+									<button
+										type="button"
+										disabled={safeAdjustmentPage >= adjustmentTotalPages}
+										onClick={() => setAdjustmentPage(safeAdjustmentPage + 1)}
+										className="h-6 rounded border border-gray-200 bg-white px-1.5 text-[10px] font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50">
+										Next
+									</button>
+									<button
+										type="button"
+										onClick={() => navigate(buildAdjustmentCategoryUrl())}
+										className="inline-flex h-6 items-center gap-0.5 rounded border border-gray-200 bg-white px-1.5 text-[10px] font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-700">
+										View all
+										<ExternalLink className="h-3 w-3" />
+									</button>
+								</div>
 							</div>
+								</AccordionContent>
+							</AccordionItem>
+
+							<AccordionItem value="approved-ot" className="border-t border-gray-100">
+								<AccordionTrigger className="rounded-md px-2 py-2.5 hover:no-underline hover:bg-gray-50/80">
+									<div className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-2">
+										<div className="flex min-w-0 items-center gap-2">
+											<Clock className="h-4 w-4 shrink-0 text-gray-500" />
+											<span className="truncate text-sm font-semibold text-gray-900">
+												Approved OT
+											</span>
+											<span className="hidden truncate text-[11px] text-gray-400 sm:inline">
+												timesheet lines → payroll Reg OT
+											</span>
+										</div>
+										<div className="flex shrink-0 items-center gap-1.5">
+											{payrollOtReadinessLoading || payrollOtReadinessFetching ? (
+												<Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+											) : (
+												<>
+													<span className="text-[11px] tabular-nums text-gray-600">
+														{formatCount(
+															payrollOtReadiness?.summary.peopleWithLineOt || 0,
+														)}{" "}
+														people
+													</span>
+													<Badge className="rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-800">
+														{Number(
+															payrollOtReadiness?.summary.totalLineOtHours || 0,
+														).toLocaleString(undefined, {
+															maximumFractionDigits: 1,
+														})}{" "}
+														hrs
+													</Badge>
+												</>
+											)}
+										</div>
+									</div>
+								</AccordionTrigger>
+								<AccordionContent className="px-1 pb-2 pt-0">
+									<p className="mb-2 text-[11px] leading-relaxed text-gray-500">
+										Payable OT is on effective timesheet lines (from approved OT
+										workbook), not raw biometric punches. Attendance OT fields are
+										shown only for comparison.
+									</p>
+									<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-4">
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">Timesheets</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
+												{formatCount(
+													payrollOtReadiness?.summary.timesheetsTotal || 0,
+												)}
+											</p>
+										</div>
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">With line OT</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
+												{formatCount(
+													payrollOtReadiness?.summary.peopleWithLineOt || 0,
+												)}
+											</p>
+										</div>
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">Line OT hrs</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-orange-800">
+												{Number(
+													payrollOtReadiness?.summary.totalLineOtHours || 0,
+												).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+											</p>
+										</div>
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">No line OT</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
+												{formatCount(
+													payrollOtReadiness?.summary.peopleWithoutOt || 0,
+												)}
+											</p>
+										</div>
+									</div>
+
+									<div className="mt-2 max-h-[min(180px,28vh)] overflow-y-auto overscroll-contain divide-y divide-gray-100 rounded-lg border border-gray-200 modern-scroll">
+										{payrollOtReadinessLoading && !payrollOtReadiness ? (
+											<div className="space-y-2 p-3">
+												<Skeleton className="h-4 w-2/3" />
+												<Skeleton className="h-4 w-1/2" />
+												<p className="text-[11px] text-gray-400">
+													Loading OT summary (headers only — should be under a few seconds)…
+												</p>
+											</div>
+										) : payrollOtReadinessError ? (
+											<div className="px-3 py-3 text-xs text-amber-800">
+												Could not load OT readiness
+												{payrollOtReadinessErrorObj instanceof Error
+													? `: ${payrollOtReadinessErrorObj.message}`
+													: ""}. Restart API if route 404, or seed OT for this period via
+												repair-bandai-payroll-source-timesheet-lines.
+											</div>
+										) : (payrollOtReadiness?.people || []).length > 0 ? (
+											(payrollOtReadiness?.people || []).map((person) => (
+												<div
+													key={person.timesheetId}
+													className="flex h-9 items-center gap-2 px-2 hover:bg-orange-50/30">
+													<div className="min-w-0 flex-1">
+														<p className="truncate text-xs font-medium text-gray-900">
+															{person.name}
+															{person.employeeCode ? (
+																<span className="font-normal text-gray-500">
+																	{" "}
+																	· {person.employeeCode}
+																</span>
+															) : null}
+														</p>
+														<p className="truncate text-[10px] text-gray-500">
+															{person.timesheetStatus}
+															{person.lineDaysWithOt
+																? ` · ${person.lineDaysWithOt} OT days`
+																: ""}
+															{person.blockerClass !== "ok"
+																? ` · ${person.blockerClass}`
+																: ""}
+														</p>
+													</div>
+													<span className="shrink-0 text-xs font-semibold tabular-nums text-orange-800">
+														{person.lineOtHours}
+													</span>
+												</div>
+											))
+										) : (
+											<div className="px-3 py-2.5 text-xs leading-relaxed text-gray-600">
+												{Number(payrollOtReadiness?.summary?.timesheetsTotal || 0) === 0 ? (
+													<>
+														<strong className="text-gray-800">0 timesheets</strong> for
+														this period — Approved OT has nothing to attach to. Seed
+														timesheets (DM4 biometrics) for this cutoff first, then apply
+														rptOvertimeDetails. Opening a June period already mapped shows
+														non-zero OT.
+													</>
+												) : (
+													<>
+														{formatCount(
+															payrollOtReadiness?.summary?.timesheetsTotal || 0,
+														)}{" "}
+														timesheets but{" "}
+														<strong className="text-gray-800">0 with OT hours</strong>.
+														Apply approved OT workbook for this periodCode (not raw
+														biometrics alone).
+													</>
+												)}
+											</div>
+										)}
+									</div>
+
+									<div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+										<p className="text-[11px] text-gray-500">
+											Showing{" "}
+											{formatCount(payrollOtReadiness?.people?.length || 0)} of{" "}
+											{formatCount(
+												payrollOtReadiness?.pagination?.totalItems || 0,
+											)}{" "}
+											people with OT signal
+										</p>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => openTimesheets()}
+											className="h-7 shrink-0 px-2 text-xs text-gray-700 hover:bg-orange-50 hover:text-orange-700">
+											<ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+											Open timesheets
+										</Button>
+									</div>
+								</AccordionContent>
+							</AccordionItem>
+							</Accordion>
 						</div>
 
 						{/* Reminders Section */}

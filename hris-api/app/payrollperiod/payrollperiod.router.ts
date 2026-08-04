@@ -20,6 +20,7 @@ interface IController {
 		res: Response,
 		next: NextFunction,
 	): Promise<void>;
+	getOtReadiness(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	updateConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	bulkGenerate(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -464,6 +465,19 @@ export const router = (route: Router, controller: IController): Router => {
 			label: "payrollperiod:generate-timesheet-preview",
 		}),
 		controller.previewTimesheetPayroll,
+	);
+
+	/**
+	 * Approved OT readiness for a payroll period (timesheetline / timesheet OT vs attendance OT field).
+	 * Not inside generate-timesheet body — separate read for Run Payroll Adjustments accordion.
+	 */
+	routes.get(
+		"/:id/ot-readiness",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "payrollperiod:ot-readiness",
+		}),
+		controller.getOtReadiness,
 	);
 
 	routes.get("/:id/generate-timesheet/progress", controller.getActiveTimesheetGenerationProgress);

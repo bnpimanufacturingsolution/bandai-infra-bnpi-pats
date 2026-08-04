@@ -268,6 +268,49 @@ export const useRequestPauseTimesheetPayroll = () => {
 	});
 };
 
+export const usePayrollOtReadiness = (
+	id: string | null | undefined,
+	params?: { page?: number; limit?: number; query?: string; onlyWithOt?: boolean },
+	enabled: boolean = true,
+) => {
+	return useQuery({
+		queryKey: ["payrollOtReadiness", id, params],
+		queryFn: () => {
+			if (!id) return null;
+			return payrollPeriodsService.getOtReadiness(id, params);
+		},
+		enabled: Boolean(id) && enabled,
+		// List summary is stable within a period; avoid hammering while accordion open.
+		staleTime: 60_000,
+		gcTime: 5 * 60_000,
+		refetchOnWindowFocus: false,
+		// Do not spin forever if API is slow/down — service uses 45s client timeout.
+		retry: 1,
+		retryDelay: 1500,
+	});
+};
+
+/** Honest empty-state copy when OT readiness fails or times out (accordion-safe). */
+export function payrollOtReadinessErrorMessage(error: unknown): string {
+	const status = (error as any)?.status ?? (error as any)?.response?.status;
+	const msg = String(
+		(error as any)?.message ||
+			(error as any)?.response?.data?.message ||
+			(error as any)?.error ||
+			"",
+	);
+	if (status === 408 || /timeout|took too long|aborted/i.test(msg)) {
+		return "Approved OT readiness timed out. Payroll can still run; refresh this panel or check timesheet OT totals.";
+	}
+	if (status === 404 || /not found/i.test(msg)) {
+		return "Payroll period not found for OT readiness.";
+	}
+	if (!msg) {
+		return "Could not load approved OT readiness. Try again; Run Payroll is not blocked by this panel.";
+	}
+	return msg;
+}
+
 export const useGenerateTimesheetPayrollPreview = (
 	id: string | null | undefined,
 	params?: TimesheetPayrollPreviewParams,
