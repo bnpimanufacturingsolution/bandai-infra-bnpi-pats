@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	ADMIN_MIGRATION_IMPORT_ACTION_SEQUENCE,
 	ADMIN_MIGRATION_MODAL_TITLES,
+	buildDm4RunSourcePayload,
 	getWorkbookReportIssue,
 	isDm4ApprovedOvertimeSource,
 	normalizeWorkbookReportLifecycle,
@@ -51,6 +52,39 @@ describe("admin migration route contract", () => {
 			true,
 		);
 		expect(isDm4ApprovedOvertimeSource("Biometrics Data_Jun 26 - Jul 10.xlsx")).toBe(false);
+	});
+
+	it("scopes DM4 overtime-only runs to the selected OT file without biometrics", () => {
+		const biometrics = [
+			"confidential-files/DMs/Biometrics Data_Jun 26 - Jul 10.xlsx",
+			"confidential-files/DMs/extra-punch.xlsx",
+		];
+		const overtime = [
+			"confidential-files/2rptOvertimeDetails - June 26 - July 10, 2026.xlsx",
+		];
+
+		const otOnly = buildDm4RunSourcePayload("overtime-only", biometrics, overtime);
+		expect(otOnly.biometricFiles).toEqual([]);
+		expect(otOnly.approvedOvertimeFiles).toEqual(overtime);
+		expect(otOnly.sourceFiles).toEqual(overtime);
+		expect(otOnly.sourceFiles).not.toContain(biometrics[0]);
+		expect(otOnly.sourceFiles).not.toContain(biometrics[1]);
+
+		const full = buildDm4RunSourcePayload("full", biometrics, overtime);
+		expect(full.biometricFiles).toEqual(biometrics);
+		expect(full.approvedOvertimeFiles).toEqual(overtime);
+		expect(full.sourceFiles).toEqual([...biometrics, ...overtime]);
+	});
+
+	it("overtime-only payload stays empty when no OT file is attached", () => {
+		const otOnly = buildDm4RunSourcePayload(
+			"overtime-only",
+			["confidential-files/DMs/Biometrics Data_Jun 26 - Jul 10.xlsx"],
+			[],
+		);
+		expect(otOnly.biometricFiles).toEqual([]);
+		expect(otOnly.approvedOvertimeFiles).toEqual([]);
+		expect(otOnly.sourceFiles).toEqual([]);
 	});
 
 	it("keeps every import action mapped to a modal title", () => {

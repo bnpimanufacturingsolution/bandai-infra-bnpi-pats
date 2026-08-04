@@ -2251,6 +2251,44 @@ function uniqueDm4Paths(paths: string[]) {
 	return next;
 }
 
+/** How DM4 durable run source lists are scoped from the upload modals. */
+export type Dm4RunSourceMode = "full" | "overtime-only";
+
+/**
+ * Build biometrics + approved OT path lists for a DM4 migration run.
+ * overtime-only never pulls biometrics paths (even if stored for the biometrics modal).
+ */
+export function buildDm4RunSourcePayload(
+	mode: Dm4RunSourceMode,
+	biometricFiles: string[],
+	approvedOvertimeFiles: string[],
+) {
+	const biometrics = uniqueDm4Paths(biometricFiles);
+	const overtime = uniqueDm4Paths(approvedOvertimeFiles);
+	if (mode === "overtime-only") {
+		// Backend OT-only: empty attendance sourceFiles + explicit approvedOvertimeFiles.
+		// Do not put biometrics paths (or default folder expansions) into the run.
+		return {
+			mode,
+			biometricFiles: [] as string[],
+			approvedOvertimeFiles: overtime,
+			/** Paths sent as run sourceFiles — OT only, never biometrics. */
+			sourceFiles: overtime,
+			sourceMode: overtime.length > 0 ? "UI workbook files" : "Server default config",
+		};
+	}
+	return {
+		mode,
+		biometricFiles: biometrics,
+		approvedOvertimeFiles: overtime,
+		sourceFiles: uniqueDm4Paths([...biometrics, ...overtime]),
+		sourceMode:
+			biometrics.length + overtime.length > 0
+				? "UI workbook files"
+				: "Server default config",
+	};
+}
+
 function splitLegacyDm4SourcePaths(paths: string[]) {
 	const biometrics: string[] = [];
 	const overtime: string[] = [];
@@ -5284,19 +5322,34 @@ export default function AdminMigrationPage() {
 		});
 	};
 
-	const startDm4MigrationRun = async () => {
+	const startDm4MigrationRun = async (options?: { mode?: Dm4RunSourceMode }) => {
+		const runMode: Dm4RunSourceMode = options?.mode === "overtime-only" ? "overtime-only" : "full";
+		const payload = buildDm4RunSourcePayload(
+			runMode,
+			parseDm4SourceFiles(dm4SourceFilesText),
+			parseDm4SourceFiles(dm4OvertimeSourceFilesText),
+		);
+		const { sourceFiles, approvedOvertimeFiles, sourceMode } = payload;
+		if (runMode === "overtime-only" && approvedOvertimeFiles.length === 0) {
+			toast.error("Choose an approved overtime workbook before importing overtime.");
+			return;
+		}
+		if (runMode === "full" && payload.biometricFiles.length === 0) {
+			toast.error("Choose biometrics workbook file(s) before importing attendance.");
+			return;
+		}
+
 		setIsLoadingDm4Proof(true);
 		const startedAt = Date.now();
-		const biometricFiles = parseDm4SourceFiles(dm4SourceFilesText);
-		const approvedOvertimeFiles = parseDm4SourceFiles(dm4OvertimeSourceFilesText);
-		const sourceFiles = uniqueDm4Paths([...biometricFiles, ...approvedOvertimeFiles]);
-		const sourceMode = sourceFiles.length > 0 ? "UI workbook files" : "Server default config";
+		const startMessage =
+			runMode === "overtime-only"
+				? "Approved overtime import is running (OT-only; biometrics not included)."
+				: "Import is running through the durable migration run API. Source workbooks are being scanned.";
 		setDm4ProofRun({
 			status: "running",
 			startedAt,
 			elapsedSeconds: 0,
-			message:
-				"Import is running through the durable migration run API. Source workbooks are being scanned.",
+			message: startMessage,
 			sourceMode,
 			sourceCount: sourceFiles.length,
 			sourceWorkbookCount: sourceFiles.length,
@@ -5305,13 +5358,19 @@ export default function AdminMigrationPage() {
 		appendDm4ProofEventOnce("start", {
 			sheetName: "DM4 proof",
 			status: "Importing",
-			message: "DM4 durable migration run started. Source workbooks are being scanned.",
+			message:
+				runMode === "overtime-only"
+					? "DM4 OT-only run started. Applying approved overtime details."
+					: "DM4 durable migration run started. Source workbooks are being scanned.",
 			rowCount: sourceFiles.length,
 		});
 		showWorkbookImportProgressToast("dm4", {
 			runKey: "pending",
 			status: "RUNNING",
-			description: "Starting durable DM4 run…",
+			description:
+				runMode === "overtime-only"
+					? "Starting OT-only DM4 run…"
+					: "Starting durable DM4 run…",
 		});
 		try {
 			const idempotencyKey =
@@ -5319,20 +5378,26 @@ export default function AdminMigrationPage() {
 					? crypto.randomUUID()
 					: `dm4-${Date.now()}`;
 			const formData = new FormData();
+			// overtime-only: send only OT paths as sourceFiles so attendance workbooks stay empty.
+			// full: biometrics + OT combined; approvedOvertimeFiles always explicit (may be empty).
+			const runSourceFiles =
+				runMode === "overtime-only" ? approvedOvertimeFiles : sourceFiles;
 			formData.append(
 				"data",
 				JSON.stringify({
 					organizationId,
 					workbookId: "dm4",
 					sourceFilename:
-						sourceFiles.length > 0
-							? `${sourceFiles.length} DM4 source workbook path(s)`
+						runSourceFiles.length > 0
+							? runMode === "overtime-only"
+								? `${approvedOvertimeFiles.length} approved overtime workbook path(s)`
+								: `${runSourceFiles.length} DM4 source workbook path(s)`
 							: "DM4 server default source config",
 					idempotencyKey,
-					sourceFiles,
+					sourceFiles: runSourceFiles,
 					options: {
-						sourceFiles,
-						// Explicit OT list (may be empty). Backend accepts any filename for these paths.
+						sourceFiles: runSourceFiles,
+						// Explicit OT list (may be empty on full). Backend accepts any filename.
 						approvedOvertimeFiles,
 						approveHistoricalTimesheets: true,
 					},
@@ -5749,7 +5814,7 @@ export default function AdminMigrationPage() {
 		const invalid = files.filter(
 			(file) => !/\.xlsx?$/i.test(file.name) || file.name.startsWith("~$"),
 		);
-		const valid = files.filter(
+		let valid = files.filter(
 			(file) => /\.xlsx?$/i.test(file.name) && !file.name.startsWith("~$"),
 		);
 		if (valid.length === 0) {
@@ -5762,6 +5827,11 @@ export default function AdminMigrationPage() {
 		}
 		if (invalid.length > 0) {
 			toast.message(`Skipped ${invalid.length} non-Excel file(s).`);
+		}
+		// OT slot is single-file only even if the OS dialog somehow multi-selects.
+		if (role === "overtime" && valid.length > 1) {
+			toast.message("Only the first overtime file will be uploaded.");
+			valid = valid.slice(0, 1);
 		}
 
 		if (role === "overtime") setIsUploadingDm4OvertimeFiles(true);
@@ -8343,28 +8413,62 @@ export default function AdminMigrationPage() {
 							disabled={isUploading || isLoadingDm4Proof}>
 							Choose file
 						</Button>
-						<Button
-							type="button"
-							size="sm"
-							className="h-8 px-2.5 text-xs"
-							disabled={
-								isLoadingDm4Proof ||
-								isUploading ||
-								isUploadingDm4Files ||
-								isUploadingDm4OvertimeFiles ||
-								dm4SourcePaths.length === 0
-							}
-							onClick={() => {
-								closeWorkbookUploadModal();
-								void startDm4MigrationRun();
-							}}>
-							{isLoadingDm4Proof ? (
-								<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-							) : (
-								<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
-							)}
-							{isLoadingDm4Proof ? "Importing…" : "Import attendance"}
-						</Button>
+						{isOvertime ? (
+							<>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-8 px-2.5 text-xs"
+									disabled={isLoadingDm4Proof || isUploading}
+									onClick={() => closeWorkbookUploadModal()}>
+									Done
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									className="h-8 px-2.5 text-xs"
+									disabled={
+										isLoadingDm4Proof ||
+										isUploading ||
+										isUploadingDm4OvertimeFiles ||
+										dm4OvertimeSourcePaths.length === 0
+									}
+									onClick={() => {
+										closeWorkbookUploadModal();
+										void startDm4MigrationRun({ mode: "overtime-only" });
+									}}>
+									{isLoadingDm4Proof ? (
+										<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+									) : (
+										<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
+									)}
+									{isLoadingDm4Proof ? "Importing…" : "Import overtime"}
+								</Button>
+							</>
+						) : (
+							<Button
+								type="button"
+								size="sm"
+								className="h-8 px-2.5 text-xs"
+								disabled={
+									isLoadingDm4Proof ||
+									isUploading ||
+									isUploadingDm4Files ||
+									dm4SourcePaths.length === 0
+								}
+								onClick={() => {
+									closeWorkbookUploadModal();
+									void startDm4MigrationRun({ mode: "full" });
+								}}>
+								{isLoadingDm4Proof ? (
+									<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+								) : (
+									<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
+								)}
+								{isLoadingDm4Proof ? "Importing…" : "Import attendance"}
+							</Button>
+						)}
 					</div>
 				</div>
 			</div>
