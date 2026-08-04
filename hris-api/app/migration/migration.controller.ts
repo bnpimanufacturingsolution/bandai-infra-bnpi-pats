@@ -966,26 +966,22 @@ function toRepoDisplayPath(filePath: string) {
 		: filePath.replace(/\\/g, "/");
 }
 
+function isDm4NonAttendanceWorkbookPath(filePath: string): boolean {
+	const baseName = path.basename(String(filePath || "").replace(/\\/g, "/"));
+	if (/rptOvertimeDetails/i.test(baseName)) return true;
+	if (/^DM[123]([\s._-]|$)/i.test(baseName)) return true;
+	if (/DM[123][-_\s].*(master|policy|employee|migration)/i.test(baseName)) return true;
+	if (/(master-data|policy-data|employee-data)-migration/i.test(baseName)) return true;
+	return false;
+}
+
 function resolveDm4SourceFiles(rawSourceFiles: unknown[]) {
+	// Resolve only the caller-supplied paths. Do not auto-append default OT —
+	// that polluted biometrics folder expands and forced Import attendance off scope.
 	const resolvedInputs = rawSourceFiles
 		.map((item) => String(item || "").trim())
 		.filter(Boolean)
 		.map((filePath: string) => (path.isAbsolute(filePath) ? filePath : resolveRepoPath(filePath)));
-	const defaultApprovedOvertimeWorkbook = resolveRepoPath(
-		"docs",
-		"Bandai Payroll",
-		"2026 rptOvertimeDetails.xlsx",
-	);
-	const hasApprovedOvertimeWorkbook = resolvedInputs.some((filePath) =>
-		/2026\s+rptOvertimeDetails\.xlsx$/i.test(filePath.replace(/\\/g, "/")),
-	);
-	if (
-		resolvedInputs.length > 0 &&
-		fs.existsSync(defaultApprovedOvertimeWorkbook) &&
-		!hasApprovedOvertimeWorkbook
-	) {
-		resolvedInputs.push(defaultApprovedOvertimeWorkbook);
-	}
 
 	const missing = resolvedInputs.filter((filePath) => !fs.existsSync(filePath));
 	const invalid = resolvedInputs.filter((filePath) => {
@@ -993,9 +989,11 @@ function resolveDm4SourceFiles(rawSourceFiles: unknown[]) {
 		if (fs.statSync(filePath).isDirectory()) return false;
 		return !/\.(xlsx|xls)$/i.test(filePath);
 	});
-	const workbookFiles = Array.from(
+	const collected = Array.from(
 		new Set(resolvedInputs.flatMap((filePath) => collectWorkbookFiles(filePath))),
 	).sort((left, right) => left.localeCompare(right));
+	// Folder expands under confidential-files/DMs must not return DM1–DM3 masters as biometrics.
+	const workbookFiles = collected.filter((filePath) => !isDm4NonAttendanceWorkbookPath(filePath));
 	const emptyDirectories = resolvedInputs.filter(
 		(filePath) =>
 			fs.existsSync(filePath) &&

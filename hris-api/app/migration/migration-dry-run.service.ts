@@ -40,6 +40,19 @@ export function isDm4ApprovedOvertimeWorkbookPath(filePath: string): boolean {
 	return ANY_APPROVED_OT_WORKBOOK_PATTERN.test(baseName);
 }
 
+/**
+ * Master DM1/DM2/DM3 workbooks and OT reports must not enter attendance/biometrics
+ * materialization when a folder such as confidential-files/DMs is expanded.
+ */
+export function isDm4NonAttendanceWorkbookPath(filePath: string): boolean {
+	const baseName = path.basename(String(filePath || "").replace(/\\/g, "/"));
+	if (isDm4ApprovedOvertimeWorkbookPath(filePath)) return true;
+	if (/^DM[123]([\s._-]|$)/i.test(baseName)) return true;
+	if (/DM[123][-_\s].*(master|policy|employee|migration)/i.test(baseName)) return true;
+	if (/(master-data|policy-data|employee-data)-migration/i.test(baseName)) return true;
+	return false;
+}
+
 /** Parse "Date Range: M/D/YYYY to M/D/YYYY" (or filename dates) from Bandai OT report workbooks. */
 export function parseApprovedOvertimeWorkbookDateRange(
 	filePath: string,
@@ -350,14 +363,18 @@ export function resolveMigrationDm4SourceFiles(
 	const approvedOvertimeKeySet = new Set(
 		approvedOvertimeWorkbookFiles.map((filePath) => normalizePathKey(filePath)),
 	);
+	// Attendance = non-OT and not DM1/DM2/DM3 master workbooks (folder expand footgun).
 	const attendanceWorkbookFiles = workbookFiles.filter(
-		(filePath) => !approvedOvertimeKeySet.has(normalizePathKey(filePath)),
+		(filePath) =>
+			!approvedOvertimeKeySet.has(normalizePathKey(filePath)) &&
+			!isDm4NonAttendanceWorkbookPath(filePath),
 	);
 
 	// Recompute workbook set if default OT was appended after first collect.
+	// Keep only attendance + OT sources; drop DM1–DM3 masters that rode in via a folder path.
 	const finalWorkbookFiles = Array.from(
 		new Set([
-			...workbookFiles,
+			...attendanceWorkbookFiles,
 			...approvedOvertimeWorkbookFiles,
 		]),
 	).sort((left, right) => left.localeCompare(right));

@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import {
 	isDm4ApprovedOvertimeWorkbookPath,
+	isDm4NonAttendanceWorkbookPath,
 	parseApprovedOvertimeWorkbookDateRange,
 	resolveMigrationDm4SourceFiles,
 } from "../app/migration/migration-dry-run.service";
@@ -11,6 +12,8 @@ import {
 describe("DM4 source resolve contract", () => {
 	const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "dm4-source-resolve-"));
 	const biometricsPath = path.join(tempRoot, "Biometrics Data_Jun 26 - Jul 10.xlsx");
+	const dm1Path = path.join(tempRoot, "DM1-master-data-migration (4).xlsx");
+	const dm3Path = path.join(tempRoot, "DM3-employee-data-migration (4).xlsx");
 	const oddOtNamePath = path.join(
 		tempRoot,
 		"2rptOvertimeDetails - June 26 - July 10, 2026.xlsx",
@@ -26,6 +29,8 @@ describe("DM4 source resolve contract", () => {
 	before(() => {
 		// Minimal xlsx zip stubs so collectWorkbookFiles accepts them as files.
 		fs.writeFileSync(biometricsPath, "stub");
+		fs.writeFileSync(dm1Path, "stub");
+		fs.writeFileSync(dm3Path, "stub");
 		fs.writeFileSync(oddOtNamePath, "stub");
 	});
 
@@ -67,6 +72,27 @@ describe("DM4 source resolve contract", () => {
 		expect(resolution.attendanceWorkbookFiles).to.deep.equal([]);
 		expect(resolution.approvedOvertimeWorkbookFiles).to.deep.equal([oddOtNamePath]);
 		expect(resolution.workbookFiles).to.deep.equal([oddOtNamePath]);
+	});
+
+	it("drops DM1/DM3 master workbooks from attendance when a mixed folder expands", () => {
+		expect(isDm4NonAttendanceWorkbookPath(dm1Path)).to.equal(true);
+		expect(isDm4NonAttendanceWorkbookPath(dm3Path)).to.equal(true);
+		expect(isDm4NonAttendanceWorkbookPath(biometricsPath)).to.equal(false);
+
+		const resolution = resolveMigrationDm4SourceFiles(
+			[biometricsPath, dm1Path, dm3Path, oddOtNamePath],
+			{
+				approvedOvertimeFiles: [],
+				autoAppendDefaultApprovedOvertime: false,
+			},
+		);
+		expect(resolution.attendanceWorkbookFiles).to.deep.equal([biometricsPath]);
+		expect(resolution.approvedOvertimeWorkbookFiles).to.deep.equal([oddOtNamePath]);
+		expect(resolution.workbookFiles).to.deep.equal(
+			[biometricsPath, oddOtNamePath].sort((a, b) => a.localeCompare(b)),
+		);
+		expect(resolution.workbookFiles).to.not.include(dm1Path);
+		expect(resolution.workbookFiles).to.not.include(dm3Path);
 	});
 
 	it("ignores missing biometrics paths while keeping a resolved OT workbook", () => {

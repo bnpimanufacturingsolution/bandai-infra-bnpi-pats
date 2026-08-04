@@ -2292,6 +2292,24 @@ export function isDm4ApprovedOvertimeSource(filePath: string) {
 	return /rptOvertimeDetails/i.test(baseName);
 }
 
+/**
+ * Drop DM1/DM2/DM3 master workbooks and OT reports from biometrics/attendance lists.
+ * Folder expands under confidential-files/DMs must not inject those into Import attendance.
+ */
+export function isDm4NonAttendanceSource(filePath: string) {
+	const baseName = getDm4WorkbookFileName(filePath);
+	if (isDm4ApprovedOvertimeSource(filePath)) return true;
+	if (/^DM[123]([\s._-]|$)/i.test(baseName)) return true;
+	if (/DM[123][-_\s].*(master|policy|employee|migration)/i.test(baseName)) return true;
+	if (/(master-data|policy-data|employee-data)-migration/i.test(baseName)) return true;
+	return false;
+}
+
+/** Keep only paths that can be biometrics/attendance punch workbooks. */
+export function filterDm4AttendanceSourcePaths(paths: string[]) {
+	return uniqueDm4Paths(paths).filter((filePath) => !isDm4NonAttendanceSource(filePath));
+}
+
 function isDm4ResolvableSourcePath(filePath: string) {
 	return !/\.xlsx$/i.test(filePath.trim());
 }
@@ -2311,18 +2329,20 @@ function uniqueDm4Paths(paths: string[]) {
 }
 
 /** How DM4 durable run source lists are scoped from the upload modals. */
-export type Dm4RunSourceMode = "full" | "overtime-only";
+export type Dm4RunSourceMode = "full" | "overtime-only" | "biometrics-only";
 
 /**
  * Build biometrics + approved OT path lists for a DM4 migration run.
- * overtime-only never pulls biometrics paths (even if stored for the biometrics modal).
+ * - overtime-only: never pulls biometrics paths
+ * - biometrics-only: never pulls OT paths (Import attendance contract)
+ * - full: legacy combined (not used by Import attendance button)
  */
 export function buildDm4RunSourcePayload(
 	mode: Dm4RunSourceMode,
 	biometricFiles: string[],
 	approvedOvertimeFiles: string[],
 ) {
-	const biometrics = uniqueDm4Paths(biometricFiles);
+	const biometrics = filterDm4AttendanceSourcePaths(biometricFiles);
 	const overtime = uniqueDm4Paths(approvedOvertimeFiles);
 	if (mode === "overtime-only") {
 		// Backend OT-only: empty attendance sourceFiles + explicit approvedOvertimeFiles.
@@ -2334,6 +2354,16 @@ export function buildDm4RunSourcePayload(
 			/** Paths sent as run sourceFiles — OT only, never biometrics. */
 			sourceFiles: overtime,
 			sourceMode: overtime.length > 0 ? "UI workbook files" : "Server default config",
+		};
+	}
+	if (mode === "biometrics-only") {
+		// Import attendance: selected biometrics only — never OT slot or default OT auto-append.
+		return {
+			mode,
+			biometricFiles: biometrics,
+			approvedOvertimeFiles: [] as string[],
+			sourceFiles: biometrics,
+			sourceMode: biometrics.length > 0 ? "UI workbook files" : "Server default config",
 		};
 	}
 	return {
@@ -2861,12 +2891,11 @@ export default function AdminMigrationPage() {
 
 		if (savedOvertimeFiles !== null) {
 			// New split storage: biometrics + dedicated OT list.
-			const biometricsOnly = uniqueDm4Paths(
+			// Empty biometrics stays empty — do not reseed confidential-files/DMs (injects DM1–DM3).
+			const biometricsOnly = filterDm4AttendanceSourcePaths(
 				savedPaths.filter((path) => !isDm4ApprovedOvertimeSource(path)),
 			);
-			setDm4SourceFilesText(
-				biometricsOnly.length > 0 ? biometricsOnly.join("\n") : DM4_DEFAULT_SOURCE_FOLDER,
-			);
+			setDm4SourceFilesText(biometricsOnly.join("\n"));
 			setDm4OvertimeSourceFilesText(savedOvertimePaths.join("\n"));
 			return;
 		}
@@ -2874,14 +2903,13 @@ export default function AdminMigrationPage() {
 		// Legacy combined list → split once into biometrics vs OT slots.
 		if (savedPaths.length > 0) {
 			const split = splitLegacyDm4SourcePaths(savedPaths);
-			setDm4SourceFilesText(
-				split.biometrics.length > 0 ? split.biometrics.join("\n") : DM4_DEFAULT_SOURCE_FOLDER,
-			);
+			setDm4SourceFilesText(filterDm4AttendanceSourcePaths(split.biometrics).join("\n"));
 			setDm4OvertimeSourceFilesText(split.overtime.join("\n"));
 			return;
 		}
 
-		setDm4SourceFilesText(DM4_DEFAULT_SOURCE_FOLDER);
+		// First visit: start empty so Import attendance only runs after explicit upload/path/defaults.
+		setDm4SourceFilesText("");
 		setDm4OvertimeSourceFilesText("");
 	}, []);
 
@@ -2913,11 +2941,12 @@ export default function AdminMigrationPage() {
 			})
 			.then((response) => {
 				if (cancelled) return;
-				const workbookFiles = (response.data?.sourceWorkbookFiles || []).filter(
-					(filePath) => !isDm4ApprovedOvertimeSource(filePath),
+				// Drop OT + DM1/DM2/DM3 master workbooks so folder expands never pollute attendance.
+				const workbookFiles = filterDm4AttendanceSourcePaths(
+					response.data?.sourceWorkbookFiles || [],
 				);
 				if (workbookFiles.length === 0) return;
-				const nextText = uniqueDm4Paths(workbookFiles).join("\n");
+				const nextText = workbookFiles.join("\n");
 				if (nextText !== dm4SourceFilesText) {
 					setDm4SourceFilesText(nextText);
 				}
@@ -2928,6 +2957,7 @@ export default function AdminMigrationPage() {
 					biometricFiles.length === 1 &&
 					biometricFiles[0].replace(/\\/g, "/") === DM4_DEFAULT_SOURCE_FOLDER
 				) {
+					// Folder missing: fall back to the explicit default biometrics file only.
 					setDm4SourceFilesText(DM4_DEFAULT_SOURCE_FILES_TEXT);
 				}
 			});
@@ -5387,7 +5417,14 @@ export default function AdminMigrationPage() {
 	};
 
 	const startDm4MigrationRun = async (options?: { mode?: Dm4RunSourceMode }) => {
-		const runMode: Dm4RunSourceMode = options?.mode === "overtime-only" ? "overtime-only" : "full";
+		const runMode: Dm4RunSourceMode =
+			options?.mode === "overtime-only"
+				? "overtime-only"
+				: options?.mode === "biometrics-only"
+					? "biometrics-only"
+					: options?.mode === "full"
+						? "full"
+						: "biometrics-only";
 		const payload = buildDm4RunSourcePayload(
 			runMode,
 			parseDm4SourceFiles(dm4SourceFilesText),
@@ -5398,7 +5435,10 @@ export default function AdminMigrationPage() {
 			toast.error("Choose an approved overtime workbook before importing overtime.");
 			return;
 		}
-		if (runMode === "full" && payload.biometricFiles.length === 0) {
+		if (
+			(runMode === "biometrics-only" || runMode === "full") &&
+			payload.biometricFiles.length === 0
+		) {
 			toast.error("Choose biometrics workbook file(s) before importing attendance.");
 			return;
 		}
@@ -5408,7 +5448,9 @@ export default function AdminMigrationPage() {
 		const startMessage =
 			runMode === "overtime-only"
 				? "Approved overtime import is running (OT-only; biometrics not included)."
-				: "Import is running through the durable migration run API. Source workbooks are being scanned.";
+				: runMode === "biometrics-only"
+					? `Importing attendance from ${payload.biometricFiles.length} selected biometrics file(s) only.`
+					: "Import is running through the durable migration run API. Source workbooks are being scanned.";
 		setDm4ProofRun({
 			status: "running",
 			startedAt,
@@ -5425,7 +5467,9 @@ export default function AdminMigrationPage() {
 			message:
 				runMode === "overtime-only"
 					? "DM4 OT-only run started. Applying approved overtime details."
-					: "DM4 durable migration run started. Source workbooks are being scanned.",
+					: runMode === "biometrics-only"
+						? `DM4 biometrics-only run started with ${payload.biometricFiles.length} file(s).`
+						: "DM4 durable migration run started. Source workbooks are being scanned.",
 			rowCount: sourceFiles.length,
 		});
 		showWorkbookImportProgressToast("dm4", {
@@ -5434,7 +5478,9 @@ export default function AdminMigrationPage() {
 			description:
 				runMode === "overtime-only"
 					? "Starting OT-only DM4 run…"
-					: "Starting durable DM4 run…",
+					: runMode === "biometrics-only"
+						? `Starting biometrics-only DM4 run (${payload.biometricFiles.length} file(s))…`
+						: "Starting durable DM4 run…",
 		});
 		try {
 			const idempotencyKey =
@@ -5442,10 +5488,17 @@ export default function AdminMigrationPage() {
 					? crypto.randomUUID()
 					: `dm4-${Date.now()}`;
 			const formData = new FormData();
-			// overtime-only: send only OT paths as sourceFiles so attendance workbooks stay empty.
-			// full: biometrics + OT combined; approvedOvertimeFiles always explicit (may be empty).
+			// overtime-only: OT paths only.
+			// biometrics-only: selected biometrics only; approvedOvertimeFiles forced [].
+			// full: biometrics + OT combined (legacy).
 			const runSourceFiles =
-				runMode === "overtime-only" ? approvedOvertimeFiles : sourceFiles;
+				runMode === "overtime-only"
+					? approvedOvertimeFiles
+					: runMode === "biometrics-only"
+						? payload.biometricFiles
+						: sourceFiles;
+			const runApprovedOvertimeFiles =
+				runMode === "biometrics-only" ? [] : approvedOvertimeFiles;
 			formData.append(
 				"data",
 				JSON.stringify({
@@ -5454,16 +5507,19 @@ export default function AdminMigrationPage() {
 					sourceFilename:
 						runSourceFiles.length > 0
 							? runMode === "overtime-only"
-								? `${approvedOvertimeFiles.length} approved overtime workbook path(s)`
-								: `${runSourceFiles.length} DM4 source workbook path(s)`
+								? `${runApprovedOvertimeFiles.length} approved overtime workbook path(s)`
+								: runMode === "biometrics-only"
+									? `${runSourceFiles.length} biometrics workbook path(s)`
+									: `${runSourceFiles.length} DM4 source workbook path(s)`
 							: "DM4 server default source config",
 					idempotencyKey,
 					sourceFiles: runSourceFiles,
 					options: {
 						sourceFiles: runSourceFiles,
-						// Explicit OT list (may be empty on full). Backend accepts any filename.
-						approvedOvertimeFiles,
+						// Explicit OT list: empty for biometrics-only so backend never auto-appends default OT.
+						approvedOvertimeFiles: runApprovedOvertimeFiles,
 						approveHistoricalTimesheets: true,
+						sourceScope: runMode,
 					},
 				}),
 			);
@@ -5807,7 +5863,7 @@ export default function AdminMigrationPage() {
 	};
 
 	const setDm4SourcePaths = (paths: string[]) => {
-		setDm4SourceFilesText(uniqueDm4Paths(paths).join("\n"));
+		setDm4SourceFilesText(filterDm4AttendanceSourcePaths(paths).join("\n"));
 	};
 
 	const setDm4OvertimeSourcePaths = (paths: string[]) => {
@@ -8604,14 +8660,18 @@ export default function AdminMigrationPage() {
 								}
 								onClick={() => {
 									closeWorkbookUploadModal();
-									void startDm4MigrationRun({ mode: "full" });
+									void startDm4MigrationRun({ mode: "biometrics-only" });
 								}}>
 								{isLoadingDm4Proof ? (
 									<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
 								) : (
 									<PlayCircle className="mr-1.5 h-3.5 w-3.5" />
 								)}
-								{isLoadingDm4Proof ? "Importing…" : "Import attendance"}
+								{isLoadingDm4Proof
+									? "Importing…"
+									: dm4SourcePaths.length > 0
+										? `Import attendance (${dm4SourcePaths.length})`
+										: "Import attendance"}
 							</Button>
 						)}
 					</div>

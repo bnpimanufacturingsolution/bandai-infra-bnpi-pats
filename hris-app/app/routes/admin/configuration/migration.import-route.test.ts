@@ -3,8 +3,10 @@ import {
 	ADMIN_MIGRATION_IMPORT_ACTION_SEQUENCE,
 	ADMIN_MIGRATION_MODAL_TITLES,
 	buildDm4RunSourcePayload,
+	filterDm4AttendanceSourcePaths,
 	getWorkbookReportIssue,
 	isDm4ApprovedOvertimeSource,
+	isDm4NonAttendanceSource,
 	normalizeWorkbookReportLifecycle,
 } from "./migration";
 import {
@@ -92,6 +94,40 @@ describe("admin migration route contract", () => {
 		expect(full.biometricFiles).toEqual(biometrics);
 		expect(full.approvedOvertimeFiles).toEqual(overtime);
 		expect(full.sourceFiles).toEqual([...biometrics, ...overtime]);
+	});
+
+	it("scopes biometrics-only Import attendance to selected biometrics without OT", () => {
+		const biometrics = [
+			".runtime/dm4-uploads/org/2026-08-04/Biometrics Data_Jul 11 - 25_3.xlsx",
+		];
+		const overtime = [
+			"confidential-files/2rptOvertimeDetails - June 26 - July 10, 2026.xlsx",
+		];
+
+		const bioOnly = buildDm4RunSourcePayload("biometrics-only", biometrics, overtime);
+		expect(bioOnly.biometricFiles).toEqual(biometrics);
+		expect(bioOnly.approvedOvertimeFiles).toEqual([]);
+		expect(bioOnly.sourceFiles).toEqual(biometrics);
+		expect(bioOnly.sourceFiles).not.toContain(overtime[0]);
+		expect(bioOnly.mode).toBe("biometrics-only");
+	});
+
+	it("drops DM1/DM2/DM3 master workbooks from biometrics attendance lists", () => {
+		const mixed = [
+			"confidential-files/DMs/Biometrics Data_Jun 26 - Jul 10.xlsx",
+			"confidential-files/DMs/DM1-master-data-migration (4).xlsx",
+			"confidential-files/DMs/DM2-policy-data-migration (2).xlsx",
+			"confidential-files/DMs/DM3-employee-data-migration (4).xlsx",
+			"confidential-files/2rptOvertimeDetails - June 26 - July 10, 2026.xlsx",
+		];
+		expect(isDm4NonAttendanceSource(mixed[1])).toBe(true);
+		expect(isDm4NonAttendanceSource(mixed[4])).toBe(true);
+		expect(isDm4NonAttendanceSource(mixed[0])).toBe(false);
+		expect(filterDm4AttendanceSourcePaths(mixed)).toEqual([mixed[0]]);
+
+		const bioOnly = buildDm4RunSourcePayload("biometrics-only", mixed, [mixed[4]]);
+		expect(bioOnly.sourceFiles).toEqual([mixed[0]]);
+		expect(bioOnly.approvedOvertimeFiles).toEqual([]);
 	});
 
 	it("overtime-only payload stays empty when no OT file is attached", () => {
