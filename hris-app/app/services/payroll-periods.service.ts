@@ -592,13 +592,26 @@ class PayrollPeriodsService extends APIService {
 
 	async getOtReadiness(
 		id: string,
-		params?: { page?: number; limit?: number; query?: string; onlyWithOt?: boolean },
+		params?: {
+			page?: number;
+			limit?: number;
+			query?: string;
+			onlyWithOt?: boolean;
+			departmentId?: string | null;
+			sectionId?: string | null;
+		},
 	): Promise<PayrollOtReadinessResponse> {
 		const query = new URLSearchParams();
 		if (params?.page) query.set("page", String(params.page));
 		if (params?.limit) query.set("limit", String(params.limit));
 		if (params?.query) query.set("query", params.query);
 		if (params?.onlyWithOt === false) query.set("onlyWithOt", "false");
+		if (params?.departmentId && params.departmentId !== "all") {
+			query.set("departmentId", params.departmentId);
+		}
+		if (params?.sectionId && params.sectionId !== "all") {
+			query.set("sectionId", params.sectionId);
+		}
 		const queryString = query.toString();
 		// Cap client wait so Run Payroll accordion never spins forever if API is slow/down.
 		const response = await hrisApiClient.get<any>(

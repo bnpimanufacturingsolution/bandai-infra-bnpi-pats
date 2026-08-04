@@ -398,6 +398,9 @@ export async function getPayrollPeriodOtReadiness(
 		limit?: number;
 		query?: string;
 		onlyWithOt?: boolean;
+		/** Same scope as Run Payroll payable counts / preview. */
+		departmentId?: string | null;
+		sectionId?: string | null;
 	},
 ): Promise<PayrollOtReadinessResult> {
 	const page = params.page && params.page > 0 ? Math.floor(params.page) : 1;
@@ -405,6 +408,12 @@ export async function getPayrollPeriodOtReadiness(
 		params.limit && params.limit > 0 ? Math.min(Math.floor(params.limit), 100) : 25;
 	const query = String(params.query || "").trim().toLowerCase();
 	const onlyWithOt = params.onlyWithOt !== false;
+	const departmentId =
+		params.departmentId && params.departmentId !== "all"
+			? String(params.departmentId)
+			: null;
+	const sectionId =
+		params.sectionId && params.sectionId !== "all" ? String(params.sectionId) : null;
 
 	const period = await prisma.payrollPeriod.findFirst({
 		where: {
@@ -427,11 +436,20 @@ export async function getPayrollPeriodOtReadiness(
 	}
 
 	// Phase 1: light timesheets — prefer totalOvertimeHours for list filtering.
+	// Respect department/section so OT panel matches Payable Now / Scope filters.
 	const timesheets = await prisma.timesheet.findMany({
 		where: {
 			organizationId: params.organizationId,
 			payrollPeriodId: params.payrollPeriodId,
 			isDeleted: false,
+			...(departmentId || sectionId
+				? {
+						employee: {
+							...(departmentId ? { departmentId } : {}),
+							...(sectionId ? { sectionId } : {}),
+						},
+					}
+				: {}),
 		},
 		select: {
 			id: true,

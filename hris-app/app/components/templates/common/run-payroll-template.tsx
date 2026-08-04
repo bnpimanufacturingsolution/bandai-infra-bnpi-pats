@@ -507,7 +507,14 @@ export function RunPayrollTemplate() {
 		error: payrollOtReadinessErrorObj,
 	} = usePayrollOtReadiness(
 		payrollPeriodId,
-		{ page: 1, limit: 20, onlyWithOt: true },
+		{
+			page: 1,
+			limit: 20,
+			onlyWithOt: true,
+			// Match Payable Now / Scope filters (sticky dept/section in URL).
+			departmentId: payrollScope.departmentId,
+			sectionId: payrollScope.sectionId,
+		},
 		Boolean(payrollPeriodId),
 	);
 	// Lean OT matrix detail (report buckets) — not full timesheet totals.
@@ -977,6 +984,26 @@ export function RunPayrollTemplate() {
 		missingInfoAndNotSubmittedCount > 0
 			? `${formatCount(missingInfoAndNotSubmittedCount)} also not submitted`
 			: "Required payroll fields incomplete";
+	const selectedDepartmentName = useMemo(() => {
+		if (selectedDepartmentId === "all") return null;
+		const match = departments.find((d: any) => String(d.id) === selectedDepartmentId);
+		return (match?.name || match?.code || "Department") as string;
+	}, [departments, selectedDepartmentId]);
+	const selectedSectionName = useMemo(() => {
+		if (selectedSectionId === "all") return null;
+		const match = sections.find((s: any) => String(s.id) === selectedSectionId);
+		return (match?.name || match?.code || "Section") as string;
+	}, [sections, selectedSectionId]);
+	const hasPayrollScopeFilter =
+		selectedDepartmentId !== "all" || selectedSectionId !== "all";
+	const clearPayrollScopeFilter = () => {
+		setSearchParams((prev) => {
+			const next = new URLSearchParams(prev);
+			next.delete("departmentId");
+			next.delete("sectionId");
+			return next;
+		});
+	};
 	const payrollAdjustments = useMemo(() => {
 		const rows = (payrollAdjustmentsData?.employeeBenefits || []) as EmployeeBenefit[];
 		if (!payrollPeriodId) return [];
@@ -3617,6 +3644,36 @@ export function RunPayrollTemplate() {
 
 							{/* Payroll Details */}
 							<div className="mt-5 space-y-3">
+								{/* Sticky dept/section filter explains 0/0 when scope is empty */}
+								{hasPayrollScopeFilter ? (
+									<div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50/80 px-2.5 py-2">
+										<span className="text-[11px] font-medium text-amber-900">
+											Scope filter
+										</span>
+										{selectedDepartmentName ? (
+											<span className="rounded-md border border-amber-200 bg-white px-1.5 py-0.5 text-[11px] text-amber-900">
+												{selectedDepartmentName}
+											</span>
+										) : null}
+										{selectedSectionName ? (
+											<span className="rounded-md border border-amber-200 bg-white px-1.5 py-0.5 text-[11px] text-amber-900">
+												{selectedSectionName}
+											</span>
+										) : null}
+										{payableEmployeesCount === 0 && payrollScopeCount === 0 ? (
+											<span className="text-[11px] text-amber-800">
+												· 0 employees in this scope
+											</span>
+										) : null}
+										<button
+											type="button"
+											onClick={clearPayrollScopeFilter}
+											className="ml-auto text-[11px] font-medium text-orange-700 underline-offset-2 hover:underline">
+											Clear → all
+										</button>
+									</div>
+								) : null}
+
 								{/* Due Date */}
 								<div className="flex items-start gap-3">
 									<Clock className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
@@ -5097,118 +5154,136 @@ export function RunPayrollTemplate() {
 				</div>
 			</Modal>
 
-			{/* OT detail — TimesheetViewModal pattern: avatar|summary, then matrix. No title/date header. */}
+			{/* OT detail — compact horizontal avatar+summary; table scrolls; shell fits viewport */}
 			<Modal
 				open={isOtDetailModalOpen}
 				onOpenChange={(open) => {
 					if (!open) setSelectedOtPerson(null);
 				}}
 				showCloseButton={false}
-				className="relative w-[calc(100vw-1.5rem)] max-w-3xl max-h-[min(92vh,720px)] gap-3 overflow-hidden p-4 pr-12 sm:p-5 sm:pr-12">
-				{/* Floating X only — no title strip */}
+				className="relative flex h-auto max-h-[min(88dvh,640px)] w-[calc(100vw-1rem)] max-w-2xl flex-col gap-2 overflow-hidden p-3 pr-10 sm:max-h-[min(88vh,640px)] sm:p-3.5 sm:pr-11">
 				<Button
 					variant="ghost"
 					size="icon"
-					className="absolute right-3 top-3 z-10 h-7 w-7 rounded-sm opacity-70 hover:opacity-100"
+					className="absolute right-2 top-2 z-20 h-7 w-7 rounded-sm opacity-70 hover:opacity-100"
 					onClick={() => setSelectedOtPerson(null)}>
 					<X className="h-4 w-4" />
 					<span className="sr-only">Close</span>
 				</Button>
 
 				{otPersonDetailLoading || otPersonDetailFetching ? (
-					<div className="space-y-3">
-						<div className="flex gap-3">
-							<Skeleton className="h-[72px] flex-1 rounded-lg" />
-							<Skeleton className="h-[72px] flex-[2] rounded-lg" />
-						</div>
-						{Array.from({ length: 6 }).map((_, i) => (
-							<Skeleton key={`ot-sk-${i}`} className="h-7 w-full" />
+					<div className="space-y-2">
+						<Skeleton className="h-14 w-full rounded-lg" />
+						{Array.from({ length: 5 }).map((_, i) => (
+							<Skeleton key={`ot-sk-${i}`} className="h-6 w-full" />
 						))}
 					</div>
 				) : otPersonDetailError ? (
-					<p className="py-6 text-center text-sm text-amber-800">
+					<p className="py-4 text-center text-sm text-amber-800">
 						Could not load OT detail
 						{otPersonDetailErrorObj instanceof Error
 							? `: ${otPersonDetailErrorObj.message}`
 							: "."}
 					</p>
 				) : otPersonDetail ? (
-					<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-						{/* Row 1: avatar card | payable OT summary (TimesheetEmployeeCard + HoursOverview pattern) */}
-						<div className="flex flex-col gap-3 sm:flex-row">
-							{/* Avatar + identity */}
-							<div className="flex min-w-0 flex-1 items-center gap-3 rounded-lg border border-gray-200 bg-white px-3.5 py-3">
-								<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-900 text-sm font-semibold text-white">
-									{(otPersonDetail.name || "E")
-										.trim()
-										.split(/\s+/)
-										.filter(Boolean)
-										.slice(0, 2)
-										.map((p) => p[0]?.toUpperCase() ?? "")
-										.join("") || "E"}
-								</div>
-								<div className="min-w-0 flex-1">
-									<p className="truncate text-base font-semibold text-gray-900">
-										{otPersonDetail.name || "Employee"}
-									</p>
-									<div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
-										{otPersonDetail.department ? (
-											<span className="truncate">{otPersonDetail.department}</span>
-										) : null}
-										{otPersonDetail.timesheetStatus ? (
-											<span
-												className={`rounded-md border px-1.5 py-0 text-[10px] font-semibold uppercase ${
-													otPersonDetail.timesheetStatus === "APPROVED"
-														? "border-emerald-200 bg-emerald-50 text-emerald-700"
-														: "border-amber-200 bg-amber-50 text-amber-800"
-												}`}>
-												{otPersonDetail.timesheetStatus}
-											</span>
-										) : null}
-									</div>
-									{otPersonDetail.employeeCode ? (
-										<p className="mt-0.5 text-xs tabular-nums text-gray-400">
-											ID: {otPersonDetail.employeeCode}
+					(() => {
+						const profileEmployeeId =
+							otPersonDetail.employeeId || selectedOtPerson?.employeeId || "";
+						const openOtEmployeeProfile = () => {
+							if (!profileEmployeeId) return;
+							const params = new URLSearchParams();
+							params.set("from", "run-payroll");
+							if (selectedPeriodCode) params.set("periodCode", selectedPeriodCode);
+							params.set(
+								"returnTo",
+								`${window.location.pathname}${window.location.search}`,
+							);
+							navigate(
+								`/employee/${encodeURIComponent(profileEmployeeId)}?${params.toString()}`,
+							);
+						};
+						const initials =
+							(otPersonDetail.name || "E")
+								.trim()
+								.split(/\s+/)
+								.filter(Boolean)
+								.slice(0, 2)
+								.map((p) => p[0]?.toUpperCase() ?? "")
+								.join("") || "E";
+						const catChips = otPersonDetail.categoryTotals
+							? (
+									[
+										["Reg", otPersonDetail.categoryTotals.regOtHrs],
+										["ND", otPersonDetail.categoryTotals.regNdHrs],
+										["Spcl", otPersonDetail.categoryTotals.spclHrs],
+										["Spcl OT", otPersonDetail.categoryTotals.spclOtHrs],
+										["RHol", otPersonDetail.categoryTotals.rholOtHrs],
+										["RD", otPersonDetail.categoryTotals.rdHrs],
+										["RD OT", otPersonDetail.categoryTotals.rdOtHrs],
+									] as const
+								).filter(([, v]) => Number(v) > 0)
+							: [];
+						return (
+							<div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+								{/* Single compact horizontal strip: avatar | identity | payable | cats */}
+								<div className="flex shrink-0 items-center gap-2.5 rounded-lg border border-gray-200 bg-white px-2.5 py-2 pr-8">
+									<button
+										type="button"
+										onClick={openOtEmployeeProfile}
+										disabled={!profileEmployeeId}
+										className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white transition hover:bg-gray-800 disabled:cursor-default"
+										aria-label={
+											otPersonDetail.name
+												? `Open ${otPersonDetail.name} profile`
+												: "Open employee profile"
+										}>
+										{initials}
+									</button>
+									<div className="min-w-0 shrink basis-[9.5rem] sm:basis-40">
+										{profileEmployeeId ? (
+											<button
+												type="button"
+												onClick={openOtEmployeeProfile}
+												className="block max-w-full truncate text-left text-sm font-semibold text-gray-900 hover:text-orange-700 hover:underline">
+												{otPersonDetail.name || "Employee"}
+											</button>
+										) : (
+											<p className="truncate text-sm font-semibold text-gray-900">
+												{otPersonDetail.name || "Employee"}
+											</p>
+										)}
+										<p className="truncate text-[11px] text-gray-500">
+											{otPersonDetail.employeeCode
+												? `ID ${otPersonDetail.employeeCode}`
+												: ""}
+											{otPersonDetail.department
+												? `${otPersonDetail.employeeCode ? " · " : ""}${otPersonDetail.department}`
+												: ""}
 										</p>
-									) : null}
-								</div>
-							</div>
-
-							{/* Payable OT summary */}
-							<div className="flex min-w-0 flex-[2] items-center gap-3 rounded-lg border border-gray-200 bg-white px-3.5 py-3">
-								<div className="shrink-0 border-r border-gray-200 pr-3">
-									<p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">
-										Payable OT
-									</p>
-									<p className="text-2xl font-bold tabular-nums leading-none text-orange-800">
-										{otPersonDetail.totalLineOtHours}
-									</p>
-									<p className="mt-1 text-xs tabular-nums text-gray-500">
-										{otPersonDetail.otDayCount} OT day
-										{otPersonDetail.otDayCount === 1 ? "" : "s"}
-									</p>
-								</div>
-								<div className="min-w-0 flex-1">
-									{otPersonDetail.categoryTotals ? (
-										<div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
-											{(
-												[
-													["Reg OT", otPersonDetail.categoryTotals.regOtHrs],
-													["ND", otPersonDetail.categoryTotals.regNdHrs],
-													["Spcl", otPersonDetail.categoryTotals.spclHrs],
-													["Spcl OT", otPersonDetail.categoryTotals.spclOtHrs],
-													["RHol OT", otPersonDetail.categoryTotals.rholOtHrs],
-													["RD", otPersonDetail.categoryTotals.rdHrs],
-													["RD OT", otPersonDetail.categoryTotals.rdOtHrs],
-												] as const
-											)
-												.filter(([, v]) => Number(v) > 0)
-												.map(([label, val]) => (
+									</div>
+									<div className="h-8 w-px shrink-0 bg-gray-200" />
+									<div className="shrink-0 text-right">
+										<p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+											Payable OT
+										</p>
+										<p className="text-xl font-bold tabular-nums leading-none text-orange-800">
+											{otPersonDetail.totalLineOtHours}
+										</p>
+										<p className="text-[10px] tabular-nums text-gray-500">
+											{otPersonDetail.otDayCount} day
+											{otPersonDetail.otDayCount === 1 ? "" : "s"}
+										</p>
+									</div>
+									{catChips.length > 0 ? (
+										<>
+											<div className="hidden h-8 w-px shrink-0 bg-gray-200 sm:block" />
+											<div className="hidden min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 sm:flex">
+												{catChips.map(([label, val]) => (
 													<div key={label} className="min-w-0">
-														<p className="mb-0.5 text-[11px] font-medium uppercase tracking-wider text-gray-400">
+														<p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
 															{label}
 														</p>
-														<p className="text-base font-bold tabular-nums leading-none text-gray-900">
+														<p className="text-sm font-bold tabular-nums leading-none text-gray-900">
 															{Number(val).toLocaleString(undefined, {
 																maximumFractionDigits: 1,
 															})}
@@ -5216,161 +5291,169 @@ export function RunPayrollTemplate() {
 														</p>
 													</div>
 												))}
-										</div>
-									) : (
-										<p className="text-sm text-gray-400">No category breakdown</p>
-									)}
+											</div>
+										</>
+									) : null}
+									{otPersonDetail.timesheetStatus ? (
+										<span
+											className={`ml-auto hidden shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase sm:inline ${
+												otPersonDetail.timesheetStatus === "APPROVED"
+													? "border-emerald-200 bg-emerald-50 text-emerald-700"
+													: "border-amber-200 bg-amber-50 text-amber-800"
+											}`}>
+											{otPersonDetail.timesheetStatus}
+										</span>
+									) : null}
 								</div>
-							</div>
-						</div>
 
-						{/* Row 2: day matrix (full width) */}
-						<div className="min-h-0 flex-1 overflow-auto rounded-lg border border-gray-200 modern-scroll">
-							<table className="w-full min-w-[520px] border-collapse text-left text-[11px]">
-								<thead className="sticky top-0 z-10 bg-gray-50 text-[10px] font-medium text-gray-500">
-									<tr className="border-b border-gray-200">
-										<th className="px-3 py-2 font-medium">Date</th>
-										<th className="px-1.5 py-2 text-right font-medium">Reg</th>
-										<th className="px-1.5 py-2 text-right font-medium">ND</th>
-										<th className="px-1.5 py-2 text-right font-medium">Spcl</th>
-										<th className="px-1.5 py-2 text-right font-medium">Spcl OT</th>
-										<th className="px-1.5 py-2 text-right font-medium">RHol</th>
-										<th className="px-1.5 py-2 text-right font-medium">RD</th>
-										<th className="px-1.5 py-2 text-right font-medium">RD OT</th>
-										<th className="px-3 py-2 text-right font-medium text-orange-800">
-											Pay
-										</th>
-									</tr>
-								</thead>
-								<tbody className="divide-y divide-gray-50 bg-white">
-									{otPersonDetail.days.length === 0 ? (
-										<tr>
-											<td
-												colSpan={9}
-												className="px-3 py-6 text-center text-xs text-gray-500">
-												No report-backed OT days.
-											</td>
-										</tr>
-									) : (
-										otPersonDetail.days.map((day) => {
-											const b = day.approvedBuckets || {};
-											const n = (k: string) => {
-												const v = Number((b as any)[k] ?? 0);
-												return Number.isFinite(v) ? v : 0;
-											};
-											const cell = (v: number) =>
-												v > 0 ? (
-													<span className="font-medium tabular-nums text-gray-900">
-														{v}
-													</span>
-												) : (
-													<span className="tabular-nums text-gray-300">·</span>
-												);
-											return (
-												<tr
-													key={day.lineId}
-													className="hover:bg-orange-50/40">
-													<td className="whitespace-nowrap px-3 py-1.5 font-medium tabular-nums text-gray-800">
-														{day.date}
-													</td>
-													<td className="px-1.5 py-1.5 text-right">
-														{cell(n("regOtHrs"))}
-													</td>
-													<td className="px-1.5 py-1.5 text-right">
-														{cell(n("regNdHrs"))}
-													</td>
-													<td className="px-1.5 py-1.5 text-right">
-														{cell(n("spclHrs"))}
-													</td>
-													<td className="px-1.5 py-1.5 text-right">
-														{cell(n("spclOtHrs"))}
-													</td>
-													<td className="px-1.5 py-1.5 text-right">
-														{cell(n("rholOtHrs"))}
-													</td>
-													<td className="px-1.5 py-1.5 text-right">
-														{cell(n("rdHrs"))}
-													</td>
-													<td className="px-1.5 py-1.5 text-right">
-														{cell(n("rdOtHrs"))}
-													</td>
-													<td className="px-3 py-1.5 text-right text-sm font-semibold tabular-nums text-orange-800">
-														{day.overtimeHours}
+								{/* Day table — only scroll region (cap so modal never exceeds viewport) */}
+								<div className="min-h-0 max-h-[calc(min(88dvh,640px)-9.5rem)] flex-1 overflow-y-auto overflow-x-auto rounded-lg border border-gray-200 modern-scroll sm:max-h-[calc(min(88vh,640px)-9.5rem)]">
+									<table className="w-full min-w-[480px] border-collapse text-left text-[11px]">
+										<thead className="sticky top-0 z-10 bg-gray-50 text-[10px] font-medium text-gray-500 shadow-sm">
+											<tr className="border-b border-gray-200">
+												<th className="px-2.5 py-1.5 font-medium">Date</th>
+												<th className="px-1 py-1.5 text-right font-medium">Reg</th>
+												<th className="px-1 py-1.5 text-right font-medium">ND</th>
+												<th className="px-1 py-1.5 text-right font-medium">Spcl</th>
+												<th className="px-1 py-1.5 text-right font-medium">Spcl OT</th>
+												<th className="px-1 py-1.5 text-right font-medium">RHol</th>
+												<th className="px-1 py-1.5 text-right font-medium">RD</th>
+												<th className="px-1 py-1.5 text-right font-medium">RD OT</th>
+												<th className="px-2.5 py-1.5 text-right font-medium text-orange-800">
+													Pay
+												</th>
+											</tr>
+										</thead>
+										<tbody className="divide-y divide-gray-50 bg-white">
+											{otPersonDetail.days.length === 0 ? (
+												<tr>
+													<td
+														colSpan={9}
+														className="px-3 py-5 text-center text-xs text-gray-500">
+														No report-backed OT days.
 													</td>
 												</tr>
-											);
-										})
-									)}
-								</tbody>
-								{otPersonDetail.categoryTotals ? (
-									<tfoot className="sticky bottom-0 border-t border-gray-200 bg-gray-50 text-[11px] font-semibold">
-										<tr>
-											<td className="px-3 py-2 text-gray-600">Total</td>
-											<td className="px-1.5 py-2 text-right tabular-nums">
-												{otPersonDetail.categoryTotals.regOtHrs}
-											</td>
-											<td className="px-1.5 py-2 text-right tabular-nums">
-												{otPersonDetail.categoryTotals.regNdHrs}
-											</td>
-											<td className="px-1.5 py-2 text-right tabular-nums">
-												{otPersonDetail.categoryTotals.spclHrs}
-											</td>
-											<td className="px-1.5 py-2 text-right tabular-nums">
-												{otPersonDetail.categoryTotals.spclOtHrs}
-											</td>
-											<td className="px-1.5 py-2 text-right tabular-nums">
-												{otPersonDetail.categoryTotals.rholOtHrs}
-											</td>
-											<td className="px-1.5 py-2 text-right tabular-nums">
-												{otPersonDetail.categoryTotals.rdHrs}
-											</td>
-											<td className="px-1.5 py-2 text-right tabular-nums">
-												{otPersonDetail.categoryTotals.rdOtHrs}
-											</td>
-											<td className="px-3 py-2 text-right text-sm tabular-nums text-orange-800">
-												{otPersonDetail.totalLineOtHours}
-											</td>
-										</tr>
-									</tfoot>
-								) : null}
-							</table>
-						</div>
+											) : (
+												otPersonDetail.days.map((day) => {
+													const b = day.approvedBuckets || {};
+													const n = (k: string) => {
+														const v = Number((b as any)[k] ?? 0);
+														return Number.isFinite(v) ? v : 0;
+													};
+													const cell = (v: number) =>
+														v > 0 ? (
+															<span className="font-medium tabular-nums text-gray-900">
+																{v}
+															</span>
+														) : (
+															<span className="tabular-nums text-gray-300">·</span>
+														);
+													return (
+														<tr
+															key={day.lineId}
+															className="hover:bg-orange-50/40">
+															<td className="whitespace-nowrap px-2.5 py-1 font-medium tabular-nums text-gray-800">
+																{day.date}
+															</td>
+															<td className="px-1 py-1 text-right">
+																{cell(n("regOtHrs"))}
+															</td>
+															<td className="px-1 py-1 text-right">
+																{cell(n("regNdHrs"))}
+															</td>
+															<td className="px-1 py-1 text-right">
+																{cell(n("spclHrs"))}
+															</td>
+															<td className="px-1 py-1 text-right">
+																{cell(n("spclOtHrs"))}
+															</td>
+															<td className="px-1 py-1 text-right">
+																{cell(n("rholOtHrs"))}
+															</td>
+															<td className="px-1 py-1 text-right">
+																{cell(n("rdHrs"))}
+															</td>
+															<td className="px-1 py-1 text-right">
+																{cell(n("rdOtHrs"))}
+															</td>
+															<td className="px-2.5 py-1 text-right text-sm font-semibold tabular-nums text-orange-800">
+																{day.overtimeHours}
+															</td>
+														</tr>
+													);
+												})
+											)}
+										</tbody>
+										{otPersonDetail.categoryTotals ? (
+											<tfoot className="sticky bottom-0 border-t border-gray-200 bg-gray-50 text-[11px] font-semibold">
+												<tr>
+													<td className="px-2.5 py-1.5 text-gray-600">Total</td>
+													<td className="px-1 py-1.5 text-right tabular-nums">
+														{otPersonDetail.categoryTotals.regOtHrs}
+													</td>
+													<td className="px-1 py-1.5 text-right tabular-nums">
+														{otPersonDetail.categoryTotals.regNdHrs}
+													</td>
+													<td className="px-1 py-1.5 text-right tabular-nums">
+														{otPersonDetail.categoryTotals.spclHrs}
+													</td>
+													<td className="px-1 py-1.5 text-right tabular-nums">
+														{otPersonDetail.categoryTotals.spclOtHrs}
+													</td>
+													<td className="px-1 py-1.5 text-right tabular-nums">
+														{otPersonDetail.categoryTotals.rholOtHrs}
+													</td>
+													<td className="px-1 py-1.5 text-right tabular-nums">
+														{otPersonDetail.categoryTotals.rdHrs}
+													</td>
+													<td className="px-1 py-1.5 text-right tabular-nums">
+														{otPersonDetail.categoryTotals.rdOtHrs}
+													</td>
+													<td className="px-2.5 py-1.5 text-right text-sm tabular-nums text-orange-800">
+														{otPersonDetail.totalLineOtHours}
+													</td>
+												</tr>
+											</tfoot>
+										) : null}
+									</table>
+								</div>
 
-						{/* Footer actions */}
-						<div className="flex items-center justify-end gap-2 pt-0.5">
-							<Button
-								variant="outline"
-								size="sm"
-								className="h-8 px-3 text-xs"
-								onClick={() => setSelectedOtPerson(null)}>
-								Close
-							</Button>
-							<Button
-								variant="ghost"
-								size="sm"
-								className="h-8 px-2.5 text-xs text-gray-600 hover:bg-orange-50 hover:text-orange-700"
-								onClick={() => {
-									const tid = selectedOtPerson?.timesheetId;
-									setSelectedOtPerson(null);
-									if (tid) {
-										navigate(
-											`/hr/timesheets?action=view&id=${encodeURIComponent(tid)}${
-												selectedPeriodCode
-													? `&periodCode=${encodeURIComponent(selectedPeriodCode)}`
-													: ""
-											}`,
-										);
-									} else {
-										openTimesheets();
-									}
-								}}>
-								<ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-								Full timesheet
-							</Button>
-						</div>
-					</div>
+								<div className="flex shrink-0 items-center justify-end gap-2">
+									<Button
+										variant="outline"
+										size="sm"
+										className="h-8 px-3 text-xs"
+										onClick={() => setSelectedOtPerson(null)}>
+										Close
+									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="h-8 px-2.5 text-xs text-gray-600 hover:bg-orange-50 hover:text-orange-700"
+										onClick={() => {
+											const tid = selectedOtPerson?.timesheetId;
+											setSelectedOtPerson(null);
+											if (tid) {
+												navigate(
+													`/hr/timesheets?action=view&id=${encodeURIComponent(tid)}${
+														selectedPeriodCode
+															? `&periodCode=${encodeURIComponent(selectedPeriodCode)}`
+															: ""
+													}`,
+												);
+											} else {
+												openTimesheets();
+											}
+										}}>
+										<ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+										Full timesheet
+									</Button>
+								</div>
+							</div>
+						);
+					})()
 				) : (
-					<p className="py-6 text-center text-sm text-gray-500">No OT detail.</p>
+					<p className="py-4 text-center text-sm text-gray-500">No OT detail.</p>
 				)}
 			</Modal>
 

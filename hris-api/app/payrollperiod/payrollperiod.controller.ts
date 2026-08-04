@@ -1041,6 +1041,12 @@ const controller = (prisma) => {
         const query = typeof req.query.query === "string" ? req.query.query.trim() : "";
         const onlyWithOtRaw = typeof req.query.onlyWithOt === "string" ? req.query.onlyWithOt.trim().toLowerCase() : "true";
         const onlyWithOt = onlyWithOtRaw !== "false" && onlyWithOtRaw !== "0";
+        const requestedDepartmentId = typeof req.query.departmentId === "string" && req.query.departmentId.trim() !== "all"
+            ? req.query.departmentId.trim()
+            : undefined;
+        const requestedSectionId = typeof req.query.sectionId === "string" && req.query.sectionId.trim() !== "all"
+            ? req.query.sectionId.trim()
+            : undefined;
         const page = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.floor(requestedPage) : 1;
         const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
             ? Math.min(Math.floor(requestedLimit), 100)
@@ -1058,6 +1064,8 @@ const controller = (prisma) => {
                 limit,
                 query,
                 onlyWithOt,
+                departmentId: requestedDepartmentId,
+                sectionId: requestedSectionId,
             });
             res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll OT readiness retrieved successfully", readiness, 200));
         }

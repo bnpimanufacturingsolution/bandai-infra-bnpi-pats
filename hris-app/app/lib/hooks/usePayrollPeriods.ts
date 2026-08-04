@@ -270,7 +270,14 @@ export const useRequestPauseTimesheetPayroll = () => {
 
 export const usePayrollOtReadiness = (
 	id: string | null | undefined,
-	params?: { page?: number; limit?: number; query?: string; onlyWithOt?: boolean },
+	params?: {
+		page?: number;
+		limit?: number;
+		query?: string;
+		onlyWithOt?: boolean;
+		departmentId?: string | null;
+		sectionId?: string | null;
+	},
 	enabled: boolean = true,
 ) => {
 	return useQuery({
