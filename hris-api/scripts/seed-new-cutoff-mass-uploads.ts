@@ -3,6 +3,11 @@ import path from "path";
 import * as dotenv from "dotenv";
 import * as XLSX from "xlsx";
 import { PrismaClient } from "../generated/prisma";
+import {
+	COMPENSATION_CODE_LABELS,
+	COMPENSATION_CODE_PAYROLL_ROLES,
+	type CompensationCodePayrollRole,
+} from "../helper/bnpi-mass-upload-import.helper";
 
 dotenv.config({ path: path.resolve(__dirname, "..", ".env") });
 dotenv.config({ path: path.resolve(__dirname, "..", ".env.development.local"), override: true });
@@ -19,38 +24,34 @@ type UploadRow = {
 	startDate: string;
 };
 
+/** Keep offline seed script aligned with DM3 mass-upload COMCODE payroll wiring. */
 const compensationCodeMap: Record<
 	string,
-	{ name: string; reconciliationAction: "GROSS_INCLUDED" | "NET_ADJUSTMENT" | "RECEIVABLE_ONLY"; category?: string; note?: string }
+	CompensationCodePayrollRole & { name: string; category?: string; note?: string }
 > = {
-	AON: { name: "Adjustment OT/ND", reconciliationAction: "GROSS_INCLUDED" },
-	ARP: {
-		name: "ARP",
-		reconciliationAction: "RECEIVABLE_ONLY",
-		note: "Code label NEEDS_CONFIRMATION; treated as receivable-only so it increases total receivable without changing gross.",
-	},
-	ABS: {
-		name: "ABS",
-		reconciliationAction: "NET_ADJUSTMENT",
-		note: "Code label NEEDS_CONFIRMATION; treated as post-gross net adjustment until HRIS label is confirmed.",
-	},
-	LLA: { name: "Line Leader Allowance", reconciliationAction: "RECEIVABLE_ONLY" },
-	MTX: {
-		name: "MTX",
-		reconciliationAction: "GROSS_INCLUDED",
-		note: "Code label NEEDS_CONFIRMATION; treated as gross-included compensation.",
-	},
-	OAD: { name: "Other Compensation", reconciliationAction: "GROSS_INCLUDED" },
-	OBA: { name: "OB Allowance", reconciliationAction: "GROSS_INCLUDED" },
-	PFA: { name: "Perfect Attendance", reconciliationAction: "RECEIVABLE_ONLY" },
-	// BNPI register: Incentive 2025 is a post-NetPay / TotalReceivable column, not NetPay.
+	...Object.fromEntries(
+		Object.entries(COMPENSATION_CODE_PAYROLL_ROLES).map(([code, role]) => [
+			code,
+			{
+				name: COMPENSATION_CODE_LABELS[code] || code,
+				...role,
+				note:
+					code === "ARP"
+						? "Receivable-only: increases TotalReceivable without changing GrossPay/NetPay."
+						: code === "ABS"
+							? "Client COMCODE ABS = Adjustment Basic; gross-included taxable adjustment."
+							: undefined,
+			},
+		]),
+	),
+	// BNPI register: Incentive is a post-NetPay / TotalReceivable column, not NetPay.
 	// See docs/BNPI_JUNE11_25_2026_PAYROLL_PARITY_CHECKLIST.md (post-net receivable lines).
 	INC: {
 		name: "Incentive",
 		reconciliationAction: "RECEIVABLE_ONLY",
+		isTaxable: false,
 		note: "Post-net receivable (register Incentive column); do not mix into NetPay.",
 	},
-	TSA: { name: "Technical Skills Allowance", reconciliationAction: "GROSS_INCLUDED" },
 };
 
 const deductionLoanMap: Record<string, { name: string; category: string }> = {
@@ -314,7 +315,7 @@ async function main() {
 				category: (mapping.category || "ALLOWANCE") as any,
 				payrollDirection: "COMPENSATION",
 				reconciliationAction: mapping.reconciliationAction,
-				isTaxable: mapping.reconciliationAction === "GROSS_INCLUDED",
+				isTaxable: mapping.isTaxable,
 				isActive: true,
 				isDeleted: false,
 				description: mapping.note || `New cutoff compensation upload code ${code}`,
@@ -326,7 +327,7 @@ async function main() {
 				category: (mapping.category || "ALLOWANCE") as any,
 				payrollDirection: "COMPENSATION",
 				reconciliationAction: mapping.reconciliationAction,
-				isTaxable: mapping.reconciliationAction === "GROSS_INCLUDED",
+				isTaxable: mapping.isTaxable,
 				isActive: true,
 				isDeleted: false,
 				description: mapping.note || `New cutoff compensation upload code ${code}`,

@@ -6,6 +6,7 @@ import {
 	MASS_UPLOAD_HTTP_ERROR_CAP,
 	presentDm4MassUploadImportLog,
 	resolveMassUploadImportStatus,
+	supersedeOpenHorizonBenefitsForPeriodScoped,
 } from "../app/migration/bnpi-mass-upload-import.service";
 
 describe("BNPI mass upload import summary helpers", () => {
@@ -230,5 +231,44 @@ describe("BNPI mass upload import summary helpers", () => {
 		expect(csv).to.include("Employee 01466 was not found.");
 		expect(csv).to.include("success,2,01360,ARP,500");
 		expect(csv).to.include("created");
+	});
+
+	it("supersedes overlapping open-horizon benefits when period-scoped mass upload lands", async () => {
+		const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
+		const prisma = {
+			employeeBenefit: {
+				findMany: async () => [
+					{ id: "open-arp", notes: "BNPI Compensation Mass Upload row 776; COMCODE=ARP" },
+				],
+				update: async (args: { where: { id: string }; data: Record<string, unknown> }) => {
+					updates.push({ id: args.where.id, data: args.data });
+					return { id: args.where.id };
+				},
+			},
+		};
+		const count = await supersedeOpenHorizonBenefitsForPeriodScoped({
+			prisma: prisma as any,
+			organizationId: "org-1",
+			employeeId: "emp-pk",
+			benefitTypeId: "bt-arp",
+			period: {
+				id: "period-june",
+				code: "PP-20260626-20260711",
+				startDate: new Date("2026-06-26T00:00:00.000Z"),
+				endDate: new Date("2026-07-10T00:00:00.000Z"),
+			},
+			keepBenefitId: "period-arp",
+			code: "ARP",
+		});
+		expect(count).to.equal(1);
+		expect(updates).to.have.length(1);
+		expect(updates[0]?.id).to.equal("open-arp");
+		expect(updates[0]?.data.isActive).to.equal(false);
+		expect(updates[0]?.data.status).to.equal("COMPLETED");
+		const endDate = updates[0]?.data.endDate as Date;
+		expect(endDate).to.be.instanceOf(Date);
+		expect(endDate.toISOString().slice(0, 10)).to.equal("2026-06-25");
+		expect(String(updates[0]?.data.notes)).to.include("Superseded by period-scoped ARP");
+		expect(String(updates[0]?.data.notes)).to.include("PP-20260626-20260711");
 	});
 });

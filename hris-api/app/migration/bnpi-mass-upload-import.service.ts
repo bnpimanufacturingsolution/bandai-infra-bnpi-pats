@@ -7,6 +7,8 @@ import {
 	padEmployeeId,
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
+	resolveCompensationCodePayrollRole,
+	resolveDeductionCodePayrollRole,
 } from "../../helper/bnpi-mass-upload-import.helper";
 import {
 	parseStatutoryBenefitsWorkbook,
@@ -149,6 +151,66 @@ function trackPeriodCode(summary: MassUploadImportSummary, code: string | null |
 	if (!summary.periodCodes.includes(code)) summary.periodCodes.push(code);
 }
 
+/**
+ * When a period-scoped mass-upload enrollment is written, end any overlapping
+ * open-horizon (payrollPeriodId null) peer of the same employee + benefit type
+ * so Run Payroll cannot stack both (e.g. double ARP).
+ */
+export async function supersedeOpenHorizonBenefitsForPeriodScoped(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	employeeId: string;
+	benefitTypeId: string;
+	period: ResolvedPayrollPeriod;
+	/** Period-scoped enrollment that must not be superseded. */
+	keepBenefitId: string;
+	code: string;
+}): Promise<number> {
+	const openHorizon = await params.prisma.employeeBenefit.findMany({
+		where: {
+			organizationId: params.organizationId,
+			employeeId: params.employeeId,
+			benefitTypeId: params.benefitTypeId,
+			isDeleted: false,
+			isActive: true,
+			status: { in: ["ACTIVE", "APPROVED"] },
+			payrollPeriodId: null,
+			id: { not: params.keepBenefitId },
+			startDate: { lte: params.period.endDate },
+			OR: [{ endDate: null }, { endDate: { gte: params.period.startDate } }],
+		},
+		select: { id: true, notes: true },
+	});
+	if (!openHorizon.length) return 0;
+
+	const endDate = utcDayStart(
+		new Date(
+			Date.UTC(
+				params.period.startDate.getUTCFullYear(),
+				params.period.startDate.getUTCMonth(),
+				params.period.startDate.getUTCDate() - 1,
+			),
+		),
+	);
+	const periodLabel = params.period.code || params.period.id;
+	const stamp = `Superseded by period-scoped ${params.code} mass upload for ${periodLabel}`;
+
+	for (const row of openHorizon) {
+		const priorNotes = String(row.notes || "").trim();
+		await params.prisma.employeeBenefit.update({
+			where: { id: row.id },
+			data: {
+				endDate,
+				endPayrollCutOff: endDate,
+				isActive: false,
+				status: "COMPLETED",
+				notes: priorNotes ? `${priorNotes} | ${stamp}` : stamp,
+			} as any,
+		});
+	}
+	return openHorizon.length;
+}
+
 function readSheetRows(buffer: Buffer): Record<string, unknown>[] {
 	const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true, raw: true });
 	const sheetName = workbook.SheetNames[0];
@@ -180,7 +242,25 @@ async function ensureBenefitType(
 	code: string,
 	options?: { name?: string; direction?: "COMPENSATION" | "DEDUCTION" },
 ) {
-	const normalized = String(code || "").trim().toUpperCase();
+	const normalized = String(code || "")
+		.trim()
+		.toUpperCase();
+	const direction = options?.direction || "COMPENSATION";
+	const name = options?.name || compensationBenefitLabel(code);
+	const payrollRole =
+		direction === "DEDUCTION"
+			? resolveDeductionCodePayrollRole(code)
+			: resolveCompensationCodePayrollRole(code);
+	// Prefer catalog roles; fall back to known BNPI post-net register codes (e.g. INC).
+	const receivableOnlyFallback =
+		direction === "COMPENSATION" && BNPI_RECEIVABLE_ONLY_CODES.has(normalized);
+	const reconciliationAction =
+		payrollRole?.reconciliationAction ??
+		(receivableOnlyFallback ? "RECEIVABLE_ONLY" : null);
+	const isTaxable =
+		payrollRole?.isTaxable ??
+		(direction === "COMPENSATION" && !receivableOnlyFallback);
+
 	const existing = await prisma.benefitType.findFirst({
 		where: {
 			organizationId,
@@ -195,29 +275,43 @@ async function ensureBenefitType(
 			code: true,
 			name: true,
 			reconciliationAction: true,
+			isTaxable: true,
+			payrollDirection: true,
 		},
 	});
 	if (existing) {
-		// Heal known BNPI post-net codes that were auto-created with null action.
-		if (
-			BNPI_RECEIVABLE_ONLY_CODES.has(String(existing.code || "").toUpperCase()) &&
-			!existing.reconciliationAction
-		) {
-			await prisma.benefitType.update({
+		// Heal empty/stale recon wiring + canonical labels for known BNPI codes on every
+		// mass upload (e.g. ABS was mislabeled "Absent Amount Recovery"; must be Adjustment Basic).
+		const nameNeedsPatch =
+			Boolean(name) &&
+			String(existing.name || "").trim().toLowerCase() !== String(name).trim().toLowerCase() &&
+			// Only force-rename when we own a canonical COMCODE label / explicit options name.
+			(Boolean(options?.name) ||
+				Boolean(resolveCompensationCodePayrollRole(code)) ||
+				BNPI_RECEIVABLE_ONLY_CODES.has(normalized));
+		const needsPatch =
+			(reconciliationAction &&
+				String(existing.reconciliationAction || "").trim().toUpperCase() !==
+					reconciliationAction) ||
+			(payrollRole != null && existing.isTaxable !== isTaxable) ||
+			(receivableOnlyFallback && !existing.reconciliationAction) ||
+			String(existing.payrollDirection || "").toUpperCase() !== direction ||
+			nameNeedsPatch;
+		if (needsPatch) {
+			return prisma.benefitType.update({
 				where: { id: existing.id },
 				data: {
-					reconciliationAction: "RECEIVABLE_ONLY",
-					isTaxable: false,
+					...(reconciliationAction ? { reconciliationAction } : {}),
+					isTaxable,
+					payrollDirection: direction,
+					...(nameNeedsPatch ? { name } : {}),
 				},
+				select: { id: true, code: true, name: true },
 			});
 		}
-		return existing;
+		return { id: existing.id, code: existing.code, name: existing.name };
 	}
 
-	const name = options?.name || compensationBenefitLabel(code);
-	const direction = options?.direction || "COMPENSATION";
-	const receivableOnly =
-		direction === "COMPENSATION" && BNPI_RECEIVABLE_ONLY_CODES.has(normalized);
 	// BenefitCategory has no DEDUCTION value — use OTHER for deduction-direction types.
 	// payrollDirection is the field that marks compensation vs deduction.
 	return prisma.benefitType.create({
@@ -227,9 +321,9 @@ async function ensureBenefitType(
 			name,
 			category: direction === "DEDUCTION" ? "OTHER" : "ALLOWANCE",
 			payrollDirection: direction,
+			reconciliationAction: reconciliationAction || undefined,
 			description: `Auto-created from BNPI mass upload (${code})`,
-			isTaxable: direction === "COMPENSATION" && !receivableOnly,
-			reconciliationAction: receivableOnly ? "RECEIVABLE_ONLY" : null,
+			isTaxable,
 			isActive: true,
 			isDefault: false,
 			defaultInstallments: 1,
@@ -1216,6 +1310,7 @@ export async function importCompensationMassUpload(params: {
 				agreedToTerms: true,
 			});
 
+			let periodScopedId = existingId || "";
 			if (existingId) {
 				await params.prisma.employeeBenefit.update({
 					where: { id: existingId },
@@ -1234,6 +1329,7 @@ export async function importCompensationMassUpload(params: {
 					data: payload as any,
 					select: { id: true },
 				});
+				periodScopedId = created.id;
 				existingByKey.set(key, created.id);
 				pushImportSuccess(state, {
 					row: row.rowNumber,
@@ -1244,6 +1340,15 @@ export async function importCompensationMassUpload(params: {
 					periodCode: period.code,
 				});
 			}
+			await supersedeOpenHorizonBenefitsForPeriodScoped({
+				prisma: params.prisma,
+				organizationId: params.organizationId,
+				employeeId: employeePk,
+				benefitTypeId: benefitType.id,
+				period,
+				keepBenefitId: periodScopedId,
+				code: row.code,
+			});
 			trackPeriodCode(state.summary, period.code);
 		} catch (error: any) {
 			pushImportError(state, {
@@ -1571,6 +1676,7 @@ export async function importDeductionMassUpload(params: {
 				currency: "PHP",
 				agreedToTerms: true,
 			});
+			let periodScopedId = existingId || "";
 			if (existingId) {
 				await params.prisma.employeeBenefit.update({
 					where: { id: existingId },
@@ -1589,6 +1695,7 @@ export async function importDeductionMassUpload(params: {
 					data: payload as any,
 					select: { id: true },
 				});
+				periodScopedId = created.id;
 				existingBenefitByKey.set(key, created.id);
 				pushImportSuccess(state, {
 					row: row.rowNumber,
@@ -1599,6 +1706,15 @@ export async function importDeductionMassUpload(params: {
 					periodCode: period.code,
 				});
 			}
+			await supersedeOpenHorizonBenefitsForPeriodScoped({
+				prisma: params.prisma,
+				organizationId: params.organizationId,
+				employeeId: employeePk,
+				benefitTypeId: benefitType.id,
+				period,
+				keepBenefitId: periodScopedId,
+				code: row.code,
+			});
 			trackPeriodCode(state.summary, period.code);
 		} catch (error: any) {
 			pushImportError(state, {

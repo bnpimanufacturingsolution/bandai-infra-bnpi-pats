@@ -4,41 +4,26 @@
 done
 
 ## Summary
-Confirm device-user CSV/package import job progress path (hris-app) + import conflict auto-resolve capabilities (hris-api) + getDeviceUserImportJob serialization.
+DM3 migration page: **Upload work sharing schedule** button + modal for BNPI WorkSharingSchedule .xlsx (DM3.2 employee schedules).
 
 ## Category
-docs-only (verification; no product code change this session)
+feature / ui-ux
 
 ## Packages
 - bandai-infra/hris-app
-- bandai-infra/hris-api
-- Dual-app: **HR-only (no counterpart)** — admin device users Sync Center
+- bandai-infra/hris-api (API dependency)
+- Dual-app: **HR/emp-only (no counterpart)**
 
-## Verification results
+## Changes
+- `app/lib/admin-migration-ui.ts` — `WorkbookUploadKind` adds `worksharing-schedule`
+- `app/routes/admin/configuration/migration.tsx` — button, modal copy, mass-upload import path, activity filter "Schedule"
+- `app/routes/admin/configuration/migration.import-route.test.ts` — upload kind coverage
 
-### 1) UI import job progress path (hris-app) — COMPLETE
-- `enroll.tsx`: `data-testid="device-user-import-job-progress"`, progress bar, weights stages, API `progressPercent` with client fallback
-- `useDeviceUserImportJob`: polls every 2s until completed/failed
-- `devices.service.ts` `DeviceUserImportJobResponse`: `progressPercent`, `progressWeights` typed
-- Vitest: `device-user-ui-contract.test.ts` + `device-display-address.test.ts` — **7 passed**
-- Playwright smoke: `admin-device-user-csv-import-job-progress.spec.ts` — **1 passed**
-
-### 2) Import conflict handling (hris-api device.controller)
-- `review_conflict` when hard conflict = **employeeNo** mismatch on existing vendorUserId
-- Soft conflicts (**displayName**, **userType** only) auto-downgrade to `action: "match"` with `conflictFields: []` and `autoResolvedConflicts` populated
-- Same employeeNo/vendorUserId can proceed as match and write biometrics (rawPackage / sdkPeerCopy); metadataOnly → `matched_metadata_only`
-- **No** import body flags: `forceOverwrite`, `overwrite`, `resolveConflict`, `conflictStrategy`, `autoResolve`
-- Execute body: `execute=true`, `confirmation`, `previewToken`, `targetDeviceId`, payload, `biometricTransferMode`, `runAsJob`/`jobMode`/`async`
-- Note: `autoResolveDecisions` exists only on **merge** apply endpoints, not device-user import
-
-### 3) getDeviceUserImportJob
-- Uses `serializeDeviceUserPackageImportJob(job)` which always merges `buildDeviceUserPackageImportProgress` → `progressPercent`, `progressLabel`, `progressWeights` always present
-
-## Code changes this session
-none (truth already in code; verification only)
+## Truth delta
+YES — UI exposes WorkSharing as preferred period DM3.2 operator path
 
 ## Drift
-NONE
+LOW
 
-## Dual-app
-HR-only (no emp-app counterpart)
+## Verification
+- vitest: migration.import-route.test.ts (19 passing)

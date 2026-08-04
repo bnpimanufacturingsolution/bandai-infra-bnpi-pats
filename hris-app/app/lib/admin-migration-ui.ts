@@ -33,6 +33,7 @@ const IMPORT_MODAL_STATE_PARAMS = [
  * - `compensation` / `deduction` → DM3 BNPI mass upload sources
  *   (all benefits and deductions; statutory/monthly-payment register is not a UI path)
  * - `manpower-databank` → DM3 BNPI employee roster refresh (create/update master data)
+ * - `worksharing-schedule` → DM3.2 BNPI WorkSharingSchedule employee schedule assignments
  * - `biometrics` / `overtime` → DM4 attendance sources
  */
 const WORKBOOK_PAGE_STATE_PARAMS = ["workbook", "runId", "importJobId", "upload"] as const;
@@ -45,7 +46,8 @@ export type WorkbookUploadKind =
 	| "overtime"
 	| "compensation"
 	| "deduction"
-	| "manpower-databank";
+	| "manpower-databank"
+	| "worksharing-schedule";
 
 export const ADMIN_MIGRATION_WORKBOOK_IDS = ["dm1", "dm2", "dm3", "dm4"] as const;
 export type AdminMigrationWorkbookId = (typeof ADMIN_MIGRATION_WORKBOOK_IDS)[number];
@@ -69,7 +71,8 @@ export function getWorkbookUploadKind(
 		value === "overtime" ||
 		value === "compensation" ||
 		value === "deduction" ||
-		value === "manpower-databank"
+		value === "manpower-databank" ||
+		value === "worksharing-schedule"
 	) {
 		return value;
 	}

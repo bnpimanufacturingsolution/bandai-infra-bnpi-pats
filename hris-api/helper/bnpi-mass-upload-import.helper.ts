@@ -25,9 +25,76 @@ export const COMPENSATION_CODE_LABELS: Record<string, string> = {
 	OAD: "Other Compensation",
 	AON: "Adjustment OT/ND",
 	ARP: "Attendance Recognition Program",
-	ABS: "Absent Amount Recovery",
+	/** Client COMCODE ABS = Adjustment Basic (adjustment only), not absent recovery. */
+	ABS: "Adjustment Basic",
 	MTX: "MWE Tax Adjustment",
 };
+
+/**
+ * Canonical payroll wiring for BNPI compensation mass-upload COMCODEs.
+ * Used when creating/updating BenefitType rows so Run Payroll applies money
+ * (not display-only enrollments with empty reconciliationAction).
+ *
+ * - GROSS_INCLUDED → adds to GrossPay
+ * - NET_ADJUSTMENT → adds to NetPay after deductions (not gross)
+ * - RECEIVABLE_ONLY → adds to TotalReceivable after NetPay (e.g. PFA/MLA/ARP)
+ */
+export type CompensationCodePayrollRole = {
+	reconciliationAction: "GROSS_INCLUDED" | "NET_ADJUSTMENT" | "RECEIVABLE_ONLY";
+	isTaxable: boolean;
+};
+
+export const COMPENSATION_CODE_PAYROLL_ROLES: Record<string, CompensationCodePayrollRole> = {
+	AON: { reconciliationAction: "GROSS_INCLUDED", isTaxable: true },
+	/** Receivable-only: increases TotalReceivable without changing GrossPay/NetPay. */
+	ARP: { reconciliationAction: "RECEIVABLE_ONLY", isTaxable: true },
+	/**
+	 * Client COMCODE ABS = Adjustment Basic (manual/one-time ADJUSTMENT).
+	 * Include in GrossPay so the payslip left column tallies with GrossPay.
+	 */
+	ABS: { reconciliationAction: "GROSS_INCLUDED", isTaxable: true },
+	LLA: { reconciliationAction: "RECEIVABLE_ONLY", isTaxable: true },
+	MLA: { reconciliationAction: "RECEIVABLE_ONLY", isTaxable: false },
+	PFA: { reconciliationAction: "RECEIVABLE_ONLY", isTaxable: true },
+	DMA: { reconciliationAction: "GROSS_INCLUDED", isTaxable: false },
+	HYS: { reconciliationAction: "GROSS_INCLUDED", isTaxable: true },
+	OBA: { reconciliationAction: "GROSS_INCLUDED", isTaxable: true },
+	OTM: { reconciliationAction: "GROSS_INCLUDED", isTaxable: true },
+	TSA: { reconciliationAction: "GROSS_INCLUDED", isTaxable: true },
+	OAD: { reconciliationAction: "GROSS_INCLUDED", isTaxable: true },
+	MTX: { reconciliationAction: "GROSS_INCLUDED", isTaxable: true },
+};
+
+export function resolveCompensationCodePayrollRole(
+	code: string,
+): CompensationCodePayrollRole | null {
+	const key = String(code || "")
+		.trim()
+		.toUpperCase();
+	if (!key) return null;
+	return COMPENSATION_CODE_PAYROLL_ROLES[key] || null;
+}
+
+/** Deduction-direction benefit codes created from mass upload / statutory import. */
+export const DEDUCTION_CODE_PAYROLL_ROLES: Record<
+	string,
+	{ reconciliationAction: "DEDUCTION"; isTaxable: boolean }
+> = {
+	NEGADJ: { reconciliationAction: "DEDUCTION", isTaxable: false },
+	UFD: { reconciliationAction: "DEDUCTION", isTaxable: false },
+	MHDMF2: { reconciliationAction: "DEDUCTION", isTaxable: false },
+	UNIDED: { reconciliationAction: "DEDUCTION", isTaxable: false },
+};
+
+export function resolveDeductionCodePayrollRole(
+	code: string,
+): { reconciliationAction: "DEDUCTION"; isTaxable: boolean } | null {
+	const key = String(code || "")
+		.trim()
+		.toUpperCase();
+	if (!key) return null;
+	return DEDUCTION_CODE_PAYROLL_ROLES[key] || { reconciliationAction: "DEDUCTION", isTaxable: false };
+}
 
 /** Deduction mass-upload codes → loan type name (must match DM2 Loan Types when loan). */
 export const DEDUCTION_CODE_TO_LOAN_NAME: Record<string, string> = {

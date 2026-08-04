@@ -3753,7 +3753,7 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		thirteenthMonthAdjustment: sourceBy([], ["13th Month Adjustment"], ["COMPENSATION"]),
 		productionIncentives: sourceBy([], ["Production Incentives"], ["COMPENSATION"]),
 		otherCompensation: sourceBy(["OAD"], ["Other Compensation"], ["COMPENSATION"]),
-		adjustmentBasic: sourceBy([], ["Adjustment Basic"], ["COMPENSATION"]),
+		adjustmentBasic: sourceBy(["ABS"], ["Adjustment Basic"], ["COMPENSATION"]),
 		adjustmentOtNd: sourceBy(["AON"], ["Adjustment OT/ND"], ["COMPENSATION"]),
 		adjustmentNonTax: sourceBy([], ["Adjustment Non-Tax"], ["COMPENSATION"]),
 		excessDeduction: sourceBy([], ["Excess Deduction"], ["COMPENSATION"]),

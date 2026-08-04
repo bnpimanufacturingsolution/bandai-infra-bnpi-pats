@@ -23,6 +23,8 @@ export const PAYROLL_SOURCE_REGISTER_FIELD_BY_CODE: Record<string, string> = {
 	DMA: "deMinimisAllowance",
 	OBA: "obAllowance",
 	AON: "adjustmentOtNd",
+	/** Client COMCODE ABS = Adjustment Basic. */
+	ABS: "adjustmentBasic",
 	PFA: "perfectAttendance",
 	MLA: "mealAllowance",
 	LLA: "lineLeaderAllowance",
@@ -37,6 +39,7 @@ const REGISTER_FIELD_BY_TYPE_NAME: Record<string, string> = {
 	deminimisallowance: "deMinimisAllowance",
 	oballowance: "obAllowance",
 	adjustmentotnd: "adjustmentOtNd",
+	adjustmentbasic: "adjustmentBasic",
 	perfectattendance: "perfectAttendance",
 	mealallowance: "mealAllowance",
 	lineleaderallowance: "lineLeaderAllowance",

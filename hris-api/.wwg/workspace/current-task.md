@@ -4,36 +4,30 @@
 done
 
 ## Summary
-Fixed Special Payroll mass-upload / preview 403 `"HR access required"` on `/hr/run-payroll` import preview.
+DM3 WorkSharingSchedule upload for employee schedule assignments (DM3.2). Operators can upload period WorkSharingSchedule .xlsx from the migration page; API assigns embedded schedules and refreshes obligations.
 
 ## Category
-bugfix | security (auth context read)
+feature / mixed
 
 ## Packages
-- `bandai-infra/hris-api`
-- Dual-app: **HR/emp-only (no counterpart)** — Special Payroll HR run surfaces; emp-app only consumes released payslips via separate endpoints that do not use the broken HR gate the same way for import
+- bandai-infra/hris-api
+- bandai-infra/hris-app
+- Dual-app: **HR/emp-only (no counterpart)**
 
-## Root cause (CONFIRMED)
-`specialPayroll.controller.ts` `getAuthContext` read only `req.user.role` / `req.user.*`.
-
-`verifyToken` attaches JWT claims on the request itself:
-- `req.role`
-- `req.userId`
-- `req.organizationId`
-- `req.metadata.employee.id`
-
-`organizationId` had a fallback so the org check often passed, but `role` was always `null` → `isHr` always `false` → every HR Special Payroll mutation/list (including `POST /api/special-payroll/import/preview`) returned **403 HR access required**.
-
-## Code changes
-- `app/specialPayroll/specialPayroll.controller.ts` — read verifyToken fields first; keep `req.user` fallback; export `getAuthContext`; align allowed roles with payroll-period managers (`admin` / `super_admin` / `superadmin`)
-- `tests/special-payroll.auth-context.spec.ts` — regression coverage
+## Changes
+- `helper/bnpi-worksharing-schedule-import.helper.ts` — parse WorkSharingSchedule workbooks
+- `app/migration/bnpi-worksharing-schedule-import.service.ts` — import + template ensure + assign + obligations
+- `app/migration/migration.controller.ts` / `migration.router.ts` — `POST /api/migration/dm3/import-worksharing-schedule`
+- `app/migration/bnpi-mass-upload-import.service.ts` — activity kind `worksharing-schedule`
+- `tests/bnpi-worksharing-schedule-import.helper.spec.ts`
+- Docs: `docs/dm-source-input-manifest.json`, `bandai-infra/docs/dm-migration-workflow.md`
 
 ## Truth delta
-NO durable product-truth change. Auth middleware contract was already known (`req.role`); controller was wrong.
+YES — WorkSharingSchedule is an operator-uploadable DM3.2 source (period window effective dates; Mon–Sat shift without lunch unless later repaired). Breaktime remains break-detail / legacy transform path.
 
 ## Drift
-NONE (docs did not claim the broken `req.user` shape for this controller)
+LOW — workflow + manifest updated with new path
 
-## Follow-ups
-- Retry mass upload Preview on `/hr/run-payroll?periodCode=...&periodView=past` after API restart/reload
-- Optional: extend same auth-context pattern audit to any other new controllers that read `req.user` only
+## Verification
+- mocha: `tests/bnpi-worksharing-schedule-import.helper.spec.ts` (6 passing)
+- vitest: migration.import-route.test.ts (19 passing)

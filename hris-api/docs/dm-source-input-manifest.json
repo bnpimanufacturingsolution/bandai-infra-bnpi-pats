@@ -132,6 +132,18 @@
       "confidential": true
     },
     {
+      "id": "dm3-worksharing-schedule",
+      "dmPhase": "dm3",
+      "displayName": "Work sharing schedule (July 11-25, 2026)",
+      "sourceRef": "confidential-files/WorkSharingSchedule - July 11-25, 2026.xlsx",
+      "description": "BNPI period WorkSharingSchedule source for DM3.2 employee schedule assignments (Employeeid, Shift window, date columns). Preferred operator path: DM3 page Upload work sharing schedule.",
+      "sheetMappings": [
+        { "step": "DM3.2", "sheet": "WorkSharingSchedule" }
+      ],
+      "downloadable": true,
+      "confidential": true
+    },
+    {
       "id": "dm3-org-chart",
       "dmPhase": "dm3",
       "displayName": "FY2025 BNPI organization chart",

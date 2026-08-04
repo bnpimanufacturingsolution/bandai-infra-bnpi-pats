@@ -1,5 +1,19 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-04 Harden mass-upload / payroll resolve anti-stack
+
+- Task mode: bug fix / regression guard (double ARP open-horizon + period-scoped).
+- Finish line: Run Payroll cannot stack open-horizon + period-scoped same COMCODE;
+  re-import of period-scoped mass upload supersedes open-horizon peers.
+- Code:
+  - `hris-api/helper/payroll-benefit-source.helper.ts` —
+    `preferPeriodScopedPayrollBenefitSources` in `resolvePayrollBenefitSources`
+  - `hris-api/app/migration/bnpi-mass-upload-import.service.ts` —
+    `supersedeOpenHorizonBenefitsForPeriodScoped` after compensation/deduction benefit write
+- Tests: payroll-benefit-source + mass-upload summary specs green (stack + supersede cases).
+- Operator note: existing dirty open-horizon rows still need one regenerate (resolve now
+  prefers period-scoped); re-import mass upload also completes open-horizon peers.
+
 ## Latest Task Addendum - 2026-08-04 DM3 mass upload detailed results + history
 
 - Task mode: product UX + API observability for DM3 compensation/deduction imports.

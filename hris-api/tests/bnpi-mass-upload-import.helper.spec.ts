@@ -1,8 +1,12 @@
 import { expect } from "chai";
 import {
+	COMPENSATION_CODE_LABELS,
+	COMPENSATION_CODE_PAYROLL_ROLES,
 	detectMassUploadKindFromHeaders,
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
+	resolveCompensationCodePayrollRole,
+	resolveDeductionCodePayrollRole,
 } from "../helper/bnpi-mass-upload-import.helper";
 import { parseBenefitImportDate } from "../helper/employee-benefit-import.helper";
 
@@ -109,5 +113,49 @@ describe("BNPI mass upload import helper", () => {
 		if (!unided.ok) return;
 		expect(unided.kind).to.equal("benefit");
 		expect(unided.benefitCode).to.equal("UNIDED");
+	});
+
+	it("wires known compensation COMCODEs to payroll reconciliation actions", () => {
+		// Critical cut codes that previously imported as display-only (empty recon).
+		expect(resolveCompensationCodePayrollRole("ARP")).to.deep.equal({
+			reconciliationAction: "RECEIVABLE_ONLY",
+			isTaxable: true,
+		});
+		// Client COMCODE ABS = Adjustment Basic → gross-included adjustment.
+		expect(resolveCompensationCodePayrollRole("abs")).to.deep.equal({
+			reconciliationAction: "GROSS_INCLUDED",
+			isTaxable: true,
+		});
+		expect(COMPENSATION_CODE_LABELS.ABS).to.equal("Adjustment Basic");
+		expect(resolveCompensationCodePayrollRole("OBA")?.reconciliationAction).to.equal(
+			"GROSS_INCLUDED",
+		);
+		expect(resolveCompensationCodePayrollRole("AON")?.reconciliationAction).to.equal(
+			"GROSS_INCLUDED",
+		);
+		expect(resolveCompensationCodePayrollRole("PFA")?.reconciliationAction).to.equal(
+			"RECEIVABLE_ONLY",
+		);
+		expect(resolveCompensationCodePayrollRole("UNKNOWN_CODE")).to.equal(null);
+
+		// Every labeled COMCODE must have an explicit payroll role so mass upload never
+		// creates empty reconciliationAction for known BNPI codes.
+		for (const code of Object.keys(COMPENSATION_CODE_LABELS)) {
+			expect(
+				COMPENSATION_CODE_PAYROLL_ROLES[code],
+				`missing payroll role for COMCODE ${code}`,
+			).to.exist;
+		}
+	});
+
+	it("defaults unknown deduction benefit codes to DEDUCTION recon", () => {
+		expect(resolveDeductionCodePayrollRole("MHDMF2")).to.deep.equal({
+			reconciliationAction: "DEDUCTION",
+			isTaxable: false,
+		});
+		expect(resolveDeductionCodePayrollRole("CUSTOM_DED")).to.deep.equal({
+			reconciliationAction: "DEDUCTION",
+			isTaxable: false,
+		});
 	});
 });

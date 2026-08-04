@@ -68,10 +68,12 @@ describe("admin migration route contract", () => {
 			"compensation",
 			"deduction",
 			"manpower-databank",
+			"worksharing-schedule",
 		];
 		expect(new Set(kinds).size).toBe(kinds.length);
 		expect(kinds).toContain("dm4-overtime");
 		expect(kinds).toContain("dm1-workbook");
+		expect(kinds).toContain("worksharing-schedule");
 	});
 
 	it("scopes DM4 overtime-only runs to the selected OT file without biometrics", () => {
@@ -184,6 +186,15 @@ describe("admin migration route contract", () => {
 		expect(closedPage.has("workbook")).toBe(false);
 		expect(closedPage.has("upload")).toBe(false);
 		expect(closedPage.get("tab")).toBe("migration");
+	});
+
+	it("opens DM3 work sharing schedule upload modal via dedicated upload kind", () => {
+		const dm3 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm3");
+		const schedule = buildOpenWorkbookUploadSearchParams(dm3, "worksharing-schedule");
+		expect(schedule.get("workbook")).toBe("dm3");
+		expect(schedule.get("upload")).toBe("worksharing-schedule");
+		expect(getWorkbookUploadKind(schedule)).toBe("worksharing-schedule");
+		expect(isWorkbookUploadOpen(schedule)).toBe(true);
 	});
 
 	it("opens DM4 biometrics and overtime upload modals via dedicated upload kinds", () => {

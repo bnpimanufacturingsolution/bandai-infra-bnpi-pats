@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import {
+	preferPeriodScopedPayrollBenefitSources,
 	resolvePayrollBenefitSource,
+	resolvePayrollBenefitSources,
 	type PayrollBenefitSourceInput,
+	type PayrollBenefitSource,
 } from "../helper/payroll-benefit-source.helper";
 import { buildBenefitInstallments } from "../helper/employee-benefit-program.helper";
 import {
@@ -303,14 +306,139 @@ describe("resolvePayrollBenefitSource", () => {
 	});
 });
 
+describe("preferPeriodScopedPayrollBenefitSources", () => {
+	const asSource = (
+		overrides: Partial<PayrollBenefitSource> & Pick<PayrollBenefitSource, "id" | "payrollPeriodId">,
+	): PayrollBenefitSource => ({
+		employeeId: "employee-1",
+		code: "ARP",
+		name: "Attendance Recognition Program",
+		benefitTypeName: "Attendance Recognition Program",
+		direction: "COMPENSATION",
+		reconciliationAction: "RECEIVABLE_ONLY",
+		isTaxable: true,
+		amount: 500,
+		installmentIds: [],
+		startDate: period.startDate,
+		endDate: null,
+		payrollPeriodCode: null,
+		...overrides,
+	});
+
+	it("drops open-horizon peers when a period-scoped enrollment exists for the same code", () => {
+		const kept = preferPeriodScopedPayrollBenefitSources(
+			[
+				asSource({ id: "open", payrollPeriodId: null, amount: 500 }),
+				asSource({ id: "period", payrollPeriodId: period.id, amount: 500, endDate: period.endDate }),
+			],
+			period,
+		);
+		assert.equal(kept.length, 1);
+		assert.equal(kept[0]?.id, "period");
+	});
+
+	it("keeps multiple open-horizon-only enrollments of the same code (no period-scoped winner)", () => {
+		const kept = preferPeriodScopedPayrollBenefitSources(
+			[
+				asSource({ id: "open-a", payrollPeriodId: null, amount: 200 }),
+				asSource({ id: "open-b", payrollPeriodId: null, amount: 300 }),
+			],
+			period,
+		);
+		assert.equal(kept.length, 2);
+	});
+
+	it("does not drop a different benefit code open-horizon when only ARP is period-scoped", () => {
+		const kept = preferPeriodScopedPayrollBenefitSources(
+			[
+				asSource({ id: "arp-open", payrollPeriodId: null, code: "ARP", amount: 500 }),
+				asSource({
+					id: "arp-period",
+					payrollPeriodId: period.id,
+					code: "ARP",
+					amount: 500,
+					endDate: period.endDate,
+				}),
+				asSource({
+					id: "pfa-open",
+					payrollPeriodId: null,
+					code: "PFA",
+					name: "Perfect Attendance",
+					benefitTypeName: "Perfect Attendance",
+					amount: 200,
+				}),
+			],
+			period,
+		);
+		assert.deepEqual(
+			kept.map((row) => row.id).sort(),
+			["arp-period", "pfa-open"],
+		);
+	});
+
+	it("resolvePayrollBenefitSources applies stacking preference (Rio double-ARP case)", () => {
+		const sources = resolvePayrollBenefitSources(
+			[
+				benefit({
+					id: "arp-open",
+					payrollPeriodId: null,
+					endDate: null,
+					amount: 500,
+					totalAmount: 500,
+					benefitType: {
+						code: "ARP",
+						name: "Attendance Recognition Program",
+						payrollDirection: "COMPENSATION",
+						reconciliationAction: "RECEIVABLE_ONLY",
+						isTaxable: true,
+						isDeleted: false,
+					},
+				}),
+				benefit({
+					id: "arp-period",
+					payrollPeriodId: period.id,
+					startDate: period.startDate,
+					endDate: period.endDate,
+					amount: 500,
+					totalAmount: 500,
+					benefitType: {
+						code: "ARP",
+						name: "Attendance Recognition Program",
+						payrollDirection: "COMPENSATION",
+						reconciliationAction: "RECEIVABLE_ONLY",
+						isTaxable: true,
+						isDeleted: false,
+					},
+				}),
+			],
+			period,
+		);
+		assert.equal(sources.length, 1);
+		assert.equal(sources[0]?.id, "arp-period");
+		assert.equal(sources[0]?.amount, 500);
+	});
+});
+
 describe("payroll benefit source integration", () => {
 	const prismaFor = (benefits: PayrollBenefitSourceInput[]) => ({
+		payrollPeriod: {
+			findUnique: async () => ({
+				id: period.id,
+				periodNumber: 1,
+				payFrequency: "SEMI_MONTHLY",
+				startDate: period.startDate,
+				endDate: period.endDate,
+			}),
+			count: async () => 2,
+		},
+		payrollCycleConfig: { findFirst: async () => null },
 		employeeBenefit: { findMany: async () => benefits },
 		employeeLoan: { findMany: async () => [] },
 		timesheet: { findMany: async () => [] },
 		employeeBenefitInstallment: {
 			create: async (args: any) => ({ id: "created-1", ...args.data }),
 			update: async (args: any) => ({ id: args.where.id, ...args.data }),
+			findFirst: async () => null,
 		},
 	});
 
@@ -390,6 +518,52 @@ describe("payroll benefit source integration", () => {
 
 		assert.equal(sources.get("employee-1")?.amounts.totalCompensationBenefits, 400);
 		assert.equal(sources.get("employee-1")?.amounts.grossIncludedBenefits, 400);
+	});
+
+	it("does not double receivable-only when open-horizon and period-scoped ARP both exist", async () => {
+		const sources = await buildPayrollSourceAmountsByEmployeeId(prismaFor([
+			benefit({
+				id: "arp-open",
+				payrollPeriodId: null,
+				endDate: null,
+				amount: 500,
+				totalAmount: 500,
+				benefitType: {
+					code: "ARP",
+					name: "Attendance Recognition Program",
+					payrollDirection: "COMPENSATION",
+					reconciliationAction: "RECEIVABLE_ONLY",
+					isTaxable: true,
+					isDeleted: false,
+				},
+			}),
+			benefit({
+				id: "arp-period",
+				payrollPeriodId: period.id,
+				startDate: period.startDate,
+				endDate: period.endDate,
+				amount: 500,
+				totalAmount: 500,
+				benefitType: {
+					code: "ARP",
+					name: "Attendance Recognition Program",
+					payrollDirection: "COMPENSATION",
+					reconciliationAction: "RECEIVABLE_ONLY",
+					isTaxable: true,
+					isDeleted: false,
+				},
+			}),
+		] as any) as any, {
+			employeeIds: ["employee-1"],
+			organizationId: "org-1",
+			payrollPeriodId: period.id,
+			startDate: period.startDate,
+			endDate: period.endDate,
+		});
+
+		assert.equal(sources.get("employee-1")?.amounts.receivableOnlyBenefits, 500);
+		assert.equal(sources.get("employee-1")?.details.length, 1);
+		assert.equal(sources.get("employee-1")?.details[0]?.id, "arp-period");
 	});
 
 	it("aggregates generated deduction installments once for the current payroll period", async () => {
