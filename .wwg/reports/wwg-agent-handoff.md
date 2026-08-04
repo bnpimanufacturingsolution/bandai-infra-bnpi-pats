@@ -1,5 +1,26 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-04 - DM3 compensation/deduction detailed import results + history
+
+- Status: `IMPLEMENTED_LOCAL_CLONE_PROVEN`.
+- Problem: mass upload UI only showed success/failed counts; no failure why and
+  no durable history.
+- Backend: `MassUploadImportLog` model + SQL
+  `20260804_add_mass_upload_import_logs.sql`; service returns row-level
+  `errors`/`results` and persists logs; list/detail/CSV routes under
+  `/api/migration/dm3/mass-upload-imports*`.
+- Frontend: DM3 modal keeps open with failure/success tables; Import history
+  panel on compensation/deduction section.
+- Local DB truth: table applied on `hris-local-dev-clone` `127.0.0.1:5433`
+  (user local runtime via `npm run dev:local`). Not applied to VM shared DEV.
+- Live proof: compensation upload 2/2 failed with messages
+  `Missing COMCODE` and `Employee 99999 was not found.`; history row
+  `cmseb02uw0010vg2w4ca1pcx9` linked to migration run
+  `cmryj0vpm00huvgaks2t2js57`.
+- Tests: 8 mass-upload helper/summary specs passing.
+- Operator: hard-refresh DM3 page after app rebuild if UI lagging; API already
+  serving new routes on local clone.
+
 ## 2026-07-29 - Special Payroll one-time compensation (implemented)
 
 - Status: `IMPLEMENTED_LOCAL_AWAITING_DB_MIGRATE`.

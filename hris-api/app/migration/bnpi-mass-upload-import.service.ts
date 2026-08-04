@@ -3,6 +3,8 @@ import type { PrismaClient } from "../../generated/prisma";
 import {
 	compensationBenefitLabel,
 	DEDUCTION_BENEFIT_CODE_LABELS,
+	normalizeMassUploadRow,
+	padEmployeeId,
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
 } from "../../helper/bnpi-mass-upload-import.helper";
@@ -12,6 +14,34 @@ import {
 } from "../../helper/bnpi-statutory-benefits-import.helper";
 import { normalizeEmployeeBenefitPayload } from "../../helper/employee-benefit-program.helper";
 
+/** HTTP response sample caps (full lists live in MassUploadImportLog when persisted). */
+export const MASS_UPLOAD_HTTP_ERROR_CAP = 200;
+export const MASS_UPLOAD_HTTP_RESULT_CAP = 200;
+/** Persist full success rows only up to this size; beyond that store samples + truncation flag. */
+export const MASS_UPLOAD_PERSIST_RESULT_CAP = 2000;
+
+export type MassUploadRowAction = "created" | "updated" | "failed" | "skipped";
+
+export type MassUploadRowError = {
+	row: number;
+	employeeId?: string;
+	code?: string;
+	field?: string;
+	message: string;
+};
+
+export type MassUploadRowResult = {
+	row: number;
+	employeeId?: string;
+	code?: string;
+	amount?: number;
+	paymentAmount?: number;
+	action: MassUploadRowAction;
+	field?: string;
+	message?: string;
+	periodCode?: string | null;
+};
+
 export type MassUploadImportSummary = {
 	kind: "compensation" | "deduction" | "statutory";
 	total: number;
@@ -19,12 +49,26 @@ export type MassUploadImportSummary = {
 	updated: number;
 	skipped: number;
 	failed: number;
-	errors: Array<{ row: number; field?: string; message: string }>;
+	errors: MassUploadRowError[];
+	/** Successful row samples (may be truncated for HTTP). */
+	results?: MassUploadRowResult[];
+	/** True failed count (may exceed errors.length when truncated). */
+	errorTotal?: number;
+	/** True success count (created + updated; may exceed results.length when truncated). */
+	resultTotal?: number;
+	errorsTruncated?: boolean;
+	resultsTruncated?: boolean;
 	/** Payroll period codes that received at least one benefit enrollment. */
 	periodCodes?: string[];
 	/** Present for statutory remittance imports. */
 	sheetName?: string;
 	contributionOnlyEmployees?: number;
+	importLogId?: string;
+	sourceFilename?: string;
+	startedAt?: string;
+	finishedAt?: string;
+	durationMs?: number;
+	status?: "completed" | "partial" | "failed";
 };
 
 type ResolvedPayrollPeriod = {
@@ -32,6 +76,12 @@ type ResolvedPayrollPeriod = {
 	code: string | null;
 	startDate: Date;
 	endDate: Date;
+};
+
+type InternalImportState = {
+	summary: MassUploadImportSummary;
+	allErrors: MassUploadRowError[];
+	allResults: MassUploadRowResult[];
 };
 
 function utcDayStart(date: Date): Date {
@@ -133,7 +183,7 @@ async function ensureBenefitType(
 
 	const name = options?.name || compensationBenefitLabel(code);
 	const direction = options?.direction || "COMPENSATION";
-	// BenefitCategory has no DEDUCTION value ΓÇö use OTHER for deduction-direction types.
+	// BenefitCategory has no DEDUCTION value — use OTHER for deduction-direction types.
 	// payrollDirection is the field that marks compensation vs deduction.
 	return prisma.benefitType.create({
 		data: {
@@ -182,34 +232,359 @@ async function ensureLoanType(prisma: PrismaClient, organizationId: string, name
 	});
 }
 
-const MAX_MASS_UPLOAD_ERRORS = 50;
+function emptyInternalState(kind: MassUploadImportSummary["kind"], total: number): InternalImportState {
+	return {
+		summary: {
+			kind,
+			total,
+			created: 0,
+			updated: 0,
+			skipped: 0,
+			failed: 0,
+			errors: [],
+			results: [],
+			errorTotal: 0,
+			resultTotal: 0,
+			errorsTruncated: false,
+			resultsTruncated: false,
+			periodCodes: [],
+		},
+		allErrors: [],
+		allResults: [],
+	};
+}
 
 function pushImportError(
-	summary: MassUploadImportSummary,
-	error: { row: number; field?: string; message: string },
+	state: InternalImportState,
+	error: MassUploadRowError,
 ) {
-	summary.failed += 1;
-	if (summary.errors.length < MAX_MASS_UPLOAD_ERRORS) {
-		summary.errors.push(error);
+	state.summary.failed += 1;
+	state.allErrors.push(error);
+}
+
+function pushImportSuccess(
+	state: InternalImportState,
+	result: MassUploadRowResult,
+) {
+	if (result.action === "created") state.summary.created += 1;
+	else if (result.action === "updated") state.summary.updated += 1;
+	state.allResults.push(result);
+}
+
+export function resolveMassUploadImportStatus(
+	summary: Pick<MassUploadImportSummary, "total" | "created" | "updated" | "failed">,
+): "completed" | "partial" | "failed" {
+	const ok = Number(summary.created || 0) + Number(summary.updated || 0);
+	const failed = Number(summary.failed || 0);
+	if (failed > 0 && ok > 0) return "partial";
+	if (failed > 0 || ok === 0) return "failed";
+	return "completed";
+}
+
+/** Finalize summary samples for HTTP (full lists remain on state for persist). */
+export function finalizeMassUploadSummary(
+	state: InternalImportState,
+	meta?: { sourceFilename?: string; startedAt?: Date; finishedAt?: Date },
+): MassUploadImportSummary {
+	const errorTotal = state.allErrors.length;
+	const resultTotal = state.allResults.length;
+	const errorsTruncated = errorTotal > MASS_UPLOAD_HTTP_ERROR_CAP;
+	const resultsTruncated = resultTotal > MASS_UPLOAD_HTTP_RESULT_CAP;
+	const startedAt = meta?.startedAt;
+	const finishedAt = meta?.finishedAt || new Date();
+	const summary: MassUploadImportSummary = {
+		...state.summary,
+		errors: state.allErrors.slice(0, MASS_UPLOAD_HTTP_ERROR_CAP),
+		results: state.allResults.slice(0, MASS_UPLOAD_HTTP_RESULT_CAP),
+		errorTotal,
+		resultTotal,
+		errorsTruncated,
+		resultsTruncated,
+		status: resolveMassUploadImportStatus(state.summary),
+		sourceFilename: meta?.sourceFilename,
+		startedAt: startedAt?.toISOString(),
+		finishedAt: finishedAt.toISOString(),
+		durationMs:
+			startedAt && finishedAt ? Math.max(0, finishedAt.getTime() - startedAt.getTime()) : undefined,
+	};
+	return summary;
+}
+
+function resultsForPersist(allResults: MassUploadRowResult[]): {
+	results: MassUploadRowResult[];
+	truncated: boolean;
+} {
+	if (allResults.length <= MASS_UPLOAD_PERSIST_RESULT_CAP) {
+		return { results: allResults, truncated: false };
 	}
+	// Keep head + tail samples so operators can still spot patterns.
+	const head = allResults.slice(0, 1000);
+	const tail = allResults.slice(-200);
+	return { results: [...head, ...tail], truncated: true };
+}
+
+export async function persistMassUploadImportLog(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	kind: "compensation" | "deduction";
+	sourceFilename?: string | null;
+	migrationRunId?: string | null;
+	startedByUserId?: string | null;
+	startedAt: Date;
+	finishedAt: Date;
+	state: InternalImportState;
+	summary: MassUploadImportSummary;
+}): Promise<{ id: string } | null> {
+	const prismaAny = params.prisma as any;
+	if (!prismaAny.massUploadImportLog?.create) {
+		// Prisma client not regenerated yet — do not fail the import write path.
+		return null;
+	}
+
+	const persistResults = resultsForPersist(params.state.allResults);
+	const status = resolveMassUploadImportStatus(params.summary);
+	const userId =
+		params.startedByUserId && params.startedByUserId !== "unknown"
+			? params.startedByUserId
+			: null;
+
+	try {
+		const row = await prismaAny.massUploadImportLog.create({
+			data: {
+				organizationId: params.organizationId,
+				kind: params.kind,
+				status,
+				sourceFilename: params.sourceFilename || null,
+				migrationRunId: params.migrationRunId || null,
+				startedByUserId: userId,
+				total: params.summary.total,
+				created: params.summary.created,
+				updated: params.summary.updated,
+				skipped: params.summary.skipped,
+				failed: params.summary.failed,
+				periodCodes: params.summary.periodCodes || [],
+				summaryJson: {
+					kind: params.summary.kind,
+					total: params.summary.total,
+					created: params.summary.created,
+					updated: params.summary.updated,
+					skipped: params.summary.skipped,
+					failed: params.summary.failed,
+					periodCodes: params.summary.periodCodes || [],
+					errorTotal: params.state.allErrors.length,
+					resultTotal: params.state.allResults.length,
+					errorsTruncated: false,
+					resultsTruncated: persistResults.truncated,
+					status,
+					sourceFilename: params.sourceFilename || null,
+					startedAt: params.startedAt.toISOString(),
+					finishedAt: params.finishedAt.toISOString(),
+					durationMs: Math.max(0, params.finishedAt.getTime() - params.startedAt.getTime()),
+				},
+				// Always persist full error list for failure diagnosis.
+				errorsJson: params.state.allErrors,
+				resultsJson: persistResults.results,
+				errorsTruncated: false,
+				resultsTruncated: persistResults.truncated,
+				startedAt: params.startedAt,
+				finishedAt: params.finishedAt,
+			},
+			select: { id: true },
+		});
+		return row;
+	} catch {
+		// Best-effort audit; import already applied.
+		return null;
+	}
+}
+
+export function buildMassUploadReportCsv(params: {
+	kind: string;
+	errors: MassUploadRowError[];
+	results: MassUploadRowResult[];
+}): string {
+	const lines: string[] = [
+		"section,row,employeeId,code,amount,paymentAmount,action,field,message,periodCode",
+	];
+	const esc = (value: unknown) => {
+		const raw = value === null || value === undefined ? "" : String(value);
+		if (/[",\n\r]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
+		return raw;
+	};
+	for (const error of params.errors || []) {
+		lines.push(
+			[
+				"failure",
+				error.row,
+				error.employeeId || "",
+				error.code || "",
+				"",
+				"",
+				"failed",
+				error.field || "",
+				error.message || "",
+				"",
+			]
+				.map(esc)
+				.join(","),
+		);
+	}
+	for (const result of params.results || []) {
+		lines.push(
+			[
+				"success",
+				result.row,
+				result.employeeId || "",
+				result.code || "",
+				result.amount ?? "",
+				result.paymentAmount ?? "",
+				result.action || "",
+				result.field || "",
+				result.message || "",
+				result.periodCode || "",
+			]
+				.map(esc)
+				.join(","),
+		);
+	}
+	return lines.join("\n");
+}
+
+export async function listMassUploadImportLogs(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	kind?: "compensation" | "deduction" | null;
+	migrationRunId?: string | null;
+	limit?: number;
+}) {
+	const prismaAny = params.prisma as any;
+	if (!prismaAny.massUploadImportLog?.findMany) {
+		return { items: [], total: 0, unavailable: true };
+	}
+	const take = Math.min(Math.max(Number(params.limit || 50), 1), 100);
+	const where: Record<string, unknown> = {
+		organizationId: params.organizationId,
+		isDeleted: false,
+	};
+	if (params.kind) where.kind = params.kind;
+	if (params.migrationRunId) where.migrationRunId = params.migrationRunId;
+
+	try {
+		const [items, total] = await Promise.all([
+			prismaAny.massUploadImportLog.findMany({
+				where,
+				orderBy: { createdAt: "desc" },
+				take,
+				select: {
+					id: true,
+					kind: true,
+					status: true,
+					sourceFilename: true,
+					migrationRunId: true,
+					total: true,
+					created: true,
+					updated: true,
+					skipped: true,
+					failed: true,
+					periodCodes: true,
+					errorsTruncated: true,
+					resultsTruncated: true,
+					startedAt: true,
+					finishedAt: true,
+					createdAt: true,
+					startedByUser: {
+						select: { id: true, email: true, userName: true },
+					},
+				},
+			}),
+			prismaAny.massUploadImportLog.count({ where }),
+		]);
+		return { items, total };
+	} catch (error: any) {
+		// Table not applied yet (migration pending) — return empty rather than 500 the DM3 page.
+		const message = String(error?.message || "");
+		if (
+			message.includes("mass_upload_import_logs") ||
+			message.includes("does not exist") ||
+			error?.code === "P2021"
+		) {
+			return { items: [], total: 0, unavailable: true };
+		}
+		throw error;
+	}
+}
+
+export async function getMassUploadImportLog(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	id: string;
+}) {
+	const prismaAny = params.prisma as any;
+	if (!prismaAny.massUploadImportLog?.findFirst) return null;
+	try {
+		return await prismaAny.massUploadImportLog.findFirst({
+			where: {
+				id: params.id,
+				organizationId: params.organizationId,
+				isDeleted: false,
+			},
+			include: {
+				startedByUser: {
+					select: { id: true, email: true, userName: true },
+				},
+			},
+		});
+	} catch (error: any) {
+		const message = String(error?.message || "");
+		if (
+			message.includes("mass_upload_import_logs") ||
+			message.includes("does not exist") ||
+			error?.code === "P2021"
+		) {
+			return null;
+		}
+		throw error;
+	}
+}
+
+function peekCompensationHints(raw: Record<string, unknown>): {
+	employeeId?: string;
+	code?: string;
+} {
+	const row = normalizeMassUploadRow(raw);
+	const employeeId = padEmployeeId(row.EMPLOYEEID ?? row.EMPLOYEE_ID ?? row.EMP_ID) || undefined;
+	const code =
+		String(row.COMCODE ?? row.BENEFIT_CODE ?? row.CODE ?? "")
+			.trim()
+			.toUpperCase() || undefined;
+	return { employeeId, code };
+}
+
+function peekDeductionHints(raw: Record<string, unknown>): {
+	employeeId?: string;
+	code?: string;
+} {
+	const row = normalizeMassUploadRow(raw);
+	const employeeId = padEmployeeId(row.EMPLOYEEID ?? row.EMPLOYEE_ID ?? row.EMP_ID) || undefined;
+	const code =
+		String(row.DEDCODE ?? row.CODE ?? "")
+			.trim()
+			.toUpperCase() || undefined;
+	return { employeeId, code };
 }
 
 export async function importCompensationMassUpload(params: {
 	prisma: PrismaClient;
 	organizationId: string;
 	buffer: Buffer;
+	sourceFilename?: string | null;
+	migrationRunId?: string | null;
+	startedByUserId?: string | null;
+	persistLog?: boolean;
 }): Promise<MassUploadImportSummary> {
+	const startedAt = new Date();
 	const rows = readSheetRows(params.buffer);
-	const summary: MassUploadImportSummary = {
-		kind: "compensation",
-		total: rows.length,
-		created: 0,
-		updated: 0,
-		skipped: 0,
-		failed: 0,
-		errors: [],
-		periodCodes: [],
-	};
+	const state = emptyInternalState("compensation", rows.length);
 
 	type OkRow = {
 		rowNumber: number;
@@ -221,9 +596,15 @@ export async function importCompensationMassUpload(params: {
 	const okRows: OkRow[] = [];
 	for (const [index, raw] of rows.entries()) {
 		const rowNumber = index + 2;
+		const hints = peekCompensationHints(raw);
 		const parsed = parseCompensationMassUploadRow(raw);
 		if (!parsed.ok) {
-			pushImportError(summary, { row: rowNumber, message: parsed.error });
+			pushImportError(state, {
+				row: rowNumber,
+				employeeId: hints.employeeId,
+				code: hints.code,
+				message: parsed.error,
+			});
 			continue;
 		}
 		okRows.push({
@@ -234,7 +615,30 @@ export async function importCompensationMassUpload(params: {
 			startDate: parsed.startDate,
 		});
 	}
-	if (!okRows.length) return summary;
+	if (!okRows.length) {
+		const finishedAt = new Date();
+		const summary = finalizeMassUploadSummary(state, {
+			sourceFilename: params.sourceFilename || undefined,
+			startedAt,
+			finishedAt,
+		});
+		if (params.persistLog !== false) {
+			const log = await persistMassUploadImportLog({
+				prisma: params.prisma,
+				organizationId: params.organizationId,
+				kind: "compensation",
+				sourceFilename: params.sourceFilename,
+				migrationRunId: params.migrationRunId,
+				startedByUserId: params.startedByUserId,
+				startedAt,
+				finishedAt,
+				state,
+				summary,
+			});
+			if (log) summary.importLogId = log.id;
+		}
+		return summary;
+	}
 
 	const employeeCodes = Array.from(new Set(okRows.map((r) => r.employeeId)));
 	const employees = await params.prisma.employee.findMany({
@@ -249,7 +653,6 @@ export async function importCompensationMassUpload(params: {
 
 	const periodCache = new Map<string, ResolvedPayrollPeriod | null>();
 	const benefitTypeCache = new Map<string, { id: string; code: string; name: string }>();
-	// Prefetch existing period-scoped enrollments once periods and types are known.
 	const existingByKey = new Map<string, string>();
 
 	const ensurePeriod = async (startDate: Date) => {
@@ -279,7 +682,6 @@ export async function importCompensationMassUpload(params: {
 		return benefitTypeCache.get(key)!;
 	};
 
-	// Warm period + type caches and collect period IDs for bulk existing lookup.
 	const periodIds = new Set<string>();
 	const typeIds = new Set<string>();
 	for (const row of okRows) {
@@ -318,8 +720,10 @@ export async function importCompensationMassUpload(params: {
 		try {
 			const employeePk = employeeByCode.get(row.employeeId);
 			if (!employeePk) {
-				pushImportError(summary, {
+				pushImportError(state, {
 					row: row.rowNumber,
+					employeeId: row.employeeId,
+					code: row.code,
 					field: "EmployeeID",
 					message: `Employee ${row.employeeId} was not found.`,
 				});
@@ -328,8 +732,10 @@ export async function importCompensationMassUpload(params: {
 
 			const { dayKey, period } = await ensurePeriod(row.startDate);
 			if (!period) {
-				pushImportError(summary, {
+				pushImportError(state, {
 					row: row.rowNumber,
+					employeeId: row.employeeId,
+					code: row.code,
 					field: "StartPayDate",
 					message: `No payroll period found for StartPayDate ${dayKey}. Create the period (e.g. PP starting that day) before mass upload.`,
 				});
@@ -370,24 +776,61 @@ export async function importCompensationMassUpload(params: {
 					where: { id: existingId },
 					data: payload as any,
 				});
-				summary.updated += 1;
+				pushImportSuccess(state, {
+					row: row.rowNumber,
+					employeeId: row.employeeId,
+					code: row.code,
+					amount: row.amount,
+					action: "updated",
+					periodCode: period.code,
+				});
 			} else {
 				const created = await params.prisma.employeeBenefit.create({
 					data: payload as any,
 					select: { id: true },
 				});
 				existingByKey.set(key, created.id);
-				summary.created += 1;
+				pushImportSuccess(state, {
+					row: row.rowNumber,
+					employeeId: row.employeeId,
+					code: row.code,
+					amount: row.amount,
+					action: "created",
+					periodCode: period.code,
+				});
 			}
-			trackPeriodCode(summary, period.code);
+			trackPeriodCode(state.summary, period.code);
 		} catch (error: any) {
-			pushImportError(summary, {
+			pushImportError(state, {
 				row: row.rowNumber,
+				employeeId: row.employeeId,
+				code: row.code,
 				message: error?.message || "Failed to import compensation row",
 			});
 		}
 	}
 
+	const finishedAt = new Date();
+	const summary = finalizeMassUploadSummary(state, {
+		sourceFilename: params.sourceFilename || undefined,
+		startedAt,
+		finishedAt,
+	});
+	if (params.persistLog !== false) {
+		const log = await persistMassUploadImportLog({
+			prisma: params.prisma,
+			organizationId: params.organizationId,
+			kind: "compensation",
+			sourceFilename: params.sourceFilename,
+			migrationRunId: params.migrationRunId,
+			startedByUserId: params.startedByUserId,
+			startedAt,
+			finishedAt,
+			state,
+			summary,
+		});
+		if (log) summary.importLogId = log.id;
+	}
 	return summary;
 }
 
@@ -395,18 +838,14 @@ export async function importDeductionMassUpload(params: {
 	prisma: PrismaClient;
 	organizationId: string;
 	buffer: Buffer;
+	sourceFilename?: string | null;
+	migrationRunId?: string | null;
+	startedByUserId?: string | null;
+	persistLog?: boolean;
 }): Promise<MassUploadImportSummary> {
+	const startedAt = new Date();
 	const rows = readSheetRows(params.buffer);
-	const summary: MassUploadImportSummary = {
-		kind: "deduction",
-		total: rows.length,
-		created: 0,
-		updated: 0,
-		skipped: 0,
-		failed: 0,
-		errors: [],
-		periodCodes: [],
-	};
+	const state = emptyInternalState("deduction", rows.length);
 
 	type OkRow = {
 		rowNumber: number;
@@ -422,9 +861,15 @@ export async function importDeductionMassUpload(params: {
 	const okRows: OkRow[] = [];
 	for (const [index, raw] of rows.entries()) {
 		const rowNumber = index + 2;
+		const hints = peekDeductionHints(raw);
 		const parsed = parseDeductionMassUploadRow(raw);
 		if (!parsed.ok) {
-			pushImportError(summary, { row: rowNumber, message: parsed.error });
+			pushImportError(state, {
+				row: rowNumber,
+				employeeId: hints.employeeId,
+				code: hints.code,
+				message: parsed.error,
+			});
 			continue;
 		}
 		okRows.push({
@@ -439,7 +884,30 @@ export async function importDeductionMassUpload(params: {
 			benefitCode: parsed.benefitCode,
 		});
 	}
-	if (!okRows.length) return summary;
+	if (!okRows.length) {
+		const finishedAt = new Date();
+		const summary = finalizeMassUploadSummary(state, {
+			sourceFilename: params.sourceFilename || undefined,
+			startedAt,
+			finishedAt,
+		});
+		if (params.persistLog !== false) {
+			const log = await persistMassUploadImportLog({
+				prisma: params.prisma,
+				organizationId: params.organizationId,
+				kind: "deduction",
+				sourceFilename: params.sourceFilename,
+				migrationRunId: params.migrationRunId,
+				startedByUserId: params.startedByUserId,
+				startedAt,
+				finishedAt,
+				state,
+				summary,
+			});
+			if (log) summary.importLogId = log.id;
+		}
+		return summary;
+	}
 
 	const employeeCodes = Array.from(new Set(okRows.map((r) => r.employeeId)));
 	const employees = await params.prisma.employee.findMany({
@@ -475,7 +943,6 @@ export async function importDeductionMassUpload(params: {
 		return { dayKey, period: periodCache.get(dayKey) || null };
 	};
 
-	// Warm period + benefit-type caches and bulk-load existing period-scoped benefits.
 	const periodIds = new Set<string>();
 	const benefitTypeIds = new Set<string>();
 	for (const row of okRows) {
@@ -531,8 +998,10 @@ export async function importDeductionMassUpload(params: {
 		try {
 			const employeePk = employeeByCode.get(row.employeeId);
 			if (!employeePk) {
-				pushImportError(summary, {
+				pushImportError(state, {
 					row: row.rowNumber,
+					employeeId: row.employeeId,
+					code: row.code,
 					field: "EmployeeID",
 					message: `Employee ${row.employeeId} was not found.`,
 				});
@@ -588,18 +1057,36 @@ export async function importDeductionMassUpload(params: {
 						where: { id: existing.id },
 						data: loanData,
 					});
-					summary.updated += 1;
+					pushImportSuccess(state, {
+						row: row.rowNumber,
+						employeeId: row.employeeId,
+						code: row.code,
+						amount: principal,
+						paymentAmount: monthlyPayment,
+						action: "updated",
+						periodCode: period?.code || null,
+					});
 				} else {
 					await params.prisma.employeeLoan.create({ data: loanData });
-					summary.created += 1;
+					pushImportSuccess(state, {
+						row: row.rowNumber,
+						employeeId: row.employeeId,
+						code: row.code,
+						amount: principal,
+						paymentAmount: monthlyPayment,
+						action: "created",
+						periodCode: period?.code || null,
+					});
 				}
-				if (period) trackPeriodCode(summary, period.code);
+				if (period) trackPeriodCode(state.summary, period.code);
 				continue;
 			}
 
 			if (!period) {
-				pushImportError(summary, {
+				pushImportError(state, {
 					row: row.rowNumber,
+					employeeId: row.employeeId,
+					code: row.code,
 					field: "StartPayment",
 					message: `No payroll period found for StartPayment ${dayKey}. Create the period before mass upload.`,
 				});
@@ -644,24 +1131,61 @@ export async function importDeductionMassUpload(params: {
 					where: { id: existingId },
 					data: payload as any,
 				});
-				summary.updated += 1;
+				pushImportSuccess(state, {
+					row: row.rowNumber,
+					employeeId: row.employeeId,
+					code: row.code,
+					paymentAmount: row.paymentAmount,
+					action: "updated",
+					periodCode: period.code,
+				});
 			} else {
 				const created = await params.prisma.employeeBenefit.create({
 					data: payload as any,
 					select: { id: true },
 				});
 				existingBenefitByKey.set(key, created.id);
-				summary.created += 1;
+				pushImportSuccess(state, {
+					row: row.rowNumber,
+					employeeId: row.employeeId,
+					code: row.code,
+					paymentAmount: row.paymentAmount,
+					action: "created",
+					periodCode: period.code,
+				});
 			}
-			trackPeriodCode(summary, period.code);
+			trackPeriodCode(state.summary, period.code);
 		} catch (error: any) {
-			pushImportError(summary, {
+			pushImportError(state, {
 				row: row.rowNumber,
+				employeeId: row.employeeId,
+				code: row.code,
 				message: error?.message || "Failed to import deduction row",
 			});
 		}
 	}
 
+	const finishedAt = new Date();
+	const summary = finalizeMassUploadSummary(state, {
+		sourceFilename: params.sourceFilename || undefined,
+		startedAt,
+		finishedAt,
+	});
+	if (params.persistLog !== false) {
+		const log = await persistMassUploadImportLog({
+			prisma: params.prisma,
+			organizationId: params.organizationId,
+			kind: "deduction",
+			sourceFilename: params.sourceFilename,
+			migrationRunId: params.migrationRunId,
+			startedByUserId: params.startedByUserId,
+			startedAt,
+			finishedAt,
+			state,
+			summary,
+		});
+		if (log) summary.importLogId = log.id;
+	}
 	return summary;
 }
 
@@ -674,7 +1198,7 @@ export async function importDeductionMassUpload(params: {
  *
  * Applies loan/deduction enrollments (SSS/HDMF loans, calamity, LRP, MP2) as
  * ACTIVE open-horizon obligations. Does not freeze SSS/PHIC/HDMF contribution
- * amounts into benefits ΓÇö those stay engine-computed by payroll schedule.
+ * amounts into benefits — those stay engine-computed by payroll schedule.
  */
 export async function importStatutoryBenefitsUpload(params: {
 	prisma: PrismaClient;
@@ -690,12 +1214,18 @@ export async function importStatutoryBenefitsUpload(params: {
 		skipped: parsedBook.contributionOnlyEmployees + parsedBook.skippedEmployees,
 		failed: 0,
 		errors: [...parsedBook.errors],
+		results: [],
+		errorTotal: parsedBook.errors.length,
+		resultTotal: 0,
+		errorsTruncated: false,
+		resultsTruncated: false,
 		sheetName: parsedBook.sheetName,
 		contributionOnlyEmployees: parsedBook.contributionOnlyEmployees,
 	};
 
 	if (!parsedBook.deductionRows.length && parsedBook.errors.length) {
 		summary.failed = Math.max(1, parsedBook.errors.length);
+		summary.status = "failed";
 		return summary;
 	}
 
@@ -716,6 +1246,7 @@ export async function importStatutoryBenefitsUpload(params: {
 				summary.failed += 1;
 				summary.errors.push({
 					row: row.sourceRow,
+					employeeId: row.employeeId,
 					field: "Emp. No.",
 					message: `Employee ${row.employeeId} was not found.`,
 				});
@@ -795,7 +1326,7 @@ export async function importStatutoryBenefitsUpload(params: {
 				totalAmount: row.paymentAmount,
 				startDate: row.startDate,
 				startPayrollCutOff: row.startDate,
-				// No end date in source ΓåÆ recurring every cutoff until superseded.
+				// No end date in source → recurring every cutoff until superseded.
 				scheduleMode: "RECURRING",
 				recurrenceFrequency: "EVERY_CUTOFF",
 				totalInstallments: 0,
@@ -821,10 +1352,14 @@ export async function importStatutoryBenefitsUpload(params: {
 			summary.failed += 1;
 			summary.errors.push({
 				row: row.sourceRow,
+				employeeId: row.employeeId,
 				message: error?.message || "Failed to import statutory deduction row",
 			});
 		}
 	}
 
+	summary.errorTotal = summary.errors.length;
+	summary.resultTotal = summary.created + summary.updated;
+	summary.status = resolveMassUploadImportStatus(summary);
 	return summary;
 }

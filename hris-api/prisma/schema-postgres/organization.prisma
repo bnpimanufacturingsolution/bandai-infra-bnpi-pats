@@ -8,8 +8,9 @@ model Organization {
   updatedAt   DateTime @updatedAt
   isDeleted   Boolean  @default(false)
 
-  users         User[]
-  migrationRuns MigrationRun[]
+  users               User[]
+  migrationRuns       MigrationRun[]
+  massUploadImportLogs MassUploadImportLog[]
 
   @@index([isDeleted])
   @@map("organizations")

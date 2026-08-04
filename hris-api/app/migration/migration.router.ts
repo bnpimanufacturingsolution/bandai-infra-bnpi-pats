@@ -17,6 +17,9 @@ interface IMigrationController {
 	importDm3EmployeeBenefitsLoans(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3CompensationMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3DeductionMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
+	listDm3MassUploadImports(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDm3MassUploadImport(req: Request, res: Response, next: NextFunction): Promise<void>;
+	downloadDm3MassUploadImportReport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3ManpowerDatabank(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDm3ManpowerDatabankProgress(req: Request, res: Response, next: NextFunction): Promise<void>;
 	finalizeDm3EmployeeImport(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -332,6 +335,12 @@ export const router = (route: Router, controller: IMigrationController): Router 
 		uploadImportFile,
 		controller.importDm3DeductionMassUpload,
 	);
+	routes.get("/dm3/mass-upload-imports", controller.listDm3MassUploadImports);
+	routes.get(
+		"/dm3/mass-upload-imports/:id/report.csv",
+		controller.downloadDm3MassUploadImportReport,
+	);
+	routes.get("/dm3/mass-upload-imports/:id", controller.getDm3MassUploadImport);
 	routes.post(
 		"/dm3/import-manpower-databank",
 		uploadImportFile,

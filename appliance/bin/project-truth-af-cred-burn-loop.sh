@@ -21,8 +21,9 @@ POLL_SLEEP="${PT_POLL_SLEEP:-10}"
 # Hard ceiling so one stuck job cannot block forever (~50 min at 10s).
 POLL_HARD_MAX="${PT_POLL_HARD_MAX:-300}"
 
-# Main A/B/D/E/F always. Main C is included only when live From is readable
-# (source_unavailable → skip C; face residual to C burns when C returns).
+# Main A/B/C/D/E/F always — never hard-skip C.
+# C owns most residual finger/face gaps in Sync Center; excluding it freezes gap-zero.
+# API/plan already degrades gracefully when C is source_unavailable.
 # TEST A/B always excluded.
 A_ID=cmrht5s2w00ei7zgsre8y3o5n
 B_ID=cmpxw13hx002h7zwso7dyedrn
@@ -109,12 +110,12 @@ auth_curl() {
 write_status() {
   # write_status cycle decisions uFace uFp faceReady fpReady job note
   cat >"$STATUSF" <<EOF
-# A/B/D/E/F durable credential burn (VM)
+# A/B/C/D/E/F durable credential burn (VM)
 
 Updated: $(date -Is)
 PID: $$
 API: $API_BASE
-Devices: A B D E F + C-if-readable
+Devices: A B C D E F (always — no hard-skip)
 Cycle: $1
 decision: $2
 uFace: $3
@@ -123,7 +124,7 @@ faceReady: $5
 fpReady: $6
 job: $7
 note: $8
-includeC: ${INCLUDE_C:-false}
+includeC: true
 
 Watch:
   tail -f $HBF
@@ -134,34 +135,11 @@ Stop:
 EOF
 }
 
-# Returns deviceIds JSON array. Sets INCLUDE_C=true|false.
+# Always return A/B/C/D/E/F. Never hard-skip C (UI residual is concentrated on C).
+# Sets INCLUDE_C=true for status/heartbeat compatibility.
 build_device_ids_json() {
-  local out code include_c=false
-  out=$(mktemp)
-  code=$(auth_curl GET '/api/device/sync-preview?quick=true' '' "$out" 90)
-  if [[ "$code" == "200" ]]; then
-    local c_from c_status
-    c_from=$(jq -r --arg id "$C_ID" '
-      (.data.devices//[])[]
-      | select((.deviceId//.id)==$id or (.name|test("Device C$")))
-      | .vendorUserCount // empty
-    ' "$out" 2>/dev/null | head -1)
-    c_status=$(jq -r --arg id "$C_ID" '
-      (.data.devices//[])[]
-      | select((.deviceId//.id)==$id or (.name|test("Device C$")))
-      | .status // empty
-    ' "$out" 2>/dev/null | head -1)
-    if [[ "$c_status" == "user_count_ready" && -n "${c_from:-}" && "${c_from}" =~ ^[0-9]+$ && "$c_from" -ge 800 ]]; then
-      include_c=true
-    fi
-  fi
-  rm -f "$out"
-  INCLUDE_C=$include_c
-  if [[ "$include_c" == "true" ]]; then
-    echo "[\"$A_ID\",\"$B_ID\",\"$C_ID\",\"$D_ID\",\"$E_ID\",\"$F_ID\"]"
-  else
-    echo "[\"$A_ID\",\"$B_ID\",\"$D_ID\",\"$E_ID\",\"$F_ID\"]"
-  fi
+  INCLUDE_C=true
+  echo "[\"$A_ID\",\"$B_ID\",\"$C_ID\",\"$D_ID\",\"$E_ID\",\"$F_ID\"]"
 }
 
 write_blocker() {
@@ -182,7 +160,7 @@ EOF
 }
 
 any_active_jobs() {
-  local out code running recovery_running active_id
+  local out code running recovery_running active_id stale_pending
   out=$(mktemp)
   code=$(auth_curl GET '/api/device/hikvision/sdk-users/merge/jobs' '' "$out" 30)
   running=$(jq -r '.data.running // 0' "$out" 2>/dev/null || echo 0)
@@ -190,20 +168,43 @@ any_active_jobs() {
   out=$(mktemp)
   code=$(auth_curl GET '/api/device/hikvision/sdk-users/merge/recovery/jobs?limit=20' '' "$out" 30)
   # Only truly in-flight statuses count as active.
-  # needs_attention / awaiting_replan / completed / failed are terminal for the supervisor.
+  # needs_attention / awaiting_replan / completed / failed are terminal.
+  # Orphan "pending" older than 2h is NOT active (left-behind Jul-31 job froze the loop).
   # Keep jq simple (no def) — some appliance jq builds mishandle nested defs here.
   recovery_running=$(jq -r '
-    [
+    now as $now
+    | [
       (.data.jobs // [])[]
       | select(
           .status=="recovering" or .status=="running" or .status=="queued"
-          or .status=="pending" or .status=="in_progress" or .status=="writing"
-          or .status=="starting"
+          or .status=="in_progress" or .status=="writing" or .status=="starting"
+          or (
+            .status=="pending"
+            and (
+              ((.updatedAt // .createdAt // "") | fromdateiso8601? // 0) as $ts
+              | ($ts == 0) or (($now - $ts) < 7200)
+            )
+          )
         )
     ] | length
   ' "$out" 2>/dev/null || echo 0)
+  stale_pending=$(jq -r '
+    now as $now
+    | [
+      (.data.jobs // [])[]
+      | select(
+          .status=="pending"
+          and (
+            ((.updatedAt // .createdAt // "") | fromdateiso8601? // 0) as $ts
+            | ($ts > 0) and (($now - $ts) >= 7200)
+          )
+        )
+      | .id
+    ] | join(",")
+  ' "$out" 2>/dev/null || true)
   active_id=$(jq -r '
-    (.data.activeJobId // .data.activeJob.id // empty) as $aid
+    now as $now
+    | (.data.activeJobId // .data.activeJob.id // empty) as $aid
     | if ($aid|tostring|length) > 0 then $aid
       else
         (
@@ -211,8 +212,14 @@ any_active_jobs() {
             (.data.jobs // [])[]
             | select(
                 .status=="recovering" or .status=="running" or .status=="queued"
-                or .status=="pending" or .status=="in_progress" or .status=="writing"
-                or .status=="starting"
+                or .status=="in_progress" or .status=="writing" or .status=="starting"
+                or (
+                  .status=="pending"
+                  and (
+                    ((.updatedAt // .createdAt // "") | fromdateiso8601? // 0) as $ts
+                    | ($ts == 0) or (($now - $ts) < 7200)
+                  )
+                )
               )
             | .id
           ]
@@ -220,15 +227,26 @@ any_active_jobs() {
         ) // empty
       end
   ' "$out" 2>/dev/null || true)
-  # last-resort: scrape "already active" style id from raw if counters missing
+  # last-resort: scrape recovering id if counters missing
   if [[ -z "${active_id:-}" && "${recovery_running:-0}" -gt 0 ]]; then
-    active_id=$(jq -r '[.data.jobs[]?|select(.status=="recovering")|.id]|first // empty' "$out" 2>/dev/null || true)
+    active_id=$(jq -r '[.data.jobs[]?|select(.status=="recovering" or .status=="running" or .status=="writing")|.id]|first // empty' "$out" 2>/dev/null || true)
   fi
   rm -f "$out"
+  if [[ -n "${stale_pending:-}" ]]; then
+    log "ACTIVE_PROBE ignore_stale_pending ids=$stale_pending"
+  fi
   log "ACTIVE_PROBE merge=${running:-0} recovery=${recovery_running:-0} active=${active_id:-} code=$code"
-  if [[ "${running:-0}" -gt 0 || "${recovery_running:-0}" -gt 0 ]]; then
-    echo "merge=$running recovery=$recovery_running active=${active_id:-}"
+  # If counter says active but we have no job id, do not block forever — proceed to plan.
+  if [[ "${running:-0}" -gt 0 ]]; then
+    echo "merge=$running recovery=${recovery_running:-0} active=${active_id:-}"
     return 0
+  fi
+  if [[ "${recovery_running:-0}" -gt 0 && -n "${active_id:-}" ]]; then
+    echo "merge=0 recovery=$recovery_running active=$active_id"
+    return 0
+  fi
+  if [[ "${recovery_running:-0}" -gt 0 && -z "${active_id:-}" ]]; then
+    log "ACTIVE_PROBE recovery_count>0 but no active id — not blocking plan"
   fi
   return 1
 }
@@ -527,9 +545,9 @@ DECISIONS=0
 UFACE=0
 UFP=0
 
-INCLUDE_C=false
-log "START pid=$$ api=$API_BASE wave_max=$WAVE_MAX devices=A,B,D,E,F+C-if-readable"
-hb "start pid=$$ api=$API_BASE devices=A,B,D,E,F+C-if-readable"
+INCLUDE_C=true
+log "START pid=$$ api=$API_BASE wave_max=$WAVE_MAX devices=A,B,C,D,E,F"
+hb "start pid=$$ api=$API_BASE devices=A,B,C,D,E,F"
 write_status 0 "?" "?" "?" "?" "?" "none" "starting"
 
 while true; do
@@ -568,7 +586,7 @@ while true; do
     fi
   fi
 
-  # PLAN A/B/D/E/F (+ C when live From readable)
+  # PLAN A/B/C/D/E/F always — never hard-skip C (residual gaps concentrate on C).
   PLAN_BODY=$(mktemp)
   PLAN_OUT=$(mktemp)
   IDS_JSON=$(build_device_ids_json)

@@ -434,6 +434,20 @@ The HR-facing journey for the wired DM3 workbook is:
    `HDMFMP2` → benefit `MHDMF2`, `UNIDED` → benefit `UNIDED`. Re-upload a cutoff
    file after this importer change so older unpinned rows are superseded for that
    period key.
+   **Detailed result + import history:** each compensation/deduction upload keeps
+   the modal open with row-level failure reasons (EmployeeID, code, field,
+   message) and success rows (created/updated, amount, period). Results are
+   also persisted to `mass_upload_import_logs` and listed on the DM3 page under
+   **Compensation / deduction import history**. APIs:
+   - `POST /api/migration/dm3/import-compensation-mass-upload` → `{ summary, importLogId }`
+     (`summary.errors`, `summary.results`, truncation flags)
+   - `POST /api/migration/dm3/import-deduction-mass-upload` → same shape
+   - `GET /api/migration/dm3/mass-upload-imports?organizationId=&kind=&limit=`
+   - `GET /api/migration/dm3/mass-upload-imports/:id?organizationId=`
+   - `GET /api/migration/dm3/mass-upload-imports/:id/report.csv?organizationId=`
+   Optional multipart fields `migrationRunId` / `runId` link the log to the open
+   DM3 durable run. SQL migration:
+   `hris-api/prisma/schema-postgres/migrations/20260804_add_mass_upload_import_logs.sql`.
 7. HR verifies a sampled employee in the employee profile/compliance surfaces:
    `Person.identification.statutoryIds.pagibig`, `Employee.basicSalary`,
    `Employee.embeddedSchedule`, `EmployeeScheduleHistory`, `Employee.reportToId`,

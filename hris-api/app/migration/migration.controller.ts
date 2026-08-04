@@ -48,8 +48,11 @@ import {
 	importOpeningLeaveBalances,
 } from "./dm3-workbook-import.service";
 import {
+	buildMassUploadReportCsv,
+	getMassUploadImportLog,
 	importCompensationMassUpload,
 	importDeductionMassUpload,
+	listMassUploadImportLogs,
 } from "./bnpi-mass-upload-import.service";
 import {
 	getManpowerDatabankJobProgress,
@@ -3263,6 +3266,17 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const resolveMassUploadMigrationRunId = (body: any, req: Request): string | null => {
+		const raw =
+			body?.migrationRunId ||
+			body?.runId ||
+			(req as any).body?.migrationRunId ||
+			(req as any).body?.runId ||
+			"";
+		const value = String(raw || "").trim();
+		return value || null;
+	};
+
 	const importDm3CompensationMassUpload = async (
 		req: Request,
 		res: Response,
@@ -3297,10 +3311,21 @@ export const controller = (prisma: PrismaClient) => {
 				prisma,
 				organizationId,
 				buffer: uploadedFile.buffer,
+				sourceFilename: uploadedFile.originalname || null,
+				migrationRunId: resolveMassUploadMigrationRunId(parsedBody.body, req),
+				startedByUserId: getMigrationRequestUserId(req),
+				persistLog: true,
 			});
 
 			res.status(200).json(
-				buildSuccessResponse("Compensation mass upload imported", { summary }, 200),
+				buildSuccessResponse(
+					"Compensation mass upload imported",
+					{
+						summary,
+						importLogId: summary.importLogId || null,
+					},
+					200,
+				),
 			);
 		} catch (error: any) {
 			migrationLogger.error(
@@ -3350,10 +3375,21 @@ export const controller = (prisma: PrismaClient) => {
 				prisma,
 				organizationId,
 				buffer: uploadedFile.buffer,
+				sourceFilename: uploadedFile.originalname || null,
+				migrationRunId: resolveMassUploadMigrationRunId(parsedBody.body, req),
+				startedByUserId: getMigrationRequestUserId(req),
+				persistLog: true,
 			});
 
 			res.status(200).json(
-				buildSuccessResponse("Deduction mass upload imported", { summary }, 200),
+				buildSuccessResponse(
+					"Deduction mass upload imported",
+					{
+						summary,
+						importLogId: summary.importLogId || null,
+					},
+					200,
+				),
 			);
 		} catch (error: any) {
 			migrationLogger.error(
@@ -3363,6 +3399,165 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(500).json(
 				buildErrorResponse(
 					`Deduction mass upload failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
+	const listDm3MassUploadImports = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const organizationId = String(
+				req.query.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+			const kindRaw = String(req.query.kind || "").trim().toLowerCase();
+			const kind =
+				kindRaw === "compensation" || kindRaw === "deduction" ? kindRaw : null;
+			const migrationRunId = String(req.query.migrationRunId || req.query.runId || "").trim() || null;
+			const limit = Number(req.query.limit || 50);
+			const result = await listMassUploadImportLogs({
+				prisma,
+				organizationId,
+				kind,
+				migrationRunId,
+				limit,
+			});
+			res.status(200).json(
+				buildSuccessResponse("Mass upload import history retrieved", result, 200),
+			);
+		} catch (error: any) {
+			migrationLogger.error(
+				`List mass upload imports failed: ${error?.message || "Unknown error"}`,
+				{ error },
+			);
+			res.status(500).json(
+				buildErrorResponse(
+					`List mass upload imports failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
+	const getDm3MassUploadImport = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const organizationId = String(
+				req.query.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+			const id = String(req.params.id || "").trim();
+			if (!id) {
+				res.status(400).json(buildErrorResponse("import log id is required", 400));
+				return;
+			}
+			const item = await getMassUploadImportLog({ prisma, organizationId, id });
+			if (!item) {
+				res.status(404).json(buildErrorResponse("Mass upload import log not found", 404));
+				return;
+			}
+			const errors = Array.isArray(item.errorsJson) ? item.errorsJson : [];
+			const results = Array.isArray(item.resultsJson) ? item.resultsJson : [];
+			const summaryFromJson =
+				item.summaryJson && typeof item.summaryJson === "object" ? item.summaryJson : {};
+			res.status(200).json(
+				buildSuccessResponse(
+					"Mass upload import log retrieved",
+					{
+						importLog: item,
+						summary: {
+							kind: item.kind,
+							total: item.total,
+							created: item.created,
+							updated: item.updated,
+							skipped: item.skipped,
+							failed: item.failed,
+							periodCodes: item.periodCodes || [],
+							errors,
+							results,
+							errorTotal: Number((summaryFromJson as any).errorTotal ?? errors.length),
+							resultTotal: Number((summaryFromJson as any).resultTotal ?? results.length),
+							errorsTruncated: Boolean(item.errorsTruncated),
+							resultsTruncated: Boolean(item.resultsTruncated),
+							status: item.status,
+							sourceFilename: item.sourceFilename,
+							importLogId: item.id,
+							startedAt: item.startedAt,
+							finishedAt: item.finishedAt,
+						},
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			migrationLogger.error(
+				`Get mass upload import failed: ${error?.message || "Unknown error"}`,
+				{ error },
+			);
+			res.status(500).json(
+				buildErrorResponse(
+					`Get mass upload import failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
+	const downloadDm3MassUploadImportReport = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		try {
+			const organizationId = String(
+				req.query.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+			const id = String(req.params.id || "").trim();
+			if (!id) {
+				res.status(400).json(buildErrorResponse("import log id is required", 400));
+				return;
+			}
+			const item = await getMassUploadImportLog({ prisma, organizationId, id });
+			if (!item) {
+				res.status(404).json(buildErrorResponse("Mass upload import log not found", 404));
+				return;
+			}
+			const csv = buildMassUploadReportCsv({
+				kind: item.kind,
+				errors: Array.isArray(item.errorsJson) ? item.errorsJson : [],
+				results: Array.isArray(item.resultsJson) ? item.resultsJson : [],
+			});
+			const safeKind = String(item.kind || "mass-upload").replace(/[^a-z0-9_-]+/gi, "-");
+			const filename = `${safeKind}-import-${id}.csv`;
+			res.setHeader("Content-Type", "text/csv; charset=utf-8");
+			res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+			res.status(200).send(csv);
+		} catch (error: any) {
+			migrationLogger.error(
+				`Download mass upload report failed: ${error?.message || "Unknown error"}`,
+				{ error },
+			);
+			res.status(500).json(
+				buildErrorResponse(
+					`Download mass upload report failed: ${error?.message || "Unknown error"}`,
 					500,
 				),
 			);
@@ -5143,6 +5338,9 @@ export const controller = (prisma: PrismaClient) => {
 		importDm3EmployeeBenefitsLoans,
 		importDm3CompensationMassUpload,
 		importDm3DeductionMassUpload,
+		listDm3MassUploadImports,
+		getDm3MassUploadImport,
+		downloadDm3MassUploadImportReport,
 		importDm3ManpowerDatabank,
 		getDm3ManpowerDatabankProgress,
 		finalizeDm3EmployeeImport,

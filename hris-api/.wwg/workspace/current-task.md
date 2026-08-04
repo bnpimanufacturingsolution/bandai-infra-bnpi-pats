@@ -4,38 +4,36 @@
 done
 
 ## Summary
-Investigated reported loss of `npm run dev:local` / `dev:local:restore` after benefit-enrollment PR merge into develop. Scripts are present on current `origin/develop`; local develop was 225 commits behind. Added contract test so future divergent merges cannot drop the scripts silently.
+Fixed Special Payroll mass-upload / preview 403 `"HR access required"` on `/hr/run-payroll` import preview.
 
 ## Category
-infra | bugfix
+bugfix | security (auth context read)
 
 ## Packages
-- bandai-infra/hris-api
-- Dual-app: **HR/emp-only (no counterpart)**
+- `bandai-infra/hris-api`
+- Dual-app: **HR/emp-only (no counterpart)** — Special Payroll HR run surfaces; emp-app only consumes released payslips via separate endpoints that do not use the broken HR gate the same way for import
 
 ## Root cause (CONFIRMED)
-1. PR #6 (`0c8add4`) brought `dev:local`, `dev:local:restore`, `db:snapshot`/`db:restore`, and support scripts onto develop.
-2. Concurrent tip `dc265fe` (recovery work) was based on pre-PR develop `36dde92` and did **not** include those package.json keys/files — so for that commit the scripts appeared "gone".
-3. `c707ba9` recombined histories and restored the scripts. Tip `bd9a50e` still has them.
-4. Local `develop` was stuck at `7cc4c64` (225 behind) — fast-forwarded to `origin/develop`.
+`specialPayroll.controller.ts` `getAuthContext` read only `req.user.role` / `req.user.*`.
+
+`verifyToken` attaches JWT claims on the request itself:
+- `req.role`
+- `req.userId`
+- `req.organizationId`
+- `req.metadata.employee.id`
+
+`organizationId` had a fallback so the org check often passed, but `role` was always `null` → `isHr` always `false` → every HR Special Payroll mutation/list (including `POST /api/special-payroll/import/preview`) returned **403 HR access required**.
 
 ## Code changes
-- `tests/dev-local-scripts.contract.spec.ts` — asserts required npm scripts + support files exist
-- Local branch: `develop` ff → `bd9a50e`
-
-## Commands (from `bandai-infra/hris-api`)
-| Script | Purpose |
-|---|---|
-| `npm run dev:local` | Docker local clone :5433 + schema push + API watch |
-| `npm run dev:local:restore` | Restore golden snapshot then start |
-| `npm run db:snapshot` / `db:restore` / `db:snapshot:status` | Snapshot tooling only |
+- `app/specialPayroll/specialPayroll.controller.ts` — read verifyToken fields first; keep `req.user` fallback; export `getAuthContext`; align allowed roles with payroll-period managers (`admin` / `super_admin` / `superadmin`)
+- `tests/special-payroll.auth-context.spec.ts` — regression coverage
 
 ## Truth delta
-NO — local-dev tooling / merge hygiene only.
+NO durable product-truth change. Auth middleware contract was already known (`req.role`); controller was wrong.
 
 ## Drift
-NONE
+NONE (docs did not claim the broken `req.user` shape for this controller)
 
 ## Follow-ups
-- Commit/push contract test if not already on develop
-- Optional: seed minimal org defaults only after push
+- Retry mass upload Preview on `/hr/run-payroll?periodCode=...&periodView=past` after API restart/reload
+- Optional: extend same auth-context pattern audit to any other new controllers that read `req.user` only

@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- **Special Payroll HR auth fix**: `POST /api/special-payroll/import/preview` (and other HR Special Payroll routes) no longer always return `403 HR access required`. Controllers now read `req.role` / `req.userId` / `req.organizationId` / `req.metadata.employee` as set by `verifyToken` (previously only looked at missing `req.user`).
 - **Bulk benefit enrollment import** (`POST /api/employeeBenefit/import`): accepts Excel/CSV with per-row benefit code/amount; sample aliases `COMCODE` / `EmployeeID` / `StartPayDate`; creates `RECURRING` + `EVERY_CUTOFF` + `ACTIVE` enrollments (same defaults as HR create form); **fails** rows that already have an enrollment for the same benefit type (no upsert). Helper: `helper/employee-benefit-import.helper.ts`.
 - Benefit **attendance eligibility** configuration: `eligibilityMode` (`ENROLLED_ALWAYS` \| `ATTENDANCE_QUALIFIED`) plus disqualify flags (absent/late/undertime/leave) on `EmployeeBenefit`, independent of amount pro-rate. Payroll zeros the period when qualification fails. `BenefitType` policy defaults + PFA seed classic Perfect Attendance defaults. See `docs/BENEFIT_SCHEDULE_MODES.md`.
 - Payroll benefit **tax grouping** on details and payslip: freeze `isTaxable` on `metadata.payrollSourceDetails`; group applied benefits under **Benefits applied → Non-taxable / Taxable** on PDF payslip, computation view flags, and live enrich on GET/payslip for older rows. See `docs/BENEFIT_SCHEDULE_MODES.md`.
