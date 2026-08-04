@@ -3307,14 +3307,40 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const sourceFilename = uploadedFile.originalname || "compensation-mass-upload.xlsx";
 			const summary = await importCompensationMassUpload({
 				prisma,
 				organizationId,
 				buffer: uploadedFile.buffer,
-				sourceFilename: uploadedFile.originalname || null,
+				sourceFilename,
 				migrationRunId: resolveMassUploadMigrationRunId(parsedBody.body, req),
 				startedByUserId: getMigrationRequestUserId(req),
 				persistLog: true,
+			});
+
+			const okCount = Number(summary.created || 0) + Number(summary.updated || 0);
+			const failedCount = Number(summary.failed || 0);
+			const userActivityMessage = `Uploaded compensation file "${sourceFilename}" — ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${failedCount} failed`;
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
+				userActivityMessage,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.CREATE,
+				entityId: summary.importLogId || organizationId,
+				description: userActivityMessage,
+				changesAfter: {
+					kind: "compensation",
+					importLogId: summary.importLogId || null,
+					sourceFilename,
+					total: summary.total,
+					created: summary.created,
+					updated: summary.updated,
+					failed: summary.failed,
+					status: summary.status,
+				},
 			});
 
 			res.status(200).json(
@@ -3323,6 +3349,11 @@ export const controller = (prisma: PrismaClient) => {
 					{
 						summary,
 						importLogId: summary.importLogId || null,
+						userActivity: {
+							kind: "compensation",
+							message: userActivityMessage,
+							importLogId: summary.importLogId || null,
+						},
 					},
 					200,
 				),
@@ -3371,14 +3402,40 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const sourceFilename = uploadedFile.originalname || "deduction-mass-upload.xlsx";
 			const summary = await importDeductionMassUpload({
 				prisma,
 				organizationId,
 				buffer: uploadedFile.buffer,
-				sourceFilename: uploadedFile.originalname || null,
+				sourceFilename,
 				migrationRunId: resolveMassUploadMigrationRunId(parsedBody.body, req),
 				startedByUserId: getMigrationRequestUserId(req),
 				persistLog: true,
+			});
+
+			const okCount = Number(summary.created || 0) + Number(summary.updated || 0);
+			const failedCount = Number(summary.failed || 0);
+			const userActivityMessage = `Uploaded deduction file "${sourceFilename}" — ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${failedCount} failed`;
+			logMigrationActivity(
+				req,
+				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
+				userActivityMessage,
+				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+			);
+			logMigrationAudit(req, {
+				auditAction: config.AUDIT_LOG.ACTIONS.CREATE,
+				entityId: summary.importLogId || organizationId,
+				description: userActivityMessage,
+				changesAfter: {
+					kind: "deduction",
+					importLogId: summary.importLogId || null,
+					sourceFilename,
+					total: summary.total,
+					created: summary.created,
+					updated: summary.updated,
+					failed: summary.failed,
+					status: summary.status,
+				},
 			});
 
 			res.status(200).json(
@@ -3387,6 +3444,11 @@ export const controller = (prisma: PrismaClient) => {
 					{
 						summary,
 						importLogId: summary.importLogId || null,
+						userActivity: {
+							kind: "deduction",
+							message: userActivityMessage,
+							importLogId: summary.importLogId || null,
+						},
 					},
 					200,
 				),
@@ -3420,7 +3482,16 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const kindRaw = String(req.query.kind || "").trim().toLowerCase();
 			const kind =
-				kindRaw === "compensation" || kindRaw === "deduction" ? kindRaw : null;
+				kindRaw === "compensation" ||
+				kindRaw === "deduction" ||
+				kindRaw === "workbook" ||
+				kindRaw === "manpower-databank"
+					? (kindRaw as
+							| "compensation"
+							| "deduction"
+							| "workbook"
+							| "manpower-databank")
+					: null;
 			const migrationRunId = String(req.query.migrationRunId || req.query.runId || "").trim() || null;
 			const limit = Number(req.query.limit || 50);
 			const result = await listMassUploadImportLogs({
@@ -3599,6 +3670,8 @@ export const controller = (prisma: PrismaClient) => {
 				organizationId,
 				buffer: uploadedFile.buffer,
 				sourceFileName: uploadedFile.originalname || "manpower-databank.xlsx",
+				migrationRunId: resolveMassUploadMigrationRunId(parsedBody.body, req),
+				startedByUserId: getMigrationRequestUserId(req),
 			});
 
 			res.setHeader(

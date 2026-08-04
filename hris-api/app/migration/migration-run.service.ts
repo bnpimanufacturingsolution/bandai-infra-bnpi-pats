@@ -13,6 +13,10 @@ import {
 	MigrationRunSourceFile,
 } from "./migration-run.types";
 import { getMigrationStepPlan } from "./migration-step-registry";
+import {
+	persistDm3ImportActivityLog,
+	resolveMassUploadImportStatus,
+} from "./bnpi-mass-upload-import.service";
 
 const activeRunJobs = new Set<string>();
 const NON_TERMINAL_RUN_STATUSES = [
@@ -916,15 +920,25 @@ export class MigrationRunService {
 		} catch (error: any) {
 			const current = await (this.prisma as any).migrationRun.findUnique({
 				where: { id: runId },
-				select: { status: true },
+				select: {
+					status: true,
+					organizationId: true,
+					workbookId: true,
+					sourceFilename: true,
+					startedByUserId: true,
+					startedAt: true,
+					createdAt: true,
+				},
 			});
 			if (current?.status === "STALE") return;
+			const finishedAt = now();
+			const failMessage = error?.message || "Migration run failed.";
 			await (this.prisma as any).migrationRunStep.updateMany({
 				where: { runId, status: "RUNNING" },
 				data: {
 					status: "FAILED",
-					finishedAt: now(),
-					errorJson: { message: error?.message || "Migration run failed." },
+					finishedAt,
+					errorJson: { message: failMessage },
 				},
 			});
 			await this.events.append({
@@ -932,26 +946,55 @@ export class MigrationRunService {
 				stage: request.workbookId.toUpperCase(),
 				eventType: "RUN_FAILED",
 				status: "FAILED",
-				message: error?.message || "Migration run failed.",
+				message: failMessage,
 			});
 			await (this.prisma as any).migrationRun.update({
 				where: { id: runId },
 				data: {
 					status: "FAILED",
 					phase: "FAILED",
-					finishedAt: now(),
-					errorJson: { message: error?.message || "Migration run failed." },
+					finishedAt,
+					errorJson: { message: failMessage },
 				},
 			});
+			if (current?.workbookId === "dm3" && current.organizationId) {
+				await persistDm3ImportActivityLog({
+					prisma: this.prisma,
+					organizationId: current.organizationId,
+					kind: "workbook",
+					sourceFilename: current.sourceFilename || "dm3-workbook.xlsx",
+					migrationRunId: runId,
+					startedByUserId: current.startedByUserId || null,
+					startedAt: current.startedAt || current.createdAt || finishedAt,
+					finishedAt,
+					total: 0,
+					created: 0,
+					updated: 0,
+					skipped: 0,
+					failed: 1,
+					status: "failed",
+					errors: [{ row: 0, message: failMessage }],
+					summaryExtra: { runStatus: "FAILED" },
+				});
+			}
 		}
 	}
 
 	private async finishRun(runId: string, result: MigrationRunAdapterResult, dryRun: boolean) {
 		const current = await (this.prisma as any).migrationRun.findUnique({
 			where: { id: runId },
-			select: { status: true },
+			select: {
+				status: true,
+				organizationId: true,
+				workbookId: true,
+				sourceFilename: true,
+				startedByUserId: true,
+				startedAt: true,
+				createdAt: true,
+			},
 		});
 		if (!dryRun && current?.status === "STALE") return;
+		const finishedAt = now();
 		await (this.prisma as any).migrationRun.update({
 			where: { id: runId },
 			data: {
@@ -962,7 +1005,7 @@ export class MigrationRunService {
 				summaryJson: result.summaryJson || undefined,
 				proofJson: result.proofJson || undefined,
 				errorJson: result.errorJson || undefined,
-				finishedAt: now(),
+				finishedAt,
 			},
 		});
 		await this.events.append({
@@ -973,5 +1016,57 @@ export class MigrationRunService {
 			message: dryRun ? "Migration dry-run persisted." : "Migration run persisted.",
 			counts: result.counts || null,
 		});
+
+		// DM3 workbook upload: durable operator activity (same feed as mass uploads).
+		if (!dryRun && current?.workbookId === "dm3" && current.organizationId) {
+			const counts = (result.counts || {}) as Record<string, any>;
+			const total = Number(
+				counts.totalRows ?? counts.total ?? counts.rows ?? counts.processed ?? 0,
+			);
+			const created = Number(counts.created ?? counts.success ?? 0);
+			const updated = Number(counts.updated ?? 0);
+			const skipped = Number(counts.skipped ?? 0);
+			const failed = Number(counts.failed ?? counts.failures ?? 0);
+			const blocked = Number(counts.blocked ?? 0);
+			const statusText = String(result.status || "").toUpperCase();
+			const status =
+				statusText.includes("FAIL") || statusText === "BLOCKED"
+					? failed + blocked > 0 && created + updated > 0
+						? ("partial" as const)
+						: ("failed" as const)
+					: resolveMassUploadImportStatus({
+							total,
+							created,
+							updated,
+							failed: failed + blocked,
+						});
+			const errorMessage =
+				(result.errorJson as any)?.message ||
+				(status === "failed" ? "DM3 workbook import failed or blocked." : undefined);
+			await persistDm3ImportActivityLog({
+				prisma: this.prisma,
+				organizationId: current.organizationId,
+				kind: "workbook",
+				sourceFilename: current.sourceFilename || "dm3-workbook.xlsx",
+				migrationRunId: runId,
+				startedByUserId: current.startedByUserId || null,
+				startedAt: current.startedAt || current.createdAt || finishedAt,
+				finishedAt,
+				total,
+				created,
+				updated,
+				skipped,
+				failed: failed + blocked,
+				status,
+				errors: errorMessage
+					? [{ row: 0, message: String(errorMessage) }]
+					: [],
+				summaryExtra: {
+					runStatus: result.status,
+					phase: result.phase || result.status,
+					counts,
+				},
+			});
+		}
 	}
 }
