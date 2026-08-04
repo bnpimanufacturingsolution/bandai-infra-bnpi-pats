@@ -323,26 +323,53 @@ function resultsForPersist(allResults: MassUploadRowResult[]): {
 	return { results: [...head, ...tail], truncated: true };
 }
 
-export async function persistMassUploadImportLog(params: {
+/** All DM3 operator uploads that appear in the unified Upload activity feed. */
+export type Dm3ImportActivityKind =
+	| "workbook"
+	| "manpower-databank"
+	| "compensation"
+	| "deduction";
+
+/**
+ * Durable operator activity for any DM3 expected upload (workbook, databank,
+ * compensation, deduction). Best-effort: never throws into the import path.
+ */
+export async function persistDm3ImportActivityLog(params: {
 	prisma: PrismaClient;
 	organizationId: string;
-	kind: "compensation" | "deduction";
+	kind: Dm3ImportActivityKind;
 	sourceFilename?: string | null;
 	migrationRunId?: string | null;
 	startedByUserId?: string | null;
 	startedAt: Date;
 	finishedAt: Date;
-	state: InternalImportState;
-	summary: MassUploadImportSummary;
+	total?: number;
+	created?: number;
+	updated?: number;
+	skipped?: number;
+	failed?: number;
+	status?: "completed" | "partial" | "failed";
+	periodCodes?: string[];
+	errors?: MassUploadRowError[];
+	results?: MassUploadRowResult[];
+	summaryExtra?: Record<string, unknown>;
 }): Promise<{ id: string } | null> {
 	const prismaAny = params.prisma as any;
 	if (!prismaAny.massUploadImportLog?.create) {
-		// Prisma client not regenerated yet — do not fail the import write path.
 		return null;
 	}
 
-	const persistResults = resultsForPersist(params.state.allResults);
-	const status = resolveMassUploadImportStatus(params.summary);
+	const total = Number(params.total || 0);
+	const created = Number(params.created || 0);
+	const updated = Number(params.updated || 0);
+	const skipped = Number(params.skipped || 0);
+	const failed = Number(params.failed || 0);
+	const status =
+		params.status ||
+		resolveMassUploadImportStatus({ total, created, updated, failed });
+	const allErrors = Array.isArray(params.errors) ? params.errors : [];
+	const allResults = Array.isArray(params.results) ? params.results : [];
+	const persistResults = resultsForPersist(allResults);
 	const userId =
 		params.startedByUserId && params.startedByUserId !== "unknown"
 			? params.startedByUserId
@@ -357,32 +384,35 @@ export async function persistMassUploadImportLog(params: {
 				sourceFilename: params.sourceFilename || null,
 				migrationRunId: params.migrationRunId || null,
 				startedByUserId: userId,
-				total: params.summary.total,
-				created: params.summary.created,
-				updated: params.summary.updated,
-				skipped: params.summary.skipped,
-				failed: params.summary.failed,
-				periodCodes: params.summary.periodCodes || [],
+				total,
+				created,
+				updated,
+				skipped,
+				failed,
+				periodCodes: params.periodCodes || [],
 				summaryJson: {
-					kind: params.summary.kind,
-					total: params.summary.total,
-					created: params.summary.created,
-					updated: params.summary.updated,
-					skipped: params.summary.skipped,
-					failed: params.summary.failed,
-					periodCodes: params.summary.periodCodes || [],
-					errorTotal: params.state.allErrors.length,
-					resultTotal: params.state.allResults.length,
+					kind: params.kind,
+					total,
+					created,
+					updated,
+					skipped,
+					failed,
+					periodCodes: params.periodCodes || [],
+					errorTotal: allErrors.length,
+					resultTotal: allResults.length,
 					errorsTruncated: false,
 					resultsTruncated: persistResults.truncated,
 					status,
 					sourceFilename: params.sourceFilename || null,
 					startedAt: params.startedAt.toISOString(),
 					finishedAt: params.finishedAt.toISOString(),
-					durationMs: Math.max(0, params.finishedAt.getTime() - params.startedAt.getTime()),
+					durationMs: Math.max(
+						0,
+						params.finishedAt.getTime() - params.startedAt.getTime(),
+					),
+					...(params.summaryExtra || {}),
 				},
-				// Always persist full error list for failure diagnosis.
-				errorsJson: params.state.allErrors,
+				errorsJson: allErrors,
 				resultsJson: persistResults.results,
 				errorsTruncated: false,
 				resultsTruncated: persistResults.truncated,
@@ -393,9 +423,43 @@ export async function persistMassUploadImportLog(params: {
 		});
 		return row;
 	} catch {
-		// Best-effort audit; import already applied.
 		return null;
 	}
+}
+
+export async function persistMassUploadImportLog(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	kind: "compensation" | "deduction";
+	sourceFilename?: string | null;
+	migrationRunId?: string | null;
+	startedByUserId?: string | null;
+	startedAt: Date;
+	finishedAt: Date;
+	state: InternalImportState;
+	summary: MassUploadImportSummary;
+}): Promise<{ id: string } | null> {
+	return persistDm3ImportActivityLog({
+		prisma: params.prisma,
+		organizationId: params.organizationId,
+		kind: params.kind,
+		sourceFilename: params.sourceFilename,
+		migrationRunId: params.migrationRunId,
+		startedByUserId: params.startedByUserId,
+		startedAt: params.startedAt,
+		finishedAt: params.finishedAt,
+		total: params.summary.total,
+		created: params.summary.created,
+		updated: params.summary.updated,
+		skipped: params.summary.skipped,
+		failed: params.summary.failed,
+		periodCodes: params.summary.periodCodes,
+		errors: params.state.allErrors,
+		results: params.state.allResults,
+		summaryExtra: {
+			massUploadKind: params.summary.kind,
+		},
+	});
 }
 
 export function buildMassUploadReportCsv(params: {
@@ -453,7 +517,7 @@ export function buildMassUploadReportCsv(params: {
 export async function listMassUploadImportLogs(params: {
 	prisma: PrismaClient;
 	organizationId: string;
-	kind?: "compensation" | "deduction" | null;
+	kind?: Dm3ImportActivityKind | null;
 	migrationRunId?: string | null;
 	limit?: number;
 }) {

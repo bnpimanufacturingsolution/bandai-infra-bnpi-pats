@@ -3482,7 +3482,16 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const kindRaw = String(req.query.kind || "").trim().toLowerCase();
 			const kind =
-				kindRaw === "compensation" || kindRaw === "deduction" ? kindRaw : null;
+				kindRaw === "compensation" ||
+				kindRaw === "deduction" ||
+				kindRaw === "workbook" ||
+				kindRaw === "manpower-databank"
+					? (kindRaw as
+							| "compensation"
+							| "deduction"
+							| "workbook"
+							| "manpower-databank")
+					: null;
 			const migrationRunId = String(req.query.migrationRunId || req.query.runId || "").trim() || null;
 			const limit = Number(req.query.limit || 50);
 			const result = await listMassUploadImportLogs({
@@ -3661,6 +3670,8 @@ export const controller = (prisma: PrismaClient) => {
 				organizationId,
 				buffer: uploadedFile.buffer,
 				sourceFileName: uploadedFile.originalname || "manpower-databank.xlsx",
+				migrationRunId: resolveMassUploadMigrationRunId(parsedBody.body, req),
+				startedByUserId: getMigrationRequestUserId(req),
 			});
 
 			res.setHeader(

@@ -434,19 +434,23 @@ The HR-facing journey for the wired DM3 workbook is:
    `HDMFMP2` → benefit `MHDMF2`, `UNIDED` → benefit `UNIDED`. Re-upload a cutoff
    file after this importer change so older unpinned rows are superseded for that
    period key.
-   **Detailed result + import history:** each compensation/deduction upload keeps
-   the modal open with row-level failure reasons (EmployeeID, code, field,
-   message) and success rows (created/updated, amount, period). Results are
-   also persisted to `mass_upload_import_logs` and listed on the DM3 page under
-   **Compensation / deduction import history**. APIs:
+   **Upload activity (all expected DM3 uploads):** the DM3 page **Upload activity**
+   feed logs operator uploads for:
+   - `workbook` — DM3 employee workbook durable run
+   - `manpower-databank` — employee manpower databank
+   - `compensation` / `deduction` — BNPI mass uploads
+   Rows are compact (`DM3 workbook · N ok · M fail`) and clickable for result
+   detail. Durable table: `mass_upload_import_logs` (`kind` one of the four above).
+   APIs:
+   - `POST /api/migration/runs` (DM3 workbook) → activity log on run finish
+   - `POST /api/migration/dm3/import-manpower-databank` → job progress includes `importLogId`
    - `POST /api/migration/dm3/import-compensation-mass-upload` → `{ summary, importLogId }`
-     (`summary.errors`, `summary.results`, truncation flags)
    - `POST /api/migration/dm3/import-deduction-mass-upload` → same shape
    - `GET /api/migration/dm3/mass-upload-imports?organizationId=&kind=&limit=`
-   - `GET /api/migration/dm3/mass-upload-imports/:id?organizationId=`
-   - `GET /api/migration/dm3/mass-upload-imports/:id/report.csv?organizationId=`
-   Optional multipart fields `migrationRunId` / `runId` link the log to the open
-   DM3 durable run. SQL migration:
+     (`kind` optional: workbook | manpower-databank | compensation | deduction)
+   - `GET /api/migration/dm3/mass-upload-imports/:id` and `.../report.csv`
+   Optional multipart `migrationRunId` / `runId` links mass/databank logs to the
+   open DM3 run. SQL:
    `hris-api/prisma/schema-postgres/migrations/20260804_add_mass_upload_import_logs.sql`.
 7. HR verifies a sampled employee in the employee profile/compliance surfaces:
    `Person.identification.statutoryIds.pagibig`, `Employee.basicSalary`,

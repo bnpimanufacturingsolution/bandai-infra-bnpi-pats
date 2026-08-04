@@ -9,6 +9,10 @@ import {
 	type ManpowerDatabankSheetSelectionReason,
 } from "../../helper/bnpi-manpower-databank-import.helper";
 import { getLogger } from "../../helper/logger.helper";
+import {
+	persistDm3ImportActivityLog,
+	resolveMassUploadImportStatus,
+} from "./bnpi-mass-upload-import.service";
 
 export type ManpowerDatabankImportSummary = {
 	kind: "manpower-databank";
@@ -50,6 +54,9 @@ export type ManpowerDatabankJobProgress = {
 	startedAt: Date;
 	completedAt?: Date;
 	message?: string;
+	/** Durable activity log id when persist succeeds. */
+	importLogId?: string | null;
+	migrationRunId?: string | null;
 };
 
 const MAX_ERRORS = 50;
@@ -484,10 +491,13 @@ export function startManpowerDatabankImport(params: {
 	organizationId: string;
 	buffer: Buffer;
 	sourceFileName?: string;
+	migrationRunId?: string | null;
+	startedByUserId?: string | null;
 }): { jobId: string } {
 	cleanupOldManpowerJobs();
 	const sourceFileName = params.sourceFileName || "manpower-databank.xlsx";
 	const jobId = randomUUID();
+	const startedAt = new Date();
 	const job: ManpowerDatabankJobProgress = {
 		jobId,
 		kind: "manpower-databank",
@@ -505,8 +515,10 @@ export function startManpowerDatabankImport(params: {
 		failed: 0,
 		errors: [],
 		recentLog: [],
-		startedAt: new Date(),
+		startedAt,
 		message: "Reading Manpower Databank workbook…",
+		migrationRunId: params.migrationRunId || null,
+		importLogId: null,
 	};
 	manpowerJobs.set(jobId, job);
 
@@ -550,6 +562,31 @@ export function startManpowerDatabankImport(params: {
 				},
 			});
 
+			const finishedAt = new Date();
+			const status = resolveMassUploadImportStatus(summary);
+			const log = await persistDm3ImportActivityLog({
+				prisma: params.prisma,
+				organizationId: params.organizationId,
+				kind: "manpower-databank",
+				sourceFilename: sourceFileName,
+				migrationRunId: params.migrationRunId,
+				startedByUserId: params.startedByUserId,
+				startedAt,
+				finishedAt,
+				total: summary.total,
+				created: summary.created,
+				updated: summary.updated,
+				skipped: summary.skipped,
+				failed: summary.failed,
+				status,
+				errors: summary.errors,
+				summaryExtra: {
+					sheetName: summary.sheetName,
+					sheetSelectionReason: summary.sheetSelectionReason,
+					jobId,
+				},
+			});
+
 			setManpowerJob(jobId, {
 				status: "completed",
 				phase: "completed",
@@ -560,24 +597,46 @@ export function startManpowerDatabankImport(params: {
 				success: summary.created + summary.updated,
 				skipped: summary.skipped,
 				errors: summary.errors,
-				completedAt: new Date(),
+				completedAt: finishedAt,
 				message: `Completed sheet "${summary.sheetName}"`,
+				importLogId: log?.id || null,
 			});
 			manpowerLogger.info(
 				`Manpower databank job ${jobId} completed: created=${summary.created} updated=${summary.updated} failed=${summary.failed}`,
 			);
 		} catch (error: any) {
+			const finishedAt = new Date();
+			const failMessage = error?.message || "Manpower databank import failed";
+			const log = await persistDm3ImportActivityLog({
+				prisma: params.prisma,
+				organizationId: params.organizationId,
+				kind: "manpower-databank",
+				sourceFilename: sourceFileName,
+				migrationRunId: params.migrationRunId,
+				startedByUserId: params.startedByUserId,
+				startedAt,
+				finishedAt,
+				total: 0,
+				created: 0,
+				updated: 0,
+				skipped: 0,
+				failed: 1,
+				status: "failed",
+				errors: [{ row: 0, message: failMessage }],
+				summaryExtra: { jobId },
+			});
 			setManpowerJob(jobId, {
 				status: "failed",
 				phase: "failed",
-				completedAt: new Date(),
-				message: error?.message || "Manpower databank import failed",
+				completedAt: finishedAt,
+				message: failMessage,
 				errors: [
 					{
 						row: 0,
-						message: error?.message || "Manpower databank import failed",
+						message: failMessage,
 					},
 				],
+				importLogId: log?.id || null,
 			});
 			manpowerLogger.error(
 				`Manpower databank job ${jobId} failed: ${error?.message || "Unknown error"}`,
