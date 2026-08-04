@@ -664,11 +664,49 @@ export function RunPayrollTemplate() {
 		return null;
 	})();
 	const savedPayrollGenerationProgress = metadataPayrollProgress;
-	const visiblePayrollProgress =
+	const rawVisiblePayrollProgress =
 		payrollProgress ||
 		activePayrollProgressForSelectedPeriod ||
 		// Prefer live active over stale metadata counts when both exist
 		savedPayrollGenerationProgress;
+	/**
+	 * Period status wins over stale job snapshot.
+	 * COMPLETED/CLOSED must never present as paused/processing/failed with Resume
+	 * (API returns 400 "Payroll period is already completed").
+	 */
+	const visiblePayrollProgress = (() => {
+		const base = rawVisiblePayrollProgress;
+		const periodStatus = String(selectedPeriodCard?.status || "");
+		const periodTerminal =
+			periodStatus === "COMPLETED" || periodStatus === "CLOSED";
+		if (!periodTerminal || !base) return base;
+		if (
+			base.status === "completed" ||
+			base.status === "cancelled"
+		) {
+			return base;
+		}
+		// Coerce paused/processing/failed job UI to completed for terminal periods.
+		const done = Math.max(
+			Number(base.success || 0),
+			Number(base.processed || 0),
+			Number(base.total || 0),
+		);
+		return {
+			...base,
+			status: "completed" as const,
+			processed: Math.max(Number(base.processed || 0), done),
+			success: Math.max(Number(base.success || 0), done > 0 ? done : Number(base.success || 0)),
+			pauseRequested: false,
+			cancellationRequested: false,
+			orphaned: false,
+			completedAt: base.completedAt || base.updatedAt || base.startedAt,
+			message:
+				base.message && !/paused|resume/i.test(String(base.message))
+					? base.message
+					: "Payroll period is completed",
+		};
+	})();
 
 	const blockers = useMemo(
 		() =>
@@ -2149,6 +2187,13 @@ export function RunPayrollTemplate() {
 
 	const handleRetryPayrollJob = () => {
 		if (!payrollPeriodId) return;
+		// Period already finished — never call generate (API 400 "already completed").
+		if (
+			selectedPeriodCard?.status === "COMPLETED" ||
+			selectedPeriodCard?.status === "CLOSED"
+		) {
+			return;
+		}
 		clearPayrollProgressCache(payrollJobId);
 		setPayrollJobId(null);
 		generatePayrollMutation.mutate({
@@ -2296,6 +2341,8 @@ export function RunPayrollTemplate() {
 	const isPayrollPauseRequested =
 		isPayrollRunProcessing && Boolean(visiblePayrollProgress?.pauseRequested);
 	const canViewPayrollReport = visiblePayrollProgress?.status === "completed";
+	// Show progress entry when there is something to reopen. On COMPLETED periods the
+	// coerced status is "completed" (not paused), so label is "View payroll progress".
 	const hasPayrollStatusResume = Boolean(
 		payrollJobId ||
 			visiblePayrollProgress ||
@@ -4895,7 +4942,8 @@ export function RunPayrollTemplate() {
 									className="h-9 rounded-lg border-neutral-200 px-4 text-sm font-medium text-neutral-700 shadow-none hover:bg-neutral-50">
 									Close
 								</Button>
-								{isPayrollProgressUnavailable && (
+								{/* Never resume/reopen when period is already COMPLETED/CLOSED */}
+								{isPayrollProgressUnavailable && !isPeriodCompleted && (
 									<>
 										<Button
 											variant="outline"
@@ -4922,9 +4970,10 @@ export function RunPayrollTemplate() {
 										</Button>
 									</>
 								)}
-								{(visiblePayrollProgress?.status === "failed" ||
-									visiblePayrollProgress?.status === "paused" ||
-									visiblePayrollProgress?.status === "cancelled") && (
+								{!isPeriodCompleted &&
+									(visiblePayrollProgress?.status === "failed" ||
+										visiblePayrollProgress?.status === "paused" ||
+										visiblePayrollProgress?.status === "cancelled") && (
 									<Button
 										onClick={handleRetryPayrollJob}
 										disabled={isPayrollActionPending}

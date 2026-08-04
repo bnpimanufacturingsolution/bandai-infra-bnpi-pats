@@ -248,6 +248,37 @@ export class PayrollGenerationJobService {
 					const snap = meta?.payrollGeneration as StoredPayrollGenerationSnapshot | undefined;
 					if (!snap?.jobId) continue;
 					if (PayrollGenerationJobService.jobs.has(snap.jobId)) continue;
+
+					// Period already terminal: never rehydrate as paused/processing (Resume would 400).
+					const periodTerminal =
+						period.status === "COMPLETED" || period.status === "CLOSED";
+					if (
+						periodTerminal &&
+						(snap.status === "paused" ||
+							snap.status === "processing" ||
+							snap.status === "failed")
+					) {
+						const repaired: PayrollGenerationJobProgress = {
+							...PayrollGenerationJobService.fromSnapshot(snap, period.id),
+							status: "completed",
+							orphaned: false,
+							pauseRequested: false,
+							pauseRequestedAt: undefined,
+							cancellationRequested: false,
+							cancellationRequestedAt: undefined,
+							completedAt: snap.completedAt
+								? new Date(snap.completedAt)
+								: new Date(snap.updatedAt || snap.startedAt || Date.now()),
+							message:
+								snap.message ||
+								"Payroll period already completed; job closed as completed",
+						};
+						PayrollGenerationJobService.jobs.set(repaired.jobId, repaired);
+						// Heal DB so FE metadata matches period status.
+						void PayrollGenerationJobService.persistJob(repaired);
+						continue;
+					}
+
 					const job = PayrollGenerationJobService.fromSnapshot(snap, period.id);
 					// Restored from disk after process start: no live worker in this process.
 					if (job.status === "processing") {

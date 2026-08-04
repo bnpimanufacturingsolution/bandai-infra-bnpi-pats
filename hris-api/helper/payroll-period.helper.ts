@@ -2796,6 +2796,10 @@ export async function generatePayrollFromTimesheets(
 	const completedAt = new Date();
 
 	// Update payroll period status to COMPLETED and persist audit-friendly totals.
+	// Always force payrollGeneration → completed so UI never offers "Resume" against a
+	// COMPLETED period (stale paused/processing snapshots caused "already completed" toast).
+	const priorGeneration = asRecord(existingPeriodMetadata.payrollGeneration);
+	const completedIso = completedAt.toISOString();
 	await prisma.payrollPeriod.update({
 		where: { id: payrollPeriodId },
 		data: {
@@ -2816,7 +2820,30 @@ export async function generatePayrollFromTimesheets(
 					payslipsGeneratedCount: payslipSuccessCount,
 					payslipErrorCount,
 					payrollCorrectionsAppliedCount,
-					savedAt: completedAt.toISOString(),
+					savedAt: completedIso,
+				},
+				payrollGeneration: {
+					...priorGeneration,
+					periodId: payrollPeriodId,
+					status: "completed",
+					total: Number(priorGeneration.total ?? timesheets.length + resumeProcessedCount) || successCount,
+					processed: Math.max(
+						Number(priorGeneration.processed || 0),
+						successCount,
+					),
+					success: Math.max(Number(priorGeneration.success || 0), successCount),
+					failed: Number(priorGeneration.failed || errorCount) || errorCount,
+					message:
+						payslipErrorCount > 0
+							? `Payroll generated for ${successCount} employees with ${payslipErrorCount} payslip issue(s)`
+							: `Payroll and payslips generated for ${successCount} employees`,
+					updatedAt: completedIso,
+					completedAt: completedIso,
+					pauseRequested: false,
+					pauseRequestedAt: null,
+					cancellationRequested: false,
+					cancellationRequestedAt: null,
+					orphaned: false,
 				},
 			},
 		},
