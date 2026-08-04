@@ -21,8 +21,9 @@ model User {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  metadata      Json?
-  migrationRuns MigrationRun[]
+  metadata             Json?
+  migrationRuns        MigrationRun[]
+  massUploadImportLogs MassUploadImportLog[]
 
   @@index([organizationId])
   @@index([role])

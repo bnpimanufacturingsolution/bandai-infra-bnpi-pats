@@ -1,5 +1,22 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-04 DM3 mass upload detailed results + history
+
+- Task mode: product UX + API observability for DM3 compensation/deduction imports.
+- Finish line: after compensation/deduction upload, operator sees row-level failure
+  reasons and success actions; durable **Import history** lists past imports.
+- Surfaces:
+  - API: enrich `import-*-mass-upload` summary (`errors` + `results` + truncation flags)
+  - Persist `mass_upload_import_logs` (local clone applied on `127.0.0.1:5433`)
+  - `GET /api/migration/dm3/mass-upload-imports` list/detail/CSV
+  - UI: keep modal open with result tables; history table on DM3 page
+- Local runtime: `npm run dev:local` → `.env.local-clone` → container
+  `hris-local-dev-clone` port `5433` (not shared VM `15433`/`55435`).
+- Proof: import of 2 failing rows returned per-row messages + `importLogId`;
+  history listed log linked to run `cmryj0vpm00huvgaks2t2js57`.
+- Tests: `bnpi-mass-upload-import.helper.spec.ts` +
+  `bnpi-mass-upload-import.summary.spec.ts` (8 passing).
+
 ## Latest Task Addendum - 2026-07-29 Special Payroll one-time compensation
 
 - Task mode: product feature (dedicated Special Payroll, separate from regular).
