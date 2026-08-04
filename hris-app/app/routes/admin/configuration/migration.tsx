@@ -466,6 +466,7 @@ type MigrationLiveEvent = {
 	isUserActivity?: boolean;
 };
 
+/** Compact one-line activity label for the DM3 feed (details live in the modal). */
 function formatMassUploadUserActivityMessage(params: {
 	kind: "compensation" | "deduction";
 	sourceFilename?: string | null;
@@ -475,19 +476,10 @@ function formatMassUploadUserActivityMessage(params: {
 	total?: number;
 	status?: string | null;
 }): string {
-	const label = params.kind === "compensation" ? "compensation" : "deduction";
-	const fileName = String(params.sourceFilename || `${label} mass upload.xlsx`).trim();
-	const created = Number(params.created || 0);
-	const updated = Number(params.updated || 0);
+	const title = params.kind === "compensation" ? "Compensation" : "Deduction";
+	const ok = Number(params.created || 0) + Number(params.updated || 0);
 	const failed = Number(params.failed || 0);
-	const ok = created + updated;
-	const resultBit =
-		failed > 0 && ok === 0
-			? `failed for all ${Number(params.total || failed)} row(s)`
-			: failed > 0
-				? `${ok} succeeded (${created} new, ${updated} updated), ${failed} failed`
-				: `${ok} succeeded (${created} new, ${updated} updated)`;
-	return `Uploaded ${label} file “${fileName}” — ${resultBit}`;
+	return `${title} · ${ok} ok · ${failed} fail`;
 }
 
 function massUploadHistoryStatusToSheetStatus(status?: string | null): WorkbookSheetStatus {
@@ -3642,7 +3634,6 @@ export default function AdminMigrationPage() {
 	const dm3UserActivityFeed = dm3UserMassUploadEvents
 		.slice()
 		.sort((left, right) => getReportTimeMs(right.at) - getReportTimeMs(left.at));
-	const latestDm3UserActivity = dm3UserActivityFeed[0] || null;
 	const activeWorkbookReportRows = activeWorkbookGroup
 		? [
 				...[...activeWorkbookGroup.steps, ...(activeWorkbookGroup.generatedSteps || [])].map((step) => {
@@ -7505,17 +7496,15 @@ export default function AdminMigrationPage() {
 						// Still surface detail in the modal; throw only for toast.promise error path
 						// after we set result.
 						const sourceFilename = summary.sourceFilename || file.name;
-						const userMessage =
-							payload?.userActivity?.message ||
-							formatMassUploadUserActivityMessage({
-								kind: role,
-								sourceFilename,
-								created,
-								updated,
-								failed,
-								total,
-								status: "failed",
-							});
+						const userMessage = formatMassUploadUserActivityMessage({
+							kind: role,
+							sourceFilename,
+							created,
+							updated,
+							failed,
+							total,
+							status: "failed",
+						});
 						setDm3MassUploadResult({
 							kind: role,
 							label,
@@ -7563,17 +7552,15 @@ export default function AdminMigrationPage() {
 						);
 					}
 					const sourceFilename = summary.sourceFilename || file.name;
-					const userMessage =
-						payload?.userActivity?.message ||
-						formatMassUploadUserActivityMessage({
-							kind: role,
-							sourceFilename,
-							created,
-							updated,
-							failed,
-							total,
-							status: summary.status,
-						});
+					const userMessage = formatMassUploadUserActivityMessage({
+						kind: role,
+						sourceFilename,
+						created,
+						updated,
+						failed,
+						total,
+						status: summary.status,
+					});
 					setDm3MassUploadResult({
 						kind: role,
 						label,
@@ -8757,93 +8744,50 @@ export default function AdminMigrationPage() {
 							</div>
 
 							<div className="rounded-lg border border-gray-200 bg-white">
-								<div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-3 py-2.5">
-									<div className="min-w-0">
-										<p className="text-sm font-semibold text-gray-950">
-											Your upload activity
-										</p>
-										<p className="text-xs text-gray-600">
-											Operator uploads for compensation and deduction. Click a row
-											to open the import result details.
-										</p>
-									</div>
-									<div className="flex flex-wrap gap-1.5">
+								<div className="flex items-center justify-between gap-2 border-b border-gray-100 px-3 py-2">
+									<p className="text-xs font-semibold text-gray-900">Upload activity</p>
+									<div className="flex gap-1">
 										{(
 											[
 												["all", "All"],
-												["compensation", "Compensation"],
-												["deduction", "Deduction"],
+												["compensation", "Comp"],
+												["deduction", "Ded"],
 											] as const
 										).map(([value, filterLabel]) => (
 											<button
 												key={value}
 												type="button"
 												onClick={() => setDm3MassUploadHistoryKind(value)}
-												className={`rounded-md px-2.5 py-1 text-[11px] font-medium ring-1 ${
+												className={`rounded px-2 py-0.5 text-[10px] font-medium ${
 													dm3MassUploadHistoryKind === value
-														? "bg-orange-50 text-orange-800 ring-orange-200"
-														: "bg-white text-gray-600 ring-gray-200 hover:bg-gray-50"
+														? "bg-orange-50 text-orange-800"
+														: "text-gray-500 hover:bg-gray-50"
 												}`}>
 												{filterLabel}
 											</button>
 										))}
 									</div>
 								</div>
-								{latestDm3UserActivity ? (
-									<button
-										type="button"
-										onClick={() => {
-											if (latestDm3UserActivity.importLogId) {
-												void openMassUploadImportLog(
-													String(latestDm3UserActivity.importLogId),
-												);
-											}
-										}}
-										className="flex w-full items-start gap-3 border-b border-orange-100 bg-orange-50/60 px-3 py-3 text-left hover:bg-orange-50">
-										<div className="min-w-0 flex-1">
-											<div className="flex flex-wrap items-center gap-2">
-												<span className="rounded-md bg-orange-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-800">
-													Latest activity
-												</span>
-												<span className="text-[11px] text-gray-500">
-													{formatReportTimestamp(latestDm3UserActivity.at)}
-												</span>
-											</div>
-											<p className="mt-1 text-sm font-medium text-gray-950">
-												{latestDm3UserActivity.message}
-											</p>
-											<p className="mt-0.5 text-xs text-orange-800">
-												Click to view result details
-												{latestDm3UserActivity.actorLabel
-													? ` · ${latestDm3UserActivity.actorLabel}`
-													: ""}
-											</p>
-										</div>
-										<span className="shrink-0 text-xs font-medium text-orange-700">
-											Open →
-										</span>
-									</button>
-								) : null}
-								<div className="max-h-72 overflow-auto">
+								<div className="max-h-40 overflow-auto">
 									{isLoadingDm3MassUploadHistory ? (
-										<div className="flex items-center gap-2 px-3 py-4 text-xs text-gray-600">
-											<Loader2 className="h-3.5 w-3.5 animate-spin" />
-											Loading upload activity…
-										</div>
+										<div className="px-3 py-2 text-[11px] text-gray-500">Loading…</div>
 									) : dm3UserActivityFeed.length === 0 ? (
-										<p className="px-3 py-4 text-xs text-gray-600">
-											No compensation or deduction uploads yet. After you upload a
-											file, the activity appears here with the result.
-										</p>
+										<p className="px-3 py-2 text-[11px] text-gray-500">No uploads yet</p>
 									) : (
 										<ul className="divide-y divide-gray-100">
-											{dm3UserActivityFeed.map((event) => {
+											{dm3UserActivityFeed.map((event, index) => {
 												const clickable = Boolean(event.importLogId);
+												const isLatest = index === 0;
 												return (
 													<li key={event.id}>
 														<button
 															type="button"
 															disabled={!clickable}
+															title={
+																event.metadata?.sourceFilename
+																	? String(event.metadata.sourceFilename)
+																	: event.message
+															}
 															onClick={() => {
 																if (event.importLogId) {
 																	void openMassUploadImportLog(
@@ -8851,43 +8795,20 @@ export default function AdminMigrationPage() {
 																	);
 																}
 															}}
-															className={`flex w-full items-start gap-3 px-3 py-2.5 text-left ${
-																clickable
-																	? "hover:bg-gray-50"
-																	: "cursor-default opacity-80"
-															}`}>
-															<div className="min-w-0 flex-1">
-																<div className="flex flex-wrap items-center gap-2">
-																	<span className="text-[11px] text-gray-400">
-																		{formatReportTimestamp(event.at)}
-																	</span>
-																	<span className="text-[11px] font-semibold text-gray-900">
-																		{event.sheetName}
-																	</span>
-																	{event.actorLabel ? (
-																		<span className="text-[11px] text-gray-500">
-																			by {event.actorLabel}
-																		</span>
-																	) : null}
-																	<Badge
-																		variant="outline"
-																		className={`rounded-md px-2 py-0.5 text-[10px] ${
-																			WORKBOOK_STATUS_CLASS[
-																				getEventBadgeStatus(event)
-																			] || WORKBOOK_STATUS_CLASS.Importing
-																		}`}>
-																		{event.status}
-																	</Badge>
-																</div>
-																<p className="mt-0.5 text-xs text-gray-800">
-																	{event.message}
-																</p>
-															</div>
-															{clickable ? (
-																<span className="shrink-0 text-[11px] font-medium text-orange-700">
-																	Details
-																</span>
-															) : null}
+															className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] ${
+																clickable ? "hover:bg-gray-50" : "cursor-default"
+															} ${isLatest ? "bg-orange-50/40" : ""}`}>
+															<span className="shrink-0 tabular-nums text-gray-400">
+																{formatReportTimestamp(event.at)}
+															</span>
+															<span
+																className={`min-w-0 flex-1 truncate ${
+																	Number(event.metadata?.failed || 0) > 0
+																		? "text-red-700"
+																		: "text-gray-900"
+																}`}>
+																{event.message}
+															</span>
 														</button>
 													</li>
 												);
@@ -9081,52 +9002,38 @@ export default function AdminMigrationPage() {
 												event.importLogId ||
 												event.metadata?.importLogId ||
 												null;
-											const isClickableUserUpload = Boolean(
-												importLogId || event.isUserActivity,
-											);
+											const isClickableUserUpload = Boolean(importLogId);
+											const line = event.isUserActivity
+												? event.message
+												: [
+														event.sheetName || event.stepCode || "Run",
+														event.message || event.eventType || event.status,
+													]
+														.filter(Boolean)
+														.join(" · ");
 											const content = (
-												<>
-													<div className="flex flex-wrap items-center gap-1.5">
-														<span className="text-gray-400">
-															{formatReportTimestamp(event.at)}
-														</span>
-														{event.isUserActivity ? (
-															<span className="rounded bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-800">
-																User
-															</span>
-														) : null}
-														<span className="font-medium text-gray-900">
-															{event.sheetName || event.stepCode || "Run"}
-														</span>
-														{event.actorLabel ? (
-															<span className="text-gray-500">
-																· {event.actorLabel}
-															</span>
-														) : null}
-													</div>
-													<p className="mt-0.5 text-gray-700">
-														{event.message || event.eventType || event.status}
-													</p>
-													{isClickableUserUpload ? (
-														<p className="mt-0.5 text-[11px] font-medium text-orange-700">
-															Click to view import result details
-														</p>
-													) : null}
-												</>
+												<span className="flex items-center gap-2">
+													<span className="shrink-0 tabular-nums text-gray-400">
+														{formatReportTimestamp(event.at)}
+													</span>
+													<span className="min-w-0 flex-1 truncate text-gray-800">
+														{line}
+													</span>
+												</span>
 											);
 											return (
 												<li key={event.id}>
-													{isClickableUserUpload && importLogId ? (
+													{isClickableUserUpload ? (
 														<button
 															type="button"
-															className="w-full px-4 py-2 text-left hover:bg-orange-50/60"
+															className="w-full px-3 py-1.5 text-left hover:bg-gray-50"
 															onClick={() =>
 																void openMassUploadImportLog(String(importLogId))
 															}>
 															{content}
 														</button>
 													) : (
-														<div className="px-4 py-2 text-gray-700">{content}</div>
+														<div className="px-3 py-1.5 text-gray-700">{content}</div>
 													)}
 												</li>
 											);
