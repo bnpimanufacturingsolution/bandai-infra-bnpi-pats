@@ -362,6 +362,19 @@ export interface PayrollOtDayDetail {
 	appliedAt: string | null;
 }
 
+export interface PayrollOtCategoryTotals {
+	payableOtHours: number;
+	regOtHrs: number;
+	regNdHrs: number;
+	spclHrs: number;
+	spclOtHrs: number;
+	rholHrs: number;
+	rholOtHrs: number;
+	rdHrs: number;
+	rdOtHrs: number;
+	regularDays: number;
+}
+
 export interface PayrollOtPersonDetail {
 	employeeId: string;
 	employeeCode: string | null;
@@ -376,6 +389,7 @@ export interface PayrollOtPersonDetail {
 	totalLineOtHours: string;
 	totalLineOtMinutes: number;
 	otDayCount: number;
+	categoryTotals?: PayrollOtCategoryTotals;
 	days: PayrollOtDayDetail[];
 	truth: {
 		note: string;

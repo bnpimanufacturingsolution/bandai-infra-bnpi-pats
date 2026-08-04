@@ -5,7 +5,6 @@ import { Button } from "~/components/atoms/Button";
 import { Badge } from "~/components/atoms/Badge";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
 import { Modal } from "~/components/atoms/Modal";
-import { ProfileInitialsAvatar } from "~/components/atoms/ProfileInitialsAvatar";
 import { Input } from "~/components/ui/input";
 import { Progress } from "~/components/ui/progress";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -35,6 +34,7 @@ import {
 	useActiveTimesheetPayrollProgress,
 	useGenerateTimesheetPayrollPreview,
 	usePayrollOtReadiness,
+	usePayrollOtPersonDetail,
 	payrollPeriodsQueryKeys,
 	usePayrollCycleConfig,
 } from "~/lib/hooks/usePayrollPeriods";
@@ -54,7 +54,6 @@ import {
 } from "~/lib/hooks/useEmployeePayroll";
 import { useBenefitTypes } from "~/lib/hooks/useBenefitTypes";
 import { useEmployees } from "~/lib/hooks/useEmployees";
-import { useTimesheet } from "~/lib/hooks/useTimesheets";
 import { formatDate, formatDateForInput } from "~/lib/utils/text-utils";
 import type { EmployeeBenefit } from "~/services/employee-benefit.service";
 import type {
@@ -62,9 +61,7 @@ import type {
 	TimesheetPayrollPreviewEmployee,
 	TimesheetPayrollSourceDetail,
 } from "~/services/payroll-periods.service";
-import type { Timesheet } from "~/services/timesheet.service";
 import { resolveBenefitDisplay } from "~/lib/utils/bnpi-comcode-catalog";
-import { TimesheetViewModal } from "~/components/organisms/TimesheetViewModal";
 import { SpecialPayrollModal } from "~/components/organisms/special-payroll-modal";
 import {
 	specialPayrollService,
@@ -179,7 +176,7 @@ export function RunPayrollTemplate() {
 	const [selectedPreviewEmployee, setSelectedPreviewEmployee] =
 		useState<PreviewPayrollRow | null>(null);
 	const [expandedAdjustmentId, setExpandedAdjustmentId] = useState<string | null>(null);
-	/** Open real TimesheetViewModal for OT person (DB fetch via useTimesheet — not precomputed list). */
+	/** Open OT matrix detail (report buckets) for list person — not full timesheet totals. */
 	const [selectedOtPerson, setSelectedOtPerson] =
 		useState<PayrollOtReadinessPerson | null>(null);
 	const [specialPayrollOpen, setSpecialPayrollOpen] = useState(false);
@@ -513,107 +510,22 @@ export function RunPayrollTemplate() {
 		{ page: 1, limit: 20, onlyWithOt: true },
 		Boolean(payrollPeriodId),
 	);
-	// Real TimesheetViewModal (same atoms as HR timesheets). Filter breakdown to OT days only.
+	// Lean OT matrix detail (report buckets) — not full timesheet totals.
 	const selectedOtTimesheetId = selectedOtPerson?.timesheetId || "";
-	const isOtTimesheetModalOpen = Boolean(selectedOtTimesheetId);
+	const isOtDetailModalOpen = Boolean(
+		selectedOtTimesheetId && payrollPeriodId,
+	);
 	const {
-		data: otTimesheetFromDb,
-		isLoading: otTimesheetLoading,
-		isFetching: otTimesheetFetching,
-		error: otTimesheetError,
-	} = useTimesheet(selectedOtTimesheetId, {
-		enabled: isOtTimesheetModalOpen,
-		staleTime: 0,
-		refetchOnMount: "always",
-	});
-	/**
-	 * OT-focused modal: show days with line OT that is report-backed when possible.
-	 * Do NOT treat top-level metadata.source=BNPI_DM4_DEMO as kill-switch when
-	 * bandaiPayrollSourceRepair exists (repair overwrites OT from rptOvertimeDetails).
-	 */
-	const otOnlyTimesheet = useMemo((): Timesheet | null => {
-		if (!otTimesheetFromDb) return null;
-		const breakdown = Array.isArray(otTimesheetFromDb.breakdown)
-			? otTimesheetFromDb.breakdown
-			: Array.isArray((otTimesheetFromDb as any).timesheetlines)
-				? (otTimesheetFromDb as any).timesheetlines
-				: [];
-		const parseOtMinutes = (value: unknown) => {
-			const raw = String(value || "").trim();
-			if (!raw || raw === "0" || raw === "0:00" || raw === "00:00") return 0;
-			if (raw.includes(":")) {
-				const [h, m] = raw.split(":").map(Number);
-				return (h || 0) * 60 + (m || 0);
-			}
-			const n = Number(raw);
-			return Number.isFinite(n) && n > 0 ? Math.round(n * 60) : 0;
-		};
-		const isDemoOnly = (day: any) => {
-			const meta = day?.metadata || {};
-			const repair = meta?.bandaiPayrollSourceRepair;
-			// Report apply wins: keep day if repair buckets/source exist.
-			if (repair && typeof repair === "object") {
-				const repairSrc = String(repair.source || "");
-				if (/demo/i.test(repairSrc)) return true;
-				return false;
-			}
-			// No repair: drop pure demo seed days so we never show fake 16h OT.
-			const topSrc =
-				typeof meta.source === "string"
-					? meta.source
-					: typeof meta.source === "object" && meta.source
-						? String((meta.source as any).type || (meta.source as any).id || "")
-						: "";
-			return /demo/i.test(topSrc) || /BNPI_DM4_DEMO/i.test(topSrc);
-		};
-		const otDays = breakdown.filter((day: any) => {
-			const otMin = parseOtMinutes(
-				day?.overtimeHours ?? day?.overtime ?? day?.totalOvertimeHours,
-			);
-			if (otMin <= 0) return false;
-			if (isDemoOnly(day)) return false;
-			return true;
-		});
-		const otMinutes = otDays.reduce(
-			(sum: number, day: any) =>
-				sum +
-				parseOtMinutes(day?.overtimeHours ?? day?.overtime ?? day?.totalOvertimeHours),
-			0,
-		);
-		const otHhMm = `${Math.floor(otMinutes / 60)}:${String(otMinutes % 60).padStart(2, "0")}`;
-		// Prefer list chip hours when filter unexpectedly empty but readiness said OT exists.
-		const fallbackOt =
-			selectedOtPerson?.lineOtHours &&
-			parseOtMinutes(selectedOtPerson.lineOtHours) > 0 &&
-			otDays.length === 0
-				? String(selectedOtPerson.lineOtHours)
-				: otHhMm;
-		// If we still have zero days but list claims OT, show full breakdown (not empty calendar).
-		const safeBreakdown =
-			otDays.length > 0
-				? otDays
-				: parseOtMinutes(selectedOtPerson?.lineOtHours) > 0
-					? breakdown.filter(
-							(day: any) =>
-								parseOtMinutes(day?.overtimeHours ?? day?.overtime) > 0,
-						)
-					: otDays;
-		const finalOtMinutes =
-			safeBreakdown.length > 0
-				? safeBreakdown.reduce(
-						(sum: number, day: any) =>
-							sum + parseOtMinutes(day?.overtimeHours ?? day?.overtime),
-						0,
-					)
-				: parseOtMinutes(fallbackOt);
-		const finalOtHhMm = `${Math.floor(finalOtMinutes / 60)}:${String(finalOtMinutes % 60).padStart(2, "0")}`;
-		return {
-			...otTimesheetFromDb,
-			breakdown: safeBreakdown,
-			// Header OVERTIME must match list chip / line OT (not misleading 0h).
-			totalOvertimeHours: finalOtHhMm,
-		} as Timesheet;
-	}, [otTimesheetFromDb, selectedOtPerson?.lineOtHours]);
+		data: otPersonDetail,
+		isLoading: otPersonDetailLoading,
+		isFetching: otPersonDetailFetching,
+		isError: otPersonDetailError,
+		error: otPersonDetailErrorObj,
+	} = usePayrollOtPersonDetail(
+		payrollPeriodId,
+		selectedOtTimesheetId,
+		isOtDetailModalOpen,
+	);
 	const { data: generatedPayrollRowsData, isLoading: generatedPayrollRowsLoading } =
 		useEmployeePayrolls({
 			filter: payrollPeriodId ? `payrollPeriodId:${payrollPeriodId}` : undefined,
@@ -5185,27 +5097,282 @@ export function RunPayrollTemplate() {
 				</div>
 			</Modal>
 
-			{/* Same TimesheetViewModal atoms as HR timesheets; breakdown filtered to OT days only. */}
-			<TimesheetViewModal
-				isOpen={isOtTimesheetModalOpen}
-				onClose={() => setSelectedOtPerson(null)}
-				timesheet={otOnlyTimesheet}
-				isLoading={otTimesheetLoading || otTimesheetFetching}
-				error={otTimesheetError}
-				showActions={false}
-				title={
-					selectedOtPerson
-						? `Approved OT · ${selectedOtPerson.name}${
-								selectedOtPerson.employeeCode
-									? ` · ${selectedOtPerson.employeeCode}`
-									: ""
-							}`
-						: "Approved OT"
-				}
-				approvedEditedDaysSummary={
-					(otTimesheetFromDb as any)?.approvedEditedDaysSummary ?? null
-				}
-			/>
+			{/* OT detail — TimesheetViewModal pattern: avatar|summary, then matrix. No title/date header. */}
+			<Modal
+				open={isOtDetailModalOpen}
+				onOpenChange={(open) => {
+					if (!open) setSelectedOtPerson(null);
+				}}
+				showCloseButton={false}
+				className="relative w-[calc(100vw-1.5rem)] max-w-3xl max-h-[min(92vh,720px)] gap-3 overflow-hidden p-4 pr-12 sm:p-5 sm:pr-12">
+				{/* Floating X only — no title strip */}
+				<Button
+					variant="ghost"
+					size="icon"
+					className="absolute right-3 top-3 z-10 h-7 w-7 rounded-sm opacity-70 hover:opacity-100"
+					onClick={() => setSelectedOtPerson(null)}>
+					<X className="h-4 w-4" />
+					<span className="sr-only">Close</span>
+				</Button>
+
+				{otPersonDetailLoading || otPersonDetailFetching ? (
+					<div className="space-y-3">
+						<div className="flex gap-3">
+							<Skeleton className="h-[72px] flex-1 rounded-lg" />
+							<Skeleton className="h-[72px] flex-[2] rounded-lg" />
+						</div>
+						{Array.from({ length: 6 }).map((_, i) => (
+							<Skeleton key={`ot-sk-${i}`} className="h-7 w-full" />
+						))}
+					</div>
+				) : otPersonDetailError ? (
+					<p className="py-6 text-center text-sm text-amber-800">
+						Could not load OT detail
+						{otPersonDetailErrorObj instanceof Error
+							? `: ${otPersonDetailErrorObj.message}`
+							: "."}
+					</p>
+				) : otPersonDetail ? (
+					<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+						{/* Row 1: avatar card | payable OT summary (TimesheetEmployeeCard + HoursOverview pattern) */}
+						<div className="flex flex-col gap-3 sm:flex-row">
+							{/* Avatar + identity */}
+							<div className="flex min-w-0 flex-1 items-center gap-3 rounded-lg border border-gray-200 bg-white px-3.5 py-3">
+								<div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gray-900 text-sm font-semibold text-white">
+									{(otPersonDetail.name || "E")
+										.trim()
+										.split(/\s+/)
+										.filter(Boolean)
+										.slice(0, 2)
+										.map((p) => p[0]?.toUpperCase() ?? "")
+										.join("") || "E"}
+								</div>
+								<div className="min-w-0 flex-1">
+									<p className="truncate text-base font-semibold text-gray-900">
+										{otPersonDetail.name || "Employee"}
+									</p>
+									<div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
+										{otPersonDetail.department ? (
+											<span className="truncate">{otPersonDetail.department}</span>
+										) : null}
+										{otPersonDetail.timesheetStatus ? (
+											<span
+												className={`rounded-md border px-1.5 py-0 text-[10px] font-semibold uppercase ${
+													otPersonDetail.timesheetStatus === "APPROVED"
+														? "border-emerald-200 bg-emerald-50 text-emerald-700"
+														: "border-amber-200 bg-amber-50 text-amber-800"
+												}`}>
+												{otPersonDetail.timesheetStatus}
+											</span>
+										) : null}
+									</div>
+									{otPersonDetail.employeeCode ? (
+										<p className="mt-0.5 text-xs tabular-nums text-gray-400">
+											ID: {otPersonDetail.employeeCode}
+										</p>
+									) : null}
+								</div>
+							</div>
+
+							{/* Payable OT summary */}
+							<div className="flex min-w-0 flex-[2] items-center gap-3 rounded-lg border border-gray-200 bg-white px-3.5 py-3">
+								<div className="shrink-0 border-r border-gray-200 pr-3">
+									<p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">
+										Payable OT
+									</p>
+									<p className="text-2xl font-bold tabular-nums leading-none text-orange-800">
+										{otPersonDetail.totalLineOtHours}
+									</p>
+									<p className="mt-1 text-xs tabular-nums text-gray-500">
+										{otPersonDetail.otDayCount} OT day
+										{otPersonDetail.otDayCount === 1 ? "" : "s"}
+									</p>
+								</div>
+								<div className="min-w-0 flex-1">
+									{otPersonDetail.categoryTotals ? (
+										<div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+											{(
+												[
+													["Reg OT", otPersonDetail.categoryTotals.regOtHrs],
+													["ND", otPersonDetail.categoryTotals.regNdHrs],
+													["Spcl", otPersonDetail.categoryTotals.spclHrs],
+													["Spcl OT", otPersonDetail.categoryTotals.spclOtHrs],
+													["RHol OT", otPersonDetail.categoryTotals.rholOtHrs],
+													["RD", otPersonDetail.categoryTotals.rdHrs],
+													["RD OT", otPersonDetail.categoryTotals.rdOtHrs],
+												] as const
+											)
+												.filter(([, v]) => Number(v) > 0)
+												.map(([label, val]) => (
+													<div key={label} className="min-w-0">
+														<p className="mb-0.5 text-[11px] font-medium uppercase tracking-wider text-gray-400">
+															{label}
+														</p>
+														<p className="text-base font-bold tabular-nums leading-none text-gray-900">
+															{Number(val).toLocaleString(undefined, {
+																maximumFractionDigits: 1,
+															})}
+															h
+														</p>
+													</div>
+												))}
+										</div>
+									) : (
+										<p className="text-sm text-gray-400">No category breakdown</p>
+									)}
+								</div>
+							</div>
+						</div>
+
+						{/* Row 2: day matrix (full width) */}
+						<div className="min-h-0 flex-1 overflow-auto rounded-lg border border-gray-200 modern-scroll">
+							<table className="w-full min-w-[520px] border-collapse text-left text-[11px]">
+								<thead className="sticky top-0 z-10 bg-gray-50 text-[10px] font-medium text-gray-500">
+									<tr className="border-b border-gray-200">
+										<th className="px-3 py-2 font-medium">Date</th>
+										<th className="px-1.5 py-2 text-right font-medium">Reg</th>
+										<th className="px-1.5 py-2 text-right font-medium">ND</th>
+										<th className="px-1.5 py-2 text-right font-medium">Spcl</th>
+										<th className="px-1.5 py-2 text-right font-medium">Spcl OT</th>
+										<th className="px-1.5 py-2 text-right font-medium">RHol</th>
+										<th className="px-1.5 py-2 text-right font-medium">RD</th>
+										<th className="px-1.5 py-2 text-right font-medium">RD OT</th>
+										<th className="px-3 py-2 text-right font-medium text-orange-800">
+											Pay
+										</th>
+									</tr>
+								</thead>
+								<tbody className="divide-y divide-gray-50 bg-white">
+									{otPersonDetail.days.length === 0 ? (
+										<tr>
+											<td
+												colSpan={9}
+												className="px-3 py-6 text-center text-xs text-gray-500">
+												No report-backed OT days.
+											</td>
+										</tr>
+									) : (
+										otPersonDetail.days.map((day) => {
+											const b = day.approvedBuckets || {};
+											const n = (k: string) => {
+												const v = Number((b as any)[k] ?? 0);
+												return Number.isFinite(v) ? v : 0;
+											};
+											const cell = (v: number) =>
+												v > 0 ? (
+													<span className="font-medium tabular-nums text-gray-900">
+														{v}
+													</span>
+												) : (
+													<span className="tabular-nums text-gray-300">·</span>
+												);
+											return (
+												<tr
+													key={day.lineId}
+													className="hover:bg-orange-50/40">
+													<td className="whitespace-nowrap px-3 py-1.5 font-medium tabular-nums text-gray-800">
+														{day.date}
+													</td>
+													<td className="px-1.5 py-1.5 text-right">
+														{cell(n("regOtHrs"))}
+													</td>
+													<td className="px-1.5 py-1.5 text-right">
+														{cell(n("regNdHrs"))}
+													</td>
+													<td className="px-1.5 py-1.5 text-right">
+														{cell(n("spclHrs"))}
+													</td>
+													<td className="px-1.5 py-1.5 text-right">
+														{cell(n("spclOtHrs"))}
+													</td>
+													<td className="px-1.5 py-1.5 text-right">
+														{cell(n("rholOtHrs"))}
+													</td>
+													<td className="px-1.5 py-1.5 text-right">
+														{cell(n("rdHrs"))}
+													</td>
+													<td className="px-1.5 py-1.5 text-right">
+														{cell(n("rdOtHrs"))}
+													</td>
+													<td className="px-3 py-1.5 text-right text-sm font-semibold tabular-nums text-orange-800">
+														{day.overtimeHours}
+													</td>
+												</tr>
+											);
+										})
+									)}
+								</tbody>
+								{otPersonDetail.categoryTotals ? (
+									<tfoot className="sticky bottom-0 border-t border-gray-200 bg-gray-50 text-[11px] font-semibold">
+										<tr>
+											<td className="px-3 py-2 text-gray-600">Total</td>
+											<td className="px-1.5 py-2 text-right tabular-nums">
+												{otPersonDetail.categoryTotals.regOtHrs}
+											</td>
+											<td className="px-1.5 py-2 text-right tabular-nums">
+												{otPersonDetail.categoryTotals.regNdHrs}
+											</td>
+											<td className="px-1.5 py-2 text-right tabular-nums">
+												{otPersonDetail.categoryTotals.spclHrs}
+											</td>
+											<td className="px-1.5 py-2 text-right tabular-nums">
+												{otPersonDetail.categoryTotals.spclOtHrs}
+											</td>
+											<td className="px-1.5 py-2 text-right tabular-nums">
+												{otPersonDetail.categoryTotals.rholOtHrs}
+											</td>
+											<td className="px-1.5 py-2 text-right tabular-nums">
+												{otPersonDetail.categoryTotals.rdHrs}
+											</td>
+											<td className="px-1.5 py-2 text-right tabular-nums">
+												{otPersonDetail.categoryTotals.rdOtHrs}
+											</td>
+											<td className="px-3 py-2 text-right text-sm tabular-nums text-orange-800">
+												{otPersonDetail.totalLineOtHours}
+											</td>
+										</tr>
+									</tfoot>
+								) : null}
+							</table>
+						</div>
+
+						{/* Footer actions */}
+						<div className="flex items-center justify-end gap-2 pt-0.5">
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-8 px-3 text-xs"
+								onClick={() => setSelectedOtPerson(null)}>
+								Close
+							</Button>
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-8 px-2.5 text-xs text-gray-600 hover:bg-orange-50 hover:text-orange-700"
+								onClick={() => {
+									const tid = selectedOtPerson?.timesheetId;
+									setSelectedOtPerson(null);
+									if (tid) {
+										navigate(
+											`/hr/timesheets?action=view&id=${encodeURIComponent(tid)}${
+												selectedPeriodCode
+													? `&periodCode=${encodeURIComponent(selectedPeriodCode)}`
+													: ""
+											}`,
+										);
+									} else {
+										openTimesheets();
+									}
+								}}>
+								<ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+								Full timesheet
+							</Button>
+						</div>
+					</div>
+				) : (
+					<p className="py-6 text-center text-sm text-gray-500">No OT detail.</p>
+				)}
+			</Modal>
 
 			<SpecialPayrollModal
 				open={specialPayrollOpen}

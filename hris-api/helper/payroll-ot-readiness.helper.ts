@@ -96,6 +96,20 @@ export type PayrollOtDayDetail = {
 	appliedAt: string | null;
 };
 
+export type PayrollOtCategoryTotals = {
+	/** Payable line OT hours (RegOT+SpclOT+RHolOT+RDOT) */
+	payableOtHours: number;
+	regOtHrs: number;
+	regNdHrs: number;
+	spclHrs: number;
+	spclOtHrs: number;
+	rholHrs: number;
+	rholOtHrs: number;
+	rdHrs: number;
+	rdOtHrs: number;
+	regularDays: number;
+};
+
 export type PayrollOtPersonDetail = {
 	employeeId: string;
 	employeeCode: string | null;
@@ -110,6 +124,8 @@ export type PayrollOtPersonDetail = {
 	totalLineOtHours: string;
 	totalLineOtMinutes: number;
 	otDayCount: number;
+	/** Report category sums from approvedBuckets (and payable OT). */
+	categoryTotals: PayrollOtCategoryTotals;
 	days: PayrollOtDayDetail[];
 	truth: {
 		note: string;
@@ -680,7 +696,7 @@ export async function getPayrollPeriodOtPersonDetail(
 		throw new Error(`Timesheet not found for OT detail: ${params.timesheetId}`);
 	}
 
-	// Phase 2: approved-source OT days only (rptOvertimeDetails apply), not demo/biometric alone
+	// Phase 2: all approved-source lines (report matrix), including ND/RD-only days.
 	const lineRows = await prisma.$queryRaw<
 		Array<{
 			lineId: string;
@@ -708,10 +724,6 @@ export async function getPayrollPeriodOtPersonDetail(
 			AND l."payrollPeriodId" = ${params.payrollPeriodId}
 			AND l."isDeleted" = false
 			AND l."isEffective" = true
-			AND l."overtimeHours" IS NOT NULL
-			AND btrim(l."overtimeHours") <> ''
-			AND btrim(l."overtimeHours") NOT IN ('0:00', '0', '00:00')
-			AND (${LINE_OT_MINUTES_SQL}) > 0
 			AND ${APPROVED_OT_SOURCE_SQL}
 		ORDER BY l.date ASC
 	`;
@@ -724,12 +736,28 @@ export async function getPayrollPeriodOtPersonDetail(
 	const approvalDateIso =
 		timesheet.approvalDate?.toISOString?.() || approval.approvalDate || null;
 
+	const bucketNum = (buckets: Record<string, number> | null, key: string) => {
+		if (!buckets) return 0;
+		const n = Number(buckets[key] ?? 0);
+		return Number.isFinite(n) ? n : 0;
+	};
+
 	const days: PayrollOtDayDetail[] = [];
 	let totalLineOtMinutes = 0;
+	const categoryTotals: PayrollOtCategoryTotals = {
+		payableOtHours: 0,
+		regOtHrs: 0,
+		regNdHrs: 0,
+		spclHrs: 0,
+		spclOtHrs: 0,
+		rholHrs: 0,
+		rholOtHrs: 0,
+		rdHrs: 0,
+		rdOtHrs: 0,
+		regularDays: 0,
+	};
+
 	for (const line of lineRows) {
-		const otMin = parseDurationToMinutes(line.overtimeHours);
-		if (otMin <= 0) continue;
-		totalLineOtMinutes += otMin;
 		const meta =
 			line.metadata && typeof line.metadata === "object" && !Array.isArray(line.metadata)
 				? (line.metadata as Record<string, any>)
@@ -743,6 +771,31 @@ export async function getPayrollPeriodOtPersonDetail(
 			repair.approvedBuckets && typeof repair.approvedBuckets === "object"
 				? (repair.approvedBuckets as Record<string, number>)
 				: null;
+		const otMin = parseDurationToMinutes(line.overtimeHours);
+		const bucketSum =
+			bucketNum(buckets, "regOtHrs") +
+			bucketNum(buckets, "spclOtHrs") +
+			bucketNum(buckets, "rholOtHrs") +
+			bucketNum(buckets, "rdOtHrs") +
+			bucketNum(buckets, "regNdHrs") +
+			bucketNum(buckets, "spclHrs") +
+			bucketNum(buckets, "rholHrs") +
+			bucketNum(buckets, "rdHrs") +
+			bucketNum(buckets, "regularDays");
+		// Keep days with payable OT or any report category signal.
+		if (otMin <= 0 && bucketSum <= 0) continue;
+
+		totalLineOtMinutes += otMin;
+		categoryTotals.regOtHrs += bucketNum(buckets, "regOtHrs");
+		categoryTotals.regNdHrs += bucketNum(buckets, "regNdHrs");
+		categoryTotals.spclHrs += bucketNum(buckets, "spclHrs");
+		categoryTotals.spclOtHrs += bucketNum(buckets, "spclOtHrs");
+		categoryTotals.rholHrs += bucketNum(buckets, "rholHrs");
+		categoryTotals.rholOtHrs += bucketNum(buckets, "rholOtHrs");
+		categoryTotals.rdHrs += bucketNum(buckets, "rdHrs");
+		categoryTotals.rdOtHrs += bucketNum(buckets, "rdOtHrs");
+		categoryTotals.regularDays += bucketNum(buckets, "regularDays");
+
 		const dateVal =
 			line.date instanceof Date
 				? line.date.toISOString().slice(0, 10)
@@ -767,6 +820,7 @@ export async function getPayrollPeriodOtPersonDetail(
 			appliedAt: repair.appliedAt ? String(repair.appliedAt) : null,
 		});
 	}
+	categoryTotals.payableOtHours = Math.round((totalLineOtMinutes / 60) * 100) / 100;
 
 	return {
 		employeeId: timesheet.employeeId,
@@ -781,16 +835,14 @@ export async function getPayrollPeriodOtPersonDetail(
 		approvalDate: approvalDateIso,
 		totalLineOtHours: formatMinutesAsHhMm(totalLineOtMinutes),
 		totalLineOtMinutes,
-		otDayCount: days.length,
+		otDayCount: days.filter((d) => d.overtimeMinutes > 0).length,
+		categoryTotals,
 		days,
 		truth: {
 			note:
-				approval.approvalSource === "system"
-					? "Past approved OT import: system approved this timesheet so Run Payroll can pay line OT."
-					: approval.approvalSource === "manager"
-						? "Timesheet was approved in the normal workflow; OT days below are effective line OT."
-						: "Timesheet is not APPROVED yet — line OT is mapped but not payable until approved (import auto-approves past OT).",
-			payableWhen: "Timesheet status APPROVED + effective timesheet_lines.overtimeHours",
+				"Payable OT = Reg OT + Spcl OT + RHol OT + RD OT from rptOvertimeDetails. ND / Spcl Hrs / RHol Hrs / RD Hrs are premium buckets (shown for truth, not added into payable OT).",
+			payableWhen:
+				"Timesheet APPROVED + timesheet_lines.overtimeHours from approved OT workbook",
 		},
 	};
 }
