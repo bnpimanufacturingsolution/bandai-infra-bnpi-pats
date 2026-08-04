@@ -1033,6 +1033,39 @@ const controller = (prisma) => {
             res.status(500).json(errorResponse);
         }
     });
+    const getOtReadiness = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        const { id: payrollPeriodId } = req.params;
+        const organizationId = req.organizationId;
+        const requestedPage = Number(req.query.page);
+        const requestedLimit = Number(req.query.limit);
+        const query = typeof req.query.query === "string" ? req.query.query.trim() : "";
+        const onlyWithOtRaw = typeof req.query.onlyWithOt === "string" ? req.query.onlyWithOt.trim().toLowerCase() : "true";
+        const onlyWithOt = onlyWithOtRaw !== "false" && onlyWithOtRaw !== "0";
+        const page = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.floor(requestedPage) : 1;
+        const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+            ? Math.min(Math.floor(requestedLimit), 100)
+            : 25;
+        try {
+            if (!payrollPeriodId || !organizationId) {
+                res.status(400).json((0, error_handler_1.buildErrorResponse)("payrollPeriodId and organizationId are required", 400));
+                return;
+            }
+            const { getPayrollPeriodOtReadiness } = require("../../helper/payroll-ot-readiness.helper");
+            const readiness = yield getPayrollPeriodOtReadiness(prisma, {
+                payrollPeriodId,
+                organizationId,
+                page,
+                limit,
+                query,
+                onlyWithOt,
+            });
+            res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll OT readiness retrieved successfully", readiness, 200));
+        }
+        catch (error) {
+            payrollPeriodLogger.error(`Failed to load payroll OT readiness: ${error}`);
+            res.status(error instanceof Error && /not found/i.test(error.message) ? 404 : 500).json((0, error_handler_1.buildErrorResponse)(error instanceof Error ? error.message : constant_1.config.ERROR.COMMON.INTERNAL_SERVER_ERROR, error instanceof Error && /not found/i.test(error.message) ? 404 : 500));
+        }
+    });
     const getTimesheetGenerationProgress = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
         try {
             const { jobId } = req.params;
@@ -1702,6 +1735,7 @@ const controller = (prisma) => {
         getActiveTimesheetGenerationProgress,
         requestPauseTimesheetPayroll,
         requestStopTimesheetPayroll,
+        getOtReadiness,
         getConfig,
         updateConfig,
         bulkGenerate,

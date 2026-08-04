@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+﻿import * as XLSX from "xlsx";
 import type { PrismaClient } from "../../generated/prisma";
 import {
 	compensationBenefitLabel,
@@ -133,7 +133,7 @@ async function ensureBenefitType(
 
 	const name = options?.name || compensationBenefitLabel(code);
 	const direction = options?.direction || "COMPENSATION";
-	// BenefitCategory has no DEDUCTION value — use OTHER for deduction-direction types.
+	// BenefitCategory has no DEDUCTION value ΓÇö use OTHER for deduction-direction types.
 	// payrollDirection is the field that marks compensation vs deduction.
 	return prisma.benefitType.create({
 		data: {
@@ -674,7 +674,7 @@ export async function importDeductionMassUpload(params: {
  *
  * Applies loan/deduction enrollments (SSS/HDMF loans, calamity, LRP, MP2) as
  * ACTIVE open-horizon obligations. Does not freeze SSS/PHIC/HDMF contribution
- * amounts into benefits — those stay engine-computed by payroll schedule.
+ * amounts into benefits ΓÇö those stay engine-computed by payroll schedule.
  */
 export async function importStatutoryBenefitsUpload(params: {
 	prisma: PrismaClient;
@@ -795,7 +795,7 @@ export async function importStatutoryBenefitsUpload(params: {
 				totalAmount: row.paymentAmount,
 				startDate: row.startDate,
 				startPayrollCutOff: row.startDate,
-				// No end date in source → recurring every cutoff until superseded.
+				// No end date in source ΓåÆ recurring every cutoff until superseded.
 				scheduleMode: "RECURRING",
 				recurrenceFrequency: "EVERY_CUTOFF",
 				totalInstallments: 0,

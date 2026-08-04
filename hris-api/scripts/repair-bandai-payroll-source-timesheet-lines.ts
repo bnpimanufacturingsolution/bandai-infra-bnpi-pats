@@ -446,12 +446,16 @@ async function main() {
 		select: { startDate: true },
 	});
 	const calendarHolidayDates = new Set(holidays.map((holiday) => holiday.startDate.toISOString().slice(0, 10)));
+	// Include DRAFT/SUBMITTED/etc. so approved-OT mapping is not a false green when
+	// timesheets exist but are not yet APPROVED (Run Payroll still needs OT on lines).
+	// Override with --approved-only to restore legacy APPROVED-only scope.
+	const approvedOnly = process.argv.includes("--approved-only");
 	const timesheets = await prisma.timesheet.findMany({
 		where: {
 			organizationId: period.organizationId,
 			payrollPeriodId: period.id,
 			isDeleted: false,
-			status: "APPROVED",
+			...(approvedOnly ? { status: "APPROVED" } : {}),
 			employee: normalizedEmployeeFilter.size ? { employeeId: { in: Array.from(normalizedEmployeeFilter) } } : undefined,
 		},
 		select: {

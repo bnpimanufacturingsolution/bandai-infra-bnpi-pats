@@ -283,11 +283,16 @@ class ApiClient {
 		}
 	}
 
-	// GET request
-	async get<T>(endpoint: string, params?: QueryParams): Promise<ApiResponse<T>> {
+	// GET request (optional timeoutMs / signal via ApiRequestOptions)
+	async get<T>(
+		endpoint: string,
+		params?: QueryParams,
+		options?: ApiRequestOptions,
+	): Promise<ApiResponse<T>> {
 		const queryString = params ? this.buildQueryString(params) : "";
 		return this.request<T>(`${endpoint}${queryString}`, {
 			method: "GET",
+			...options,
 		});
 	}
 
