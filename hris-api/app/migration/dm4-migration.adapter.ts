@@ -427,15 +427,30 @@ export class Dm4MigrationAdapter {
 		});
 
 		const primaryOt = approvedOvertimeRepairs[0];
+		const writeCounts = (proof?.phase2Application?.writeCounts || {}) as Record<string, any>;
+		const selectedRowsTotal = Number(
+			proof?.phase1Selection?.selectedRowsTotal || proof?.phase2Application?.appliedTotal || 0,
+		);
+		const attendanceCreated = Number(writeCounts.attendanceCreated || 0);
+		const attendanceUpdated = Number(writeCounts.attendanceUpdated || 0);
+		const timesheetsRecalculated = Number(materialization.timesheetsRecalculated || 0);
+		const materializedMissingLines = Number(materialization.materializedMissingLines || 0);
 		return {
 			status: "COMPLETED",
 			phase: "COMPLETED",
 			counts: {
 				sourceWorkbookCount: resolution.sourceWorkbookFiles.length,
 				matchedEmployees: employeeCount,
+				selectedRowsTotal,
+				total: selectedRowsTotal,
+				created: attendanceCreated,
+				// Materialized timesheet work counts as updates for Upload activity.
+				updated: attendanceUpdated + timesheetsRecalculated + materializedMissingLines,
+				failed: 0,
 				attendanceRowsFound: Number(proof?.phase3DbProof?.attendanceRowsFound || 0),
 				timesheetlineRowsFound: Number(proof?.phase3DbProof?.timesheetlineRowsFound || 0),
-				materializedMissingLines: Number(materialization.materializedMissingLines || 0),
+				materializedMissingLines,
+				timesheetsRecalculated,
 				approvedOvertimeWorkbookCount: approvedOvertimeWorkbooks.length,
 				approvedOvertimePlannedLineUpdates: approvedOvertimeRepairs.reduce(
 					(sum, item) => sum + Number(item.repair?.plannedLineUpdates || 0),

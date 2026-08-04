@@ -281,6 +281,183 @@ export function resolveMassUploadImportStatus(
 	return "completed";
 }
 
+export type Dm4UploadActivitySnapshot = {
+	total: number;
+	created: number;
+	updated: number;
+	skipped: number;
+	failed: number;
+	status: "completed" | "partial" | "failed";
+	errors: MassUploadRowError[];
+	results: MassUploadRowResult[];
+	otOnly: boolean;
+};
+
+/**
+ * Map a durable DM4 run result into mass-upload activity counts/status.
+ * DM4 proof counts use attendance/timesheet metrics, not compensation created/updated.
+ * A COMPLETED run must never be persisted as "failed" with 0 ok.
+ */
+export function buildDm4UploadActivityFromRunResult(params: {
+	resultStatus: string;
+	counts?: Record<string, any> | null;
+	proofJson?: Record<string, any> | null;
+	errorMessage?: string | null;
+}): Dm4UploadActivitySnapshot {
+	const counts = (params.counts || {}) as Record<string, any>;
+	const proof = (params.proofJson || {}) as Record<string, any>;
+	const statusText = String(params.resultStatus || "").toUpperCase();
+	const writeCounts = (proof?.phase2Application?.writeCounts || {}) as Record<string, any>;
+	const materialization =
+		(proof?.timesheetMaterialization ||
+			proof?.phase2Materialization?.timesheetDays ||
+			{}) as Record<string, any>;
+
+	const otOnly = Boolean(
+		proof?.guardrails?.otOnly ||
+			proof?.mode === "OT_ONLY_SKIP_ATTENDANCE" ||
+			(Number(counts.attendanceWorkbookCount || 0) === 0 &&
+				Number(counts.approvedOvertimeWorkbookCount || 0) > 0),
+	);
+
+	const selectedRows = Number(
+		counts.selectedRowsTotal ??
+			counts.total ??
+			proof?.phase1Selection?.selectedRowsTotal ??
+			proof?.phase2Application?.appliedTotal ??
+			0,
+	);
+	const sourceWorkbookCount = Number(counts.sourceWorkbookCount ?? 0);
+	const attendanceCreated = Number(
+		counts.created ?? writeCounts.attendanceCreated ?? 0,
+	);
+	const attendanceUpdated = Number(
+		counts.attendanceUpdated ?? writeCounts.attendanceUpdated ?? 0,
+	);
+	const attendanceRowsFound = Number(
+		counts.attendanceRowsFound ?? proof?.phase3DbProof?.attendanceRowsFound ?? 0,
+	);
+	const timesheetlineRowsFound = Number(
+		counts.timesheetlineRowsFound ?? proof?.phase3DbProof?.timesheetlineRowsFound ?? 0,
+	);
+	const materializedMissingLines = Number(
+		counts.materializedMissingLines ?? materialization.materializedMissingLines ?? 0,
+	);
+	const timesheetsRecalculated = Number(
+		counts.timesheetsRecalculated ?? materialization.timesheetsRecalculated ?? 0,
+	);
+	const otLineUpdates = Number(
+		counts.approvedOvertimePlannedLineUpdates ??
+			counts.plannedLineUpdates ??
+			proof?.approvedOvertimeRepair?.plannedLineUpdates ??
+			0,
+	);
+	const explicitFailed = Number(counts.failed ?? counts.failures ?? 0);
+	const blocked = Number(counts.blocked ?? 0);
+
+	const isTerminalFail = statusText.includes("FAIL") || statusText === "BLOCKED";
+	const isTerminalSuccess =
+		statusText === "COMPLETED" || statusText === "COMPLETED_WITH_WARNINGS";
+
+	let created = 0;
+	let updated = 0;
+	let failed = Math.max(0, explicitFailed + blocked);
+	let skipped = Number(counts.skipped ?? 0);
+	let total = 0;
+
+	if (otOnly) {
+		updated = Math.max(0, otLineUpdates);
+		total = Math.max(updated, sourceWorkbookCount, isTerminalSuccess || updated > 0 ? 1 : 0);
+		if (isTerminalFail && updated === 0) {
+			failed = Math.max(failed, 1);
+		}
+	} else {
+		created = Math.max(0, attendanceCreated);
+		// Prefer explicit write/materialization counts; accept counts.updated from adapter.
+		const materializationUpdates = timesheetsRecalculated + materializedMissingLines;
+		updated = Math.max(
+			0,
+			attendanceUpdated + materializationUpdates,
+			// Adapter may already fold attendance+timesheet work into counts.updated.
+			Number(counts.updated ?? 0),
+		);
+		if (created + updated === 0 && isTerminalSuccess) {
+			// Idempotent re-import: proof rows still prove successful materialization.
+			updated = Math.max(
+				attendanceRowsFound,
+				timesheetlineRowsFound,
+				selectedRows,
+				sourceWorkbookCount,
+				1,
+			);
+		}
+		total = Math.max(
+			selectedRows,
+			created + updated + failed,
+			sourceWorkbookCount,
+			isTerminalSuccess ? 1 : 0,
+		);
+		if (isTerminalFail && created + updated === 0) {
+			failed = Math.max(failed, 1);
+			total = Math.max(total, failed);
+		}
+	}
+
+	let status: "completed" | "partial" | "failed";
+	if (isTerminalSuccess) {
+		status = failed > 0 && created + updated > 0 ? "partial" : failed > 0 ? "failed" : "completed";
+	} else if (isTerminalFail) {
+		status = created + updated > 0 ? "partial" : "failed";
+	} else {
+		status = resolveMassUploadImportStatus({ total, created, updated, failed });
+	}
+
+	// Never invent a failure message for a completed run with zero failures.
+	const errors: MassUploadRowError[] =
+		status === "failed" || (failed > 0 && params.errorMessage)
+			? [
+					{
+						row: 0,
+						message:
+							String(params.errorMessage || "").trim() ||
+							(isTerminalFail
+								? "DM4 import failed or blocked."
+								: "DM4 import finished with failures."),
+					},
+				]
+			: failed > 0
+				? [
+						{
+							row: 0,
+							message: String(params.errorMessage || "DM4 import finished with failures."),
+						},
+					]
+				: [];
+
+	const results: MassUploadRowResult[] = [
+		{
+			row: 1,
+			code: otOnly ? "DM4.3" : "DM4",
+			action: status === "failed" ? "failed" : updated > 0 || created > 0 ? "updated" : "created",
+			message: otOnly
+				? `Approved overtime only · ${updated} line update(s)`
+				: `Attendance/timesheet proof · ${created} created · ${updated} updated · attendanceRows=${attendanceRowsFound} · timesheetlines=${timesheetlineRowsFound}`,
+		},
+	];
+
+	return {
+		total,
+		created,
+		updated,
+		skipped,
+		failed,
+		status,
+		errors,
+		results,
+		otOnly,
+	};
+}
+
 /** Finalize summary samples for HTTP (full lists remain on state for persist). */
 export function finalizeMassUploadSummary(
 	state: InternalImportState,
@@ -332,6 +509,7 @@ export type Dm3ImportActivityKind =
 	| "manpower-databank"
 	| "compensation"
 	| "deduction"
+	| "worksharing-schedule"
 	| "dm1-workbook"
 	| "dm2-workbook"
 	| "dm4-workbook"
@@ -343,7 +521,7 @@ export type MigrationUploadActivityKind = Dm3ImportActivityKind;
 export const DM_UPLOAD_ACTIVITY_KINDS_BY_WORKBOOK: Record<string, Dm3ImportActivityKind[]> = {
 	dm1: ["dm1-workbook"],
 	dm2: ["dm2-workbook"],
-	dm3: ["workbook", "manpower-databank", "compensation", "deduction"],
+	dm3: ["workbook", "manpower-databank", "compensation", "deduction", "worksharing-schedule"],
 	dm4: ["dm4-workbook", "dm4-overtime"],
 };
 
@@ -366,6 +544,7 @@ export function isKnownUploadActivityKind(kind?: string | null): kind is Dm3Impo
 		value === "manpower-databank" ||
 		value === "compensation" ||
 		value === "deduction" ||
+		value === "worksharing-schedule" ||
 		value === "dm1-workbook" ||
 		value === "dm2-workbook" ||
 		value === "dm4-workbook" ||
@@ -557,6 +736,91 @@ export function buildMassUploadReportCsv(params: {
 	return lines.join("\n");
 }
 
+/**
+ * Repair DM4 activity rows that were persisted as "failed" while the durable
+ * migration run status was COMPLETED and created/updated/failed were all zero.
+ * Presentation-only by default; callers may persist the returned patch.
+ */
+export function presentDm4MassUploadImportLog<T extends Record<string, any>>(item: T): T {
+	if (!item) return item;
+	const kind = String(item.kind || "");
+	if (kind !== "dm4-workbook" && kind !== "dm4-overtime") return item;
+
+	const summary =
+		item.summaryJson && typeof item.summaryJson === "object"
+			? (item.summaryJson as Record<string, any>)
+			: {};
+	const runStatus = String(summary.runStatus || "").toUpperCase();
+	// Only rewrite the known bad shape: status=failed with zero failed/created/updated
+	// while the durable run was COMPLETED (or proof counts prove materialization).
+	const hasProofSuccess =
+		Number(summary.attendanceRowsFound || summary.counts?.attendanceRowsFound || 0) > 0 ||
+		Number(summary.timesheetlineRowsFound || summary.counts?.timesheetlineRowsFound || 0) > 0;
+	const looksMisclassified =
+		String(item.status || "").toLowerCase() === "failed" &&
+		Number(item.failed || 0) === 0 &&
+		Number(item.created || 0) === 0 &&
+		Number(item.updated || 0) === 0 &&
+		(runStatus === "COMPLETED" ||
+			runStatus === "COMPLETED_WITH_WARNINGS" ||
+			hasProofSuccess);
+
+	// Only rewrite when status says failed with zero work — not true failures.
+	if (!looksMisclassified) return item;
+	// If runStatus is explicitly FAILED/BLOCKED, keep failed.
+	if (runStatus.includes("FAIL") || runStatus === "BLOCKED") return item;
+
+	const repaired = buildDm4UploadActivityFromRunResult({
+		resultStatus: runStatus || "COMPLETED",
+		counts: (summary.counts as Record<string, any>) || {
+			sourceWorkbookCount: Number(item.total || 1),
+			attendanceRowsFound: Number(summary.attendanceRowsFound || 0),
+			timesheetlineRowsFound: Number(summary.timesheetlineRowsFound || 0),
+			materializedMissingLines: Number(summary.materializedMissingLines || 0),
+			approvedOvertimeWorkbookCount: summary.otOnly ? 1 : 0,
+			attendanceWorkbookCount: summary.otOnly ? 0 : 1,
+			approvedOvertimePlannedLineUpdates: Number(
+				summary.counts?.approvedOvertimePlannedLineUpdates || 0,
+			),
+		},
+		proofJson: {
+			guardrails: { otOnly: Boolean(summary.otOnly) },
+			mode: summary.otOnly ? "OT_ONLY_SKIP_ATTENDANCE" : undefined,
+			phase3DbProof: {
+				attendanceRowsFound: Number(
+					summary.attendanceRowsFound || summary.counts?.attendanceRowsFound || 0,
+				),
+				timesheetlineRowsFound: Number(
+					summary.timesheetlineRowsFound || summary.counts?.timesheetlineRowsFound || 0,
+				),
+			},
+		},
+	});
+
+	return {
+		...item,
+		status: repaired.status,
+		total: repaired.total,
+		created: repaired.created,
+		updated: repaired.updated,
+		skipped: repaired.skipped,
+		failed: repaired.failed,
+		errorsJson: repaired.errors,
+		resultsJson: repaired.results,
+		summaryJson: {
+			...summary,
+			status: repaired.status,
+			total: repaired.total,
+			created: repaired.created,
+			updated: repaired.updated,
+			failed: repaired.failed,
+			errorTotal: repaired.errors.length,
+			resultTotal: repaired.results.length,
+			repairedFromMisclassified: true,
+		},
+	};
+}
+
 export async function listMassUploadImportLogs(params: {
 	prisma: PrismaClient;
 	organizationId: string;
@@ -600,6 +864,7 @@ export async function listMassUploadImportLogs(params: {
 					skipped: true,
 					failed: true,
 					periodCodes: true,
+					summaryJson: true,
 					errorsTruncated: true,
 					resultsTruncated: true,
 					startedAt: true,
@@ -612,7 +877,10 @@ export async function listMassUploadImportLogs(params: {
 			}),
 			prismaAny.massUploadImportLog.count({ where }),
 		]);
-		return { items, total };
+		return {
+			items: (items || []).map((item: any) => presentDm4MassUploadImportLog(item)),
+			total,
+		};
 	} catch (error: any) {
 		// Table not applied yet (migration pending) — return empty rather than 500 the DM3 page.
 		const message = String(error?.message || "");
@@ -635,7 +903,7 @@ export async function getMassUploadImportLog(params: {
 	const prismaAny = params.prisma as any;
 	if (!prismaAny.massUploadImportLog?.findFirst) return null;
 	try {
-		return await prismaAny.massUploadImportLog.findFirst({
+		const item = await prismaAny.massUploadImportLog.findFirst({
 			where: {
 				id: params.id,
 				organizationId: params.organizationId,
@@ -647,6 +915,34 @@ export async function getMassUploadImportLog(params: {
 				},
 			},
 		});
+		if (!item) return null;
+		const presented = presentDm4MassUploadImportLog(item);
+		// Persist repair so list/detail stay consistent after first open.
+		if (
+			presented !== item &&
+			(presented as any).summaryJson?.repairedFromMisclassified &&
+			prismaAny.massUploadImportLog?.update
+		) {
+			try {
+				await prismaAny.massUploadImportLog.update({
+					where: { id: item.id },
+					data: {
+						status: presented.status,
+						total: presented.total,
+						created: presented.created,
+						updated: presented.updated,
+						skipped: presented.skipped,
+						failed: presented.failed,
+						errorsJson: presented.errorsJson,
+						resultsJson: presented.resultsJson,
+						summaryJson: presented.summaryJson,
+					},
+				});
+			} catch {
+				// Presentation still returns repaired view even if persist fails.
+			}
+		}
+		return presented;
 	} catch (error: any) {
 		const message = String(error?.message || "");
 		if (

@@ -14,6 +14,7 @@ import {
 } from "./migration-run.types";
 import { getMigrationStepPlan } from "./migration-step-registry";
 import {
+	buildDm4UploadActivityFromRunResult,
 	persistDm3ImportActivityLog,
 	resolveMassUploadImportStatus,
 } from "./bnpi-mass-upload-import.service";
@@ -1032,100 +1033,102 @@ export class MigrationRunService {
 		) {
 			const counts = (result.counts || {}) as Record<string, any>;
 			const proof = (result.proofJson || {}) as Record<string, any>;
-			const otOnly = Boolean(
-				proof?.guardrails?.otOnly ||
-					proof?.mode === "OT_ONLY_SKIP_ATTENDANCE" ||
-					(Number(counts.attendanceWorkbookCount || 0) === 0 &&
-						Number(counts.approvedOvertimeWorkbookCount || 0) > 0),
-			);
-			const total = Number(
-				counts.totalRows ??
-					counts.total ??
-					counts.rows ??
-					counts.processed ??
-					counts.sourceWorkbookCount ??
-					0,
-			);
-			const created = Number(counts.created ?? counts.success ?? 0);
-			const updated = Number(
-				counts.updated ??
-					counts.plannedLineUpdates ??
-					proof?.approvedOvertimeRepair?.plannedLineUpdates ??
-					0,
-			);
-			const skipped = Number(counts.skipped ?? 0);
-			const failed = Number(counts.failed ?? counts.failures ?? 0);
-			const blocked = Number(counts.blocked ?? 0);
-			const statusText = String(result.status || "").toUpperCase();
-			const status =
-				statusText.includes("FAIL") || statusText === "BLOCKED"
-					? failed + blocked > 0 && created + updated > 0
-						? ("partial" as const)
-						: ("failed" as const)
-					: resolveMassUploadImportStatus({
-							total: total || created + updated + failed + blocked,
-							created,
-							updated,
-							failed: failed + blocked,
-						});
-			const kind =
-				current.workbookId === "dm4"
-					? otOnly
-						? ("dm4-overtime" as const)
-						: ("dm4-workbook" as const)
-					: ("workbook" as const);
-			const defaultName =
-				kind === "dm4-overtime"
-					? "dm4-overtime.xlsx"
-					: kind === "dm4-workbook"
-						? "dm4-sources.xlsx"
-						: "dm3-workbook.xlsx";
-			const errorMessage =
-				(result.errorJson as any)?.message ||
-				(status === "failed"
-					? `${String(current.workbookId).toUpperCase()} import failed or blocked.`
-					: undefined);
-			const results =
-				current.workbookId === "dm4"
-					? [
-							{
-								row: 1,
-								code: otOnly ? "DM4.3" : "DM4",
-								action:
-									status === "failed"
-										? ("failed" as const)
-										: ("updated" as const),
-								message: otOnly
-									? `Approved overtime only · ${updated} line update(s)`
-									: `Attendance/timesheet proof · ${created} created · ${updated} updated`,
-							},
-						]
-					: [];
-			await persistDm3ImportActivityLog({
-				prisma: this.prisma,
-				organizationId: current.organizationId,
-				kind,
-				sourceFilename: current.sourceFilename || defaultName,
-				migrationRunId: runId,
-				startedByUserId: current.startedByUserId || null,
-				startedAt: current.startedAt || current.createdAt || finishedAt,
-				finishedAt,
-				total: total || created + updated + failed + blocked,
-				created,
-				updated,
-				skipped,
-				failed: failed + blocked,
-				status,
-				errors: errorMessage ? [{ row: 0, message: String(errorMessage) }] : [],
-				results,
-				summaryExtra: {
-					runStatus: result.status,
-					phase: result.phase || result.status,
+
+			if (current.workbookId === "dm4") {
+				const activity = buildDm4UploadActivityFromRunResult({
+					resultStatus: String(result.status || ""),
 					counts,
-					workbookId: current.workbookId,
-					otOnly,
-				},
-			});
+					proofJson: proof,
+					errorMessage: (result.errorJson as any)?.message || null,
+				});
+				const kind = activity.otOnly
+					? ("dm4-overtime" as const)
+					: ("dm4-workbook" as const);
+				await persistDm3ImportActivityLog({
+					prisma: this.prisma,
+					organizationId: current.organizationId,
+					kind,
+					sourceFilename:
+						current.sourceFilename ||
+						(activity.otOnly ? "dm4-overtime.xlsx" : "dm4-sources.xlsx"),
+					migrationRunId: runId,
+					startedByUserId: current.startedByUserId || null,
+					startedAt: current.startedAt || current.createdAt || finishedAt,
+					finishedAt,
+					total: activity.total,
+					created: activity.created,
+					updated: activity.updated,
+					skipped: activity.skipped,
+					failed: activity.failed,
+					status: activity.status,
+					errors: activity.errors,
+					results: activity.results,
+					summaryExtra: {
+						runStatus: result.status,
+						phase: result.phase || result.status,
+						counts,
+						workbookId: current.workbookId,
+						otOnly: activity.otOnly,
+						attendanceRowsFound: Number(counts.attendanceRowsFound || 0),
+						timesheetlineRowsFound: Number(counts.timesheetlineRowsFound || 0),
+						materializedMissingLines: Number(counts.materializedMissingLines || 0),
+					},
+				});
+			} else {
+				const total = Number(
+					counts.totalRows ??
+						counts.total ??
+						counts.rows ??
+						counts.processed ??
+						0,
+				);
+				const created = Number(counts.created ?? counts.success ?? 0);
+				const updated = Number(counts.updated ?? 0);
+				const skipped = Number(counts.skipped ?? 0);
+				const failed = Number(counts.failed ?? counts.failures ?? 0);
+				const blocked = Number(counts.blocked ?? 0);
+				const statusText = String(result.status || "").toUpperCase();
+				const status =
+					statusText.includes("FAIL") || statusText === "BLOCKED"
+						? failed + blocked > 0 && created + updated > 0
+							? ("partial" as const)
+							: ("failed" as const)
+						: resolveMassUploadImportStatus({
+								total: total || created + updated + failed + blocked,
+								created,
+								updated,
+								failed: failed + blocked,
+							});
+				const errorMessage =
+					(result.errorJson as any)?.message ||
+					(status === "failed"
+						? "DM3 import failed or blocked."
+						: undefined);
+				await persistDm3ImportActivityLog({
+					prisma: this.prisma,
+					organizationId: current.organizationId,
+					kind: "workbook",
+					sourceFilename: current.sourceFilename || "dm3-workbook.xlsx",
+					migrationRunId: runId,
+					startedByUserId: current.startedByUserId || null,
+					startedAt: current.startedAt || current.createdAt || finishedAt,
+					finishedAt,
+					total: total || created + updated + failed + blocked,
+					created,
+					updated,
+					skipped,
+					failed: failed + blocked,
+					status,
+					errors: errorMessage ? [{ row: 0, message: String(errorMessage) }] : [],
+					results: [],
+					summaryExtra: {
+						runStatus: result.status,
+						phase: result.phase || result.status,
+						counts,
+						workbookId: current.workbookId,
+					},
+				});
+			}
 		}
 	}
 }

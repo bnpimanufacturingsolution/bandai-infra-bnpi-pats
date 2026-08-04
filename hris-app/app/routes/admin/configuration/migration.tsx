@@ -507,6 +507,25 @@ function formatMassUploadUserActivityMessage(params: {
 										: "Upload";
 	const ok = Number(params.created || 0) + Number(params.updated || 0);
 	const failed = Number(params.failed || 0);
+	const status = String(params.status || "").toLowerCase();
+	// Prefer explicit status for durable DM4 runs when counts were historically zeroed.
+	if (
+		(kind === "dm4-workbook" || kind === "dm4-overtime") &&
+		status === "completed" &&
+		ok === 0 &&
+		failed === 0
+	) {
+		return `${title} · completed · 0 fail`;
+	}
+	if (
+		(kind === "dm4-workbook" || kind === "dm4-overtime") &&
+		status === "failed" &&
+		ok === 0 &&
+		failed === 0
+	) {
+		// Stale bad logs: do not claim 0 fail when status is failed.
+		return `${title} · failed`;
+	}
 	return `${title} · ${ok} ok · ${failed} fail`;
 }
 
@@ -8024,10 +8043,21 @@ export default function AdminMigrationPage() {
 				? dm3MassUploadResult
 				: null;
 		const resultErrors = resultForRole?.summary.errors || [];
-		const resultSuccesses = resultForRole?.summary.results || [];
-		const errorTotal = Number(
-			resultForRole?.summary.errorTotal ?? resultForRole?.summary.failed ?? 0,
+		const resultSuccesses = (resultForRole?.summary.results || []).filter(
+			(row) => String(row?.action || "").toLowerCase() !== "failed",
 		);
+		const resultStatus = String(resultForRole?.summary.status || "").toLowerCase();
+		// Prefer failed count over errors.length so completed DM4 runs with stale error
+		// rows (or success rows wrongly marked failed) do not inflate Failed chips.
+		const failedCount = Number(resultForRole?.summary.failed || 0);
+		const errorTotal =
+			resultStatus === "completed" || resultStatus === "partial"
+				? failedCount
+				: Number(
+						resultForRole?.summary.errorTotal ??
+							failedCount ??
+							(resultStatus === "failed" ? resultErrors.length : 0),
+					);
 		const resultTotal = Number(
 			resultForRole?.summary.resultTotal ??
 				Number(resultForRole?.summary.created || 0) +

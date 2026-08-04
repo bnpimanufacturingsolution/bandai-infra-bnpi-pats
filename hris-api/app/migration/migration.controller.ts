@@ -3548,6 +3548,15 @@ export const controller = (prisma: PrismaClient) => {
 			const results = Array.isArray(item.resultsJson) ? item.resultsJson : [];
 			const summaryFromJson =
 				item.summaryJson && typeof item.summaryJson === "object" ? item.summaryJson : {};
+			const status = String(item.status || "").toLowerCase();
+			// For completed runs, never inflate Failed from historical error arrays.
+			const errorTotal =
+				status === "completed"
+					? Number(item.failed || 0)
+					: Number((summaryFromJson as any).errorTotal ?? item.failed ?? errors.length);
+			const successResults = results.filter(
+				(row: any) => String(row?.action || "").toLowerCase() !== "failed",
+			);
 			res.status(200).json(
 				buildSuccessResponse(
 					"Mass upload import log retrieved",
@@ -3561,10 +3570,15 @@ export const controller = (prisma: PrismaClient) => {
 							skipped: item.skipped,
 							failed: item.failed,
 							periodCodes: item.periodCodes || [],
-							errors,
-							results,
-							errorTotal: Number((summaryFromJson as any).errorTotal ?? errors.length),
-							resultTotal: Number((summaryFromJson as any).resultTotal ?? results.length),
+							errors: status === "completed" ? [] : errors,
+							results: successResults.length > 0 ? successResults : results,
+							errorTotal,
+							resultTotal: Number(
+								(summaryFromJson as any).resultTotal ??
+									(successResults.length > 0
+										? successResults.length
+										: results.length),
+							),
 							errorsTruncated: Boolean(item.errorsTruncated),
 							resultsTruncated: Boolean(item.resultsTruncated),
 							status: item.status,
