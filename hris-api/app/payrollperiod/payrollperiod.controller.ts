@@ -1095,6 +1095,40 @@ const controller = (prisma) => {
             res.status(error instanceof Error && /not found/i.test(error.message) ? 404 : 500).json((0, error_handler_1.buildErrorResponse)(error instanceof Error ? error.message : constant_1.config.ERROR.COMMON.INTERNAL_SERVER_ERROR, error instanceof Error && /not found/i.test(error.message) ? 404 : 500));
         }
     });
+    /** Schedule assignment deltas (WorkSharing / history) for Run Payroll accordion. */
+    const getScheduleDeltas = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        const { id: payrollPeriodId } = req.params;
+        const organizationId = req.organizationId;
+        const requestedPage = Number(req.query.page);
+        const requestedLimit = Number(req.query.limit);
+        const onlyWorkshareRaw = typeof req.query.onlyWorkshare === "string"
+            ? req.query.onlyWorkshare.trim().toLowerCase()
+            : "true";
+        const onlyWorkshare = onlyWorkshareRaw !== "false" && onlyWorkshareRaw !== "0";
+        const page = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.floor(requestedPage) : 1;
+        const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
+            ? Math.min(Math.floor(requestedLimit), 100)
+            : 25;
+        try {
+            if (!payrollPeriodId || !organizationId) {
+                res.status(400).json((0, error_handler_1.buildErrorResponse)("payrollPeriodId and organizationId are required", 400));
+                return;
+            }
+            const { getPayrollPeriodScheduleDeltas } = require("../../helper/payroll-schedule-delta.helper");
+            const deltas = yield getPayrollPeriodScheduleDeltas(prisma, {
+                payrollPeriodId,
+                organizationId,
+                page,
+                limit,
+                onlyWorkshare,
+            });
+            res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)("Payroll schedule deltas retrieved successfully", deltas, 200));
+        }
+        catch (error) {
+            payrollPeriodLogger.error(`Failed to load payroll schedule deltas: ${error}`);
+            res.status(error instanceof Error && /not found/i.test(error.message) ? 404 : 500).json((0, error_handler_1.buildErrorResponse)(error instanceof Error ? error.message : constant_1.config.ERROR.COMMON.INTERNAL_SERVER_ERROR, error instanceof Error && /not found/i.test(error.message) ? 404 : 500));
+        }
+    });
     const getTimesheetGenerationProgress = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
         try {
             const { jobId } = req.params;
@@ -1766,6 +1800,7 @@ const controller = (prisma) => {
         requestStopTimesheetPayroll,
         getOtReadiness,
         getOtPersonDetail,
+        getScheduleDeltas,
         getConfig,
         updateConfig,
         bulkGenerate,

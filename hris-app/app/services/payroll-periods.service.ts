@@ -397,6 +397,53 @@ export interface PayrollOtPersonDetail {
 	};
 }
 
+/** WorkSharing / schedule assignment deltas for Run Payroll accordion. */
+export interface PayrollScheduleDeltaRow {
+	historyId: string;
+	employeeId: string;
+	employeeCode: string | null;
+	name: string;
+	action: string;
+	effectiveAt: string | null;
+	createdAt: string;
+	reason: string | null;
+	beforeTemplateCode: string | null;
+	afterTemplateCode: string | null;
+	sourceWorkbook: string | null;
+	sourceSheet: string | null;
+	sourceRow: number | null;
+	isWorkshare: boolean;
+}
+
+export interface PayrollScheduleDeltaResponse {
+	period: {
+		id: string;
+		code: string | null;
+		startDate: string;
+		endDate: string;
+	};
+	summary: {
+		totalDeltas: number;
+		workshareDeltas: number;
+		otherDeltas: number;
+		uniqueEmployees: number;
+		templateChanges: number;
+		alreadySameSkipped: number;
+	};
+	rows: PayrollScheduleDeltaRow[];
+	pagination: {
+		page: number;
+		limit: number;
+		totalItems: number;
+		totalPages: number;
+		hasNextPage: boolean;
+	};
+	truth: {
+		source: string;
+		note: string;
+	};
+}
+
 export interface PayrollOtReadinessResponse {
 	period: {
 		id: string;
@@ -636,6 +683,25 @@ class PayrollPeriodsService extends APIService {
 		if (!response?.data) throw new Error("Invalid payroll OT person detail response");
 		const payload = response.data?.data || response.data;
 		return payload as PayrollOtPersonDetail;
+	}
+
+	async getScheduleDeltas(
+		periodId: string,
+		params?: { page?: number; limit?: number; onlyWorkshare?: boolean },
+	): Promise<PayrollScheduleDeltaResponse> {
+		const query = new URLSearchParams();
+		if (params?.page) query.set("page", String(params.page));
+		if (params?.limit) query.set("limit", String(params.limit));
+		if (params?.onlyWorkshare === false) query.set("onlyWorkshare", "false");
+		const qs = query.toString();
+		const response = await hrisApiClient.get<any>(
+			`/api/payrollperiod/${periodId}/schedule-deltas${qs ? `?${qs}` : ""}`,
+			undefined,
+			{ timeoutMs: 45_000 },
+		);
+		if (!response?.data) throw new Error("Invalid payroll schedule deltas response");
+		const payload = response.data?.data || response.data;
+		return payload as PayrollScheduleDeltaResponse;
 	}
 
 	async getGenerateTimesheetPayrollProgress(

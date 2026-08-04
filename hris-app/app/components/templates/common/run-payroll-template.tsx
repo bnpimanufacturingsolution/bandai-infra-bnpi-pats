@@ -35,6 +35,7 @@ import {
 	useGenerateTimesheetPayrollPreview,
 	usePayrollOtReadiness,
 	usePayrollOtPersonDetail,
+	usePayrollScheduleDeltas,
 	payrollPeriodsQueryKeys,
 	usePayrollCycleConfig,
 } from "~/lib/hooks/usePayrollPeriods";
@@ -515,6 +516,17 @@ export function RunPayrollTemplate() {
 			departmentId: payrollScope.departmentId,
 			sectionId: payrollScope.sectionId,
 		},
+		Boolean(payrollPeriodId),
+	);
+	// WorkSharing / schedule assignment deltas (source of truth: EmployeeScheduleHistory).
+	const {
+		data: payrollScheduleDeltas,
+		isLoading: payrollScheduleDeltasLoading,
+		isFetching: payrollScheduleDeltasFetching,
+		isError: payrollScheduleDeltasError,
+	} = usePayrollScheduleDeltas(
+		payrollPeriodId,
+		{ page: 1, limit: 30, onlyWorkshare: true },
 		Boolean(payrollPeriodId),
 	);
 	// Lean OT matrix detail (report buckets) — not full timesheet totals.
@@ -3572,6 +3584,186 @@ export function RunPayrollTemplate() {
 											Open timesheets
 										</Button>
 									</div>
+								</AccordionContent>
+							</AccordionItem>
+
+							{/* Schedule deltas — WorkSharing / assignment history under OT stack */}
+							<AccordionItem value="schedule-deltas" className="border-t border-gray-100">
+								<AccordionTrigger className="rounded-md px-2 py-2.5 hover:no-underline hover:bg-gray-50/80">
+									<div className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-2">
+										<div className="flex min-w-0 items-center gap-2">
+											<Calendar className="h-4 w-4 shrink-0 text-gray-500" />
+											<span className="truncate text-sm font-semibold text-gray-900">
+												Schedule changes
+											</span>
+											<span className="hidden truncate text-[11px] text-gray-400 sm:inline">
+												WorkSharing · before → after
+											</span>
+										</div>
+										<div className="flex shrink-0 items-center gap-1.5">
+											{payrollScheduleDeltasLoading ||
+											payrollScheduleDeltasFetching ? (
+												<Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
+											) : (
+												<>
+													<span className="text-[11px] tabular-nums text-gray-600">
+														{formatCount(
+															payrollScheduleDeltas?.summary.uniqueEmployees ?? 0,
+														)}{" "}
+														emps
+													</span>
+													<Badge className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-xs font-medium text-gray-800">
+														{formatCount(
+															payrollScheduleDeltas?.summary.workshareDeltas ??
+																payrollScheduleDeltas?.summary.totalDeltas ??
+																0,
+														)}{" "}
+														deltas
+													</Badge>
+												</>
+											)}
+										</div>
+									</div>
+								</AccordionTrigger>
+								<AccordionContent className="px-1 pb-2 pt-0">
+									<p className="mb-2 text-[11px] leading-relaxed text-gray-500">
+										<strong className="font-medium text-gray-700">
+											Source of truth
+										</strong>
+										:{" "}
+										<code className="rounded bg-gray-100 px-1 text-[10px]">
+											EmployeeScheduleHistory
+										</code>{" "}
+										from WorkSharing backfill (template before → after). Already-matching
+										schedules are skipped at apply time (no history row).
+									</p>
+									<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-4">
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">
+												Workshare deltas
+											</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
+												{formatCount(
+													payrollScheduleDeltas?.summary.workshareDeltas ?? 0,
+												)}
+											</p>
+										</div>
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">
+												Unique employees
+											</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-emerald-800">
+												{formatCount(
+													payrollScheduleDeltas?.summary.uniqueEmployees ?? 0,
+												)}
+											</p>
+										</div>
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">
+												Template changes
+											</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-orange-800">
+												{formatCount(
+													payrollScheduleDeltas?.summary.templateChanges ?? 0,
+												)}
+											</p>
+										</div>
+										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
+											<p className="truncate text-[11px] text-gray-500">Total rows</p>
+											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
+												{formatCount(
+													payrollScheduleDeltas?.summary.totalDeltas ?? 0,
+												)}
+											</p>
+										</div>
+									</div>
+									<div className="mt-2 max-h-[min(180px,28vh)] overflow-y-auto overscroll-contain divide-y divide-gray-100 rounded-lg border border-gray-200 modern-scroll">
+										{payrollScheduleDeltasLoading && !payrollScheduleDeltas ? (
+											Array.from({ length: 4 }).map((_, i) => (
+												<div
+													key={`sch-skel-${i}`}
+													className="flex h-9 items-center gap-2 px-2">
+													<div className="min-w-0 flex-1 space-y-1">
+														<Skeleton className="h-3 w-2/3" />
+														<Skeleton className="h-2.5 w-1/2" />
+													</div>
+												</div>
+											))
+										) : payrollScheduleDeltasError ? (
+											<div className="px-3 py-3 text-xs text-amber-800">
+												Could not load schedule deltas. Restart API if route 404.
+												Apply WorkSharing via{" "}
+												<code className="rounded bg-gray-100 px-1 text-[10px]">
+													backfill-employee-schedules-from-worksharing.ts
+												</code>
+												.
+											</div>
+										) : (payrollScheduleDeltas?.rows || []).length > 0 ? (
+											(payrollScheduleDeltas?.rows || []).map((row) => (
+												<button
+													key={row.historyId}
+													type="button"
+													onClick={() => {
+														if (!row.employeeId) return;
+														const params = new URLSearchParams();
+														params.set("from", "run-payroll");
+														params.set("tab", "schedule");
+														if (selectedPeriodCode) {
+															params.set("periodCode", selectedPeriodCode);
+														}
+														params.set(
+															"returnTo",
+															`${window.location.pathname}${window.location.search}`,
+														);
+														navigate(
+															`/employee/${encodeURIComponent(row.employeeId)}?${params.toString()}`,
+														);
+													}}
+													className="flex min-h-9 w-full items-start gap-2 px-2 py-1.5 text-left hover:bg-orange-50/50 focus:outline-none focus-visible:bg-orange-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-300">
+													<div className="min-w-0 flex-1">
+														<p className="truncate text-xs font-medium text-gray-900 hover:text-orange-700 hover:underline">
+															{row.name}
+															{row.employeeCode ? (
+																<span className="font-normal text-gray-500">
+																	{" "}
+																	· {row.employeeCode}
+																</span>
+															) : null}
+														</p>
+														<p className="truncate text-[10px] text-gray-500">
+															<span className="font-medium text-gray-600">
+																{row.action}
+															</span>
+															{" · "}
+															<span className="tabular-nums text-gray-400">
+																{row.beforeTemplateCode || "—"}
+															</span>
+															{" → "}
+															<span className="tabular-nums text-orange-800">
+																{row.afterTemplateCode || "—"}
+															</span>
+														</p>
+													</div>
+													<ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-gray-300" />
+												</button>
+											))
+										) : (
+											<div className="px-3 py-3 text-xs leading-relaxed text-gray-600">
+												<strong className="text-gray-800">0 workshare deltas</strong>{" "}
+												for this period window. Either schedules already matched
+												(backfill skip) or WorkSharing has not been applied yet for
+												this cutoff.
+											</div>
+										)}
+									</div>
+									<p className="mt-1.5 text-[10px] text-gray-400">
+										Showing{" "}
+										{formatCount(payrollScheduleDeltas?.rows?.length || 0)} of{" "}
+										{formatCount(
+											payrollScheduleDeltas?.pagination?.totalItems || 0,
+										)}{" "}
+										· history DB
+									</p>
 								</AccordionContent>
 							</AccordionItem>
 							</Accordion>

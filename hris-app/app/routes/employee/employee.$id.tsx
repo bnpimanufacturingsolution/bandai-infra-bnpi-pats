@@ -71,6 +71,16 @@ export default function EmployeeDetailPage() {
 	};
 
 	const handleBack = () => {
+		// Prefer explicit returnTo (e.g. Run Payroll schedule deeplink) over from= slug.
+		const returnTo = searchParams.get("returnTo");
+		if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+			navigate(returnTo);
+			return;
+		}
+		if (fromParam === "run-payroll") {
+			navigate("/hr/run-payroll");
+			return;
+		}
 		if (fromParam) {
 			navigate(`/${fromParam.replace(/-/g, "/")}`);
 			return;

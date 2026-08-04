@@ -319,6 +319,26 @@ export const usePayrollOtPersonDetail = (
 	});
 };
 
+/** WorkSharing / schedule assignment deltas for Run Payroll (under Approved OT stack). */
+export const usePayrollScheduleDeltas = (
+	periodId: string | null | undefined,
+	params?: { page?: number; limit?: number; onlyWorkshare?: boolean },
+	enabled: boolean = true,
+) => {
+	return useQuery({
+		queryKey: ["payrollScheduleDeltas", periodId, params],
+		queryFn: () => {
+			if (!periodId) return null;
+			return payrollPeriodsService.getScheduleDeltas(periodId, params);
+		},
+		enabled: Boolean(periodId) && enabled,
+		staleTime: 60_000,
+		gcTime: 5 * 60_000,
+		refetchOnWindowFocus: false,
+		retry: 1,
+	});
+};
+
 /** Honest empty-state copy when OT readiness fails or times out (accordion-safe). */
 export function payrollOtReadinessErrorMessage(error: unknown): string {
 	const status = (error as any)?.status ?? (error as any)?.response?.status;

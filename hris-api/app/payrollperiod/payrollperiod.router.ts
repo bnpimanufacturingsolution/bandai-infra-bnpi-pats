@@ -22,6 +22,7 @@ interface IController {
 	): Promise<void>;
 	getOtReadiness(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getOtPersonDetail(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getScheduleDeltas(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	updateConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	bulkGenerate(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -491,6 +492,19 @@ export const router = (route: Router, controller: IController): Router => {
 			label: "payrollperiod:ot-person-detail",
 		}),
 		controller.getOtPersonDetail,
+	);
+
+	/**
+	 * Schedule assignment deltas (WorkSharing backfill / reassignment history)
+	 * for Run Payroll — shown under Approved OT stack.
+	 */
+	routes.get(
+		"/:id/schedule-deltas",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "payrollperiod:schedule-deltas",
+		}),
+		controller.getScheduleDeltas,
 	);
 
 	routes.get("/:id/generate-timesheet/progress", controller.getActiveTimesheetGenerationProgress);

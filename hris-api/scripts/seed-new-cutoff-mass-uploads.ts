@@ -43,6 +43,13 @@ const compensationCodeMap: Record<
 	OAD: { name: "Other Compensation", reconciliationAction: "GROSS_INCLUDED" },
 	OBA: { name: "OB Allowance", reconciliationAction: "GROSS_INCLUDED" },
 	PFA: { name: "Perfect Attendance", reconciliationAction: "RECEIVABLE_ONLY" },
+	// BNPI register: Incentive 2025 is a post-NetPay / TotalReceivable column, not NetPay.
+	// See docs/BNPI_JUNE11_25_2026_PAYROLL_PARITY_CHECKLIST.md (post-net receivable lines).
+	INC: {
+		name: "Incentive",
+		reconciliationAction: "RECEIVABLE_ONLY",
+		note: "Post-net receivable (register Incentive column); do not mix into NetPay.",
+	},
 	TSA: { name: "Technical Skills Allowance", reconciliationAction: "GROSS_INCLUDED" },
 };
 

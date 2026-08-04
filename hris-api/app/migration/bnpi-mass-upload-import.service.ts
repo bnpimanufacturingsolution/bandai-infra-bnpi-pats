@@ -165,24 +165,59 @@ function addMonths(date: Date, months: number): Date {
 	return next;
 }
 
+/** BNPI post-NetPay / TotalReceivable codes (register columns after NetPay). */
+const BNPI_RECEIVABLE_ONLY_CODES = new Set([
+	"INC",
+	"ARP",
+	"PFA",
+	"LLA",
+	"MLA",
+]);
+
 async function ensureBenefitType(
 	prisma: PrismaClient,
 	organizationId: string,
 	code: string,
 	options?: { name?: string; direction?: "COMPENSATION" | "DEDUCTION" },
 ) {
+	const normalized = String(code || "").trim().toUpperCase();
 	const existing = await prisma.benefitType.findFirst({
 		where: {
 			organizationId,
 			isDeleted: false,
-			OR: [{ code: { equals: code, mode: "insensitive" } }, { name: { equals: code, mode: "insensitive" } }],
+			OR: [
+				{ code: { equals: code, mode: "insensitive" } },
+				{ name: { equals: code, mode: "insensitive" } },
+			],
 		},
-		select: { id: true, code: true, name: true },
+		select: {
+			id: true,
+			code: true,
+			name: true,
+			reconciliationAction: true,
+		},
 	});
-	if (existing) return existing;
+	if (existing) {
+		// Heal known BNPI post-net codes that were auto-created with null action.
+		if (
+			BNPI_RECEIVABLE_ONLY_CODES.has(String(existing.code || "").toUpperCase()) &&
+			!existing.reconciliationAction
+		) {
+			await prisma.benefitType.update({
+				where: { id: existing.id },
+				data: {
+					reconciliationAction: "RECEIVABLE_ONLY",
+					isTaxable: false,
+				},
+			});
+		}
+		return existing;
+	}
 
 	const name = options?.name || compensationBenefitLabel(code);
 	const direction = options?.direction || "COMPENSATION";
+	const receivableOnly =
+		direction === "COMPENSATION" && BNPI_RECEIVABLE_ONLY_CODES.has(normalized);
 	// BenefitCategory has no DEDUCTION value — use OTHER for deduction-direction types.
 	// payrollDirection is the field that marks compensation vs deduction.
 	return prisma.benefitType.create({
@@ -193,7 +228,8 @@ async function ensureBenefitType(
 			category: direction === "DEDUCTION" ? "OTHER" : "ALLOWANCE",
 			payrollDirection: direction,
 			description: `Auto-created from BNPI mass upload (${code})`,
-			isTaxable: direction === "COMPENSATION",
+			isTaxable: direction === "COMPENSATION" && !receivableOnly,
+			reconciliationAction: receivableOnly ? "RECEIVABLE_ONLY" : null,
 			isActive: true,
 			isDefault: false,
 			defaultInstallments: 1,

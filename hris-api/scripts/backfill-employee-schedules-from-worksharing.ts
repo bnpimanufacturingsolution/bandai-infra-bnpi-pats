@@ -318,14 +318,60 @@ const buildShiftPayload = (organizationId: string, assignment: SourceAssignment)
 	};
 };
 
+/** Retry Prisma writes over flaky SSH/K3s DB forwards (P1001/P1017/P2024). */
+const withDbRetry = async <T>(
+	label: string,
+	fn: () => Promise<T>,
+	attempts = 12,
+): Promise<T> => {
+	let last: unknown;
+	for (let i = 1; i <= attempts; i++) {
+		try {
+			return await fn();
+		} catch (error) {
+			last = error;
+			const message = error instanceof Error ? error.message : String(error);
+			const retryable =
+				/Can't reach database server|Server has closed the connection|connection pool|P1001|P1017|P2024|Timed out fetching|Connection reset|ECONNRESET|ECONNREFUSED/i.test(
+					message,
+				);
+			if (!retryable || i === attempts) throw error;
+			const waitMs = Math.min(2000 * i, 20000);
+			console.warn(
+				JSON.stringify({
+					phase: "db_retry",
+					label,
+					attempt: i,
+					waitMs,
+					message: message.slice(0, 160),
+				}),
+			);
+			await new Promise((r) => setTimeout(r, waitMs));
+			try {
+				await prisma.$disconnect();
+			} catch {
+				/* ignore */
+			}
+			try {
+				await prisma.$connect();
+			} catch {
+				/* next attempt will surface connect errors */
+			}
+		}
+	}
+	throw last instanceof Error ? last : new Error(String(last));
+};
+
 const main = async () => {
 	const organizationId = await resolveOrganizationId();
 	const { sourcePath, sheetName, dateColumns, assignments } = readSourceAssignments();
 	const employeeIds = assignments.map((assignment) => assignment.employeeExternalId);
-	const employees = await prisma.employee.findMany({
-		where: { organizationId, isDeleted: false, employeeId: { in: employeeIds } },
-		select: { id: true, employeeId: true, embeddedSchedule: true },
-	});
+	const employees = await withDbRetry("employee.findMany", () =>
+		prisma.employee.findMany({
+			where: { organizationId, isDeleted: false, employeeId: { in: employeeIds } },
+			select: { id: true, employeeId: true, embeddedSchedule: true },
+		}),
+	);
 	const employeesByExternalId = new Map(
 		employees.map((employee) => [employee.employeeId, employee]),
 	);
@@ -574,33 +620,37 @@ const main = async () => {
 			reason: "BNPI WorkSharingSchedule employee schedule assignment backfill",
 			version: Number(current?.version || 0) + 1,
 		});
-		await prisma.employee.update({
-			where: { id: employee.id },
-			data: { embeddedSchedule: nextEmbeddedSchedule as any },
-		});
-		await appendEmployeeScheduleHistory(prisma, {
-			organizationId,
-			employeeId: employee.id,
-			action: current?.templateCode ? "reassigned" : "assigned",
-			effectiveAt: assignment.effectiveFrom,
-			reason: "BNPI WorkSharingSchedule employee schedule assignment backfill",
-			beforeSchedule: current || null,
-			afterSchedule: nextEmbeddedSchedule,
-			metadata: {
-				sourceWorkbook: stats.sourceWorkbook,
-				sourceSheet: assignment.sourceSheet,
-				sourceRow: assignment.sourceRow,
-				sourceEmployeeId: assignment.sourceEmployeeId,
-				sourceEffectiveFrom: toDateKey(assignment.effectiveFrom),
-				sourceEffectiveTo: toDateKey(assignment.effectiveTo),
-				effectiveTo: null,
-				employeeName: assignment.employeeName,
-				department: assignment.department,
-				division: assignment.division,
-				position: assignment.position,
-				shift: assignment.shiftLabel,
-			},
-		});
+		await withDbRetry(`employee.update:${assignment.employeeExternalId}`, () =>
+			prisma.employee.update({
+				where: { id: employee.id },
+				data: { embeddedSchedule: nextEmbeddedSchedule as any },
+			}),
+		);
+		await withDbRetry(`scheduleHistory:${assignment.employeeExternalId}`, () =>
+			appendEmployeeScheduleHistory(prisma, {
+				organizationId,
+				employeeId: employee.id,
+				action: current?.templateCode ? "reassigned" : "assigned",
+				effectiveAt: assignment.effectiveFrom,
+				reason: "BNPI WorkSharingSchedule employee schedule assignment backfill",
+				beforeSchedule: current || null,
+				afterSchedule: nextEmbeddedSchedule,
+				metadata: {
+					sourceWorkbook: stats.sourceWorkbook,
+					sourceSheet: assignment.sourceSheet,
+					sourceRow: assignment.sourceRow,
+					sourceEmployeeId: assignment.sourceEmployeeId,
+					sourceEffectiveFrom: toDateKey(assignment.effectiveFrom),
+					sourceEffectiveTo: toDateKey(assignment.effectiveTo),
+					effectiveTo: null,
+					employeeName: assignment.employeeName,
+					department: assignment.department,
+					division: assignment.division,
+					position: assignment.position,
+					shift: assignment.shiftLabel,
+				},
+			}),
+		);
 		stats.employeeSchedulesUpdated++;
 	}
 
@@ -656,6 +706,10 @@ const main = async () => {
 
 	if (writeCsv) {
 		const csvPath = path.resolve(__dirname, "..", "..", "data", "import", "employee-schedules-import.csv");
+		const csvDir = path.dirname(csvPath);
+		if (!fs.existsSync(csvDir)) {
+			fs.mkdirSync(csvDir, { recursive: true });
+		}
 		fs.writeFileSync(
 			csvPath,
 			csvRows.map((row) => row.map(csvCell).join(",")).join("\n") + "\n",
