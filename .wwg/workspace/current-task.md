@@ -1,5 +1,30 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-05 Fix invisible View Payroll Report on completed period
+
+- Task mode: bug fix (UI visibility).
+- Symptom: on `/hr/run-payroll?periodView=past` for a COMPLETED period, the
+  **View Payroll Report** control above Special Payroll looked missing.
+- Root cause: button used `bg-emerald-700` / `hover:bg-emerald-800`, which are
+  not present in the compiled Tailwind CSS for this app → transparent
+  background + white text = invisible. DOM still had the button.
+- Fix: `hris-app/.../run-payroll-template.tsx` — use `bg-emerald-600
+  hover:bg-emerald-500` (proven to resolve) for View Payroll Report and current
+  period month chip.
+- Proof: Playwright `.runtime/view-payroll-btn-*/after-fix.{png,json}` —
+  computed bg `oklch(...)` non-transparent; green button visible above Special
+  Payroll.
+
+## Latest Task Addendum - 2026-08-05 Payroll tally: mass upload ≠ sole money source
+
+- Operator clarification → Project Truth **CONFIRMED**.
+- Not all compensation/deduction comes from cutoff mass-upload files; recurring
+  / standing enrollments apply when they resolve for the period.
+- Agents must classify each line: `mass_upload` | `recurring_enrollment` |
+  `engine` | `ot_attendance` | `missing_enrollment`.
+- Truth: `.wwg/wiki/project-truth.md`, summary, terminology; parity checklist +
+  `docs/dm-migration-workflow.md` corrected (mass upload is additive, not sole).
+
 ## Latest Task Addendum - 2026-08-04 Harden mass-upload / payroll resolve anti-stack
 
 - Task mode: bug fix / regression guard (double ARP open-horizon + period-scoped).

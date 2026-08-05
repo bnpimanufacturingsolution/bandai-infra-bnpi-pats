@@ -2600,7 +2600,7 @@ export function RunPayrollTemplate() {
 													isSelected
 														? "bg-orange-500 text-white"
 														: isCurrent
-															? "bg-emerald-700 text-white"
+															? "bg-emerald-600 text-white"
 															: isCompleted
 																? "bg-orange-600 text-white"
 																: "bg-gray-100 text-gray-600"
@@ -3801,12 +3801,14 @@ export function RunPayrollTemplate() {
 										</p>
 									</div>
 									<Button
+										type="button"
 										onClick={() =>
 											navigate(
 												getPayrollManagementUrl(selectedPeriodCard?.id),
 											)
 										}
-										className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-5 text-base gap-2">
+										data-testid="view-payroll-report"
+										className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-5 text-base gap-2 shadow-sm">
 										<FileText className="w-5 h-5" />
 										View Payroll Report
 									</Button>
