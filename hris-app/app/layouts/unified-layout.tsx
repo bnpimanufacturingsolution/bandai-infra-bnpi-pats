@@ -1,4 +1,4 @@
-import { Outlet } from "react-router";
+import { Outlet, useLocation } from "react-router";
 import { TopNavbar } from "~/components/molecules/shared/TopNavbar";
 import { AuthGuard } from "../guards/auth-guard";
 import { Sidebar } from "~/components/organisms/Sidebar";
@@ -10,6 +10,8 @@ import { ProductTourHost } from "~/components/organisms/tour/ProductTourHost";
 import { SocketProvider } from "~/contexts/socket-context";
 import { NotificationProvider } from "~/contexts/notification-context";
 import LoadingScreen from "~/components/atoms/LoadingScreen";
+import { isUnifiedViewportFillPath } from "~/lib/unified-viewport-fill";
+import { cn } from "~/lib/utils";
 
 /**
  * Unified Layout Component
@@ -17,11 +19,16 @@ import LoadingScreen from "~/components/atoms/LoadingScreen";
  * Used by all roles: employees, managers, hr-users, hr-managers
  * Shows role-specific sidebars and navigation
  * Allows cross-role navigation (e.g., HR viewing employee profiles)
+ *
+ * List/table pages use viewport-fill mode (height-locked main pane) so
+ * DataTable `containedScroll` fills remaining height like admin tables.
  */
 export default function UnifiedLayout() {
 	const { user, isLoading } = useAuth();
+	const location = useLocation();
 	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const currentEmployeeId = user?.metadata?.employee?.id;
+	const isViewportFillPage = isUnifiedViewportFillPath(location.pathname);
 
 	useActionMetrics({
 		enabled: !isLoading && !!currentEmployeeId,
@@ -58,8 +65,15 @@ export default function UnifiedLayout() {
 						  Root is a row flex on lg. The main column MUST use min-w-0 (not w-full)
 						  or flex min-content width from wide children (e.g. period carousels)
 						  expands the page and creates a document horizontal scrollbar.
+						  Viewport-fill list pages lock to h-screen so tables fill height.
 						*/}
-						<div className="flex min-h-screen max-w-[100vw] flex-col overflow-x-hidden bg-gray-50 lg:flex-row">
+						<div
+							className={cn(
+								"flex max-w-[100vw] flex-col overflow-x-hidden bg-gray-50 lg:flex-row",
+								isViewportFillPage
+									? "h-screen overflow-hidden"
+									: "min-h-screen",
+							)}>
 							{/* Mobile Sidebar Overlay */}
 							{sidebarOpen && (
 								<div
@@ -79,7 +93,11 @@ export default function UnifiedLayout() {
 							</div>
 
 							{/* Main Content Area — min-w-0 lets this column shrink inside the row flex */}
-							<div className="flex min-w-0 flex-1 flex-col">
+							<div
+								className={cn(
+									"flex min-w-0 flex-1 flex-col",
+									isViewportFillPage && "h-screen min-h-0 overflow-hidden",
+								)}>
 								{/* Top Navbar */}
 								<TopNavbar
 									sidebarOpen={sidebarOpen}
@@ -90,9 +108,23 @@ export default function UnifiedLayout() {
 									)}
 								/>
 
-								{/* Main Content — keep page-level X overflow off; allow vertical scroll */}
-								<main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-									<div className="container mx-auto min-w-0 max-w-7xl px-4 py-6 lg:px-6">
+								{/*
+								  List tables: fixed viewport height (h-0+flex-1), no page scroll.
+								  Forms/dashboards: page-level vertical scroll.
+								*/}
+								<main
+									className={cn(
+										"min-w-0 flex-1",
+										isViewportFillPage
+											? "flex h-0 min-h-0 flex-col overflow-hidden"
+											: "overflow-x-hidden overflow-y-auto",
+									)}>
+									<div
+										className={cn(
+											"container mx-auto min-w-0 max-w-7xl px-4 py-6 lg:px-6",
+											isViewportFillPage &&
+												"flex h-full min-h-0 flex-1 flex-col overflow-hidden",
+										)}>
 										<Outlet />
 									</div>
 								</main>

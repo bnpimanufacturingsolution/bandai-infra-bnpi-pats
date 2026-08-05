@@ -140,10 +140,18 @@ export interface DataTableProps<T> {
 	totalPages?: number;
 	searchPlaceholder?: string;
 	searchValue?: string; // Controlled search value for server-side search
-	containedScroll?: boolean; // Keep dense admin tables scrolling inside the table shell.
+	/**
+	 * Required for dense list/table pages (admin + HR standard).
+	 * Table body fills remaining viewport height and scrolls inside the shell;
+	 * page itself does not grow with row count. Pair with:
+	 * - layout viewport-fill path (`isAdminViewportFillPath` / `isUnifiedViewportFillPath`)
+	 * - `AdminTablePageShell` (or `flex h-full min-h-0 flex-col overflow-hidden`)
+	 */
+	containedScroll?: boolean;
 	/** Toolbar (search / add / filters) alignment. Defaults to `right` when `containedScroll` is on. */
 	toolbarAlign?: "left" | "right";
 }
+
 
 const DataTable = <T extends Record<string, any>>({
 	title,

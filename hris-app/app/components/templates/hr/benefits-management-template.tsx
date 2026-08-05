@@ -38,6 +38,7 @@ import {
 	DrawerTitle,
 } from "~/components/ui/drawer";
 import { EmployeeBenefitForm } from "~/components/templates/hr/employee-benefit-form";
+import { AdminTablePageShell } from "~/components/templates/AdminTablePageShell";
 import {
 	queryKeys as benefitTypeQueryKeys,
 	useBenefitTypes,
@@ -477,23 +478,26 @@ export function BenefitsManagement({
 	}
 
 	return (
-		<div className="space-y-6">
+		<AdminTablePageShell className="gap-3">
+			{/* Optional chrome above the table — shrink-0 so DataTable keeps flex-1 height */}
 			{returnToParam === "run-payroll" && (
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					onClick={() => {
-						navigate(runPayrollReturnUrl);
-					}}
-					className="h-9">
-					<ArrowLeft className="h-4 w-4" />
-					Back to Run Payroll
-				</Button>
+				<div className="shrink-0">
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={() => {
+							navigate(runPayrollReturnUrl);
+						}}
+						className="h-9">
+						<ArrowLeft className="h-4 w-4" />
+						Back to Run Payroll
+					</Button>
+				</div>
 			)}
 
 			{(activeSourceLabel || directionParam || periodCodeParam || payrollPeriodIdParam) && (
-				<div className="flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
+				<div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
 					<span className="font-medium text-gray-800">Filtered source</span>
 					{activeSourceLabel && <Badge variant="secondary">{activeSourceLabel}</Badge>}
 					{codeParam && <Badge variant="outline">{codeParam.toUpperCase()}</Badge>}
@@ -504,66 +508,69 @@ export function BenefitsManagement({
 				</div>
 			)}
 
-			<DataTable
-				title={title}
-				description={description}
-				data={benefitTypes}
-				columns={columns}
-				renderActions={renderActions}
-				isLoading={isLoadingTypes}
-				emptyMessage="No benefit types found"
-				emptyDescription="Create a benefit type in configuration, then enroll employees."
-				searchWidth="w-80"
-				searchPlaceholder="Search benefits by name or code..."
-				toolbarAlign="right"
-				itemsPerPage={limitParam}
-				currentPage={pageParam}
-				totalItems={benefitTypesData?.pagination?.total || benefitTypes.length}
-				searchValue={searchQuery}
-				onSearch={(query) => {
-					updateSearchParams((next) => {
-						if (query) {
-							next.set("search", query);
-						} else {
-							next.delete("search");
-						}
-						next.set("page", "1");
-					});
-				}}
-				onPageChange={(page) => {
-					updateSearchParams((next) => next.set("page", String(page)));
-				}}
-				filters={benefitAdvancedFilters}
-				filterValues={benefitAdvancedFilterValues}
-				filterButtonLabel="Filters"
-				filterColumns={1}
-				onFilterChange={(filters) => {
-					updateSearchParams((next) => {
-						const value = filters.direction;
-						if (!value || value === "all") {
-							next.delete("direction");
-						} else {
-							next.set("direction", value);
-						}
-						next.set("page", "1");
-					});
-				}}
-				headerActions={
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						className="h-9 gap-1.5"
-						onClick={() => setBulkImportOpen(true)}
-						data-testid="benefit-bulk-upload-button">
-						<Upload className="h-4 w-4" />
-						Bulk upload
-					</Button>
-				}
-				onAdd={openCreate}
-				addButtonLabel="Enroll employees"
-				addButtonClassName="bg-orange-600 hover:bg-orange-700 text-white"
-			/>
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+				<DataTable
+					title={title}
+					description={description}
+					data={benefitTypes}
+					columns={columns}
+					renderActions={renderActions}
+					isLoading={isLoadingTypes}
+					emptyMessage="No benefit types found"
+					emptyDescription="Create a benefit type in configuration, then enroll employees."
+					searchWidth="w-80"
+					searchPlaceholder="Search benefits by name or code..."
+					toolbarAlign="right"
+					itemsPerPage={limitParam}
+					currentPage={pageParam}
+					totalItems={benefitTypesData?.pagination?.total || benefitTypes.length}
+					searchValue={searchQuery}
+					onSearch={(query) => {
+						updateSearchParams((next) => {
+							if (query) {
+								next.set("search", query);
+							} else {
+								next.delete("search");
+							}
+							next.set("page", "1");
+						});
+					}}
+					onPageChange={(page) => {
+						updateSearchParams((next) => next.set("page", String(page)));
+					}}
+					filters={benefitAdvancedFilters}
+					filterValues={benefitAdvancedFilterValues}
+					filterButtonLabel="Filters"
+					filterColumns={1}
+					onFilterChange={(filters) => {
+						updateSearchParams((next) => {
+							const value = filters.direction;
+							if (!value || value === "all") {
+								next.delete("direction");
+							} else {
+								next.set("direction", value);
+							}
+							next.set("page", "1");
+						});
+					}}
+					headerActions={
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							className="h-9 gap-1.5"
+							onClick={() => setBulkImportOpen(true)}
+							data-testid="benefit-bulk-upload-button">
+							<Upload className="h-4 w-4" />
+							Bulk upload
+						</Button>
+					}
+					onAdd={openCreate}
+					addButtonLabel="Enroll employees"
+					addButtonClassName="bg-orange-600 hover:bg-orange-700 text-white"
+					containedScroll
+				/>
+			</div>
 
 			<BenefitEnrollmentImportModal
 				open={bulkImportOpen}
@@ -864,6 +871,6 @@ export function BenefitsManagement({
 					</div>
 				</div>
 			</Modal>
-		</div>
+		</AdminTablePageShell>
 	);
 }

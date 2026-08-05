@@ -1,5 +1,18 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-05 - Benefits Management full-height table standard
+
+- Status: `IMPLEMENTED`.
+- `/hr/benefits-management` now uses `AdminTablePageShell` + `containedScroll`
+  so the table fills remaining main-pane height like admin list tables.
+- Unified layout gains viewport-fill via `isUnifiedViewportFillPath` for HR
+  dense list routes (benefits-management, benefit-types, activity/audit logs,
+  settings/documents). Create path `/hr/benefits-management/new` stays page-scroll.
+- Durable standard documented in `DESIGN.md`,
+  `.grok/rules/05-datatable-full-height.md`, `AdminTablePageShell` JSDoc,
+  terminology. Always: viewport-fill path + shell + `containedScroll`.
+- Tests: `unified-viewport-fill.test.ts` + admin viewport-fill tests green.
+
 ## 2026-08-04 - DM3 compensation/deduction detailed import results + history
 
 - Status: `IMPLEMENTED_LOCAL_CLONE_PROVEN`.

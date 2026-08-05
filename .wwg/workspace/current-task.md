@@ -1,5 +1,20 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-05 Benefits Management full-height table standard
+
+- Task mode: UI standard + bug fix (layout).
+- Problem: `/hr/benefits-management` table was content-height only (`space-y-6` +
+  no `containedScroll`); did not fill main pane like admin list tables.
+- Standard (always for list DataTables):
+  1. Layout viewport-fill (`isAdminViewportFillPath` / `isUnifiedViewportFillPath`)
+  2. `AdminTablePageShell` (or equivalent flex height chain)
+  3. `DataTable` `containedScroll`
+- Code:
+  - `benefits-management-template.tsx` — shell + `containedScroll`
+  - `unified-layout.tsx` + `unified-viewport-fill.ts` — HR viewport-fill mode
+  - `DESIGN.md`, `.grok/rules/05-datatable-full-height.md`, terminology
+- Tests: `unified-viewport-fill.test.ts`
+
 ## Latest Task Addendum - 2026-08-05 Fix invisible View Payroll Report on completed period
 
 - Task mode: bug fix (UI visibility).
