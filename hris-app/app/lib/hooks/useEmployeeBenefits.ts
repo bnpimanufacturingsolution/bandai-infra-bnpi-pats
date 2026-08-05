@@ -32,8 +32,10 @@ export const queryKeys = {
 };
 
 /**
- * Per-benefit-type enrollment totals from the API (accurate), not a client-side
- * sample of a global list. Use for Benefits Management "Enrolled" column.
+ * Per-benefit-type enrollment totals via count-only API calls
+ * (`document=false`, no row payload). Use for Benefits Management "Enrolled".
+ *
+ * DataTable rule: column aggregates must not hydrate list documents.
  */
 export const useEmployeeBenefitCountsByTypeIds = (benefitTypeIds: string[]) => {
 	const stableIds = useMemo(
@@ -44,6 +46,7 @@ export const useEmployeeBenefitCountsByTypeIds = (benefitTypeIds: string[]) => {
 	const queries = useQueries({
 		queries: stableIds.map((benefitTypeId) => ({
 			queryKey: queryKeys.employeeBenefits.countByType(benefitTypeId),
+			// Count-only: server returns `{ count }` — no employee/benefit rows.
 			queryFn: () => employeeBenefitService.countByBenefitTypeId(benefitTypeId),
 			enabled: Boolean(benefitTypeId),
 			staleTime: 5 * 60 * 1000,

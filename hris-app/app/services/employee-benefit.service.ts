@@ -218,20 +218,20 @@ class EmployeeBenefitService extends APIService {
 	}
 
 	/**
-	 * Accurate enrollment total for one benefit type (no shared query-param mutation).
-	 * Prefer this over sampling a global employee-benefit page and counting client-side —
-	 * global samples under-count types whose rows are outside the sample window.
+	 * Count-only enrollment total for one benefit type.
+	 *
+	 * Performance contract (DataTable column counts):
+	 * - `document=false` + `pagination=false` + `count=true` → response is `{ count }` only
+	 * - Never pull row documents / joins just to derive a column total
+	 * - Prefer this over sampling a global list and counting client-side
 	 */
 	async countByBenefitTypeId(benefitTypeId: string): Promise<number> {
 		if (!benefitTypeId) return 0;
 		const params = new URLSearchParams({
-			page: "1",
-			limit: "1",
 			filter: `benefitTypeId:${benefitTypeId}`,
-			document: "true",
-			pagination: "true",
+			document: "false",
+			pagination: "false",
 			count: "true",
-			fields: "id",
 		});
 		const response = await hrisApiClient.get<any>(
 			`/api/employeeBenefit?${params.toString()}`,
@@ -240,8 +240,25 @@ class EmployeeBenefitService extends APIService {
 		if (data && typeof data === "object" && "data" in data) {
 			data = data.data;
 		}
-		const total = Number(data?.pagination?.total ?? data?.count ?? 0);
+		const total = Number(data?.count ?? data?.pagination?.total ?? 0);
 		return Number.isFinite(total) ? total : 0;
+	}
+
+	/**
+	 * Parallel count-only totals for many benefit types (one lightweight request each).
+	 * Safe for concurrent use (does not mutate shared query-param state).
+	 */
+	async countByBenefitTypeIds(
+		benefitTypeIds: string[],
+	): Promise<Record<string, number>> {
+		const uniqueIds = Array.from(new Set(benefitTypeIds.filter(Boolean)));
+		const entries = await Promise.all(
+			uniqueIds.map(async (id) => {
+				const total = await this.countByBenefitTypeId(id);
+				return [id, total] as const;
+			}),
+		);
+		return Object.fromEntries(entries);
 	}
 
 	/**

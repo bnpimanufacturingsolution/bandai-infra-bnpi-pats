@@ -19,6 +19,12 @@ import { cn } from "~/lib/utils";
  *
  * Do **not** wrap list tables in bare `space-y-6` only — that collapses height
  * to content and leaves empty viewport below the table.
+ *
+ * ## Count columns
+ *
+ * Aggregate chips (Enrolled, Members, …) must use **count-only** API calls
+ * (`document=false&pagination=false&count=true` or a dedicated counts endpoint).
+ * Do not hydrate full row lists just to display a number.
  */
 export function AdminTablePageShell({
 	children,

@@ -146,6 +146,10 @@ export interface DataTableProps<T> {
 	 * page itself does not grow with row count. Pair with:
 	 * - layout viewport-fill path (`isAdminViewportFillPath` / `isUnifiedViewportFillPath`)
 	 * - `AdminTablePageShell` (or `flex h-full min-h-0 flex-col overflow-hidden`)
+	 *
+	 * Count/aggregate columns (Enrolled, Members, …) must use count-only API
+	 * calls (`document=false&pagination=false&count=true`), not full row lists.
+	 * See DESIGN.md + `.grok/rules/05-datatable-full-height.md`.
 	 */
 	containedScroll?: boolean;
 	/** Toolbar (search / add / filters) alignment. Defaults to `right` when `containedScroll` is on. */

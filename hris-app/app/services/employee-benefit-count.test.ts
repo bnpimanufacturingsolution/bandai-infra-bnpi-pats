@@ -15,13 +15,12 @@ describe("employeeBenefitService.countByBenefitTypeId", () => {
 		getMock.mockReset();
 	});
 
-	it("returns pagination.total for a benefit type (accurate enrolled count)", async () => {
+	it("uses count-only API (no documents / no pagination / no row fields)", async () => {
 		getMock.mockResolvedValue({
 			data: {
 				data: {
-					employeeBenefits: [{ id: "row-1" }],
+					// Count-only shape — must not require employeeBenefits array
 					count: 831,
-					pagination: { total: 831, page: 1, limit: 1, totalPages: 831 },
 				},
 			},
 		});
@@ -36,11 +35,31 @@ describe("employeeBenefitService.countByBenefitTypeId", () => {
 		expect(url).toContain("/api/employeeBenefit?");
 		expect(url).toContain("filter=benefitTypeId%3Acmryj0l9g00gdvgakb9nbjxi5");
 		expect(url).toContain("count=true");
-		expect(url).toContain("limit=1");
+		expect(url).toContain("document=false");
+		expect(url).toContain("pagination=false");
+		// Must not request row payload / joins for a column total
+		expect(url).not.toContain("document=true");
+		expect(url).not.toContain("fields=");
+		expect(url).not.toContain("limit=");
 	});
 
 	it("returns 0 for empty benefitTypeId", async () => {
 		await expect(employeeBenefitService.countByBenefitTypeId("")).resolves.toBe(0);
 		expect(getMock).not.toHaveBeenCalled();
+	});
+
+	it("countByBenefitTypeIds batches parallel count-only calls", async () => {
+		getMock
+			.mockResolvedValueOnce({ data: { data: { count: 831 } } })
+			.mockResolvedValueOnce({ data: { data: { count: 66 } } });
+
+		const map = await employeeBenefitService.countByBenefitTypeIds([
+			"type-mla",
+			"type-hys",
+			"type-mla", // dedupe
+		]);
+
+		expect(map).toEqual({ "type-mla": 831, "type-hys": 66 });
+		expect(getMock).toHaveBeenCalledTimes(2);
 	});
 });

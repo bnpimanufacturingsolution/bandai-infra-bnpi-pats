@@ -1,5 +1,15 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-05 Count-only DataTable column standard
+
+- Task mode: performance + standard.
+- Enrolled column must not hydrate documents: `document=false&pagination=false&count=true`
+  → payload `{ count }` only.
+- Encoded in DESIGN.md, `.grok/rules/05-datatable-full-height.md` (section B),
+  terminology, DataTable/AdminTablePageShell docs.
+- Service: `countByBenefitTypeId` / `countByBenefitTypeIds`.
+- Tests: `employee-benefit-count.test.ts` assert count-only URL shape.
+
 ## Latest Task Addendum - 2026-08-05 Benefits Management enrolled count under-report
 
 - Task mode: bug fix.

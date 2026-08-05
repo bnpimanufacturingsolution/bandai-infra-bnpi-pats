@@ -37,6 +37,17 @@ Reference implementations: `/admin/configuration/agencies`, `/admin/devices/even
 
 Do **not** ship a new list table with only `space-y-6` + default `DataTable` (content-height only).
 
+### Count / aggregate columns (required performance standard)
+
+When a table column is a **count, total, or aggregate** (e.g. Enrolled, Members, Device users):
+
+1. **Fetch count-only** — use the list API with `document=false`, `pagination=false`, `count=true` (or a dedicated count/group endpoint). Response should be `{ count }` (or grouped totals), **not** a page of full records.
+2. **Do not hydrate rows for math** — never download enrollments/users/events just to `array.length` on the client for a column chip.
+3. **Scope the filter** — count with the same identity filter the UI means (e.g. `benefitTypeId:…`), not a global sample window.
+4. **Keep list loads separate** — open/drawer/detail views may load documents; the table column must not.
+
+Canonical example: Benefits Management **Enrolled** via `employeeBenefitService.countByBenefitTypeId` (`document=false&count=true`).
+
 ## Components
 
 - Use existing Radix/shadcn accordion, select, switch, input, and button components.
