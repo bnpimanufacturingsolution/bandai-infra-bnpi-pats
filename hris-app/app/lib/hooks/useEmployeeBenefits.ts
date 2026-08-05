@@ -1,4 +1,11 @@
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+	useQuery,
+	useQueries,
+	useMutation,
+	useQueryClient,
+	keepPreviousData,
+} from "@tanstack/react-query";
+import { useMemo } from "react";
 import employeeBenefitService, {
 	type EmployeeBenefit,
 	type EmployeeBenefitsResponse,
@@ -19,7 +26,44 @@ export const queryKeys = {
 			[...queryKeys.employeeBenefits.lists(), { params }] as const,
 		details: () => [...queryKeys.employeeBenefits.all, "detail"] as const,
 		detail: (id: string) => [...queryKeys.employeeBenefits.details(), id] as const,
+		countByType: (benefitTypeId: string) =>
+			[...queryKeys.employeeBenefits.all, "countByType", benefitTypeId] as const,
 	},
+};
+
+/**
+ * Per-benefit-type enrollment totals from the API (accurate), not a client-side
+ * sample of a global list. Use for Benefits Management "Enrolled" column.
+ */
+export const useEmployeeBenefitCountsByTypeIds = (benefitTypeIds: string[]) => {
+	const stableIds = useMemo(
+		() => Array.from(new Set(benefitTypeIds.filter(Boolean))).sort(),
+		[benefitTypeIds],
+	);
+
+	const queries = useQueries({
+		queries: stableIds.map((benefitTypeId) => ({
+			queryKey: queryKeys.employeeBenefits.countByType(benefitTypeId),
+			queryFn: () => employeeBenefitService.countByBenefitTypeId(benefitTypeId),
+			enabled: Boolean(benefitTypeId),
+			staleTime: 5 * 60 * 1000,
+		})),
+	});
+
+	const countByTypeId = useMemo(() => {
+		const map = new Map<string, number>();
+		stableIds.forEach((id, index) => {
+			const total = queries[index]?.data;
+			if (typeof total === "number") {
+				map.set(id, total);
+			}
+		});
+		return map;
+	}, [queries, stableIds]);
+
+	const isLoading = queries.some((query) => query.isLoading || query.isPending);
+
+	return { countByTypeId, isLoading, queries };
 };
 
 export const useEmployeeBenefits = (params?: ApiQueryParams) => {

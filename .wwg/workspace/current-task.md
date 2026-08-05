@@ -1,5 +1,18 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-05 Benefits Management enrolled count under-report
+
+- Task mode: bug fix.
+- Symptom: Meal Allowance **Enrolled = 0** in table, drawer listed ~500 people.
+- Root cause: table counted client-side from a global `limit=1000` `isActive`
+  sample sorted by `createdAt desc`. MLA has **831** enrollments but **0** in
+  that sample window (live API proof).
+- Fix: per-type API count via `countByBenefitTypeId` +
+  `useEmployeeBenefitCountsByTypeIds`; drawer uses accurate total and shows
+  “Showing N of M” when list is capped.
+- Tests: `employee-benefit-count.test.ts` green.
+- Live: MLA `pagination.total=831`.
+
 ## Latest Task Addendum - 2026-08-05 Benefits Management full-height table standard
 
 - Task mode: UI standard + bug fix (layout).

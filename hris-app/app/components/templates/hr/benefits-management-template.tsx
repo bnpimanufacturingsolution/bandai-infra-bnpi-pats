@@ -47,11 +47,15 @@ import {
 	queryKeys as employeeBenefitQueryKeys,
 	useDeleteEmployeeBenefit,
 	useEmployeeBenefit,
+	useEmployeeBenefitCountsByTypeIds,
 	useEmployeeBenefits,
 } from "~/lib/hooks/useEmployeeBenefits";
 import { formatDate } from "~/lib/utils/text-utils";
 import type { BenefitType } from "~/services/benefit-types.service";
 import type { EmployeeBenefit } from "~/services/employee-benefit.service";
+
+/** Drawer list page size; total enrolled uses API count, not this length. */
+const DRAWER_ENROLLMENT_PAGE_SIZE = 500;
 
 interface BenefitsManagementProps {
 	title?: string;
@@ -218,7 +222,7 @@ export function BenefitsManagement({
 
 	const { data: enrollmentsData, isLoading: isLoadingEnrollments } = useEmployeeBenefits({
 		page: 1,
-		limit: 500,
+		limit: DRAWER_ENROLLMENT_PAGE_SIZE,
 		filter: enrollmentFilterParts.join(",") || undefined,
 		sort: "createdAt",
 		order: "desc",
@@ -226,30 +230,35 @@ export function BenefitsManagement({
 		enabled: Boolean(typeIdParam),
 	} as any);
 
-	// Light enrollment list for counting on the main table (all active types in view)
-	const { data: enrollmentCountsData } = useEmployeeBenefits({
-		page: 1,
-		limit: 1000,
-		filter: "isActive:true",
-		sort: "createdAt",
-		order: "desc",
-		count: true,
-	});
-
-	const enrollmentCountByTypeId = useMemo(() => {
-		const map = new Map<string, number>();
-		for (const row of enrollmentCountsData?.employeeBenefits || []) {
-			const typeId = row.benefitTypeId || row.benefitType?.id;
-			if (!typeId) continue;
-			map.set(typeId, (map.get(typeId) || 0) + 1);
-		}
-		return map;
-	}, [enrollmentCountsData?.employeeBenefits]);
+	// Accurate per-type totals for the table (API count), not a global sample.
+	const visibleTypeIds = useMemo(
+		() => benefitTypes.map((type) => type.id).filter(Boolean),
+		[benefitTypes],
+	);
+	const { countByTypeId: enrollmentCountByTypeId, isLoading: isLoadingEnrollmentCounts } =
+		useEmployeeBenefitCountsByTypeIds(visibleTypeIds);
 
 	const enrollments = useMemo(
 		() => enrollmentsData?.employeeBenefits || [],
 		[enrollmentsData?.employeeBenefits],
 	);
+
+	const drawerEnrollmentTotal = useMemo(() => {
+		if (typeIdParam) {
+			const fromMap = enrollmentCountByTypeId.get(typeIdParam);
+			if (typeof fromMap === "number") return fromMap;
+		}
+		return (
+			enrollmentsData?.pagination?.total ??
+			(enrollmentsData as { count?: number } | undefined)?.count ??
+			enrollments.length
+		);
+	}, [
+		enrollmentCountByTypeId,
+		enrollments.length,
+		enrollmentsData,
+		typeIdParam,
+	]);
 
 	const filteredEnrollments = useMemo(() => {
 		const q = employeeSearch.trim().toLowerCase();
@@ -422,11 +431,27 @@ export function BenefitsManagement({
 			className: "whitespace-nowrap align-middle",
 			headerClassName: "whitespace-nowrap",
 			render: (_value, item) => {
-				const count = enrollmentCountByTypeId.get(item.id) || 0;
+				const hasCount = enrollmentCountByTypeId.has(item.id);
+				const count = enrollmentCountByTypeId.get(item.id) ?? 0;
 				return (
-					<span className="inline-flex items-center gap-1.5 text-sm font-medium tabular-nums text-gray-900">
+					<span
+						className="inline-flex items-center gap-1.5 text-sm font-medium tabular-nums text-gray-900"
+						data-testid={`benefit-type-enrolled-${item.id}`}
+						title={
+							hasCount
+								? `${count} enrolled employee(s)`
+								: isLoadingEnrollmentCounts
+									? "Loading enrollment count…"
+									: "Enrollment count unavailable"
+						}>
 						<Users className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
-						{count}
+						{hasCount ? (
+							count
+						) : isLoadingEnrollmentCounts ? (
+							<span className="text-neutral-400">…</span>
+						) : (
+							"—"
+						)}
 					</span>
 				);
 			},
@@ -647,15 +672,7 @@ export function BenefitsManagement({
 												: "Non-taxable"
 											: "—",
 									],
-									[
-										"Enrolled",
-										String(
-											typeIdParam
-												? enrollmentCountByTypeId.get(typeIdParam) ??
-														enrollments.length
-												: enrollments.length,
-										),
-									],
+									["Enrolled", String(drawerEnrollmentTotal)],
 								].map(([label, value]) => (
 									<div
 										key={label}
@@ -692,7 +709,11 @@ export function BenefitsManagement({
 									Assigned employees
 								</p>
 								<span className="text-xs text-neutral-500">
-									{filteredEnrollments.length} shown
+									{employeeSearch.trim()
+										? `${filteredEnrollments.length} match`
+										: enrollments.length < drawerEnrollmentTotal
+											? `Showing ${enrollments.length} of ${drawerEnrollmentTotal}`
+											: `${drawerEnrollmentTotal} enrolled`}
 								</span>
 							</div>
 							<div className="relative mb-3">

@@ -151,6 +151,7 @@ export interface UpdateEmployeeBenefitRequest {
 
 export interface EmployeeBenefitsResponse {
 	employeeBenefits: EmployeeBenefit[];
+	count?: number;
 	pagination: {
 		total: number;
 		page: number;
@@ -214,6 +215,33 @@ class EmployeeBenefitService extends APIService {
 					"Error fetching employee benefits",
 			);
 		}
+	}
+
+	/**
+	 * Accurate enrollment total for one benefit type (no shared query-param mutation).
+	 * Prefer this over sampling a global employee-benefit page and counting client-side —
+	 * global samples under-count types whose rows are outside the sample window.
+	 */
+	async countByBenefitTypeId(benefitTypeId: string): Promise<number> {
+		if (!benefitTypeId) return 0;
+		const params = new URLSearchParams({
+			page: "1",
+			limit: "1",
+			filter: `benefitTypeId:${benefitTypeId}`,
+			document: "true",
+			pagination: "true",
+			count: "true",
+			fields: "id",
+		});
+		const response = await hrisApiClient.get<any>(
+			`/api/employeeBenefit?${params.toString()}`,
+		);
+		let data = response.data;
+		if (data && typeof data === "object" && "data" in data) {
+			data = data.data;
+		}
+		const total = Number(data?.pagination?.total ?? data?.count ?? 0);
+		return Number.isFinite(total) ? total : 0;
 	}
 
 	/**
