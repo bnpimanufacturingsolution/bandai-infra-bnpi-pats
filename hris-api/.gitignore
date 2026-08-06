@@ -75,6 +75,7 @@ web_modules/
 # dotenv environment variable files
 .env.development.local
 .env.local-clone
+.env.local-native
 .env.test.local
 .env.production.local
 
@@ -159,3 +160,7 @@ infrastructure/onprem/observability/backups/
 
 .wwg/reports/backups/
 config.bat
+
+# Native host Postgres lane (npm run dev:native)
+.env.local-native
+

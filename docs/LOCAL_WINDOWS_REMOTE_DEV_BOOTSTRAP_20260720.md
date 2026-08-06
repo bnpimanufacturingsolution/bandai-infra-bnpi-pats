@@ -64,7 +64,7 @@ cd <repo>\hris-api
 npm.cmd run dev:local
 ```
 
-Single command (`scripts/run-dev-local.cjs`) does all of:
+Requires Docker. Single command (`scripts/run-dev-local.cjs`) does all of:
 
 1. Ensure `.env.local-clone` (copy from example if missing)
 2. Start/create Docker `hris-local-dev-clone` on `5433` with named volume `hris-local-dev-clone-pgdata`
@@ -72,6 +72,45 @@ Single command (`scripts/run-dev-local.cjs`) does all of:
 4. Run `prisma db push` against the local clone (`prisma/schema-postgres`) so tables exist for `/setup`
 5. Run predev with BNPI tunnel + Hikvision bridges skipped
 6. Start API watch against the local clone
+
+### Native host Postgres (no Docker, no VM) — separate third lane
+
+Does **not** replace `npm run dev` (VM tunnel `55435`) or `npm run dev:local` (Docker `5433`).
+
+```powershell
+cd <repo>\hris-api
+# one-time if binaries missing:
+npm.cmd install --no-save embedded-postgres@18.4.0-beta.17
+node node_modules/@embedded-postgres/windows-x64/scripts/hydrate-symlinks.js
+
+npm.cmd run db:native:start      # Postgres only on 127.0.0.1:5434
+npm.cmd run dev:native           # empty/schema-only API (.env.local-native)
+npm.cmd run dev:native:restore   # restore shared golden dump, then API
+npm.cmd run db:native:status
+npm.cmd run db:native:stop
+```
+
+#### Same snapshot data as `dev:local:restore`?
+
+**Yes.** Both lanes read the same portable dump:
+
+```text
+.runtime/local-db-snapshots/current/hris-local.dump
+```
+
+| Action | Docker lane | Native lane |
+|---|---|---|
+| Capture | `npm run db:snapshot` (from running Docker clone) | `npm run db:snapshot:native` |
+| Restore only | `npm run db:restore` | `npm run db:restore:native` |
+| Restore + API | `npm run dev:local:restore` | `npm run dev:native:restore` |
+
+The dump is gitignored. On a machine without a local capture, **copy** `.runtime/local-db-snapshots/` from a device that already ran `db:snapshot` (your other PCs that use `dev:local:restore`). Then `dev:native:restore` loads that same business data into port `5434`.
+
+| Lane | Command | DB | Env file |
+|---|---|---|---|
+| Shared VM DEV | `npm run dev` | tunnel `55435` | `.env` / `.env.development.local` |
+| Docker clone | `npm run dev:local` / `dev:local:restore` | Docker `5433` | `.env.local-clone` |
+| Native host | `npm run dev:native` / `dev:native:restore` | embedded `5434` | `.env.local-native` |
 
 Named volume (distinguishable in Docker Desktop / `docker volume ls`):
 

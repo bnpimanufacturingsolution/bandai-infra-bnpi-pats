@@ -10,6 +10,7 @@
  * 6) Start API watch with .env + .env.local-clone
  *
  * Does not touch shared VM DEV (55435). For that use: npm run dev
+ * No-Docker host Postgres is a separate path: npm run dev:native (port 5434)
  *
  * Skip schema push: HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true
  * Restore snapshot on start: HRIS_LOCAL_CLONE_RESTORE_ON_START=true or --restore
@@ -154,7 +155,8 @@ function logVolumeHintForExistingContainer() {
 function ensureContainer() {
 	if (!dockerAvailable()) {
 		fail(
-			"Docker is not available. Start Docker Desktop, then re-run: npm run dev:local",
+			"Docker is not available. Start Docker Desktop, then re-run: npm run dev:local\n" +
+				"  (No Docker? Use the separate native path instead: npm run dev:native)",
 		);
 	}
 
