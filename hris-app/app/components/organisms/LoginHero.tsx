@@ -1,77 +1,65 @@
-import { Globe, Sparkles, Zap } from "lucide-react";
-
+/**
+ * Pure visual background for the login surface.
+ * No marketing copy — soft geometric shapes only.
+ */
 export function LoginHero() {
 	return (
-		<div className="hidden lg:flex lg:w-[55%] relative items-center justify-center overflow-hidden bg-gradient-to-br from-orange-50 via-white to-red-50">
-			{/* Main Content Container */}
-			<div className="relative z-10 w-full h-full max-w-7xl mx-auto p-12 flex flex-col justify-between">
-				{/* Top Right Decorative Element */}
-				<div className="self-end animate-in fade-in slide-in-from-top-8 duration-1000 delay-100">
-					<div className="flex items-center gap-2 px-4 py-2 bg-white/60 backdrop-blur-md rounded-full border border-gray-200/50 shadow-sm">
-						<Globe className="w-4 h-4 text-orange-600" />
-						<span className="text-xs font-medium text-gray-600">
-							Global Entertainment
-						</span>
-					</div>
-				</div>
+		<div
+			aria-hidden="true"
+			className="pointer-events-none absolute inset-0 overflow-hidden"
+		>
+			{/* Soft base wash */}
+			<div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(226,6,19,0.06),transparent_55%)]" />
+			<div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_100%_100%,rgba(255,173,0,0.07),transparent_50%)]" />
 
-				{/* Center Content Area */}
-				<div className="flex-1 flex flex-col justify-center items-start lg:pl-12 xl:pl-20 max-w-2xl">
-					<div className="inline-flex items-center gap-2 px-3 py-1 bg-white/80 border border-orange-100 text-orange-600 rounded-full text-[10px] font-bold tracking-wider uppercase mb-6 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200 shadow-sm">
-						<Sparkles className="w-3 h-3" />
-						Fun for All into the Future
-					</div>
+			{/* Large soft orbs */}
+			<div className="absolute -left-[18%] -top-[12%] h-[52vmin] w-[52vmin] rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(226,6,19,0.12),rgba(226,6,19,0.03)_55%,transparent_70%)] blur-[2px]" />
+			<div className="absolute -bottom-[20%] -right-[12%] h-[58vmin] w-[58vmin] rounded-full bg-[radial-gradient(circle_at_60%_40%,rgba(255,173,0,0.14),rgba(226,6,19,0.04)_50%,transparent_72%)]" />
+			<div className="absolute right-[8%] top-[18%] h-[28vmin] w-[28vmin] rounded-full border border-[rgba(226,6,19,0.08)]" />
+			<div className="absolute bottom-[22%] left-[10%] h-[18vmin] w-[18vmin] rounded-full border border-[rgba(0,0,0,0.04)]" />
 
-					{/* Refined Headline - Fits Width Better */}
-					<h2 className="text-4xl xl:text-5xl font-black text-gray-900 leading-[1.15] tracking-tight mb-6 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 drop-shadow-sm max-w-lg">
-						Adventure Awaits. <br className="hidden xl:block" />
-						<span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-red-600">
-							Conquer It.
-						</span>
-					</h2>
+			{/* Thin geometric arcs (SVG) */}
+			<svg
+				className="absolute left-1/2 top-1/2 h-[min(90vh,900px)] w-[min(90vh,900px)] -translate-x-1/2 -translate-y-1/2 opacity-[0.45]"
+				viewBox="0 0 800 800"
+				fill="none"
+				xmlns="http://www.w3.org/2000/svg"
+			>
+				<circle
+					cx="400"
+					cy="400"
+					r="280"
+					stroke="rgba(226,6,19,0.08)"
+					strokeWidth="1"
+				/>
+				<circle
+					cx="400"
+					cy="400"
+					r="340"
+					stroke="rgba(0,0,0,0.04)"
+					strokeWidth="1"
+					strokeDasharray="4 10"
+				/>
+				<path
+					d="M120 420 C 220 180, 580 180, 680 420"
+					stroke="rgba(226,6,19,0.1)"
+					strokeWidth="1.25"
+					strokeLinecap="round"
+				/>
+				<path
+					d="M160 500 C 280 620, 520 620, 640 500"
+					stroke="rgba(255,173,0,0.14)"
+					strokeWidth="1.25"
+					strokeLinecap="round"
+				/>
+				{/* Small accent dots */}
+				<circle cx="180" cy="280" r="3" fill="rgba(226,6,19,0.35)" />
+				<circle cx="620" cy="300" r="2.5" fill="rgba(255,173,0,0.45)" />
+				<circle cx="540" cy="560" r="2" fill="rgba(226,6,19,0.25)" />
+			</svg>
 
-					<p className="text-gray-600 text-lg leading-relaxed max-w-md animate-in fade-in slide-in-from-bottom-8 duration-700 delay-400 font-medium">
-						Join a world where creativity knows no bounds. Your journey with Bandai
-						Namco starts here.
-					</p>
-
-					{/* Feature Pills */}
-					<div className="flex flex-wrap gap-3 mt-8 animate-in fade-in slide-in-from-bottom-10 duration-700 delay-500">
-						<div className="px-4 py-2 bg-white/60 backdrop-blur-sm border border-gray-200/50 rounded-lg text-sm text-gray-700 font-medium hover:bg-white hover:border-orange-200 transition-colors shadow-sm">
-							🚀 Innovation
-						</div>
-						<div className="px-4 py-2 bg-white/60 backdrop-blur-sm border border-gray-200/50 rounded-lg text-sm text-gray-700 font-medium hover:bg-white hover:border-orange-200 transition-colors shadow-sm">
-							🎨 Creativity
-						</div>
-						<div className="px-4 py-2 bg-white/60 backdrop-blur-sm border border-gray-200/50 rounded-lg text-sm text-gray-700 font-medium hover:bg-white hover:border-orange-200 transition-colors shadow-sm">
-							🤝 Community
-						</div>
-					</div>
-				</div>
-
-				{/* Bottom Right Floating Card */}
-				<div className="self-end mt-auto xl:mr-12 animate-in fade-in zoom-in-95 duration-1000 delay-700">
-					<div className="bg-white/80 backdrop-blur-md border border-white/60 p-5 rounded-2xl w-64 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
-						<div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-						<div className="flex items-center gap-4 mb-3">
-							<div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20 border border-white/20">
-								<Zap className="w-5 h-5 fill-current" />
-							</div>
-							<div>
-								<h4 className="text-gray-900 font-bold text-sm">Employee Portal</h4>
-								<p className="text-gray-500 text-[10px]">Access your dashboard</p>
-							</div>
-						</div>
-						<div className="flex items-center justify-between text-[10px] text-gray-400 pt-3 border-t border-gray-100">
-							<span>System Status</span>
-							<span className="flex items-center gap-1.5 text-green-500 font-medium">
-								<span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></span>
-								Online
-							</span>
-						</div>
-					</div>
-				</div>
-			</div>
+			{/* Soft edge vignette */}
+			<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(250,250,250,0.85)_100%)]" />
 		</div>
 	);
 }

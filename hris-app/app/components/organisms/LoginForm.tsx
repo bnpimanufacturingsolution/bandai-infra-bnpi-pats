@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { useForm } from "react-hook-form";
-import { Flag, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useToastContext } from "~/lib/contexts/toast-context";
@@ -19,6 +19,9 @@ type LoginFormValues = {
 	password: string;
 	keepLoggedIn: boolean;
 };
+
+const fieldClassName =
+	"h-11 rounded-md border-gray-200 bg-white px-3.5 text-sm text-gray-900 shadow-none placeholder:text-gray-400 focus:border-red-600 focus:ring-1 focus:ring-red-600";
 
 export default function LoginForm() {
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,7 +68,6 @@ export default function LoginForm() {
 			if (typeof window !== "undefined") {
 				window.localStorage.removeItem(LOGIN_PREFILL_STORAGE_KEY);
 			}
-			// The redirect will be handled by the Navigate component in the parent
 		} catch (error: any) {
 			console.error("Login error:", error);
 			const message = getErrorMessage(error) || "Login failed. Please try again.";
@@ -77,88 +79,84 @@ export default function LoginForm() {
 	};
 
 	return (
-		<form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-			{/* Identifier Input */}
+		<form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
 			<div className="space-y-1.5">
-				<Label className="text-xs font-semibold text-gray-700 block ml-1">
+				<Label
+					htmlFor="login-identifier"
+					className="text-sm font-medium text-gray-700"
+				>
 					Employee ID or Email
 				</Label>
-				<div className="relative group">
-					<Input
-						type="text"
-						className="pl-3.5 h-10 bg-white border-gray-200 focus:bg-white focus:border-orange-500 focus:ring-orange-500 rounded-lg transition-all duration-200 text-sm text-gray-900 placeholder:text-gray-400 group-hover:border-gray-300 shadow-sm"
-						placeholder="EMP-HR-MGR-001 or hr-manager@seed.local"
-						{...register("identifier", {
-							required: "Employee ID or email is required",
-						})}
-					/>
-				</div>
-				{errors.identifier && (
-					<p className="text-xs text-red-500 font-medium flex items-center gap-1 mt-1 ml-1">
-						<Flag className="w-3 h-3" />
-						{errors.identifier.message}
-					</p>
-				)}
+				<Input
+					id="login-identifier"
+					type="text"
+					autoComplete="username"
+					className={fieldClassName}
+					placeholder="you@company.com"
+					{...register("identifier", {
+						required: "Employee ID or email is required",
+					})}
+				/>
+				{errors.identifier ? (
+					<p className="text-xs text-red-600">{errors.identifier.message}</p>
+				) : null}
 			</div>
 
-			{/* Password Input */}
 			<div className="space-y-1.5">
-				<Label className="text-xs font-semibold text-gray-700 block ml-1">Password</Label>
-				<div className="relative group">
-					<PasswordInput
-						className="pl-3.5 h-10 bg-white border-gray-200 focus:bg-white focus:border-orange-500 focus:ring-orange-500 rounded-lg transition-all duration-200 text-sm text-gray-900 placeholder:text-gray-400 group-hover:border-gray-300 shadow-sm"
-						placeholder="Enter your password"
-						{...register("password", {
-							required: "Password is required",
-						})}
-					/>
-				</div>
-				{errors.password && (
-					<p className="text-xs text-red-500 font-medium flex items-center gap-1 mt-1 ml-1">
-						<Flag className="w-3 h-3" />
-						{errors.password.message}
-					</p>
-				)}
+				<Label
+					htmlFor="login-password"
+					className="text-sm font-medium text-gray-700"
+				>
+					Password
+				</Label>
+				<PasswordInput
+					id="login-password"
+					autoComplete="current-password"
+					className={fieldClassName}
+					placeholder="Password"
+					{...register("password", {
+						required: "Password is required",
+					})}
+				/>
+				{errors.password ? (
+					<p className="text-xs text-red-600">{errors.password.message}</p>
+				) : null}
 			</div>
 
-			{/* Remember Me & Forgot Password */}
-			<div className="flex items-center justify-between pt-1">
-				<div className="flex items-center gap-2.5">
-					<label
-						htmlFor="keepLoggedIn"
-						className="flex items-center gap-2.5 cursor-pointer">
-						<Checkbox
-							id="keepLoggedIn"
-							{...register("keepLoggedIn")}
-							onCheckedChange={(checked) => {
-								console.log(checked);
-							}}
-						/>
-
-						<span className="text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors">
-							Remember me
-						</span>
-					</label>
-				</div>
+			<div className="flex items-center justify-between gap-3 pt-0.5">
+				<label
+					htmlFor="keepLoggedIn"
+					className="flex cursor-pointer items-center gap-2"
+				>
+					<Checkbox
+						id="keepLoggedIn"
+						{...register("keepLoggedIn")}
+						onCheckedChange={() => {
+							/* controlled via RHF register; no-op for a11y */
+						}}
+					/>
+					<span className="text-sm text-gray-600">Remember me</span>
+				</label>
 				<Link
 					to="/auth/forgot-password"
-					className="text-xs font-semibold text-orange-600 hover:text-orange-700 hover:underline transition-all">
+					className="text-sm font-medium text-red-600 transition-colors hover:text-red-700"
+				>
 					Forgot password?
 				</Link>
 			</div>
 
-			{/* Login Button */}
 			<Button
 				type="submit"
 				disabled={isLoading || isSubmitting}
-				className="w-full h-11 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white font-bold text-sm rounded-lg shadow-md shadow-orange-500/25 transform hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none mt-4">
+				className="mt-1 h-11 w-full rounded-md bg-red-600 text-sm font-semibold text-white shadow-none transition-colors hover:bg-red-700 focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+			>
 				{isLoading || isSubmitting ? (
-					<span className="flex items-center gap-2">
-						<Loader2 className="w-4 h-4 animate-spin" />
-						Signing in...
+					<span className="inline-flex items-center gap-2">
+						<Loader2 className="h-4 w-4 animate-spin" />
+						Signing in…
 					</span>
 				) : (
-					"Sign In"
+					"Sign in"
 				)}
 			</Button>
 		</form>

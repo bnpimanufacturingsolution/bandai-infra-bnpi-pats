@@ -1,5 +1,5 @@
 interface AuthTemplateProps {
-	hero: React.ReactNode;
+	hero?: React.ReactNode;
 	form: React.ReactNode;
 	title?: string;
 	subtitle?: string;
@@ -12,40 +12,41 @@ interface AuthTemplateProps {
 export function AuthTemplate({
 	hero,
 	form,
-	title = "Welcome back",
-	subtitle = "Please enter your details to sign in.",
+	title = "Sign in",
+	subtitle,
 	logoUrl = "https://res.cloudinary.com/dyal0wstg/image/upload/v1759107126/Bandai_Ni_Bryan_1_1_ruj2ty.webp",
-	footerText = "© 2025 Bandai Namco Philippines Inc. All Rights Reserved.",
-	signUpLinkText = "Sign up for free",
-	signUpUrl = "/auth/register",
+	footerText = "© 2026 Bandai Namco Philippines Inc.",
 }: AuthTemplateProps) {
 	return (
-		<div className="h-screen w-full bg-white flex overflow-hidden font-sans">
-			{/* Right Column - Hero/Image */}
+		<div className="relative min-h-screen w-full overflow-hidden bg-neutral-50 font-sans text-gray-900">
+			{/* Minimalist background art layer */}
 			{hero}
 
-			{/* Left Column - Form */}
-			<div className="w-full lg:w-[45%] flex flex-col justify-center px-6 sm:px-12 lg:px-16 xl:px-24 py-8 bg-white z-20 shadow-2xl lg:shadow-[5px_0_30px_rgba(0,0,0,0.03)] animate-in fade-in slide-in-from-left-4 duration-700">
-				<div className="w-full max-w-sm mx-auto">
-					{/* Logo */}
-					<div className="mb-8">
-						<img src={logoUrl} alt="Logo" className="h-10 w-auto" />
-					</div>
-
-					{/* Header */}
-					<div className="mb-6">
-						<h1 className="text-3xl font-bold text-gray-900 tracking-tight mb-2">
+			{/* Form */}
+			<div className="relative z-10 flex min-h-screen w-full items-center justify-center px-6 py-12">
+				<div className="mx-auto w-full max-w-sm">
+					<div className="mb-10 flex flex-col items-center text-center">
+						<img
+							src={logoUrl}
+							alt="Bandai Namco"
+							className="mb-8 h-9 w-auto select-none"
+						/>
+						<h1 className="text-2xl font-semibold tracking-tight text-gray-900 text-balance">
 							{title}
 						</h1>
-						<p className="text-gray-500 text-sm">{subtitle}</p>
+						{subtitle ? (
+							<p className="mt-2 text-sm leading-relaxed text-gray-500">{subtitle}</p>
+						) : null}
 					</div>
 
-					{/* Form Content */}
 					{form}
-				</div>
 
-				{/* Footer Copyright */}
-				<div className="mt-10 text-center text-[10px] text-gray-400">{footerText}</div>
+					{footerText ? (
+						<p className="mt-12 text-center text-xs leading-none text-gray-400">
+							{footerText}
+						</p>
+					) : null}
+				</div>
 			</div>
 		</div>
 	);
