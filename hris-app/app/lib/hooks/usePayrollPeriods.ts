@@ -375,6 +375,7 @@ export const useGenerateTimesheetPayrollPreview = (
 			params?.departmentId || "",
 			params?.sectionId || "",
 			params?.employeeId || "",
+			params?.calculateRows ? "calc" : "list",
 		],
 		queryFn: async () => {
 			if (!id) return null;

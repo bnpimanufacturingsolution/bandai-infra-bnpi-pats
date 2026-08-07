@@ -492,6 +492,8 @@ export interface TimesheetPayrollPreviewParams {
 	departmentId?: string | null;
 	sectionId?: string | null;
 	employeeId?: string | null;
+	/** When true, compute gross/net/deductions for each included row (dry-run). */
+	calculateRows?: boolean;
 }
 
 export interface TimesheetPayrollPreviewResponse {
@@ -625,6 +627,9 @@ class PayrollPeriodsService extends APIService {
 		}
 		if (params?.employeeId) {
 			query.set("employeeId", params.employeeId);
+		}
+		if (params?.calculateRows) {
+			query.set("calculateRows", "true");
 		}
 		const queryString = query.toString();
 		const response = await hrisApiClient.get<any>(

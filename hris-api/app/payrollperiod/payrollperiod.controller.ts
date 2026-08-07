@@ -993,6 +993,10 @@ const controller = (prisma) => {
         const requestedEmployeeId = typeof req.query.employeeId === "string" && req.query.employeeId.trim() !== ""
             ? req.query.employeeId.trim()
             : null;
+        const calculateRowsRaw = typeof req.query.calculateRows === "string"
+            ? req.query.calculateRows.trim().toLowerCase()
+            : "";
+        const calculateRows = calculateRowsRaw === "true" || calculateRowsRaw === "1" || calculateRowsRaw === "yes";
         const page = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.floor(requestedPage) : 1;
         const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
             ? Math.min(Math.floor(requestedLimit), 50)
@@ -1013,6 +1017,8 @@ const controller = (prisma) => {
                 departmentId: requestedDepartmentId,
                 sectionId: requestedSectionId,
                 employeeId: requestedEmployeeId,
+                // Explicit full-page calc for Preview Payroll results (dry-run only).
+                calculateRows: calculateRows || Boolean(requestedEmployeeId),
             });
             (0, activityLogger_1.logActivity)(req, {
                 userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",

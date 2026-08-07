@@ -1,5 +1,24 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-07 Preview Payroll modal parity with Start Payroll
+
+- Task mode: product UX feature (Run Payroll).
+- Request: Preview Payroll must use the same screen journey as Start Payroll,
+  with clear preview-only differentiation, then show computed list + details.
+- Implementation:
+  1. **Preview Payroll** opens a modal (no full-page swap of Run Payroll body).
+  2. Steps: **Start Payroll Preview** (confirm) → **Preview running** → **Payroll Preview** results.
+  3. Dry-run only via `GET …/generate-timesheet/preview?calculateRows=true` (API param added).
+  4. Results table: Basic / Gross / Deduct. / Net + **View Details**.
+  5. Detail modal: **Payroll summary (Preview)** + PREVIEW banner; no payslips.
+  6. Footer: Close | optional **Start real payroll…**
+- Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts`, payrollperiod controller
+  `calculateRows`, service/hook param pass-through.
+- Tests: `payroll-preview-modal.test.ts` (4) green.
+- Live API: period `PP-20260726-20260811` reachable; local DB had 0 approved TS in
+  sample so amounts empty — endpoint accepts `calculateRows` without period mutation.
+- Evidence: `.runtime/preview-payroll-modal-20260807-140641/`.
+
 ## Latest Task Addendum - 2026-08-07 Benefits enroll Select employees from drawer
 
 - Task mode: bug fix (UX + picker reliability).

@@ -1,5 +1,17 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-07 - Preview Payroll modal parity with Start Payroll
+
+- Status: `IMPLEMENTED_LOCAL`.
+- `/hr/run-payroll` **Preview Payroll** now opens a multi-step modal aligned with
+  Start Payroll: confirm → progress → results + employee detail, with **Preview only**
+  chrome and no writes.
+- API: `calculateRows=true` on timesheet payroll preview for full dry-run row amounts.
+- Tests: `hris-app/app/lib/utils/payroll-preview-modal.test.ts` green.
+- Evidence: `.runtime/preview-payroll-modal-20260807-140641/`.
+- Open: browser Playwright proof when a period has approved timesheets with amounts;
+  optional Phase B extract of shared Payroll summary panel with live management.
+
 ## 2026-08-05 - Benefits Management full-height table standard
 
 - Status: `IMPLEMENTED`.
