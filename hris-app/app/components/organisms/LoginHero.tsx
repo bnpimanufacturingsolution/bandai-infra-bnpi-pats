@@ -1,65 +1,96 @@
 /**
- * Pure visual background for the login surface.
- * No marketing copy — soft geometric shapes only.
+ * Left panel: minimal modern art + short title.
+ * No marketing pills, status cards, or slogan spam.
  */
 export function LoginHero() {
 	return (
-		<div
-			aria-hidden="true"
-			className="pointer-events-none absolute inset-0 overflow-hidden"
-		>
-			{/* Soft base wash */}
-			<div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,rgba(226,6,19,0.06),transparent_55%)]" />
-			<div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_100%_100%,rgba(255,173,0,0.07),transparent_50%)]" />
+		<div className="relative hidden min-h-screen overflow-hidden bg-neutral-50 lg:col-span-3 lg:flex lg:flex-col lg:justify-between">
+			{/* Background art */}
+			<div aria-hidden="true" className="pointer-events-none absolute inset-0">
+				<div className="absolute inset-0 bg-gradient-to-br from-red-50 via-neutral-50 to-amber-50" />
+				<div className="absolute -left-24 -top-24 h-96 w-96 rounded-full bg-red-500/10 blur-3xl" />
+				<div className="absolute -bottom-32 -right-16 h-96 w-96 rounded-full bg-amber-400/15 blur-3xl" />
+				<div className="absolute right-1/4 top-1/3 h-64 w-64 rounded-full bg-red-600/5 blur-2xl" />
 
-			{/* Large soft orbs */}
-			<div className="absolute -left-[18%] -top-[12%] h-[52vmin] w-[52vmin] rounded-full bg-[radial-gradient(circle_at_30%_30%,rgba(226,6,19,0.12),rgba(226,6,19,0.03)_55%,transparent_70%)] blur-[2px]" />
-			<div className="absolute -bottom-[20%] -right-[12%] h-[58vmin] w-[58vmin] rounded-full bg-[radial-gradient(circle_at_60%_40%,rgba(255,173,0,0.14),rgba(226,6,19,0.04)_50%,transparent_72%)]" />
-			<div className="absolute right-[8%] top-[18%] h-[28vmin] w-[28vmin] rounded-full border border-[rgba(226,6,19,0.08)]" />
-			<div className="absolute bottom-[22%] left-[10%] h-[18vmin] w-[18vmin] rounded-full border border-[rgba(0,0,0,0.04)]" />
+				<svg
+					className="absolute inset-0 h-full w-full"
+					viewBox="0 0 800 900"
+					fill="none"
+					xmlns="http://www.w3.org/2000/svg"
+					preserveAspectRatio="xMidYMid slice"
+				>
+					<circle
+						cx="520"
+						cy="420"
+						r="180"
+						stroke="rgba(226,6,19,0.12)"
+						strokeWidth="1"
+					/>
+					<circle
+						cx="520"
+						cy="420"
+						r="260"
+						stroke="rgba(0,0,0,0.05)"
+						strokeWidth="1"
+					/>
+					<circle
+						cx="520"
+						cy="420"
+						r="340"
+						stroke="rgba(226,6,19,0.06)"
+						strokeWidth="1"
+						strokeDasharray="6 12"
+					/>
+					<path
+						d="M80 520 C 200 280, 420 240, 620 360"
+						stroke="rgba(226,6,19,0.14)"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+					/>
+					<path
+						d="M120 640 C 280 740, 500 720, 680 580"
+						stroke="rgba(255,173,0,0.22)"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+					/>
+					<circle cx="200" cy="300" r="3.5" fill="rgba(226,6,19,0.4)" />
+					<circle cx="640" cy="260" r="2.5" fill="rgba(255,173,0,0.55)" />
+					<circle cx="480" cy="620" r="2" fill="rgba(226,6,19,0.28)" />
+					<line
+						x1="120"
+						y1="160"
+						x2="120"
+						y2="280"
+						stroke="rgba(0,0,0,0.08)"
+						strokeWidth="1"
+					/>
+				</svg>
+			</div>
 
-			{/* Thin geometric arcs (SVG) */}
-			<svg
-				className="absolute left-1/2 top-1/2 h-[min(90vh,900px)] w-[min(90vh,900px)] -translate-x-1/2 -translate-y-1/2 opacity-[0.45]"
-				viewBox="0 0 800 800"
-				fill="none"
-				xmlns="http://www.w3.org/2000/svg"
-			>
-				<circle
-					cx="400"
-					cy="400"
-					r="280"
-					stroke="rgba(226,6,19,0.08)"
-					strokeWidth="1"
-				/>
-				<circle
-					cx="400"
-					cy="400"
-					r="340"
-					stroke="rgba(0,0,0,0.04)"
-					strokeWidth="1"
-					strokeDasharray="4 10"
-				/>
-				<path
-					d="M120 420 C 220 180, 580 180, 680 420"
-					stroke="rgba(226,6,19,0.1)"
-					strokeWidth="1.25"
-					strokeLinecap="round"
-				/>
-				<path
-					d="M160 500 C 280 620, 520 620, 640 500"
-					stroke="rgba(255,173,0,0.14)"
-					strokeWidth="1.25"
-					strokeLinecap="round"
-				/>
-				{/* Small accent dots */}
-				<circle cx="180" cy="280" r="3" fill="rgba(226,6,19,0.35)" />
-				<circle cx="620" cy="300" r="2.5" fill="rgba(255,173,0,0.45)" />
-				<circle cx="540" cy="560" r="2" fill="rgba(226,6,19,0.25)" />
-			</svg>
+			{/* Accent bar */}
+			<div className="relative z-10 px-12 pt-12 xl:px-16 xl:pt-14">
+				<div className="inline-flex h-2 w-8 rounded-full bg-red-600" />
+			</div>
 
-			{/* Soft edge vignette */}
-			<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(250,250,250,0.85)_100%)]" />
+			{/* Title */}
+			<div className="relative z-10 flex flex-1 flex-col justify-center px-12 xl:px-16">
+				<p className="mb-4 text-sm font-medium tracking-wide text-red-600">
+					Bandai Namco Philippines
+				</p>
+				<h2 className="max-w-md text-4xl font-semibold leading-tight tracking-tight text-gray-900 xl:text-5xl">
+					Your workplace,
+					<br />
+					<span className="text-red-600">simplified.</span>
+				</h2>
+				<p className="mt-5 max-w-sm text-base leading-relaxed text-gray-500">
+					Secure access to HR, attendance, and workforce tools.
+				</p>
+			</div>
+
+			{/* Footer label */}
+			<div className="relative z-10 px-12 pb-12 xl:px-16 xl:pb-14">
+				<p className="text-xs text-gray-400">Employee Portal</p>
+			</div>
 		</div>
 	);
 }

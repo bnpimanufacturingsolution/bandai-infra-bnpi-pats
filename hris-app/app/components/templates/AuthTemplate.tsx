@@ -18,20 +18,20 @@ export function AuthTemplate({
 	footerText = "© 2026 Bandai Namco Philippines Inc.",
 }: AuthTemplateProps) {
 	return (
-		<div className="relative min-h-screen w-full overflow-hidden bg-neutral-50 font-sans text-gray-900">
-			{/* Minimalist background art layer */}
+		<div className="grid h-screen w-full overflow-hidden bg-white font-sans text-gray-900 lg:grid-cols-5">
+			{/* Left — art + title (spans 3/5 on desktop) */}
 			{hero}
 
-			{/* Form */}
-			<div className="relative z-10 flex min-h-screen w-full items-center justify-center px-6 py-12">
+			{/* Right — form (spans 2/5 on desktop) */}
+			<div className="relative z-10 flex min-h-0 w-full flex-col justify-center bg-white px-6 py-10 sm:px-12 lg:col-span-2 lg:px-12 xl:px-16">
 				<div className="mx-auto w-full max-w-sm">
-					<div className="mb-10 flex flex-col items-center text-center">
+					<div className="mb-8">
 						<img
 							src={logoUrl}
 							alt="Bandai Namco"
 							className="mb-8 h-9 w-auto select-none"
 						/>
-						<h1 className="text-2xl font-semibold tracking-tight text-gray-900 text-balance">
+						<h1 className="text-2xl font-semibold tracking-tight text-gray-900">
 							{title}
 						</h1>
 						{subtitle ? (
@@ -42,7 +42,7 @@ export function AuthTemplate({
 					{form}
 
 					{footerText ? (
-						<p className="mt-12 text-center text-xs leading-none text-gray-400">
+						<p className="mt-12 text-center text-xs text-gray-400 lg:text-left">
 							{footerText}
 						</p>
 					) : null}
