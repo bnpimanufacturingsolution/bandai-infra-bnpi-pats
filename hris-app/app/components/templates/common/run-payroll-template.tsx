@@ -2125,13 +2125,17 @@ export function RunPayrollTemplate() {
 			width: "12%",
 			sortable: false,
 			headerClassName: "text-right",
-			render: (_value, employee) => (
-				<span className="block text-right font-mono text-xs tabular-nums text-gray-900">
-					{typeof employee.basicPay === "number"
-						? formatCurrency(employee.basicPay)
-						: formatCurrency(employee.basicSalary)}
-				</span>
-			),
+			render: (_value, employee) => {
+				// Only show computed period basicPay — not standing basicSalary
+				// (salary alone made empty Gross/Net look broken).
+				const amount =
+					typeof employee.basicPay === "number" ? employee.basicPay : null;
+				return (
+					<span className="block text-right font-mono text-xs tabular-nums text-gray-900">
+						{amount == null ? "—" : formatCurrency(amount)}
+					</span>
+				);
+			},
 		},
 		{
 			key: "grossPay",

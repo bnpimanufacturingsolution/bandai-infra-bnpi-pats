@@ -978,7 +978,6 @@ const controller = (prisma) => {
         }
     });
     const previewTimesheetPayroll = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
-        var _a;
         const { id: payrollPeriodId } = req.params;
         const organizationId = req.organizationId;
         const requestedPage = Number(req.query.page);
@@ -993,10 +992,21 @@ const controller = (prisma) => {
         const requestedEmployeeId = typeof req.query.employeeId === "string" && req.query.employeeId.trim() !== ""
             ? req.query.employeeId.trim()
             : null;
-        const calculateRowsRaw = typeof req.query.calculateRows === "string"
-            ? req.query.calculateRows.trim().toLowerCase()
-            : "";
-        const calculateRows = calculateRowsRaw === "true" || calculateRowsRaw === "1" || calculateRowsRaw === "yes";
+        // Accept string | string[] | boolean query shapes from Express/qs.
+        const calculateRowsParam = Array.isArray(req.query.calculateRows)
+            ? req.query.calculateRows[0]
+            : req.query.calculateRows;
+        const calculateRowsRaw =
+            typeof calculateRowsParam === "string"
+                ? calculateRowsParam.trim().toLowerCase()
+                : calculateRowsParam === true
+                    ? "true"
+                    : "";
+        const calculateRows =
+            calculateRowsRaw === "true" ||
+                calculateRowsRaw === "1" ||
+                calculateRowsRaw === "yes" ||
+                calculateRowsParam === true;
         const page = Number.isFinite(requestedPage) && requestedPage > 0 ? Math.floor(requestedPage) : 1;
         const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
             ? Math.min(Math.floor(requestedLimit), 50)
@@ -1010,6 +1020,9 @@ const controller = (prisma) => {
                 res.status(404).json(errorResponse);
                 return;
             }
+            // List mode defaults to DETAIL_REQUIRED stubs (basicSalary only). Preview Payroll
+            // results must set calculateRows so each row gets gross/deductions/net dry-run amounts.
+            const shouldCalculateRows = Boolean(calculateRows || requestedEmployeeId);
             const preview = yield (0, payroll_period_helper_1.previewPayrollFromTimesheets)(prisma, payrollPeriodId, organizationId, {
                 page,
                 limit,
@@ -1017,11 +1030,10 @@ const controller = (prisma) => {
                 departmentId: requestedDepartmentId,
                 sectionId: requestedSectionId,
                 employeeId: requestedEmployeeId,
-                // Explicit full-page calc for Preview Payroll results (dry-run only).
-                calculateRows: calculateRows || Boolean(requestedEmployeeId),
+                calculateRows: shouldCalculateRows,
             });
             (0, activityLogger_1.logActivity)(req, {
-                userId: ((_a = req.user) === null || _a === void 0 ? void 0 : _a.id) || "unknown",
+                userId: (req.user && req.user.id) || "unknown",
                 action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.PREVIEW_TIMESHEET_PAYROLL,
                 description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.TIMESHEET_PAYROLL_PREVIEWED}: ${payrollPeriodId}`,
                 page: {
