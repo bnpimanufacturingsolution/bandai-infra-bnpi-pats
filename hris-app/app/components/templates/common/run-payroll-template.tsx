@@ -3934,12 +3934,12 @@ export function RunPayrollTemplate() {
 				closeOnBackdropClick={previewStep !== "progress"}
 				className={
 					previewStep === "results"
-						? "max-h-[92vh] max-w-6xl gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-6xl"
+						? "flex max-h-[92vh] max-w-6xl flex-col gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-6xl"
 						: previewStep === "progress"
-							? "max-h-[90vh] max-w-2xl gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-3xl"
-							: "max-h-[90vh] max-w-lg gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-xl"
+							? "flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-3xl"
+							: "flex max-h-[90vh] max-w-lg flex-col gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-xl"
 				}>
-				<div className="flex min-h-0 max-h-[92vh] flex-col">
+				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 					<div className="shrink-0 border-b border-neutral-100 px-5 py-4 pr-12">
 						<div className="flex flex-wrap items-center gap-2">
 							<h2 className="text-base font-semibold tracking-tight text-neutral-900">
@@ -4083,17 +4083,23 @@ export function RunPayrollTemplate() {
 									)}
 								</div>
 							</div>
-							<div className="flex shrink-0 items-center justify-end gap-2 border-t border-neutral-100 bg-white px-5 py-3">
+							<div
+								className="flex shrink-0 items-center justify-end gap-2 border-t border-neutral-100 bg-white px-5 py-3"
+								data-testid="preview-payroll-confirm-footer">
 								<Button
+									type="button"
 									variant="outline"
 									onClick={handleClosePreview}
 									className="h-9 rounded-lg border-neutral-200 px-4 text-sm font-medium text-neutral-700 shadow-none hover:bg-neutral-50">
 									Back
 								</Button>
+								{/* Use orange-500 (compiled) — sky-700 is often missing from Tailwind output and hides white label text */}
 								<Button
+									type="button"
 									onClick={handleConfirmRunPreview}
 									disabled={!payrollPeriodId || payableEmployeesCount === 0}
-									className="h-9 gap-2 rounded-lg bg-sky-700 px-4 text-sm font-medium text-white shadow-none hover:bg-sky-600 disabled:opacity-60">
+									data-testid="preview-payroll-run"
+									className="h-9 gap-2 rounded-lg bg-orange-500 px-4 text-sm font-medium text-white shadow-none hover:bg-orange-600 disabled:opacity-60">
 									<Eye className="h-3.5 w-3.5" />
 									Run Preview
 								</Button>
@@ -4123,8 +4129,10 @@ export function RunPayrollTemplate() {
 											Close
 										</Button>
 										<Button
+											type="button"
 											onClick={handleConfirmRunPreview}
-											className="bg-sky-700 text-white hover:bg-sky-600">
+											data-testid="preview-payroll-retry"
+											className="bg-orange-500 text-white hover:bg-orange-600">
 											Retry preview
 										</Button>
 									</div>
