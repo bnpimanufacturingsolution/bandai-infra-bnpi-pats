@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "~/components/atoms/Button";
 import { EmployeeBenefitForm } from "~/components/templates/hr/employee-benefit-form";

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useForm, Controller, type Resolver } from "react-hook-form";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { Loader2, Users } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { Button } from "~/components/atoms/Button";
@@ -306,19 +306,25 @@ export function EmployeeBenefitForm({
 	const [searchParams, setSearchParams] = useSearchParams();
 	const isEditing = mode === "edit";
 	const isPage = presentation === "page";
-	// Local open state for modal presentation (edit flow); page create uses URL deep link.
+	// Local open state is always the source of truth for the picker so a URL/search-param
+	// race cannot leave the Select employees dialog closed. Page mode also mirrors to
+	// `?action=select-employees` for deep links / back-forward.
 	const [localEmployeePickerOpen, setLocalEmployeePickerOpen] = useState(false);
+	const urlEmployeePickerOpen =
+		isPage && searchParams.get("action") === SELECT_EMPLOYEES_ACTION;
+	const employeePickerOpen = localEmployeePickerOpen || urlEmployeePickerOpen;
 
-	const employeePickerOpen = isPage
-		? searchParams.get("action") === SELECT_EMPLOYEES_ACTION
-		: localEmployeePickerOpen;
+	// Sync deep-link / drawer navigation that lands with action=select-employees.
+	useEffect(() => {
+		if (urlEmployeePickerOpen) {
+			setLocalEmployeePickerOpen(true);
+		}
+	}, [urlEmployeePickerOpen]);
 
 	const setEmployeePickerOpen = useCallback(
 		(open: boolean) => {
-			if (!isPage) {
-				setLocalEmployeePickerOpen(open);
-				return;
-			}
+			setLocalEmployeePickerOpen(open);
+			if (!isPage) return;
 			setSearchParams(
 				(prev) => {
 					const next = new URLSearchParams(prev);

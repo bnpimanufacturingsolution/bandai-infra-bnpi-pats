@@ -1,6 +1,30 @@
 # Project Truth Summary
 
-Last updated: 2026-07-28
+Last updated: 2026-08-07
+
+## 2026-08-07 BNPI Meal Allowance (MLA) coverage
+
+- **Coverage expectation:** every Bandai employee **should have** an active MLA
+  enrollment.
+- **Still enrollment-driven** — payroll does not invent MLA without a resolving
+  `EmployeeBenefit`.
+- **Do not auto-enroll** all employees unless the operator explicitly orders a
+  deliberate enrollment job.
+- Full write-up: `.wwg/wiki/project-truth.md` section
+  **BNPI Meal Allowance (MLA) coverage expectation (2026-08-07)**.
+
+## 2026-08-05 BNPI payroll money sources (tally)
+
+- **Confirmed:** Not every compensation/deduction on the register or payslip
+  comes from cutoff mass-upload files.
+- Run Payroll also applies **recurring / standing `EmployeeBenefit` and
+  `EmployeeLoan` enrollments** that are active for the period even when the
+  code is **absent** from that cut’s compensation/deduction mass upload.
+- Tally agents must classify each line as mass-upload, recurring enrollment,
+  engine (tax/contrib schedule), or OT/attendance — never “missing mass = must
+  be zero.”
+- Full write-up: `.wwg/wiki/project-truth.md` section
+  **BNPI payroll compensation / deduction source ownership (2026-08-05)**.
 
 ## 2026-07-28 shared observability recovery
 

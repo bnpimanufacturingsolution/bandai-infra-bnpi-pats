@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router";
 import {
 	ArrowLeft,
 	Edit,
@@ -319,7 +319,7 @@ export function BenefitsManagement({
 		return `/hr/run-payroll${params.toString() ? `?${params.toString()}` : ""}`;
 	}, [adjustmentFilterParam, periodCodeParam, periodViewParam]);
 
-	const openCreate = () => {
+	const openCreate = (options?: { openEmployeePicker?: boolean }) => {
 		const params = new URLSearchParams();
 		for (const key of CREATE_CONTEXT_PARAMS) {
 			const value = searchParams.get(key);
@@ -328,6 +328,11 @@ export function BenefitsManagement({
 		// Prefer preselecting type when opening create from drawer
 		if (typeIdParam && !params.get("benefitTypeId")) {
 			params.set("benefitTypeId", typeIdParam);
+		}
+		// From the drawer / enroll CTAs, open the employee picker immediately so HR
+		// lands on "Select employees" instead of only the long form.
+		if (options?.openEmployeePicker) {
+			params.set("action", "select-employees");
 		}
 		const query = params.toString();
 		navigate(`/hr/benefits-management/new${query ? `?${query}` : ""}`);
@@ -472,14 +477,14 @@ export function BenefitsManagement({
 				</DropdownMenuItem>
 				<DropdownMenuItem
 					onClick={() => {
-						openDrawer(item);
-						// Create preselected for this type
 						const params = new URLSearchParams();
 						for (const key of CREATE_CONTEXT_PARAMS) {
 							const value = searchParams.get(key);
 							if (value) params.set(key, value);
 						}
 						params.set("benefitTypeId", item.id);
+						params.set("typeId", item.id);
+						params.set("action", "select-employees");
 						navigate(`/hr/benefits-management/new?${params.toString()}`);
 					}}>
 					<Users className="mr-2 h-4 w-4" />
@@ -590,7 +595,7 @@ export function BenefitsManagement({
 							Bulk upload
 						</Button>
 					}
-					onAdd={openCreate}
+					onAdd={() => openCreate({ openEmployeePicker: true })}
 					addButtonLabel="Enroll employees"
 					addButtonClassName="bg-orange-600 hover:bg-orange-700 text-white"
 					containedScroll
@@ -696,7 +701,8 @@ export function BenefitsManagement({
 									type="button"
 									size="sm"
 									className="bg-orange-600 text-white hover:bg-orange-700"
-									onClick={openCreate}>
+									onClick={() => openCreate({ openEmployeePicker: true })}
+									data-testid="drawer-enroll-employees">
 									Enroll employees
 								</Button>
 							</div>

@@ -27,6 +27,9 @@ export type EmployeeMultiSelectModalProps = {
 };
 
 const ALL_VALUE = "all";
+/** Page size for the employee picker; search is server-side so all employees are reachable. */
+const PICKER_PAGE_SIZE = 500;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const getEmployeeName = (employee?: Partial<Employee> | null) => {
 	const personalInfo = employee?.person?.personalInfo || {};
@@ -59,10 +62,26 @@ export function EmployeeMultiSelectModal({
 }: EmployeeMultiSelectModalProps) {
 	const [draftIds, setDraftIds] = useState<string[]>(selectedIds);
 	const [search, setSearch] = useState("");
+	const [debouncedSearch, setDebouncedSearch] = useState("");
 	const [departmentId, setDepartmentId] = useState(ALL_VALUE);
 	const [sectionId, setSectionId] = useState(ALL_VALUE);
 	const [positionId, setPositionId] = useState(ALL_VALUE);
 	const [levelId, setLevelId] = useState(ALL_VALUE);
+
+	// Debounce search so we hit the API, not only the first loaded page.
+	useEffect(() => {
+		const handle = window.setTimeout(() => {
+			setDebouncedSearch(search.trim());
+		}, SEARCH_DEBOUNCE_MS);
+		return () => window.clearTimeout(handle);
+	}, [search]);
+
+	const employeeFilterParts = [
+		departmentId !== ALL_VALUE ? `departmentId:${departmentId}` : "",
+		sectionId !== ALL_VALUE ? `sectionId:${sectionId}` : "",
+		positionId !== ALL_VALUE ? `positionId:${positionId}` : "",
+		levelId !== ALL_VALUE ? `levelId:${levelId}` : "",
+	].filter(Boolean);
 
 	const {
 		data: employeesData,
@@ -72,10 +91,12 @@ export function EmployeeMultiSelectModal({
 	} = useEmployees(
 		{
 			page: 1,
-			limit: 1000,
+			limit: PICKER_PAGE_SIZE,
 			sort: "employeeId",
 			order: "asc",
 			count: true,
+			query: debouncedSearch || undefined,
+			filter: employeeFilterParts.join(",") || undefined,
 		},
 		{ enabled: open },
 	);
@@ -127,6 +148,15 @@ export function EmployeeMultiSelectModal({
 		if (Array.isArray(payload)) return payload;
 		return [];
 	}, [employeesData]);
+	const employeesTotal = useMemo(() => {
+		const payload = employeesData as any;
+		const total =
+			payload?.pagination?.total ??
+			payload?.count ??
+			payload?.data?.pagination?.total ??
+			payload?.data?.count;
+		return typeof total === "number" ? total : employees.length;
+	}, [employeesData, employees.length]);
 	const departments = useMemo(
 		() => (departmentsData as any)?.departments || [],
 		[departmentsData],
@@ -148,6 +178,7 @@ export function EmployeeMultiSelectModal({
 		if (!open) return;
 		setDraftIds(selectedIds);
 		setSearch("");
+		setDebouncedSearch("");
 		setDepartmentId(ALL_VALUE);
 		setSectionId(ALL_VALUE);
 		setPositionId(ALL_VALUE);
@@ -231,6 +262,8 @@ export function EmployeeMultiSelectModal({
 		];
 	}, [levels, positionId, positions]);
 
+	// Server already applies query + structural filters; keep a light client pass for
+	// immediate typing feedback before debounce settles and for API filter gaps.
 	const filteredEmployees = useMemo(() => {
 		const query = search.trim().toLowerCase();
 		return employees.filter((employee) => {
@@ -258,6 +291,7 @@ export function EmployeeMultiSelectModal({
 			) {
 				return false;
 			}
+			// While debounce is pending, narrow the current page client-side so typing feels instant.
 			if (!query) return true;
 			const name = getEmployeeName(employee).toLowerCase();
 			const code = String(employee.employeeId || "").toLowerCase();
@@ -272,6 +306,8 @@ export function EmployeeMultiSelectModal({
 		sectionId !== ALL_VALUE ||
 		positionId !== ALL_VALUE ||
 		levelId !== ALL_VALUE;
+	const listIsCapped =
+		!hasActiveFilters && employeesTotal > filteredEmployees.length;
 
 	const filteredEmployeeIds = useMemo(
 		() =>
@@ -451,8 +487,14 @@ export function EmployeeMultiSelectModal({
 									(employeesFetching && employees.length === 0)
 										? "Loading employees…"
 										: hasActiveFilters
-											? `${filteredEmployees.length} matching current filters`
-											: `${filteredEmployees.length} employee${filteredEmployees.length === 1 ? "" : "s"} available`}
+											? `${filteredEmployees.length} matching${
+													employeesTotal > filteredEmployees.length
+														? ` (of ${employeesTotal})`
+														: ""
+												} — search all employees by name or ID`
+											: listIsCapped
+												? `Showing ${filteredEmployees.length} of ${employeesTotal} — search to find others`
+												: `${filteredEmployees.length} employee${filteredEmployees.length === 1 ? "" : "s"} available`}
 								</p>
 							</div>
 						</div>

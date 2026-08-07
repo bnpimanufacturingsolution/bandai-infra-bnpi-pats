@@ -65,7 +65,8 @@ Already implemented:
 | Capability | Where |
 |---|---|
 | DM1–DM3 import | `/admin/configuration/migration` |
-| Compensation / deduction mass upload | DM3 UI + `POST /api/migration/dm3/import-*-mass-upload` (covers **all** cutoff benefits and deductions) |
+| Compensation / deduction mass upload | DM3 UI + `POST /api/migration/dm3/import-*-mass-upload` (**additive** period enrollments for this cut — **not** the only benefit/deduction source; see recurring enrollments below) |
+| Recurring / standing benefits & loans | Active `EmployeeBenefit` / `EmployeeLoan` that already exist on the employee and resolve for the period **even if absent from this cut’s mass-upload files** |
 | Employee manpower databank (roster refresh) | DM3 UI **Upload employee databank** + `POST /api/migration/dm3/import-manpower-databank` (create/update master data only; not a salary source) |
 | Statutory / monthly payment register import | **Removed from DM3 UI and HTTP.** Do not use April statutory board as a migration step; loans/deductions belong in the cutoff deduction mass upload. Offline helper only: `hris-api/helper/bnpi-statutory-benefits-import.helper.ts` |
 | DM4 biometrics + approved OT materialization | DM4 durable migration run |
@@ -85,8 +86,23 @@ Already implemented:
 | Fill missing mass-upload rows from register | Optional tooling | Convenience; source of truth remains client files |
 
 **Conclusion:**  
-For June 26–July 10 parity, focus on **correct period sources, complete mass-upload coverage, DM4 OT/attendance, clear unpaid payroll, re-run**.  
-Do **not** block on inventing a contribution-amount import or changing period-2 contribution logic.
+For June 26–July 10 parity, focus on **correct period sources, mass-upload *plus* recurring enrollments, DM4 OT/attendance, clear unpaid payroll, re-run**.  
+Do **not** block on inventing a contribution-amount import or changing period-2 contribution logic.  
+Do **not** treat “absent from mass upload” as “must be zero on payslip” when a recurring enrollment should apply.
+
+### 2.3 Hard rule — mass upload is not the only money source (Project Truth)
+
+**Confirmed 2026-08-05 (operator):** Not all compensation and deduction comes from
+the cutoff mass-upload workbooks.
+
+| Source class | What it is | Tally implication |
+|---|---|---|
+| `mass_upload` | Rows in this cut’s compensation/deduction mass upload → period-scoped (or loan) enrollments | File completeness matters for **these** codes only |
+| `recurring_enrollment` | Standing `EmployeeBenefit` / `EmployeeLoan` already on employee; resolves for period without a mass row | **Must** apply at Run Payroll; gap diagnosis is enrollment/eligibility/period scope, not “add to mass file” by default |
+| `engine` | SSS/PHIC/Pag-IBIG schedule, W/Tax | Period 2 contrib = 0 by BNPI rule |
+| `ot_attendance` | Basic/absent/UT, approved OT | DM3 schedules + DM4 bio/OT |
+
+Canonical write-up: `.wwg/wiki/project-truth.md` → **BNPI payroll compensation / deduction source ownership (2026-08-05)**.
 
 ---
 
@@ -97,11 +113,11 @@ Do **not** block on inventing a contribution-amount import or changing period-2 
 | Monthly Salary / Basic Salary | Period basic on employee | DM3 Employees `BASIC_SALARY` |
 | No. of Days / Absent / UT-Late | Attendance + schedule + timesheet rules | DM3.2 schedules + DM4 biometrics + setup timesheet rules |
 | Reg OT / RD / Hol / ND buckets | Approved OT workbook (**not** raw biometrics) | DM4.3 `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx`. Biometrics file has only punch timestamps; OT report has approved hour buckets.
-| Allowances / AON / ARP / PFA / OBA / … | Cutoff compensation file | Compensation Mass Upload 07.15.26 |
-| Loans / NEGADJ / some deductions | Cutoff deduction file | Deduction Mass Upload 07.15.26 |
+| Allowances / AON / ARP / PFA / OBA / DMA / MLA / … | **Either** cutoff compensation mass upload **or** recurring/standing enrollment | Mass upload **and/or** existing `EmployeeBenefit`; classify before gap burn |
+| Loans / NEGADJ / some deductions | **Either** cutoff deduction mass upload **or** existing loan/benefit enrollment | Mass upload **and/or** `EmployeeLoan` / deduction benefit |
 | SSS Cont / PhilHealth / Pagibig | Engine (period 2 = **0**) | No file; Calculator + schedule |
 | W/Tax | Engine | Calculator + taxable gross |
-| TotalReceivable extras (e.g. MLA/PFA/ARP) | Often post-net / receivable | Compensation or recurring benefits; compare to correct column |
+| TotalReceivable extras (e.g. MLA/PFA/ARP) | Often post-net / receivable | Mass upload **or** recurring RECEIVABLE_ONLY benefits |
 | April statutory loan board | Historical remittance | Supporting only; not June primary |
 
 ---
@@ -299,11 +315,13 @@ Do **not** block on inventing a contribution-amount import or changing period-2 
 | Do I still lack files to import? | **Core pack is present.** Possible **gaps inside** June compensation/deduction rows for specific employees vs the full register — that is incomplete source content, not a missing DM stage. |
 | Should there be code/logic changes? | **Not required** for standard BNPI tally of this cut. Process + period-correct imports + DM4 + clean re-run first. Code only for optional ergonomics or if product rules are deliberately changed. |
 | Why contributions stay 0? | **Engine rule + register blank on period 2.** Not a missing mandatory-contribution import file. |
+| Is mass upload the only compensation/deduction source? | **No.** Recurring/standing enrollments also apply. Classify each line before gap burn. See §2.3 and Project Truth 2026-08-05. |
 
 ---
 
 ## 11. Related documents
 
+- `.wwg/wiki/project-truth.md` — BNPI payroll compensation / deduction source ownership (2026-08-05)
 - `docs/dm-migration-workflow.md` — DM0–DM6 sequence, DM4 OT proof, re-import semantics  
 - `hris-api/docs/multi-period-tax-calculation-plan.md` — contribution toggles by period  
 - Historical Apr 26–May 10 tooling paths under `docs/Bandai Payroll/` (same pattern; different cutoff files)
@@ -315,3 +333,4 @@ Do **not** block on inventing a contribution-amount import or changing period-2 
 | Date | Note |
 |---|---|
 | 2026-07-26 | Initial checklist from confidential-files investigation and Rio `01360` source cross-walk |
+| 2026-08-05 | Project Truth: mass upload is **not** sole compensation/deduction source; recurring enrollments apply without mass rows; component ownership + DM workflow corrected |

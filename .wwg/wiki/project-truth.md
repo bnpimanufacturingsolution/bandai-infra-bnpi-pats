@@ -1,5 +1,58 @@
 # Project Truth
 
+## BNPI payroll compensation / deduction source ownership (2026-08-05)
+
+- Status: `CONFIRMED_OPERATOR_PRODUCT_TRUTH`.
+- **Hard ban for payroll tally work:** do **not** assume every compensation or
+  deduction on the HRIS Payroll Computation register (or on a generated payslip)
+  must appear in the period’s **compensation / deduction mass-upload** workbooks.
+- Run Payroll applies money from **active `EmployeeBenefit` / `EmployeeLoan`
+  sources that resolve for the payroll period**, including:
+  1. **Cutoff mass upload** — period-scoped (or superseding) enrollments from
+     DM3 compensation / deduction mass upload for that cut.
+  2. **Recurring / standing enrollments** — benefits and deductions already on
+     the employee (catalog, prior enrollment, open-horizon or multi-cutoff
+     recurring) that remain active and eligible for the period **even when
+     those codes are absent from the cutoff mass-upload file**.
+  3. **Engine-only** lines — e.g. SSS Cont / PhilHealth / Pag-IBIG (BNPI
+     semi-monthly schedule: period 1 full, period 2 zero), W/Tax from taxable
+     gross. Not mass-upload rows.
+  4. **Attendance / OT path** — basic/absent/UT, approved OT buckets (DM4), not
+     mass-upload compensation.
+- **Tally method:** for each register or payslip line, classify source as
+  `mass_upload` | `recurring_enrollment` | `engine` | `ot_attendance` |
+  `missing_enrollment` before blaming incomplete mass files or inventing
+  imports. Missing from mass upload is **not** proof the line should be zero if
+  a valid recurring enrollment exists (and is in period scope).
+- **Stacking guard:** when both a period-scoped mass-upload enrollment and an
+  open-horizon peer exist for the same employee + benefit code, generation
+  prefers period-scoped and mass import supersedes open-horizon peers (anti
+  double ARP). Recurring truth remains valid when no period-scoped peer exists.
+- Operator confirmation: 2026-08-05 — not all compensation/deduction comes from
+  mass upload; recurring benefits apply without a mass-upload row.
+- Related checklists: `docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md`,
+  `docs/BNPI_JUNE11_25_2026_PAYROLL_PARITY_CHECKLIST.md`,
+  `docs/dm-migration-workflow.md` (DM3 mass upload is additive cutoff path, not
+  sole benefit source).
+
+## BNPI Meal Allowance (MLA) coverage expectation (2026-08-07)
+
+- Status: `CONFIRMED_OPERATOR_PRODUCT_TRUTH`.
+- **Coverage expectation:** every Bandai / BNPI employee **should have** an
+  active Meal Allowance (`MLA`) enrollment so payroll can pay MLA for each cut.
+- **Still enrollment-driven:** Run Payroll does **not** invent MLA for employees
+  without a resolving `EmployeeBenefit`. Missing MLA on a payslip is
+  `missing_enrollment` (or date/status/scope), not engine default pay.
+- **Hard ban — do not auto-enroll:** agents must **not** implement or run
+  automatic bulk/system enroll of MLA for all employees unless the operator
+  explicitly requests a deliberate enrollment job. Product note ≠ auto-grant.
+- **Money path when enrolled:** `BenefitType` MLA is compensation with BNPI
+  wiring `RECEIVABLE_ONLY` (post-net; named field `mealAllowance`; adds to
+  TotalReceivable, not GrossPay). Standing/recurring enrollments apply even when
+  MLA is absent from that cut’s compensation mass upload.
+- Operator confirmation: 2026-08-07 — all Bandai employees should have MLA;
+  keep enrollment-driven; do not auto-enroll.
+
 ## Shared DEV/UAT/PROD observability recovery (2026-07-28)
 
 - Status: `CONFIRMED_VM_GITOPS_PUBLIC_BROWSER`.

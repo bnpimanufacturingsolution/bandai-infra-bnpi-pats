@@ -76,21 +76,21 @@ Sheet2 header (105 money/identity columns). Ownership for **this cut**:
 | Absent-Amt / UT/Late-Amt | Attendance + rules | DM4 biometrics + timesheet rules |
 | Reg OT / RD / Hol / ND hour + pay columns | **Approved OT workbook**, not punches | DM4.3 + `repair:bandai-payroll-timesheet-lines` → `Timesheetline` |
 | Night Differential | OT/ND report + engine | OT workbook ND hrs + payroll calc |
-| Allowances in GrossPay (OBA, HYS, etc.) | Compensation mass upload / catalog | `POST /api/migration/dm3/import-compensation-mass-upload` |
-| Adjustment OT/ND, Other Adjustment, AON-class | Compensation (`AON`, `OAD`, …) | Same compensation import |
-| De Minimis / catalog fixed | DM2 + DM3.6 or compensation | Benefit types + enrollments |
+| Allowances in GrossPay (OBA, HYS, etc.) | Mass upload **and/or** recurring enrollment | `import-compensation-mass-upload` and/or existing `EmployeeBenefit` |
+| Adjustment OT/ND, Other Adjustment, AON-class | Mass upload **and/or** recurring | Same |
+| De Minimis / catalog fixed | DM2 + DM3.6, recurring, or compensation mass | Benefit types + enrollments (not mass-only) |
 | **SSS Cont / PhilHealth / Pagibig** | **Engine period 1 full** | Calculator + `BNPI_FIRST_CUTOFF_FULL…` — **do not import as open benefits from April file** |
 | W/Tax | Engine | Calculator from taxable gross |
-| Loans (SSS/HDMF/RCBC/BNPI…) | Deduction mass upload (+ any complete loan enrollments) | `POST /api/migration/dm3/import-deduction-mass-upload` |
+| Loans (SSS/HDMF/RCBC/BNPI…) | Deduction mass upload **and/or** existing loans | Mass upload + standing `EmployeeLoan` |
 | NetPay | Generated | Run Payroll → `EmployeePayroll` |
-| Post-net receivable lines (MLA, PFA/Perfect Attendance, ARP, Incentive 2025 30%, Meal Allowance, LLA, …) | Compensation / special lines | Often hit **TotalReceivable**, not NetPay — **never mix columns** |
+| Post-net receivable lines (MLA, PFA/Perfect Attendance, ARP, Incentive 2025 30%, Meal Allowance, LLA, …) | Mass upload **and/or** recurring RECEIVABLE_ONLY | Often **TotalReceivable**, not NetPay — **never mix columns** |
 | TotalReceivable | NetPay + receivable-only lines | Compare separately from NetPay |
 
 ### Guardrails (hard)
 
 1. Biometrics = attendance evidence only. **OT hour buckets require file O.**  
 2. Period 1 contributions **should be non-zero** for most employees (probe: ~842 of ~859 with SSS Cont). Zero contributions on this cut is a **bug or wrong periodNumber**, not success.  
-3. Deduction mass upload has **~24 rows** only — many register loan cells will be `SOURCE_INCOMPLETE` until client file is complete or explicit enrollments exist.  
+3. Deduction mass upload may be thin — but **absent from mass ≠ must be zero** if a **recurring/standing enrollment** exists (Project Truth 2026-08-05). Classify: `mass_upload` \| `recurring_enrollment` \| `engine` \| `ot_attendance` \| `missing_enrollment`.  
 4. Clear **unpaid** `EmployeePayroll` (or full debug reset) before re-run after source fixes.  
 5. Comparison scripts still default to Apr 26–May 10 paths — **always pass this cut’s `--workbook=` and source flags**.
 

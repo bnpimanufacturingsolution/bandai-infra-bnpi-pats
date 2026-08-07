@@ -1,5 +1,20 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-07 Benefits enroll Select employees from drawer
+
+- Task mode: bug fix (UX + picker reliability).
+- Symptom: drawer **Enroll employees** only navigated to `/hr/benefits-management/new`
+  form; Select employees modal did not open reliably with `action=select-employees`.
+- Fixes:
+  1. Drawer / toolbar / row enroll CTAs open `?action=select-employees` so the picker
+     opens immediately with benefit type preselected.
+  2. `EmployeeBenefitForm` keeps local picker open state (URL is mirror, not sole gate).
+  3. `Modal` portals to `document.body` at `z-[100]` so layout overflow cannot clip it.
+  4. Employee picker uses **server-side search** + structural filters; shows
+     “Showing N of M — search to find others” (was silent first-1000 client-only).
+- Proof: `.runtime/benefits-enroll-fix-20260807-121034/report.json` pass.
+- Tests: `EmployeeMultiSelectModal.test.tsx` green.
+
 ## Latest Task Addendum - 2026-08-05 Count-only DataTable column standard
 
 - Task mode: performance + standard.

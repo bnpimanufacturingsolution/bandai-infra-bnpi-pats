@@ -419,10 +419,16 @@ The HR-facing journey for the wired DM3 workbook is:
    salary/email/statutory values.
 6. Optionally, for BNPI payroll cutoffs, HR uploads the **compensation mass
    upload** and **deduction mass upload** from the same DM3 page. Those two
-   files are the only BNPI mass-upload path for cutoff benefits and deductions
-   (allowances, loan payments, and other period deductions). A separate
-   statutory / monthly payment register upload is **not** offered in the UI
-   and is not required after compensation and deduction files are imported.
+   files are the BNPI **mass-upload** path for **period-scoped / cutoff-delta**
+   benefits and deductions (allowances, loan payments, and other period
+   adjustments). They are **not** the only source of payslip money: **recurring
+   or standing `EmployeeBenefit` / `EmployeeLoan` enrollments** already on the
+   employee still apply at Run Payroll when they resolve for the period, even
+   if the code is absent from that cut’s mass-upload workbook (Project Truth:
+   BNPI payroll compensation / deduction source ownership, 2026-08-05). A
+   separate statutory / monthly payment register upload is **not** offered in
+   the UI and is not required after compensation and deduction files are
+   imported.
    **Period pin contract:** each mass-upload row resolves
    `StartPayDate` / `StartPayment` to a payroll period (prefer exact period
    start calendar day in Asia/Manila) and writes `EmployeeBenefit.payrollPeriodId`
