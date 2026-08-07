@@ -3924,7 +3924,9 @@ export function RunPayrollTemplate() {
 				</div>
 			)}
 
-			{/* Preview Payroll — same journey shape as Start Payroll, dry-run only */}
+			{/* Preview Payroll — same journey shape as Start Payroll, dry-run only.
+			    Results uses height-locked dialog + DataTable containedScroll (overflow-y-auto
+			    on Modal would break the flex chain — Modal detects overflow-hidden). */}
 			<Modal
 				open={isPreviewPayrollModalOpen}
 				onOpenChange={(open) => {
@@ -3932,21 +3934,31 @@ export function RunPayrollTemplate() {
 				}}
 				showCloseButton={previewStep !== "progress"}
 				closeOnBackdropClick={previewStep !== "progress"}
+				style={
+					previewStep === "results"
+						? {
+								// Inline height always wins (Tailwind arbitrary min() can miss compile).
+								height: "min(90vh, 880px)",
+								maxHeight: "90vh",
+								width: "min(96vw, 72rem)",
+							}
+						: undefined
+				}
 				className={
 					previewStep === "results"
-						? // Height-locked shell: table region flexes; body scrolls inside DataTable (containedScroll).
-							"flex h-[min(92dvh,900px)] max-h-[min(92dvh,900px)] w-full max-w-6xl flex-col gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-6xl"
+						? "h-[90vh] max-h-[90vh] w-[min(96vw,72rem)] max-w-6xl gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-6xl"
 						: previewStep === "progress"
-							? "flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-3xl"
-							: "flex max-h-[90vh] max-w-lg flex-col gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-xl"
+							? "max-h-[90vh] max-w-2xl gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-3xl"
+							: "max-h-[90vh] max-w-lg gap-0 overflow-hidden rounded-xl border-neutral-200 p-0 shadow-[0_8px_30px_rgba(0,0,0,0.06)] sm:max-w-xl"
 				}>
+				{/* Single flex column root — required for containedScroll height chain */}
 				<div
-					className={
-						previewStep === "results"
-							? "flex h-full min-h-0 flex-1 flex-col overflow-hidden"
-							: "flex min-h-0 flex-1 flex-col overflow-hidden"
-					}>
-					<div className="shrink-0 border-b border-neutral-100 px-5 py-4 pr-12">
+					className="flex min-h-0 flex-1 flex-col overflow-hidden"
+					style={
+						previewStep === "results" ? { height: "100%", minHeight: 0 } : undefined
+					}
+					data-testid="preview-payroll-modal-root">
+					<div className="shrink-0 border-b border-neutral-100 px-5 py-3 pr-12">
 						<div className="flex flex-wrap items-center gap-2">
 							<h2 className="text-base font-semibold tracking-tight text-neutral-900">
 								{previewPayrollModalTitle(
@@ -3986,7 +3998,7 @@ export function RunPayrollTemplate() {
 					</div>
 
 					{previewStep === "confirm" ? (
-						<>
+						<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 							<div className="min-h-0 flex-1 overflow-y-auto modern-scroll px-5 py-4">
 								<div className="space-y-4">
 									<div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5">
@@ -4110,7 +4122,7 @@ export function RunPayrollTemplate() {
 									Run Preview
 								</Button>
 							</div>
-						</>
+						</div>
 					) : previewStep === "progress" ? (
 						<div className="min-h-0 flex-1 overflow-y-auto modern-scroll p-6">
 							{isTimesheetPayrollPreviewError ? (
@@ -4157,115 +4169,113 @@ export function RunPayrollTemplate() {
 							)}
 						</div>
 					) : (
-						<>
-							{/* Results shell: chrome shrink-0, table flex-1 min-h-0 + containedScroll */}
-							<div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 pt-4">
-								<div className="shrink-0 space-y-3 pb-3">
-									<div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5">
-										<Eye className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-										<p className="text-sm text-sky-950">
-											Preview results only — amounts match the payroll engine dry-run.
-											Start real payroll separately when ready.
+						<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+							{/* Chrome above table — shrink-0 */}
+							<div className="shrink-0 space-y-2 px-5 pt-3">
+								<div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+									<Eye className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+									<p className="text-xs text-sky-950 sm:text-sm">
+										Preview results only — dry-run amounts. Start real payroll
+										separately when ready.
+									</p>
+								</div>
+								<div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+									<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2">
+										<p className="text-[11px] text-neutral-400">Ready</p>
+										<p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-900">
+											{formatCount(
+												previewSummary?.includedEmployeesCount ??
+													previewPagination?.totalItems ??
+													previewIncludedEmployees.length,
+											)}
 										</p>
 									</div>
-
-									<div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
-											<p className="text-[11px] text-neutral-400">Ready</p>
-											<p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-900">
-												{formatCount(
-													previewSummary?.includedEmployeesCount ??
-														previewPagination?.totalItems ??
-														previewIncludedEmployees.length,
-												)}
-											</p>
-										</div>
-										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
-											<p className="text-[11px] text-neutral-400">Est. Gross</p>
-											<p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-900">
-												{formatCurrency(previewSummary?.estimatedGrossPay)}
-											</p>
-										</div>
-										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
-											<p className="text-[11px] text-neutral-400">Est. Deductions</p>
-											<p className="mt-0.5 text-sm font-semibold tabular-nums text-rose-700">
-												{formatCurrency(previewSummary?.estimatedTotalDeductions)}
-											</p>
-										</div>
-										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
-											<p className="text-[11px] text-neutral-400">Est. Net</p>
-											<p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-700">
-												{formatCurrency(previewSummary?.estimatedNetPay)}
-											</p>
-										</div>
+									<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2">
+										<p className="text-[11px] text-neutral-400">Est. Gross</p>
+										<p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-900">
+											{formatCurrency(previewSummary?.estimatedGrossPay)}
+										</p>
 									</div>
-
-									{!previewTableLoading && zeroGrossEmployeeCount > 0 && (
-										<div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-800">
-											{zeroGrossEmployeeCount}{" "}
-											{zeroGrossEmployeeCount === 1
-												? "employee has"
-												: "employees have"}{" "}
-											zero gross pay — non-statutory deductions waived in this preview.
-										</div>
-									)}
+									<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2">
+										<p className="text-[11px] text-neutral-400">Est. Deductions</p>
+										<p className="mt-0.5 text-sm font-semibold tabular-nums text-rose-700">
+											{formatCurrency(previewSummary?.estimatedTotalDeductions)}
+										</p>
+									</div>
+									<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2">
+										<p className="text-[11px] text-neutral-400">Est. Net</p>
+										<p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-700">
+											{formatCurrency(previewSummary?.estimatedNetPay)}
+										</p>
+									</div>
 								</div>
-
-								{/* Height-locked table region (DataTable full-height rule) */}
-								<div
-									className="flex min-h-0 flex-1 flex-col overflow-hidden pb-3"
-									data-testid="preview-payroll-results-table-shell">
-									<DataTable<PreviewPayrollRow>
-										data={previewIncludedEmployees}
-										columns={previewColumns}
-										isLoading={previewTableLoading}
-										loadingRows={6}
-										title="Employees ready for payroll"
-										description="Computed dry-run amounts for this period scope."
-										showFilters={false}
-										showExport={false}
-										showPagination
-										containedScroll
-										searchPlaceholder="Search employee or code"
-										searchValue={previewQueryParam}
-										onSearch={handlePreviewSearch}
-										currentPage={previewPagination?.page || previewPage}
-										totalItems={previewPagination?.totalItems || 0}
-										totalPages={previewPagination?.totalPages || 1}
-										itemsPerPage={previewPagination?.limit || previewLimit}
-										onPageChange={handlePreviewPageChange}
-										emptyMessage={
-											previewQueryParam
-												? "No matching employees found"
-												: "No employees ready for payroll"
-										}
-										emptyDescription={
-											previewQueryParam
-												? `No ready employees matched "${previewQueryParam}".`
-												: "Approved timesheets with valid payroll details will appear here."
-										}
-										rowClassName={() => "hover:bg-sky-50/40"}
-										titleActions={
-											<Badge className="whitespace-nowrap border border-sky-200 bg-sky-50 text-sky-800">
-												{previewPagination?.totalItems ??
-													previewIncludedEmployees.length}{" "}
-												ready
-											</Badge>
-										}
-										renderActions={(employee) => (
-											<Button
-												type="button"
-												variant="outline"
-												size="sm"
-												onClick={() => handleOpenPreviewEmployee(employee)}
-												className="h-8 whitespace-nowrap border-sky-200 px-2.5 text-sky-800 hover:bg-sky-50">
-												<Eye className="mr-1.5 h-3.5 w-3.5" />
-												View Details
-											</Button>
-										)}
-									/>
-								</div>
+								{!previewTableLoading && zeroGrossEmployeeCount > 0 && (
+									<div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+										{zeroGrossEmployeeCount}{" "}
+										{zeroGrossEmployeeCount === 1
+											? "employee has"
+											: "employees have"}{" "}
+										zero gross pay — non-statutory deductions waived in this preview.
+									</div>
+								)}
 							</div>
+
+							{/* Table region fills remaining height; rows scroll inside DataTable */}
+							<div
+								className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-3"
+								data-testid="preview-payroll-results-table-shell">
+								<DataTable<PreviewPayrollRow>
+									data={previewIncludedEmployees}
+									columns={previewColumns}
+									isLoading={previewTableLoading}
+									loadingRows={6}
+									title="Employees ready for payroll"
+									description="Computed dry-run amounts for this period scope."
+									showFilters={false}
+									showExport={false}
+									showPagination
+									containedScroll
+									className="min-h-0 flex-1"
+									searchPlaceholder="Search employee or code"
+									searchValue={previewQueryParam}
+									onSearch={handlePreviewSearch}
+									currentPage={previewPagination?.page || previewPage}
+									totalItems={previewPagination?.totalItems || 0}
+									totalPages={previewPagination?.totalPages || 1}
+									itemsPerPage={previewPagination?.limit || previewLimit}
+									onPageChange={handlePreviewPageChange}
+									emptyMessage={
+										previewQueryParam
+											? "No matching employees found"
+											: "No employees ready for payroll"
+									}
+									emptyDescription={
+										previewQueryParam
+											? `No ready employees matched "${previewQueryParam}".`
+											: "Approved timesheets with valid payroll details will appear here."
+									}
+									rowClassName={() => "hover:bg-sky-50/40"}
+									titleActions={
+										<Badge className="whitespace-nowrap border border-sky-200 bg-sky-50 text-sky-800">
+											{previewPagination?.totalItems ??
+												previewIncludedEmployees.length}{" "}
+											ready
+										</Badge>
+									}
+									renderActions={(employee) => (
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											onClick={() => handleOpenPreviewEmployee(employee)}
+											className="h-8 whitespace-nowrap border-sky-200 px-2.5 text-sky-800 hover:bg-sky-50">
+											<Eye className="mr-1.5 h-3.5 w-3.5" />
+											View Details
+										</Button>
+									)}
+								/>
+							</div>
+
 							<div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-neutral-100 bg-white px-5 py-3">
 								<Button
 									type="button"
@@ -4284,7 +4294,7 @@ export function RunPayrollTemplate() {
 									</Button>
 								)}
 							</div>
-						</>
+						</div>
 					)}
 				</div>
 			</Modal>

@@ -70,6 +70,12 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 		const hasExplicitZ =
 			typeof className === "string" && /\bz-\[?\d/.test(className);
 		const shellZ = hasExplicitZ ? undefined : "z-[100]";
+		// overflow-hidden does NOT win over default overflow-y-auto in tailwind-merge
+		// (different groups). Contained layouts (DataTable containedScroll, pinned
+		// footers) must suppress the dialog-level vertical scroll so height flexes.
+		const containOverflow =
+			typeof className === "string" &&
+			/(?:^|\s)(?:!)?overflow-(?:hidden|y-hidden|clip)(?:\s|$)/.test(className);
 
 		if (!open) {
 			return trigger ? <>{trigger}</> : null;
@@ -98,7 +104,10 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 					aria-labelledby={title ? titleId : undefined}
 					aria-describedby={description ? descriptionId : undefined}
 					className={cn(
-						"relative z-10 flex flex-col w-full max-w-3xl gap-4 border bg-white p-6 shadow-lg duration-200 rounded-lg mx-4 max-h-[90vh] overflow-y-auto modern-scroll",
+						"relative z-10 flex w-full max-w-3xl flex-col gap-4 rounded-lg border bg-white p-6 shadow-lg duration-200 mx-4 max-h-[90vh]",
+						containOverflow
+							? "min-h-0 overflow-hidden"
+							: "overflow-y-auto modern-scroll",
 						className,
 					)}
 					{...props}
