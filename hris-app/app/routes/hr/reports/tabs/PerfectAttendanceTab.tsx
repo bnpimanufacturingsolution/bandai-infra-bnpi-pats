@@ -314,7 +314,9 @@ export function PerfectAttendanceTab() {
 									<div className="text-2xl font-bold">
 										{metrics?.totalEmployees || 0}
 									</div>
-									<p className="text-xs text-gray-500">Active employees</p>
+									<p className="text-xs text-gray-500">
+										With attendance in period
+									</p>
 								</CardContent>
 							</Card>
 							<Card>

@@ -60,30 +60,41 @@ export async function calculateOvertimeMetrics(
 				where: {
 					isDeleted: false,
 					date: { gte: startDate, lte: endDate },
-					overtimeHours: { not: null },
 				},
 				select: {
 					date: true,
 					overtimeHours: true,
+					overtimeMinutes: true,
 				},
 			},
 		},
 	});
 
-	// Calculate overtime stats for each employee
+	// Calculate overtime stats for each employee (minutes > 0 only; "0:00" excluded)
 	const overtimeStats = employees
 		.map((emp) => {
-			const totalOvertimeMinutes = emp.attendances.reduce(
-				(sum, att) => sum + parseTimeToMinutes(att.overtimeHours),
-				0,
-			);
+			let overtimeCount = 0;
+			let totalOvertimeMinutes = 0;
+
+			emp.attendances.forEach((att) => {
+				const minutes =
+					typeof att.overtimeMinutes === "number" &&
+					Number.isFinite(att.overtimeMinutes) &&
+					att.overtimeMinutes > 0
+						? att.overtimeMinutes
+						: parseTimeToMinutes(att.overtimeHours);
+				if (minutes > 0) {
+					overtimeCount++;
+					totalOvertimeMinutes += minutes;
+				}
+			});
 
 			return {
 				id: emp.id,
 				employeeId: emp.employeeId,
 				name: getEmployeeName(emp),
 				department: emp.department?.name || "N/A",
-				overtimeCount: emp.attendances.length,
+				overtimeCount,
 				totalOvertimeHours: Math.round((totalOvertimeMinutes / 60) * 100) / 100,
 			};
 		})

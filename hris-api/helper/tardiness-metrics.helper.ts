@@ -5,7 +5,11 @@
  */
 
 import { PrismaClient } from "../generated/prisma";
-import { getEmployeeName, parseTimeToMinutes, buildEmployeeFilter } from "./attendance-metrics-common.helper";
+import {
+	getEmployeeName,
+	attendanceMinutesFromFields,
+	buildEmployeeFilter,
+} from "./attendance-metrics-common.helper";
 
 export interface TardinessEmployee {
 	id: string;
@@ -14,6 +18,8 @@ export interface TardinessEmployee {
 	department: string;
 	tardinessCount: number;
 	totalLateMinutes: number;
+	avgLateMinutes: number;
+	maxLateMinutes: number;
 	undertimeCount: number;
 	totalUndertimeMinutes: number;
 	earlyOutCount: number;
@@ -75,6 +81,9 @@ export async function calculateTardinessMetrics(
 					lateHours: true,
 					undertimeHours: true,
 					earlyOutHours: true,
+					lateMinutes: true,
+					undertimeMinutes: true,
+					earlyOutMinutes: true,
 				},
 			},
 		},
@@ -86,17 +95,25 @@ export async function calculateTardinessMetrics(
 		let undertimeCount = 0;
 		let earlyOutCount = 0;
 		let totalLateMinutes = 0;
+		let maxLateMinutes = 0;
 		let totalUndertimeMinutes = 0;
 		let totalEarlyOutMinutes = 0;
 
 		emp.attendances.forEach((att) => {
-			const lateMinutes = parseTimeToMinutes(att.lateHours);
-			const undertimeMinutes = parseTimeToMinutes(att.undertimeHours);
-			const earlyOutMinutes = parseTimeToMinutes(att.earlyOutHours);
+			const lateMinutes = attendanceMinutesFromFields(att.lateHours, att.lateMinutes);
+			const undertimeMinutes = attendanceMinutesFromFields(
+				att.undertimeHours,
+				att.undertimeMinutes,
+			);
+			const earlyOutMinutes = attendanceMinutesFromFields(
+				att.earlyOutHours,
+				att.earlyOutMinutes,
+			);
 
 			if (lateMinutes > 0) {
 				tardinessCount++;
 				totalLateMinutes += lateMinutes;
+				if (lateMinutes > maxLateMinutes) maxLateMinutes = lateMinutes;
 			}
 			if (undertimeMinutes > 0) {
 				undertimeCount++;
@@ -108,6 +125,9 @@ export async function calculateTardinessMetrics(
 			}
 		});
 
+		const avgLateMinutes =
+			tardinessCount > 0 ? Math.round((totalLateMinutes / tardinessCount) * 100) / 100 : 0;
+
 		return {
 			id: emp.id,
 			employeeId: emp.employeeId,
@@ -115,6 +135,8 @@ export async function calculateTardinessMetrics(
 			department: emp.department?.name || "N/A",
 			tardinessCount,
 			totalLateMinutes,
+			avgLateMinutes,
+			maxLateMinutes,
 			undertimeCount,
 			totalUndertimeMinutes,
 			earlyOutCount,

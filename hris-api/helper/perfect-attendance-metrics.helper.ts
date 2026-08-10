@@ -5,8 +5,11 @@
  */
 
 import { PrismaClient } from "../generated/prisma";
-import { findShiftForDay } from "./schedule.helper";
-import { getEmployeeName, parseTimeToMinutes, buildEmployeeFilter } from "./attendance-metrics-common.helper";
+import {
+	getEmployeeName,
+	attendanceMinutesFromFields,
+	buildEmployeeFilter,
+} from "./attendance-metrics-common.helper";
 
 export interface PerfectAttendanceEmployee {
 	id: string;
@@ -26,21 +29,48 @@ export interface PerfectAttendanceMetrics {
 	employees: PerfectAttendanceEmployee[];
 }
 
+type AttendanceRow = {
+	id: string;
+	lateHours: string | null;
+	undertimeHours: string | null;
+	earlyOutHours?: string | null;
+	lateMinutes?: number | null;
+	undertimeMinutes?: number | null;
+	earlyOutMinutes?: number | null;
+	status: string | null;
+};
+
+function attendanceHasViolation(att: AttendanceRow): boolean {
+	const status = String(att.status || "").toUpperCase();
+	if (status === "LEAVE" || status === "ABSENT") {
+		return true;
+	}
+
+	const lateMinutes = attendanceMinutesFromFields(att.lateHours, att.lateMinutes);
+	const undertimeMinutes = attendanceMinutesFromFields(
+		att.undertimeHours,
+		att.undertimeMinutes,
+	);
+	const earlyOutMinutes = attendanceMinutesFromFields(
+		att.earlyOutHours,
+		att.earlyOutMinutes,
+	);
+
+	return lateMinutes > 0 || undertimeMinutes > 0 || earlyOutMinutes > 0;
+}
+
+function isPresentLike(att: AttendanceRow): boolean {
+	const status = String(att.status || "").toUpperCase();
+	if (status === "LEAVE" || status === "ABSENT") return false;
+	return true;
+}
+
 /**
  * Calculate perfect attendance metrics for a specific date range
- * Perfect attendance = zero absences AND zero tardiness/undertime/early out
- * 
- * Follows test script pattern:
- * - Start from Employee model
- * - Filter attendances with violations (lateHours, undertimeHours, status LEAVE)
- * - Employees with zero violations have perfect attendance
+ * Perfect attendance = at least one in-period attendance, zero absences,
+ * and zero tardiness / undertime / early-out (minutes > 0).
  *
- * @param prisma - Prisma client instance
- * @param organizationId - Organization ID
- * @param startDate - Start date of the period (normalized to start of day)
- * @param endDate - End date of the period (normalized to end of day)
- * @param departmentId - Optional department filter
- * @returns Perfect attendance metrics
+ * Important: "0:00" hour strings are NOT violations (parse to 0 minutes).
  */
 export async function calculatePerfectAttendanceMetrics(
 	prisma: PrismaClient,
@@ -49,13 +79,8 @@ export async function calculatePerfectAttendanceMetrics(
 	endDate: Date,
 	departmentId?: string,
 ): Promise<PerfectAttendanceMetrics> {
-	// Build employee filter (no employmentStatus filter per test script)
 	const employeeWhere = buildEmployeeFilter(organizationId, departmentId);
 
-	// Fetch employees with their attendance records
-	// We need TWO queries:
-	// 1. Attendances WITH violations (to exclude)
-	// 2. ALL attendances (to ensure they have records)
 	const employees = await prisma.employee.findMany({
 		where: employeeWhere,
 		select: {
@@ -72,53 +97,64 @@ export async function calculatePerfectAttendanceMetrics(
 					id: true,
 					lateHours: true,
 					undertimeHours: true,
+					earlyOutHours: true,
+					lateMinutes: true,
+					undertimeMinutes: true,
+					earlyOutMinutes: true,
 					status: true,
 				},
 			},
 		},
 	});
 
-	// Filter employees with perfect attendance:
-	// - Must have at least 1 attendance record
-	// - Must have zero violations (no late, undertime, or leave)
-	const perfectAttendance = employees.filter((emp) => {
-		if (emp.attendances.length === 0) return false; // No records = not perfect
-		
-		// Check if any attendance has violations
-		const hasViolations = emp.attendances.some(
-			(att) => att.lateHours || att.undertimeHours || att.status === "LEAVE"
-		);
-		
-		return !hasViolations;
-	});
+	// Period-scoped population: only employees who have attendance in the range.
+	const employeesWithRecords = employees.filter((emp) => emp.attendances.length > 0);
 
-	const perfectPct = employees.length > 0 
-		? (perfectAttendance.length / employees.length) * 100 
-		: 0;
-
-	// Map to response format
-	const results: PerfectAttendanceEmployee[] = employees.map((emp) => {
-		const hasViolations = emp.attendances.some(
-			(att) => att.lateHours || att.undertimeHours || att.status === "LEAVE"
-		);
-		const isPerfect = emp.attendances.length > 0 && !hasViolations;
+	const results: PerfectAttendanceEmployee[] = employeesWithRecords.map((emp) => {
+		const hasViolations = emp.attendances.some((att) => attendanceHasViolation(att));
+		const daysPresent = emp.attendances.filter((att) => isPresentLike(att)).length;
+		const totalWorkDays = emp.attendances.length;
+		const isPerfect = totalWorkDays > 0 && !hasViolations;
 
 		return {
 			id: emp.id,
 			employeeId: emp.employeeId,
 			name: getEmployeeName(emp),
 			department: emp.department?.name || "N/A",
-			daysPresent: emp.attendances.length,
-			totalWorkDays: emp.attendances.length, // Simplified: count all attendance records
+			daysPresent,
+			totalWorkDays,
 			isPerfect,
 		};
 	});
 
+	const perfectAttendance = results.filter((row) => row.isPerfect);
+	const totalEmployees = results.length;
+	const perfectPct =
+		totalEmployees > 0 ? (perfectAttendance.length / totalEmployees) * 100 : 0;
+
+	// Mean individual attendance rate among employees with records in period.
+	const averageAttendanceRate =
+		totalEmployees > 0
+			? results.reduce((sum, row) => {
+					const rate =
+						row.totalWorkDays > 0 ? row.daysPresent / row.totalWorkDays : 0;
+					return sum + rate;
+				}, 0) /
+				totalEmployees *
+				100
+			: 0;
+
+	// Sort perfect employees first, then by days present desc for table UX.
+	results.sort((a, b) => {
+		if (a.isPerfect !== b.isPerfect) return a.isPerfect ? -1 : 1;
+		return b.daysPresent - a.daysPresent;
+	});
+
 	return {
-		totalEmployees: employees.length,
+		totalEmployees,
 		perfectAttendanceCount: perfectAttendance.length,
 		perfectAttendanceRate: Math.round(perfectPct * 100) / 100,
-		averageAttendanceRate: 0, // Not calculated in simplified version
+		averageAttendanceRate: Math.round(averageAttendanceRate * 100) / 100,
 		employees: results,
 	};
 }
