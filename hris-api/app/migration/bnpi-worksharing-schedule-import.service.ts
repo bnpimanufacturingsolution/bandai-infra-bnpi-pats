@@ -19,6 +19,7 @@ import {
 	parseWorkSharingScheduleWorkbook,
 	parseWorkSharingShiftWindow,
 	toWorkSharingDateKey,
+	type WorkSharingDayAssignment,
 	type WorkSharingSourceAssignment,
 } from "../../helper/bnpi-worksharing-schedule-import.helper";
 import {
@@ -58,6 +59,10 @@ export type WorkSharingScheduleImportSummary = {
 	attendanceObligationsRefreshed?: number;
 	attendanceObligationsInserted?: number;
 	attendanceObligationRemainingGap?: number;
+	/** Day-level schedule_overrides written from WorkSharing date flags. */
+	dayOverridesCreated?: number;
+	dayOverridesUpdated?: number;
+	dayAssignmentsParsed?: number;
 };
 
 function resolveImportStatus(summary: {
@@ -275,11 +280,35 @@ export async function importWorkSharingScheduleUpload(params: {
 		});
 	}
 
+	summary.dayAssignmentsParsed = parsed.dayAssignments?.length || 0;
+	summary.dayOverridesCreated = 0;
+	summary.dayOverridesUpdated = 0;
+
 	const uniqueBySchedule = new Map<string, WorkSharingSourceAssignment>();
 	for (const assignment of parsed.assignments) {
 		if (!uniqueBySchedule.has(assignment.scheduleCode)) {
 			uniqueBySchedule.set(assignment.scheduleCode, assignment);
 		}
+	}
+	// Also ensure templates for day-only shifts that are not the majority primary.
+	for (const day of parsed.dayAssignments || []) {
+		if (uniqueBySchedule.has(day.scheduleCode)) continue;
+		uniqueBySchedule.set(day.scheduleCode, {
+			employeeExternalId: day.employeeExternalId,
+			sourceEmployeeId: day.sourceEmployeeId,
+			employeeName: day.employeeName,
+			department: day.department,
+			division: day.division,
+			position: day.position,
+			shiftLabel: day.shiftLabel,
+			shiftCode: day.shiftCode,
+			scheduleCode: day.scheduleCode,
+			effectiveFrom: day.date,
+			effectiveTo: day.date,
+			sourceSheet: day.sourceSheet,
+			sourceRow: day.sourceRow,
+			activeDates: [day.dateKey],
+		});
 	}
 
 	const templatesByCode = new Map<string, any>();
@@ -478,6 +507,99 @@ export async function importWorkSharingScheduleUpload(params: {
 		}
 		affectedEmployeeIds.add(employee.id);
 		(employee as any).embeddedSchedule = nextEmbeddedSchedule;
+	}
+
+	// Day-level overrides from WorkSharing date flags (Option A: shortfall uses day shift).
+	// resolveEffectiveShift prefers schedule_overrides over embedded Mon-Sat template.
+	const dayAssignments: WorkSharingDayAssignment[] = parsed.dayAssignments || [];
+	if (dayAssignments.length > 0) {
+		const shiftTypes = await (params.prisma as any).shiftType.findMany({
+			where: {
+				organizationId: params.organizationId,
+				isDeleted: false,
+				code: {
+					in: Array.from(new Set(dayAssignments.map((d) => d.shiftCode))),
+				},
+			},
+			select: { id: true, code: true, name: true, timeSlots: true, isOff: true, isOvernight: true, shiftHour: true },
+		});
+		const shiftByCode = new Map<string, any>(shiftTypes.map((s: any) => [String(s.code), s]));
+
+		for (const day of dayAssignments) {
+			const employee = employeesByExternalId.get(day.employeeExternalId);
+			if (!employee) continue;
+			const shiftType = shiftByCode.get(day.shiftCode);
+			if (!shiftType) continue;
+
+			const dayDate = new Date(day.date);
+			dayDate.setUTCHours(0, 0, 0, 0);
+			const shiftSnapshot = {
+				code: shiftType.code,
+				name: shiftType.name,
+				isOff: Boolean(shiftType.isOff),
+				isOvernight: Boolean(shiftType.isOvernight),
+				shiftHour: shiftType.shiftHour,
+				timeSlots: shiftType.timeSlots,
+				source: "WORKSHARING_DAY_FLAG",
+				shiftLabel: day.shiftLabel,
+			};
+			const reason = `WorkSharing day flag: ${day.shiftLabel} (row ${day.sourceRow})`;
+
+			const existing = await (params.prisma as any).scheduleOverride.findFirst({
+				where: {
+					organizationId: params.organizationId,
+					employeeId: employee.id,
+					date: dayDate,
+					isDeleted: false,
+				},
+				select: { id: true },
+			});
+
+			if (existing?.id) {
+				await (params.prisma as any).scheduleOverride.update({
+					where: { id: existing.id },
+					data: {
+						shiftTypeId: shiftType.id,
+						shiftSnapshot,
+						reason,
+						isDeleted: false,
+					},
+				});
+				summary.dayOverridesUpdated = (summary.dayOverridesUpdated || 0) + 1;
+			} else {
+				try {
+					await (params.prisma as any).scheduleOverride.create({
+						data: {
+							organizationId: params.organizationId,
+							employeeId: employee.id,
+							date: dayDate,
+							shiftTypeId: shiftType.id,
+							shiftSnapshot,
+							reason,
+							isDeleted: false,
+						},
+					});
+					summary.dayOverridesCreated = (summary.dayOverridesCreated || 0) + 1;
+				} catch {
+					// Unique race: update
+					await (params.prisma as any).scheduleOverride.updateMany({
+						where: {
+							organizationId: params.organizationId,
+							employeeId: employee.id,
+							date: dayDate,
+						},
+						data: {
+							shiftTypeId: shiftType.id,
+							shiftSnapshot,
+							reason,
+							isDeleted: false,
+						},
+					});
+					summary.dayOverridesUpdated = (summary.dayOverridesUpdated || 0) + 1;
+				}
+			}
+			affectedEmployeeIds.add(employee.id);
+		}
 	}
 
 	if (affectedEmployeeIds.size > 0) {

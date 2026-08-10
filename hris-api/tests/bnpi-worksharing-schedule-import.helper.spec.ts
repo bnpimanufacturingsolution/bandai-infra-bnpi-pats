@@ -126,11 +126,65 @@ describe("BNPI WorkSharingSchedule import helper", () => {
 			shiftLabel: "06:45 to 15:45",
 			scheduleCode: "BNPI_WS_MON_SAT_WS_0645_1545",
 		});
+		// Multi-row same employee is merged into day flags (not skipped as duplicate).
 		const skipReasons = parsed.skippedRows.map((row) => row.reason);
-		expect(skipReasons).to.include("duplicate_employee_id");
+		expect(skipReasons).to.not.include("duplicate_employee_id");
 		expect(skipReasons.some((reason) => reason.startsWith("unsupported_shift:"))).to.equal(
 			true,
 		);
+	});
+
+	it("emits day-level assignments when an employee has multiple shifts across days", () => {
+		const buffer = buildSampleWorkbookBuffer({
+			rows: [
+				[
+					"Employeeid",
+					"EmployeeName",
+					"Department",
+					"Division",
+					"Position",
+					"Shift",
+					"2026-07-01",
+					"2026-07-02",
+					"2026-07-03",
+				],
+				[
+					1792,
+					"Hernandez, Alexa Mae B.",
+					"Administration",
+					"GA/HR 1",
+					"Staff",
+					"06:00 to 14:00",
+					1,
+					1,
+					0,
+				],
+				[
+					1792,
+					"Hernandez, Alexa Mae B.",
+					"Administration",
+					"GA/HR 1",
+					"Staff",
+					"08:15 to 16:15",
+					0,
+					0,
+					1,
+				],
+			],
+		});
+		const parsed = parseWorkSharingScheduleWorkbook(buffer);
+		// Primary/majority = 06:00 (2 days)
+		expect(parsed.assignments).to.have.length(1);
+		expect(parsed.assignments[0].shiftLabel).to.equal("06:00 to 14:00");
+		expect(parsed.assignments[0].activeDates).to.deep.equal(["2026-07-01", "2026-07-02"]);
+		// Day-level keeps both shifts
+		expect(parsed.dayAssignments).to.have.length(3);
+		const byDate = Object.fromEntries(
+			parsed.dayAssignments.map((d) => [d.dateKey, d.shiftLabel]),
+		);
+		expect(byDate["2026-07-01"]).to.equal("06:00 to 14:00");
+		expect(byDate["2026-07-02"]).to.equal("06:00 to 14:00");
+		expect(byDate["2026-07-03"]).to.equal("08:15 to 16:15");
 	});
 
 	it("builds operator notes for assignments", () => {

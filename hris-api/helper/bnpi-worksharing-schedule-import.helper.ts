@@ -5,6 +5,9 @@
  *   Employeeid | EmployeeName | Department | Division | Position | Shift | <date columns...>
  * Shift values look like "08:15 to 16:15". Date cells are 0/1 work flags.
  *
+ * One employee may appear on multiple rows with different shifts; each date flag
+ * of 1 assigns that day's shift. Shortfall (late/EO) must use the day-level shift.
+ *
  * Schedule codes match existing DM3 WorkSharing templates:
  *   BNPI_WS_MON_SAT_WS_HHMM_HHMM
  */
@@ -22,6 +25,7 @@ export type WorkSharingDateColumn = {
 	label: string;
 };
 
+/** Period-level assignment used for embedded Mon-Sat template (majority shift). */
 export type WorkSharingSourceAssignment = {
 	employeeExternalId: string;
 	sourceEmployeeId: string;
@@ -36,12 +40,34 @@ export type WorkSharingSourceAssignment = {
 	effectiveTo: Date;
 	sourceSheet: string;
 	sourceRow: number;
+	/** Days this employee is on this shift (flag=1). */
+	activeDates: string[];
+};
+
+/** Exact day → shift assignment for schedule_overrides / shortfall. */
+export type WorkSharingDayAssignment = {
+	employeeExternalId: string;
+	sourceEmployeeId: string;
+	employeeName: string;
+	department: string;
+	division: string;
+	position: string;
+	date: Date;
+	dateKey: string;
+	shiftLabel: string;
+	shiftCode: string;
+	scheduleCode: string;
+	sourceSheet: string;
+	sourceRow: number;
 };
 
 export type ParseWorkSharingWorkbookResult = {
 	sheetName: string;
 	dateColumns: WorkSharingDateColumn[];
+	/** One row per employee + majority (or first) shift for embedded template. */
 	assignments: WorkSharingSourceAssignment[];
+	/** Day-level shifts (employee × date with flag 1). */
+	dayAssignments: WorkSharingDayAssignment[];
 	skippedRows: Array<{ row: number; reason: string }>;
 	effectiveFrom: string;
 	effectiveTo: string;
@@ -102,8 +128,20 @@ function normalizeDateOnly(date: Date): Date {
 	return next;
 }
 
+/**
+ * Parse workbook date headers.
+ * Handles Excel serials and UTC midnights that represent Manila calendar days
+ * (e.g. 2026-06-25T16:00:00.000Z → 2026-06-26 in UTC+8).
+ */
 export function parseWorkSharingSourceDate(value: unknown): Date | null {
 	if (value instanceof Date && !Number.isNaN(value.getTime())) {
+		// If time component is non-midnight UTC, treat as Manila wall date.
+		const hours = value.getUTCHours();
+		const minutes = value.getUTCMinutes();
+		if (hours !== 0 || minutes !== 0) {
+			const manila = new Date(value.getTime() + 8 * 60 * 60 * 1000);
+			return new Date(Date.UTC(manila.getUTCFullYear(), manila.getUTCMonth(), manila.getUTCDate()));
+		}
 		return normalizeDateOnly(value);
 	}
 	if (typeof value === "number" && Number.isFinite(value)) {
@@ -111,10 +149,29 @@ export function parseWorkSharingSourceDate(value: unknown): Date | null {
 		const excelEpoch = Date.UTC(1899, 11, 30);
 		const ms = excelEpoch + value * 24 * 60 * 60 * 1000;
 		const parsed = new Date(ms);
-		if (!Number.isNaN(parsed.getTime())) return normalizeDateOnly(parsed);
+		if (!Number.isNaN(parsed.getTime())) {
+			// Serials are date-only; keep UTC date.
+			return normalizeDateOnly(parsed);
+		}
 	}
 	const text = clean(value);
 	if (!text || /^total/i.test(text)) return null;
+
+	// ISO with time (often prior UTC day for PH files)
+	const isoTime = text.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+	if (isoTime) {
+		const hour = Number(isoTime[4]);
+		const minute = Number(isoTime[5]);
+		if (hour !== 0 || minute !== 0) {
+			const parsed = new Date(text.endsWith("Z") || text.includes("+") ? text : `${text}Z`);
+			if (!Number.isNaN(parsed.getTime())) {
+				const manila = new Date(parsed.getTime() + 8 * 60 * 60 * 1000);
+				return new Date(Date.UTC(manila.getUTCFullYear(), manila.getUTCMonth(), manila.getUTCDate()));
+			}
+		}
+		return new Date(Date.UTC(Number(isoTime[1]), Number(isoTime[2]) - 1, Number(isoTime[3])));
+	}
+
 	const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
 	if (iso) {
 		return new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
@@ -122,11 +179,18 @@ export function parseWorkSharingSourceDate(value: unknown): Date | null {
 	const slash = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
 	if (slash) {
 		const year = Number(slash[3].length === 2 ? `20${slash[3]}` : slash[3]);
+		// Prefer M/D/Y (BNPI workbooks)
 		return new Date(Date.UTC(year, Number(slash[1]) - 1, Number(slash[2])));
 	}
 	const parsed = new Date(`${text} UTC`);
 	if (!Number.isNaN(parsed.getTime())) return normalizeDateOnly(parsed);
 	return null;
+}
+
+export function isWorkSharingActiveFlag(value: unknown): boolean {
+	if (value === true || value === 1) return true;
+	const text = clean(value);
+	return text === "1" || text.toLowerCase() === "true" || text.toLowerCase() === "yes";
 }
 
 export function pickWorkSharingSheetName(sheetNames: string[]): string | null {
@@ -139,12 +203,33 @@ export function pickWorkSharingSheetName(sheetNames: string[]): string | null {
 }
 
 export function buildWorkSharingAssignmentNotes(assignment: WorkSharingSourceAssignment): string {
-	return `BNPI WorkSharingSchedule source row ${assignment.sourceRow}; source span ${toWorkSharingDateKey(assignment.effectiveFrom)} to ${toWorkSharingDateKey(assignment.effectiveTo)}; recurring Mon-Sat shift ${assignment.shiftLabel}`;
+	const dayCount = assignment.activeDates?.length || 0;
+	return `BNPI WorkSharingSchedule source row ${assignment.sourceRow}; source span ${toWorkSharingDateKey(assignment.effectiveFrom)} to ${toWorkSharingDateKey(assignment.effectiveTo)}; majority/primary shift ${assignment.shiftLabel}${dayCount ? ` (${dayCount} day flag(s))` : ""}`;
 }
 
 /**
- * Parse a WorkSharingSchedule workbook buffer into employee schedule assignments.
- * effectiveFrom/effectiveTo span all date columns on the sheet (period window).
+ * Build day→shift lookup: employeeExternalId -> dateKey -> day assignment.
+ */
+export function indexWorkSharingDayAssignments(
+	dayAssignments: WorkSharingDayAssignment[],
+): Map<string, Map<string, WorkSharingDayAssignment>> {
+	const byEmployee = new Map<string, Map<string, WorkSharingDayAssignment>>();
+	for (const day of dayAssignments) {
+		let byDate = byEmployee.get(day.employeeExternalId);
+		if (!byDate) {
+			byDate = new Map();
+			byEmployee.set(day.employeeExternalId, byDate);
+		}
+		// Later rows win if same date flagged twice (should be rare).
+		byDate.set(day.dateKey, day);
+	}
+	return byEmployee;
+}
+
+/**
+ * Parse a WorkSharingSchedule workbook buffer.
+ * Emits day-level assignments (flag=1) and primary period assignments
+ * (majority shift per employee for embedded Mon-Sat template).
  */
 export function parseWorkSharingScheduleWorkbook(
 	buffer: Buffer,
@@ -191,9 +276,21 @@ export function parseWorkSharingScheduleWorkbook(
 		dateColumns[0].date,
 	);
 
-	const assignments: WorkSharingSourceAssignment[] = [];
+	const dayAssignments: WorkSharingDayAssignment[] = [];
 	const skippedRows: Array<{ row: number; reason: string }> = [];
-	const seenEmployees = new Set<string>();
+	// employeeExternalId -> shiftLabel -> meta + dates
+	const employeeShiftBuckets = new Map<
+		string,
+		Map<
+			string,
+			{
+				meta: Omit<WorkSharingDayAssignment, "date" | "dateKey" | "shiftLabel"> & {
+					shiftLabel: string;
+				};
+				dates: string[];
+			}
+		>
+	>();
 
 	for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
 		const row = rows[rowIndex] || [];
@@ -214,14 +311,10 @@ export function parseWorkSharingScheduleWorkbook(
 			skippedRows.push({ row: sourceRow, reason: `unsupported_shift:${shiftLabel}` });
 			continue;
 		}
-		if (seenEmployees.has(employeeExternalId)) {
-			skippedRows.push({ row: sourceRow, reason: "duplicate_employee_id" });
-			continue;
-		}
-		seenEmployees.add(employeeExternalId);
 
 		const shiftCode = toWorkSharingShiftCode(shiftLabel);
-		assignments.push({
+		const scheduleCode = toWorkSharingMonSatScheduleCode(shiftCode);
+		const meta = {
 			employeeExternalId,
 			sourceEmployeeId,
 			employeeName: clean(row[1]),
@@ -230,18 +323,95 @@ export function parseWorkSharingScheduleWorkbook(
 			position: clean(row[4]),
 			shiftLabel,
 			shiftCode,
-			scheduleCode: toWorkSharingMonSatScheduleCode(shiftCode),
-			effectiveFrom,
-			effectiveTo,
+			scheduleCode,
 			sourceSheet: sheetName,
 			sourceRow,
+		};
+
+		let activeOnAnyDay = false;
+		for (const column of dateColumns) {
+			if (!isWorkSharingActiveFlag(row[column.index])) continue;
+			activeOnAnyDay = true;
+			const dateKey = toWorkSharingDateKey(column.date);
+			dayAssignments.push({
+				...meta,
+				date: column.date,
+				dateKey,
+			});
+
+			let shiftMap = employeeShiftBuckets.get(employeeExternalId);
+			if (!shiftMap) {
+				shiftMap = new Map();
+				employeeShiftBuckets.set(employeeExternalId, shiftMap);
+			}
+			let bucket = shiftMap.get(shiftLabel);
+			if (!bucket) {
+				bucket = { meta, dates: [] };
+				shiftMap.set(shiftLabel, bucket);
+			}
+			if (!bucket.dates.includes(dateKey)) bucket.dates.push(dateKey);
+		}
+
+		if (!activeOnAnyDay) {
+			// Row present but no day flags — still usable as period-wide primary if sole row.
+			let shiftMap = employeeShiftBuckets.get(employeeExternalId);
+			if (!shiftMap) {
+				shiftMap = new Map();
+				employeeShiftBuckets.set(employeeExternalId, shiftMap);
+			}
+			if (!shiftMap.has(shiftLabel)) {
+				shiftMap.set(shiftLabel, { meta, dates: [] });
+			}
+			skippedRows.push({ row: sourceRow, reason: "no_active_day_flags" });
+		}
+	}
+
+	// Primary assignment = shift with most active days (ties: first seen / lowest sourceRow).
+	const assignments: WorkSharingSourceAssignment[] = [];
+	for (const [employeeExternalId, shiftMap] of employeeShiftBuckets) {
+		const buckets = Array.from(shiftMap.values()).sort((a, b) => {
+			if (b.dates.length !== a.dates.length) return b.dates.length - a.dates.length;
+			return a.meta.sourceRow - b.meta.sourceRow;
+		});
+		const primary = buckets[0];
+		if (!primary) continue;
+		// If no flags anywhere for employee, still assign primary shift to whole window
+		// (legacy behavior for rows with all zeros — rare).
+		const activeDates =
+			primary.dates.length > 0
+				? primary.dates.slice().sort()
+				: dateColumns.map((c) => toWorkSharingDateKey(c.date));
+		assignments.push({
+			employeeExternalId,
+			sourceEmployeeId: primary.meta.sourceEmployeeId,
+			employeeName: primary.meta.employeeName,
+			department: primary.meta.department,
+			division: primary.meta.division,
+			position: primary.meta.position,
+			shiftLabel: primary.meta.shiftLabel,
+			shiftCode: primary.meta.shiftCode,
+			scheduleCode: primary.meta.scheduleCode,
+			effectiveFrom,
+			effectiveTo,
+			sourceSheet: primary.meta.sourceSheet,
+			sourceRow: primary.meta.sourceRow,
+			activeDates,
 		});
 	}
+
+	// Stable order
+	assignments.sort((a, b) => a.sourceRow - b.sourceRow || a.employeeExternalId.localeCompare(b.employeeExternalId));
+	dayAssignments.sort(
+		(a, b) =>
+			a.employeeExternalId.localeCompare(b.employeeExternalId) ||
+			a.dateKey.localeCompare(b.dateKey),
+	);
 
 	return {
 		sheetName,
 		dateColumns,
 		assignments,
+		dayAssignments,
 		skippedRows,
 		effectiveFrom: toWorkSharingDateKey(effectiveFrom),
 		effectiveTo: toWorkSharingDateKey(effectiveTo),
