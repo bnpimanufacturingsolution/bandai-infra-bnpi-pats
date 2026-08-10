@@ -214,6 +214,69 @@ export function resolveBandaiApprovedBucketRateBasis(params: {
 	};
 }
 
+/**
+ * Daily rate for absent + shortfall (late/EO) deductions.
+ *
+ * BNPI register prices these with monthly × 12 / 313 (not periodBasic / workdays-in-cutoff).
+ * When Bandai approved OT buckets are present, use that 313 basis and 8 working hours/day
+ * so UT/Late and Absent-Amt match the legacy register. Otherwise keep cutoff work-day divisor.
+ */
+export function resolveBnpiAttendanceDailyRate(params: {
+	periodBasic: number;
+	estimatedMonthlyRate: number;
+	totalWorkDays: number;
+	/** True when employee has Bandai approved OT/attendance buckets for the period. */
+	useBnpi313: boolean;
+	/** Schedule-derived hours (may be 7.5); ignored for BNPI 313 peso rates. */
+	scheduleWorkingHoursPerDay?: number;
+}): {
+	dailyRate: number;
+	hourlyRate: number;
+	minuteRate: number;
+	workingHoursPerDay: number;
+	method: "BNPI_DIRECT_313_ATTENDANCE" | "TIMESHEET_PERIOD_WORK_DAYS" | "NONE";
+} {
+	const periodBasic = Number(params.periodBasic || 0);
+	const estimatedMonthlyRate = Number(params.estimatedMonthlyRate || 0);
+	const totalWorkDays = Number(params.totalWorkDays || 0);
+	const scheduleHours = Number(params.scheduleWorkingHoursPerDay || BANDAI_WORKING_HOURS_PER_DAY);
+
+	if (params.useBnpi313 && estimatedMonthlyRate > 0) {
+		const dailyRate = (estimatedMonthlyRate * 12) / BANDAI_DIRECT_ANNUAL_WORK_DAYS;
+		const workingHoursPerDay = BANDAI_WORKING_HOURS_PER_DAY;
+		const hourlyRate = dailyRate / workingHoursPerDay;
+		return {
+			dailyRate,
+			hourlyRate,
+			minuteRate: hourlyRate / 60,
+			workingHoursPerDay,
+			method: "BNPI_DIRECT_313_ATTENDANCE",
+		};
+	}
+
+	if (totalWorkDays > 0 && periodBasic > 0) {
+		const workingHoursPerDay =
+			scheduleHours > 0 ? scheduleHours : BANDAI_WORKING_HOURS_PER_DAY;
+		const dailyRate = periodBasic / totalWorkDays;
+		const hourlyRate = dailyRate / workingHoursPerDay;
+		return {
+			dailyRate,
+			hourlyRate,
+			minuteRate: hourlyRate / 60,
+			workingHoursPerDay,
+			method: "TIMESHEET_PERIOD_WORK_DAYS",
+		};
+	}
+
+	return {
+		dailyRate: 0,
+		hourlyRate: 0,
+		minuteRate: 0,
+		workingHoursPerDay: BANDAI_WORKING_HOURS_PER_DAY,
+		method: "NONE",
+	};
+}
+
 type PayrollTimesheetScope = {
 	departmentId?: string | null;
 	sectionId?: string | null;
@@ -1586,17 +1649,20 @@ export async function generatePayrollFromTimesheets(
 				}
 			}
 
-			let dailyRate = 0;
-			let absentDeduction = 0;
-
-			if (totalWorkDays > 0) {
-				dailyRate = periodBasic / totalWorkDays;
-				absentDeduction = roundToCentavo(daysAbsent * dailyRate);
-			}
-
-			// Calculate rates for deductions and earnings
-			const hourlyRate = dailyRate / workingHoursPerDay;
-			const minuteRate = hourlyRate / 60;
+			// Bandai OT buckets first — when present, attendance deductions use BNPI 313 daily.
+			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(validatedDays, periodBasic);
+			const attendanceRate = resolveBnpiAttendanceDailyRate({
+				periodBasic,
+				estimatedMonthlyRate,
+				totalWorkDays,
+				useBnpi313: Boolean(bandaiApprovedBucketPay),
+				scheduleWorkingHoursPerDay: workingHoursPerDay,
+			});
+			const dailyRate = attendanceRate.dailyRate;
+			const hourlyRate = attendanceRate.hourlyRate;
+			const minuteRate = attendanceRate.minuteRate;
+			workingHoursPerDay = attendanceRate.workingHoursPerDay;
+			const absentDeduction = roundToCentavo(daysAbsent * dailyRate);
 
 			// Base multipliers (ordinary day) from calculator
 			const baseWorkMultiplier =
@@ -1622,7 +1688,6 @@ export async function generatePayrollFromTimesheets(
 			let totalNightDiffPay = 0;
 			let totalHolidayPay = 0;
 			let totalRestDayPay = 0;
-			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(validatedDays, periodBasic);
 
 			for (const validatedDay of validatedDays) {
 				// Skip if not present or no work done
@@ -4473,15 +4538,20 @@ function calculatePayrollPreviewDataset(params: {
 				}
 			}
 
-			let dailyRate = 0;
-			let absentDeduction = 0;
-			if (totalWorkDays > 0) {
-				dailyRate = periodBasic / totalWorkDays;
-				absentDeduction = roundToCentavo(daysAbsent * dailyRate);
-			}
+			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(validatedDays, periodBasic);
+			const attendanceRate = resolveBnpiAttendanceDailyRate({
+				periodBasic,
+				estimatedMonthlyRate,
+				totalWorkDays,
+				useBnpi313: Boolean(bandaiApprovedBucketPay),
+				scheduleWorkingHoursPerDay: workingHoursPerDay,
+			});
+			const dailyRate = attendanceRate.dailyRate;
+			const hourlyRate = attendanceRate.hourlyRate;
+			const minuteRate = attendanceRate.minuteRate;
+			workingHoursPerDay = attendanceRate.workingHoursPerDay;
+			const absentDeduction = roundToCentavo(daysAbsent * dailyRate);
 
-			const hourlyRate = dailyRate / workingHoursPerDay;
-			const minuteRate = hourlyRate / 60;
 			const baseWorkMultiplier =
 				getRateMultiplier(params.rateMultipliers, "ordinaryDay", "work") ?? 1.0;
 			const baseOtMultiplier =
@@ -4504,7 +4574,6 @@ function calculatePayrollPreviewDataset(params: {
 			let totalNightDiffPay = 0;
 			let totalHolidayPay = 0;
 			let totalRestDayPay = 0;
-			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(validatedDays, periodBasic);
 
 			for (const validatedDay of validatedDays) {
 				if (validatedDay.status === "ABSENT" || validatedDay.status === "LEAVE") continue;
