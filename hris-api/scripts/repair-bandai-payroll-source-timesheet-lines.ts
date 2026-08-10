@@ -7,6 +7,10 @@ import {
 	AUTO_APPROVED_REASON,
 	shouldAutoApproveTimesheetStatus,
 } from "../helper/bandai-payroll-ot-auto-approve.helper";
+import {
+	buildBandaiOtLinePatch,
+	type BandaiOtSourceRow,
+} from "../helper/bandai-ot-line-patch.helper";
 
 const prisma = new PrismaClient();
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -41,21 +45,9 @@ const normalizedEmployeeFilter = new Set(
 	Array.from(employeeFilter).map((value) => value.padStart(5, "0")),
 );
 
-type OvertimeSourceRow = {
-	rowNumber: number;
-	date: string;
+type OvertimeSourceRow = BandaiOtSourceRow & {
 	department: string;
 	name: string;
-	employeeNo: string;
-	regularDays: number;
-	regOtHrs: number;
-	regNdHrs: number;
-	spclHrs: number;
-	spclOtHrs: number;
-	rholHrs: number;
-	rholOtHrs: number;
-	rdHrs: number;
-	rdOtHrs: number;
 };
 
 const text = (value: unknown) => String(value ?? "").trim();
@@ -72,16 +64,7 @@ const dateKey = (value: unknown) => {
 	const parsed = new Date(raw);
 	return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
 };
-const timeToMinutes = (value: unknown) => {
-	const raw = text(value);
-	if (!raw) return 0;
-	const [hours, minutes = 0] = raw.split(":").map(Number);
-	return (hours || 0) * 60 + (minutes || 0);
-};
-const hoursToTime = (hours: number) => {
-	const totalMinutes = Math.max(0, Math.round(hours * 60));
-	return `${Math.floor(totalMinutes / 60)}:${String(totalMinutes % 60).padStart(2, "0")}`;
-};
+
 function parseOvertimeSource(filePath: string) {
 	const workbook = XLSX.readFile(filePath, { cellDates: true, dense: true, raw: false, password });
 	const sheetName = workbook.SheetNames.find((name) => /overtime/i.test(name)) || workbook.SheetNames[0];
@@ -130,143 +113,26 @@ function parseOvertimeSource(filePath: string) {
 	return byEmployeeDate;
 }
 
-function approvedOvertimeHours(source: OvertimeSourceRow) {
-	return source.regOtHrs + source.spclOtHrs + source.rholOtHrs + source.rdOtHrs;
-}
-
-function approvedPremiumHours(source: OvertimeSourceRow) {
-	return source.spclHrs + source.spclOtHrs + source.rholHrs + source.rholOtHrs + source.rdHrs + source.rdOtHrs;
-}
-
-function hasAnyApprovedPayBucket(source: OvertimeSourceRow) {
-	return (
-		source.regularDays > 0 ||
-		source.regOtHrs > 0 ||
-		source.regNdHrs > 0 ||
-		source.spclHrs > 0 ||
-		source.spclOtHrs > 0 ||
-		source.rholHrs > 0 ||
-		source.rholOtHrs > 0 ||
-		source.rdHrs > 0 ||
-		source.rdOtHrs > 0
-	);
-}
-
-const approvedBucketKeys = [
-	"regularDays",
-	"regOtHrs",
-	"regNdHrs",
-	"spclHrs",
-	"spclOtHrs",
-	"rholHrs",
-	"rholOtHrs",
-	"rdHrs",
-	"rdOtHrs",
-] as const;
-
-function approvedBucketsDiffer(current: unknown, source: OvertimeSourceRow) {
-	if (!current || typeof current !== "object" || Array.isArray(current)) return true;
-	const bucket = current as Record<string, unknown>;
-	return approvedBucketKeys.some(
-		(key) => Math.abs(numberValue(bucket[key]) - source[key]) > 0.001,
-	);
-}
-
-function hasPayrollPremiumMarker(line: any) {
-	const marker = String(line.primaryMarker || line.metadata?.primaryMarker || "").toUpperCase();
-	return (
-		marker === "HOLIDAY" ||
-		marker === "REST_DAY" ||
-		Array.isArray(line.metadata?.holidayEntries) ||
-		Boolean(line.metadata?.holidayType || line.metadata?.holidayTitle)
-	);
-}
-
-function withoutPremiumMetadata(metadata: Record<string, any>) {
-	const {
-		holidayEntries: _holidayEntries,
-		holidayType: _holidayType,
-		holidayTitle: _holidayTitle,
-		isDoubleHoliday: _isDoubleHoliday,
-		...rest
-	} = metadata;
-	return rest;
-}
-
 function buildLinePatch(line: any, source: OvertimeSourceRow, isCalendarHoliday: boolean) {
-	const currentOvertime = timeToMinutes(line.overtimeHours) / 60;
-	const targetOvertime = approvedOvertimeHours(source);
-	const sourceHasPayBucket = hasAnyApprovedPayBucket(source);
-	const sourceHasPremiumBucket = approvedPremiumHours(source) > 0;
-	const changes: Record<string, any> = {};
-	const reasons: string[] = [];
-	const metadata = {
-		...(line.metadata || {}),
-		bandaiPayrollSourceRepair: {
-			source: "2026 rptOvertimeDetails.xlsx",
-			sourceRow: source.rowNumber,
-			employeeNo: source.employeeNo,
-			date: source.date,
-			appliedAt: new Date().toISOString(),
-			previous: {
-				status: line.status,
-				hoursWorked: line.hoursWorked,
-				regularHours: line.regularHours,
-				overtimeHours: line.overtimeHours,
-				primaryMarker: line.primaryMarker,
-			},
-			approvedBuckets: {
-				regularDays: source.regularDays,
-				regOtHrs: source.regOtHrs,
-				regNdHrs: source.regNdHrs,
-				spclHrs: source.spclHrs,
-				spclOtHrs: source.spclOtHrs,
-				rholHrs: source.rholHrs,
-				rholOtHrs: source.rholOtHrs,
-				rdHrs: source.rdHrs,
-				rdOtHrs: source.rdOtHrs,
-			},
+	return buildBandaiOtLinePatch({
+		line: {
+			status: line.status,
+			timeIn: line.timeIn,
+			timeOut: line.timeOut,
+			hoursWorked: line.hoursWorked,
+			regularHours: line.regularHours,
+			overtimeHours: line.overtimeHours,
+			lateHours: line.lateHours,
+			earlyOutHours: line.earlyOutHours,
+			undertimeHours: line.undertimeHours,
+			primaryMarker: line.primaryMarker,
+			metadata: line.metadata,
+			scheduleSnapshot: line.scheduleSnapshot,
 		},
-	};
-
-	if (Math.abs(currentOvertime - targetOvertime) > 0.01) {
-		changes.overtimeHours = hoursToTime(targetOvertime);
-		reasons.push(`overtime ${currentOvertime.toFixed(2)}h -> ${targetOvertime.toFixed(2)}h`);
-	}
-
-	if (approvedBucketsDiffer(line.metadata?.bandaiPayrollSourceRepair?.approvedBuckets, source)) {
-		changes.metadata = metadata;
-		reasons.push("approved bucket metadata refreshed from overtime source");
-	}
-
-	if (!sourceHasPayBucket && !["REST_DAY", "LEAVE"].includes(String(line.status || ""))) {
-		changes.status = "REST_DAY";
-		changes.primaryMarker = "REST_DAY";
-		changes.hoursWorked = "0:00";
-		changes.regularHours = "0:00";
-		changes.overtimeHours = "0:00";
-		changes.lateHours = "0:00";
-		changes.earlyOutHours = "0:00";
-		changes.undertimeHours = "0:00";
-		reasons.push(`${line.status} -> REST_DAY because source has zero regular/OT/premium buckets`);
-	} else if (
-		source.regularDays > 0 &&
-		!sourceHasPremiumBucket &&
-		String(line.status || "") === "PRESENT" &&
-		(isCalendarHoliday || hasPayrollPremiumMarker(line))
-	) {
-		changes.status = "HOLIDAY";
-		changes.primaryMarker = "HOLIDAY";
-		changes.metadata = {
-			...withoutPremiumMetadata(metadata),
-			primaryMarker: "HOLIDAY",
-		};
-		reasons.push("cleared premium marker because source has regular day but zero holiday/rest premium buckets");
-	}
-
-	if (!Object.keys(changes).length) return null;
-	changes.metadata = changes.metadata || metadata;
-	return { changes, reasons };
+		source,
+		isCalendarHoliday,
+		sourceLabel: path.basename(overtimeWorkbookPath),
+	});
 }
 
 type LinePatchPayload = {
@@ -280,6 +146,7 @@ type LinePatchPayload = {
 	lateHours: string | null;
 	earlyOutHours: string | null;
 	undertimeHours: string | null;
+	notes: string | null;
 	metadata: Record<string, any>;
 };
 
@@ -299,6 +166,7 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				late_hours text,
 				early_out_hours text,
 				undertime_hours text,
+				notes text,
 				metadata jsonb NOT NULL
 			) ON COMMIT DROP
 		`;
@@ -314,6 +182,7 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				late_hours,
 				early_out_hours,
 				undertime_hours,
+				notes,
 				metadata
 			)
 			SELECT
@@ -327,6 +196,7 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				"lateHours",
 				"earlyOutHours",
 				"undertimeHours",
+				notes,
 				metadata
 			FROM jsonb_to_recordset(${patchJson}::jsonb) AS patch(
 				"lineId" text,
@@ -339,6 +209,7 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				"lateHours" text,
 				"earlyOutHours" text,
 				"undertimeHours" text,
+				notes text,
 				metadata jsonb
 			)
 		`;
@@ -353,6 +224,7 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				"lateHours" = COALESCE(patch.late_hours, line."lateHours"),
 				"earlyOutHours" = COALESCE(patch.early_out_hours, line."earlyOutHours"),
 				"undertimeHours" = COALESCE(patch.undertime_hours, line."undertimeHours"),
+				notes = COALESCE(patch.notes, line.notes),
 				metadata = patch.metadata,
 				"updatedAt" = now()
 			FROM bandai_ot_line_patches patch
@@ -577,6 +449,8 @@ async function main() {
 					id: true,
 					date: true,
 					status: true,
+					timeIn: true,
+					timeOut: true,
 					hoursWorked: true,
 					regularHours: true,
 					overtimeHours: true,
@@ -585,6 +459,8 @@ async function main() {
 					undertimeHours: true,
 					primaryMarker: true,
 					metadata: true,
+					scheduleSnapshot: true,
+					notes: true,
 				},
 			},
 		},
@@ -621,6 +497,7 @@ async function main() {
 				lateHours: patch.changes.lateHours ?? null,
 				earlyOutHours: patch.changes.earlyOutHours ?? null,
 				undertimeHours: patch.changes.undertimeHours ?? null,
+				notes: patch.changes.notes ?? null,
 				metadata: patch.changes.metadata,
 			});
 		}

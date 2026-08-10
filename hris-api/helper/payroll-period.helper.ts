@@ -3707,8 +3707,11 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		numberOfDays: roundToCentavo(input.totalWorkDays),
 		basicPay: roundToCentavo(input.periodBasic),
 		absentDeduction: roundToCentavo(input.absentDeduction),
+		// shortfallDeduction is already late+earlyOut; do not triple-sum for register UT/Late-Amt.
 		lateUndertimeAmount: roundToCentavo(
-			input.lateDeduction + input.earlyOutDeduction + input.shortfallDeduction,
+			input.shortfallDeduction > 0
+				? input.shortfallDeduction
+				: input.lateDeduction + input.earlyOutDeduction,
 		),
 		regularOtHours: roundToCentavo(Number(bucketHours.regOtHrs || 0)),
 		overtimePay: roundToCentavo(bucket ? Number(bucket.overtimePay || 0) : input.overtimePay),

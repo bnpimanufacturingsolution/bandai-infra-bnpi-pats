@@ -365,11 +365,17 @@ const timeTextToMinutes = (value) => {
 	return Number(match[1]) * 60 + Number(match[2]);
 };
 
-const workedMinutesFromTimeText = (timeIn, timeOut, breakMinutes) => {
+const workedMinutesFromTimeText = (timeIn, timeOut, breakMinutes, options = {}) => {
 	const start = timeTextToMinutes(timeIn);
 	let end = timeTextToMinutes(timeOut);
 	if (start === null || end === null) return null;
-	if (end <= start) end += 24 * 60;
+	// Single-punch / identical in-out must NOT invent a 24h span.
+	if (end === start) return 0;
+	const allowOvernight = Boolean(options.allowOvernight);
+	if (end < start) {
+		if (!allowOvernight) return null;
+		end += 24 * 60;
+	}
 	return Math.max(0, end - start - Math.max(0, Number(breakMinutes || 0)));
 };
 
@@ -381,6 +387,90 @@ const splitWorkedMinutes = (workedMinutes, scheduledRegularMinutes) => {
 	return {
 		regularMinutes,
 		overtimeMinutes: Math.max(0, Number(workedMinutes || 0) - regularMinutes),
+	};
+};
+
+/**
+ * Compute late/early-out vs schedule window (HH:mm). Pure; used by DM4 apply path.
+ * Single punch (timeIn === timeOut or missing out) → incomplete, no 24h work.
+ */
+const computeDm4DayMetrics = ({
+	timeIn,
+	timeOut,
+	punchCount = 0,
+	scheduleStart = null,
+	scheduleEnd = null,
+	scheduleRegularMinutes = 480,
+	breakMinutes = 0,
+	isOff = false,
+	graceLateMinutes = 0,
+	graceEarlyOutMinutes = 0,
+}) => {
+	const startMin = timeTextToMinutes(timeIn);
+	const endMin = timeTextToMinutes(timeOut);
+	const singlePunch =
+		Number(punchCount) === 1 ||
+		(startMin !== null && endMin !== null && startMin === endMin) ||
+		(timeIn && timeOut && String(timeIn) === String(timeOut));
+
+	let lateMinutes = 0;
+	const schedStart = timeTextToMinutes(scheduleStart);
+	const schedEnd = timeTextToMinutes(scheduleEnd);
+	if (!isOff && startMin !== null && schedStart !== null) {
+		lateMinutes = Math.max(0, startMin - schedStart - Math.max(0, Number(graceLateMinutes || 0)));
+	}
+
+	if (!timeIn || startMin === null || singlePunch || !timeOut || endMin === null) {
+		return {
+			status: "INCOMPLETE",
+			incomplete: true,
+			timeIn: timeIn || null,
+			timeOut: singlePunch ? null : timeOut || null,
+			totalMinutesWorked: 0,
+			regularMinutes: 0,
+			overtimeMinutes: 0,
+			lateMinutes: isOff ? 0 : lateMinutes,
+			earlyOutMinutes: 0,
+			undertimeMinutes: 0,
+			hoursWorked: "0:00",
+			regularHours: "0:00",
+			overtimeHours: "0:00",
+			lateHours: minutesToHoursText(isOff ? 0 : lateMinutes),
+			earlyOutHours: "0:00",
+			undertimeHours: "0:00",
+		};
+	}
+
+	const allowOvernight = schedStart !== null && schedEnd !== null && schedEnd <= schedStart;
+	const workedMinutes =
+		workedMinutesFromTimeText(timeIn, timeOut, breakMinutes, { allowOvernight }) ?? 0;
+	const split = splitWorkedMinutes(workedMinutes, scheduleRegularMinutes);
+	let earlyOutMinutes = 0;
+	if (!isOff && endMin !== null && schedEnd !== null) {
+		earlyOutMinutes = Math.max(
+			0,
+			schedEnd - endMin - Math.max(0, Number(graceEarlyOutMinutes || 0)),
+		);
+	}
+	const regularMinutes = isOff ? 0 : split.regularMinutes;
+	const overtimeMinutes = isOff ? workedMinutes : split.overtimeMinutes;
+	return {
+		status: "PRESENT",
+		incomplete: false,
+		timeIn,
+		timeOut,
+		totalMinutesWorked: workedMinutes,
+		regularMinutes,
+		overtimeMinutes,
+		lateMinutes: isOff ? 0 : lateMinutes,
+		earlyOutMinutes: isOff ? 0 : earlyOutMinutes,
+		undertimeMinutes: isOff ? 0 : earlyOutMinutes,
+		hoursWorked: minutesToHoursText(workedMinutes),
+		regularHours: minutesToHoursText(regularMinutes),
+		overtimeHours: minutesToHoursText(overtimeMinutes),
+		lateHours: minutesToHoursText(isOff ? 0 : lateMinutes),
+		earlyOutHours: minutesToHoursText(isOff ? 0 : earlyOutMinutes),
+		undertimeHours: minutesToHoursText(isOff ? 0 : earlyOutMinutes),
 	};
 };
 
@@ -661,13 +751,18 @@ const findBiometricPunchRows = (filePath, options = {}) => {
 		row.punches.sort((left, right) => left.timestamp.getTime() - right.timestamp.getTime());
 		const firstPunch = row.punches[0];
 		const lastPunch = row.punches[row.punches.length - 1];
+		const punchCount = row.punches.length;
+		// Single punch: keep timeOut empty so apply path marks INCOMPLETE (no 24h invent).
+		const timeIn = firstPunch?.time || null;
+		const timeOut = punchCount >= 2 ? lastPunch?.time || null : null;
 		return {
 			...row,
 			sourceRow: row.sourceRows[0],
 			sourceRows: row.sourceRows,
+			punchCount,
 			isWeekend: row.dayOfWeek === 0 || row.dayOfWeek === 6,
-			timeIn: firstPunch?.time || "08:00",
-			timeOut: lastPunch?.time || firstPunch?.time || "17:00",
+			timeIn,
+			timeOut,
 			notes: `Raw biometric punches: ${row.punches.map((punch) => `${punch.time}#${punch.sourceRow}`).join(", ")}`,
 		};
 	});
@@ -1189,21 +1284,28 @@ const bulkMaterializePresentRows = async (organizationId, rows, options = {}) =>
 		payrollPeriodId: row.payrollPeriod.id,
 		payrollPeriodCode: row.payrollPeriod.code,
 		date: row.date,
-		timeIn: manilaTime(row.date, row.timeIn).toISOString(),
+		timeIn: row.timeIn ? manilaTime(row.date, row.timeIn).toISOString() : null,
 		timeBreak: manilaTimeIsoOrNull(row.date, row.timeBreak),
-		timeOut: manilaTime(row.date, row.timeOut).toISOString(),
+		timeOut: row.timeOut ? manilaTime(row.date, row.timeOut).toISOString() : null,
 		expectedStartAt: manilaTime(row.date, row.scheduleSnapshot.startTime || "08:00").toISOString(),
 		expectedEndAt: manilaTime(row.date, row.scheduleSnapshot.endTime || "17:00").toISOString(),
-		status: "PRESENT",
+		status: row.attendanceStatus || "PRESENT",
+		attendanceStatus: row.attendanceStatus || "PRESENT",
 		sourceRequestId: row.sourceRequestId,
 		scheduleSnapshot: row.scheduleSnapshot,
 		scheduleFingerprint: row.scheduleSnapshot.scheduleCode || SCHEDULE_CODE,
 		totalMinutesWorked: row.totalMinutesWorked,
 		regularMinutes: row.regularMinutes,
 		overtimeMinutes: row.overtimeMinutes,
+		lateMinutes: Number(row.lateMinutes || 0),
+		earlyOutMinutes: Number(row.earlyOutMinutes || 0),
+		undertimeMinutes: Number(row.undertimeMinutes || 0),
 		hoursWorked: row.hoursWorked,
 		regularHours: row.regularHours,
 		overtimeHours: row.overtimeHours,
+		lateHours: row.lateHours || "0:00",
+		earlyOutHours: row.earlyOutHours || "0:00",
+		undertimeHours: row.undertimeHours || "0:00",
 		breakMinutes: row.breakMinutes,
 		sourceWorkbook: row.sourceWorkbook,
 		sourceWorkbookPath: row.sourceWorkbookPath,
@@ -1246,15 +1348,22 @@ WITH input_rows AS (
 		x."expectedStartAt"::timestamptz AS "expectedStartAt",
 		x."expectedEndAt"::timestamptz AS "expectedEndAt",
 		x.status,
+		COALESCE(x."attendanceStatus", x.status, 'PRESENT') AS "attendanceStatus",
 		x."sourceRequestId",
 		x."scheduleSnapshot",
 		x."scheduleFingerprint",
 		x."totalMinutesWorked",
 		x."regularMinutes",
 		x."overtimeMinutes",
+		COALESCE(x."lateMinutes", 0) AS "lateMinutes",
+		COALESCE(x."earlyOutMinutes", 0) AS "earlyOutMinutes",
+		COALESCE(x."undertimeMinutes", 0) AS "undertimeMinutes",
 		x."hoursWorked",
 		x."regularHours",
 		x."overtimeHours",
+		COALESCE(x."lateHours", '0:00') AS "lateHours",
+		COALESCE(x."earlyOutHours", '0:00') AS "earlyOutHours",
+		COALESCE(x."undertimeHours", '0:00') AS "undertimeHours",
 		x."breakMinutes",
 		x."sourceWorkbook",
 		x."sourceWorkbookPath",
@@ -1282,15 +1391,22 @@ WITH input_rows AS (
 		"expectedStartAt" text,
 		"expectedEndAt" text,
 		status text,
+		"attendanceStatus" text,
 		"sourceRequestId" text,
 		"scheduleSnapshot" jsonb,
 		"scheduleFingerprint" text,
 		"totalMinutesWorked" int,
 		"regularMinutes" int,
 		"overtimeMinutes" int,
+		"lateMinutes" int,
+		"earlyOutMinutes" int,
+		"undertimeMinutes" int,
 		"hoursWorked" text,
 		"regularHours" text,
 		"overtimeHours" text,
+		"lateHours" text,
+		"earlyOutHours" text,
+		"undertimeHours" text,
 		"breakMinutes" int,
 		"sourceWorkbook" text,
 		"sourceWorkbookPath" text,
@@ -1468,7 +1584,7 @@ attendance_update AS (
 		"timeIn" = r."timeIn",
 		"timeBreak" = r."timeBreak",
 		"timeOut" = r."timeOut",
-		status = 'PRESENT'::"AttendanceStatus",
+		status = COALESCE(r."attendanceStatus", 'PRESENT')::"AttendanceStatus",
 		"ledgerType" = 'RAW'::"AttendanceLedgerType",
 		"isManualEntry" = true,
 		"isEffective" = true,
@@ -1477,16 +1593,16 @@ attendance_update AS (
 		"totalMinutesWorked" = r."totalMinutesWorked",
 		"regularMinutes" = r."regularMinutes",
 		"overtimeMinutes" = r."overtimeMinutes",
-		"undertimeMinutes" = 0,
-		"lateMinutes" = 0,
-		"earlyOutMinutes" = 0,
+		"undertimeMinutes" = COALESCE(r."undertimeMinutes", 0),
+		"lateMinutes" = COALESCE(r."lateMinutes", 0),
+		"earlyOutMinutes" = COALESCE(r."earlyOutMinutes", 0),
 		"breakMinutes" = r."breakMinutes",
 		"hoursWorked" = r."hoursWorked",
 		"regularHours" = r."regularHours",
 		"overtimeHours" = r."overtimeHours",
-		"undertimeHours" = '0:00',
-		"lateHours" = '0:00',
-		"earlyOutHours" = '0:00',
+		"undertimeHours" = COALESCE(r."undertimeHours", '0:00'),
+		"lateHours" = COALESCE(r."lateHours", '0:00'),
+		"earlyOutHours" = COALESCE(r."earlyOutHours", '0:00'),
 		"timesheetId" = r."timesheetId",
 		"employeeCodeSnapshot" = r."employeeCode",
 		"employeeNameSnapshot" = r."employeeName",
@@ -1544,7 +1660,7 @@ attendance_insert AS (
 		r."timeIn",
 		r."timeBreak",
 		r."timeOut",
-		'PRESENT'::"AttendanceStatus",
+		COALESCE(r."attendanceStatus", 'PRESENT')::"AttendanceStatus",
 		'RAW'::"AttendanceLedgerType",
 		true,
 		true,
@@ -1553,16 +1669,16 @@ attendance_insert AS (
 		r."totalMinutesWorked",
 		r."regularMinutes",
 		r."overtimeMinutes",
-		0,
-		0,
-		0,
+		COALESCE(r."undertimeMinutes", 0),
+		COALESCE(r."lateMinutes", 0),
+		COALESCE(r."earlyOutMinutes", 0),
 		r."breakMinutes",
 		r."hoursWorked",
 		r."regularHours",
 		r."overtimeHours",
-		'0:00',
-		'0:00',
-		'0:00',
+		COALESCE(r."undertimeHours", '0:00'),
+		COALESCE(r."lateHours", '0:00'),
+		COALESCE(r."earlyOutHours", '0:00'),
 		r."timesheetId",
 		r."employeeCode",
 		r."employeeName",
@@ -1661,15 +1777,21 @@ line_upsert AS (
 		r."timeIn",
 		r."timeBreak",
 		r."timeOut",
-		'PRESENT',
-		ARRAY[]::text[],
+		COALESCE(r."attendanceStatus", 'PRESENT'),
+		CASE
+			WHEN COALESCE(r."lateMinutes", 0) > 0 THEN ARRAY['TARDINESS']::text[]
+			ELSE ARRAY[]::text[]
+		END || CASE
+			WHEN COALESCE(r."earlyOutMinutes", 0) > 0 THEN ARRAY['EARLY_OUT']::text[]
+			ELSE ARRAY[]::text[]
+		END,
 		r."scheduleSnapshot",
 		r."hoursWorked",
 		r."regularHours",
 		r."overtimeHours",
-		'0:00',
-		'0:00',
-		'0:00',
+		COALESCE(r."undertimeHours", '0:00'),
+		COALESCE(r."lateHours", '0:00'),
+		COALESCE(r."earlyOutHours", '0:00'),
 		r."breakMinutes",
 		jsonb_build_object(
 			'source', $3::text,
@@ -1689,10 +1811,13 @@ line_upsert AS (
 			'shiftCode', r."scheduleFingerprint",
 			'regularMinutes', r."regularMinutes",
 			'overtimeMinutes', r."overtimeMinutes",
+			'lateMinutes', r."lateMinutes",
+			'earlyOutMinutes', r."earlyOutMinutes",
+			'undertimeMinutes', r."undertimeMinutes",
 			'totalMinutesWorked', r."totalMinutesWorked",
 			'breakMinutes', r."breakMinutes"
 		),
-		'PRESENT',
+		COALESCE(r."attendanceStatus", 'PRESENT'),
 		true,
 		false,
 		1,
@@ -2047,8 +2172,6 @@ const applySelectedRows = async (organizationId, selectedRows, options = {}) => 
 		});
 		if (!employeeSchedule) return [];
 		const resolvedSchedule = employeeSchedule;
-		const timeIn = row.timeIn || resolvedSchedule.startTime || "08:00";
-		const timeOut = row.timeOut || resolvedSchedule.endTime || "17:00";
 		const sourceBreakMinutes =
 			typeof row.breakMinutes === "number" && Number.isFinite(row.breakMinutes)
 				? row.breakMinutes
@@ -2062,12 +2185,24 @@ const applySelectedRows = async (organizationId, selectedRows, options = {}) => 
 			row.timeBreak ||
 			(breakMinutes > 0 ? deriveBreakStartTime(resolvedSchedule.timeSlots) : null);
 		const scheduleRegularMinutes = resolvedSchedule.regularMinutes ?? row.regularMinutes ?? 480;
-		const workedMinutes =
-			workedMinutesFromTimeText(timeIn, timeOut, breakMinutes) ?? scheduleRegularMinutes;
-		const splitMinutes = splitWorkedMinutes(workedMinutes, scheduleRegularMinutes);
-		const hoursWorked = minutesToHoursText(workedMinutes);
-		const regularHours = minutesToHoursText(splitMinutes.regularMinutes);
-		const overtimeHours = minutesToHoursText(splitMinutes.overtimeMinutes);
+		const punchCount = Number(
+			row.punchCount ||
+				(Array.isArray(row.punches) ? row.punches.length : 0) ||
+				(row.timeIn && row.timeOut && row.timeIn !== row.timeOut ? 2 : row.timeIn ? 1 : 0),
+		);
+		// Do not invent timeOut from schedule end — that fabricates PRESENT days and kills late/UT.
+		const metrics = computeDm4DayMetrics({
+			timeIn: row.timeIn || null,
+			timeOut: row.timeOut || null,
+			punchCount,
+			scheduleStart: resolvedSchedule.startTime || null,
+			scheduleEnd: resolvedSchedule.endTime || null,
+			scheduleRegularMinutes,
+			breakMinutes,
+			isOff: Boolean(resolvedSchedule.isOff),
+			graceLateMinutes: resolvedSchedule.graceLateMinutes || 0,
+			graceEarlyOutMinutes: resolvedSchedule.graceEarlyOutMinutes || 0,
+		});
 		const sourceRequestId = `${SOURCE_TAG}:${row.employeeId}:${row.date}:${row.sourceRow}`;
 		const scheduleSnapshot = {
 			...resolvedSchedule,
@@ -2087,16 +2222,23 @@ const applySelectedRows = async (organizationId, selectedRows, options = {}) => 
 		};
 		return [{
 			...row,
-			timeIn,
-			timeBreak,
-			timeOut,
+			timeIn: metrics.timeIn,
+			timeBreak: metrics.incomplete ? null : timeBreak,
+			timeOut: metrics.timeOut,
 			breakMinutes,
-			totalMinutesWorked: workedMinutes,
-			regularMinutes: splitMinutes.regularMinutes,
-			overtimeMinutes: splitMinutes.overtimeMinutes,
-			hoursWorked,
-			regularHours,
-			overtimeHours,
+			attendanceStatus: metrics.status,
+			totalMinutesWorked: metrics.totalMinutesWorked,
+			regularMinutes: metrics.regularMinutes,
+			overtimeMinutes: metrics.overtimeMinutes,
+			lateMinutes: metrics.lateMinutes,
+			earlyOutMinutes: metrics.earlyOutMinutes,
+			undertimeMinutes: metrics.undertimeMinutes,
+			hoursWorked: metrics.hoursWorked,
+			regularHours: metrics.regularHours,
+			overtimeHours: metrics.overtimeHours,
+			lateHours: metrics.lateHours,
+			earlyOutHours: metrics.earlyOutHours,
+			undertimeHours: metrics.undertimeHours,
 			sourceRequestId,
 			scheduleSnapshot,
 			dateObject: dateOnly(row.date),
