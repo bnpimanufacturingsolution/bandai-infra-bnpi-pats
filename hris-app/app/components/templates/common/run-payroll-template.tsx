@@ -1586,7 +1586,7 @@ export function RunPayrollTemplate() {
 	const activePreviewPayrollSourceDetails = useMemo(
 		() =>
 			((activePreviewEmployee?.metadata?.payrollSourceDetails || []) as TimesheetPayrollSourceDetail[])
-				.filter((detail) => Number(detail.amount || 0) > 0),
+				.filter((detail) => Math.abs(Number(detail.amount || 0)) >= 0.005),
 		[activePreviewEmployee?.metadata?.payrollSourceDetails],
 	);
 	const getPreviewSourceRole = (detail: TimesheetPayrollSourceDetail) => {
@@ -1608,44 +1608,228 @@ export function RunPayrollTemplate() {
 	const activePreviewDeductionSourceDetails = activePreviewPayrollSourceDetails.filter(
 		(detail) => getPreviewSourceRole(detail) === "deduction",
 	);
-	const activePreviewRegisterColumns = useMemo(
-		() =>
-			(activePreviewEmployee?.payrollRegisterColumns || [])
-				.filter((column) => Number(column.value || 0) !== 0)
-				.filter((column) =>
-					[
-						"HYS Meal Allowance",
-						"OB Allowance",
-						"Adjustment OT/ND",
-						"Modified HDMF 2",
-						"Uniform Deduction",
-						"Perfect Attendance",
-						"Meal Allowance",
-						"Line Leader Allowance",
-						"TotalReceivable",
-					].includes(column.label),
-				),
-		[activePreviewEmployee?.payrollRegisterColumns],
+	type PreviewComputationRow = {
+		label: string;
+		field: string;
+		operation: "ADD" | "SUBTRACT";
+		amount: number;
+		isBenefitSource?: boolean;
+		isTaxable?: boolean | null;
+		explanation?: string;
+	};
+	const previewAmount = (value: unknown) => {
+		const n = Number(value);
+		return Number.isFinite(n) ? n : 0;
+	};
+	const previewNonZero = (amount: number) => Math.abs(amount) >= 0.005;
+	const activePreviewGrossBaseRows = useMemo((): PreviewComputationRow[] => {
+		if (!activePreviewEmployee || !hasActivePreviewComputation) return [];
+		const rows: PreviewComputationRow[] = [
+			{
+				label: "Basic Pay",
+				field: "basicPay",
+				operation: "ADD",
+				amount: previewAmount(activePreviewEmployee.basicPay),
+				explanation:
+					"Period basic after attendance shortfall (absent / late / early-out already applied).",
+			},
+			{
+				label: "Overtime Pay",
+				field: "overtimePay",
+				operation: "ADD",
+				amount: previewAmount(activePreviewEmployee.overtimePay),
+			},
+			{
+				label: "Night Differential Pay",
+				field: "nightDiffPay",
+				operation: "ADD",
+				amount: previewAmount(activePreviewEmployee.nightDiffPay),
+			},
+			{
+				label: "Holiday / rest day pay",
+				field: "holidayPay",
+				operation: "ADD",
+				amount: previewAmount(activePreviewEmployee.holidayPay),
+			},
+		];
+		return rows.filter(
+			(row) => previewNonZero(row.amount) || row.field === "basicPay",
+		);
+	}, [activePreviewEmployee, hasActivePreviewComputation]);
+	const activePreviewGrossBenefitRows = useMemo((): PreviewComputationRow[] => {
+		return activePreviewGrossSourceDetails.map((detail) => ({
+			label: String(detail.name || detail.benefitTypeName || "Benefit").trim() || "Benefit",
+			field: `source:${detail.source}:${detail.id}`,
+			operation: "ADD" as const,
+			amount: previewAmount(detail.amount),
+			isBenefitSource: true,
+			isTaxable:
+				detail.isTaxable === true ? true : detail.isTaxable === false ? false : null,
+			explanation: [detail.benefitTypeName, detail.code].filter(Boolean).join(" · ") || undefined,
+		}));
+	}, [activePreviewGrossSourceDetails]);
+	const activePreviewGrossBenefitTaxableRows = activePreviewGrossBenefitRows.filter(
+		(row) => row.isTaxable !== false,
 	);
-	const getPreviewRegisterRole = (label: string) => {
-		if (["Perfect Attendance", "Meal Allowance", "TotalReceivable"].includes(label)) {
-			return "postNet";
-		}
-		if (["Modified HDMF 2", "Uniform Deduction"].includes(label)) {
-			return "deduction";
-		}
-		return "gross";
-	};
-	const getPreviewRoleLabel = (role: string) => {
-		if (role === "postNet") return "Added after NetPay";
-		if (role === "deduction") return "Deducted after GrossPay";
-		return "Included in GrossPay";
-	};
-	const getPreviewRoleClassName = (role: string) => {
-		if (role === "postNet") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-		if (role === "deduction") return "border-rose-200 bg-rose-50 text-rose-700";
-		return "border-orange-200 bg-orange-50 text-orange-700";
-	};
+	const activePreviewGrossBenefitNonTaxableRows = activePreviewGrossBenefitRows.filter(
+		(row) => row.isTaxable === false,
+	);
+	const activePreviewDeductionRows = useMemo((): PreviewComputationRow[] => {
+		if (!activePreviewEmployee || !hasActivePreviewComputation) return [];
+		const hasLoanSources = activePreviewDeductionSourceDetails.some(
+			(detail) => String(detail.direction || "").toUpperCase() === "LOAN",
+		);
+		const rows: PreviewComputationRow[] = [
+			{
+				label: "W/Tax",
+				field: "taxAmount",
+				operation: "SUBTRACT",
+				amount: previewAmount(activePreviewDeductions.taxAmount),
+			},
+			{
+				label: "SSS Contribution",
+				field: "sssContribution",
+				operation: "SUBTRACT",
+				amount: previewAmount(activePreviewDeductions.sssContribution),
+			},
+			{
+				label: "PhilHealth Contribution",
+				field: "philHealthContribution",
+				operation: "SUBTRACT",
+				amount: previewAmount(activePreviewDeductions.philHealthContribution),
+			},
+			{
+				label: "Pag-IBIG Contribution",
+				field: "pagibigContribution",
+				operation: "SUBTRACT",
+				amount: previewAmount(activePreviewDeductions.pagibigContribution),
+			},
+			...(hasLoanSources
+				? []
+				: [
+						{
+							label: "Loan deductions",
+							field: "loanDeductions",
+							operation: "SUBTRACT" as const,
+							amount: previewAmount(activePreviewEmployee.loanDeductions),
+						},
+					]),
+			...activePreviewDeductionSourceDetails.map((detail) => ({
+				label:
+					String(detail.name || detail.benefitTypeName || "Deduction").trim() ||
+					"Deduction",
+				field: `source:${detail.source}:${detail.id}`,
+				operation: "SUBTRACT" as const,
+				amount: previewAmount(detail.amount),
+				isBenefitSource: true,
+				explanation:
+					[detail.benefitTypeName, detail.code || detail.direction]
+						.filter(Boolean)
+						.join(" · ") || undefined,
+			})),
+		];
+		return rows.filter(
+			(row) =>
+				previewNonZero(row.amount) ||
+				["sssContribution", "philHealthContribution", "pagibigContribution"].includes(
+					row.field,
+				),
+		);
+	}, [
+		activePreviewEmployee,
+		activePreviewDeductions,
+		activePreviewDeductionSourceDetails,
+		hasActivePreviewComputation,
+	]);
+	const activePreviewPostNetRows = useMemo((): PreviewComputationRow[] => {
+		return activePreviewPostNetSourceDetails.map((detail) => ({
+			label: String(detail.name || detail.benefitTypeName || "Receivable").trim() || "Receivable",
+			field: `source:${detail.source}:${detail.id}`,
+			operation: "ADD" as const,
+			amount: previewAmount(detail.amount),
+			isBenefitSource: true,
+			explanation: [detail.benefitTypeName, detail.code].filter(Boolean).join(" · ") || undefined,
+		}));
+	}, [activePreviewPostNetSourceDetails]);
+	const activePreviewGrossPay = previewAmount(activePreviewEmployee?.grossPay);
+	const activePreviewTotalDeductions = previewAmount(activePreviewEmployee?.totalDeductions);
+	const activePreviewNetPay = previewAmount(activePreviewEmployee?.netPay);
+	const activePreviewTotalReceivable = previewAmount(
+		activePreviewEmployee?.totalReceivable ?? activePreviewNetPay,
+	);
+	const activePreviewReceivableDelta =
+		activePreviewTotalReceivable - activePreviewNetPay;
+	const shouldShowPreviewReceivable =
+		Math.abs(activePreviewReceivableDelta) >= 0.005 ||
+		activePreviewPostNetRows.length > 0;
+	const activePreviewPeriodName =
+		timesheetPayrollPreview?.period?.name ||
+		previewEmployeeDetail?.period?.name ||
+		"Payroll period";
+	const activePreviewPeriodRange =
+		(timesheetPayrollPreview?.period?.startDate || previewEmployeeDetail?.period?.startDate) &&
+		(timesheetPayrollPreview?.period?.endDate || previewEmployeeDetail?.period?.endDate)
+			? `${formatDate(
+					timesheetPayrollPreview?.period?.startDate ||
+						previewEmployeeDetail?.period?.startDate,
+					"short",
+				)} - ${formatDate(
+					timesheetPayrollPreview?.period?.endDate ||
+						previewEmployeeDetail?.period?.endDate,
+					"short",
+				)}`
+			: null;
+	const activePreviewMeta = (activePreviewEmployee?.metadata || {}) as Record<string, any>;
+	const activePreviewHasRatesMeta =
+		activePreviewMeta.estimatedMonthlyRate != null ||
+		activePreviewMeta.totalWorkDays != null ||
+		activePreviewMeta.overtimeRate != null ||
+		activePreviewMeta.nightDiffRate != null ||
+		activePreviewEmployee?.basicSalary != null;
+	const activePreviewHasAttendanceMeta =
+		activePreviewMeta.daysAbsent != null ||
+		activePreviewMeta.totalWorkDays != null ||
+		activePreviewMeta.totalOvertimeHours != null ||
+		activePreviewMeta.totalLateHours != null ||
+		activePreviewMeta.totalEarlyOutHours != null ||
+		previewAmount(activePreviewDeductions.absentDeduction) > 0 ||
+		previewAmount(activePreviewDeductions.lateDeduction) > 0 ||
+		previewAmount(activePreviewDeductions.earlyOutDeduction) > 0;
+	const previewSummaryCells = [
+		{
+			label: "GrossPay",
+			value: formatCurrency(activePreviewGrossPay),
+			tone: "text-gray-950",
+			lines: [
+				"Estimated pay included before deductions: basic allocation, OT, leave premiums, and gross-included benefits.",
+				"Items added after NetPay are not part of this amount.",
+			],
+		},
+		{
+			label: "Deductions",
+			value: formatCurrency(activePreviewTotalDeductions),
+			tone: "text-rose-700",
+			lines: ["Estimated tax, statutory items, loans, and other deductions taken after GrossPay."],
+		},
+		{
+			label: "NetPay",
+			value: formatCurrency(activePreviewNetPay),
+			tone: "text-orange-700",
+			lines: ["Estimated GrossPay less total deductions."],
+		},
+		...(shouldShowPreviewReceivable
+			? [
+					{
+						label: "TotalReceivable",
+						value: formatCurrency(activePreviewTotalReceivable),
+						tone: "text-gray-950",
+						lines: [
+							"Estimated NetPay plus items added after NetPay, such as receivable-only benefits.",
+						],
+					},
+				]
+			: []),
+	];
 	const PreviewHelp = ({
 		lines,
 	}: {
@@ -4308,334 +4492,607 @@ export function RunPayrollTemplate() {
 				onOpenChange={(open) => {
 					if (!open) handleClosePreviewEmployee();
 				}}
-				title="Payroll summary (Preview)"
-				description="Estimated amounts for this employee. Preview only — no payroll record was saved."
-				className="max-w-3xl">
+				showCloseButton={false}
+				closeOnBackdropClick
+				className="max-w-6xl p-5">
 				{activePreviewEmployee ? (
 					<div className="space-y-4">
-						<div className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5">
-							<Eye className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
-							<p className="text-sm text-sky-950">
-								Preview detail — same engine as payroll generation, without writing
-								EmployeePayroll or payslips.
-							</p>
-						</div>
-						<div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-							<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-								<div className="flex min-w-0 items-center gap-3">
-									<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs font-semibold text-neutral-700">
-										{initials(activePreviewEmployee.name)}
-									</div>
-									<div className="min-w-0">
-										<div className="flex flex-wrap items-center gap-2">
-											<p className="truncate text-sm font-semibold text-gray-900">
-												{activePreviewEmployee.name}
-											</p>
-											<Badge className="border border-sky-200 bg-sky-50 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
-												Preview
-											</Badge>
-										</div>
-										<p className="text-xs text-gray-500">
-											{activePreviewEmployee.employeeCode ||
-												activePreviewEmployee.employeeId}
-										</p>
-										<p className="truncate text-xs text-gray-500">
-											{activePreviewEmployee.position}{" "}
-											<span className="text-gray-300">/</span>{" "}
-											{activePreviewEmployee.department}
-										</p>
-									</div>
+						{/* Header — matches payroll summary, with PREVIEW distinction */}
+						<div className="flex items-start justify-between gap-3">
+							<div className="min-w-0 space-y-1">
+								<div className="flex flex-wrap items-center gap-2">
+									<h2 className="text-lg font-bold leading-none tracking-tight">
+										Payroll summary
+									</h2>
+									<span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+										Preview
+									</span>
 								</div>
+								<p className="text-xs text-gray-500">
+									Estimated amounts before payroll records are generated. Not a final payslip.
+								</p>
+							</div>
+							<div className="flex shrink-0 items-center gap-1">
 								<Button
 									type="button"
 									variant="outline"
 									size="sm"
+									className="h-7 gap-1.5 px-2 text-xs"
 									onClick={() =>
 										handleViewEmployeeProfile(activePreviewEmployee.employeeId)
-									}
-									className="w-full justify-center sm:w-auto">
-									<ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+									}>
+									<ExternalLink className="h-3.5 w-3.5" />
 									Profile
+								</Button>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7 rounded-sm opacity-70 hover:opacity-100"
+									onClick={handleClosePreviewEmployee}>
+									<X className="h-4 w-4" />
+									<span className="sr-only">Close</span>
 								</Button>
 							</div>
 						</div>
 
-						{isPreviewEmployeeComputationLoading && !hasActivePreviewComputation ? (
-							<div className="space-y-3 rounded-xl border border-gray-200 bg-white p-4">
-								<div className="flex items-center gap-2 text-sm text-gray-600">
-									<Loader2 className="h-4 w-4 animate-spin text-orange-500" />
-									Calculating payroll computation...
-								</div>
-								<div className="grid gap-3 sm:grid-cols-3">
-									<Skeleton className="h-16 rounded-lg" />
-									<Skeleton className="h-16 rounded-lg" />
-									<Skeleton className="h-16 rounded-lg" />
-								</div>
-								<Skeleton className="h-32 rounded-lg" />
-							</div>
-						) : !hasActivePreviewComputation ? (
-							<div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
-								Payroll computation is not available for this employee yet.
-							</div>
-						) : (
-							<>
-						<div className="grid gap-3 sm:grid-cols-3">
-							<div className="rounded-lg border border-gray-200 bg-white p-3">
-								<div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-gray-500">
-									<span>GrossPay</span>
-									<PreviewHelp
-										lines={[
-											"Pay before deductions: basic pay plus items included in GrossPay.",
-											"Items added after NetPay are not part of this amount.",
-										]}
-									/>
-								</div>
-								<p className="mt-1 font-semibold text-gray-900">
-									{formatCurrency(activePreviewEmployee.grossPay)}
-								</p>
-							</div>
-							<div className="rounded-lg border border-gray-200 bg-white p-3">
-								<div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-gray-500">
-									<span>Deductions</span>
-									<PreviewHelp
-										lines={["Tax, statutory items, loans, and other deductions taken after GrossPay."]}
-									/>
-								</div>
-								<p className="mt-1 font-semibold text-rose-600">
-									{formatCurrency(activePreviewEmployee.totalDeductions)}
-								</p>
-							</div>
-							<div className="rounded-lg border border-gray-200 bg-white p-3">
-								<div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-gray-500">
-									<span>NetPay</span>
-									<PreviewHelp
-										lines={["GrossPay less total deductions."]}
-									/>
-								</div>
-								<p className="mt-1 font-semibold text-orange-700">
-									{formatCurrency(activePreviewEmployee.netPay)}
+						{/* Persistent preview banner */}
+						<div
+							className="flex items-start gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950"
+							role="status">
+							<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
+							<div className="min-w-0">
+								<p className="font-semibold">Preview only — not generated payroll</p>
+								<p className="mt-0.5 text-amber-900/90">
+									Figures use the same engine as generation, but no{" "}
+									<span className="font-medium">EmployeePayroll</span> row exists yet.
+									Regenerate preview after timesheet or enrollment changes.
 								</p>
 							</div>
 						</div>
 
-						{activePreviewRegisterColumns.length > 0 && (
-							<div className="rounded-xl border border-gray-200 bg-white p-4">
-								<div className="flex items-center justify-between gap-3">
-									<div className="flex items-center gap-1">
-										<h4 className="text-sm font-semibold text-gray-900">
-											Register items by payroll role
-										</h4>
-										<PreviewHelp
-											lines={[
-												"Each item shows where it enters the payroll math.",
-												"Added after NetPay items increase TotalReceivable but do not increase GrossPay.",
-											]}
-										/>
+						{/* Employee header card */}
+						<div className="rounded-lg border border-amber-200/80 border-l-4 border-l-amber-500 bg-white p-3">
+							<button
+								type="button"
+								onClick={() =>
+									handleViewEmployeeProfile(activePreviewEmployee.employeeId)
+								}
+								className="flex min-w-0 w-full items-start gap-3 rounded-md text-left transition enabled:cursor-pointer enabled:hover:bg-amber-50/60 enabled:focus-visible:outline-none enabled:focus-visible:ring-2 enabled:focus-visible:ring-amber-300">
+								<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-semibold text-amber-900">
+									{initials(activePreviewEmployee.name)}
+								</div>
+								<div className="min-w-0 flex-1">
+									<div className="flex flex-wrap items-center gap-2">
+										<h3 className="truncate text-base font-semibold text-gray-900">
+											{activePreviewEmployee.name}
+										</h3>
+										<span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+											Estimated
+										</span>
 									</div>
-									<span className="text-xs text-gray-500">
-										{formatCount(activePreviewRegisterColumns.length)} lines
-									</span>
-								</div>
-								<div className="mt-3 grid gap-2 sm:grid-cols-2">
-									{activePreviewRegisterColumns.map((column) => (
-										<div
-											key={`${column.column}-${column.field}`}
-											className="min-w-0 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-											<div className="flex items-center justify-between gap-2">
-												<p className="truncate text-xs font-medium text-gray-700">
-													{column.label}
-												</p>
-												<span
-													className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium ${getPreviewRoleClassName(
-														getPreviewRegisterRole(column.label),
-													)}`}>
-													{getPreviewRoleLabel(getPreviewRegisterRole(column.label))}
-												</span>
-											</div>
-											<div className="mt-1 flex items-center justify-between gap-2">
-												<span className="text-[11px] text-gray-400">{column.column}</span>
-												<p className="text-sm font-semibold tabular-nums text-gray-900">
-													{formatCurrency(Number(column.value || 0))}
-												</p>
-											</div>
-										</div>
-									))}
-								</div>
-							</div>
-						)}
-
-						<div className={`grid gap-4 ${activePreviewPostNetSourceDetails.length > 0 ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
-							<div className="rounded-xl border border-gray-200 bg-white p-4">
-								<div className="flex items-center gap-1">
-									<h4 className="text-sm font-semibold text-gray-900">Included in GrossPay</h4>
-									<PreviewHelp
-										lines={[
-											"These amounts feed GrossPay before deductions.",
-											"Post-net benefits are shown separately.",
-										]}
-									/>
-								</div>
-								<div className="mt-3 space-y-2 text-sm">
-									{[
-										["Basic", activePreviewEmployee.basicPay],
-										["Overtime", activePreviewEmployee.overtimePay],
-										["Night diff", activePreviewEmployee.nightDiffPay],
-										["Holiday/rest day", activePreviewEmployee.holidayPay],
-									].map(([label, value]) => (
-										<div
-											key={String(label)}
-											className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
-											<span className="text-gray-500">{label}</span>
-											<span className="text-left font-medium tabular-nums text-gray-900 sm:text-right">
-												{formatCurrency(Number(value))}
+									<p className="mt-0.5 min-w-0 truncate text-xs text-gray-500">
+										<span className="truncate">{activePreviewPeriodName}</span>
+										{activePreviewPeriodRange ? (
+											<span className="ml-2 border-l border-gray-300 pl-2">
+												{" "}
+												{activePreviewPeriodRange}
 											</span>
-										</div>
-									))}
-									{activePreviewGrossSourceDetails.map((detail) => (
-										<div
-											key={`${detail.source}-${detail.id}`}
-											className="grid gap-1 border-t border-gray-100 pt-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-											<span className="min-w-0 text-gray-500">
-												<span className="block truncate text-gray-700">
-													{detail.name}
-												</span>
-												<span className="block truncate text-xs text-gray-400">
-													{[
-														detail.benefitTypeName || null,
-														detail.code || null,
-														detail.payrollPeriodCode
-															? detail.payrollPeriodCode
-															: detail.startDate
-																? `${formatDate(detail.startDate, "short")}${
-																		detail.endDate
-																			? ` - ${formatDate(detail.endDate, "short")}`
-																			: ""
-																	}`
-																: null,
-													]
-														.filter(Boolean)
-														.join(" · ") || "Adjustment"}
-												</span>
-											</span>
-											<span className="text-left font-medium tabular-nums text-gray-900 sm:text-right">
-												{formatCurrency(Number(detail.amount))}
-											</span>
-										</div>
-									))}
-								</div>
-							</div>
-
-							{activePreviewPostNetSourceDetails.length > 0 && (
-								<div className="rounded-xl border border-emerald-200 bg-white p-4">
-									<div className="flex items-center gap-1">
-										<h4 className="text-sm font-semibold text-gray-900">Added after NetPay</h4>
-										<PreviewHelp
-											lines={[
-												"These are payable on top of NetPay.",
-												"They are not included in GrossPay.",
-											]}
-										/>
+										) : null}
+									</p>
+									<div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-500">
+										<span className="max-w-full truncate">
+											{activePreviewEmployee.employeeCode ||
+												activePreviewEmployee.employeeId ||
+												"N/A"}
+										</span>
+										<span aria-hidden="true" className="text-gray-300">
+											/
+										</span>
+										<span className="max-w-[220px] truncate">
+											{activePreviewEmployee.department || "N/A"}
+										</span>
+										<span aria-hidden="true" className="text-gray-300">
+											/
+										</span>
+										<span className="max-w-[260px] truncate">
+											{activePreviewEmployee.position || "N/A"}
+										</span>
 									</div>
-									<div className="mt-3 space-y-2 text-sm">
-										{activePreviewPostNetSourceDetails.map((detail) => (
+								</div>
+							</button>
+						</div>
+
+						{isPreviewEmployeeComputationLoading && !hasActivePreviewComputation ? (
+							<div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
+								<div className="flex items-center gap-2 text-sm text-gray-600">
+									<Loader2 className="h-4 w-4 animate-spin text-orange-500" />
+									Calculating estimated payroll computation...
+								</div>
+								<div className="grid gap-px overflow-hidden rounded-lg border border-gray-200 bg-gray-200 sm:grid-cols-2 lg:grid-cols-4">
+									<Skeleton className="h-16 rounded-none bg-white" />
+									<Skeleton className="h-16 rounded-none bg-white" />
+									<Skeleton className="h-16 rounded-none bg-white" />
+									<Skeleton className="h-16 rounded-none bg-white" />
+								</div>
+								<Skeleton className="h-40 rounded-lg" />
+							</div>
+						) : !hasActivePreviewComputation ? (
+							<div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+								Estimated payroll computation is not available for this employee yet.
+							</div>
+						) : (
+							<>
+								{/* Summary cells — same layout as generated payroll summary */}
+								<div className="overflow-hidden rounded-lg border border-gray-200 bg-white ring-1 ring-amber-100">
+									<div
+										className={`grid gap-px bg-gray-200 sm:grid-cols-2 ${
+											shouldShowPreviewReceivable
+												? "lg:grid-cols-4"
+												: "lg:grid-cols-3"
+										}`}>
+										{previewSummaryCells.map((cell) => (
 											<div
-												key={`${detail.source}-${detail.id}`}
-												className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-												<span className="min-w-0 text-gray-500">
-													<span className="block truncate text-gray-700">
-														{detail.name}
+												key={cell.label}
+												className="min-w-0 bg-white px-3 py-2.5">
+												<div className="flex items-center gap-1 text-xs font-medium text-gray-500">
+													<span>{cell.label}</span>
+													<span className="rounded bg-amber-50 px-1 text-[9px] font-semibold uppercase tracking-wide text-amber-700">
+														est.
 													</span>
-													<span className="block truncate text-xs text-gray-400">
-														{[detail.benefitTypeName || null, detail.code || null]
-															.filter(Boolean)
-															.join(" · ") || "Benefit"}
-													</span>
-												</span>
-												<span className="text-left font-medium tabular-nums text-emerald-700 sm:text-right">
-													{formatCurrency(Number(detail.amount))}
-												</span>
+													<PreviewHelp lines={cell.lines} />
+												</div>
+												<div
+													className={`mt-1 break-words text-sm font-semibold tabular-nums ${cell.tone}`}>
+													{cell.value}
+												</div>
 											</div>
 										))}
 									</div>
 								</div>
-							)}
 
-							<div className="rounded-xl border border-gray-200 bg-white p-4">
-								<div className="flex items-center gap-1">
-									<h4 className="text-sm font-semibold text-gray-900">Deducted after GrossPay</h4>
-									<PreviewHelp
-										lines={["These reduce GrossPay to compute NetPay."]}
-									/>
-								</div>
-								<div className="mt-3 space-y-2 text-sm">
-									{[
-										["SSS", activePreviewDeductions.sssContribution],
-										[
-											"PhilHealth",
-											activePreviewDeductions.philHealthContribution,
-										],
-										["Pag-IBIG", activePreviewDeductions.pagibigContribution],
-										["Tax", activePreviewDeductions.taxAmount],
-										["Absences", activePreviewDeductions.absentDeduction],
-										["Late", activePreviewDeductions.lateDeduction],
-										["Early out", activePreviewDeductions.earlyOutDeduction],
-									].map(([label, value]) => (
-										<div
-											key={String(label)}
-											className="grid gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-3">
-											<span className="text-gray-500">{label}</span>
-											<span className="text-left font-medium tabular-nums text-gray-900 sm:text-right">
-												{formatCurrency(Number(value))}
-											</span>
-										</div>
-									))}
-									{activePreviewDeductionSourceDetails.map((detail) => (
-										<div
-											key={`${detail.source}-${detail.id}`}
-											className="grid gap-1 border-t border-gray-100 pt-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
-											<span className="min-w-0 text-gray-500">
-												<span className="block truncate text-gray-700">
-													{detail.name}
-												</span>
-												<span className="block truncate text-xs text-gray-400">
-													{[
-														detail.benefitTypeName || null,
-														detail.code || detail.direction || null,
-														detail.payrollPeriodCode
-															? detail.payrollPeriodCode
-															: detail.startDate
-																? `${formatDate(detail.startDate, "short")}${
-																		detail.endDate
-																			? ` - ${formatDate(detail.endDate, "short")}`
-																			: ""
-																	}`
-																: null,
-													]
-														.filter(Boolean)
-														.join(" · ")}
+								{/* Accordion sections mirror /hr/hr-payroll view modal */}
+								<Accordion
+									type="multiple"
+									defaultValue={["earnings-deductions"]}
+									className="rounded-lg border border-gray-200 bg-white">
+									<AccordionItem
+										value="earnings-deductions"
+										className="border-b border-gray-200">
+										<AccordionTrigger className="px-3 py-2.5 text-sm font-semibold text-gray-900 hover:no-underline">
+											<span className="flex items-center gap-2">
+												Payroll computation
+												<span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+													Estimated
 												</span>
 											</span>
-											<span className="text-left font-medium tabular-nums text-rose-600 sm:text-right">
-												{formatCurrency(Number(detail.amount))}
-											</span>
-										</div>
-									))}
-								</div>
-							</div>
-						</div>
+										</AccordionTrigger>
+										<AccordionContent className="px-3 pb-3">
+											<div className="grid gap-3 md:grid-cols-2">
+												{/* Left: earnings → GrossPay */}
+												<div className="overflow-hidden rounded-md border border-gray-200 bg-white">
+													<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-semibold text-gray-500">
+														<span>Earnings</span>
+														<span className="text-right">Amount</span>
+													</div>
+													<div className="divide-y divide-gray-100">
+														{activePreviewGrossBaseRows.map((row) => (
+															<div
+																key={`preview-gross-${row.field}-${row.amount}`}
+																className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																<div className="min-w-0">
+																	<span className="block truncate font-medium text-gray-900">
+																		{row.label}
+																	</span>
+																	{row.explanation ? (
+																		<span className="mt-0.5 block truncate text-[10px] text-gray-500">
+																			{row.explanation}
+																		</span>
+																	) : null}
+																</div>
+																<span
+																	className={`whitespace-nowrap text-right font-mono font-semibold tabular-nums ${
+																		row.operation === "SUBTRACT"
+																			? "text-rose-700"
+																			: "text-gray-950"
+																	}`}>
+																	{row.operation === "SUBTRACT" ? "-" : "+"}
+																	{formatCurrency(row.amount)}
+																</span>
+															</div>
+														))}
+														{activePreviewGrossBenefitRows.length > 0 && (
+															<div className="bg-slate-50/80">
+																<div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+																	Benefits applied
+																</div>
+																{activePreviewGrossBenefitNonTaxableRows.length >
+																	0 && (
+																	<div>
+																		<div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-emerald-800/80">
+																			Non-taxable
+																		</div>
+																		{activePreviewGrossBenefitNonTaxableRows.map(
+																			(row) => (
+																				<div
+																					key={`preview-gross-nt-${row.field}`}
+																					className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																					<div className="min-w-0">
+																						<span className="block truncate font-medium text-gray-900">
+																							{row.label}
+																						</span>
+																						{row.explanation ? (
+																							<span className="mt-0.5 block truncate text-[10px] text-gray-500">
+																								{row.explanation}
+																							</span>
+																						) : null}
+																					</div>
+																					<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-gray-950">
+																						+{formatCurrency(row.amount)}
+																					</span>
+																				</div>
+																			),
+																		)}
+																	</div>
+																)}
+																{activePreviewGrossBenefitTaxableRows.length >
+																	0 && (
+																	<div>
+																		<div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-amber-900/80">
+																			Taxable
+																		</div>
+																		{activePreviewGrossBenefitTaxableRows.map(
+																			(row) => (
+																				<div
+																					key={`preview-gross-t-${row.field}`}
+																					className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																					<div className="min-w-0">
+																						<span className="block truncate font-medium text-gray-900">
+																							{row.label}
+																						</span>
+																						{row.explanation ? (
+																							<span className="mt-0.5 block truncate text-[10px] text-gray-500">
+																								{row.explanation}
+																							</span>
+																						) : null}
+																					</div>
+																					<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-gray-950">
+																						+{formatCurrency(row.amount)}
+																					</span>
+																				</div>
+																			),
+																		)}
+																	</div>
+																)}
+															</div>
+														)}
+														<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-orange-50 px-3 py-2 text-sm">
+															<span className="font-semibold text-orange-950">
+																GrossPay
+																<span className="ml-1.5 text-[10px] font-semibold uppercase text-amber-800">
+																	(est.)
+																</span>
+															</span>
+															<span className="font-mono font-bold tabular-nums text-orange-950">
+																{formatCurrency(activePreviewGrossPay)}
+															</span>
+														</div>
+													</div>
+												</div>
+
+												{/* Right: deductions → NetPay → post-net → TotalReceivable */}
+												<div className="overflow-hidden rounded-md border border-gray-200 bg-white">
+													<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-gray-200 bg-gray-50 px-3 py-2 text-[11px] font-semibold text-gray-500">
+														<span>Deductions &amp; net</span>
+														<span className="text-right">Amount</span>
+													</div>
+													<div className="divide-y divide-gray-100">
+														{activePreviewDeductionRows.map((row) => (
+															<div
+																key={`preview-deduction-${row.field}-${row.amount}`}
+																className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																<div className="min-w-0">
+																	<span className="block truncate font-medium text-gray-900">
+																		{row.label}
+																	</span>
+																	{row.explanation ? (
+																		<span className="mt-0.5 block truncate text-[10px] text-gray-500">
+																			{row.explanation}
+																		</span>
+																	) : null}
+																</div>
+																<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-rose-700">
+																	-{formatCurrency(row.amount)}
+																</span>
+															</div>
+														))}
+														<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-rose-50 px-3 py-2 text-sm">
+															<span className="font-semibold text-rose-950">
+																Total Deductions
+																<span className="ml-1.5 text-[10px] font-semibold uppercase text-amber-800">
+																	(est.)
+																</span>
+															</span>
+															<span className="font-mono font-bold tabular-nums text-rose-950">
+																-{formatCurrency(activePreviewTotalDeductions)}
+															</span>
+														</div>
+														<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-emerald-50 px-3 py-2 text-sm">
+															<span className="font-semibold text-emerald-950">
+																NetPay
+																<span className="ml-1.5 text-[10px] font-semibold uppercase text-amber-800">
+																	(est.)
+																</span>
+															</span>
+															<span className="font-mono font-bold tabular-nums text-emerald-950">
+																{formatCurrency(activePreviewNetPay)}
+															</span>
+														</div>
+														{activePreviewPostNetRows.map((row) => (
+															<div
+																key={`preview-post-net-${row.field}`}
+																className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-xs">
+																<div className="min-w-0">
+																	<span className="block truncate font-medium text-gray-900">
+																		{row.label}
+																	</span>
+																	{row.explanation ? (
+																		<span className="mt-0.5 block truncate text-[10px] text-gray-500">
+																			{row.explanation}
+																		</span>
+																	) : null}
+																</div>
+																<span className="whitespace-nowrap text-right font-mono font-semibold tabular-nums text-sky-700">
+																	+{formatCurrency(row.amount)}
+																</span>
+															</div>
+														))}
+														{shouldShowPreviewReceivable && (
+															<div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 bg-sky-50 px-3 py-2 text-sm">
+																<span className="font-semibold text-sky-950">
+																	TotalReceivable
+																	<span className="ml-1.5 text-[10px] font-semibold uppercase text-amber-800">
+																		(est.)
+																	</span>
+																</span>
+																<span className="font-mono font-bold tabular-nums text-sky-950">
+																	{formatCurrency(activePreviewTotalReceivable)}
+																</span>
+															</div>
+														)}
+													</div>
+												</div>
+											</div>
+										</AccordionContent>
+									</AccordionItem>
+
+									{activePreviewHasRatesMeta && (
+										<AccordionItem
+											value="rates-used"
+											className="border-b border-gray-200">
+											<AccordionTrigger className="px-3 py-2.5 text-sm font-semibold text-gray-900 hover:no-underline">
+												<span className="flex items-center gap-2">
+													Rates used
+													<span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+														Estimated
+													</span>
+												</span>
+											</AccordionTrigger>
+											<AccordionContent className="px-3 pb-3">
+												<div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+													<div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2">
+														<h4 className="text-sm font-semibold text-gray-800">
+															Salary and rates
+														</h4>
+														<Badge
+															variant="outline"
+															className="h-5 rounded-md border-gray-300 px-2 text-[10px] font-normal">
+															{(
+																activePreviewEmployee.payFrequency || "N/A"
+															).replace(/_/g, " ")}
+														</Badge>
+													</div>
+													<div className="grid gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-4">
+														<div className="min-w-0 bg-white px-3 py-2.5">
+															<div className="text-[11px] font-medium text-gray-500">
+																Period basic salary
+															</div>
+															<div className="mt-0.5 text-sm font-semibold tabular-nums text-gray-900">
+																{formatCurrency(
+																	activePreviewEmployee.basicSalary,
+																)}
+															</div>
+														</div>
+														<div className="min-w-0 bg-white px-3 py-2.5">
+															<div className="text-[11px] font-medium text-gray-500">
+																Est. monthly rate
+															</div>
+															<div className="mt-0.5 text-sm font-semibold tabular-nums text-gray-900">
+																{formatCurrency(
+																	activePreviewMeta.estimatedMonthlyRate ??
+																		activePreviewEmployee.basicSalary,
+																)}
+															</div>
+														</div>
+														<div className="min-w-0 bg-white px-3 py-2.5">
+															<div className="text-[11px] font-medium text-gray-500">
+																Working days
+															</div>
+															<div className="mt-0.5 text-sm font-semibold tabular-nums text-gray-900">
+																{formatCount(
+																	activePreviewMeta.totalWorkDays ?? 0,
+																)}
+															</div>
+														</div>
+														<div className="min-w-0 bg-white px-3 py-2.5">
+															<div className="text-[11px] font-medium text-gray-500">
+																OT / ND rate
+															</div>
+															<div className="mt-0.5 text-sm font-semibold tabular-nums text-gray-900">
+																{formatCurrency(
+																	activePreviewMeta.overtimeRate,
+																)}{" "}
+																/{" "}
+																{formatCurrency(
+																	activePreviewMeta.nightDiffRate,
+																)}
+															</div>
+														</div>
+													</div>
+												</div>
+											</AccordionContent>
+										</AccordionItem>
+									)}
+
+									{activePreviewHasAttendanceMeta && (
+										<AccordionItem value="attendance-basis" className="border-b-0">
+											<AccordionTrigger className="px-3 py-2.5 text-sm font-semibold text-gray-900 hover:no-underline">
+												<span className="flex items-center gap-2">
+													Attendance basis
+													<span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800">
+														Estimated
+													</span>
+												</span>
+											</AccordionTrigger>
+											<AccordionContent className="px-3 pb-3">
+												<div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+													<div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-3 py-2">
+														<h4 className="text-sm font-semibold text-gray-900">
+															Attendance used for estimate
+														</h4>
+														<Calendar className="h-4 w-4 text-gray-400" />
+													</div>
+													<div className="grid grid-cols-2 gap-px bg-gray-200 sm:grid-cols-4">
+														<div className="min-w-0 bg-white px-3 py-2">
+															<div className="text-[11px] font-medium text-gray-500">
+																Work days
+															</div>
+															<div className="mt-1 text-base font-semibold leading-none text-gray-950">
+																{formatCount(
+																	activePreviewMeta.totalWorkDays ?? 0,
+																)}
+															</div>
+														</div>
+														<div className="min-w-0 bg-white px-3 py-2">
+															<div className="text-[11px] font-medium text-gray-500">
+																Days absent
+															</div>
+															<div className="mt-1 text-base font-semibold leading-none text-gray-950">
+																{formatCount(
+																	activePreviewMeta.daysAbsent ?? 0,
+																)}
+															</div>
+														</div>
+														<div className="min-w-0 bg-white px-3 py-2">
+															<div className="text-[11px] font-medium text-gray-500">
+																OT hours
+															</div>
+															<div className="mt-1 text-base font-semibold leading-none text-gray-950">
+																{Number(
+																	activePreviewMeta.totalOvertimeHours || 0,
+																).toFixed(2)}
+															</div>
+														</div>
+														<div className="min-w-0 bg-white px-3 py-2">
+															<div className="text-[11px] font-medium text-gray-500">
+																Late / early-out hrs
+															</div>
+															<div className="mt-1 text-base font-semibold leading-none text-gray-950">
+																{Number(
+																	activePreviewMeta.totalLateHours || 0,
+																).toFixed(2)}{" "}
+																/{" "}
+																{Number(
+																	activePreviewMeta.totalEarlyOutHours || 0,
+																).toFixed(2)}
+															</div>
+														</div>
+													</div>
+													{(previewNonZero(
+														previewAmount(activePreviewDeductions.absentDeduction),
+													) ||
+														previewNonZero(
+															previewAmount(activePreviewDeductions.lateDeduction),
+														) ||
+														previewNonZero(
+															previewAmount(
+																activePreviewDeductions.earlyOutDeduction,
+															),
+														)) && (
+														<div className="border-t border-gray-200 px-3 py-2 text-xs text-gray-600">
+															<p className="font-medium text-gray-800">
+																Attendance shortfalls already in Basic Pay
+															</p>
+															<div className="mt-1.5 grid gap-1 sm:grid-cols-3">
+																<span>
+																	Absent:{" "}
+																	<span className="font-mono font-semibold tabular-nums text-rose-700">
+																		-
+																		{formatCurrency(
+																			activePreviewDeductions.absentDeduction,
+																		)}
+																	</span>
+																</span>
+																<span>
+																	Late:{" "}
+																	<span className="font-mono font-semibold tabular-nums text-rose-700">
+																		-
+																		{formatCurrency(
+																			activePreviewDeductions.lateDeduction,
+																		)}
+																	</span>
+																</span>
+																<span>
+																	Early out:{" "}
+																	<span className="font-mono font-semibold tabular-nums text-rose-700">
+																		-
+																		{formatCurrency(
+																			activePreviewDeductions.earlyOutDeduction,
+																		)}
+																	</span>
+																</span>
+															</div>
+														</div>
+													)}
+												</div>
+											</AccordionContent>
+										</AccordionItem>
+									)}
+								</Accordion>
 							</>
 						)}
 					</div>
 				) : (
-					<div className="rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
-						{isPreviewEmployeeComputationLoading ? (
-							<>
-								<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin align-middle" />
-								Loading payroll preview detail...
-							</>
-						) : (
-							"That payroll preview row is no longer on this page. Return to the preview list and open the employee again."
-						)}
+					<div className="space-y-4">
+						<div className="flex items-start justify-between">
+							<div className="space-y-1">
+								<div className="flex items-center gap-2">
+									<h2 className="text-lg font-bold leading-none tracking-tight">
+										Payroll summary
+									</h2>
+									<span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+										Preview
+									</span>
+								</div>
+							</div>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 rounded-sm opacity-70 hover:opacity-100"
+								onClick={handleClosePreviewEmployee}>
+								<X className="h-4 w-4" />
+								<span className="sr-only">Close</span>
+							</Button>
+						</div>
+						<div className="rounded-lg border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+							{isPreviewEmployeeComputationLoading ? (
+								<>
+									<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin align-middle" />
+									Loading payroll preview detail...
+								</>
+							) : (
+								"That payroll preview row is no longer on this page. Return to the preview list and open the employee again."
+							)}
+						</div>
 					</div>
 				)}
 			</Modal>

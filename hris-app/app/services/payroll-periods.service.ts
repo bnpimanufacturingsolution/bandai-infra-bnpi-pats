@@ -285,6 +285,8 @@ export interface TimesheetPayrollSourceDetail {
 	benefitTypeName?: string | null;
 	direction: "COMPENSATION" | "DEDUCTION" | "LOAN";
 	reconciliationAction?: string | null;
+	/** From BenefitType when known; unknown treated as taxable for disclosure. */
+	isTaxable?: boolean | null;
 	amount: number;
 	startDate?: string | null;
 	endDate?: string | null;
