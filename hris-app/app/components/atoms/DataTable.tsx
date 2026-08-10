@@ -12,13 +12,7 @@ import {
 	getDataTablePaginationModel,
 } from "~/lib/data-table-state";
 import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "~/components/ui/select";
+import { SearchableSelect } from "~/components/ui/searchable-select";
 import {
 	Search,
 	Filter,
@@ -1080,28 +1074,28 @@ const DataTable = <T extends Record<string, any>>({
 											className="h-9 rounded-md border-neutral-200 bg-white text-xs font-medium focus:ring-2 focus:ring-primary/20"
 										/>
 									) : (
-										<Select
-											value={activeFilters[filter.key] || "all"}
-											onOpenChange={(open) =>
-												setOpenFilterSelectKey(open ? filter.key : null)
-											}
-											onValueChange={(value) =>
-												handleFilter(filter.key, value)
-											}>
-											<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs font-medium focus:ring-2 focus:ring-primary/20">
-												<SelectValue
-													placeholder={`All ${filter.label}`}
-												/>
-											</SelectTrigger>
-											<SelectContent data-filter-select className="z-[120]">
-												<SelectItem value="all">All {filter.label}</SelectItem>
-												{filter.options.map((option) => (
-													<SelectItem key={option.value} value={option.value}>
-														{option.label}
-													</SelectItem>
-												))}
-											</SelectContent>
-										</Select>
+										<div data-filter-select data-testid={`${filter.key}-filter-select`}>
+											<SearchableSelect
+												options={[
+													{
+														value: "all",
+														label: `All ${filter.label}`,
+													},
+													...filter.options,
+												]}
+												value={activeFilters[filter.key] || "all"}
+												onValueChange={(value) =>
+													handleFilter(filter.key, value || "all")
+												}
+												placeholder={`All ${filter.label}`}
+												searchPlaceholder={`Search ${filter.label.toLowerCase()}...`}
+												emptyText={`No ${filter.label.toLowerCase()} found.`}
+												onOpenChange={(open) =>
+													setOpenFilterSelectKey(open ? filter.key : null)
+												}
+												className="mt-0 h-9 min-h-9 rounded-md border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-primary/20"
+											/>
+										</div>
 									)}
 								</div>
 							))}

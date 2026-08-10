@@ -36,6 +36,7 @@ import {
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { Label } from "~/components/ui/label";
+import { SearchableSelect } from "~/components/ui/searchable-select";
 import {
 	Select,
 	SelectContent,
@@ -1514,21 +1515,20 @@ export default function EmployeeList({
 		placeholder: string,
 	) => (
 		<div className="w-full min-w-0" data-testid={`${option.key}-toolbar-filter`}>
-			<Select
+			<SearchableSelect
+				options={[
+					{ value: "all", label: `All ${option.label}` },
+					...option.options,
+				]}
 				value={value && value !== "all" ? value : "all"}
-				onValueChange={(nextValue) => handleFilterChange({ [option.key]: nextValue })}>
-				<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs font-medium focus:ring-2 focus:ring-primary/20">
-					<SelectValue placeholder={placeholder} />
-				</SelectTrigger>
-				<SelectContent data-filter-select className="z-[120]">
-					<SelectItem value="all">All {option.label}</SelectItem>
-					{option.options.map((item) => (
-						<SelectItem key={item.value} value={item.value}>
-							{item.label}
-						</SelectItem>
-					))}
-				</SelectContent>
-			</Select>
+				onValueChange={(nextValue) =>
+					handleFilterChange({ [option.key]: nextValue || "all" })
+				}
+				placeholder={placeholder}
+				searchPlaceholder={`Search ${option.label.toLowerCase()}...`}
+				emptyText={`No ${option.label.toLowerCase()} found.`}
+				className="mt-0 h-9 min-h-9 rounded-md border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-primary/20"
+			/>
 		</div>
 	);
 

@@ -407,5 +407,58 @@ describe("EmployeeList agency advanced filter", () => {
 			);
 		});
 		expect(screen.getByLabelText("location-search")).toHaveTextContent("agency=agency-1");
+
+		const employeeListCalls = vi
+			.mocked(useEmployees)
+			.mock.calls.map(([params]) => params)
+			.filter((params) => params?.count === true);
+
+		expect(
+			employeeListCalls.some(
+				(params) =>
+					String(params?.filter || "").includes("workforceSource:AGENCY") &&
+					String(params?.filter || "").includes("agencyId:agency-1"),
+			),
+		).toBe(true);
+	}, 15_000);
+
+	it("opens a searchable agency select and filters options by typed query", async () => {
+		renderEmployeeList();
+
+		const user = await openAgencyFilter();
+
+		const agencySearch = await screen.findByPlaceholderText(/search agency/i);
+		expect(agencySearch).toBeInTheDocument();
+		expect(screen.getByText("AGY1 - Agency One")).toBeInTheDocument();
+		expect(screen.getByText("AGY2 - Agency Two")).toBeInTheDocument();
+
+		await user.type(agencySearch, "Two");
+
+		await waitFor(() => {
+			expect(screen.queryByText("AGY1 - Agency One")).not.toBeInTheDocument();
+		});
+		expect(screen.getByText("AGY2 - Agency Two")).toBeInTheDocument();
+
+		await user.click(screen.getByText("AGY2 - Agency Two"));
+
+		await waitFor(() => {
+			expect(screen.getByLabelText("location-search")).toHaveTextContent(
+				"workforceSource=AGENCY",
+			);
+		});
+		expect(screen.getByLabelText("location-search")).toHaveTextContent("agency=agency-2");
+
+		const employeeListCalls = vi
+			.mocked(useEmployees)
+			.mock.calls.map(([params]) => params)
+			.filter((params) => params?.count === true);
+
+		expect(
+			employeeListCalls.some(
+				(params) =>
+					String(params?.filter || "").includes("workforceSource:AGENCY") &&
+					String(params?.filter || "").includes("agencyId:agency-2"),
+			),
+		).toBe(true);
 	}, 15_000);
 });

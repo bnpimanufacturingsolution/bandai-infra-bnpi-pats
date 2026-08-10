@@ -82,7 +82,10 @@ export function SearchableSelect({
 					<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
 				</button>
 			</PopoverTrigger>
-			<PopoverContent className="w-full p-0">
+			<PopoverContent
+				data-filter-select
+				align="start"
+				className="w-[var(--radix-popover-trigger-width)] min-w-[12rem] p-0">
 				<Command>
 					<CommandInput placeholder={searchPlaceholder} className="h-9" />
 					<CommandList id={listId}>
@@ -106,8 +109,8 @@ export function SearchableSelect({
 						{options.map((option) => (
 							<CommandItem
 								key={option.value}
-								value={option.value}
-								keywords={[option.label, option.description || "", option.badge || ""]}
+								value={`${option.label} ${option.value}`}
+								keywords={[option.label, option.description || "", option.badge || "", option.value]}
 								onSelect={() => {
 									const newValue = option.value === value ? "" : option.value;
 									onValueChange?.(newValue);
