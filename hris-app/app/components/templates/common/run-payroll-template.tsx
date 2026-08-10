@@ -1914,6 +1914,18 @@ export function RunPayrollTemplate() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isPreviewPayrollAction, previewStep]);
 
+	// Deep links with previewEmployeeId (e.g. shared results URL) open results + detail.
+	useEffect(() => {
+		if (!isPreviewPayrollAction || !previewDetailEmployeeId) return;
+		if (previewStep === "results") return;
+		updateSearchParams((next) => {
+			next.set("previewStep", "results");
+			if (!next.get("page")) next.set("page", "1");
+			if (!next.get("limit")) next.set("limit", String(previewLimit));
+		});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [isPreviewPayrollAction, previewDetailEmployeeId, previewStep]);
+
 	useEffect(() => {
 		if (!isPreviewPayrollAction || previewStep !== "results" || !previewPagination) return;
 		if (previewPagination.page === previewPage) return;
@@ -4494,7 +4506,7 @@ export function RunPayrollTemplate() {
 				}}
 				showCloseButton={false}
 				closeOnBackdropClick
-				className="max-w-6xl p-5">
+				className="z-[110] max-w-6xl p-5">
 				{activePreviewEmployee ? (
 					<div className="space-y-4">
 						{/* Header — matches payroll summary, with PREVIEW distinction */}
