@@ -14,6 +14,12 @@ export interface ModalProps {
 	className?: string;
 	showCloseButton?: boolean;
 	closeOnBackdropClick?: boolean;
+	/**
+	 * Stacking order for the portaled overlay shell (inline style, not Tailwind).
+	 * Use when nesting modals — e.g. detail over a parent list dialog.
+	 * Default 100 (above sidebar z-50). Nested dialogs should use 110+.
+	 */
+	zIndex?: number;
 }
 
 const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
@@ -28,54 +34,79 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 			className,
 			showCloseButton = true,
 			closeOnBackdropClick = true,
+			zIndex = 100,
 			...props
 		},
 		ref,
 	) => {
 		const [mounted, setMounted] = React.useState(false);
+		const contentRef = React.useRef<HTMLDivElement | null>(null);
+		const setContentRef = React.useCallback(
+			(node: HTMLDivElement | null) => {
+				contentRef.current = node;
+				if (typeof ref === "function") ref(node);
+				else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+			},
+			[ref],
+		);
 
 		React.useEffect(() => {
 			setMounted(true);
 		}, []);
 
 		React.useEffect(() => {
-			if (open) {
-				document.body.style.overflow = "hidden";
-			} else {
-				document.body.style.overflow = "unset";
-			}
-
+			if (!open) return;
+			document.body.style.overflow = "hidden";
 			return () => {
-				document.body.style.overflow = "unset";
+				// Nested modals: only unlock body scroll when no dialog remains.
+				requestAnimationFrame(() => {
+					const remaining = document.querySelectorAll(
+						'[role="dialog"][aria-modal="true"]',
+					).length;
+					if (remaining === 0) {
+						document.body.style.overflow = "unset";
+					} else {
+						document.body.style.overflow = "hidden";
+					}
+				});
 			};
 		}, [open]);
 
 		React.useEffect(() => {
 			if (!open) return;
 			const handleKeyDown = (event: KeyboardEvent) => {
-				if (event.key === "Escape") {
-					onOpenChange?.(false);
-				}
+				if (event.key !== "Escape") return;
+				// Only the topmost open dialog handles Escape (nested modals).
+				const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+				const top = dialogs[dialogs.length - 1];
+				if (contentRef.current && top && top !== contentRef.current) return;
+				event.preventDefault();
+				event.stopPropagation();
+				onOpenChange?.(false);
 			};
-			window.addEventListener("keydown", handleKeyDown);
-			return () => window.removeEventListener("keydown", handleKeyDown);
+			// Capture so a parent modal registered earlier does not also close.
+			window.addEventListener("keydown", handleKeyDown, true);
+			return () => window.removeEventListener("keydown", handleKeyDown, true);
 		}, [onOpenChange, open]);
 
 		// Hooks must run unconditionally (nested Sync Center → Merge device users
 		// previously crashed with React #310 when useId ran only while open).
 		const titleId = React.useId();
 		const descriptionId = React.useId();
-		// Allow nested modals to stack above a parent (e.g. payroll correction over timesheet).
-		// Default z-[100] so portaled dialogs sit above app chrome (sidebar z-50, drawers).
-		const hasExplicitZ =
-			typeof className === "string" && /\bz-\[?\d/.test(className);
-		const shellZ = hasExplicitZ ? undefined : "z-[100]";
 		// overflow-hidden does NOT win over default overflow-y-auto in tailwind-merge
 		// (different groups). Contained layouts (DataTable containedScroll, pinned
 		// footers) must suppress the dialog-level vertical scroll so height flexes.
 		const containOverflow =
 			typeof className === "string" &&
 			/(?:^|\s)(?:!)?overflow-(?:hidden|y-hidden|clip)(?:\s|$)/.test(className);
+		// Strip Tailwind z-* from panel className — stacking belongs on the shell via zIndex.
+		const panelClassName =
+			typeof className === "string"
+				? className
+						.replace(/(?:^|\s)z-\[?\d+\]?(?=\s|$)/g, " ")
+						.replace(/\s+/g, " ")
+						.trim()
+				: className;
 
 		if (!open) {
 			return trigger ? <>{trigger}</> : null;
@@ -83,11 +114,9 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 
 		const dialog = (
 			<div
-				className={cn(
-					"fixed inset-0 flex items-center justify-center",
-					shellZ,
-					hasExplicitZ ? className?.match(/z-\S+/)?.[0] : undefined,
-				)}>
+				className="fixed inset-0 flex items-center justify-center"
+				style={{ zIndex }}
+				data-modal-layer={zIndex}>
 				{/* Backdrop — under dialog panel in this stacking context */}
 				<div
 					className="absolute inset-0 bg-black/50"
@@ -98,7 +127,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 				/>
 				{/* Modal Content */}
 				<div
-					ref={ref}
+					ref={setContentRef}
 					role="dialog"
 					aria-modal="true"
 					aria-labelledby={title ? titleId : undefined}
@@ -108,7 +137,7 @@ const Modal = React.forwardRef<HTMLDivElement, ModalProps>(
 						containOverflow
 							? "min-h-0 overflow-hidden"
 							: "overflow-y-auto modern-scroll",
-						className,
+						panelClassName,
 					)}
 					{...props}
 					onClick={(e) => e.stopPropagation()}>

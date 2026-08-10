@@ -4506,7 +4506,9 @@ export function RunPayrollTemplate() {
 				}}
 				showCloseButton={false}
 				closeOnBackdropClick
-				className="z-[110] max-w-6xl p-5">
+				zIndex={120}
+				className="max-w-6xl p-5"
+				data-testid="preview-payroll-employee-detail-modal">
 				{activePreviewEmployee ? (
 					<div className="space-y-4">
 						{/* Header — matches payroll summary, with PREVIEW distinction */}
