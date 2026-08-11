@@ -1,8 +1,10 @@
 import { expect } from "chai";
 import {
+	aggregateCompensationMassUploadRowsByEmployeeCodeStart,
 	COMPENSATION_CODE_LABELS,
 	COMPENSATION_CODE_PAYROLL_ROLES,
 	detectMassUploadKindFromHeaders,
+	loanTypeNameToDeductionCode,
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
 	resolveCompensationCodePayrollRole,
@@ -47,6 +49,27 @@ describe("BNPI mass upload import helper", () => {
 		expect(parsed.code).to.equal("LLA");
 		expect(parsed.amount).to.equal(250);
 		expect(parsed.startDate.toISOString().slice(0, 10)).to.equal("2026-06-26");
+	});
+
+	it("sums multi-row ABS for same employee + StartPayDate (not last-write-wins)", () => {
+		const start = new Date("2026-06-26T00:00:00.000Z");
+		const summed = aggregateCompensationMassUploadRowsByEmployeeCodeStart([
+			{ rowNumber: 10, employeeId: "01660", code: "ABS", amount: 600, startDate: start },
+			{ rowNumber: 20, employeeId: "01660", code: "ABS", amount: 1800, startDate: start },
+			{ rowNumber: 30, employeeId: "01660", code: "ARP", amount: 500, startDate: start },
+		]);
+		expect(summed).to.have.length(2);
+		const abs = summed.find((r) => r.code === "ABS");
+		const arp = summed.find((r) => r.code === "ARP");
+		expect(abs?.amount).to.equal(2400);
+		expect(abs?.sourceRowNumbers).to.deep.equal([10, 20]);
+		expect(arp?.amount).to.equal(500);
+	});
+
+	it("maps loan type names to DEDCODE for payroll source details", () => {
+		expect(loanTypeNameToDeductionCode("SSS Calamity Loan")).to.equal("SSSCALLN");
+		expect(loanTypeNameToDeductionCode("HDMF Salary Loan")).to.equal("HDMFSALLN");
+		expect(loanTypeNameToDeductionCode("RCBC Loan")).to.equal("RCBCLN");
 	});
 
 	it("parses Excel Date cells using Asia/Manila calendar (not UTC day)", () => {

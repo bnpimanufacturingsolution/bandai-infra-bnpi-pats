@@ -1,6 +1,16 @@
 # Project Truth Summary
 
-Last updated: 2026-08-07
+Last updated: 2026-08-11
+
+## 2026-08-11 BNPI Jun 26–Jul 10 payroll tally investigation
+
+- Full-fleet preview vs target Sheet2: **not fleet-tallied** (4 exact + Alexa −₱0.77).
+- **No. of Days** register field ≠ target paid regular days: app counts non-`REST_DAY`
+  timesheet lines (includes ABSENT); target ≈ sum Bandai `approvedBuckets.regularDays`.
+  Universal day-column mismatch is a **definition/code** issue, not “all biometrics wrong.”
+- Fixing day-count alone does **not** make Gross/Net/TotalReceivable tally.
+- Master evidence: `.runtime/full-tally-20260811/FINDINGS.md` and
+  `.wwg/reports/bnpi-june26-jul10-payroll-tally-20260811.md`.
 
 ## 2026-08-07 BNPI Meal Allowance (MLA) coverage
 

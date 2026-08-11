@@ -96,6 +96,27 @@ export function resolveDeductionCodePayrollRole(
 	return DEDUCTION_CODE_PAYROLL_ROLES[key] || { reconciliationAction: "DEDUCTION", isTaxable: false };
 }
 
+/** Loan type display name → mass-upload DEDCODE (for payroll source details). */
+export function loanTypeNameToDeductionCode(name: string | null | undefined): string | null {
+	const n = String(name || "")
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, " ")
+		.trim();
+	if (!n) return null;
+	const map: Record<string, string> = {
+		"sss emergency loan": "SSSELN",
+		"sss calamity loan": "SSSCALLN",
+		"sss salary loan": "SSSSALLN",
+		"hdmf salary loan": "HDMFSALLN",
+		"hdmf calamity loan": "HDMFCALLN",
+		"bnpi emergency loan": "BNPIEMLN",
+		"bnpi salary loan": "BNPISALLN",
+		"rcbc loan": "RCBCLN",
+	};
+	return map[n] || null;
+}
+
 /** Deduction mass-upload codes → loan type name (must match DM2 Loan Types when loan). */
 export const DEDUCTION_CODE_TO_LOAN_NAME: Record<string, string> = {
 	SSSSALLN: "SSS Salary Loan",
@@ -186,6 +207,58 @@ export function parseCompensationMassUploadRow(
 	if (!startDate) return { ok: false, error: "Invalid or missing StartPayDate" };
 
 	return { ok: true, employeeId, employeeName, code, amount, startDate };
+}
+
+/**
+ * Collapse multiple compensation mass-upload rows for the same employee + COMCODE +
+ * StartPayDate day into one amount (sum). Client workbooks often split ABS (and
+ * occasionally other codes) across lines; last-write-wins import under-pays.
+ */
+export type AggregateableCompensationMassRow = {
+	rowNumber: number;
+	employeeId: string;
+	code: string;
+	amount: number;
+	startDate: Date;
+};
+
+export type AggregatedCompensationMassRow = AggregateableCompensationMassRow & {
+	/** Source sheet rows that were summed (1-based Excel data rows). */
+	sourceRowNumbers: number[];
+};
+
+export function aggregateCompensationMassUploadRowsByEmployeeCodeStart(
+	rows: AggregateableCompensationMassRow[],
+): AggregatedCompensationMassRow[] {
+	const byKey = new Map<string, AggregatedCompensationMassRow>();
+	for (const row of rows) {
+		const dayKey = row.startDate.toISOString().slice(0, 10);
+		const code = String(row.code || "")
+			.trim()
+			.toUpperCase();
+		const key = `${row.employeeId}|${code}|${dayKey}`;
+		const existing = byKey.get(key);
+		if (existing) {
+			existing.amount = Math.round((existing.amount + Number(row.amount || 0) + Number.EPSILON) * 100) / 100;
+			existing.sourceRowNumbers.push(row.rowNumber);
+			// Keep earliest rowNumber as primary for stable notes / ordering.
+			if (row.rowNumber < existing.rowNumber) {
+				existing.rowNumber = row.rowNumber;
+			}
+		} else {
+			byKey.set(key, {
+				rowNumber: row.rowNumber,
+				employeeId: row.employeeId,
+				code,
+				amount: Number(row.amount || 0),
+				startDate: row.startDate,
+				sourceRowNumbers: [row.rowNumber],
+			});
+		}
+	}
+	return Array.from(byKey.values()).sort(
+		(a, b) => a.rowNumber - b.rowNumber || a.employeeId.localeCompare(b.employeeId),
+	);
 }
 
 export type DeductionMassUploadRow =

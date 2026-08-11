@@ -68,6 +68,8 @@ export type RecurringInstallmentEnsureResult =
 				status: string;
 				payrollCutOffId?: string | null;
 			};
+			/** When true, ensure should persist installment.amount (mass-upload amount correction). */
+			shouldUpdateAmount?: boolean;
 	  }
 	| {
 			action: "create";
@@ -379,24 +381,7 @@ export const planRecurringInstallmentForPeriod = (
 		);
 	});
 
-	if (existing) {
-		const scheduledDate = asDate(existing.scheduledDate);
-		if (!scheduledDate) {
-			return { action: "skipped", reason: "invalid_existing" };
-		}
-		return {
-			action: "existing",
-			installment: {
-				id: existing.id,
-				amount: Number(existing.amount),
-				scheduledDate,
-				status: existing.status,
-				payrollCutOffId: existing.payrollCutOffId,
-			},
-		};
-	}
-
-	const amount = roundMoney(
+	const desiredAmount = roundMoney(
 		toNumber(
 			benefit.computedPeriodAmount ??
 				benefit.installmentAmount ??
@@ -405,6 +390,33 @@ export const planRecurringInstallmentForPeriod = (
 			0,
 		),
 	);
+
+	if (existing) {
+		const scheduledDate = asDate(existing.scheduledDate);
+		if (!scheduledDate) {
+			return { action: "skipped", reason: "invalid_existing" };
+		}
+		// When enrollment amount was corrected (e.g. mass-upload ABS multi-row sum),
+		// keep a single installment but refresh amount on writable SCHEDULED rows.
+		const status = String(existing.status || "").toUpperCase();
+		const canRefreshAmount =
+			status === "SCHEDULED" &&
+			desiredAmount > 0 &&
+			Math.abs(Number(existing.amount) - desiredAmount) > 0.005;
+		return {
+			action: "existing",
+			installment: {
+				id: existing.id,
+				amount: canRefreshAmount ? desiredAmount : Number(existing.amount),
+				scheduledDate,
+				status: existing.status,
+				payrollCutOffId: existing.payrollCutOffId,
+			},
+			...(canRefreshAmount ? { shouldUpdateAmount: true as const } : {}),
+		};
+	}
+
+	const amount = desiredAmount;
 	if (!(amount > 0)) {
 		return { action: "skipped", reason: "invalid_amount" };
 	}
@@ -687,13 +699,28 @@ export const ensureRecurringBenefitInstallmentForPeriod = async (
 	prisma: {
 		employeeBenefitInstallment: {
 			create: (args: { data: AnyRecord }) => Promise<AnyRecord>;
+			update?: (args: { where: { id: string }; data: AnyRecord }) => Promise<AnyRecord>;
 		};
 	},
 	benefit: RecurringInstallmentEnsureInput,
 	period: BenefitSchedulePeriod,
 ): Promise<RecurringInstallmentEnsureResult> => {
 	const plan = planRecurringInstallmentForPeriod(benefit, period);
-	if (plan.action !== "create") {
+	if (plan.action === "skipped") {
+		return plan;
+	}
+	if (plan.action === "existing") {
+		if (plan.shouldUpdateAmount && prisma.employeeBenefitInstallment.update) {
+			await prisma.employeeBenefitInstallment.update({
+				where: { id: plan.installment.id },
+				data: { amount: plan.installment.amount },
+			});
+			// Keep in-memory installments aligned for resolve in the same request.
+			if (Array.isArray(benefit.installments)) {
+				const hit = benefit.installments.find((i) => i.id === plan.installment.id);
+				if (hit) hit.amount = plan.installment.amount;
+			}
+		}
 		return plan;
 	}
 

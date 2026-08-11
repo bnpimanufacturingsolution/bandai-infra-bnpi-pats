@@ -1,6 +1,7 @@
 ﻿import * as XLSX from "xlsx";
 import type { PrismaClient } from "../../generated/prisma";
 import {
+	aggregateCompensationMassUploadRowsByEmployeeCodeStart,
 	compensationBenefitLabel,
 	DEDUCTION_BENEFIT_CODE_LABELS,
 	normalizeMassUploadRow,
@@ -1179,7 +1180,11 @@ export async function importCompensationMassUpload(params: {
 		return summary;
 	}
 
-	const employeeCodes = Array.from(new Set(okRows.map((r) => r.employeeId)));
+	// Sum multi-line same employee+COMCODE+StartPayDate (e.g. split ABS rows).
+	const aggregatedRows = aggregateCompensationMassUploadRowsByEmployeeCodeStart(okRows);
+	const okWriteRows = aggregatedRows;
+
+	const employeeCodes = Array.from(new Set(okWriteRows.map((r) => r.employeeId)));
 	const employees = await params.prisma.employee.findMany({
 		where: {
 			organizationId: params.organizationId,
@@ -1223,7 +1228,7 @@ export async function importCompensationMassUpload(params: {
 
 	const periodIds = new Set<string>();
 	const typeIds = new Set<string>();
-	for (const row of okRows) {
+	for (const row of okWriteRows) {
 		const { period } = await ensurePeriod(row.startDate);
 		if (period) periodIds.add(period.id);
 		const type = await ensureType(row.code);
@@ -1255,7 +1260,7 @@ export async function importCompensationMassUpload(params: {
 		}
 	}
 
-	for (const row of okRows) {
+	for (const row of okWriteRows) {
 		try {
 			const employeePk = employeeByCode.get(row.employeeId);
 			if (!employeePk) {
@@ -1284,6 +1289,10 @@ export async function importCompensationMassUpload(params: {
 			const benefitType = await ensureType(row.code);
 			const key = `${employeePk}|${benefitType.id}|${period.id}`;
 			const existingId = existingByKey.get(key);
+			const sourceRowsNote =
+				row.sourceRowNumbers.length > 1
+					? ` rows ${row.sourceRowNumbers.join("+")} (summed)`
+					: ` row ${row.rowNumber}`;
 
 			const payload = normalizeEmployeeBenefitPayload({
 				organizationId: params.organizationId,
@@ -1305,7 +1314,7 @@ export async function importCompensationMassUpload(params: {
 				isActive: true,
 				status: "ACTIVE",
 				name: benefitType.name,
-				notes: `BNPI Compensation Mass Upload row ${row.rowNumber}; COMCODE=${row.code}; period=${period.code || period.id}`,
+				notes: `BNPI Compensation Mass Upload${sourceRowsNote}; COMCODE=${row.code}; period=${period.code || period.id}`,
 				currency: "PHP",
 				agreedToTerms: true,
 			});

@@ -1,5 +1,34 @@
 # Project Truth
 
+## BNPI Jun 26–Jul 10 2026 payroll tally investigation (2026-08-11)
+
+- Status: `INVESTIGATED_CODE_AND_LIVE_PREVIEW` (fleet money not green).
+- Period under study: `PP-20260626-20260711` (Sheet2 payroll computation vs
+  Run Payroll / generate-timesheet preview with `calculateRows=true`).
+- **Fleet result (818 compared):** 4 exact money-core tallied; 1 Alexa-near
+  (01792, Δ TotalReceivable −₱0.77); majority not tallied. Evidence pack:
+  `.runtime/full-tally-20260811/FINDINGS.md`,
+  `.wwg/reports/bnpi-june26-jul10-payroll-tally-20260811.md`.
+- **Register No. of Days (col I) definition (CONFIRMED from code + live proof):**
+  - Target Sheet2 “No. of Days” aligns with paid regular days ≈ sum of Bandai
+    timesheet `approvedBuckets.regularDays` (`sourceRegularDays`).
+  - App `payrollRegister.numberOfDays` is currently `totalWorkDays` = count of
+    timesheet reporting lines with `status !== REST_DAY` (includes ABSENT and
+    other non-rest statuses). Implemented in `payroll-period.helper.ts`.
+  - Therefore day-count can fail for every employee while OT hours and bucket
+    regular days still match target. Example: Alexa target 9 / buckets 9 / app
+    days 13; Rio target 12 / buckets 12 / app days 13.
+- **Hard ban for tally agents:** do not treat universal day-column mismatch as
+  proof that biometrics data is globally wrong. Classify day fail as
+  `definition_mismatch` first; only then inspect PRESENT/ABSENT data faults.
+- **Hard ban:** do not claim “fixing numberOfDays will tally payroll.” BNPI
+  Basic Salary is largely semi-monthly allocation when Bandai buckets drive
+  rates; Gross/Net/TotalReceivable residuals are dominated by absent, late,
+  OT pay/rate, loans, DMA/MHDMF2 period pin, and tax cascade.
+- Alexa-era path notes: OT bucket hours apply fleet-wide strongly; BNPI 313
+  attendance daily applies when buckets present; WorkSharing day overrides may
+  exist without line schedule rebuild (late residual class `apply_path`).
+
 ## BNPI payroll compensation / deduction source ownership (2026-08-05)
 
 - Status: `CONFIRMED_OPERATOR_PRODUCT_TRUTH`.

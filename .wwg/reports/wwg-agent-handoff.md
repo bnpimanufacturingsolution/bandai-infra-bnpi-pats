@@ -1,5 +1,36 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-11 - Mass-upload apply gaps closed (COMP/DED present data)
+
+- Status: `FIXED_LOCAL_CLONE` for mass-upload **present→apply** path.
+- Scope: Jun 26–Jul 10 compensation + deduction mass upload only (not target file).
+- Before: multi-row ABS last-write-wins; 00147 double installments; loan source codes null.
+- After live re-measure: **apply-gap rows = 0** (all mass COMP/DED codes match payroll sources).
+- Code: sum multi-row COMP import; installment dedupe + amount refresh; loan DEDCODE on sources.
+- Evidence: `.runtime/mass-upload-apply-gap-20260811/FINDINGS.md`, `repair-apply.json`.
+- Still open for fleet target unmatch: attendance/late/WS, target-only lines, OT pay rate.
+
+## 2026-08-11 - BNPI Jun 26–Jul 10 full payroll tally investigation
+
+- Status: `INVESTIGATED_NOT_FLEET_TALLIED` (no fleet money fix claimed).
+- Period: `PP-20260626-20260711`. Compared **818** app preview rows vs **860**
+  target Sheet2 rows (unlocked payroll computation workbook).
+- **Fleet money:** only **4** exact tallied (`00269`, `00344`, `01687`, `01729`);
+  **1** Alexa-near (`01792`, Δ TotalReceivable **−₱0.77** late residual);
+  **346** OT match only; **463** unmatch. ~81% \|Δ Total\| > ₱500.
+- **Alexa (01792):** OT + absent match after BNPI 313 / OT bucket path; late +0.77.
+- **Rio (01360):** OT/AON/PFA/MLA/HDMF SL match; absent/late/DMA/RCBC/SSS/tax far
+  (Δ Total **+₱2,195.73**). WorkSharing overrides exist; line schedules often not rebuilt.
+- **No. of Days always fails (818/818):** **code definition**, not universal biometrics
+  failure. Target = sum `approvedBuckets.regularDays`; app = non-`REST_DAY` line count
+  (includes ABSENT). Alexa 9 vs app 13 (buckets=9); Rio 12 vs app 13 (buckets=12).
+- **Fixing day-count alone does not tally payroll** (display/definition; money gaps elsewhere).
+- Evidence pack: `.runtime/full-tally-20260811/FINDINGS.md` (master),
+  `summary.json`, `compare.csv`; Rio `.runtime/rio-tally-20260811/`;
+  WWG report `.wwg/reports/bnpi-june26-jul10-payroll-tally-20260811.md`.
+- Open recommendations: REC-20260811-PAYROLL-NUMBER-OF-DAYS-BUCKETS,
+  REC-20260811-PAYROLL-WS-LINE-REBUILD, REC-20260811-PAYROLL-PERIOD-PIN-ENROLLMENTS.
+
 ## 2026-08-07 - Preview Payroll modal parity with Start Payroll
 
 - Status: `IMPLEMENTED_LOCAL`.

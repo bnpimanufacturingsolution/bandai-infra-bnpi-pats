@@ -46,6 +46,7 @@ import {
 	normalizeBenefitEligibilityMode,
 } from "./benefit-attendance-eligibility.helper";
 import { getUtcMonthRangeContaining } from "./benefit-recurrence.helper";
+import { loanTypeNameToDeductionCode } from "./bnpi-mass-upload-import.helper";
 import { getMergedCycleRules } from "../app/payrollperiod/payroll-cycle.helper";
 import {
 	applyReadyPayrollCorrectionsToEmployeePayroll,
@@ -4323,11 +4324,17 @@ export async function buildPayrollSourceAmountsByEmployeeId(
 		const amount = Number(row.monthlyPayment ?? row.totalAmount ?? 0);
 		if (!Number.isFinite(amount) || amount <= 0) continue;
 		const current = currentFor(employeeId);
+		const loanName = row.loanType?.name || "Employee loan";
+		// Prefer stored loan type code when present; else map BNPI mass-upload DEDCODE names.
+		const loanCode =
+			(row.loanType as { code?: string | null } | null)?.code ||
+			loanTypeNameToDeductionCode(loanName) ||
+			null;
 		current.details.push({
 			id: row.id,
 			source: "employeeLoan",
-			code: null,
-			name: row.loanType?.name || "Employee loan",
+			code: loanCode,
+			name: loanName,
 			benefitTypeName: row.loanType?.name || null,
 			direction: "LOAN",
 			reconciliationAction: "DEDUCTION",

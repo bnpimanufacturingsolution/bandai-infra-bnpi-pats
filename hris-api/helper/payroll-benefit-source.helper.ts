@@ -115,8 +115,20 @@ export function resolvePayrollBenefitSource(
 		});
 
 		if (dueInstallments.length === 0) return null;
-		amount = dueInstallments.reduce((sum, installment) => sum + Number(installment.amount), 0);
-		installmentIds = dueInstallments.map((installment) => installment.id);
+		// Collapse accidental duplicate SCHEDULED rows for the same period day + amount
+		// (ensureRecurring race / double-call). Keep one installment per day+amount key.
+		const seen = new Set<string>();
+		const uniqueDue: typeof dueInstallments = [];
+		for (const installment of dueInstallments) {
+			const scheduledDate = asDate(installment.scheduledDate);
+			const dayKey = scheduledDate ? scheduledDate.toISOString().slice(0, 10) : "na";
+			const key = `${dayKey}|${Number(installment.amount).toFixed(2)}|${String(installment.status || "").toUpperCase()}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			uniqueDue.push(installment);
+		}
+		amount = uniqueDue.reduce((sum, installment) => sum + Number(installment.amount), 0);
+		installmentIds = uniqueDue.map((installment) => installment.id);
 	} else {
 		amount = finitePositive(benefit.amount);
 		if (amount === null) return null;

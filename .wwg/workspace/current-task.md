@@ -1,5 +1,17 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-11 BNPI Jun 26–Jul 10 full payroll tally log
+
+- Task mode: investigation / evidence log (no fleet money repair claimed).
+- Compared live preview vs target Sheet2 for period `PP-20260626-20260711`.
+- **Result:** 4 exact tallied; Alexa near (−₱0.77); Rio and most employees not tallied.
+- **Day-count 818/818 fail:** code definition (non-rest lines vs paid regularDays buckets),
+  not universal biometrics failure. Fixing day-count alone will not tally payroll.
+- Master log: `.runtime/full-tally-20260811/FINDINGS.md`
+- WWG: `.wwg/reports/bnpi-june26-jul10-payroll-tally-20260811.md`
+- Handoff entry + RECs: numberOfDays buckets, WS line rebuild, period-pin enrollments.
+- Next if requested: implement day-count mapping and/or WS line rebuild + re-run bulk compare.
+
 ## Latest Task Addendum - 2026-08-07 Preview Payroll modal parity with Start Payroll
 
 - Task mode: product UX feature (Run Payroll).
