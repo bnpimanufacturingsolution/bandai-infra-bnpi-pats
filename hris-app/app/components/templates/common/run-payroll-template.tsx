@@ -2742,34 +2742,93 @@ export function RunPayrollTemplate() {
 		);
 	}
 
+	const previewResultsPeriodStart =
+		timesheetPayrollPreview?.period?.startDate || selectedPeriodCard?.startDate;
+	const previewResultsPeriodEnd =
+		timesheetPayrollPreview?.period?.endDate || selectedPeriodCard?.endDate;
+	const previewResultsPeriodRange =
+		previewResultsPeriodStart && previewResultsPeriodEnd
+			? `${formatDate(previewResultsPeriodStart, "short")} - ${formatDate(previewResultsPeriodEnd, "short")}`
+			: null;
+
 	return (
 		<div className="w-full min-w-0 max-w-full space-y-4 overflow-x-hidden">
 			{/* Header */}
 			<div className="flex min-w-0 items-center justify-between gap-3">
 				<div className="flex min-w-0 items-center gap-3">
-					<div className="shrink-0 p-2 bg-orange-100 rounded-lg">
-						<PesoIcon className="w-6 h-6 text-orange-600" />
+					<div
+						className={`shrink-0 rounded-lg p-2 ${
+							isPreviewResultsPage ? "bg-sky-100" : "bg-orange-100"
+						}`}>
+						{isPreviewResultsPage ? (
+							<Eye className="h-6 w-6 text-sky-700" />
+						) : (
+							<PesoIcon className="w-6 h-6 text-orange-600" />
+						)}
 					</div>
 					<div className="min-w-0">
-						<h1 className="text-2xl font-bold text-gray-900">Run Payroll</h1>
-						<p className="text-sm text-gray-500">
-							{formatDate(selectedPeriodCard?.startDate, "short")} -{" "}
-							{formatDate(selectedPeriodCard?.endDate, "short")}
-						</p>
+						{isPreviewResultsPage ? (
+							<>
+								<div className="flex flex-wrap items-center gap-2">
+									<h1 className="text-2xl font-bold text-gray-900">
+										Preview Payroll
+									</h1>
+									<Badge className="border border-sky-200 bg-sky-50 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
+										Preview only
+									</Badge>
+								</div>
+								<p className="text-sm text-gray-500">
+									{previewResultsPeriodRange || "Selected period"}
+									{timesheetPayrollPreview?.period?.name || selectedPeriodCard?.name
+										? ` · ${timesheetPayrollPreview?.period?.name || selectedPeriodCard?.name}`
+										: ""}
+								</p>
+							</>
+						) : (
+							<>
+								<h1 className="text-2xl font-bold text-gray-900">Run Payroll</h1>
+								<p className="text-sm text-gray-500">
+									{formatDate(selectedPeriodCard?.startDate, "short")} -{" "}
+									{formatDate(selectedPeriodCard?.endDate, "short")}
+								</p>
+							</>
+						)}
 					</div>
 				</div>
 				<div className="flex shrink-0 items-center gap-2">
-					<Button
-						variant="outline"
-						className="gap-2"
-						onClick={() => navigate("/hr/hr-payroll")}>
-						<FileText className="w-4 h-4" />
-						Open Payroll Reports
-					</Button>
+					{isPreviewResultsPage ? (
+						<>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={handleClosePreview}
+								className="gap-2">
+								Back to Run Payroll
+							</Button>
+							{!isPeriodCompleted && !isSelectedPeriodProcessing && (
+								<Button
+									type="button"
+									onClick={handleStartRealPayrollFromPreview}
+									className="gap-2 bg-neutral-900 text-white hover:bg-neutral-800">
+									<CheckCircle className="h-4 w-4" />
+									Start real payroll…
+								</Button>
+							)}
+						</>
+					) : (
+						<Button
+							variant="outline"
+							className="gap-2"
+							onClick={() => navigate("/hr/hr-payroll")}>
+							<FileText className="w-4 h-4" />
+							Open Payroll Reports
+						</Button>
+					)}
 				</div>
 			</div>
 
-			{/* Pay Period Selector — constrain width so carousel never expands the page */}
+			{/* Pay Period Selector — hidden on preview results (period is fixed in page title) */}
+			{!isPreviewResultsPage && (
 			<div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
 				{/* Month/Year Headers */}
 				<div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
@@ -2939,6 +2998,7 @@ export function RunPayrollTemplate() {
 					</button>
 				</div>
 			</div>
+			)}
 
 			{/* Main Content */}
 			{showInitialSkeleton ? (
@@ -2990,64 +3050,21 @@ export function RunPayrollTemplate() {
 					</div>
 				</div>
 			) : isPreviewResultsPage ? (
-				/* Preview results live on the page after modal progress completes */
+				/* Preview results live on the page after modal progress completes.
+				   Page h1 carries Preview Payroll + period date range; carousel is hidden. */
 				<div
 					className="space-y-4"
 					data-testid="preview-payroll-results-page">
 					<div className="rounded-xl border border-sky-200 bg-white p-5">
-						<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-							<div className="min-w-0 space-y-1">
-								<div className="flex flex-wrap items-center gap-2">
-									<h2 className="text-xl font-bold text-gray-900">
-										Payroll Preview
-									</h2>
-									<Badge className="border border-sky-200 bg-sky-50 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
-										Preview only
-									</Badge>
-								</div>
-								<p className="text-sm text-gray-500">
-									{timesheetPayrollPreview?.period?.name ||
-										selectedPeriodCard?.name ||
-										"Selected period"}
-									{" · "}
-									{formatDate(
-										timesheetPayrollPreview?.period?.startDate ||
-											selectedPeriodCard?.startDate,
-										"short",
-									)}{" "}
-									-{" "}
-									{formatDate(
-										timesheetPayrollPreview?.period?.endDate ||
-											selectedPeriodCard?.endDate,
-										"short",
-									)}
-								</p>
-								<p className="text-xs text-sky-900/80">
-									Dry-run amounts from timesheet lines. No payslips or period
-									status changes.
-									{estimatedIncludesNonApproved
-										? " Rows marked Not submitted / Pending approval are estimates (status does not change money)."
-										: ""}
-								</p>
-							</div>
-							<div className="flex shrink-0 flex-wrap items-center gap-2">
-								<Button
-									type="button"
-									variant="outline"
-									onClick={handleClosePreview}
-									className="h-9 rounded-lg border-neutral-200 px-4 text-sm font-medium text-neutral-700 shadow-none hover:bg-neutral-50">
-									Back to Run Payroll
-								</Button>
-								{!isPeriodCompleted && !isSelectedPeriodProcessing && (
-									<Button
-										type="button"
-										onClick={handleStartRealPayrollFromPreview}
-										className="h-9 gap-2 rounded-lg bg-neutral-900 px-4 text-sm font-medium text-white shadow-none hover:bg-neutral-800">
-										<CheckCircle className="h-3.5 w-3.5" />
-										Start real payroll…
-									</Button>
-								)}
-							</div>
+						<div className="flex items-start gap-2 rounded-lg border border-sky-100 bg-sky-50/70 px-3 py-2">
+							<Eye className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" />
+							<p className="text-xs text-sky-950 sm:text-sm">
+								Dry-run amounts from timesheet lines. No payslips or period status
+								changes.
+								{estimatedIncludesNonApproved
+									? " Rows marked Not submitted / Pending approval are estimates (status does not change money)."
+									: ""}
+							</p>
 						</div>
 
 						<div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
