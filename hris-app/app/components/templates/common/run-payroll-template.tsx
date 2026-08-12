@@ -4611,24 +4611,6 @@ export function RunPayrollTemplate() {
 							</div>
 						</div>
 
-						{/* Persistent preview banner */}
-						<div
-							className="flex items-start gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/90 px-3 py-2 text-xs text-amber-950"
-							role="status">
-							<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
-							<div className="min-w-0">
-								<p className="font-semibold">Preview only — not generated payroll</p>
-								<p className="mt-0.5 text-amber-900/90">
-									Figures use the same engine as generation, but no{" "}
-									<span className="font-medium">EmployeePayroll</span> row exists yet.
-									Regenerate preview after timesheet or enrollment changes.
-									{activePreviewEmployee.isPayrollReady === false
-										? " Timesheet workflow status does not change calculated money when lines are unchanged."
-										: ""}
-								</p>
-							</div>
-						</div>
-
 						{/* Employee header card */}
 						<div className="rounded-lg border border-amber-200/80 border-l-4 border-l-amber-500 bg-white p-3">
 							<button
