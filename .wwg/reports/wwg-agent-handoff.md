@@ -1,5 +1,20 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-12 - BNPI OT rate always 313 (not source-daily ≤700)
+
+- Status: `FIXED_LOCAL_CLONE`.
+- Problem: ~397 employees with matching OT **hours** used
+  `periodBasic/regularDays` OT rate when that daily ≤ ₱700, so app OT pay ≠
+  pure BNPI `periodBasic×24/313/8×1.25`.
+- Fix: `resolveBandaiApprovedBucketRateBasis` always `BNPI_DIRECT_313_APPROVED_BUCKETS`
+  for approved-bucket OT/premium pay. Source daily kept diagnostic only.
+- Proof: `.runtime/ot-rate-proof-20260812/` — after fix, hours-matched BNPI OT
+  self-consistency **719/719** (was 322/719). Sheet2 OT mismatches may increase
+  where file uses ~₱93.75/hr (operator chose BNPI, not Sheet2 OT $).
+- Absent policy unchanged: empty biometrics = full-day ABSENT.
+- Tests: `tests/bandai-ot-rate-basis.spec.ts` (3) green.
+- Scan after: `.runtime/payroll-scan-after-ot-rate-20260812/`.
+
 ## 2026-08-12 - Attendance Step1 WorkSharing+late applied; Step2 no false absents
 
 - Status: `STEP1_APPLIED_LOCAL_CLONE` / `STEP2_PROBED_NO_WRITES`.

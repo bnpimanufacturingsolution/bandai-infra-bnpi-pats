@@ -185,6 +185,17 @@ const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 	["CW", "TotalReceivable", "totalReceivable"],
 ] as const;
 
+/**
+ * Rate basis for Bandai approved-bucket OT / premium pay.
+ *
+ * Product (2026-08-12): always use BNPI direct 313 for SEMI_MONTHLY period basic:
+ *   daily = periodBasic × 24 / 313  (= monthly×12/313 when periodBasic is half-month)
+ *   hourly = daily / 8
+ *
+ * Source daily (periodBasic / regularDays) is retained as a diagnostic only.
+ * It must not price OT — that path underpaid ~397 employees vs pure BNPI when
+ * allocation daily ≤ BANDAI_SOURCE_DAILY_RATE_MAX (700).
+ */
 export function resolveBandaiApprovedBucketRateBasis(params: {
 	periodBasic: number;
 	sourceRegularDays: number;
@@ -192,20 +203,19 @@ export function resolveBandaiApprovedBucketRateBasis(params: {
 	const periodBasic = Number(params.periodBasic || 0);
 	const sourceRegularDays = Number(params.sourceRegularDays || 0);
 	const sourceDailyRate = sourceRegularDays > 0 ? periodBasic / sourceRegularDays : 0;
-	const useSourceDailyRate =
+	// Diagnostic only: would the legacy dual-path have used source daily?
+	const wouldUseSourceDailyRate =
 		sourceDailyRate > 0 && sourceDailyRate <= BANDAI_SOURCE_DAILY_RATE_MAX;
-	const dailyRate = useSourceDailyRate
-		? sourceDailyRate
-		: (periodBasic * 24) / BANDAI_DIRECT_ANNUAL_WORK_DAYS;
+	const dailyRate = (periodBasic * 24) / BANDAI_DIRECT_ANNUAL_WORK_DAYS;
 	const hourlyRate = dailyRate / BANDAI_WORKING_HOURS_PER_DAY;
 
 	return {
-		method: useSourceDailyRate
-			? "BANDAI_SOURCE_DAILY_APPROVED_BUCKETS"
-			: "BNPI_DIRECT_313_APPROVED_BUCKETS",
+		method: "BNPI_DIRECT_313_APPROVED_BUCKETS",
 		sourceRegularDays: roundToCentavo(sourceRegularDays),
 		sourceDailyRate: roundToCentavo(sourceDailyRate),
-		useSourceDailyRate,
+		/** Always false for OT pricing — BNPI 313 is authoritative. */
+		useSourceDailyRate: false,
+		wouldUseSourceDailyRate,
 		annualWorkDays: BANDAI_DIRECT_ANNUAL_WORK_DAYS,
 		workingHoursPerDay: BANDAI_WORKING_HOURS_PER_DAY,
 		exactDailyRate: dailyRate,
