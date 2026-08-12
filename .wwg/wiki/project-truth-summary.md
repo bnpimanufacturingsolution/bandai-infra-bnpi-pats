@@ -1,6 +1,27 @@
 # Project Truth Summary
 
-Last updated: 2026-08-11
+Last updated: 2026-08-12
+
+## 2026-08-12 Preview Payroll results on page
+
+- After Run Preview loading finishes, results render **on the page** at
+  `action=preview-payroll&previewStep=results` (not inside the modal).
+- Modal still hosts confirm + progress only; employee detail stays modal.
+- Full: terminology **Payroll Preview**; handoff 2026-08-12 page results.
+
+## 2026-08-12 Payroll Preview includes non-submitted timesheets
+
+- **Preview Payroll** dry-run may include `DRAFT` / `SUBMITTED` / `REJECTED` /
+  `REVISED` timesheets (with salary + schedule) and labels them estimate-only.
+- Money uses timesheet **lines** + benefits — status alone does not change pay.
+- **Start Payroll** still APPROVED + payroll-ready only
+  (`includedEmployeesCount` unchanged contract).
+- Summary adds `previewComputableEmployeesCount` +
+  `estimatedIncludesNonApproved`.
+- Live: `PP-20260711-20260726` preview 834 vs ready 641.
+- Evidence: `.runtime/preview-non-submitted-20260812/`.
+- Full: `.wwg/wiki/project-truth.md` section
+  **Payroll Preview includes non-submitted timesheets (2026-08-12)**.
 
 ## 2026-08-11 BNPI Jun 26–Jul 10 payroll tally investigation
 

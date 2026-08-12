@@ -1,5 +1,41 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-12 Preview Payroll results on page
+
+- Task mode: product UX (Run Payroll Preview).
+- Request: loading/confirm may stay in modal; after processing, results must
+  render on the page (not in the modal), e.g.
+  `/hr/run-payroll?…&action=preview-payroll&previewStep=results&page=1&limit=10`.
+- Implementation:
+  1. Modal open only for `previewStep` confirm | progress.
+  2. `previewStep=results` replaces Run Payroll main body with page table
+     (search/pagination/scope filters + View Details).
+  3. Helpers: `isPreviewPayrollModalStep`, `isPreviewPayrollResultsPage`.
+- Tests: `payroll-preview-modal.test.ts` (includes page vs modal contract).
+- Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts`.
+
+## Latest Task Addendum - 2026-08-12 Preview Payroll without submitted timesheet
+
+- Task mode: product feature (Run Payroll Preview only).
+- Request: allow viewing payroll preview money when timesheet is not submitted,
+  with clear not-submitted indication, because status does not change money when
+  lines are unchanged.
+- Implementation:
+  1. API `previewPayrollFromTimesheets` lists statuses
+     APPROVED|DRAFT|SUBMITTED|REJECTED|REVISED with salary+schedule.
+  2. Keeps `includedEmployeesCount` = APPROVED ready (Start Payroll contract).
+  3. Adds `previewComputableEmployeesCount`, `estimatedIncludesNonApproved`,
+     row `timesheetStatus` / `isPayrollReady` / readiness labels.
+  4. UI badges + copy; Run Preview enabled when computable &gt; 0 even if payable=0.
+- Start Payroll / generate path **unchanged** (APPROVED only).
+- Tests: `hris-api/tests/payroll-preview-readiness.spec.ts` (mocha 4);
+  `hris-app/.../payroll-preview-modal.test.ts` (6).
+- Live: `PP-20260711-20260726` ready 641 / preview 834 /
+  `estimatedIncludesNonApproved=true`.
+- Evidence: `.runtime/preview-non-submitted-20260812/`.
+- Docs: project-truth, summary, terminology, handoff, e2e agent prompt,
+  logging-audit note.
+
 ## Latest Task Addendum - 2026-08-11 BNPI Jun 26–Jul 10 full payroll tally log
 
 - Task mode: investigation / evidence log (no fleet money repair claimed).

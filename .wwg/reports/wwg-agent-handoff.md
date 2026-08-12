@@ -1,5 +1,37 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-12 - Preview Payroll results on page (not modal)
+
+- Status: `IMPLEMENTED_LOCAL`.
+- UX: Preview confirm + progress stay in modal; when dry-run finishes,
+  `previewStep=results` shows the employee table **on the page** (not in a
+  dialog). Employee detail remains a modal over the page.
+- URL example:
+  `/hr/run-payroll?periodView=past&periodCode=PP-…&action=preview-payroll&previewStep=results&page=1&limit=10`
+- Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts` helpers
+  `isPreviewPayrollModalStep` / `isPreviewPayrollResultsPage`.
+- Tests: `hris-app/app/lib/utils/payroll-preview-modal.test.ts`.
+- Terminology: Payroll Preview journey updated (modal load → page results).
+
+## 2026-08-12 - Preview Payroll includes non-submitted timesheets
+
+- Status: `IMPLEMENTED_LOCAL_PROVEN`.
+- Product: Preview may compute dry-run pay for DRAFT/SUBMITTED/REJECTED/REVISED
+  timesheets (salary+schedule) with estimate-only badges. Start Payroll remains
+  APPROVED-only.
+- Rationale (CONFIRMED in code): money from lines/benefits, not workflow status.
+- API summary: `previewComputableEmployeesCount`,
+  `estimatedIncludesNonApproved`; row readiness fields.
+- UI: readiness badge on preview table + detail; confirm copy updated.
+- Live: `PP-20260711-20260726` approved 650 / ready 641 / **preview 834**.
+- Evidence: `.runtime/preview-non-submitted-20260812/`.
+- Tests: API readiness 4 mocha; app preview modal 6 vitest.
+- Docs synced: project-truth, summary, terminology, current-task, this handoff,
+  `docs/00-product/AGENT-PROMPT-e2e-new-cutoff-payroll-tally-dryrun-to-run.md`,
+  `hris-api/docs/logging-audit.md` route note.
+- Boundary: period with **zero** timesheets still shows empty money (e.g.
+  `PP-20260811-20260826` notSubmitted=857) until timesheets exist.
+
 ## 2026-08-12 - BNPI OT rate always 313 (not source-daily ≤700)
 
 - Status: `FIXED_LOCAL_CLONE`.

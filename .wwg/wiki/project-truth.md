@@ -1,5 +1,50 @@
 # Project Truth
 
+## Payroll Preview results on page (2026-08-12)
+
+- **CONFIRMED_LOCAL_IMPLEMENTATION:** Preview Payroll journey is confirm →
+  progress in a **modal**, then **page-level results** when
+  `previewStep=results` on `/hr/run-payroll`. Completed dry-run employee list
+  is not shown inside the modal. Employee payroll summary detail remains a
+  modal over the results page.
+- Evidence: `hris-app/app/components/templates/common/run-payroll-template.tsx`,
+  `payroll-preview-modal.ts` (`isPreviewPayrollModalStep`,
+  `isPreviewPayrollResultsPage`).
+
+## Payroll Preview includes non-submitted timesheets (2026-08-12)
+
+- Status: `CONFIRMED_LOCAL_IMPLEMENTATION` (live API proof on host DEV clone).
+- **Product rule:** On `/hr/run-payroll`, **Preview Payroll** may compute dry-run
+  money for employees whose period timesheet is **not yet APPROVED**, as long as
+  a timesheet exists with payroll inputs (basic salary + schedule) and effective
+  lines. Each such row is **estimate-only** and must show workflow readiness
+  (e.g. **Timesheet not submitted**, **Pending approval**, **Needs correction**).
+- **Why money is still valid:** payroll math uses **timesheet lines** + benefits /
+  loans / calculator rates. Changing timesheet status from `DRAFT` → `SUBMITTED`
+  → `APPROVED` does **not** by itself change computed pay when lines are unchanged.
+  Status is a **workflow gate**, not a money formula input.
+- **Start Payroll unchanged:** real generation (`generatePayrollFromTimesheets` /
+  Start Payroll job size) still uses **APPROVED + salary + schedule only**.
+  Preview must never inflate payable / job total with draft rows.
+- **Summary contract** (`GET …/generate-timesheet/preview`):
+  - `includedEmployeesCount` = payroll-ready (**APPROVED** + inputs) — Start Payroll.
+  - `previewComputableEmployeesCount` = all previewable statuses with inputs.
+  - `estimatedIncludesNonApproved` = true when preview set is wider than ready.
+  - Row fields: `timesheetStatus`, `isPayrollReady`, `readinessKey`,
+    `readinessLabel`, `metadata.estimateOnly`.
+- **Statuses in preview set:** `APPROVED`, `DRAFT`, `SUBMITTED`, `REJECTED`,
+  `REVISED` (`PAYROLL_PREVIEW_TIMESHEET_STATUSES`).
+- **Boundary:** employees with **no timesheet** for the period still cannot get
+  amounts (no lines). Generate/import timesheets first; then draft rows preview.
+- **Live proof (2026-08-12):** period `PP-20260711-20260726` —
+  approved 650, payroll-ready 641, **previewComputable 834**,
+  `estimatedIncludesNonApproved=true`. Evidence:
+  `.runtime/preview-non-submitted-20260812/`.
+- **Code:** `hris-api/helper/payroll-period.helper.ts`
+  (`previewPayrollFromTimesheets`, `resolvePayrollPreviewReadiness`);
+  UI `hris-app/.../run-payroll-template.tsx`,
+  `hris-app/app/lib/utils/payroll-preview-modal.ts`.
+
 ## BNPI Jun 26–Jul 10 2026 payroll tally investigation (2026-08-11)
 
 - Status: `INVESTIGATED_CODE_AND_LIVE_PREVIEW` (fleet money not green).
