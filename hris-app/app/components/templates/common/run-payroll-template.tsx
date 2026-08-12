@@ -2210,6 +2210,21 @@ export function RunPayrollTemplate() {
 		navigate(buildTimesheetsUrl(statuses, blocker));
 	};
 
+	const handleViewPreviewEmployeeTimesheet = (employee: {
+		employeeId?: string | null;
+		timesheetId?: string | null;
+		name?: string | null;
+	}) => {
+		if (!employee.timesheetId && !employee.employeeId) return;
+		navigate(
+			buildTimesheetsUrl(undefined, {
+				id: employee.employeeId || "",
+				timesheetId: employee.timesheetId || null,
+				name: employee.name || undefined,
+			}),
+		);
+	};
+
 	const handleOpenPreviewEmployee = (employee: PreviewPayrollRow) => {
 		const previewEmployeeKey =
 			employee.employeeId || employee.employeeCode || employee.timesheetId;
@@ -4612,13 +4627,13 @@ export function RunPayrollTemplate() {
 						</div>
 
 						{/* Employee header card */}
-						<div className="rounded-lg border border-amber-200/80 border-l-4 border-l-amber-500 bg-white p-3">
+						<div className="flex items-center gap-3 rounded-lg border border-amber-200/80 border-l-4 border-l-amber-500 bg-white p-3">
 							<button
 								type="button"
 								onClick={() =>
 									handleViewEmployeeProfile(activePreviewEmployee.employeeId)
 								}
-								className="flex min-w-0 w-full items-start gap-3 rounded-md text-left transition enabled:cursor-pointer enabled:hover:bg-amber-50/60 enabled:focus-visible:outline-none enabled:focus-visible:ring-2 enabled:focus-visible:ring-amber-300">
+								className="flex min-w-0 flex-1 items-start gap-3 rounded-md text-left transition enabled:cursor-pointer enabled:hover:bg-amber-50/60 enabled:focus-visible:outline-none enabled:focus-visible:ring-2 enabled:focus-visible:ring-amber-300">
 								<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-xs font-semibold text-amber-900">
 									{initials(activePreviewEmployee.name)}
 								</div>
@@ -4661,6 +4676,21 @@ export function RunPayrollTemplate() {
 									</div>
 								</div>
 							</button>
+							{(activePreviewEmployee.timesheetId ||
+								activePreviewEmployee.employeeId) && (
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="h-8 shrink-0 gap-1.5 border-sky-200 px-2.5 text-xs text-sky-800 hover:bg-sky-50"
+									onClick={() =>
+										handleViewPreviewEmployeeTimesheet(activePreviewEmployee)
+									}
+									data-testid="preview-employee-view-timesheet">
+									<Clock className="h-3.5 w-3.5" />
+									View Timesheet
+								</Button>
+							)}
 						</div>
 
 						{isPreviewEmployeeComputationLoading && !hasActivePreviewComputation ? (
