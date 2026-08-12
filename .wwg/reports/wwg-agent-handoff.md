@@ -1,5 +1,18 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-12 - Attendance Step1 WorkSharing+late applied; Step2 no false absents
+
+- Status: `STEP1_APPLIED_LOCAL_CLONE` / `STEP2_PROBED_NO_WRITES`.
+- Period `PP-20260626-20260711`: re-imported WorkSharing day flags (9114 overrides
+  updated) and recomputed late/EO/UT + scheduleSnapshot on **9785** PRESENT/INCOMPLETE lines.
+- **Rio 01360:** late minutes **183→0**, UT/Late-Amt **277.72→0**, Gross **12591→12869**;
+  Jul 4 remains ABSENT (no punches in biometrics file or DB) — true absence.
+- **Alexa 01792:** multi-day late collapsed; shortfall still ~₱420.41 (late 2:55 + EO 2:35)
+  ≈ prior near-tally residual vs target ~419.64.
+- Step2 tool `repair-period-false-absent-from-punches.ts`: **1597** ABSENT all have
+  **zero** punches on line/attendance → bucket A = 0; no status flips.
+- Evidence: `.runtime/attend-repair-20260812-093657/REPORT.md`.
+
 ## 2026-08-11 - Mass-upload apply gaps closed (COMP/DED present data)
 
 - Status: `FIXED_LOCAL_CLONE` for mass-upload **present→apply** path.
