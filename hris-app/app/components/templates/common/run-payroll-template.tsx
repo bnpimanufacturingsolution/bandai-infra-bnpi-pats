@@ -2769,14 +2769,9 @@ export function RunPayrollTemplate() {
 					<div className="min-w-0">
 						{isPreviewResultsPage ? (
 							<>
-								<div className="flex flex-wrap items-center gap-2">
-									<h1 className="text-2xl font-bold text-gray-900">
-										Preview Payroll
-									</h1>
-									<Badge className="border border-sky-200 bg-sky-50 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
-										Preview only
-									</Badge>
-								</div>
+								<h1 className="text-2xl font-bold text-gray-900">
+									Preview Payroll
+								</h1>
 								<p className="text-sm text-gray-500">
 									{previewResultsPeriodRange || "Selected period"}
 									{timesheetPayrollPreview?.period?.name || selectedPeriodCard?.name
