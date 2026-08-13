@@ -1,6 +1,6 @@
 # Hikvision Select Status mapping (HRIS)
 
-**Status:** `WIRE_AND_DISPLAY_IMPLEMENTED` (pairing unchanged)  
+**Status:** `WIRE_DISPLAY_AND_PANEL_PAIRING`  
 **Last updated:** 2026-08-13  
 **WWG twin:** `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`  
 **Audit report:** `.wwg/reports/hikvision-select-status-audit-20260813.md`  
@@ -33,9 +33,9 @@ HRIS callback-controller `attendanceStatus` (PRESENT / INCOMPLETE) is a **differ
 
 | Path | Device sends Select Status? | Copied / stored? | Used for Time In/Out? |
 |---|---|---|---|
-| Live SDK `EN_HCNETSDK_ALARM` | Yes, on ACS **extend** when T&A is on | **Yes** — C++ POSTs `attendanceStatus` + `label` + `statusValue` | No — pair by time |
-| ISAPI / Sync `HIKVISION_CALLBACK` `{ AcsEventInfo }` | Yes | **Yes** — extract + `payload.panelSelectStatus` | No — pair by time |
-| Device Events UI | — | **Device status** column | No |
+| Live SDK `EN_HCNETSDK_ALARM` | Yes, on ACS **extend** when T&A is on | **Yes** — C++ POSTs `attendanceStatus` + `label` + `statusValue` | **Yes** — Check In/Out |
+| ISAPI / Sync `HIKVISION_CALLBACK` `{ AcsEventInfo }` | Yes | **Yes** — extract + `payload.panelSelectStatus` | **Yes** — Check In/Out |
+| Device Events UI | — | **Device status** column | Display |
 
 ### Live proof (2026-08-13, Device D, person 10, serial 9619)
 
@@ -70,11 +70,18 @@ Operator picked **Check In** on the panel.
 | Device event | `DeviceEvent.eventAction` | `TAP`, `TAP_REJECTED`, enroll actions |
 | Attendance day | `Attendance.status` | `PRESENT`, `INCOMPLETE`, `ABSENT`, … |
 
-## Pairing (unchanged)
+## Pairing (panel Check In / Check Out)
 
-`callback.controller.ts` still uses `pairPunchesAsClockOut` (default on, gap 0): first punch = `timeIn`, later punch = `timeOut`. Panel Check In on every device still becomes Time Out on the second tap.
+`selectHikvisionPunchPair` now has two modes:
 
-`REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP` remains Proposed until the operator chooses to honor panel status for pairing.
+| Mode | When | Time In | Time Out |
+|---|---|---|---|
+| `panel` | Any same-day punch has `checkIn` or `checkOut` | Earliest **Check In** (else earliest unsigned) | Latest **Check Out** after Time In. Later **Check In** is **not** Time Out |
+| `time` | No panel Check In/Out on the day's punches | Earliest punch | Latest punch after gap (legacy) |
+
+Break / OT panel labels do not set `timeIn`/`timeOut`. Timesheet refresh still runs after attendance create/update.
+
+`REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP` is Implemented for Check In/Out pairing.
 
 ## Vendor SDK at setup
 

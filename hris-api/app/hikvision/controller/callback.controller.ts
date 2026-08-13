@@ -479,28 +479,25 @@ export const controller = (prisma: PrismaClient) => {
 				const existingTimeOut = existingAttendance?.timeOut
 					? new Date(existingAttendance.timeOut)
 					: null;
-				const punchTimeIn = existingTimeIn || eventTime;
-				const isNewerClockOutPunch =
-					Boolean(existingTimeIn) &&
-					eventTime.getTime() > (existingTimeIn as Date).getTime() &&
-					(!existingTimeOut ||
-						eventTime.getTime() > (existingTimeOut as Date).getTime());
-				const pairedTimeOut =
-					pairPunchesAsClockOut &&
-					isNewerClockOutPunch &&
-					eventTime.getTime() - (existingTimeIn as Date).getTime() >=
-						minimumPunchPairGapMinutes * 60 * 1000
-						? eventTime
-						: null;
-				const punchTimeOut = pairedTimeOut || existingTimeOut || null;
-				const isRepeatPunchWithinGap =
+				const usesPanelStatus = punchPair.mode === "panel";
+				const punchTimeIn =
+					punchPair.timeIn ||
+					(usesPanelStatus ? existingTimeIn : existingTimeIn || eventTime);
+				const punchTimeOut = usesPanelStatus
+					? punchPair.timeOut
+					: pairPunchesAsClockOut
+						? punchPair.timeOut || existingTimeOut || null
+						: existingTimeOut || null;
+				const sameTime = (left?: Date | null, right?: Date | null) =>
+					(left?.getTime() || 0) === (right?.getTime() || 0);
+				const timesUnchanged =
 					Boolean(existingAttendance) &&
-					Boolean(existingTimeIn) &&
-					!existingTimeOut &&
-					!pairedTimeOut &&
-					eventTime.getTime() > (existingTimeIn as Date).getTime();
+					sameTime(existingTimeIn, punchTimeIn) &&
+					sameTime(existingTimeOut, punchTimeOut);
+				const isRepeatPunchWithinGap = timesUnchanged;
 				const isOutOfOrderOrAlreadyCovered =
 					Boolean(existingAttendance) &&
+					!usesPanelStatus &&
 					((existingTimeIn && eventTime.getTime() <= existingTimeIn.getTime()) ||
 						(existingTimeOut &&
 							eventTime.getTime() <= (existingTimeOut as Date).getTime()));
@@ -543,6 +540,7 @@ export const controller = (prisma: PrismaClient) => {
 						punchEventCount: punchPair.count,
 						minimumPunchPairGapMinutes,
 						pairPunchesAsClockOut,
+						pairMode: punchPair.mode,
 					},
 					behaviorFlags:
 						finalStatus === "LEAVE" ? [] : overtimeApplication.behaviorFlags,
@@ -613,7 +611,7 @@ export const controller = (prisma: PrismaClient) => {
 					const refreshedTimesheet = await refreshTimesheetForAttendanceDate(prisma, {
 						organizationId: employee.organizationId,
 						employeeId: employee.id,
-						date: punchTimeIn,
+						date: punchTimeIn || eventTime,
 					});
 					if (refreshedTimesheet) {
 						await invalidateCache.byPattern("cache:timesheet:*");

@@ -6,7 +6,7 @@ Last updated: 2026-08-13
 
 - Panel **Select Status** (Check In / Out, Break In / Out, Overtime In / Out) is real T&A.
 - Live SDK listener **now copies** `byAttendanceStatus` onto the callback JSON. ISAPI `checkIn`/`label` is extracted and shown as Device Events **Device status**.
-- Time In/Out still first/later punch. Pairing not changed.
+- Time In/Out follows panel Check In/Out when present; unsigned punches still pair first/later.
 - Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`. Report: `.wwg/reports/hikvision-select-status-audit-20260813.md`.
 
 ## 2026-08-13 Device 5 reverse tunnel (host Wi‑Fi)

@@ -10,7 +10,7 @@
   3. `Attendance.status` — day class `PRESENT` / `INCOMPLETE` / `ABSENT` plus `timeIn` / `timeOut`.
 - **Live SDK path (`EN_HCNETSDK_ALARM`):** C++ `alarm_callback` copies ACS extend `byAttendanceStatus` (0–6) into the POST as `attendanceStatus` + `label` when `byAcsEventInfoExtend==1`. Pre-fix DEV snapshot: 0 / 32,489 SDK rows had the field. Live proof after rebuild: listener logs include `attendanceStatusPresent`. Same tap serial `9619` (person `10`, Device D) was `checkIn` on ISAPI while the pre-fix SDK POST was Not sent.
 - **ISAPI / Sync path (`HIKVISION_CALLBACK`):** `AcsEventInfo.attendanceStatus` + `label` is extracted (`deviceAttendanceStatus` / `panelSelectStatus`) and stamped on persist. Device Events shows **Device status**.
-- **HRIS attendance write:** still first punch = `timeIn`, later punch = `timeOut` (`hikvisionPairPunchesAsClockOut` default on; gap 0). Panel Check In does **not** drive pairing yet.
+- **HRIS attendance write:** when the day's punches include panel `checkIn`/`checkOut`, Time In = earliest Check In and Time Out = latest Check Out. Extra Check Ins do not become Time Out. If no panel in/out is present, first/later punch pairing still applies.
 - **Hard ban:** do not treat `currentVerifyMode` as Check In/Out. Do not treat callback-controller `attendanceStatus` as panel status — that name is the day class from `determineAttendanceStatus`.
 - Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`. Architecture: `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`. Report: `.wwg/reports/hikvision-select-status-audit-20260813.md`.
 

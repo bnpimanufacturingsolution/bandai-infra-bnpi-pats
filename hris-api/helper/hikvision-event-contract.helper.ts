@@ -980,16 +980,45 @@ export const selectHikvisionPunchPair = (
 		Number.isFinite(rawGapMinutes) && rawGapMinutes > 0
 			? rawGapMinutes * 60 * 1000
 			: 0;
-	const punchTimes = rows
+	const punches = rows
 		.filter((row) =>
 			row.payload && typeof row.payload === "object"
 				? isHikvisionAttendancePunchPayload(row.payload)
 				: true,
 		)
-		.map((row) => (row.eventTime instanceof Date ? row.eventTime : new Date(row.eventTime)))
-		.filter((date) => !Number.isNaN(date.getTime()))
-		.sort((left, right) => left.getTime() - right.getTime());
+		.map((row) => {
+			const eventTime =
+				row.eventTime instanceof Date ? row.eventTime : new Date(row.eventTime);
+			const panel = extractHikvisionPanelSelectStatus(row.payload);
+			return {
+				eventTime,
+				code: panel.present ? panel.code : null,
+			};
+		})
+		.filter((row) => !Number.isNaN(row.eventTime.getTime()))
+		.sort((left, right) => left.eventTime.getTime() - right.eventTime.getTime());
 
+	const checkIns = punches.filter((row) => row.code === "checkIn");
+	const checkOuts = punches.filter((row) => row.code === "checkOut");
+	const unsigned = punches.filter((row) => row.code !== "checkIn" && row.code !== "checkOut");
+	const usesPanelStatus = checkIns.length > 0 || checkOuts.length > 0;
+
+	if (usesPanelStatus) {
+		const timeIn = checkIns[0]?.eventTime || unsigned[0]?.eventTime || null;
+		const eligibleOuts = checkOuts.filter((row) => {
+			if (!timeIn) return true;
+			return row.eventTime.getTime() - timeIn.getTime() >= minPairGapMs;
+		});
+		const timeOut = eligibleOuts[eligibleOuts.length - 1]?.eventTime || null;
+		return {
+			timeIn,
+			timeOut: timeIn && timeOut && timeOut.getTime() > timeIn.getTime() ? timeOut : timeOut && !timeIn ? timeOut : null,
+			count: punches.length,
+			mode: "panel" as const,
+		};
+	}
+
+	const punchTimes = punches.map((row) => row.eventTime);
 	const timeIn = punchTimes[0] || null;
 	const eligibleTimeOuts = timeIn
 		? punchTimes.filter(
@@ -1003,6 +1032,7 @@ export const selectHikvisionPunchPair = (
 		timeIn,
 		timeOut,
 		count: punchTimes.length,
+		mode: "time" as const,
 	};
 };
 

@@ -1,5 +1,12 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-13 Timesheet uses panel Check In/Out
+
+- Task mode: pairing fix after live status copy.
+- `selectHikvisionPunchPair` mode `panel`: Time In = earliest Check In, Time Out = latest Check Out. Later Check In is not out.
+- Unsigned punches keep first/last pairing.
+- Spec + REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP Implemented.
+
 ## Latest Task Addendum - 2026-08-13 Select Status copy (ready to push)
 
 - Task mode: implement + document + push `develop`.

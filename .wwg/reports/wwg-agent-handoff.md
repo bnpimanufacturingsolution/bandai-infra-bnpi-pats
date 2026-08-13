@@ -1,5 +1,11 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-13 - Timesheet Check In/Out from panel
+
+- Status: `IMPLEMENTED`.
+- Panel Check In → Time In. Panel Check Out → Time Out. Two Check Ins do not close the day.
+- Fallback: no panel status → first/last punch.
+
 ## 2026-08-13 - Select Status copied (document + push)
 
 - Status: `IMPLEMENTED_DOCUMENTED`.

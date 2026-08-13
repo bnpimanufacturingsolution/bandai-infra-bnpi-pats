@@ -16,7 +16,7 @@ Audit: `.wwg/reports/hikvision-select-status-audit-20260813.md`
 
 ## One-line truth
 
-Panel **Select Status** is Hikvision T&A. Live SDK POST and ISAPI extract **now copy** `attendanceStatus` / `label` onto Device Events as **Device status**. Clock in/out is still first punch / later punch.
+Panel **Select Status** is Hikvision T&A. Live SDK and ISAPI copy it to Device Events. When Check In/Out is present, timesheet Time In/Out follows the panel. Unsigned punches still pair by time.
 
 ## Planes (do not mix)
 
@@ -32,7 +32,7 @@ Panel **Select Status** is Hikvision T&A. Live SDK POST and ISAPI extract **now 
 1. Live ACS callbacks **do** carry Check In/Out after the 2026-08-13 C++ copy when extend is present and T&A is on.
 2. Do not treat callback-controller `attendanceStatus` (PRESENT/INCOMPLETE) as panel status.
 3. Do not treat `currentVerifyMode` as in vs out.
-4. Do not change pairing without an explicit operator decision.
+4. Panel `checkIn`/`checkOut` drive Time In/Out when present. Do not treat Break/OT as payroll OT.
 5. Break/OT panel labels are not payroll OT and not schedule `timeBreak`.
 
 ## Related

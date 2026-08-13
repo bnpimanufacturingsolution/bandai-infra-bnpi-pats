@@ -218,6 +218,61 @@ describe("hikvision event contract helper", () => {
 		).to.equal(true);
 	});
 
+	it("does not use a later Check In as clock out", () => {
+		const pair = selectHikvisionPunchPair([
+			{
+				eventTime: new Date("2026-08-13T00:49:11.000Z"),
+				payload: {
+					major: 5,
+					minor: 38,
+					actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+					attendanceStatus: "checkIn",
+					label: "Check In",
+				},
+			},
+			{
+				eventTime: new Date("2026-08-13T09:10:00.000Z"),
+				payload: {
+					major: 5,
+					minor: 38,
+					actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+					attendanceStatus: "checkIn",
+					label: "Check In",
+				},
+			},
+		]);
+		expect(pair.mode).to.equal("panel");
+		expect(pair.timeIn?.toISOString()).to.equal("2026-08-13T00:49:11.000Z");
+		expect(pair.timeOut).to.equal(null);
+	});
+
+	it("uses panel Check Out as clock out and Check In as clock in", () => {
+		const pair = selectHikvisionPunchPair([
+			{
+				eventTime: new Date("2026-08-13T00:49:11.000Z"),
+				payload: {
+					major: 5,
+					minor: 38,
+					actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+					AcsEventInfo: { attendanceStatus: "checkIn", label: "Check In" },
+				},
+			},
+			{
+				eventTime: new Date("2026-08-13T09:05:00.000Z"),
+				payload: {
+					major: 5,
+					minor: 38,
+					actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+					attendanceStatus: "checkOut",
+					label: "Check Out",
+				},
+			},
+		]);
+		expect(pair.mode).to.equal("panel");
+		expect(pair.timeIn?.toISOString()).to.equal("2026-08-13T00:49:11.000Z");
+		expect(pair.timeOut?.toISOString()).to.equal("2026-08-13T09:05:00.000Z");
+	});
+
 	it("selects earliest biometric punch as time in and latest as time out", () => {
 		const pair = selectHikvisionPunchPair([
 			{
