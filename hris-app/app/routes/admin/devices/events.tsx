@@ -60,6 +60,7 @@ import {
 	selectWatcherHeadlineEvent,
 	shouldRefreshSavedEventsAfterSocketEvent,
 } from "~/lib/device-events-realtime-ui";
+import { extractHikvisionPanelSelectStatus } from "~/lib/hikvision-panel-select-status";
 import { DeviceLiveReadinessStrip } from "~/components/molecules/DeviceLiveReadinessStrip";
 import devicesService from "~/services/devices.service";
 import {
@@ -120,6 +121,9 @@ type UnifiedDeviceEventRow = {
 	directDeviceEvidence?: boolean;
 	searchMatch?: DeviceEvent["searchMatch"];
 	payload?: any;
+	panelSelectStatusCode?: string | null;
+	panelSelectStatusLabel?: string | null;
+	panelSelectStatusPresent?: boolean;
 };
 
 type HikvisionListenerDeviceRow = NonNullable<
@@ -1387,6 +1391,23 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		verifyMode: event.verifyMode || getVerifyModeFromPayload(payload),
 		serialNo,
 		savedEventId: event.id,
+		...(() => {
+			const panel =
+				event.panelSelectStatus && typeof event.panelSelectStatus === "object"
+					? {
+							code: event.panelSelectStatus.code ?? null,
+							label:
+								event.panelSelectStatus.label ||
+								extractHikvisionPanelSelectStatus(payload).label,
+							present: Boolean(event.panelSelectStatus.present),
+						}
+					: extractHikvisionPanelSelectStatus(payload);
+			return {
+				panelSelectStatusCode: panel.code,
+				panelSelectStatusLabel: panel.label,
+				panelSelectStatusPresent: panel.present,
+			};
+		})(),
 	};
 };
 
@@ -1423,6 +1444,20 @@ const normalizeLiveEvent = (
 	verifyMode: event.currentVerifyMode || savedMatch?.verifyMode || null,
 	serialNo: event.serialNo,
 	savedEventId: savedMatch?.savedEventId || null,
+	...(() => {
+		const panel = event.hrisPanelSelectStatus?.present
+			? {
+					code: event.hrisPanelSelectStatus.code ?? null,
+					label: event.hrisPanelSelectStatus.label || "Not sent",
+					present: true,
+				}
+			: extractHikvisionPanelSelectStatus(savedMatch?.payload, event);
+		return {
+			panelSelectStatusCode: panel.code,
+			panelSelectStatusLabel: panel.label,
+			panelSelectStatusPresent: panel.present,
+		};
+	})(),
 });
 
 export default function DeviceEventsPage() {
@@ -3449,6 +3484,31 @@ export default function DeviceEventsPage() {
 						{formatEventTaxonomyToken(item.eventAction)}
 					</p>
 					<p className="truncate text-xs text-slate-500">{item.eventLabel || "Device event"}</p>
+				</div>
+			),
+		},
+		{
+			key: "panelSelectStatusLabel",
+			label: "Device status",
+			width: "150px",
+			render: (_value, item) => (
+				<div className="min-w-0">
+					<p
+						className={
+							item.panelSelectStatusPresent
+								? "truncate text-sm font-semibold text-slate-950"
+								: "truncate text-sm font-medium text-slate-500"
+						}
+						title={
+							item.panelSelectStatusPresent
+								? `Panel Select Status from device (${item.panelSelectStatusCode})`
+								: "Device did not send Select Status on this event"
+						}>
+						{item.panelSelectStatusLabel || "Not sent"}
+					</p>
+					<p className="truncate text-xs text-slate-500">
+						{item.panelSelectStatusPresent ? "From device" : "Not on wire"}
+					</p>
 				</div>
 			),
 		},
@@ -5495,6 +5555,16 @@ export default function DeviceEventsPage() {
 								<div className="grid grid-cols-2 gap-2">
 									{[
 										["Door", activeEvent.doorNo || "-"],
+										[
+											"Device status",
+											activeEvent.panelSelectStatusPresent
+												? `${activeEvent.panelSelectStatusLabel}${
+														activeEvent.panelSelectStatusCode
+															? ` (${activeEvent.panelSelectStatusCode})`
+															: ""
+													}`
+												: activeEvent.panelSelectStatusLabel || "Not sent",
+										],
 										["Verify", activeEvent.verifyMode || "-"],
 										["Serial", activeEvent.serialNo || "-"],
 										["Evidence", getOptionLabel(evidenceSourceOptions, activeEvent.evidenceSource || "UNKNOWN")],

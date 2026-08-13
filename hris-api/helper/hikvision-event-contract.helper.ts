@@ -1,4 +1,8 @@
 import { createHash } from "crypto";
+import {
+	extractHikvisionPanelSelectStatus,
+	type HikvisionPanelSelectStatus,
+} from "./hikvision-panel-select-status.helper";
 
 export type HikvisionDeviceEventSource = "HIKVISION_CALLBACK" | "EN_HCNETSDK_ALARM";
 export type HikvisionEvidenceSource =
@@ -23,6 +27,10 @@ export type NormalizedHikvisionEvent = {
 	deviceTime?: string;
 	timeAdjusted?: boolean;
 	deviceClockSkewSeconds?: number;
+	/** Panel Select Status from device (`checkIn`), not Attendance.status PRESENT. */
+	deviceAttendanceStatus?: string;
+	deviceAttendanceLabel?: string;
+	panelSelectStatus?: HikvisionPanelSelectStatus;
 };
 
 export type HikvisionLogSearchRow = {
@@ -108,6 +116,8 @@ export const parseHikvisionBodyPayload = (rawBody: unknown): Record<string, any>
 		verifyMode: getXmlTagValue(text, "verifyMode"),
 		currentVerifyMode: getXmlTagValue(text, "currentVerifyMode"),
 		serialNo: getXmlTagValue(text, "serialNo"),
+		attendanceStatus: getXmlTagValue(text, "attendanceStatus"),
+		label: getXmlTagValue(text, "label"),
 	};
 };
 
@@ -133,6 +143,14 @@ export const extractHikvisionEventData = (
 		return undefined;
 	};
 
+	const panelSelectStatus = extractHikvisionPanelSelectStatus(payload);
+	const deviceAttendanceStatus = String(
+		pick("attendanceStatus", "deviceAttendanceStatus") || panelSelectStatus.code || "",
+	).trim();
+	const deviceAttendanceLabel = String(
+		pick("label", "deviceAttendanceLabel") || panelSelectStatus.label || "",
+	).trim();
+
 	return {
 		deviceId: pick("deviceId", "hikvisionDeviceId"),
 		source: pick("source", "eventSource"),
@@ -150,6 +168,9 @@ export const extractHikvisionEventData = (
 		deviceTime: pick("deviceTime"),
 		timeAdjusted: Boolean(pick("timeAdjusted")),
 		deviceClockSkewSeconds: Number(pick("deviceClockSkewSeconds") || 0),
+		deviceAttendanceStatus: deviceAttendanceStatus || undefined,
+		deviceAttendanceLabel: deviceAttendanceLabel || undefined,
+		panelSelectStatus,
 	};
 };
 

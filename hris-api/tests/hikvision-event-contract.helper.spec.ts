@@ -29,10 +29,12 @@ describe("hikvision event contract helper", () => {
 				currentVerifyMode: "card",
 				doorNo: 1,
 				serialNo: 987,
+				attendanceStatus: "checkIn",
+				label: "Check In",
 			},
 		});
 
-		expect(event).to.deep.equal({
+		expect(event).to.include({
 			deviceId: "device-1",
 			source: undefined,
 			eventType: "normal",
@@ -49,6 +51,34 @@ describe("hikvision event contract helper", () => {
 			deviceTime: undefined,
 			timeAdjusted: false,
 			deviceClockSkewSeconds: 0,
+			deviceAttendanceStatus: "checkIn",
+			deviceAttendanceLabel: "Check In",
+		});
+		expect(event.panelSelectStatus).to.deep.equal({
+			code: "checkIn",
+			label: "Check In",
+			present: true,
+		});
+	});
+
+	it("copies AcsEventInfo attendanceStatus as panel Select Status, not HR PRESENT", () => {
+		const event = extractHikvisionEventData({
+			deviceId: "cmripjwkw00ffl0013lfxcbxw",
+			AcsEventInfo: {
+				major: 5,
+				minor: 38,
+				employeeNoString: "10",
+				serialNo: 9619,
+				attendanceStatus: "checkIn",
+				label: "Check In",
+			},
+		});
+		expect(event.deviceAttendanceStatus).to.equal("checkIn");
+		expect(event.deviceAttendanceLabel).to.equal("Check In");
+		expect(event.panelSelectStatus).to.deep.equal({
+			code: "checkIn",
+			label: "Check In",
+			present: true,
 		});
 	});
 

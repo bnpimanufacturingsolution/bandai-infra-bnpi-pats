@@ -97,6 +97,11 @@ export interface DeviceEvent {
 	verifyMode?: string | null;
 	dedupeKey: string;
 	payload?: any;
+	panelSelectStatus?: {
+		code?: string | null;
+		label?: string | null;
+		present?: boolean;
+	} | null;
 	errorMessage?: string | null;
 	searchMatch?: {
 		field: string;

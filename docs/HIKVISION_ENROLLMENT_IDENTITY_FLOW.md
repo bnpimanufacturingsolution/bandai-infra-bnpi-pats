@@ -19,7 +19,7 @@ Three Hikvision → HRIS event families:
 |---|---|---|
 | **onUserCreate** | User add on panel (op / `addUserInfo` / major=3 then leaf) | DeviceEvent `USER_CREATED` + **DeviceUser** + raw metadata |
 | **onEnrollUser** | Fingerprint enroll (`addFp…` / FP management) | DeviceEvent `FINGERPRINT_ENROLLED` + DeviceUser credential refresh |
-| **onAttendanceTap** | Access auth pass (major=5) | DeviceEvent `TAP` + Attendance if employee linked |
+| **onAttendanceTap** | Access auth pass (major=5) | DeviceEvent `TAP` + Attendance if employee linked. Panel **Select Status** is copied onto the live SDK POST and Device Events; it is **not** used for `timeIn`/`timeOut` yet — see `docs/HIKVISION_SELECT_STATUS_MAPPING.md` |
 
 ### Identity model (operator + schema truth)
 

@@ -1,6 +1,20 @@
 # Project Truth Summary
 
-Last updated: 2026-08-11
+Last updated: 2026-08-13
+
+## 2026-08-13 Hikvision Select Status → HRIS (audit)
+
+- Panel **Select Status** (Check In / Out, Break In / Out, Overtime In / Out) is real T&A.
+- Live SDK listener **now copies** `byAttendanceStatus` onto the callback JSON. ISAPI `checkIn`/`label` is extracted and shown as Device Events **Device status**.
+- Time In/Out still first/later punch. Pairing not changed.
+- Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`. Report: `.wwg/reports/hikvision-select-status-audit-20260813.md`.
+
+## 2026-08-13 Device 5 reverse tunnel (host Wi‑Fi)
+
+- Device 5 (`cmsq47r9t0039vxbwt9rfxk68`) physical `192.168.1.136:80` on the same Wi‑Fi as the Windows PC `192.168.1.116`.
+- Reverse is on: `ssh-reverse-forward`, VM `https://127.0.0.1:59443` + SDK `127.0.0.1:59000`.
+- TEST A live address is `192.168.254.109:443` via `127.0.0.1:58080` — not `192.168.254.102`. Wiki `59000`/`59443` = TEST A is **STALE**.
+- Evidence: `.runtime/device5-reverse-20260813-005641/`.
 
 ## 2026-08-11 BNPI Jun 26–Jul 10 payroll tally investigation
 
@@ -64,7 +78,7 @@ Last updated: 2026-08-11
 
 ## Current Runtime Truth
 
-- Local Windows hot-reload uses canonical K3s DEV PostgreSQL at `127.0.0.1:55435`, API `http://localhost:3001`, and app `http://localhost:5175`. The API dependency watchdog probe-first repairs A-F device forwards, VM reverse API/callback port `53001`, and the managed listener while keeping optional TEST A/B bridges non-blocking.
+- Local Windows hot-reload uses canonical K3s DEV PostgreSQL at `127.0.0.1:55435`, API `http://localhost:3001`, and app `http://localhost:5175`. The API dependency watchdog probe-first repairs A-F device forwards, VM reverse API/callback port `53001`, and the managed listener while keeping optional TEST A/B bridges non-blocking. Device 5 reverse on host Wi‑Fi (`192.168.1.136` → VM `59443`/`59000`) is the current same-LAN reverse occupant and is not the TEST A/B `.254` lane.
 - The current A-F host-forward map is HTTP `10080-10085`, HTTPS `10443-10448`, and SDK `18000-18005`. A listening SSH process alone is not health proof; every port must carry traffic.
 - Sync Center transport availability is sourced from bounded quick health, not `sync-preview?quick=true` source-user counts. Full merge inventory and physical/operator state are separate evidence. Current operator truth is exactly five Main Entrance devices online with Main C down; the earlier A-F quick-health result is `CONFLICTING` transport evidence until its mapping/cache/probe semantics are root-caused. The latest plan was read-only and no physical write was started, so the merge is not fulfilled.
 - Saved `DeviceEvent` rows are independent of listener readiness. The Saved Events UI preserves database rows while listener/tap status loads or refreshes.
@@ -141,7 +155,7 @@ Last updated: 2026-08-11
   `400 action metrics` warning.
 - Host-local PROD and DEV checks passed during validation, but host-local UAT ports `3200` and `3201` failed while LAN UAT passed.
 - `%ProgramData%\ProjectTruth\config\project-truth.json` was previously backed up and updated to use VM `project-truth-local-vhdx-proof`, guest IP hint `192.168.254.148`, memory `1536`, and SSH port `22`; current operator/LAN evidence now points to pure static LAN address `10.184.37.19`.
-- Current local DEV reverse-path proof uses DB device TEST A at `192.168.254.102`, Windows-to-device TCP `8000`/`443`, and VM loopback forwards `59000`/`59443` plus callback reverse `53001`. VM ping to the physical device address is not a tunnel test. A running armed listener is stable while quiet; `receiving` is short-lived event freshness, and Keep ready must not restart armed state merely because no tap arrived recently. This supersedes older local claims that Linux SDK arm/callback was unproven for this reverse-forward path; public/GitOps promotion remains separate.
+- Current local DEV reverse-path proof (2026-08-13): Device 5 at `192.168.1.136` from Windows `192.168.1.116`, VM loopback `59443`/`59000`, plus callback reverse `53001`. Live TEST A is `192.168.254.109` via `58080`/`58000`; TEST B is `192.168.254.110` via `58180`/`58100`. The older TEST A `192.168.254.102` + exclusive `59000`/`59443` map is **STALE**. VM ping to a physical reverse-device address is not a tunnel test. A running armed listener is stable while quiet; `receiving` is short-lived event freshness, and Keep ready must not restart armed state merely because no tap arrived recently.
 - Hikvision integration exists in code through `/api/hikvision/callback`, ISAPI helpers, event persistence, admin device-event filters, and realtime `device-event:saved`; editable source is now `vendor/hikvision-linux`, while proprietary Linux HCNetSDK binaries remain local-only runtime inputs.
 - On 2026-07-16, direct stored-credential proof against Main Entrance Device A (`10.184.38.173:443`) returned 167 users, 162 users with fingerprints, 161 with faces, 109 with cards, and 2,107 device logs. `DeviceEvent` is now enforced as the single saved event ledger: 70 frozen-window ACS serials matched 70 saved SDK rows, 23 two-page logSearch rows saved with 23/23 repeat deduplication, and API totals reconciled to 93 direct-evidence rows. Backup-first cleanup removed 219 false current-state lifecycle rows and zero attendance rows. Current inventory remains a separate `DEVICE_CURRENT_STATE` plane and never creates lifecycle history.
 - Local hot-reload implementation on 2026-07-06 adds `DeviceUser` as the durable admin device identity/enrollment record. `DeviceUser` belongs to `Device`, optionally belongs to `Employee`, and is unique by `organizationId + deviceId + vendorUserId`; `DeviceEvent` can now link to `DeviceUser` and resolves employee identity through `DeviceUser` before the legacy `Employee.deviceEmpId` fallback. `Employee.deviceId` and `Employee.deviceEmpId` remain as legacy compatibility fields in this pass. `EmployeeDeviceEnrollment` was intentionally not introduced because the current relationship only needs direct optional `employeeId` plus status and source metadata. On 2026-07-13 `DeviceUser.vendorMetadata` was added as an additive JSON/JSONB field for per-device vendor SDK/ISAPI user metadata while preserving `rawPayload` as compatibility/fallback source payload; the Sync Center device-user details modal previews this metadata with a tooltip and expandable JSON. On 2026-07-14 the local DeviceUser metadata cache was extended to hold separate AES-256-GCM fingerprint and face envelopes captured from the Hikvision SDK. Portable CSV/Excel/JSON exports expose separate key-source/blob columns per modality, never copy one encrypted envelope into both modality columns, and keep SDK-empty users explicit.

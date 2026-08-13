@@ -1,7 +1,15 @@
 # Hikvision Runtime Truth
 
 Task mode: Linux-first SDK/runtime truth.
-Last updated: 2026-07-19.
+Last updated: 2026-08-13.
+
+## Select Status / T&A punch direction (2026-08-13)
+
+Panel **Select Status** is copied on the live SDK callback (`byAttendanceStatus` → `attendanceStatus`/`label`) and extracted from ISAPI `AcsEventInfo`. Device Events shows **Device status**. HRIS still pairs first tap = in, later tap = out.
+
+- Spec: **`docs/HIKVISION_SELECT_STATUS_MAPPING.md`**
+- WWG: `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`
+- Audit: `.wwg/reports/hikvision-select-status-audit-20260813.md`
 
 ## Enrollment identity flow (spec)
 

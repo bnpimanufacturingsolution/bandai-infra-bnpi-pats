@@ -1,5 +1,59 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-13 - Select Status copied (document + push)
+
+- Status: `IMPLEMENTED_DOCUMENTED`.
+- C++ POST + API extract + Device Events **Device status**. Pairing still first/later.
+- Proof: serial 9619 ISAPI `checkIn`; listener rebuilt with `attendanceStatusPresent`.
+- Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`.
+
+## 2026-08-13 - Live biometric logs were silent (listener wrapper)
+
+- Status: `REPAIRED_RUNTIME`.
+- systemd `active` but no C++ process. Wrapper preferred outbox `:30108/health` then `POST /api/auth/login` **404**. Last SDK row before repair: 2026-08-12T14:05Z.
+- Fix: drop-in `HIKVISION_PREFER_CALLBACK_OUTBOX=0` + API `53001`; restart listener. C++ running; E/D/B armed; new rows `receivedAt=2026-08-13T06:18:33Z`.
+- A/F SDK login error 7. Select Status still not on SDK JSON.
+- Evidence: `.runtime/biometric-silence-20260813-141526/FINDINGS.md`.
+
+## 2026-08-13 - Vendor SDK setup has byAttendanceStatus (unread)
+
+- Status: `INVESTIGATED_VM_HEADER`.
+- Setup SDK = `EN-HCNetSDKV6.1.9.48` at `/home/infra/project-truth-hcnetsdk/.../incEn/HCNetSDK.h`.
+- Header defines `byAttendanceStatus` on the **same** `NET_DVR_ACS_EVENT_INFO_EXTEND` the listener uses for `byEmployeeNo`.
+- Not a wrong-vendor problem. Field unused. T&A mode not set by HRIS.
+- Evidence: `.runtime/hikvision-status-audit-20260813/16-vendor-sdk-setup-investigation.md`.
+
+## 2026-08-13 - Device status on biometric APIs (not pushed)
+
+- Status: `API_AND_UI_DISPLAY_LOCAL_NOT_PUSHED`.
+- `GET /api/device/events` returns `panelSelectStatus`. ACS list adds `hrisPanelSelectStatus`. Persist stamps `payload.panelSelectStatus`.
+- Pairing/C++ unchanged. HEAD `f93adc5`. Do not push.
+
+## 2026-08-13 - Device status column (display only, not pushed)
+
+- Status: `DISPLAY_ONLY_LOCAL_NOT_PUSHED`.
+- Device Events **Device status** reads `payload.AcsEventInfo.attendanceStatus` + `label`. Live SDK rows = Not sent. Pairing/C++ unchanged.
+- Tests: `hikvision-panel-select-status.test.ts` 7 green. HEAD still `f93adc5`. **Do not push.**
+
+## 2026-08-13 - Hikvision Select Status → HRIS audit
+
+- Status: `AUDITED_NO_IMPLEMENTATION`.
+- Panel Select Status is real T&A. Live `EN_HCNETSDK_ALARM` POST has **no** in/out field (0 / 32,489). ISAPI Sync can nest `attendanceStatus`+`label` (689 rows; 678 `checkIn`). HRIS pairing ignores it (first punch in, later out).
+- C++ already has ACS extend pointer and only copies `byEmployeeNo`.
+- ZK `attStateName` is also unused for pairing (time first/last).
+- Documented, **not committed**: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`, `.wwg/reports/hikvision-select-status-audit-20260813.md`, `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`.
+- 10 reports: `.runtime/hikvision-status-audit-20260813/01`–`10` + `11-lead-synthesis.md`.
+- RECs: `REC-20260813-HIKVISION-SDK-ATTENDANCE-STATUS-WIRE`, `REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP`.
+
+## 2026-08-13 - Device 5 reverse tunnel (192.168.1.136)
+
+- Status: `LIVE_AND_TRUTH_SYNCED`.
+- Device 5 `cmsq47r9t0039vxbwt9rfxk68` = physical `192.168.1.136:80` on PC Wi‑Fi `192.168.1.116`.
+- Reverse: `ssh-reverse-forward` → VM `127.0.0.1:59443` (HTTPS/ISAPI) and `127.0.0.1:59000` (SDK).
+- Proof: host TCP open; VM listeners `59443`/`59000`; pack ISAPI `401` on `58480`; local quick health `online`.
+- STALE: TEST A at `192.168.254.102` and TEST A owning `59000`/`59443`. Live TEST A `.109:58080`, TEST B `.110:58180`.
+- Evidence: `.runtime/device5-reverse-20260813-005641/`.
+
 ## 2026-08-12 - BNPI OT rate always 313 (not source-daily ≤700)
 
 - Status: `FIXED_LOCAL_CLONE`.

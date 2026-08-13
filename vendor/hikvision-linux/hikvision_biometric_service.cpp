@@ -80,7 +80,43 @@ struct ReconcileJob {
     std::string face_template_b64;
     std::string face_picture_b64;
     int fingerprint_count = 0;
+    // Panel Select Status from NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus.
+    // Empty when extend is absent. "undefined" when extend is present and byte is 0.
+    std::string attendance_status;
+    std::string attendance_label;
+    int attendance_status_value = 0;
+    bool attendance_status_present = false;
 };
+
+static const char *attendance_status_from_sdk_byte(unsigned byte_value) {
+    switch (byte_value) {
+        case 1:
+            return "checkIn";
+        case 2:
+            return "checkOut";
+        case 3:
+            return "breakOut";
+        case 4:
+            return "breakIn";
+        case 5:
+            return "overtimeIn";
+        case 6:
+            return "overtimeOut";
+        default:
+            return "undefined";
+    }
+}
+
+static const char *attendance_label_from_status(const std::string &status) {
+    if (status == "checkIn") return "Check In";
+    if (status == "checkOut") return "Check Out";
+    if (status == "breakOut") return "Break Out";
+    if (status == "breakIn") return "Break In";
+    if (status == "overtimeIn") return "Overtime In";
+    if (status == "overtimeOut") return "Overtime Out";
+    if (status == "undefined") return "Unset";
+    return "";
+}
 
 template <typename Operation>
 bool retry_peer_operation(
@@ -725,11 +761,19 @@ void CALLBACK alarm_callback(
             ? std::to_string(acs->struAcsEventInfo.dwEmployeeNo)
             : "";
     std::string employee_no_ext;
+    std::string attendance_status;
+    std::string attendance_label;
+    int attendance_status_value = 0;
+    bool attendance_status_present = false;
     if (acs->byAcsEventInfoExtend == 1 && acs->pAcsEventInfoExtend != nullptr) {
         auto *ext =
             reinterpret_cast<NET_DVR_ACS_EVENT_INFO_EXTEND *>(acs->pAcsEventInfoExtend);
         employee_no_ext =
             fixed_bytes_to_string(ext->byEmployeeNo, NET_SDK_EMPLOYEE_NO_LEN);
+        attendance_status_present = true;
+        attendance_status_value = static_cast<int>(ext->byAttendanceStatus);
+        attendance_status = attendance_status_from_sdk_byte(ext->byAttendanceStatus);
+        attendance_label = attendance_label_from_status(attendance_status);
     }
     std::string employee_no = !employee_no_ext.empty() ? employee_no_ext : employee_no_dw;
     std::string identity_from_acs = "empty";
@@ -763,7 +807,11 @@ void CALLBACK alarm_callback(
         {"doorNo", door_no},
         {"verifyMode", verify_mode},
         {"serialNo", serial_no},
-        {"sdkTime", sdk_time_to_string(acs->struTime)}
+        {"sdkTime", sdk_time_to_string(acs->struTime)},
+        {"attendanceStatus", attendance_status},
+        {"attendanceLabel", attendance_label},
+        {"attendanceStatusValue", std::to_string(attendance_status_value)},
+        {"attendanceStatusPresent", attendance_status_present ? "true" : "false"}
     });
 
     ReconcileJob job;
@@ -781,6 +829,10 @@ void CALLBACK alarm_callback(
     job.minor = acs->dwMinor;
     job.event_kind = kind;
     job.sdk_time = sdk_time_to_string(acs->struTime);
+    job.attendance_status = attendance_status;
+    job.attendance_label = attendance_label;
+    job.attendance_status_value = attendance_status_value;
+    job.attendance_status_present = attendance_status_present;
 
     if (!min_sdk_time.empty() && job.sdk_time < min_sdk_time) {
         emit_json({
@@ -914,6 +966,10 @@ std::string build_hikvision_callback_json(const ReconcileJob &job) {
          << "\"verifyMode\":\"" << json_escape(job.verify_mode) << "\","
          << "\"currentVerifyMode\":\"" << json_escape(job.verify_mode) << "\","
          << "\"serialNo\":\"" << json_escape(job.serial_no) << "\","
+         << "\"attendanceStatus\":\"" << json_escape(job.attendance_status) << "\","
+         << "\"label\":\"" << json_escape(job.attendance_label) << "\","
+         << "\"statusValue\":" << job.attendance_status_value << ","
+         << "\"attendanceStatusPresent\":" << (job.attendance_status_present ? "true" : "false") << ","
          << "\"fingerprintCount\":" << job.fingerprint_count << ","
          // Raw base64 templates when C++ could read them (not AES). Empty array when none.
          << "\"fingerprints\":" << (has_raw_fp ? job.fingerprints_json : "[]") << ","

@@ -103,6 +103,13 @@ export interface AcsEventInfo {
 	serialNo: number;
 	userType: string;
 	currentVerifyMode: string;
+	attendanceStatus?: string;
+	label?: string;
+	hrisPanelSelectStatus?: {
+		code?: string | null;
+		label?: string | null;
+		present?: boolean;
+	} | null;
 	mask: string;
 	pictureURL?: string;
 	FaceRect?: FaceRect;

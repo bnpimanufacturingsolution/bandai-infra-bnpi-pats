@@ -36,6 +36,7 @@ import {
 	parseHikvisionLogSearchResponse,
 	type NormalizedHikvisionEvidenceEvent,
 } from "../../helper/hikvision-event-contract.helper";
+import { extractHikvisionPanelSelectStatus } from "../../helper/hikvision-panel-select-status.helper";
 import { classifyDeviceEvent } from "../../helper/device-event-taxonomy.helper";
 import {
 	buildHikvisionSourceChecks,
@@ -8527,6 +8528,10 @@ export const controller = (prisma: PrismaClient) => {
 			deviceName: params.device.name,
 			deviceIP: params.device.address || resolvedEvidence.deviceIP || null,
 			employeeNo: employeeNo || null,
+			panelSelectStatus: extractHikvisionPanelSelectStatus({
+				...resolvedEvidence,
+				rawEvidence: resolvedEvidence.rawEvidence ?? rawEvidence ?? null,
+			}),
 			opaquePersonToken,
 			personTokenResolved: Boolean((resolvedEvidence as any).personTokenResolved),
 			resolvedEmployeeNo: (resolvedEvidence as any).personTokenResolved ? employeeNo : null,
@@ -27531,6 +27536,7 @@ export const controller = (prisma: PrismaClient) => {
 						...event,
 						employeeNo,
 						payload,
+						panelSelectStatus: extractHikvisionPanelSelectStatus(payload),
 						taxonomy: {
 							eventCategory: event.eventCategory,
 							eventAction: event.eventAction,

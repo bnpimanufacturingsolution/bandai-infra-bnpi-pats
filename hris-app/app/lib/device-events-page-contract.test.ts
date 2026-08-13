@@ -20,6 +20,15 @@ describe("device events page UX contract", () => {
 		);
 	});
 
+	it("shows Hikvision panel Select Status as Device status without treating TAP as Check In", () => {
+		expect(routeSource).to.contain('label: "Device status"');
+		expect(routeSource).to.contain("extractHikvisionPanelSelectStatus");
+		expect(routeSource).to.contain("panelSelectStatusLabel");
+		expect(routeSource).to.contain("From device");
+		expect(routeSource).to.contain("Not on wire");
+		expect(routeSource).to.contain('ATTENDANCE: ["TAP", "TAP_REJECTED"]');
+	});
+
 	it("filters event action options by selected event category", () => {
 		expect(routeSource).to.contain("EVENT_ACTIONS_BY_CATEGORY");
 		expect(routeSource).to.contain("getSavedActionOptionsForCategory");

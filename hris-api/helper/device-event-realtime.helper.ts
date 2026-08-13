@@ -1,4 +1,5 @@
 import type { Server as SocketIOServer } from "socket.io";
+import { extractHikvisionPanelSelectStatus } from "./hikvision-panel-select-status.helper";
 
 /**
  * FE/BE realtime contract for Device Events:
@@ -44,6 +45,9 @@ const pickEventFields = (eventRecord: any): Record<string, unknown> | null => {
 		evidenceSource: eventRecord.evidenceSource ?? null,
 		device: eventRecord.device ?? undefined,
 		payload: eventRecord.payload ?? undefined,
+		panelSelectStatus:
+			eventRecord.panelSelectStatus ??
+			extractHikvisionPanelSelectStatus(eventRecord.payload),
 	};
 };
 

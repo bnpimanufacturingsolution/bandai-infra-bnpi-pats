@@ -1,5 +1,57 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-13 Select Status copy (ready to push)
+
+- Task mode: implement + document + push `develop`.
+- C++ copies `byAttendanceStatus`; API extract copies `AcsEventInfo.attendanceStatus`; UI **Device status**.
+- Pairing unchanged. Live proof: Device D serial 9619 ISAPI `checkIn`; rebuilt listener logs `attendanceStatusPresent`.
+- Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`.
+
+## Latest Task Addendum - 2026-08-13 Vendor SDK setup vs byAttendanceStatus
+
+- Task mode: investigation. No C++. Not pushed.
+- Listener setup **does** use vendor HCNetSDK 6.1.9.48 on the VM.
+- That header **has** `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` (0–6 = panel six).
+- C++ already opens that struct for `byEmployeeNo` and does not copy the status byte.
+- HRIS setup does not configure panel T&A mode.
+- Evidence: `.runtime/hikvision-status-audit-20260813/16-vendor-sdk-setup-investigation.md`.
+
+## Latest Task Addendum - 2026-08-13 Device status on biometric APIs
+
+- Task mode: API + UI display. No pairing. No C++. **Do not push.**
+- `GET /api/device/events` now returns `panelSelectStatus` from payload/AcsEventInfo.
+- Live `POST .../acs-events` InfoList items get `hrisPanelSelectStatus`.
+- Callback/sync persist stamps `payload.panelSelectStatus` when present.
+- Pairing still first/later punch.
+
+## Latest Task Addendum - 2026-08-13 Device status column (display only)
+
+- Task mode: UI display of already-stored ISAPI Select Status. No pairing. No C++. **Do not push.**
+- Device Events saved/live rows show **Device status** from `AcsEventInfo.attendanceStatus` + `label`.
+- Missing field = `Not sent` / `Not on wire`. Device sent `undefined` = `Unset`.
+- Helper: `hris-app/app/lib/hikvision-panel-select-status.ts`.
+- Time In/Out still first/later punch.
+
+## Latest Task Addendum - 2026-08-13 Hikvision Select Status audit
+
+- Task mode: deep audit only (no mapping implementation).
+- Operator: Hikvision **Select Status** (Check In / Out, Break In / Out, Overtime In / Out); users Check In on all devices; suspect status is not on the mapped device response.
+- Result: live SDK callback never sends it; ISAPI Sync can store unused `AcsEventInfo.attendanceStatus`; HRIS pairs first tap = in, later = out.
+- Live DEV residual: 689 nested statuses (678 checkIn, 6 checkOut, 2 undefined, 1 overtimeOut, 1 breakOut, 1 breakIn).
+- Documented (not committed): spec `docs/HIKVISION_SELECT_STATUS_MAPPING.md`, WWG report `.wwg/reports/hikvision-select-status-audit-20260813.md`, architecture `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`.
+- Evidence: `.runtime/hikvision-status-audit-20260813/` (10 agent reports + lead synthesis).
+- Next only if operator asks: wire C++ `byAttendanceStatus` and/or honor panel status in pairing. Do not commit this pack unless asked.
+
+## Latest Task Addendum - 2026-08-13 Device 5 reverse on host Wi‑Fi
+
+- Task mode: live runtime + truth sync (no code feature).
+- Operator: Windows PC `192.168.1.116`, biometric `192.168.1.136` (Device 5).
+- Device 5 `cmsq47r9t0039vxbwt9rfxk68` saved `ssh-reverse-forward`, runtime `https://127.0.0.1:59443`, SDK `127.0.0.1:59000`.
+- Host TCP `80`/`443`/`8000` open; VM listeners `59443`/`59000` (plus leftover `58480`/`58400`); pack-captured ISAPI `401` is on `58480`.
+- Live TEST A/B remain `.109`/`.110` on `58080`/`58180`. Do not reuse wiki `.102` or claim `59000`/`59443` belong to TEST A.
+- Evidence: `.runtime/device5-reverse-20260813-005641/`.
+- WWG: project-truth + summary + terminology reverse-tunnel term + this addendum.
+
 ## Latest Task Addendum - 2026-08-11 BNPI Jun 26–Jul 10 full payroll tally log
 
 - Task mode: investigation / evidence log (no fleet money repair claimed).

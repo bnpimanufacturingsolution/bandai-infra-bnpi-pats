@@ -9,6 +9,12 @@ describe("Device events API contract", () => {
 		"utf8",
 	);
 
+	it("projects Hikvision panel Select Status from biometric payload without pairing", () => {
+		expect(controllerSource).to.contain("panelSelectStatus: extractHikvisionPanelSelectStatus(payload)");
+		expect(controllerSource).to.contain('from "../../helper/hikvision-panel-select-status.helper"');
+		expect(controllerSource).not.to.contain("pairPunchesAsClockOut");
+	});
+
 	it("accepts event category and action filters as the primary event contract", () => {
 		expect(controllerSource).to.contain("req.query.eventCategory");
 		expect(controllerSource).to.contain("req.query.eventAction");

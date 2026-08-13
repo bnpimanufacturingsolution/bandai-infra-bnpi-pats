@@ -1,5 +1,19 @@
 # Project Truth
 
+## Hikvision panel Select Status mapping (2026-08-13)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_DEV_DB` (audit only; no mapping implemented).
+- Operator physical: Hikvision terminals show **Select Status** with Check In, Check Out, Break Out, Break In, Overtime In, Overtime Out. Users often pick **Check In** on every device. Devices do not auto-detect in vs out unless T&A mode is Auto/schedule.
+- **Three vocabularies (do not mix):**
+  1. Panel Select Status — Hikvision T&A (`attendanceStatus` / `label`).
+  2. `DeviceEvent.eventAction` — attendance punches are `TAP` / `TAP_REJECTED`.
+  3. `Attendance.status` — day class `PRESENT` / `INCOMPLETE` / `ABSENT` plus `timeIn` / `timeOut`.
+- **Live SDK path (`EN_HCNETSDK_ALARM`):** C++ `alarm_callback` copies ACS extend `byAttendanceStatus` (0–6) into the POST as `attendanceStatus` + `label` when `byAcsEventInfoExtend==1`. Pre-fix DEV snapshot: 0 / 32,489 SDK rows had the field. Live proof after rebuild: listener logs include `attendanceStatusPresent`. Same tap serial `9619` (person `10`, Device D) was `checkIn` on ISAPI while the pre-fix SDK POST was Not sent.
+- **ISAPI / Sync path (`HIKVISION_CALLBACK`):** `AcsEventInfo.attendanceStatus` + `label` is extracted (`deviceAttendanceStatus` / `panelSelectStatus`) and stamped on persist. Device Events shows **Device status**.
+- **HRIS attendance write:** still first punch = `timeIn`, later punch = `timeOut` (`hikvisionPairPunchesAsClockOut` default on; gap 0). Panel Check In does **not** drive pairing yet.
+- **Hard ban:** do not treat `currentVerifyMode` as Check In/Out. Do not treat callback-controller `attendanceStatus` as panel status — that name is the day class from `determineAttendanceStatus`.
+- Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`. Architecture: `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`. Report: `.wwg/reports/hikvision-select-status-audit-20260813.md`.
+
 ## BNPI Jun 26–Jul 10 2026 payroll tally investigation (2026-08-11)
 
 - Status: `INVESTIGATED_CODE_AND_LIVE_PREVIEW` (fleet money not green).
@@ -171,7 +185,7 @@ Project Truth must not be silently overwritten. Requirement evolution is allowed
 ## Confirmed Local DEV and Sync Center Runtime Truth (2026-07-23)
 
 - Canonical Windows hot-reload PostgreSQL is the K3s DEV forward at `127.0.0.1:55435`; compose DEV is not an automatic fallback.
-- Local app/API are `http://localhost:5175` and `http://localhost:3001`. API startup probe-first restores required DB, A-F device forwards, VM reverse API/callback port `53001`, and the listener path. Optional TEST A/B bridges must not hold API startup open.
+- Local app/API are `http://localhost:5175` and `http://localhost:3001`. API startup probe-first restores required DB, A-F device forwards, VM reverse API/callback port `53001`, and the listener path. Optional TEST A/B bridges must not hold API startup open. Device 5 reverse (`192.168.1.136` → VM `59443`/`59000`) is a separate same-LAN `ssh-reverse-forward` path, not the TEST A/B `.254` lane.
 - Main Entrance A-F use host-forward HTTP `10080-10085`, HTTPS `10443-10448`, and SDK `18000-18005`. Health requires traffic proof, not merely an SSH process or listening port.
 - Sync Center merge availability is sourced from bounded per-device quick health. Missing `vendorUserCount` from `sync-preview?quick=true` is not offline evidence.
 - Transport-online and full inventory-readable are separate truths. Read-only merge planning preserves partial reads, reports exact failures, and must not start physical writes without reviewed scope.
@@ -296,9 +310,13 @@ Accepted or observed architecture:
 - Item: `github.com/canhlinh/gozk` is not currently proven as a better default than PyZK for Project Truth ZKTeco history/user reads.
   - Status: CONFIRMED_RUNTIME_EVIDENCE_WITH_BOUNDARY
   - Evidence: On 2026-07-04, a disposable gozk probe ran from the remote VM against the four configured ZKTeco devices. gozk connected quickly to the two TCP-reachable devices, but its `GetUsers()` call returned no user objects, `10.184.38.234` attendance history failed where PyZK succeeded, and isolated attendance retries failed on both `10.184.38.235` and `10.184.38.234`. One successful `.235` gozk attendance read returned 18,085 events in about 22.1s, still above the 15-second interactive threshold. Detailed evidence: `.wwg/reports/zkteco-gozk-trial-20260704.md`.
-- Item: Local DEV Hikvision reverse forwarding treats an armed quiet listener as stable; only a stopped, unarmed, or genuinely login-failed listener should be force-rearmed. `receiving` is a short freshness signal, not tunnel-process liveness. TEST A is DB-configured at `192.168.254.102`, reached by Windows on TCP `8000`/`443`, and exposed to the VM listener as loopback `59000`/`59443`; VM ICMP ping to the physical address is not reverse-tunnel proof.
+- Item: Local DEV Hikvision reverse forwarding treats an armed quiet listener as stable; only a stopped, unarmed, or genuinely login-failed listener should be force-rearmed. `receiving` is a short freshness signal, not tunnel-process liveness. VM ICMP ping to the physical device address is not reverse-tunnel proof.
   - Status: CONFIRMED_LOCAL_RUNTIME_EVIDENCE_WITH_BOUNDARY
-  - Evidence: On 2026-07-19, VM loopback `53001`, `59000`, and `59443` remained listening, callback posts succeeded, and listener PID `2458362` stayed unchanged from `11:04:27Z` through `11:09:55Z` after Keep-ready stopped restarting armed/quiet state. Boundary: local Windows/VM DEV proof; public/GitOps promotion is separate.
+  - Evidence: On 2026-07-19, VM loopback `53001`, `59000`, and `59443` remained listening for the then-current TEST A reverse, callback posts succeeded, and listener PID `2458362` stayed unchanged from `11:04:27Z` through `11:09:55Z` after Keep-ready stopped restarting armed/quiet state. Boundary: local Windows/VM DEV proof; public/GitOps promotion is separate.
+  - Current-address note (2026-08-13): the 2026-07-19 TEST A IP `192.168.254.102` and exclusive use of VM `59000`/`59443` for TEST A are **STALE**. Live DEV rows: TEST A `cmrlgqsjv000oob01165tbd8n` = `192.168.254.109:443` via `127.0.0.1:58080`/`58000`; TEST B `cmrv02vam004cnxekd57dsjh8` = `192.168.254.110:443` via `127.0.0.1:58180`/`58100`. VM `59000`/`59443` are now the Device 5 reverse pair (next item).
+- Item: Device 5 (`cmsq47r9t0039vxbwt9rfxk68`) is the host-LAN Hikvision at `192.168.1.136:80` (`http`). The Windows PC at `192.168.1.116` can TCP `80`/`443`/`8000`; the VM cannot route that Wi‑Fi, so the device uses `ssh-reverse-forward` with saved runtime `https://127.0.0.1:59443` and SDK `127.0.0.1:59000`.
+  - Status: CONFIRMED_LOCAL_RUNTIME_EVIDENCE
+  - Evidence: 2026-08-13 admin PATCH + host TCP + `ssh project-truth-hris` `ss` listeners on `59443`/`59000` (and leftover `58480`/`58400`). Pack-captured VM ISAPI `401` is through `127.0.0.1:58480`; saved Device row and keep-ready bind are `59443`/`59000` (`59443 → device :443`). Local quick health `online` via physical `http://192.168.1.136:80` (Windows API does not use loopback). Evidence: `.runtime/device5-reverse-20260813-005641/`.
 - Item: Local DEV Hikvision authentication callbacks have an independent immediate delivery lane; slow empty-person lifecycle/operation identity enrichment must not share their active worker or hold the callback spool mutex during HTTP.
   - Status: IMPLEMENTED_LOCAL_RUNTIME_WITH_BOUNDARY
   - Evidence: On 2026-07-19, `vendor/hikvision-linux/hikvision_biometric_service.cpp` was changed to use two bounded immediate workers and one separate enrichment worker, attendance HTTP attempts were bounded to five seconds with durable spool replay, lane notifications wake all predicate-specific consumers, and callback replay tracks in-flight files without serializing HTTP. Fourteen focused tests and a Linux HCNetSDK compile passed. The managed VM listener rebuilt from source hash `c2493e7630c33cff14aad070ff74838a584104ec31cebdf62893abc14c7e249d`; its running ELF contains `callback_immediate_ready`, and live no-person operation serials `3979`/`3980` entered `lane=enrichment`. Boundary: a physical post-deploy major-5 attendance tap is still `NEEDS_CONFIRMATION`; GitOps/public promotion is separate. Evidence: `.wwg/reports/hikvision-attendance-fast-lane-20260719.md`.

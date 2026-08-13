@@ -33,6 +33,7 @@ import {
 	selectHikvisionPunchPair,
 	type NormalizedHikvisionEvent,
 } from "../../../helper/hikvision-event-contract.helper";
+import { withHikvisionPanelSelectStatus } from "../../../helper/hikvision-panel-select-status.helper";
 import { emitDeviceEventSaved } from "../../../helper/device-event-realtime.helper";
 import { emitAttendanceRealtimeEvent } from "../../../helper/attendance-realtime.helper";
 import { refreshTimesheetForAttendanceDate } from "../../../helper/timesheet.helper";
@@ -310,7 +311,7 @@ export const controller = (prisma: PrismaClient) => {
 				const { eventRecord, isDuplicate } = await saveInitialDeviceEvent({
 					device,
 					event,
-					payload,
+					payload: withHikvisionPanelSelectStatus(payload),
 					eventTime,
 					employeeNo,
 					source,

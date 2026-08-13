@@ -18,6 +18,9 @@
 | **`eventAction`** | *What happened on the device / ledger concept* | `USER_CREATED`, `FINGERPRINT_ENROLLED`, `TAP` |
 | **`status`** | *HRIS processing result* | `RECEIVED`, `MATCHED`, `UNMATCHED`, `ATTENDANCE_CREATED`, `IGNORED` |
 | **`source`** | *Runtime path that delivered the row* | `EN_HCNETSDK_ALARM`, `HIKVISION_CALLBACK`, `ZKTECO_EVENT` |
+| **Panel Select Status** | *Hikvision T&A choice on the glass* — **not** a DeviceEvent column today | `checkIn`, `checkOut`, `breakOut`, `breakIn`, `overtimeIn`, `overtimeOut` |
+
+Hikvision **Select Status** is a third vocabulary. Live SDK and ISAPI extract now copy it to **Device status**. Attendance `timeIn`/`timeOut` is still pair-by-time. Spec: [`docs/HIKVISION_SELECT_STATUS_MAPPING.md`](./HIKVISION_SELECT_STATUS_MAPPING.md).
 | **`employeeNo`** | Plain device person id when known | `"15"` |
 | **`employeeId`** | FK to HRIS `Employee` row | ObjectId or null |
 | **`deviceUserId`** | FK to `DeviceUser` inventory row | ObjectId or null |
