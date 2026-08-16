@@ -124,6 +124,8 @@ export const EmployeeSchema = z.object({
 	leaveBalances: z.array(LeaveBalanceDetailSchema).optional(),
 	leaveBalancesLastUpdated: z.coerce.date().optional().nullable(),
 	basicSalary: z.number(),
+	/** Register Daily Salary for Path A OT; omit/0 → Path B BNPI */
+	dailyRate: z.number().optional().nullable(),
 	currency: z.string().min(1),
 	payFrequency: PayFrequency,
 	isTour: z.boolean().optional().default(false),

@@ -1,5 +1,53 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-17 - FILE_DUAL Basic Path A (paidDays × dailyRate)
+
+- Status: `IMPLEMENTED_LOCAL_PROVEN` / VM **blocked** (same as OT dual).
+- Engine: Path A if `dailyRate > 0` → `basicPay = paidRegularDays × dailyRate`
+  (`approvedBuckets.regularDays`); suppress full-day Absent-Amt on Path A.
+  Path B keeps `periodBasic` + full-day absent.
+- Register: no longer forces `basicPay = periodBasic`; Path A days = paid regular days.
+- Tests: `bandai-register-basic-pay.spec.ts` + OT dual → **11 green**.
+- **Re-tally (local only)** period `PP-20260626-20260711`:
+  - basicPay fails **481 → 1** (only `01711` Path B ₱75 drift)
+  - numberOfDays fails **818 → 263**
+  - absent fails **603 → 222**
+  - OT pay still **1**; Gross **~805**; TR **~827**; TALLIED **1**
+- Evidence: `.runtime/full-tally-jul11-25-after-basic-path-a-20260817/COMPARE-BEFORE-AFTER.md`
+- Docs: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` §14b
+- Next: absent residual / DMA / late / loans package; VM migrate when up.
+  Aligning Basic alone does **not** unlock fleet TR (product lock already known).
+
+## 2026-08-13 - FILE_DUAL OT Path A/B + local clone backfill
+
+- Status: `IMPLEMENTED_LOCAL_CLONE_BACKFILLED` / VM **blocked** (network).
+- Engine: Path A if `dailyRate > 0` (hourly = daily/8); else Path B BNPI 313.
+- **Local clone** `hris-local-dev-clone` Docker `127.0.0.1:5433` / db `hris` / table `employees`:
+  - Column `dailyRate` added
+  - Backfill from June Sheet2 Daily Salary: **path_a=569**, path_b=1643 (of 2212 employees)
+  - Evidence: `.runtime/ot-dual-path-local-*/local-report.json`
+- **VM DB still pending:** `10.184.37.19:15433` + SSH `project-truth-hris` unreachable
+  (ping timeout; Cloudflare SSH closed). **Do not claim VM/DEV appliance has dailyRate.**
+  When VM is up: `$env:TARGET_PG_URL='postgresql://postgres:postgres@10.184.37.19:15433/hris?schema=public'; node .runtime/ot-dual-path-backfill-run/migrate-local-employees.mjs`
+- Tests: `bandai-ot-rate-basis.spec.ts` 6 green.
+- **Re-tally (local only) after dual + backfill:** OT pay fails **482→1**, OT_MATCH_ONLY
+  **327→797**, UNMATCH **482→1**, full TALLIED still **4**. Gross/basic/absent fails unchanged.
+  Evidence: `.runtime/full-tally-after-ot-dual-20260813/COMPARE-BEFORE-AFTER.md`
+- Next when VM up: same migrate/backfill on `10.184.37.19:15433`; then residual Gross
+  (basic/absent/DMA) work for full TR tally.
+
+## 2026-08-13 - BNPI app vs computation file findings (documented)
+
+- Status: `DOCUMENTED` (+ FILE_DUAL OT engine implemented same day).
+- Canonical: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md`
+- WWG short: `.wwg/reports/bnpi-payroll-app-vs-file-findings-20260813.md`
+- Product locks: empty bio = ABSENT kept; do not Path-A-only OT.
+- Key counts (Jun 26–Jul 10): Basic unmatch 481; OT hrs ~817/818; OT pay unmatch ~482;
+  Rio-pattern absent peers 472; TR exact ~4; aligning Basic alone does not unlock TR.
+- File OT dual path proven on April register: Path A Daily/8 (545), Path B BNPI monthly (249).
+- Runtime evidence under `.runtime/unmatch-non-rio-20260813/`, `april-ot-rate-20260813/`,
+  `rio-absent-pattern-peers-20260812/`, `ot-rate-proof-20260812/`.
+
 ## 2026-08-12 - Preview Payroll results on page (not modal)
 
 - Status: `IMPLEMENTED_LOCAL`.

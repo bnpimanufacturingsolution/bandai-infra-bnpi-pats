@@ -94,6 +94,8 @@ model Employee {
 
   // Compensation
   basicSalary  Float
+  /// Register Daily Salary (Path A OT: hourly = dailyRate/8). Null/0 → Path B BNPI 313.
+  dailyRate    Float?
   currency     String       @default("PHP")
   payFrequency PayFrequency @default(SEMI_MONTHLY)
 

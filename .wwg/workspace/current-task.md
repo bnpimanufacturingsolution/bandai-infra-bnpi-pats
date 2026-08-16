@@ -1,5 +1,29 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 FILE_DUAL Basic Path A
+
+- Task mode: engine fix (FILE_DUAL Basic) + local proof.
+- Request: proceed with Path A Basic recommendation
+  (`basicPay = paidDays × dailyRate`, no Absent double-count on Path A).
+- Implementation:
+  1. `resolveBandaiRegisterBasicPay` — Path A paidDays×dailyRate; Path B periodBasic.
+  2. Full-day Absent-Amt suppressed when Path A (`suppressFullDayAbsentDeduction`).
+  3. Register uses computed `basicPay` + Path A paid regular days (not non-REST line count).
+  4. Wired in generate + preview paths in `payroll-period.helper.ts`.
+- Proof (local clone `5433`, period Jun 26–Jul 10): basicPay **481→1**, absent **603→222**,
+  numberOfDays **818→263**; OT still 1; Gross/TR still fleet-unmatched.
+- Evidence: `.runtime/full-tally-jul11-25-after-basic-path-a-20260817/`
+- Tests: 11 green (basic 5 + OT dual 6).
+- Next residual: absent residual, DMA, late, loans — not Basic formula.
+
+## Latest Task Addendum - 2026-08-13 BNPI app vs file findings documented
+
+- Task mode: docs / investigation close-out (no engine change in this addendum).
+- Canonical write-up: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md`
+- WWG: `.wwg/reports/bnpi-payroll-app-vs-file-findings-20260813.md` + handoff entry.
+- Locks: empty bio = ABSENT; OT dual file formula recommended (Path A Daily/8 + Path B BNPI).
+- Next if requested: implement FILE_DUAL OT + Daily Salary import; rescan OT pay.
+
 ## Latest Task Addendum - 2026-08-12 Preview Payroll results on page
 
 - Task mode: product UX (Run Payroll Preview).
