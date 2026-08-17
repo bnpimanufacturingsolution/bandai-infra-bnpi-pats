@@ -1371,23 +1371,41 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		source: event.source,
 		receivedAt: event.receivedAt,
 		businessStatus: event.taxonomy?.processingLabel || formatBusinessStatus(event.status),
-		eventCategory: event.eventCategory || event.taxonomy?.eventCategory || null,
-		eventAction: event.eventAction || event.taxonomy?.eventAction || null,
-		eventLabel:
-			(event.eventAction || event.taxonomy?.eventAction
-				? getOptionLabel(eventActionOptionsStatic, event.eventAction || event.taxonomy?.eventAction || "")
-				: null) ||
-			event.eventLabel ||
-			event.taxonomy?.eventLabel ||
-			event.eventType ||
-			payload.eventKind ||
-			null,
+		eventCategory: (() => {
+			const stored = String(event.eventCategory || "").toUpperCase();
+			const live = event.taxonomy?.eventCategory || null;
+			if (!stored || stored === "UNKNOWN" || stored === "UNKNOWN_VENDOR") return live || event.eventCategory || null;
+			return event.eventCategory || live || null;
+		})(),
+		eventAction: (() => {
+			const stored = String(event.eventAction || "").toUpperCase();
+			const live = event.taxonomy?.eventAction || null;
+			if (!stored || stored === "UNKNOWN") return live || event.eventAction || null;
+			return event.eventAction || live || null;
+		})(),
+		eventLabel: (() => {
+			const storedAction = String(event.eventAction || event.taxonomy?.eventAction || "").toUpperCase();
+			const action = !event.eventAction || storedAction === "UNKNOWN"
+				? event.taxonomy?.eventAction || event.eventAction
+				: event.eventAction || event.taxonomy?.eventAction;
+			return (
+				(action ? getOptionLabel(eventActionOptionsStatic, action) : null) ||
+				event.taxonomy?.eventLabel ||
+				event.eventLabel ||
+				event.eventType ||
+				payload.eventKind ||
+				null
+			);
+		})(),
 		processingLabel: event.taxonomy?.processingLabel || formatBusinessStatus(event.status),
 		transportLabel: event.taxonomy?.transportLabel || formatEventSource(event.source),
 		capabilityConfidence:
 			event.eventConfidence || event.taxonomy?.eventConfidence || event.taxonomy?.capabilityConfidence || null,
-		evidenceSource: payload.evidenceSource || null,
-		directDeviceEvidence: payload.directDeviceEvidence === true,
+		evidenceSource:
+			payload.evidenceSource ||
+			(event.source === "EN_HCNETSDK_ALARM" ? "SDK_CALLBACK" : null),
+		directDeviceEvidence:
+			payload.directDeviceEvidence === true || event.source === "EN_HCNETSDK_ALARM",
 		searchMatch: event.searchMatch || null,
 		payload,
 		attendanceId: event.attendanceId,

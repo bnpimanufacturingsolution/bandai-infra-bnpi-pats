@@ -37,7 +37,11 @@ import {
 	type NormalizedHikvisionEvidenceEvent,
 } from "../../helper/hikvision-event-contract.helper";
 import { extractHikvisionPanelSelectStatus } from "../../helper/hikvision-panel-select-status.helper";
-import { classifyDeviceEvent } from "../../helper/device-event-taxonomy.helper";
+import {
+	ensureSdkCallbackEvidence,
+	isStalePersistedDeviceEventTaxonomy,
+	resolveDeviceEventDisplayTaxonomy,
+} from "../../helper/device-event-taxonomy.helper";
 import {
 	buildHikvisionSourceChecks,
 	buildHikvisionSyncLogsEventRows,
@@ -27480,12 +27484,33 @@ export const controller = (prisma: PrismaClient) => {
 				await import("../../helper/device-person-token.helper.js");
 			const enrichedEvents = await Promise.all(
 				events.map(async (event) => {
-					const runtimeLabels = classifyDeviceEvent(event);
 					let employeeNo = String(event.employeeNo || "").trim() || null;
 					let payload =
 						event.payload && typeof event.payload === "object"
 							? { ...event.payload }
 							: {};
+					payload = ensureSdkCallbackEvidence(payload, event.source);
+					const displayTaxonomy = resolveDeviceEventDisplayTaxonomy({
+						...event,
+						payload,
+					});
+					if (
+						isStalePersistedDeviceEventTaxonomy(event) &&
+						displayTaxonomy.eventAction !== "UNKNOWN"
+					) {
+						void (prisma as any).deviceEvent
+							.update({
+								where: { id: event.id },
+								data: {
+									eventCategory: displayTaxonomy.eventCategory,
+									eventAction: displayTaxonomy.eventAction,
+									eventLabel: displayTaxonomy.eventLabel,
+									eventConfidence: displayTaxonomy.eventConfidence,
+									payload,
+								},
+							})
+							.catch(() => undefined);
+					}
 					const opaqueCandidate =
 						(employeeNo && isOpaqueHikvisionPersonToken(employeeNo) && employeeNo) ||
 						(payload?.opaquePersonToken &&
@@ -27542,17 +27567,19 @@ export const controller = (prisma: PrismaClient) => {
 						...event,
 						employeeNo,
 						payload,
+						eventCategory: displayTaxonomy.eventCategory,
+						eventAction: displayTaxonomy.eventAction,
+						eventLabel: displayTaxonomy.eventLabel,
+						eventConfidence: displayTaxonomy.eventConfidence,
 						panelSelectStatus: extractHikvisionPanelSelectStatus(payload),
 						taxonomy: {
-							eventCategory: event.eventCategory,
-							eventAction: event.eventAction,
-							eventLabel: event.eventLabel,
-							eventConfidence: event.eventConfidence,
-							processingLabel: runtimeLabels.processingLabel,
-							transportLabel: runtimeLabels.transportLabel,
-							capabilityConfidence: String(
-								event.eventConfidence || "UNKNOWN",
-							).toLowerCase(),
+							eventCategory: displayTaxonomy.eventCategory,
+							eventAction: displayTaxonomy.eventAction,
+							eventLabel: displayTaxonomy.eventLabel,
+							eventConfidence: displayTaxonomy.eventConfidence,
+							processingLabel: displayTaxonomy.processingLabel,
+							transportLabel: displayTaxonomy.transportLabel,
+							capabilityConfidence: displayTaxonomy.capabilityConfidence,
 						},
 					};
 				}),

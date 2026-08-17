@@ -2,6 +2,8 @@ import { expect } from "chai";
 import {
 	buildPersistedDeviceEventTaxonomy,
 	classifyDeviceEvent,
+	ensureSdkCallbackEvidence,
+	resolveDeviceEventDisplayTaxonomy,
 } from "../helper/device-event-taxonomy.helper";
 
 describe("Device event taxonomy helper", () => {
@@ -252,6 +254,40 @@ describe("Device event taxonomy helper", () => {
 			eventCategory: "ENROLLMENT",
 			eventAction: "FINGERPRINT_ENROLLED",
 			eventConfidence: "PROVEN",
+		});
+	});
+
+	it("reclassifies stale stored UNKNOWN punch rows for display", () => {
+		const taxonomy = resolveDeviceEventDisplayTaxonomy({
+			source: "EN_HCNETSDK_ALARM",
+			status: "ATTENDANCE_UPDATED",
+			major: "5",
+			minor: "38",
+			eventCategory: "UNKNOWN_VENDOR",
+			eventAction: "UNKNOWN",
+			eventLabel: "Device event",
+			eventConfidence: "UNKNOWN",
+			payload: {
+				eventKind: "attendance_fingerprint_success",
+				actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+			},
+		});
+		expect(taxonomy).to.deep.include({
+			eventCategory: "ATTENDANCE",
+			eventAction: "TAP",
+			eventLabel: "Fingerprint attendance punch",
+			eventConfidence: "PROVEN",
+			processingLabel: "Attendance updated",
+		});
+	});
+
+	it("stamps missing SDK callback evidence on listener rows", () => {
+		expect(
+			ensureSdkCallbackEvidence({ label: "Check Out" }, "EN_HCNETSDK_ALARM"),
+		).to.deep.include({
+			evidenceSource: "SDK_CALLBACK",
+			directDeviceEvidence: true,
+			label: "Check Out",
 		});
 	});
 

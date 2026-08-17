@@ -37,6 +37,10 @@ import {
 import { withHikvisionPanelSelectStatus } from "../../../helper/hikvision-panel-select-status.helper";
 import { buildPersistedDeviceEventTaxonomy } from "../../../helper/device-event-taxonomy.helper";
 import {
+	resolveLinkedEmployeeForDevicePerson,
+	upsertDeviceUserInventoryStub,
+} from "../../../helper/device-person-token.helper";
+import {
 	extractAcsSerialFromPayload,
 	findExistingDeviceEventByAcsSerial,
 } from "../../../helper/hikvision-device-event-serial-dedupe.helper";
@@ -277,6 +281,7 @@ export const controller = (prisma: PrismaClient) => {
 		data: {
 			status: string;
 			employeeId?: string | null;
+			deviceUserId?: string | null;
 			attendanceId?: string | null;
 			errorMessage?: string | null;
 		},
@@ -469,26 +474,34 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				const employee = await prisma.employee.findFirst({
-					where: {
-						isDeleted: false,
-						organizationId: device.organizationId,
-						deviceEmpId: employeeNo,
-					},
-					select: {
-						id: true,
-						organizationId: true,
-						deviceEmpId: true,
-					},
+				const linkedEmployee = await resolveLinkedEmployeeForDevicePerson(prisma, {
+					organizationId: device.organizationId,
+					employeeNo,
 				});
+				const inventoryUser = linkedEmployee
+					? await upsertDeviceUserInventoryStub(prisma, {
+							organizationId: device.organizationId,
+							deviceId: device.id,
+							employeeNo,
+							displayName: linkedEmployee.displayName || null,
+						})
+					: null;
+				const employee = linkedEmployee
+					? {
+							id: linkedEmployee.id,
+							organizationId: device.organizationId,
+							deviceEmpId: employeeNo,
+						}
+					: null;
 
 				if (!employee) {
 					console.log(
-						`[HIKVISION_CALLBACK][CTRL] no employee matched by deviceEmpId=${employeeNo}`,
+						`[HIKVISION_CALLBACK][CTRL] no employee matched by deviceEmpId/employeeId=${employeeNo}`,
 					);
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "UNMATCHED",
 						errorMessage: "employee_not_found",
+						deviceUserId: inventoryUser?.id || null,
 					}, device);
 					const successResponse = buildSuccessResponse(
 						"Callback received but no employee matched by deviceEmpId",
@@ -703,6 +716,7 @@ export const controller = (prisma: PrismaClient) => {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "ATTENDANCE_CREATED",
 						employeeId: employee.id,
+						deviceUserId: inventoryUser?.id || null,
 						attendanceId,
 						errorMessage: null,
 					}, device);
@@ -710,6 +724,7 @@ export const controller = (prisma: PrismaClient) => {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "ATTENDANCE_UPDATED",
 						employeeId: employee.id,
+						deviceUserId: inventoryUser?.id || null,
 						attendanceId,
 						errorMessage: null,
 					}, device);
@@ -720,6 +735,7 @@ export const controller = (prisma: PrismaClient) => {
 					await updateDeviceEventStatus(req, eventRecord.id, {
 						status: "MATCHED",
 						employeeId: employee.id,
+						deviceUserId: inventoryUser?.id || null,
 						attendanceId,
 						errorMessage: attendanceAction,
 					}, device);

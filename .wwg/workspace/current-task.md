@@ -1,5 +1,13 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 Device Event other-info TAP display
+
+- Operator tap Device D person 10 serial 9652: attendance updated; UI still showed Unknown Vendor / Unknown evidence.
+- Cause: GET copied stale stored UNKNOWN taxonomy; payload lacked evidenceSource on old rows.
+- Fix: GET reclassifies stale UNKNOWN to TAP for major=5 punches; stamp SDK_CALLBACK + direct evidence; UI prefers live taxonomy; callback matches employee by pad/deviceEmpId/employeeId and links DeviceUser on next tap.
+- Live local GET `cmsr688py002xvxwwttxhdsal` now `ATTENDANCE` / `TAP` / `SDK_CALLBACK` / `direct=true`.
+- Did not auto-link the other 50 unmatched (no HRIS employee).
+
 ## Latest Task Addendum - 2026-08-17 Duplicate per active device
 
 - Operator: extras appear on each **active** device.

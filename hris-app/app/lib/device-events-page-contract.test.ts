@@ -159,6 +159,8 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("activeEvent.eventLabel");
 		expect(routeSource).to.contain("activeEvent.eventCategory");
 		expect(routeSource).to.contain("activeEvent.eventAction");
+		expect(routeSource).to.contain('stored === "UNKNOWN_VENDOR"');
+		expect(routeSource).to.contain('event.source === "EN_HCNETSDK_ALARM" ? "SDK_CALLBACK"');
 		expect(routeSource).to.contain("activeEvent.capabilityConfidence");
 		// Misleading advanced filters removed from the toolbar (runtime path / HRIS result / evidence / confidence).
 		expect(routeSource).to.not.contain('label: "Runtime path"');
