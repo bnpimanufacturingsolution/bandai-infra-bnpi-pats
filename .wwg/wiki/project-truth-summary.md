@@ -5,7 +5,7 @@ Last updated: 2026-08-17
 ## 2026-08-17 Device Events TAP display + person 10
 
 - Operator Check Out on Device D (person `10`, serial `9652`) already updated attendance. Unknown Vendor / Unknown evidence was stale stored taxonomy.
-- GET/UI now reclassify those rows as **Attendance / TAP** and stamp **SDK callback** + direct evidence. Commit `a6dce32`.
+- GET/UI now reclassify those rows as **Attendance / TAP** and stamp **SDK callback** + direct evidence. Commit `a6dce32` (already on origin; **do not push** further unless asked). Public DEV UI is `NEEDS_CONFIRMATION` until that SHA is serving. List GET can heal stored columns; item GET display-only.
 - Callback next tap matches `deviceEmpId` or padded `employeeId` and links DeviceUser. `10` ≠ `01515`.
 - DeviceUser `10` on B/D/E linked to Zen Andrei `00010`. Other unmatched ids without an employee were not linked.
 - Report: `.wwg/reports/device-event-tap-display-20260817.md`.

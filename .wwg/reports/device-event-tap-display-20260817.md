@@ -47,7 +47,8 @@ Do **not** treat “51 unmatched” as “taps do not work.” Person 10 tapped 
 | `classifyDeviceEvent` | major=2 + minor 38 → `DEVICE_HEALTH` / `LISTENER_RECEIVED`. major≠2 + fingerprint-pass / minor 38 → `ATTENDANCE` / `TAP`. |
 | `resolveDeviceEventDisplayTaxonomy` | If stored category/action is empty / `UNKNOWN` / `UNKNOWN_VENDOR`, use live classify. |
 | `ensureSdkCallbackEvidence` | `source=EN_HCNETSDK_ALARM` and missing evidence → `SDK_CALLBACK` + `directDeviceEvidence=true`. |
-| GET `/api/device/events` | Returns display taxonomy + stamped evidence; background-heals stale stored columns when classify is not UNKNOWN. |
+| GET `/api/device/events` | Returns display taxonomy + stamped evidence; **list** GET background-heals stale stored columns when classify is not UNKNOWN. |
+| GET `/api/device/events/item/:eventId` | Same display overlay + evidence stamp. **Does not** write healed columns. |
 | Device Events UI | If stored action/category is Unknown, show taxonomy TAP. SDK source fills evidence even if payload omitted it. |
 | Hikvision callback | `resolveLinkedEmployeeForDevicePerson` (deviceEmpId **or** padded employeeId). On match, `upsertDeviceUserInventoryStub` and set `deviceUserId` on the event. |
 
