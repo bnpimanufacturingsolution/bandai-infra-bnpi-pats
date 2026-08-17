@@ -25,6 +25,19 @@
 - Proof: `.runtime/device-event-deeplink-20260817/`. Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
 - Operator must have `localhost:3001` healthy; Vite cache is not API proof.
 
+## 2026-08-17 - Device event details SHE + icon/label (push)
+
+- Status: `IMPLEMENTED`. Report: `.wwg/reports/device-event-details-she-20260817.md`.
+- Shrink/Hide/Embody + icon and full button labels on view-event modal.
+- Principle + grok rule 06 + DESIGN.md. Push when this commit is green.
+
+## 2026-08-17 - SHE UI doctrine saved
+
+- Status: `PRINCIPLE_ACTIVE`.
+- Shrink, Hide, Embody (Maeda). Hide is the forgotten third word.
+- `.wwg/wiki/principles/shrink-hide-embody.md` + `.grok/rules/06-shrink-hide-embody.md` + `DESIGN.md`.
+- Pull when operator says clean UI / Carpati UI / SHE.
+
 ## 2026-08-17 - Dup updates documented (no push)
 
 - Status: `DOCUMENTED_LOCAL_API_PROVEN`.

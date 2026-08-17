@@ -48,11 +48,22 @@ When a table column is a **count, total, or aggregate** (e.g. Enrolled, Members,
 
 Canonical example: Benefits Management **Enrolled** via `employeeBenefitService.countByBenefitTypeId` (`document=false&count=true`).
 
+## Shrink, Hide, Embody (SHE)
+
+Operator UI doctrine (John Maeda). Full brief: `.wwg/wiki/principles/shrink-hide-embody.md`.
+
+- **Shrink** — make the surface feel smaller. Fewer boxes, narrower detail modals, one list instead of a card grid.
+- **Hide** — keep complexity off first paint. Raw payload and debug fields go in a **closed** accordion.
+- **Embody** — what remains must be complete enough to act (person, event, time, result, terminal, device status).
+
+When the operator says “that clean design” or “Carpati UI”, pull this. The third word is **Hide**.
+
 ## Components
 
 - Use existing Radix/shadcn accordion, select, switch, input, and button components.
 - Use numeric badges for operational counts.
 - Dropdowns/selects should keep the existing bordered white control vocabulary.
+- **Icon + label together.** Action buttons show a lucide icon and the full words (`Device user`, `Employee record`). Detail rows show a small icon beside the label. Do not ship icon-only controls or strip icons when cleaning a screen.
 
 ## Motion
 

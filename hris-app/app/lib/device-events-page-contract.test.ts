@@ -244,6 +244,9 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Will add to Device Events");
 		expect(routeSource).to.contain("Activity in selected window");
 		expect(routeSource).to.contain("Raw payload");
+		expect(routeSource).to.contain('<Accordion type="single" collapsible');
+		expect(routeSource).to.contain('value="raw-payload"');
+		expect(routeSource).not.to.contain('defaultValue="raw-payload"');
 		expect(routeSource).to.contain("FACE_ENROLLED");
 		expect(routeSource).not.to.contain('const viewMode = (searchParams.get("view")');
 		expect(routeSource).to.contain("Loading saved events…");

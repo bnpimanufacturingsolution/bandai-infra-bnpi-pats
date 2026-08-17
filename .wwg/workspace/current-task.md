@@ -1,5 +1,25 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 SHE uses icon + label
+
+- Operator: when making UI, full use of icons and button labels.
+- Details modal: outline buttons with UserRound + full labels; fact rows icon+label; Raw payload Braces + label.
+- Doctrine: Shrink ≠ strip icons. SHE + DESIGN.md + grok rule 06.
+
+## Latest Task Addendum - 2026-08-17 Persist SHE design doctrine
+
+- Operator: always be able to pull Shrink / Hide / Embody.
+- Active principle: `.wwg/wiki/principles/shrink-hide-embody.md`
+- Always-on reminder: `.grok/rules/06-shrink-hide-embody.md`
+- Also: `DESIGN.md`, terminology **SHE**.
+
+## Latest Task Addendum - 2026-08-17 Device event details SHE cleanup
+
+- Operator: clean details modal; remembered Shrink + Embody, forgot Hide (Maeda SHE).
+- Shrink: `max-w-lg`, one definition list, no 4-card grid.
+- Hide: raw payload stays a quiet closed accordion.
+- Embody: person, event, time, result, source, terminal, device status only.
+
 ## Latest Task Addendum - 2026-08-17 Device event details drop payload grid
 
 - UI: remove Device payload field grid from details modal. Keep Terminal; Device status stays on that card. Raw payload remains a closed accordion.
