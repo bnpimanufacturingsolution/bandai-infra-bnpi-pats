@@ -4108,6 +4108,9 @@ export const controller = (prisma: PrismaClient) => {
 		const createLimit = Number.isFinite(requestedCreateLimit)
 			? Math.min(Math.max(Math.floor(requestedCreateLimit), 1), 500)
 			: 250;
+		const requestedEmployeeIds = Array.isArray(req.body?.employeeIds)
+			? req.body.employeeIds.map((value: unknown) => String(value || "").trim()).filter(Boolean)
+			: [];
 
 		if (!organizationId) {
 			res.status(401).json(buildErrorResponse("Unauthorized access", 401));
@@ -4130,6 +4133,7 @@ export const controller = (prisma: PrismaClient) => {
 				organizationId,
 				payrollPeriodId,
 				actorEmployeeId,
+				employeeIds: requestedEmployeeIds,
 				limit: createLimit,
 			});
 
@@ -4164,6 +4168,104 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			timesheetLogger.error(`Failed to prepare period draft timesheets: ${error}`);
 			res.status(500).json(buildErrorResponse("Failed to prepare draft timesheets", 500));
+		}
+	};
+
+	const syncObligationLines = async (req: Request, res: Response, _next: NextFunction) => {
+		const authReq = req as AuthRequest;
+		const organizationId = authReq.organizationId;
+		const id = String(req.params.id || "").trim();
+
+		if (!organizationId) {
+			res.status(401).json(buildErrorResponse("Unauthorized access", 401));
+			return;
+		}
+
+		if (!isTimesheetPolicyManager(authReq.role)) {
+			res.status(403).json(
+				buildErrorResponse("You are not authorized to prepare timesheets", 403),
+			);
+			return;
+		}
+
+		if (!id) {
+			res.status(400).json(buildErrorResponse("Timesheet ID is required", 400));
+			return;
+		}
+
+		try {
+			const timesheet = await prisma.timesheet.findFirst({
+				where: {
+					organizationId,
+					isDeleted: false,
+					OR: [{ id }, { code: id }],
+				},
+				select: {
+					id: true,
+					code: true,
+					employeeId: true,
+					payrollPeriodId: true,
+					organizationId: true,
+					payrollPeriod: {
+						select: {
+							startDate: true,
+							endDate: true,
+						},
+					},
+					employee: {
+						select: {
+							employmentStartDate: true,
+							employmentHireDate: true,
+						},
+					},
+				},
+			});
+
+			if (!timesheet) {
+				res.status(404).json(buildErrorResponse("Timesheet not found", 404));
+				return;
+			}
+
+			if (!timesheet.payrollPeriod) {
+				res.status(400).json(buildErrorResponse("Timesheet has no payroll period", 400));
+				return;
+			}
+
+			const periodStart = normalizeToStartOfDay(new Date(timesheet.payrollPeriod.startDate));
+			const hireDate = getEffectiveEmploymentStartDate(timesheet.employee);
+			const fromDate = hireDate && hireDate > periodStart ? hireDate : periodStart;
+
+			const lines = await materializeTimesheetLinesFromObligations(prisma, {
+				organizationId: timesheet.organizationId,
+				employeeId: timesheet.employeeId,
+				payrollPeriodId: timesheet.payrollPeriodId,
+				timesheetId: timesheet.id,
+				fromDate,
+				toDate: timesheet.payrollPeriod.endDate,
+			});
+
+			try {
+				await invalidateTimesheetCaches(timesheet.id, timesheet.code);
+			} catch (cacheError) {
+				timesheetLogger.warn(
+					`Failed to invalidate cache after obligation line sync for ${timesheet.id}:`,
+					cacheError,
+				);
+			}
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Timesheet obligation lines materialized",
+					{
+						timesheetId: timesheet.id,
+						lineCount: Array.isArray(lines) ? lines.length : 0,
+					},
+					200,
+				),
+			);
+		} catch (error) {
+			timesheetLogger.error(`Failed to sync obligation lines: ${error}`);
+			res.status(500).json(buildErrorResponse("Failed to sync obligation lines", 500));
 		}
 	};
 
@@ -5798,6 +5900,7 @@ export const controller = (prisma: PrismaClient) => {
 		listPayrollCorrections,
 		normalizeBreakdownPreview,
 		ensurePeriodDrafts,
+		syncObligationLines,
 		repairCurrentPeriodCoverage,
 		lockPeriodTimesheets,
 		sendReminder,

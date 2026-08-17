@@ -1,5 +1,16 @@
 # Project Truth
 
+## Zen 00010 salary, timesheet, payroll preview (2026-08-17)
+
+- Status: `CONFIRMED_LIVE_DEV`. Timesheet sync **code** is on this `develop` push.
+- Operator could not generate payroll: **Timesheet is missing for this payroll period** on Period 1 Aug 2026 (`PP-20260811-20260826`, 11–25 Aug Manila). Hire 12 Aug 2026; no DM4/bulk draft existed.
+- **Salary:** `basicSalary` ₱11,000, `SEMI_MONTHLY`, PHP. Monthly display ₱22,000 = Technician `minSalary` floor. Not a Sheet2 register basic.
+- **Timesheet:** `cmswwobaz05mxlp01e8p71f9q` APPROVED. Fourteen `Timesheetline` rows were materialized from `AttendanceObligation` (DEV DB `127.0.0.1:55435`).
+- **Preview after lines (Manila clocks):** 3 ABSENT (14–16 Aug) −₱2,357.14; late+UT 1,229 min −₱2,011.76; gross ₱6,631.10; SSS ₱675 + PhilHealth ₱331.56 + Pag-IBIG ₱200; net ₱5,424.54. Still preview — no `EmployeePayroll` row.
+- **Engine:** generate reads saved lines. Empty lines → daily rate ₱0 → no attendance deduct. `POST /api/payrollPeriod/:id/generate-timesheet` writes payroll from **APPROVED** timesheets; it does not create timesheets.
+- **Code:** `POST /api/timesheet/:id/sync-obligation-lines`; `ensure-period-drafts` accepts `employeeIds`.
+- Math: `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`. Code: `.wwg/reports/zen-payroll-timesheet-code-20260817.md`.
+
 ## User-facing encoding / boarding notification titles (2026-08-17)
 
 - Status: `CONFIRMED_CODE_AND_LIVE_DEV_ROW`.

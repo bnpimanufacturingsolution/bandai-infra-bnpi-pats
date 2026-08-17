@@ -2,6 +2,13 @@
 
 Last updated: 2026-08-17
 
+## 2026-08-17 Zen 00010 payroll / timesheet
+
+- Missing timesheet blocked generate for Period 1 Aug 2026 (11–25 Aug Manila).
+- Salary ₱11,000 SEMI_MONTHLY (Technician floor). Timesheet approved; 14 lines attached; preview net ₱5,424.54.
+- API: `POST /api/timesheet/:id/sync-obligation-lines` (this `develop` push).
+- Math: `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`. Code: `.wwg/reports/zen-payroll-timesheet-code-20260817.md`.
+
 ## 2026-08-17 Encoding / boarding notification titles
 
 - `Onboarding Completed! ðŸŽ‰` was Latin-1 of `🎉` in source, then stored on the notification.

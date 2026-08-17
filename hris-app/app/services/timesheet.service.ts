@@ -846,7 +846,7 @@ class TimesheetService extends APIService {
 
 	async ensurePeriodDrafts(
 		payrollPeriodId: string,
-		options: { createLimit?: number } = {},
+		options: { createLimit?: number; employeeIds?: string[] } = {},
 	): Promise<EnsurePeriodDraftsResponse> {
 		try {
 			const response = await hrisApiClient.post<EnsurePeriodDraftsResponse>(
@@ -860,6 +860,24 @@ class TimesheetService extends APIService {
 		} catch (error: any) {
 			console.error("Error preparing draft timesheets:", error);
 			throw new Error(error.message || "Failed to prepare draft timesheets");
+		}
+	}
+
+	async syncObligationLines(
+		timesheetId: string,
+	): Promise<{ timesheetId: string; lineCount: number }> {
+		try {
+			const response = await hrisApiClient.post<{ timesheetId: string; lineCount: number }>(
+				`/api/timesheet/${timesheetId}/sync-obligation-lines`,
+				{},
+			);
+			if (!response.data) {
+				throw new Error(response.message || "Failed to sync timesheet obligation lines");
+			}
+			return response.data;
+		} catch (error: any) {
+			console.error("Error syncing timesheet obligation lines:", error);
+			throw new Error(error.message || "Failed to sync timesheet obligation lines");
 		}
 	}
 

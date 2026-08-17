@@ -1,5 +1,12 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-17 - Zen 00010 timesheet lines + sync API
+
+- Status: `IMPLEMENTED_DOCUMENTED` — operator asked to push leftover timesheet sync + docs.
+- Missing timesheet → created/approved `cmswwobaz05mxlp01e8p71f9q`; 14 lines materialized; preview deducts absent/late.
+- `POST /api/timesheet/:id/sync-obligation-lines` + `ensure-period-drafts` `employeeIds`.
+- Reports: `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`, `.wwg/reports/zen-payroll-timesheet-code-20260817.md`.
+
 ## 2026-08-17 - Encoding / boarding titles + set-active recompute
 
 - Status: `IMPLEMENTED_DOCUMENTED` — operator asked to document and push `develop`.

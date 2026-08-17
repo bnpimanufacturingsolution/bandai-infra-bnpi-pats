@@ -1,5 +1,13 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 Document all code changes
+
+- Operator: make sure all code changes are well documented.
+- Canonical: `.wwg/reports/zen-payroll-timesheet-code-20260817.md` (this thread’s code + live DEV).
+- Math (Manila): `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`.
+- Encoding pack already documented + pushed `7b5030b`.
+- Operator then asked to push every leftover change. Pack: timesheet `sync-obligation-lines` + `ensure-period-drafts` `employeeIds` + WWG reports.
+
 ## Latest Task Addendum - 2026-08-17 SHE uses icon + label
 
 - Operator: when making UI, full use of icons and button labels.
