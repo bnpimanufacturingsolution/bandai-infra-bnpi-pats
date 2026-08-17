@@ -1,6 +1,20 @@
 # Project Truth Summary
 
-Last updated: 2026-08-13
+Last updated: 2026-08-17
+
+## 2026-08-17 Device Events TAP display + person 10
+
+- Operator Check Out on Device D (person `10`, serial `9652`) already updated attendance. Unknown Vendor / Unknown evidence was stale stored taxonomy.
+- GET/UI now reclassify those rows as **Attendance / TAP** and stamp **SDK callback** + direct evidence. Commit `a6dce32`.
+- Callback next tap matches `deviceEmpId` or padded `employeeId` and links DeviceUser. `10` ≠ `01515`.
+- DeviceUser `10` on B/D/E linked to Zen Andrei `00010`. Other unmatched ids without an employee were not linked.
+- Report: `.wwg/reports/device-event-tap-display-20260817.md`.
+
+## 2026-08-17 Device Events saved-event details deeplink
+
+- `action=view-event&id=` opens **Device event details** by `DeviceEvent.id`.
+- Table `page=` is not the event identity. Do not resolve the modal from the current page only.
+- API: `GET /api/device/events/item/:eventId`. Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
 
 ## 2026-08-13 Hikvision Select Status → HRIS (audit)
 
@@ -82,6 +96,7 @@ Last updated: 2026-08-13
 - The current A-F host-forward map is HTTP `10080-10085`, HTTPS `10443-10448`, and SDK `18000-18005`. A listening SSH process alone is not health proof; every port must carry traffic.
 - Sync Center transport availability is sourced from bounded quick health, not `sync-preview?quick=true` source-user counts. Full merge inventory and physical/operator state are separate evidence. Current operator truth is exactly five Main Entrance devices online with Main C down; the earlier A-F quick-health result is `CONFLICTING` transport evidence until its mapping/cache/probe semantics are root-caused. The latest plan was read-only and no physical write was started, so the merge is not fulfilled.
 - Saved `DeviceEvent` rows are independent of listener readiness. The Saved Events UI preserves database rows while listener/tap status loads or refreshes.
+- 2026-08-17 Device Events “duplicates”: (1) armed B/D/E ACS **exception** `major=2`/`minor=38` every ~301s, empty person — not a tap; local API skip persist proven. (2) `identity_repost` extra rows for one serial — serial collapse in git. Historical rows remain. Report: `.wwg/reports/device-events-dup-20260817.md`.
 
 - Hyper-V is available from the elevated Windows host context.
 - Repo source shape now includes `hris-api`, `hris-app`, and `hris-emp-app`, with `hris-emp-app` tracked as a git submodule rooted in this workspace and intended to remain visible/editable beside the other HRIS surfaces.

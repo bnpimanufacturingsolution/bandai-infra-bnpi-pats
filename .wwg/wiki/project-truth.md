@@ -1,5 +1,32 @@
 # Project Truth
 
+## Device Events TAP display and person-10 inventory (2026-08-17)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL_GET` (commit `a6dce32`). Public DEV UI is `NEEDS_CONFIRMATION` until that SHA is serving.
+- Operator tap Device D serial `9652` person `10` (Check Out, major=5 / minor=38) already set `ATTENDANCE_UPDATED` on attendance `cmsr4ngt2011jvxj4wardyw9f`. The Unknown Vendor / Unknown evidence / Direct No labels were **stale stored taxonomy**, not a failed punch.
+- **Classify:** ACS `major=2` + `minor=38` empty-person is an armed-device exception (not a punch). `major=5` + fingerprint-pass / `minor=38` is `ATTENDANCE` / `TAP`.
+- **GET / UI:** if stored `eventCategory`/`eventAction` is empty, `UNKNOWN`, or `UNKNOWN_VENDOR`, display uses live `classifyDeviceEvent`. SDK listener rows missing evidence stamp as `SDK_CALLBACK` + `directDeviceEvidence=true`. Opening the list can heal those stored columns.
+- **Callback match:** attendance lookup uses `resolveLinkedEmployeeForDevicePerson` (`deviceEmpId` or padded `employeeId`, e.g. `10`/`00010` and `01515`/`1515`). On match, the callback upserts/links `DeviceUser` and sets `deviceUserId` on the event. Pad does **not** mean `10` = `01515`.
+- **Inventory this session:** DeviceUser `10` on Main B/D/E (`uzaro_zen`) was manually linked ACTIVE to employee `00010` Zen Andrei. The other unmatched DeviceUsers with no HRIS employee were left unmatched.
+- Report: `.wwg/reports/device-event-tap-display-20260817.md`.
+
+## Device Events saved-event details deeplink (2026-08-17)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL_API`.
+- Operator URL with `action=view-event&id=<DeviceEvent.id>&page=116` used to open
+  **Device event details** and say the event was not on the current table page.
+- **Cause:** modal resolved only `rows.find(id)` on the current saved page
+  (`limit` default 10, `sort=receivedAt desc`). `page` is leftover table
+  position. New listener rows shift paging; socket prepend is same-tab only.
+- **Contract:** details load by id via `GET /api/device/events/item/:eventId`
+  (org-scoped, uncached). Table `page=` must not gate the modal.
+- Live proof: `cmsr688py002xvxwwttxhdsal` is `ATTENDANCE` / `TAP` / person `10`.
+  Device D `page=116` did not contain it. Item route did.
+- Local Vite (`:5175`) needs API (`:3001`) up. Cached table rows are not API proof.
+- Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
+  Architecture: `.wwg/wiki/05-architecture/device-events-saved-event-deeplink.md`.
+  Evidence: `.runtime/device-event-deeplink-20260817/`.
+
 ## Hikvision panel Select Status mapping (2026-08-13)
 
 - Status: `CONFIRMED_CODE_AND_LIVE_DEV_DB` (audit only; no mapping implemented).
@@ -326,6 +353,12 @@ Accepted or observed architecture:
 - Item: Hikvision create/enroll biometric custody is dual-plane after a plain device person id is evidenced: DeviceUser holds current raw fingerprint/face custody, while USER_CREATED and FINGERPRINT_ENROLLED DeviceEvent payloads also retain the same usable blobs. Automatic ISAPI capture after plain-id resolution is the happy path; the UI Capture action is repair-only. UserInfo enrichment must preserve callback-owned raw custody with an optimistic `updatedAt` merge/retry so a slower inventory write cannot erase the saved template.
   - Status: CONFIRMED_LOCAL_RUNTIME_EVIDENCE_WITH_BOUNDARY
   - Evidence: On 2026-07-19, TEST A person `15` remained `numOfFP=1`, a same-person (non-donor) rewrite completed with device progress status 6 and sticky read-back, DeviceUser `cmrrkhpba00017ziwplzxgkce` stored one 684-character raw base64 template, and saved FINGERPRINT_ENROLLED rows stored the same 684-character template with plain `employeeNo=15`, the DeviceUser FK, and custody `raw_on_event_and_device_user`. Socket evidence delivered saved lifecycle rows with plain `15` while opaque tokens remained in payload evidence. Boundary: the existing-person ACS callbacks themselves still carried empty employee identity and zero templates; HRIS logSearch/plain-id resolution plus automatic ISAPI capture closed the journey. Person `15` has `numOfFace=0`, so no face is claimed. Evidence pack: `.runtime/cpp-first-create-enroll-raw-20260719-200043/`.
+- Item: Armed Hikvision listener devices emit ACS **exception** `major=2` `minor=38` about every 301 seconds with empty person. That is not an attendance tap. Real fingerprint taps are `major=5` `minor=38` and have a person id. Local HRIS must not persist the exception as a Saved event.
+  - Status: CONFIRMED_LOCAL_RUNTIME_EVIDENCE_WITH_BOUNDARY
+  - Evidence: 2026-08-17 DEV: only armed B/D/E produced these rows; A/C/F were 0. Gaps 301–302s; serials increment per device; payload IP matches Device.address; 0 same-second / 0 same-serial across devices. Ledger had 4,541+ empty SDK `2/38` vs major=5/38 never empty (590 SDK + 788 callback). Local `POST /api/hikvision/callback` with that shape returns `persisted=false` `reason=acs_exception_not_punch` and inserts 0 rows. C++ `classify_event` now requires major=5; running VM ELF rebuild is `NEEDS_CONFIRMATION`. A live `2/38` row can still appear if another API writer shares the DEV DB. Report: `.wwg/reports/device-events-dup-20260817.md`.
+- Item: Same physical ACS `serialNo` on one device must not become multiple `DeviceEvent` rows when C++ `identity_repost` later fills or guesses `employeeNo`.
+  - Status: CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY
+  - Evidence: Live serial 5560 on Main D had four rows (empty, 1838, 320, 186) because `dedupeKey` included `employeeNo` and serial fallback required a person + same source. `a801c4b` matches by device+serial (any source, empty person ok) and updates in place. Historical extras remain until a reviewed cleanup. Report: `.wwg/reports/device-events-dup-20260817.md`.
 - Item: `DeviceEvent` is the single saved source of truth for physical-device events; current device inventory is a separate evidence plane and cannot create lifecycle history by itself.
   - Status: CONFIRMED_LOCAL_RUNTIME_EVIDENCE_WITH_BOUNDARY
   - Evidence: On 2026-07-16, Main Entrance Device A at `10.184.38.173:443` directly returned 167 users, 162 users with fingerprints, 161 with faces, 109 with cards, and 2,107 device logs. A frozen window returned 70 ACS rows whose serials matched 70/70 saved SDK `DeviceEvent` rows. `ContentMgmt/logSearch` returned 23 rows across two raw XML pages; all 23 saved with direct evidence and a repeat execution reported 23 duplicates. Cleanup preview and backup isolated 219 false current-state lifecycle rows (120 `USER_CREATED`, 99 `FINGERPRINT_ENROLLED`) with zero attendance links; execute deleted those rows and zero attendance, and postcondition preview returned zero. Retained rows carry evidence source/directness/raw vendor evidence, and API action/evidence summaries reconcile to saved-row totals. Boundary: proof is local/shared-DEV runtime evidence; full historical 2,107-row ACS serial reconciliation and GitOps/public promotion remain open. Detailed evidence: `.wwg/reports/hikvision-device-events-sync-center-current-state-20260716.md`.

@@ -1,12 +1,32 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 Device Events view-event deeplink
+
+- Task mode: bug fix + document (no push).
+- Operator deep link `page=116&action=view-event&id=cmsr688py002xvxwwttxhdsal`
+  opened **Device event details** empty (first “not on this page”, then “not found”).
+- Cause: modal used current table page only; `page` goes stale; then local API `:3001` was down while Vite `:5175` still showed cached rows.
+- Fix: `GET /api/device/events/item/:eventId` + `useDeviceEvent`; modal no longer requires the row on the page.
+- Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
+- Live: item route returns TAP / person `10`. Did not push.
+
+## Latest Task Addendum - 2026-08-17 Dup updates documented + live skip proof
+
+- Operator: confirm we are on the updates; document them.
+- Local `:3001` **is** on `935963a` skip: smoke `GROK-DOC-M2-38-20260817` → `acs_exception_not_punch`, DB 0 rows.
+- Git: `a801c4b` + `935963a` (+ later `a6dce32` TAP display).
+- CONFLICTING: live B `2/38` serial 8564 still saved `02:51:12Z` after this API start — possible second writer. Not pushed this pass.
+- Canonical report: `.wwg/reports/device-events-dup-20260817.md`.
+
 ## Latest Task Addendum - 2026-08-17 Device Event other-info TAP display
 
+- Task mode: bug fix + truth sync. **Do not push** unless asked (`a6dce32` already on origin from earlier).
 - Operator tap Device D person 10 serial 9652: attendance updated; UI still showed Unknown Vendor / Unknown evidence.
 - Cause: GET copied stale stored UNKNOWN taxonomy; payload lacked evidenceSource on old rows.
 - Fix: GET reclassifies stale UNKNOWN to TAP for major=5 punches; stamp SDK_CALLBACK + direct evidence; UI prefers live taxonomy; callback matches employee by pad/deviceEmpId/employeeId and links DeviceUser on next tap.
 - Live local GET `cmsr688py002xvxwwttxhdsal` now `ATTENDANCE` / `TAP` / `SDK_CALLBACK` / `direct=true`.
-- Did not auto-link the other 50 unmatched (no HRIS employee).
+- DeviceUser 10 on B/D/E linked ACTIVE to `00010` Zen Andrei. Did not auto-link the other 50 unmatched (no HRIS employee).
+- Full write-up: `.wwg/reports/device-event-tap-display-20260817.md`.
 
 ## Latest Task Addendum - 2026-08-17 Duplicate per active device
 

@@ -1,5 +1,30 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-17 - Device Event TAP display + person-10 link
+
+- Status: `IMPLEMENTED_DOCUMENTED_LOCAL` (`a6dce32` already on `origin/develop` from before the no-push instruction).
+- Operator serial 9652 person 10 Check Out: attendance was already updated. Unknown Vendor / Unknown evidence = stale stored taxonomy.
+- GET/UI reclassify stale UNKNOWN → TAP; SDK evidence stamp; callback pad match + DeviceUser link on next tap.
+- Data: DeviceUser 10 on B/D/E linked to `00010` Zen Andrei. Other unmatched left unmatched.
+- Proof: local GET TAP/`SDK_CALLBACK` on `cmsr688py002xvxwwttxhdsal`. Report: `.wwg/reports/device-event-tap-display-20260817.md`.
+- Do not push unless asked. Public DEV UI until API SHA rolls is `NEEDS_CONFIRMATION`.
+
+## 2026-08-17 - Device Events view-event deeplink
+
+- Status: `IMPLEMENTED_DOCUMENTED_LOCAL_NOT_PUSHED`.
+- `action=view-event&id=` must fetch `GET /api/device/events/item/:eventId`.
+- Table `page=` is not identity. Do not use `rows.find` alone.
+- Proof: `.runtime/device-event-deeplink-20260817/`. Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
+- Operator must have `localhost:3001` healthy; Vite cache is not API proof.
+
+## 2026-08-17 - Dup updates documented (no push)
+
+- Status: `DOCUMENTED_LOCAL_API_PROVEN`.
+- Local `:3001` skip persist proven (smoke serial `GROK-DOC-M2-38-20260817`, 0 DB rows).
+- Canonical: `.wwg/reports/device-events-dup-20260817.md` + project-truth + terminology **Armed-device ACS exception**.
+- CONFLICTING: live `2/38` still saved `02:51:12Z` after API start — do not claim every writer is on the skip.
+- No push (operator standing order).
+
 ## 2026-08-17 - Duplicate per active device
 
 - Status: `ROOT_CAUSED_AND_FIXED_LOCAL`.
