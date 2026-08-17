@@ -1,5 +1,14 @@
 # Project Truth
 
+## User-facing encoding / boarding notification titles (2026-08-17)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_DEV_ROW`.
+- Operator notification showed `Onboarding Completed! ðŸŽ‰`. That is UTF-8 `🎉` stored as Latin-1 in `checklistItem.controller.ts`, then copied into `notifications.title`.
+- **Product:** boarding complete titles are ASCII: `Onboarding Completed!` and `Exit Clearance Completed!`. Do not put emoji in those literals.
+- Live DEV row `cmswtgafn0cn3lp01zmus0q06` was patched to the ASCII title. New completes stay clean after this SHA is serving.
+- Same pass: documents default-icon compare, enroll ellipsis/bullet, Grafana `Open in Tempo`, migration `Level N - …` descriptions, and `POST /api/employee/:id/schedules/set-active` now recomputes `AttendanceObligation` (`ScheduleChanged`) so `/hr/attendance` does not keep a leftover Off Day.
+- Report: `.wwg/reports/mojibake-encoding-20260817.md`.
+
 ## Device Events TAP display and person-10 inventory (2026-08-17)
 
 - Status: `CONFIRMED_CODE_AND_LIVE_LOCAL_GET` (commit `a6dce32`). Public DEV UI is `NEEDS_CONFIRMATION` until that SHA is serving.

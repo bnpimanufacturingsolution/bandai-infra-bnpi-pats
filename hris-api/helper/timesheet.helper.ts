@@ -439,7 +439,7 @@ export async function generateTimesheetForEmployee(
 	});
 
 	if (existingTimesheet) {
-		console.log(`      â„¹ï¸  Timesheet already exists for this period, skipping...`);
+		console.log(`      Timesheet already exists for this period, skipping...`);
 		return existingTimesheet;
 	}
 

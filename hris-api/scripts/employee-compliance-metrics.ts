@@ -120,7 +120,7 @@ function isCompliant(
 // Fetch all employees with documents
 async function fetchEmployees() {
 	try {
-		console.log("ðŸ” Fetching employees from database...\n");
+		console.log("Fetching employees from database...\n");
 
 		const employees = await prisma.employee.findMany({
 			where: {
@@ -157,10 +157,10 @@ async function fetchEmployees() {
 			},
 		});
 
-		console.log(`âœ… Found ${employees.length} active employees\n`);
+		console.log(`OK Found ${employees.length} active employees\n`);
 		return employees;
 	} catch (error: any) {
-		console.error("âŒ Failed to fetch employees:", error.message);
+		console.error("ERROR Failed to fetch employees:", error.message);
 		process.exit(1);
 	}
 }
@@ -288,7 +288,7 @@ function calculateCompliance(employees: any[]): ComplianceStats {
 function progressBar(percentage: number, width: number = 30): string {
 	const filled = Math.round((percentage / 100) * width);
 	const empty = width - filled;
-	return `[${"â–ˆ".repeat(filled)}${"â–‘".repeat(empty)}]`;
+	return `[${"#".repeat(filled)}${"-".repeat(empty)}]`;
 }
 
 // Get color based on percentage
@@ -315,130 +315,129 @@ function displayMetrics(
 	console.log("\n");
 	console.log(
 		BOLD +
-			"â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—" +
+			"+----------------------------------------------------------------------+" +
 			RESET,
 	);
 	console.log(
 		BOLD +
-			"â•‘                  ðŸ“Š EMPLOYEE COMPLIANCE METRICS ðŸ“Š                    â•‘" +
+			"|                    EMPLOYEE COMPLIANCE METRICS                       |" +
 			RESET,
 	);
 	console.log(
 		BOLD +
-			"â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•" +
+			"+----------------------------------------------------------------------+" +
 			RESET,
 	);
 	console.log("\n");
 
 	// Overall Compliance
 	const compColor = getColorCode(stats.compliancePercentage);
-	console.log(BOLD + "â”Œâ”€ ðŸ“‹ OVERALL COMPLIANCE" + RESET);
-	console.log("â”‚");
+	console.log(BOLD + "+- OVERALL COMPLIANCE" + RESET);
+	console.log("|");
 	console.log(
-		`â”‚  ${compColor}${BOLD}${Math.round(stats.compliancePercentage)}%${RESET} ${progressBar(stats.compliancePercentage, 40)}`,
+		`|  ${compColor}${BOLD}${Math.round(stats.compliancePercentage)}%${RESET} ${progressBar(stats.compliancePercentage, 40)}`,
 	);
 	console.log(
-		`â”‚  ${BOLD}${stats.compliantEmployees}${RESET} of ${BOLD}${stats.totalEmployees}${RESET} employees compliant`,
+		`|  ${BOLD}${stats.compliantEmployees}${RESET} of ${BOLD}${stats.totalEmployees}${RESET} employees compliant`,
 	);
-	console.log("â”‚");
+	console.log("|");
 	console.log(
-		`â”‚  ${DIM}${stats.totalEmployees - stats.compliantEmployees} employees need attention${RESET}`,
+		`|  ${DIM}${stats.totalEmployees - stats.compliantEmployees} employees need attention${RESET}`,
 	);
-	console.log("â””" + "â”€".repeat(70));
+	console.log("+" + "-".repeat(70));
 	console.log("\n");
 
 	// Document Verification
 	const verColor = getColorCode(stats.verificationPercentage);
-	console.log(BOLD + "â”Œâ”€ âœ… DOCUMENT VERIFICATION" + RESET);
-	console.log("â”‚");
+	console.log(BOLD + "+- DOCUMENT VERIFICATION" + RESET);
+	console.log("|");
 	console.log(
-		`â”‚  ${verColor}${BOLD}${Math.round(stats.verificationPercentage)}%${RESET} ${progressBar(stats.verificationPercentage, 40)}`,
+		`|  ${verColor}${BOLD}${Math.round(stats.verificationPercentage)}%${RESET} ${progressBar(stats.verificationPercentage, 40)}`,
 	);
 	console.log(
-		`â”‚  ${BOLD}${stats.verifiedDocuments}${RESET} of ${BOLD}${stats.totalDocuments}${RESET} documents verified`,
+		`|  ${BOLD}${stats.verifiedDocuments}${RESET} of ${BOLD}${stats.totalDocuments}${RESET} documents verified`,
 	);
 	console.log(
-		`â”‚  ${DIM}${stats.totalDocuments - stats.verifiedDocuments} documents missing${RESET}`,
+		`|  ${DIM}${stats.totalDocuments - stats.verifiedDocuments} documents missing${RESET}`,
 	);
-	console.log("â””" + "â”€".repeat(70));
+	console.log("+" + "-".repeat(70));
 	console.log("\n");
 
 	// Document Type Breakdown
-	console.log(BOLD + "â”Œâ”€ ðŸ“‘ DOCUMENT TYPE BREAKDOWN" + RESET);
-	console.log("â”‚");
+	console.log(BOLD + "+- DOCUMENT TYPE BREAKDOWN" + RESET);
+	console.log("|");
 
 	const docTypes = [
-		{ name: "Gov't ID", icon: "ðŸªª", data: stats.documentBreakdown.govtId },
-		{ name: "TIN", icon: "ðŸ¦", data: stats.documentBreakdown.tin },
-		{ name: "SSS", icon: "ðŸ‘¥", data: stats.documentBreakdown.sss },
+		{ name: "Gov't ID", data: stats.documentBreakdown.govtId },
+		{ name: "TIN", data: stats.documentBreakdown.tin },
+		{ name: "SSS", data: stats.documentBreakdown.sss },
 		{
 			name: "PhilHealth",
-			icon: "ðŸ¥",
 			data: stats.documentBreakdown.philhealth,
 		},
-		{ name: "Pag-IBIG", icon: "ðŸ ", data: stats.documentBreakdown.pagibig },
+		{ name: "Pag-IBIG", data: stats.documentBreakdown.pagibig },
 	];
 
 	docTypes.forEach((docType, index) => {
 		const color = getColorCode(docType.data.percentage);
 		const percentage = Math.round(docType.data.percentage);
 		console.log(
-			`â”‚  ${docType.icon}  ${docType.name.padEnd(12)} ${color}${BOLD}${percentage}%${RESET} ${progressBar(docType.data.percentage, 30)} ${DIM}(${docType.data.count}/${stats.totalEmployees})${RESET}`,
+			`|  ${docType.name.padEnd(12)} ${color}${BOLD}${percentage}%${RESET} ${progressBar(docType.data.percentage, 30)} ${DIM}(${docType.data.count}/${stats.totalEmployees})${RESET}`,
 		);
-		if (index < docTypes.length - 1) console.log("â”‚");
+		if (index < docTypes.length - 1) console.log("|");
 	});
 
-	console.log("â””" + "â”€".repeat(70));
+	console.log("+" + "-".repeat(70));
 	console.log("\n");
 
 	// Statistics Summary
-	console.log(BOLD + "â”Œâ”€ ðŸ“Š STATISTICS SUMMARY" + RESET);
-	console.log("â”‚");
+	console.log(BOLD + "+- STATISTICS SUMMARY" + RESET);
+	console.log("|");
 	console.log(
-		`â”‚  Total Active Employees:      ${BOLD}${stats.totalEmployees.toString().padStart(6)}${RESET}`,
+		`|  Total Active Employees:      ${BOLD}${stats.totalEmployees.toString().padStart(6)}${RESET}`,
 	);
 	console.log(
-		`â”‚  Fully Compliant:             ${BOLD}${getColorCode(stats.compliancePercentage)}${stats.compliantEmployees.toString().padStart(6)}${RESET}`,
+		`|  Fully Compliant:             ${BOLD}${getColorCode(stats.compliancePercentage)}${stats.compliantEmployees.toString().padStart(6)}${RESET}`,
 	);
 	console.log(
-		`â”‚  Non-Compliant:               ${BOLD}\x1b[31m${stats.nonCompliantEmployees.length.toString().padStart(6)}${RESET}`,
+		`|  Non-Compliant:               ${BOLD}\x1b[31m${stats.nonCompliantEmployees.length.toString().padStart(6)}${RESET}`,
 	);
-	console.log("â”‚");
+	console.log("|");
 	console.log(
-		`â”‚  Total Expected Documents:    ${BOLD}${stats.totalDocuments.toString().padStart(6)}${RESET}`,
-	);
-	console.log(
-		`â”‚  Documents Verified:          ${BOLD}${getColorCode(stats.verificationPercentage)}${stats.verifiedDocuments.toString().padStart(6)}${RESET}`,
+		`|  Total Expected Documents:    ${BOLD}${stats.totalDocuments.toString().padStart(6)}${RESET}`,
 	);
 	console.log(
-		`â”‚  Documents Missing:           ${BOLD}\x1b[31m${(stats.totalDocuments - stats.verifiedDocuments).toString().padStart(6)}${RESET}`,
+		`|  Documents Verified:          ${BOLD}${getColorCode(stats.verificationPercentage)}${stats.verifiedDocuments.toString().padStart(6)}${RESET}`,
 	);
-	console.log("â””" + "â”€".repeat(70));
+	console.log(
+		`|  Documents Missing:           ${BOLD}\x1b[31m${(stats.totalDocuments - stats.verifiedDocuments).toString().padStart(6)}${RESET}`,
+	);
+	console.log("+" + "-".repeat(70));
 	console.log("\n");
 
 	// Show detailed breakdown if requested
 	if (detailed && stats.nonCompliantEmployees.length > 0) {
-		console.log(BOLD + "â”Œâ”€ âš ï¸  NON-COMPLIANT EMPLOYEES (Detailed)" + RESET);
-		console.log("â”‚");
+		console.log(BOLD + "+- NON-COMPLIANT EMPLOYEES (Detailed)" + RESET);
+		console.log("|");
 
 		stats.nonCompliantEmployees.forEach((emp, index) => {
 			console.log(
-				`â”‚  ${(index + 1).toString().padStart(3)}. ${BOLD}${emp.name}${RESET} ${DIM}(${emp.employeeId})${RESET}`,
+				`|  ${(index + 1).toString().padStart(3)}. ${BOLD}${emp.name}${RESET} ${DIM}(${emp.employeeId})${RESET}`,
 			);
 			console.log(
-				`â”‚       ${DIM}Department: ${emp.department} | Position: ${emp.position}${RESET}`,
+				`|       ${DIM}Department: ${emp.department} | Position: ${emp.position}${RESET}`,
 			);
 			console.log(
-				`â”‚       ${BOLD}\x1b[31mMissing:${RESET} ${emp.missingDocs.join(", ")}`,
+				`|       ${BOLD}\x1b[31mMissing:${RESET} ${emp.missingDocs.join(", ")}`,
 			);
-			if (index < stats.nonCompliantEmployees.length - 1) console.log("â”‚");
+			if (index < stats.nonCompliantEmployees.length - 1) console.log("|");
 		});
 
-		console.log("â””" + "â”€".repeat(70));
+		console.log("+" + "-".repeat(70));
 		console.log("\n");
 	} else if (stats.nonCompliantEmployees.length > 0) {
 		console.log(
-			`${DIM}ðŸ’¡ Run with --detailed flag to see non-compliant employee breakdown${RESET}`,
+			`${DIM}Run with --detailed flag to see non-compliant employee breakdown${RESET}`,
 		);
 		console.log("\n");
 	}
@@ -463,7 +462,7 @@ async function main() {
 		const employees = await fetchEmployees();
 
 		if (!employees) {
-			console.error("âŒ No employees found");
+			console.error("ERROR No employees found");
 			await prisma.$disconnect();
 			process.exit(1);
 		}
@@ -477,14 +476,14 @@ async function main() {
 		// Exit with appropriate code
 		if (stats.compliantEmployees === stats.totalEmployees) {
 			console.log(
-				`${BOLD}\x1b[32mðŸŽ‰ All employees are compliant!${RESET}\n`,
+				`${BOLD}\x1b[32mAll employees are compliant!${RESET}\n`,
 			);
 		}
 
 		await prisma.$disconnect();
 		process.exit(0);
 	} catch (error: any) {
-		console.error("\nâŒ Error:", error.message);
+		console.error("\nERROR Error:", error.message);
 		await prisma.$disconnect();
 		process.exit(1);
 	}

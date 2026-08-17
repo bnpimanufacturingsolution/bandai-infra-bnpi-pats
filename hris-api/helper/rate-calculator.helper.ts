@@ -88,31 +88,31 @@ export function calculateRatesWithBreakdown(
  * Format rate calculation details for console output
  */
 export function formatRateCalculationOutput(breakdown: RateCalculationBreakdown): void {
-	console.log(`💰 Monthly Salary: ${formatPHP(breakdown.monthlySalary)}`);
+	console.log(`Monthly Salary: ${formatPHP(breakdown.monthlySalary)}`);
 
 	if (breakdown.payFrequency === "SEMI_MONTHLY") {
-		console.log(`💰 Semi-Monthly Salary: ${formatPHP(breakdown.applicableSalary)}`);
+		console.log(`Semi-Monthly Salary: ${formatPHP(breakdown.applicableSalary)}`);
 	}
 
-	console.log(`📊 Working Days in Period: ${breakdown.workingDays} days`);
+	console.log(`Working Days in Period: ${breakdown.workingDays} days`);
 
 	// Show detailed daily rate calculation
-	console.log(`\n📌 DAILY RATE CALCULATION:`);
+	console.log(`\nDAILY RATE CALCULATION:`);
 	console.log(`   Formula: ${breakdown.dailyRateFormula}`);
 	console.log(`   Calculation: ${breakdown.dailyRateCalculation}`);
-	console.log(`   💵 Daily Rate: ${formatPHP(breakdown.dailyRate)}`);
+	console.log(`   Daily Rate: ${formatPHP(breakdown.dailyRate)}`);
 
 	// Show hourly rate calculation
-	console.log(`\n📌 HOURLY RATE CALCULATION:`);
+	console.log(`\nHOURLY RATE CALCULATION:`);
 	console.log(`   Formula: ${breakdown.hourlyRateFormula}`);
 	console.log(`   Calculation: ${breakdown.hourlyRateCalculation}`);
-	console.log(`   ⏰ Hourly Rate: ${formatPHP(breakdown.hourlyRate)}`);
+	console.log(`   Hourly Rate: ${formatPHP(breakdown.hourlyRate)}`);
 
 	// Show minute rate calculation
-	console.log(`\n📌 MINUTE RATE CALCULATION:`);
+	console.log(`\nMINUTE RATE CALCULATION:`);
 	console.log(`   Formula: ${breakdown.minuteRateFormula}`);
 	console.log(`   Calculation: ${breakdown.minuteRateCalculation}`);
-	console.log(`   ⏱️  Minute Rate: ${formatPHP(breakdown.minuteRate)}`);
+	console.log(`   Minute Rate: ${formatPHP(breakdown.minuteRate)}`);
 	console.log();
 }
 

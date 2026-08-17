@@ -1,5 +1,13 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-17 - Encoding / boarding titles + set-active recompute
+
+- Status: `IMPLEMENTED_DOCUMENTED` — operator asked to document and push `develop`.
+- Boarding titles ASCII. Documents icon compare, enroll copy, Grafana Tempo title, level descriptions cleaned.
+- `set-active` calls `recomputeAttendanceObligationsForRange` after assign.
+- Report: `.wwg/reports/mojibake-encoding-20260817.md`.
+- Tests: boarding + user-facing mojibake + set-active recompute contracts.
+
 ## 2026-08-17 - Device Event TAP display + person-10 link
 
 - Status: `IMPLEMENTED_DOCUMENTED_LOCAL` (`a6dce32` already on `origin/develop` from before the no-push instruction).

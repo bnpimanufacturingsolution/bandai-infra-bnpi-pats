@@ -2,6 +2,13 @@
 
 Last updated: 2026-08-17
 
+## 2026-08-17 Encoding / boarding notification titles
+
+- `Onboarding Completed! ðŸŽ‰` was Latin-1 of `🎉` in source, then stored on the notification.
+- Titles are now ASCII. Live DEV row `cmswtgafn0cn3lp01zmus0q06` patched.
+- `set-active` schedule also recomputes attendance obligations so HR Attendance is not leftover Off Day.
+- Report: `.wwg/reports/mojibake-encoding-20260817.md`.
+
 ## 2026-08-17 Device Events TAP display + person 10
 
 - Operator Check Out on Device D (person `10`, serial `9652`) already updated attendance. Unknown Vendor / Unknown evidence was stale stored taxonomy.

@@ -65,6 +65,9 @@ const LEGACY_DOCUMENT_TYPE_OPTIONS: SelectOption[] = [
 	{ value: "other", label: "Other" },
 ];
 
+/** Default page-facing-up glyph (📄). Compare against this — never a Latin-1 "ðŸ“„" mojibake. */
+const DEFAULT_DOCUMENT_ICON = "\u{1F4C4}";
+
 const getCanonicalDocumentCategoryValue = (value: string) =>
 	DOCUMENT_TYPE_CATEGORY_OPTIONS.find((option) => option.value === value)?.value || value;
 
@@ -327,7 +330,7 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 			case "medical_certificate":
 				return "🏥";
 			default:
-				return "📄";
+				return DEFAULT_DOCUMENT_ICON;
 		}
 	};
 
@@ -1098,7 +1101,7 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 
 											{/* Icon */}
 											<div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-3 shadow-sm border border-gray-100 group-hover:bg-gray-100 transition-colors text-3xl">
-												{getDocumentIcon(doc.type) !== "📄" ? (
+												{getDocumentIcon(doc.type) !== DEFAULT_DOCUMENT_ICON ? (
 													getDocumentIcon(doc.type)
 												) : (
 													<FileText className="w-8 h-8 text-gray-400" />
@@ -1143,7 +1146,7 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 											key={index}
 											className="flex items-center gap-4 p-3 hover:bg-gray-50 transition-colors">
 											<div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0 text-xl border border-gray-100">
-												{getDocumentIcon(doc.type) !== "📄" ? (
+												{getDocumentIcon(doc.type) !== DEFAULT_DOCUMENT_ICON ? (
 													getDocumentIcon(doc.type)
 												) : (
 													<FileText className="w-5 h-5 text-gray-400" />
@@ -1649,7 +1652,7 @@ function DocumentViewModal({
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 						<div className="flex items-start gap-4">
 							<div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#eadfda] bg-[#fbf8f5] text-2xl">
-								{getDocumentIcon(document.type) !== "ðŸ“„" ? (
+								{getDocumentIcon(document.type) !== DEFAULT_DOCUMENT_ICON ? (
 									getDocumentIcon(document.type)
 								) : (
 									<FileText className="h-6 w-6 text-gray-400" />

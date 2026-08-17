@@ -275,7 +275,7 @@ async function main() {
 				);
 			}
 		} catch {
-			// not healthy â€” fall through to reclaim/fail logic
+			// not healthy -- fall through to reclaim/fail logic
 		}
 	}
 

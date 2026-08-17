@@ -977,7 +977,7 @@ function isDm4NonAttendanceWorkbookPath(filePath: string): boolean {
 }
 
 function resolveDm4SourceFiles(rawSourceFiles: unknown[]) {
-	// Resolve only the caller-supplied paths. Do not auto-append default OT —
+	// Resolve only the caller-supplied paths. Do not auto-append default OT -
 	// that polluted biometrics folder expands and forced Import attendance off scope.
 	const resolvedInputs = rawSourceFiles
 		.map((item) => String(item || "").trim())
@@ -993,7 +993,7 @@ function resolveDm4SourceFiles(rawSourceFiles: unknown[]) {
 	const collected = Array.from(
 		new Set(resolvedInputs.flatMap((filePath) => collectWorkbookFiles(filePath))),
 	).sort((left, right) => left.localeCompare(right));
-	// Folder expands under confidential-files/DMs must not return DM1–DM3 masters as biometrics.
+	// Folder expands under confidential-files/DMs must not return DM1-DM3 masters as biometrics.
 	const workbookFiles = collected.filter((filePath) => !isDm4NonAttendanceWorkbookPath(filePath));
 	const emptyDirectories = resolvedInputs.filter(
 		(filePath) =>
@@ -1422,7 +1422,7 @@ function mergeExtractedBuckets(files: Array<{ sheets: SheetExtractionSummary[] }
 	};
 }
 
-// â”€â”€â”€ Shared file-parsing helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Shared file-parsing helper --------------------------------------------
 
 /**
  * Parse an uploaded file buffer (CSV or XLSX) into an array of EmployeeImportRow.
@@ -2025,7 +2025,7 @@ export const controller = (prisma: PrismaClient) => {
 
 	/**
 	 * GET /api/migration/hierarchy?organizationId=xxx&departmentCode=yyy
-	 * Get the employee hierarchy tree structured by department â†’ level.
+	 * Get the employee hierarchy tree structured by department -> level.
 	 * Leverages compound B-tree index: @@index([departmentId, levelId])
 	 */
 	const hierarchy = async (req: Request, res: Response, _next: NextFunction) => {
@@ -2198,7 +2198,7 @@ export const controller = (prisma: PrismaClient) => {
 	 *   - batchSize: number (optional, default 500)
 	 *   - skipDuplicates: boolean (optional, default true)
 	 *   - dryRun: boolean (optional, default false)
-	 *   - autoCreate: boolean (optional, default false â€” auto-create missing dept/pos/level)
+	 *   - autoCreate: boolean (optional, default false - auto-create missing dept/pos/level)
 	 */
 	const uploadCsv = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
@@ -2283,7 +2283,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			const autoCreate = parseBoolean(requestData.autoCreate, false);
 
-			// â”€â”€ Step 1: Parse file buffer into EmployeeImportRow[] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 1: Parse file buffer into EmployeeImportRow[] --------------
 			let rows: EmployeeImportRow[];
 			try {
 				rows = parseFileBufferToImportRows(uploadedFile.buffer);
@@ -2307,7 +2307,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			migrationLogger.info(`Parsed ${rows.length} rows from "${uploadedFile.originalname}"`);
 
-			// â”€â”€ Step 2: Load caches and optionally auto-create resources â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 2: Load caches and optionally auto-create resources ---------
 			const helper = new EmployeeImportHelper(prisma, organizationId);
 			await helper.loadCaches();
 
@@ -2328,7 +2328,7 @@ export const controller = (prisma: PrismaClient) => {
 				await helper.loadCaches();
 			}
 
-			// â”€â”€ Step 3: Map rows â†’ migrationService employee format â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 3: Map rows -> migrationService employee format ---------------
 			// The EmployeeImportHelper.mapRowToEmployeeData resolves all IDs.
 			// We then adapt the result to the EmployeeRowInput shape expected by the migration service.
 			const mappedEmployees: any[] = [];
@@ -2434,7 +2434,7 @@ export const controller = (prisma: PrismaClient) => {
 			const enablePostActions = true;
 			const strictPostActions = true;
 
-			// â”€â”€ Step 4: Execute migration service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 4: Execute migration service --------------------------------
 			const result = await service.executeMigration(
 				{
 					config: configValidation.data,
@@ -3324,7 +3324,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			const okCount = Number(summary.created || 0) + Number(summary.updated || 0);
 			const failedCount = Number(summary.failed || 0);
-			const userActivityMessage = `Uploaded compensation file "${sourceFilename}" — ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${failedCount} failed`;
+			const userActivityMessage = `Uploaded compensation file "${sourceFilename}" - ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${failedCount} failed`;
 			logMigrationActivity(
 				req,
 				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
@@ -3419,7 +3419,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			const okCount = Number(summary.created || 0) + Number(summary.updated || 0);
 			const failedCount = Number(summary.failed || 0);
-			const userActivityMessage = `Uploaded deduction file "${sourceFilename}" — ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${failedCount} failed`;
+			const userActivityMessage = `Uploaded deduction file "${sourceFilename}" - ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${failedCount} failed`;
 			logMigrationActivity(
 				req,
 				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
@@ -3515,7 +3515,7 @@ export const controller = (prisma: PrismaClient) => {
 			const okCount = Number(summary.created || 0) + Number(summary.updated || 0);
 			const failedCount = Number(summary.failed || 0);
 			const skippedCount = Number(summary.skipped || 0);
-			const userActivityMessage = `Uploaded work sharing schedule "${sourceFilename}" — ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${skippedCount} skipped, ${failedCount} failed`;
+			const userActivityMessage = `Uploaded work sharing schedule "${sourceFilename}" - ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${skippedCount} skipped, ${failedCount} failed`;
 			logMigrationActivity(
 				req,
 				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,

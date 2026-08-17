@@ -470,9 +470,9 @@ export function printBIRPart4(result: BIRPart4Result): void {
 	console.log(`         ${formatPHP(result.part4A.field24).padStart(20)}`);
 	console.log(`Field 25: Amount of Taxes Withheld`);
 	console.log(`         ${formatPHP(result.part4A.field25).padStart(20)}`);
-	console.log(`Field 25A: Amount of Taxes Withheld – Present Employer`);
+	console.log(`Field 25A: Amount of Taxes Withheld - Present Employer`);
 	console.log(`          ${formatPHP(result.part4A.field25A).padStart(20)}`);
-	console.log(`Field 25B: Amount of Taxes Withheld – Previous Employer`);
+	console.log(`Field 25B: Amount of Taxes Withheld - Previous Employer`);
 	console.log(`          ${formatPHP(result.part4A.field25B).padStart(20)}`);
 	console.log(`Field 26: Total Amount of Taxes Withheld as adjusted`);
 	console.log(`         ${formatPHP(result.part4A.field26).padStart(20)}`);

@@ -444,7 +444,7 @@
                 "value": [
                   {
                     "targetBlank": true,
-                    "title": "ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Open in Tempo",
+                    "title": "Open in Tempo",
                     "url": "http://localhost:3000/explore?left=%7B%22datasource%22:%22Tempo%22,%22queries%22:%5B%7B%22queryType%22:%22traceql%22,%22traceql%22:%22traceID%20=%20${__value.raw}%22%7D%5D%7D"
                   }
                 ]

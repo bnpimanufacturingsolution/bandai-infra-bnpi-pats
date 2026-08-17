@@ -1,5 +1,21 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 Device event details drop payload grid
+
+- UI: remove Device payload field grid from details modal. Keep Terminal; Device status stays on that card. Raw payload remains a closed accordion.
+
+## Latest Task Addendum - 2026-08-17 Device event details raw payload accordion
+
+- Task mode: UI. **Do not push** unless asked.
+- Operator: Device event details raw JSON is always open; put it in an accordion, closed by default.
+- `events.tsx` details modal: `Accordion type=single collapsible`, no `defaultValue`.
+
+## Latest Task Addendum - 2026-08-17 Encoding pack documented + push
+
+- Operator: document the encoding/schedule-hook changes and push `develop`.
+- Canonical: `.wwg/reports/mojibake-encoding-20260817.md` + project-truth.
+- Device event details accordion / payload-grid UI in `events.tsx` is **not** in this push (separate local addendum).
+
 ## Latest Task Addendum - 2026-08-17 Device Events view-event deeplink
 
 - Task mode: bug fix + document (no push).

@@ -1244,6 +1244,8 @@ interface PayrollPdfEmployeeBlock {
 }
 
 const PAYROLL_PESO_SYMBOL = "\u20b1";
+// Latin-1 and double-encoded peso glyphs from already-broken imported files.
+// Detectors only — sanitizePayrollPdfText replaces them with "P"; do not display these strings.
 const PAYROLL_PESO_MARKERS = [PAYROLL_PESO_SYMBOL, "â‚±", "Ã¢â€šÂ±"];
 
 function parseReportNumberValue(value: string) {
