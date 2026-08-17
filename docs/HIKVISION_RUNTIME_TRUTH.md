@@ -1,7 +1,14 @@
 # Hikvision Runtime Truth
 
 Task mode: Linux-first SDK/runtime truth.
-Last updated: 2026-08-13.
+Last updated: 2026-08-17.
+
+## Device Events TAP display (2026-08-17)
+
+Old saved SDK punches can still have stored `UNKNOWN` taxonomy. GET/UI reclassify `major=5` fingerprint-pass as `ATTENDANCE`/`TAP` and stamp `SDK_CALLBACK` evidence. ACS `major=2`/`minor=38` empty-person is not a punch.
+
+- WWG report: `.wwg/reports/device-event-tap-display-20260817.md`
+- Commit: `a6dce32` (do not push further unless asked)
 
 ## Select Status / T&A punch direction (2026-08-13)
 
