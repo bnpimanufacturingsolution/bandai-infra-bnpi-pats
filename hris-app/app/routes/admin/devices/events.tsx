@@ -1334,8 +1334,12 @@ const normalizeSavedEvent = (event: DeviceEvent): UnifiedDeviceEventRow => {
 		id: event.id,
 		origin: "saved",
 		deviceId: event.deviceId,
-		deviceName: event.device?.name,
-		deviceAddress: event.device?.address,
+		deviceName: event.device?.name || (event as { deviceName?: string | null }).deviceName || null,
+		deviceAddress:
+			event.device?.address ||
+			(event as { deviceAddress?: string | null }).deviceAddress ||
+			observedDeviceAddress ||
+			null,
 		devicePort: event.device?.port,
 		observedDeviceAddress,
 		hasDeviceAddressDrift,
@@ -1990,10 +1994,28 @@ export default function DeviceEventsPage() {
 			setLastRealtimeEvent(payload);
 			const hasRealtimeEventRow = Boolean(payload.event?.id);
 			if (hasRealtimeEventRow) {
+				const rawEvent = payload.event as DeviceEvent;
+				const socketPayload = rawEvent.payload || {};
+				const socketEvent: DeviceEvent = {
+					...rawEvent,
+					device: rawEvent.device
+						? {
+								...rawEvent.device,
+								id: rawEvent.device.id || rawEvent.deviceId,
+								name: rawEvent.device.name || "",
+								address:
+									rawEvent.device.address ||
+									socketPayload.deviceIP ||
+									socketPayload.ipAddress ||
+									socketPayload.deviceIp ||
+									"",
+							}
+						: rawEvent.device,
+				};
 				// Instant row: socket payload is source of truth for the new line.
 				setRealtimeSavedEvents((current) =>
 					[
-						payload.event as DeviceEvent,
+						socketEvent,
 						...current.filter((event) => event.id !== payload.event?.id),
 					].slice(0, Math.max(limitParam, 25)),
 				);
@@ -2352,6 +2374,7 @@ export default function DeviceEventsPage() {
 				latestRealtimeEventId,
 				receivedAt: latestSavedEvent.receivedAt,
 				eventTime: latestSavedEvent.eventTime,
+				source: latestSavedEvent.source,
 			})
 		: null;
 	const watcherHeadlineProcessingLabel = watcherHeadlineEvent
@@ -2362,6 +2385,7 @@ export default function DeviceEventsPage() {
 					latestRealtimeEventId,
 					receivedAt: watcherHeadlineEvent.receivedAt,
 					eventTime: watcherHeadlineEvent.eventTime,
+					source: watcherHeadlineEvent.source,
 				})
 		: latestSavedProcessingLabel;
 	const latestSdkActionLabel = latestSdkEvidenceEvent?.eventAction

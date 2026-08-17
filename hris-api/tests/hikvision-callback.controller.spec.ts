@@ -355,4 +355,191 @@ describe("Hikvision callback controller", () => {
 		});
 		expect(createdEvents).to.deep.equal([]);
 	});
+
+	const createSerialCollapsePrisma = () => {
+		const createdEvents: any[] = [];
+		const updatedEvents: any[] = [];
+		const device = {
+			id: "device-d",
+			organizationId: "org-1",
+			name: "Main Entrance Device D",
+			address: "10.184.37.23",
+			port: 80,
+			protocol: "http",
+			config: {},
+		};
+		let eventSeq = 0;
+		const prisma = {
+			device: {
+				findFirst: async (input: any) => {
+					if (input.where?.id === device.id) return device;
+					if (input.where?.address === device.address) return device;
+					return null;
+				},
+			},
+			deviceEvent: {
+				findFirst: async (input: any) => {
+					const dedupeKey = input?.where?.dedupeKey;
+					if (dedupeKey) {
+						return (
+							createdEvents.find(
+								(event) =>
+									event.organizationId === input.where.organizationId &&
+									event.dedupeKey === dedupeKey,
+							) || null
+						);
+					}
+					return null;
+				},
+				findUnique: async (input: any) =>
+					createdEvents.find((event) => event.id === input.where.id) || null,
+				findMany: async (input: any) => {
+					const start = input?.where?.eventTime?.gte
+						? new Date(input.where.eventTime.gte).getTime()
+						: null;
+					const end = input?.where?.eventTime?.lte
+						? new Date(input.where.eventTime.lte).getTime()
+						: null;
+					return createdEvents
+						.filter((event) => {
+							if (input?.where?.organizationId && event.organizationId !== input.where.organizationId) {
+								return false;
+							}
+							if (input?.where?.deviceId && event.deviceId !== input.where.deviceId) {
+								return false;
+							}
+							if (start !== null && new Date(event.eventTime).getTime() < start) {
+								return false;
+							}
+							if (end !== null && new Date(event.eventTime).getTime() > end) {
+								return false;
+							}
+							return true;
+						})
+						.sort(
+							(left, right) =>
+								new Date(left.receivedAt).getTime() - new Date(right.receivedAt).getTime(),
+						);
+				},
+				create: async (input: any) => {
+					eventSeq += 1;
+					const row = {
+						id: `event-${eventSeq}`,
+						receivedAt: new Date(`2026-08-17T08:11:0${eventSeq}.000Z`),
+						createdAt: new Date("2026-08-17T08:11:00.000Z"),
+						updatedAt: new Date("2026-08-17T08:11:00.000Z"),
+						...input.data,
+					};
+					createdEvents.push(row);
+					return row;
+				},
+				update: async (input: any) => {
+					updatedEvents.push(input);
+					const idx = createdEvents.findIndex((event) => event.id === input.where.id);
+					const base = idx >= 0 ? createdEvents[idx] : createdEvents[0];
+					const row = { ...base, ...input.data };
+					if (idx >= 0) createdEvents[idx] = row;
+					return row;
+				},
+			},
+			deviceUser: { findFirst: async () => null },
+			employee: { findFirst: async () => null },
+		};
+		return { prisma, device, createdEvents, updatedEvents };
+	};
+
+	const postSdkCallback = async (prisma: any, body: Record<string, any>) => {
+		const response = createResponse();
+		const request = {
+			body: {
+				source: "EN_HCNETSDK_ALARM",
+				deviceId: "device-d",
+				deviceIP: "10.184.37.23",
+				time: "2026-08-17T16:11:00+08:00",
+				major: 3,
+				minor: 0,
+				...body,
+			},
+			query: {},
+			get: () => "application/json",
+			io: null,
+		} as any;
+		await callbackController(prisma).handleCallback(
+			request,
+			response.res as any,
+			(() => undefined) as any,
+		);
+		return response;
+	};
+
+	it("fills an empty same-serial callback in place instead of inserting a second DeviceEvent", async () => {
+		const { prisma, createdEvents, updatedEvents } = createSerialCollapsePrisma();
+
+		const emptyResponse = await postSdkCallback(prisma, {
+			employeeNo: "",
+			serialNo: "5560",
+			eventKind: "acs_event",
+		});
+		const filledResponse = await postSdkCallback(prisma, {
+			employeeNo: "1838",
+			serialNo: "5560",
+			identitySource: "identity_repost",
+			eventKind: "acs_event",
+		});
+
+		expect(emptyResponse.statusCode).to.equal(200);
+		expect(filledResponse.statusCode).to.equal(200);
+		expect(filledResponse.body.data.duplicate).to.equal(true);
+		expect(createdEvents).to.have.length(1);
+		expect(createdEvents[0]).to.include({
+			employeeNo: "1838",
+			eventCategory: "RUNTIME",
+			eventAction: "SYNC_SIGNAL",
+		});
+		expect(createdEvents[0].payload).to.include({
+			serialNo: "5560",
+			employeeNo: "1838",
+			identitySource: "identity_repost",
+			evidenceSource: "SDK_CALLBACK",
+			directDeviceEvidence: true,
+		});
+		expect(
+			updatedEvents.some((item) => item.data?.employeeNo === "1838"),
+		).to.equal(true);
+	});
+
+	it("keeps the first filled employeeNo when a later identity_repost guesses a different person", async () => {
+		const { prisma, createdEvents } = createSerialCollapsePrisma();
+
+		await postSdkCallback(prisma, { employeeNo: "", serialNo: "5560" });
+		await postSdkCallback(prisma, { employeeNo: "1838", serialNo: "5560" });
+		const third = await postSdkCallback(prisma, {
+			employeeNo: "320",
+			serialNo: "5560",
+			identitySource: "identity_repost",
+		});
+
+		expect(third.body.data.duplicate).to.equal(true);
+		expect(createdEvents).to.have.length(1);
+		expect(createdEvents[0].employeeNo).to.equal("1838");
+		expect(createdEvents[0].payload.employeeNo).to.equal("320");
+		expect(createdEvents[0].payload.evidenceSource).to.equal("SDK_CALLBACK");
+	});
+
+	it("still creates two DeviceEvent rows when ACS serials differ", async () => {
+		const { prisma, createdEvents } = createSerialCollapsePrisma();
+
+		await postSdkCallback(prisma, { employeeNo: "1838", serialNo: "5560" });
+		await postSdkCallback(prisma, { employeeNo: "320", serialNo: "5561" });
+
+		expect(createdEvents).to.have.length(2);
+		expect(createdEvents.map((event) => event.employeeNo)).to.deep.equal([
+			"1838",
+			"320",
+		]);
+		expect(createdEvents[0].payload.serialNo).to.equal("5560");
+		expect(createdEvents[1].payload.serialNo).to.equal("5561");
+		expect(createdEvents[0].payload.directDeviceEvidence).to.equal(true);
+		expect(createdEvents[1].payload.evidenceSource).to.equal("SDK_CALLBACK");
+	});
 });

@@ -1,5 +1,14 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-17 - Device Events duplicated on Sync
+
+- Status: `ROOT_CAUSED_AND_FIXED_LOCAL`.
+- Screenshot 63,933 = live empty-person SDK taps + huge historical ledger, not four copies of one punch.
+- Live extra rows: same ACS serial inserted again on `identity_repost` because `dedupeKey` includes `employeeNo` and serial fallback required a person + same source.
+- Fix: serial-only match/update; Sync skip by serial; one ACS searchID; taxonomy/evidence stamps; Listener save + device name on socket.
+- Proof: `.runtime/device-event-dup-20260817/FINDINGS.md`. Mocha serial/socket 16 green; app vitest 20 green.
+- Existing 1,992 duplicate serial rows remain in DEV until a reviewed cleanup. New POSTs will collapse.
+
 ## 2026-08-13 - Timesheet Check In/Out from panel
 
 - Status: `IMPLEMENTED`.

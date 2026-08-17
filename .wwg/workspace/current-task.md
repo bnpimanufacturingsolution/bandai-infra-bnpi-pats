@@ -1,5 +1,15 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 Device Events look duplicated on Sync
+
+- Task mode: bug fix (DeviceEvent persist + Sync skip + UI honesty).
+- Operator: Saved events 63,933; rows look unknown / no person id; CUID device names; thought Sync duplicated logs.
+- Live: 63,940 rows. Screenshot is live SDK fingerprint taps with empty `dwEmployeeNo`, not four copies of one tap. CUIDs are Main D/E.
+- True extra rows: C++ `identity_repost` + dedupe key includes `employeeNo` (serial 5560 = empty + 1838 + 320 + 186). 963 serial groups / 1,992 rows.
+- Fix: serial-only collapse (any source / empty person), Sync skip by serial, one ACS `searchID` per job, persist taxonomy + evidence, socket device name, banner **Listener save**.
+- Evidence: `.runtime/device-event-dup-20260817/FINDINGS.md`.
+- REC: `REC-20260817-DEVICEEVENT-SERIAL-COLLAPSE` (C++ multi-guess + SYNC_SIGNAL vs logSearch leftover).
+
 ## Latest Task Addendum - 2026-08-13 Timesheet uses panel Check In/Out
 
 - Task mode: pairing fix after live status copy.

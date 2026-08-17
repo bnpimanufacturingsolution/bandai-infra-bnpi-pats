@@ -72,7 +72,7 @@ describe("device events realtime UI", () => {
 		).to.equal("Live socket");
 	});
 
-	it("labels the exact socket row as a watcher save", () => {
+	it("labels the exact socket row as saved now when source is not the SDK listener", () => {
 		expect(
 			getSavedDeviceEventProcessingLabel({
 				itemId: "event-1",
@@ -80,7 +80,31 @@ describe("device events realtime UI", () => {
 				eventTime: "2026-07-02T02:20:00.000Z",
 				receivedAt: "2026-07-02T02:20:02.000Z",
 			}),
-		).to.equal("Watcher save");
+		).to.equal("Saved now");
+	});
+
+	it("labels a non-listener socket row as saved now even when a source is present", () => {
+		expect(
+			getSavedDeviceEventProcessingLabel({
+				itemId: "event-1",
+				latestRealtimeEventId: "event-1",
+				eventTime: "2026-07-02T02:20:00.000Z",
+				receivedAt: "2026-07-02T02:20:02.000Z",
+				source: "HIKVISION_CALLBACK",
+			}),
+		).to.equal("Saved now");
+	});
+
+	it("labels the exact SDK listener socket row as a listener save", () => {
+		expect(
+			getSavedDeviceEventProcessingLabel({
+				itemId: "event-1",
+				latestRealtimeEventId: "event-1",
+				eventTime: "2026-07-02T02:20:00.000Z",
+				receivedAt: "2026-07-02T02:20:02.000Z",
+				source: "EN_HCNETSDK_ALARM",
+			}),
+		).to.equal("Listener save");
 	});
 
 	it("labels old punch times saved later as synced saves", () => {

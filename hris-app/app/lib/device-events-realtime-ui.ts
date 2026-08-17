@@ -77,14 +77,16 @@ export const getSavedDeviceEventProcessingLabel = ({
 	latestRealtimeEventId,
 	receivedAt,
 	eventTime,
+	source,
 }: {
 	itemId: string;
 	latestRealtimeEventId?: string | null;
 	receivedAt?: string | Date | null;
 	eventTime?: string | Date | null;
+	source?: string | null;
 }) => {
 	if (itemId && latestRealtimeEventId && itemId === latestRealtimeEventId) {
-		return "Watcher save";
+		return source === "EN_HCNETSDK_ALARM" ? "Listener save" : "Saved now";
 	}
 
 	const receivedAtMs = getTimeMs(receivedAt);

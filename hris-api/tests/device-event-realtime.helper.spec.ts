@@ -33,6 +33,73 @@ describe("device event realtime helper", () => {
 		expect(payload?.event?.employeeNo).to.equal("15");
 	});
 
+	it("includes a joined device { id, name, address } on the slim socket row", () => {
+		const payload = buildDeviceEventRealtimePayload({
+			id: "event-d",
+			organizationId: "org-1",
+			deviceId: "cmripjwkw00ffl0013lfxcbxw",
+			status: "UNMATCHED",
+			source: "EN_HCNETSDK_ALARM",
+			device: {
+				id: "cmripjwkw00ffl0013lfxcbxw",
+				name: "Main Entrance Device D",
+				address: "10.184.38.140",
+			},
+		});
+
+		expect(payload?.event?.device).to.deep.include({
+			id: "cmripjwkw00ffl0013lfxcbxw",
+			name: "Main Entrance Device D",
+			address: "10.184.38.140",
+		});
+	});
+
+	it("builds device from deviceName / deviceAddress when no join is present", () => {
+		const payload = buildDeviceEventRealtimePayload({
+			id: "event-e",
+			deviceId: "cmriu5ab102goi001x9o7nfct",
+			source: "EN_HCNETSDK_ALARM",
+			deviceName: "Main Entrance Device E",
+			deviceAddress: "10.184.38.141",
+		});
+
+		expect(payload?.event?.device).to.deep.equal({
+			id: "cmriu5ab102goi001x9o7nfct",
+			name: "Main Entrance Device E",
+			address: "10.184.38.141",
+		});
+	});
+
+	it("fills device.address from payload.deviceIP so the FE subtitle is not a CUID", () => {
+		const payload = buildDeviceEventRealtimePayload({
+			id: "event-ip",
+			deviceId: "cmripjwkw00ffl0013lfxcbxw",
+			source: "EN_HCNETSDK_ALARM",
+			payload: { deviceIP: "10.184.38.140", major: 5 },
+		});
+
+		expect(payload?.event?.device).to.deep.equal({
+			id: "cmripjwkw00ffl0013lfxcbxw",
+			name: null,
+			address: "10.184.38.140",
+		});
+	});
+
+	it("fills device.address from payload.ipAddress when deviceIP is absent", () => {
+		const payload = buildDeviceEventRealtimePayload({
+			id: "event-ip2",
+			deviceId: "cmriu5ab102goi001x9o7nfct",
+			source: "EN_HCNETSDK_ALARM",
+			payload: { ipAddress: "10.184.38.141" },
+		});
+
+		expect(payload?.event?.device).to.deep.equal({
+			id: "cmriu5ab102goi001x9o7nfct",
+			name: null,
+			address: "10.184.38.141",
+		});
+	});
+
 	it("emits saved events to org and device rooms as a UNION (not intersection)", () => {
 		const roomsHit: string[] = [];
 		const emitted: Array<{ room: string | null; event: string; payload: any }> = [];

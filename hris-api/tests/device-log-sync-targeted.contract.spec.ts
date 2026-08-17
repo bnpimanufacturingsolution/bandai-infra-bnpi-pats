@@ -132,6 +132,16 @@ describe("device log sync targeted import contract", () => {
 		expect(controllerSource).to.contain("updatedAt: new Date()");
 	});
 
+	it("skips already-saved ACS rows by serial across sources and reuses one attendance searchID", () => {
+		expect(controllerSource).to.contain("const findExistingHikvisionDeviceEvent");
+		expect(controllerSource).to.contain("if (!serialNo) return null");
+		expect(controllerSource).not.to.contain(
+			"if (!serialNo || !params.employeeNo) return null",
+		);
+		expect(controllerSource).to.contain("const attendanceSearchId = `${jobId}-att`");
+		expect(controllerSource).not.to.contain("searchID: `${jobId}-att-${position}`");
+	});
+
 	it("retries transient Hikvision import page failures before failing the whole job", () => {
 		expect(controllerSource).to.contain("fetchHikvisionImportPageWithRetry");
 		expect(controllerSource).to.contain("HIKVISION_IMPORT_PAGE_RETRY_LIMIT || 4");

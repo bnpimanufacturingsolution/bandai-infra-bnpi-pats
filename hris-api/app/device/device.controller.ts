@@ -23102,8 +23102,12 @@ export const controller = (prisma: PrismaClient) => {
 		});
 		if (existingByDedupe) return existingByDedupe;
 
+		// Serial-only fallback: skip already-saved SDK listener rows when ISAPI
+		// Sync later returns the same ACS serial. Do not require employeeNo or
+		// the same source — HIKVISION_CALLBACK copies of EN_HCNETSDK_ALARM must
+		// match. Prefer oldest receivedAt (listener row first).
 		const serialNo = String(params.serialNo || "").trim();
-		if (!serialNo || !params.employeeNo) return null;
+		if (!serialNo) return null;
 		const start = new Date(params.eventTime);
 		start.setUTCHours(0, 0, 0, 0);
 		start.setUTCDate(start.getUTCDate() - 1);
@@ -23114,13 +23118,11 @@ export const controller = (prisma: PrismaClient) => {
 			where: {
 				organizationId: params.organizationId,
 				deviceId: params.deviceId,
-				employeeNo: params.employeeNo,
-				source: params.source,
 				eventTime: { gte: start, lte: end },
 			},
 			select: { id: true, payload: true },
-			orderBy: { receivedAt: "desc" },
-			take: 200,
+			orderBy: { receivedAt: "asc" },
+			take: 2000,
 		});
 		return (
 			candidates.find((candidate: any) => {
@@ -23546,6 +23548,10 @@ export const controller = (prisma: PrismaClient) => {
 						? Math.min(Number(totalHint), maxEvents)
 						: maxEvents;
 
+				// Hikvision ACS snapshot is keyed by searchID. Reuse one id per
+				// import job so later pages only change searchResultPosition.
+				// A new searchID each page rebuilds the snapshot and can replay rows.
+				const attendanceSearchId = `${jobId}-att`;
 				while (attendanceProcessed < maxEvents) {
 					const currentJob = deviceImportJobs.get(jobId);
 					if (currentJob?.cancelRequested) {
@@ -23569,7 +23575,7 @@ export const controller = (prisma: PrismaClient) => {
 					);
 					const payload = {
 						AcsEventCond: {
-							searchID: `${jobId}-att-${position}`,
+							searchID: attendanceSearchId,
 							searchResultPosition: position,
 							maxResults: pageMaxResults,
 							major: 0,

@@ -26,6 +26,39 @@ export type DeviceEventRealtimePayload = {
 	eventAction?: string | null;
 };
 
+const pickSlimDevice = (eventRecord: any): Record<string, unknown> | undefined => {
+	const payload = eventRecord?.payload && typeof eventRecord.payload === "object" ? eventRecord.payload : {};
+	const payloadAddress =
+		payload.deviceIP ||
+		payload.ipAddress ||
+		payload.deviceIp ||
+		payload.rawAlarm?.deviceIP ||
+		payload.rawAlarm?.deviceIp ||
+		payload.socketCandidate?.deviceIP ||
+		payload.EventNotificationAlert?.ipAddress ||
+		null;
+	const joined = eventRecord?.device;
+	const fallbackName = eventRecord?.deviceName ?? joined?.name ?? null;
+	const fallbackAddress =
+		eventRecord?.deviceAddress ?? joined?.address ?? payloadAddress ?? null;
+	if (joined && typeof joined === "object") {
+		return {
+			...joined,
+			id: joined.id ?? eventRecord.deviceId ?? null,
+			name: joined.name ?? fallbackName ?? null,
+			address: joined.address ?? fallbackAddress ?? null,
+		};
+	}
+	if (fallbackName || fallbackAddress) {
+		return {
+			id: eventRecord.deviceId ?? null,
+			name: fallbackName,
+			address: fallbackAddress,
+		};
+	}
+	return undefined;
+};
+
 const pickEventFields = (eventRecord: any): Record<string, unknown> | null => {
 	if (!eventRecord?.id) return null;
 	// Prefer an already-shaped row; otherwise build a slim projection.
@@ -43,7 +76,7 @@ const pickEventFields = (eventRecord: any): Record<string, unknown> | null => {
 		receivedAt: eventRecord.receivedAt ?? null,
 		updatedAt: eventRecord.updatedAt ?? null,
 		evidenceSource: eventRecord.evidenceSource ?? null,
-		device: eventRecord.device ?? undefined,
+		device: pickSlimDevice(eventRecord),
 		payload: eventRecord.payload ?? undefined,
 		panelSelectStatus:
 			eventRecord.panelSelectStatus ??
