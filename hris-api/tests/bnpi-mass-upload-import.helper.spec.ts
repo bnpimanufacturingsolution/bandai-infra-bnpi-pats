@@ -7,6 +7,8 @@ import {
 	loanTypeNameToDeductionCode,
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
+	resolveBandaiLoanEndDate,
+	resolveBandaiMassUploadLoanTermMonths,
 	resolveCompensationCodePayrollRole,
 	resolveDeductionCodePayrollRole,
 } from "../helper/bnpi-mass-upload-import.helper";
@@ -70,6 +72,38 @@ describe("BNPI mass upload import helper", () => {
 		expect(loanTypeNameToDeductionCode("SSS Calamity Loan")).to.equal("SSSCALLN");
 		expect(loanTypeNameToDeductionCode("HDMF Salary Loan")).to.equal("HDMFSALLN");
 		expect(loanTypeNameToDeductionCode("RCBC Loan")).to.equal("RCBCLN");
+	});
+
+	it("loan term ignores maxTermMonths=1 and floors at 24 multi-cutoff months", () => {
+		const term = resolveBandaiMassUploadLoanTermMonths({
+			maxTermMonths: 1,
+			principalAmount: 40000,
+			paymentAmount: 904.54,
+		});
+		// ~45 cutoffs / 2 ≈ 23 months, floor 24
+		expect(term).to.be.at.least(24);
+		expect(term).to.equal(24);
+	});
+
+	it("loan term grows with principal/payment when longer than floor", () => {
+		const term = resolveBandaiMassUploadLoanTermMonths({
+			maxTermMonths: 1,
+			principalAmount: 100000,
+			paymentAmount: 1000,
+		});
+		// 100 cutoffs / 2 = 50 months
+		expect(term).to.equal(50);
+	});
+
+	it("loan endDate never shrinks below existing later end", () => {
+		const start = new Date("2026-04-26T00:00:00.000Z");
+		const existing = new Date("2028-04-26T00:00:00.000Z");
+		const end = resolveBandaiLoanEndDate({
+			startDate: start,
+			termMonths: 1,
+			existingEndDate: existing,
+		});
+		expect(end.toISOString().slice(0, 10)).to.equal("2028-04-26");
 	});
 
 	it("parses Excel Date cells using Asia/Manila calendar (not UTC day)", () => {

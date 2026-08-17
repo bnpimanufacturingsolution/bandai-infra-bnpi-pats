@@ -1,5 +1,21 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-17 - BNPI multi-cutoff loan horizon + prior mass reimport
+
+- Status: `IMPLEMENTED_LOCAL_PROVEN` (local clone `5433` only).
+- Problem: Sheet2 Jul loans recur from prior mass; DB loans had `endDate` = one cut
+  (`maxTermMonths=1` / workbook seed) so payroll applied ₱0 for Jul 11–25.
+- Fix: multi-cutoff term (floor 24 mo), never-shrink endDate on mass import;
+  repair script extended 1280 ACTIVE loans; reimported prior DED mass oldest→newest
+  (org `cmryhwpv70000vgaktlmrubmx`).
+- Proof Jul period `PP-20260711-20260726`: emps with loan apply **4→509**;
+  HDMFSALLN/SSSSALLN/SSSELN app-zero-vs-target **→ 0**; exact cells ~5541+.
+- Evidence: `.runtime/prior-deduction-recur-20260817/REPORT.md`,
+  `loan-horizon-repair-execute.txt`, `preview-loan-fleet.json`, `reimport/SUMMARY.json`.
+- Residual: few amount mismatches / app-extra loans; TOTAL DEDN + Gross/TR still open.
+- Scripts: `repair-bnpi-loan-multi-cutoff-horizon.mjs`,
+  `import-prior-deduction-mass-history.ts`.
+
 ## 2026-08-17 - FILE_DUAL Basic Path A (paidDays × dailyRate)
 
 - Status: `IMPLEMENTED_LOCAL_PROVEN` / VM **blocked** (same as OT dual).

@@ -186,7 +186,8 @@ async function main() {
 				minAmount: toNumber(row.MIN_AMOUNT),
 				maxAmount: toNumber(row.MAX_AMOUNT),
 				interestRate: toNumber(row.INTEREST_RATE, 0) || 0,
-				maxTermMonths: toNumber(row.MAX_TERM_MONTHS, 1) || 1,
+				// BNPI loans recur across cutoffs; never seed 1-month types from workbook.
+				maxTermMonths: Math.max(toNumber(row.MAX_TERM_MONTHS, 24) || 24, 24),
 				minServiceMonths: toNumber(row.MIN_SERVICE_MONTHS),
 				isActive: toBool(row.IS_ACTIVE, true),
 				isDeleted: false,
@@ -413,34 +414,48 @@ async function main() {
 			continue;
 		}
 		const startDate = toDate(row.START_DATE);
-		const endDate = toDate(row.END_DATE);
+		// Workbook START/END is the *source cut*, not the loan horizon. Keep multi-cutoff endDate.
+		const sheetEndDate = toDate(row.END_DATE);
 		const existing = await (prisma as any).employeeLoan.findFirst({
 			where: {
 				organizationId: organization.id,
 				employeeId: employee.id,
 				loanTypeId: loanType.id,
-				startDate,
-				endDate,
 				isDeleted: false,
+				status: { in: ["PENDING", "APPROVED", "ACTIVE"] },
 			},
-			select: { id: true },
+			select: { id: true, endDate: true, monthlyPayment: true },
 		});
 		if (existing) employeeLoanUpdates += 1;
 		else employeeLoanCreates += 1;
 
 		if (!execute) continue;
-		const termMonths = toNumber(row.INSTALLMENTS, loanType.maxTermMonths || 1) || 1;
-		const monthlyPayment = termMonths > 0 ? amount / termMonths : amount;
+		const termMonths = Math.max(
+			toNumber(row.INSTALLMENTS, loanType.maxTermMonths || 24) || 24,
+			24,
+		);
+		// Sheet AMOUNT for loans is the per-cutoff payment on the register, not principal.
+		const monthlyPayment = amount;
+		const principalAmount = amount * termMonths;
+		const horizonEnd = new Date(startDate.getTime());
+		horizonEnd.setUTCMonth(horizonEnd.getUTCMonth() + termMonths);
+		const existingEnd = existing?.endDate ? new Date(existing.endDate) : null;
+		const endDate =
+			existingEnd && existingEnd.getTime() > horizonEnd.getTime()
+				? existingEnd
+				: horizonEnd.getTime() > sheetEndDate.getTime()
+					? horizonEnd
+					: sheetEndDate;
 		const payload = {
-			principalAmount: amount,
+			principalAmount,
 			interestRate: Number(loanType.interestRate || 0),
-			totalAmount: amount,
+			totalAmount: principalAmount,
 			termMonths,
 			monthlyPayment,
 			startDate,
 			endDate,
 			amountPaid: 0,
-			balance: amount,
+			balance: principalAmount,
 			status: row.STATUS || "ACTIVE",
 			notes: row.NOTES || null,
 			isDeleted: false,

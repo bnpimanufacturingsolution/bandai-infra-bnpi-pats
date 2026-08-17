@@ -2,12 +2,15 @@
 import type { PrismaClient } from "../../generated/prisma";
 import {
 	aggregateCompensationMassUploadRowsByEmployeeCodeStart,
+	BANDAI_LOAN_MIN_TERM_MONTHS,
 	compensationBenefitLabel,
 	DEDUCTION_BENEFIT_CODE_LABELS,
 	normalizeMassUploadRow,
 	padEmployeeId,
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
+	resolveBandaiLoanEndDate,
+	resolveBandaiMassUploadLoanTermMonths,
 	resolveCompensationCodePayrollRole,
 	resolveDeductionCodePayrollRole,
 } from "../../helper/bnpi-mass-upload-import.helper";
@@ -344,7 +347,17 @@ async function ensureLoanType(prisma: PrismaClient, organizationId: string, name
 		},
 		select: { id: true, name: true, interestRate: true, maxTermMonths: true },
 	});
-	if (existing) return existing;
+	if (existing) {
+		// Lift one-cutoff misconfig (maxTermMonths=1) so mass import uses multi-cutoff terms.
+		if (Number(existing.maxTermMonths || 0) < BANDAI_LOAN_MIN_TERM_MONTHS) {
+			return prisma.loanType.update({
+				where: { id: existing.id },
+				data: { maxTermMonths: BANDAI_LOAN_MIN_TERM_MONTHS },
+				select: { id: true, name: true, interestRate: true, maxTermMonths: true },
+			});
+		}
+		return existing;
+	}
 
 	return prisma.loanType.create({
 		data: {
@@ -353,7 +366,7 @@ async function ensureLoanType(prisma: PrismaClient, organizationId: string, name
 			category: "OTHER",
 			description: `Auto-created from BNPI deduction mass upload (${name})`,
 			interestRate: 0,
-			maxTermMonths: 12,
+			maxTermMonths: BANDAI_LOAN_MIN_TERM_MONTHS,
 			minAmount: 0,
 			maxAmount: 0,
 			minServiceMonths: 0,
@@ -1579,10 +1592,13 @@ export async function importDeductionMassUpload(params: {
 					);
 				}
 				const loanType = loanTypeCache.get(row.loanTypeName)!;
-				const termMonths = Math.max(1, Number(loanType.maxTermMonths || 12));
 				const principal = row.principalAmount;
 				const monthlyPayment = row.paymentAmount;
-				const endDate = addMonths(loanStart, termMonths);
+				const termMonths = resolveBandaiMassUploadLoanTermMonths({
+					maxTermMonths: loanType.maxTermMonths,
+					principalAmount: principal,
+					paymentAmount: monthlyPayment,
+				});
 				const existing = await params.prisma.employeeLoan.findFirst({
 					where: {
 						organizationId: params.organizationId,
@@ -1591,7 +1607,13 @@ export async function importDeductionMassUpload(params: {
 						isDeleted: false,
 						status: { in: ["PENDING", "APPROVED", "ACTIVE"] },
 					},
-					select: { id: true },
+					select: { id: true, endDate: true },
+				});
+				// Multi-cutoff horizon; never shrink an existing later endDate on re-import.
+				const endDate = resolveBandaiLoanEndDate({
+					startDate: loanStart,
+					termMonths,
+					existingEndDate: existing?.endDate ?? null,
 				});
 
 				const loanData = {

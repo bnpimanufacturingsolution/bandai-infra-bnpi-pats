@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- **BNPI multi-cutoff loan horizon (2026-08-17):** Mass-upload and workbook loan
+  enrollments no longer expire after one cutoff when `maxTermMonths` was 1.
+  Term floor 24 months (from principal/payment when longer); re-import never
+  shrinks `endDate`. Repair script extends ACTIVE loans for local clone tally.
+  Helpers: `resolveBandaiMassUploadLoanTermMonths`, `resolveBandaiLoanEndDate`.
 - **FILE_DUAL OT + Basic Path A (2026-08-13 / 2026-08-17):** When
   `Employee.dailyRate > 0` (register Daily Salary), OT/premium hourly =
   `dailyRate/8` and register Basic = `paidRegularDays × dailyRate` (paid days

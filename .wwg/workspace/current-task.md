@@ -1,5 +1,18 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 multi-cutoff loans + prior DED mass
+
+- Task mode: data + engine fix (loan horizon) for Jul 11–25 deduction tally.
+- Request: use prior deduction mass (recurring) to improve Jul tally.
+- Finding: Jul cut mass incomplete; main blocker was short `endDate` on loans.
+- Done:
+  1. Multi-cutoff term + never-shrink endDate in mass import.
+  2. Local repair: 1280 loans overlap Jul (was 88).
+  3. Reimport prior+cut DED mass oldest→newest (Bandai org).
+  4. Preview proof: loan apply fleet improved (HDMF/SSS/SSSELN app-zero→0).
+- Evidence: `.runtime/prior-deduction-recur-20260817/`.
+- Still open: Gross/absent/late/DMA; TOTAL DEDN package beyond loans.
+
 ## Latest Task Addendum - 2026-08-17 FILE_DUAL Basic Path A
 
 - Task mode: engine fix (FILE_DUAL Basic) + local proof.
