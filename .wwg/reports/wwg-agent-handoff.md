@@ -1,5 +1,13 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-17 - Duplicate per active device
+
+- Status: `ROOT_CAUSED_AND_FIXED_LOCAL`.
+- Armed B/D/E each POST ACS **exception** major=2 minor=38 every 301s with empty person. A/C/F silent.
+- Not HRIS fan-out (0 same-second / 0 shared serial). Real taps are major=5 with person.
+- HRIS no longer persists that exception. C++ classify requires major=5 (needs listener rebuild on VM).
+- Evidence: `.runtime/device-event-dup-20260817/per-active-device/`.
+
 ## 2026-08-17 - Device Events duplicated on Sync
 
 - Status: `ROOT_CAUSED_AND_FIXED_LOCAL`.

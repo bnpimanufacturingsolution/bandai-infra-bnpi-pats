@@ -385,13 +385,17 @@ std::string classify_event(DWORD major, DWORD minor) {
     if (major == MAJOR_OPERATION && is_observed_operation_sync_minor(minor)) {
         return "biometric_operation_sync";
     }
-    if (minor == MINOR_FINGERPRINT_COMPARE_PASS ||
-        minor == MINOR_CARD_FINGERPRINT_VERIFY_PASS) {
+    // Fingerprint pass/fail live on MAJOR_EVENT (5). Major 2 + minor 38 is an
+    // ACS exception the armed B/D/E panels emit every ~301s with empty person.
+    if (major == 5 &&
+        (minor == MINOR_FINGERPRINT_COMPARE_PASS ||
+         minor == MINOR_CARD_FINGERPRINT_VERIFY_PASS)) {
         return "attendance_fingerprint_success";
     }
-    if (minor == MINOR_FINGERPRINT_COMPARE_FAIL ||
-        minor == MINOR_CARD_FINGERPRINT_VERIFY_FAIL ||
-        minor == MINOR_FINGERPRINT_INEXISTENCE) {
+    if (major == 5 &&
+        (minor == MINOR_FINGERPRINT_COMPARE_FAIL ||
+         minor == MINOR_CARD_FINGERPRINT_VERIFY_FAIL ||
+         minor == MINOR_FINGERPRINT_INEXISTENCE)) {
         return "attendance_fingerprint_failed";
     }
     return "acs_event";

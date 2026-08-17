@@ -1,5 +1,14 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-17 Duplicate per active device
+
+- Operator: extras appear on each **active** device.
+- Live: only armed B/D/E. Each emits `major=2`/`minor=38` empty-person every **301s**. IPs and serials are per panel. Not one tap cloned.
+- Real taps are `major=5`/`minor=38` and always have person id (590 SDK + 788 callback).
+- Noise: **4,541** SDK exception rows mislabeled fingerprint pass.
+- Fix: do not persist that exception; taxonomy is device health; C++ classify requires major=5.
+- Evidence: `.runtime/device-event-dup-20260817/per-active-device/FINDINGS.md`.
+
 ## Latest Task Addendum - 2026-08-17 Device Events look duplicated on Sync
 
 - Task mode: bug fix (DeviceEvent persist + Sync skip + UI honesty).

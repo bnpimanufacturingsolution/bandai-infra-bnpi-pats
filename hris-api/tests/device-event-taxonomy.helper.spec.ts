@@ -5,6 +5,25 @@ import {
 } from "../helper/device-event-taxonomy.helper";
 
 describe("Device event taxonomy helper", () => {
+	it("does not classify armed-device major=2 minor=38 exceptions as attendance taps", () => {
+		const taxonomy = classifyDeviceEvent({
+			source: "EN_HCNETSDK_ALARM",
+			status: "IGNORED",
+			major: "2",
+			minor: "38",
+			payload: {
+				eventKind: "attendance_fingerprint_success",
+				actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+			},
+		});
+
+		expect(taxonomy).to.deep.include({
+			eventCategory: "DEVICE_HEALTH",
+			eventAction: "LISTENER_RECEIVED",
+			eventLabel: "Armed-device ACS exception (not a punch)",
+		});
+	});
+
 	it("maps proven Hikvision fingerprint compare pass rows to persisted attendance tap fields", () => {
 		const taxonomy = classifyDeviceEvent({
 			source: "EN_HCNETSDK_ALARM",

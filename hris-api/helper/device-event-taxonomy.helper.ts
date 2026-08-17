@@ -94,10 +94,24 @@ export const classifyDeviceEvent = (event: {
 		});
 	}
 
+	const major = String(event.major ?? readPayloadText(event.payload, "major") ?? "").trim();
+	// Major 2 + minor 38 is ACS exception on armed panels, not MAJOR_EVENT tap.
+	if (major === "2" && (minor === "38" || actionCode === "MINOR_FINGERPRINT_COMPARE_PASS")) {
+		return withCompatibilityConfidence({
+			eventCategory: "DEVICE_HEALTH",
+			eventAction: "LISTENER_RECEIVED",
+			eventLabel: "Armed-device ACS exception (not a punch)",
+			eventConfidence: "SUPPORTED",
+			processingLabel,
+			transportLabel,
+		});
+	}
+
 	if (
-		actionCode === "MINOR_FINGERPRINT_COMPARE_PASS" ||
-		eventKind === "attendance_fingerprint_success" ||
-		minor === "38"
+		major !== "2" &&
+		(actionCode === "MINOR_FINGERPRINT_COMPARE_PASS" ||
+			eventKind === "attendance_fingerprint_success" ||
+			minor === "38")
 	) {
 		return withCompatibilityConfidence({
 			eventCategory: "ATTENDANCE",

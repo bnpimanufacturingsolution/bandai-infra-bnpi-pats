@@ -25,6 +25,7 @@ import {
 	buildHikvisionDeviceEventDedupeKey,
 	DEFAULT_HIKVISION_MIN_PUNCH_PAIR_GAP_MINUTES,
 	extractHikvisionEventData,
+	isHikvisionArmedListenerAcsException,
 	isHikvisionAttendancePunchEvent,
 	normalizeHikvisionDeviceEventSource,
 	normalizeHikvisionFutureSkewedEventTime,
@@ -325,6 +326,25 @@ export const controller = (prisma: PrismaClient) => {
 				}
 
 				const employeeNo = String(event.employeeNo || "").trim();
+				if (isHikvisionArmedListenerAcsException({ ...event, employeeNo })) {
+					console.log(
+						`[HIKVISION_CALLBACK][CTRL] ignored armed-device ACS exception major=${event.major} minor=${event.minor}`,
+					);
+					const successResponse = buildSuccessResponse(
+						"Callback received but ACS exception is not an attendance punch",
+						{
+							received: true,
+							matched: false,
+							persisted: false,
+							reason: "acs_exception_not_punch",
+							employeeNo: employeeNo || null,
+							event,
+						},
+						200,
+					);
+					res.status(200).json(successResponse);
+					return;
+				}
 				const receivedAt = new Date();
 				const knownSkewSeconds = Number(
 					(device.config as any)?.hikvisionClockSkewSeconds || 0,

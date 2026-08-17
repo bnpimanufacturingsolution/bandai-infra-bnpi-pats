@@ -542,4 +542,24 @@ describe("Hikvision callback controller", () => {
 		expect(createdEvents[0].payload.directDeviceEvidence).to.equal(true);
 		expect(createdEvents[1].payload.evidenceSource).to.equal("SDK_CALLBACK");
 	});
+
+	it("does not persist armed-device major=2 minor=38 empty-person ACS exceptions", async () => {
+		const { prisma, createdEvents } = createSerialCollapsePrisma();
+		const response = await postSdkCallback(prisma, {
+			employeeNo: "",
+			serialNo: "8550",
+			major: 2,
+			minor: 38,
+			eventKind: "attendance_fingerprint_success",
+			actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+		});
+
+		expect(response.statusCode).to.equal(200);
+		expect(response.body.data).to.include({
+			received: true,
+			persisted: false,
+			reason: "acs_exception_not_punch",
+		});
+		expect(createdEvents).to.have.length(0);
+	});
 });

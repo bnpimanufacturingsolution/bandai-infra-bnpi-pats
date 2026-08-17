@@ -930,6 +930,10 @@ export const isHikvisionAttendancePunchEvent = (
 	const actionCode = String(event.actionCode || "").trim().toUpperCase();
 	const verifyMode = String(event.verifyMode || "").trim().toLowerCase();
 
+	// Major 2 is ACS exception. Minor 38 there is not MAJOR_EVENT fingerprint pass.
+	// Armed B/D/E emit major=2/minor=38 empty-person every ~301s — not a tap.
+	if (major === "2") return false;
+
 	if (major === "5" && minor === "38") return true;
 	if (major === "5" && minor === "75") return true;
 	if (major === "5" && event.employeeNo && verifyMode) {
@@ -946,6 +950,16 @@ export const isHikvisionAttendancePunchEvent = (
 		"MINOR_FACE_RECOGNITION_PASS",
 		"MINOR_CARD_PASS",
 	].includes(actionCode);
+};
+
+/** Armed-listener ACS exception: empty person, major=2 minor=38, ~5 min per device. */
+export const isHikvisionArmedListenerAcsException = (
+	event: Pick<NormalizedHikvisionEvent, "major" | "minor" | "employeeNo">,
+) => {
+	const major = String(event.major ?? "").trim();
+	const minor = String(event.minor ?? "").trim();
+	const employeeNo = String(event.employeeNo ?? "").trim();
+	return major === "2" && minor === "38" && !employeeNo;
 };
 
 export const isHikvisionAttendancePunchPayload = (payload: Record<string, any>) =>

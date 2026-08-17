@@ -6,6 +6,7 @@ import {
 	extractHikvisionEventData,
 	getHikvisionClockSkewSecondsFromSystemTime,
 	getHikvisionObservedClockSkewSeconds,
+	isHikvisionArmedListenerAcsException,
 	isHikvisionAttendancePunchEvent,
 	normalizeHikvisionAcsEventListTimes,
 	normalizeHikvisionDeviceEventSource,
@@ -216,6 +217,30 @@ describe("hikvision event contract helper", () => {
 				actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
 			}),
 		).to.equal(true);
+	});
+
+	it("does not treat armed-device major=2 minor=38 exceptions as attendance punches", () => {
+		expect(
+			isHikvisionAttendancePunchEvent({
+				major: 2,
+				minor: 38,
+				actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+			}),
+		).to.equal(false);
+		expect(
+			isHikvisionArmedListenerAcsException({
+				major: 2,
+				minor: 38,
+				employeeNo: "",
+			}),
+		).to.equal(true);
+		expect(
+			isHikvisionArmedListenerAcsException({
+				major: 5,
+				minor: 38,
+				employeeNo: "10",
+			}),
+		).to.equal(false);
 	});
 
 	it("does not use a later Check In as clock out", () => {
