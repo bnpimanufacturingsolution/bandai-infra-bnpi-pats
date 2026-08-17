@@ -33,6 +33,23 @@ describe("Device events API contract", () => {
 		expect(controllerSource).to.contain("facetWhereSql");
 	});
 
+	it("exposes a cache-free GET /events/item/:eventId for deeplinks", () => {
+		const routerSource = fs.readFileSync(
+			path.resolve(__dirname, "../app/device/device.router.ts"),
+			"utf8",
+		);
+		expect(routerSource).to.contain('routes.get("/events/item/:eventId", controller.getEventById)');
+		expect(controllerSource).to.contain("const getEventById = async");
+		expect(controllerSource).to.contain('where: { id: eventId, organizationId }');
+	});
+
+	it("looks up a saved event by eventId without using the current table page", () => {
+		expect(controllerSource).to.contain('String(req.query.eventId || "").trim()');
+		expect(controllerSource).to.contain('de."id" = ${eventId}');
+		expect(controllerSource).to.contain("const page = eventId ? 1 : Math.max(Number(req.query.page || 1), 1)");
+		expect(controllerSource).to.contain("if (!eventId && deviceId)");
+	});
+
 	it("supports summaryScope=page/none so soft-poll uses page+count only (pool safety)", () => {
 		expect(controllerSource).to.contain('summaryScope === "none"');
 		expect(controllerSource).to.contain('summaryScope === "page"');

@@ -8,6 +8,7 @@ interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getEventById(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getHikvisionListenerStatus(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceLiveReadiness(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -126,6 +127,8 @@ export const router = (route: Router, controller: IController): Router => {
 	);
 	routes.post("/events/reset", controller.resetDeviceEvents);
 	// Nested under /events so Express never treats the path as /:id (device by id).
+	// Saved-event details deeplink: docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md
+	routes.get("/events/item/:eventId", controller.getEventById);
 	routes.get("/events/live-readiness", controller.getDeviceLiveReadiness);
 	routes.post("/events/live-readiness/prove", controller.proveDeviceLivePath);
 	routes.get("/hikvision/listener", controller.getHikvisionListenerStatus);

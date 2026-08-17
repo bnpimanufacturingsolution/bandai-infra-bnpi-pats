@@ -9,6 +9,10 @@
 
 **Visual cards:** open [`docs/device-event-actions.html`](./device-event-actions.html) in a browser.
 
+**Opening one saved row from a URL:** the **Device event details** modal must load
+`GET /api/device/events/item/:eventId`. Table `page=` is not the event identity.
+Contract: [`docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`](./00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md).
+
 ---
 
 ## 1. Two different fields (do not mix)

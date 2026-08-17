@@ -123,6 +123,19 @@ export const useDevice = (id: string) => {
 	});
 };
 
+/** Saved-event details deeplink. See docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md */
+export const useDeviceEvent = (eventId?: string | null, enabled = true) => {
+	const id = String(eventId || "").trim();
+	return useQuery<DeviceEventsResponse>({
+		queryKey: [...queryKeys.devices.all, "event", id],
+		queryFn: () => devicesService.getDeviceEventById(id),
+		enabled: enabled && Boolean(id),
+		staleTime: 0,
+		retry: 1,
+		refetchOnWindowFocus: false,
+	});
+};
+
 export const useDeviceEvents = (
 	params?: ApiQueryParams,
 	options: {

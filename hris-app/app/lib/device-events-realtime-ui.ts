@@ -132,6 +132,24 @@ export const getHighlightedSavedDeviceEventId = ({
 	return latestRealtimeEventId || latestSavedEventId || null;
 };
 
+export const resolveActiveSavedDeviceEvent = <T extends { id: string }>({
+	action,
+	eventId,
+	pageRows,
+	fetchedEvent,
+}: {
+	action?: string | null;
+	eventId?: string | null;
+	pageRows: T[];
+	fetchedEvent?: T | null;
+}): T | null => {
+	if (action !== "view-event" || !eventId) return null;
+	const pageMatch = pageRows.find((row) => row.id === eventId);
+	if (pageMatch) return pageMatch;
+	if (fetchedEvent?.id === eventId) return fetchedEvent;
+	return null;
+};
+
 export const prependRealtimeSavedRows = <T extends { id: string }>({
 	rows,
 	realtimeRows,

@@ -49,12 +49,19 @@ not replace or summarize away original evidence.
 
 Query: `deviceId`, `from`, `to`, `dateField`, `source`, `eventCategory`,
 `eventAction`, `query`, `status`, `evidenceSource`, `eventConfidence`, `page`,
-`limit`, `sort`, `order`.
+`limit`, `sort`, `order`. Optional `eventId` forces page 1 and ignores other
+filters (list fallback only).
 
 Response includes saved rows, pagination, and a summary calculated using the
 same filter predicate: total; category/action/result/runtime buckets;
 confidence/evidence buckets; direct/inferred/unknown totals; matched,
 needs-match, ignored, and failed totals.
+
+### `GET /api/device/events/item/:eventId`
+
+Org-scoped one-row fetch for **Device event details** (`action=view-event&id=`).
+Uncached. Must not depend on the current table `page`. Contract:
+`docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
 
 ### `POST /api/device/:id/hikvision/log-search`
 
@@ -197,7 +204,8 @@ Below it:
 - one time-window activity line;
 - one filter toolbar;
 - one dense saved-events table;
-- one details drawer.
+- one **Device event details** modal (`action=view-event&id=`), loaded by
+  `GET /api/device/events/item/:eventId`, not by the current table page.
 
 Primary columns: event time, category, action, employee/user, device, evidence,
 confidence, and HRIS result. The drawer shows event/received times, identifiers,

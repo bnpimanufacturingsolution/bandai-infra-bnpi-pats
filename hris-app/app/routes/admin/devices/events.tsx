@@ -32,6 +32,7 @@ import { Select, type SelectOption } from "~/components/atoms/Select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Switch } from "~/components/ui/switch";
 import {
+	useDeviceEvent,
 	useDeviceEvents,
 	useDeviceHealth,
 	useDeviceHealthMap,
@@ -56,6 +57,7 @@ import {
 	getHighlightedSavedDeviceEventId,
 	getSavedDeviceEventProcessingLabel,
 	prependRealtimeSavedRows,
+	resolveActiveSavedDeviceEvent,
 	savedDeviceEventMatchesScope,
 	selectWatcherHeadlineEvent,
 	shouldRefreshSavedEventsAfterSocketEvent,
@@ -1876,6 +1878,14 @@ export default function DeviceEventsPage() {
 		// Live ledger without hammering: only "live" when we are not socket-backed.
 		liveLedger: viewMode === "saved" && shouldPollSavedEvents,
 	});
+	const {
+		data: activeEventData,
+		isLoading: isLoadingActiveEvent,
+		isFetching: isFetchingActiveEvent,
+		isFetched: isFetchedActiveEvent,
+		isError: isActiveEventError,
+		error: activeEventError,
+	} = useDeviceEvent(activeEventId, action === "view-event" && Boolean(activeEventId));
 	// Prefer dedicated facet summary (summaryScope=facets). Never use leaf-filtered
 	// list summary for dropdowns.
 	const savedFacetSummary = savedFacetData?.summary || null;
@@ -2280,7 +2290,20 @@ export default function DeviceEventsPage() {
 					realtimeRows: realtimeSavedRows,
 					maxRealtimeRows: limitParam,
 				});
-	const activeEvent = action === "view-event" ? rows.find((row) => row.id === activeEventId) : null;
+	const fetchedActiveEvent = activeEventData?.events?.[0]
+		? normalizeSavedEvent(activeEventData.events[0])
+		: null;
+	const activeEvent = resolveActiveSavedDeviceEvent({
+		action,
+		eventId: activeEventId,
+		pageRows: rows,
+		fetchedEvent: fetchedActiveEvent,
+	});
+	const isResolvingActiveEvent =
+		action === "view-event" &&
+		Boolean(activeEventId) &&
+		!activeEvent &&
+		(isLoadingActiveEvent || (isFetchingActiveEvent && !isFetchedActiveEvent));
 	// Table request is summaryScope=page (total only). Chip/facet counts come from
 	// the dedicated facets request so soft-poll cannot starve the DB pool.
 	const savedSummaryTotal =
@@ -5635,9 +5658,18 @@ export default function DeviceEventsPage() {
 							</pre>
 						</div>
 					</div>
+				) : isResolvingActiveEvent ? (
+					<div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+						<Loader2 className="h-4 w-4 animate-spin" />
+						Loading saved event…
+					</div>
+				) : isActiveEventError ? (
+					<div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+						Could not load this saved event. {String((activeEventError as Error)?.message || "Try the link again.")}
+					</div>
 				) : (
 					<div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-						This event is not in the current table page. Refresh the saved view or open it from the row again.
+						This saved event was not found. It may have been removed, or the link is for a different organization.
 					</div>
 				)}
 			</Modal>

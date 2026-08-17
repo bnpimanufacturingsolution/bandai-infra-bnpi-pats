@@ -6,6 +6,7 @@ import {
 	getSavedDeviceEventRealtimeBadge,
 	prependRealtimeSavedRow,
 	prependRealtimeSavedRows,
+	resolveActiveSavedDeviceEvent,
 	savedDeviceEventMatchesScope,
 	selectWatcherHeadlineEvent,
 	shouldRefreshSavedEventsAfterSocketEvent,
@@ -234,6 +235,39 @@ describe("device events realtime UI", () => {
 			"tap-2",
 			"employee-1-old",
 		]);
+	});
+
+	it("resolves a view-event deeplink from a dedicated fetch when the row is not on this page", () => {
+		const fetched = { id: "cmsr688py002xvxwwttxhdsal" };
+		const active = resolveActiveSavedDeviceEvent({
+			action: "view-event",
+			eventId: "cmsr688py002xvxwwttxhdsal",
+			pageRows: [{ id: "page-row-1" }, { id: "page-row-2" }],
+			fetchedEvent: fetched,
+		});
+		expect(active).to.equal(fetched);
+	});
+
+	it("ignores a leftover fetched event when the deeplink id has changed", () => {
+		const leftover = { id: "old-event" };
+		const active = resolveActiveSavedDeviceEvent({
+			action: "view-event",
+			eventId: "cmsr688py002xvxwwttxhdsal",
+			pageRows: [{ id: "page-row-1" }],
+			fetchedEvent: leftover,
+		});
+		expect(active).to.equal(null);
+	});
+
+	it("prefers the current table row when the view-event id is already on the page", () => {
+		const pageRow = { id: "cmsr688py002xvxwwttxhdsal" };
+		const active = resolveActiveSavedDeviceEvent({
+			action: "view-event",
+			eventId: "cmsr688py002xvxwwttxhdsal",
+			pageRows: [pageRow],
+			fetchedEvent: { id: "cmsr688py002xvxwwttxhdsal" },
+		});
+		expect(active).to.equal(pageRow);
 	});
 
 	it("keeps the realtime overlay bounded to the requested size", () => {

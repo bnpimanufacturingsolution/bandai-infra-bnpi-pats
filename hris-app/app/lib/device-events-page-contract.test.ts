@@ -144,6 +144,12 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('label: "Evidence"');
 		expect(routeSource).to.contain('label: "Confidence"');
 		expect(routeSource).to.contain('next.set("action", "view-event")');
+		expect(routeSource).to.contain("resolveActiveSavedDeviceEvent");
+		expect(routeSource).to.contain("useDeviceEvent(activeEventId");
+		expect(routeSource).to.contain("Loading saved event…");
+		expect(routeSource).to.contain("This saved event was not found.");
+		expect(routeSource).to.contain("Could not load this saved event.");
+		expect(routeSource).not.to.contain("This event is not in the current table page.");
 		expect(routeSource).to.contain("formatEventSource(activeEvent.source)");
 		expect(routeSource).to.contain("formatEventSourceDetail(activeEvent.source)");
 	});

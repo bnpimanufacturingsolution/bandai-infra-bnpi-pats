@@ -26866,6 +26866,87 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const getEventById = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = (req as any).organizationId;
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+				return;
+			}
+			const eventId = String(req.params.eventId || req.query.eventId || "").trim();
+			if (!eventId) {
+				res.status(400).json(buildErrorResponse("Event id is required", 400));
+				return;
+			}
+
+			const event = await (prisma as any).deviceEvent.findFirst({
+				where: { id: eventId, organizationId },
+				include: {
+					device: { select: { id: true, name: true, address: true, port: true } },
+					deviceUser: {
+						select: {
+							id: true,
+							vendorUserId: true,
+							displayName: true,
+							employeeNo: true,
+							employeeId: true,
+						},
+					},
+				},
+			});
+			if (!event) {
+				res.status(404).json(buildErrorResponse("Device event not found", 404));
+				return;
+			}
+
+			let employee: { id: string; employeeId?: string | null } | null = null;
+			if (event.employeeId) {
+				employee = await prisma.employee.findFirst({
+					where: { id: String(event.employeeId), organizationId, isDeleted: false },
+					select: { id: true, employeeId: true },
+				});
+			}
+
+			const payload = ensureSdkCallbackEvidence(
+				event.payload && typeof event.payload === "object" ? { ...event.payload } : {},
+				event.source,
+			);
+			const displayTaxonomy = resolveDeviceEventDisplayTaxonomy({
+				...event,
+				payload,
+			});
+			const row = {
+				...event,
+				employee,
+				payload,
+				eventCategory: displayTaxonomy.eventCategory,
+				eventAction: displayTaxonomy.eventAction,
+				eventLabel: displayTaxonomy.eventLabel,
+				eventConfidence: displayTaxonomy.eventConfidence,
+				panelSelectStatus: extractHikvisionPanelSelectStatus(payload),
+				taxonomy: {
+					eventCategory: displayTaxonomy.eventCategory,
+					eventAction: displayTaxonomy.eventAction,
+					eventLabel: displayTaxonomy.eventLabel,
+					eventConfidence: displayTaxonomy.eventConfidence,
+					processingLabel: displayTaxonomy.processingLabel,
+					transportLabel: displayTaxonomy.transportLabel,
+					capabilityConfidence: displayTaxonomy.capabilityConfidence,
+				},
+			};
+
+			res.status(200).json(
+				buildSuccessResponse("Device event retrieved successfully", {
+					events: [row],
+					pagination: { page: 1, limit: 1, total: 1, totalPages: 1 },
+				}),
+			);
+		} catch (error) {
+			deviceLogger.error(`getEventById failed: ${error}`);
+			res.status(500).json(buildErrorResponse("Failed to retrieve device event", 500));
+		}
+	};
+
 	const getEvents = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const organizationId = (req as any).organizationId;
@@ -26874,7 +26955,8 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const page = Math.max(Number(req.query.page || 1), 1);
+			const eventId = String(req.query.eventId || "").trim();
+			const page = eventId ? 1 : Math.max(Number(req.query.page || 1), 1);
 			const limit = Math.min(Math.max(Number(req.query.limit || 10), 1), 100);
 			const skip = (page - 1) * limit;
 			const deviceId = String(req.query.deviceId || "").trim();
@@ -26917,11 +26999,16 @@ export const controller = (prisma: PrismaClient) => {
 				Prisma.sql`de."organizationId" = ${String(organizationId)}`,
 			];
 
-			if (deviceId) whereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
-			if (status && status !== "all" && DEVICE_EVENT_STATUSES.has(status)) {
+			if (eventId) {
+				// Deep-link / modal lookup: exact DeviceEvent id, not the current table page.
+				whereConditions.push(Prisma.sql`de."id" = ${eventId}`);
+			}
+
+			if (!eventId && deviceId) whereConditions.push(Prisma.sql`de."deviceId" = ${deviceId}`);
+			if (!eventId && status && status !== "all" && DEVICE_EVENT_STATUSES.has(status)) {
 				whereConditions.push(Prisma.sql`de."status" = ${status}::"DeviceEventStatus"`);
 			}
-			if (source && source !== "all" && DEVICE_EVENT_SOURCES.has(source)) {
+			if (!eventId && source && source !== "all" && DEVICE_EVENT_SOURCES.has(source)) {
 				whereConditions.push(Prisma.sql`de."source" = ${source}::"DeviceEventSource"`);
 			}
 			const hasDeviceEventColumns = await getDeviceEventColumnPresence();
@@ -26940,6 +27027,7 @@ export const controller = (prisma: PrismaClient) => {
 				: Prisma.sql`'UNKNOWN'::text`;
 
 			if (
+				!eventId &&
 				eventCategory &&
 				eventCategory !== "ALL" &&
 				DEVICE_EVENT_CATEGORIES.has(eventCategory) &&
@@ -26950,6 +27038,7 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 			if (
+				!eventId &&
 				eventAction &&
 				eventAction !== "ALL" &&
 				DEVICE_EVENT_ACTIONS.has(eventAction) &&
@@ -26960,6 +27049,7 @@ export const controller = (prisma: PrismaClient) => {
 				);
 			}
 			if (
+				!eventId &&
 				eventConfidence &&
 				eventConfidence !== "ALL" &&
 				DEVICE_EVENT_CONFIDENCES.has(eventConfidence) &&
@@ -26969,13 +27059,13 @@ export const controller = (prisma: PrismaClient) => {
 					Prisma.sql`de."eventConfidence" = ${eventConfidence}::"DeviceEventConfidence"`,
 				);
 			}
-			if (evidenceSource && evidenceSource !== "ALL") {
+			if (!eventId && evidenceSource && evidenceSource !== "ALL") {
 				whereConditions.push(
 					Prisma.sql`UPPER(COALESCE(de.payload->>'evidenceSource', '')) = ${evidenceSource}`,
 				);
 			}
 
-			if (from || to) {
+			if (!eventId && (from || to)) {
 				if (from) {
 					const fromDate = parseHikvisionBusinessDateBound(from);
 					if (fromDate) whereConditions.push(Prisma.sql`${dateColumnSql} >= ${fromDate}`);
@@ -26986,11 +27076,12 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
-			const hasQuery = Boolean(query);
+			const hasQuery = !eventId && Boolean(query);
 			if (hasQuery) {
 				whereConditions.push(Prisma.sql`
 					CONCAT_WS(
 						E'\n',
+						de.id,
 						de."employeeNo",
 						du."vendorUserId",
 						du."employeeNo",
@@ -28580,6 +28671,7 @@ export const controller = (prisma: PrismaClient) => {
 	return {
 		create,
 		getAll,
+		getEventById,
 		getEvents,
 		getDeviceHealth,
 		getHikvisionListenerStatus,

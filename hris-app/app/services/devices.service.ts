@@ -1773,6 +1773,37 @@ class DevicesService extends APIService {
 		return this.setParams(params).getDevices();
 	}
 
+	async getDeviceEventById(eventId: string): Promise<DeviceEventsResponse> {
+		const id = String(eventId || "").trim();
+		if (!id) {
+			throw new Error("Event id is required");
+		}
+		try {
+			const response = await hrisApiClient.get<any>(`/api/device/events/item/${encodeURIComponent(id)}`);
+			let eventsData: any = response?.data ?? response;
+			if (eventsData && typeof eventsData === "object" && "data" in eventsData && !Array.isArray(eventsData.events)) {
+				const nested = (eventsData as { data?: unknown }).data;
+				if (nested && typeof nested === "object") {
+					eventsData = nested;
+				}
+			}
+			const rawEvents =
+				(Array.isArray(eventsData?.events) && eventsData.events) ||
+				(eventsData?.id ? [eventsData] : []) ||
+				[];
+			return {
+				events: rawEvents,
+				summary: eventsData?.summary,
+				pagination: eventsData?.pagination,
+			};
+		} catch (error: any) {
+			console.error("Error fetching device event by id:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error fetching device event",
+			);
+		}
+	}
+
 	async getDeviceEvents(params: ApiQueryParams = {}): Promise<DeviceEventsResponse> {
 		try {
 			const query = new URLSearchParams();
