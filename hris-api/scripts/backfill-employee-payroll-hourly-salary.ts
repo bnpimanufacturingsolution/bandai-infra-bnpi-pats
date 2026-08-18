@@ -71,9 +71,13 @@ function parseArgs(argv = process.argv.slice(2)): CliOptions {
 }
 
 function splitSqlStatements(sql: string): string[] {
-	return sql
+	const withoutComments = sql
+		.split(/\r?\n/)
+		.filter((line) => !/^\s*--/.test(line))
+		.join("\n");
+	return withoutComments
 		.split(";")
-		.map((part) => part.replace(/^\s*--.*$/gm, "").trim())
+		.map((part) => part.trim())
 		.filter((part) => part.length > 0)
 		.map((part) => `${part};`);
 }

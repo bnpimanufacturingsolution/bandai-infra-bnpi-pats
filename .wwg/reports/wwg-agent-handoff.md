@@ -1,5 +1,12 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - EmployeePayroll.hourlySalary live DEV backfill
+
+- Status: `EXECUTED_LIVE_DEV`. K3s DEV via `127.0.0.1:55435`.
+- Dry-run: scanned 46, wouldUpdate 46, alreadySet 0. Execute: **updated 46 / errors 0**.
+- Source: `metadata.hourlyRate`. Second dry-run: alreadySet 46, wouldUpdate 0.
+- Money fields not rewritten. Sample `cmsednryg0190nxvsgfr4utaa` daily 1471.43 → hourly 196.19.
+
 ## 2026-08-19 - EmployeePayroll.hourlySalary backfill script
 
 - Status: `IMPLEMENTED_DOCUMENTED`. Dry-run default. Writes `hourlySalary` only.
