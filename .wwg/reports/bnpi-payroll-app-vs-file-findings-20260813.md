@@ -18,13 +18,18 @@
 | 313 | Hardcoded `BANDAI_DIRECT_ANNUAL_WORK_DAYS` | `payroll-period.helper.ts` |
 | Admin Rates | Multipliers only; not base ₱75 | `/admin/rules-policies/payroll?tab=rates` |
 | Recommendation | FILE_DUAL OT + Basic Path A | Canonical doc §11 + §14b — **both implemented local** |
+| Recurring loans | Past DED mass `Amount`+`Payment`; cut file alone incomplete; multi-cutoff horizon required | Canonical **§14c**; `.wwg/reports/bnpi-recurring-deduction-mass-loans-20260818.md` |
+| Loan Jul tally | hdmfSl 353→11; sssSl 300→31; rcbc 132→29 | `.runtime/tally-after-loan-20260818/` |
+| Still owed | Mass **Amount** / `balance` — not Sheet2 period loan $ | §14c Amount vs Payment |
 
 ## Product locks
 
 - Empty biometrics = ABSENT (kept)
 - Do not Path-A-only (breaks monthly Path B)
 - FILE_DUAL OT + Basic Path A: **implemented local clone**; VM dailyRate pending
+- Recurring DED: past mass uploads are primary; single-cut mass is not enough
+- Sheet2 loan column = Payment only; remaining balance = Amount
 
 ## Full narrative
 
-See `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md`.
+See `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` (§14c for recurring deductions).

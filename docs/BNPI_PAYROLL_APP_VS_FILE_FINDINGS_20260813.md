@@ -437,7 +437,8 @@ Independent of OT rate work.
 | **VM DB** (`10.184.37.19:15433` / appliance) | **NOT updated yet** — host/LAN/Cloudflare SSH unreachable this session. Re-run migrate/backfill when VM is up. |
 | **Re-tally local after FILE_DUAL** | 2026-08-13: OT pay fails **482 → 1**; OT_MATCH_ONLY **327 → 797**; full TALLIED still **4**. Evidence: `.runtime/full-tally-after-ot-dual-20260813/` |
 | Re-import period Basic | Optional; won’t alone fix TR |
-| Gross package / DMA / loans | Still open (next residual after Basic) |
+| Gross package / DMA | Still open (next residual after loans) |
+| Recurring loans | See **§14c** (prior DED mass + multi-cutoff horizon) |
 
 ## 14b. Implementation status (FILE_DUAL Basic Path A)
 
@@ -470,6 +471,102 @@ else:                                         // Path B
 bucket OT/premium $ = hours × hourly × Bandai multipliers
 ```
 
+## 14c. Recurring deductions — past mass upload, Amount vs Payment, multi-cutoff
+
+### Product truth (CONFIRMED)
+
+BNPI computation Sheet2 loan columns for a cutoff are **not** filled from that cutoff’s deduction mass file alone. Many HDMF SL / SSS SL / RCBC / BNPI SL / calamity / emergency lines are **recurring**: they were enrolled in **earlier** deduction mass uploads and keep deducting until paid off.
+
+| Source | Role |
+|---|---|
+| `confidential-files/deduction mass upload/` (Jan→Jun history) | Primary enrollment of recurring loans (`Amount` + `Payment`) |
+| Cut mass e.g. `june26-july10/Deduction Mass Upload 07.15.26.xlsx` | Updates / new enrollments for that StartPayment window |
+| Cut mass e.g. `july11-july25/Deduction Mass Upload 07.31.26.xlsx` | **Incomplete alone** (Jul example: **39** rows; Sheet2 loan cells ≠0 ≈ **1227**) |
+| Computation Sheet2 loan $ | **This cutoff’s charge** (tally target) — not remaining balance |
+| Workbook seed (“BNPI payroll workbook loan deduction”) | Earlier import of Sheet2 Payment into `EmployeeLoan`; often weak principal/balance |
+
+**Locks**
+
+- Empty bio = ABSENT unchanged.
+- Do **not** expect Jul (or any single-cut) DED mass alone to explain fleet loan columns.
+- Reimport mass **oldest → newest** so last Payment wins; use correct org (local Bandai `cmryhwpv70000vgaktlmrubmx`).
+
+### Amount vs Payment (how “still owed” works)
+
+Deduction mass upload columns:
+
+| Column | Meaning | App field | Used for |
+|---|---|---|---|
+| **Payment** | Deduct **this cutoff** | `EmployeeLoan.monthlyPayment` | Payroll loan line + Sheet2 tally |
+| **Amount** | Principal / **still owed** at enroll time | `principalAmount` / `balance` | Remaining payoff; **not** the Sheet2 period column |
+
+```text
+Still owed (balance)   ←  Amount  (mass) / EmployeeLoan.balance
+This cutoff charge     ←  Payment (mass) / monthlyPayment / Sheet2 loan $
+When done              ←  balance ≈ 0 (or last short payment)
+```
+
+Rough remaining cutoffs ≈ `Amount ÷ Payment` (~2 cutoffs/month ⇒ months ≈ cutoffs/2).
+
+**Honesty bound:** Payroll today applies **Payment** when the loan window overlaps the period. Live amortized `amountPaid` / declining `balance` after each run is **not** fully proven; `amountPaid` is often still 0. Trust **Amount** from mass for “still owed”; workbook-seeded rows that copied Payment into principal are **weak** for balance.
+
+### Multi-cutoff horizon (why past mass alone was not enough)
+
+Payroll applies `EmployeeLoan` only when:
+
+```text
+status IN (ACTIVE, APPROVED)
+startDate <= period.endDate
+endDate   >= period.startDate
+```
+
+Local defect (before 2026-08-17 repair): `loan_types.maxTermMonths = 1` and workbook seed stamped `endDate` to a **single cut** (e.g. 2026-04-26→2026-05-10). Loans had correct Payment but **did not apply** in Jul 11–25.
+
+| Fix | What it does |
+|---|---|
+| `resolveBandaiMassUploadLoanTermMonths` | Floor **24** months; ignore type term=1; grow from Amount/Payment when longer |
+| `resolveBandaiLoanEndDate` | Never shrink existing later `endDate` on reimport |
+| `repair-bnpi-loan-multi-cutoff-horizon.mjs` | Lift types to 24; extend ACTIVE loan endDates |
+| `import-prior-deduction-mass-history.ts` | Reimport prior+cut DED mass oldest→newest |
+
+### Jul 11–25 proof (local clone)
+
+| Metric | Before loan fix | After repair + prior mass |
+|---|---:|---:|
+| Loans overlapping Jul | 88 | **1280+** |
+| Emps with any loan applied (preview) | ~4 | **509** |
+| Full tally HDMF SL fails | 353 | **11** |
+| Full tally SSS SL fails | 300 | **31** |
+| Full tally RCBC fails | 132 | **29** |
+| Gross / absent / late / DMA fails | unchanged | unchanged |
+| Total Receivable fails | ~827 | ~826 |
+
+Evidence:
+
+- Investigation: `.runtime/prior-deduction-recur-20260817/REPORT.md`
+- Full re-tally: `.runtime/tally-after-loan-20260818/COMPARE-BEFORE-AFTER.md`
+
+### What is / is not “done using past deduction mass upload files”
+
+| Claim | Verdict |
+|---|---|
+| Recurring loan **Payments** that match computation | **Mostly yes** — past (+ cut) DED mass |
+| **Amount / still owed** when mass-sourced | **Yes** — mass `Amount` |
+| Jul cut DED mass alone sufficient | **No** |
+| Loan apply in later periods | Needs **horizon fix** + mass (not Excel alone) |
+| OT / Basic / absent / late / DMA / fleet TR | **No** — other workstreams |
+
+### Operator FAQ
+
+**Q: Do most deductions now match computation?**  
+**A:** Most **loan** columns largely match. **TOTAL DEDN** still fails for nearly everyone (other deds + Gross-driven package). Fleet TR still open.
+
+**Q: How do we know how much is still needed to be paid?**  
+**A:** Use mass upload **Amount** (and app `balance` when it reflects that Amount). Sheet2 loan $ is only this cutoff’s **Payment**.
+
+**Q: Is all of this from past deduction mass uploads?**  
+**A:** Recurring loan enrollments/Payments **yes (primarily)**. Making them apply across cutoffs also required the multi-cutoff code/data repair. Workbook seed and attendance/Gross are separate.
+
 ---
 
 ## 15. Document history
@@ -479,3 +576,4 @@ bucket OT/premium $ = hours × hourly × Bandai multipliers
 | 2026-08-13 | Initial session findings write-up: absent policy, basic import/mismatch, TR impact, OT dual path April proof, Admin Rates limits, recommendations |
 | 2026-08-13 | FILE_DUAL OT implemented: dailyRate field, rate basis Path A/B, import, backfill script, tests |
 | 2026-08-17 | FILE_DUAL Basic Path A: paidDays×dailyRate, suppress Path A full-day absent, register uses computed basicPay; re-tally basic fails 481→1 |
+| 2026-08-17/18 | §14c recurring DED mass, Amount vs Payment, multi-cutoff loan horizon, Jul re-tally after loan fix |

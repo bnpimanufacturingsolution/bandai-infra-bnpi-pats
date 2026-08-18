@@ -1,5 +1,15 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-18 document recurring DED / Amount vs Payment
+
+- Task mode: docs / truth-sync.
+- Documented in canonical §14c + WWG report:
+  past deduction mass uploads as primary recurring source;
+  Payment (this cutoff) vs Amount (still owed);
+  multi-cutoff horizon; Jul re-tally after loan fix; operator FAQ.
+- Paths: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` §14c,
+  `.wwg/reports/bnpi-recurring-deduction-mass-loans-20260818.md`.
+
 ## Latest Task Addendum - 2026-08-17 multi-cutoff loans + prior DED mass
 
 - Task mode: data + engine fix (loan horizon) for Jul 11–25 deduction tally.
@@ -10,8 +20,11 @@
   2. Local repair: 1280 loans overlap Jul (was 88).
   3. Reimport prior+cut DED mass oldest→newest (Bandai org).
   4. Preview proof: loan apply fleet improved (HDMF/SSS/SSSELN app-zero→0).
-- Evidence: `.runtime/prior-deduction-recur-20260817/`.
+  5. Full re-tally 2026-08-18: hdmfSl 353→11, sssSl 300→31, rcbc 132→29.
+- Evidence: `.runtime/prior-deduction-recur-20260817/`,
+  `.runtime/tally-after-loan-20260818/`.
 - Still open: Gross/absent/late/DMA; TOTAL DEDN package beyond loans.
+- Docs: canonical §14c (2026-08-18).
 
 ## Latest Task Addendum - 2026-08-17 FILE_DUAL Basic Path A
 

@@ -1,5 +1,22 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-18 - Recurring DED mass / Amount vs Payment documented
+
+- Status: `DOCUMENTED`.
+- Canonical: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` **§14c**.
+- WWG: `.wwg/reports/bnpi-recurring-deduction-mass-loans-20260818.md` + findings summary updated.
+- Captures: past mass = primary recurring source; Payment vs Amount (still owed);
+  multi-cutoff horizon; Jul proof; FAQ (most loans match ≠ TOTAL DEDN/TR tallied).
+
+## 2026-08-18 - Full Jul 11–25 re-tally after loan fix
+
+- Status: `RE_TALLIED_LOCAL`.
+- Period `PP-20260711-20260726` / `cmryhzl500032vgakz1uy1k7l`, 828 compared.
+- vs Path A Basic baseline: **hdmfSl 353→11**, **sssSl 300→31**, **rcbc 132→29**;
+  Gross/absent/late/DMA unchanged; TR fails **827→826**; TALLIED still **1**.
+- Preview estimated total deductions **₱139k→₱255k** (loans now applying).
+- Evidence: `.runtime/tally-after-loan-20260818/COMPARE-BEFORE-AFTER.md`
+
 ## 2026-08-17 - BNPI multi-cutoff loan horizon + prior mass reimport
 
 - Status: `IMPLEMENTED_LOCAL_PROVEN` (local clone `5433` only).
