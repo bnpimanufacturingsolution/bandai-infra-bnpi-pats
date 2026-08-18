@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- **WorkSharing flag=0 → REST_DAY (2026-08-18):** Explicit WorkSharing date
+  flag `0` now emits `dayOffAssignments` and writes `isOff` schedule overrides
+  (reason `WorkSharing day flag OFF`). Prevents empty-bio ABSENT on off/holiday
+  schedule days that computation does not charge. Repair script:
+  `repair-absent-on-worksharing-off-days.ts`.
 - **BNPI multi-cutoff loan horizon (2026-08-17):** Mass-upload and workbook loan
   enrollments no longer expire after one cutoff when `maxTermMonths` was 1.
   Term floor 24 months (from principal/payment when longer); re-import never

@@ -1,5 +1,22 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-18 - WorkSharing flag=0 ABSENT fix (proof + repair + re-tally)
+
+- Status: `PROOFED_FIXED_LOCAL_RETALLIED`.
+- Proof: Rio-class (file Absent=0, app>0) **82 people / 140 ABSENT lines** — **100%** on
+  WorkSharing flag **0**; leave requests **0**; OT details ≠ holiday-off source.
+- Bug: WS import only wrote flag=1 overrides; flag=0 left work template → empty=ABSENT.
+- Fix: parse `dayOffAssignments`; import `isOff` overrides; repair **1715** lines → REST_DAY.
+- Re-tally Jul: absent fails **222→173** (false charges gone; residual file>0/app=0);
+  Gross **805→731**; Alexa dTotal **−1037→−0.84**; TALLIED **1→3**.
+- Evidence: `.runtime/absent-nopunch-proof-20260818/FINDINGS.md`,
+  `.runtime/tally-after-ws-off-absent-fix-20260818/`.
+
+## 2026-08-18 - Absent residual explained (bio vs computation)
+
+- Status: `DOCUMENTED` (superseded in part by WS-off fix above).
+- Report: `.runtime/absent-residual-explained-20260818/REPORT.md` + §5.4
+
 ## 2026-08-18 - Recurring DED mass / Amount vs Payment documented
 
 - Status: `DOCUMENTED`.

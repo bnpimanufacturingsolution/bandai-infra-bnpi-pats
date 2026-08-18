@@ -149,6 +149,23 @@ Evidence: `.runtime/rio-absent-pattern-peers-20260812/`, `.runtime/attend-repair
 
 With empty=ABSENT kept, next investigation set is **Absent already matches but Gross still unmatch (~203)** plus basic/DMA package — not “fix” empty bio to present.
 
+### 5.4 Clear report — does absent residual mean bio ≠ computation? (2026-08-18)
+
+**Full write-up:** `.runtime/absent-residual-explained-20260818/REPORT.md`  
+**Proof + WS-off fix:** `.runtime/absent-nopunch-proof-20260818/FINDINGS.md`
+
+| Question | Answer |
+|---|---|
+| Bio vs Sheet2 on Absent-$ | Often **disagree**: empty bio days exist; Sheet2 Absent frequently **0** |
+| App inventing absent when punches exist? | **No** — false-absent probe = 0 |
+| Leave causing no-punch / file no-charge? | **No** in local evidence (`requests` empty; no day-leave file in Jul pack) |
+| Holiday-off from `rptOvertimeDetails`? | **No** — that file is holiday/OT **hours worked**, not holiday-off |
+| Primary proven cause (Jul Rio-class) | **WorkSharing flag=0** days charged ABSENT (import ignored flag=0) |
+| Fix | Flag=0 → `REST_DAY` / `isOff` override with reason; repaired 1715 lines |
+| After fix absent fails | **173** — now mostly **file>0 / app=0** (false app charges cleared) |
+
+Operator truth: many “no punch + file Absent=0” cases were **not scheduled (WS=0)**, not leave. Empty=ABSENT still applies on **scheduled** empty days (WS=1).
+
 ---
 
 ## 6. Basic Salary mismatch
