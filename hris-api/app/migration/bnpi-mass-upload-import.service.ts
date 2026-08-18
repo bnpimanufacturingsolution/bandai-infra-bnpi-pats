@@ -5,6 +5,7 @@ import {
 	BANDAI_LOAN_MIN_TERM_MONTHS,
 	compensationBenefitLabel,
 	DEDUCTION_BENEFIT_CODE_LABELS,
+	isOpenHorizonCompensationCode,
 	normalizeMassUploadRow,
 	padEmployeeId,
 	parseCompensationMassUploadRow,
@@ -1273,6 +1274,40 @@ export async function importCompensationMassUpload(params: {
 		}
 	}
 
+	// Open-horizon COMP (e.g. DMA): one active enrollment per employee+type.
+	const openHorizonTypeIds = Array.from(typeIds).filter((typeId) => {
+		for (const [code, type] of benefitTypeCache.entries()) {
+			if (type.id === typeId && isOpenHorizonCompensationCode(code)) return true;
+		}
+		return false;
+	});
+	if (openHorizonTypeIds.length > 0) {
+		const openExisting = await params.prisma.employeeBenefit.findMany({
+			where: {
+				organizationId: params.organizationId,
+				isDeleted: false,
+				benefitTypeId: { in: openHorizonTypeIds },
+				employeeId: { in: employees.map((e) => e.id) },
+			},
+			select: {
+				id: true,
+				employeeId: true,
+				benefitTypeId: true,
+				payrollPeriodId: true,
+				startDate: true,
+				endDate: true,
+				isActive: true,
+				status: true,
+			},
+			orderBy: [{ updatedAt: "desc" }],
+		});
+		for (const row of openExisting) {
+			const key = `${row.employeeId}|${row.benefitTypeId}|open`;
+			if (existingByKey.has(key)) continue;
+			existingByKey.set(key, row.id);
+		}
+	}
+
 	for (const row of okWriteRows) {
 		try {
 			const employeePk = employeeByCode.get(row.employeeId);
@@ -1300,39 +1335,80 @@ export async function importCompensationMassUpload(params: {
 			}
 
 			const benefitType = await ensureType(row.code);
-			const key = `${employeePk}|${benefitType.id}|${period.id}`;
+			const openHorizon = isOpenHorizonCompensationCode(row.code);
+			const key = openHorizon
+				? `${employeePk}|${benefitType.id}|open`
+				: `${employeePk}|${benefitType.id}|${period.id}`;
 			const existingId = existingByKey.get(key);
 			const sourceRowsNote =
 				row.sourceRowNumbers.length > 1
 					? ` rows ${row.sourceRowNumbers.join("+")} (summed)`
 					: ` row ${row.rowNumber}`;
 
-			const payload = normalizeEmployeeBenefitPayload({
-				organizationId: params.organizationId,
-				employeeId: employeePk,
-				benefitTypeId: benefitType.id,
-				payrollPeriodId: period.id,
-				amount: row.amount,
-				totalAmount: row.amount,
-				// One period only: pin to period bounds so Run Payroll Adjustments (filter by
-				// payrollPeriodId) and generation both see the same cutoff-scoped enrollment.
-				startDate: period.startDate,
-				endDate: period.endDate,
-				startPayrollCutOff: period.startDate,
-				endPayrollCutOff: period.endDate,
-				scheduleMode: "RECURRING",
-				recurrenceFrequency: "EVERY_CUTOFF",
-				totalInstallments: 0,
-				attendanceBased: false,
-				isActive: true,
-				status: "ACTIVE",
-				name: benefitType.name,
-				notes: `BNPI Compensation Mass Upload${sourceRowsNote}; COMCODE=${row.code}; period=${period.code || period.id}`,
-				currency: "PHP",
-				agreedToTerms: true,
-			});
+			const existingMeta = openHorizon && existingId
+				? await params.prisma.employeeBenefit.findUnique({
+						where: { id: existingId },
+						select: { startDate: true },
+					})
+				: null;
+			const openStart =
+				existingMeta?.startDate && existingMeta.startDate.getTime() < period.startDate.getTime()
+					? existingMeta.startDate
+					: period.startDate;
 
-			let periodScopedId = existingId || "";
+			const payload = normalizeEmployeeBenefitPayload(
+				openHorizon
+					? {
+							organizationId: params.organizationId,
+							employeeId: employeePk,
+							benefitTypeId: benefitType.id,
+							// Open-horizon: apply every cutoff until a later period-scoped
+							// mass row supersedes (see supersedeOpenHorizonBenefitsForPeriodScoped).
+							payrollPeriodId: null,
+							amount: row.amount,
+							totalAmount: row.amount,
+							startDate: openStart,
+							endDate: null,
+							startPayrollCutOff: openStart,
+							endPayrollCutOff: null,
+							scheduleMode: "RECURRING",
+							recurrenceFrequency: "EVERY_CUTOFF",
+							totalInstallments: 0,
+							attendanceBased: false,
+							isActive: true,
+							status: "ACTIVE",
+							name: benefitType.name,
+							notes: `BNPI Compensation Mass Upload${sourceRowsNote}; COMCODE=${row.code}; open-horizon EVERY_CUTOFF; seedPeriod=${period.code || period.id}`,
+							currency: "PHP",
+							agreedToTerms: true,
+						}
+					: {
+							organizationId: params.organizationId,
+							employeeId: employeePk,
+							benefitTypeId: benefitType.id,
+							payrollPeriodId: period.id,
+							amount: row.amount,
+							totalAmount: row.amount,
+							// One period only: pin to period bounds so Run Payroll Adjustments (filter by
+							// payrollPeriodId) and generation both see the same cutoff-scoped enrollment.
+							startDate: period.startDate,
+							endDate: period.endDate,
+							startPayrollCutOff: period.startDate,
+							endPayrollCutOff: period.endDate,
+							scheduleMode: "RECURRING",
+							recurrenceFrequency: "EVERY_CUTOFF",
+							totalInstallments: 0,
+							attendanceBased: false,
+							isActive: true,
+							status: "ACTIVE",
+							name: benefitType.name,
+							notes: `BNPI Compensation Mass Upload${sourceRowsNote}; COMCODE=${row.code}; period=${period.code || period.id}`,
+							currency: "PHP",
+							agreedToTerms: true,
+						},
+			);
+
+			let writtenId = existingId || "";
 			if (existingId) {
 				await params.prisma.employeeBenefit.update({
 					where: { id: existingId },
@@ -1351,7 +1427,7 @@ export async function importCompensationMassUpload(params: {
 					data: payload as any,
 					select: { id: true },
 				});
-				periodScopedId = created.id;
+				writtenId = created.id;
 				existingByKey.set(key, created.id);
 				pushImportSuccess(state, {
 					row: row.rowNumber,
@@ -1362,15 +1438,17 @@ export async function importCompensationMassUpload(params: {
 					periodCode: period.code,
 				});
 			}
-			await supersedeOpenHorizonBenefitsForPeriodScoped({
-				prisma: params.prisma,
-				organizationId: params.organizationId,
-				employeeId: employeePk,
-				benefitTypeId: benefitType.id,
-				period,
-				keepBenefitId: periodScopedId,
-				code: row.code,
-			});
+			if (!openHorizon) {
+				await supersedeOpenHorizonBenefitsForPeriodScoped({
+					prisma: params.prisma,
+					organizationId: params.organizationId,
+					employeeId: employeePk,
+					benefitTypeId: benefitType.id,
+					period,
+					keepBenefitId: writtenId,
+					code: row.code,
+				});
+			}
 			trackPeriodCode(state.summary, period.code);
 		} catch (error: any) {
 			pushImportError(state, {

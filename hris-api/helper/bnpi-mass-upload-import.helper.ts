@@ -75,6 +75,26 @@ export function resolveCompensationCodePayrollRole(
 	return COMPENSATION_CODE_PAYROLL_ROLES[key] || null;
 }
 
+/**
+ * COMP codes that must enroll as open-horizon (payrollPeriodId null, no period
+ * endDate pin) so EVERY_CUTOFF applies until a later period-scoped mass row
+ * supersedes them.
+ *
+ * DMA is catalog/register recurring: Sheet2 still pays De Minimis even when the
+ * cut's Compensation Mass Upload has 0 DMA rows. Period-scoped workbook seeds
+ * (e.g. Apr 26–May 10 only) caused Jul app DMA=0.
+ *
+ * ARP/PFA/MLA stay period-scoped (attendance / cut-specific receivable).
+ */
+export const OPEN_HORIZON_COMPENSATION_CODES = new Set<string>(["DMA"]);
+
+export function isOpenHorizonCompensationCode(code: string | null | undefined): boolean {
+	const key = String(code || "")
+		.trim()
+		.toUpperCase();
+	return Boolean(key) && OPEN_HORIZON_COMPENSATION_CODES.has(key);
+}
+
 /** Deduction-direction benefit codes created from mass upload / statutory import. */
 export const DEDUCTION_CODE_PAYROLL_ROLES: Record<
 	string,

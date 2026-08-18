@@ -454,8 +454,9 @@ Independent of OT rate work.
 | **VM DB** (`10.184.37.19:15433` / appliance) | **NOT updated yet** — host/LAN/Cloudflare SSH unreachable this session. Re-run migrate/backfill when VM is up. |
 | **Re-tally local after FILE_DUAL** | 2026-08-13: OT pay fails **482 → 1**; OT_MATCH_ONLY **327 → 797**; full TALLIED still **4**. Evidence: `.runtime/full-tally-after-ot-dual-20260813/` |
 | Re-import period Basic | Optional; won’t alone fix TR |
-| Gross package / DMA | Still open (next residual after loans) |
+| Gross package / DMA | **DMA closed** for Jul compared set — see **§14d**; Gross package still open |
 | Recurring loans | See **§14c** (prior DED mass + multi-cutoff horizon) |
+| Recurring DMA | See **§14d** (open-horizon EVERY_CUTOFF from Sheet2 Jul amounts) |
 
 ## 14b. Implementation status (FILE_DUAL Basic Path A)
 
@@ -586,6 +587,41 @@ Evidence:
 
 ---
 
+## 14d. Recurring De Minimis (DMA) — open-horizon EVERY_CUTOFF
+
+**Problem (Jul 11–25):** Sheet2 still pays De Minimis (often ₱150) but app DMA = 0 for **332** compared people.
+
+| Cause | Evidence |
+|---|---|
+| Jul COMP mass has **0** DMA rows | `july11-july25/Compensation Mass Upload 07.31.26.xlsx` |
+| Existing DMA enrollments expired | 336 rows, `startDate=2026-04-26` … `endDate=2026-05-10`, all `payrollPeriodId` pinned |
+| Apply rule | `resolvePayrollBenefitSource` skips when `endDate < period.start` or wrong `payrollPeriodId` |
+
+Same class of bug as short loan horizons: **period-scoped seed**, not open-horizon recurring.
+
+**Fix (2026-08-18):**
+
+1. `isOpenHorizonCompensationCode('DMA')` — DMA only; ARP/PFA/MLA stay cut-scoped.
+2. COMP mass upload writes DMA with `payrollPeriodId=null`, `endDate=null`, `RECURRING` + `EVERY_CUTOFF`.
+3. Workbook benefit apply treats DMA the same way.
+4. Local repair: `repair-bnpi-dma-open-horizon.mjs --execute` upserts amounts from **Jul Sheet2** (operator choice).
+
+**Jul re-tally proof** (period id `cmryhzl500032vgakz1uy1k7l`, 828 compared):
+
+| Metric | Before | After |
+|---|---:|---:|
+| DMA match | 496 | **828** |
+| DMA fail | 332 | **0** |
+| `fieldFailCounts.dma` | 332 | **0** |
+
+Repair: 329 updated, 6 inserted, 2 missing employees (`01831`, `01845` — not in compared set).
+
+Evidence: `.runtime/dma-tally-20260818/REPORT.md`, `.runtime/dma-open-horizon-repair-20260818/`, `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`.
+
+**Still open:** Gross (~620), absent reverse (~173), late (~55), TR/Net — not DMA.
+
+---
+
 ## 15. Document history
 
 | Date | Change |
@@ -594,3 +630,4 @@ Evidence:
 | 2026-08-13 | FILE_DUAL OT implemented: dailyRate field, rate basis Path A/B, import, backfill script, tests |
 | 2026-08-17 | FILE_DUAL Basic Path A: paidDays×dailyRate, suppress Path A full-day absent, register uses computed basicPay; re-tally basic fails 481→1 |
 | 2026-08-17/18 | §14c recurring DED mass, Amount vs Payment, multi-cutoff loan horizon, Jul re-tally after loan fix |
+| 2026-08-18 | §14d DMA open-horizon EVERY_CUTOFF; Jul DMA fails 332→0 |

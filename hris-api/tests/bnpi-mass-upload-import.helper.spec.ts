@@ -4,6 +4,7 @@ import {
 	COMPENSATION_CODE_LABELS,
 	COMPENSATION_CODE_PAYROLL_ROLES,
 	detectMassUploadKindFromHeaders,
+	isOpenHorizonCompensationCode,
 	loanTypeNameToDeductionCode,
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
@@ -104,6 +105,15 @@ describe("BNPI mass upload import helper", () => {
 			existingEndDate: existing,
 		});
 		expect(end.toISOString().slice(0, 10)).to.equal("2028-04-26");
+	});
+
+	it("DMA is open-horizon COMP; ARP/PFA/MLA stay period-scoped", () => {
+		expect(isOpenHorizonCompensationCode("DMA")).to.equal(true);
+		expect(isOpenHorizonCompensationCode("dma")).to.equal(true);
+		expect(isOpenHorizonCompensationCode("ARP")).to.equal(false);
+		expect(isOpenHorizonCompensationCode("PFA")).to.equal(false);
+		expect(isOpenHorizonCompensationCode("MLA")).to.equal(false);
+		expect(isOpenHorizonCompensationCode("")).to.equal(false);
 	});
 
 	it("parses Excel Date cells using Asia/Manila calendar (not UTC day)", () => {

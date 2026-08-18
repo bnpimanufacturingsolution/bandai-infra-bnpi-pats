@@ -1,5 +1,18 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-18 DMA open-horizon recurring
+
+- Task mode: data + import fix (DMA recurring) for Jul 11–25 tally.
+- Request: fix DMA for recurring; amounts = latest Sheet2 Jul per employee.
+- Finding: expired period-scoped workbook DMA + no Jul COMP DMA rows → app 0.
+- Done:
+  1. `isOpenHorizonCompensationCode(DMA)` + COMP mass + workbook apply open-horizon.
+  2. Local repair from Jul Sheet2 (335 apply Jul; 2 missing emps).
+  3. Re-tally: DMA fails **332→0**.
+- Evidence: `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`
+- Docs: canonical §14d + handoff.
+- Still open: Gross/absent reverse/late/TR.
+
 ## Latest Task Addendum - 2026-08-18 document recurring DED / Amount vs Payment
 
 - Task mode: docs / truth-sync.

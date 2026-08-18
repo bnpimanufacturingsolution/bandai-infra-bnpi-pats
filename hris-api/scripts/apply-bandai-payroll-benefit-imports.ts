@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "../generated/prisma";
+import { isOpenHorizonCompensationCode } from "../helper/bnpi-mass-upload-import.helper";
 
 const prisma = new PrismaClient();
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -352,44 +353,75 @@ async function main() {
 			continue;
 		}
 		const startDate = toDate(row.START_DATE);
-		const endDate = toDate(row.END_DATE);
+		const sheetEndDate = toDate(row.END_DATE);
+		const openHorizon = isOpenHorizonCompensationCode(row.CODE_OR_NAME);
 		const payrollPeriodCode = String(row.PAYROLL_PERIOD_CODE || "").trim();
-		const payrollPeriod = payrollPeriodCode
-			? payrollPeriodByKey.get(payrollPeriodCode.toUpperCase())
-			: payrollPeriodByKey.get(dateKey(startDate, endDate));
+		const payrollPeriod = openHorizon
+			? null
+			: payrollPeriodCode
+				? payrollPeriodByKey.get(payrollPeriodCode.toUpperCase())
+				: payrollPeriodByKey.get(dateKey(startDate, sheetEndDate));
 		const existing = await prisma.employeeBenefit.findFirst({
 			where: {
 				organizationId: organization.id,
 				employeeId: employee.id,
 				benefitTypeId: benefitType.id,
-				...(payrollPeriod
-					? { OR: [{ payrollPeriodId: payrollPeriod.id }, { startDate, endDate }] }
-					: { startDate, endDate }),
 				isDeleted: false,
+				...(openHorizon
+					? {}
+					: payrollPeriod
+						? { OR: [{ payrollPeriodId: payrollPeriod.id }, { startDate, endDate: sheetEndDate }] }
+						: { startDate, endDate: sheetEndDate }),
 			},
-			select: { id: true },
+			select: { id: true, startDate: true },
+			orderBy: openHorizon ? [{ payrollPeriodId: "asc" }, { updatedAt: "desc" }] : undefined,
 		});
 		if (existing) employeeBenefitUpdates += 1;
 		else employeeBenefitCreates += 1;
 
 		if (!execute) continue;
-		const totalInstallments = toNumber(row.INSTALLMENTS, 1) || 1;
-		const payload = {
-			name: benefitType.name,
-			totalAmount: amount,
-			totalInstallments,
-			installmentAmount: amount / totalInstallments,
-			remainingBalance: amount,
-			amount,
-			payrollPeriodId: payrollPeriod?.id,
-			startDate,
-			endDate,
-			status: row.STATUS || "ACTIVE",
-			notes: row.NOTES || null,
-			remarks: row.NOTES || null,
-			isActive: true,
-			isDeleted: false,
-		};
+		const totalInstallments = openHorizon ? 0 : toNumber(row.INSTALLMENTS, 1) || 1;
+		const openStart =
+			openHorizon && existing?.startDate && existing.startDate.getTime() < startDate.getTime()
+				? existing.startDate
+				: startDate;
+		const payload = openHorizon
+			? {
+					name: benefitType.name,
+					totalAmount: amount,
+					totalInstallments: 0,
+					installmentAmount: amount,
+					remainingBalance: amount,
+					amount,
+					payrollPeriodId: null,
+					startDate: openStart,
+					endDate: null,
+					startPayrollCutOff: openStart,
+					endPayrollCutOff: null,
+					scheduleMode: "RECURRING",
+					recurrenceFrequency: "EVERY_CUTOFF",
+					status: row.STATUS || "ACTIVE",
+					notes: [row.NOTES, "open-horizon EVERY_CUTOFF (DMA)"].filter(Boolean).join(" | "),
+					remarks: row.NOTES || null,
+					isActive: true,
+					isDeleted: false,
+				}
+			: {
+					name: benefitType.name,
+					totalAmount: amount,
+					totalInstallments,
+					installmentAmount: amount / totalInstallments,
+					remainingBalance: amount,
+					amount,
+					payrollPeriodId: payrollPeriod?.id,
+					startDate,
+					endDate: sheetEndDate,
+					status: row.STATUS || "ACTIVE",
+					notes: row.NOTES || null,
+					remarks: row.NOTES || null,
+					isActive: true,
+					isDeleted: false,
+				};
 		if (existing) {
 			await prisma.employeeBenefit.update({ where: { id: existing.id }, data: payload as any });
 		} else {
