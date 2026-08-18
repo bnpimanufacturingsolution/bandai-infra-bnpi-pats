@@ -6,9 +6,10 @@
 - **Snapshot only.** `EmployeePayroll.hourlySalary` is a `Float` default `0` written at payroll generate (and the same generate-timesheet / preview engine path). It freezes the **attendance hourly already used for OT and late/UT** on that run. It is not a live formula field after save.
 - **Not Employee input.** `Employee` still has only `basicSalary` + `currency` + `payFrequency`. There is no `Employee.hourlyRate` / `Employee.hourlySalary`. Hire and edit forms do not collect hourly. `basicSalary` remains source of truth.
 - **Formula (derived, then snapshotted):** hourly = daily / `workingHoursPerDay`. BNPI 313 attendance / approved-bucket path uses `BANDAI_WORKING_HOURS_PER_DAY = 8` (`daily = monthly × 12 / 313`, then `/ 8`). Same `hourlyRate` already computed in `resolveBnpiAttendanceDailyRate` / `resolveBandaiApprovedBucketRateBasis`.
-- **Existing rows** stay `0` until unpaid regenerate (safe additive column). Regenerating writes the snapshot; paid history is not rewritten.
+- **Existing rows** stay `0` until unpaid regenerate **or** the optional hourlySalary backfill. Regenerating writes the snapshot; paid money history is not rewritten.
+- **Backfill of existing `0` rows:** `cd hris-api` then `npm run backfill:employee-payroll-hourly-salary` (dry-run default) or `npm run backfill:employee-payroll-hourly-salary:execute`. Fills `EmployeePayroll.hourlySalary` from current `dailySalary` / payroll `metadata` (`hourlyRate`, else daily ÷ hours). Does **not** change payroll computation. Stored column is still not used in compute.
 - **Not a Sheet2 register column.** Register mapping stays G Monthly / H Daily / I No. of Days. Do not add an Hourly Salary column to the BNPI computation workbook or treat `hourlySalary` as register parity.
-- **Not SoT. Not used in current computation.** Generate/preview still price OT/late/UT/absent from in-memory `attendanceRate.hourlyRate` (daily ÷ hours). They write `hourlySalary` after money is done. They do not read the stored column.
+- **Not SoT. Not used in current computation.** Generate/preview still price OT/late/UT/absent from in-memory `attendanceRate.hourlyRate` (daily ÷ hours). They write `hourlySalary` after money is done. They do not read the stored column. The backfill also does not feed compute.
 - Canonical write-up: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
 
 ## Zen 00010 salary, timesheet, payroll preview (2026-08-17)

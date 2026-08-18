@@ -308,6 +308,59 @@ export function computeEmployeePayrollHourlySalarySnapshot(params: {
 	return roundToCentavo(dailyRate / hours);
 }
 
+/**
+ * Derive a generate-time hourly snapshot from an already-saved payroll row.
+ * Uses metadata / rateBreakdown / dailySalary only. Never Employee.basicSalary
+ * or the stored hourly column.
+ */
+export function resolveEmployeePayrollHourlySalaryFromExistingRow(row: {
+	dailySalary?: unknown;
+	metadata?: unknown;
+	rateBreakdown?: unknown;
+}): {
+	hourlySalary: number;
+	source: "metadata.hourlyRate" | "rateBreakdown.hourlyRate" | "dailySalary" | "none";
+} {
+	const metadata = asRecord(row?.metadata);
+	const rateBreakdown = asRecord(row?.rateBreakdown);
+	const hours = Number(metadata.workingHoursPerDay || BANDAI_WORKING_HOURS_PER_DAY);
+	let source: "metadata.hourlyRate" | "rateBreakdown.hourlyRate" | "dailySalary" | "none" = "none";
+	let hourlyRate: number | undefined;
+	let dailyRate = 0;
+
+	const metadataHourly = Number(metadata.hourlyRate);
+	if (Number.isFinite(metadataHourly) && metadataHourly !== 0) {
+		source = "metadata.hourlyRate";
+		hourlyRate = metadataHourly;
+	} else {
+		const breakdownHourly = Number(asRecord(rateBreakdown.hourlyRate).result);
+		if (Number.isFinite(breakdownHourly) && breakdownHourly !== 0) {
+			source = "rateBreakdown.hourlyRate";
+			hourlyRate = breakdownHourly;
+		} else {
+			const dailyCandidates = [
+				Number(row?.dailySalary),
+				Number(metadata.dailyRate),
+				Number(asRecord(rateBreakdown.dailyRate).result),
+			];
+			const foundDaily = dailyCandidates.find((value) => Number.isFinite(value) && value !== 0) ?? 0;
+			if (Number.isFinite(foundDaily) && foundDaily !== 0) {
+				source = "dailySalary";
+				dailyRate = foundDaily;
+			}
+		}
+	}
+
+	return {
+		hourlySalary: computeEmployeePayrollHourlySalarySnapshot({
+			dailyRate,
+			hourlyRate,
+			workingHoursPerDay: hours,
+		}),
+		source,
+	};
+}
+
 type PayrollTimesheetScope = {
 	departmentId?: string | null;
 	sectionId?: string | null;

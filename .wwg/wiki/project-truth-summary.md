@@ -4,7 +4,7 @@ Last updated: 2026-08-19
 
 ## 2026-08-19 EmployeePayroll.hourlySalary snapshot
 
-- Generate-time snapshot of derived hourly (daily ÷ working hours; BNPI 313 uses 8). Not Employee input. No `Employee.hourlyRate`. Not a Sheet2 column. `basicSalary` stays SoT. Existing rows stay 0 until regenerate.
+- Generate-time snapshot of derived hourly (daily ÷ working hours; BNPI 313 uses 8). Not Employee input. No `Employee.hourlyRate`. Not a Sheet2 column. `basicSalary` stays SoT. Existing `0` rows can be filled by the dry-run-default backfill from current daily/metadata; still unused in compute.
 - Full: `.wwg/wiki/project-truth.md` section **EmployeePayroll hourlySalary snapshot (2026-08-19)**. Report: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
 
 ## 2026-08-17 Zen 00010 payroll / timesheet

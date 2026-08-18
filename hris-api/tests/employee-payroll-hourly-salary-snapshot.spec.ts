@@ -7,6 +7,7 @@ import {
 	BANDAI_WORKING_HOURS_PER_DAY,
 	computeEmployeePayrollHourlySalarySnapshot,
 	resolveBnpiAttendanceDailyRate,
+	resolveEmployeePayrollHourlySalaryFromExistingRow,
 } from "../helper/payroll-period.helper";
 
 describe("computeEmployeePayrollHourlySalarySnapshot", () => {
@@ -103,6 +104,64 @@ describe("computeEmployeePayrollHourlySalarySnapshot", () => {
 		expect(helperSource).to.match(/BANDAI_PAYROLL_REGISTER_COLUMNS[\s\S]*\["H", "Daily Salary", "dailySalary"\]/);
 		expect(helperSource).to.not.match(/\["[^"]+", "[^"]*Hourly[^"]*", "hourlySalary"\]/);
 		const writeMatches = helperSource.match(/hourlySalary/g) || [];
-		expect(writeMatches.length).to.equal(3);
+		expect(writeMatches.length).to.equal(5);
+		const resolverStart = helperSource.indexOf("export function resolveEmployeePayrollHourlySalaryFromExistingRow");
+		expect(resolverStart).to.be.greaterThan(-1);
+		const resolverSource = helperSource.slice(
+			resolverStart,
+			helperSource.indexOf("type PayrollTimesheetScope", resolverStart),
+		);
+		expect(resolverSource).to.not.match(/row\.hourlySalary/);
+		expect(resolverSource).to.not.match(/basicSalary/);
+	});
+});
+
+describe("resolveEmployeePayrollHourlySalaryFromExistingRow", () => {
+	it("metadata.hourlyRate 99.123 → rounded", () => {
+		const resolved = resolveEmployeePayrollHourlySalaryFromExistingRow({
+			dailySalary: 800,
+			metadata: { hourlyRate: 99.123, workingHoursPerDay: 8 },
+			rateBreakdown: { hourlyRate: { result: 50 } },
+		});
+		expect(resolved.source).to.equal("metadata.hourlyRate");
+		expect(resolved.hourlySalary).to.equal(roundToCentavo(99.123));
+	});
+
+	it("rateBreakdown.hourlyRate.result when metadata missing", () => {
+		const resolved = resolveEmployeePayrollHourlySalaryFromExistingRow({
+			dailySalary: 800,
+			rateBreakdown: { hourlyRate: { result: 87.654 } },
+		});
+		expect(resolved.source).to.equal("rateBreakdown.hourlyRate");
+		expect(resolved.hourlySalary).to.equal(roundToCentavo(87.654));
+	});
+
+	it("dailySalary 800 / 8 = 100", () => {
+		const resolved = resolveEmployeePayrollHourlySalaryFromExistingRow({
+			dailySalary: 800,
+		});
+		expect(resolved.source).to.equal("dailySalary");
+		expect(resolved.hourlySalary).to.equal(roundToCentavo(800 / 8));
+		expect(resolved.hourlySalary).to.equal(100);
+	});
+
+	it("empty → 0", () => {
+		const resolved = resolveEmployeePayrollHourlySalaryFromExistingRow({});
+		expect(resolved.source).to.equal("none");
+		expect(resolved.hourlySalary).to.equal(0);
+	});
+});
+
+describe("backfill-employee-payroll-hourly-salary script contract", () => {
+	it("updates only hourlySalary and defaults to dry-run", () => {
+		const script = readFileSync(
+			path.join(__dirname, "../scripts/backfill-employee-payroll-hourly-salary.ts"),
+			"utf8",
+		);
+		expect(script).to.match(/execute:\s*flags\.has\("--execute"\)/);
+		expect(script).to.match(/data:\s*\{\s*hourlySalary:\s*next\s*\}/);
+		expect(script).to.not.match(/data:\s*\{[^}]*basicPay/);
+		expect(script).to.not.match(/data:\s*\{[^}]*netPay/);
+		expect(script).to.not.match(/generatePayrollFromTimesheets/);
 	});
 });

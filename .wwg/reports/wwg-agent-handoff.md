@@ -1,5 +1,16 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - EmployeePayroll.hourlySalary backfill script
+
+- Status: `IMPLEMENTED_DOCUMENTED`. Dry-run default. Writes `hourlySalary` only.
+- Commands: `cd hris-api`; `npm run backfill:employee-payroll-hourly-salary` or `:execute`. Wrapper: `scripts/backfill-employee-payroll-hourly-salary.ps1`.
+- Source: existing `metadata.hourlyRate` / `rateBreakdown` / `dailySalary`. Not used in compute.
+- Optional script fills existing `EmployeePayroll.hourlySalary = 0` from current `dailySalary` / payroll `metadata`. Still **not** used in OT/late/UT/absent/gross.
+- Dry-run default: `cd hris-api` then `npm run backfill:employee-payroll-hourly-salary`.
+- Writes only on `npm run backfill:employee-payroll-hourly-salary:execute`. Column only; paid money history is not regenerated.
+- Derive: `computeEmployeePayrollHourlySalarySnapshot` — prefer metadata `hourlyRate`, else daily ÷ hours (BNPI 313 uses 8).
+- WWG: project-truth hourlySalary bullet + summary one-liner + current-task addendum + snapshot report **Backfill** section.
+
 ## 2026-08-19 - EmployeePayroll.hourlySalary generate-time snapshot
 
 - Status: `IMPLEMENTED_DOCUMENTED`. Operator: snapshot only; auto-computed; no extra features.

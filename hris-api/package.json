@@ -102,6 +102,8 @@
 		"backfill:employee-manpower-contact:execute": "tsx scripts/backfill-employee-contact-from-manpower-databank.ts --execute",
 		"backfill:employee-worksharing-schedules": "tsx scripts/backfill-employee-schedules-from-worksharing.ts",
 		"backfill:employee-worksharing-schedules:execute": "tsx scripts/backfill-employee-schedules-from-worksharing.ts --execute --write-csv",
+		"backfill:employee-payroll-hourly-salary": "tsx scripts/backfill-employee-payroll-hourly-salary.ts",
+		"backfill:employee-payroll-hourly-salary:execute": "tsx scripts/backfill-employee-payroll-hourly-salary.ts --execute",
 		"repair:dm3-attendance-obligations": "tsx scripts/repair-dm3-attendance-obligations.ts",
 		"repair:dm3-attendance-obligations:execute": "tsx scripts/repair-dm3-attendance-obligations.ts --execute",
 		"repair:dm3-onboarding-documents": "tsx scripts/repair-dm3-onboarding-document-requirements.ts",

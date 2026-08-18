@@ -1,5 +1,16 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 hourlySalary backfill script
+
+- Operator: backfill current EmployeePayroll rows for the new `hourlySalary` snapshot. Dry-run default. Does **not** change payroll computation.
+- Commands (`hris-api`):
+  - `npm run backfill:employee-payroll-hourly-salary` — dry-run (default; no writes)
+  - `npm run backfill:employee-payroll-hourly-salary:execute` — write `hourlySalary` only
+- Derive: prefer metadata `hourlyRate`, else `dailySalary` (or metadata daily) ÷ `workingHoursPerDay` (BNPI 313 uses 8). Same helper as generate: `computeEmployeePayrollHourlySalarySnapshot`.
+- Does **not** rewrite money (OT/late/UT/absent/gross/net), Employee input, Sheet2 columns, or paid/published/lock flags.
+- WWG: project-truth + summary + this addendum + handoff + snapshot report Backfill section.
+- Boundary: no product compute edits; no commit/push this pass.
+
 ## Latest Task Addendum - 2026-08-19 EmployeePayroll.hourlySalary snapshot
 
 - Operator: add hourly on the payroll snapshot; auto-compute; document; do not add other features.
