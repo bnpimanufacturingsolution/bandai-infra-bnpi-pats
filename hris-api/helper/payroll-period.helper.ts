@@ -288,7 +288,11 @@ export function resolveBnpiAttendanceDailyRate(params: {
 	};
 }
 
-/** Persist EmployeePayroll.hourlySalary. Prefer explicit hourlyRate; else daily / hours. */
+/**
+ * WRITE-ONLY snapshot for EmployeePayroll.hourlySalary.
+ * Prefer the in-memory attendance hourlyRate; else daily / hours.
+ * Do not read EmployeePayroll.hourlySalary for OT, late, UT, absent, or gross.
+ */
 export function computeEmployeePayrollHourlySalarySnapshot(params: {
 	dailyRate: number;
 	hourlyRate?: number;

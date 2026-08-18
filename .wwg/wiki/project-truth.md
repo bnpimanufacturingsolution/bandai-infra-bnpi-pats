@@ -8,7 +8,7 @@
 - **Formula (derived, then snapshotted):** hourly = daily / `workingHoursPerDay`. BNPI 313 attendance / approved-bucket path uses `BANDAI_WORKING_HOURS_PER_DAY = 8` (`daily = monthly × 12 / 313`, then `/ 8`). Same `hourlyRate` already computed in `resolveBnpiAttendanceDailyRate` / `resolveBandaiApprovedBucketRateBasis`.
 - **Existing rows** stay `0` until unpaid regenerate (safe additive column). Regenerating writes the snapshot; paid history is not rewritten.
 - **Not a Sheet2 register column.** Register mapping stays G Monthly / H Daily / I No. of Days. Do not add an Hourly Salary column to the BNPI computation workbook or treat `hourlySalary` as register parity.
-- **Not SoT.** Do not price payroll from stored `hourlySalary` on a later edit. Recompute from `basicSalary` + period + 313/8 (or the same attendance helper) at generate, then snapshot.
+- **Not SoT. Not used in current computation.** Generate/preview still price OT/late/UT/absent from in-memory `attendanceRate.hourlyRate` (daily ÷ hours). They write `hourlySalary` after money is done. They do not read the stored column.
 - Canonical write-up: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
 
 ## Zen 00010 salary, timesheet, payroll preview (2026-08-17)

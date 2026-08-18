@@ -1,4 +1,6 @@
 import { expect } from "chai";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { roundToCentavo } from "../helper/tax-calculator.helper";
 import {
 	BANDAI_DIRECT_ANNUAL_WORK_DAYS,
@@ -80,5 +82,27 @@ describe("computeEmployeePayrollHourlySalarySnapshot", () => {
 			workingHoursPerDay: 8,
 		});
 		expect(snapshot).to.equal(roundToCentavo(800 / 8));
+	});
+
+	it("does not read hourlySalary as payroll money input", () => {
+		const helperSource = readFileSync(
+			path.join(__dirname, "../helper/payroll-period.helper.ts"),
+			"utf8",
+		);
+		const computeSources = [
+			helperSource,
+			readFileSync(path.join(__dirname, "../helper/payroll-calculator.helper.ts"), "utf8"),
+			readFileSync(path.join(__dirname, "../helper/payroll-reconciliation.helper.ts"), "utf8"),
+			readFileSync(path.join(__dirname, "../app/employeepayroll/employeepayroll.controller.ts"), "utf8"),
+		];
+		for (const source of computeSources) {
+			expect(source).to.not.match(/hourlySalary\s*\*/);
+			expect(source).to.not.match(/employeePayroll\.hourlySalary/);
+			expect(source).to.not.match(/input\.hourlySalary/);
+		}
+		expect(helperSource).to.match(/BANDAI_PAYROLL_REGISTER_COLUMNS[\s\S]*\["H", "Daily Salary", "dailySalary"\]/);
+		expect(helperSource).to.not.match(/\["[^"]+", "[^"]*Hourly[^"]*", "hourlySalary"\]/);
+		const writeMatches = helperSource.match(/hourlySalary/g) || [];
+		expect(writeMatches.length).to.equal(3);
 	});
 });

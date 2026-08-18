@@ -49,6 +49,7 @@ Helpers (existing, not a new rate family):
 | Hire / edit / boarding hourly field | Not an Employee input |
 | Sheet2 / payroll-computation **Hourly Salary** column | Register stays G Monthly, H Daily, I No. of Days |
 | Using stored `hourlySalary` as SoT on a later edit | Recompute from `basicSalary` at generate, then snapshot again |
+| Using stored `hourlySalary` in OT/late/absent/gross | Confirmed unused. Money uses in-memory `attendanceRate.hourlyRate` only |
 | Backfill of historical paid rows | Existing rows stay `0` until unpaid regenerate; paid history is immutable |
 | UI claim that hourly is a register or employee master field | Do not invent that UI |
 

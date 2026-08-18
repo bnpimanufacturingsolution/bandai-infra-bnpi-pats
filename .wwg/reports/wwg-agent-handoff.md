@@ -3,6 +3,7 @@
 ## 2026-08-19 - EmployeePayroll.hourlySalary generate-time snapshot
 
 - Status: `IMPLEMENTED_DOCUMENTED`. Operator: snapshot only; auto-computed; no extra features.
+- Compute audit 2026-08-19: `hourlySalary` is **not** read for OT/late/UT/absent/gross. Money still uses in-memory `attendanceRate.hourlyRate`. Contract test in `employee-payroll-hourly-salary-snapshot.spec.ts`.
 - Field: `EmployeePayroll.hourlySalary` Float default 0. Written on generate/preview register persist via `computeEmployeePayrollHourlySalarySnapshot`.
 - `Employee` SoT remains `basicSalary` + `currency` + `payFrequency`. No `Employee.hourlyRate`. Hire/edit, Sheet2 columns, metrics, and payroll UI unchanged.
 - Formula: prefer attendance `hourlyRate`, else `daily / workingHoursPerDay` (BNPI 313 uses 8).
