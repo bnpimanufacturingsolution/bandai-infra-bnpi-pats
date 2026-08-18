@@ -288,6 +288,22 @@ export function resolveBnpiAttendanceDailyRate(params: {
 	};
 }
 
+/** Persist EmployeePayroll.hourlySalary. Prefer explicit hourlyRate; else daily / hours. */
+export function computeEmployeePayrollHourlySalarySnapshot(params: {
+	dailyRate: number;
+	hourlyRate?: number;
+	workingHoursPerDay?: number;
+}): number {
+	const explicit = Number(params.hourlyRate);
+	if (Number.isFinite(explicit) && explicit !== 0) {
+		return roundToCentavo(explicit);
+	}
+	const dailyRate = Number(params.dailyRate || 0);
+	const hours = Number(params.workingHoursPerDay || BANDAI_WORKING_HOURS_PER_DAY);
+	if (!(dailyRate > 0) || !(hours > 0)) return 0;
+	return roundToCentavo(dailyRate / hours);
+}
+
 type PayrollTimesheetScope = {
 	departmentId?: string | null;
 	sectionId?: string | null;
@@ -2148,6 +2164,8 @@ export async function generatePayrollFromTimesheets(
 				periodBasic,
 				estimatedMonthlyRate,
 				dailyRate,
+				hourlyRate,
+				workingHoursPerDay,
 				totalWorkDays,
 				basicPay,
 				absentDeduction,
@@ -3717,6 +3735,8 @@ type BandaiPayrollRegisterInput = {
 	periodBasic: number;
 	estimatedMonthlyRate: number;
 	dailyRate: number;
+	hourlyRate?: number;
+	workingHoursPerDay?: number;
 	totalWorkDays: number;
 	basicPay: number;
 	absentDeduction: number;
@@ -3780,6 +3800,11 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 	const sourceRow = {
 		monthlySalary: roundToCentavo(input.estimatedMonthlyRate),
 		dailySalary: roundToCentavo(input.dailyRate),
+		hourlySalary: computeEmployeePayrollHourlySalarySnapshot({
+			dailyRate: input.dailyRate,
+			hourlyRate: input.hourlyRate,
+			workingHoursPerDay: input.workingHoursPerDay,
+		}),
 		numberOfDays: roundToCentavo(input.totalWorkDays),
 		basicPay: roundToCentavo(input.periodBasic),
 		absentDeduction: roundToCentavo(input.absentDeduction),
@@ -4764,6 +4789,8 @@ function calculatePayrollPreviewDataset(params: {
 				periodBasic,
 				estimatedMonthlyRate,
 				dailyRate,
+				hourlyRate,
+				workingHoursPerDay,
 				totalWorkDays,
 				basicPay,
 				absentDeduction,

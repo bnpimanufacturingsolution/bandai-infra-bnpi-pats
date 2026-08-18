@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - EmployeePayroll.hourlySalary generate-time snapshot
+
+- Status: `IMPLEMENTED_DOCUMENTED`. Operator: snapshot only; auto-computed; no extra features.
+- Field: `EmployeePayroll.hourlySalary` Float default 0. Written on generate/preview register persist via `computeEmployeePayrollHourlySalarySnapshot`.
+- `Employee` SoT remains `basicSalary` + `currency` + `payFrequency`. No `Employee.hourlyRate`. Hire/edit, Sheet2 columns, metrics, and payroll UI unchanged.
+- Formula: prefer attendance `hourlyRate`, else `daily / workingHoursPerDay` (BNPI 313 uses 8).
+- Tests: `hris-api/tests/employee-payroll-hourly-salary-snapshot.spec.ts` (5 cases) green with existing 313 daily-rate tests (8 passing).
+- Migration: `hris-api/prisma/schema-postgres/migrations/20260819_add_employee_payroll_hourly_salary.sql`. Existing rows stay 0 until unpaid regenerate. Runtime apply on DEV is `NEEDS_CONFIRMATION` until the SQL is applied.
+- Report: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
+
 ## 2026-08-17 - Zen 00010 timesheet lines + sync API
 
 - Status: `IMPLEMENTED_DOCUMENTED` — operator asked to push leftover timesheet sync + docs.

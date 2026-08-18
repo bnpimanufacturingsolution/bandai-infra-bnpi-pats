@@ -1,5 +1,13 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 EmployeePayroll.hourlySalary snapshot
+
+- Operator: add hourly on the payroll snapshot; auto-compute; document; do not add other features.
+- Field: `EmployeePayroll.hourlySalary` Float default 0. Generate/preview persist via `computeEmployeePayrollHourlySalarySnapshot`.
+- Employee still has only `basicSalary` + `currency` + `payFrequency`. No hire/edit hourly. No Sheet2 Hourly column.
+- Tests: `hris-api/tests/employee-payroll-hourly-salary-snapshot.spec.ts` (5 green).
+- Canonical: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
+
 ## Latest Task Addendum - 2026-08-17 Document all code changes
 
 - Operator: make sure all code changes are well documented.

@@ -38,6 +38,8 @@ model EmployeePayroll {
   // Payroll register fields - BNPI payroll computation workbook projection
   monthlySalary                    Float @default(0)
   dailySalary                      Float @default(0)
+  // generate-time snapshot of derived hourly (daily / workingHoursPerDay). Not an Employee input. Not a Sheet2 register column.
+  hourlySalary                     Float @default(0)
   numberOfDays                     Float @default(0)
   lateUndertimeAmount              Float @default(0)
   regularOtHours                   Float @default(0)

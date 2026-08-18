@@ -1,5 +1,16 @@
 # Project Truth
 
+## EmployeePayroll hourlySalary snapshot (2026-08-19)
+
+- Status: `CONFIRMED_CODE`.
+- **Snapshot only.** `EmployeePayroll.hourlySalary` is a `Float` default `0` written at payroll generate (and the same generate-timesheet / preview engine path). It freezes the **attendance hourly already used for OT and late/UT** on that run. It is not a live formula field after save.
+- **Not Employee input.** `Employee` still has only `basicSalary` + `currency` + `payFrequency`. There is no `Employee.hourlyRate` / `Employee.hourlySalary`. Hire and edit forms do not collect hourly. `basicSalary` remains source of truth.
+- **Formula (derived, then snapshotted):** hourly = daily / `workingHoursPerDay`. BNPI 313 attendance / approved-bucket path uses `BANDAI_WORKING_HOURS_PER_DAY = 8` (`daily = monthly × 12 / 313`, then `/ 8`). Same `hourlyRate` already computed in `resolveBnpiAttendanceDailyRate` / `resolveBandaiApprovedBucketRateBasis`.
+- **Existing rows** stay `0` until unpaid regenerate (safe additive column). Regenerating writes the snapshot; paid history is not rewritten.
+- **Not a Sheet2 register column.** Register mapping stays G Monthly / H Daily / I No. of Days. Do not add an Hourly Salary column to the BNPI computation workbook or treat `hourlySalary` as register parity.
+- **Not SoT.** Do not price payroll from stored `hourlySalary` on a later edit. Recompute from `basicSalary` + period + 313/8 (or the same attendance helper) at generate, then snapshot.
+- Canonical write-up: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
+
 ## Zen 00010 salary, timesheet, payroll preview (2026-08-17)
 
 - Status: `CONFIRMED_LIVE_DEV`. Timesheet sync **code** is on this `develop` push.
