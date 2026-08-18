@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-18 - Jul late/EO recompute vs WorkSharing day shift
+
+- Status: `APPLIED_LOCAL_RETALLIED`.
+- Ran `repair-period-late-ut-from-punches.ts --periodCode=PP-20260711-20260726 --apply`
+  with Jul WorkSharing workbook (day shifts + OFF overrides).
+- **9647** lines updated; false overnight late e.g. **11:49→0:00**.
+- Late fails **349→55**; Gross **731→691**; Alexa/Rio late now **match Sheet2 0**.
+- Evidence: `.runtime/tally-after-late-repair-20260818/COMPARE-BEFORE-AFTER.md`
+- Residual late ~55; Absent reverse (file>0/app=0) unchanged.
+
 ## 2026-08-18 - WorkSharing flag=0 ABSENT fix (proof + repair + re-tally)
 
 - Status: `PROOFED_FIXED_LOCAL_RETALLIED`.
