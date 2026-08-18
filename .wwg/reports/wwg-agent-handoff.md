@@ -2,7 +2,7 @@
 
 ## 2026-08-18 - DMA open-horizon recurring (Sheet2 Jul amounts)
 
-- Status: `IMPLEMENTED_LOCAL_PROVEN`.
+- Status: `IMPLEMENTED_LOCAL_PROVEN` (local clone **test DB only**).
 - Problem: Jul DMA fail **332** (file>0/app=0); workbook DMA ended 2026-05-10; Jul COMP mass 0 DMA.
 - Fix: DMA = open-horizon COMP (`payrollPeriodId` null, null endDate, RECURRING/EVERY_CUTOFF);
   local repair from Jul Sheet2 amounts (329 upd / 6 ins / 2 missing emps).
@@ -10,7 +10,10 @@
 - Evidence: `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`,
   `.runtime/dma-open-horizon-repair-20260818/`.
 - Docs: canonical §14d.
-- Still open: Gross ~620, absent ~173, late ~55, TR/Net.
+- **Operator note:** local `5433` is testing only. Brute/data repairs (DMA upsert, loan
+  horizon, WS-off REST_DAY, late/EO recompute, prior DED reimport, dailyRate backfill)
+  must be **replayed on VM DB later**. Code path is git-durable; data is not until VM.
+- Still open: Gross ~620, absent ~173, late ~55, TR/Net; VM data replay.
 
 ## 2026-08-18 - Jul late/EO recompute vs WorkSharing day shift
 

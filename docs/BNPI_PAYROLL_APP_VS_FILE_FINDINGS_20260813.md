@@ -618,7 +618,9 @@ Repair: 329 updated, 6 inserted, 2 missing employees (`01831`, `01845` — not i
 
 Evidence: `.runtime/dma-tally-20260818/REPORT.md`, `.runtime/dma-open-horizon-repair-20260818/`, `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`.
 
-**Still open:** Gross (~620), absent reverse (~173), late (~55), TR/Net — not DMA.
+**Local vs VM (operator note, 2026-08-18):** Local clone DB (`127.0.0.1:5433` / `hris-local-dev-clone`) is **testing only**. Brute/data repairs proved here (DMA open-horizon upsert, multi-cutoff loan horizon repair, WS-off ABSENT→REST_DAY line repair, late/EO punch recompute, prior DED mass reimport, Sheet2 dailyRate backfill, etc.) are **not** durable runtime truth until re-run against the **VM/appliance DB**. Code/import-path fixes land via git; data mutations must be replayed on VM later.
+
+**Still open:** Gross (~620), absent reverse (~173), late (~55), TR/Net — not DMA. VM data replay of brute fixes.
 
 ---
 
@@ -630,4 +632,4 @@ Evidence: `.runtime/dma-tally-20260818/REPORT.md`, `.runtime/dma-open-horizon-re
 | 2026-08-13 | FILE_DUAL OT implemented: dailyRate field, rate basis Path A/B, import, backfill script, tests |
 | 2026-08-17 | FILE_DUAL Basic Path A: paidDays×dailyRate, suppress Path A full-day absent, register uses computed basicPay; re-tally basic fails 481→1 |
 | 2026-08-17/18 | §14c recurring DED mass, Amount vs Payment, multi-cutoff loan horizon, Jul re-tally after loan fix |
-| 2026-08-18 | §14d DMA open-horizon EVERY_CUTOFF; Jul DMA fails 332→0 |
+| 2026-08-18 | §14d DMA open-horizon EVERY_CUTOFF; Jul DMA fails 332→0; note local DB test-only — brute data fixes replay on VM later |

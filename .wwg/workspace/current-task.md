@@ -11,7 +11,9 @@
   3. Re-tally: DMA fails **332→0**.
 - Evidence: `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`
 - Docs: canonical §14d + handoff.
-- Still open: Gross/absent reverse/late/TR.
+- **Local DB = testing only.** Brute/data fixes proved locally must be replayed on
+  **VM DB later** (DMA, loans, WS-off, late/EO, prior DED, dailyRate, etc.).
+- Still open: Gross/absent reverse/late/TR; VM data replay.
 
 ## Latest Task Addendum - 2026-08-18 document recurring DED / Amount vs Payment
 

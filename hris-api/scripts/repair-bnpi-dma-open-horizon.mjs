@@ -10,6 +10,10 @@
  * Usage (local Docker clone hris-local-dev-clone on 5433):
  *   node hris-api/scripts/repair-bnpi-dma-open-horizon.mjs
  *   node hris-api/scripts/repair-bnpi-dma-open-horizon.mjs --execute
+ *
+ * Local clone is **testing only**. This brute data repair must be replayed on
+ * the VM/appliance DB later for durable runtime truth (see REC-20260818-
+ * PAYROLL-BRUTE-DATA-REPLAY-VM / canonical §14d).
  */
 import { execSync } from "child_process";
 import fs from "fs";
