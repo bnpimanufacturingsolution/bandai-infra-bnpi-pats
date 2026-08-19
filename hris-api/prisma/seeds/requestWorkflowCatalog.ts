@@ -82,6 +82,56 @@ const buildApprovalSteps = (finalStepName = "Request Completion") => [
 	},
 ];
 
+const buildSupervisorThenHrReviewSteps = (
+	hrStepName = "HR Review",
+	finalStepName = "Request Completion",
+) => [
+	{
+		step_number: 1,
+		step_name: "Employee Submission",
+		step_type: "SUBMISSION",
+		assignee_type: "REQUESTER",
+		is_required: true,
+		state_on_enter: "OPEN",
+		state_on_complete: "SUBMITTED",
+	},
+	{
+		step_number: 2,
+		step_name: "Manager Approval",
+		step_type: "APPROVAL",
+		assignee_type: "SUPERVISOR",
+		is_required: true,
+		state_on_enter: "SUBMITTED",
+		state_on_approve: "FOR_APPROVAL",
+		state_on_reject: "REJECTED",
+	},
+	{
+		step_number: 3,
+		step_name: hrStepName,
+		step_type: "TASK",
+		assignee_type: "HR",
+		is_required: true,
+		state_on_enter: "FOR_APPROVAL",
+		state_on_complete: "APPROVED",
+	},
+	{
+		step_number: 4,
+		step_name: finalStepName,
+		step_type: "TASK",
+		assignee_type: "SYSTEM",
+		is_required: true,
+		state_on_enter: "APPROVED",
+		state_on_complete: "COMPLETED",
+		state_on_skip: "COMPLETED",
+	},
+];
+
+export const ATTENDANCE_CORRECTION_SUPERVISOR_THEN_HR_STEPS =
+	buildSupervisorThenHrReviewSteps(
+		"HR Review",
+		"Attendance Correction Completion",
+	);
+
 const buildHrOnlyApprovalSteps = (finalStepName = "Request Completion") => [
 	{
 		step_number: 1,
@@ -242,8 +292,8 @@ export const DEFAULT_REQUEST_WORKFLOW_TEMPLATES = [
 		name: "Attendance Correction Workflow",
 		requestType: "ATTENDANCE_CORRECTION",
 		description:
-			"Attendance correction workflow: HR submission, HR approval, correction completion",
-		steps: buildHrOnlyApprovalSteps("Attendance Correction Completion"),
+			"Attendance correction workflow: employee submit, supervisor (report-to) approval, then HR review",
+		steps: ATTENDANCE_CORRECTION_SUPERVISOR_THEN_HR_STEPS,
 		states: SEEDED_LIFECYCLE_STATES,
 	},
 	{

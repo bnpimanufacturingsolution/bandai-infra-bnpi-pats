@@ -2,6 +2,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getClockInArrivalIndicator } from "~/lib/utils/attendance-arrival";
+import { formatManilaClockTime } from "~/lib/utils/manila-clock";
 
 const mockUseNavigate = vi.hoisted(() => vi.fn());
 const mockUseAuth = vi.hoisted(() => vi.fn());
@@ -429,6 +431,107 @@ describe("AttendanceManagement", () => {
 		);
 	});
 
+	it("shows clocked-in over employees scheduled to work, not a punch-inflated work-day count", async () => {
+		mockUseAttendanceMetricsDetailed.mockReturnValue({
+			data: {
+				metrics: {
+					attendanceObligationDetailed: {
+						metrics: {
+							...metricsPayload,
+							totalClockedIn: 2,
+							totalClockedInObligated: 1,
+							totalObligatedToWork: 33,
+							totalScheduledWorkDays: 33,
+							totalOnLeave: 4,
+							utilizationRate: 3,
+							avgAttendanceRate: 3,
+						},
+						records: [attendanceRecord],
+						dateRange: {
+							from: "2026-08-13",
+							to: "2026-08-13",
+						},
+						totalRecords: 1,
+						departmentBreakdown: [],
+						departmentPreviewRows: [],
+					},
+				},
+			},
+			isLoading: false,
+		});
+
+		render(
+			<MemoryRouter initialEntries={["/hr/attendance"]}>
+				<Routes>
+					<Route
+						path="/hr/attendance"
+						element={
+							<AttendanceManagement
+								title="Attendance Overview"
+								description="View, manage and import attendance records"
+							/>
+						}
+					/>
+				</Routes>
+			</MemoryRouter>,
+		);
+
+		expect(screen.getByText("Attendance Utilization")).toBeInTheDocument();
+		expect(screen.getAllByText("3%").length).toBe(1);
+		expect(screen.getByText("clocked in")).toBeInTheDocument();
+		expect(screen.queryByText("utilization rate")).not.toBeInTheDocument();
+		expect(screen.getAllByText("of 33 scheduled to work").length).toBeGreaterThan(0);
+		expect(screen.getByText("Absenteeism")).toBeInTheDocument();
+		expect(screen.queryByText("Leave Balances")).not.toBeInTheDocument();
+	});
+
+	it("puts the clock-in rate inside the circle and does not duplicate it", async () => {
+		mockUseAttendanceMetricsDetailed.mockReturnValue({
+			data: {
+				metrics: {
+					attendanceObligationDetailed: {
+						metrics: {
+							...metricsPayload,
+							totalClockedIn: 1,
+							totalClockedInObligated: 1,
+							totalObligatedToWork: 866,
+							totalScheduledWorkDays: 866,
+							utilizationRate: 0,
+							avgAttendanceRate: 0,
+						},
+						records: [attendanceRecord],
+						dateRange: { from: "2026-08-17", to: "2026-08-17" },
+						totalRecords: 1,
+						departmentBreakdown: [],
+						departmentPreviewRows: [],
+					},
+				},
+			},
+			isLoading: false,
+		});
+
+		render(
+			<MemoryRouter initialEntries={["/hr/attendance"]}>
+				<Routes>
+					<Route
+						path="/hr/attendance"
+						element={
+							<AttendanceManagement
+								title="Attendance Overview"
+								description="View, manage and import attendance records"
+							/>
+						}
+					/>
+				</Routes>
+			</MemoryRouter>,
+		);
+
+		expect(screen.getByText("1%")).toBeInTheDocument();
+		expect(screen.getByText("clocked in")).toBeInTheDocument();
+		expect(screen.queryByText("<1%")).not.toBeInTheDocument();
+		expect(screen.queryByText("utilization rate")).not.toBeInTheDocument();
+	});
+
 	it("shows the org filter bar on the default attendance route", async () => {
 		render(
 			<MemoryRouter initialEntries={["/hr/attendance"]}>
@@ -641,6 +744,93 @@ describe("AttendanceManagement", () => {
 		expect(screen.queryByTestId("attendance-daily-trend-section")).not.toBeInTheDocument();
 	});
 
+	it("rolls a multi-day employee preview into one period total row", () => {
+		const zenRollup = {
+			...attendanceRecord,
+			id: "period-rollup-zen",
+			employeeRefId: "emp-zen",
+			employeeId: "00010",
+			employeeName: "Zen Andrei",
+			departmentId: "dept-gahr",
+			departmentName: "GA/HR",
+			isPeriodRollup: true,
+			periodTotals: {
+				scheduled: 14,
+				present: 5,
+				late: 3,
+				undertime: 1,
+				absent: 9,
+				onTime: 2,
+			},
+		};
+
+		mockUseAttendanceMetricsDetailed.mockReturnValue({
+			data: {
+				metrics: {
+					attendanceObligationDetailed: {
+						metrics: {
+							...metricsPayload,
+							totalClockedIn: 121,
+							totalClockedInObligated: 121,
+							totalObligatedToWork: 11249,
+							totalScheduledWorkDays: 11249,
+							totalLate: 59,
+							totalEarlyOut: 14,
+						},
+						records: [],
+						dateRange: { from: "2026-08-11", to: "2026-08-25" },
+						totalRecords: 12989,
+						departmentBreakdown: [
+							{
+								departmentId: "dept-gahr",
+								departmentName: "GA/HR",
+								totalRecords: 14,
+								employeeCount: 1,
+								scheduled: 14,
+								present: 5,
+								late: 3,
+								undertime: 1,
+								absent: 9,
+								leave: 0,
+								missing: 9,
+								overtimeHours: 0,
+							},
+						],
+						departmentPreviewRows: [
+							{
+								departmentId: "dept-gahr",
+								departmentName: "GA/HR",
+								rows: [zenRollup],
+							},
+						],
+					},
+				},
+			},
+			isLoading: false,
+		});
+
+		render(
+			<MemoryRouter initialEntries={["/hr/attendance"]}>
+				<Routes>
+					<Route
+						path="/hr/attendance"
+						element={
+							<AttendanceManagement
+								title="Attendance Overview"
+								description="View, manage and import attendance records"
+							/>
+						}
+					/>
+				</Routes>
+			</MemoryRouter>,
+		);
+
+		expect(screen.getAllByText("Zen Andrei")).to.have.length(1);
+		expect(screen.getByText("period total")).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "View days" })).toBeInTheDocument();
+		expect(screen.getByText("Showing 1 of 1 employees")).toBeInTheDocument();
+	});
+
 	describe("Employee-day present threshold", () => {
 		it("binds the threshold parameter to the URL when toggled", async () => {
 			mockUseAttendanceMetricsDetailed.mockReturnValue({
@@ -751,6 +941,26 @@ describe("AttendanceManagement", () => {
 			);
 			expect(hasWidenLimitCall).toBe(true);
 		});
+	});
+
+	it("shows Hikvision UTC punches as Manila clock like Device Events", () => {
+		const timeIn = "2026-08-17T05:40:36.000Z";
+		expect(formatManilaClockTime(timeIn)).toBe("1:40 PM");
+		expect(formatManilaClockTime(timeIn)).not.toBe("5:40 AM");
+		expect(
+			getClockInArrivalIndicator({
+				timeIn,
+				status: "INCOMPLETE",
+				primaryMarker: "HOURS",
+				lateHours: "0:00",
+				scheduleSnapshot: {
+					startTime: "08:00",
+					endTime: "17:00",
+					graceLateMinutes: 0,
+					timeSlots: [{ type: "work", startTime: "08:00", endTime: "17:00" }],
+				},
+			})?.kind,
+		).toBe("LATE");
 	});
 });
 

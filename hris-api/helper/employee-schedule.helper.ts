@@ -537,15 +537,15 @@ const resolveEmbeddedScheduleSnapshot = (
 	) {
 		return null;
 	}
+	const storedAnchor = embedded?.cycleAnchorDate || embedded?.scheduleAnchorDate || null;
+	const fallbackStart =
+		embedded?.effectiveStartDate ||
+		employee?.employmentStartDate ||
+		employee?.employmentHireDate ||
+		date;
+	const shouldWeekAlign = !storedAnchor && cycleDays % 7 === 0;
 	const anchorDate = normalizeDateOnly(
-		new Date(
-			embedded?.cycleAnchorDate ||
-				embedded?.scheduleAnchorDate ||
-				embedded?.effectiveStartDate ||
-				employee?.employmentStartDate ||
-				employee?.employmentHireDate ||
-				date,
-		),
+		new Date(shouldWeekAlign ? anchorToMondayUtc(new Date(fallbackStart)) : storedAnchor || fallbackStart),
 	);
 	const diffDays = Math.floor(
 		(targetDay.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24),

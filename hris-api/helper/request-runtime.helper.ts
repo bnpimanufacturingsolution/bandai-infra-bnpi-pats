@@ -21,6 +21,15 @@ import {
 	normalizeScheduleChangeWorkflowStepsForHrApproval,
 	SCHEDULE_CHANGE_HR_APPROVAL_STEP_NAME,
 } from "./schedule-change-workflow.helper";
+import {
+	isAttendanceCorrectionHrRole,
+	isAttendanceCorrectionRequestType,
+	isAttendanceCorrectionWorkflowCode,
+	isPendingAttendanceCorrectionHrReviewStep,
+	normalizeAttendanceCorrectionWorkflowSteps,
+	shouldAutoCompleteAttendanceCorrectionHrReview,
+} from "./attendance-correction-workflow.helper";
+import { applyAttendanceCorrectionRequest } from "../app/attendance/apply-attendance-correction-request";
 
 export const DEFAULT_WORKFLOW_STATE_KEYS = {
 	OPEN: "OPEN",
@@ -1190,6 +1199,9 @@ const getWorkflowStepsForRequestType = (
 	steps: unknown,
 ): WorkflowStepConfig[] => {
 	const normalizedSteps = normalizeWorkflowSteps(steps);
+	if (isAttendanceCorrectionRequestType(requestType)) {
+		return normalizeAttendanceCorrectionWorkflowSteps(normalizedSteps);
+	}
 	return isScheduleChangeRequestType(requestType)
 		? normalizeScheduleChangeWorkflowStepsForHrApproval(normalizedSteps)
 		: normalizedSteps;
@@ -1198,11 +1210,21 @@ const getWorkflowStepsForRequestType = (
 const shouldNormalizeWorkflowTemplate = (workflow: {
 	code?: string | null;
 	requestType?: string | null;
-}) => isScheduleChangeWorkflowCode(workflow.code) || isScheduleChangeRequestType(workflow.requestType);
+}) =>
+	isScheduleChangeWorkflowCode(workflow.code) ||
+	isScheduleChangeRequestType(workflow.requestType) ||
+	isAttendanceCorrectionWorkflowCode(workflow.code) ||
+	isAttendanceCorrectionRequestType(workflow.requestType);
 
 const normalizeDefaultWorkflowTemplate = <T extends { code?: string | null; requestType?: string | null; steps: unknown }>(
 	workflow: T,
 ): T => {
+	if (isAttendanceCorrectionWorkflowCode(workflow.code) || isAttendanceCorrectionRequestType(workflow.requestType)) {
+		return {
+			...workflow,
+			steps: normalizeAttendanceCorrectionWorkflowSteps(workflow.steps),
+		};
+	}
 	if (!shouldNormalizeWorkflowTemplate(workflow)) {
 		return workflow;
 	}
@@ -1352,6 +1374,326 @@ export async function repairScheduleChangeHrApprovalStepIfNeeded(
 
 	return repaired;
 }
+
+export async function repairAttendanceCorrectionSupervisorWorkflowIfNeeded(
+	prisma: PrismaExecutor,
+	requestId: string,
+): Promise<boolean> {
+	const request = await prisma.request.findFirst({
+		where: {
+			id: requestId,
+			type: "ATTENDANCE_CORRECTION",
+			isDeleted: false,
+		},
+		select: {
+			id: true,
+			organizationId: true,
+			requesterId: true,
+			targetEmployeeId: true,
+			currentWorkflowStateKey: true,
+			currentStepExecutionId: true,
+			workflowInstanceId: true,
+			requester: {
+				select: {
+					reportToId: true,
+				},
+			},
+			workflowInstance: {
+				select: {
+					id: true,
+					steps: true,
+				},
+			},
+			stepExecutions: {
+				where: { isDeleted: false },
+				orderBy: { stepNumber: "asc" },
+				select: {
+					id: true,
+					stepNumber: true,
+					stepName: true,
+					stepType: true,
+					assigneeType: true,
+					assigneeId: true,
+					status: true,
+					metadata: true,
+				},
+			},
+		},
+	});
+
+	if (!request) {
+		return false;
+	}
+
+	const alreadySupervisorLed = request.stepExecutions.some(
+		(step) =>
+			String(step.assigneeType || "").toUpperCase() === "SUPERVISOR" &&
+			String(step.stepType || "").toUpperCase() === "APPROVAL",
+	);
+	if (alreadySupervisorLed) {
+		return false;
+	}
+
+	const completedHrSubmission = request.stepExecutions.find(
+		(step) =>
+			String(step.status || "").toUpperCase() === "COMPLETED" &&
+			String(step.stepType || "").toUpperCase() === "SUBMISSION" &&
+			String(step.assigneeType || "").toUpperCase() === "HR",
+	);
+	if (completedHrSubmission) {
+		await prisma.workflowStepExecution.update({
+			where: { id: completedHrSubmission.id },
+			data: {
+				stepNumber: 1,
+				stepName: "Employee Submission",
+				assigneeType: "REQUESTER",
+				assigneeId: request.requesterId,
+			},
+		});
+	}
+
+	const pendingHrApproval = request.stepExecutions.find(
+		(step) =>
+			String(step.status || "").toUpperCase() === "PENDING" &&
+			String(step.stepType || "").toUpperCase() === "APPROVAL" &&
+			String(step.assigneeType || "").toUpperCase() === "HR",
+	);
+	if (!pendingHrApproval) {
+		return false;
+	}
+
+	const resolution = await resolveStepAssignee(prisma, {
+		organizationId: request.organizationId,
+		requesterId: request.requesterId,
+		assigneeType: "SUPERVISOR",
+		requesterReportToId: request.requester?.reportToId ?? null,
+		targetEmployeeId: request.targetEmployeeId ?? null,
+	});
+
+	const currentMetadata = asRecord(pendingHrApproval.metadata);
+	await prisma.workflowStepExecution.update({
+		where: { id: pendingHrApproval.id },
+		data: {
+			stepNumber: 2,
+			stepName: "Manager Approval",
+			stepType: "APPROVAL",
+			assigneeType: "SUPERVISOR",
+			assigneeId: resolution.assigneeId,
+			metadata: {
+				...currentMetadata,
+				approvalResolution: buildAssigneeResolutionMetadata(resolution),
+				attendanceCorrectionSupervisorRepair: {
+					repairedAt: new Date().toISOString(),
+					fromAssigneeType: pendingHrApproval.assigneeType,
+					fromStepName: pendingHrApproval.stepName,
+				},
+			} as Prisma.InputJsonValue,
+		},
+	});
+
+	const hasHrReviewTask = request.stepExecutions.some(
+		(step) =>
+			String(step.assigneeType || "").toUpperCase() === "HR" &&
+			String(step.stepType || "").toUpperCase() === "TASK" &&
+			step.id !== pendingHrApproval.id,
+	);
+	if (!hasHrReviewTask) {
+		const hrResolution = await resolveStepAssignee(prisma, {
+			organizationId: request.organizationId,
+			requesterId: request.requesterId,
+			assigneeType: "HR",
+			requesterReportToId: request.requester?.reportToId ?? null,
+			targetEmployeeId: request.targetEmployeeId ?? null,
+		});
+		await prisma.workflowStepExecution.create({
+			data: {
+				organizationId: request.organizationId,
+				workflowInstanceId: request.workflowInstanceId,
+				requestId: request.id,
+				stepNumber: 3,
+				stepName: "HR Review",
+				stepType: "TASK",
+				assigneeType: "HR",
+				assigneeId: hrResolution.assigneeId,
+				status: "PENDING",
+				isRequired: true,
+				metadata: {
+					approvalResolution: buildAssigneeResolutionMetadata(hrResolution),
+				} as Prisma.InputJsonValue,
+			},
+		});
+	}
+
+	const systemStep = request.stepExecutions.find(
+		(step) => String(step.assigneeType || "").toUpperCase() === "SYSTEM",
+	);
+	if (systemStep) {
+		await prisma.workflowStepExecution.update({
+			where: { id: systemStep.id },
+			data: {
+				stepNumber: 4,
+				stepName: "Attendance Correction Completion",
+			},
+		});
+	}
+
+	if (request.workflowInstance?.id) {
+		await prisma.workflowInstance.update({
+			where: { id: request.workflowInstance.id },
+			data: {
+				steps: normalizeAttendanceCorrectionWorkflowSteps(
+					request.workflowInstance.steps,
+				) as unknown as Prisma.InputJsonValue,
+			},
+		});
+	}
+
+	if (request.currentStepExecutionId === pendingHrApproval.id) {
+		await prisma.request.update({
+			where: { id: request.id },
+			data: {
+				currentWorkflowStateKey: "SUBMITTED",
+			},
+		});
+	}
+
+	return true;
+}
+
+export async function completeAttendanceCorrectionHrReviewIfActorIsHr(
+	prisma: PrismaExecutor,
+	params: {
+		requestId: string;
+		actingEmployeeId: string;
+		actingEmployeeRole?: string | null;
+		comment?: string;
+	},
+): Promise<boolean> {
+	const request = await prisma.request.findFirst({
+		where: {
+			id: params.requestId,
+			type: "ATTENDANCE_CORRECTION",
+			isDeleted: false,
+		},
+		select: {
+			id: true,
+			type: true,
+			currentStepExecution: {
+				select: {
+					id: true,
+					stepName: true,
+					stepType: true,
+					assigneeType: true,
+					status: true,
+				},
+			},
+		},
+	});
+
+	if (
+		!shouldAutoCompleteAttendanceCorrectionHrReview({
+			requestType: request?.type,
+			actingEmployeeRole: params.actingEmployeeRole,
+			nextStep: request?.currentStepExecution ?? null,
+		})
+	) {
+		return false;
+	}
+
+	await completeTaskStep(
+		prisma,
+		params.requestId,
+		request!.currentStepExecution!.stepName,
+		params.actingEmployeeId,
+		params.comment || "Completed because an HR actor already approved this request",
+	);
+	return true;
+}
+
+export async function repairAttendanceCorrectionHrReviewIfHrAlreadyApproved(
+	prisma: PrismaExecutor,
+	requestId: string,
+): Promise<boolean> {
+	const request = await prisma.request.findFirst({
+		where: {
+			id: requestId,
+			type: "ATTENDANCE_CORRECTION",
+			isDeleted: false,
+		},
+		select: {
+			id: true,
+			type: true,
+			currentStepExecution: {
+				select: {
+					id: true,
+					stepName: true,
+					stepType: true,
+					assigneeType: true,
+					status: true,
+				},
+			},
+			stepExecutions: {
+				where: { isDeleted: false },
+				select: {
+					id: true,
+					stepName: true,
+					stepType: true,
+					assigneeType: true,
+					assigneeId: true,
+					status: true,
+					metadata: true,
+				},
+			},
+		},
+	});
+
+	if (
+		!request ||
+		!isPendingAttendanceCorrectionHrReviewStep(request.currentStepExecution)
+	) {
+		return false;
+	}
+
+	const managerStep = request.stepExecutions.find(
+		(step) =>
+			normalizeTokenForAttendanceRepair(step.stepName) === "MANAGER_APPROVAL" &&
+			["APPROVED", "COMPLETED"].includes(normalizeTokenForAttendanceRepair(step.status)),
+	);
+	if (!managerStep) {
+		return false;
+	}
+
+	const managerMetadata = asRecord(managerStep.metadata);
+	const lastDecision = asRecord(managerMetadata.lastDecision);
+	const actingEmployeeId =
+		(typeof lastDecision.decidedBy === "string" && lastDecision.decidedBy) ||
+		managerStep.assigneeId ||
+		null;
+	if (!actingEmployeeId) {
+		return false;
+	}
+
+	const actingEmployee = await prisma.employee.findFirst({
+		where: { id: actingEmployeeId, isDeleted: false },
+		select: { id: true, role: true },
+	});
+	if (!isAttendanceCorrectionHrRole(actingEmployee?.role)) {
+		return false;
+	}
+
+	return completeAttendanceCorrectionHrReviewIfActorIsHr(prisma, {
+		requestId,
+		actingEmployeeId,
+		actingEmployeeRole: actingEmployee?.role,
+		comment: "Auto-completed because HR already approved the manager step",
+	});
+}
+
+const normalizeTokenForAttendanceRepair = (value?: string | null) =>
+	String(value || "")
+		.trim()
+		.toUpperCase()
+		.replace(/[\s-]+/g, "_");
 
 export async function repairScheduleChangeHrApprovalQueueIfNeeded(
 	prisma: PrismaExecutor,
@@ -2228,6 +2570,26 @@ export async function updateRequestStepProgress(
 
 	// PAN side effects should run automatically once the workflow reaches COMPLETED.
 	const isWorkflowCompleted = String(nextStateKey || "").toUpperCase() === "COMPLETED";
+	if (isWorkflowCompleted && isAttendanceCorrectionRequestType(request.type)) {
+		try {
+			await applyAttendanceCorrectionRequest({
+				prisma: prisma as PrismaClient,
+				organizationId: request.organizationId,
+				requestId,
+				requesterId: request.requesterId,
+				targetEmployeeId: request.targetEmployeeId,
+				startDate: request.startDate,
+				endDate: request.endDate,
+				metadata: request.metadata,
+				actorEmployeeId: params?.changedByEmployeeId ?? request.requesterId,
+			});
+		} catch (error) {
+			console.error(
+				`[attendance-correction] Failed to apply completed request ${requestId}:`,
+				error,
+			);
+		}
+	}
 	if (isWorkflowCompleted && String(request.type || "").toUpperCase() === "LEAVE") {
 		// LEAVE workflow completion is an attendance event even when it happens through the
 		// shared runtime/system path instead of request.controller approval. Recompute the live
@@ -2351,7 +2713,7 @@ export async function completeTaskStep(
 			throw new Error(`Employee not found: ${completedByEmployeeId}`);
 		}
 
-		const isHRRole = completingEmployee.role?.includes("hr");
+		const isHRRole = isAttendanceCorrectionHrRole(completingEmployee.role);
 		console.log(
 			`[completeTaskStep] Completing HR task - Employee: ${completingEmployee.employeeId}, Role: ${completingEmployee.role}, isHR: ${isHRRole}`,
 		);

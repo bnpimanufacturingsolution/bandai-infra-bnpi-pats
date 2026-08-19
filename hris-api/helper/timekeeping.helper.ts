@@ -290,6 +290,103 @@ function calculateMinutesDifference(time1: string, time2: string): number {
 	return minutes2 - minutes1;
 }
 
+export type ClockInArrival = {
+	evaluable: boolean;
+	lateMinutes: number;
+	lateHours: string;
+	rawLateMinutes: number;
+	gracePeriodMinutes: number;
+	withinGrace: boolean;
+	earlyOutMinutes: number;
+	earlyOutHours: string;
+	undertimeMinutes: number;
+	undertimeHours: string;
+	hoursWorkedMinutes: number;
+	hoursWorked: string;
+	behaviorFlags: AttendanceBehaviorFlag[];
+};
+
+export function hasEvaluableScheduleWindow(
+	schedule: EmployeeSchedule | null | undefined,
+	date: Date = new Date(),
+): boolean {
+	if (!schedule) return false;
+	if ((schedule as any)?.isOff || (schedule as any)?.isRestDay) return false;
+	const shift = findShiftForDay(schedule as any, date.getUTCDay());
+	if (!shift || shift.isRestDay) return false;
+	if (Array.isArray(shift.timeSlots) && shift.timeSlots.some((slot: any) => slot?.startTime)) {
+		return true;
+	}
+	return Boolean((schedule as any)?.startTime);
+}
+
+function toDateOrNull(value?: Date | string | null): Date | null {
+	if (!value) return null;
+	const date = value instanceof Date ? value : new Date(value);
+	return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function buildClockInArrivalFields(params: {
+	timeIn?: Date | string | null;
+	timeOut?: Date | string | null;
+	schedule?: EmployeeSchedule | null;
+	date: Date;
+	timeZone?: string;
+}): ClockInArrival {
+	const empty: ClockInArrival = {
+		evaluable: false,
+		lateMinutes: 0,
+		lateHours: "0:00",
+		rawLateMinutes: 0,
+		gracePeriodMinutes: 0,
+		withinGrace: false,
+		earlyOutMinutes: 0,
+		earlyOutHours: "0:00",
+		undertimeMinutes: 0,
+		undertimeHours: "0:00",
+		hoursWorkedMinutes: 0,
+		hoursWorked: "0:00",
+		behaviorFlags: [],
+	};
+	const timeIn = toDateOrNull(params.timeIn);
+	if (!timeIn) return empty;
+	const timeOut = toDateOrNull(params.timeOut);
+	const schedule = params.schedule || null;
+	if (!hasEvaluableScheduleWindow(schedule, params.date)) return empty;
+
+	const calc = calculateTimekeeping(
+		timeIn,
+		timeOut,
+		schedule,
+		params.date,
+		params.timeZone || "Asia/Manila",
+	);
+	const grace = deriveGracePeriodStatus(
+		timeIn,
+		schedule,
+		params.date,
+		params.timeZone || "Asia/Manila",
+	);
+	const flags: AttendanceBehaviorFlag[] = [];
+	if (calc.lateMinutes > 0) flags.push("TARDINESS");
+	if (calc.earlyOutMinutes > 0) flags.push("EARLY_OUT");
+	return {
+		evaluable: true,
+		lateMinutes: calc.lateMinutes,
+		lateHours: formatMinutesAsTime(calc.lateMinutes),
+		rawLateMinutes: grace.rawLateMinutes,
+		gracePeriodMinutes: grace.gracePeriodMinutes,
+		withinGrace: grace.withinGrace,
+		earlyOutMinutes: calc.earlyOutMinutes,
+		earlyOutHours: formatMinutesAsTime(calc.earlyOutMinutes),
+		undertimeMinutes: calc.undertimeMinutes,
+		undertimeHours: formatMinutesAsTime(calc.undertimeMinutes),
+		hoursWorkedMinutes: calc.totalMinutesWorked,
+		hoursWorked: formatMinutesAsTime(calc.totalMinutesWorked),
+		behaviorFlags: flags,
+	};
+}
+
 export function deriveGracePeriodStatus(
 	timeIn: Date | null,
 	schedule: EmployeeSchedule | null,

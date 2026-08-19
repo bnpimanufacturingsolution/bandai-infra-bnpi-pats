@@ -75,6 +75,23 @@ export const getAttendancePrimaryMarker = (record: MarkerAwareRecord): Attendanc
 	return "HOURS";
 };
 
+export const isClockedInDisplayStatus = (displayStatus: AttendanceDisplayStatus | string): boolean =>
+	displayStatus === "Clocked In" || displayStatus === "Present" || displayStatus === "Late";
+
+/** Overview PRES is a punch, not leftover obligation PRESENT/INCOMPLETE. */
+export const isOverviewPresentRecord = (record?: MarkerAwareRecord | null): boolean =>
+	Boolean(record?.timeIn);
+
+export const compareClockedInFirst = (
+	left: MarkerAwareRecord & { employeeName?: string | null },
+	right: MarkerAwareRecord & { employeeName?: string | null },
+): number => {
+	const leftIn = isOverviewPresentRecord(left);
+	const rightIn = isOverviewPresentRecord(right);
+	if (leftIn !== rightIn) return leftIn ? -1 : 1;
+	return String(left?.employeeName || "").localeCompare(String(right?.employeeName || ""));
+};
+
 export const getAttendanceDisplayStatus = (record: MarkerAwareRecord): AttendanceDisplayStatus => {
 	const marker = getAttendancePrimaryMarker(record);
 	if (marker === "HOLIDAY") return "Holiday";

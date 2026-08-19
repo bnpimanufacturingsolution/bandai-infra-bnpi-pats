@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 Promote attendance request UI to develop
+
+- Local Vite on `bryan-task` showed **Request time** / attendance request. Public DEV `https://dev.bnpi-hris.tech` did not.
+- Cause: GitOps DEV serves `develop` `b409ca4`. The attendance request work lived only on `bryan-task` `3bad2d1`. Merging `develop` into `bryan-task` does not deploy the feature.
+- Layout (Today left / log right) was still uncommitted local CSS. Promote the committed attendance request + related API/UI from `3bad2d1` onto `develop`.
+
 ## Latest Task Addendum - 2026-08-19 LAN-deployed new SDK listener
 
 - Operator: how to deploy the new units right now.
@@ -225,6 +231,125 @@
 - Live TEST A/B remain `.109`/`.110` on `58080`/`58180`. Do not reuse wiki `.102` or claim `59000`/`59443` belong to TEST A.
 - Evidence: `.runtime/device5-reverse-20260813-005641/`.
 - WWG: project-truth + summary + terminology reverse-tunnel term + this addendum.
+
+## Latest Task Addendum - 2026-08-19 Period overview totals, not duplicate days
+
+- Operator: Active Timesheet 8/11–8/25 repeated Zen five times (PRES 1/1/1). Clocked In list said no records.
+- Cause: department expand previewed 5 **days**. Clocked In scanned 5000 obligation rows (~67s) so the page timed out empty.
+- Fix: multi-day expand is **one row per employee** with SCHED/PRES/LATE/UT/ABS day totals. View days opens that person's daily list. Clocked In pages from scheduled punches (live 122 rows in 1.3s).
+- Live GA/HR Zen: 14 scheduled, 6 present, 4 late, 4 undertime, 8 absent.
+- Tests: schedule helper 13 passing; attendance template 16 passing.
+
+## Latest Task Addendum - 2026-08-19 Absent-day correction must create a punch
+
+- Operator: `REQ-1786424090600` completed for Zen Aug 14 (8:00–16:00 Manila) but My Attendance still showed **Absent / no record**.
+- Cause: that day is a virtual `absent-2026-08-14` row. Apply required a real Attendance and failed. Completing a missed whole day must **backfill**.
+- Fix: completed `ATTENDANCE_CORRECTION` now backfills when attendanceId is virtual/missing. Live apply created PRESENT `cmszhlo6a00018h4sy78fjinn` 08:00–16:00 Manila.
+- Tests: apply-request + backfill 5 passing; payload + modal 19 passing.
+
+## Latest Task Addendum - 2026-08-19 Attendance correction HR Review must finish
+
+- Operator: Maria Santos (`hr-manager@seed.local`) approved Zen's Aug 18 missed clock-out, but Zen's request stayed **Approved / HR Review pending**.
+- Cause: manager approval flipped the request to APPROVED while HR Review is a TASK. My Approvals hid Complete Task (`stepType !== TASK`). Apply also 500'd (`deriveBehaviorFlags` missing) and missed Manila-day rows (`2026-08-17T16:00Z`).
+- Fix: HR actors can complete HR Review; if the manager who approved is HR, HR Review + SYSTEM auto-complete. Apply uses Manila day bounds. Live `REQ-1786424090599` is **COMPLETED**; Zen Aug 18 effective row is PRESENT 08:00–17:00 Manila.
+- Tests: workflow helper 2 passing; request-approval-action + RequestReviewModal 15 passing.
+
+## Latest Task Addendum - 2026-08-18 OT is not automatic payroll
+
+- Operator asked if overtime auto-pays or needs approval.
+- Live TimesheetConfig: `requireManagerApprovedOvertime=true`, `enableAutoApprove=false`, OT flag threshold 60 minutes.
+- Extra punch hours become OT candidates. They do **not** write payable `overtimeHours` until a manager OT request is approved, or the approved OT workbook (DM4.3) is applied to timesheet lines.
+- Run Payroll only uses **APPROVED** timesheets. Payable OT is `timesheet_lines.overtimeHours` / Bandai `approvedBuckets`, not raw attendance.
+- Live: Jun 26–Jul 10 has 725 people / 15,239 hrs payable line OT (workbook path). Current Aug 11–26 has 0 line OT. OVERTIME request type is unused in this clone.
+- Evidence: `.runtime/ot-audit/`.
+
+## Latest Task Addendum - 2026-08-18 Overview PRES collapsed vs expand
+
+- Operator: department rows showed PRES 6 / 3 / 2, but expanding Production listed Aileen/Alberto with PRES 0.
+- Collapsed PRES was leftover AttendanceObligation PRESENT/INCOMPLETE (`_isClockedIn`). Expand is a 5-name preview, not those punchers.
+- API now overwrites department `present` from scheduled punches and ranks clocked-in first. Live 2026-08-17: Production present=1, first preview = Joys `00680`. Live 2026-08-18: present=0.
+- Overview person PRES = has `timeIn`. Expand sorts clocked-in first so the department total and the open list use the same punch definition.
+
+## Latest Task Addendum - 2026-08-17 Utilization rate lives in the circle
+
+- Operator: `<1%` sat in the header while the circle said `0% CLOCKED IN`.
+- Removed the duplicate header percent. Circle shows the clock-in rate (`<1%` when 1/866) with label clocked in.
+
+## Latest Task Addendum - 2026-08-17 Overview cards use schedule late/UT
+
+- Operator: 1 clock-in is late + undertime, but overview Late/UT cards stayed 0 and utilization looked like 0%.
+- Cards were counting stored obligation lateHours (still 0:00). Table computes from schedule + punches.
+- Metrics now use the same scheduled-day timekeeping: Late 1, On time 0, Undertime 1 for Zen.
+- Late/On time rate is among clocked-in; Undertime among clocked-out. Utilization shows `<1%` when 1/866.
+
+## Latest Task Addendum - 2026-08-17 Same table + Late/UT/Hours columns
+
+- Operator: Clocked In vs All Statuses tables looked different; LATE/UT in Indicators felt wrong.
+- One Attendance Records DataTable for every status filter (Image #1 chrome).
+- Indicators = HOL/LEAVE/REST/ACTION/+EX only.
+- New columns: Late (next to Clock In), UT (next to Clock Out), Hours.
+- All Statuses now applies the same schedule arrival as Clocked In, so Zen is not a dash.
+
+## Latest Task Addendum - 2026-08-17 Clock-out UT + Hours column
+
+- Operator: after LATE appeared, also want ON TIME/LATE, undertime on clock-out, and total hours that day.
+- Indicators: LATE / ON TIME / GRACE on clock-in; UT on early clock-out. New Hours column = worked time.
+- API arrival now fills earlyOutHours / undertimeHours / hoursWorked when timeOut exists.
+- Example: Zen 1:40 PM–2:55 PM vs 08:00–17:00 → LATE + UT + Hours 1h 15m.
+
+## Latest Task Addendum - 2026-08-17 Clock-in Indicators LATE / ON TIME
+
+- Operator: Attendance Records showed Zen Andrei Clocked In 1:40 PM with Indicators `-`.
+- Cause: Indicators only painted LATE after stored `lateHours`, and clock-in rows (virtual or obligation without clock-out) hardcoded `0:00`. A stale rest-day snapshot also hid the current Regular Day start.
+- Fix: compute arrival from scheduled start vs Manila clock-in immediately. Table shows LATE, GRACE, or ON TIME. Persist no longer lets `attendance.lateHours="0:00"` mask calculated late.
+- Tests: timekeeping + schedule utilization + arrival util 38 passing focused.
+
+## Latest Task Addendum - 2026-08-17 Zen Monday is a work day
+
+- Operator: Rest Day should not sit in “scheduled to work”; update Zen today; clock showed 5:40 AM.
+- DB: Regular Day override 2026-08-17 + cycleAnchorDate this Monday; obligation REST_DAY → INCOMPLETE with punch.
+- Clock: table used browser TZ; 05:40Z is 1:40 PM Manila. `renderClockValue` / `format12HourTime` now use Asia/Manila.
+- Rest days stay out of the 866; Zen is a work-day clock-in.
+
+## Latest Task Addendum - 2026-08-17 Clocked-in table shows schedule punches
+
+- Card showed Clocked in 1/866; table filter Clocked in was empty.
+- Count comes from Attendance punches on scheduled people; table only listed AttendanceObligation PRESENT/INCOMPLETE (Zen has a punch, no obligation row).
+- Fix: CLOCKED_IN filter merges scheduled+clocked-in attendance rows. Live: 1 row **Zen Andrei** INCOMPLETE 1:40 PM.
+- Tests: schedule helper 7 passing.
+
+## Latest Task Addendum - 2026-08-17 Include Zen Andrei in scheduled today
+
+- Zen Andrei `00010` / device 10 is a real DIRECT employee with `REGULAR_14DAY_ROTATION`.
+- Was excluded by (1) `employmentTerminationDate=1970-01-01` treated as terminated, (2) missing `cycleAnchorDate` so Mon 8/17 mapped to rotation day 6 OFF.
+- Fix: ignore non-final + year<=1971 termination; week-align 14-day templates when anchor is missing (same as assign path).
+- Live after fix: Zen `inScheduledToday=true`; scheduled count 853→866.
+- Tests: schedule + employee-schedule + obligation 27 passing.
+
+## Latest Task Addendum - 2026-08-17 Not clocked in uses scheduled over
+
+- Operator: 0 clock-ins but UI showed **76 / 1706** not clocked in. 1700+ employees are scheduled.
+- Cause: utilization denominator is `Employee.embeddedSchedule` (1706); not-clocked-in still counted leftover AttendanceObligation rows (76).
+- Fix: `notClockedIn = scheduled − clockedIn − absent` on the same 1706. Zero punches ⇒ 1706 / 1706.
+- API overwrites `totalNotClockedIn` from `attendance-schedule-utilization`. UI derives the same if API is stale.
+- Table: `MISSING_CLOCK_IN` / `NOT_CLOCKED_IN` merges virtual scheduled rows so the list matches the card, not 76 leftover obligation rows.
+- Also: 1706 was Mon+Tue (UTC 23:59 spilling into Manila 8/18). Today is one calendar day (~853 scheduled, 0 punches → 853 not clocked in).
+- Tests: schedule helper + attendance-utilization display.
+
+## Latest Task Addendum - 2026-08-13 Utilization over = regular-day schedules
+
+- Operator: 42 grew on clock-in; wants all employees with a regular work schedule today (~2000), not obligation rows.
+- Denominator now comes from `Employee.embeddedSchedule` regular (not off) days. Live: **11 clocked in / 1706 scheduled**, 1%. Clock-in does not add to 1706.
+- 1360 remain Missing schedule (no embedded schedule). Those are not in the over.
+- Helper: `attendance-schedule-utilization.helper.ts`. Tests: 4 passing.
+
+## Latest Task Addendum - 2026-08-13 Attendance Utilization obligated-to-work
+
+- Task mode: bug fix / product meaning.
+- Problem: Attendance Utilization `0 of 33 work days` grew to 34 when someone clocked in.
+- Fix: numerator = clocked in among people obligated to work; denominator = scheduled-to-work obligations for the selected dates. Rest-day / unscheduled / leave punches no longer inflate the 33.
+- UI label: `of N scheduled to work`.
+- Tests: API obligation helper 16 passing; app utilization + template 15 passing.
 
 ## Latest Task Addendum - 2026-08-11 BNPI Jun 26–Jul 10 full payroll tally log
 

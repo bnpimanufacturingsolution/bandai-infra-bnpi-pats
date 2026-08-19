@@ -8,6 +8,10 @@ import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
 import { RequestReviewModal } from "~/components/molecules/RequestReviewModal";
 import { useRequests, useRequest, useApproveRequest } from "~/lib/hooks/useRequests";
 import { useAuth } from "~/lib/hooks/use-auth";
+import {
+	canActOnApprovalRequest,
+	canRejectApprovalRequest,
+} from "~/lib/utils/request-approval-action";
 import type { Request, RequestStatus } from "~/services/requests.service";
 import { CheckCircle, Clock, Eye, MoreVertical, XCircle } from "lucide-react";
 import {
@@ -18,7 +22,7 @@ import {
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 
-const ACTIVE_STATES = ["OPEN", "SUBMITTED", "APPROVED"] as const;
+const ACTIVE_STATES = ["OPEN", "SUBMITTED", "FOR_APPROVAL", "IN_PROCESS", "APPROVED"] as const;
 const REQUEST_FIELDS =
 	"id,code,requester.person.personalInfo,requester.employeeId,requester.user.avatar,requester.position.title,requester.department.name,requester.id,requester.reportTo.id,requesterId,description,type,startDate,endDate,metadata,currentWorkflowStateKey,createdAt,currentStepExecution.stepName,currentStepExecution.stepNumber,currentStepExecution.assigneeType,currentStepExecution.assigneeId,currentStepExecution.status,currentStepExecution.assignee.id,currentStepExecution.assignee.person.personalInfo,currentStepExecution.assignee.employeeId,lastCompletedStepExecution.stepName,lastCompletedStepExecution.completedAt,lastCompletedStepExecution.assignee.person.personalInfo,lastCompletedStepExecution.assignee.employeeId";
 const REQUEST_DETAIL_FIELDS =
@@ -44,6 +48,7 @@ const REQUEST_TYPE_LABELS: Record<string, string> = {
 	SALARY_CHANGE: "Salary Change",
 	TRANSFER: "Transfer",
 	SCHEDULE_CHANGE: "Schedule Change",
+	ATTENDANCE_CORRECTION: "Attendance Correction",
 	OTHER: "General Request",
 };
 
@@ -94,6 +99,14 @@ const getCurrentAssigneeName = (request?: Request | null) => {
 export default function EmployeeRequestsTab() {
 	const { user } = useAuth();
 	const currentEmployeeId = user?.metadata?.employee?.id || "";
+	const currentRole = String(user?.role || user?.metadata?.employee?.role || "")
+		.trim()
+		.toLowerCase();
+	const approvalActor = {
+		currentEmployeeId,
+		currentRole,
+		isHrActor: true,
+	};
 
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [rejectionReason, setRejectionReason] = useState("");
@@ -103,7 +116,7 @@ export default function EmployeeRequestsTab() {
 	const activeTab = searchParams.get("tab") || "submitted";
 	const activeStatusFilters = TAB_STATUS_FILTERS[activeTab] || TAB_STATUS_FILTERS.submitted;
 	const assigneeFilter = currentEmployeeId
-		? `currentStepExecution.assignee.id:${currentEmployeeId},currentStepExecution.stepType!TASK`
+		? `currentStepExecution.assignee.id:${currentEmployeeId}`
 		: "";
 	const statusFilter = activeStatusFilters
 		.map((state) => `currentWorkflowStateKey:${state}`)
@@ -163,17 +176,10 @@ export default function EmployeeRequestsTab() {
 
 	const modalRequest = requestDetails || selectedRequest;
 
-	const canActOnRequest = (request?: Request | null) => {
-		if (!request?.currentStepExecution) return false;
-		const state = getRequestState(request);
-		if (!ACTIVE_STATES.includes(state as (typeof ACTIVE_STATES)[number])) return false;
-
-		return (
-			request.currentStepExecution.assignee?.id === currentEmployeeId ||
-			(request.currentStepExecution as { assigneeId?: string | null }).assigneeId ===
-				currentEmployeeId
-		);
-	};
+	const canActOnRequest = (request?: Request | null) =>
+		canActOnApprovalRequest(request, approvalActor);
+	const canRejectRequest = (request?: Request | null) =>
+		canRejectApprovalRequest(request, approvalActor);
 
 	const handleCloseModal = () => {
 		updateSearchParams((next) => {
@@ -450,7 +456,7 @@ export default function EmployeeRequestsTab() {
 				}}
 				request={modalRequest || null}
 				onApprove={canActOnRequest(modalRequest) ? handleApprove : undefined}
-				onReject={canActOnRequest(modalRequest) ? handleReject : undefined}
+				onReject={canRejectRequest(modalRequest) ? handleReject : undefined}
 				isApproving={approveRequestMutation.isPending}
 				isRejecting={approveRequestMutation.isPending}
 			/>

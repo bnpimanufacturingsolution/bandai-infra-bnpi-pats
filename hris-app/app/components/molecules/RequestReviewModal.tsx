@@ -17,6 +17,11 @@ import {
 	getOvertimeCandidateReasonLabel,
 	getOvertimeRequestHoursLabel,
 } from "~/lib/utils/overtime-request-display";
+import { formatManilaClockTime } from "~/lib/utils/manila-clock";
+import {
+	formatPickerTime12Hour,
+	isoToManilaPickerTime,
+} from "~/lib/utils/attendance-adjustment-request";
 import {
 	AlertCircle,
 	ArrowRight,
@@ -743,13 +748,37 @@ const buildDetailRows = (request: Request) => {
 			displayValue: formatMetadataLabel(metadata.adjustmentType || metadata.correctionType),
 			asBadge: true,
 		});
+		const correction = getMetadataRecord(metadata.attendanceCorrection);
+		const correctedValues = getMetadataRecord(correction.correctedValues);
+		const formatAttendanceClock = (value: unknown) => {
+			const raw = String(value || "").trim();
+			if (!raw) return "N/A";
+			if (/^\d{1,2}:\d{2}$/.test(raw)) {
+				return formatPickerTime12Hour(raw.length === 4 ? `0${raw}` : raw);
+			}
+			const manilaPicker = isoToManilaPickerTime(raw);
+			if (manilaPicker) return formatPickerTime12Hour(manilaPicker);
+			return formatManilaClockTime(raw) || raw;
+		};
+		const timeInRaw =
+			metadata.timeIn ||
+			metadata.correctedTimeIn ||
+			correctedValues.timeIn ||
+			correction.timeIn ||
+			null;
+		const timeOutRaw =
+			metadata.timeOut ||
+			metadata.correctedTimeOut ||
+			correctedValues.timeOut ||
+			correction.timeOut ||
+			null;
 		rows.push({
 			label: "Time In",
-			value: String(metadata.timeIn || metadata.correctedTimeIn || "N/A"),
+			value: formatAttendanceClock(timeInRaw),
 		});
 		rows.push({
 			label: "Time Out",
-			value: String(metadata.timeOut || metadata.correctedTimeOut || "N/A"),
+			value: formatAttendanceClock(timeOutRaw),
 		});
 		if (request.type === "TIME_ADJUSTMENT") {
 			const reconciliation = getTimeAdjustmentReconciliation(request);
@@ -1093,6 +1122,7 @@ export function RequestReviewModal({
 				getMetadataField(request, "timesheetAction") === "EDIT_PERMISSION"
 					? "Timesheet Edit Permission"
 					: "Timesheet Submission",
+			ATTENDANCE_CORRECTION: "Attendance Correction",
 			OTHER: "General Request",
 			LEAVE: "Leave Request",
 			OVERTIME: "Overtime Request",

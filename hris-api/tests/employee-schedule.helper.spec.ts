@@ -120,4 +120,45 @@ describe("employee-schedule.helper regression", () => {
 		expect(hireDateShift?.templateDay).to.equal(4);
 		expect(hireDateShift?.shiftTypeCode).to.equal("DAY_4");
 	});
+
+	it("week-aligns a 14-day template when cycleAnchorDate is missing", () => {
+		const embeddedSchedule = {
+			cycleDays: 14,
+			effectiveStartDate: "2026-08-12T00:00:00.000Z",
+			pattern: Array.from({ length: 14 }, (_, index) => ({
+				day: index + 1,
+				shiftTypeId: `shift-${index + 1}`,
+				shiftSnapshot: {
+					code: index + 1 === 6 ? "OFF" : index + 1 === 8 ? "NIGHT_SHIFT" : "REGULAR_DAY",
+					name: `Day ${index + 1}`,
+					isOff: index + 1 === 6,
+					isOvernight: index + 1 === 8,
+					timeSlots: [
+						{ type: "work", label: "Work", startTime: "08:00", endTime: "17:00" },
+					],
+				},
+			})),
+		};
+		const employee = {
+			embeddedSchedule,
+			employmentStartDate: "2026-08-12T00:00:00.000Z",
+			scheduleOverrides: [],
+		};
+
+		const wednesday = resolveEffectiveShiftFromEmployeeData(
+			employee,
+			new Date("2026-08-12T00:00:00.000Z"),
+			new Map(),
+		);
+		const nextMonday = resolveEffectiveShiftFromEmployeeData(
+			employee,
+			new Date("2026-08-17T00:00:00.000Z"),
+			new Map(),
+		);
+
+		expect(wednesday?.templateDay).to.equal(3);
+		expect(nextMonday?.templateDay).to.equal(8);
+		expect(nextMonday?.shiftTypeCode).to.equal("NIGHT_SHIFT");
+		expect(nextMonday?.isOff).to.equal(false);
+	});
 });

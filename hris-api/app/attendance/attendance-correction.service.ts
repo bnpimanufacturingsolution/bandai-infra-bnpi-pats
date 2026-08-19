@@ -3,11 +3,13 @@ import {
 	buildAttendanceLedgerSummary,
 	buildAttendanceTimekeepingFields,
 	fetchAttendanceEmployeeSnapshotFields,
+	getBusinessDayBounds,
 	normalizeToEndOfDay,
 	normalizeToStartOfDay,
 } from "../../helper/attendance.helper";
 import {
 	calculateTimekeeping,
+	deriveBehaviorFlags,
 	determineAttendanceStatus,
 } from "../../helper/timekeeping.helper";
 import { resolveOvertimePolicyApplication } from "../../helper/overtime-approval.helper";
@@ -539,15 +541,27 @@ export async function applyAttendanceCorrection(
 		dependencies.invalidateCacheByPattern || invalidateCache.byPattern;
 	const now = dependencies.now ? dependencies.now() : new Date();
 
+	const businessDayBounds = getBusinessDayBounds(normalized.correctionDate);
 	const sameDayAttendances = await params.prisma.attendance.findMany({
 		where: {
 			organizationId: params.organizationId,
 			employeeId: normalized.employeeId,
 			isDeleted: false,
-			date: {
-				gte: normalized.startOfDay,
-				lte: normalized.endOfDay,
-			},
+			OR: [
+				{
+					date: {
+						gte: businessDayBounds.start,
+						lte: businessDayBounds.end,
+					},
+				},
+				{
+					date: {
+						gte: normalized.startOfDay,
+						lte: normalized.endOfDay,
+					},
+				},
+				...(normalized.attendanceId ? [{ id: normalized.attendanceId }] : []),
+			],
 		},
 		include: ATTENDANCE_CORRECTION_RELATION_INCLUDE,
 		orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
@@ -616,8 +630,8 @@ export async function applyAttendanceCorrection(
 				employeeId: normalized.employeeId,
 				isDeleted: false,
 				date: {
-					gte: normalized.startOfDay,
-					lte: normalized.endOfDay,
+					gte: businessDayBounds.start,
+					lte: businessDayBounds.end,
 				},
 				isEffective: true,
 			},
@@ -630,7 +644,7 @@ export async function applyAttendanceCorrection(
 			data: {
 				organizationId: params.organizationId,
 				employeeId: normalized.employeeId,
-				date: normalized.correctionDate,
+				date: (rawAttendance as any)?.date || businessDayBounds.start || normalized.correctionDate,
 				timeIn: correctedTimeIn,
 				timeOut: correctedTimeOut,
 				status: normalized.status,

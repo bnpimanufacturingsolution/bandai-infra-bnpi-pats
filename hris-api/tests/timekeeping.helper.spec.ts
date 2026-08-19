@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import {
+	buildClockInArrivalFields,
 	calculateTimekeeping,
 	deriveBehaviorFlags,
 	deriveGracePeriodStatus,
@@ -141,6 +142,44 @@ describe("timekeeping helper", () => {
 		expect(status.rawLateMinutes).to.equal(326);
 		expect(status.gracePeriodMinutes).to.equal(15);
 		expect(status.withinGrace).to.equal(false);
+	});
+
+	it("evaluates late at clock-in from a resolved shift snapshot without waiting for clock-out", () => {
+		const arrival = buildClockInArrivalFields({
+			timeIn: new Date("2026-08-17T05:40:00.000Z"),
+			timeOut: null,
+			schedule: {
+				startTime: "08:00",
+				endTime: "17:00",
+				graceLateMinutes: 0,
+				timeSlots: [{ type: "work", startTime: "08:00", endTime: "17:00" }],
+			} as any,
+			date: new Date("2026-08-17T00:00:00.000Z"),
+		});
+
+		expect(arrival.evaluable).to.equal(true);
+		expect(arrival.lateMinutes).to.equal(340);
+		expect(arrival.lateHours).to.equal("5:40");
+		expect(arrival.behaviorFlags).to.include("TARDINESS");
+	});
+
+	it("computes undertime and hours worked once clock-out exists", () => {
+		const arrival = buildClockInArrivalFields({
+			timeIn: new Date("2026-08-17T05:40:00.000Z"),
+			timeOut: new Date("2026-08-17T06:55:00.000Z"),
+			schedule: {
+				startTime: "08:00",
+				endTime: "17:00",
+				graceLateMinutes: 0,
+				timeSlots: [{ type: "work", startTime: "08:00", endTime: "17:00" }],
+			} as any,
+			date: new Date("2026-08-17T00:00:00.000Z"),
+		});
+
+		expect(arrival.hoursWorked).to.equal("1:15");
+		expect(arrival.earlyOutHours).to.equal("2:05");
+		expect(arrival.undertimeHours).to.equal("2:05");
+		expect(arrival.behaviorFlags).to.include("EARLY_OUT");
 	});
 
 	it("counts only missed scheduled work as late when clock-in lands during break", () => {

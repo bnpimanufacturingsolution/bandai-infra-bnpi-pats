@@ -1,7 +1,10 @@
 import { expect } from "chai";
 import {
 	buildTimesheetBreakdownFromObligations,
+	computeAttendanceUtilizationRate,
 	deriveAttendanceObligationDisplayStatus,
+	hasAttendanceWorkSchedule,
+	isObligatedToWorkDay,
 } from "../helper/attendance-obligation.helper";
 
 describe("attendance-obligation.helper regression", () => {
@@ -249,6 +252,68 @@ describe("attendance-obligation.helper regression", () => {
 		);
 
 		expect(breakdown.map((day) => day.primaryMarker)).to.deep.equal(["LEAVE", "HOLIDAY"]);
+	});
+});
+
+describe("attendance utilization obligated-to-work denominator", () => {
+	it("counts expected work days that have not clocked in yet", () => {
+		expect(
+			isObligatedToWorkDay({
+				displayStatus: "NOT_CLOCKED_IN",
+				hasWorkSchedule: true,
+			}),
+		).to.equal(true);
+	});
+
+	it("keeps a scheduled employee in the denominator after they clock in", () => {
+		expect(
+			isObligatedToWorkDay({
+				displayStatus: "PRESENT",
+				isClockedIn: true,
+				hasWorkSchedule: true,
+			}),
+		).to.equal(true);
+	});
+
+	it("does not grow the denominator when a rest-day person clocks in", () => {
+		expect(
+			isObligatedToWorkDay({
+				displayStatus: "PRESENT",
+				isClockedIn: true,
+				isOffDay: true,
+			}),
+		).to.equal(false);
+		expect(
+			isObligatedToWorkDay({
+				displayStatus: "REST_DAY",
+				isClockedIn: true,
+				isOffDay: true,
+			}),
+		).to.equal(false);
+		expect(
+			isObligatedToWorkDay({
+				displayStatus: "PRESENT",
+				isClockedIn: true,
+				hasWorkSchedule: false,
+			}),
+		).to.equal(true);
+		expect(hasAttendanceWorkSchedule({ isOff: true, startTime: "08:00" })).to.equal(false);
+		expect(hasAttendanceWorkSchedule({ startTime: "08:00" })).to.equal(true);
+	});
+
+	it("excludes leave, holiday, and cancelled days from obligated-to-work", () => {
+		expect(isObligatedToWorkDay({ displayStatus: "LEAVE" })).to.equal(false);
+		expect(isObligatedToWorkDay({ displayStatus: "HOLIDAY", isHoliday: true })).to.equal(false);
+		expect(isObligatedToWorkDay({ displayStatus: "CANCELLED" })).to.equal(false);
+	});
+
+	it("computes clocked-in / obligated and stays 1/33 instead of 1/34", () => {
+		const obligatedBeforeClockIn = 33;
+		const obligatedAfterUnscheduledClockIn = 33;
+		expect(obligatedAfterUnscheduledClockIn).to.equal(obligatedBeforeClockIn);
+		expect(computeAttendanceUtilizationRate(0, 33)).to.equal(0);
+		expect(computeAttendanceUtilizationRate(1, 33)).to.equal(3);
+		expect(1 / 33).to.not.equal(1 / 34);
 	});
 });
 

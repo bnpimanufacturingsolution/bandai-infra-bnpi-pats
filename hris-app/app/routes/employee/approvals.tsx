@@ -45,6 +45,10 @@ import {
 	SelectValue,
 } from "~/components/ui/select";
 import { useAuth } from "~/lib/hooks/use-auth";
+import {
+	canActOnApprovalRequest,
+	canRejectApprovalRequest,
+} from "~/lib/utils/request-approval-action";
 
 const ACTIVE_APPROVAL_STATES = ["OPEN", "SUBMITTED", "FOR_APPROVAL", "IN_PROCESS", "APPROVED"] as const;
 const HR_APPROVAL_ROLES = new Set([
@@ -342,20 +346,17 @@ export default function Approvals() {
 			.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
 			.join(" ");
 
-	const canActOnRequest = (request: Request | null | undefined) => {
-		if (!request) return false;
-		const requestState = getRequestState(request);
-		return (
-			ACTIVE_APPROVAL_STATES.includes(
-				requestState as (typeof ACTIVE_APPROVAL_STATES)[number],
-			) &&
-			request.currentStepExecution?.stepType !== "TASK" &&
-			((isHrApprovalActor && request.currentStepExecution?.assigneeType === "HR") ||
-				request.currentStepExecution?.assignee?.id === managerId ||
-				(request.currentStepExecution as { assigneeId?: string | null }).assigneeId ===
-					managerId)
-		);
+	const approvalActor = {
+		currentEmployeeId: managerId,
+		currentRole,
+		isHrActor: isHrApprovalActor,
 	};
+
+	const canActOnRequest = (request: Request | null | undefined) =>
+		canActOnApprovalRequest(request, approvalActor);
+
+	const canRejectRequest = (request: Request | null | undefined) =>
+		canRejectApprovalRequest(request, approvalActor);
 
 	const openRequestReview = (
 		request: Request,
@@ -1024,14 +1025,18 @@ export default function Approvals() {
 											onClick={() => openDecisionReview(item)}
 											disabled={isProcessing}>
 											<CheckCircle className="h-4 w-4 mr-2 text-green-600" />
-											Approve
+											{item.currentStepExecution?.stepType === "TASK"
+												? "Complete Task"
+												: "Approve"}
 										</DropdownMenuItem>
-										<DropdownMenuItem
-											onClick={() => openDecisionReview(item)}
-											disabled={isProcessing}>
-											<XCircle className="h-4 w-4 mr-2 text-red-600" />
-											Reject
-										</DropdownMenuItem>
+										{canRejectRequest(item) ? (
+											<DropdownMenuItem
+												onClick={() => openDecisionReview(item)}
+												disabled={isProcessing}>
+												<XCircle className="h-4 w-4 mr-2 text-red-600" />
+												Reject
+											</DropdownMenuItem>
+										) : null}
 									</>
 								) : null}
 
@@ -1114,7 +1119,7 @@ export default function Approvals() {
 				onReject={
 					action === "view" &&
 					!isTimesheetSubmissionRequest(modalRequest || null) &&
-					canActOnRequest(modalRequest)
+					canRejectRequest(modalRequest)
 						? (request) => {
 								handleRejectRequest(request);
 							}

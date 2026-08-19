@@ -42,6 +42,9 @@ import {
 	buildAssigneeResolutionMetadata,
 	getDefaultWorkflowStates,
 	getDefaultRequestWorkflow,
+	completeAttendanceCorrectionHrReviewIfActorIsHr,
+	repairAttendanceCorrectionHrReviewIfHrAlreadyApproved,
+	repairAttendanceCorrectionSupervisorWorkflowIfNeeded,
 	repairScheduleChangeHrApprovalQueueIfNeeded,
 	repairScheduleChangeHrApprovalStepIfNeeded,
 	resolveStepAssignee,
@@ -66,7 +69,7 @@ import {
 } from "../../helper/notification-dispatch.helper";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { uploadToCloudinary } from "../../helper/cloudinary.helper";
-import { applyAttendanceCorrection } from "../attendance/attendance-correction.service";
+import { applyAttendanceCorrectionRequest } from "../attendance/apply-attendance-correction-request";
 import { applyApprovedLeaveAttendanceReconciliation } from "./leave-attendance-reconciliation.service";
 import { applyApprovedTimeAdjustmentReconciliation } from "./time-adjustment-reconciliation.service";
 import {
@@ -146,7 +149,7 @@ const isRequestActiveForDecision = (
 	const stateKey = getRequestStateKey(request);
 	return (
 		Boolean(request?.currentStepExecutionId) ||
-		["OPEN", "SUBMITTED", "APPROVED"].includes(stateKey)
+		["OPEN", "SUBMITTED", "FOR_APPROVAL", "IN_PROCESS", "APPROVED"].includes(stateKey)
 	);
 };
 
@@ -214,6 +217,7 @@ const HR_TICKET_REQUEST_TYPES = [
 	"PROMOTION",
 	"SALARY_CHANGE",
 	"SCHEDULE_CHANGE",
+	"ATTENDANCE_CORRECTION",
 	"OTHER",
 ];
 const HR_TICKET_ACTIVE_STATES = ["OPEN", "SUBMITTED", "FOR_APPROVAL", "IN_PROCESS"];
@@ -926,62 +930,19 @@ export const controller = (prisma: PrismaClient) => {
 		appliedByEmployeeId?: string | null;
 	}) => {
 		const { requestId, requestData, appliedByEmployeeId } = params;
-		const metadata = getSafeMetadataObject(requestData.metadata);
-		const correction = getSafeMetadataObject(metadata.attendanceCorrection);
-		const correctedValues = getSafeMetadataObject(correction.correctedValues);
-		const correctionDateRaw =
-			correction.correctionDate || requestData.startDate || requestData.endDate;
-		if (!correctionDateRaw) {
-			throw new Error("Attendance correction is missing correctionDate.");
-		}
-
-		const correctionDate =
-			correctionDateRaw instanceof Date ? correctionDateRaw : new Date(correctionDateRaw);
-		if (Number.isNaN(correctionDate.getTime())) {
-			throw new Error("Attendance correction has an invalid correctionDate.");
-		}
-
-		const employeeId =
-			String(requestData.targetEmployeeId || requestData.requesterId || correction.employeeId || "")
-				.trim() || null;
-		if (!employeeId) {
-			throw new Error("Attendance correction is missing target employee.");
-		}
-
-		const correctionResult = await applyAttendanceCorrection({
+		return applyAttendanceCorrectionRequest({
 			prisma,
 			organizationId: requestData.organizationId,
-			rawInput: {
-				attendanceId:
-					correction.attendanceId ||
-					correction.attendance?.id ||
-					correction.targetAttendanceId ||
-					null,
-				employeeId,
-				correctionDate,
-				status: correctedValues.status ?? correction.status ?? null,
-				timeIn: correctedValues.timeIn ?? correction.timeIn ?? null,
-				timeOut: correctedValues.timeOut ?? correction.timeOut ?? null,
-				reasonCategory:
-					correction.reasonCategory ||
-					correctedValues.reasonCategory ||
-					requestData.reasonCategory ||
-					null,
-				notes: correction.reason || requestData.notes || correctedValues.notes || null,
-				timeInLocation: correctedValues.timeInLocation ?? correction.timeInLocation ?? null,
-				timeOutLocation: correctedValues.timeOutLocation ?? correction.timeOutLocation ?? null,
-			},
-			source: "ATTENDANCE_CORRECTION_REQUEST",
+			requestId,
+			requesterId: requestData.requesterId,
+			targetEmployeeId: requestData.targetEmployeeId,
+			startDate: requestData.startDate,
+			endDate: requestData.endDate,
+			notes: requestData.notes,
+			metadata: requestData.metadata,
 			actorEmployeeId: appliedByEmployeeId || null,
-			sourceRequestId: requestId,
-			allowDerivedStatus: true,
-			notesFallbacks: [correction.reason, requestData.notes, correctedValues.notes],
-			dependencies: {
-				now: () => now,
-			},
+			now,
 		});
-
-		return correctionResult;
 	};
 
 	const applyTimeAdjustmentApprovalSideEffects = async (params: {
@@ -2400,6 +2361,23 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
+			if (existingRequest.type === "ATTENDANCE_CORRECTION") {
+				try {
+					const repairedHrReview =
+						await repairAttendanceCorrectionHrReviewIfHrAlreadyApproved(prisma, id);
+					if (repairedHrReview) {
+						const repairedRequest = await prisma.request.findFirst({ where: { id } });
+						if (repairedRequest) {
+							existingRequest = repairedRequest;
+						}
+					}
+				} catch (repairError) {
+					requestLogger.warn(
+						`Attendance correction HR review repair failed for ${id}: ${repairError}`,
+					);
+				}
+			}
+
 			if (!isRequestActiveForDecision(existingRequest)) {
 				const currentStateKey = getRequestStateKey(existingRequest);
 				const msg = `cannot ${validation.data.action} when state is ${currentStateKey || "UNKNOWN"}`;
@@ -2737,34 +2715,61 @@ export const controller = (prisma: PrismaClient) => {
 							}
 						}
 
-						updateData.currentWorkflowStateKey =
-							getRequestStateKey(requestAfterProgress) || "APPROVED";
-
-						// Document requests are considered "approved" once the manager approval step succeeds,
-						// even if an HR TASK step is still pending for generation/release.
-						if (
-							existingRequest.type === "DOCUMENT_REQUEST" &&
-							requestAfterProgress?.currentStepExecutionId
-						) {
-							const nextStepForDocumentFlow =
-								await prisma.workflowStepExecution.findFirst({
-									where: {
-										id: requestAfterProgress.currentStepExecutionId,
-										requestId: id,
-										isDeleted: false,
-									},
+						if (existingRequest.type === "ATTENDANCE_CORRECTION") {
+							const completedHrReview =
+								await completeAttendanceCorrectionHrReviewIfActorIsHr(prisma, {
+									requestId: id,
+									actingEmployeeId,
+									actingEmployeeRole,
+									comment:
+										"Completed because HR already approved this request",
+								});
+							if (completedHrReview) {
+								const completedRequest = await prisma.request.findUnique({
+									where: { id },
 									select: {
-										stepType: true,
+										currentWorkflowStateKey: true,
 									},
 								});
-
-							if (nextStepForDocumentFlow?.stepType === "TASK") {
-								updateData.currentWorkflowStateKey = "APPROVED";
+								updateData.currentWorkflowStateKey =
+									getRequestStateKey(completedRequest) || "COMPLETED";
+								shouldRunApprovalSideEffects = isRequestApprovedState(
+									updateData.currentWorkflowStateKey,
+								);
 							}
 						}
-						shouldRunApprovalSideEffects = isRequestApprovedState(
-							updateData.currentWorkflowStateKey,
-						);
+
+						if (!updateData.currentWorkflowStateKey) {
+							updateData.currentWorkflowStateKey =
+								getRequestStateKey(requestAfterProgress) || "APPROVED";
+
+							// Document requests stay visible as approved after manager approval
+							// while an HR TASK is still pending. Attendance correction no longer
+							// stops there when HR already acted — see auto-complete above.
+							if (
+								existingRequest.type === "DOCUMENT_REQUEST" &&
+								requestAfterProgress?.currentStepExecutionId
+							) {
+								const nextStepForDocumentFlow =
+									await prisma.workflowStepExecution.findFirst({
+										where: {
+											id: requestAfterProgress.currentStepExecutionId,
+											requestId: id,
+											isDeleted: false,
+										},
+										select: {
+											stepType: true,
+										},
+									});
+
+								if (nextStepForDocumentFlow?.stepType === "TASK") {
+									updateData.currentWorkflowStateKey = "APPROVED";
+								}
+							}
+							shouldRunApprovalSideEffects = isRequestApprovedState(
+								updateData.currentWorkflowStateKey,
+							);
+						}
 					} else {
 						updateData.currentWorkflowStateKey = "REJECTED";
 						updateData.currentStepExecutionId = null;
@@ -3743,6 +3748,23 @@ export const controller = (prisma: PrismaClient) => {
 			}
 
 			requestLogger.info(`${config.SUCCESS.REQUEST.GETTING_BY_ID}: ${id}`);
+
+			try {
+				const repaired = await repairAttendanceCorrectionSupervisorWorkflowIfNeeded(
+					prisma,
+					id,
+				);
+				const repairedHrReview =
+					await repairAttendanceCorrectionHrReviewIfHrAlreadyApproved(prisma, id);
+				if (repaired || repairedHrReview) {
+					await invalidateCache.byPattern(`cache:request:byId:${id}:*`);
+					await invalidateCache.byPattern("cache:request:list:*");
+				}
+			} catch (repairError) {
+				requestLogger.warn(
+					`Attendance correction workflow repair failed for ${id}: ${repairError}`,
+				);
+			}
 
 			const cacheKey = `cache:request:byId:${id}:${fields || "full"}`;
 			let request = null;
