@@ -571,7 +571,7 @@ std::string resolve_plain_employee_no_from_userinfo_touch(DeviceSession &device)
 // Full UserInfo inventory. Critical: many Hikvision firmwares return at most ~30
 // rows even when maxResults is larger. Never advance by requested page_size alone
 // and never stop just because page_count < requested maxResults when MORE remains.
-std::vector<std::string> read_device_employee_numbers(DeviceSession &device, bool *complete_out = nullptr) {
+std::vector<std::string> read_device_employee_numbers(DeviceSession &device, bool *complete_out) {
     std::lock_guard<std::mutex> inventory_lock(inventory_read_mutex);
     if (complete_out != nullptr) {
         *complete_out = false;

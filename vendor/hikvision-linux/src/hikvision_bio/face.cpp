@@ -185,7 +185,7 @@ bool write_face_and_template(
     const std::string &card_no,
     const std::vector<char> &face_template,
     const std::vector<char> &face_picture,
-    bool redact_card_no = false) {
+    bool redact_card_no) {
     const auto operation_started_at = std::chrono::steady_clock::now();
     const auto elapsed_ms = [&]() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -307,7 +307,7 @@ bool read_face_and_template(
     const std::string &card_no,
     std::vector<char> *face_template,
     std::vector<char> *face_picture,
-    bool redact_card_no = false) {
+    bool redact_card_no) {
     NET_DVR_FACE_AND_TEMPLATE_COND cond{};
     cond.dwSize = sizeof(cond);
     cond.dwFaceNum = 1;

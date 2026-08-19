@@ -208,10 +208,10 @@ void queue_reconcile(const ReconcileJob &job);
 bool is_immediate_hris_job(const ReconcileJob &job);
 void queue_hris_device_event(const ReconcileJob &job);
 void CALLBACK alarm_callback(
-    LONG handle,
-    ULONG message,
-    BYTE *buffer,
-    DWORD buffer_len,
+    LONG command,
+    NET_DVR_ALARMER *alarmer,
+    char *alarm_info,
+    DWORD buffer_length,
     void *user);
 std::string build_status_contract_json(const ReconcileJob &job, const std::string &status);
 std::string build_hikvision_callback_json(const ReconcileJob &job);
@@ -232,7 +232,14 @@ std::string resolve_plain_employee_no_from_userinfo_touch(DeviceSession &device)
 std::string pick_newest_plain_employee_no(const std::vector<std::string> &candidates);
 void seed_inventory_baseline_for_session(DeviceSession &device);
 std::string resolve_plain_employee_no_from_inventory(DeviceSession &device);
+std::vector<std::string> read_device_employee_numbers(
+    DeviceSession &device,
+    bool *complete_out = nullptr);
+std::vector<std::string> find_missing_employee_numbers(
+    const std::vector<std::string> &source_employee_numbers,
+    const std::vector<std::string> &target_employee_numbers);
 
+void CALLBACK fingerprint_callback(DWORD type, void *buffer, DWORD buffer_length, void *user_data);
 bool wait_for_fingerprint_remote_config(
     FingerprintReadContext &ctx,
     std::chrono::milliseconds total_timeout,
@@ -250,7 +257,10 @@ bool capture_fingerprint_template(
     BYTE finger_no,
     NET_DVR_CAPTURE_FINGERPRINT_CFG *capture,
     std::chrono::milliseconds total_timeout);
-bool write_peer_fingerprints(DeviceSession &target, const ReconcileJob &job);
+bool write_peer_fingerprints(
+    DeviceSession &target,
+    const ReconcileJob &job,
+    const std::vector<NET_DVR_FINGER_PRINT_CFG_V50> &templates);
 bool clone_fingerprints_between_users(
     DeviceSession &source,
     const std::string &source_employee_no,
@@ -267,9 +277,24 @@ bool export_biometric_templates_for_employee(
     bool include_fingerprints,
     bool include_face);
 
-bool capture_face_template(DeviceSession &source, const std::string &employee_no);
-bool write_face_and_template(DeviceSession &target, const ReconcileJob &job);
-bool read_face_and_template(DeviceSession &source, const ReconcileJob &job);
+bool capture_face_template(
+    DeviceSession &source,
+    std::vector<char> *face_template,
+    std::vector<char> *face_picture);
+bool write_face_and_template(
+    DeviceSession &target,
+    const std::string &employee_no,
+    const std::string &card_no,
+    const std::vector<char> &face_template,
+    const std::vector<char> &face_picture,
+    bool redact_card_no = false);
+bool read_face_and_template(
+    DeviceSession &source,
+    const std::string &employee_no,
+    const std::string &card_no,
+    std::vector<char> *face_template,
+    std::vector<char> *face_picture,
+    bool redact_card_no = false);
 bool capture_and_sync_face_for_employee(DeviceSession &source, const std::string &employee_no);
 bool mirror_face_for_employee(DeviceSession &source, const std::string &employee_no);
 bool delete_face_for_exact_owner(DeviceSession &target, const std::string &employee_no);
