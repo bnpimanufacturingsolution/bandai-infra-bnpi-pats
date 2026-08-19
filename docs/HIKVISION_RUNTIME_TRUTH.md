@@ -88,6 +88,9 @@ Current implementation state:
   `spool.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `time.cpp`,
   `copy.cpp`, `runtime.cpp`, `common.cpp`, `main.cpp`). The former monolith
   `hikvision_biometric_service.cpp` is gone.
+- Rollback if this layout fails to compile: restore `6b670a4` (foldered
+  `.inc.cpp` unity) by reverting `301ebb5` then `66868a2`. Details:
+  `.wwg/reports/hikvision-cpp-maintainable-units-20260819.md`.
 - The old `hcnetsdk_alarm_probe.cpp` source and `build-hcnetsdk-alarm-probe.sh`
   active build path were removed. The active build script is
   `scripts/build-hikvision-biometric-service.sh`.

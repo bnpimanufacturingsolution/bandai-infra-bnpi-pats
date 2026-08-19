@@ -1,5 +1,13 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 Hikvision C++ rollback docs
+
+- Operator: document the real-TU split so a failure is easy to roll back.
+- Report: `.wwg/reports/hikvision-cpp-maintainable-units-20260819.md`.
+- Last good unity source: `6b670a4`. Hard rollback: `git revert --no-edit 301ebb5` then `66868a2`.
+- Soft: wrapper keeps last ELF if `g++` fails.
+- Live VM rebuild still `NEEDS_CONFIRMATION`.
+
 ## Latest Task Addendum - 2026-08-19 Hikvision C++ real compilation units
 
 - Operator: leftover foldered `.inc.cpp` dumps were still confusing. Split into maintainable real `.cpp` / `.hpp` units.

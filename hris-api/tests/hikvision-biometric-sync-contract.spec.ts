@@ -960,6 +960,7 @@ describe("Hikvision biometric sync contract", () => {
 			'! cmp --silent "$deployed_build_script" "$build_script"',
 		);
 		expect(wrapper).to.include('if [[ ! -x "$binary" || "$rebuild_required" == "1" ]]');
+		expect(wrapper).to.include("hikvision rebuild failed; keeping existing binary");
 		expect(wrapper).to.not.include(
 			'"$SOURCE_ROOT/hikvision_biometric_service.cpp" -nt "$source_file"',
 		);

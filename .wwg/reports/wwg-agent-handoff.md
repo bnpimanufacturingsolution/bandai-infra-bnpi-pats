@@ -1,10 +1,21 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - Hikvision C++ real units rollback docs
+
+| Field | Value |
+|---|---|
+| Status | `DOCUMENTED` |
+| Report | `.wwg/reports/hikvision-cpp-maintainable-units-20260819.md` |
+| Last good unity | `6b670a4` |
+| Hard rollback | revert `301ebb5` then `66868a2` |
+| Soft | wrapper keeps last `hikvision-biometric-service` ELF if rebuild fails |
+| Live compile | `NEEDS_CONFIRMATION` |
+
 ## 2026-08-19 - Hikvision C++ real .cpp/.hpp compilation units
 
 | Field | Value |
 |---|---|
-| Status | `IMPLEMENTED` |
+| Status | `IMPLEMENTED_SOURCE` (VM rebuild `NEEDS_CONFIRMATION`) |
 | Supersedes | 2026-08-19 foldered `.inc.cpp` include/src split |
 | Headers | `vendor/hikvision-linux/include/hikvision_bio/` — `types.hpp`, `common.hpp`, `time.hpp`, `runtime.hpp`, `prelude.hpp`, `acs.hpp`, `identity.hpp`, `fingerprint.hpp`, `face.hpp`, `copy.hpp`, `spool.hpp` |
 | Sources | `vendor/hikvision-linux/src/hikvision_bio/` — `common.cpp`, `time.cpp`, `acs.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `copy.cpp`, `spool.cpp`, `runtime.cpp`, `main.cpp` |

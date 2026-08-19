@@ -70,6 +70,20 @@ vendor/hikvision-linux/
 
 Still one binary: `build/hikvision-biometric-service`. CLI and JSONL are unchanged.
 
+## Rollback
+
+If the new units fail to compile or the listener misbehaves after this split:
+
+| Step | Action |
+|---|---|
+| Soft | Hot-reload wrapper keeps the last ELF if `g++` fails (`keeping existing binary`). Devices stay on the previous binary. |
+| Hard | Revert `301ebb5` then `66868a2` on `develop` (restores `6b670a4` foldered `.inc.cpp` unity). Push. Wrapper rebuilds from `include/` + `src/`. |
+| Last good source | `6b670a4` — `main.cpp` includes `.inc.cpp`; build is `common.cpp` + `time/device_time.cpp` + `main.cpp`. |
+
+Do not go back to `ad98250` (monolith) unless `6b670a4` itself is broken.
+
+Full table: `.wwg/reports/hikvision-cpp-maintainable-units-20260819.md`.
+
 To query recent ACS event history directly from the device:
 
 ```bash

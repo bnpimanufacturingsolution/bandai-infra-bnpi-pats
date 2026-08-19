@@ -5,6 +5,7 @@ Last updated: 2026-08-19
 ## 2026-08-19 Hikvision C++ current layout
 
 - Live HCNetSDK sources are `vendor/hikvision-linux/src/hikvision_bio/*.cpp` (`acs.cpp`, `spool.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `time.cpp`, `copy.cpp`, `runtime.cpp`, `common.cpp`, `main.cpp`) plus matching `include/hikvision_bio/*.hpp`. Same binary `hikvision-biometric-service`. The 2026-07-09 monolith `hikvision_biometric_service.cpp` is historical.
+- Rollback: last unity source `6b670a4`; revert `301ebb5` then `66868a2`. Report: `.wwg/reports/hikvision-cpp-maintainable-units-20260819.md`.
 
 ## 2026-08-19 Hikvision biometric clock / Manila
 

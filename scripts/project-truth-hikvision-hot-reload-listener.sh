@@ -183,7 +183,16 @@ ensure_work_tree() {
   fi
 
   if [[ ! -x "$binary" || "$rebuild_required" == "1" ]]; then
-    HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT" bash "$build_script" >/dev/null
+    local rebuild_log="$WORK/build/last-rebuild.log"
+    mkdir -p "$WORK/build"
+    if ! HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT" bash "$build_script" >"$rebuild_log" 2>&1; then
+      if [[ -x "$binary" ]]; then
+        echo "hikvision rebuild failed; keeping existing binary $binary (see $rebuild_log)" >&2
+      else
+        echo "hikvision rebuild failed and no previous binary exists (see $rebuild_log)" >&2
+        return 1
+      fi
+    fi
   fi
 }
 
