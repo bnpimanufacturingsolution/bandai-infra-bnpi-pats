@@ -83,8 +83,11 @@ callback/persistence/socket/UI leg.
 
 Current implementation state:
 
-- `hikvision_biometric_service.cpp` is the only active C++ HCNetSDK runtime
-  source under `vendor/hikvision-linux`.
+- `vendor/hikvision-linux/src/hikvision_bio/*.cpp` are the only active C++
+  HCNetSDK runtime sources under `vendor/hikvision-linux` (`acs.cpp`,
+  `spool.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `time.cpp`,
+  `copy.cpp`, `runtime.cpp`, `common.cpp`, `main.cpp`). The former monolith
+  `hikvision_biometric_service.cpp` is gone.
 - The old `hcnetsdk_alarm_probe.cpp` source and `build-hcnetsdk-alarm-probe.sh`
   active build path were removed. The active build script is
   `scripts/build-hikvision-biometric-service.sh`.
@@ -240,8 +243,8 @@ Project Truth default path.
 - a read-only Python probe for TCP reachability, ISAPI system time, ACS event
   history, and bounded watch diagnostics;
 - a Dockerfile for Linux VM/container tests;
-- one Project Truth-named C++ Linux HCNetSDK service source file,
-  `hikvision_biometric_service.cpp`, built as `hikvision-biometric-service`;
+- Project Truth-named C++ Linux HCNetSDK service sources under
+  `src/hikvision_bio/*.cpp`, built as `hikvision-biometric-service`;
 - scripts for VM-side device-source discovery.
 
 On 2026-07-01, the Linux VM at `10.184.38.144` proved TCP reachability to the

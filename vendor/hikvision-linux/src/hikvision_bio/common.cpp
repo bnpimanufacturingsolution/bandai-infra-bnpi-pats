@@ -1,9 +1,11 @@
 #include "hikvision_bio/common.hpp"
 
+#include <cstdio>
 #include <ctime>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <regex>
 #include <sstream>
 
 #include "HCNetSDK.h"
@@ -166,6 +168,119 @@ void parse_time_payload(
     if (time_zone->empty()) {
         *time_zone = json_string_field(payload, "timeZone");
     }
+}
+
+std::string extract_string_field_from_json(const std::string &json, const std::string &field_name) {
+    const std::regex field_regex("\"" + field_name + "\"\\s*:\\s*\"([^\"]*)\"");
+    std::smatch match;
+    if (std::regex_search(json, match, field_regex) && match.size() > 1) {
+        return match[1].str();
+    }
+    return "";
+}
+
+int extract_int_field_from_json(const std::string &json, const std::string &field_name) {
+    const std::regex field_regex("\"" + field_name + "\"\\s*:\\s*([0-9]+)");
+    std::smatch match;
+    if (std::regex_search(json, match, field_regex) && match.size() > 1) {
+        try {
+            return std::stoi(match[1].str());
+        } catch (...) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+std::string extract_enclosing_json_object(const std::string &json, size_t pos_inside) {
+    if (json.empty() || pos_inside >= json.size()) {
+        return "";
+    }
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+    size_t start = pos_inside;
+    for (size_t i = pos_inside + 1; i-- > 0;) {
+        const char c = json[i];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+            continue;
+        }
+        if (c == '}') {
+            depth += 1;
+        } else if (c == '{') {
+            if (depth == 0) {
+                start = i;
+                break;
+            }
+            depth -= 1;
+        }
+        if (i == 0) {
+            break;
+        }
+    }
+    depth = 0;
+    in_string = false;
+    escaped = false;
+    for (size_t index = start; index < json.size(); ++index) {
+        const char c = json[index];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+        if (c == '"') {
+            in_string = true;
+            continue;
+        }
+        if (c == '{') {
+            depth += 1;
+        } else if (c == '}') {
+            depth -= 1;
+            if (depth == 0) {
+                return json.substr(start, index - start + 1);
+            }
+        }
+    }
+    return "";
+}
+
+std::string sdk_time_to_string(const NET_DVR_TIME &value) {
+    char buffer[32] = {0};
+    std::snprintf(
+        buffer,
+        sizeof(buffer),
+        "%04u-%02u-%02uT%02u:%02u:%02u",
+        value.dwYear,
+        value.dwMonth,
+        value.dwDay,
+        value.dwHour,
+        value.dwMinute,
+        value.dwSecond);
+    return buffer;
+}
+
+std::string fixed_bytes_to_string(const BYTE *value, size_t max_len) {
+    size_t len = 0;
+    while (len < max_len && value[len] != 0) {
+        ++len;
+    }
+    return std::string(reinterpret_cast<const char *>(value), len);
 }
 
 }  // namespace hikvision_bio

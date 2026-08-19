@@ -166,7 +166,7 @@ SDK alarm (employeeNo="15")
 
 | Step | Location |
 |---|---|
-| SDK JSON body | `vendor/hikvision-linux/hikvision_biometric_service.cpp` (`build_hikvision_callback_json`) |
+| SDK JSON body | `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` (`build_hikvision_callback_json`) |
 | Callback + non-attendance branch | `hris-api/app/hikvision/controller/callback.controller.ts` |
 | Fast identity | `applyFastEnrollmentIdentityOnSdkCallback` in `hris-api/helper/device-person-token.helper.ts` |
 | DeviceUser UserInfo enrich | `enrichEnrollmentLifecycleEvent` same helper |
@@ -378,7 +378,7 @@ Listener modal **armed/receiving** proves transport. Person labels prove identit
 
 | Spec intent | Implemented? | Primary code |
 |---|---|---|
-| SDK callback is the live enroll path | **Yes** | `hikvision_biometric_service.cpp` → `/api/hikvision/callback` |
+| SDK callback is the live enroll path | **Yes** | `src/hikvision_bio/acs.cpp` → `/api/hikvision/callback` |
 | Quick socket on every saved event | **Yes** | `emitDeviceEventSaved` |
 | Plain id on callback when SDK sends it | **Yes** | `applyFastEnrollmentIdentityOnSdkCallback` |
 | Panel opaque → plain without inventing ids | **Yes** | logSearch + inventory delta |
@@ -447,7 +447,7 @@ Invoke-RestMethod -Headers $h -Uri 'http://localhost:3001/api/device/<TEST_A_ID>
 | `hris-api/helper/device-person-token.helper.ts` | Opaque map, inventory delta, fast identity |
 | `hris-api/helper/device-user-sync.helper.ts` | Pad candidates + link decision |
 | `hris-api/app/hikvision/controller/callback.controller.ts` | Callback orchestration |
-| `vendor/hikvision-linux/hikvision_biometric_service.cpp` | SDK → HRIS post |
+| `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` | SDK `alarm_callback` / `build_hikvision_callback_json` → HRIS post |
 
 ---
 

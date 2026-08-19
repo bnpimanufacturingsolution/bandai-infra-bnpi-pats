@@ -54,17 +54,18 @@ changes.
 
 ```text
 vendor/hikvision-linux/
-  include/hikvision_bio/     types, STDXML, time API
+  include/hikvision_bio/     types, common, time, runtime, matching module headers
   src/hikvision_bio/
-    common.cpp               shared JSONL + STDXML
-    time/device_time.cpp     --get-time / --set-time
-    acs/                     ACS classify + alarm callback
-    identity/                UserInfo / person resolve
-    biometric/               fingerprint + face templates
-    copy/                    peer copy
-    spool/                   HRIS post + replay
-    runtime/                 queues, login/arm, CLI helpers
-    main.cpp                 entry (includes folder modules)
+    common.cpp               JSONL + STDXML + shared JSON extract helpers
+    time.cpp                 --get-time / --set-time
+    acs.cpp                  ACS classify + alarm_callback
+    identity.cpp             UserInfo / person resolve
+    fingerprint.cpp          fingerprint templates
+    face.cpp                 face templates + stored-face writer
+    copy.cpp                 peer copy
+    spool.cpp                HRIS post + replay
+    runtime.cpp              queues, login/arm
+    main.cpp                 CLI entry
 ```
 
 Still one binary: `build/hikvision-biometric-service`. CLI and JSONL are unchanged.

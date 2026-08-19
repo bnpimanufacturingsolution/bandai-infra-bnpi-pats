@@ -52,7 +52,7 @@ Operator picked **Check In** on the panel.
 
 | Layer | Path | What it copies |
 |---|---|---|
-| C++ callback | `vendor/hikvision-linux/hikvision_biometric_service.cpp` `alarm_callback` | `ext->byAttendanceStatus` → job |
+| C++ callback | `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` `alarm_callback` | `ext->byAttendanceStatus` → job |
 | C++ POST | same, `build_hikvision_callback_json` | `attendanceStatus`, `label`, `statusValue`, `attendanceStatusPresent` |
 | Extract | `hris-api/helper/hikvision-event-contract.helper.ts` `extractHikvisionEventData` | `deviceAttendanceStatus`, `deviceAttendanceLabel`, `panelSelectStatus` |
 | Normalize | `hris-api/helper/hikvision-panel-select-status.helper.ts` | Nested `AcsEventInfo` / `rawEvidence` / top-level |

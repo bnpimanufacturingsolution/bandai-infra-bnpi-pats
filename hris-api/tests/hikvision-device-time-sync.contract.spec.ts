@@ -33,16 +33,20 @@ describe("hikvision device time-sync contract", () => {
 		expect(readFileSync(resolve(vendorRoot, "include/hikvision_bio/common.hpp"), "utf8")).to.contain(
 			"stdxml_json_request",
 		);
-		expect(readFileSync(resolve(vendorRoot, "include/hikvision_bio/device_time.hpp"), "utf8")).to.contain(
+		expect(readFileSync(resolve(vendorRoot, "include/hikvision_bio/time.hpp"), "utf8")).to.contain(
 			"run_device_time_command",
 		);
-		expect(readFileSync(resolve(vendorRoot, "scripts/build-hikvision-biometric-service.sh"), "utf8")).to.contain(
-			"src/hikvision_bio/main.cpp",
+		const buildScript = readFileSync(
+			resolve(vendorRoot, "scripts/build-hikvision-biometric-service.sh"),
+			"utf8",
 		);
-		expect(readFileSync(resolve(vendorRoot, "src/hikvision_bio/time/device_time.cpp"), "utf8")).to.contain(
+		expect(buildScript).to.contain("src/hikvision_bio/main.cpp");
+		expect(buildScript).to.contain("src/hikvision_bio/time.cpp");
+		expect(buildScript).to.contain("src/hikvision_bio/acs.cpp");
+		expect(readFileSync(resolve(vendorRoot, "src/hikvision_bio/time.cpp"), "utf8")).to.contain(
 			"run_device_time_command",
 		);
-		expect(readFileSync(resolve(vendorRoot, "src/hikvision_bio/acs/listener.inc.cpp"), "utf8")).to.contain(
+		expect(readFileSync(resolve(vendorRoot, "src/hikvision_bio/acs.cpp"), "utf8")).to.contain(
 			"alarm_callback",
 		);
 	});
@@ -50,7 +54,7 @@ describe("hikvision device time-sync contract", () => {
 	it("adds HCNetSDK STDXML get/set time flags to the listener binary", () => {
 		const serviceSource = [
 			readFileSync(
-				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/time/device_time.cpp"),
+				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/time.cpp"),
 				"utf8",
 			),
 			readFileSync(
@@ -62,7 +66,7 @@ describe("hikvision device time-sync contract", () => {
 				"utf8",
 			),
 			readFileSync(
-				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/runtime/session.inc.cpp"),
+				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/runtime.cpp"),
 				"utf8",
 			),
 		].join("\n");

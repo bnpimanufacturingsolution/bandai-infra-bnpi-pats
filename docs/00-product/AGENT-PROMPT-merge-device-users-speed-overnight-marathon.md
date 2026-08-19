@@ -202,7 +202,7 @@ S5. OPTIONAL TWO-PASS MODALITY (if still slow)
 
 S6. LONG-LIVED SDK SESSION (C++ / listener) — if run-once still dominates
     - Prefer armed listener multi-user queue over SSH spawn per user
-    - May edit vendor/hikvision-linux/hikvision_biometric_service.cpp
+    - May edit vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp + copy.cpp
     - Prove with small N before full wave
 
 S7. DURABLE LEDGER + RETRY-FAILED API/UI
@@ -368,7 +368,7 @@ tallies with reread evidence under .runtime/merge-overnight-<stamp>/. EXIT GATE 
 |---|---|
 | Merge apply was sequential user×target 1:1 | Explore agent TS path |
 | Batch multi-target already exists for copy-to-all | `copyHikvisionUserToPeersBatch` + PRD |
-| C++ one employee → all sessions in one run | `hikvision_biometric_service.cpp` |
+| C++ one employee → all sessions in one run | `src/hikvision_bio/copy.cpp` + `acs.cpp` |
 | No multi-user bulk ISAPI write in repo | Explore agent ISAPI research |
 | TEST A/B FAIL TCP from VM; Main A–D OK | `ssh project-truth-hris` probe |
 | Prior job ~14% success, mostly circuit-skip | Live merge job API |
@@ -381,4 +381,4 @@ tallies with reread evidence under .runtime/merge-overnight-<stamp>/. EXIT GATE 
 - `docs/00-product/PRD-hikvision-copy-to-all-performance.md`
 - `.runtime/merge-speed-truth-20260722-073117/SPEED-TRUTH-MATRIX.md`
 - `hris-api/app/device/device.controller.ts` (`applyHikvisionSdkUserMerge`, `copyHikvisionUserToPeersBatch`)
-- `vendor/hikvision-linux/hikvision_biometric_service.cpp`
+- `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` + `spool.cpp` + `identity.cpp` + `fingerprint.cpp` + `face.cpp` + `copy.cpp`

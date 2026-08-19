@@ -1,3 +1,8 @@
+#include "hikvision_bio/prelude.hpp"
+#include "hikvision_bio/copy.hpp"
+
+namespace hikvision_bio {
+
 bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::string &user_json) {
     const std::string setup_payload = build_user_setup_payload_from_search_response(user_json);
     if (setup_payload.empty()) {
@@ -751,3 +756,72 @@ bool delete_peer_fingerprints(DeviceSession &target, const ReconcileJob &job) {
     }
     return ok;
 }
+
+
+bool target_card_allows_owner(
+    DeviceSession &target,
+    const std::string &employee_no,
+    const std::string &card_no,
+    bool *already_owned_by_employee) {
+    if (already_owned_by_employee != nullptr) *already_owned_by_employee = false;
+    std::ostringstream body;
+    body << "{\"CardInfoSearchCond\":{\"searchID\":\"pt-card-owner-"
+         << json_escape(employee_no)
+         << "\",\"searchResultPosition\":0,\"maxResults\":5,\"CardNoList\":[{\"cardNo\":\""
+         << json_escape(card_no) << "\"}]}}";
+    std::string response;
+    const bool read_ok = stdxml_json_request(
+        target,
+        "POST /ISAPI/AccessControl/CardInfo/Search?format=json",
+        body.str(),
+        &response);
+    if (!read_ok) {
+        emit_json({
+            {"event", "peer_card_owner_probe"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"ok", "false"},
+            {"reason", "target_card_owner_read_failed"}
+        });
+        return false;
+    }
+    const std::string owner = extract_string_field_from_json(response, "employeeNo");
+    if (!owner.empty() && owner != employee_no) {
+        emit_json({
+            {"event", "peer_card_owner_conflict"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"existingOwner", owner},
+            {"ok", "false"}
+        });
+        return false;
+    }
+    if (already_owned_by_employee != nullptr) {
+        *already_owned_by_employee = owner == employee_no;
+    }
+    return true;
+}
+
+bool add_sync_card_if_unowned(
+    DeviceSession &target,
+    const std::string &employee_no,
+    const std::string &card_no) {
+    bool already_owned = false;
+    if (!target_card_allows_owner(target, employee_no, card_no, &already_owned)) {
+        return false;
+    }
+    if (already_owned) {
+        emit_json({
+            {"event", "peer_sync_card"},
+            {"targetDeviceId", target.config.hris_device_id},
+            {"employeeNo", employee_no},
+            {"cardPresent", "true"},
+            {"ok", "true"},
+            {"retained", "true"}
+        });
+        return true;
+    }
+    return add_sync_card(target, employee_no, card_no);
+}
+
+}  // namespace hikvision_bio

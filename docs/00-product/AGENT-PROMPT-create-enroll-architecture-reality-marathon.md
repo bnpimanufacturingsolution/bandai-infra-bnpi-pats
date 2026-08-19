@@ -225,7 +225,7 @@ You MAY edit any of these until acceptance is green. Prefer smallest proven fix.
 
 | Layer | Primary files / surfaces |
 |---|---|
-| C++ alarm + enrich + POST | vendor/hikvision-linux/hikvision_biometric_service.cpp |
+| C++ alarm + enrich + POST | vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp |
 | C++ FP read/write SDK/ISAPI | same; NET_DVR_GET/SET_FINGERPRINT_CFG_V50, FingerPrintDownload/Upload |
 | Build/deploy listener | VM rebuild scripts; restart service/process; prove binary mtime + log banner |
 | Reverse tunnel | host scripts that map 59000/59443/53001; do NOT disable cloudflared |

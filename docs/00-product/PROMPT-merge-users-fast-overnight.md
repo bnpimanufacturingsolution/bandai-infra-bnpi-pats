@@ -142,7 +142,7 @@
       applyHikvisionSdkUserMerge, startHikvisionSdkUserMergeJob,
       copyHikvisionUserToPeersBatch, runHikvisionManualCopyOnVm
     hris-api/helper/device-user-merge.helper.ts  (plan only)
-    vendor/hikvision-linux/hikvision_biometric_service.cpp
+    vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp + copy.cpp
     docs/00-product/PRD-hikvision-copy-to-all-performance.md
 
   Prior evidence dirs (resume, do not treat as live truth without re-check):

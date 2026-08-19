@@ -1,3 +1,8 @@
+#include "hikvision_bio/prelude.hpp"
+#include "hikvision_bio/spool.hpp"
+
+namespace hikvision_bio {
+
 void post_hris_contract_preview(const ReconcileJob &job, const std::string &status) {
     const std::string contract = build_status_contract_json(job, status);
     emit_json({
@@ -1423,43 +1428,6 @@ void polling_loop() {
     }
 }
 
-template <typename Operation>
-bool retry_peer_operation(
-    const std::string &operation,
-    DeviceSession &target,
-    const std::string &employee_no,
-    Operation operation_fn) {
-    constexpr int max_attempts = 3;
-    for (int attempt = 1; attempt <= max_attempts; ++attempt) {
-        const bool ok = operation_fn();
-        emit_json({
-            {"event", "peer_sync_attempt"},
-            {"operation", operation},
-            {"targetDeviceId", target.config.hris_device_id},
-            {"targetHost", target.config.host},
-            {"employeeNo", employee_no},
-            {"attempt", std::to_string(attempt)},
-            {"maxAttempts", std::to_string(max_attempts)},
-            {"ok", ok ? "true" : "false"}
-        });
-        if (ok) {
-            return true;
-        }
-        if (attempt < max_attempts) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(350 * attempt));
-        }
-    }
-    emit_json({
-        {"event", "peer_sync_failed_after_retries"},
-        {"operation", operation},
-        {"targetDeviceId", target.config.hris_device_id},
-        {"targetHost", target.config.host},
-        {"employeeNo", employee_no},
-        {"attempts", std::to_string(max_attempts)}
-    });
-    return false;
-}
-
 void process_reconcile_job(const ReconcileJob &job) {
     const bool full_mirror = should_full_mirror_reconcile(job);
     struct FullMirrorGuard {
@@ -1750,3 +1718,5 @@ void reconcile_worker_loop() {
 void worker_loop() {
     hris_enrichment_post_loop();
 }
+
+}  // namespace hikvision_bio

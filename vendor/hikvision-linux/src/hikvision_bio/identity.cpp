@@ -1,3 +1,8 @@
+#include "hikvision_bio/prelude.hpp"
+#include "hikvision_bio/identity.hpp"
+
+namespace hikvision_bio {
+
 bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::string *user_json) {
     if (job.employee_no.empty()) {
         emit_json({
@@ -44,12 +49,6 @@ bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::strin
     }
     return exact_owner;
 }
-
-std::string extract_enclosing_json_object(const std::string &json, size_t pos_inside);
-std::string extract_string_field_from_json(
-    const std::string &json,
-    const std::string &field_name);
-int extract_int_field_from_json(const std::string &json, const std::string &field_name);
 
 std::string extract_card_object_for_employee(
     const std::string &response,
@@ -325,99 +324,6 @@ std::set<std::string> extract_employee_numbers_from_search_response(const std::s
         }
     }
     return employee_numbers;
-}
-
-std::string extract_string_field_from_json(const std::string &json, const std::string &field_name) {
-    const std::regex field_regex("\"" + field_name + "\"\\s*:\\s*\"([^\"]*)\"");
-    std::smatch match;
-    if (std::regex_search(json, match, field_regex) && match.size() > 1) {
-        return match[1].str();
-    }
-    return "";
-}
-
-int extract_int_field_from_json(const std::string &json, const std::string &field_name) {
-    const std::regex field_regex("\"" + field_name + "\"\\s*:\\s*([0-9]+)");
-    std::smatch match;
-    if (std::regex_search(json, match, field_regex) && match.size() > 1) {
-        try {
-            return std::stoi(match[1].str());
-        } catch (...) {
-            return -1;
-        }
-    }
-    return -1;
-}
-
-// Expand from a position inside a JSON object to the full {...} object bounds.
-std::string extract_enclosing_json_object(const std::string &json, size_t pos_inside) {
-    if (json.empty() || pos_inside >= json.size()) {
-        return "";
-    }
-    // Walk left to the matching '{' for this object.
-    int depth = 0;
-    bool in_string = false;
-    bool escaped = false;
-    size_t start = pos_inside;
-    for (size_t i = pos_inside + 1; i-- > 0;) {
-        const char c = json[i];
-        if (in_string) {
-            if (escaped) {
-                escaped = false;
-            } else if (c == '\\') {
-                escaped = true;
-            } else if (c == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-        if (c == '"') {
-            in_string = true;
-            continue;
-        }
-        if (c == '}') {
-            depth += 1;
-        } else if (c == '{') {
-            if (depth == 0) {
-                start = i;
-                break;
-            }
-            depth -= 1;
-        }
-        if (i == 0) {
-            break;
-        }
-    }
-    // Walk right from start to matching '}'.
-    depth = 0;
-    in_string = false;
-    escaped = false;
-    for (size_t index = start; index < json.size(); ++index) {
-        const char c = json[index];
-        if (in_string) {
-            if (escaped) {
-                escaped = false;
-            } else if (c == '\\') {
-                escaped = true;
-            } else if (c == '"') {
-                in_string = false;
-            }
-            continue;
-        }
-        if (c == '"') {
-            in_string = true;
-            continue;
-        }
-        if (c == '{') {
-            depth += 1;
-        } else if (c == '}') {
-            depth -= 1;
-            if (depth == 0) {
-                return json.substr(start, index - start + 1);
-            }
-        }
-    }
-    return "";
 }
 
 // Parse per-user name/numOfFP/numOfFace from a UserInfo/Search page.
@@ -805,3 +711,5 @@ std::vector<std::string> find_missing_employee_numbers(
     }
     return missing;
 }
+
+}  // namespace hikvision_bio

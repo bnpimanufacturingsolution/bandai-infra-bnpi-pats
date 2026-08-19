@@ -1,4 +1,4 @@
-#include "hikvision_bio/device_time.hpp"
+#include "hikvision_bio/time.hpp"
 
 #include "hikvision_bio/common.hpp"
 

@@ -1,8 +1,20 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - Hikvision C++ real .cpp/.hpp compilation units
+
+| Field | Value |
+|---|---|
+| Status | `IMPLEMENTED` |
+| Supersedes | 2026-08-19 foldered `.inc.cpp` include/src split |
+| Headers | `vendor/hikvision-linux/include/hikvision_bio/` — `types.hpp`, `common.hpp`, `time.hpp`, `runtime.hpp`, `prelude.hpp`, `acs.hpp`, `identity.hpp`, `fingerprint.hpp`, `face.hpp`, `copy.hpp`, `spool.hpp` |
+| Sources | `vendor/hikvision-linux/src/hikvision_bio/` — `common.cpp`, `time.cpp`, `acs.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `copy.cpp`, `spool.cpp`, `runtime.cpp`, `main.cpp` |
+| Split | fingerprint vs face are separate units; leftover `.inc.cpp` dumps removed |
+| Binary / CLI | same `hikvision-biometric-service`; CLI/JSONL unchanged; wrapper still syncs whole include/ + src/ |
+| Time | still SDK STDXML GET/PUT `/ISAPI/System/time`, `CST-8:00:00`, `execute=false` default; no NTP |
+
 ## 2026-08-19 - Hikvision C++ include/src folder split
 
-- Status: `IMPLEMENTED`. Removed the two confusing leftover files.
+- Status: `SUPERSEDED` by **Hikvision C++ real .cpp/.hpp compilation units**.
 - Folders: `acs/`, `identity/`, `biometric/`, `copy/`, `spool/`, `runtime/`, `time/`.
 - Entry: `src/hikvision_bio/main.cpp`. Mocha 37 green.
 

@@ -107,10 +107,10 @@ B. SOURCE OF TRUTH (HARD — NO ASSUMPTIONS)
 ================================================================
 Canonical sources (OPEN WITH TOOLS; quote paths):
 
-1) C++ wire: vendor/hikvision-linux/hikvision_biometric_service.cpp
-   - alarm_callback: person ONLY from dwEmployeeNo > 0
-   - enrich_hris_job_before_post: inventory_delta + FP/face attach
-   - build_hikvision_callback_json → POST /api/hikvision/callback
+1) C++ wire: vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp
+   - alarm_callback (acs.cpp): person ONLY from dwEmployeeNo > 0
+   - enrich_hris_job_before_post (spool.cpp): inventory_delta + FP/face attach
+   - build_hikvision_callback_json (acs.cpp) → POST /api/hikvision/callback
 2) Live listener logs (VM): /var/log/project-truth/hikvision-hot-reload-listener.jsonl
    Quote: identitySource, employeeNo, fingerprintCount, templatesAttached, post_result
 3) HRIS callback: hris-api/app/hikvision/controller/callback.controller.ts
@@ -175,7 +175,7 @@ D. CODE OWNERS (change as needed)
 ================================================================
 | Layer | Files |
 |---|---|
-| C++ alarm/enrich/POST/FP/face | vendor/hikvision-linux/hikvision_biometric_service.cpp |
+| C++ alarm/enrich/POST/FP/face | vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp |
 | Build/deploy listener | VM build.sh / systemctl project-truth-hikvision-hot-reload-listener |
 | Callback | hris-api/app/hikvision/controller/callback.controller.ts |
 | Plain backfill + schedule raw | device-person-token.helper.ts |

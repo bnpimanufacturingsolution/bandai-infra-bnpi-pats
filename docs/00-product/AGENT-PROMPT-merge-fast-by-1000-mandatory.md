@@ -59,7 +59,7 @@ Admin merge job → copyHikvisionUserToPeersBatch → runHikvisionManualCopyOnVm
 | # | subagent_type | Leg (independent) | Required return |
 |---|---|---|---|
 | A1 | `explore` | `hris-api/app/device/device.controller.ts` merge apply, batch, circuit, durable job, face physical gap, timeout scaling | path + line quotes + “what live events mean” |
-| A2 | `explore` | `vendor/hikvision-linux/hikvision_biometric_service.cpp` manual copy / peer write / timeouts / 401 faceURL | path + line quotes + failure classes |
+| A2 | `explore` | `vendor/hikvision-linux/src/hikvision_bio/copy.cpp` + `acs.cpp` + `spool.cpp` + `identity.cpp` + `fingerprint.cpp` + `face.cpp` manual copy / peer write / timeouts / 401 faceURL | path + line quotes + failure classes |
 | A3 | `general-purpose` (execute) | SSH TCP matrix all 6 devices × 80/443/8000 + listener active | `.runtime/merge-fast-<stamp>/ssh-tcp.txt` |
 | A4 (optional 4th) | `general-purpose` | API health + WAVE plan + gap ID pick list | `devices-health-summary.json`, `merge-plan-wave.json`, `bakeoff-ids.json` |
 

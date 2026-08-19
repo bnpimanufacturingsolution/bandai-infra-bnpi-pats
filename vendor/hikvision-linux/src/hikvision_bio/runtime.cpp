@@ -1,3 +1,62 @@
+#include "hikvision_bio/prelude.hpp"
+#include "hikvision_bio/runtime.hpp"
+
+namespace hikvision_bio {
+
+volatile std::sig_atomic_t keep_running = 1;
+
+std::mutex queue_mutex;
+std::condition_variable queue_cv;
+std::deque<ReconcileJob> hris_immediate_event_queue;
+std::deque<ReconcileJob> hris_enrichment_event_queue;
+std::deque<ReconcileJob> reconcile_queue;
+std::vector<DeviceSession> sessions;
+std::mutex sessions_mutex;
+std::mutex peer_apply_guard_mutex;
+std::mutex delayed_reconcile_guard_mutex;
+std::mutex full_mirror_guard_mutex;
+std::mutex reconcile_spool_mutex;
+std::mutex callback_spool_mutex;
+std::set<std::string> callback_posts_in_flight;
+std::mutex recent_employee_candidate_mutex;
+std::mutex poll_reconcile_guard_mutex;
+// UserInfo/Search behaves like a device-global cursor on the TEST A firmware.
+// Serialize full paginated inventories; interleaved searches can fail mid-page
+// and must never be mistaken for a complete baseline/delta.
+std::mutex inventory_read_mutex;
+std::mutex inventory_baseline_mutex;
+std::map<std::string, std::chrono::steady_clock::time_point> recent_peer_apply_by_host;
+std::map<std::string, unsigned long long> delayed_reconcile_by_host;
+// last_seen timestamps (not expiry). TTL applied when reading.
+std::map<std::string, std::chrono::steady_clock::time_point> recent_employee_candidates;
+std::map<std::string, std::chrono::steady_clock::time_point> recent_poll_reconcile_by_key;
+std::mutex callback_identity_scan_mutex;
+std::map<std::string, std::chrono::steady_clock::time_point>
+    recent_callback_identity_scan_by_host;
+std::map<std::string, std::set<std::string>> observed_employee_numbers_by_host;
+std::set<std::string> inventory_baseline_ready_hosts;
+std::mutex userinfo_touch_mutex;
+std::map<std::string, std::map<std::string, UserInfoTouchSnapshot>> userinfo_touch_baseline_by_host;
+std::set<std::string> userinfo_touch_baseline_ready_hosts;
+std::set<std::string> pending_full_mirror_hosts;
+std::atomic<unsigned long long> delayed_reconcile_token{0};
+std::atomic<unsigned long long> callback_spool_token{0};
+bool execute_mode = true;
+bool automatic_peer_reconcile_enabled = true;
+std::string hris_api_base;
+std::string hris_api_token;
+std::string min_sdk_time;
+std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";
+std::string reconcile_quarantine_dir =
+    "/tmp/project-truth-hikvision-reconcile-quarantine";
+std::string callback_spool_dir = "/tmp/project-truth-hikvision-callback-spool";
+
+void handle_signal(int) {
+    keep_running = 0;
+    queue_cv.notify_all();
+}
+
+
 bool parse_device_spec(const std::string &spec, DeviceConfig *config) {
     std::vector<std::string> parts;
     std::stringstream stream(spec);
@@ -99,3 +158,5 @@ void usage(const char *program) {
         << "[--stored-face-payload-file mode-0600-json] "
         << "[--get-time] [--set-time] [--time-device-id id] [--local-time ISO] [--time-zone CST-8:00:00]\n";
 }
+
+}  // namespace hikvision_bio

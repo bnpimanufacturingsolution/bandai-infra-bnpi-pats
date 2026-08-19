@@ -1,9 +1,19 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 Hikvision C++ real compilation units
+
+- Operator: leftover foldered `.inc.cpp` dumps were still confusing. Split into maintainable real `.cpp` / `.hpp` units.
+- Layout: `include/hikvision_bio/` (`types.hpp`, `common.hpp`, `time.hpp`, `runtime.hpp`, `prelude.hpp`, `acs.hpp`, `identity.hpp`, `fingerprint.hpp`, `face.hpp`, `copy.hpp`, `spool.hpp`) + `src/hikvision_bio/` (`common.cpp`, `time.cpp`, `acs.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `copy.cpp`, `spool.cpp`, `runtime.cpp`, `main.cpp`).
+- Fingerprint vs face are separate units. Leftover `.inc.cpp` dumps removed.
+- Goal: easy to maintain. Non-breaking: same binary `hikvision-biometric-service`, same CLI/JSONL. Wrapper still syncs whole include/ + src/.
+- Time still SDK STDXML GET/PUT `/ISAPI/System/time`, `CST-8:00:00`, `execute=false` default. No NTP enable.
+- Previous 2026-08-19 foldered `.inc.cpp` addendum is superseded.
+
 ## Latest Task Addendum - 2026-08-19 Hikvision C++ include/src split
 
+- Status: `SUPERSEDED` by **2026-08-19 Hikvision C++ real compilation units**.
 - Operator: folder layout was still two confusing files. Removed `hikvision_biometric_service.cpp` and `runtime_service.cpp`.
-- Layout: `include/hikvision_bio/` + `src/hikvision_bio/{common.cpp,main.cpp,time/,acs/,identity/,biometric/,copy/,spool/,runtime/}`.
+- Layout (superseded): `include/hikvision_bio/` + `src/hikvision_bio/{common.cpp,main.cpp,time/,acs/,identity/,biometric/,copy/,spool/,runtime/}`.
 - One binary, same CLI/JSONL. Wrapper syncs whole include/src trees.
 
 ## Latest Task Addendum - 2026-08-19 HRIS Hikvision Update time button

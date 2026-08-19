@@ -1,56 +1,13 @@
-// Hikvision biometric service entry.
-// Folder modules below are included into one translation unit so HCNetSDK
-// keeps a single login/callback/session list. CLI and JSONL are unchanged.
+// Hikvision biometric service entry. Real compilation units; one binary.
 
-#include <chrono>
-#include <cctype>
-#include <condition_variable>
-#include <csignal>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <ctime>
-#include <deque>
-#include <fstream>
-#include <iomanip>
-#include <iostream>
-#include <map>
-#include <mutex>
-#include <regex>
-#include <set>
-#include <sstream>
-#include <string>
-#include <thread>
-#include <vector>
-#include <algorithm>
-#include <atomic>
-#include <cerrno>
-#include <functional>
-
-#include <dirent.h>
-#include <fcntl.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <unistd.h>
-
-#include "HCNetSDK.h"
-#include "hikvision_bio/types.hpp"
-#include "hikvision_bio/common.hpp"
-#include "hikvision_bio/device_time.hpp"
-
-namespace hikvision_bio {
-
-#include "runtime/state.inc.cpp"
-#include "acs/status.inc.cpp"
-#include "acs/events.inc.cpp"
-#include "acs/listener.inc.cpp"
-#include "identity/userinfo.inc.cpp"
-#include "biometric/templates.inc.cpp"
-#include "copy/peer.inc.cpp"
-#include "spool/hris.inc.cpp"
-#include "runtime/session.inc.cpp"
-
-}  // namespace hikvision_bio
+#include "hikvision_bio/prelude.hpp"
+#include "hikvision_bio/acs.hpp"
+#include "hikvision_bio/copy.hpp"
+#include "hikvision_bio/face.hpp"
+#include "hikvision_bio/fingerprint.hpp"
+#include "hikvision_bio/identity.hpp"
+#include "hikvision_bio/spool.hpp"
+#include "hikvision_bio/time.hpp"
 
 using namespace hikvision_bio;
 

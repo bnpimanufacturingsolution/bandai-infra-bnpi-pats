@@ -18,7 +18,7 @@ If you did not open those files / evidence in this session, label claims `NEEDS_
 
 ## How to find truth (required before “always plain on socket”)
 
-1. Open `vendor/hikvision-linux/src/hikvision_bio/acs/listener.inc.cpp` — `alarm_callback`, `build_hikvision_callback_json`. Time GET/SET is `src/hikvision_bio/time/device_time.cpp`.
+1. Open `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` — `alarm_callback`, `build_hikvision_callback_json`. Time GET/SET is `src/hikvision_bio/time.cpp`.
 2. Open recent `.runtime/*` SDK/listener logs or saved DeviceEvent payload samples.
 3. Quote: major/minor, `employeeNo` empty vs plain vs opaque.
 4. Only then plan C++ enrich, HRIS multipass, or UI copy.

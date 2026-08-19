@@ -24,7 +24,14 @@ COMMON_LINK_ARGS=(
 
 SOURCES=(
   "$PROJECT_DIR/src/hikvision_bio/common.cpp"
-  "$PROJECT_DIR/src/hikvision_bio/time/device_time.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/time.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/acs.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/identity.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/fingerprint.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/face.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/copy.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/spool.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/runtime.cpp"
   "$PROJECT_DIR/src/hikvision_bio/main.cpp"
 )
 

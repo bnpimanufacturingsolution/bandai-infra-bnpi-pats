@@ -14,7 +14,7 @@ describe("Hikvision biometric sync contract", () => {
 			for (const name of readdirSync(dir)) {
 				const full = join(dir, name);
 				if (statSync(full).isDirectory()) collect(full, acc);
-				else if (/\.(cpp|hpp|inc\.cpp)$/.test(name)) acc.push(full);
+				else if (/\.(cpp|hpp)$/.test(name)) acc.push(full);
 			}
 			return acc;
 		};

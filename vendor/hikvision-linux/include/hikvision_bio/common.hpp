@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cstddef>
 #include <map>
 #include <mutex>
 #include <fstream>
 #include <string>
 
+#include "HCNetSDK.h"
 #include "hikvision_bio/types.hpp"
 
 namespace hikvision_bio {
@@ -31,5 +33,11 @@ void parse_time_payload(
     std::string *local_time,
     std::string *time_mode,
     std::string *time_zone);
+
+std::string extract_string_field_from_json(const std::string &json, const std::string &field_name);
+int extract_int_field_from_json(const std::string &json, const std::string &field_name);
+std::string extract_enclosing_json_object(const std::string &json, size_t pos_inside);
+std::string sdk_time_to_string(const NET_DVR_TIME &value);
+std::string fixed_bytes_to_string(const BYTE *value, size_t max_len);
 
 }  // namespace hikvision_bio

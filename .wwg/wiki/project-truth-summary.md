@@ -2,6 +2,10 @@
 
 Last updated: 2026-08-19
 
+## 2026-08-19 Hikvision C++ current layout
+
+- Live HCNetSDK sources are `vendor/hikvision-linux/src/hikvision_bio/*.cpp` (`acs.cpp`, `spool.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `time.cpp`, `copy.cpp`, `runtime.cpp`, `common.cpp`, `main.cpp`) plus matching `include/hikvision_bio/*.hpp`. Same binary `hikvision-biometric-service`. The 2026-07-09 monolith `hikvision_biometric_service.cpp` is historical.
+
 ## 2026-08-19 Hikvision biometric clock / Manila
 
 - Devices can set time (panel / web / iVMS / ISAPI PUT / NTP). HRIS Preview/Update time prefers HCNetSDK STDXML, ISAPI HTTP fallback. Wire TZ `CST-8:00:00` = UTC+8, no DST.
