@@ -5,10 +5,12 @@
 | Field | Value |
 |---|---|
 | Symptom | Local Vite showed **Request time** / attendance request. `https://dev.bnpi-hris.tech` did not. |
-| Cause | DEV GitOps serves `develop`. Feature lived on `bryan-task` `3bad2d1`. Merging `develop` into `bryan-task` does not deploy it. Layout CSS was uncommitted. |
-| Proof | Argo `project-truth-dev` Synced `b409ca4`. `origin/develop` had no `AttendanceAdjustmentRequestModal` / `Request time`. Live HTML `NO_REQUEST_TIME_IN_HTML`. |
-| Fix | Cherry-pick `3bad2d1` onto `develop` (kept `hris-emp-app`). Added Today-left/log-right CSS. Tests: API 30, app 26. |
-| Commits | `af8d585` latest; `a2dc057` layout. Push `develop` then wait GitOps image roll. |
+| Cause 1 | DEV GitOps serves `develop`. Feature lived on `bryan-task` `3bad2d1`. Merging `develop` into `bryan-task` does not deploy it. |
+| Cause 2 | Layout CSS was uncommitted. |
+| Cause 3 | Root `.gitignore` `templates/` ignored `hris-app/app/components/templates/AttendanceRateDonut.tsx`, so the first develop image build failed `UNRESOLVED_IMPORT`. |
+| Before | Argo/image `b409ca4`. Live HTML `root-pLw9zlEI.css`, no Request time. |
+| After | `origin/develop` `f93f30d`. ansible-pull `2026-08-19T10:01:21Z`. DEV app pod `hris-app-77fcb5db6f-d69md`. HTML `root-CIRKoZkC.css`. Chunk `_id.attendance-DI1eNUjI.js` contains **Request time**. CSS has `attendance-period-layout`. |
+| Tests | API mocha 30; app vitest 26; local `hris-app` production build green. |
 
 ## 2026-08-19 - ansible-pull fixed (suspended GitHub user)
 
