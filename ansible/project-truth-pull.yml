@@ -38,6 +38,7 @@
       - project-truth-ansible-pull
       - project-truth-os-sync
       - project-truth-disk-guard
+      - project-truth-report-github-deploy
     project_truth_systemd_units:
       - project-truth-hris.service
       - project-truth-lan-config.service
@@ -554,6 +555,13 @@
           commit={{ project_truth_commit.stdout }}
           synced_at={{ ansible_date_time.iso8601 }}
           apply_engine=ansible-pull
+
+    - name: Report GitHub deployment success for this pull
+      ansible.builtin.command:
+        argv:
+          - project-truth-report-github-deploy
+      failed_when: false
+      changed_when: false
 
     - name: Keep experimental TryCloudflare disabled by default
       ansible.builtin.systemd:

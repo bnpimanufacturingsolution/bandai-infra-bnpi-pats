@@ -1,5 +1,14 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - GitHub Action observe VM deploy
+
+| Field | Value |
+|---|---|
+| Gap | Actions tab had no live “is this SHA deployed” signal |
+| Workflow | `.github/workflows/observe-deploy.yml` — environment `vm-gitops` |
+| VM report | `project-truth-report-github-deploy` after ansible-pull state |
+| How to watch | `gh run list --workflow observe-deploy.yml --branch develop` |
+
 ## 2026-08-19 - infra git login on VM
 
 | Field | Value |

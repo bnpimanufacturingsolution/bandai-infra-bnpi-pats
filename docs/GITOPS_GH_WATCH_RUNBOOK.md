@@ -83,6 +83,27 @@ gh run list --branch develop --limit 5
 .\scripts\project-truth.ps1 watch-github-run -RunId <run-id>
 ```
 
+## Observe VM auto-deploy from GitHub Actions
+
+Pushing `develop` starts **Observe VM GitOps deploy**. That job is the public
+signal for whether the VM has already pulled the SHA.
+
+| GitHub Actions job | Meaning |
+|---|---|
+| in progress | GitHub has the commit; waiting for VM `ansible-pull` (timer every 5 min) |
+| success | VM wrote `ansible-pull-state` for this SHA and reported `success` |
+| failure / timeout | VM did not report within 10 minutes |
+
+Also visible as environment **vm-gitops** on the repo Deployments page.
+
+```powershell
+gh run list --workflow observe-deploy.yml --branch develop --limit 5
+gh run watch <run-id>
+```
+
+Do not treat **Validate Project Truth Hyper-V Repo** as deploy proof. That job
+only validates the repo. VM pull is **Observe VM GitOps deploy**.
+
 For `uat` or `production`, first verify those branches exist locally and remotely:
 
 ```powershell

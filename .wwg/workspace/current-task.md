@@ -1,5 +1,12 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 GitHub Action observe VM deploy
+
+- Operator: no GitHub Actions observation of whether a SHA is deploying or already pulled.
+- Add workflow `observe-deploy.yml` (push `develop` + dispatch). Creates GitHub Deployment `vm-gitops` `in_progress`, waits up to 10 min for VM success.
+- VM `project-truth-report-github-deploy` runs after ansible-pull records state (does not fail the pull).
+- Validate workflow is not deploy proof.
+
 ## Latest Task Addendum - 2026-08-19 infra git login on VM
 
 - Operator: git was not interactively logged in for `infra` (no `gh`, no `~/.git-credentials`; ansible-pull still used Argo secret).
