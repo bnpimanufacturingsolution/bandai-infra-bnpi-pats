@@ -1,5 +1,16 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - SDK callback listener deployed via LAN (GitOps still 403)
+
+| Field | Value |
+|---|---|
+| Status | `DEPLOYED_LAN` |
+| How | Host scp → `/opt` `include/`+`src/` + new wrapper → `systemctl restart` (ansible-pull still 403) |
+| ELF | `/home/infra/.../build/hikvision-biometric-service` **2026-08-19 05:21 UTC** size `1548384` (was 2026-08-13 `1499832`) |
+| Process | started **2026-08-19 05:20:59** `sdk_login`/`sdk_alarm_arm` ok; `acs_alarm_received` at 05:21:40Z |
+| Rollback ELF | `hikvision-biometric-service.bak-20260813` |
+| GitOps | still not pulling GitHub |
+
 ## 2026-08-19 - Push vs VM pull check
 
 | Step | Last working | Now |

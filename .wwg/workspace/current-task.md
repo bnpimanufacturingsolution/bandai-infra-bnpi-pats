@@ -1,5 +1,12 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 LAN-deployed new SDK listener
+
+- Operator: how to deploy the new units right now.
+- GitOps pull still 403. Deployed from Windows host over LAN SSH: `/opt` include/src + wrapper, restart.
+- New ELF **2026-08-19 05:21 UTC**. Backup `*.bak-20260813`. Callbacks observed after arm.
+- ansible-pull still broken; this LAN copy will not be refreshed from GitHub until that 403 is fixed.
+
 ## Latest Task Addendum - 2026-08-19 deployed listener is stale
 
 - Operator: is it still working as intended, or is deployed being updated?
