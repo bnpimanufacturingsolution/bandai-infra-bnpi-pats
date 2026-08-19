@@ -1,6 +1,6 @@
 # Hikvision C++ real units + rollback (2026-08-19)
 
-Status: `IMPLEMENTED_SOURCE`. Live VM `g++` / listener rebuild is `NEEDS_CONFIRMATION` (`10.184.37.19` ping/SSH timed out 2026-08-19).
+Status: `IMPLEMENTED_SOURCE` + `PROVEN_STALE_DEPLOY`. Scratch VM `g++` of the 10 units **passed** 2026-08-19 04:58 UTC. The **running** listener was **not** replaced (still 2026-08-13 monolith). GitOps pull is 403 (GitHub account suspended).
 
 Operator goal: easy to maintain, same product, **easy to roll back** if the new units fail to compile or the listener misbehaves.
 
@@ -39,9 +39,10 @@ CLI/JSONL intended unchanged: `--get-time` / `--set-time`, `device_time_read` / 
 | Mocha time-sync + biometric | Proven | 37 passing |
 | Python `test_probe.py` | Proven | 17/17 |
 | Header vs other-TU call sites | Static match | audit 2026-08-19; defaults only on `runtime.hpp` |
-| Linux `g++` + HCNetSDK link | **Not run** | SDK not on Windows host |
-| VM listener serving this SHA | **Not proven** | `10.184.37.19` unreachable this pass |
-| Live panel time / callback | **Not proven** | needs that binary |
+| Linux `g++` + HCNetSDK link | **Passed** (scratch dir) | `/tmp/hikvision-units-proof/build/hikvision-biometric-service` 2026-08-19 04:58 UTC |
+| VM listener serving this SHA | **No** | ELF + wrapper still **2026-08-13**; `/opt` still monolith |
+| GitOps updating `/opt` | **No** | `ansible-pull` 403 `Your account is suspended` |
+| Live panel time / callback | Still the **Aug 13** binary | process `ActiveEnterTimestamp=2026-08-13 06:59 UTC` |
 
 ## Soft fail (listener)
 

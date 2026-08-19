@@ -1,5 +1,12 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 deployed listener is stale
+
+- Operator: is it still working as intended, or is deployed being updated?
+- **Deployed is not updated.** Live listener ELF + wrapper are **2026-08-13** monolith. GitOps `ansible-pull` 403 (GitHub account suspended). Source SHA `a6fdd26a`.
+- **Scratch g++ of the new 10 units on the VM succeeded** (`/tmp/hikvision-units-proof/`). Running process was not replaced.
+- Handoff: `PROVEN_STALE_DEPLOY`.
+
 ## Latest Task Addendum - 2026-08-19 Hikvision C++ rollback docs
 
 - Operator: document the real-TU split so a failure is easy to roll back.

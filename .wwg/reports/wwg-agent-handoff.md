@@ -1,5 +1,19 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - Live VM: deployed listener is NOT the new units
+
+| Field | Value |
+|---|---|
+| Status | `PROVEN_STALE_DEPLOY` |
+| VM | `10.184.37.19` `project-truth-node` (LAN SSH 2026-08-19 04:54 UTC) |
+| Listener | `project-truth-hikvision-hot-reload-listener.service` **active** since **2026-08-13 06:59 UTC** |
+| Running ELF | `/home/infra/project-truth-hikvision-biometric-service/build/hikvision-biometric-service` dated **2026-08-13 06:59** |
+| Installed wrapper | `/usr/local/bin/project-truth-hikvision-hot-reload-listener` dated **2026-08-13 06:07** still keys on `hikvision_biometric_service.cpp` |
+| `/opt` + git source | still **monolith** `hikvision_biometric_service.cpp`; no `src/hikvision_bio/` |
+| Git source SHA | `/var/lib/project-truth/source` `a6fdd26a` (not `e1ddfba`) |
+| Why not updating | `ansible-pull` **failed**: GitHub `403` `Your account is suspended` on `https://github.com/hrisworkforcesystem-coder/bandai-infra.git` |
+| Scratch compile | **OK** — new 10 TUs linked at `/tmp/hikvision-units-proof/build/hikvision-biometric-service` 2026-08-19 04:58 UTC. **Did not replace** the running ELF. |
+
 ## 2026-08-19 - Hikvision C++ real units rollback docs
 
 | Field | Value |
