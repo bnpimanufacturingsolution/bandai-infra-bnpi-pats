@@ -31,6 +31,8 @@ describe("hikvision device time-sync contract", () => {
 			"utf8",
 		);
 		expect(serviceSource).to.contain("bool run_device_time_command");
+		expect(serviceSource).to.contain("GET /ISAPI/System/time?format=json");
+		expect(serviceSource).to.contain("PUT /ISAPI/System/time?format=json");
 		expect(serviceSource).to.contain("GET /ISAPI/System/time");
 		expect(serviceSource).to.contain("PUT /ISAPI/System/time");
 		expect(serviceSource).to.contain('arg == "--get-time"');

@@ -957,6 +957,46 @@ std::string xml_inner_tag(const std::string &xml, const char *tag) {
     return xml.substr(from, end - from);
 }
 
+std::string json_string_field(const std::string &json, const char *key) {
+    const std::string needle = std::string("\"") + key + "\"";
+    auto pos = json.find(needle);
+    if (pos == std::string::npos) {
+        return "";
+    }
+    pos = json.find(':', pos + needle.size());
+    if (pos == std::string::npos) {
+        return "";
+    }
+    pos = json.find('"', pos + 1);
+    if (pos == std::string::npos) {
+        return "";
+    }
+    const auto end = json.find('"', pos + 1);
+    if (end == std::string::npos) {
+        return "";
+    }
+    return json.substr(pos + 1, end - pos - 1);
+}
+
+void parse_time_payload(
+    const std::string &payload,
+    std::string *local_time,
+    std::string *time_mode,
+    std::string *time_zone) {
+    *local_time = xml_inner_tag(payload, "localTime");
+    *time_mode = xml_inner_tag(payload, "timeMode");
+    *time_zone = xml_inner_tag(payload, "timeZone");
+    if (local_time->empty()) {
+        *local_time = json_string_field(payload, "localTime");
+    }
+    if (time_mode->empty()) {
+        *time_mode = json_string_field(payload, "timeMode");
+    }
+    if (time_zone->empty()) {
+        *time_zone = json_string_field(payload, "timeZone");
+    }
+}
+
 bool run_device_time_command(
     DeviceSession &session,
     bool set_time,
@@ -964,10 +1004,15 @@ bool run_device_time_command(
     const std::string &local_time,
     const std::string &time_zone) {
     std::string before_xml;
-    const bool read_ok = stdxml_json_request(session, "GET /ISAPI/System/time", "", &before_xml);
-    const std::string before_local = xml_inner_tag(before_xml, "localTime");
-    const std::string before_mode = xml_inner_tag(before_xml, "timeMode");
-    const std::string before_zone = xml_inner_tag(before_xml, "timeZone");
+    bool read_ok = stdxml_json_request(session, "GET /ISAPI/System/time?format=json", "", &before_xml);
+    std::string before_local;
+    std::string before_mode;
+    std::string before_zone;
+    parse_time_payload(before_xml, &before_local, &before_mode, &before_zone);
+    if (!read_ok || before_local.empty()) {
+        read_ok = stdxml_json_request(session, "GET /ISAPI/System/time", "", &before_xml) || read_ok;
+        parse_time_payload(before_xml, &before_local, &before_mode, &before_zone);
+    }
     emit_json({
         {"event", "device_time_read"},
         {"ok", read_ok && !before_local.empty() ? "true" : "false"},
@@ -1002,24 +1047,41 @@ bool run_device_time_command(
         return false;
     }
     const std::string zone = time_zone.empty() ? "CST-8:00:00" : time_zone;
-    std::ostringstream body;
-    body << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-         << "<Time version=\"2.0\" xmlns=\"http://www.isapi.org/ver20/XMLSchema\">"
-         << "<timeMode>manual</timeMode>"
-         << "<localTime>" << local_time << "</localTime>"
-         << "<timeZone>" << zone << "</timeZone>"
-         << "</Time>";
+    std::ostringstream json_body;
+    json_body << "{\"Time\":{"
+              << "\"timeMode\":\"manual\","
+              << "\"localTime\":\"" << local_time << "\","
+              << "\"timeZone\":\"" << zone << "\"}}";
+    std::ostringstream xml_body;
+    xml_body << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+             << "<Time version=\"2.0\" xmlns=\"http://www.isapi.org/ver20/XMLSchema\">"
+             << "<timeMode>manual</timeMode>"
+             << "<localTime>" << local_time << "</localTime>"
+             << "<timeZone>" << zone << "</timeZone>"
+             << "</Time>";
     std::string put_xml;
-    const bool put_ok = stdxml_json_request(
+    bool put_ok = stdxml_json_request(
         session,
-        "PUT /ISAPI/System/time",
-        body.str(),
+        "PUT /ISAPI/System/time?format=json",
+        json_body.str(),
         &put_xml);
+    if (!put_ok) {
+        put_ok = stdxml_json_request(
+            session,
+            "PUT /ISAPI/System/time",
+            xml_body.str(),
+            &put_xml);
+    }
     std::string after_xml;
-    const bool after_ok = stdxml_json_request(session, "GET /ISAPI/System/time", "", &after_xml);
-    const std::string after_local = xml_inner_tag(after_xml, "localTime");
-    const std::string after_mode = xml_inner_tag(after_xml, "timeMode");
-    const std::string after_zone = xml_inner_tag(after_xml, "timeZone");
+    bool after_ok = stdxml_json_request(session, "GET /ISAPI/System/time?format=json", "", &after_xml);
+    std::string after_local;
+    std::string after_mode;
+    std::string after_zone;
+    parse_time_payload(after_xml, &after_local, &after_mode, &after_zone);
+    if (!after_ok || after_local.empty()) {
+        after_ok = stdxml_json_request(session, "GET /ISAPI/System/time", "", &after_xml) || after_ok;
+        parse_time_payload(after_xml, &after_local, &after_mode, &after_zone);
+    }
     const bool wrote = put_ok && after_ok && !after_local.empty();
     emit_json({
         {"event", "device_time_write"},
