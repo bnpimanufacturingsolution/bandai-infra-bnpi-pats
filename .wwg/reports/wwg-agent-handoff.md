@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - Local attendance request missing on public DEV
+
+| Field | Value |
+|---|---|
+| Symptom | Local Vite showed **Request time** / attendance request. `https://dev.bnpi-hris.tech` did not. |
+| Cause | DEV GitOps serves `develop`. Feature lived on `bryan-task` `3bad2d1`. Merging `develop` into `bryan-task` does not deploy it. Layout CSS was uncommitted. |
+| Proof | Argo `project-truth-dev` Synced `b409ca4`. `origin/develop` had no `AttendanceAdjustmentRequestModal` / `Request time`. Live HTML `NO_REQUEST_TIME_IN_HTML`. |
+| Fix | Cherry-pick `3bad2d1` onto `develop` (kept `hris-emp-app`). Added Today-left/log-right CSS. Tests: API 30, app 26. |
+| Commits | `af8d585` latest; `a2dc057` layout. Push `develop` then wait GitOps image roll. |
+
 ## 2026-08-19 - ansible-pull fixed (suspended GitHub user)
 
 | Field | Value |
