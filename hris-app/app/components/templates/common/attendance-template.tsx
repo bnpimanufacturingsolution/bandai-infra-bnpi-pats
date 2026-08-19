@@ -1071,9 +1071,9 @@ export default function AttendanceTemplate({
 				/>
 			)}
 
-			<div className="grid gap-5 lg:grid-cols-[minmax(360px,420px)_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)]">
-				{/* Left Column: Current period attendance (cards, no DataTable) */}
-				<div className="space-y-4 lg:order-2">
+			<div className="attendance-period-layout">
+				{/* Attendance log: second on mobile, right column on desktop */}
+				<div className="attendance-period-log space-y-4">
 					<div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
 						<div className="min-w-0">
 							<h2 className="text-sm font-semibold text-gray-950">{recordsTitle}</h2>
@@ -1469,7 +1469,7 @@ export default function AttendanceTemplate({
 				</div>
 
 				{/* Active attendance and period context */}
-				<div className="flex flex-col gap-5 lg:order-1">
+				<div className="attendance-period-today">
 					{/* Current period summary */}
 					<div className="order-2 rounded-md border border-gray-200 bg-white p-4">
 						<div className="mb-4 flex items-center justify-between gap-3">
