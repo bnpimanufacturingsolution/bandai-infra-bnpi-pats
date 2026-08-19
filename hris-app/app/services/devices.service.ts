@@ -176,6 +176,8 @@ export type HikvisionDeviceTimeSyncResponse = {
 	};
 	after: HikvisionDeviceTimeSnapshot | null;
 	putFormat?: "json" | "xml";
+	transport?: "sdk_stdxml" | "isapi_http";
+	sdkError?: string | null;
 };
 
 export interface DeviceHealthResponse {

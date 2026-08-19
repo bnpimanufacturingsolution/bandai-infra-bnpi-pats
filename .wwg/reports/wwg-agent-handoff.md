@@ -2,10 +2,11 @@
 
 ## 2026-08-19 - HRIS Hikvision Update time button
 
-- Status: `IMPLEMENTED_DOCUMENTED`. Preview-first. No live PUT this pass.
-- API: `POST /api/device/:id/time-sync` (`execute=false` default). Execute PUTs manual Manila `CST-8:00:00`.
-- UI: device console **Preview time** → confirm → **Update time**. Hikvision only. Not NTP.
-- Tests: mocha helper+contract 6 green; vitest `device-time-sync-ui-contract` 1 green.
+- Status: `IMPLEMENTED_SDK_FIRST`. Preview-first. Check+write prefer HCNetSDK STDXML.
+- C++: `--get-time` / `--set-time` via `NET_DVR_STDXMLConfig` GET/PUT `/ISAPI/System/time`.
+- HRIS: `runHikvisionDeviceTimeOnVm`; ISAPI HTTP fallback. Response `transport`.
+- UI shows SDK vs ISAPI path. Not NTP. VM listener must rebuild this C++ for SDK path.
+- Tests: mocha 7 green; vitest time-sync UI 1.
 
 ## 2026-08-19 - Hikvision biometric clock / Manila fleet sync research
 

@@ -4,7 +4,7 @@ Last updated: 2026-08-19
 
 ## 2026-08-19 Hikvision biometric clock / Manila
 
-- Devices can set time (panel / web / iVMS / ISAPI PUT / NTP). HRIS now has preview-then-PUT `POST /api/device/:id/time-sync` (manual Manila). Wire TZ `CST-8:00:00` = UTC+8, no DST.
+- Devices can set time (panel / web / iVMS / ISAPI PUT / NTP). HRIS Preview/Update time prefers HCNetSDK STDXML, ISAPI HTTP fallback. Wire TZ `CST-8:00:00` = UTC+8, no DST.
 - Last proven `timeMode=manual`. Attendance uses device punch time. Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`.
 
 ## 2026-08-19 EmployeePayroll.hourlySalary snapshot

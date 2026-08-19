@@ -753,6 +753,19 @@ function DeviceConsolePage({
 							<dt className="text-slate-600">Write Manila time</dt>
 							<dd className="font-mono text-slate-950">{timeSyncResult?.manilaTime || "—"}</dd>
 						</div>
+						<div className="flex items-start justify-between gap-3 px-3 py-2">
+							<dt className="text-slate-600">Check path</dt>
+							<dd className="text-right text-slate-950">
+								{timeSyncResult?.transport === "sdk_stdxml"
+									? "SDK (HCNetSDK STDXML)"
+									: timeSyncResult?.transport === "isapi_http"
+										? "ISAPI HTTP fallback"
+										: "Not checked"}
+								{timeSyncResult?.sdkError ? (
+									<div className="mt-1 text-xs text-amber-700">{timeSyncResult.sdkError}</div>
+								) : null}
+							</dd>
+						</div>
 						{timeSyncResult?.after ? (
 							<div className="flex items-start justify-between gap-3 px-3 py-2">
 								<dt className="text-slate-600">After write</dt>

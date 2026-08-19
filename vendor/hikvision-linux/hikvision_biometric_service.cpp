@@ -942,6 +942,101 @@ bool stdxml_json_request(DeviceSession &session, const std::string &method_and_p
     return ok == TRUE;
 }
 
+std::string xml_inner_tag(const std::string &xml, const char *tag) {
+    const std::string open = std::string("<") + tag + ">";
+    const std::string close = std::string("</") + tag + ">";
+    const auto start = xml.find(open);
+    if (start == std::string::npos) {
+        return "";
+    }
+    const auto from = start + open.size();
+    const auto end = xml.find(close, from);
+    if (end == std::string::npos) {
+        return "";
+    }
+    return xml.substr(from, end - from);
+}
+
+bool run_device_time_command(
+    DeviceSession &session,
+    bool set_time,
+    bool execute,
+    const std::string &local_time,
+    const std::string &time_zone) {
+    std::string before_xml;
+    const bool read_ok = stdxml_json_request(session, "GET /ISAPI/System/time", "", &before_xml);
+    const std::string before_local = xml_inner_tag(before_xml, "localTime");
+    const std::string before_mode = xml_inner_tag(before_xml, "timeMode");
+    const std::string before_zone = xml_inner_tag(before_xml, "timeZone");
+    emit_json({
+        {"event", "device_time_read"},
+        {"ok", read_ok && !before_local.empty() ? "true" : "false"},
+        {"deviceId", session.config.hris_device_id},
+        {"host", session.config.host},
+        {"sdkPort", std::to_string(session.config.sdk_port)},
+        {"localTime", before_local},
+        {"timeMode", before_mode},
+        {"timeZone", before_zone},
+        {"transport", "sdk_stdxml"},
+        {"sdkLastError", std::to_string(NET_DVR_GetLastError())}
+    });
+    if (!set_time || !execute) {
+        emit_json({
+            {"event", "device_time_preview"},
+            {"ok", read_ok ? "true" : "false"},
+            {"deviceId", session.config.hris_device_id},
+            {"plannedLocalTime", local_time},
+            {"plannedTimeZone", time_zone.empty() ? "CST-8:00:00" : time_zone},
+            {"plannedTimeMode", "manual"},
+            {"transport", "sdk_stdxml"}
+        });
+        return read_ok && !before_local.empty();
+    }
+    if (local_time.empty()) {
+        emit_json({
+            {"event", "device_time_write"},
+            {"ok", "false"},
+            {"deviceId", session.config.hris_device_id},
+            {"reason", "local_time_required"}
+        });
+        return false;
+    }
+    const std::string zone = time_zone.empty() ? "CST-8:00:00" : time_zone;
+    std::ostringstream body;
+    body << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+         << "<Time version=\"2.0\" xmlns=\"http://www.isapi.org/ver20/XMLSchema\">"
+         << "<timeMode>manual</timeMode>"
+         << "<localTime>" << local_time << "</localTime>"
+         << "<timeZone>" << zone << "</timeZone>"
+         << "</Time>";
+    std::string put_xml;
+    const bool put_ok = stdxml_json_request(
+        session,
+        "PUT /ISAPI/System/time",
+        body.str(),
+        &put_xml);
+    std::string after_xml;
+    const bool after_ok = stdxml_json_request(session, "GET /ISAPI/System/time", "", &after_xml);
+    const std::string after_local = xml_inner_tag(after_xml, "localTime");
+    const std::string after_mode = xml_inner_tag(after_xml, "timeMode");
+    const std::string after_zone = xml_inner_tag(after_xml, "timeZone");
+    const bool wrote = put_ok && after_ok && !after_local.empty();
+    emit_json({
+        {"event", "device_time_write"},
+        {"ok", wrote ? "true" : "false"},
+        {"deviceId", session.config.hris_device_id},
+        {"host", session.config.host},
+        {"localTime", after_local},
+        {"timeMode", after_mode},
+        {"timeZone", after_zone},
+        {"plannedLocalTime", local_time},
+        {"transport", "sdk_stdxml"},
+        {"putOk", put_ok ? "true" : "false"},
+        {"sdkLastError", std::to_string(NET_DVR_GetLastError())}
+    });
+    return wrote;
+}
+
 std::string build_hikvision_callback_json(const ReconcileJob &job) {
     const std::string identity_source =
         !job.identity_source.empty()
@@ -5662,7 +5757,8 @@ void usage(const char *program) {
         << "[--export-biometric-employee-no employeeNo] [--export-biometric-source-device-id id] "
         << "[--export-biometric-no-fingerprints] [--export-biometric-no-face] "
         << "[--delete-face-device-id id] [--delete-face-employee-no employeeNo] "
-        << "[--stored-face-payload-file mode-0600-json]\n";
+        << "[--stored-face-payload-file mode-0600-json] "
+        << "[--get-time] [--set-time] [--time-device-id id] [--local-time ISO] [--time-zone CST-8:00:00]\n";
 }
 
 }  // namespace
@@ -5696,6 +5792,11 @@ int main(int argc, char **argv) {
     std::string delete_face_device_id;
     std::string delete_face_employee_no;
     std::string stored_face_payload_file;
+    bool get_time_mode = false;
+    bool set_time_mode = false;
+    std::string time_device_id;
+    std::string set_local_time;
+    std::string set_time_zone;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -5800,6 +5901,16 @@ int main(int argc, char **argv) {
             if (!next(&delete_face_employee_no)) return 2;
         } else if (arg == "--stored-face-payload-file") {
             if (!next(&stored_face_payload_file)) return 2;
+        } else if (arg == "--get-time") {
+            get_time_mode = true;
+        } else if (arg == "--set-time") {
+            set_time_mode = true;
+        } else if (arg == "--time-device-id") {
+            if (!next(&time_device_id)) return 2;
+        } else if (arg == "--local-time") {
+            if (!next(&set_local_time)) return 2;
+        } else if (arg == "--time-zone") {
+            if (!next(&set_time_zone)) return 2;
         } else if (arg == "--min-sdk-time") {
             if (!next(&min_sdk_time)) return 2;
         } else if (arg == "--execute") {
@@ -5873,12 +5984,14 @@ int main(int argc, char **argv) {
     const bool delete_face_mode =
         delete_face_device_arg_present && delete_face_employee_arg_present;
     const bool stored_face_write_mode = !stored_face_payload_file.empty();
+    const bool device_time_mode = get_time_mode || set_time_mode;
     const bool manual_reconcile_queue_mode =
         !manual_full_mirror_source_device_id.empty() && !manual_fingerprint_clone_mode;
     const bool manual_reconcile_mode =
         manual_reconcile_queue_mode || !manual_employee_no.empty() || manual_fingerprint_clone_mode ||
         manual_fingerprint_capture_mode || manual_face_capture_mode || manual_face_mirror_mode ||
-        manual_biometric_export_mode || delete_face_mode || stored_face_write_mode;
+        manual_biometric_export_mode || delete_face_mode || stored_face_write_mode ||
+        device_time_mode;
 
     if (configs.empty()) {
         usage(argv[0]);
@@ -5910,7 +6023,11 @@ int main(int argc, char **argv) {
         !mirror_face_employee_no.empty() ||
         !mirror_face_source_device_id.empty() ||
         !export_biometric_employee_no.empty() ||
-        !export_biometric_source_device_id.empty();
+        !export_biometric_source_device_id.empty() ||
+        get_time_mode ||
+        set_time_mode ||
+        !time_device_id.empty() ||
+        !set_local_time.empty();
     if (delete_face_mode &&
         (configs.size() != 1 ||
          configs.front().hris_device_id != delete_face_device_id)) {
@@ -6157,6 +6274,41 @@ int main(int argc, char **argv) {
         NET_DVR_Cleanup();
         emit_json({{"event", "sdk_cleanup"}, {"ok", "true"}});
         return ok ? 0 : 1;
+    }
+
+    if (device_time_mode) {
+        DeviceSession *time_session = nullptr;
+        for (auto &session : sessions) {
+            if (time_device_id.empty() || session.config.hris_device_id == time_device_id) {
+                time_session = &session;
+                if (!time_device_id.empty()) {
+                    break;
+                }
+            }
+        }
+        int time_rc = 1;
+        if (time_session == nullptr) {
+            emit_json({
+                {"event", "device_time_failed"},
+                {"ok", "false"},
+                {"reason", "device_not_armed"},
+                {"deviceId", time_device_id},
+                {"transport", "sdk_stdxml"}
+            });
+        } else {
+            time_rc = run_device_time_command(
+                *time_session,
+                set_time_mode,
+                execute_mode,
+                set_local_time,
+                set_time_zone)
+                ? 0
+                : 1;
+        }
+        close_sessions();
+        NET_DVR_Cleanup();
+        emit_json({{"event", "sdk_cleanup"}, {"ok", "true"}});
+        return time_rc;
     }
 
     // Start worker threads after the initial session list is stable. SDK callbacks

@@ -4,7 +4,7 @@
 
 - Status: `CONFIRMED_CODE_AND_VENDOR`; live 2026-08-19 GET is `NEEDS_CONFIRMATION`.
 - Punch Time In/Out uses **device event time**, not HRIS `receivedAt`. Naive SDK stamps are treated as `Asia/Manila` (`+08:00`). Clocks that differ across terminals break pairing.
-- HRIS **reads** `GET /ISAPI/System/time` (health, skew, `check-hikvision-device-clock`). Admin device console can **preview then PUT** a one-shot Manila manual time via `POST /api/device/:id/time-sync`. That is Time Settings manual sync, **not** NTP enable.
+- Admin device console **Preview time / Update time** uses `POST /api/device/:id/time-sync`. Check and write prefer **HCNetSDK STDXML** (`NET_DVR_STDXMLConfig` GET/PUT `/ISAPI/System/time` on the VM listener binary). ISAPI HTTP is fallback if SDK cannot arm. That is Time Settings **manual** sync, **not** NTP. Health still GETs ISAPI for reachability.
 - Vendor MinMoe / DS-K1T **can** set time: panel Time Settings, web Manual or NTP, Hik-Connect, iVMS Batch Time Sync, ISAPI `PUT /ISAPI/System/time`, `PUT /ISAPI/System/time/ntpServers`.
 - Manila on the device is POSIX **`CST-8:00:00`** (UTC+8), DST **off**, `localTime` with `+08:00`. Not IANA `Asia/Manila`. US Central “CST” is a different offset.
 - Surviving BNPI Time XML (2026-07-01 through 2026-08-17): `timeMode=manual`, `timeZone=CST-8:00:00`. Offset is already Manila; mode is not fleet NTP. Inter-device drift of tens of seconds was recorded (Main D ~40s ahead of B/E on 2026-08-17).

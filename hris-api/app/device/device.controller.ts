@@ -2652,6 +2652,95 @@ export const controller = (prisma: PrismaClient) => {
 		return localPath;
 	};
 
+	const runHikvisionDeviceTimeOnVm = async (params: {
+		device: any;
+		execute: boolean;
+		localTime?: string;
+		timeZone?: string;
+	}) => {
+		const deviceId = String(params.device?.id || "").trim();
+		if (!deviceId) throw new Error("Device ID is required for SDK time sync");
+		await preflightHikvisionManualCopyEndpoint(params.device, "source", "time-sync");
+		const localSpecPath = path.join(
+			os.tmpdir(),
+			`project-truth-hikvision-time-${Date.now()}-${Math.random().toString(16).slice(2)}.spec`,
+		);
+		const remoteSpecPath = `/tmp/project-truth-hikvision-time-${Date.now()}.spec`;
+		fsSync.writeFileSync(
+			localSpecPath,
+			`${buildHikvisionManualCopySpecLine(params.device)}\n`,
+			{ mode: 0o600 },
+		);
+		try {
+			const copied = await runHikvisionListenerVmCopy(localSpecPath, remoteSpecPath, 12_000);
+			if (copied.exitCode !== 0) {
+				throw new Error(
+					copied.stderr.trim() ||
+						copied.stdout.trim() ||
+						"Failed to copy Hikvision time spec to the VM",
+				);
+			}
+			const result = await runHikvisionListenerVmCommand(
+				[
+					"sudo",
+					"timeout",
+					"-k",
+					"5s",
+					"40s",
+					"env",
+					"HIKVISION_ALLOW_STATIC_DEVICE_SPEC=1",
+					"HIKVISION_SKIP_SPOOL_REPLAY=1",
+					`HIKVISION_DEVICE_SPEC_OVERRIDE=${remoteSpecPath}`,
+					"HIKVISION_RUN_SECONDS=1",
+					HIKVISION_VM_WRAPPER_REMOTE_PATH,
+					"--run-once",
+					params.execute ? "--execute" : "--dry-run",
+					params.execute ? "--set-time" : "--get-time",
+					"--time-device-id",
+					deviceId,
+					...(params.localTime ? ["--local-time", params.localTime] : []),
+					...(params.timeZone ? ["--time-zone", params.timeZone] : []),
+				],
+				50_000,
+			);
+			const events = parseJsonLines(result.stdout);
+			const readEvent = [...events]
+				.reverse()
+				.find((event) => event?.event === "device_time_read");
+			const writeEvent = [...events]
+				.reverse()
+				.find((event) => event?.event === "device_time_write");
+			const failed = [...events]
+				.reverse()
+				.find((event) => event?.event === "device_time_failed");
+			if (failed && !readEvent) {
+				throw new Error(
+					String(failed.reason || "SDK time command failed to arm the device"),
+				);
+			}
+			if (!readEvent) {
+				throw new Error(
+					result.stderr.trim() ||
+						result.stdout.trim() ||
+						"SDK time command returned no device_time_read event",
+				);
+			}
+			return {
+				transport: "sdk_stdxml" as const,
+				exitCode: result.exitCode,
+				events,
+				read: readEvent,
+				write: writeEvent || null,
+			};
+		} finally {
+			try {
+				fsSync.unlinkSync(localSpecPath);
+			} catch {
+				/* ignore */
+			}
+		}
+	};
+
 	const preflightHikvisionManualCopyEndpoint = async (
 		device: any,
 		role: "source" | "target",
@@ -25539,11 +25628,13 @@ export const controller = (prisma: PrismaClient) => {
 				},
 				select: {
 					id: true,
+					organizationId: true,
 					name: true,
 					address: true,
 					port: true,
 					protocol: true,
 					config: true,
+					access: true,
 				},
 			});
 
@@ -25566,84 +25657,108 @@ export const controller = (prisma: PrismaClient) => {
 
 			const serverTime = new Date();
 			const manilaTime = formatHikvisionManilaLocalTime(serverTime);
-			let before;
-			try {
-				const read = await readHikvisionSystemTime(req, device.id);
-				before = {
-					...read.snapshot,
-					skewSeconds: hikvisionClockSkewSeconds(read.snapshot.localTime, serverTime),
-				};
-			} catch (error: any) {
-				res.status(502).json(
-					buildErrorResponse(
-						error?.data?.errorCause ||
-							error?.message ||
-							"Could not read Hikvision system time",
-						502,
-					),
-				);
-				return;
-			}
-
 			const plannedWrite = {
 				timeMode: HIKVISION_MANUAL_TIME_MODE,
 				localTime: manilaTime,
 				timeZone: HIKVISION_MANILA_TIME_ZONE,
 			};
+			let transport: "sdk_stdxml" | "isapi_http" = "sdk_stdxml";
+			let before;
+			let after = null;
+			let wrote = false;
+			let sdkError: string | null = null;
 
-			if (!execute) {
-				res.status(200).json(
-					buildSuccessResponse("Hikvision time update preview", {
-						execute: false,
-						wrote: false,
+			try {
+				const sdk = await runHikvisionDeviceTimeOnVm({
+					device,
+					execute,
+					localTime: manilaTime,
+					timeZone: HIKVISION_MANILA_TIME_ZONE,
+				});
+				transport = "sdk_stdxml";
+				before = {
+					localTime: String(sdk.read.localTime || "").trim() || null,
+					timeMode: String(sdk.read.timeMode || "").trim() || null,
+					timeZone: String(sdk.read.timeZone || "").trim() || null,
+					skewSeconds: hikvisionClockSkewSeconds(
+						String(sdk.read.localTime || "").trim() || null,
+						serverTime,
+					),
+				};
+				if (execute) {
+					after = {
+						localTime: String(sdk.write?.localTime || "").trim() || null,
+						timeMode: String(sdk.write?.timeMode || "").trim() || null,
+						timeZone: String(sdk.write?.timeZone || "").trim() || null,
+						skewSeconds: hikvisionClockSkewSeconds(
+							String(sdk.write?.localTime || "").trim() || null,
+							new Date(),
+						),
+					};
+					wrote = String(sdk.write?.ok || "").toLowerCase() === "true";
+				}
+			} catch (error: any) {
+				sdkError = error?.message || "SDK time command failed";
+				try {
+					const read = await readHikvisionSystemTime(req, device.id);
+					transport = "isapi_http";
+					before = {
+						...read.snapshot,
+						skewSeconds: hikvisionClockSkewSeconds(read.snapshot.localTime, serverTime),
+					};
+					if (execute) {
+						const putResult = await writeHikvisionSystemTime(req, device.id, manilaTime);
+						const afterRead = await readHikvisionSystemTime(req, device.id);
+						after = {
+							...afterRead.snapshot,
+							skewSeconds: hikvisionClockSkewSeconds(afterRead.snapshot.localTime, new Date()),
+						};
+						wrote =
+							hikvisionTimePutSucceeded(putResult.put) || after.localTime === manilaTime;
+					}
+				} catch (isapiError: any) {
+					res.status(502).json(
+						buildErrorResponse(
+							isapiError?.data?.errorCause ||
+								isapiError?.message ||
+								sdkError ||
+								"Could not read or write Hikvision system time",
+							502,
+						),
+					);
+					return;
+				}
+			}
+
+			if (execute) {
+				logActivity(req, {
+					userId: String((req as any).userId || (req as any).user?.id || "unknown"),
+					action: "HIKVISION_TIME_SYNC",
+					description: `Updated Hikvision time on ${device.name} to ${manilaTime} via ${transport}`,
+					page: { url: req.originalUrl, title: "Device time" },
+				}).catch(() => undefined);
+			}
+
+			res.status(execute && !wrote ? 207 : 200).json(
+				buildSuccessResponse(
+					execute
+						? wrote
+							? "Hikvision time updated"
+							: "Hikvision time write returned an unclear status"
+						: "Hikvision time update preview",
+					{
+						execute,
+						wrote,
 						device: { id: device.id, name: device.name },
 						serverTime: serverTime.toISOString(),
 						manilaTime,
 						before,
 						plannedWrite,
-						after: null,
-					}),
-				);
-				return;
-			}
-
-			let putResult;
-			try {
-				putResult = await writeHikvisionSystemTime(req, device.id, manilaTime);
-			} catch (error: any) {
-				res.status(502).json(
-					buildErrorResponse(error?.message || "Hikvision time PUT failed", 502),
-				);
-				return;
-			}
-
-			const afterRead = await readHikvisionSystemTime(req, device.id);
-			const afterServerTime = new Date();
-			const after = {
-				...afterRead.snapshot,
-				skewSeconds: hikvisionClockSkewSeconds(afterRead.snapshot.localTime, afterServerTime),
-			};
-			const putOk = hikvisionTimePutSucceeded(putResult.put) || after.localTime === manilaTime;
-
-			logActivity(req, {
-				userId: String((req as any).userId || (req as any).user?.id || "unknown"),
-				action: "HIKVISION_TIME_SYNC",
-				description: `Updated Hikvision time on ${device.name} to ${manilaTime}`,
-				page: { url: req.originalUrl, title: "Device time" },
-			}).catch(() => undefined);
-
-			res.status(putOk ? 200 : 207).json(
-				buildSuccessResponse(putOk ? "Hikvision time updated" : "Hikvision time PUT returned an unclear status", {
-					execute: true,
-					wrote: putOk,
-					device: { id: device.id, name: device.name },
-					serverTime: serverTime.toISOString(),
-					manilaTime,
-					before,
-					plannedWrite,
-					after,
-					putFormat: putResult.format,
-				}),
+						after,
+						transport,
+						sdkError,
+					},
+				),
 			);
 		} catch (error: any) {
 			res.status(500).json(

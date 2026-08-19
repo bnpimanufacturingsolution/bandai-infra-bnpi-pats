@@ -44,6 +44,12 @@ python -m hikvision_linux_probe --mode isapi-time
 The probe calls `GET /ISAPI/System/time`. It does not write users, change
 device configuration, clear logs, restart the device, or post HRIS events.
 
+HRIS device-console **Preview time / Update time** uses this binary over
+HCNetSDK `NET_DVR_STDXMLConfig`: `--get-time` (read) and `--set-time --local-time
+<ISO+08:00> --execute` (write). That is SDK login on port 8000, not a host HTTP
+PUT from Windows. Rebuild/restart the hot-reload listener after this source
+changes.
+
 To query recent ACS event history directly from the device:
 
 ```bash

@@ -2,11 +2,12 @@
 
 ## Latest Task Addendum - 2026-08-19 HRIS Hikvision Update time button
 
-- Operator: add an HRIS button that does the Hikvision time update (Manila).
-- API: `POST /api/device/:id/time-sync` default `execute=false` (GET clock + planned Manila write). `execute=true` PUTs `timeMode=manual`, `timeZone=CST-8:00:00`, `localTime=+08:00` then re-GETs.
-- UI: device console Manual Operations → **Preview time** → confirm modal → **Update time**. Hikvision only. Does not enable NTP.
-- Tests: helper 5 + contract 1 mocha green; UI contract asserts button + hook + time-sync path.
-- Boundary: no live PUT this pass unless operator confirms on a named device after preview.
+- Operator: add an HRIS button that does the Hikvision time update (Manila). Then: do not stop; check/update must use SDK.
+- Check + update now go through **HCNetSDK STDXML** first: C++ `--get-time` / `--set-time` via `NET_DVR_STDXMLConfig` GET/PUT `/ISAPI/System/time` (same SDK session as FP/face).
+- HRIS: `runHikvisionDeviceTimeOnVm` then ISAPI HTTP fallback if VM SDK command cannot arm.
+- API: `POST /api/device/:id/time-sync` (`execute=false` default). Response `transport=sdk_stdxml|isapi_http`.
+- UI: Preview time → confirm Update time. Modal shows check path.
+- Does not enable NTP. Listener binary on the VM must rebuild from this C++ before SDK path is live.
 
 ## Latest Task Addendum - 2026-08-19 Hikvision bio time / Manila sync research
 

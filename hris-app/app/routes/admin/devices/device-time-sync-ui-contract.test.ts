@@ -24,5 +24,7 @@ describe("admin Hikvision time-sync UI contract", () => {
 		expect(deviceController).toContain("syncHikvisionDeviceTime");
 		expect(deviceController).toContain("execute === true");
 		expect(deviceController).toContain("HIKVISION_MANILA_TIME_ZONE");
+		expect(deviceController).toContain("runHikvisionDeviceTimeOnVm");
+		expect(manage).toContain("SDK (HCNetSDK STDXML)");
 	});
 });
