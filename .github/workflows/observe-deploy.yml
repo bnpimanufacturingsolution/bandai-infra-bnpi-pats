@@ -66,7 +66,7 @@ jobs:
             fi
             state="none"
             saw_failure=""
-            while read -r id; do
+            for id in $ids; do
               [ -z "$id" ] && continue
               this="$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq 'if any(.state=="success") then "success" elif any(.state=="failure") then "failure" elif any(.state=="error") then "error" else (.[0].state // "none") end')"
               echo "deployment=${id} state=${this} sha=${SHA}"
@@ -79,9 +79,7 @@ jobs:
               if [ "$this" = "failure" ] || [ "$this" = "error" ]; then
                 saw_failure="$this"
               fi
-            done <<EOF
-${ids}
-EOF
+            done
             if [ -n "$saw_failure" ]; then
               echo "| VM report | ${saw_failure} |" >> "$GITHUB_STEP_SUMMARY"
               echo "VM reported ${saw_failure} for ${SHA}" >&2
