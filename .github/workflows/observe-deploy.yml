@@ -37,7 +37,7 @@ jobs:
 
           existing_id="$(gh api "repos/${REPO}/deployments?sha=${SHA}&environment=${ENVIRONMENT}&per_page=10" --jq '.[0].id // empty')"
           if [ -n "$existing_id" ]; then
-            state="$(gh api "repos/${REPO}/deployments/${existing_id}/statuses" --jq '.[0].state // "none"')"
+            state="$(gh api "repos/${REPO}/deployments/${existing_id}/statuses" --jq 'if any(.state=="success") then "success" else (.[0].state // "none") end')"
             echo "| existing deployment | ${existing_id} (${state}) |" >> "$GITHUB_STEP_SUMMARY"
             echo "id=${existing_id}" >> "$GITHUB_OUTPUT"
             echo "already=${state}" >> "$GITHUB_OUTPUT"
@@ -60,20 +60,33 @@ jobs:
           deadline=$((SECONDS + 600))
           state="${{ steps.deploy.outputs.already }}"
           while [ "$SECONDS" -lt "$deadline" ]; do
-            state="$(gh api "repos/${REPO}/deployments/${deploy_id}/statuses" --jq '.[0].state // "none"')"
-            echo "deployment=${deploy_id} state=${state} sha=${SHA}"
-            case "$state" in
-              success)
-                echo "| VM report | success |" >> "$GITHUB_STEP_SUMMARY"
-                echo "VM ansible-pull reported success for ${SHA}"
+            ids="$(gh api "repos/${REPO}/deployments?sha=${SHA}&environment=${ENVIRONMENT}&per_page=10" --jq '.[].id')"
+            if [ -z "$ids" ]; then
+              ids="$deploy_id"
+            fi
+            state="none"
+            saw_failure=""
+            while read -r id; do
+              [ -z "$id" ] && continue
+              this="$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq 'if any(.state=="success") then "success" elif any(.state=="failure") then "failure" elif any(.state=="error") then "error" else (.[0].state // "none") end')"
+              echo "deployment=${id} state=${this} sha=${SHA}"
+              if [ "$this" = "success" ]; then
+                echo "| VM report | success (deployment ${id}) |" >> "$GITHUB_STEP_SUMMARY"
+                echo "VM ansible-pull reported success for ${SHA} on deployment ${id}"
                 exit 0
-                ;;
-              failure|error)
-                echo "| VM report | ${state} |" >> "$GITHUB_STEP_SUMMARY"
-                echo "VM reported ${state} for ${SHA}" >&2
-                exit 1
-                ;;
-            esac
+              fi
+              state="$this"
+              if [ "$this" = "failure" ] || [ "$this" = "error" ]; then
+                saw_failure="$this"
+              fi
+            done <<EOF
+${ids}
+EOF
+            if [ -n "$saw_failure" ]; then
+              echo "| VM report | ${saw_failure} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "VM reported ${saw_failure} for ${SHA}" >&2
+              exit 1
+            fi
             sleep 20
           done
           echo "| VM report | timeout (still ${state}) |" >> "$GITHUB_STEP_SUMMARY"
