@@ -52,15 +52,20 @@ changes.
 
 ## Source layout
 
-| Path | Role |
-|---|---|
-| `include/hikvision_bio/types.hpp` | DeviceConfig / DeviceSession / ReconcileJob |
-| `include/hikvision_bio/common.hpp` | JSONL + `NET_DVR_STDXMLConfig` |
-| `include/hikvision_bio/device_time.hpp` | Manila clock GET/SET |
-| `src/hikvision_bio/common.cpp` | Shared SDK helpers |
-| `src/hikvision_bio/device_time.cpp` | `--get-time` / `--set-time` body |
-| `src/hikvision_bio/runtime_service.cpp` | Listener, identity, FP/face, peer copy, `main` |
-| `hikvision_biometric_service.cpp` | Marker only — do not add code |
+```text
+vendor/hikvision-linux/
+  include/hikvision_bio/     types, STDXML, time API
+  src/hikvision_bio/
+    common.cpp               shared JSONL + STDXML
+    time/device_time.cpp     --get-time / --set-time
+    acs/                     ACS classify + alarm callback
+    identity/                UserInfo / person resolve
+    biometric/               fingerprint + face templates
+    copy/                    peer copy
+    spool/                   HRIS post + replay
+    runtime/                 queues, login/arm, CLI helpers
+    main.cpp                 entry (includes folder modules)
+```
 
 Still one binary: `build/hikvision-biometric-service`. CLI and JSONL are unchanged.
 

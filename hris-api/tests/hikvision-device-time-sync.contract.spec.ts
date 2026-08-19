@@ -37,25 +37,32 @@ describe("hikvision device time-sync contract", () => {
 			"run_device_time_command",
 		);
 		expect(readFileSync(resolve(vendorRoot, "scripts/build-hikvision-biometric-service.sh"), "utf8")).to.contain(
-			"src/hikvision_bio/runtime_service.cpp",
+			"src/hikvision_bio/main.cpp",
 		);
-		expect(readFileSync(resolve(vendorRoot, "hikvision_biometric_service.cpp"), "utf8")).to.contain(
-			"Compatibility marker only",
+		expect(readFileSync(resolve(vendorRoot, "src/hikvision_bio/time/device_time.cpp"), "utf8")).to.contain(
+			"run_device_time_command",
+		);
+		expect(readFileSync(resolve(vendorRoot, "src/hikvision_bio/acs/listener.inc.cpp"), "utf8")).to.contain(
+			"alarm_callback",
 		);
 	});
 
 	it("adds HCNetSDK STDXML get/set time flags to the listener binary", () => {
 		const serviceSource = [
 			readFileSync(
-				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/device_time.cpp"),
+				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/time/device_time.cpp"),
 				"utf8",
 			),
 			readFileSync(
-				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/runtime_service.cpp"),
+				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/main.cpp"),
 				"utf8",
 			),
 			readFileSync(
 				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/common.cpp"),
+				"utf8",
+			),
+			readFileSync(
+				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/runtime/session.inc.cpp"),
 				"utf8",
 			),
 		].join("\n");

@@ -2,11 +2,9 @@
 
 ## Latest Task Addendum - 2026-08-19 Hikvision C++ include/src split
 
-- Operator: decouple the 6k listener file with proper folders. Not a product-breaking change: same binary, CLI, JSONL.
-- Layout: `include/hikvision_bio/{types,common,device_time}.hpp` + `src/hikvision_bio/{common,device_time,runtime_service}.cpp`.
-- `hikvision_biometric_service.cpp` is a marker only.
-- Build + hot-reload wrapper now sync the whole `include/` and `src/` trees (not one .cpp cmp).
-- runtime_service.cpp still holds listener/FP/face/copy. Time + STDXML are extracted.
+- Operator: folder layout was still two confusing files. Removed `hikvision_biometric_service.cpp` and `runtime_service.cpp`.
+- Layout: `include/hikvision_bio/` + `src/hikvision_bio/{common.cpp,main.cpp,time/,acs/,identity/,biometric/,copy/,spool/,runtime/}`.
+- One binary, same CLI/JSONL. Wrapper syncs whole include/src trees.
 
 ## Latest Task Addendum - 2026-08-19 HRIS Hikvision Update time button
 

@@ -13,6 +13,7 @@ COMMON_ARGS=(
   -I"$SDK_ROOT/incEn"
   -I"$SDK_ROOT/consoleDemo/include"
   -I"$PROJECT_DIR/include"
+  -I"$PROJECT_DIR/src/hikvision_bio"
 )
 
 COMMON_LINK_ARGS=(
@@ -23,8 +24,8 @@ COMMON_LINK_ARGS=(
 
 SOURCES=(
   "$PROJECT_DIR/src/hikvision_bio/common.cpp"
-  "$PROJECT_DIR/src/hikvision_bio/device_time.cpp"
-  "$PROJECT_DIR/src/hikvision_bio/runtime_service.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/time/device_time.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/main.cpp"
 )
 
 for source in "${SOURCES[@]}"; do

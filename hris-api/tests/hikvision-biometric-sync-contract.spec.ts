@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { describe, it } from "mocha";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 describe("Hikvision biometric sync contract", () => {
@@ -8,17 +8,21 @@ describe("Hikvision biometric sync contract", () => {
 		readFileSync(join(process.cwd(), "app/device/device.controller.ts"), "utf8");
 	const routerSource = () =>
 		readFileSync(join(process.cwd(), "app/device/device.router.ts"), "utf8");
-	const serviceSource = () =>
-		[
-			"../vendor/hikvision-linux/include/hikvision_bio/types.hpp",
-			"../vendor/hikvision-linux/include/hikvision_bio/common.hpp",
-			"../vendor/hikvision-linux/include/hikvision_bio/device_time.hpp",
-			"../vendor/hikvision-linux/src/hikvision_bio/common.cpp",
-			"../vendor/hikvision-linux/src/hikvision_bio/device_time.cpp",
-			"../vendor/hikvision-linux/src/hikvision_bio/runtime_service.cpp",
-		]
-			.map((relative) => readFileSync(join(process.cwd(), relative), "utf8"))
+	const serviceSource = () => {
+		const vendor = join(process.cwd(), "../vendor/hikvision-linux");
+		const collect = (dir, acc = []) => {
+			for (const name of readdirSync(dir)) {
+				const full = join(dir, name);
+				if (statSync(full).isDirectory()) collect(full, acc);
+				else if (/\.(cpp|hpp|inc\.cpp)$/.test(name)) acc.push(full);
+			}
+			return acc;
+		};
+		return collect(join(vendor, "include"))
+			.concat(collect(join(vendor, "src")))
+			.map((file) => readFileSync(file, "utf8"))
 			.join("\n");
+	};
 	const envelopeHelperSource = () =>
 		readFileSync(join(process.cwd(), "app/device/biometric-envelope.helper.ts"), "utf8");
 	const indexSource = () => readFileSync(join(process.cwd(), "index.ts"), "utf8");
