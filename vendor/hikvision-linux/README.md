@@ -50,6 +50,20 @@ HCNetSDK `NET_DVR_STDXMLConfig`: `--get-time` (read) and `--set-time --local-tim
 PUT from Windows. Rebuild/restart the hot-reload listener after this source
 changes.
 
+## Source layout
+
+| Path | Role |
+|---|---|
+| `include/hikvision_bio/types.hpp` | DeviceConfig / DeviceSession / ReconcileJob |
+| `include/hikvision_bio/common.hpp` | JSONL + `NET_DVR_STDXMLConfig` |
+| `include/hikvision_bio/device_time.hpp` | Manila clock GET/SET |
+| `src/hikvision_bio/common.cpp` | Shared SDK helpers |
+| `src/hikvision_bio/device_time.cpp` | `--get-time` / `--set-time` body |
+| `src/hikvision_bio/runtime_service.cpp` | Listener, identity, FP/face, peer copy, `main` |
+| `hikvision_biometric_service.cpp` | Marker only — do not add code |
+
+Still one binary: `build/hikvision-biometric-service`. CLI and JSONL are unchanged.
+
 To query recent ACS event history directly from the device:
 
 ```bash

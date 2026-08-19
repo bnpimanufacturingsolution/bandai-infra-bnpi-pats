@@ -1,5 +1,11 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - Hikvision C++ include/src folder split
+
+- Status: `IMPLEMENTED`. One binary. CLI/JSONL unchanged.
+- `include/hikvision_bio/` + `src/hikvision_bio/{common,device_time,runtime_service}.cpp`.
+- Wrapper syncs whole trees. Mocha biometric 34 + time-sync 3 green.
+
 ## 2026-08-19 - HRIS Hikvision Update time button
 
 - Status: `IMPLEMENTED_SDK_FIRST`. Preview-first. Check+write prefer HCNetSDK STDXML.

@@ -25,11 +25,40 @@ describe("hikvision device time-sync contract", () => {
 		expect(controllerSource).to.contain("sdk_stdxml");
 	});
 
-	it("adds HCNetSDK STDXML get/set time flags to the listener binary", () => {
-		const serviceSource = readFileSync(
-			resolve(currentDir, "../../vendor/hikvision-linux/hikvision_biometric_service.cpp"),
-			"utf8",
+	it("keeps Hikvision C++ sources in include/src folders", () => {
+		const vendorRoot = resolve(currentDir, "../../vendor/hikvision-linux");
+		expect(readFileSync(resolve(vendorRoot, "include/hikvision_bio/types.hpp"), "utf8")).to.contain(
+			"struct DeviceSession",
 		);
+		expect(readFileSync(resolve(vendorRoot, "include/hikvision_bio/common.hpp"), "utf8")).to.contain(
+			"stdxml_json_request",
+		);
+		expect(readFileSync(resolve(vendorRoot, "include/hikvision_bio/device_time.hpp"), "utf8")).to.contain(
+			"run_device_time_command",
+		);
+		expect(readFileSync(resolve(vendorRoot, "scripts/build-hikvision-biometric-service.sh"), "utf8")).to.contain(
+			"src/hikvision_bio/runtime_service.cpp",
+		);
+		expect(readFileSync(resolve(vendorRoot, "hikvision_biometric_service.cpp"), "utf8")).to.contain(
+			"Compatibility marker only",
+		);
+	});
+
+	it("adds HCNetSDK STDXML get/set time flags to the listener binary", () => {
+		const serviceSource = [
+			readFileSync(
+				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/device_time.cpp"),
+				"utf8",
+			),
+			readFileSync(
+				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/runtime_service.cpp"),
+				"utf8",
+			),
+			readFileSync(
+				resolve(currentDir, "../../vendor/hikvision-linux/src/hikvision_bio/common.cpp"),
+				"utf8",
+			),
+		].join("\n");
 		expect(serviceSource).to.contain("bool run_device_time_command");
 		expect(serviceSource).to.contain("GET /ISAPI/System/time?format=json");
 		expect(serviceSource).to.contain("PUT /ISAPI/System/time?format=json");

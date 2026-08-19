@@ -126,26 +126,53 @@ fi
 
 mkdir -p /run/project-truth /var/log/project-truth
 
+sync_hikvision_tree() {
+  local from="$1"
+  local to="$2"
+  if [[ ! -d "$from" ]]; then
+    echo "missing deployed Hikvision tree: $from" >&2
+    return 2
+  fi
+  if [[ ! -d "$to" ]] || ! diff -rq "$from" "$to" >/dev/null 2>&1; then
+    rm -rf "$to"
+    mkdir -p "$(dirname "$to")"
+    cp -a "$from" "$to"
+    return 1
+  fi
+  return 0
+}
+
 ensure_work_tree() {
   local build_script="$WORK/scripts/build-hikvision-biometric-service.sh"
-  local source_file="$WORK/hikvision_biometric_service.cpp"
   local binary="$WORK/build/hikvision-biometric-service"
   local deployed_build_script="$SOURCE_ROOT/scripts/build-hikvision-biometric-service.sh"
-  local deployed_source_file="$SOURCE_ROOT/hikvision_biometric_service.cpp"
+  local deployed_include="$SOURCE_ROOT/include"
+  local deployed_src="$SOURCE_ROOT/src"
   local rebuild_required=0
 
-  if [[ ! -f "$deployed_source_file" || ! -f "$deployed_build_script" ]]; then
-    echo "missing deployed Hikvision source or build script under $SOURCE_ROOT" >&2
+  if [[ ! -d "$deployed_include" || ! -d "$deployed_src" || ! -f "$deployed_build_script" ]]; then
+    echo "missing deployed Hikvision include/src/build script under $SOURCE_ROOT" >&2
     return 1
   fi
 
   mkdir -p "$WORK/scripts"
 
-  # Deployment tools preserve timestamps, so mtime ordering cannot prove that
-  # the long-lived work tree contains the deployed source. Compare content and
-  # force a rebuild whenever either input differs.
-  if [[ ! -f "$source_file" ]] || ! cmp --silent "$deployed_source_file" "$source_file"; then
-    cp "$deployed_source_file" "$source_file"
+  # Compare whole include/ and src/ trees. A single .cpp cmp would miss new
+  # hikvision_bio modules after the folder split.
+  sync_hikvision_tree "$deployed_include" "$WORK/include"
+  local include_rc=$?
+  if [[ "$include_rc" -eq 2 ]]; then
+    return 1
+  fi
+  if [[ "$include_rc" -eq 1 ]]; then
+    rebuild_required=1
+  fi
+  sync_hikvision_tree "$deployed_src" "$WORK/src"
+  local src_rc=$?
+  if [[ "$src_rc" -eq 2 ]]; then
+    return 1
+  fi
+  if [[ "$src_rc" -eq 1 ]]; then
     rebuild_required=1
   fi
 

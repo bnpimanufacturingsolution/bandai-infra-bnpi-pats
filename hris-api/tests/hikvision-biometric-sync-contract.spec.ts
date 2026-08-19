@@ -9,10 +9,16 @@ describe("Hikvision biometric sync contract", () => {
 	const routerSource = () =>
 		readFileSync(join(process.cwd(), "app/device/device.router.ts"), "utf8");
 	const serviceSource = () =>
-		readFileSync(
-			join(process.cwd(), "../vendor/hikvision-linux/hikvision_biometric_service.cpp"),
-			"utf8",
-		);
+		[
+			"../vendor/hikvision-linux/include/hikvision_bio/types.hpp",
+			"../vendor/hikvision-linux/include/hikvision_bio/common.hpp",
+			"../vendor/hikvision-linux/include/hikvision_bio/device_time.hpp",
+			"../vendor/hikvision-linux/src/hikvision_bio/common.cpp",
+			"../vendor/hikvision-linux/src/hikvision_bio/device_time.cpp",
+			"../vendor/hikvision-linux/src/hikvision_bio/runtime_service.cpp",
+		]
+			.map((relative) => readFileSync(join(process.cwd(), relative), "utf8"))
+			.join("\n");
 	const envelopeHelperSource = () =>
 		readFileSync(join(process.cwd(), "app/device/biometric-envelope.helper.ts"), "utf8");
 	const indexSource = () => readFileSync(join(process.cwd(), "index.ts"), "utf8");
@@ -943,9 +949,9 @@ describe("Hikvision biometric sync contract", () => {
 		expect(wrapper).to.include('case "$DEVICE_SOURCE" in');
 		expect(wrapper).to.include('rows="$(fetch_hikvision_device_rows_from_api "$hris_token")"');
 		expect(wrapper).to.include("ensure_work_tree()");
-		expect(wrapper).to.include(
-			'! cmp --silent "$deployed_source_file" "$source_file"',
-		);
+		expect(wrapper).to.include("sync_hikvision_tree");
+		expect(wrapper).to.include("$SOURCE_ROOT/include");
+		expect(wrapper).to.include("$SOURCE_ROOT/src");
 		expect(wrapper).to.include(
 			'! cmp --silent "$deployed_build_script" "$build_script"',
 		);
