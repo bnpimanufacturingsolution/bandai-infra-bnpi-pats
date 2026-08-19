@@ -1,5 +1,13 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 infra git login on VM
+
+- Operator: git was not interactively logged in for `infra` (no `gh`, no `~/.git-credentials`; ansible-pull still used Argo secret).
+- Fix: `infra` git `credential.helper=store` from `argocd/project-truth-repo-creds` (`x-access-token` / GitHub `g-zenr`). Mode 0600.
+- Proof: `git ls-remote` as `infra` → `6f973877ca13` `refs/heads/develop`.
+- LAN `ssh infra@10.184.37.19` still times out from this PC (Wi-Fi `192.168.1.26`, no `10.184.37.x`). Use `ssh project-truth-hris`.
+- Evidence: `.runtime/vm-git-login-20260819/infra-git-login-proof.txt`.
+
 ## Latest Task Addendum - 2026-08-19 Promote attendance request UI to develop
 
 - Local Vite on `bryan-task` showed **Request time** / attendance request. Public DEV `https://dev.bnpi-hris.tech` did not.

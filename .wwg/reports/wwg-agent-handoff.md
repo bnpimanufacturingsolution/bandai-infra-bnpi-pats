@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - infra git login on VM
+
+| Field | Value |
+|---|---|
+| Before | `infra` had no git login (`gh` missing, no `~/.git-credentials`); ansible-pull already worked via `argocd/project-truth-repo-creds` as `g-zenr` |
+| After | `credential.helper=store`; `~/.git-credentials` mode 0600; `user.name=g-zenr` |
+| Proof | `git ls-remote` as `infra` → `6f973877ca13` develop |
+| LAN SSH | still timeout from this host (`192.168.1.26` Wi-Fi, not on `10.184.37.0/24`); use `ssh project-truth-hris` |
+| Evidence | `.runtime/vm-git-login-20260819/` |
+
 ## 2026-08-19 - Local attendance request missing on public DEV
 
 | Field | Value |
