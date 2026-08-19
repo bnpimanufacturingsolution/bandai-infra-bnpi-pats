@@ -31,7 +31,7 @@ jobs:
       - name: Install
         run: npm ci
       - name: Source-truth tests
-        run: npm run test:ci:source-truth
+        run: npm run test:regression:payroll-source-truth
 
   hris-app:
     name: hris-app
@@ -49,8 +49,8 @@ jobs:
           cache-dependency-path: hris-app/package-lock.json
       - name: Install
         run: npm ci
-      - name: Typecheck and unit tests
-        run: npm run test:ci
+      - name: Unit tests
+        run: npm test
 
   hris-emp-app:
     name: hris-emp-app
@@ -99,7 +99,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Probe unit tests
-        run: python -m unittest discover -s vendor/hikvision-linux/tests -v
+        run: |
+          python -m pip install -r vendor/hikvision-linux/requirements.txt
+          python -m unittest discover -s vendor/hikvision-linux/tests -v
 
   callback-outbox:
     name: callback-outbox

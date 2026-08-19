@@ -90,8 +90,8 @@ signal for whether the VM has already pulled the SHA.
 
 | GitHub Actions job | Meaning |
 |---|---|
-| **CI / hris-api** | API source-truth mocha (`npm run test:ci:source-truth`) |
-| **CI / hris-app** | App typecheck + vitest (`npm run test:ci`) |
+| **CI / hris-api** | API source-truth mocha (`npm run test:regression:payroll-source-truth`) |
+| **CI / hris-app** | App vitest (`npm test`) |
 | **CI / hris-emp-app** | Employee app tests, or skip if submodule missing |
 | **CI / hikvision** | Linux probe unit tests |
 | **CI / callback-outbox** | Python syntax |
