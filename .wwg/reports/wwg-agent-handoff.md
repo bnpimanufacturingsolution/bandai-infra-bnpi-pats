@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - Push vs VM pull check
+
+| Step | Last working | Now |
+|---|---|---|
+| Host `git push origin develop` | yes | **yes** — GitHub tip `68dd7ae` (2026-08-19T04:59:02Z) |
+| VM `ansible-pull` | last **success** `bedf705` at **2026-08-12T09:51:24Z** | **fail every ~5 min** — GitHub `403` `Your account is suspended` |
+| Listener rebuild | ELF **2026-08-13 06:59** | **not since** |
+
+Host push still works (same as last time). VM pull does **not**. SDK listener is not receiving those pushes.
+
 ## 2026-08-19 - Live VM: deployed listener is NOT the new units
 
 | Field | Value |
