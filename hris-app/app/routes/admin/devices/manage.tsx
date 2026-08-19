@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
@@ -37,6 +37,7 @@ import {
 	type Device,
 	type CreateDeviceRequest,
 	type UpdateDeviceRequest,
+	type HikvisionDeviceTimeSyncResponse,
 } from "~/services/devices.service";
 import { CreateDeviceSchema, type CreateDevice } from "~/zod/device.zod";
 import {
@@ -51,6 +52,7 @@ import {
 	useUpdateDevice,
 	useDeleteDevice,
 	useResetDeviceEvents,
+	useHikvisionDeviceTimeSync,
 	useSyncDeviceUsers,
 	useTriggerHikvisionAttendanceImport,
 } from "~/lib/hooks/useDevices";
@@ -383,6 +385,11 @@ function DeviceConsolePage({
 	const syncLogsMutation = useTriggerHikvisionAttendanceImport();
 	const syncUsersMutation = useSyncDeviceUsers();
 	const resetEventsMutation = useResetDeviceEvents();
+	const timeSyncMutation = useHikvisionDeviceTimeSync();
+	const [timeSyncOpen, setTimeSyncOpen] = useState(false);
+	const [timeSyncResult, setTimeSyncResult] = useState<HikvisionDeviceTimeSyncResponse | null>(
+		null,
+	);
 	const previewRow = syncPreview?.devices?.[0];
 	const latestRun = runsData?.syncRuns?.[0];
 	const checks = health?.checks;
@@ -563,6 +570,31 @@ function DeviceConsolePage({
 					<p className="text-xs text-slate-500">Actions stay narrow: HRIS imports are active; physical wipe/reset actions are blocked until explicitly implemented.</p>
 				</div>
 				<CapabilityRow
+					icon={<Clock3 className="h-4 w-4" />}
+					title="Update Hikvision time"
+					description="Preview the panel clock, then write Manila time (UTC+8, CST-8:00:00). Same as the terminal Time Settings manual sync. Does not enable NTP."
+					state={hikvision ? "guarded" : "blocked"}>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						disabled={!hikvision || !deviceId || timeSyncMutation.isPending}
+						onClick={async () => {
+							if (!deviceId) return;
+							const preview = await timeSyncMutation.mutateAsync({
+								deviceId,
+								execute: false,
+							});
+							setTimeSyncResult(preview);
+							setTimeSyncOpen(true);
+						}}>
+						<Clock3 className="mr-2 h-4 w-4" />
+						{timeSyncMutation.isPending && !timeSyncResult?.execute
+							? "Reading clock…"
+							: "Preview time"}
+					</Button>
+				</CapabilityRow>
+				<CapabilityRow
 					icon={<Database className="h-4 w-4" />}
 					title="Sync attendance logs into HRIS"
 					description="Pull ACS event history, classify skipped rows, and save importable attendance events through the existing sync job."
@@ -680,8 +712,98 @@ function DeviceConsolePage({
 					</Button>
 				</div>
 			</section>
+
+			<Modal
+				open={timeSyncOpen}
+				onOpenChange={(open) => {
+					setTimeSyncOpen(open);
+					if (!open) setTimeSyncResult(null);
+				}}
+				title="Update Hikvision time"
+				className="sm:max-w-lg">
+				<div className="space-y-4">
+					<p className="text-sm text-slate-600">
+						Writes Manila time to this terminal. Preview is read-only. Confirm only if the
+						planned clock is correct.
+					</p>
+					<dl className="divide-y divide-slate-200 rounded-md border border-slate-200 text-sm">
+						<div className="flex items-start justify-between gap-3 px-3 py-2">
+							<dt className="flex items-center gap-2 text-slate-600">
+								<Clock3 className="h-4 w-4" />
+								Device clock
+							</dt>
+							<dd className="font-mono text-slate-950">
+								{timeSyncResult?.before.localTime || "Not sent"}
+							</dd>
+						</div>
+						<div className="flex items-start justify-between gap-3 px-3 py-2">
+							<dt className="text-slate-600">Mode / zone</dt>
+							<dd className="text-right text-slate-950">
+								{timeSyncResult?.before.timeMode || "unknown"} ·{" "}
+								{timeSyncResult?.before.timeZone || "unknown"}
+							</dd>
+						</div>
+						<div className="flex items-start justify-between gap-3 px-3 py-2">
+							<dt className="text-slate-600">Skew vs HRIS</dt>
+							<dd className="font-mono text-slate-950">
+								{formatClockSkew(timeSyncResult?.before.skewSeconds)}
+							</dd>
+						</div>
+						<div className="flex items-start justify-between gap-3 px-3 py-2">
+							<dt className="text-slate-600">Write Manila time</dt>
+							<dd className="font-mono text-slate-950">{timeSyncResult?.manilaTime || "—"}</dd>
+						</div>
+						{timeSyncResult?.after ? (
+							<div className="flex items-start justify-between gap-3 px-3 py-2">
+								<dt className="text-slate-600">After write</dt>
+								<dd className="text-right font-mono text-slate-950">
+									{timeSyncResult.after.localTime || "Unclear"}
+									<div className="text-xs text-slate-500">
+										skew {formatClockSkew(timeSyncResult.after.skewSeconds)}
+									</div>
+								</dd>
+							</div>
+						) : null}
+					</dl>
+					<div className="flex justify-end gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => {
+								setTimeSyncOpen(false);
+								setTimeSyncResult(null);
+							}}>
+							Close
+						</Button>
+						<Button
+							type="button"
+							disabled={!deviceId || timeSyncMutation.isPending || Boolean(timeSyncResult?.execute)}
+							onClick={async () => {
+								if (!deviceId) return;
+								const written = await timeSyncMutation.mutateAsync({
+									deviceId,
+									execute: true,
+								});
+								setTimeSyncResult(written);
+								refetchHealth();
+							}}>
+							<Clock3 className="mr-2 h-4 w-4" />
+							{timeSyncMutation.isPending && timeSyncOpen
+								? "Updating time…"
+								: "Update time"}
+						</Button>
+					</div>
+				</div>
+			</Modal>
 		</div>
 	);
+}
+
+function formatClockSkew(seconds: number | null | undefined) {
+	if (seconds === null || seconds === undefined) return "Unknown";
+	if (seconds === 0) return "0s";
+	const sign = seconds > 0 ? "+" : "-";
+	return `${sign}${Math.abs(seconds)}s`;
 }
 
 export default function DevicesManagePage() {

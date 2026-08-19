@@ -1,5 +1,21 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - HRIS Hikvision Update time button
+
+- Status: `IMPLEMENTED_DOCUMENTED`. Preview-first. No live PUT this pass.
+- API: `POST /api/device/:id/time-sync` (`execute=false` default). Execute PUTs manual Manila `CST-8:00:00`.
+- UI: device console **Preview time** → confirm → **Update time**. Hikvision only. Not NTP.
+- Tests: mocha helper+contract 6 green; vitest `device-time-sync-ui-contract` 1 green.
+
+## 2026-08-19 - Hikvision biometric clock / Manila fleet sync research
+
+- Status: `RESEARCHED_CODE_VENDOR_AND_STALE_LIVE`. No panel writes.
+- Devices **can** set time: panel Time Settings, web Manual/NTP, Hik-Connect, iVMS Batch Time Sync, ISAPI `PUT /ISAPI/System/time`, NTP `ntpServers`.
+- HRIS today: **GET only**. Health badge Readable. No SET/NTP writer.
+- Manila on wire: `CST-8:00:00` + DST off + `+08:00`. Already matches BNPI GET. Preferred fleet: NTP + that TZ.
+- Last XML: `timeMode=manual`; B/D/E 2026-08-17 drifted ~20–61s vs API. Live today `NEEDS_CONFIRMATION`.
+- Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`. REC-20260819-HIKVISION-DEVICE-NTP-FLEET.
+
 ## 2026-08-19 - EmployeePayroll.hourlySalary live DEV backfill
 
 - Status: `EXECUTED_LIVE_DEV`. K3s DEV via `127.0.0.1:55435`.

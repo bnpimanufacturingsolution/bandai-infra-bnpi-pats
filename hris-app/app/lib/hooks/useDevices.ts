@@ -21,6 +21,7 @@ import devicesService, {
 	type DeleteDeviceUserRequest,
 	type DeleteDeviceUsersRequest,
 	type DeviceEventsResetScope,
+	type HikvisionDeviceTimeSyncResponse,
 	type HikvisionListenerAction,
 	type HikvisionListenerStatus,
 	type DeviceLiveReadiness,
@@ -1048,6 +1049,31 @@ export const useMockHikvisionFaceTally = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to update synthetic face tally");
+		},
+	});
+};
+
+export const useHikvisionDeviceTimeSync = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: { deviceId: string; execute?: boolean }) => {
+			return await devicesService.syncHikvisionDeviceTime(payload);
+		},
+		onSuccess: (result: HikvisionDeviceTimeSyncResponse, variables) => {
+			queryClient.invalidateQueries({
+				queryKey: queryKeys.devices.health(variables.deviceId),
+			});
+			if (result.execute) {
+				sonnerToast.success(
+					result.wrote
+						? `Updated ${result.device.name} to Manila time`
+						: `Time write sent to ${result.device.name}; re-read was unclear`,
+				);
+			}
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to update Hikvision time");
 		},
 	});
 };

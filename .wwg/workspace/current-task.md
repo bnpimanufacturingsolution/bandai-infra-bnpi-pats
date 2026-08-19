@@ -1,5 +1,23 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 HRIS Hikvision Update time button
+
+- Operator: add an HRIS button that does the Hikvision time update (Manila).
+- API: `POST /api/device/:id/time-sync` default `execute=false` (GET clock + planned Manila write). `execute=true` PUTs `timeMode=manual`, `timeZone=CST-8:00:00`, `localTime=+08:00` then re-GETs.
+- UI: device console Manual Operations → **Preview time** → confirm modal → **Update time**. Hikvision only. Does not enable NTP.
+- Tests: helper 5 + contract 1 mocha green; UI contract asserts button + hook + time-sync path.
+- Boundary: no live PUT this pass unless operator confirms on a named device after preview.
+
+## Latest Task Addendum - 2026-08-19 Hikvision bio time / Manila sync research
+
+- Operator: can Hikvision biometric terminals set time manually, and can we sync all devices together to Manila time?
+- Verdict: **Yes** on the device (panel / web / Hik-Connect / iVMS Batch Time Sync / ISAPI PUT / NTP). **HRIS does not SET** today — GET `/ISAPI/System/time` only.
+- Manila mapping: device `timeZone=CST-8:00:00`, DST off, `localTime` `+08:00`. Same offset as `Asia/Manila`. Do not send IANA names to the panel.
+- Live BNPI XML (stale 2026-08-17 and earlier): always `timeMode=manual`. Clocks already +08 but **not** fleet-NTP; B/D/E differed by ~40s. Today’s clocks `NEEDS_CONFIRMATION` (localhost:3001 down; VM ping false).
+- Attendance uses **device punch time**, not `receivedAt`. Aligning clocks is required for Time In/Out.
+- Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`.
+- Boundary: research only. No PUT. No NTP write. No clock-writer feature this pass.
+
 ## Latest Task Addendum - 2026-08-19 hourlySalary backfill script
 
 - Operator: backfill current EmployeePayroll rows for the new `hourlySalary` snapshot. Dry-run default. Does **not** change payroll computation.

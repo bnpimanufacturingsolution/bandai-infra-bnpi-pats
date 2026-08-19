@@ -155,6 +155,29 @@ export interface DeviceEventsResponse {
 	};
 }
 
+export type HikvisionDeviceTimeSnapshot = {
+	localTime: string | null;
+	timeMode: string | null;
+	timeZone: string | null;
+	skewSeconds: number | null;
+};
+
+export type HikvisionDeviceTimeSyncResponse = {
+	execute: boolean;
+	wrote: boolean;
+	device: { id: string; name: string };
+	serverTime: string;
+	manilaTime: string;
+	before: HikvisionDeviceTimeSnapshot;
+	plannedWrite: {
+		timeMode: string;
+		localTime: string;
+		timeZone: string;
+	};
+	after: HikvisionDeviceTimeSnapshot | null;
+	putFormat?: "json" | "xml";
+};
+
 export interface DeviceHealthResponse {
 	device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {
 		baseUrl?: string;
@@ -2835,6 +2858,28 @@ class DevicesService extends APIService {
 			console.error("Error cancelling device import job:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error cancelling import job",
+			);
+		}
+	}
+
+	async syncHikvisionDeviceTime(payload: {
+		deviceId: string;
+		execute?: boolean;
+	}): Promise<HikvisionDeviceTimeSyncResponse> {
+		try {
+			if (!String(payload.deviceId || "").trim()) {
+				throw new Error("Select a device before updating time");
+			}
+			const response = await hrisApiClient.post<any>(
+				`/api/device/${payload.deviceId}/time-sync`,
+				{ execute: payload.execute === true },
+			);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to update Hikvision time");
+			return data as HikvisionDeviceTimeSyncResponse;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error updating Hikvision time",
 			);
 		}
 	}

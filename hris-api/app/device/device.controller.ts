@@ -50,6 +50,15 @@ import {
 } from "../../helper/sync-logs-event-rows.helper";
 import { hikvisionEndpoint } from "../../config/hikvision.endpoint";
 import {
+	buildHikvisionManualTimePut,
+	extractHikvisionTimeSnapshot,
+	formatHikvisionManilaLocalTime,
+	HIKVISION_MANILA_TIME_ZONE,
+	HIKVISION_MANUAL_TIME_MODE,
+	hikvisionClockSkewSeconds,
+	hikvisionTimePutSucceeded,
+} from "../../helper/hikvision-device-time.helper";
+import {
 	buildHikvisionDeviceBaseUrl,
 	getHikvisionDeviceHttpPort,
 	hikvisionFetch,
@@ -25459,6 +25468,190 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const readHikvisionSystemTime = async (req: Request, deviceId: string) => {
+		const payload = await hikvisionFetch(hikvisionEndpoint.system.time, {
+			method: "GET",
+			deviceId,
+			prisma,
+			request: req,
+			timeoutMs: 8000,
+		});
+		const snapshot = extractHikvisionTimeSnapshot(payload);
+		return { payload, snapshot };
+	};
+
+	const writeHikvisionSystemTime = async (req: Request, deviceId: string, localTime: string) => {
+		const { jsonBody, xmlBody } = buildHikvisionManualTimePut(localTime);
+		try {
+			const put = await hikvisionFetch(hikvisionEndpoint.system.time, {
+				method: "PUT",
+				deviceId,
+				prisma,
+				request: req,
+				timeoutMs: 8000,
+				body: jsonBody,
+				headers: { "Content-Type": "application/json" },
+			});
+			return { format: "json" as const, put };
+		} catch (jsonError: any) {
+			try {
+				const put = await hikvisionFetch("/ISAPI/System/time", {
+					method: "PUT",
+					deviceId,
+					prisma,
+					request: req,
+					timeoutMs: 8000,
+					ensureJsonFormat: false,
+					body: xmlBody,
+					headers: { "Content-Type": "application/xml; charset=UTF-8" },
+				});
+				return { format: "xml" as const, put };
+			} catch (xmlError: any) {
+				const jsonMessage = jsonError?.data?.errorCause || jsonError?.message || "JSON PUT failed";
+				const xmlMessage = xmlError?.data?.errorCause || xmlError?.message || "XML PUT failed";
+				const error = new Error(`Hikvision time PUT failed (${jsonMessage}; xml: ${xmlMessage})`);
+				(error as any).jsonError = jsonError;
+				(error as any).xmlError = xmlError;
+				throw error;
+			}
+		}
+	};
+
+	const syncHikvisionDeviceTime = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = (req as any).organizationId;
+			const { id } = req.params;
+			const execute = req.body?.execute === true;
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+				return;
+			}
+			if (!id) {
+				res.status(400).json(buildErrorResponse("Device ID is required", 400));
+				return;
+			}
+
+			const device = await prisma.device.findFirst({
+				where: {
+					id,
+					organizationId: String(organizationId),
+					isDeleted: false,
+				},
+				select: {
+					id: true,
+					name: true,
+					address: true,
+					port: true,
+					protocol: true,
+					config: true,
+				},
+			});
+
+			if (!device) {
+				res.status(404).json(buildErrorResponse(config.ERROR.DEVICE.NOT_FOUND, 404));
+				return;
+			}
+			if (isZktecoDevice(device)) {
+				res.status(400).json(
+					buildErrorResponse("Hikvision time update is not available on ZKTeco devices", 400),
+				);
+				return;
+			}
+			if (!isHikvisionDevice(device)) {
+				res.status(400).json(
+					buildErrorResponse("Hikvision time update is only available on Hikvision devices", 400),
+				);
+				return;
+			}
+
+			const serverTime = new Date();
+			const manilaTime = formatHikvisionManilaLocalTime(serverTime);
+			let before;
+			try {
+				const read = await readHikvisionSystemTime(req, device.id);
+				before = {
+					...read.snapshot,
+					skewSeconds: hikvisionClockSkewSeconds(read.snapshot.localTime, serverTime),
+				};
+			} catch (error: any) {
+				res.status(502).json(
+					buildErrorResponse(
+						error?.data?.errorCause ||
+							error?.message ||
+							"Could not read Hikvision system time",
+						502,
+					),
+				);
+				return;
+			}
+
+			const plannedWrite = {
+				timeMode: HIKVISION_MANUAL_TIME_MODE,
+				localTime: manilaTime,
+				timeZone: HIKVISION_MANILA_TIME_ZONE,
+			};
+
+			if (!execute) {
+				res.status(200).json(
+					buildSuccessResponse("Hikvision time update preview", {
+						execute: false,
+						wrote: false,
+						device: { id: device.id, name: device.name },
+						serverTime: serverTime.toISOString(),
+						manilaTime,
+						before,
+						plannedWrite,
+						after: null,
+					}),
+				);
+				return;
+			}
+
+			let putResult;
+			try {
+				putResult = await writeHikvisionSystemTime(req, device.id, manilaTime);
+			} catch (error: any) {
+				res.status(502).json(
+					buildErrorResponse(error?.message || "Hikvision time PUT failed", 502),
+				);
+				return;
+			}
+
+			const afterRead = await readHikvisionSystemTime(req, device.id);
+			const afterServerTime = new Date();
+			const after = {
+				...afterRead.snapshot,
+				skewSeconds: hikvisionClockSkewSeconds(afterRead.snapshot.localTime, afterServerTime),
+			};
+			const putOk = hikvisionTimePutSucceeded(putResult.put) || after.localTime === manilaTime;
+
+			logActivity(req, {
+				userId: String((req as any).userId || (req as any).user?.id || "unknown"),
+				action: "HIKVISION_TIME_SYNC",
+				description: `Updated Hikvision time on ${device.name} to ${manilaTime}`,
+				page: { url: req.originalUrl, title: "Device time" },
+			}).catch(() => undefined);
+
+			res.status(putOk ? 200 : 207).json(
+				buildSuccessResponse(putOk ? "Hikvision time updated" : "Hikvision time PUT returned an unclear status", {
+					execute: true,
+					wrote: putOk,
+					device: { id: device.id, name: device.name },
+					serverTime: serverTime.toISOString(),
+					manilaTime,
+					before,
+					plannedWrite,
+					after,
+					putFormat: putResult.format,
+				}),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Hikvision time update failed", 500),
+			);
+		}
+	};
+
 	const getDeviceHealth = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const organizationId = (req as any).organizationId;
@@ -28674,6 +28867,7 @@ export const controller = (prisma: PrismaClient) => {
 		getEventById,
 		getEvents,
 		getDeviceHealth,
+		syncHikvisionDeviceTime,
 		getHikvisionListenerStatus,
 		getDeviceLiveReadiness,
 		proveDeviceLivePath,

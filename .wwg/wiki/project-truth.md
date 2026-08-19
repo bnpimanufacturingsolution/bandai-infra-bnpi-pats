@@ -1,5 +1,15 @@
 # Project Truth
 
+## Hikvision biometric device clock and Manila time (2026-08-19)
+
+- Status: `CONFIRMED_CODE_AND_VENDOR`; live 2026-08-19 GET is `NEEDS_CONFIRMATION`.
+- Punch Time In/Out uses **device event time**, not HRIS `receivedAt`. Naive SDK stamps are treated as `Asia/Manila` (`+08:00`). Clocks that differ across terminals break pairing.
+- HRIS **reads** `GET /ISAPI/System/time` (health, skew, `check-hikvision-device-clock`). Admin device console can **preview then PUT** a one-shot Manila manual time via `POST /api/device/:id/time-sync`. That is Time Settings manual sync, **not** NTP enable.
+- Vendor MinMoe / DS-K1T **can** set time: panel Time Settings, web Manual or NTP, Hik-Connect, iVMS Batch Time Sync, ISAPI `PUT /ISAPI/System/time`, `PUT /ISAPI/System/time/ntpServers`.
+- Manila on the device is POSIX **`CST-8:00:00`** (UTC+8), DST **off**, `localTime` with `+08:00`. Not IANA `Asia/Manila`. US Central “CST” is a different offset.
+- Surviving BNPI Time XML (2026-07-01 through 2026-08-17): `timeMode=manual`, `timeZone=CST-8:00:00`. Offset is already Manila; mode is not fleet NTP. Inter-device drift of tens of seconds was recorded (Main D ~40s ahead of B/E on 2026-08-17).
+- Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`.
+
 ## EmployeePayroll hourlySalary snapshot (2026-08-19)
 
 - Status: `CONFIRMED_CODE`.

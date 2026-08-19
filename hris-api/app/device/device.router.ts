@@ -10,6 +10,7 @@ interface IController {
 	getEvents(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getEventById(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceHealth(req: Request, res: Response, next: NextFunction): Promise<void>;
+	syncHikvisionDeviceTime(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getHikvisionListenerStatus(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDeviceLiveReadiness(req: Request, res: Response, next: NextFunction): Promise<void>;
 	proveDeviceLivePath(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -135,6 +136,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/hikvision/listener", controller.controlHikvisionListener);
 
 	routes.get("/:id/health", controller.getDeviceHealth);
+	routes.post("/:id/time-sync", controller.syncHikvisionDeviceTime);
 	routes.post("/:id/hikvision/log-search", controller.searchHikvisionDeviceLogs);
 	routes.get("/users", controller.listDeviceUsers);
 	routes.post("/users/export/preview", controller.previewDeviceUserExport);
