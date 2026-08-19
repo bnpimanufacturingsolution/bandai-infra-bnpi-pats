@@ -1,5 +1,20 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Non-breaking DevOps CI/Observe harden (push authorized)
+
+- Operator: improve without breaking, then **do it** (push `develop`). VM ansible-pull will pick up the SHA.
+- CI adds `zkteco` unittest + `ansible` syntax-check. Existing jobs unchanged.
+- Observe still succeeds on `services=none`. Summary now prints VM description; public URL GET is informational (`continue-on-error`).
+- Reporter descriptions add `outcome=pulled|rebuilt|not_rebuilt|pull_only` and match `hris-api-local:develop` (not db-init substring). Still never posts `failure`.
+- Emp-app skip stays green, with a GitHub notice that it is not test proof.
+
+## Latest Task Addendum - 2026-08-20 Document CI/Observe/Validate (no push)
+
+- Operator: document DevOps CI well; **do not deploy**; **do not push** until ordered.
+- Canonical: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
+- Live tip at proof: `efc86c56` — CI + Observe + Validate success; VM pull match; images `services=none`; runtime Argo **Degraded** (`hris-api-db-init` Failed).
+- Observe success ≠ live pod SHA. `/health` has no `buildSha`. Nested Cloud Run/Firebase workflows do not run on this repo.
+
 ## Latest Task Addendum - 2026-08-19 CI checks per deploy type
 
 - Operator: GitHub Actions should show checks per deployment type (hris-app, hris-api, others).

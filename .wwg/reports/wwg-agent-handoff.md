@@ -1,5 +1,24 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Non-breaking DevOps CI/Observe harden (push authorized)
+
+| Field | Value |
+|---|---|
+| Operator | Improve without breaking, then **do it** (push `develop`). |
+| CI | Additive jobs `zkteco`, `ansible` syntax-check. Existing jobs unchanged. |
+| Observe | Still green on not-rebuilt. Summary shows VM description. Informational URL GET does not fail the job. |
+| Reporter | `outcome=` token; precise image needles. Never posts failure. |
+
+## 2026-08-20 - Document CI/Observe/Validate (no push)
+
+| Field | Value |
+|---|---|
+| Operator | Document well. **Do not push. Do not deploy** until ordered. |
+| Canonical | `.wwg/reports/devops-ci-observe-validate-20260819.md` |
+| Tip at proof | `efc86c56` CI + Observe + Validate green |
+| Honesty | Observe image envs were **not rebuilt** (`services=none`). Runtime Argo **Degraded** = failed `hris-api-db-init` Job. |
+| Evidence | `.runtime/devops-ci-validate-20260819/` |
+
 ## 2026-08-19 - CI checks per deploy type
 
 | Field | Value |

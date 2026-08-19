@@ -97,8 +97,11 @@ jobs:
               this="$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq 'if any(.state=="success") then "success" elif any(.state=="failure") then "failure" elif any(.state=="error") then "error" else (.[0].state // "none") end')"
               echo "deployment=${id} env=${ENVIRONMENT} state=${this} sha=${SHA}"
               if [ "$this" = "success" ]; then
+                desc="$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq '.[0].description // empty')"
                 echo "| VM report | success (deployment ${id}) |" >> "$GITHUB_STEP_SUMMARY"
+                echo "| VM description | ${desc} |" >> "$GITHUB_STEP_SUMMARY"
                 echo "VM reported success for ${ENVIRONMENT} ${SHA} on deployment ${id}"
+                echo "description=${desc}"
                 exit 0
               fi
               state="$this"
@@ -120,5 +123,23 @@ jobs:
       - name: Record already-deployed
         if: steps.deploy.outputs.already == 'success'
         run: |
+          set -euo pipefail
+          id="${{ steps.deploy.outputs.id }}"
+          desc="$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq '.[0].description // empty')"
           echo "| VM report | already success |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| VM description | ${desc} |" >> "$GITHUB_STEP_SUMMARY"
           echo "VM already reported ${ENVIRONMENT} success for ${SHA}"
+          echo "description=${desc}"
+
+      - name: Probe public URL (informational)
+        if: success()
+        continue-on-error: true
+        run: |
+          set +e
+          echo "| public URL | ${ENV_URL} |" >> "$GITHUB_STEP_SUMMARY"
+          code="$(curl -sS -o /tmp/observe-url.out -w '%{http_code}' --max-time 15 "${ENV_URL}" || true)"
+          echo "| public HTTP | ${code:-000} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "informational GET ${ENV_URL} -> ${code:-000} (does not fail this job)"
+          head -c 240 /tmp/observe-url.out 2>/dev/null || true
+          echo
+          exit 0

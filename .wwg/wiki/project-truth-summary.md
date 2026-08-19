@@ -1,6 +1,12 @@
 # Project Truth Summary
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
+
+## 2026-08-20 GitHub Actions CI / Observe / Validate
+
+- Three root workflows: **CI** (per-type tests), **Observe VM GitOps deploy** (VM reporter), **Validate** (Windows terraform/packer/installer). Nested Cloud Run/Firebase YAML does not run on this repo.
+- Observe `success` can mean **not rebuilt** (`services=none`). `/health` has no `buildSha`. Runtime Argo can be Synced/**Degraded** (failed `hris-api-db-init` Job) while Observe is green.
+- Operator 2026-08-20 authorized push of the CI/Observe harden. Full: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
 
 ## 2026-08-19 Hikvision C++ current layout
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Report ansible-pull and per-service image outcomes to GitHub Deployments.
+# Always posts success when gh works. Image envs include outcome=rebuilt|not_rebuilt|pull_only.
 set -euo pipefail
 
 repo="${PROJECT_TRUTH_GITHUB_REPO:-hrisworkforcesystem-coder/bandai-infra}"
@@ -15,6 +16,10 @@ run_gh() {
   fi
 }
 
+post_json() {
+  python3 -c 'import json,sys; print(json.dumps(json.loads(sys.argv[1])))' "$1"
+}
+
 report_env() {
   local environment="$1"
   local env_url="$2"
@@ -22,23 +27,23 @@ report_env() {
   local ids
   local deploy_id
   local ok_local=0
+  local create_body
+  local status_body
 
   ids="$(run_gh api "repos/${repo}/deployments?sha=${commit}&environment=${environment}&per_page=10" --jq '.[].id' 2>/dev/null || true)"
   if [ -z "$ids" ]; then
-    ids="$(
-      printf '%s\n' "{\"ref\":\"${commit}\",\"environment\":\"${environment}\",\"auto_merge\":false,\"required_contexts\":[],\"description\":\"${description}\"}" |
-        run_gh api "repos/${repo}/deployments" --input - --jq .id
-    )"
+    create_body="$(post_json "{\"ref\":\"${commit}\",\"environment\":\"${environment}\",\"auto_merge\":false,\"required_contexts\":[],\"description\":\"${description}\"}")"
+    ids="$(printf '%s\n' "$create_body" | run_gh api "repos/${repo}/deployments" --input - --jq .id)"
   fi
   if [ -z "$ids" ]; then
     echo "could not create or find GitHub deployment for ${environment} ${commit}" >&2
     return 0
   fi
 
+  status_body="$(post_json "{\"state\":\"success\",\"environment\":\"${environment}\",\"description\":\"${description}\",\"environment_url\":\"${env_url}\"}")"
   for deploy_id in $ids; do
     [ -z "$deploy_id" ] && continue
-    if printf '%s\n' "{\"state\":\"success\",\"environment\":\"${environment}\",\"description\":\"${description}\",\"environment_url\":\"${env_url}\"}" |
-      run_gh api "repos/${repo}/deployments/${deploy_id}/statuses" --input - >/dev/null; then
+    if printf '%s\n' "$status_body" | run_gh api "repos/${repo}/deployments/${deploy_id}/statuses" --input - >/dev/null; then
       ok_local=1
     fi
   done
@@ -81,26 +86,36 @@ if [ -r "$image_state_file" ]; then
   fi
 fi
 
-ok=0
-report_env "vm-gitops" "https://dev.bnpi-hris.tech/auth/login" "ansible-pull ${commit} synced_at=${synced_at:-unknown}"
-
-service_note() {
+service_outcome() {
   local needle="$1"
   if [ -z "$image_services" ]; then
-    printf '%s' "image-state missing; ansible-pull only"
+    printf '%s' "pull_only"
   elif [ "$image_services" = "none" ]; then
-    printf '%s' "not rebuilt this SHA (services=none)"
-  elif printf '%s' "$image_services" | grep -Eq "$needle"; then
-    printf '%s' "image rebuilt: ${image_services}"
+    printf '%s' "not_rebuilt"
+  elif printf '%s' " ${image_services} " | grep -Fq " ${needle}"; then
+    printf '%s' "rebuilt"
   else
-    printf '%s' "not rebuilt this SHA (services=${image_services})"
+    printf '%s' "not_rebuilt"
   fi
 }
 
-report_env "hris-api" "https://dev-api.bnpi-hris.tech/health" "hris-api ${commit} $(service_note 'hris-api')"
-report_env "hris-app" "https://dev.bnpi-hris.tech/auth/login" "hris-app ${commit} $(service_note 'hris-app')"
-report_env "hris-emp-app" "https://dev-emp.bnpi-hris.tech/auth/login" "hris-emp-app ${commit} $(service_note 'hris-emp-app')"
-report_env "callback-outbox" "https://dev-api.bnpi-hris.tech/health" "callback-outbox ${commit} $(service_note 'callback-outbox')"
+service_note() {
+  local needle="$1"
+  local outcome
+  outcome="$(service_outcome "$needle")"
+  case "$outcome" in
+    rebuilt) printf '%s' "outcome=rebuilt images=${image_services}" ;;
+    pull_only) printf '%s' "outcome=pull_only image-state missing or SHA mismatch" ;;
+    *) printf '%s' "outcome=not_rebuilt services=${image_services:-none}" ;;
+  esac
+}
+
+ok=0
+report_env "vm-gitops" "https://dev.bnpi-hris.tech/auth/login" "ansible-pull ${commit} outcome=pulled synced_at=${synced_at:-unknown}"
+report_env "hris-api" "https://dev-api.bnpi-hris.tech/health" "hris-api ${commit} $(service_note 'hris-api-local:develop')"
+report_env "hris-app" "https://dev.bnpi-hris.tech/auth/login" "hris-app ${commit} $(service_note 'hris-app-local:develop')"
+report_env "hris-emp-app" "https://dev-emp.bnpi-hris.tech/auth/login" "hris-emp-app ${commit} $(service_note 'hris-emp-app-local:develop')"
+report_env "callback-outbox" "https://dev-api.bnpi-hris.tech/health" "callback-outbox ${commit} $(service_note 'hris-callback-outbox:develop')"
 
 {
   echo "repo=${repo}"

@@ -1,5 +1,14 @@
 # Project Truth
 
+## GitHub Actions CI / Observe / Validate (2026-08-19 documented 2026-08-20)
+
+- Status: `CONFIRMED_LIVE_20260819`; operator 2026-08-20 authorized push of the CI/Observe harden.
+- Root workflows only: `ci.yml` (per-type tests), `observe-deploy.yml` (GitHub Deployments wait on VM reporter), `validate.yml` (Windows terraform/packer/installer/self-heal). `promote-gitops.yml` is manual.
+- Nested `hris-api/.github` Cloud Run and `hris-app/.github` Firebase workflows **do not run** on `bandai-infra`.
+- Observe environment `success` is the VM reporter. `k8s-runtime-image-state` `services=none` still posts **success** with “not rebuilt this SHA”. That is not a live API/app image SHA. `/health` has no `buildSha`.
+- Live proof SHA `efc86c56`: CI + Observe + Validate green; VM ansible-pull match; Argo contract apps Synced/Healthy; runtime apps Synced/**Degraded** because Job `hris-api-db-init` Failed `BackoffLimitExceeded`.
+- Full map: `.wwg/reports/devops-ci-observe-validate-20260819.md`. Evidence: `.runtime/devops-ci-validate-20260819/`.
+
 ## Hikvision biometric device clock and Manila time (2026-08-19)
 
 - Status: `CONFIRMED_CODE_AND_VENDOR`; live 2026-08-19 GET is `NEEDS_CONFIRMATION`.

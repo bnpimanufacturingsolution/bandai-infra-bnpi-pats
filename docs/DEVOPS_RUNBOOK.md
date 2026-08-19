@@ -4,8 +4,12 @@
 
 | Workflow | Purpose | Runner |
 |---|---|---|
-| `validate.yml` | Static validation for Node, PowerShell, Terraform, and GitOps overlays. | GitHub-hosted Windows runner |
-| `promote-gitops.yml` | Manual GitOps release tag and runtime image tag promotion for DEV/UAT/PROD. | GitHub-hosted Ubuntu runner |
+| `ci.yml` | Per-type product checks: hris-api, hris-app, hris-emp-app, hikvision, zkteco, ansible syntax-check, callback-outbox, gitops kustomize. **Not** deploy proof. | GitHub-hosted Ubuntu |
+| `observe-deploy.yml` | Per-type GitHub Deployments wait for VM `project-truth-report-github-deploy`. `success` can mean **not rebuilt** (`services=none`). DEV only. | GitHub-hosted Ubuntu |
+| `validate.yml` | Static validation for Node, PowerShell, Terraform, Packer, installer, self-heal, observability contract, GitOps overlays. **Not** deploy proof. | GitHub-hosted Windows |
+| `promote-gitops.yml` | Manual GitOps release tag and runtime image tag promotion for DEV/UAT/PROD. | GitHub-hosted Ubuntu |
+
+Operator map and honesty tables: `.wwg/reports/devops-ci-observe-validate-20260819.md`. Nested package workflows under `hris-api/.github` and `hris-app/.github` do not run on this monorepo.
 
 ## Validate
 
