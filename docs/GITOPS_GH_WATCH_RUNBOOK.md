@@ -91,7 +91,7 @@ signal for whether the VM has already pulled the SHA.
 | GitHub Actions job | Meaning |
 |---|---|
 | **CI / hris-api** | API source-truth mocha (`npm run test:regression:payroll-source-truth`) |
-| **CI / hris-app** | App vitest (`npm test`) |
+| **CI / hris-app** | App vitest payroll-correction (`npm run test:payroll-correction`). Full `npm test` still has Router/typecheck failures. |
 | **CI / hris-emp-app** | Employee app tests, or skip if submodule missing |
 | **CI / hikvision** | Linux probe unit tests |
 | **CI / callback-outbox** | Python syntax |
