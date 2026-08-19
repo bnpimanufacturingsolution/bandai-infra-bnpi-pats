@@ -1,5 +1,13 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-19 - CI checks per deploy type
+
+| Field | Value |
+|---|---|
+| CI workflow | `.github/workflows/ci.yml` jobs: hris-api, hris-app, hris-emp-app, hikvision, callback-outbox, gitops |
+| Observe | matrix environments `vm-gitops`, `hris-api`, `hris-app`, `hris-emp-app`, `callback-outbox` |
+| VM | `project-truth-report-github-deploy` reports each environment |
+
 ## 2026-08-19 - GitHub Action observe VM deploy
 
 | Field | Value |
@@ -8,6 +16,7 @@
 | Workflow | `.github/workflows/observe-deploy.yml` — environment `vm-gitops` |
 | VM report | `project-truth-report-github-deploy` after ansible-pull state |
 | How to watch | `gh run list --workflow observe-deploy.yml --branch develop` |
+| Live proof | SHA `e8046073` — Action [32257214024](https://github.com/hrisworkforcesystem-coder/bandai-infra/actions/runs/32257214024) success; VM `synced_at=2026-08-19T13:20:58Z`; deployment `5983215227` |
 
 ## 2026-08-19 - infra git login on VM
 

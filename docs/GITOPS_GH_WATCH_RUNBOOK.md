@@ -90,11 +90,22 @@ signal for whether the VM has already pulled the SHA.
 
 | GitHub Actions job | Meaning |
 |---|---|
-| in progress | GitHub has the commit; waiting for VM `ansible-pull` (timer every 5 min) |
-| success | VM wrote `ansible-pull-state` for this SHA and reported `success` |
-| failure / timeout | VM did not report within 10 minutes |
+| **CI / hris-api** | API source-truth mocha (`npm run test:ci:source-truth`) |
+| **CI / hris-app** | App typecheck + vitest (`npm run test:ci`) |
+| **CI / hris-emp-app** | Employee app tests, or skip if submodule missing |
+| **CI / hikvision** | Linux probe unit tests |
+| **CI / callback-outbox** | Python syntax |
+| **CI / gitops** | `kubectl kustomize` overlays |
+| **Observe / ansible-pull** | VM wrote `ansible-pull-state` for this SHA |
+| **Observe / hris-api** | DEV API image rebuilt **or** `services=none` this SHA |
+| **Observe / hris-app** | DEV app image rebuilt **or** not rebuilt this SHA |
+| **Observe / hris-emp-app** | Employee app image rebuilt **or** not rebuilt |
+| **Observe / callback-outbox** | Outbox image rebuilt **or** not rebuilt |
 
-Also visible as environment **vm-gitops** on the repo Deployments page.
+`in progress` on Observe = waiting for VM `ansible-pull` (timer every 5 min).
+`success` = VM reported that environment. Image jobs can succeed with **not rebuilt this SHA**.
+
+Deployments page environments: `vm-gitops`, `hris-api`, `hris-app`, `hris-emp-app`, `callback-outbox`.
 
 ```powershell
 gh run list --workflow observe-deploy.yml --branch develop --limit 5

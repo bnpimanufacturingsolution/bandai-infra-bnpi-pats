@@ -1,5 +1,12 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-19 CI checks per deploy type
+
+- Operator: GitHub Actions should show checks per deployment type (hris-app, hris-api, others).
+- Workflow **CI**: jobs `hris-api`, `hris-app`, `hris-emp-app`, `hikvision`, `callback-outbox`, `gitops`.
+- Observe VM GitOps deploy is now a matrix: `ansible-pull`, `hris-api`, `hris-app`, `hris-emp-app`, `callback-outbox`.
+- VM reporter posts success per GitHub environment. Docs-only SHA reports image jobs as not rebuilt.
+
 ## Latest Task Addendum - 2026-08-19 GitHub Action observe VM deploy
 
 - Operator: no GitHub Actions observation of whether a SHA is deploying or already pulled.
