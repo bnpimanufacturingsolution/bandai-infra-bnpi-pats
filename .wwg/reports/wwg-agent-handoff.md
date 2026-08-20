@@ -1,5 +1,16 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Employee weekly hours change
+
+| Field | Value |
+|---|---|
+| Ask | Set Zen Monday 6–3, Tuesday 7–4 (per employee, not only org templates) |
+| Already existed | Admin `/admin/configuration/schedule-templates`; employee edit Active Schedule weekly pattern |
+| Gap | Work Schedule tab was view-only; team assign was one shift for every day |
+| Now | **Change schedule** on `/employee/:id?tab=schedule` and admin employee profile |
+| API | `POST /api/employee-schedules` accepts `pattern` (7/14/21/28 days) |
+| Git | Cherry-picked onto `origin/develop` for VM/Docker DEV deploy |
+
 ## 2026-08-20 - Day labor timesheet property (NO PUSH)
 
 | Field | Value |

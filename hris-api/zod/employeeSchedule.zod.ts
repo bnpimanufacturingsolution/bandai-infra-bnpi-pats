@@ -23,31 +23,65 @@ const ShiftSnapshotSchema = z.object({
 	timeSlots: z.array(ShiftTimeSlotSchema).optional(),
 });
 
+const PatternDaySchema = z.object({
+	day: z.number().int().min(1).max(28).optional(),
+	shiftTypeId: z.string().optional().nullable(),
+	shiftSnapshot: ShiftSnapshotSchema.optional().nullable(),
+	isOff: z.boolean().optional(),
+	startTime: z.string().optional().nullable(),
+	endTime: z.string().optional().nullable(),
+});
+
 export const CreateEmployeeScheduleSchema = z.object({
 	employeeId: z.string().min(1),
 	scheduleTemplateId: z.string().min(1).optional(),
 	shiftTypeId: z.string().optional().nullable(),
 	shiftSnapshot: ShiftSnapshotSchema.optional().nullable(),
+	pattern: z.array(PatternDaySchema).min(7).max(28).optional(),
 	startDate: z.coerce.date().optional(),
 	endDate: z.coerce.date().optional().nullable(),
 	departmentId: z.string().optional().nullable(),
 	createdByEmployeeId: z.string().optional().nullable(),
 	reason: z.string().optional().nullable(),
+	graceLateMinutes: z.number().int().min(0).optional(),
+	graceEarlyOutMinutes: z.number().int().min(0).optional(),
 }).superRefine((value, ctx) => {
 	const hasTemplate = Boolean(value.scheduleTemplateId);
 	const hasManual = Boolean(value.shiftSnapshot);
-	if (hasTemplate && hasManual) {
+	const hasPattern = Array.isArray(value.pattern) && value.pattern.length > 0;
+	const modeCount = [hasTemplate, hasManual, hasPattern].filter(Boolean).length;
+	if (modeCount > 1) {
 		ctx.addIssue({
 			code: z.ZodIssueCode.custom,
-			message: "Provide either scheduleTemplateId or shiftSnapshot, not both.",
+			message: "Provide only one of scheduleTemplateId, shiftSnapshot, or pattern.",
 			path: ["scheduleTemplateId"],
 		});
 	}
-	if (!hasTemplate && !hasManual) {
+	if (modeCount === 0) {
 		ctx.addIssue({
 			code: z.ZodIssueCode.custom,
-			message: "Either scheduleTemplateId or shiftSnapshot is required.",
+			message: "Either scheduleTemplateId, shiftSnapshot, or pattern is required.",
 			path: ["scheduleTemplateId"],
+		});
+	}
+	if (hasPattern) {
+		const length = value.pattern?.length || 0;
+		if (![7, 14, 21, 28].includes(length)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Weekly hours pattern must be 7, 14, 21, or 28 days.",
+				path: ["pattern"],
+			});
+		}
+		(value.pattern || []).forEach((day, index) => {
+			if (day.isOff) return;
+			if (day.shiftSnapshot || day.shiftTypeId) return;
+			if (day.startTime && day.endTime) return;
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Each work day needs start/end times or a shift snapshot.",
+				path: ["pattern", index],
+			});
 		});
 	}
 	if (value.startDate && toUtcStartOfDay(value.startDate) < getTodayUtc()) {
@@ -83,6 +117,7 @@ export const UpdateEmployeeScheduleSchema = z
 		scheduleTemplateId: z.string().min(1).optional(),
 		shiftTypeId: z.string().optional().nullable(),
 		shiftSnapshot: ShiftSnapshotSchema.optional().nullable(),
+		pattern: z.array(PatternDaySchema).min(7).max(28).optional(),
 		startDate: z.coerce.date().optional(),
 		endDate: z.coerce.date().optional().nullable(),
 		departmentId: z.string().optional().nullable(),
@@ -92,10 +127,11 @@ export const UpdateEmployeeScheduleSchema = z
 	.superRefine((value, ctx) => {
 		const hasTemplate = Boolean(value.scheduleTemplateId);
 		const hasManual = Boolean(value.shiftSnapshot);
-		if (hasTemplate && hasManual) {
+		const hasPattern = Array.isArray(value.pattern) && value.pattern.length > 0;
+		if ([hasTemplate, hasManual, hasPattern].filter(Boolean).length > 1) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				message: "Provide either scheduleTemplateId or shiftSnapshot, not both.",
+				message: "Provide only one of scheduleTemplateId, shiftSnapshot, or pattern.",
 				path: ["scheduleTemplateId"],
 			});
 		}

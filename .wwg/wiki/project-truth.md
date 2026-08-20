@@ -1,5 +1,15 @@
 # Project Truth
 
+## Employee weekly hours vs schedule templates (2026-08-20)
+
+- Status: `CONFIRMED_CODE`.
+- **Schedule templates** (`/admin/configuration/schedule-templates`) are reusable org patterns (7/14-day cycles, shift types per day). Assign them to many people.
+- **One employee’s hours** (Zen Monday 06:00–15:00, Tuesday 07:00–16:00) live on `Employee.embeddedSchedule.pattern`. HR/admin edit that from:
+  1. Employee edit form → Active Schedule weekly pattern (`/hr/employees/:id/edit` or admin twin).
+  2. Employee profile **Work Schedule** tab → **Change schedule** (weekday start/end/off). `POST /api/employee-schedules` with `pattern`. Takes effect next Monday UTC and recomputes attendance obligations.
+- A one-off date uses **schedule override**, not the weekly pattern.
+- Team assign modal can still pick a template or one manual shift for every day; it is not the per-weekday hours editor.
+
 ## Day labor on timesheet (2026-08-20)
 
 - Status: `CONFIRMED_CODE_LOCAL`. **Do not push** until the operator says so.

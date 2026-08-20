@@ -329,11 +329,21 @@ export interface CreateEmployeeScheduleRequest {
 		isOff?: boolean;
 		timeSlots?: ShiftTimeSlot[];
 	} | null;
-	startDate: string;
+	pattern?: Array<{
+		day?: number;
+		shiftTypeId?: string | null;
+		shiftSnapshot?: CreateEmployeeScheduleRequest["shiftSnapshot"];
+		isOff?: boolean;
+		startTime?: string | null;
+		endTime?: string | null;
+	}>;
+	startDate?: string;
 	endDate?: string | null;
 	departmentId?: string | null;
 	createdByEmployeeId?: string | null;
 	reason?: string | null;
+	graceLateMinutes?: number;
+	graceEarlyOutMinutes?: number;
 }
 
 export interface UpdateEmployeeScheduleRequest extends Partial<CreateEmployeeScheduleRequest> {}

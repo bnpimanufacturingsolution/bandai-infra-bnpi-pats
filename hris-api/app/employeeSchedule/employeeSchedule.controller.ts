@@ -9,6 +9,7 @@ import {
 import {
 	appendEmployeeScheduleHistory,
 	collectShiftTypeIdsFromEmployeeScheduleData,
+	buildManualPatternEmbeddedSchedule,
 	copyTemplateToEmployeeEmbeddedSchedule,
 	resolveEffectiveShiftFromEmployeeData,
 } from "../../helper/employee-schedule.helper";
@@ -294,6 +295,23 @@ export const controller = (prisma: PrismaClient) => {
 				reason: validation.data.reason || null,
 			});
 			source = "template";
+		} else if (Array.isArray(validation.data.pattern) && validation.data.pattern.length > 0) {
+			if (validation.data.pattern.length % 7 === 0 && !isMondayUtc(effectiveStartDate)) {
+				res.status(400).json(
+					buildErrorResponse("Weekly schedules must start on a Monday (UTC).", 400),
+				);
+				return;
+			}
+			nextEmbeddedSchedule = buildManualPatternEmbeddedSchedule({
+				pattern: validation.data.pattern,
+				startDate: effectiveStartDate,
+				assignedByEmployeeId: validation.data.createdByEmployeeId || null,
+				reason: validation.data.reason || "weekly_hours_assignment",
+				graceLateMinutes: validation.data.graceLateMinutes,
+				graceEarlyOutMinutes: validation.data.graceEarlyOutMinutes,
+				version: Number((targetEmployee.embeddedSchedule as any)?.version || 0) + 1,
+			});
+			source = "manual";
 		} else {
 			const manualSnapshot = normalizeManualSnapshot(validation.data.shiftSnapshot);
 			if (!manualSnapshot) {

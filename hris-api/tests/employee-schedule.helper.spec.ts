@@ -1,9 +1,11 @@
 import { expect } from "chai";
 import {
+	buildManualPatternEmbeddedSchedule,
 	collectShiftTypeIdsFromEmployeeScheduleData,
 	copyTemplateToEmployeeEmbeddedSchedule,
 	resolveEffectiveShiftFromEmployeeData,
 } from "../helper/employee-schedule.helper";
+import { CreateEmployeeScheduleSchema } from "../zod/employeeSchedule.zod";
 
 describe("employee-schedule.helper regression", () => {
 	const wrappedEmbeddedSchedule = {
@@ -160,5 +162,73 @@ describe("employee-schedule.helper regression", () => {
 		expect(nextMonday?.templateDay).to.equal(8);
 		expect(nextMonday?.shiftTypeCode).to.equal("NIGHT_SHIFT");
 		expect(nextMonday?.isOff).to.equal(false);
+	});
+
+	it("builds a weekly hours pattern with different Mon/Tue times", () => {
+		const monday = new Date("2026-08-24T00:00:00.000Z");
+		const embedded = buildManualPatternEmbeddedSchedule({
+			startDate: monday,
+			pattern: [
+				{ day: 1, startTime: "06:00", endTime: "15:00" },
+				{ day: 2, startTime: "07:00", endTime: "16:00" },
+				{ day: 3, startTime: "08:00", endTime: "17:00" },
+				{ day: 4, startTime: "08:00", endTime: "17:00" },
+				{ day: 5, startTime: "08:00", endTime: "17:00" },
+				{ day: 6, isOff: true },
+				{ day: 7, isOff: true },
+			],
+		});
+
+		expect(embedded.cycleDays).to.equal(7);
+		expect(embedded.templateCode).to.equal("WEEKLY_HOURS");
+		expect(embedded.pattern[0].shiftSnapshot.timeSlots[0]).to.deep.equal({
+			type: "work",
+			label: "Work",
+			startTime: "06:00",
+			endTime: "15:00",
+		});
+		expect(embedded.pattern[1].shiftSnapshot.timeSlots[0].startTime).to.equal("07:00");
+		expect(embedded.pattern[5].shiftSnapshot.isOff).to.equal(true);
+
+		const mondayShift = resolveEffectiveShiftFromEmployeeData(
+			{
+				embeddedSchedule: embedded,
+				employmentStartDate: monday.toISOString(),
+				scheduleOverrides: [],
+				scheduleHistoryRecords: [],
+			},
+			monday,
+			new Map(),
+		);
+		const tuesdayShift = resolveEffectiveShiftFromEmployeeData(
+			{
+				embeddedSchedule: embedded,
+				employmentStartDate: monday.toISOString(),
+				scheduleOverrides: [],
+				scheduleHistoryRecords: [],
+			},
+			new Date("2026-08-25T00:00:00.000Z"),
+			new Map(),
+		);
+		expect(mondayShift?.startTime).to.equal("06:00");
+		expect(mondayShift?.endTime).to.equal("15:00");
+		expect(tuesdayShift?.startTime).to.equal("07:00");
+		expect(tuesdayShift?.endTime).to.equal("16:00");
+	});
+
+	it("accepts a weekly pattern on CreateEmployeeScheduleSchema", () => {
+		const parsed = CreateEmployeeScheduleSchema.safeParse({
+			employeeId: "emp-1",
+			pattern: [
+				{ day: 1, startTime: "06:00", endTime: "15:00" },
+				{ day: 2, startTime: "07:00", endTime: "16:00" },
+				{ day: 3, startTime: "08:00", endTime: "17:00" },
+				{ day: 4, startTime: "08:00", endTime: "17:00" },
+				{ day: 5, startTime: "08:00", endTime: "17:00" },
+				{ day: 6, isOff: true },
+				{ day: 7, isOff: true },
+			],
+		});
+		expect(parsed.success).to.equal(true);
 	});
 });

@@ -1,5 +1,13 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Employee weekly hours (Mon 6–3, Tue 7–4)
+
+- Operator asked where to change one employee’s shift (Zen Monday 6–3, Tuesday 7–4). Admin Schedule Templates already exist as reusable patterns.
+- Per-person weekly hours already lived on HR/Admin employee edit → Active Schedule. Work Schedule tab was view-only.
+- Added **Change schedule** on the employee Work Schedule tab: 7 weekday start/end/off editor. Saves `POST /api/employee-schedules` with a `pattern`. Takes effect next Monday.
+- Tests: mocha helper 6; vitest 6 (helper + modal + tab).
+- 2026-08-20: landed on `origin/develop` so VM ansible-pull / Docker can deploy DEV.
+
 ## Latest Task Addendum - 2026-08-20 Day labor timesheet property (NO PUSH)
 
 - Operator: implement the lead requirement; **stop pushing to develop until they say so**.
