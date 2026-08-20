@@ -1,5 +1,13 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Timesheet 2.1.7 Direct vs Indirect UI
+
+- Operator assigned Timesheet Management **2.1.7** (split): tardiness/OT reports already existed; Direct vs Indirect labor was API-only.
+- Mounted existing `DirectIndirectLaborTab` on `/hr/reports/workforce?tab=direct-indirect`. Did **not** replace Manpower Distribution (`tab=labor` remains default).
+- Live API `POST /api/metrics` `directIndirectLaborSummary`: **872** direct / **1355** indirect, 15 departments.
+- Playwright: tab chrome + report title + Labor Type; tardiness tab still present.
+- Remaining honesty: gender/agency/total-manpower blocks on that tab still use client employee roster (can show 0 while API KPIs are filled). REC-20260820-DIRECT-INDIRECT-ROSTER-VS-API.
+
 ## Latest Task Addendum - 2026-08-20 Document on-prem port access
 
 - Operator: document that on-prem ports still exist; this PC cannot reach them; Cloudflare is the same VM.

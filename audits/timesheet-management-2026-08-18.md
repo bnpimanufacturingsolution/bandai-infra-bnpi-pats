@@ -34,7 +34,7 @@ Evidence: `.runtime/timesheet-real-test-20260819/` · mocha **26 passing** (`tim
 | 2.1.4 Undertime | Zen is in tardiness report (3 late / 2 UT). Row UT 2:05 is real. Report rollup minutes do not match the row | **Partial** | `tardiness-aug.json` |
 | 2.1.5 Adjustments | **App feature added 2026-08-19.** Employee **My Requests → Attendance Adjustment** now files `ATTENDANCE_CORRECTION` with time in/out. My Attendance missed clock-out has **Request clock-out**. HR **Time Adjustments** tab still posted invalid `TIME_ADJUSTMENT` (not wired). Direct HR `/hr/time-corrections` exists. Live Zen 8/18 request `REQ-1786424090598` SUBMITTED waiting HR | **Partial — request UI exists; apply-on-approve not proven in UI this pass** | `.runtime/zen-att-adjust-20260819/` |
 | 2.1.6 Perfect attendance | API 200: **36 / 91** (39.56%) Aug 1–19. Not re-checked person-by-person vs punches | **API works; not 100% proven** | `perfect-aug.json` |
-| 2.1.7 Direct vs indirect | API 200. UI tab still **not mounted** | **API only** | `direct-indirect.json` |
+| 2.1.7 Direct vs indirect | API 200. **UI mounted 2026-08-20** on `/hr/reports/workforce?tab=direct-indirect` | **Pass UI + API** | `.runtime/direct-indirect-2.1.7-20260820-114121/api-direct-indirect.json`, Playwright `hr-workforce-direct-indirect.spec.ts` |
 | 2.1.8 Leave balance | Filter `employeeId=Zen` → `totalEmployees=1` | **Pass** | `leave-balance.json` |
 | 2.1.9 No-work / manpower | 2026-08-19: no-work **864** + active **2** = **866**. Matches overview. 2026-08-18: 849+17=866. Report tabs still unwired | **Pass math / fail UI** | `nowork-19.json`, `active-19.json` |
 | 2.1.10 Leave conversion / credit upload | `LEAVE_CONVERSION` is **not** a request type (400 enum). Allowed: LEAVE, TIMESHEET, OVERTIME, ATTENDANCE_CORRECTION, … | **Missing** | `request-types-probe` 400 |
@@ -95,7 +95,7 @@ The sheet marks Core and Customization **100%**. The live app has **most Timekee
 | 2.1.4 | Undertime | `/hr/reports/attendance?tab=tardiness` · `tardinessMetrics` | Yes | **Working** | **Tardiness & Undertime** tab. API Aug 1–18: **51** people, **62** late (285.42h), **27** UT (39.25h). Zen 00010 is first row |
 | 2.1.5 | Adjustments | `/hr/time-corrections` | Yes | **Working (empty list)** | **Attendance Corrections**. Table chrome; rows still loading / empty on hop |
 | 2.1.6 | Monthly/annual perfect attendance | `/hr/reports/attendance?tab=perfect` · `perfectAttendanceMetrics` | Yes | **Working** | Perfect Attendance tab. API Aug 1–18: **31 / 82** perfect (37.8%) |
-| 2.1.7 | Tardiness / UT / OT details + **direct vs indirect labor** | tardiness + overtime tabs; labor API `directIndirectLaborSummary` | **Split** | **Partial** | Tardiness/OT reports exist. `DirectIndirectLaborTab.tsx` is **not mounted**. Workforce page shows **Manpower Distribution**, not that report. API itself 200: 871 direct / 1355 indirect |
+| 2.1.7 | Tardiness / UT / OT details + **direct vs indirect labor** | tardiness + overtime tabs; labor API `directIndirectLaborSummary` | **Yes (split surfaces)** | **Working** | Tardiness/OT remain on Attendance Reports. Workforce now has a third tab **Direct vs Indirect** (`?tab=direct-indirect`). Live API 2026-08-20: **872** direct / **1355** indirect, 15 departments. Manpower Distribution stays default `labor`. Client gender/agency/total-manpower tables on this tab can still show 0 while API KPIs are filled |
 | 2.1.8 | Leave tardiness/UT, leave balance, manhour | `/hr/reports/attendance?tab=leave` · `leaveBalanceMetrics` | Yes (balance) | **Working** | Leave Balance tab. API: 2,226 employees, types include ACL / BEL / BIL / CL. Manhour is timesheet hours, not a separate report |
 | 2.1.9 | No-work, daily manpower, agency summary | agency tab + unused tabs + metrics | **Split** | **Partial** | **Agency Attendance** tab works (5 agencies). `NoWorkReportTab` + `DailyManpowerTab` exist but **are not routed**. APIs work: no-work **864**, active manpower **2** (Jhon 01694, Zen 00010) on 2026-08-18 |
 | 2.1.10 | Leave conversion, annual leave credit uploads | PAN type + leave-type import | **Split** | **Partial** | `LEAVE_CONVERSION` is an employee PAN option (“convert leave credits to cash”). HR `/hr/requests/personnel-action` **redirects to tickets**. No dedicated “annual leave credit upload” timesheet screen. Leave-type import lives under admin/migration |
@@ -194,7 +194,7 @@ Active names on this snapshot: Jhon `01694`, Russel `00536`, Jessica `01640`, Ze
 
 | Gap | Class | Detail |
 |---|---|---|
-| Direct vs indirect labor **page** | orphan UI | `DirectIndirectLaborTab.tsx` + live API, not added to `/hr/reports/workforce` |
+| Direct vs indirect labor **page** | **mounted 2026-08-20** | `/hr/reports/workforce?tab=direct-indirect`. Remaining honesty: gender/agency/total-manpower on that tab use `useEmployees` roster, not the metrics API |
 | Daily manpower + no-work **pages** | orphan UI | Same: tabs exist, APIs 200, not routed. Dashboard hop did not show a no-work report |
 | Pregnant employee list | missing product | Import metadata only (`bnpi-manpower-databank-import.helper.ts` column `pregnant`) |
 | `/hr/my-attendance` | dead route | 404 |

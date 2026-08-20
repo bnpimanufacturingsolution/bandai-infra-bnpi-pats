@@ -175,15 +175,30 @@ test("Timesheet Management sheet live audit", async ({ page }) => {
 	await checkSurface(page, {
 		id: "2.1.7b",
 		sheetLabel: "Direct vs indirect labor reports",
-		route: "/hr/reports/workforce?tab=labor",
-		shot: "2.1.7b-manpower-labor",
-		needles: ["Manpower", "Direct", "Indirect", "Labor", "Agency"],
+		route: "/hr/reports/workforce?tab=direct-indirect",
+		shot: "2.1.7b-direct-indirect",
+		needles: ["Direct vs Indirect Labor Report", "Labor Type", "Direct Employees"],
 		score: async (found, p) => {
-			const body = await bodyText(p);
-			const hasDirectIndirect = /direct\s*vs\s*indirect|indirect labor/i.test(body);
-			if (hasDirectIndirect) return { status: "working", notes: "direct vs indirect labor UI" };
-			if (found) return { status: "partial", notes: "workforce labor page exists; dedicated direct/indirect tab not on this route" };
-			return { status: "missing", notes: body.slice(0, 160) };
+			const title = await p
+				.getByText("Direct vs Indirect Labor Report")
+				.first()
+				.isVisible()
+				.catch(() => false);
+			const tabState = await p
+				.getByRole("tab", { name: /direct vs indirect/i })
+				.getAttribute("data-state")
+				.catch(() => "");
+			const laborType = await p.getByText("Labor Type").first().isVisible().catch(() => false);
+			if (title && tabState === "active" && laborType) {
+				return { status: "working", notes: "direct vs indirect labor report tab active" };
+			}
+			if (found) {
+				return {
+					status: "partial",
+					notes: `title=${title} tab=${tabState} laborType=${laborType}`,
+				};
+			}
+			return { status: "missing", notes: (await bodyText(p)).slice(0, 160) };
 		},
 	});
 

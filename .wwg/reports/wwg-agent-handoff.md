@@ -1,5 +1,17 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Timesheet 2.1.7 Direct vs Indirect labor UI
+
+| Field | Value |
+|---|---|
+| Status | `IMPLEMENTED_LOCAL_BROWSER_PROOF` |
+| Gap | Audit 2.1.7: tardiness/OT existed; Direct vs Indirect tab was not mounted |
+| Fix | Third Workforce tab `direct-indirect` renders `DirectIndirectLaborTab` |
+| Default | `tab=labor` still Manpower Distribution |
+| Live API | 872 direct / 1355 indirect (2026-08-20) |
+| Tests | vitest workforce 3 + manpower 3; Playwright `hr-workforce-direct-indirect.spec.ts` |
+| Open | Client roster tables on that tab can be 0; no-work / daily manpower still unmounted (2.1.9) |
+
 ## 2026-08-20 - Document on-prem port access
 
 | Field | Value |
