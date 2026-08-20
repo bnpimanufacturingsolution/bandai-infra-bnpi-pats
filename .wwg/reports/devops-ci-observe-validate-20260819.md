@@ -70,7 +70,7 @@ CI run: https://github.com/hrisworkforcesystem-coder/bandai-infra/actions/runs/3
 
 GitHub environments: `vm-gitops`, `hris-api`, `hris-app`, `hris-emp-app`, `callback-outbox`.
 
-VM script: `appliance/bin/project-truth-report-github-deploy.sh` after ansible-pull records `/var/lib/project-truth/ansible-pull-state`. It **never posts `failure`**. `services=none` is still GitHub `success` with description **not rebuilt this SHA**.
+VM script: `appliance/bin/project-truth-report-github-deploy.sh` after ansible-pull records `/var/lib/project-truth/ansible-pull-state`. Image/gitops envs **never post `failure`**. `services=none` is still GitHub `success` with description **not rebuilt**. On-prem port jobs **do post `failure`** if VM localhost HTTP is not 2xx.
 
 | Job / env | Success means | Does **not** mean |
 |---|---|---|
@@ -79,6 +79,21 @@ VM script: `appliance/bin/project-truth-report-github-deploy.sh` after ansible-p
 | **hris-app** | same | Public HTML is this SHA |
 | **hris-emp-app** | same | Emp-app tests ran |
 | **callback-outbox** | same | Outbox process identity |
+
+### On-prem instance ports (DEV / UAT / PROD)
+
+GitHub-hosted runners **cannot** reach `10.184.37.19`. The VM curls `127.0.0.1` (same processes published on the LAN IP).
+
+| Env | LAN URL | VM bind | Live 2026-08-20 |
+|---|---|---|---|
+| `onprem-prod-app` | `http://10.184.37.19:3000/auth/login` | `:3000` | 200 |
+| `onprem-prod-api` | `http://10.184.37.19:3001/health` | `:3001` | 200 |
+| `onprem-dev-app` | `http://10.184.37.19:3100/auth/login` | `:3100` | 200 |
+| `onprem-dev-api` | `http://10.184.37.19:3101/health` | `:3101` | 200 |
+| `onprem-uat-app` | `http://10.184.37.19:3200/auth/login` | `:3200` | 200 |
+| `onprem-uat-api` | `http://10.184.37.19:3201/health` | `:3201` | 200 |
+
+This workstation on Wi-Fi `192.168.1.26` still cannot open those LAN URLs (host_not_on_lan). Use VM bind proof or Cloudflare for remote.
 
 Observe run: https://github.com/hrisworkforcesystem-coder/bandai-infra/actions/runs/32261539755
 

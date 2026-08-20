@@ -24,11 +24,17 @@ report_env() {
   local environment="$1"
   local env_url="$2"
   local description="$3"
+  local state="${4:-success}"
   local ids
   local deploy_id
   local ok_local=0
   local create_body
   local status_body
+
+  case "$state" in
+    success|failure|error|inactive) ;;
+    *) state="success" ;;
+  esac
 
   ids="$(run_gh api "repos/${repo}/deployments?sha=${commit}&environment=${environment}&per_page=10" --jq '.[].id' 2>/dev/null || true)"
   if [ -z "$ids" ]; then
@@ -40,7 +46,7 @@ report_env() {
     return 0
   fi
 
-  status_body="$(post_json "{\"state\":\"success\",\"environment\":\"${environment}\",\"description\":\"${description}\",\"environment_url\":\"${env_url}\"}")"
+  status_body="$(post_json "{\"state\":\"${state}\",\"environment\":\"${environment}\",\"description\":\"${description}\",\"environment_url\":\"${env_url}\"}")"
   for deploy_id in $ids; do
     [ -z "$deploy_id" ] && continue
     if printf '%s\n' "$status_body" | run_gh api "repos/${repo}/deployments/${deploy_id}/statuses" --input - >/dev/null; then
@@ -116,6 +122,37 @@ report_env "hris-api" "https://dev-api.bnpi-hris.tech/health" "hris-api ${commit
 report_env "hris-app" "https://dev.bnpi-hris.tech/auth/login" "hris-app ${commit} $(service_note 'hris-app-local:develop')"
 report_env "hris-emp-app" "https://dev-emp.bnpi-hris.tech/auth/login" "hris-emp-app ${commit} $(service_note 'hris-emp-app-local:develop')"
 report_env "callback-outbox" "https://dev-api.bnpi-hris.tech/health" "callback-outbox ${commit} $(service_note 'hris-callback-outbox:develop')"
+
+probe_http() {
+  local url="$1"
+  local code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "$url" || true)"
+  if [ -z "$code" ]; then
+    code="000"
+  fi
+  printf '%s' "$code"
+}
+
+report_onprem_port() {
+  local environment="$1"
+  local lan_url="$2"
+  local loop_url="$3"
+  local code
+  local state="failure"
+  code="$(probe_http "$loop_url")"
+  case "$code" in
+    200|301|302|303|307|308) state="success" ;;
+  esac
+  report_env "$environment" "$lan_url" "onprem ${environment} ${commit} outcome=${state} http=${code} bind=${loop_url}" "$state"
+}
+
+# On-prem instance ports on the VM (not Cloudflare). GitHub runners cannot reach 10.184.37.19.
+report_onprem_port "onprem-prod-api" "http://10.184.37.19:3001/health" "http://127.0.0.1:3001/health"
+report_onprem_port "onprem-prod-app" "http://10.184.37.19:3000/auth/login" "http://127.0.0.1:3000/auth/login"
+report_onprem_port "onprem-dev-api" "http://10.184.37.19:3101/health" "http://127.0.0.1:3101/health"
+report_onprem_port "onprem-dev-app" "http://10.184.37.19:3100/auth/login" "http://127.0.0.1:3100/auth/login"
+report_onprem_port "onprem-uat-api" "http://10.184.37.19:3201/health" "http://127.0.0.1:3201/health"
+report_onprem_port "onprem-uat-app" "http://10.184.37.19:3200/auth/login" "http://127.0.0.1:3200/auth/login"
 
 {
   echo "repo=${repo}"

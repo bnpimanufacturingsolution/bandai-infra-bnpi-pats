@@ -1,5 +1,14 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - On-prem DEV/UAT/PROD port Observe
+
+| Field | Value |
+|---|---|
+| Meaning | Operator asked for on-prem instance port access (DEV/UAT/PROD app+API), not Cloudflare-only |
+| Probe | VM `curl 127.0.0.1:{3000,3001,3100,3101,3200,3201}` |
+| Live bind | all six HTTP 200 (2026-08-20 SSH) |
+| Observe | `onprem-{prod,dev,uat}-{api,app}`; failure if port down |
+
 ## 2026-08-20 - Non-breaking DevOps CI/Observe harden (push authorized)
 
 | Field | Value |

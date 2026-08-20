@@ -103,6 +103,12 @@ signal for whether the VM has already pulled the SHA.
 | **Observe / hris-app** | DEV app image rebuilt **or** not rebuilt this SHA |
 | **Observe / hris-emp-app** | Employee app image rebuilt **or** not rebuilt |
 | **Observe / callback-outbox** | Outbox image rebuilt **or** not rebuilt |
+| **Observe / onprem-prod-api** | VM `127.0.0.1:3001/health` HTTP 2xx |
+| **Observe / onprem-prod-app** | VM `127.0.0.1:3000/auth/login` HTTP 2xx |
+| **Observe / onprem-dev-api** | VM `127.0.0.1:3101/health` HTTP 2xx |
+| **Observe / onprem-dev-app** | VM `127.0.0.1:3100/auth/login` HTTP 2xx |
+| **Observe / onprem-uat-api** | VM `127.0.0.1:3201/health` HTTP 2xx |
+| **Observe / onprem-uat-app** | VM `127.0.0.1:3200/auth/login` HTTP 2xx |
 
 `in progress` on Observe = waiting for VM `ansible-pull` (timer every 5 min).
 `success` = VM reported that environment. Image jobs can succeed with **not rebuilt this SHA**.

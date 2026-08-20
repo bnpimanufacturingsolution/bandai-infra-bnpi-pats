@@ -1,5 +1,12 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 On-prem DEV/UAT/PROD port Observe
+
+- Operator: Observe should cover **on-premise port access** of the instance for DEV/UAT/PROD app+API, not only GitHub unit tests / Cloudflare.
+- GitHub runners cannot reach `10.184.37.19`. VM reporter curls `127.0.0.1` after ansible-pull.
+- Live VM bind proof: prod/dev/uat API `:3001/:3101/:3201` and app `:3000/:3100/:3200` all HTTP 200.
+- Observe matrix adds `onprem-{prod,dev,uat}-{api,app}`. Down port posts GitHub Deployment **failure** (fail-fast false).
+
 ## Latest Task Addendum - 2026-08-20 Non-breaking DevOps CI/Observe harden (push authorized)
 
 - Operator: improve without breaking, then **do it** (push `develop`). VM ansible-pull will pick up the SHA.
