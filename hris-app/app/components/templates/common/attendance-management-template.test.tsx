@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useSearchParams } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getClockInArrivalIndicator } from "~/lib/utils/attendance-arrival";
 import { formatManilaClockTime } from "~/lib/utils/manila-clock";
@@ -247,6 +247,32 @@ vi.mock("./AttendanceDailyTrendSection", () => ({
 }));
 
 const { AttendanceManagement } = await import("./attendance-management-template");
+
+function AttendanceSearchProbe() {
+	const [params] = useSearchParams();
+	return <div data-testid="attendance-search">{params.toString()}</div>;
+}
+
+function renderAttendance(path: string) {
+	return render(
+		<MemoryRouter initialEntries={[path]}>
+			<Routes>
+				<Route
+					path="/hr/attendance"
+					element={
+						<>
+							<AttendanceSearchProbe />
+							<AttendanceManagement
+								title="Attendance Overview"
+								description="View, manage and import attendance records"
+							/>
+						</>
+					}
+				/>
+			</Routes>
+		</MemoryRouter>,
+	);
+}
 
 describe("AttendanceManagement", () => {
 	beforeEach(() => {
@@ -554,6 +580,47 @@ describe("AttendanceManagement", () => {
 		expect(screen.getByLabelText("Section filter")).toBeInTheDocument();
 		expect(screen.getByLabelText("Position filter")).toBeInTheDocument();
 		expect(screen.getByLabelText("Level filter")).toBeInTheDocument();
+	});
+
+	it("opens the clocked-in list from the overview and returns to the attendance route", () => {
+		renderAttendance("/hr/attendance");
+
+		expect(screen.queryByTestId("attendance-table")).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: /^Clocked in/i }));
+
+		expect(screen.getByTestId("attendance-search").textContent).toContain("status=CLOCKED_IN");
+		expect(screen.getByTestId("attendance-search").textContent).toContain("view=list");
+		expect(screen.getByTestId("attendance-table")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("link", { name: /back to attendance overview/i }));
+
+		expect(screen.getByTestId("attendance-search")).toHaveTextContent("");
+		expect(screen.queryByTestId("attendance-table")).not.toBeInTheDocument();
+		expect(screen.queryByRole("link", { name: /back to attendance overview/i })).not.toBeInTheDocument();
+	});
+
+	it("returns to the attendance overview when the active clocked-in filter is clicked again", () => {
+		renderAttendance("/hr/attendance?status=CLOCKED_IN&view=list&page=1");
+
+		expect(screen.getByTestId("attendance-table")).toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: /^Clocked in/i, pressed: true }));
+
+		expect(screen.getByTestId("attendance-search")).toHaveTextContent("");
+		expect(screen.queryByTestId("attendance-table")).not.toBeInTheDocument();
+	});
+
+	it("keeps date filters when returning from a clocked-in list", () => {
+		renderAttendance("/hr/attendance?status=CLOCKED_IN&view=list&page=1&period=custom&from=2026-08-01&to=2026-08-15");
+
+		fireEvent.click(screen.getByRole("link", { name: /back to attendance overview/i }));
+
+		const search = screen.getByTestId("attendance-search").textContent || "";
+		expect(search).toContain("period=custom");
+		expect(search).toContain("from=2026-08-01");
+		expect(search).toContain("to=2026-08-15");
+		expect(search).not.toContain("status=");
+		expect(search).not.toContain("view=list");
+		expect(screen.queryByTestId("attendance-table")).not.toBeInTheDocument();
 	});
 
 	it("shows the Fix Attendance action in the record details modal", async () => {

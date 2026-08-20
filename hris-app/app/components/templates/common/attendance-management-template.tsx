@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useMemo, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
 	Clock,
 	Calendar,
@@ -205,6 +205,32 @@ function parseDurationToMinutes(value?: string | null): number {
 	if (verbose) return Number(verbose[1]) * 60 + Number(verbose[2]);
 
 	return 0;
+}
+
+const ATTENDANCE_ROUTE = "/hr/attendance";
+const ATTENDANCE_OVERVIEW_QUERY_KEYS = ["period", "periodCode", "from", "to"] as const;
+const ATTENDANCE_LIST_CONTEXT_KEYS = [
+	"department",
+	"section",
+	"position",
+	"level",
+	"manager",
+	"employee",
+	"shiftType",
+	"search",
+] as const;
+
+function buildAttendanceOverviewSearch(params: URLSearchParams): string {
+	const next = new URLSearchParams();
+	for (const key of ATTENDANCE_OVERVIEW_QUERY_KEYS) {
+		const value = params.get(key);
+		if (value) next.set(key, value);
+	}
+	return next.toString();
+}
+
+function hasAttendanceListContext(params: URLSearchParams): boolean {
+	return ATTENDANCE_LIST_CONTEXT_KEYS.some((key) => Boolean(params.get(key)));
 }
 
 export function AttendanceManagement({
@@ -1049,6 +1075,17 @@ export function AttendanceManagement({
 		});
 	};
 
+	const attendanceOverviewSearch = buildAttendanceOverviewSearch(searchParams);
+	const attendanceOverviewTo = {
+		pathname: ATTENDANCE_ROUTE,
+		search: attendanceOverviewSearch,
+	} as const;
+
+	const returnToAttendanceOverview = () => {
+		setSearchQuery("");
+		setSearchParams(new URLSearchParams(attendanceOverviewSearch));
+	};
+
 	const clearScopeAndShiftFilters = () => {
 		updateSearchParams((params) => {
 			params.delete("department");
@@ -1473,7 +1510,18 @@ export function AttendanceManagement({
 	};
 
 	const handleMetricFilter = (status: string) => {
-		handleStatusFilterChange(statusFilter === status ? "all" : status);
+		if (statusFilter === status) {
+			if (hasAttendanceListContext(searchParams)) {
+				updateSearchParams((params) => {
+					params.delete("status");
+					params.set("page", "1");
+				});
+				return;
+			}
+			returnToAttendanceOverview();
+			return;
+		}
+		handleStatusFilterChange(status);
 	};
 
 	// Pagination handlers
@@ -1980,23 +2028,6 @@ export function AttendanceManagement({
 			params.delete("manager");
 			params.delete("search");
 			params.delete("status");
-		});
-		setSearchQuery("");
-	};
-
-	const returnToAttendanceOverview = () => {
-		updateSearchParams((params) => {
-			params.delete("view");
-			params.delete("department");
-			params.delete("section");
-			params.delete("position");
-			params.delete("level");
-			params.delete("manager");
-			params.delete("employee");
-			params.delete("shiftType");
-			params.delete("search");
-			params.delete("status");
-			params.delete("page");
 		});
 		setSearchQuery("");
 	};
@@ -3547,13 +3578,13 @@ export function AttendanceManagement({
 			) : null}
 
 			{viewMode === "list" ? (
-				<button
-					type="button"
-					onClick={returnToAttendanceOverview}
+				<Link
+					to={attendanceOverviewTo}
+					onClick={() => setSearchQuery("")}
 					className="inline-flex w-fit items-center gap-2 text-sm font-medium text-gray-600 transition-colors hover:text-orange-600">
 					<ArrowLeft className="h-4 w-4" />
 					Back to attendance overview
-				</button>
+				</Link>
 			) : null}
 
 			{viewMode === "overview" ? (

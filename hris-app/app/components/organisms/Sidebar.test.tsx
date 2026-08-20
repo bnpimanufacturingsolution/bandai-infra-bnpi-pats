@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "./Sidebar";
 
@@ -113,6 +113,35 @@ describe("Sidebar", () => {
 			reportsButton.compareDocumentPosition(auditLogsLink) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
+	});
+
+	it("resets attendance list query params when Attendance is clicked again", () => {
+		function LocationProbe() {
+			const location = useLocation();
+			return (
+				<div data-testid="sidebar-location">
+					{`${location.pathname}${location.search}`}
+				</div>
+			);
+		}
+
+		render(
+			<MemoryRouter
+				initialEntries={["/hr/attendance?status=CLOCKED_IN&view=list&page=1"]}>
+				<LocationProbe />
+				<Sidebar />
+			</MemoryRouter>,
+		);
+
+		expect(screen.getByTestId("sidebar-location")).toHaveTextContent(
+			"/hr/attendance?status=CLOCKED_IN&view=list&page=1",
+		);
+
+		fireEvent.click(screen.getByRole("link", { name: "Attendance" }));
+
+		expect(screen.getByTestId("sidebar-location")).toHaveTextContent("/hr/attendance");
+		expect(screen.getByTestId("sidebar-location").textContent).not.toContain("status=");
+		expect(screen.getByTestId("sidebar-location").textContent).not.toContain("view=list");
 	});
 
 	it("shows Audit Logs in the sidebar for HR Managers", () => {

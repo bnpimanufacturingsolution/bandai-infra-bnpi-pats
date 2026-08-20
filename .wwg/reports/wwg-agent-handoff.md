@@ -92,6 +92,36 @@
 | After | `origin/develop` `f93f30d`. ansible-pull `2026-08-19T10:01:21Z`. DEV app pod `hris-app-77fcb5db6f-d69md`. HTML `root-CIRKoZkC.css`. Chunk `_id.attendance-DI1eNUjI.js` contains **Request time**. CSS has `attendance-period-layout`. |
 | Tests | API mocha 30; app vitest 26; local `hris-app` production build green. |
 
+## 2026-08-20 - Attendance overview return from list filters
+
+| Field | Value |
+|---|---|
+| Symptom | Clocked In (and other overview filters) set `?status=&view=list`. Sidebar Attendance stayed on that URL. |
+| Fix | Back link → `/hr/attendance` (date/period kept). Metric toggle-off returns to overview. Sidebar same-path click clears search. |
+| Tests | vitest 23 (attendance 19 + sidebar 4) |
+| Browser | `.runtime/attendance-overview-return-20260820/result.json` |
+
+## 2026-08-19 - Overtime request hours/minutes + HR payable OT
+
+| Field | Value |
+|---|---|
+| Symptom | OT form was a number spinner; 2h 50m not enterable. Workflow was manager. Approve did not write payable OT. |
+| UI | DatePicker + Hours/Minutes. Example 2:50. |
+| Workflow | `WF-OVERTIME-DEFAULT` employee → **HR** → system |
+| Apply | HR approve writes `timesheet_lines.overtimeHours` `2:50` (170 min) |
+| Tests | vitest 7; mocha 3 |
+
+## 2026-08-19 - Payroll Management sheet audit (actual users)
+
+| Field | Value |
+|---|---|
+| Status | `AUDITED_LIVE` |
+| Sheet claim | 98.08% — **wrong** |
+| Report | `audits/payroll-management-2026-08-19.md` |
+| Records | **46** `EmployeePayroll` (35 Jun P1 + 11 Jul P1). Payslip files **0**. Special runs **0**. Loans **1321**. Corrections **0** |
+| Current Aug | OPEN `PP-20260811-20260826`. Approved timesheets **0**. Zen TS `cmswwobaz05mxlp01e8p71f9q` **404** |
+| Actors | Maria Santos HR · Juan Mendoza employee · Zen `00010` via API |
+
 ## 2026-08-19 - ansible-pull fixed (suspended GitHub user)
 
 | Field | Value |

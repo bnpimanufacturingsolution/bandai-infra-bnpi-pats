@@ -65,19 +65,30 @@
 - Cause: GitOps DEV serves `develop` `b409ca4`. The attendance request work lived only on `bryan-task` `3bad2d1`. Merging `develop` into `bryan-task` does not deploy the feature.
 - Layout (Today left / log right) was still uncommitted local CSS. Promote the committed attendance request + related API/UI from `3bad2d1` onto `develop`.
 
-## Latest Task Addendum - 2026-08-19 LAN-deployed new SDK listener
+## Latest Task Addendum - 2026-08-20 Attendance list filters return to overview
 
-- Operator: how to deploy the new units right now.
-- GitOps pull still 403. Deployed from Windows host over LAN SSH: `/opt` include/src + wrapper, restart.
-- New ELF **2026-08-19 05:21 UTC**. Backup `*.bak-20260813`. Callbacks observed after arm.
-- ansible-pull still broken; this LAN copy will not be refreshed from GitHub until that 403 is fixed.
+- Operator: `/hr/attendance` overview; click Clocked In (or any metric) → URL becomes `?status=CLOCKED_IN&view=list`. No way back to the clean attendance route.
+- Fix: Back link is a real `/hr/attendance` Link (keeps date/period). Clicking the same metric again returns to overview. Sidebar Attendance resets list query params on the same path.
+- Tests: attendance-management 19; Sidebar 4. Browser: `.runtime/attendance-overview-return-20260820/`.
 
-## Latest Task Addendum - 2026-08-19 deployed listener is stale
+## Latest Task Addendum - 2026-08-19 Overtime request date + 2h 50m + HR payable OT
 
-- Operator: is it still working as intended, or is deployed being updated?
-- **Deployed is not updated.** Live listener ELF + wrapper are **2026-08-13** monolith. GitOps `ansible-pull` 403 (GitHub account suspended). Source SHA `a6fdd26a`.
-- **Scratch g++ of the new 10 units on the VM succeeded** (`/tmp/hikvision-units-proof/`). Running process was not replaced.
-- Handoff: `PROVEN_STALE_DEPLOY`.
+- Operator: OT form used a number spinner; 2 hours 50 minutes could not be entered. Workflow was manager-first. Approved employee OT did not write payable hours.
+- Fix: DatePicker; Hours + Minutes (example 2:50). Workflow is employee → HR → system. HR approve writes `timesheetline.overtimeHours` (`2:50` / 170 min).
+- Tests: payload vitest 7; overtime workflow/apply mocha 3.
+
+## Latest Task Addendum - 2026-08-19 Payroll Management sheet live audit
+
+- Operator asked to audit sheet **3 Payroll Management** (claimed 98.08%) with actual users, and whether generate payslip / payroll creates records.
+- Report: `audits/payroll-management-2026-08-19.md`. Evidence: `.runtime/payroll-mgmt-audit-20260819-204314/`.
+- **Not 100%.** `EmployeePayroll` rows exist (**46** = 35 Jun P1 + 11 Jul P1). **No payslip PDFs.** Current Aug cut: 0 approved timesheets; Zen `00010` timesheet `cmswwobaz05mxlp01e8p71f9q` is **404**.
+- Actors: Maria Santos `hr-manager@seed.local`, Juan Mendoza `employee@seed.local`, Zen via HR API.
+
+## Latest Task Addendum - 2026-08-19 DEV pull/push GitOps operator report
+
+- Operator asked how to pull latest (VM / `https://dev.bnpi-hris.tech` / `develop`) and how a push to `develop` shows on DEV.
+- Report: `audits/dev-bnpi-hris-pull-push-gitops-2026-08-19.md`. Indexed in `audits/README.md`.
+- Truth: do not pull code from the website. Pull `origin/develop`. DEV updates only after `git push origin develop` and VM ansible-pull rebuilds `hris-*-local:develop`.
 
 ## Latest Task Addendum - 2026-08-19 Hikvision C++ rollback docs
 
