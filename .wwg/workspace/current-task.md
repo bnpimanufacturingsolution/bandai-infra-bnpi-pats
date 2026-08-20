@@ -1,5 +1,13 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Timesheet ↔ schedule connection audit
+
+- Operator: audit timesheet vs schedule because schedule can change (that is the process).
+- Three layers: live schedule → obligation expected windows → punches/timesheet snapshots.
+- Schedule change **does** recompute obligations. **Does not** rewrite punches or timesheet lines or stored late/OT.
+- **Days** tab = weekly pattern (next Monday). **Dates** tab = that calendar day (`ScheduleOverride`).
+- Canonical: `.wwg/reports/timesheet-schedule-connection-20260820.md`.
+
 ## Latest Task Addendum - 2026-08-20 Change schedule Days vs Dates
 
 - Operator: weekly hours modal should also set hours on a real calendar date, not only next Monday.

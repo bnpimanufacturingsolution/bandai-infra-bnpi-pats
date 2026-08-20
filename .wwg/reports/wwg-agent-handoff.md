@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Timesheet ↔ schedule connection
+
+| Field | Value |
+|---|---|
+| Status | `AUDITED_CODE` |
+| Days tab | Weekly pattern → obligations from next Monday |
+| Dates tab | That calendar date → `ScheduleOverride` + obligation that day |
+| Punches / timesheet lines / stored late | **Not** rewritten by schedule change |
+| Report | `.wwg/reports/timesheet-schedule-connection-20260820.md` |
+
 ## 2026-08-20 - Change schedule Days vs Dates
 
 | Field | Value |
