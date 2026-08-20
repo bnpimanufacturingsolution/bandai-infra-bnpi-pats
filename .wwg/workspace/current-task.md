@@ -12,6 +12,13 @@
 - Changing the date no longer resets start/end back to 08:00–17:00.
 - Break start/end optional (default 12:00–13:00). Days tab unchanged.
 
+## Latest Task Addendum - 2026-08-20 10-agent DevOps audit
+
+- Operator: audit DevOps with 10 subagents. Audit only (no playbook/workflow/Job edits).
+- Tip SHA `37b443a`: CI+Validate green; Observe waiting VM reporter; last apply `885c331` `services=none`.
+- Runtime Argo still Synced/Degraded on failed `hris-api-db-init` (dev/uat/prod).
+- Canonical: `.wwg/reports/devops-audit-20260820.md`.
+
 ## Latest Task Addendum - 2026-08-20 Timesheet ↔ schedule connection audit
 
 - Operator: audit timesheet vs schedule because schedule can change (that is the process).

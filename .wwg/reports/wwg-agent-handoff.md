@@ -28,6 +28,21 @@
 | Fix | Applied `DayLaborType` columns on DEV; save no longer 500s if recompute fails |
 | Proof | DEV POST `/api/scheduleOverride` **200** after column add |
 
+## 2026-08-20 - 10-agent DevOps audit
+
+| Field | Value |
+|---|---|
+| Status | `AUDITED_LIVE` |
+| SHA | `origin/develop` `37b443a` |
+| CI / Validate | success runs 32368517756 / 32368517759 |
+| Observe tip | run 32368517802 waiting VM report (stacked on `e7b6704`) |
+| VM apply stamp | `885c331` `services=none` (docs-only; images not rebuilt) |
+| Argo overlay | Synced/Healthy `37b443a` |
+| Argo runtime | Synced/**Degraded** — `hris-api-db-init` Failed ×3 ns |
+| Ports | VM 6×200; this PC LAN timeout; public APIs 200 no `buildSha` |
+| Tunnel | `cloudflared-bnpi-hris.service` active+enabled |
+| Report | `.wwg/reports/devops-audit-20260820.md` |
+
 ## 2026-08-20 - Timesheet ↔ schedule connection
 
 | Field | Value |
