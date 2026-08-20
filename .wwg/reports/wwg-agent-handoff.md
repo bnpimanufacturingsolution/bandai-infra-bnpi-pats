@@ -9,7 +9,9 @@
 | Gap | Work Schedule tab was view-only; team assign was one shift for every day |
 | Now | **Change schedule** on `/employee/:id?tab=schedule` and admin employee profile |
 | API | `POST /api/employee-schedules` accepts `pattern` (7/14/21/28 days) |
-| Git | Cherry-picked onto `origin/develop` for VM/Docker DEV deploy |
+| Git | `origin/develop` `5807eb1` |
+| VM ansible-pull | `commit=5807eb1` `synced_at=2026-08-20T11:40:44Z` |
+| DEV pods | `dev/hris-app` and `dev/hris-api` Running after rebuild; public chunk has `change-weekly-hours` |
 
 ## 2026-08-20 - Day labor timesheet property (NO PUSH)
 
