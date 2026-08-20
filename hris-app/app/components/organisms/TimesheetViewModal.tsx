@@ -201,6 +201,7 @@ const mergeNormalizedDay = (
 		leaveEntries: normalizedDay.leaveEntries ?? baseDay.leaveEntries ?? [],
 		holidayEntries: normalizedDay.holidayEntries ?? baseDay.holidayEntries ?? [],
 		primaryMarker: normalizedDay.primaryMarker ?? baseDay.primaryMarker,
+		dayLaborType: normalizedDay.dayLaborType ?? baseDay.dayLaborType ?? null,
 		metadata: {
 			...(baseDay.metadata || {}),
 			...(normalizedDay.metadata || {}),
