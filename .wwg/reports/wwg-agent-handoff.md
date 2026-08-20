@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - 2.1.7 readiness re-check
+
+| Field | Value |
+|---|---|
+| Verdict | `READY_WITH_RESIDUAL` |
+| Screenshot “not shown in UI” | **STALE** — tab is mounted |
+| Re-proof | vitest 3, Playwright 1, API 872/1355 |
+| Residual | roster Gender/Agency/Total Manpower = 0; public DEV SHA unproven |
+| Report | `.wwg/reports/direct-indirect-labor-ui-20260820.md` |
+
 ## 2026-08-20 - Timesheet 2.1.7 Direct vs Indirect labor UI
 
 | Field | Value |

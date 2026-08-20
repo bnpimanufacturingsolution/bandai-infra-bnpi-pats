@@ -3,6 +3,7 @@
 | Field | Value |
 |---|---|
 | Status | `IMPLEMENTED_LOCAL_BROWSER_PROOF` |
+| Readiness re-check | 2026-08-20 later: **READY_WITH_RESIDUAL** |
 | Operator assignment | Timesheet Management **2.1.7** (split) |
 | Operator doc | `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md` |
 | Audit | `audits/timesheet-management-2026-08-18.md` |
@@ -12,6 +13,21 @@
 ## Answer
 
 Tardiness / overtime reports were already on Attendance Reports. Direct vs Indirect labor was **API-only**. It is now a third Workforce Analytics tab. Manpower Distribution was **not** replaced.
+
+The 2026-08-18 screenshot line “direct vs indirect labor is not shown in the UI” is **STALE**.
+
+## Readiness re-check (later 2026-08-20)
+
+| Check | Result | Evidence |
+|---|---|---|
+| Git on `origin/develop` | `519d85ea` (docs) + `6aad83c5` (mount) | `HEAD` = `origin/develop` |
+| Vitest `workforce.test.tsx` | **3 passed** | this session |
+| Playwright 2.1.7 smoke | **1 passed** (54s) | this session |
+| API `directIndirectLaborSummary` | 200, **872 / 1355**, 15 depts, 3.59s | `.runtime/direct-indirect-readiness-20260820/api.json` |
+| UI tab + department table | Shown | `.runtime/direct-indirect-2.1.7-browser/workforce-direct-indirect.png` |
+| Public DEV serving this SHA | `NEEDS_CONFIRMATION` | `https://dev.bnpi-hris.tech/...` only returned login chrome |
+
+**Verdict:** `READY_WITH_RESIDUAL` — 2.1.7 assigned gap (tab missing) is closed locally. Roster tables still 0. Public GitOps SHA unproven.
 
 ## Done vs not done
 
