@@ -1215,6 +1215,7 @@ export async function materializeTimesheetLinesFromObligations(
 				reportToIdSnapshot: obligation.reportToIdSnapshot || null,
 				workforceSourceSnapshot: obligation.workforceSourceSnapshot || null,
 				agencyIdSnapshot: obligation.agencyIdSnapshot || null,
+				dayLaborType: obligation.dayLaborType || null,
 				isDeleted: false,
 			},
 		});

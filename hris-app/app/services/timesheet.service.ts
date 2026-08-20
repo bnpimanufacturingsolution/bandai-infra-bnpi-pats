@@ -74,6 +74,7 @@ export interface TimesheetBreakdown {
 	primaryMarker?: TimesheetPrimaryMarker;
 	employeeNotes: string | null;
 	approverNotes: string | null;
+	dayLaborType?: "DIRECT" | "INDIRECT" | null;
 	metadata?: {
 		businessDate?: string | null;
 		totalMinutes?: number;
@@ -667,6 +668,10 @@ function normalizeTimesheetLineBreakdown(
 		primaryMarker: line.primaryMarker as TimesheetPrimaryMarker | undefined,
 		employeeNotes: line.employeeNotes ?? line.notes ?? null,
 		approverNotes: line.approverNotes ?? null,
+		dayLaborType:
+			line.dayLaborType === "DIRECT" || line.dayLaborType === "INDIRECT"
+				? line.dayLaborType
+				: null,
 		metadata: {
 			...metadata,
 			breakMinutes: line.breakMinutes ?? metadata.breakMinutes ?? null,

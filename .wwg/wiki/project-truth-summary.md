@@ -2,6 +2,10 @@
 
 Last updated: 2026-08-20
 
+## 2026-08-20 Day labor on timesheet (no push)
+
+- Per-day work type `Timesheetline.dayLaborType` Direct/Indirect. Timesheet day editor **Day labor**. Not the BNPI vs Agency report. **Do not push** until operator says.
+
 ## 2026-08-20 Timesheet 2.1.7 Direct vs Indirect labor UI
 
 - Workforce Analytics has a third tab **Direct vs Indirect** at `/hr/reports/workforce?tab=direct-indirect`.

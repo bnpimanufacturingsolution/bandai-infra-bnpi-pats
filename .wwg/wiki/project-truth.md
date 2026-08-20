@@ -1,5 +1,15 @@
 # Project Truth
 
+## Day labor on timesheet (2026-08-20)
+
+- Status: `CONFIRMED_CODE_LOCAL`. **Do not push** until the operator says so.
+- Lead requirement: Direct vs Indirect **work** can change every day. Line Leader tags people under them. Store it on the timesheet **day**.
+- Field: `Timesheetline.dayLaborType` (`DayLaborType` `DIRECT` \| `INDIRECT`, nullable). Also on `AttendanceObligation` for the same day. **Not** `Employee.workforceSource`.
+- UI: Timesheet day editor → **Day labor**. Persist when the timesheet breakdown is saved.
+- The Workforce **Direct vs Indirect** report remains hire source (BNPI vs Agency). Do not mix the two.
+- Line Leader is not a separate auth role yet; whoever can edit the timesheet day can set the tag (HR / manager / employee-with-edit).
+- Report: `.wwg/reports/direct-indirect-lead-claim-validation-20260820.md`.
+
 ## Direct vs Indirect labor report UI (2026-08-20)
 
 - Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`. Public DEV until `6aad83c5` is serving is `NEEDS_CONFIRMATION`.

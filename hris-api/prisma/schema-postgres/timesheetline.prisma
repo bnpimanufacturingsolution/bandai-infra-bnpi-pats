@@ -53,6 +53,7 @@ model Timesheetline {
   reportToIdSnapshot      String?
   workforceSourceSnapshot WorkforceSource?
   agencyIdSnapshot        String?
+  dayLaborType            DayLaborType?
   attendanceObligations   AttendanceObligation[]
 
   isDeleted Boolean  @default(false)

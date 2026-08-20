@@ -43,6 +43,7 @@ export interface TimesheetTooltipDayData {
 	approvalStatus?: string | null;
 	employeeNotes?: string | null;
 	approverNotes?: string | null;
+	dayLaborType?: "DIRECT" | "INDIRECT" | null;
 	metadata?: {
 		businessDate?: string | null;
 		breakMinutes?: number | null;
@@ -295,6 +296,11 @@ export function TimesheetDayTooltipContent({
 			{hasScheduleError ? (
 				<p className="text-gray-700 font-medium text-sm">
 					Employee has no schedule for this date
+				</p>
+			) : null}
+			{day.dayLaborType === "DIRECT" || day.dayLaborType === "INDIRECT" ? (
+				<p className="text-sm text-gray-700">
+					Day labor: {day.dayLaborType === "DIRECT" ? "Direct" : "Indirect"}
 				</p>
 			) : null}
 			{isAbsent ? <p className="text-gray-700 font-medium text-sm">Absent</p> : null}

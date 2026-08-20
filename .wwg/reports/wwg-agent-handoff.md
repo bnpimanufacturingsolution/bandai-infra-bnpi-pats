@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Day labor timesheet property (NO PUSH)
+
+| Field | Value |
+|---|---|
+| Operator | Implement lead per-day Direct/Indirect; **do not push develop** |
+| Field | `Timesheetline.dayLaborType` + `AttendanceObligation.dayLaborType` |
+| UI | Timesheet day editor **Day labor** |
+| Distinct from | Hire-source Workforce report |
+| Push | **Stopped** until operator says |
+
 ## 2026-08-20 - Lead 2.1.7 claim vs shipped
 
 | Field | Value |

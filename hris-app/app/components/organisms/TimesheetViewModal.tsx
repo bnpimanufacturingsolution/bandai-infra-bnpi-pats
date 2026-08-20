@@ -187,6 +187,7 @@ const normalizeDayForDirtyCheck = (day: TimesheetBreakdownDay) => ({
 	withinGrace: day.metadata?.withinGrace ?? null,
 	rawEarlyOutMinutes: (day.metadata as any)?.rawEarlyOutMinutes ?? null,
 	graceEarlyOutMinutes: (day.metadata as any)?.graceEarlyOutMinutes ?? null,
+	dayLaborType: day.dayLaborType || null,
 });
 
 const mergeNormalizedDay = (

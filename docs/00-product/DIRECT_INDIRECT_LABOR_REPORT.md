@@ -50,6 +50,19 @@ Live local snapshot 2026-08-20: Direct labor **872**, Indirect labor **1,355**, 
 | Public `dev.bnpi-hris.tech` | Until `6aad83c5` is serving | Proof this SHA is live |
 | No-work / daily manpower tabs | Still not mounted (2.1.9) | Part of this report |
 
+## Day labor vs this report (lead 2026-08-20)
+
+The Workforce report above is **hire source** (BNPI Direct vs Agency). It is **not** the Line Leader per-day tag.
+
+| Concept | Field | Who sets it | Changes daily? |
+|---|---|---|---|
+| Hire source (this report) | `Employee.workforceSource` | HR / import | No |
+| **Day labor** (timesheet property) | `Timesheetline.dayLaborType` | Supervisor/HR on the timesheet **day** | Yes |
+
+On a timesheet day: open the day editor → **Day labor** → Direct / Indirect / Not tagged. Save the timesheet to persist. Untagged is allowed.
+
+Do **not** reuse hire source for daily work type.
+
 ## Hard bans
 
 | Do not say | Because |

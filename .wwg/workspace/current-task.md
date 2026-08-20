@@ -1,5 +1,12 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Day labor timesheet property (NO PUSH)
+
+- Operator: implement the lead requirement; **stop pushing to develop until they say so**.
+- Added `Timesheetline.dayLaborType` / `AttendanceObligation.dayLaborType` (`DIRECT` \| `INDIRECT`, nullable).
+- Timesheet day editor: **Day labor** select. Persist via existing breakdown save. Distinct from hire-source report.
+- Standing order: **do not `git push origin develop`** until the operator asks.
+
 ## Latest Task Addendum - 2026-08-20 Lead 2.1.7 meaning vs shipped
 
 - Lead: Tardiness/OT = actual TI/TO vs sched. Direct vs Indirect = Line Leader **per-day** work tag on timesheet.

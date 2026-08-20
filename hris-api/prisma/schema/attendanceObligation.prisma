@@ -48,6 +48,7 @@ model AttendanceObligation {
   reportToIdSnapshot      String?          @db.ObjectId
   workforceSourceSnapshot WorkforceSource?
   agencyIdSnapshot        String?          @db.ObjectId
+  dayLaborType            DayLaborType?
 
   isDeleted Boolean  @default(false)
   createdAt DateTime @default(now())

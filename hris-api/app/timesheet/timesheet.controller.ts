@@ -34,6 +34,7 @@ import {
 	normalizeToStartOfDay,
 } from "../../helper/attendance.helper";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler.helper";
+import { normalizeDayLaborType } from "../../helper/day-labor-type.helper";
 import { groupDataByField } from "../../helper/dataGrouping";
 import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler";
 import {
@@ -339,6 +340,7 @@ export const controller = (prisma: PrismaClient) => {
 		"status",
 		"employeeNotes",
 		"approverNotes",
+		"dayLaborType",
 	]);
 
 	const toAuditEpochMinute = (value: unknown): number | null => {
@@ -371,6 +373,7 @@ export const controller = (prisma: PrismaClient) => {
 			approverNotes: day?.approverNotes ?? null,
 			breakMinutes: metadata.breakMinutes ?? null,
 			breakDisplay: metadata.breakDisplay ?? null,
+			dayLaborType: day?.dayLaborType ?? null,
 		};
 	};
 
@@ -462,6 +465,7 @@ export const controller = (prisma: PrismaClient) => {
 			approverNotes: line?.approverNotes ?? null,
 			breakMinutes: line?.breakMinutes ?? metadata.breakMinutes ?? null,
 			breakDisplay: metadata.breakDisplay ?? null,
+			dayLaborType: line?.dayLaborType ?? null,
 		};
 	};
 
@@ -479,6 +483,7 @@ export const controller = (prisma: PrismaClient) => {
 		approverNotes: "Approver note",
 		breakMinutes: "Break",
 		breakDisplay: "Break label",
+		dayLaborType: "Day labor",
 	};
 
 	const buildRevisionFieldChanges = (
@@ -1265,6 +1270,7 @@ export const controller = (prisma: PrismaClient) => {
 							typeof day?.employeeNotes === "string" ? day.employeeNotes : null,
 						approverNotes:
 							typeof day?.approverNotes === "string" ? day.approverNotes : null,
+						dayLaborType: normalizeDayLaborType(day?.dayLaborType),
 						metadata: {
 							...incomingMetadata,
 							...mergeOvertimeMetadata(incomingMetadata, overtimeApplication.metadata),
@@ -1318,6 +1324,7 @@ export const controller = (prisma: PrismaClient) => {
 							typeof day?.employeeNotes === "string" ? day.employeeNotes : null,
 						approverNotes:
 							typeof day?.approverNotes === "string" ? day.approverNotes : null,
+						dayLaborType: normalizeDayLaborType(day?.dayLaborType),
 						metadata:
 							day?.metadata &&
 							typeof day.metadata === "object" &&
