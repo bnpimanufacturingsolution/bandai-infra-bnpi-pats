@@ -23,6 +23,10 @@ All three live on **one VM**. Images are `*:develop` + `imagePullPolicy: Never`.
 
 Creating GitHub branches `uat` / `production` is **still not** the trigger. Argo `targetRevision` remains `develop`.
 
+## Self-heal contract
+
+`scripts/test-self-heal-contract.ps1` used to require `env_name=dev` (DEV-only restart). That check is now the default `PROJECT_TRUTH_ROLLOUT_NAMESPACES:-dev uat prod`, the namespace loop, skip-if-missing, and **no** hardcoded `env_name=dev` assignment.
+
 ## Skip-safe
 
 `kubectl get deploy` per namespace: UAT/PROD do not have `hris-callback-outbox` or `hris-hikvision-watcher`. Those are skipped, not failed.

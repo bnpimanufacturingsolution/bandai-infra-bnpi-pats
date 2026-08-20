@@ -24,6 +24,14 @@
 | Operator doc | `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md` |
 | Report | `.wwg/reports/direct-indirect-labor-ui-20260820.md` |
 
+## 2026-08-20 - Self-heal contract matches UAT/PROD auto-roll
+
+| Field | Value |
+|---|---|
+| Fail | Validate `test-self-heal-contract` still required `env_name=dev` |
+| Fix | Contract now requires `PROJECT_TRUTH_ROLLOUT_NAMESPACES:-dev uat prod` + skip missing Deployments |
+| Run | https://github.com/hrisworkforcesystem-coder/bandai-infra/actions/runs/32345677172/job/96353823532 |
+
 ## 2026-08-20 - UAT/PROD app+API auto-roll
 
 | Field | Value |
