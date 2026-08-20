@@ -123,7 +123,9 @@ Hard honesty:
 
 Full map: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
 
-Deployments page environments: `vm-gitops`, `hris-api`, `hris-app`, `hris-emp-app`, `callback-outbox`.
+Deployments page environments: `vm-gitops`, `hris-api`, `hris-app`, `hris-emp-app`, `callback-outbox`, plus `onprem-{prod,dev,uat}-{api,app}`.
+
+On-prem URL cheat sheet: `docs/ONPREM_PORT_ACCESS.md`.
 
 ```powershell
 gh run list --workflow observe-deploy.yml --branch develop --limit 5

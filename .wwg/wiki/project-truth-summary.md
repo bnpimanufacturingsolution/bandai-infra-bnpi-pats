@@ -2,6 +2,11 @@
 
 Last updated: 2026-08-20
 
+## 2026-08-20 On-prem ports vs this PC
+
+- VM still serves DEV/UAT/PROD on `10.184.37.19` ports `3000/3001`, `3100/3101`, `3200/3201` (loopback HTTP 200).
+- This home Wi‑Fi cannot open those LAN ports. Use Cloudflare or SSH then `127.0.0.1`. Doc: `docs/ONPREM_PORT_ACCESS.md`.
+
 ## 2026-08-20 GitHub Actions CI / Observe / Validate
 
 - Three root workflows: **CI** (per-type tests), **Observe VM GitOps deploy** (VM reporter), **Validate** (Windows terraform/packer/installer). Nested Cloud Run/Firebase YAML does not run on this repo.

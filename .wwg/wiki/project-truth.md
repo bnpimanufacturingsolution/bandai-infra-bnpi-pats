@@ -1,5 +1,12 @@
 # Project Truth
 
+## On-prem DEV/UAT/PROD ports (2026-08-20)
+
+- Status: `CONFIRMED_LIVE`. Operator doc: `docs/ONPREM_PORT_ACCESS.md`. Report: `.wwg/reports/onprem-port-access-20260820.md`.
+- One VM `10.184.37.19` publishes PROD `:3000/:3001`, DEV `:3100/:3101`, UAT `:3200/:3201`. Cloudflare `*.bnpi-hris.tech` is that VM, not a second cloud.
+- VM loopback HTTP **200** on all six. This Windows host Wi‑Fi **cannot** TCP those LAN ports (`host_not_on_lan`). Public API `/health` **200**.
+- Observe jobs `onprem-{prod,dev,uat}-{api,app}` prove VM bind, not this laptop’s LAN NIC.
+
 ## GitHub Actions CI / Observe / Validate (2026-08-19 documented 2026-08-20)
 
 - Status: `CONFIRMED_LIVE_20260819`; operator 2026-08-20 authorized push of the CI/Observe harden.

@@ -11,6 +11,8 @@
 
 Operator map and honesty tables: `.wwg/reports/devops-ci-observe-validate-20260819.md`. Nested package workflows under `hris-api/.github` and `hris-app/.github` do not run on this monorepo.
 
+On-prem DEV/UAT/PROD ports (LAN vs this PC vs Cloudflare): `docs/ONPREM_PORT_ACCESS.md`.
+
 ## Validate
 
 Runs on pull request, manual dispatch, and pushes to `main`, `develop`, `uat`, or `production`.

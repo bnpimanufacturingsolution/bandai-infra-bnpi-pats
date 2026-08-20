@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Document on-prem port access
+
+| Field | Value |
+|---|---|
+| Operator page | `docs/ONPREM_PORT_ACCESS.md` |
+| Evidence | `.wwg/reports/onprem-port-access-20260820.md` |
+| VM binds | six HTTP 200 |
+| This PC LAN | six `tcp=false` |
+| Public APIs | 200 |
+
 ## 2026-08-20 - On-prem DEV/UAT/PROD port Observe
 
 | Field | Value |

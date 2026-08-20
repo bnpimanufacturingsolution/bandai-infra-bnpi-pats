@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Document on-prem port access
+
+- Operator: document that on-prem ports still exist; this PC cannot reach them; Cloudflare is the same VM.
+- Canonical operator page: `docs/ONPREM_PORT_ACCESS.md`. Evidence: `.wwg/reports/onprem-port-access-20260820.md`.
+- Live: VM six binds 200; this PC six LAN tcp=false; public APIs 200; Observe onprem jobs green.
+
 ## Latest Task Addendum - 2026-08-20 On-prem DEV/UAT/PROD port Observe
 
 - Operator: Observe should cover **on-premise port access** of the instance for DEV/UAT/PROD app+API, not only GitHub unit tests / Cloudflare.
