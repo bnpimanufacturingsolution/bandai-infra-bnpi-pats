@@ -1,5 +1,16 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Lead 2.1.7 claim vs shipped
+
+| Field | Value |
+|---|---|
+| Verdict | `CONFLICTING` |
+| Lead Direct/Indirect | Per-day Line Leader tag |
+| Shipped | Employee DIRECT vs AGENCY report |
+| Tardiness | Partial (stored late from punch vs sched; not a TI/TO grid) |
+| OT | Payable/approved, not raw extra |
+| Report | `.wwg/reports/direct-indirect-lead-claim-validation-20260820.md` |
+
 ## 2026-08-20 - 2.1.7 readiness re-check
 
 | Field | Value |

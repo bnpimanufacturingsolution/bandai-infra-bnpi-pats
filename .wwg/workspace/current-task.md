@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Lead 2.1.7 meaning vs shipped
+
+- Lead: Tardiness/OT = actual TI/TO vs sched. Direct vs Indirect = Line Leader **per-day** work tag on timesheet.
+- Validation: tardiness **partial**; OT **not** raw extra (approval). Direct vs Indirect in app = **BNPI vs Agency person**, not daily work. Line Leader tagging **MISSING**.
+- Canonical: `.wwg/reports/direct-indirect-lead-claim-validation-20260820.md`. REC-20260820-DAILY-LABOR-TYPE-TIMESHEET.
+
 ## Latest Task Addendum - 2026-08-20 UAT/PROD app+API auto-roll
 
 - Operator: no auto-deploy for UAT/PROD app/API; asked if we can do it and document well.
