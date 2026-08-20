@@ -339,6 +339,7 @@ export function normalizeAttendanceCorrectionPayload(
 				breakMinutes: 0,
 			},
 			Boolean(timeOutResult.value),
+			Boolean(timeInResult.value),
 		);
 	}
 

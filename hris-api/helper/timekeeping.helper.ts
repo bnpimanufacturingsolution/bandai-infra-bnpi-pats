@@ -55,8 +55,9 @@ function formatBreakDisplayFromSchedule(schedule: EmployeeSchedule | null, date:
 export function determineAttendanceStatus(
 	_calc: TimekeepingCalculation,
 	hasTimeOut: boolean,
+	hasTimeIn = true,
 ): AttendanceStatus {
-	if (!hasTimeOut) {
+	if (!hasTimeIn || !hasTimeOut) {
 		return "INCOMPLETE";
 	}
 

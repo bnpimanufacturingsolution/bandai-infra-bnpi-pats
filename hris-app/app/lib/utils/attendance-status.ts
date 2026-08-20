@@ -4,6 +4,7 @@ export type AttendanceFilterValue = "ALL" | "WORK_DAY" | "HOLIDAY" | "LEAVE";
 
 export type AttendanceDisplayStatus =
 	| "Clocked In"
+	| "Clocked Out"
 	| "Present"
 	| "Late"
 	| "Half Day"
@@ -99,11 +100,15 @@ export const getAttendanceDisplayStatus = (record: MarkerAwareRecord): Attendanc
 
 	switch (record?.status) {
 		case "PRESENT":
+			if (!record?.timeIn && record?.timeOut) return "Clocked Out";
 			if (record?.timeIn && !record?.timeOut) return "Clocked In";
+			if (!record?.timeIn && !record?.timeOut) return "Not Clocked In";
 			return "Present";
 		case "INCOMPLETE":
+			if (!record?.timeIn && record?.timeOut) return "Clocked Out";
 			return "Clocked In";
 		case "LATE":
+			if (!record?.timeIn && record?.timeOut) return "Clocked Out";
 			if (record?.timeIn && !record?.timeOut) return "Clocked In";
 			return "Late";
 		case "HALF_DAY":
@@ -151,6 +156,8 @@ export const getAttendanceStatusBadgeClass = (displayStatus: AttendanceDisplaySt
 	switch (displayStatus) {
 		case "Clocked In":
 			return "border-amber-200 bg-amber-50 text-amber-700";
+		case "Clocked Out":
+			return "border-orange-200 bg-orange-50 text-orange-800";
 		case "Present":
 			return "border-green-200 bg-green-50 text-green-700";
 		case "Late":

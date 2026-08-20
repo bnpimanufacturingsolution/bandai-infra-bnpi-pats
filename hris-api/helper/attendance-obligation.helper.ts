@@ -1000,7 +1000,11 @@ export async function applyAttendanceToObligation(
 	const finalStatus =
 		existingNonWorkStatus ||
 		attendance.status ||
-		determineAttendanceStatus(timekeepingCalc, Boolean(attendance.timeOut));
+		determineAttendanceStatus(
+			timekeepingCalc,
+			Boolean(attendance.timeOut),
+			Boolean(attendance.timeIn),
+		);
 	const employeeSnapshot = await fetchAttendanceEmployeeSnapshotFields(prisma, params.employeeId);
 	const data = {
 		organizationId: params.organizationId,

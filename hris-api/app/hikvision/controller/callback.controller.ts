@@ -608,6 +608,7 @@ export const controller = (prisma: PrismaClient) => {
 				const finalStatus = determineAttendanceStatus(
 					timekeepingCalc,
 					Boolean(punchTimeOut),
+					Boolean(punchTimeIn),
 				);
 				const overtimeApplication = await resolveOvertimePolicyApplication(
 					prisma,

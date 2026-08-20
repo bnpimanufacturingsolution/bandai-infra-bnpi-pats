@@ -71,6 +71,18 @@ describe("clock-in arrival vs schedule", () => {
 		expect(undertime?.hours).toBe("2:05");
 	});
 
+	it("does not treat a clock-out-only row as undertime", () => {
+		expect(
+			getClockOutUndertimeIndicator({
+				timeIn: null,
+				timeOut: "2026-08-20T22:45:00.000Z",
+				status: "PRESENT",
+				undertimeHours: "8:00",
+				scheduleSnapshot: dayShift,
+			}),
+		).toBeNull();
+	});
+
 	it("shows elapsed hours from clock-in to clock-out", () => {
 		expect(
 			getWorkedHoursLabel({

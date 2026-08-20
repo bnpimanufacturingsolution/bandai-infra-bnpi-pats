@@ -290,7 +290,7 @@ export function deriveClockOutUndertimeFromSchedule(
 export function getClockOutUndertimeIndicator(
 	record: ArrivalRecord,
 ): ClockOutUndertimeIndicator | null {
-	if (!record?.timeOut) return null;
+	if (!record?.timeOut || !record?.timeIn) return null;
 	const status = String(record.status || "").toUpperCase();
 	const marker = String(record.primaryMarker || "").toUpperCase();
 	if (NON_ARRIVAL_STATUSES.has(status) || NON_ARRIVAL_MARKERS.has(marker)) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	compareClockedInFirst,
+	getAttendanceDisplayStatus,
 	isOverviewPresentRecord,
 } from "./attendance-status";
 
@@ -21,5 +22,34 @@ describe("overview PRES", () => {
 		].sort(compareClockedInFirst);
 		expect(ranked[0].employeeName).toBe("Joys Ador Zuniga");
 		expect(ranked[1].employeeName).toBe("Aileen");
+	});
+});
+
+describe("attendance display status", () => {
+	it("does not call a missed clock-in Present", () => {
+		expect(
+			getAttendanceDisplayStatus({
+				status: "PRESENT",
+				timeIn: null,
+				timeOut: "2026-08-20T22:45:00.000Z",
+			}),
+		).toBe("Clocked Out");
+		expect(
+			getAttendanceDisplayStatus({
+				status: "INCOMPLETE",
+				timeIn: null,
+				timeOut: "2026-08-20T22:45:00.000Z",
+			}),
+		).toBe("Clocked Out");
+	});
+
+	it("keeps Present only when both punches exist", () => {
+		expect(
+			getAttendanceDisplayStatus({
+				status: "PRESENT",
+				timeIn: "2026-08-20T00:00:00.000Z",
+				timeOut: "2026-08-20T08:00:00.000Z",
+			}),
+		).toBe("Present");
 	});
 });

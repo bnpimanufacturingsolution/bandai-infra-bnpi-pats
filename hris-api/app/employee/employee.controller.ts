@@ -6686,7 +6686,11 @@ export const controller = (prisma: PrismaClient) => {
 				// Update status if not explicitly provided
 				const finalStatus =
 					validatedData.status ||
-					determineAttendanceStatus(timekeepingCalc, Boolean(nextTimeOut));
+					determineAttendanceStatus(
+						timekeepingCalc,
+						Boolean(nextTimeOut),
+						Boolean(nextTimeIn),
+					);
 				const overtimeApplication = await resolveOvertimePolicyApplication(
 					prisma,
 					existingAttendance.organizationId,
