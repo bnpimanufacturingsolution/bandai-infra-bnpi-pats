@@ -5,6 +5,7 @@ import {
 	deriveAttendanceObligationDisplayStatus,
 	hasAttendanceWorkSchedule,
 	isObligatedToWorkDay,
+	recomputeAttendanceObligationsForRangeSafe,
 } from "../helper/attendance-obligation.helper";
 
 describe("attendance-obligation.helper regression", () => {
@@ -314,6 +315,25 @@ describe("attendance utilization obligated-to-work denominator", () => {
 		expect(computeAttendanceUtilizationRate(0, 33)).to.equal(0);
 		expect(computeAttendanceUtilizationRate(1, 33)).to.equal(3);
 		expect(1 / 33).to.not.equal(1 / 34);
+	});
+
+	it("does not throw when attendance recompute fails after a schedule save", async () => {
+		const prisma = {
+			payrollPeriod: {
+				findMany: async () => {
+					throw new Error("dayLaborType column missing");
+				},
+			},
+		};
+		const result = await recomputeAttendanceObligationsForRangeSafe(prisma as any, {
+			organizationId: "org-1",
+			employeeId: "emp-1",
+			fromDate: new Date("2026-08-21T00:00:00.000Z"),
+			toDate: new Date("2026-08-21T00:00:00.000Z"),
+			reason: "ScheduleChanged",
+		});
+		expect(result.failed).to.equal(true);
+		expect(String(result.error || "")).to.match(/dayLaborType/);
 	});
 });
 

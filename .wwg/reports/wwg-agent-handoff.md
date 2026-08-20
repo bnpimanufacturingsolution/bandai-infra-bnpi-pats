@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Dates save 500
+
+| Field | Value |
+|---|---|
+| Symptom | Dates **Save hours** 500 on DEV |
+| Hours | Already written (`cmt1j0ays025um80173ugo6dc`) |
+| Cause | After save, recompute called `attendanceObligation.findFirst` selecting `dayLaborType`; DEV Postgres lacked that column (`hris-api-db-init` was degraded) |
+| Fix | Applied `DayLaborType` columns on DEV; save no longer 500s if recompute fails |
+| Proof | DEV POST `/api/scheduleOverride` **200** after column add |
+
 ## 2026-08-20 - Timesheet ↔ schedule connection
 
 | Field | Value |

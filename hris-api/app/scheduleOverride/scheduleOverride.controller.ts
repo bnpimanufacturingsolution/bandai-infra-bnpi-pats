@@ -18,7 +18,10 @@ import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
-import { recomputeAttendanceObligationsForRange } from "../../helper/attendance-obligation.helper";
+import {
+	recomputeAttendanceObligationsForRange,
+	recomputeAttendanceObligationsForRangeSafe,
+} from "../../helper/attendance-obligation.helper";
 import {
 	collectShiftTypeIdsFromEmployeeScheduleData,
 	resolveEffectiveShiftFromEmployeeData,
@@ -330,13 +333,18 @@ export const controller = (prisma: PrismaClient) => {
 			scheduleOverrideLogger.info(
 				`ScheduleOverride ${isCreated ? "created" : "updated-via-create"} successfully: ${scheduleOverride.id}`,
 			);
-			await recomputeAttendanceObligationsForRange(prisma, {
+			const recompute = await recomputeAttendanceObligationsForRangeSafe(prisma, {
 				organizationId: scheduleOverride.organizationId,
 				employeeId: scheduleOverride.employeeId,
 				fromDate: scheduleOverride.date,
 				toDate: scheduleOverride.date,
 				reason: "ScheduleChanged",
 			});
+			if (recompute?.failed) {
+				scheduleOverrideLogger.error(
+					`Schedule override saved but attendance recompute failed: ${recompute.error}`,
+				);
+			}
 
 			logActivity(req, {
 				userId: (req as any).user?.id || "unknown",

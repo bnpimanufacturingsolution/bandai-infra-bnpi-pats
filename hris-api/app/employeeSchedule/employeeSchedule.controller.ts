@@ -14,7 +14,10 @@ import {
 	resolveEffectiveShiftFromEmployeeData,
 } from "../../helper/employee-schedule.helper";
 import { invalidateCache } from "../../middleware/cache";
-import { recomputeAttendanceObligationsForRange } from "../../helper/attendance-obligation.helper";
+import {
+	recomputeAttendanceObligationsForRange,
+	recomputeAttendanceObligationsForRangeSafe,
+} from "../../helper/attendance-obligation.helper";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
@@ -353,7 +356,7 @@ export const controller = (prisma: PrismaClient) => {
 				shiftTypeId: validation.data.shiftTypeId || null,
 			},
 		});
-		await recomputeAttendanceObligationsForRange(prisma, {
+		await recomputeAttendanceObligationsForRangeSafe(prisma, {
 			organizationId,
 			employeeId: validation.data.employeeId,
 			fromDate: effectiveStartDate,

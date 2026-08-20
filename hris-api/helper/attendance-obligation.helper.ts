@@ -665,6 +665,30 @@ export async function ensureAttendanceObligationsForPayrollPeriod(
 	});
 }
 
+export async function recomputeAttendanceObligationsForRangeSafe(
+	prisma: PrismaClient,
+	params: {
+		organizationId: string;
+		employeeId?: string | null;
+		fromDate: Date | string;
+		toDate: Date | string;
+		reason: string;
+		payrollPeriodId?: string | null;
+	},
+) {
+	try {
+		return await recomputeAttendanceObligationsForRange(prisma, params);
+	} catch (error) {
+		return {
+			touched: 0,
+			created: 0,
+			updated: 0,
+			failed: true as const,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
 export async function recomputeAttendanceObligationsForRange(
 	prisma: PrismaClient,
 	params: {
