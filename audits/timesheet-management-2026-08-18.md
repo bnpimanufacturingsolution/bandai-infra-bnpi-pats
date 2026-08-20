@@ -1,9 +1,53 @@
 # Timesheet Management audit
 
-**Date:** 2026-08-18 (UI hop) · **real functional re-test 2026-08-19**  
+**Date:** 2026-08-18 (UI hop) · **real functional re-test 2026-08-19** · **sheet 2.1.1–2.1.12 recheck 2026-08-20**  
 **Sheet:** Timesheet Management (section 2) — claimed Core 100%, Customization 100%, Testing 96.25%  
 **Kind:** live Playwright (screens) **plus live API writes/math** (not page-open only)  
 **Answer to “is it 100% working?”:** **No.**
+
+---
+
+## Recheck 2026-08-20 on public DEV (`https://dev.bnpi-hris.tech`)
+
+Actor: Maria Santos `hr-manager@seed.local`. CSS `root-CIRKoZkC.css`. Evidence: `.runtime/dev-timesheet-sheet-20260820/`.
+
+| ID | Sheet 100% claim | Live DEV | Proof |
+|---|---|---|---|
+| 2.1.1 | Attendance / Online | **Yes** | `/hr/attendance` Attendance Overview |
+| 2.1.2 | Attendance / Biometrics | **Partial** | Device Events opens (admin). Not an HR Timekeeping page |
+| 2.1.3 | Overtime | **Yes (report)** | `/hr/reports/attendance?tab=overtime` |
+| 2.1.4 | Undertime | **Yes** | `/hr/reports/attendance?tab=tardiness` |
+| 2.1.5 | Adjustments | **Yes** | `/hr/time-corrections` |
+| 2.1.6 | Perfect attendance | **Yes** | `/hr/reports/attendance?tab=perfect` |
+| 2.1.7 | Tardiness/UT/OT + **direct vs indirect** | **Partial** | Workforce **Manpower Distribution** only. No Direct vs Indirect tab |
+| 2.1.8 | Leave tardiness/UT, balance, manhour | **Partial** | Leave Balance tab exists |
+| 2.1.9 | No-work, daily manpower, agency | **Partial** | Agency Attendance report exists (5 agencies). No dedicated No-Work / Daily Manpower tabs |
+| 2.1.10 | Leave conversion / credit upload | **No** | PAN URL redirects to tickets. `LEAVE_CONVERSION` API **400** |
+| 2.1.11 | Disciplinary + late | **Partial** | Late on overview. Disciplinary page opens. API **404** |
+| 2.1.12 | Pregnant / no-work lists | **No** | Employee directory has no Pregnant list. `/hr/my-attendance` is **404** |
+
+**DEV verdict:** sheet 100% is still false. Same gaps as local: 2.1.7 labor report, 2.1.10 conversion, 2.1.11 API, 2.1.12 lists.
+
+## Recheck 2026-08-20 vs sheet 2.1.1–2.1.12 (all marked 100%)
+
+The orange box on the sheet (**2.1.7**) and the rest of 2.1 are **not all present as product screens**. Sheet 100% is still wrong.
+
+| ID | Sheet row | Have it? | Where / gap |
+|---|---|---|---|
+| 2.1.1 | Attendance / Online | **Yes** | `/hr/attendance` |
+| 2.1.2 | Attendance / Biometrics | **Partial** | Admin Device Events, not an HR Timekeeping page |
+| 2.1.3 | Overtime | **Yes (report + request)** | `/hr/reports/attendance?tab=overtime`; employee OT request exists. Payable OT still needs HR approve |
+| 2.1.4 | Undertime | **Yes** | `/hr/reports/attendance?tab=tardiness` |
+| 2.1.5 | Adjustments | **Yes (partial)** | `/hr/time-corrections` + employee attendance correction |
+| 2.1.6 | Monthly/annual perfect attendance | **Yes** | `/hr/reports/attendance?tab=perfect` |
+| 2.1.7 | Tardiness, UT, OT details + **direct vs indirect labor** | **Partial** | Tardiness/OT tabs exist. `DirectIndirectLaborTab.tsx` is **not mounted**. Workforce page is Agency + Manpower Distribution only |
+| 2.1.8 | Leave tardiness/UT, leave balance, manhour | **Partial** | Leave Balance tab exists. No separate “leave tardiness” report. Manhour is timesheet hours, not its own report |
+| 2.1.9 | No-work, daily manpower, agency summary | **Partial** | Agency Attendance tab works. `NoWorkReportTab` + `DailyManpowerTab` exist as files but **are not routed** |
+| 2.1.10 | Leave conversion, annual leave credit uploads | **Missing as timesheet feature** | Live `POST /api/request` type `LEAVE_CONVERSION` → **400 invalid enum** (2026-08-20) |
+| 2.1.11 | Disciplinary + late tracking | **Partial** | Late is real on Attendance. `/admin/disciplinary-action` is **mock**. `GET /api/disciplinaryAction` → **404** (2026-08-20) |
+| 2.1.12 | Lists of pregnant and no-work employees | **Missing** | Pregnant is a manpower import column, not an HR list. No-work API exists; list tab unwired |
+
+**Score vs sheet:** 4 clearly in (1, 3, 4, 6). Rest split/missing. **Not 100%.**
 
 ---
 

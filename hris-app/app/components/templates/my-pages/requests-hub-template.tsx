@@ -1502,7 +1502,8 @@ export default function EmployeeRequestsHubPage() {
 						employeeId,
 						organizationId,
 						date: data.date,
-						overtimeHours: data.overtimeHours,
+						overtimeHourPart: data.overtimeHourPart,
+						overtimeMinutePart: data.overtimeMinutePart,
 						notes: data.notes,
 					})
 				: buildAttendanceAdjustmentRequestPayload({

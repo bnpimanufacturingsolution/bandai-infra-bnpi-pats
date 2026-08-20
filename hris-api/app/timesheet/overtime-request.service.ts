@@ -11,7 +11,9 @@ import {
 	mergeOvertimeMetadata,
 	resolveOvertimeCandidateForLine,
 	resolveOvertimePolicyApplication,
+	resolveRequestedOvertimeMinutes,
 } from "../../helper/overtime-approval.helper";
+import { getBusinessDayBounds } from "../../helper/attendance.helper";
 import {
 	createRequestStepExecutions,
 	getDefaultRequestWorkflow,
@@ -235,27 +237,81 @@ export async function applyOvertimeRequestApprovalSideEffects(params: {
 	requestMetadata: Record<string, unknown>;
 	isApprove: boolean;
 	approverEmployeeId?: string | null;
+	requesterEmployeeId?: string | null;
 	rejectionReason?: string | null;
 }) {
 	const metadata = asRecord(params.requestMetadata);
 	const timesheetLineId = String(metadata.timesheetLineId || "");
 	const timesheetId = String(metadata.timesheetId || "");
-	const attendanceId = metadata.attendanceId ? String(metadata.attendanceId) : null;
-	const detectedOvertimeMinutes = Math.max(0, Number(metadata.detectedOvertimeMinutes || 0));
+	const attendanceId = metadata.attendanceId
+		? String(metadata.attendanceId)
+		: null;
+	const employeeId = String(
+		metadata.employeeId || params.requesterEmployeeId || "",
+	);
+	const dateKey = String(metadata.date || "").slice(0, 10);
+	const detectedOvertimeMinutes = resolveRequestedOvertimeMinutes(metadata);
 
-	if (!timesheetLineId || !timesheetId) {
-		throw new Error("OVERTIME_REQUEST_METADATA_INCOMPLETE");
+	let line = timesheetLineId
+		? await params.prisma.timesheetline.findFirst({
+				where: {
+					id: timesheetLineId,
+					organizationId: params.organizationId,
+					isDeleted: false,
+					isEffective: true,
+				},
+			})
+		: null;
+
+	if (!line && employeeId && dateKey) {
+		const bounds = getBusinessDayBounds(new Date(`${dateKey}T00:00:00.000Z`));
+		line = await params.prisma.timesheetline.findFirst({
+			where: {
+				organizationId: params.organizationId,
+				employeeId,
+				isDeleted: false,
+				isEffective: true,
+				date: { gte: bounds.start, lte: bounds.end },
+			},
+			orderBy: { date: "desc" },
+		});
 	}
 
-	const line = await params.prisma.timesheetline.findFirst({
-		where: {
-			id: timesheetLineId,
-			organizationId: params.organizationId,
-			timesheetId,
-			isDeleted: false,
-			isEffective: true,
-		},
-	});
+	if (!line && employeeId && dateKey) {
+		const bounds = getBusinessDayBounds(new Date(`${dateKey}T00:00:00.000Z`));
+		const timesheet = await params.prisma.timesheet.findFirst({
+			where: {
+				organizationId: params.organizationId,
+				employeeId,
+				isDeleted: false,
+				payrollPeriod: {
+					startDate: { lte: bounds.end },
+					endDate: { gte: bounds.start },
+				},
+			},
+			select: { id: true, employeeId: true, payrollPeriodId: true },
+		});
+		if (timesheet) {
+			await materializeTimesheetLinesFromObligations(params.prisma, {
+				organizationId: params.organizationId,
+				employeeId: timesheet.employeeId,
+				payrollPeriodId: timesheet.payrollPeriodId,
+				timesheetId: timesheet.id,
+				fromDate: bounds.start,
+				toDate: bounds.end,
+			});
+			line = await params.prisma.timesheetline.findFirst({
+				where: {
+					organizationId: params.organizationId,
+					timesheetId: timesheet.id,
+					employeeId,
+					isDeleted: false,
+					isEffective: true,
+					date: { gte: bounds.start, lte: bounds.end },
+				},
+			});
+		}
+	}
 
 	if (!line) {
 		throw new Error("TIMESHEET_LINE_NOT_FOUND");
@@ -290,10 +346,11 @@ export async function applyOvertimeRequestApprovalSideEffects(params: {
 		},
 	});
 
-	if (attendanceId) {
+	const resolvedAttendanceId = attendanceId || line.attendanceId || null;
+	if (resolvedAttendanceId) {
 		const attendance = await params.prisma.attendance.findFirst({
 			where: {
-				id: attendanceId,
+				id: resolvedAttendanceId,
 				organizationId: params.organizationId,
 				isDeleted: false,
 			},
@@ -337,7 +394,7 @@ export async function applyOvertimeRequestApprovalSideEffects(params: {
 
 	const timesheet = await params.prisma.timesheet.findFirst({
 		where: {
-			id: timesheetId,
+			id: timesheetId || line.timesheetId,
 			organizationId: params.organizationId,
 			isDeleted: false,
 		},

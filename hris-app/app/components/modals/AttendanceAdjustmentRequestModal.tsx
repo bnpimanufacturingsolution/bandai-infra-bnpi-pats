@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
+import { DatePicker } from "~/components/atoms/DatePicker";
 import { Modal } from "~/components/atoms/Modal";
 import { TimePicker } from "~/components/molecules/TimePicker";
 import {
@@ -40,7 +41,8 @@ export type AttendanceTimeRequestFormValues =
 	| {
 			requestKind: "OVERTIME";
 			date: string;
-			overtimeHours: number;
+			overtimeHourPart: number;
+			overtimeMinutePart: number;
 			notes: string;
 	  };
 
@@ -82,7 +84,8 @@ export function AttendanceAdjustmentRequestModal({
 	const [date, setDate] = useState("");
 	const [timeIn, setTimeIn] = useState("");
 	const [timeOut, setTimeOut] = useState("");
-	const [overtimeHours, setOvertimeHours] = useState("1");
+	const [overtimeHourPart, setOvertimeHourPart] = useState("2");
+	const [overtimeMinutePart, setOvertimeMinutePart] = useState("50");
 	const [reasonCategory, setReasonCategory] =
 		useState<AttendanceAdjustmentReasonCategory>("MISSED_PUNCH");
 	const [notes, setNotes] = useState("");
@@ -95,7 +98,8 @@ export function AttendanceAdjustmentRequestModal({
 		setDate(initialDate || "");
 		setTimeIn(isoToManilaPickerTime(initialTimeIn) || initialTimeIn || "");
 		setTimeOut(isoToManilaPickerTime(initialTimeOut) || initialTimeOut || "");
-		setOvertimeHours("1");
+		setOvertimeHourPart("2");
+		setOvertimeMinutePart("50");
 		setReasonCategory("MISSED_PUNCH");
 		setNotes("");
 		setError("");
@@ -123,15 +127,25 @@ export function AttendanceAdjustmentRequestModal({
 		}
 		try {
 			if (requestKind === "OVERTIME") {
-				const hours = Number(overtimeHours);
-				if (!Number.isFinite(hours) || hours <= 0) {
-					setError("Overtime hours must be greater than 0.");
+				const hourPart = Number(overtimeHourPart);
+				const minutePart = Number(overtimeMinutePart);
+				if (!Number.isFinite(hourPart) || hourPart < 0 || hourPart > 23) {
+					setError("Hours must be between 0 and 23.");
+					return;
+				}
+				if (!Number.isFinite(minutePart) || minutePart < 0 || minutePart > 59) {
+					setError("Minutes must be between 0 and 59.");
+					return;
+				}
+				if (hourPart * 60 + minutePart <= 0) {
+					setError("Overtime duration must be greater than 0.");
 					return;
 				}
 				await onSubmit({
 					requestKind: "OVERTIME",
 					date,
-					overtimeHours: hours,
+					overtimeHourPart: hourPart,
+					overtimeMinutePart: minutePart,
 					notes: notes.trim(),
 				});
 				return;
@@ -169,7 +183,7 @@ export function AttendanceAdjustmentRequestModal({
 				if (!open && !isPending) onClose();
 			}}
 			title="Attendance request"
-			description="Choose the request type first. Your supervisor (report-to) approves; HR sees it after that.">
+			description="Overtime goes to HR. If they approve, that duration counts as payable OT.">
 			<div className="space-y-4">
 				<div>
 					<label className="mb-1 block text-sm font-medium text-gray-700">
@@ -193,10 +207,10 @@ export function AttendanceAdjustmentRequestModal({
 
 				<div>
 					<label className="mb-1 block text-sm font-medium text-gray-700">Date</label>
-					<Input
-						type="date"
+					<DatePicker
 						value={date}
-						onChange={(event) => setDate(event.target.value)}
+						onChange={setDate}
+						placeholder="Select overtime date"
 						disabled={isPending}
 					/>
 				</div>
@@ -292,16 +306,37 @@ export function AttendanceAdjustmentRequestModal({
 				) : (
 					<div>
 						<label className="mb-1 block text-sm font-medium text-gray-700">
-							Overtime hours
+							Overtime duration
 						</label>
-						<Input
-							type="number"
-							min="0.25"
-							step="0.25"
-							value={overtimeHours}
-							onChange={(event) => setOvertimeHours(event.target.value)}
-							disabled={isPending}
-						/>
+						<div className="grid grid-cols-2 gap-3">
+							<div>
+								<p className="mb-1 text-xs text-gray-500">Hours</p>
+								<Input
+									type="number"
+									min="0"
+									max="23"
+									step="1"
+									value={overtimeHourPart}
+									onChange={(event) => setOvertimeHourPart(event.target.value)}
+									disabled={isPending}
+								/>
+							</div>
+							<div>
+								<p className="mb-1 text-xs text-gray-500">Minutes</p>
+								<Input
+									type="number"
+									min="0"
+									max="59"
+									step="1"
+									value={overtimeMinutePart}
+									onChange={(event) => setOvertimeMinutePart(event.target.value)}
+									disabled={isPending}
+								/>
+							</div>
+						</div>
+						<p className="mt-1 text-xs text-gray-500">
+							Example: 2 hours 50 minutes. HR approval writes this as payable OT.
+						</p>
 					</div>
 				)}
 

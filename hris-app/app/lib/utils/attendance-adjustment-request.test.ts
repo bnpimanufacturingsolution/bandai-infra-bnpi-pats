@@ -64,16 +64,20 @@ describe("attendance adjustment request payload", () => {
 		expect(payload.metadata.adjustmentKind).toBe("CLOCK_OUT");
 	});
 
-	it("builds an overtime request for the supervisor workflow", () => {
+	it("builds an overtime request for HR with hours and minutes", () => {
 		const payload = buildOvertimeRequestPayload({
 			employeeId: "emp-zen",
 			organizationId: "org-1",
 			date: "2026-08-18",
-			overtimeHours: 2,
+			overtimeHourPart: 2,
+			overtimeMinutePart: 50,
 			notes: "Finished a shipment",
 		});
 		expect(payload.type).toBe("OVERTIME");
-		expect(payload.metadata.overtimeHours).toBe(2);
+		expect(payload.metadata.overtimeHours).toBe("2:50");
+		expect(payload.metadata.requestedOvertimeMinutes).toBe(170);
+		expect(payload.metadata.workflowTarget).toBe("HR");
+		expect(payload.description).toContain("2:50");
 	});
 
 	it("rejects a clock-out that is not after clock-in with both times named", () => {

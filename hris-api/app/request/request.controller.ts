@@ -3019,6 +3019,7 @@ export const controller = (prisma: PrismaClient) => {
 									{}) as Record<string, unknown>,
 							isApprove: shouldRunApprovalSideEffects && isApprove,
 							approverEmployeeId: actingEmployeeIdForSideEffects || null,
+							requesterEmployeeId: existingRequest.requesterId || null,
 							rejectionReason: validation.data.comment || null,
 						});
 					} catch (error) {

@@ -27,8 +27,36 @@ export type OvertimeRequestDraft = {
 	employeeId: string;
 	organizationId: string;
 	date: string;
-	overtimeHours: number;
+	overtimeHours?: number;
+	overtimeHourPart?: number;
+	overtimeMinutePart?: number;
 	notes: string;
+};
+
+export const overtimeDurationToMinutes = (
+	hourPart?: number,
+	minutePart?: number,
+	legacyHours?: number,
+): number => {
+	const hours = Number(hourPart);
+	const minutes = Number(minutePart);
+	if (Number.isFinite(hours) || Number.isFinite(minutes)) {
+		const safeHours = Number.isFinite(hours) ? Math.max(0, Math.floor(hours)) : 0;
+		const safeMinutes = Number.isFinite(minutes) ? Math.max(0, Math.min(59, Math.floor(minutes))) : 0;
+		return safeHours * 60 + safeMinutes;
+	}
+	const legacy = Number(legacyHours);
+	if (Number.isFinite(legacy) && legacy > 0) {
+		return Math.round(legacy * 60);
+	}
+	return 0;
+};
+
+export const formatOvertimeMinutesAsHours = (totalMinutes: number): string => {
+	const minutes = Math.max(0, Math.round(totalMinutes));
+	const hours = Math.floor(minutes / 60);
+	const rest = minutes % 60;
+	return `${hours}:${String(rest).padStart(2, "0")}`;
 };
 
 export const manilaDateAndTimeToIso = (dateYmd: string, hhmm: string): string | null => {
@@ -147,13 +175,18 @@ export const buildAttendanceAdjustmentRequestPayload = (draft: AttendanceAdjustm
 export const buildOvertimeRequestPayload = (draft: OvertimeRequestDraft) => {
 	const date = String(draft.date || "").trim();
 	const notes = String(draft.notes || "").trim();
-	const overtimeHours = Number(draft.overtimeHours);
+	const overtimeMinutes = overtimeDurationToMinutes(
+		draft.overtimeHourPart,
+		draft.overtimeMinutePart,
+		draft.overtimeHours,
+	);
+	const overtimeHoursLabel = formatOvertimeMinutesAsHours(overtimeMinutes);
 
 	if (!draft.employeeId) throw new Error("Employee context is required.");
 	if (!draft.organizationId) throw new Error("Organization context is required.");
 	if (!date) throw new Error("Date is required.");
-	if (!Number.isFinite(overtimeHours) || overtimeHours <= 0) {
-		throw new Error("Overtime hours must be greater than 0.");
+	if (overtimeMinutes <= 0) {
+		throw new Error("Overtime duration must be greater than 0.");
 	}
 	if (!notes) throw new Error("Explain why overtime is needed.");
 
@@ -161,15 +194,20 @@ export const buildOvertimeRequestPayload = (draft: OvertimeRequestDraft) => {
 		requesterId: draft.employeeId,
 		organizationId: draft.organizationId,
 		type: "OVERTIME" as const,
-		description: `Overtime request on ${date} for ${overtimeHours} hour(s).`,
+		description: `Overtime request on ${date} for ${overtimeHoursLabel} (HR approval).`,
 		startDate: `${date}T00:00:00.000Z`,
 		endDate: `${date}T00:00:00.000Z`,
 		notes,
 		metadata: {
 			date,
-			overtimeHours,
+			employeeId: draft.employeeId,
+			overtimeHours: overtimeHoursLabel,
+			requestedOvertimeHours: overtimeHoursLabel,
+			requestedOvertimeMinutes: overtimeMinutes,
+			hours: Math.round((overtimeMinutes / 60) * 100) / 100,
 			reason: notes,
 			requestSource: "EMPLOYEE_SELF_SERVICE",
+			workflowTarget: "HR",
 		},
 	};
 };

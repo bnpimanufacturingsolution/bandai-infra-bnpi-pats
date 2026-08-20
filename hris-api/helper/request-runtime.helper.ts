@@ -30,6 +30,11 @@ import {
 	shouldAutoCompleteAttendanceCorrectionHrReview,
 } from "./attendance-correction-workflow.helper";
 import { applyAttendanceCorrectionRequest } from "../app/attendance/apply-attendance-correction-request";
+import {
+	isOvertimeRequestType,
+	isOvertimeWorkflowCode,
+	normalizeOvertimeWorkflowSteps,
+} from "./overtime-workflow.helper";
 
 export const DEFAULT_WORKFLOW_STATE_KEYS = {
 	OPEN: "OPEN",
@@ -1202,6 +1207,9 @@ const getWorkflowStepsForRequestType = (
 	if (isAttendanceCorrectionRequestType(requestType)) {
 		return normalizeAttendanceCorrectionWorkflowSteps(normalizedSteps);
 	}
+	if (isOvertimeRequestType(requestType)) {
+		return normalizeOvertimeWorkflowSteps(normalizedSteps);
+	}
 	return isScheduleChangeRequestType(requestType)
 		? normalizeScheduleChangeWorkflowStepsForHrApproval(normalizedSteps)
 		: normalizedSteps;
@@ -1214,7 +1222,9 @@ const shouldNormalizeWorkflowTemplate = (workflow: {
 	isScheduleChangeWorkflowCode(workflow.code) ||
 	isScheduleChangeRequestType(workflow.requestType) ||
 	isAttendanceCorrectionWorkflowCode(workflow.code) ||
-	isAttendanceCorrectionRequestType(workflow.requestType);
+	isAttendanceCorrectionRequestType(workflow.requestType) ||
+	isOvertimeWorkflowCode(workflow.code) ||
+	isOvertimeRequestType(workflow.requestType);
 
 const normalizeDefaultWorkflowTemplate = <T extends { code?: string | null; requestType?: string | null; steps: unknown }>(
 	workflow: T,
@@ -1223,6 +1233,12 @@ const normalizeDefaultWorkflowTemplate = <T extends { code?: string | null; requ
 		return {
 			...workflow,
 			steps: normalizeAttendanceCorrectionWorkflowSteps(workflow.steps),
+		};
+	}
+	if (isOvertimeWorkflowCode(workflow.code) || isOvertimeRequestType(workflow.requestType)) {
+		return {
+			...workflow,
+			steps: normalizeOvertimeWorkflowSteps(workflow.steps),
 		};
 	}
 	if (!shouldNormalizeWorkflowTemplate(workflow)) {
