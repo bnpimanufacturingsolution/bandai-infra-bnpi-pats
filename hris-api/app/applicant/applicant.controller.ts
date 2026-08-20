@@ -1,3 +1,4 @@
+import path from "path";
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger.helper";
@@ -38,6 +39,12 @@ import {
 const logger = getLogger();
 const applicantLogger = logger.child({ module: "applicant" });
 const APPLICANT_ACTION_RETRY_LIMIT = 3;
+
+const attachmentPublicId = (prefix: string, id: string, originalname?: string) => {
+	const ext = path.extname(originalname || "").toLowerCase();
+	const safeExt = /^\.[a-z0-9]{1,8}$/.test(ext) ? ext : "";
+	return `${prefix}_${id}_${Date.now()}${safeExt}`;
+};
 
 type AuthRequest = Request & {
 	userId?: string;
@@ -364,7 +371,11 @@ export const controller = (prisma: PrismaClient) => {
 					const uploadResult = await uploadToCloudinary(req.file.buffer, {
 						folder: "applicants/resumes",
 						resourceType: "raw",
-						publicId: `resume_${createdApplicant.id}_${Date.now()}`,
+						publicId: attachmentPublicId(
+							"resume",
+							createdApplicant.id,
+							req.file.originalname,
+						),
 					});
 
 					if (uploadResult.success && uploadResult.secureUrl) {
@@ -1072,11 +1083,21 @@ export const controller = (prisma: PrismaClient) => {
 		const uploadResult = await uploadToCloudinary(req.file.buffer, {
 			folder: "applicants/attachments",
 			resourceType: "raw",
-			publicId: `attachment_${id}_${Date.now()}`,
+			publicId: attachmentPublicId("attachment", id, req.file.originalname),
 		});
 
 		if (!uploadResult.success || !uploadResult.secureUrl) {
-			res.status(500).json(buildErrorResponse("Failed to upload attachment file", 500));
+			applicantLogger.error(
+				`Attachment upload failed for applicant ${id}: ${uploadResult.error || "unknown storage error"}`,
+			);
+			res.status(500).json(
+				buildErrorResponse("Failed to upload attachment file", 500, [
+					{
+						field: "file",
+						message: uploadResult.error || "Storage provider rejected the upload",
+					},
+				]),
+			);
 			return;
 		}
 
