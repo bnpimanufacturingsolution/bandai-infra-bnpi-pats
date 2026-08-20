@@ -7,6 +7,7 @@
 - Live API `POST /api/metrics` `directIndirectLaborSummary`: **872** direct / **1355** indirect, 15 departments.
 - Playwright: tab chrome + report title + Labor Type; tardiness tab still present.
 - Remaining honesty: gender/agency/total-manpower blocks on that tab still use client employee roster (can show 0 while API KPIs are filled). REC-20260820-DIRECT-INDIRECT-ROSTER-VS-API.
+- Canonical: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md` + `.wwg/reports/direct-indirect-labor-ui-20260820.md`.
 
 ## Latest Task Addendum - 2026-08-20 Document on-prem port access
 

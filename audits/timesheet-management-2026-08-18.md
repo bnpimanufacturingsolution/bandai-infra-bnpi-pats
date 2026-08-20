@@ -34,7 +34,7 @@ Evidence: `.runtime/timesheet-real-test-20260819/` · mocha **26 passing** (`tim
 | 2.1.4 Undertime | Zen is in tardiness report (3 late / 2 UT). Row UT 2:05 is real. Report rollup minutes do not match the row | **Partial** | `tardiness-aug.json` |
 | 2.1.5 Adjustments | **App feature added 2026-08-19.** Employee **My Requests → Attendance Adjustment** now files `ATTENDANCE_CORRECTION` with time in/out. My Attendance missed clock-out has **Request clock-out**. HR **Time Adjustments** tab still posted invalid `TIME_ADJUSTMENT` (not wired). Direct HR `/hr/time-corrections` exists. Live Zen 8/18 request `REQ-1786424090598` SUBMITTED waiting HR | **Partial — request UI exists; apply-on-approve not proven in UI this pass** | `.runtime/zen-att-adjust-20260819/` |
 | 2.1.6 Perfect attendance | API 200: **36 / 91** (39.56%) Aug 1–19. Not re-checked person-by-person vs punches | **API works; not 100% proven** | `perfect-aug.json` |
-| 2.1.7 Direct vs indirect | API 200. **UI mounted 2026-08-20** on `/hr/reports/workforce?tab=direct-indirect` | **Pass UI + API** | `.runtime/direct-indirect-2.1.7-20260820-114121/api-direct-indirect.json`, Playwright `hr-workforce-direct-indirect.spec.ts` |
+| 2.1.7 Direct vs indirect | API 200. **UI mounted 2026-08-20** on `/hr/reports/workforce?tab=direct-indirect` | **Pass UI + API** | `.wwg/reports/direct-indirect-labor-ui-20260820.md`, `.runtime/direct-indirect-2.1.7-20260820-114121/api-direct-indirect.json`, Playwright `hr-workforce-direct-indirect.spec.ts` |
 | 2.1.8 Leave balance | Filter `employeeId=Zen` → `totalEmployees=1` | **Pass** | `leave-balance.json` |
 | 2.1.9 No-work / manpower | 2026-08-19: no-work **864** + active **2** = **866**. Matches overview. 2026-08-18: 849+17=866. Report tabs still unwired | **Pass math / fail UI** | `nowork-19.json`, `active-19.json` |
 | 2.1.10 Leave conversion / credit upload | `LEAVE_CONVERSION` is **not** a request type (400 enum). Allowed: LEAVE, TIMESHEET, OVERTIME, ATTENDANCE_CORRECTION, … | **Missing** | `request-types-probe` 400 |
@@ -194,7 +194,7 @@ Active names on this snapshot: Jhon `01694`, Russel `00536`, Jessica `01640`, Ze
 
 | Gap | Class | Detail |
 |---|---|---|
-| Direct vs indirect labor **page** | **mounted 2026-08-20** | `/hr/reports/workforce?tab=direct-indirect`. Remaining honesty: gender/agency/total-manpower on that tab use `useEmployees` roster, not the metrics API |
+| Direct vs indirect labor **page** | **mounted 2026-08-20** | `/hr/reports/workforce?tab=direct-indirect`. Operator: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`. Remaining honesty: gender/agency/total-manpower on that tab use `useEmployees` roster, not the metrics API |
 | Daily manpower + no-work **pages** | orphan UI | Same: tabs exist, APIs 200, not routed. Dashboard hop did not show a no-work report |
 | Pregnant employee list | missing product | Import metadata only (`bnpi-manpower-databank-import.helper.ts` column `pregnant`) |
 | `/hr/my-attendance` | dead route | 404 |

@@ -1,5 +1,15 @@
 # Project Truth
 
+## Direct vs Indirect labor report UI (2026-08-20)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`. Public DEV until `6aad83c5` is serving is `NEEDS_CONFIRMATION`.
+- Timesheet sheet **2.1.7** is two surfaces. Tardiness / UT / OT stay on `/hr/reports/attendance` (`tab=tardiness` / `tab=overtime`). Direct vs Indirect labor is **not** those tabs.
+- Workforce Analytics (`/hr/reports/workforce`) has three tabs: Agency Attendance (`agency`), Manpower Distribution (`labor`, **default**), Direct vs Indirect (`direct-indirect`). Do not remap `labor` to this report.
+- **DIRECT** = `Employee.workforceSource` is not `AGENCY`. **INDIRECT** = `AGENCY`. Employment type is not the bucket.
+- Metric: `POST /api/metrics` model `Attendance`, `data=["directIndirectLaborSummary"]`. Live local 2026-08-20: **872** direct / **1355** indirect, 15 departments.
+- Gender / Agency / Total Manpower blocks on this tab still come from a client employee roster and can show **0** while the API cards are filled. That is not “no Direct people.”
+- Operator: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`. Report: `.wwg/reports/direct-indirect-labor-ui-20260820.md`.
+
 ## On-prem DEV/UAT/PROD ports (2026-08-20)
 
 - Status: `CONFIRMED_LIVE`. Operator doc: `docs/ONPREM_PORT_ACCESS.md`. Report: `.wwg/reports/onprem-port-access-20260820.md`.

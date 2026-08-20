@@ -76,6 +76,10 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | Overview PRES | `/hr/attendance` department rollup PRES column; operator 2026-08-18 | People with a clock-in punch on a scheduled day. Not leftover AttendanceObligation PRESENT/INCOMPLETE. Expand lists clocked-in people first; a person row is PRES 1 only when `timeIn` exists. | CONFIRMED_LOCAL_IMPLEMENTATION |
 | Attendance Overview date range / Active Timesheet | `/hr/attendance` period picker; operator 2026-08-19 | Cards and department headers are **person-days**. Expand is **one row per employee** with SCHED/PRES/LATE/UT/ABS day totals for the range. **View days** opens that person's daily rows. Today still shows 0/1 per person. Live Active Timesheet 8/11–8/25: Zen 14 scheduled / 6 present / 4 late / 4 undertime / 8 absent. Clocked In list is 122 punch-days. | CONFIRMED_LOCAL_RUNTIME_EVIDENCE |
 | Payable overtime / approved OT | Run Payroll OT readiness; DM4.3 `rptOvertimeDetails`; TimesheetConfig `requireManagerApprovedOvertime` | Hours payroll will pay. Not automatic from extra punch time. Current policy requires manager OT request approval **or** import of the approved OT workbook onto effective timesheet lines. Timesheet must also be APPROVED. Raw attendance overtime is evidence only. | CONFIRMED_LOCAL_RUNTIME_EVIDENCE |
+| Direct vs Indirect labor | Workforce Analytics tab 2026-08-20; `directIndirectLaborSummary` | HR report at `/hr/reports/workforce?tab=direct-indirect`. Top Direct/Indirect counts come from `POST /api/metrics`. Distinct from Manpower Distribution (`tab=labor`) and from Attendance tardiness/OT. Do not shorten mixed device/workforce copy to “Direct” (that also means Direct device evidence). | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Direct labor | `Employee.workforceSource`; Direct vs Indirect tab | Labor bucket when `workforceSource` is **not** `AGENCY` (BNPI and missing source count as Direct). UI label **Direct**. Not Direct device evidence. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Indirect labor | `Employee.workforceSource` `AGENCY`; Direct vs Indirect tab | Labor bucket when `workforceSource` is `AGENCY`. UI label **Indirect**. Not the Agency Attendance tab. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Manpower Distribution | `/hr/reports/workforce?tab=labor` | Default Workforce Analytics tab (monthly manpower + databank). Must not be replaced by Direct vs Indirect. | CONFIRMED_LOCAL_IMPLEMENTATION |
 
 ## Canonical Term Candidates
 
@@ -96,6 +100,9 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | K3s node identity address | K3s node/API IP | node IP, Kubernetes endpoint IP | HIGH | 2026-07-03 user correction establishing `10.184.37.19` as canonical runtime truth |
 | live VM named tunnel connector | VM-managed Cloudflare Tunnel | VM-side Cloudflare, cloudflared service, named tunnel connector, cloud mode | HIGH | 2026-07-03 VM banner and user correction after tunnel disable incident |
 | physical device identity record | DeviceUser / Device Users | device users, enroll users, enrollment data | HIGH | 2026-07-06 schema/API/UI implementation |
+| workforce split by agency source | Direct vs Indirect labor | Direct vs Indirect, `directIndirectLaborSummary`, Timesheet 2.1.7 | HIGH | 2026-08-20 UI; `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md` |
+| non-agency workforce | Direct labor | DIRECT, BNPI, missing `workforceSource` | HIGH | `workforceSource` not `AGENCY` |
+| agency workforce | Indirect labor | INDIRECT, AGENCY | HIGH | `workforceSource` `AGENCY` |
 | device identity sync action | Sync device users | review sync, user sync, enroll users sync | HIGH | 2026-07-06 admin device UI implementation |
 | device event import action | Sync logs / Sync device logs | sync events, device log sync, attendance log sync | HIGH | 2026-07-06 admin events UI implementation |
 | Hikvision SDK callback service | Hikvision alarm listener | HCNetSDK alarm listener, Linux alarm service | HIGH | 2026-07-09 architecture intake |

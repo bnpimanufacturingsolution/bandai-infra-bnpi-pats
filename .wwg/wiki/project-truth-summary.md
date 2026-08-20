@@ -7,6 +7,7 @@ Last updated: 2026-08-20
 - Workforce Analytics has a third tab **Direct vs Indirect** at `/hr/reports/workforce?tab=direct-indirect`.
 - Manpower Distribution stays the default `labor` tab. Tardiness/OT stay on Attendance Reports.
 - Live metric `directIndirectLaborSummary`: 872 direct / 1355 indirect (2026-08-20). Gender/agency/total-manpower on that tab can still be empty from the client roster.
+- Operator: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`. Full: `.wwg/reports/direct-indirect-labor-ui-20260820.md`.
 
 ## 2026-08-20 On-prem ports vs this PC
 

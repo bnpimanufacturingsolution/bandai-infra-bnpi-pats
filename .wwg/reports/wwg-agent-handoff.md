@@ -11,6 +11,8 @@
 | Live API | 872 direct / 1355 indirect (2026-08-20) |
 | Tests | vitest workforce 3 + manpower 3; Playwright `hr-workforce-direct-indirect.spec.ts` |
 | Open | Client roster tables on that tab can be 0; no-work / daily manpower still unmounted (2.1.9) |
+| Operator doc | `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md` |
+| Report | `.wwg/reports/direct-indirect-labor-ui-20260820.md` |
 
 ## 2026-08-20 - Document on-prem port access
 
