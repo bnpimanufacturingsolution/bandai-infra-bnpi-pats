@@ -9,6 +9,10 @@ Last updated: 2026-08-20
 - Live metric `directIndirectLaborSummary`: 872 direct / 1355 indirect (2026-08-20). Gender/agency/total-manpower on that tab can still be empty from the client roster.
 - Operator: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`. Full: `.wwg/reports/direct-indirect-labor-ui-20260820.md`.
 
+## 2026-08-20 UAT/PROD app+API auto-roll
+
+- `git push origin develop` that rebuilds hris-api/hris-app now restarts those Deployments in **dev, uat, and prod** (skip missing). Not a new git branch. Docs-only still does not roll. Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+
 ## 2026-08-20 On-prem ports vs this PC
 
 - VM still serves DEV/UAT/PROD on `10.184.37.19` ports `3000/3001`, `3100/3101`, `3200/3201` (loopback HTTP 200).

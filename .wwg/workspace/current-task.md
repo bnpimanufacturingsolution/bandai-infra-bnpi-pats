@@ -1,5 +1,12 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 UAT/PROD app+API auto-roll
+
+- Operator: no auto-deploy for UAT/PROD app/API; asked if we can do it and document well.
+- Yes: ansible-pull restart loop is `dev uat prod` for existing Deployments (`hris-api`, `hris-app`, callback-outbox only where present). Still triggered by **`develop` push + image rebuild**, not GitHub `uat`/`prod` branches.
+- Revert env: `PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev`.
+- Canonical: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md` + `docs/ONPREM_PORT_ACCESS.md` + `docs/DEVOPS_RUNBOOK.md`.
+
 ## Latest Task Addendum - 2026-08-20 Timesheet 2.1.7 Direct vs Indirect UI
 
 - Operator assigned Timesheet Management **2.1.7** (split): tardiness/OT reports already existed; Direct vs Indirect labor was API-only.

@@ -249,10 +249,21 @@
         docker save -o "$archive" "${images[@]}"
         cp "$archive" /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-zz-selected-images.tar
         k3s ctr -n k8s.io images import "$archive"
-        env_name=dev
-        for deployment in "${deployments[@]}"; do
-          kubectl -n "$env_name" rollout restart "deployment/$deployment" >/dev/null
-          kubectl -n "$env_name" rollout status "deployment/$deployment" --timeout=180s
+        # App/API images are tagged :develop with imagePullPolicy Never.
+        # Restart every namespace that actually has the Deployment so a
+        # develop rebuild updates DEV, UAT, and PROD on this appliance.
+        # Override: PROJECT_TRUTH_ROLLOUT_NAMESPACES="dev" (old DEV-only).
+        rollout_namespaces="${PROJECT_TRUTH_ROLLOUT_NAMESPACES:-dev uat prod}"
+        for env_name in $rollout_namespaces; do
+          for deployment in "${deployments[@]}"; do
+            if ! kubectl -n "$env_name" get deploy "$deployment" >/dev/null 2>&1; then
+              echo "skip rollout $env_name/$deployment (not in this namespace)"
+              continue
+            fi
+            echo "rollout restart $env_name/$deployment"
+            kubectl -n "$env_name" rollout restart "deployment/$deployment" >/dev/null
+            kubectl -n "$env_name" rollout status "deployment/$deployment" --timeout=180s
+          done
         done
         if [ "$build_emp_app" = "1" ]; then
           for employee_env_name in prod dev uat; do

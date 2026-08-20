@@ -30,6 +30,22 @@ PowerShell fallback installer build
 temp-path installer install and shortcut contract verification
 ```
 
+## Appliance auto-roll (DEV + UAT + PROD app/API)
+
+On this single-VM appliance, ansible-pull still tracks Git branch **`develop`**. After it imports rebuilt `hris-api-local:develop` / `hris-app-local:develop`, it restarts those Deployments in namespaces **`dev`**, **`uat`**, and **`prod`** when the Deployment exists.
+
+That is **not** “GitHub branch `uat`/`prod` auto-deploys.” Creating those branches does not change the puller or Argo `targetRevision` (still `develop`).
+
+Docs-only pushes still do not rebuild or restart. Callback-outbox exists only in **dev** and is skipped in uat/prod.
+
+Revert to old DEV-only app/API restarts:
+
+```text
+PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev
+```
+
+Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+
 ## Promotion
 
 Use manual dispatch for `promote-gitops.yml`.

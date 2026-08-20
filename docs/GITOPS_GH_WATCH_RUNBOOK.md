@@ -113,6 +113,8 @@ signal for whether the VM has already pulled the SHA.
 `in progress` on Observe = waiting for VM `ansible-pull` (timer every 5 min).
 `success` = VM reported that environment. Image jobs can succeed with **not rebuilt this SHA**.
 
+On this appliance, a **rebuild** of hris-api/hris-app now restarts those Deployments in **dev, uat, and prod** (skip if missing). GitHub branches `uat`/`production` are not that trigger. Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+
 Hard honesty:
 
 - **CI green** is tests, not “deployed”.

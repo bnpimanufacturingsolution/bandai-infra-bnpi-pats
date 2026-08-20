@@ -24,6 +24,16 @@
 | Operator doc | `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md` |
 | Report | `.wwg/reports/direct-indirect-labor-ui-20260820.md` |
 
+## 2026-08-20 - UAT/PROD app+API auto-roll
+
+| Field | Value |
+|---|---|
+| Change | ansible-pull `rollout restart` for app/API in `dev uat prod` (skip missing) |
+| Trigger | still `develop` push + path-filter rebuild |
+| Not | GitHub branches `uat`/`production` |
+| Revert | `PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev` |
+| Report | `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md` |
+
 ## 2026-08-20 - Document on-prem port access
 
 | Field | Value |

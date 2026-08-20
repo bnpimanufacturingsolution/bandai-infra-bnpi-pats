@@ -10,6 +10,11 @@
 - Gender / Agency / Total Manpower blocks on this tab still come from a client employee roster and can show **0** while the API cards are filled. That is not “no Direct people.”
 - Operator: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`. Report: `.wwg/reports/direct-indirect-labor-ui-20260820.md`.
 
+## UAT/PROD app+API auto-roll (2026-08-20)
+
+- Status: `CONFIRMED_CODE`. ansible-pull after a **rebuild** of `hris-api` / `hris-app` restarts those Deployments in `dev`, `uat`, and `prod` if present. Not GitHub branches. Not docs-only. Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+- Revert: `PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev`. `promote-gitops.yml` remains tag/registry promote.
+
 ## On-prem DEV/UAT/PROD ports (2026-08-20)
 
 - Status: `CONFIRMED_LIVE`. Operator doc: `docs/ONPREM_PORT_ACCESS.md`. Report: `.wwg/reports/onprem-port-access-20260820.md`.

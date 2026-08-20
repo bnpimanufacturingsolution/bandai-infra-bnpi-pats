@@ -71,6 +71,19 @@ Invoke-WebRequest http://10.184.37.19:3101/health -UseBasicParsing
 
 Images rebuild only when path filters hit (`hris-api/`, `hris-app/`, …). Docs-only commits leave `services=none`; ports still answer on the previous image.
 
+### App / API auto-roll (this appliance, 2026-08-20)
+
+When ansible-pull **does** rebuild `hris-api` or `hris-app`, it now `rollout restart`s those Deployments in **dev, uat, and prod** (skip if the Deployment is missing in that namespace). Same `:develop` tag, `imagePullPolicy: Never`.
+
+| | Auto on `develop` push + image rebuild? |
+|---|---|
+| DEV app/API | yes (always was) |
+| UAT app/API | **yes now** (was DEV-only) |
+| PROD app/API | **yes now** (was DEV-only) |
+| GitHub branches `uat` / `production` | **not** the trigger |
+
+`promote-gitops.yml` is still the **tag** promote for registry-style clients. This VM path is “rebuild `:develop` → restart every NS that has the app/API”. Revert: `PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev`. Full: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+
 ## Hard bans
 
 | Do not say | Because |
