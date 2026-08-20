@@ -1480,7 +1480,7 @@ export function AttendanceManagement({
 		return (
 			<span
 				title={value || undefined}
-				className={`inline-flex min-w-0 items-baseline whitespace-nowrap text-[15px] tabular-nums ${
+				className={`inline-flex min-w-0 items-baseline whitespace-nowrap text-[11px] tabular-nums ${
 					muted ? "font-medium italic text-gray-400" : "font-semibold text-slate-950"
 				}`}>
 				{readableTime || value || "-"}
@@ -2035,7 +2035,7 @@ export function AttendanceManagement({
 	const getRecordScheduleSnapshot = (item: AttendanceRecord) =>
 		(item as AttendanceRecord & { scheduleSnapshot?: unknown }).scheduleSnapshot;
 
-	const renderEmptyMetric = () => <span className="text-gray-400 text-sm">-</span>;
+	const renderEmptyMetric = () => <span className="text-[11px] text-gray-400">-</span>;
 
 	const renderLateCell = (item: AttendanceRecord) => {
 		const arrival = getClockInArrivalIndicator({
@@ -2044,20 +2044,20 @@ export function AttendanceManagement({
 		});
 		if (arrival?.kind === "LATE") {
 			return (
-				<div className="text-sm font-semibold tabular-nums text-amber-700">
+				<div className="text-[11px] font-semibold tabular-nums text-amber-700">
 					{formatDurationCompact(arrival.lateHours)}
 				</div>
 			);
 		}
 		if (arrival?.kind === "GRACE") {
 			return (
-				<div className="text-sm font-medium tabular-nums text-amber-700">
+				<div className="text-[11px] font-medium tabular-nums text-amber-700">
 					Grace {arrival.value || ""}
 				</div>
 			);
 		}
 		if (arrival?.kind === "ON_TIME") {
-			return <div className="text-sm font-medium text-emerald-700">On time</div>;
+			return <div className="text-[11px] font-medium text-emerald-700">On time</div>;
 		}
 		return renderEmptyMetric();
 	};
@@ -2068,46 +2068,57 @@ export function AttendanceManagement({
 			scheduleSnapshot: getRecordScheduleSnapshot(item),
 		});
 		if (!undertime) return renderEmptyMetric();
-		return <div className="text-sm font-semibold tabular-nums text-orange-700">{undertime.value}</div>;
+		return (
+			<div className="text-[11px] font-semibold tabular-nums text-orange-700">
+				{undertime.value}
+			</div>
+		);
 	};
 
 	const renderHoursCell = (item: AttendanceRecord) => {
 		const hours = getWorkedHoursLabel(item);
 		if (!hours) return renderEmptyMetric();
-		return <div className="text-sm font-semibold tabular-nums text-gray-900">{hours}</div>;
+		return <div className="text-[11px] font-semibold tabular-nums text-gray-900">{hours}</div>;
 	};
 
 	const columns: Column<AttendanceRecord>[] = [
 		{
 			key: "employeeName",
 			label: "Employee",
+			pin: "left",
+			width: "220px",
+			className: "min-w-[220px] max-w-[240px]",
+			headerClassName: "min-w-[220px]",
 			render: (value, item) => (
 				<EmployeeTableCell
 					profileId={getEmployeeProfileId(item)}
 					fullName={String(value || item.employeeName || "-")}
 					employeeId={item.employeeId}
 					avatar={getEmployeeAvatar(item)}
+					size="sm"
 				/>
 			),
 		},
 		{
 			key: "date",
 			label: "Shift Date",
+			width: "92px",
 			className: "whitespace-nowrap",
 			render: (value) => (
-				<div className="text-sm text-gray-700">{formatDate(value, "short")}</div>
+				<div className="text-[11px] text-gray-700">{formatDate(value, "short")}</div>
 			),
 		},
 		{
 			key: "status",
 			label: "Status",
+			width: "104px",
 			className: "whitespace-nowrap",
 			render: (_value, item) => {
 				const displayStatus = getAttendanceDisplayStatus(item);
 				return (
 					<div className="min-w-0">
 						<span
-							className={`inline-flex max-w-full items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold leading-4 ${getAttendanceStatusBadgeClass(displayStatus)}`}>
+							className={`inline-flex max-w-full items-center whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] font-semibold leading-4 ${getAttendanceStatusBadgeClass(displayStatus)}`}>
 							{displayStatus}
 						</span>
 					</div>
@@ -2117,6 +2128,7 @@ export function AttendanceManagement({
 		{
 			key: "behaviorFlags",
 			label: "Indicators",
+			width: "112px",
 			render: (_, item) => {
 				const indicatorBadges = getAttendanceIndicatorBadges(item);
 
@@ -2146,6 +2158,7 @@ export function AttendanceManagement({
 		{
 			key: "timeIn",
 			label: "Clock In",
+			width: "88px",
 			className: "whitespace-nowrap",
 			render: (value, item) =>
 				renderClockValue(value as string | null | undefined, {
@@ -2155,6 +2168,7 @@ export function AttendanceManagement({
 		{
 			key: "lateHours",
 			label: "Late",
+			width: "72px",
 			className: "whitespace-nowrap",
 			headerClassName: "whitespace-nowrap",
 			render: (_value, item) => renderLateCell(item),
@@ -2162,6 +2176,7 @@ export function AttendanceManagement({
 		{
 			key: "timeOut",
 			label: "Clock Out",
+			width: "88px",
 			className: "whitespace-nowrap",
 			render: (_value, item) =>
 				renderClockValue(item.timeOut, {
@@ -2172,6 +2187,7 @@ export function AttendanceManagement({
 		{
 			key: "undertimeHours",
 			label: "UT",
+			width: "64px",
 			className: "whitespace-nowrap",
 			headerClassName: "whitespace-nowrap",
 			render: (_value, item) => renderUndertimeCell(item),
@@ -2179,6 +2195,7 @@ export function AttendanceManagement({
 		{
 			key: "hoursWorked",
 			label: "Hours",
+			width: "64px",
 			className: "whitespace-nowrap",
 			headerClassName: "whitespace-nowrap",
 			render: (_value, item) => renderHoursCell(item),
@@ -3596,6 +3613,8 @@ export function AttendanceManagement({
 						description={`${activeFilterLabel ? `Showing ${activeFilterLabel} records - ` : ""}Attendance from ${formatDate(metricsDateRange.from, "short")} to ${formatDate(metricsDateRange.to, "short")}`}
 						data={records}
 						columns={columns}
+						density="compact"
+						actionColumnWidth="88px"
 						isLoading={isLoadingTimesheets}
 						emptyMessage="No attendance records found"
 						searchPlaceholder="Search employees..."
@@ -3616,16 +3635,16 @@ export function AttendanceManagement({
 								<Button
 									variant="ghost"
 									size="icon"
-									className="h-8 w-8 rounded-lg"
+									className="h-7 w-7 rounded-md"
 									onClick={() => openFixAttendance(item)}
 									title="Fix Attendance"
 									aria-label={`Fix attendance for ${item.employeeName}`}
 								>
-									<FileEdit className="h-4 w-4 text-orange-600" />
+									<FileEdit className="h-3.5 w-3.5 text-orange-600" />
 								</Button>
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
+										<Button variant="ghost" size="icon" className="h-7 w-7 rounded-md">
 											<MoreVertical className="h-4 w-4" />
 											<span className="sr-only">Attendance actions</span>
 										</Button>

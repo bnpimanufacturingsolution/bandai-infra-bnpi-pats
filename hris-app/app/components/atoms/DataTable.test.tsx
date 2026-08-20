@@ -83,6 +83,50 @@ describe("DataTable", () => {
 		expect(headerRow).toContainElement(columnsButton);
 	});
 
+	it("pins a left column so the identity stays visible while scrolling horizontally", () => {
+		const pinnedColumns: Column<AdminConfigRow>[] = [
+			{ key: "name", label: "Name", pin: "left" },
+			{ key: "code", label: "Code" },
+		];
+
+		const { container } = render(
+			<DataTable
+				title="Departments"
+				data={rows}
+				columns={pinnedColumns}
+				showSearch={false}
+				showFilters={false}
+				showExport={false}
+				noCard
+			/>,
+		);
+
+		const nameHeader = container.querySelector("th");
+		expect(nameHeader?.className).toContain("sticky");
+		expect(nameHeader?.className).toContain("left-0");
+		const nameCell = container.querySelector("td");
+		expect(nameCell?.className).toContain("sticky");
+		expect(nameCell?.className).toContain("left-0");
+	});
+
+	it("uses compact padding and smaller type in compact density", () => {
+		const { container } = render(
+			<DataTable
+				title="Departments"
+				data={rows}
+				columns={columns}
+				density="compact"
+				showSearch={false}
+				showFilters={false}
+				showExport={false}
+				noCard
+			/>,
+		);
+
+		expect(container.querySelector("table")?.className).toContain("text-xs");
+		expect(container.querySelector("td")?.className).toContain("py-1.5");
+	});
+
 	it("renders one table when containedScroll is off so header and body columns stay aligned", () => {
 		const { container } = render(
 			<DataTable

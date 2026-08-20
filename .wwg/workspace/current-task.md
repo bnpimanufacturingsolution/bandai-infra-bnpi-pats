@@ -65,6 +65,12 @@
 - Cause: GitOps DEV serves `develop` `b409ca4`. The attendance request work lived only on `bryan-task` `3bad2d1`. Merging `develop` into `bryan-task` does not deploy the feature.
 - Layout (Today left / log right) was still uncommitted local CSS. Promote the committed attendance request + related API/UI from `3bad2d1` onto `develop`.
 
+## Latest Task Addendum - 2026-08-20 Attendance records compact + sticky employee
+
+- Operator: Attendance Records list needs smaller type and a frozen employee name when scrolling right.
+- Fix: compact DataTable density; smaller employee/time/status cells; Employee column `pin: left`.
+- Tests: DataTable 9; EmployeeTableCell 3; attendance 19. Browser: `.runtime/attendance-records-compact-20260820/`.
+
 ## Latest Task Addendum - 2026-08-20 Attendance list filters return to overview
 
 - Operator: `/hr/attendance` overview; click Clocked In (or any metric) → URL becomes `?status=CLOCKED_IN&view=list`. No way back to the clean attendance route.

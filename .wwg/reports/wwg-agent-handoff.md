@@ -92,6 +92,15 @@
 | After | `origin/develop` `f93f30d`. ansible-pull `2026-08-19T10:01:21Z`. DEV app pod `hris-app-77fcb5db6f-d69md`. HTML `root-CIRKoZkC.css`. Chunk `_id.attendance-DI1eNUjI.js` contains **Request time**. CSS has `attendance-period-layout`. |
 | Tests | API mocha 30; app vitest 26; local `hris-app` production build green. |
 
+## 2026-08-20 - Attendance records compact + sticky employee
+
+| Field | Value |
+|---|---|
+| Ask | Compress table; freeze employee name on horizontal scroll; smaller text |
+| Fix | DataTable `density=compact`; employee `pin: left`; smaller avatars/times/badges |
+| Tests | vitest 31 |
+| Browser | `.runtime/attendance-records-compact-20260820/result.json` — Shift Date scrolled away, Employee stayed |
+
 ## 2026-08-20 - Attendance overview return from list filters
 
 | Field | Value |

@@ -134,6 +134,8 @@ export interface DataTableProps<T> {
 	totalPages?: number;
 	searchPlaceholder?: string;
 	searchValue?: string; // Controlled search value for server-side search
+	/** Compact rows/type for wide operational ledgers (attendance records). */
+	density?: "comfortable" | "compact";
 	/**
 	 * Required for dense list/table pages (admin + HR standard).
 	 * Table body fills remaining viewport height and scrolls inside the shell;
@@ -211,6 +213,7 @@ const DataTable = <T extends Record<string, any>>({
 	totalPages: externalTotalPages,
 	searchPlaceholder,
 	searchValue,
+	density = "comfortable",
 	containedScroll = false,
 	toolbarAlign,
 }: DataTableProps<T>) => {
@@ -411,9 +414,22 @@ const DataTable = <T extends Record<string, any>>({
 	const hasActionsColumn = !!(onEdit || onDelete || onView || renderActions);
 	const hasOptionalColumns = columns.some((column) => !column.required && column.priority !== "critical");
 	const hasExplicitColumnWidths = columns.some((column) => Boolean(column.width));
+	const hasPinnedColumns = visibleColumns.some(
+		(column) => column.pin === "left" || column.pin === "right",
+	);
+	const isCompact = density === "compact";
+	const headerPad = isCompact ? "px-2.5 py-1.5" : "px-4 py-3";
+	const cellPad = isCompact ? "px-2.5 py-1.5" : "px-4 py-4";
+	const headerRowClassName = cn(
+		isCompact ? "h-9" : "h-12",
+		"text-left text-gray-700 border-b border-neutral-200 bg-neutral-100",
+	);
 	const tableClassName = cn(
-		"w-full text-sm",
-		containedScroll || hasExplicitColumnWidths ? "table-fixed" : "min-w-max",
+		"w-full",
+		isCompact ? "text-xs" : "text-sm",
+		hasPinnedColumns || !(containedScroll || hasExplicitColumnWidths)
+			? "min-w-max"
+			: "table-fixed",
 	);
 	const totalVisibleColumns = visibleColumns.length + (hasActionsColumn ? 1 : 0);
 	const getColumnWidth = (column: Column<T>) =>
@@ -428,10 +444,15 @@ const DataTable = <T extends Record<string, any>>({
 	};
 	const getPinnedColumnClassName = (column: Column<T>, align: "header" | "cell" = "cell") => {
 		if (column.pin !== "left" && column.pin !== "right") return "";
+		const isLeft = column.pin === "left";
 		return cn(
-			"sticky z-[5]",
-			column.pin === "left" ? "left-0" : "right-0",
-			align === "header" ? "bg-neutral-100" : "bg-white group-hover/row:bg-neutral-50",
+			"sticky",
+			isLeft
+				? "left-0 shadow-[8px_0_12px_-12px_rgba(15,23,42,0.35)]"
+				: "right-0 shadow-[-8px_0_12px_-12px_rgba(15,23,42,0.35)]",
+			align === "header"
+				? "z-[6] bg-neutral-100"
+				: "z-[5] bg-white group-hover/row:bg-neutral-50",
 		);
 	};
 	const actionColumnClassName =
@@ -566,12 +587,13 @@ const DataTable = <T extends Record<string, any>>({
 
 	const renderDesktopTableHead = () => (
 		<thead className={headerClassName}>
-			<tr className="h-12 text-left text-gray-700 border-b border-neutral-200 bg-neutral-100">
+			<tr className={headerRowClassName}>
 				{visibleColumns.map((column) => (
 					<th
 						key={String(column.key)}
 						className={cn(
-							"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
+							headerPad,
+							"text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
 							getColumnResponsiveClassName(column),
 							getPinnedColumnClassName(column, "header"),
 							column.className,
@@ -592,7 +614,8 @@ const DataTable = <T extends Record<string, any>>({
 				{hasActionsColumn && (
 					<th
 						className={cn(
-							"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
+							headerPad,
+							"text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
 							actionHeaderClassName,
 						)}
 						data-datatable-action-column>
@@ -632,7 +655,8 @@ const DataTable = <T extends Record<string, any>>({
 						<td
 							key={String(column.key)}
 							className={cn(
-								"px-4 py-4 group-hover/row:text-gray-900 transition-colors",
+								cellPad,
+								"group-hover/row:text-gray-900 transition-colors",
 								getColumnResponsiveClassName(column),
 								getPinnedColumnClassName(column),
 								column.className,
@@ -648,7 +672,7 @@ const DataTable = <T extends Record<string, any>>({
 					))}
 					{hasActionsColumn && (
 						<td
-							className={cn("px-4 py-4", actionColumnClassName)}
+							className={cn(cellPad, actionColumnClassName)}
 							onClick={(event) => event.stopPropagation()}
 							onKeyDown={(event) => event.stopPropagation()}>
 							<div className="flex justify-center">
@@ -669,7 +693,7 @@ const DataTable = <T extends Record<string, any>>({
 						<td
 							key={String(column.key)}
 							className={cn(
-								"px-4 py-4",
+								cellPad,
 								getColumnResponsiveClassName(column),
 								getPinnedColumnClassName(column),
 								column.className,
@@ -678,7 +702,7 @@ const DataTable = <T extends Record<string, any>>({
 						</td>
 					))}
 					{hasActionsColumn && (
-						<td className={cn("px-4 py-4", actionColumnClassName)}>
+						<td className={cn(cellPad, actionColumnClassName)}>
 							<div className="ml-auto h-8 bg-gray-200 rounded w-20" />
 						</td>
 					)}
@@ -1275,7 +1299,7 @@ const DataTable = <T extends Record<string, any>>({
 											{!isCollapsed && (
 												<table className={cn(tableClassName, "bg-white")}>
 													<thead className={headerClassName}>
-														<tr className="h-12 text-left text-gray-700 border-b border-neutral-200 bg-neutral-50/50">
+														<tr className={cn(headerRowClassName, "bg-neutral-50/50")}>
 															{visibleColumns.map((column) => {
 																const hasActions =
 																	onEdit ||
@@ -1293,7 +1317,8 @@ const DataTable = <T extends Record<string, any>>({
 																	<th
 																		key={String(column.key)}
 																		className={cn(
-																			"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
+																			headerPad,
+																			"text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
 																			getColumnResponsiveClassName(
 																				column,
 																			),
@@ -1338,7 +1363,8 @@ const DataTable = <T extends Record<string, any>>({
 																renderActions) && (
 																<th
 																	className={cn(
-																		"px-4 py-3 text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
+																		headerPad,
+																		"text-[11px] font-semibold uppercase tracking-normal text-gray-700 whitespace-nowrap align-middle",
 																		actionHeaderClassName,
 																	)}
 																	data-datatable-action-column
@@ -1382,7 +1408,8 @@ const DataTable = <T extends Record<string, any>>({
 																	<td
 																		key={String(column.key)}
 																		className={cn(
-																			"px-4 py-4 group-hover/row:text-gray-900 transition-colors",
+																			cellPad,
+																			"group-hover/row:text-gray-900 transition-colors",
 																			getColumnResponsiveClassName(
 																				column,
 																			),
@@ -1415,7 +1442,7 @@ const DataTable = <T extends Record<string, any>>({
 																	renderActions) && (
 																	<td
 																		className={cn(
-																			"px-4 py-4",
+																			cellPad,
 																			actionColumnClassName,
 																		)}
 																		onClick={(event) =>
