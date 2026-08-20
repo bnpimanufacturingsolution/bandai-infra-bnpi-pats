@@ -23,6 +23,10 @@ import {
 	isoToManilaPickerTime,
 } from "~/lib/utils/attendance-adjustment-request";
 import {
+	getDocumentRequestChangeAfterLabel,
+	hasGeneratedDocumentFile,
+} from "~/lib/document-request-handler";
+import {
 	AlertCircle,
 	ArrowRight,
 	Briefcase,
@@ -1307,13 +1311,11 @@ export function RequestReviewModal({
 				addBusinessStateRow(
 					"Document State",
 					documentStatus !== "N/A" ? documentStatus : "Requested",
-					requestState === "APPROVED"
-						? `Generate ${documentTypeLabel}`
-						: requestState === "COMPLETED"
-							? `${documentTypeLabel} Issued`
-							: requestState === "REJECTED"
-								? "No document generated"
-								: requestStateStyle.label,
+					getDocumentRequestChangeAfterLabel({
+						requestState,
+						documentTypeLabel,
+						hasGeneratedFile: hasGeneratedDocumentFile(request),
+					}),
 				);
 				return rows;
 			}
@@ -1839,21 +1841,34 @@ export function RequestReviewModal({
 							) : null}
 
 							{request.type === "DOCUMENT_REQUEST" &&
-							requestState === "APPROVED" &&
-							(request as any).metadata?.documentUrl ? (
+							hasGeneratedDocumentFile(request) ? (
 								<section className="rounded-xl border border-orange-200 bg-orange-50 p-4">
 									<h3 className="flex items-center gap-2 text-sm font-semibold text-orange-900">
 										<CheckCircle2 className="h-4 w-4 text-orange-600" />
 										Document ready
 									</h3>
 									<a
-										href={`/employee/${user?.metadata?.employee?.id}?tab=documents&action=view-doc&documentNumber=${(request as any).metadata?.documentNumber || request.code}`}
+										href={`/employee/${requesterProfileId}?tab=documents&action=view-doc&documentNumber=${(request as any).metadata?.documentNumber || request.code}`}
 										target="_blank"
 										rel="noreferrer"
 										className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm text-white transition-colors hover:bg-orange-700">
 										<FileText className="h-4 w-4" />
 										View Document
 									</a>
+								</section>
+							) : request.type === "DOCUMENT_REQUEST" &&
+							  (requestState === "COMPLETED" || requestState === "APPROVED") ? (
+								<section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+									<h3 className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+										<AlertCircle className="h-4 w-4 text-amber-600" />
+										No file on Documents yet
+									</h3>
+									<p className="mt-2 text-sm text-amber-800">
+										This request is {requestState.toLowerCase()}, but HR has not
+										generated the PDF. Open HR Tickets and use Generate
+										Document. Certificates &amp; Education stays empty until
+										then.
+									</p>
 								</section>
 							) : null}
 
@@ -2369,23 +2384,35 @@ export function RequestReviewModal({
 								</section>
 
 								{request.type === "DOCUMENT_REQUEST" &&
-									requestState === "APPROVED" &&
-									(request as any).metadata?.documentUrl && (
-										<section className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
-											<h3 className="flex items-center gap-2 text-base font-semibold text-orange-900">
-												<CheckCircle2 className="h-4 w-4 text-orange-600" />
-												Document Generated
-											</h3>
-											<a
-												href={`/employee/${user?.metadata?.employee?.id}?tab=documents&action=view-doc&documentNumber=${(request as any).metadata?.documentNumber || request.code}`}
-												target="_blank"
-												rel="noreferrer"
-												className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm text-white transition-colors hover:bg-orange-700">
-												<FileText className="h-4 w-4" />
-												View Document
-											</a>
-										</section>
-									)}
+								hasGeneratedDocumentFile(request) ? (
+									<section className="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+										<h3 className="flex items-center gap-2 text-base font-semibold text-orange-900">
+											<CheckCircle2 className="h-4 w-4 text-orange-600" />
+											Document Generated
+										</h3>
+										<a
+											href={`/employee/${requesterProfileId}?tab=documents&action=view-doc&documentNumber=${(request as any).metadata?.documentNumber || request.code}`}
+											target="_blank"
+											rel="noreferrer"
+											className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm text-white transition-colors hover:bg-orange-700">
+											<FileText className="h-4 w-4" />
+											View Document
+										</a>
+									</section>
+								) : request.type === "DOCUMENT_REQUEST" &&
+								  (requestState === "COMPLETED" || requestState === "APPROVED") ? (
+									<section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+										<h3 className="flex items-center gap-2 text-base font-semibold text-amber-900">
+											<AlertCircle className="h-4 w-4 text-amber-600" />
+											No file on Documents yet
+										</h3>
+										<p className="mt-2 text-sm text-amber-800">
+											Workflow completion does not create the PDF. HR must
+											Generate Document first. Then it appears in Certificates
+											&amp; Education.
+										</p>
+									</section>
+								) : null}
 							</div>
 						</div>
 
