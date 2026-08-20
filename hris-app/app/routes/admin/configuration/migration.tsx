@@ -66,6 +66,7 @@ import {
 	getWorkbookUploadKind,
 	isMigrationRunStatusSuccess,
 	isMigrationRunStatusTerminal,
+	isWorkbookSourceInputsPanelReady,
 	isWorkbookUploadOpen,
 	type WorkbookUploadKind,
 } from "~/lib/admin-migration-ui";
@@ -8964,15 +8965,9 @@ export default function AdminMigrationPage() {
 				["running", "failed", "completed", "blocked"].includes(
 					String(activeWorkbookReport?.status || "").toLowerCase(),
 				));
-		// Optional reference panel only when real downloadable/mapped sources exist.
-		// DM4 biometrics paths already live in the primary "What to do" card.
-		const sourceInputsReady =
-			!isDm4 &&
-			activeWorkbookSourceInputs.some(
-				(source) =>
-					source.downloadable ||
-					(Array.isArray(source.sheetMappings) && source.sheetMappings.length > 0),
-			);
+		// Catalog of configured source files. Shown for every DM workbook,
+		// including DM4 (biometrics folder, OT details, template).
+		const sourceInputsReady = isWorkbookSourceInputsPanelReady(activeWorkbookSourceInputs);
 		const title = group.title.replace(/^DM\d+\s*-\s*/i, "");
 
 		return (

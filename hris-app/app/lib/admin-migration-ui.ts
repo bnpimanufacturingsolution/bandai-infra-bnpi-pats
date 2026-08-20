@@ -56,6 +56,25 @@ export function isAdminMigrationWorkbookId(value: string | null | undefined): va
 	return Boolean(value && (ADMIN_MIGRATION_WORKBOOK_IDS as readonly string[]).includes(value));
 }
 
+export type WorkbookSourceInputLike = {
+	downloadable?: boolean;
+	sheetMappings?: unknown[];
+};
+
+/**
+ * Source-input catalog panel is shown on every DM workbook page (including DM4)
+ * when at least one mapped or downloadable source exists.
+ */
+export function isWorkbookSourceInputsPanelReady(
+	sources: WorkbookSourceInputLike[] | null | undefined,
+): boolean {
+	return (sources || []).some(
+		(source) =>
+			Boolean(source.downloadable) ||
+			(Array.isArray(source.sheetMappings) && source.sheetMappings.length > 0),
+	);
+}
+
 function workbookUploadParamValue(kind: WorkbookUploadKind): string {
 	if (kind === "workbook") return WORKBOOK_UPLOAD_VALUE;
 	return kind;
