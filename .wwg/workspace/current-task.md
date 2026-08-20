@@ -5,7 +5,7 @@
 - Operator: implement the lead requirement; **stop pushing to develop until they say so**.
 - Added `Timesheetline.dayLaborType` / `AttendanceObligation.dayLaborType` (`DIRECT` \| `INDIRECT`, nullable).
 - Timesheet day editor: **Day labor** select. Persist via existing breakdown save. Distinct from hire-source report.
-- Standing order: **do not `git push origin develop`** until the operator asks.
+- Operator later: audit then push if sure. Audit: persist is PATCH breakdown on Submit/Approve (day Save is preview, same as clocks). Prisma generate includes `DayLaborType`. SQL still must be applied on DB.
 
 ## Latest Task Addendum - 2026-08-20 Lead 2.1.7 meaning vs shipped
 
