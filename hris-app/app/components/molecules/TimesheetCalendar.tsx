@@ -423,6 +423,12 @@ export function TimesheetCalendar({
 									...(day.earlyOutHours && day.earlyOutHours !== "0:00"
 										? [{ label: "EO", tone: "eo" as const }]
 										: []),
+									...(day.dayLaborType === "DIRECT"
+										? [{ label: "DIR", tone: "meta" as const }]
+										: []),
+									...(day.dayLaborType === "INDIRECT"
+										? [{ label: "IND", tone: "meta" as const }]
+										: []),
 									...(correctionMarker
 										? [
 												{
@@ -589,6 +595,7 @@ export function TimesheetCalendar({
 															dayKey,
 													},
 													nightShift: day.nightShift,
+													dayLaborType: day.dayLaborType,
 												}}
 												modified={isModified}
 												payrollCorrection={correctionMarker}
