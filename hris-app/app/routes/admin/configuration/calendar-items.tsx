@@ -3,6 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 import { Modal } from "~/components/atoms/Modal";
 import { Badge } from "~/components/atoms/Badge";
 import { CategoricalText } from "~/components/atoms/CategoricalText";
@@ -552,17 +553,19 @@ export default function CalendarItemsPage() {
 								<label className="block text-sm font-medium text-gray-700 mb-1">
 									Start Date *
 								</label>
-								<input
-									type="date"
-									aria-invalid={Boolean(errors.startDate)}
-									className={`mt-1 w-full rounded-md border ${
+								<CalendarDatePicker
+									value={watch("startDate") || ""}
+									onChange={(next) =>
+										setValue("startDate", next, {
+											shouldValidate: true,
+											shouldDirty: true,
+										})
+									}
+									className={
 										errors.startDate
 											? "border-red-300 focus:border-red-500"
-											: "border-gray-300"
-									} bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary`}
-									{...register("startDate", {
-										required: "Start date is required",
-									})}
+											: ""
+									}
 								/>
 								{errors.startDate && (
 									<p className="mt-1 text-sm text-red-600">
@@ -574,17 +577,17 @@ export default function CalendarItemsPage() {
 								<label className="block text-sm font-medium text-gray-700 mb-1">
 									End Date *
 								</label>
-								<input
-									type="date"
-									aria-invalid={Boolean(errors.endDate)}
-									className={`mt-1 w-full rounded-md border ${
-										errors.endDate
-											? "border-red-300 focus:border-red-500"
-											: "border-gray-300"
-									} bg-white px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary`}
-									{...register("endDate", {
-										required: "End date is required",
-									})}
+								<CalendarDatePicker
+									value={watch("endDate") || ""}
+									onChange={(next) =>
+										setValue("endDate", next, {
+											shouldValidate: true,
+											shouldDirty: true,
+										})
+									}
+									className={
+										errors.endDate ? "border-red-300 focus:border-red-500" : ""
+									}
 								/>
 								{errors.endDate && (
 									<p className="mt-1 text-sm text-red-600">

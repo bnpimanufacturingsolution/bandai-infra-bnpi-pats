@@ -175,6 +175,23 @@ function Calendar({
 	);
 }
 
+export function orderCalendarDropdownOptions(
+	options: Array<{ value?: string | number; label?: string; disabled?: boolean }> = [],
+) {
+	const isYearDropdown = options.length > 12;
+	const next = isYearDropdown
+		? [...options].sort((left, right) => Number(right.value) - Number(left.value))
+		: options;
+	return {
+		isYearDropdown,
+		selectOptions: next.map((option) => ({
+			value: String(option.value),
+			label: String(option.label ?? option.value ?? ""),
+			disabled: option.disabled,
+		})),
+	};
+}
+
 function CalendarDropdown({
 	options = [],
 	value,
@@ -183,12 +200,8 @@ function CalendarDropdown({
 	"aria-label": ariaLabel,
 	style,
 }: DropdownProps) {
-	const isMonthDropdown = options.length <= 12;
-	const selectOptions = options.map((option) => ({
-		value: String(option.value),
-		label: option.label,
-		disabled: option.disabled,
-	}));
+	const { isYearDropdown, selectOptions } = orderCalendarDropdownOptions(options);
+	const isMonthDropdown = !isYearDropdown;
 
 	const handleChange = (nextValue: string) => {
 		onChange?.({

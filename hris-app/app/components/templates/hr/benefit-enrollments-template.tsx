@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
 import { Input } from "~/components/atoms/Input";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 import { DataTable, type Column, type FilterOption } from "~/components/atoms/DataTable";
 import { StatusBadge } from "~/components/atoms/StatusBadge";
 import {
@@ -885,7 +886,15 @@ LLA,250.00,01466,Ma Angelica N. Leyesa,26/06/2026,,,,`;
 								<label className="block text-sm font-medium text-gray-700 mb-1">
 									Start Date *
 								</label>
-								<Input type="date" {...register("startDate")} />
+								<CalendarDatePicker
+									value={watch("startDate") || ""}
+									onChange={(next) =>
+										setValue("startDate", next, {
+											shouldValidate: true,
+											shouldDirty: true,
+										})
+									}
+								/>
 								{errors.startDate && (
 									<p className="text-red-500 text-xs mt-1">
 										{errors.startDate.message}
@@ -896,7 +905,15 @@ LLA,250.00,01466,Ma Angelica N. Leyesa,26/06/2026,,,,`;
 								<label className="block text-sm font-medium text-gray-700 mb-1">
 									End Date
 								</label>
-								<Input type="date" {...register("endDate")} />
+								<CalendarDatePicker
+									value={watch("endDate") || ""}
+									onChange={(next) =>
+										setValue("endDate", next, {
+											shouldValidate: true,
+											shouldDirty: true,
+										})
+									}
+								/>
 								{errors.endDate && (
 									<p className="text-red-500 text-xs mt-1">
 										{errors.endDate.message}

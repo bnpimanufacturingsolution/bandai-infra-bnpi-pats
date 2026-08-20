@@ -1,6 +1,7 @@
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
 import { Card, CardContent } from "~/components/atoms/Card";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 
 import React, { useState, useCallback, useMemo } from "react";
 import {
@@ -1039,17 +1040,19 @@ export function EmployeeDetailsForm({ form, onComplete, status }: EmployeeDetail
 										className="block text-sm font-medium text-gray-700 mb-1">
 										Hire Date *
 									</label>
-									<Input
-										id="employee.employmentHireDate"
-										type="date"
+									<CalendarDatePicker
+										value={watch("employee.employmentHireDate") || ""}
+										onChange={(next) =>
+											setValue("employee.employmentHireDate", next, {
+												shouldValidate: true,
+												shouldDirty: true,
+											})
+										}
 										className={
 											errors.employee?.employmentHireDate
 												? "border-red-300 focus:border-red-500"
 												: ""
 										}
-										{...register("employee.employmentHireDate", {
-											required: "Hire date is required",
-										})}
 									/>
 									{errors.employee?.employmentHireDate && (
 										<p className="mt-1 text-sm text-red-600">
@@ -1064,17 +1067,19 @@ export function EmployeeDetailsForm({ form, onComplete, status }: EmployeeDetail
 										className="block text-sm font-medium text-gray-700 mb-1">
 										Start Date *
 									</label>
-									<Input
-										id="employee.employmentStartDate"
-										type="date"
+									<CalendarDatePicker
+										value={watch("employee.employmentStartDate") || ""}
+										onChange={(next) =>
+											setValue("employee.employmentStartDate", next, {
+												shouldValidate: true,
+												shouldDirty: true,
+											})
+										}
 										className={
 											errors.employee?.employmentStartDate
 												? "border-red-300 focus:border-red-500"
 												: ""
 										}
-										{...register("employee.employmentStartDate", {
-											required: "Start date is required",
-										})}
 									/>
 									{errors.employee?.employmentStartDate && (
 										<p className="mt-1 text-sm text-red-600">
@@ -1090,20 +1095,19 @@ export function EmployeeDetailsForm({ form, onComplete, status }: EmployeeDetail
 										Probation End Date{" "}
 										{employmentType === "PROBATIONARY" && "*"}
 									</label>
-									<Input
-										id="employee.probationEndDate"
-										type="date"
+									<CalendarDatePicker
+										value={watch("employee.probationEndDate") || ""}
+										onChange={(next) =>
+											setValue("employee.probationEndDate", next, {
+												shouldValidate: true,
+												shouldDirty: true,
+											})
+										}
 										className={
 											errors.employee?.probationEndDate
 												? "border-red-300 focus:border-red-500"
 												: ""
 										}
-										{...register("employee.probationEndDate", {
-											required:
-												employmentType === "PROBATIONARY"
-													? "Probation end date is required"
-													: false,
-										})}
 									/>
 									{errors.employee?.probationEndDate && (
 										<p className="mt-1 text-sm text-red-600">
@@ -1314,19 +1318,26 @@ export function EmployeeDetailsForm({ form, onComplete, status }: EmployeeDetail
 											<label className="block text-sm font-medium text-gray-700 mb-1">
 												Issue Date *
 											</label>
-											<Input
-												type="date"
+											<CalendarDatePicker
+												value={
+													watch(`employee.documents.${index}.issueDate`) ||
+													""
+												}
+												onChange={(next) =>
+													setValue(
+														`employee.documents.${index}.issueDate`,
+														next,
+														{
+															shouldValidate: true,
+															shouldDirty: true,
+														},
+													)
+												}
 												className={
 													errors.employee?.documents?.[index]?.issueDate
 														? "border-red-300 focus:border-red-500"
 														: ""
 												}
-												{...register(
-													`employee.documents.${index}.issueDate`,
-													{
-														required: "Issue date is required",
-													},
-												)}
 											/>
 											{errors.employee?.documents?.[index]?.issueDate && (
 												<p className="mt-1 text-sm text-red-600">
@@ -1342,16 +1353,27 @@ export function EmployeeDetailsForm({ form, onComplete, status }: EmployeeDetail
 											<label className="block text-sm font-medium text-gray-700 mb-1">
 												Expiry Date
 											</label>
-											<Input
-												type="date"
+											<CalendarDatePicker
+												value={
+													watch(
+														`employee.documents.${index}.expiryDate`,
+													) || ""
+												}
+												onChange={(next) =>
+													setValue(
+														`employee.documents.${index}.expiryDate`,
+														next,
+														{
+															shouldValidate: true,
+															shouldDirty: true,
+														},
+													)
+												}
 												className={
 													errors.employee?.documents?.[index]?.expiryDate
 														? "border-red-300 focus:border-red-500"
 														: ""
 												}
-												{...register(
-													`employee.documents.${index}.expiryDate`,
-												)}
 											/>
 											{errors.employee?.documents?.[index]?.expiryDate && (
 												<p className="mt-1 text-sm text-red-600">
@@ -1496,20 +1518,28 @@ export function EmployeeDetailsForm({ form, onComplete, status }: EmployeeDetail
 											<label className="block text-sm font-medium text-gray-700 mb-1">
 												Period Start *
 											</label>
-											<Input
-												type="date"
+											<CalendarDatePicker
+												value={
+													watch(
+														`employee.leaveBalances.${index}.periodStart`,
+													) || ""
+												}
+												onChange={(next) =>
+													setValue(
+														`employee.leaveBalances.${index}.periodStart`,
+														next,
+														{
+															shouldValidate: true,
+															shouldDirty: true,
+														},
+													)
+												}
 												className={
 													errors.employee?.leaveBalances?.[index]
 														?.periodStart
 														? "border-red-300 focus:border-red-500"
 														: ""
 												}
-												{...register(
-													`employee.leaveBalances.${index}.periodStart`,
-													{
-														required: "Period start is required",
-													},
-												)}
 											/>
 											{errors.employee?.leaveBalances?.[index]
 												?.periodStart && (
@@ -1526,20 +1556,28 @@ export function EmployeeDetailsForm({ form, onComplete, status }: EmployeeDetail
 											<label className="block text-sm font-medium text-gray-700 mb-1">
 												Period End *
 											</label>
-											<Input
-												type="date"
+											<CalendarDatePicker
+												value={
+													watch(
+														`employee.leaveBalances.${index}.periodEnd`,
+													) || ""
+												}
+												onChange={(next) =>
+													setValue(
+														`employee.leaveBalances.${index}.periodEnd`,
+														next,
+														{
+															shouldValidate: true,
+															shouldDirty: true,
+														},
+													)
+												}
 												className={
 													errors.employee?.leaveBalances?.[index]
 														?.periodEnd
 														? "border-red-300 focus:border-red-500"
 														: ""
 												}
-												{...register(
-													`employee.leaveBalances.${index}.periodEnd`,
-													{
-														required: "Period end is required",
-													},
-												)}
 											/>
 											{errors.employee?.leaveBalances?.[index]?.periodEnd && (
 												<p className="mt-1 text-sm text-red-600">

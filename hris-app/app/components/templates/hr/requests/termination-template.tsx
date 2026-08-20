@@ -47,6 +47,7 @@ import {
 	SelectValue,
 } from "~/components/ui/select";
 import { Input } from "~/components/ui/input";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 
 // Helper to get status badge variant
 const getStatusVariant = (status: TerminationStatus) => {
@@ -410,20 +411,16 @@ export function TerminationRequestsPage() {
 						<div className="grid grid-cols-2 gap-4">
 							<div>
 								<Label htmlFor="terminationDate">Termination Date *</Label>
-								<Input
-									id="terminationDate"
-									type="date"
+								<CalendarDatePicker
 									value={terminationDate}
-									onChange={(e) => setTerminationDate(e.target.value)}
+									onChange={setTerminationDate}
 								/>
 							</div>
 							<div>
 								<Label htmlFor="lastWorkingDay">Last Working Day *</Label>
-								<Input
-									id="lastWorkingDay"
-									type="date"
+								<CalendarDatePicker
 									value={lastWorkingDay}
-									onChange={(e) => setLastWorkingDay(e.target.value)}
+									onChange={setLastWorkingDay}
 								/>
 							</div>
 						</div>
