@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChangeWeeklyScheduleModal } from "./change-weekly-schedule-modal";
 
@@ -17,19 +17,35 @@ vi.mock("~/lib/hooks", () => ({
 	}),
 }));
 
-vi.mock("~/components/ui/calendar-date-picker", () => ({
-	CalendarDatePicker: ({
-		value,
-		onChange,
+vi.mock("~/components/ui/calendar", () => ({
+	Calendar: ({
+		selected,
+		onSelect,
 	}: {
-		value?: string;
-		onChange: (value: string) => void;
+		selected?: Date[];
+		onSelect?: (dates: Date[] | undefined) => void;
 	}) => (
 		<input
-			aria-label="Schedule date"
-			type="date"
-			value={value || ""}
-			onChange={(event) => onChange(event.target.value)}
+			aria-label="Selected dates"
+			value={(selected || [])
+				.map((date) => {
+					const year = date.getFullYear();
+					const month = String(date.getMonth() + 1).padStart(2, "0");
+					const day = String(date.getDate()).padStart(2, "0");
+					return `${year}-${month}-${day}`;
+				})
+				.join(",")}
+			onChange={(event) => {
+				const dates = event.target.value
+					.split(",")
+					.map((value) => value.trim())
+					.filter(Boolean)
+					.map((value) => {
+						const [year, month, day] = value.split("-").map(Number);
+						return new Date(year, month - 1, day);
+					});
+				onSelect?.(dates);
+			}}
 		/>
 	),
 }));
@@ -97,7 +113,7 @@ describe("ChangeWeeklyScheduleModal", () => {
 		expect(overrideMutateAsync).not.toHaveBeenCalled();
 	});
 
-	it("saves one calendar date hours without changing the weekday pattern", async () => {
+	it("saves hours on multiple dates with a break and does not reset times when dates change", async () => {
 		overrideMutateAsync.mockResolvedValue({});
 		render(
 			<ChangeWeeklyScheduleModal
@@ -109,24 +125,25 @@ describe("ChangeWeeklyScheduleModal", () => {
 		);
 
 		fireEvent.click(screen.getByTestId("schedule-mode-dates"));
-		fireEvent.change(screen.getByLabelText("Schedule date"), { target: { value: "2026-08-21" } });
-		fireEvent.change(screen.getByLabelText("Date start"), { target: { value: "06:00" } });
-		fireEvent.change(screen.getByLabelText("Date end"), { target: { value: "15:00" } });
+		fireEvent.change(screen.getByLabelText("Date start"), { target: { value: "09:00" } });
+		fireEvent.change(screen.getByLabelText("Date end"), { target: { value: "18:00" } });
+		fireEvent.change(screen.getByLabelText("Selected dates"), {
+			target: { value: "2026-08-21,2026-08-22" },
+		});
+		expect(screen.getByLabelText("Date start")).toHaveValue("09:00");
+		expect(screen.getByLabelText("Date end")).toHaveValue("18:00");
 		fireEvent.click(screen.getByRole("button", { name: /save hours/i }));
 
+		await waitFor(() => expect(overrideMutateAsync).toHaveBeenCalledTimes(2));
 		expect(mutateAsync).not.toHaveBeenCalled();
-		expect(overrideMutateAsync).toHaveBeenCalledTimes(1);
-		expect(overrideMutateAsync.mock.calls[0][0]).toMatchObject({
-			employeeId: "emp-zen",
-			organizationId: "org-1",
-			date: "2026-08-21",
-			reason: "date_hours_override",
-		});
-		expect(overrideMutateAsync.mock.calls[0][0].shiftSnapshot.timeSlots[0]).toEqual({
-			type: "work",
-			label: "Work",
-			startTime: "06:00",
-			endTime: "15:00",
-		});
+		expect(overrideMutateAsync.mock.calls.map((call) => call[0].date)).toEqual([
+			"2026-08-21",
+			"2026-08-22",
+		]);
+		expect(overrideMutateAsync.mock.calls[0][0].shiftSnapshot.timeSlots).toEqual([
+			{ type: "work", label: "Morning Work", startTime: "09:00", endTime: "12:00" },
+			{ type: "break", label: "Break", startTime: "12:00", endTime: "13:00" },
+			{ type: "work", label: "Afternoon Work", startTime: "13:00", endTime: "18:00" },
+		]);
 	});
 });

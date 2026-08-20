@@ -5,6 +5,7 @@ import {
 	buildWeeklyHoursPatternPayload,
 	daysFromEmbeddedPattern,
 	hoursDraftForDate,
+	toggleDateInSelection,
 	validateDateHours,
 	validateWeeklyHoursDays,
 	weekdayIndexFromDateInput,
@@ -102,5 +103,36 @@ describe("weekly hours schedule helper", () => {
 				endTime: "15:00",
 			},
 		);
+	});
+
+	it("builds 8-5 with a 12-1 break and keeps multiple selected dates", () => {
+		const snapshot = buildDateHoursShiftSnapshot({
+			isOff: false,
+			startTime: "08:00",
+			endTime: "17:00",
+			includeBreak: true,
+			breakStartTime: "12:00",
+			breakEndTime: "13:00",
+		});
+		expect(snapshot?.timeSlots).toEqual([
+			{ type: "work", label: "Morning Work", startTime: "08:00", endTime: "12:00" },
+			{ type: "break", label: "Break", startTime: "12:00", endTime: "13:00" },
+			{ type: "work", label: "Afternoon Work", startTime: "13:00", endTime: "17:00" },
+		]);
+		expect(toggleDateInSelection(["2026-08-21"], "2026-08-22")).toEqual([
+			"2026-08-21",
+			"2026-08-22",
+		]);
+		expect(
+			validateDateHours({
+				dates: ["2026-08-21", "2026-08-22"],
+				isOff: false,
+				startTime: "09:00",
+				endTime: "18:00",
+				includeBreak: true,
+				breakStartTime: "12:00",
+				breakEndTime: "13:00",
+			}),
+		).toBeNull();
 	});
 });

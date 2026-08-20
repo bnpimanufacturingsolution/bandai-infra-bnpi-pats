@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Dates calendar multi-select + break
+
+- Dates tab is a clickable calendar (multiple days). Hours + break apply to every selected date.
+- Changing the date no longer resets start/end back to 08:00–17:00.
+- Break start/end optional (default 12:00–13:00). Days tab unchanged.
+
 ## Latest Task Addendum - 2026-08-20 Timesheet ↔ schedule connection audit
 
 - Operator: audit timesheet vs schedule because schedule can change (that is the process).

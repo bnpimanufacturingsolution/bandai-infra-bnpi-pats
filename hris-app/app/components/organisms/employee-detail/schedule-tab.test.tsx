@@ -21,6 +21,10 @@ vi.mock("~/lib/hooks", () => ({
 	useCreateScheduleOverride: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
+vi.mock("~/components/ui/calendar", () => ({
+	Calendar: () => <div data-testid="schedule-calendar-stub" />,
+}));
+
 const employee = {
 	id: "emp-zen",
 	employeeId: "00010",

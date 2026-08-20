@@ -183,31 +183,141 @@ export const hoursDraftForDate = (
 	);
 };
 
-export const buildDateHoursShiftSnapshot = (draft: {
+export const DEFAULT_BREAK_START = "12:00";
+export const DEFAULT_BREAK_END = "13:00";
+
+export type DateHoursDraft = {
 	isOff: boolean;
 	startTime: string;
 	endTime: string;
-}) => buildWeeklyHoursPatternPayload([
-	{
-		day: 1,
-		label: "Mon",
-		isOff: draft.isOff,
+	includeBreak?: boolean;
+	breakStartTime?: string | null;
+	breakEndTime?: string | null;
+};
+
+export const parseDateInputLocal = (date: string) => {
+	const [year, month, day] = String(date || "")
+		.split("-")
+		.map(Number);
+	if (!year || !month || !day) return null;
+	return new Date(year, month - 1, day);
+};
+
+export const toggleDateInSelection = (dates: string[], date: string) => {
+	if (!date) return dates;
+	if (dates.includes(date)) return dates.filter((item) => item !== date);
+	return [...dates, date].sort();
+};
+
+export const buildWorkSlotsWithBreak = (draft: DateHoursDraft) => {
+	if (draft.isOff) return [];
+	const hasBreak =
+		Boolean(draft.includeBreak) &&
+		Boolean(draft.breakStartTime) &&
+		Boolean(draft.breakEndTime) &&
+		draft.breakStartTime !== draft.breakEndTime;
+	if (!hasBreak) {
+		return [
+			{
+				type: "work",
+				label: "Work",
+				startTime: draft.startTime,
+				endTime: draft.endTime,
+			},
+		];
+	}
+	return [
+		{
+			type: "work",
+			label: "Morning Work",
+			startTime: draft.startTime,
+			endTime: String(draft.breakStartTime),
+		},
+		{
+			type: "break",
+			label: "Break",
+			startTime: String(draft.breakStartTime),
+			endTime: String(draft.breakEndTime),
+		},
+		{
+			type: "work",
+			label: "Afternoon Work",
+			startTime: String(draft.breakEndTime),
+			endTime: draft.endTime,
+		},
+	];
+};
+
+export const buildDateHoursShiftSnapshot = (draft: DateHoursDraft) => {
+	if (draft.isOff) {
+		return {
+			name: "Off Day",
+			code: "OFF",
+			isOff: true,
+			isOvernight: false,
+			timeSlots: [],
+		};
+	}
+	const startMinutes = toMinutes(draft.startTime) ?? 0;
+	const endMinutes = toMinutes(draft.endTime) ?? 0;
+	const timeSlots = buildWorkSlotsWithBreak(draft);
+	const hasBreak = timeSlots.some((slot) => slot.type === "break");
+	return {
+		name: hasBreak
+			? `${draft.startTime} to ${draft.endTime}; break ${draft.breakStartTime} to ${draft.breakEndTime}`
+			: `${draft.startTime} to ${draft.endTime}`,
+		code: hasBreak
+			? `WH_${draft.startTime.replace(":", "")}_${draft.endTime.replace(":", "")}_BR`
+			: `WH_${draft.startTime.replace(":", "")}_${draft.endTime.replace(":", "")}`,
+		isOff: false,
+		isOvernight: endMinutes <= startMinutes,
 		startTime: draft.startTime,
 		endTime: draft.endTime,
-	},
-])[0]?.shiftSnapshot;
+		breakMinutes: hasBreak
+			? Math.max(0, (toMinutes(draft.breakEndTime) ?? 0) - (toMinutes(draft.breakStartTime) ?? 0))
+			: 0,
+		timeSlots,
+	};
+};
 
 export const validateDateHours = (params: {
+	dates?: string[] | null;
 	date?: string | null;
 	isOff: boolean;
 	startTime: string;
 	endTime: string;
+	includeBreak?: boolean;
+	breakStartTime?: string | null;
+	breakEndTime?: string | null;
 }) => {
-	if (!params.date) return "Pick a calendar date.";
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(params.date)) return "Pick a valid calendar date.";
+	const dates = Array.isArray(params.dates)
+		? params.dates
+		: params.date
+			? [params.date]
+			: [];
+	if (dates.length === 0) return "Pick one or more dates on the calendar.";
+	if (dates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))) {
+		return "Pick valid calendar dates.";
+	}
 	if (params.isOff) return null;
 	if (!params.startTime || !params.endTime || params.startTime === params.endTime) {
-		return "That date needs different start and end times.";
+		return "Those dates need different start and end times.";
+	}
+	if (params.includeBreak) {
+		if (
+			!params.breakStartTime ||
+			!params.breakEndTime ||
+			params.breakStartTime === params.breakEndTime
+		) {
+			return "Break needs a start and end time.";
+		}
+		const start = toMinutes(params.startTime) ?? 0;
+		const end = toMinutes(params.endTime) ?? 0;
+		const breakStart = toMinutes(params.breakStartTime) ?? 0;
+		const breakEnd = toMinutes(params.breakEndTime) ?? 0;
+		if (breakStart < start || breakEnd > end || breakStart >= breakEnd) {
+			return "Break must sit between start and end.";
+		}
 	}
 	return null;
 };

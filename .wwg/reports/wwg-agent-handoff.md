@@ -1,5 +1,13 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Dates calendar + break
+
+| Field | Value |
+|---|---|
+| Calendar | Click multiple days; same hours apply to all |
+| Break | Start/end, default 12:00–13:00, can uncheck |
+| Bugfix | Picking another date no longer resets start/end to 08:00–17:00 |
+
 ## 2026-08-20 - Dates save 500
 
 | Field | Value |

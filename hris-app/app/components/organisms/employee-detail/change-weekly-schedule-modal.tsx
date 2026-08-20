@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, Calendar as CalendarIcon, Clock, Loader2 } from "lucide-react";
+import { CalendarDays, Calendar as CalendarIcon, Clock, Loader2, X } from "lucide-react";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
 import { Select } from "~/components/atoms/Select";
-import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
+import { Calendar } from "~/components/ui/calendar";
 import { useCreateEmployeeSchedule, useCreateScheduleOverride } from "~/lib/hooks";
 import { cn } from "~/lib/utils";
 import {
+	DEFAULT_BREAK_END,
+	DEFAULT_BREAK_START,
 	buildDateHoursShiftSnapshot,
 	buildDefaultWeeklyHoursDays,
 	buildWeeklyHoursPatternPayload,
 	daysFromEmbeddedPattern,
-	hoursDraftForDate,
+	parseDateInputLocal,
 	toDateInputValue,
 	validateDateHours,
 	validateWeeklyHoursDays,
@@ -65,17 +67,22 @@ export function ChangeWeeklyScheduleModal({
 	const [days, setDays] = useState<WeeklyHoursDayDraft[]>(() =>
 		daysFromEmbeddedPattern(employee.embeddedSchedule?.pattern, employee.embeddedSchedule?.cycleDays),
 	);
-	const [selectedDate, setSelectedDate] = useState(toDateInputValue());
+	const [selectedDates, setSelectedDates] = useState<string[]>([toDateInputValue()]);
 	const [dateIsOff, setDateIsOff] = useState(false);
 	const [dateStartTime, setDateStartTime] = useState("08:00");
 	const [dateEndTime, setDateEndTime] = useState("17:00");
+	const [includeBreak, setIncludeBreak] = useState(true);
+	const [breakStartTime, setBreakStartTime] = useState(DEFAULT_BREAK_START);
+	const [breakEndTime, setBreakEndTime] = useState(DEFAULT_BREAK_END);
+	const [savingDates, setSavingDates] = useState(false);
 
-	const applyDatePrefill = (nextDate: string, sourceDays = days) => {
-		const draft = hoursDraftForDate(sourceDays, nextDate);
-		setSelectedDate(nextDate);
-		setDateIsOff(draft.isOff);
-		setDateStartTime(draft.startTime);
-		setDateEndTime(draft.endTime);
+	const resetDateHours = () => {
+		setDateIsOff(false);
+		setDateStartTime("08:00");
+		setDateEndTime("17:00");
+		setIncludeBreak(true);
+		setBreakStartTime(DEFAULT_BREAK_START);
+		setBreakEndTime(DEFAULT_BREAK_END);
 	};
 
 	useEffect(() => {
@@ -86,7 +93,8 @@ export function ChangeWeeklyScheduleModal({
 		);
 		setMode("days");
 		setDays(nextDays);
-		applyDatePrefill(toDateInputValue(), nextDays);
+		setSelectedDates([toDateInputValue()]);
+		resetDateHours();
 	}, [open, employee.embeddedSchedule]);
 
 	const cycleDays = days.length;
@@ -95,14 +103,32 @@ export function ChangeWeeklyScheduleModal({
 	const datesValidationError = useMemo(
 		() =>
 			validateDateHours({
-				date: selectedDate,
+				dates: selectedDates,
 				isOff: dateIsOff,
 				startTime: dateStartTime,
 				endTime: dateEndTime,
+				includeBreak,
+				breakStartTime,
+				breakEndTime,
 			}),
-		[dateEndTime, dateIsOff, dateStartTime, selectedDate],
+		[
+			breakEndTime,
+			breakStartTime,
+			dateEndTime,
+			dateIsOff,
+			dateStartTime,
+			includeBreak,
+			selectedDates,
+		],
 	);
-	const isPending = createSchedule.isPending || createOverride.isPending;
+	const selectedCalendarDates = useMemo(
+		() =>
+			selectedDates
+				.map((date) => parseDateInputLocal(date))
+				.filter((date): date is Date => Boolean(date)),
+		[selectedDates],
+	);
+	const isPending = createSchedule.isPending || createOverride.isPending || savingDates;
 	const validationError = mode === "days" ? daysValidationError : datesValidationError;
 
 	const updateDay = (index: number, patch: Partial<WeeklyHoursDayDraft>) => {
@@ -138,21 +164,30 @@ export function ChangeWeeklyScheduleModal({
 			toast.error(datesValidationError);
 			return;
 		}
+		const snapshot = buildDateHoursShiftSnapshot({
+			isOff: dateIsOff,
+			startTime: dateStartTime,
+			endTime: dateEndTime,
+			includeBreak,
+			breakStartTime,
+			breakEndTime,
+		});
+		setSavingDates(true);
 		try {
-			await createOverride.mutateAsync({
-				employeeId: employee.id,
-				organizationId: employee.organizationId,
-				date: selectedDate,
-				shiftSnapshot: buildDateHoursShiftSnapshot({
-					isOff: dateIsOff,
-					startTime: dateStartTime,
-					endTime: dateEndTime,
-				}),
-				reason: "date_hours_override",
-			});
+			for (const date of selectedDates) {
+				await createOverride.mutateAsync({
+					employeeId: employee.id,
+					organizationId: employee.organizationId,
+					date,
+					shiftSnapshot: snapshot,
+					reason: "date_hours_override",
+				});
+			}
 			onOpenChange(false);
 		} catch {
 			// toast handled in hook
+		} finally {
+			setSavingDates(false);
 		}
 	};
 
@@ -170,10 +205,10 @@ export function ChangeWeeklyScheduleModal({
 			title="Change schedule"
 			description={
 				employeeName
-					? `Set hours for ${employeeName} by weekday or by one calendar date.`
-					: "Set hours by weekday or by one calendar date."
+					? `Set hours for ${employeeName} by weekday, or pick calendar dates.`
+					: "Set hours by weekday, or pick calendar dates."
 			}
-			className="max-w-2xl border border-gray-200 bg-white p-5 sm:p-6">
+			className="max-w-3xl border border-gray-200 bg-white p-5 sm:p-6">
 			<div className="space-y-4">
 				<div
 					className="flex w-fit space-x-1 rounded-lg bg-gray-100 p-1"
@@ -292,25 +327,51 @@ export function ChangeWeeklyScheduleModal({
 				) : (
 					<div className="space-y-4">
 						<p className="text-xs text-muted-foreground">
-							Pick a real calendar date. Hours apply on that date only, not next Monday.
+							Click days on the calendar. The same hours, including break, apply to every selected date. Changing the date does not reset the times you already set.
 						</p>
-						<div>
-							<label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-								Date
-							</label>
-							<CalendarDatePicker
-								value={selectedDate}
-								onChange={(value) => applyDatePrefill(value)}
-								placeholder="Pick a date"
+						<div className="rounded-lg border border-border p-2">
+							<Calendar
+								mode="multiple"
+								selected={selectedCalendarDates}
+								onSelect={(dates) =>
+									setSelectedDates(
+										(dates || []).map((date) => toDateInputValue(date)).sort(),
+									)
+								}
+								captionLayout="dropdown"
+								className="w-full"
 							/>
 						</div>
+						<div className="flex flex-wrap gap-1.5">
+							{selectedDates.length === 0 ? (
+								<span className="text-xs text-muted-foreground">No dates selected.</span>
+							) : (
+								selectedDates.map((date) => (
+									<button
+										key={date}
+										type="button"
+										aria-label={`Remove ${date}`}
+										onClick={() =>
+											setSelectedDates((current) =>
+												current.filter((item) => item !== date),
+											)
+										}
+										className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-800">
+										{date}
+										<X className="h-3 w-3" />
+									</button>
+								))
+							)}
+						</div>
 						<div className="overflow-hidden rounded-lg border border-border">
-							<div className="grid grid-cols-[minmax(88px,1fr)_1fr_1fr] gap-2 border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground">
+							<div className="grid grid-cols-2 gap-2 border-b border-border bg-muted/40 px-3 py-2 text-[11px] font-medium text-muted-foreground sm:grid-cols-5">
 								<span>Status</span>
 								<span>Start</span>
+								<span>Break start</span>
+								<span>Break end</span>
 								<span>End</span>
 							</div>
-							<div className="grid grid-cols-[minmax(88px,1fr)_1fr_1fr] items-center gap-2 px-3 py-2">
+							<div className="grid grid-cols-2 items-center gap-2 px-3 py-2 sm:grid-cols-5">
 								<Select
 									options={STATUS_OPTIONS}
 									value={dateIsOff ? "off" : "work"}
@@ -326,6 +387,22 @@ export function ChangeWeeklyScheduleModal({
 								/>
 								<input
 									type="time"
+									aria-label="Break start"
+									disabled={dateIsOff || !includeBreak}
+									value={breakStartTime}
+									onChange={(event) => setBreakStartTime(event.target.value)}
+									className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
+								/>
+								<input
+									type="time"
+									aria-label="Break end"
+									disabled={dateIsOff || !includeBreak}
+									value={breakEndTime}
+									onChange={(event) => setBreakEndTime(event.target.value)}
+									className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
+								/>
+								<input
+									type="time"
 									aria-label="Date end"
 									disabled={dateIsOff}
 									value={dateEndTime}
@@ -333,6 +410,15 @@ export function ChangeWeeklyScheduleModal({
 									className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm disabled:opacity-50"
 								/>
 							</div>
+							<label className="flex items-center gap-2 border-t border-border px-3 py-2 text-xs text-muted-foreground">
+								<input
+									type="checkbox"
+									checked={includeBreak}
+									disabled={dateIsOff}
+									onChange={(event) => setIncludeBreak(event.target.checked)}
+								/>
+								Include break
+							</label>
 						</div>
 					</div>
 				)}
