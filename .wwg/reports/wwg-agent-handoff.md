@@ -1,5 +1,14 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Change schedule Days vs Dates
+
+| Field | Value |
+|---|---|
+| Ask | Set hours on an actual calendar date, not only next Monday |
+| Days tab | Unchanged weekday pattern → `POST /api/employee-schedules` `pattern` |
+| Dates tab | Calendar date + hours → `POST /api/scheduleOverride` |
+| UI | Work Schedule → Change schedule → Days / Dates |
+
 ## 2026-08-20 - Employee weekly hours change
 
 | Field | Value |

@@ -150,3 +150,64 @@ export const validateWeeklyHoursDays = (days: WeeklyHoursDayDraft[]) => {
 	}
 	return null;
 };
+
+export const toDateInputValue = (value = new Date()) => {
+	const year = value.getFullYear();
+	const month = String(value.getMonth() + 1).padStart(2, "0");
+	const day = String(value.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
+};
+
+export const weekdayIndexFromDateInput = (date: string) => {
+	const [year, month, day] = String(date || "")
+		.split("-")
+		.map(Number);
+	if (!year || !month || !day) return 0;
+	const utcDay = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+	return utcDay === 0 ? 6 : utcDay - 1;
+};
+
+export const hoursDraftForDate = (
+	days: WeeklyHoursDayDraft[],
+	date: string,
+): WeeklyHoursDayDraft => {
+	const weekdayIndex = weekdayIndexFromDateInput(date);
+	return (
+		days[weekdayIndex] || {
+			day: weekdayIndex + 1,
+			label: WEEKDAY_LABELS[weekdayIndex] || "Mon",
+			isOff: false,
+			startTime: DEFAULT_START,
+			endTime: DEFAULT_END,
+		}
+	);
+};
+
+export const buildDateHoursShiftSnapshot = (draft: {
+	isOff: boolean;
+	startTime: string;
+	endTime: string;
+}) => buildWeeklyHoursPatternPayload([
+	{
+		day: 1,
+		label: "Mon",
+		isOff: draft.isOff,
+		startTime: draft.startTime,
+		endTime: draft.endTime,
+	},
+])[0]?.shiftSnapshot;
+
+export const validateDateHours = (params: {
+	date?: string | null;
+	isOff: boolean;
+	startTime: string;
+	endTime: string;
+}) => {
+	if (!params.date) return "Pick a calendar date.";
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(params.date)) return "Pick a valid calendar date.";
+	if (params.isOff) return null;
+	if (!params.startTime || !params.endTime || params.startTime === params.endTime) {
+		return "That date needs different start and end times.";
+	}
+	return null;
+};

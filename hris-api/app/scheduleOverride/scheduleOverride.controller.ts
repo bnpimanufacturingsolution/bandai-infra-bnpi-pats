@@ -242,6 +242,17 @@ export const controller = (prisma: PrismaClient) => {
 			);
 		}
 
+		if (!requestData?.organizationId) {
+			requestData = {
+				...requestData,
+				organizationId:
+					(req as any).organizationId ||
+					(req as any)?.user?.organizationId ||
+					(req as any)?.metadata?.organizationId ||
+					null,
+			};
+		}
+
 		const validation = CreateScheduleOverrideSchema.safeParse(requestData);
 		if (!validation.success) {
 			const formattedErrors = formatZodErrors(validation.error.format());

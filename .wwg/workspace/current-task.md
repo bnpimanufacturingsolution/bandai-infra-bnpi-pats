@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 Change schedule Days vs Dates
+
+- Operator: weekly hours modal should also set hours on a real calendar date, not only next Monday.
+- Keep **Days** tab (weekday pattern) unchanged. Add **Dates** tab: calendar date + start/end. Saves `ScheduleOverride` for that date.
+- Tests: weekly helper date mapping; modal Days vs Dates payloads.
+
 ## Latest Task Addendum - 2026-08-20 Employee weekly hours (Mon 6–3, Tue 7–4)
 
 - Operator asked where to change one employee’s shift (Zen Monday 6–3, Tuesday 7–4). Admin Schedule Templates already exist as reusable patterns.

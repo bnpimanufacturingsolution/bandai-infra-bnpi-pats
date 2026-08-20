@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 ## 2026-08-20 Employee weekly hours
 
-- Templates = reusable org patterns. Per-person Mon/Tue different hours = employee **Work Schedule** → **Change schedule**, or employee edit Active Schedule. API: `POST /api/employee-schedules` `pattern`.
+- Templates = reusable org patterns. Per-person Mon/Tue different hours = employee **Work Schedule** → **Change schedule** → **Days**. One calendar date = same modal **Dates** tab (`scheduleOverride`).
 
 ## 2026-08-20 Day labor on timesheet (no push)
 

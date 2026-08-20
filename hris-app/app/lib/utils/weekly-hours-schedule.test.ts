@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+	buildDateHoursShiftSnapshot,
 	buildDefaultWeeklyHoursDays,
 	buildWeeklyHoursPatternPayload,
 	daysFromEmbeddedPattern,
+	hoursDraftForDate,
+	validateDateHours,
 	validateWeeklyHoursDays,
+	weekdayIndexFromDateInput,
 } from "./weekly-hours-schedule";
 
 describe("weekly hours schedule helper", () => {
@@ -77,5 +81,26 @@ describe("weekly hours schedule helper", () => {
 		);
 		expect(days[1]).toMatchObject({ label: "Tue", isOff: false, startTime: "08:00", endTime: "17:00" });
 		expect(days[5].isOff).toBe(true);
+	});
+
+	it("maps a calendar Friday to weekday index 4 and copies that day's hours", () => {
+		expect(weekdayIndexFromDateInput("2026-08-21")).toBe(4);
+		const days = buildDefaultWeeklyHoursDays(7).map((day) =>
+			day.label === "Fri" ? { ...day, startTime: "06:00", endTime: "15:00" } : day,
+		);
+		expect(hoursDraftForDate(days, "2026-08-21")).toMatchObject({
+			label: "Fri",
+			startTime: "06:00",
+			endTime: "15:00",
+		});
+		expect(validateDateHours({ date: "2026-08-21", isOff: false, startTime: "06:00", endTime: "15:00" })).toBeNull();
+		expect(buildDateHoursShiftSnapshot({ isOff: false, startTime: "06:00", endTime: "15:00" })?.timeSlots?.[0]).toEqual(
+			{
+				type: "work",
+				label: "Work",
+				startTime: "06:00",
+				endTime: "15:00",
+			},
+		);
 	});
 });

@@ -18,6 +18,7 @@ vi.mock("~/lib/hooks", () => ({
 	}),
 	useScheduleOverrides: () => ({ data: { scheduleOverrides: [] } }),
 	useCreateEmployeeSchedule: () => ({ mutateAsync: vi.fn(), isPending: false }),
+	useCreateScheduleOverride: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 const employee = {

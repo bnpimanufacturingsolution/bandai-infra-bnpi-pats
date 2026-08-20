@@ -350,6 +350,7 @@ export interface UpdateEmployeeScheduleRequest extends Partial<CreateEmployeeSch
 
 export interface CreateScheduleOverrideRequest {
 	employeeId: string;
+	organizationId?: string;
 	date: string;
 	shiftTypeId?: string | null;
 	shiftSnapshot?: ScheduleOverrideShiftSnapshot | null;
