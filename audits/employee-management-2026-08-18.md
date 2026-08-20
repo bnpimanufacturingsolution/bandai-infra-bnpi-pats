@@ -31,7 +31,7 @@ The sheet marks Core and Customization **100%**. The live app has **most of the 
 
 | ID | Sheet row | Route | Feature in app? | Live result | What Playwright saw |
 |---|---|---|---|---|---|
-| 1.1.1 | Employee Masterdata | `/hr/employees` | Yes | **Working** | Employee Directory, **2,226** people, Add / Import / Filters, name / position / department / workforce / hire date / status |
+| 1.1.1 | Employee Masterdata | `/hr/employees` | Yes | **Working** | Employee Directory, **2,226** people, Add / Import / Filters, name / position / department / workforce / hire date / status. **Roles + route map:** [employee-masterdata-1.1.1-roles-routes-2026-08-20.md](./employee-masterdata-1.1.1-roles-routes-2026-08-20.md) |
 | 1.1.2 | Employee Requests | `/hr/approvals/requests` | Yes | **Working (empty queue)** | **My Approvals** table (Requester, Type, Requested On, Current Step). Rows skeleton / empty |
 | 1.1.3 | Org Chart | `/hr/employees?view=organization` | Yes | **Working** | Organization Structure. 2,226 employees, 144 with direct reports, **1,428 without supervisor**. Chart cards render |
 | 1.1.4 | Monthly birthday celebrants (employees and kids) | `/celebrations/birthdays` | Yes | **Working (0 this month)** | Monthly Celebrants, August 2026, search “employees or kids”, View **All (0)** |
