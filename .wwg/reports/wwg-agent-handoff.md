@@ -1,5 +1,25 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Durable WS-off vs OT apply (01116 proof)
+
+- Status: `IMPLEMENTED_LOCAL_PROVEN` (local test DB).
+- Root: OT zero-bucket apply used stale line template `isOff:false`, forcing ABSENT
+  and wiping WS-off REST after rebuild.
+- Fix: `buildBandaiOtLinePatch` + OT repair script honor `schedule_overrides` OFF;
+  stamp line `scheduleSnapshot.isOff=true`. Tests include 01116 shape.
+- Re-applied: WS-off repair 1715 lines; Jul OT apply without reviving ABSENT on OFF.
+- 01116 Jul 21: **REST_DAY / WS_OFF**; OT dry-run keeps REST.
+- Tally: absent fails **173** (reverse vs Sheet2 guide); app-over **0**.
+- Evidence: `.runtime/reverse-reinvestigate-20260820/PROOF-01116.md`,
+  `.runtime/tally-after-ws-off-durable-20260820-*/`
+- Note: late may still need re-repair after earlier rebuild; VM data replay later.
+
+## 2026-08-20 - Reverse absent reinvestigate (01116 Kasilag)
+
+- Status: `SUPERSEDED_BY_DURABLE_FIX` above.
+- Operator was right that Jul 21 showed ABSENT after rebuild; cause was OT apply
+  ignoring OFF overrides.
+
 ## 2026-08-18 - DMA open-horizon recurring (Sheet2 Jul amounts)
 
 - Status: `IMPLEMENTED_LOCAL_PROVEN` (local clone **test DB only**).

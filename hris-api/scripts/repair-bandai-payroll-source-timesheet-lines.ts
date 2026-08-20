@@ -113,7 +113,12 @@ function parseOvertimeSource(filePath: string) {
 	return byEmployeeDate;
 }
 
-function buildLinePatch(line: any, source: OvertimeSourceRow, isCalendarHoliday: boolean) {
+function buildLinePatch(
+	line: any,
+	source: OvertimeSourceRow,
+	isCalendarHoliday: boolean,
+	effectiveScheduleSnapshot?: Record<string, any> | null,
+) {
 	return buildBandaiOtLinePatch({
 		line: {
 			status: line.status,
@@ -132,6 +137,7 @@ function buildLinePatch(line: any, source: OvertimeSourceRow, isCalendarHoliday:
 		source,
 		isCalendarHoliday,
 		sourceLabel: path.basename(overtimeWorkbookPath),
+		effectiveScheduleSnapshot: effectiveScheduleSnapshot || null,
 	});
 }
 
@@ -148,6 +154,8 @@ type LinePatchPayload = {
 	undertimeHours: string | null;
 	notes: string | null;
 	metadata: Record<string, any>;
+	/** When set, stamps OFF/effective schedule onto the line (survives UI + rebuild checks). */
+	scheduleSnapshot: Record<string, any> | null;
 };
 
 async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
@@ -167,7 +175,8 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				early_out_hours text,
 				undertime_hours text,
 				notes text,
-				metadata jsonb NOT NULL
+				metadata jsonb NOT NULL,
+				schedule_snapshot jsonb
 			) ON COMMIT DROP
 		`;
 		await tx.$executeRaw`
@@ -183,7 +192,8 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				early_out_hours,
 				undertime_hours,
 				notes,
-				metadata
+				metadata,
+				schedule_snapshot
 			)
 			SELECT
 				"lineId",
@@ -197,7 +207,8 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				"earlyOutHours",
 				"undertimeHours",
 				notes,
-				metadata
+				metadata,
+				"scheduleSnapshot"
 			FROM jsonb_to_recordset(${patchJson}::jsonb) AS patch(
 				"lineId" text,
 				"timesheetId" text,
@@ -210,7 +221,8 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				"earlyOutHours" text,
 				"undertimeHours" text,
 				notes text,
-				metadata jsonb
+				metadata jsonb,
+				"scheduleSnapshot" jsonb
 			)
 		`;
 		await tx.$executeRaw`
@@ -226,6 +238,7 @@ async function applyLinePatchesWithRawSql(patches: LinePatchPayload[]) {
 				"undertimeHours" = COALESCE(patch.undertime_hours, line."undertimeHours"),
 				notes = COALESCE(patch.notes, line.notes),
 				metadata = patch.metadata,
+				"scheduleSnapshot" = COALESCE(patch.schedule_snapshot, line."scheduleSnapshot"),
 				"updatedAt" = now()
 			FROM bandai_ot_line_patches patch
 			WHERE line.id = patch.line_id
@@ -466,14 +479,52 @@ async function main() {
 		},
 	});
 
+	// Prefetch schedule overrides so OT zero-bucket days honor WorkSharing OFF
+	// even when the line still has a stale template snapshot (isOff:false).
+	const empIdsFromLines = await prisma.timesheet.findMany({
+		where: { id: { in: timesheets.map((t) => t.id) } },
+		select: { id: true, employeeId: true },
+	});
+	const timesheetEmpPk = new Map(empIdsFromLines.map((t) => [t.id, t.employeeId]));
+	const allEmpPks = Array.from(new Set(empIdsFromLines.map((t) => t.employeeId).filter(Boolean)));
+	const overrides = allEmpPks.length
+		? await (prisma as any).scheduleOverride.findMany({
+				where: {
+					organizationId: period.organizationId,
+					employeeId: { in: allEmpPks },
+					isDeleted: false,
+					date: { gte: period.startDate, lte: period.endDate },
+				},
+				select: {
+					employeeId: true,
+					date: true,
+					shiftSnapshot: true,
+					shiftTypeId: true,
+					reason: true,
+				},
+			})
+		: [];
+	const overrideSnapByEmpDate = new Map<string, Record<string, any>>();
+	for (const ov of overrides) {
+		const day = new Date(ov.date).toISOString().slice(0, 10);
+		const snap =
+			ov.shiftSnapshot && typeof ov.shiftSnapshot === "object"
+				? (ov.shiftSnapshot as Record<string, any>)
+				: null;
+		if (!snap) continue;
+		overrideSnapByEmpDate.set(`${ov.employeeId}|${day}`, snap);
+	}
+
 	const planned: Array<{ employeeNo: string; date: string; lineId: string; reasons: string[] }> = [];
 	const linePatches: LinePatchPayload[] = [];
 	const touchedTimesheets = new Set<string>();
 	let missingSourceRows = 0;
 	let effectiveLinesChecked = 0;
+	let overrideOffHonored = 0;
 
 	for (const timesheet of timesheets) {
 		const employeeNo = timesheet.employee.employeeId;
+		const empPk = timesheetEmpPk.get(timesheet.id);
 		for (const line of timesheet.timesheetlines) {
 			effectiveLinesChecked += 1;
 			const day = line.date.toISOString().slice(0, 10);
@@ -482,7 +533,15 @@ async function main() {
 				missingSourceRows += 1;
 				continue;
 			}
-			const patch = buildLinePatch(line, source, calendarHolidayDates.has(day));
+			const effectiveScheduleSnapshot =
+				(empPk && overrideSnapByEmpDate.get(`${empPk}|${day}`)) || null;
+			if (effectiveScheduleSnapshot?.isOff === true) overrideOffHonored += 1;
+			const patch = buildLinePatch(
+				line,
+				source,
+				calendarHolidayDates.has(day),
+				effectiveScheduleSnapshot,
+			);
 			if (!patch) continue;
 			planned.push({ employeeNo, date: day, lineId: line.id, reasons: patch.reasons });
 			touchedTimesheets.add(timesheet.id);
@@ -499,6 +558,7 @@ async function main() {
 				undertimeHours: patch.changes.undertimeHours ?? null,
 				notes: patch.changes.notes ?? null,
 				metadata: patch.changes.metadata,
+				scheduleSnapshot: patch.changes.scheduleSnapshot ?? null,
 			});
 		}
 	}
@@ -543,6 +603,8 @@ async function main() {
 		plannedLineUpdates: planned.length,
 		touchedTimesheets: touchedTimesheets.size,
 		missingSourceRows,
+		scheduleOverridesLoaded: overrides.length,
+		overrideOffDaysSeenOnSourceRows: overrideOffHonored,
 		autoApproveEnabled,
 		autoApproveWithOt,
 		autoApprovedTimesheets,

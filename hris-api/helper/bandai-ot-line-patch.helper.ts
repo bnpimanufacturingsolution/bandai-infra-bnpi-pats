@@ -124,11 +124,17 @@ export function withoutPremiumMetadata(metadata: Record<string, any>): Record<st
 }
 
 /**
- * True when the line's schedule snapshot says the day is an off/rest day.
- * Falls back to existing REST_DAY status when snapshot is missing.
+ * True when the schedule snapshot says the day is an off/rest day.
+ * Prefer an effective/override snapshot when the line still carries a stale
+ * template (isOff:false) while schedule_overrides say OFF — OT apply must not
+ * revive ABSENT on WorkSharing flag=0 days.
  */
-export function isScheduledRestDay(line: BandaiOtLineLike): boolean {
+export function isScheduledRestDay(
+	line: BandaiOtLineLike,
+	effectiveScheduleSnapshot?: Record<string, any> | null,
+): boolean {
 	const snap =
+		effectiveScheduleSnapshot ||
 		line.scheduleSnapshot ||
 		(line.metadata && typeof line.metadata === "object"
 			? (line.metadata as any).scheduleSnapshot
@@ -136,13 +142,33 @@ export function isScheduledRestDay(line: BandaiOtLineLike): boolean {
 		null;
 	if (snap && typeof snap === "object") {
 		if (snap.isOff === true) return true;
-		if (String(snap.code || "").toUpperCase() === "OFF") return true;
-		if (String(snap.shiftTypeCode || "").toUpperCase() === "OFF") return true;
+		const code = String(snap.code || snap.shiftTypeCode || "").toUpperCase();
+		if (code === "OFF" || code === "WS_OFF") return true;
 		if (snap.isOff === false) return false;
 	}
 	// Without a schedule snapshot, only treat explicit OFF codes as rest.
 	// Do not treat status=REST_DAY alone as authoritative (prior OT bug mislabeled absences).
 	return false;
+}
+
+/** Snapshot to stamp on the line when OT apply confirms a true OFF day. */
+export function buildOffDayScheduleSnapshot(
+	effectiveScheduleSnapshot?: Record<string, any> | null,
+): Record<string, any> {
+	const base =
+		effectiveScheduleSnapshot && typeof effectiveScheduleSnapshot === "object"
+			? { ...effectiveScheduleSnapshot }
+			: {};
+	return {
+		...base,
+		code: String(base.code || "WS_OFF"),
+		name: String(base.name || "WorkSharing Off"),
+		isOff: true,
+		source: base.source || "SCHEDULE_OVERRIDE_OFF",
+		shiftHour: 0,
+		timeSlots: Array.isArray(base.timeSlots) ? base.timeSlots : [],
+		isOvernight: false,
+	};
 }
 
 export function buildApprovedBuckets(source: BandaiOtSourceRow) {
@@ -200,6 +226,11 @@ export function buildBandaiOtLinePatch(params: {
 	isCalendarHoliday?: boolean;
 	sourceLabel?: string;
 	appliedAt?: string;
+	/**
+	 * Effective schedule for the day (schedule_overrides win over stale line
+	 * template snapshots). When isOff, zero-bucket days stay REST_DAY — never ABSENT.
+	 */
+	effectiveScheduleSnapshot?: Record<string, any> | null;
 }): BandaiOtLinePatch | null {
 	const { line, source } = params;
 	const isCalendarHoliday = Boolean(params.isCalendarHoliday);
@@ -216,6 +247,8 @@ export function buildBandaiOtLinePatch(params: {
 		sourceLabel: params.sourceLabel,
 		appliedAt: params.appliedAt,
 	});
+	const effectiveSnap = params.effectiveScheduleSnapshot ?? null;
+	const scheduledOff = isScheduledRestDay(line, effectiveSnap);
 
 	// Always refresh approved bucket metadata when source differs or is missing.
 	// Payroll pays OT from approvedBuckets, not raw biometric overtimeHours alone.
@@ -233,13 +266,21 @@ export function buildBandaiOtLinePatch(params: {
 		// Preserve leave; true rest stays REST_DAY; scheduled workdays become ABSENT.
 		if (status === "LEAVE") {
 			// no status change
-		} else if (isScheduledRestDay(line)) {
-			// True schedule off-day only. Do NOT trust existing status=REST_DAY alone —
-			// OT apply previously mislabeled absences as REST_DAY.
+		} else if (scheduledOff) {
+			// True schedule off-day only (override or snapshot isOff). Do NOT trust
+			// status=REST_DAY alone — OT apply previously mislabeled absences as REST_DAY.
 			if (status !== "REST_DAY") {
 				changes.status = "REST_DAY";
 				changes.primaryMarker = "REST_DAY";
 				reasons.push(`${line.status} -> REST_DAY (schedule off / rest day, zero pay buckets)`);
+			}
+			// Keep line snapshot aligned with OFF override so rematerialization / UI agree.
+			const lineSnapOff = isScheduledRestDay(line);
+			if (!lineSnapOff || status !== "REST_DAY") {
+				changes.scheduleSnapshot = buildOffDayScheduleSnapshot(
+					effectiveSnap || (line.scheduleSnapshot as Record<string, any> | null),
+				);
+				reasons.push("scheduleSnapshot stamped isOff=true from effective OFF override/schedule");
 			}
 			changes.hoursWorked = "0:00";
 			changes.regularHours = "0:00";

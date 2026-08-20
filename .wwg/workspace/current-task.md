@@ -1,5 +1,14 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-20 durable WS-off vs OT ABSENT revive
+
+- Task mode: bug fix (OT apply ignored schedule OFF overrides).
+- Operator proof: 01116 Jul 21 showed ABSENT despite WS flag=0 after rebuild.
+- Fix: OT patch honors effective OFF override; stamps scheduleSnapshot; re-repair 1715.
+- Proof: 01116 REST_DAY; OT dry-run does not force ABSENT; absent app-over 505→0.
+- Local test DB only — VM replay later.
+- Evidence: `.runtime/reverse-reinvestigate-20260820/PROOF-01116.md`
+
 ## Latest Task Addendum - 2026-08-18 DMA open-horizon recurring
 
 - Task mode: data + import fix (DMA recurring) for Jul 11–25 tally.
