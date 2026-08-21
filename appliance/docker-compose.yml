@@ -25,6 +25,7 @@ services:
     restart: "no"
     env_file:
       - ./env/hris-api.env
+    # Empty local bootstrap may seed; UAT/PROD/GitOps must not seed.
     command: >
       sh -c "npm run prisma-postgres:push
       && npm run prisma-seed"

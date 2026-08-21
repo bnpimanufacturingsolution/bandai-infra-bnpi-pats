@@ -94,6 +94,8 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-Text "runtime-$envName has hris-app Deployment" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*hris-app'))
   $checks.Add((Assert-Text "runtime-$envName has hris-postgres StatefulSet" $rendered '(?ms)^kind:\s*StatefulSet.*?name:\s*hris-postgres'))
   $checks.Add((Assert-Text "runtime-$envName has db init Job" $rendered '(?ms)^kind:\s*Job.*?name:\s*hris-api-db-init'))
+  $checks.Add((Assert-Text "runtime-$envName db init Job runs prisma-postgres:push" $rendered 'prisma-postgres:push'))
+  $checks.Add((Assert-NoText "runtime-$envName db init Job does not run prisma-seed" $rendered 'npm run prisma-seed'))
   $checks.Add((Assert-Text "runtime-$envName owns its PriorityClass" $runtimePriorityClasses "name:\s*project-truth-$envName"))
   foreach ($otherEnvName in @('prod', 'uat', 'dev') | Where-Object { $_ -ne $envName }) {
     $checks.Add((Assert-NoText "runtime-$envName does not own $otherEnvName PriorityClass" $runtimePriorityClasses "name:\s*project-truth-$otherEnvName"))

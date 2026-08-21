@@ -34,9 +34,9 @@ services:
       PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+    # No prisma-seed on appliance DBs (seed can delete timesheet/attendance). Schema-only; prisma db push without --accept-data-loss is fail-closed on destructive drift.
     command: >
-      sh -c "npm run prisma-postgres:push
-      && npm run prisma-seed"
+      sh -c "npm run prisma-postgres:push"
     depends_on:
       hris-postgres-dev:
         condition: service_healthy
@@ -269,9 +269,9 @@ services:
       PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
       DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+    # No prisma-seed on appliance DBs (seed can delete timesheet/attendance). Schema-only; prisma db push without --accept-data-loss is fail-closed on destructive drift.
     command: >
-      sh -c "npm run prisma-postgres:push
-      && npm run prisma-seed"
+      sh -c "npm run prisma-postgres:push"
     depends_on:
       hris-postgres-uat:
         condition: service_healthy

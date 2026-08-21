@@ -13,6 +13,8 @@ Operator map and honesty tables: `.wwg/reports/devops-ci-observe-validate-202608
 
 On-prem DEV/UAT/PROD ports (LAN vs this PC vs Cloudflare): `docs/ONPREM_PORT_ACCESS.md`.
 
+GitOps schema Job (`hris-api-db-init`), seed ban, backups, and why Failed Jobs are left until git is schema-only: `docs/DB_INIT_JOB.md`.
+
 ## Validate
 
 Runs on pull request, manual dispatch, and pushes to `main`, `develop`, `uat`, or `production`.
@@ -45,6 +47,19 @@ PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev
 ```
 
 Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+
+## DB init Job (do not seed UAT/PROD)
+
+Runtime Argo **Degraded** on `hris-api-db-init` Failed does **not** mean Postgres is empty. Live DEV/UAT/PROD APIs can be healthy while that Job is Failed.
+
+| Env | Allowed Job command | Forbidden |
+|---|---|---|
+| GitOps `dev` / `uat` / `prod` | `npm run prisma-postgres:push` only | `prisma-seed`, `prisma-reset`, `--accept-data-loss` |
+| Empty local compose bootstrap | push **and** seed is OK for a blank laptop DB | pointing that compose at UAT/PROD volumes |
+
+Argo runtime apps use `selfHeal: true`. **Do not delete** a Failed `hris-api-db-init` Job while `origin/develop` still contains `prisma-seed` — Argo will recreate the seed Job and can delete timesheets.
+
+Operator page + backup paths + after-commit order: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
 
 ## Promotion
 

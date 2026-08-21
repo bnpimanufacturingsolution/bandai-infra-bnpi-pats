@@ -32,6 +32,15 @@
 - Gender / Agency / Total Manpower blocks on this tab still come from a client employee roster and can show **0** while the API cards are filled. That is not “no Direct people.”
 - Operator: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`. Report: `.wwg/reports/direct-indirect-labor-ui-20260820.md`.
 
+## GitOps db-init Job (2026-08-21)
+
+- Status: `CONFIRMED_CODE` (push authorized 2026-08-22).
+- Runtime Argo **Degraded** on `project-truth-runtime-{dev,uat,prod}` is Failed Job `hris-api-db-init` (`BackoffLimitExceeded`), not “Postgres empty”. App/API can be healthy.
+- Job command is `prisma-postgres:push` only. Seed can delete timesheet/attendance rows. **Do not** seed, `prisma-reset`, or `--accept-data-loss` on UAT/PROD.
+- Argo `selfHeal` will recreate the Job from git. **Do not delete** the Failed Job until `origin/develop` is schema-only (`push` only).
+- GitOps Job is schema-only (`prisma-postgres:push`). Operator authorized push 2026-08-22. UAT/PROD dumps on the VM.
+- Operator: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
+
 ## UAT/PROD app+API auto-roll (2026-08-20)
 
 - Status: `CONFIRMED_CODE`. ansible-pull after a **rebuild** of `hris-api` / `hris-app` restarts those Deployments in `dev`, `uat`, and `prod` if present. Not GitHub branches. Not docs-only. Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.

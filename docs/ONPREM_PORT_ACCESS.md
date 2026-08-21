@@ -9,6 +9,7 @@ One Linux VM owns Project Truth runtime. Cloudflare public hostnames are **that 
 | SSH (LAN, if your PC routes there) | `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19` |
 | SSH (this workstation when LAN times out) | `ssh project-truth-hris` |
 | Canonical evidence | `.wwg/reports/onprem-port-access-20260820.md` |
+| DB init Job (schema vs seed) | `docs/DB_INIT_JOB.md` |
 
 ## Three access classes (do not mix)
 

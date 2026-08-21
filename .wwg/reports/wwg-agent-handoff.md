@@ -1,5 +1,17 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-22 - db-init repair (push authorized)
+
+| Field | Value |
+|---|---|
+| Rec | REC-20260820-RUNTIME-DB-INIT-DEGRADED |
+| Operator | Push authorized 2026-08-22 |
+| GitOps Job | `prisma-postgres:push` only (no seed) |
+| Cluster | Delete Failed Jobs **only after** origin YAML is proven no-seed |
+| UAT/PROD dumps | `/home/infra/db-init-repair-dumps/` |
+| Operator page | `docs/DB_INIT_JOB.md` |
+| Report | `.wwg/reports/db-init-repair-20260821.md` |
+
 ## 2026-08-21 - Dedicated employee schedule page
 
 | Field | Value |

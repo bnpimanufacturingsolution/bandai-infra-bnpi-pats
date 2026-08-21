@@ -1,6 +1,12 @@
 # Project Truth Summary
 
-Last updated: 2026-08-21
+Last updated: 2026-08-22
+
+## 2026-08-21 GitOps db-init (no UAT/PROD seed)
+
+- Runtime Argo **Degraded** = Failed Job `hris-api-db-init`, not an empty database. Live UAT/PROD still have ~2225 employees and ~129k timesheet lines.
+- **Do not** run `prisma-seed` / `prisma-reset` / `--accept-data-loss` on UAT/PROD. **Do not** delete the Failed Job until `origin/develop` is schema-only (`prisma-postgres:push` only).
+- Operator: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`. Operator authorized **push** 2026-08-22.
 
 ## 2026-08-20 10-agent DevOps audit
 

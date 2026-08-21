@@ -120,6 +120,7 @@ Hard honesty:
 - **CI green** is tests, not “deployed”.
 - **Observe hris-api success** is not a new API image unless the status description says rebuilt (live `efc86c56` was `services=none`).
 - **`/health` healthy** is not a git SHA (`buildSha` is absent).
+- **Runtime Argo Synced/Degraded** is usually Failed Job `hris-api-db-init`, not “database wiped”. Do not reseed UAT/PROD. Do not delete that Failed Job until `origin/develop` is schema-only (`prisma-postgres:push` only). Operator page: `docs/DB_INIT_JOB.md`.
 - **Validate** is the Windows terraform/packer/installer gate; watching only **CI** misses it.
 - Nested Cloud Run / Firebase workflows under `hris-api/.github` and `hris-app/.github` do not run here.
 

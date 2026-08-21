@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-22 db-init repair (push authorized)
+
+- Operator authorized **push** of schema-only GitOps Job (`prisma-postgres:push`, no seed).
+- Do **not** delete Failed Jobs until `origin/develop` YAML has no `prisma-seed`. Then recreate, re-count UAT/PROD.
+- Operator page: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
+
 ## Latest Task Addendum - 2026-08-21 Dedicated employee schedule page
 
 - Operator: dedicated page to change employee time schedules without opening each profile.
