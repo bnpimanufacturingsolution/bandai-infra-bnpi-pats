@@ -58,6 +58,7 @@ import { TimePicker } from "~/components/molecules/TimePicker";
 import { RecruitmentEmployeeTeaser } from "~/components/molecules/recruitment-employee-teaser";
 import { DocumentFileViewer } from "~/components/molecules/document-file-viewer";
 import { RecruitmentJobsManager } from "~/components/organisms/hr/RecruitmentJobsManager";
+import { ApplicantIdentityHistory } from "~/components/organisms/hr/ApplicantIdentityHistory";
 import {
 	useApplicant,
 	useApplicantAction,
@@ -3224,6 +3225,8 @@ function ApplicantWorkflowDrawer({
 							</div>
 						))}
 					</dl>
+
+					<ApplicantIdentityHistory history={applicant?.identityHistory} />
 
 					{attachments.length > 0 ? (
 						<div className="mt-6 border-t border-[#e8dede]/80 pt-4">

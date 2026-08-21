@@ -1,5 +1,15 @@
 # Project Truth
 
+## Recruitment identity history (first name + last name + birthday) (2026-08-22)
+
+- Status: `CONFIRMED_CODE`.
+- Match key for previous Bandai record is **first name + last name + birthday only**. Middle name is not part of this check. Email is not the identity key.
+- Sources: `Applicant.person.personalInfo` and `Employee.person.personalInfo` in the same organization.
+- Purpose: **show history**, not block apply. Recruiter drawer shows previous applications (including Rejected) and employee records (including Resigned / Terminated).
+- Public apply collects date of birth. `GET /api/applicant/:id` and create attach `identityHistory`. Same email + same name/birthday reuses the Person so they can apply again.
+- Helper: `hris-api/helper/person-identity-history.helper.ts`. UI: recruiter candidate drawer **Previous Bandai record**.
+- Gap: older applicants with no stored birthday cannot match until DOB exists on that Person.
+
 ## Employee weekly hours vs schedule templates (2026-08-20)
 
 - Status: `CONFIRMED_CODE`.

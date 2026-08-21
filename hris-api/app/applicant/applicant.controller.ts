@@ -35,6 +35,7 @@ import {
 	initializeApplicantWorkflow,
 	provisionApplicantEmployeeAccountAfterHire,
 } from "../../helper/recruitment-runtime.helper";
+import { identityHistoryFromPerson } from "../../helper/person-identity-history.helper";
 
 const logger = getLogger();
 const applicantLogger = logger.child({ module: "applicant" });
@@ -221,6 +222,30 @@ export const controller = (prisma: PrismaClient) => {
 			await invalidateCache.byPattern(`cache:applicant:byId:${applicantId}:*`);
 		}
 		await invalidateCache.byPattern("cache:applicant:list:*");
+	};
+
+	const attachIdentityHistory = async (
+		organizationId: string,
+		applicant: Record<string, any> | null,
+	) => {
+		if (!applicant) {
+			return applicant;
+		}
+
+		let person = applicant.person;
+		if (!person && applicant.personId) {
+			person = await prisma.person.findFirst({
+				where: { id: applicant.personId, isDeleted: false },
+				select: { personalInfo: true },
+			});
+		}
+
+		applicant.identityHistory = await identityHistoryFromPerson(prisma, {
+			organizationId,
+			person,
+			excludeApplicantId: applicant.id,
+		});
+		return applicant;
 	};
 
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
@@ -416,6 +441,9 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			await invalidateApplicantCaches(applicant?.id);
+			if (applicant) {
+				await attachIdentityHistory(linkResult.organizationId, applicant as any);
+			}
 
 			logActivity(req, {
 				userId: (req as any).user?.id || "unknown",
@@ -611,6 +639,8 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(404).json(buildErrorResponse(config.ERROR.APPLICANT.NOT_FOUND, 404));
 				return;
 			}
+
+			await attachIdentityHistory(requestOrganizationId, applicant as any);
 
 			const preHireSetup = await getApplicantPreHireSetupReadiness(prisma, {
 				organizationId: requestOrganizationId,

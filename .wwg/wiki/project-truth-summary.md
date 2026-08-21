@@ -2,6 +2,10 @@
 
 Last updated: 2026-08-22
 
+## 2026-08-22 Recruitment identity history
+
+- First name + last name + birthday is the only match key for previous applicant/employee records. Recruiter sees history (rejected, resigned, etc.). Apply is not blocked. Public apply now requires date of birth.
+
 ## 2026-08-21 GitOps db-init (no UAT/PROD seed)
 
 - Runtime Argo **Degraded** = Failed Job `hris-api-db-init`, not an empty database. Live UAT/PROD still have ~2225 employees and ~129k timesheet lines.

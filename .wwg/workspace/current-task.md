@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-22 Recruitment previous-application history
+
+- Operator: first name + last name + birthday is only the validation to see if the applicant already exists in applicants or employees, so recruitment can show history (rejected, resigned, etc.).
+- Implemented: identity match helper; `identityHistory` on applicant GET/create; public apply collects DOB; recruiter drawer **Previous Bandai record** + full history accordion.
+- Not a hire block. Employee create still has its own name+birthday 409 for active employees.
+
 ## Latest Task Addendum - 2026-08-22 db-init repair (push authorized)
 
 - Operator authorized **push**. SHA `4f978c0a`. Jobs Complete; Argo runtime **Healthy**; UAT/PROD counts unchanged.

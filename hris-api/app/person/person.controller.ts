@@ -21,6 +21,7 @@ import { config } from "../../config/constant";
 import { config as appConfig } from "../../config/config";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
+import { personMatchesNameAndBirthday } from "../../helper/person-identity-history.helper";
 
 const logger = getLogger();
 const personLogger = logger.child({ module: "person" });
@@ -144,7 +145,7 @@ export const controller = (prisma: PrismaClient) => {
 							mode: "insensitive",
 						},
 					},
-					select: { id: true, contactInfo: true },
+					select: { id: true, contactInfo: true, personalInfo: true },
 					take: 10,
 				});
 				const existingPerson = existingPersonCandidates.find((person) => {
@@ -153,6 +154,27 @@ export const controller = (prisma: PrismaClient) => {
 				});
 
 				if (existingPerson) {
+					const incomingPersonalInfo = asRecord(validation.data.personalInfo);
+					const sameIdentity = personMatchesNameAndBirthday(existingPerson.personalInfo, {
+						firstName: String(incomingPersonalInfo.firstName || ""),
+						lastName: String(incomingPersonalInfo.lastName || ""),
+						dateOfBirth: incomingPersonalInfo.dateOfBirth as Date | string | undefined,
+					});
+
+					if (sameIdentity) {
+						const reusedPerson = await prisma.person.findFirst({
+							where: { id: existingPerson.id },
+						});
+						res.status(200).json(
+							buildSuccessResponse(
+								"Person already exists for this identity",
+								{ person: reusedPerson, reused: true },
+								200,
+							),
+						);
+						return;
+					}
+
 					res.status(409).json(
 						buildErrorResponse("Email already exists", 409, [
 							{

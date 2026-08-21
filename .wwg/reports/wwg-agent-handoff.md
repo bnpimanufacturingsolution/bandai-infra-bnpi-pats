@@ -1,5 +1,17 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-22 - Recruitment identity history
+
+| Field | Value |
+|---|---|
+| Ask | Check previous applicant/employee by first name + last name + birthday and show history |
+| Match | First + last + birthday only (not middle name, not email) |
+| Sources | Applicants and employees in the org |
+| UI | Recruiter drawer: Previous Bandai record + Full history |
+| Apply | Date of birth required; same identity may apply again |
+| Block? | No — history only |
+| Helper | `hris-api/helper/person-identity-history.helper.ts` |
+
 ## 2026-08-22 - db-init repair (push authorized)
 
 | Field | Value |
