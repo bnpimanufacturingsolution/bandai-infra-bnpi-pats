@@ -256,6 +256,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 							icon: <Clock className="w-4 h-4" />,
 						},
 						{
+							id: "hr-timekeeping-schedules",
+							label: "Schedules",
+							path: "/hr/employee-schedules",
+							icon: <Clock className="w-4 h-4" />,
+						},
+						{
 							id: "hr-timekeeping-corrections",
 							label: "Attendance Corrections",
 							path: "/hr/time-corrections",

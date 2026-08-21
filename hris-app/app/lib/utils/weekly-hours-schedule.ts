@@ -183,6 +183,32 @@ export const hoursDraftForDate = (
 	);
 };
 
+export const summarizeEmbeddedSchedule = (
+	embedded?: {
+		templateName?: string | null;
+		cycleDays?: number | null;
+		pattern?: Array<{ day?: number; shiftSnapshot?: WeeklyHoursShiftSnapshot | null }> | null;
+	} | null,
+) => {
+	if (!embedded || !Array.isArray(embedded.pattern) || embedded.pattern.length === 0) {
+		return "No schedule";
+	}
+	const days = daysFromEmbeddedPattern(embedded.pattern, embedded.cycleDays);
+	const work = days.filter((day) => !day.isOff);
+	const sameHours =
+		work.length > 0 &&
+		work.every((day) => day.startTime === work[0].startTime && day.endTime === work[0].endTime);
+	if (sameHours && work.length === days.filter((day) => !day.isOff).length) {
+		const labels = work.map((day) => day.label).join(", ");
+		return `${labels} ${work[0].startTime}–${work[0].endTime}`;
+	}
+	return days
+		.map((day) =>
+			day.isOff ? `${day.label} Off` : `${day.label} ${day.startTime}–${day.endTime}`,
+		)
+		.join(" · ");
+};
+
 export const DEFAULT_BREAK_START = "12:00";
 export const DEFAULT_BREAK_END = "13:00";
 

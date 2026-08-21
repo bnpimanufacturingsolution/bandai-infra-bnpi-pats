@@ -5,6 +5,7 @@ import {
 	buildWeeklyHoursPatternPayload,
 	daysFromEmbeddedPattern,
 	hoursDraftForDate,
+	summarizeEmbeddedSchedule,
 	toggleDateInSelection,
 	validateDateHours,
 	validateWeeklyHoursDays,
@@ -134,5 +135,31 @@ describe("weekly hours schedule helper", () => {
 				breakEndTime: "13:00",
 			}),
 		).toBeNull();
+	});
+
+	it("summarizes mixed weekday hours and empty schedules", () => {
+		expect(summarizeEmbeddedSchedule(null)).toBe("No schedule");
+		expect(summarizeEmbeddedSchedule({ cycleDays: 7, pattern: [] })).toBe("No schedule");
+		expect(
+			summarizeEmbeddedSchedule({
+				cycleDays: 7,
+				pattern: [
+					{
+						day: 1,
+						shiftSnapshot: {
+							isOff: false,
+							timeSlots: [{ type: "work", startTime: "06:00", endTime: "15:00" }],
+						},
+					},
+					{
+						day: 2,
+						shiftSnapshot: {
+							isOff: false,
+							timeSlots: [{ type: "work", startTime: "07:00", endTime: "16:00" }],
+						},
+					},
+				],
+			}),
+		).toContain("Mon 06:00–15:00");
 	});
 });

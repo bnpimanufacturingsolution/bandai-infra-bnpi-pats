@@ -174,6 +174,47 @@ export const useEmployees = (
 	});
 };
 
+export const EMPLOYEE_SCHEDULE_ROSTER_FIELDS = [
+	"id",
+	"employeeId",
+	"organizationId",
+	"person.personalInfo",
+	"departmentId",
+	"department.id",
+	"department.name",
+	"department.code",
+	"sectionId",
+	"section.id",
+	"section.name",
+	"section.code",
+	"employmentStatus",
+	"embeddedSchedule",
+] as const;
+
+export const useEmployeeScheduleRoster = (
+	params?: ApiQueryParams,
+	options?: {
+		enabled?: boolean;
+	},
+) => {
+	return useQuery<EmployeesResponse>({
+		queryKey: [...employeesQueryKeys.employees.lists(), "schedule-roster", { params }],
+		queryFn: () => {
+			return employeesService
+				.clearQueryParams()
+				.select([...EMPLOYEE_SCHEDULE_ROSTER_FIELDS])
+				.search(params?.query)
+				.paginate(params?.page || 1, params?.limit || 25)
+				.sort(params?.sort, params?.order)
+				.setParams({ ...params, document: true })
+				.getEmployees(true);
+		},
+		enabled: options?.enabled ?? true,
+		placeholderData: keepPreviousData,
+		staleTime: 60 * 1000,
+	});
+};
+
 export const useEmployee = (id: string, fields?: string | string[], params?: ApiQueryParams) => {
 	// Default fields to include if not specified
 	const defaultFields = [

@@ -1,14 +1,18 @@
 # Project Truth Summary
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 ## 2026-08-20 Timesheet ↔ schedule
 
 - Changing schedule updates **expected** work windows (`AttendanceObligation`). It does **not** rewrite punches or submitted timesheet lines. Stored late/OT stay vs the schedule frozen at first punch. **Days** = weekly pattern (next Monday). **Dates** = that day (`ScheduleOverride`). Full: `.wwg/reports/timesheet-schedule-connection-20260820.md`.
 
+## 2026-08-21 Employee schedule roster
+
+- Dedicated page: HR Timekeeping **Schedules** `/hr/employee-schedules` and admin `/admin/configuration/employee-schedules`. Table of people, department/section filter, click to see current week then **Change schedule**.
+
 ## 2026-08-20 Employee weekly hours
 
-- Templates = reusable org patterns. Per-person Mon/Tue different hours = employee **Work Schedule** → **Change schedule** → **Days**. One calendar date = same modal **Dates** tab (`scheduleOverride`).
+- Templates = reusable org patterns. Per-person Mon/Tue different hours = employee **Work Schedule** → **Change schedule** → **Days**. One calendar date = same modal **Dates** tab (`scheduleOverride`). Roster page is the easy bulk path.
 
 ## 2026-08-20 Day labor on timesheet (no push)
 

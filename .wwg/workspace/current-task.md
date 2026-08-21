@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-21 Dedicated employee schedule page
+
+- Operator: dedicated page to change employee time schedules without opening each profile.
+- HR `/hr/employee-schedules` (Timekeeping → Schedules) and admin `/admin/configuration/employee-schedules`.
+- Table of active employees, current week hours, department/section filter, click row to preview then Change schedule (same Days/Dates modal).
+
 ## Latest Task Addendum - 2026-08-20 Dates calendar multi-select + break
 
 - Dates tab is a clickable calendar (multiple days). Hours + break apply to every selected date.

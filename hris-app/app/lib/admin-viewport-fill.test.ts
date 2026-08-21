@@ -10,6 +10,7 @@ describe("isAdminViewportFillPath", () => {
 		expect(isAdminViewportFillPath("/admin/configuration/positions")).toBe(true);
 		expect(isAdminViewportFillPath("/admin/configuration/levels")).toBe(true);
 		expect(isAdminViewportFillPath("/admin/configuration/schedule-templates")).toBe(true);
+		expect(isAdminViewportFillPath("/admin/configuration/employee-schedules")).toBe(true);
 		expect(isAdminViewportFillPath("/admin/configuration/leave-types")).toBe(true);
 		expect(isAdminViewportFillPath("/admin/configuration/holidays")).toBe(true);
 		expect(isAdminViewportFillPath("/admin/configuration/agencies")).toBe(true);

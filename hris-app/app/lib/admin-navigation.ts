@@ -5,6 +5,7 @@ import {
 	Building2,
 	Calendar,
 	CalendarClock,
+	Clock,
 	FileSearch,
 	FileText,
 	Gift,
@@ -99,6 +100,12 @@ export const adminConfigurationItems: AdminNavItem[] = [
 		label: "Schedule Templates",
 		path: "/admin/configuration/schedule-templates",
 		icon: Calendar,
+	},
+	{
+		id: "employee-schedules",
+		label: "Employee Schedules",
+		path: "/admin/configuration/employee-schedules",
+		icon: Clock,
 	},
 	{
 		id: "leave-types",

@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-21 - Dedicated employee schedule page
+
+| Field | Value |
+|---|---|
+| Ask | Table of employees to see/edit current hours; filter by department and section |
+| HR | Timekeeping → **Schedules** `/hr/employee-schedules` |
+| Admin | Configuration → **Employee Schedules** `/admin/configuration/employee-schedules` |
+| Edit | Same **Change schedule** Days/Dates modal |
+| API | Existing `POST /api/employee-schedules` + `POST /api/scheduleOverride` |
+
 ## 2026-08-20 - Dates calendar + break
 
 | Field | Value |
