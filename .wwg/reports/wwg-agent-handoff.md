@@ -4,13 +4,15 @@
 
 | Field | Value |
 |---|---|
-| Rec | REC-20260820-RUNTIME-DB-INIT-DEGRADED |
-| Operator | Push authorized 2026-08-22 |
-| GitOps Job | `prisma-postgres:push` only (no seed) |
-| Cluster | Delete Failed Jobs **only after** origin YAML is proven no-seed |
-| UAT/PROD dumps | `/home/infra/db-init-repair-dumps/` |
+| Rec | REC-20260820-RUNTIME-DB-INIT-DEGRADED **Implemented** |
+| SHA | `4f978c0a` on `origin/develop` |
+| Job command | `npm run prisma-postgres:push` (no seed) |
+| Jobs | Complete 1/1 in **dev, uat, prod** |
+| Prisma | “already in sync” all three |
+| Argo runtime | Synced / **Healthy** ×3 |
+| UAT/PROD counts | Unchanged 2225 / 10979 / 129535 |
+| Tunnel | active |
 | Operator page | `docs/DB_INIT_JOB.md` |
-| Report | `.wwg/reports/db-init-repair-20260821.md` |
 
 ## 2026-08-21 - Dedicated employee schedule page
 
