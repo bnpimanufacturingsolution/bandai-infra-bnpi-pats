@@ -3,11 +3,22 @@ import { describe, expect, it } from "vitest";
 import { ApplicantIdentityHistory } from "./ApplicantIdentityHistory";
 
 describe("ApplicantIdentityHistory", () => {
-	it("renders nothing when identity is not matched", () => {
+	it("shows why history cannot be checked when birthday is missing", () => {
+		const html = renderToStaticMarkup(
+			<ApplicantIdentityHistory
+				history={{ matched: false, reason: "missing_name_or_birthday" }}
+			/>,
+		);
+		expect(html).toContain("Applicant history");
+		expect(html).toContain("Date of birth is missing");
+	});
+
+	it("shows no previous record when name and birthday do not match", () => {
 		const html = renderToStaticMarkup(
 			<ApplicantIdentityHistory history={{ matched: false, reason: "no_match" }} />,
 		);
-		expect(html).toBe("");
+		expect(html).toContain("Applicant history");
+		expect(html).toContain("No previous application or employee record");
 	});
 
 	it("shows rejected application and resigned employee history", () => {

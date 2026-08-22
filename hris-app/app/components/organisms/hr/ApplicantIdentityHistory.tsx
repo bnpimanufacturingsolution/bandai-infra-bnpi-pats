@@ -78,18 +78,39 @@ const buildSummaryLine = (history: ApplicantIdentityHistoryValue) => {
 	return parts.join(" · ");
 };
 
+const unmatchedCopy = (history?: ApplicantIdentityHistoryValue | null) => {
+	const reason = String(history?.reason || "");
+	if (reason === "missing_name_or_birthday") {
+		return "Cannot check history. Date of birth is missing, so first name + last name + birthday cannot be matched.";
+	}
+	if (reason === "invalid_birthday") {
+		return "Cannot check history. Date of birth is invalid.";
+	}
+	return "No previous application or employee record for this name and birthday.";
+};
+
 export function ApplicantIdentityHistory({
 	history,
 }: {
 	history?: ApplicantIdentityHistoryValue | null;
 }) {
-	if (!history?.matched) {
-		return null;
-	}
+	const applications = history?.previousApplications || [];
+	const employees = history?.employees || [];
+	const summaryLine = history ? buildSummaryLine(history) : "";
 
-	const applications = history.previousApplications || [];
-	const employees = history.employees || [];
-	const summaryLine = buildSummaryLine(history);
+	if (!history?.matched) {
+		return (
+			<div className="mt-5 border-t border-[#e8dede] pt-5">
+				<div className="flex items-start gap-2">
+					<History className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" />
+					<div className="min-w-0 space-y-1">
+						<p className="text-sm font-medium text-neutral-900">Applicant history</p>
+						<p className="text-sm leading-snug text-[#5f5f63]">{unmatchedCopy(history)}</p>
+					</div>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="mt-5 border-t border-[#e8dede] pt-5">
