@@ -1,5 +1,11 @@
 ﻿# Current Task
 
+## Latest Task Addendum - 2026-08-22 Hire keeps applicant public-apply name
+
+- Operator: Yan Rubio card opened as Joshua Rodriguez EMP3334. Adding employee must not change the applicant name.
+- Source of identity is the public job application person (first name, last name, email). Add Employee from recruitment reuses that Person and locks those fields.
+- Drawer shows the applicant name if the linked employee is a different person.
+
 ## Latest Task Addendum - 2026-08-22 Recruitment previous-application history
 
 - Operator: first name + last name + birthday is only the validation to see if the applicant already exists in applicants or employees, so recruitment can show history (rejected, resigned, etc.).

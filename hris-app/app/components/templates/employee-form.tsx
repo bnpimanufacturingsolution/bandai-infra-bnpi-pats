@@ -3379,7 +3379,12 @@ export function EmployeeForm({ presentation = "page", onRequestClose }: Employee
 
 		switch (currentStep) {
 			case 0:
-				return <PersonalIDsForm form={form} />;
+				return (
+					<PersonalIDsForm
+						form={form}
+						lockApplicantIdentity={Boolean(sourceApplicantId)}
+					/>
+				);
 			case 1:
 				return (
 					<EmploymentCompensationForm
