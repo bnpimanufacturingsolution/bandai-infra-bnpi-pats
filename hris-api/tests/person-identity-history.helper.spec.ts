@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import {
+	attachIdentityHistoryToApplicants,
 	loadPersonIdentityHistory,
 	personMatchesNameAndBirthday,
 } from "../helper/person-identity-history.helper";
@@ -136,6 +137,68 @@ describe("loadPersonIdentityHistory", () => {
 		expect(history.employees[0].employmentStatus).to.equal("RESIGNED");
 		expect(history.summary.previousApplicationCount).to.equal(1);
 		expect(history.summary.employeeStatuses).to.deep.equal(["RESIGNED"]);
+	});
+
+	it("stamps listed applicants with history without treating the current row as previous", async () => {
+		const prisma: any = {
+			applicant: {
+				findMany: async () => [
+					{
+						id: "current-app",
+						applicantId: "APP-2",
+						appliedDate: new Date("2026-08-22T00:00:00.000Z"),
+						currentWorkflowStateKey: "APPLIED",
+						convertedToEmployeeId: null,
+						job: { position: { title: "Technician" } },
+						position: null,
+						person: {
+							personalInfo: {
+								firstName: "Juan",
+								lastName: "Dela Cruz",
+								dateOfBirth: "1994-03-12T00:00:00.000Z",
+							},
+						},
+					},
+					{
+						id: "old-app",
+						applicantId: "APP-1",
+						appliedDate: new Date("2024-01-10T00:00:00.000Z"),
+						currentWorkflowStateKey: "REJECTED",
+						convertedToEmployeeId: null,
+						job: { position: { title: "Assembler" } },
+						position: null,
+						person: {
+							personalInfo: {
+								firstName: "Juan",
+								lastName: "Dela Cruz",
+								dateOfBirth: "1994-03-12T00:00:00.000Z",
+							},
+						},
+					},
+				],
+			},
+			employee: {
+				findMany: async () => [],
+			},
+		};
+
+		const listed = [
+			{
+				id: "current-app",
+				person: {
+					personalInfo: {
+						firstName: "Juan",
+						lastName: "Dela Cruz",
+						dateOfBirth: "1994-03-12T00:00:00.000Z",
+					},
+				},
+			},
+		];
+
+		await attachIdentityHistoryToApplicants(prisma, "org-1", listed);
+		expect(listed[0].identityHistory.matched).to.equal(true);
+		expect(listed[0].identityHistory.previousApplications).to.have.length(1);
+		expect(listed[0].identityHistory.previousApplications[0].id).to.equal("old-app");
 	});
 
 	it("returns no_match when name and birthday do not hit applicant or employee rows", async () => {

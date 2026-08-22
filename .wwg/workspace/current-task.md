@@ -5,6 +5,7 @@
 - Operator: first name + last name + birthday is only the validation to see if the applicant already exists in applicants or employees, so recruitment can show history (rejected, resigned, etc.).
 - Implemented: identity match helper; `identityHistory` on applicant GET/create; public apply collects DOB; recruiter drawer **Previous Bandai record** + full history accordion.
 - Not a hire block. Employee create still has its own name+birthday 409 for active employees.
+- Board: amber **History** chip on the kanban card and table row when first+last+birthday matched. Click the person for full history in the right drawer. No chip if birthday is missing.
 
 ## Latest Task Addendum - 2026-08-22 db-init repair (push authorized)
 

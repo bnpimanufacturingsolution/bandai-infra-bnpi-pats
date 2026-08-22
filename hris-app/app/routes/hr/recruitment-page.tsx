@@ -28,6 +28,7 @@ import {
 	ChevronDown,
 	X,
 	Copy,
+	History,
 } from "lucide-react";
 import {
 	Dialog,
@@ -1038,6 +1039,16 @@ function pipelineProgressPercent(stateKey: string, workflowColumns: WorkflowColu
 	return Math.min(100, Math.round((idx / span) * 100));
 }
 
+function ApplicantHistoryChip({ history }: { history?: any }) {
+	if (!history?.matched) return null;
+	return (
+		<div className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+			<History className="h-3 w-3" />
+			History
+		</div>
+	);
+}
+
 function KanbanApplicantCard(props: {
 	applicant: any;
 	groupKey: string;
@@ -1099,6 +1110,7 @@ function KanbanApplicantCard(props: {
 						<div className="mt-2 truncate text-xs text-neutral-600">
 							{getApplicantPositionTitle(applicant)}
 						</div>
+						<ApplicantHistoryChip history={applicant?.identityHistory} />
 						{hired ? (
 							<div className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
 								<UserCheck className="h-3 w-3" />
@@ -1883,6 +1895,14 @@ export default function RecruitmentPage() {
 																										applicant,
 																									)}
 																								</span>
+																								{applicant
+																									?.identityHistory
+																									?.matched ? (
+																									<span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+																										<History className="h-3 w-3" />
+																										History
+																									</span>
+																								) : null}
 																							</div>
 																						</td>
 																						<td className="hidden max-w-[200px] truncate px-4 py-3 text-neutral-600 sm:table-cell">

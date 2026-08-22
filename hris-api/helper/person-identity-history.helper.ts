@@ -124,23 +124,61 @@ const jobTitleFromApplicant = (applicant: {
 	return fromPosition || null;
 };
 
-export const loadPersonIdentityHistory = async (
-	prisma: PrismaExecutor,
+type IdentityMatchApplicantSource = {
+	id: string;
+	applicantId: string | null;
+	appliedDate: Date;
+	currentWorkflowStateKey: string;
+	convertedToEmployeeId: string | null;
+	job?: { position?: { title?: string | null } | null } | null;
+	position?: { title?: string | null } | null;
+	person?: { personalInfo?: unknown } | null;
+};
+
+type IdentityMatchEmployeeSource = {
+	id: string;
+	employeeId: string | null;
+	employmentStatus: string;
+	employmentHireDate: Date | null;
+	employmentTerminationDate: Date | null;
+	position?: { title?: string | null } | null;
+	department?: { name?: string | null } | null;
+	person?: { personalInfo?: unknown } | null;
+};
+
+const personalInfoFromPerson = (person?: { personalInfo?: unknown } | null) => {
+	const info = asRecord(person?.personalInfo);
+	return {
+		firstName: typeof info.firstName === "string" ? info.firstName : "",
+		lastName: typeof info.lastName === "string" ? info.lastName : "",
+		dateOfBirth:
+			info.dateOfBirth instanceof Date || typeof info.dateOfBirth === "string"
+				? info.dateOfBirth
+				: info.dateOfBirth
+					? String(info.dateOfBirth)
+					: null,
+	};
+};
+
+export const buildPersonIdentityHistoryFromSources = (
+	sources: {
+		applicants: IdentityMatchApplicantSource[];
+		employees: IdentityMatchEmployeeSource[];
+	},
 	params: {
-		organizationId: string;
 		firstName?: string | null;
 		lastName?: string | null;
 		dateOfBirth?: Date | string | null;
 		excludeApplicantId?: string | null;
 	},
-): Promise<PersonIdentityHistory> => {
+): PersonIdentityHistory => {
 	const input: PersonIdentityMatchInput = {
 		firstName: String(params.firstName || "").trim(),
 		lastName: String(params.lastName || "").trim(),
 		dateOfBirth: params.dateOfBirth,
 	};
 
-	if (!params.organizationId || !input.firstName || !input.lastName || !input.dateOfBirth) {
+	if (!input.firstName || !input.lastName || !input.dateOfBirth) {
 		return emptyHistory(input, "missing_name_or_birthday");
 	}
 
@@ -148,64 +186,7 @@ export const loadPersonIdentityHistory = async (
 		return emptyHistory(input, "invalid_birthday");
 	}
 
-	const [applicants, employees] = await Promise.all([
-		prisma.applicant.findMany({
-			where: {
-				organizationId: params.organizationId,
-				isDeleted: false,
-			},
-			select: {
-				id: true,
-				applicantId: true,
-				appliedDate: true,
-				currentWorkflowStateKey: true,
-				convertedToEmployeeId: true,
-				job: {
-					select: {
-						position: {
-							select: { title: true },
-						},
-					},
-				},
-				position: {
-					select: { title: true },
-				},
-				person: {
-					select: {
-						personalInfo: true,
-					},
-				},
-			},
-			orderBy: { appliedDate: "desc" },
-		}),
-		prisma.employee.findMany({
-			where: {
-				organizationId: params.organizationId,
-				isDeleted: false,
-			},
-			select: {
-				id: true,
-				employeeId: true,
-				employmentStatus: true,
-				employmentHireDate: true,
-				employmentTerminationDate: true,
-				position: {
-					select: { title: true },
-				},
-				department: {
-					select: { name: true },
-				},
-				person: {
-					select: {
-						personalInfo: true,
-					},
-				},
-			},
-			orderBy: { updatedAt: "desc" },
-		}),
-	]);
-
-	const previousApplications = applicants
+	const previousApplications = sources.applicants
 		.filter((applicant) => personMatchesNameAndBirthday(applicant.person?.personalInfo, input))
 		.map((applicant) => ({
 			id: applicant.id,
@@ -220,7 +201,7 @@ export const loadPersonIdentityHistory = async (
 		}))
 		.filter((row) => !row.isCurrent);
 
-	const employeeRows = employees
+	const employeeRows = sources.employees
 		.filter((employee) => personMatchesNameAndBirthday(employee.person?.personalInfo, input))
 		.map((employee) => ({
 			id: employee.id,
@@ -254,6 +235,125 @@ export const loadPersonIdentityHistory = async (
 			employeeStatuses,
 		},
 	};
+};
+
+export const loadIdentityMatchSources = async (
+	prisma: PrismaExecutor,
+	organizationId: string,
+) => {
+	const [applicants, employees] = await Promise.all([
+		prisma.applicant.findMany({
+			where: {
+				organizationId,
+				isDeleted: false,
+			},
+			select: {
+				id: true,
+				applicantId: true,
+				appliedDate: true,
+				currentWorkflowStateKey: true,
+				convertedToEmployeeId: true,
+				job: {
+					select: {
+						position: {
+							select: { title: true },
+						},
+					},
+				},
+				position: {
+					select: { title: true },
+				},
+				person: {
+					select: {
+						personalInfo: true,
+					},
+				},
+			},
+			orderBy: { appliedDate: "desc" },
+		}),
+		prisma.employee.findMany({
+			where: {
+				organizationId,
+				isDeleted: false,
+			},
+			select: {
+				id: true,
+				employeeId: true,
+				employmentStatus: true,
+				employmentHireDate: true,
+				employmentTerminationDate: true,
+				position: {
+					select: { title: true },
+				},
+				department: {
+					select: { name: true },
+				},
+				person: {
+					select: {
+						personalInfo: true,
+					},
+				},
+			},
+			orderBy: { updatedAt: "desc" },
+		}),
+	]);
+
+	return { applicants, employees };
+};
+
+export const loadPersonIdentityHistory = async (
+	prisma: PrismaExecutor,
+	params: {
+		organizationId: string;
+		firstName?: string | null;
+		lastName?: string | null;
+		dateOfBirth?: Date | string | null;
+		excludeApplicantId?: string | null;
+	},
+): Promise<PersonIdentityHistory> => {
+	const input: PersonIdentityMatchInput = {
+		firstName: String(params.firstName || "").trim(),
+		lastName: String(params.lastName || "").trim(),
+		dateOfBirth: params.dateOfBirth,
+	};
+
+	if (!params.organizationId || !input.firstName || !input.lastName || !input.dateOfBirth) {
+		return emptyHistory(input, "missing_name_or_birthday");
+	}
+
+	if (!getUtcDayRange(input.dateOfBirth)) {
+		return emptyHistory(input, "invalid_birthday");
+	}
+
+	const sources = await loadIdentityMatchSources(prisma, params.organizationId);
+	return buildPersonIdentityHistoryFromSources(sources, {
+		firstName: input.firstName,
+		lastName: input.lastName,
+		dateOfBirth: input.dateOfBirth,
+		excludeApplicantId: params.excludeApplicantId,
+	});
+};
+
+export const attachIdentityHistoryToApplicants = async (
+	prisma: PrismaExecutor,
+	organizationId: string,
+	applicants: Array<Record<string, any>>,
+) => {
+	if (!organizationId || applicants.length === 0) {
+		return applicants;
+	}
+
+	const sources = await loadIdentityMatchSources(prisma, organizationId);
+	for (const applicant of applicants) {
+		const personInfo = personalInfoFromPerson(applicant.person);
+		applicant.identityHistory = buildPersonIdentityHistoryFromSources(sources, {
+			firstName: personInfo.firstName,
+			lastName: personInfo.lastName,
+			dateOfBirth: personInfo.dateOfBirth,
+			excludeApplicantId: applicant.id,
+		});
+	}
+	return applicants;
 };
 
 export const identityHistoryFromPerson = async (

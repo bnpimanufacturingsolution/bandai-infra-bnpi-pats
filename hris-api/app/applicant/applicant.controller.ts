@@ -35,7 +35,10 @@ import {
 	initializeApplicantWorkflow,
 	provisionApplicantEmployeeAccountAfterHire,
 } from "../../helper/recruitment-runtime.helper";
-import { identityHistoryFromPerson } from "../../helper/person-identity-history.helper";
+import {
+	attachIdentityHistoryToApplicants,
+	identityHistoryFromPerson,
+} from "../../helper/person-identity-history.helper";
 
 const logger = getLogger();
 const applicantLogger = logger.child({ module: "applicant" });
@@ -578,6 +581,14 @@ export const controller = (prisma: PrismaClient) => {
 				effectiveGroupBy && document
 					? groupDataByField(applicants, effectiveGroupBy as string)
 					: applicants;
+
+			if (document && applicants.length > 0) {
+				await attachIdentityHistoryToApplicants(
+					prisma,
+					requestOrganizationId,
+					applicants as Array<Record<string, any>>,
+				);
+			}
 
 			logActivity(req, {
 				userId: (req as any).user?.id || "unknown",
