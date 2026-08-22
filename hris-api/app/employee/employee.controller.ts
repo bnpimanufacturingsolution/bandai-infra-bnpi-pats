@@ -51,6 +51,7 @@ import { CreateAttendanceSchema, UpdateAttendanceSchema } from "../../zod/attend
 import { UpdatePersonSchema } from "../../zod/person.zod";
 import { UpdateUserSchema } from "../../zod/user.zod";
 import { createEmployeeHelpers } from "../../helper/employee.helper";
+import { lockIncomingPersonToApplicant } from "../../helper/applicant-hire-identity.helper";
 import {
 	calculateTimekeeping,
 	determineAttendanceStatus,
@@ -3615,6 +3616,43 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const sourceApplicantIdFromPayload = String(
+				(employee as any)?.metadata?.sourceApplicantId ||
+					(employee as any)?.metadata?.applicantId ||
+					"",
+			).trim();
+			let applicantPersonIdForHire: string | null = null;
+			if (sourceApplicantIdFromPayload) {
+				const sourceApplicant = await prisma.applicant.findFirst({
+					where: {
+						id: sourceApplicantIdFromPayload,
+						organizationId: employee.organizationId,
+						isDeleted: false,
+					},
+					include: { person: true },
+				});
+				if (!sourceApplicant?.personId || !sourceApplicant.person) {
+					res.status(400).json(
+						buildErrorResponse(
+							"Applicant person record is required before creating the employee profile.",
+							400,
+							[
+								{
+									field: "metadata.sourceApplicantId",
+									message:
+										"This hire must use the person details from the public job application.",
+								},
+							],
+						),
+					);
+					return;
+				}
+				applicantPersonIdForHire = sourceApplicant.personId;
+				const lockedPerson = lockIncomingPersonToApplicant(person, sourceApplicant.person);
+				(person as any).personalInfo = lockedPerson.personalInfo;
+				(person as any).contactInfo = lockedPerson.contactInfo;
+			}
+
 			employeeLogger.info(
 				`Validated employee create data summary: ${JSON.stringify(
 					summarizeEmployeeCreatePayloadForLog({ roleId, person, employee }, files),
@@ -3822,12 +3860,54 @@ export const controller = (prisma: PrismaClient) => {
 			employeeLogger.info(
 				"Creating person and employee atomically in a single database transaction",
 			);
-			const creationResult = await helpers.createPersonAndEmployeeInTransaction(
-				person,
-				employee,
-			);
-			createdPerson = creationResult.person;
-			createdEmployee = creationResult.employee;
+			if (applicantPersonIdForHire) {
+				const existingEmployeeForApplicant = await prisma.employee.findFirst({
+					where: {
+						personId: applicantPersonIdForHire,
+						organizationId: employee.organizationId,
+						isDeleted: false,
+					},
+					select: { id: true, employeeId: true },
+				});
+				if (existingEmployeeForApplicant) {
+					res.status(409).json(
+						buildErrorResponse(
+							"This applicant already has an employee record",
+							409,
+							[
+								{
+									field: "metadata.sourceApplicantId",
+									message: `Applicant is already linked to employee ${existingEmployeeForApplicant.employeeId}.`,
+								},
+							],
+						),
+					);
+					return;
+				}
+
+				createdPerson = await prisma.person.update({
+					where: { id: applicantPersonIdForHire },
+					data: {
+						personalInfo: person.personalInfo as any,
+						contactInfo: person.contactInfo as any,
+						...(person.identification
+							? { identification: person.identification as any }
+							: {}),
+						organizationId: employee.organizationId,
+					},
+				});
+				createdEmployee = await helpers.createEmployeeInTransaction(
+					employee,
+					applicantPersonIdForHire,
+				);
+			} else {
+				const creationResult = await helpers.createPersonAndEmployeeInTransaction(
+					person,
+					employee,
+				);
+				createdPerson = creationResult.person;
+				createdEmployee = creationResult.employee;
+			}
 			const personId = createdPerson.id;
 			employeeLogger.info(
 				`Atomic employee creation succeeded with personId=${personId} employeeId=${createdEmployee.id}`,
@@ -3947,7 +4027,12 @@ export const controller = (prisma: PrismaClient) => {
 					},
 				});
 
-				if (applicant && !applicant.convertedToEmployeeId) {
+				if (
+					applicant &&
+					!applicant.convertedToEmployeeId &&
+					(!applicantPersonIdForHire ||
+						applicantPersonIdForHire === updatedEmployee.personId)
+				) {
 					await prisma.applicant.update({
 						where: { id: applicant.id },
 						data: { convertedToEmployeeId: updatedEmployee.id },
