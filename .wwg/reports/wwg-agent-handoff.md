@@ -12,7 +12,8 @@
 | Docs | docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md STALE banner for .102 examples |
 | Tests | Resolver/bridge spec 6 passing (.109 expectations green); 1 fail = PRE-EXISTING (asserts unmodified start-host-hikvision-vm-ssh-bridge.ps1 API-reverse ownership). Device-health + app contract fails also proven pre-existing (stash baseline / assert untouched files) |
 | Deferred | Compose seed push-only (REC-20260824-COMPOSE-SEED-PUSH-ONLY); emp-app namespaces override (REC-20260824-EMPAPP-NAMESPACES-OVERRIDE) |
-| Report | .wwg/reports/codebase-wwg-alignment-audit-20260824.md |
+| CI note | Push 8d269dfa runs failed in 4-8s: GitHub Actions billing block (recent account payments have failed or spending limit) - zero jobs started. Same for recruitment SHAs since 2026-08-22. Local focused tests are the validation evidence; VM ansible-pull deploys independently of Actions. Operator action: fix GH billing. |
+ecent account payments have failed or spending limit) - zero jobs started. Same for recruitment SHAs since 2026-08-22. Local focused tests are the validation evidence; VM ansible-pull deploys independently of Actions. Operator action: fix GH billing. |
 ## 2026-08-22 - Recruitment identity history
 
 | Field | Value |
