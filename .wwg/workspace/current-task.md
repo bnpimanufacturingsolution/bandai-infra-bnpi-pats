@@ -1,5 +1,12 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-24 Toast X removal canonized
+
+- Operator: X on success/error toasts was supposed to be gone; it reappeared on the fleet clock-sync toast.
+- Cause: sonner closeButton on global Toaster since standalone-era import 4ce3712d (2026-06-17); the no-X memory was the custom toms/Toast surface.
+- Fixed root.tsx; canonized in DESIGN.md (Toasts), terminology (Toast close button), pinned by 	oast-ux-contract.test.ts. emp-app check pending (submodule not checked out locally).
+# Current Task
+
 ## Latest Task Addendum - 2026-08-24 Fleet Hikvision time sync button + live clock snap
 
 - Operator authorized live write on A/B/D/E, then asked for an HRIS button to trigger fleet time sync.

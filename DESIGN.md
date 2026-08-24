@@ -68,3 +68,12 @@ When the operator says “that clean design” or “Carpati UI”, pull this. T
 ## Motion
 
 Use only component-default state motion. Avoid decorative page-load animations in admin workflows.
+
+## Toasts
+
+Success/error/warning/info toasts have **no close (X) button**. They auto-dismiss and are swipe-dismissible.
+
+- Global sonner Toaster (pp/root.tsx): ichColors, position="top-right", **never closeButton**, swipe directions enabled.
+- Custom toms/Toast (ToastProvider): auto-dismiss only; no manual close icon.
+- Rationale: the X re-appeared from the 2026-06-17 standalone-era import (4ce3712d) and read as clutter on every toast. Operator canon since 2026-08-24: toasts dismiss themselves; no X.
+- Contract test: pp/lib/toast-ux-contract.test.ts pins the no-closeButton config so it cannot sneak back.

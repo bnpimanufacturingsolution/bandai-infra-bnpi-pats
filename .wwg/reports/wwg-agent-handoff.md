@@ -1,5 +1,15 @@
 # WWG Agent Handoff
 
+## 2026-08-24 - Toast close (X) button removed + canonized
+
+| Field | Value |
+|---|---|
+| Symptom | X on success toasts (fleet clock-sync toast) "came back" |
+| Root cause | Global sonner Toaster closeButton in root.tsx, imported 2026-06-17 (4ce3712d, standalone era); never removed on develop. Custom toms/Toast (the no-X one operator remembered) coexists |
+| Fix | Removed closeButton; DESIGN.md Toasts standard; terminology row; contract test pp/lib/toast-ux-contract.test.ts pins no-X |
+| Parity | hris-emp-app submodule not checked out locally - verify when present (no closeButton found in repo refs) |
+
+
 ## 2026-08-24 - Fleet Hikvision time sync (button + endpoint)
 
 | Field | Value |
