@@ -126,6 +126,32 @@
 - T.4 Gov APIs: only local rate tables (SSS_CONFIG, pagibigRates) and PDF outputs exist — no HTTP client to any agency endpoint was ever written; "reports" satisfy the letter of outputs, not integration.
 - T.6 Backups: the app-DB backup is a manual script; the cron container's daily job is placeholder example code that was never wired; the only offsite mirror is disabled by default and covers the images bucket, not database dumps.
 
+## Completion rate
+
+**Scoring:** PRESENT = 1.0 · PARTIAL = 0.5 · MISSING = 0
+
+| Measure | Result |
+|---|---|
+| Fully present | **12/36 = 33%** |
+| Weighted score | (12 + 17×0.5) / 36 = 20.5/36 = **~57%** |
+| Missing outright | 7/36 = 19% |
+
+### Per-module rates
+
+| Module | Weighted | Rate |
+|---|---|---|
+| M2 Attendance & Timekeeping | 4.0/5 | 80% |
+| M4 Employee Records & Lifecycle | 4.0/5 | 80% |
+| M5 Manpower & Statutory Reports | 3.0/4 | 75% |
+| M7 Recruitment & Onboarding | 2.0/3 | 67% |
+| M1 Payroll & Compensation | 3.0/5 | 60% |
+| Technical Requirements | 3.5/6 | 58% |
+| M3 Leave & Disciplinary Management | 1.5/3 | 50% |
+| M8 Accounting & Compliance | 0.5/2 | 25% |
+| M6 Training & Performance | 0.0/3 | 0% |
+
+**Honesty caveat:** PARTIAL = 0.5 is blunt; the true weighted range is roughly **50–62%**. Item 2.5 (orphaned tabs) is ~90% done while 6.3 (mock-only tabs) is ~10%. Weighted by build effort rather than item count, the overall rate drops slightly — the MISSING items (Training module, gov APIs, terminal pay/annual BIR forms) are large builds while many PARTIALs are small wiring jobs.
+
 ## Top gaps (recommended next-work order)
 
 1. **Training & Performance module** — entirely absent (model, API, UI)
