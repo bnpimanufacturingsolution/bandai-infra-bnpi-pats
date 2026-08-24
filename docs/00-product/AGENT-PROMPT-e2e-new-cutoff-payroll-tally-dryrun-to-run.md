@@ -11,6 +11,13 @@ Related:
 - Column map / sources: `docs/BNPI_JUNE11_25_2026_PAYROLL_PARITY_CHECKLIST.md`
 - Comparison engine: `hris-api/scripts/dry-run-bandai-payroll-comparison.ts`
 - Preview engine (same as Run Payroll preview): `previewPayrollFromTimesheets` in `payroll-period.helper.ts`
+  - **2026-08-12:** Preview dry-run may include non-APPROVED timesheets
+    (`DRAFT`/`SUBMITTED`/`REJECTED`/`REVISED`) as **estimate-only** rows when
+    salary+schedule exist. Money uses lines/benefits (status alone does not
+    change pay). **Start Payroll** still counts only
+    `summary.includedEmployeesCount` (APPROVED ready). Prefer
+    `previewComputableEmployeesCount` + row `isPayrollReady` when classifying
+    readiness vs dry-run coverage.
 
 ---
 
@@ -55,7 +62,7 @@ Evidence: .runtime/payroll-tally-e2e-<stamp>/
 | Rank | Source | Role |
 |---:|---|---|
 | 1 | BNPI **register** `.xlsx` for that cutoff (password **9090**) | Target money columns |
-| 2 | `previewPayrollFromTimesheets` / Run Payroll **preview** | Live engine truth before/after re-gen |
+| 2 | `previewPayrollFromTimesheets` / Run Payroll **preview** | Live engine truth before/after re-gen. May include estimate-only non-APPROVED rows; filter `isPayrollReady===true` when tallying “payable” only |
 | 3 | `EmployeePayroll` stored row | Only after successful generate; may be **STALE** if period COMPLETED before source fix |
 | 4 | `EmployeeBenefit` + `reconciliationAction` | INC/ARP/PFA = **RECEIVABLE_ONLY**; AON/TSA/OBA = **GROSS_INCLUDED** |
 | 5 | Timesheet lines + `bandaiPayrollSourceRepair` | Approved OT hours |

@@ -222,10 +222,15 @@ export interface BulkAdjustPayrollPeriodsResponse {
 export interface TimesheetPayrollPreviewSummary {
 	scopeEmployeesCount?: number;
 	approvedTimesheetsCount: number;
+	/** APPROVED + payroll inputs — Start Payroll payable count. */
 	includedEmployeesCount: number;
+	/** Dry-run rows including not-submitted / pending timesheets. */
+	previewComputableEmployeesCount?: number;
 	excludedEmployeesCount: number;
 	approvedExcludedEmployeesCount?: number;
 	notSubmittedEmployeesCount?: number;
+	/** Estimates include rows that are not payroll-ready yet. */
+	estimatedIncludesNonApproved?: boolean;
 	estimatedGrossPay: number;
 	estimatedTotalDeductions: number;
 	estimatedNetPay: number;
@@ -242,6 +247,14 @@ export interface TimesheetPayrollPreviewEmployee {
 	timesheetId: string;
 	timesheetCode?: string;
 	timesheetStatus?: string;
+	isPayrollReady?: boolean;
+	readinessKey?:
+		| "payroll_ready"
+		| "not_submitted"
+		| "pending_approval"
+		| "needs_correction"
+		| "unknown";
+	readinessLabel?: string;
 	payrollComputationStatus?: string;
 	basicPay?: number;
 	overtimePay?: number;

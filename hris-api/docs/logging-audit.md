@@ -840,7 +840,7 @@ Logging is **manual per handler** — no global middleware, decorator, or interc
 |------|-------|---------|:--------:|:-----:|:------:|-------|
 | GET | `/api/payrollPeriod/` | getAll | Yes | No | No | activity-only on read |
 | GET | `/api/payrollPeriod/:id` | getById | Yes | No | No | activity-only on read |
-| GET | `/api/payrollPeriod/:id/generate-timesheet/preview` | previewTimesheetPayroll | Yes | No | No | activity-only on read |
+| GET | `/api/payrollPeriod/:id/generate-timesheet/preview` | previewTimesheetPayroll | Yes | No | No | activity-only on read; dry-run may include non-APPROVED timesheets as estimate-only (2026-08-12); Start Payroll still APPROVED-only |
 | GET | `/api/payrollPeriod/:id/generate-timesheet/progress` | getActiveTimesheetGenerationProgress | Yes | No | No | activity-only on read |
 | GET | `/api/payrollPeriod/config` | getConfig | Yes | No | No | activity-only on read |
 | GET | `/api/payrollPeriod/generate-timesheet/progress/:jobId` | getTimesheetGenerationProgress | No | No | No | — |

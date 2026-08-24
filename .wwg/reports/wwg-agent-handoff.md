@@ -1,5 +1,15 @@
 ﻿# WWG Agent Handoff
 
+## 2026-08-20 - Sheet2 vs confidential-files import gaps (TR)
+
+- Status: `INVESTIGATED`.
+- Jul pack has Bio/WS/OT/COMP/DED only — **no period leave-usage file**.
+- Sheet2 **Leave**: **376 people / ₱445k**; local Jul `LEAVE` lines = **0**; preview `leavePay=0`.
+- Other weak/missing Jul mass: MLA (0 in Jul COMP; prior open-horizon 831), HYS, OAD,
+  UFD, DMA (0 in Jul COMP). Gifts/CTC/shuttle/ACL conversion = ₱0 this cut.
+- Evidence: `.runtime/sheet2-import-gap-20260820/REPORT.md`
+- Next if matching Sheet2 guide: import period leave pay/usage; confirm MLA per cut.
+
 ## 2026-08-20 - Durable WS-off vs OT apply (01116 proof)
 
 - Status: `IMPLEMENTED_LOCAL_PROVEN` (local test DB).
