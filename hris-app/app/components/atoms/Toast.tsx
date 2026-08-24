@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
+import { CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
 
 export interface ToastProps {
 	id: string;
@@ -87,13 +87,6 @@ export function Toast({ id, type, title, message, duration = 5000, onClose }: To
 				<div className="ml-3 flex-1">
 					{title && <h3 className={`text-sm font-medium ${getTextColor()}`}>{title}</h3>}
 					<p className={`text-sm ${getTextColor()} ${title ? "mt-1" : ""}`}>{message}</p>
-				</div>
-				<div className="ml-4 flex-shrink-0">
-					<button
-						onClick={handleClose}
-						className={`inline-flex rounded-md p-1.5 ${getTextColor()} hover:bg-black hover:bg-opacity-5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-gray-500`}>
-						<X className="w-4 h-4" />
-					</button>
 				</div>
 			</div>
 		</div>
