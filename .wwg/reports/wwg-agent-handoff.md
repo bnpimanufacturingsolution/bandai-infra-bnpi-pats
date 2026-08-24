@@ -8,7 +8,7 @@
 | Endpoint | POST /api/device/time-sync-all — preview-first, Hikvision-only, deviceIds scope, concurrency 2 |
 | Core | unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallback) |
 | UI | Devices page **Sync device time** -> preview modal -> Update N clocks |
-| Tests | API 8 passing; app 2 passing |
+| Tests | API contract 9 + behavior 8; app contract 2 + RTL modal 4 — all passing |
 | Live | Preview 11 targets / 4 readable; scoped execute 4/4 written sdk_stdxml |
 | Evidence | .runtime/time-sync-all-smoke-20260824-151249/smoke.json; SHA af6d607 |
 
