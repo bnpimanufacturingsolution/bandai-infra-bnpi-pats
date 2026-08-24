@@ -180,6 +180,32 @@ export type HikvisionDeviceTimeSyncResponse = {
 	sdkError?: string | null;
 };
 
+export type HikvisionDeviceTimeSyncAllRow = {
+	deviceId: string;
+	name: string;
+	address: string | null;
+	ok: boolean;
+	transport: "sdk_stdxml" | "isapi_http" | null;
+	wrote: boolean;
+	before: HikvisionDeviceTimeSnapshot | null;
+	after: HikvisionDeviceTimeSnapshot | null;
+	plannedWrite: {
+		timeMode: string;
+		localTime: string;
+		timeZone: string;
+	} | null;
+	error: string | null;
+};
+
+export type HikvisionDeviceTimeSyncAllResponse = {
+	execute: boolean;
+	totalTargets: number;
+	readable: number;
+	written: number;
+	failed: number;
+	results: HikvisionDeviceTimeSyncAllRow[];
+};
+
 export interface DeviceHealthResponse {
 	device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {
 		baseUrl?: string;
@@ -2882,6 +2908,27 @@ class DevicesService extends APIService {
 		} catch (error: any) {
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error updating Hikvision time",
+			);
+		}
+	}
+
+	async syncHikvisionDeviceTimeAll(payload: {
+		execute?: boolean;
+		deviceIds?: string[];
+	}): Promise<HikvisionDeviceTimeSyncAllResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/time-sync-all", {
+				execute: payload.execute === true,
+				deviceIds: payload.deviceIds,
+			});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to run Hikvision bulk time sync");
+			return data as HikvisionDeviceTimeSyncAllResponse;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error running Hikvision bulk time sync",
 			);
 		}
 	}
