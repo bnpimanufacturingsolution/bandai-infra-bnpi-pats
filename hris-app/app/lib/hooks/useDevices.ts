@@ -21,6 +21,8 @@ import devicesService, {
 	type DeleteDeviceUserRequest,
 	type DeleteDeviceUsersRequest,
 	type DeviceEventsResetScope,
+	type HikvisionDeviceTimeSyncResponse,
+	type HikvisionDeviceTimeSyncAllResponse,
 	type HikvisionListenerAction,
 	type HikvisionListenerStatus,
 	type DeviceLiveReadiness,
@@ -120,6 +122,19 @@ export const useDevice = (id: string) => {
 		queryFn: () => devicesService.getDeviceById(id) as any,
 		enabled: !!id,
 		staleTime: 5 * 60 * 1000, // 5 minutes
+	});
+};
+
+/** Saved-event details deeplink. See docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md */
+export const useDeviceEvent = (eventId?: string | null, enabled = true) => {
+	const id = String(eventId || "").trim();
+	return useQuery<DeviceEventsResponse>({
+		queryKey: [...queryKeys.devices.all, "event", id],
+		queryFn: () => devicesService.getDeviceEventById(id),
+		enabled: enabled && Boolean(id),
+		staleTime: 0,
+		retry: 1,
+		refetchOnWindowFocus: false,
 	});
 };
 
@@ -1035,6 +1050,54 @@ export const useMockHikvisionFaceTally = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to update synthetic face tally");
+		},
+	});
+};
+
+export const useHikvisionDeviceTimeSyncAll = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: { execute?: boolean; deviceIds?: string[] }) => {
+			return await devicesService.syncHikvisionDeviceTimeAll(payload);
+		},
+		onSuccess: (result: HikvisionDeviceTimeSyncAllResponse) => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			if (result.execute) {
+				sonnerToast.success(
+					result.written > 0
+						? `Updated clocks on ${result.written}/${result.totalTargets} Hikvision devices`
+						: "No Hikvision clock could be written this run",
+				);
+			}
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to run Hikvision bulk time sync");
+		},
+	});
+};
+
+export const useHikvisionDeviceTimeSync = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: { deviceId: string; execute?: boolean }) => {
+			return await devicesService.syncHikvisionDeviceTime(payload);
+		},
+		onSuccess: (result: HikvisionDeviceTimeSyncResponse, variables) => {
+			queryClient.invalidateQueries({
+				queryKey: queryKeys.devices.health(variables.deviceId),
+			});
+			if (result.execute) {
+				sonnerToast.success(
+					result.wrote
+						? `Updated ${result.device.name} to Manila time`
+						: `Time write sent to ${result.device.name}; re-read was unclear`,
+				);
+			}
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to update Hikvision time");
 		},
 	});
 };

@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 import { Save, Settings, FileText, Calculator, Clock, Loader2 } from "lucide-react";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 import { RulesPoliciesShell } from "~/components/templates/admin/rules-policies-shell";
 import { Switch } from "~/components/ui/switch";
 import {
@@ -1959,24 +1960,22 @@ export function PayrollSettingsModule({
 											))}
 										</SelectContent>
 									</Select>
-									<Input
-										type="date"
+									<CalendarDatePicker
 										value={generationForm.rangeStart}
-										onChange={(e) =>
+										onChange={(next) =>
 											setGenerationForm((prev) => ({
 												...prev,
-												rangeStart: e.target.value,
+												rangeStart: next,
 											}))
 										}
 										className="h-10 rounded-md border-gray-200 bg-white"
 									/>
-									<Input
-										type="date"
+									<CalendarDatePicker
 										value={generationForm.rangeEnd}
-										onChange={(e) =>
+										onChange={(next) =>
 											setGenerationForm((prev) => ({
 												...prev,
-												rangeEnd: e.target.value,
+												rangeEnd: next,
 											}))
 										}
 										className="h-10 rounded-md border-gray-200 bg-white"

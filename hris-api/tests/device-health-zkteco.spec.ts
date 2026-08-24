@@ -528,9 +528,9 @@ describe("device health ZKTeco Linux bridge", () => {
 
 	it("uses NODE_HOST_IP as the K3s bridge status URL fallback", async () => {
 		delete process.env.ZKTECO_BRIDGE_STATUS_URL;
-		process.env.NODE_HOST_IP = "10.184.38.144";
+		process.env.NODE_HOST_IP = "10.184.37.19";
 		global.fetch = (async (input: any) => {
-			expect(String(input)).to.equal("http://10.184.38.144:4371/preview?deviceIp=10.184.38.9");
+			expect(String(input)).to.equal("http://10.184.37.19:4371/preview?deviceIp=10.184.38.9");
 			return {
 				ok: true,
 				status: 200,
@@ -595,7 +595,7 @@ describe("device health ZKTeco Linux bridge", () => {
 		await deviceController.getDeviceSyncPreview(req as any, res as any, (() => undefined) as any);
 
 		expect(statusCode).to.equal(200);
-		expect(body.data.bridge.statusUrl).to.equal("http://10.184.38.144:4371/preview?deviceIp=10.184.38.9");
+		expect(body.data.bridge.statusUrl).to.equal("http://10.184.37.19:4371/preview?deviceIp=10.184.38.9");
 		expect(body.data.devices[0]).to.include({
 			vendorEventCount: 8410,
 			vendorUserCount: 25,

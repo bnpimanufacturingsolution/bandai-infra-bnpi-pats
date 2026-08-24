@@ -48,12 +48,34 @@ When a table column is a **count, total, or aggregate** (e.g. Enrolled, Members,
 
 Canonical example: Benefits Management **Enrolled** via `employeeBenefitService.countByBenefitTypeId` (`document=false&count=true`).
 
+## Shrink, Hide, Embody (SHE)
+
+Operator UI doctrine (John Maeda). Full brief: `.wwg/wiki/principles/shrink-hide-embody.md`.
+
+- **Shrink** — make the surface feel smaller. Fewer boxes, narrower detail modals, one list instead of a card grid.
+- **Hide** — keep complexity off first paint. Raw payload and debug fields go in a **closed** accordion.
+- **Embody** — what remains must be complete enough to act (person, event, time, result, terminal, device status).
+
+When the operator says “that clean design” or “Carpati UI”, pull this. The third word is **Hide**.
+
 ## Components
 
 - Use existing Radix/shadcn accordion, select, switch, input, and button components.
 - Use numeric badges for operational counts.
 - Dropdowns/selects should keep the existing bordered white control vocabulary.
+- **Icon + label together.** Action buttons show a lucide icon and the full words (`Device user`, `Employee record`). Detail rows show a small icon beside the label. Do not ship icon-only controls or strip icons when cleaning a screen.
 
 ## Motion
 
 Use only component-default state motion. Avoid decorative page-load animations in admin workflows.
+
+## Toasts
+
+Success/error/warning/info toasts have **no close (X) button**. They auto-dismiss and are swipe-dismissible.
+
+- Global sonner Toaster (pp/root.tsx): 
+ichColors, position="top-right", **never closeButton**, swipe directions enabled.
+- Custom toms/Toast (ToastProvider): auto-dismiss only; no manual close icon.
+- **Scope: toasts only.** Modals/dialogs keep their X (`Modal`/`Dialog` `showCloseButton` defaults true) - do not apply this ban to modals.
+- Rationale: the X re-appeared from the 2026-06-17 standalone-era import (4ce3712d) and read as clutter on every toast. Operator canon since 2026-08-24: toasts dismiss themselves; no X.
+- Contract test: pp/lib/toast-ux-contract.test.ts pins the no-closeButton config so it cannot sneak back.

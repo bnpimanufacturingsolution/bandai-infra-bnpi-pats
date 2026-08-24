@@ -13,6 +13,7 @@ import type { FormData } from "~/types/employee-form.types";
 
 interface PersonalIDsFormProps {
 	form: UseFormReturn<FormData>;
+	lockApplicantIdentity?: boolean;
 }
 
 const genderOptions = [
@@ -97,7 +98,7 @@ const idTypeOptions = [
 	{ value: "voters_id", label: "Voter's ID" },
 ];
 
-export function PersonalIDsForm({ form }: PersonalIDsFormProps) {
+export function PersonalIDsForm({ form, lockApplicantIdentity = false }: PersonalIDsFormProps) {
 	const {
 		register,
 		control,
@@ -135,6 +136,11 @@ export function PersonalIDsForm({ form }: PersonalIDsFormProps) {
 				<h3 className="text-lg font-semibold text-foreground pb-2 border-b border-border">
 					Personal Information
 				</h3>
+				{lockApplicantIdentity ? (
+					<p className="text-sm text-muted-foreground">
+						First name, last name, and email come from the public job application and cannot be changed here.
+					</p>
+				) : null}
 
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 					<div data-field-path="person.personalInfo.firstName">
@@ -149,8 +155,9 @@ export function PersonalIDsForm({ form }: PersonalIDsFormProps) {
 								errors.person?.personalInfo?.firstName
 									? "border-red-300 focus:border-red-500"
 									: "border-border"
-							} bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary`}
+							} bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70`}
 							maxLength={EMPLOYEE_FORM_LIMITS.firstName}
+							disabled={lockApplicantIdentity}
 							{...register("person.personalInfo.firstName", {
 								required: "First name is required",
 							})}
@@ -197,8 +204,9 @@ export function PersonalIDsForm({ form }: PersonalIDsFormProps) {
 								errors.person?.personalInfo?.lastName
 									? "border-red-300 focus:border-red-500"
 									: "border-border"
-							} bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary`}
+							} bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70`}
 							maxLength={EMPLOYEE_FORM_LIMITS.lastName}
+							disabled={lockApplicantIdentity}
 							{...register("person.personalInfo.lastName", {
 								required: "Last name is required",
 							})}
@@ -325,8 +333,9 @@ export function PersonalIDsForm({ form }: PersonalIDsFormProps) {
 								errors.person?.contactInfo?.email
 									? "border-red-300 focus:border-red-500"
 									: "border-border"
-							} bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary`}
+							} bg-background px-3 py-2 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-70`}
 							maxLength={EMPLOYEE_FORM_LIMITS.contactEmail}
+							disabled={lockApplicantIdentity}
 							{...register("person.contactInfo.email", {
 								required: "Email is required",
 							})}

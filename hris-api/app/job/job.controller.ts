@@ -24,6 +24,7 @@ import {
 	resolveWorkforcePolicy,
 	serializeWorkforceRecruitmentSetting,
 } from "../../helper/workforce-recruitment.helper";
+import { resolvePublicJobListOrganizationId } from "../../helper/public-job-org.helper";
 
 const logger = getLogger();
 const jobLogger = logger.child({ module: "job" });
@@ -227,17 +228,27 @@ export const controller = (prisma: PrismaClient) => {
 	};
 	const getAll = async (req: Request, res: Response, _next: NextFunction) => {
 		const validationResult = validateQueryParams(req, jobLogger);
-		const organizationId = (req as any).organizationId;
 
 		if (!validationResult.isValid) {
 			res.status(400).json(validationResult.errorResponse);
 			return;
 		}
 
-		if (!organizationId) {
-			res.status(401).json(buildErrorResponse("Organization ID is required", 401));
+		const orgResolution = await resolvePublicJobListOrganizationId(prisma, {
+			tokenOrganizationId:
+				(req as any).organizationId || (req as any).user?.organizationId || null,
+			organizationId: req.query.organizationId as string | undefined,
+			organizationCode: req.query.organizationCode as string | undefined,
+		});
+		if (!orgResolution.ok) {
+			res.status(400).json(
+				buildErrorResponse(orgResolution.message, 400, [
+					{ field: orgResolution.field, message: orgResolution.message },
+				]),
+			);
 			return;
 		}
+		const organizationId = orgResolution.organizationId;
 
 		const {
 			page,

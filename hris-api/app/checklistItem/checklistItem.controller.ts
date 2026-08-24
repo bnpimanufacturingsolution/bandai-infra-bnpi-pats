@@ -622,8 +622,8 @@ export const controller = (prisma: PrismaClient) => {
 									sourceEmployeeId: boardingProcess.employeeId,
 									category: "BOARDING",
 									title: isOffboarding
-										? "Exit Clearance Completed! ðŸŽ‰"
-										: "Onboarding Completed! ðŸŽ‰",
+										? "Exit Clearance Completed!"
+										: "Onboarding Completed!",
 									description: isOffboarding
 										? `${employeeName} has completed their exit clearance process. All tasks are done.`
 										: `${employeeName} has completed all onboarding tasks. Welcome to the team!`,
@@ -663,18 +663,18 @@ export const controller = (prisma: PrismaClient) => {
 									const room = `employee:${recipientId}`;
 									io.to(room).emit("notification:new", notification);
 									checklistItemLogger.info(
-										`âœ… Socket notification emitted to room: ${room}`,
+										`Socket notification emitted to room: ${room}`,
 									);
 								});
 
 								// Also emit globally for debugging purposes
 								io.emit("notification:broadcast", notification);
 								checklistItemLogger.info(
-									`ðŸ“¢ Broadcast notification emitted to all connected sockets`,
+									"Broadcast notification emitted to all connected sockets",
 								);
 							} else {
 								checklistItemLogger.warn(
-									"âŒ Socket.io instance not available on request",
+									"Socket.io instance not available on request",
 								);
 							}
 						}

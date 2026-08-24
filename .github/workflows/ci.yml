@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - develop
+      - uat
+      - production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hris-api:
+    name: hris-api
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: hris-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: hris-api/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Source-truth tests
+        run: npm run test:regression:payroll-source-truth
+
+  hris-app:
+    name: hris-app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: hris-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: hris-app/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Unit tests
+        run: npm run test:payroll-correction
+
+  hris-emp-app:
+    name: hris-emp-app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - name: Check out employee app if present
+        run: |
+          set -euo pipefail
+          if [ ! -f hris-emp-app/package.json ]; then
+            echo "::notice title=hris-emp-app skipped::Submodule not present in this checkout. Job succeeds without tests."
+            echo "## hris-emp-app" >> "$GITHUB_STEP_SUMMARY"
+            echo "Skipped: submodule not present. This is **not** emp-app test proof." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "EMP_PRESENT=1" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        if: env.EMP_PRESENT == '1'
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: hris-emp-app/package-lock.json
+      - name: Install and test
+        if: env.EMP_PRESENT == '1'
+        working-directory: hris-emp-app
+        run: |
+          npm ci
+          if npm run | grep -q 'test:ci'; then
+            npm run test:ci
+          elif npm run | grep -qE '^  test$'; then
+            npm test
+          else
+            echo "No test script; skip"
+          fi
+
+  hikvision:
+    name: hikvision
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Probe unit tests
+        run: |
+          python -m pip install -r vendor/hikvision-linux/requirements.txt
+          python -m unittest discover -s vendor/hikvision-linux/tests -v
+
+  zkteco:
+    name: zkteco
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Probe unit tests
+        run: |
+          python -m pip install -r vendor/zkteco-linux/requirements.txt
+          python -m unittest discover -s vendor/zkteco-linux/tests -v
+
+  ansible:
+    name: ansible
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax-check pull playbook
+        run: |
+          python -m pip install "ansible-core>=2.16,<2.19"
+          ansible-playbook --syntax-check -i localhost, ansible/project-truth-pull.yml
+
+  callback-outbox:
+    name: callback-outbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Syntax check
+        run: python -m py_compile services/callback-outbox/outbox_server.py
+
+  gitops:
+    name: gitops
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.4
+      - name: Render GitOps overlays
+        run: |
+          set -euo pipefail
+          kubectl kustomize gitops/argocd/platform
+          kubectl kustomize gitops/overlays/dev
+          kubectl kustomize gitops/overlays/uat
+          kubectl kustomize gitops/overlays/prod
+          kubectl kustomize gitops/runtime-k8s/overlays/dev
+          kubectl kustomize gitops/runtime-k8s/overlays/uat
+          kubectl kustomize gitops/runtime-k8s/overlays/prod

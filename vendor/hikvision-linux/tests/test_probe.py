@@ -16,6 +16,29 @@ from hikvision_linux_probe.__main__ import (  # noqa: E402
     extract_count,
 )
 
+_VENDOR_ROOT = Path(__file__).resolve().parents[1]
+_HIKVISION_BIO_CPP_UNITS = (
+    "common.cpp",
+    "time.cpp",
+    "acs.cpp",
+    "identity.cpp",
+    "fingerprint.cpp",
+    "face.cpp",
+    "copy.cpp",
+    "spool.cpp",
+    "runtime.cpp",
+    "main.cpp",
+)
+
+
+def hikvision_bio_source_text() -> str:
+    include_dir = _VENDOR_ROOT / "include" / "hikvision_bio"
+    src_dir = _VENDOR_ROOT / "src" / "hikvision_bio"
+    # Definitions first so split("bool foo(") hits the body, not a header decl.
+    units = [(src_dir / name).read_text(encoding="utf-8") for name in _HIKVISION_BIO_CPP_UNITS]
+    headers = [path.read_text(encoding="utf-8") for path in sorted(include_dir.glob("*.hpp"))]
+    return "\n".join(units + headers)
+
 
 class ProbeTests(unittest.TestCase):
     def test_parse_named_http_target(self) -> None:
@@ -92,8 +115,7 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(extract_count(payload, ("AcsEvent",)), 746)
 
     def test_biometric_service_keeps_callback_light_and_queues_reconcile(self) -> None:
-        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
-        text = source.read_text(encoding="utf-8")
+        text = hikvision_bio_source_text()
 
         self.assertIn("NET_DVR_SetDVRMessageCallBack_V51(0, alarm_callback, nullptr)", text)
         self.assertIn("NET_DVR_SetupAlarmChan_V50", text)
@@ -111,8 +133,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("MINOR_MOD_FINGER_BY_EMPLOYEE_NO", text)
 
     def test_attendance_posts_on_an_independent_non_enriching_lane(self) -> None:
-        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
-        text = source.read_text(encoding="utf-8")
+        text = hikvision_bio_source_text()
 
         self.assertIn("std::deque<ReconcileJob> hris_immediate_event_queue", text)
         self.assertIn("std::deque<ReconcileJob> hris_enrichment_event_queue", text)
@@ -133,8 +154,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("post_hikvision_callback(hris_job)", enrichment_loop)
 
     def test_callback_http_retries_do_not_hold_the_spool_mutex(self) -> None:
-        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
-        text = source.read_text(encoding="utf-8")
+        text = hikvision_bio_source_text()
 
         post_body = text.split("bool post_hikvision_callback(const ReconcileJob &job)", 1)[1].split(
             "bool post_hris_contract(", 1
@@ -153,15 +173,13 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("immediate ? 5 : 30", post_body)
 
     def test_lane_specific_workers_are_woken_without_polling_only(self) -> None:
-        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
-        text = source.read_text(encoding="utf-8")
+        text = hikvision_bio_source_text()
 
         self.assertNotIn("queue_cv.notify_one()", text)
         self.assertIn("queue_cv.notify_all()", text)
 
     def test_managed_listener_can_pause_automatic_peer_writes_without_disarming(self) -> None:
-        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
-        text = source.read_text(encoding="utf-8")
+        text = hikvision_bio_source_text()
 
         self.assertIn('std::getenv("HIKVISION_AUTOMATIC_PEER_RECONCILE")', text)
         self.assertIn('"automatic_peer_reconcile_paused"', text)
@@ -170,8 +188,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn('"automaticPeerReconcile"', text)
 
     def test_stored_face_writer_is_secure_serial_disabled_and_reread_verified(self) -> None:
-        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
-        text = source.read_text(encoding="utf-8")
+        text = hikvision_bio_source_text()
 
         self.assertIn("--stored-face-payload-file", text)
         self.assertIn("payload_permissions_must_be_0600", text)
@@ -191,7 +208,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn('card_no.empty() ? "" : "[redacted]"', text)
 
         stored_writer = text.split("bool write_stored_face_with_reread(", 1)[1].split(
-            "NET_DVR_FINGER_PRINT_CFG_V50 build_fingerprint_record", 1
+            "bool export_biometric_templates_for_employee(", 1
         )[0]
         gate_position = stored_writer.index(
             'std::getenv("HIKVISION_ENABLE_STORED_FACE_WRITE")'
@@ -208,8 +225,7 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn("facePicture", stored_writer.split("emit_json", 1)[1])
 
     def test_card_lookup_falls_back_to_exact_owner_full_inventory_without_logging_values(self) -> None:
-        source = Path(__file__).resolve().parents[1] / "hikvision_biometric_service.cpp"
-        text = source.read_text(encoding="utf-8")
+        text = hikvision_bio_source_text()
 
         card_reader = text.split("bool read_source_card(", 1)[1].split(
             "std::string build_sync_card_no", 1
@@ -284,7 +300,8 @@ class ProbeTests(unittest.TestCase):
         script = Path(__file__).resolve().parents[1] / "scripts" / "build-hikvision-biometric-service.sh"
         text = script.read_text(encoding="utf-8")
 
-        self.assertIn("hikvision_biometric_service.cpp", text)
+        self.assertIn("src/hikvision_bio/main.cpp", text)
+        self.assertIn("src/hikvision_bio/acs.cpp", text)
         self.assertIn("hikvision-biometric-service", text)
         self.assertNotIn("hcnetsdk_alarm_probe.cpp", text)
         self.assertNotIn("hcnetsdk_alarm_probe", text)

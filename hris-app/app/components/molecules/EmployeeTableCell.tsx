@@ -11,6 +11,7 @@ interface EmployeeTableCellProps {
 	className?: string;
 	stopPropagation?: boolean;
 	onClick?: () => void;
+	size?: "sm" | "md";
 }
 
 export function EmployeeTableCell({
@@ -22,22 +23,36 @@ export function EmployeeTableCell({
 	className,
 	stopPropagation = false,
 	onClick,
+	size = "md",
 }: EmployeeTableCellProps) {
 	const navigate = useNavigate();
 	const resolvedName = fullName?.trim() || employeeId || fallbackName;
 	const resolvedEmployeeId = employeeId?.trim() || "-";
+	const isCompact = size === "sm";
 
 	const content = avatar !== undefined ? (
-		<div className="flex min-w-0 items-center gap-3">
+		<div className={cn("flex min-w-0 items-center", isCompact ? "gap-2" : "gap-3")}>
 			<EmployeeAvatar
 				src={avatar}
 				alt={resolvedName}
-				size="md"
+				size={isCompact ? "sm" : "md"}
 				className="shrink-0"
 			/>
 			<div className="flex min-w-0 flex-col">
-				<span className="truncate text-sm font-medium text-gray-900">{resolvedName}</span>
-				<span className="truncate text-xs text-gray-500">{resolvedEmployeeId}</span>
+				<span
+					className={cn(
+						"truncate font-medium text-gray-900",
+						isCompact ? "text-xs leading-4" : "text-sm",
+					)}>
+					{resolvedName}
+				</span>
+				<span
+					className={cn(
+						"truncate text-gray-500",
+						isCompact ? "text-[10px] leading-3" : "text-xs",
+					)}>
+					{resolvedEmployeeId}
+				</span>
 			</div>
 		</div>
 	) : (

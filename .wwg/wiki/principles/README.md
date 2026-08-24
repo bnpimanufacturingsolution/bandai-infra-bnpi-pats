@@ -33,6 +33,7 @@ If uncertain, agents should create a candidate principle note or mention the pos
 | Principle | Path | Use when |
 |---|---|---|
 | Evidence Over Assumption | `./evidence-over-assumption.md` | Every agent session; any claim about product truth, runtime, Device Events, Sync logs, or “done” |
+| Shrink, Hide, Embody (SHE) | `./shrink-hide-embody.md` | Admin/product UI cleanup; Device Events details; “make it clean”; “Carpati UI” |
 
 ## Candidate principles
 

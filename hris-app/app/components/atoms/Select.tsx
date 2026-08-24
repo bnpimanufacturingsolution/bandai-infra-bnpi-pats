@@ -46,6 +46,7 @@ export const Select: React.FC<SelectProps> = ({
 	const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
 	const selectRef = useRef<HTMLDivElement>(null);
 	const listRef = useRef<HTMLDivElement>(null);
+	const selectedOptionRef = useRef<HTMLDivElement>(null);
 
 	const updateDropdownPosition = useCallback(() => {
 		if (!selectRef.current || typeof window === "undefined") return;
@@ -128,6 +129,11 @@ export const Select: React.FC<SelectProps> = ({
 			window.removeEventListener("scroll", updateDropdownPosition, true);
 		};
 	}, [isOpen, updateDropdownPosition]);
+
+	useEffect(() => {
+		if (!isOpen) return;
+		selectedOptionRef.current?.scrollIntoView({ block: "center", inline: "nearest" });
+	}, [isOpen, value]);
 
 	// Handle keyboard navigation
 	useEffect(() => {
@@ -255,6 +261,7 @@ export const Select: React.FC<SelectProps> = ({
 							return (
 								<div
 									key={option.value}
+									ref={isSelected ? selectedOptionRef : undefined}
 									className={optionClasses(option, isSelected)}
 									onClick={() => handleSelect(option)}
 									role="option"

@@ -326,7 +326,7 @@ export function EmploymentCompensationForm({
 		if (DEBUG && levels.length > 0 && !watch("employee.levelId")) {
 			const firstLevel = levels[0];
 			setValue("employee.levelId", firstLevel._id || firstLevel.id);
-			console.log("âœ… Auto-selected first level:", firstLevel.name);
+			console.log("[ok] Auto-selected first level:", firstLevel.name);
 		}
 	}, [levels, DEBUG, setValue, watch]);
 

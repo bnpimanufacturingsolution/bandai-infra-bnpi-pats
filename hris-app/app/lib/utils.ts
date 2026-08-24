@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { formatManilaClockTime } from "./utils/manila-clock";
 
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -66,17 +67,5 @@ export function formatMilitaryTime(timeStr: string | null): string {
  * @returns Time in "hh:mm AM/PM" format (e.g., "09:00 AM", "02:30 PM")
  */
 export function format12HourTime(timeStr: string | null): string {
-	if (!timeStr) return "";
-	try {
-		const date = new Date(timeStr);
-		let hours = date.getHours();
-		const minutes = date.getMinutes().toString().padStart(2, "0");
-		const ampm = hours >= 12 ? "PM" : "AM";
-		hours = hours % 12;
-		hours = hours ? hours : 12; // the hour '0' should be '12'
-		const hoursStr = hours.toString().padStart(2, "0");
-		return `${hoursStr}:${minutes} ${ampm}`;
-	} catch {
-		return "";
-	}
+	return formatManilaClockTime(timeStr);
 }

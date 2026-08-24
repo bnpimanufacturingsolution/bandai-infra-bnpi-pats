@@ -1005,8 +1005,8 @@ export const groupDataByField = (data: any[], groupBy: string) => {
 	data.forEach((item, index) => {
 		const groupValue = getNestedValue(item, groupBy) ?? "unassigned";
 		if (index === 0) {
-			console.log(`🔍 GroupBy="${groupBy}", First item groupValue:`, groupValue);
-			console.log(`🔍 First item[position]:`, item.position);
+			console.log(`GroupBy="${groupBy}", First item groupValue:`, groupValue);
+			console.log(`First item[position]:`, item.position);
 		}
 		if (!grouped[groupValue]) {
 			grouped[groupValue] = [];
@@ -1014,7 +1014,7 @@ export const groupDataByField = (data: any[], groupBy: string) => {
 		grouped[groupValue].push(item);
 	});
 
-	console.log(`🔍 Grouped keys:`, Object.keys(grouped));
+	console.log(`Grouped keys:`, Object.keys(grouped));
 	return grouped;
 };
 

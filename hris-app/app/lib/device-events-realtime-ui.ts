@@ -77,14 +77,16 @@ export const getSavedDeviceEventProcessingLabel = ({
 	latestRealtimeEventId,
 	receivedAt,
 	eventTime,
+	source,
 }: {
 	itemId: string;
 	latestRealtimeEventId?: string | null;
 	receivedAt?: string | Date | null;
 	eventTime?: string | Date | null;
+	source?: string | null;
 }) => {
 	if (itemId && latestRealtimeEventId && itemId === latestRealtimeEventId) {
-		return "Watcher save";
+		return source === "EN_HCNETSDK_ALARM" ? "Listener save" : "Saved now";
 	}
 
 	const receivedAtMs = getTimeMs(receivedAt);
@@ -128,6 +130,24 @@ export const getHighlightedSavedDeviceEventId = ({
 }) => {
 	if (isLatestSavedFresh && latestSavedEventId) return latestSavedEventId;
 	return latestRealtimeEventId || latestSavedEventId || null;
+};
+
+export const resolveActiveSavedDeviceEvent = <T extends { id: string }>({
+	action,
+	eventId,
+	pageRows,
+	fetchedEvent,
+}: {
+	action?: string | null;
+	eventId?: string | null;
+	pageRows: T[];
+	fetchedEvent?: T | null;
+}): T | null => {
+	if (action !== "view-event" || !eventId) return null;
+	const pageMatch = pageRows.find((row) => row.id === eventId);
+	if (pageMatch) return pageMatch;
+	if (fetchedEvent?.id === eventId) return fetchedEvent;
+	return null;
 };
 
 export const prependRealtimeSavedRows = <T extends { id: string }>({

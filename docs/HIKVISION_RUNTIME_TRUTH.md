@@ -1,7 +1,22 @@
 # Hikvision Runtime Truth
 
 Task mode: Linux-first SDK/runtime truth.
-Last updated: 2026-07-19.
+Last updated: 2026-08-17.
+
+## Device Events TAP display (2026-08-17)
+
+Old saved SDK punches can still have stored `UNKNOWN` taxonomy. GET/UI reclassify `major=5` fingerprint-pass as `ATTENDANCE`/`TAP` and stamp `SDK_CALLBACK` evidence. ACS `major=2`/`minor=38` empty-person is not a punch.
+
+- WWG report: `.wwg/reports/device-event-tap-display-20260817.md`
+- Commit: `a6dce32` (do not push further unless asked)
+
+## Select Status / T&A punch direction (2026-08-13)
+
+Panel **Select Status** is copied on the live SDK callback (`byAttendanceStatus` → `attendanceStatus`/`label`) and extracted from ISAPI `AcsEventInfo`. Device Events shows **Device status**. HRIS still pairs first tap = in, later tap = out.
+
+- Spec: **`docs/HIKVISION_SELECT_STATUS_MAPPING.md`**
+- WWG: `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`
+- Audit: `.wwg/reports/hikvision-select-status-audit-20260813.md`
 
 ## Enrollment identity flow (spec)
 
@@ -68,8 +83,14 @@ callback/persistence/socket/UI leg.
 
 Current implementation state:
 
-- `hikvision_biometric_service.cpp` is the only active C++ HCNetSDK runtime
-  source under `vendor/hikvision-linux`.
+- `vendor/hikvision-linux/src/hikvision_bio/*.cpp` are the only active C++
+  HCNetSDK runtime sources under `vendor/hikvision-linux` (`acs.cpp`,
+  `spool.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `time.cpp`,
+  `copy.cpp`, `runtime.cpp`, `common.cpp`, `main.cpp`). The former monolith
+  `hikvision_biometric_service.cpp` is gone.
+- Rollback if this layout fails to compile: restore `6b670a4` (foldered
+  `.inc.cpp` unity) by reverting `301ebb5` then `66868a2`. Details:
+  `.wwg/reports/hikvision-cpp-maintainable-units-20260819.md`.
 - The old `hcnetsdk_alarm_probe.cpp` source and `build-hcnetsdk-alarm-probe.sh`
   active build path were removed. The active build script is
   `scripts/build-hikvision-biometric-service.sh`.
@@ -225,8 +246,8 @@ Project Truth default path.
 - a read-only Python probe for TCP reachability, ISAPI system time, ACS event
   history, and bounded watch diagnostics;
 - a Dockerfile for Linux VM/container tests;
-- one Project Truth-named C++ Linux HCNetSDK service source file,
-  `hikvision_biometric_service.cpp`, built as `hikvision-biometric-service`;
+- Project Truth-named C++ Linux HCNetSDK service sources under
+  `src/hikvision_bio/*.cpp`, built as `hikvision-biometric-service`;
 - scripts for VM-side device-source discovery.
 
 On 2026-07-01, the Linux VM at `10.184.38.144` proved TCP reachability to the

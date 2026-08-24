@@ -1,6 +1,7 @@
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
 import { Card, CardContent } from "~/components/atoms/Card";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 import { useState } from "react";
 import { Plus, X, Phone, MapPin, User } from "lucide-react";
 
@@ -227,17 +228,19 @@ export function PersonalDetailsForm({ form, onComplete, status }: PersonalDetail
 										className="block text-sm font-medium text-gray-700 mb-1">
 										Date of Birth *
 									</label>
-									<Input
-										id="person.personalInfo.dateOfBirth"
-										type="date"
+									<CalendarDatePicker
+										value={watch("person.personalInfo.dateOfBirth") || ""}
+										onChange={(next) =>
+											setValue("person.personalInfo.dateOfBirth", next, {
+												shouldValidate: true,
+												shouldDirty: true,
+											})
+										}
 										className={
 											errors.person?.personalInfo?.dateOfBirth
 												? "border-red-300 focus:border-red-500"
 												: ""
 										}
-										{...register("person.personalInfo.dateOfBirth", {
-											required: "Date of birth is required",
-										})}
 									/>
 									{errors.person?.personalInfo?.dateOfBirth && (
 										<p className="mt-1 text-sm text-red-600">
@@ -831,15 +834,19 @@ export function PersonalDetailsForm({ form, onComplete, status }: PersonalDetail
 										className="block text-sm font-medium text-gray-700 mb-1">
 										Expiry Date
 									</label>
-									<Input
-										id="person.identification.expiryDate"
-										type="date"
+									<CalendarDatePicker
+										value={watch("person.identification.expiryDate") || ""}
+										onChange={(next) =>
+											setValue("person.identification.expiryDate", next, {
+												shouldValidate: true,
+												shouldDirty: true,
+											})
+										}
 										className={
 											errors.person?.identification?.expiryDate
 												? "border-red-300 focus:border-red-500"
 												: ""
 										}
-										{...register("person.identification.expiryDate")}
 									/>
 									{errors.person?.identification?.expiryDate && (
 										<p className="mt-1 text-sm text-red-600">

@@ -97,6 +97,11 @@ export interface DeviceEvent {
 	verifyMode?: string | null;
 	dedupeKey: string;
 	payload?: any;
+	panelSelectStatus?: {
+		code?: string | null;
+		label?: string | null;
+		present?: boolean;
+	} | null;
 	errorMessage?: string | null;
 	searchMatch?: {
 		field: string;
@@ -149,6 +154,57 @@ export interface DeviceEventsResponse {
 		totalPages?: number;
 	};
 }
+
+export type HikvisionDeviceTimeSnapshot = {
+	localTime: string | null;
+	timeMode: string | null;
+	timeZone: string | null;
+	skewSeconds: number | null;
+};
+
+export type HikvisionDeviceTimeSyncResponse = {
+	execute: boolean;
+	wrote: boolean;
+	device: { id: string; name: string };
+	serverTime: string;
+	manilaTime: string;
+	before: HikvisionDeviceTimeSnapshot;
+	plannedWrite: {
+		timeMode: string;
+		localTime: string;
+		timeZone: string;
+	};
+	after: HikvisionDeviceTimeSnapshot | null;
+	putFormat?: "json" | "xml";
+	transport?: "sdk_stdxml" | "isapi_http";
+	sdkError?: string | null;
+};
+
+export type HikvisionDeviceTimeSyncAllRow = {
+	deviceId: string;
+	name: string;
+	address: string | null;
+	ok: boolean;
+	transport: "sdk_stdxml" | "isapi_http" | null;
+	wrote: boolean;
+	before: HikvisionDeviceTimeSnapshot | null;
+	after: HikvisionDeviceTimeSnapshot | null;
+	plannedWrite: {
+		timeMode: string;
+		localTime: string;
+		timeZone: string;
+	} | null;
+	error: string | null;
+};
+
+export type HikvisionDeviceTimeSyncAllResponse = {
+	execute: boolean;
+	totalTargets: number;
+	readable: number;
+	written: number;
+	failed: number;
+	results: HikvisionDeviceTimeSyncAllRow[];
+};
 
 export interface DeviceHealthResponse {
 	device: Pick<Device, "id" | "name" | "address" | "port" | "protocol"> & {
@@ -1768,6 +1824,37 @@ class DevicesService extends APIService {
 		return this.setParams(params).getDevices();
 	}
 
+	async getDeviceEventById(eventId: string): Promise<DeviceEventsResponse> {
+		const id = String(eventId || "").trim();
+		if (!id) {
+			throw new Error("Event id is required");
+		}
+		try {
+			const response = await hrisApiClient.get<any>(`/api/device/events/item/${encodeURIComponent(id)}`);
+			let eventsData: any = response?.data ?? response;
+			if (eventsData && typeof eventsData === "object" && "data" in eventsData && !Array.isArray(eventsData.events)) {
+				const nested = (eventsData as { data?: unknown }).data;
+				if (nested && typeof nested === "object") {
+					eventsData = nested;
+				}
+			}
+			const rawEvents =
+				(Array.isArray(eventsData?.events) && eventsData.events) ||
+				(eventsData?.id ? [eventsData] : []) ||
+				[];
+			return {
+				events: rawEvents,
+				summary: eventsData?.summary,
+				pagination: eventsData?.pagination,
+			};
+		} catch (error: any) {
+			console.error("Error fetching device event by id:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error fetching device event",
+			);
+		}
+	}
+
 	async getDeviceEvents(params: ApiQueryParams = {}): Promise<DeviceEventsResponse> {
 		try {
 			const query = new URLSearchParams();
@@ -2799,6 +2886,49 @@ class DevicesService extends APIService {
 			console.error("Error cancelling device import job:", error);
 			throw new Error(
 				error.data?.errors?.[0]?.message || error.message || "Error cancelling import job",
+			);
+		}
+	}
+
+	async syncHikvisionDeviceTime(payload: {
+		deviceId: string;
+		execute?: boolean;
+	}): Promise<HikvisionDeviceTimeSyncResponse> {
+		try {
+			if (!String(payload.deviceId || "").trim()) {
+				throw new Error("Select a device before updating time");
+			}
+			const response = await hrisApiClient.post<any>(
+				`/api/device/${payload.deviceId}/time-sync`,
+				{ execute: payload.execute === true },
+			);
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to update Hikvision time");
+			return data as HikvisionDeviceTimeSyncResponse;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message || error.message || "Error updating Hikvision time",
+			);
+		}
+	}
+
+	async syncHikvisionDeviceTimeAll(payload: {
+		execute?: boolean;
+		deviceIds?: string[];
+	}): Promise<HikvisionDeviceTimeSyncAllResponse> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/device/time-sync-all", {
+				execute: payload.execute === true,
+				deviceIds: payload.deviceIds,
+			});
+			const data = response.data?.data || response.data;
+			if (!data) throw new Error("Failed to run Hikvision bulk time sync");
+			return data as HikvisionDeviceTimeSyncAllResponse;
+		} catch (error: any) {
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error running Hikvision bulk time sync",
 			);
 		}
 	}

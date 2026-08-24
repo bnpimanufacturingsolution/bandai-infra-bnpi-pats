@@ -28,6 +28,39 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 		? (value as Record<string, unknown>)
 		: {};
 
+export function parseOvertimeHoursToMinutes(value: unknown): number {
+	if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+		return Math.round(value * 60);
+	}
+	const raw = String(value || "").trim();
+	if (!raw) return 0;
+	const clock = raw.match(/^(\d+):(\d{1,2})$/);
+	if (clock) {
+		const hours = Number(clock[1]);
+		const minutes = Number(clock[2]);
+		if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
+		return Math.max(0, hours * 60 + minutes);
+	}
+	const asNumber = Number(raw);
+	if (Number.isFinite(asNumber) && asNumber > 0) {
+		return Math.round(asNumber * 60);
+	}
+	return 0;
+}
+
+export function resolveRequestedOvertimeMinutes(metadata: unknown): number {
+	const record = asRecord(metadata);
+	const requested = Number(record.requestedOvertimeMinutes);
+	if (Number.isFinite(requested) && requested > 0) return Math.round(requested);
+	const detected = Number(record.detectedOvertimeMinutes);
+	if (Number.isFinite(detected) && detected > 0) return Math.round(detected);
+	const fromClock = parseOvertimeHoursToMinutes(
+		record.requestedOvertimeHours ?? record.detectedOvertimeHours ?? record.overtimeHours,
+	);
+	if (fromClock > 0) return fromClock;
+	return parseOvertimeHoursToMinutes(record.hours);
+}
+
 export function isPreApprovedOvertimeMetadata(metadata: unknown): boolean {
 	const record = asRecord(metadata);
 	if (record.bandaiPayrollSourceRepair) return true;

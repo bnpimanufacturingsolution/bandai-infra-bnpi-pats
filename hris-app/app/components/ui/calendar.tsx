@@ -9,7 +9,6 @@ import {
 
 import { cn } from "~/lib/utils";
 import { Button, buttonVariants } from "~/components/ui/button";
-import { Select } from "~/components/atoms/Select";
 
 export interface Holiday {
 	date: Date;
@@ -175,41 +174,226 @@ function Calendar({
 	);
 }
 
+const MONTH_SHORT_LABELS = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec",
+];
+
+export function orderCalendarDropdownOptions(
+	options: Array<{ value?: string | number; label?: string; disabled?: boolean }> = [],
+) {
+	const isYearDropdown = options.length > 12;
+	const normalized = options.map((option) => ({
+		value: String(option.value),
+		label: String(option.label ?? option.value ?? ""),
+		disabled: option.disabled,
+		numeric: Number(option.value),
+	}));
+
+	if (!isYearDropdown) {
+		const minValue = Math.min(...normalized.map((option) => option.numeric), 0);
+		return {
+			isYearDropdown,
+			selectOptions: normalized.map((option) => {
+				const monthIndex = minValue === 0 ? option.numeric : option.numeric - 1;
+				return {
+					value: option.value,
+					label: MONTH_SHORT_LABELS[monthIndex] ?? option.label,
+					disabled: option.disabled,
+				};
+			}),
+		};
+	}
+
+	const newestFirst = [...normalized].sort((left, right) => right.numeric - left.numeric);
+	return {
+		isYearDropdown,
+		selectOptions: newestFirst.map((option) => ({
+			value: option.value,
+			label: option.label,
+			disabled: option.disabled,
+		})),
+	};
+}
+
+export function calendarYearGridPage(
+	selectedYear: number,
+	years: number[],
+	pageSize = 12,
+): { years: number[]; page: number; pageCount: number } {
+	const sorted = [...new Set(years)].sort((left, right) => left - right);
+	if (sorted.length === 0) {
+		return { years: [], page: 0, pageCount: 0 };
+	}
+	const selectedIndex = Math.max(
+		0,
+		sorted.findIndex((year) => year === selectedYear),
+	);
+	const page = Math.floor((selectedIndex === -1 ? 0 : selectedIndex) / pageSize);
+	const start = page * pageSize;
+	return {
+		years: sorted.slice(start, start + pageSize),
+		page,
+		pageCount: Math.ceil(sorted.length / pageSize),
+	};
+}
+
 function CalendarDropdown({
 	options = [],
 	value,
 	onChange,
 	disabled,
 	"aria-label": ariaLabel,
-	style,
 }: DropdownProps) {
-	const isMonthDropdown = options.length <= 12;
-	const selectOptions = options.map((option) => ({
-		value: String(option.value),
-		label: option.label,
-		disabled: option.disabled,
-	}));
+	const [open, setOpen] = React.useState(false);
+	const rootRef = React.useRef<HTMLDivElement>(null);
+	const { isYearDropdown, selectOptions } = orderCalendarDropdownOptions(options);
+	const selectedValue = value === undefined ? "" : String(value);
+	const selectedOption =
+		selectOptions.find((option) => option.value === selectedValue) ?? selectOptions[0];
+	const yearValues = React.useMemo(
+		() => selectOptions.map((option) => Number(option.value)),
+		[selectOptions],
+	);
+	const selectedYear = Number(selectedValue);
+	const [yearPage, setYearPage] = React.useState(
+		() => calendarYearGridPage(selectedYear, yearValues).page,
+	);
+
+	React.useEffect(() => {
+		setYearPage(calendarYearGridPage(selectedYear, yearValues).page);
+	}, [selectedYear]);
+
+	React.useEffect(() => {
+		if (!open) return;
+		const handlePointer = (event: MouseEvent) => {
+			if (!rootRef.current?.contains(event.target as Node)) {
+				setOpen(false);
+			}
+		};
+		document.addEventListener("mousedown", handlePointer);
+		return () => document.removeEventListener("mousedown", handlePointer);
+	}, [open]);
 
 	const handleChange = (nextValue: string) => {
 		onChange?.({
 			target: { value: nextValue },
 		} as React.ChangeEvent<HTMLSelectElement>);
+		setOpen(false);
 	};
 
+	const pagedYears = React.useMemo(() => {
+		const grid = calendarYearGridPage(selectedYear, yearValues);
+		const start = yearPage * 12;
+		return {
+			years: yearValues
+				.slice()
+				.sort((left, right) => left - right)
+				.filter((year, index, all) => all.indexOf(year) === index)
+				.slice(start, start + 12),
+			pageCount: grid.pageCount,
+		};
+	}, [selectedYear, yearPage, yearValues]);
+
 	return (
-		<div
-			className={cn("shrink-0", isMonthDropdown ? "w-[92px]" : "w-[84px]")}
-			style={style}
-			aria-label={ariaLabel}>
-			<Select
-				options={selectOptions}
-				value={value === undefined ? "" : String(value)}
-				onChange={handleChange}
-				placeholder={isMonthDropdown ? "Month" : "Year"}
+		<div ref={rootRef} className="relative shrink-0" aria-label={ariaLabel}>
+			<button
+				type="button"
 				disabled={disabled}
-				className="h-9 text-sm"
-				dropdownClassName="right-auto min-w-full max-h-56"
-			/>
+				onClick={() => setOpen((current) => !current)}
+				className={cn(
+					"inline-flex h-8 min-w-[4.5rem] items-center justify-between gap-1 rounded-md border border-neutral-200 bg-white px-2.5 text-sm font-medium text-neutral-900 shadow-sm",
+					"hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50",
+					open && "border-orange-400 ring-2 ring-orange-100",
+				)}>
+				<span>{selectedOption?.label || (isYearDropdown ? "Year" : "Month")}</span>
+				<ChevronDownIcon className="size-3.5 text-neutral-500" />
+			</button>
+			{open ? (
+				<div className="absolute left-1/2 top-[calc(100%+6px)] z-30 w-[220px] -translate-x-1/2 rounded-xl border border-neutral-200 bg-white p-2 shadow-lg">
+					{isYearDropdown ? (
+						<div className="space-y-2">
+							<div className="flex items-center justify-between px-1">
+								<button
+									type="button"
+									className="rounded-md p-1 hover:bg-neutral-100 disabled:opacity-30"
+									disabled={yearPage <= 0}
+									onClick={() => setYearPage((page) => Math.max(0, page - 1))}>
+									<ChevronLeftIcon className="size-4" />
+								</button>
+								<p className="text-xs font-medium text-neutral-500">
+									{pagedYears.years[0]}
+									{pagedYears.years.length > 1
+										? ` – ${pagedYears.years[pagedYears.years.length - 1]}`
+										: ""}
+								</p>
+								<button
+									type="button"
+									className="rounded-md p-1 hover:bg-neutral-100 disabled:opacity-30"
+									disabled={yearPage >= pagedYears.pageCount - 1}
+									onClick={() =>
+										setYearPage((page) =>
+											Math.min(pagedYears.pageCount - 1, page + 1),
+										)
+									}>
+									<ChevronRightIcon className="size-4" />
+								</button>
+							</div>
+							<div className="grid grid-cols-4 gap-1">
+								{pagedYears.years.map((year) => {
+									const active = String(year) === selectedValue;
+									return (
+										<button
+											key={year}
+											type="button"
+											onClick={() => handleChange(String(year))}
+											className={cn(
+												"h-8 rounded-md text-sm font-medium",
+												active
+													? "bg-orange-500 text-white"
+													: "text-neutral-800 hover:bg-orange-50",
+											)}>
+											{year}
+										</button>
+									);
+								})}
+							</div>
+						</div>
+					) : (
+						<div className="grid grid-cols-3 gap-1">
+							{selectOptions.map((option) => {
+								const active = option.value === selectedValue;
+								return (
+									<button
+										key={option.value}
+										type="button"
+										disabled={option.disabled}
+										onClick={() => handleChange(option.value)}
+										className={cn(
+											"h-8 rounded-md text-sm font-medium",
+											active
+												? "bg-orange-500 text-white"
+												: "text-neutral-800 hover:bg-orange-50",
+											option.disabled && "opacity-40",
+										)}>
+										{option.label}
+									</button>
+								);
+							})}
+						</div>
+					)}
+				</div>
+			) : null}
 		</div>
 	);
 }

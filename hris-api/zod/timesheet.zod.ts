@@ -42,6 +42,7 @@ export const DailyBreakdownSchema = z.object({
 	status: z.string().optional(),
 	employeeNotes: z.string().nullable().optional(),
 	approverNotes: z.string().nullable().optional(),
+	dayLaborType: z.enum(["DIRECT", "INDIRECT"]).nullable().optional(),
 	metadata: z.any().optional(),
 });
 

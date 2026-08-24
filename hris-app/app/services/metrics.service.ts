@@ -678,6 +678,17 @@ export interface AttendanceRecord {
 		rawLateMinutes?: number | null;
 		gracePeriodMinutes?: number | null;
 		withinGrace?: boolean | null;
+		evaluatedFromSchedule?: boolean | null;
+		[key: string]: unknown;
+	} | null;
+	scheduleSnapshot?: {
+		isOff?: boolean | null;
+		isRestDay?: boolean | null;
+		startTime?: string | null;
+		endTime?: string | null;
+		graceLateMinutes?: number | null;
+		gracePeriodMinutes?: number | null;
+		timeSlots?: Array<{ type?: string | null; startTime?: string | null; endTime?: string | null }>;
 		[key: string]: unknown;
 	} | null;
 	hoursWorked: string | null;
@@ -709,6 +720,15 @@ export interface AttendanceRecord {
 		endDate: string;
 		tags?: string[];
 	}>;
+	isPeriodRollup?: boolean;
+	periodTotals?: {
+		scheduled: number;
+		present: number;
+		late: number;
+		undertime: number;
+		absent: number;
+		onTime?: number;
+	};
 }
 
 export interface AttendanceMetricsDetailed {
@@ -723,6 +743,8 @@ export interface AttendanceMetricsDetailed {
 	totalWorkedOnRestDay?: number;
 	totalWorkedOnHoliday?: number;
 	totalClockedIn: number;
+	totalClockedInObligated?: number;
+	totalObligatedToWork?: number;
 	totalOnTime: number;
 	totalScheduledWorkDays: number;
 	totalCalendarDays: number;
@@ -773,6 +795,7 @@ export interface AttendanceMetricsDetailedResponse {
 				scheduled: number;
 				present: number;
 				late: number;
+				undertime?: number;
 				absent: number;
 				leave: number;
 				missing: number;

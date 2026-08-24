@@ -59,6 +59,9 @@ export function DatePickerWithRange({
 						onSelect={onChange}
 						numberOfMonths={2}
 						disabled={disabled}
+						captionLayout="dropdown"
+						navLayout="after"
+						reverseYears
 					/>
 				</PopoverContent>
 			</Popover>

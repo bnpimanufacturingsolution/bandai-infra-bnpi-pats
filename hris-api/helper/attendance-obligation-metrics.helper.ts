@@ -1,11 +1,26 @@
 // @ts-nocheck
 import { Prisma, PrismaClient } from "../generated/prisma";
 import { buildEmployeeFilter, getEmployeeName } from "./attendance-metrics-common.helper";
-import { getDateKeyInBusinessTimeZone } from "./attendance.helper";
+import { getDateKeyInBusinessTimeZone, readQueryRawUtcTimestamp } from "./attendance.helper";
 import {
+	computeAttendanceUtilizationRate,
 	deriveAttendanceObligationDisplayStatus,
 	type AttendanceObligationDisplayStatus,
 } from "./attendance-obligation.helper";
+import {
+	applyScheduleArrivalToAttendanceRow,
+	applyScheduledDayArrivalToRows,
+	buildPeriodRollupAttendanceRow,
+	buildVirtualScheduledAttendanceRow,
+	countRegularScheduleWorkUtilization,
+	pageMergedScheduledAttendanceRecords,
+	pickScheduledDepartmentPreviewDays,
+	pickScheduledDepartmentPreviewEmployees,
+	rowMatchesComputedTimekeepingStatus,
+	summarizeScheduledDepartmentBreakdown,
+	summarizeScheduledDayTimekeeping,
+	summarizeScheduledEmployeeBreakdown,
+} from "./attendance-schedule-utilization.helper";
 import { enrichAttendanceRecordsBatchWithLeaveHolidayContext } from "./day-context.helper";
 
 export interface AttendanceDailyTrendDepartmentTotal {
@@ -50,6 +65,8 @@ function getZeroMetrics() {
 		totalWorkedOnRestDay: 0,
 		totalWorkedOnHoliday: 0,
 		totalClockedIn: 0,
+		totalClockedInObligated: 0,
+		totalObligatedToWork: 0,
 		totalOnTime: 0,
 		totalScheduledWorkDays: 0,
 		totalCalendarDays: 0,
@@ -761,7 +778,22 @@ async function getPostgresObligationFacet(params: {
 						jsonb_typeof(e."metadata"->'holidayEntries') = 'array' AND
 						jsonb_array_length(e."metadata"->'holidayEntries') > 0
 					)
-				) AS "_isHoliday"
+				) AS "_isHoliday",
+				(
+					e."_displayStatus" IN (
+						'NOT_CLOCKED_IN',
+						'ABSENT',
+						'SCHEDULED',
+						'PRESENT',
+						'INCOMPLETE',
+						'LATE',
+						'HALF_DAY'
+					)
+					AND NOT (
+						e."_displayStatus" IN ('PRESENT', 'INCOMPLETE')
+						AND UPPER(COALESCE(e."_shiftTypeKey", '')) = 'OFF'
+					)
+				) AS "_isObligatedWorkDay"
 			FROM enriched e
 		),
 		final_filtered AS (
@@ -841,9 +873,11 @@ async function getPostgresObligationFacet(params: {
 				COUNT(*) FILTER (WHERE "_isClockedIn" AND "_isOffDay")::int AS "totalWorkedOnRestDay",
 				COUNT(*) FILTER (WHERE "_isClockedIn" AND "_isHoliday")::int AS "totalWorkedOnHoliday",
 				COUNT(*) FILTER (WHERE "_isClockedIn")::int AS "totalClockedIn",
+				COUNT(*) FILTER (WHERE "_isClockedIn" AND "_isObligatedWorkDay")::int AS "totalClockedInObligated",
 				COUNT(*) FILTER (WHERE "_isClockedOut")::int AS "totalClockedOut",
 				COUNT(*) FILTER (WHERE "_isClockedIn" AND NOT "_isLate")::int AS "totalOnTime",
-				COUNT(*) FILTER (WHERE "_displayStatus" NOT IN ('REST_DAY', 'HOLIDAY', 'CANCELLED'))::int AS "totalScheduledWorkDays",
+				COUNT(*) FILTER (WHERE "_isObligatedWorkDay")::int AS "totalScheduledWorkDays",
+				COUNT(*) FILTER (WHERE "_isObligatedWorkDay")::int AS "totalObligatedToWork",
 				COUNT(*) FILTER (WHERE "_isEarlyOut")::int AS "totalEarlyOut",
 				COUNT(*) FILTER (WHERE "_isOvertime")::int AS "totalOvertime",
 				COALESCE(SUM("_hoursWorkedMinutes"), 0)::int AS "totalMinutesWorked",
@@ -1465,6 +1499,33 @@ function buildObligationAggregationPipeline(params: {
 				},
 			},
 		},
+		{
+			$addFields: {
+				_isObligatedWorkDay: {
+					$and: [
+						{
+							$in: [
+								"$_displayStatus",
+								[
+									"NOT_CLOCKED_IN",
+									"ABSENT",
+									"SCHEDULED",
+									"PRESENT",
+									"INCOMPLETE",
+									"LATE",
+									"HALF_DAY",
+								],
+							],
+						},
+						{
+							$not: {
+								$and: ["$_isClockedIn", "$_isOffDay"],
+							},
+						},
+					],
+				},
+			},
+		},
 	];
 
 	if (searchQuery) {
@@ -1569,6 +1630,15 @@ function buildObligationAggregationPipeline(params: {
 							},
 						},
 						totalClockedIn: { $sum: { $cond: ["$_isClockedIn", 1, 0] } },
+						totalClockedInObligated: {
+							$sum: {
+								$cond: [
+									{ $and: ["$_isClockedIn", "$_isObligatedWorkDay"] },
+									1,
+									0,
+								],
+							},
+						},
 						totalClockedOut: { $sum: { $cond: ["$_isClockedOut", 1, 0] } },
 						totalOnTime: {
 							$sum: {
@@ -1576,22 +1646,10 @@ function buildObligationAggregationPipeline(params: {
 							},
 						},
 						totalScheduledWorkDays: {
-							$sum: {
-								$cond: [
-									{
-										$not: [
-											{
-												$in: [
-													"$_displayStatus",
-													["REST_DAY", "HOLIDAY", "CANCELLED"],
-												],
-											},
-										],
-									},
-									1,
-									0,
-								],
-							},
+							$sum: { $cond: ["$_isObligatedWorkDay", 1, 0] },
+						},
+						totalObligatedToWork: {
+							$sum: { $cond: ["$_isObligatedWorkDay", 1, 0] },
 						},
 						totalEarlyOut: { $sum: { $cond: ["$_isEarlyOut", 1, 0] } },
 						totalOvertime: { $sum: { $cond: ["$_isOvertime", 1, 0] } },
@@ -1769,40 +1827,72 @@ export async function calculateAttendanceObligationDetailed(
 			departmentPreviewRows: [],
 		};
 	}
-	const facet = await getPostgresObligationFacet({
-		prisma,
+	const normalizedStatus = String(status || "").trim().toUpperCase();
+	const mergeScheduledNotClockedIn =
+		normalizedStatus === "NOT_CLOCKED_IN" || normalizedStatus === "MISSING_CLOCK_IN";
+	const mergeScheduledClockedIn =
+		normalizedStatus === "CLOCKED_IN" ||
+		normalizedStatus === "LATE" ||
+		normalizedStatus === "ON_TIME" ||
+		normalizedStatus === "EARLY_OUT";
+	const mergeScheduledList = mergeScheduledNotClockedIn || mergeScheduledClockedIn;
+	const scheduleUtilization = await countRegularScheduleWorkUtilization(prisma, {
 		organizationId,
 		startDate,
 		endDate,
-		limit: safeLimit,
-		page: safePage,
-		search,
-		status,
 		departmentId,
 		sectionId,
 		positionId,
 		levelId,
 		reportToId,
 		employeeId,
-		shiftType,
-		employeeIds,
 	});
+	const skipObligationFacet = mergeScheduledClockedIn;
+	const facet = skipObligationFacet
+		? {
+				records: [],
+				totalRecords: [{ total: 0 }],
+				calendarDays: [{ total: getBusinessDateKeys(startDate, endDate).length }],
+				metrics: [],
+				shiftTypeBreakdown: [],
+				departmentBreakdown: [],
+				departmentPreviewRecords: [],
+				leaveTypeBreakdown: [],
+			}
+		: await getPostgresObligationFacet({
+				prisma,
+				organizationId,
+				startDate,
+				endDate,
+				limit: mergeScheduledList ? 5000 : safeLimit,
+				page: mergeScheduledList ? 1 : safePage,
+				search,
+				status,
+				departmentId,
+				sectionId,
+				positionId,
+				levelId,
+				reportToId,
+				employeeId,
+				shiftType,
+				employeeIds,
+			});
 	const rows = Array.isArray(facet.records) ? facet.records : [];
 
 	const normalizeObligationRow = (row: any) => {
 	const storedStatus = String(row.status || "EXPECTED").toUpperCase();
 	const displayStatus = deriveAttendanceObligationDisplayStatus(row);
 	const rowDate = readRawDate(row.date);
-	const timeIn = readRawDate(row.timeIn);
-	const timeBreak = readRawDate(row.timeBreak);
-	const timeOut = readRawDate(row.timeOut);
+	const timeIn = readQueryRawUtcTimestamp(row.timeIn);
+	const timeBreak = readQueryRawUtcTimestamp(row.timeBreak);
+	const timeOut = readQueryRawUtcTimestamp(row.timeOut);
 	const createdAt = readRawDate(row.createdAt);
 	const updatedAt = readRawDate(row.updatedAt);
 	const businessDateKey = row.businessDate || (rowDate ? getUtcDateKey(rowDate) : null);
 	const scheduleSnapshot = normalizeScheduleSnapshotForAttendancePayload(
 		row.scheduleSnapshot,
 	);
-	return {
+	return applyScheduleArrivalToAttendanceRow({
 			id: readRawId(row._id) || readRawId(row.id),
 			employeeRefId: readRawId(row.employeeId),
 			employeeId: row.employeeCodeSnapshot || readRawId(row.employeeId),
@@ -1843,7 +1933,7 @@ export async function calculateAttendanceObligationDetailed(
 						? displayStatus
 						: "HOURS",
 			metadata: row.metadata || null,
-		};
+		});
 	};
 
 	const normalizedRows = rows.map(normalizeObligationRow);
@@ -1894,6 +1984,24 @@ export async function calculateAttendanceObligationDetailed(
 	const enrichedRows = normalizedRows
 		.map((row: any) => enrichedRowById.get(row.id) || row)
 		.filter((row: any) => matchesStatus(row.status, row.storedStatus, row, status));
+	const mergedSchedulePage = mergeScheduledList
+		? pageMergedScheduledAttendanceRecords({
+				existingRows: enrichedRows,
+				scheduledDays: scheduleUtilization.scheduledDays,
+				employeeIds,
+				page: safePage,
+				limit: safeLimit,
+				mode: mergeScheduledClockedIn ? "clocked_in" : "not_clocked_in",
+				keepRow: (row: any) =>
+					mergeScheduledClockedIn
+						? rowMatchesComputedTimekeepingStatus(row, status)
+						: matchesStatus(row.status, row.storedStatus, row, status),
+			})
+		: null;
+	const pagedRows = applyScheduledDayArrivalToRows(
+		mergedSchedulePage?.records || enrichedRows,
+		scheduleUtilization.scheduledDays,
+	);
 	const enrichedDepartmentPreviewRows = departmentPreviewRows.map((group: any) => ({
 		...group,
 		rows: (group.rows || [])
@@ -1938,7 +2046,7 @@ export async function calculateAttendanceObligationDetailed(
 		label: String(item.label || item._id || "Unassigned"),
 		total: Number(item.total || 0),
 	}));
-	const departmentBreakdown = (facet.departmentBreakdown || []).map((item: any) => ({
+	let departmentBreakdown = (facet.departmentBreakdown || []).map((item: any) => ({
 		departmentId: readRawId(item.departmentId),
 		departmentName: String(item.departmentName || "Unassigned"),
 		totalRecords: Number(item.totalRecords || 0),
@@ -1962,26 +2070,120 @@ export async function calculateAttendanceObligationDetailed(
 		0,
 		metrics.totalOvertime - metrics.approvedOvertimeCount,
 	);
-	const denominator = metrics.totalScheduledWorkDays;
-	metrics.avgAttendanceRate =
-		denominator > 0
-			? Math.round(((metrics.totalPresent + metrics.totalOnLeave) / denominator) * 100)
-			: 0;
-	metrics.utilizationRate =
-		denominator > 0
-			? Math.round(((metrics.totalClockedIn + metrics.totalOnLeave) / denominator) * 100)
-			: 0;
+	const obligatedToWork = scheduleUtilization.scheduledWorkDays;
+	const clockedInObligated = scheduleUtilization.clockedInOnScheduledDays;
+	const notClockedInObligated = scheduleUtilization.notClockedInOnScheduledDays;
+	metrics.totalObligatedToWork = obligatedToWork;
+	metrics.totalScheduledWorkDays = obligatedToWork;
+	metrics.totalClockedInObligated = clockedInObligated;
+	metrics.totalClockedIn = clockedInObligated;
+	// Same population as the utilization over: scheduled regular days minus punches.
+	// Do not keep the leftover obligation-row NOT_CLOCKED_IN count (was 76 vs 1706).
+	metrics.totalNotClockedIn = notClockedInObligated;
+	const scheduledTimekeeping = summarizeScheduledDayTimekeeping(
+		scheduleUtilization.scheduledDays,
+	);
+	metrics.totalLate = scheduledTimekeeping.lateCount;
+	metrics.totalOnTime = scheduledTimekeeping.onTimeCount;
+	metrics.totalEarlyOut = scheduledTimekeeping.undertimeCount;
+	metrics.totalLateMinutes = scheduledTimekeeping.lateMinutes;
+	metrics.totalUndertimeMinutes = scheduledTimekeeping.undertimeMinutes;
+	if (scheduledTimekeeping.clockedOutCount > 0) {
+		metrics.totalClockedOut = scheduledTimekeeping.clockedOutCount;
+	}
+	metrics.utilizationRate = computeAttendanceUtilizationRate(
+		clockedInObligated,
+		obligatedToWork,
+	);
+	metrics.avgAttendanceRate = metrics.utilizationRate;
+	const scheduledDeptStats = summarizeScheduledDepartmentBreakdown(
+		scheduleUtilization.scheduledDays,
+	);
+	const scheduledDeptByKey = new Map(
+		scheduledDeptStats.map((item) => [item.departmentId || item.departmentName, item]),
+	);
+	const useEmployeePeriodRollup =
+		(calendarDayCount || getBusinessDateKeys(startDate, endDate).length) > 1;
+	departmentBreakdown = departmentBreakdown.map((item: any) => {
+		const computed = scheduledDeptByKey.get(item.departmentId || item.departmentName);
+		if (!computed) {
+			return { ...item, present: 0, late: 0, undertime: 0 };
+		}
+		return {
+			...item,
+			employeeCount: computed.employeeCount ?? item.employeeCount,
+			scheduled: computed.scheduled,
+			present: computed.present,
+			late: computed.late,
+			undertime: computed.undertime,
+			...(useEmployeePeriodRollup
+				? { absent: computed.notClockedIn, missing: computed.notClockedIn }
+				: {}),
+		};
+	});
+	for (const computed of scheduledDeptStats) {
+		const key = computed.departmentId || computed.departmentName;
+		const exists = departmentBreakdown.some(
+			(item: any) => (item.departmentId || item.departmentName) === key,
+		);
+		if (exists) continue;
+		departmentBreakdown.push({
+			departmentId: computed.departmentId,
+			departmentName: computed.departmentName,
+			totalRecords: computed.scheduled,
+			employeeCount: computed.employeeCount || computed.scheduled,
+			scheduled: computed.scheduled,
+			present: computed.present,
+			late: computed.late,
+			undertime: computed.undertime,
+			absent: computed.notClockedIn,
+			leave: 0,
+			missing: computed.notClockedIn,
+			overtimeHours: 0,
+		});
+	}
+	const employeeRollups = useEmployeePeriodRollup
+		? summarizeScheduledEmployeeBreakdown(scheduleUtilization.scheduledDays)
+		: [];
+	const previewDays = useEmployeePeriodRollup
+		? []
+		: pickScheduledDepartmentPreviewDays(scheduleUtilization.scheduledDays, 5);
+	const previewByDept = new Map<string, any[]>();
+	if (useEmployeePeriodRollup) {
+		for (const rollup of pickScheduledDepartmentPreviewEmployees(employeeRollups, 5)) {
+			const key = rollup.departmentId || rollup.departmentName || "Unassigned";
+			const list = previewByDept.get(key) || [];
+			list.push(buildPeriodRollupAttendanceRow(rollup));
+			previewByDept.set(key, list);
+		}
+	} else {
+		for (const day of previewDays) {
+			const key = day.departmentId || day.departmentName || "Unassigned";
+			const list = previewByDept.get(key) || [];
+			list.push(applyScheduleArrivalToAttendanceRow(buildVirtualScheduledAttendanceRow(day)));
+			previewByDept.set(key, list);
+		}
+	}
+	const scheduledDepartmentPreviewRows = Array.from(previewByDept.entries()).map(
+		([key, rows]) => ({
+			departmentId: rows[0]?.departmentId || null,
+			departmentName: rows[0]?.departmentName || key,
+			rows,
+		}),
+	);
 
 	return {
 		metrics,
-		records: enrichedRows,
+		records: pagedRows,
 		dateRange: {
 			from: getDateKeyInBusinessTimeZone(startDate),
 			to: getDateKeyInBusinessTimeZone(endDate),
 		},
-		totalRecords: Number(facet.totalRecords?.[0]?.total || 0),
+		totalRecords: mergedSchedulePage
+			? mergedSchedulePage.totalRecords
+			: Number(facet.totalRecords?.[0]?.total || 0),
 		departmentBreakdown,
-		departmentPreviewRows: enrichedDepartmentPreviewRows,
+		departmentPreviewRows: scheduledDepartmentPreviewRows,
 	};
 }
 

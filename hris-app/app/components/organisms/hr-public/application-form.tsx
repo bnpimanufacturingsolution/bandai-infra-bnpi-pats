@@ -27,6 +27,7 @@ interface FormData {
 	resume: File | null;
 	firstName: string;
 	lastName: string;
+	dateOfBirth: string;
 	email: string;
 	phone: string;
 	location: string;
@@ -46,6 +47,7 @@ const INITIAL_FORM: FormData = {
 	resume: null,
 	firstName: "",
 	lastName: "",
+	dateOfBirth: "",
 	email: "",
 	phone: "",
 	location: "",
@@ -132,6 +134,7 @@ const applicantFieldMap: Record<string, keyof FormData> = {
 const personFieldMap: Record<string, keyof FormData> = {
 	"personalInfo.firstName": "firstName",
 	"personalInfo.lastName": "lastName",
+	"personalInfo.dateOfBirth": "dateOfBirth",
 	"contactInfo.email": "email",
 	"contactInfo.phones": "phone",
 	"contactInfo.phones[0].number": "phone",
@@ -222,6 +225,7 @@ export function ApplicationForm({ jobId, jobTitle }: ApplicationFormProps) {
 					personalInfo: {
 						firstName: formData.firstName.trim(),
 						lastName: formData.lastName.trim(),
+						dateOfBirth: formData.dateOfBirth,
 						nationality: "Philippines",
 						gender: "prefer_not_to_say",
 					},
@@ -344,6 +348,24 @@ export function ApplicationForm({ jobId, jobTitle }: ApplicationFormProps) {
 							placeholder="Dela Cruz"
 							inputClassName={applyInputClass}
 						/>
+					</div>
+
+					<div className="space-y-1.5">
+						<Label
+							htmlFor="dateOfBirth"
+							className="text-[13px] font-medium text-neutral-700">
+							Date of Birth <span className="text-red-500">*</span>
+						</Label>
+						<DatePicker
+							value={formData.dateOfBirth}
+							onChange={handleTextChange("dateOfBirth")}
+							placeholder="MM/DD/YYYY"
+							className={applyInputClass}
+							maxDate={getTodayDate()}
+						/>
+						{errors.dateOfBirth && (
+							<p className="text-sm text-red-600">{errors.dateOfBirth}</p>
+						)}
 					</div>
 
 					<div className="grid gap-4 sm:grid-cols-2">

@@ -21,6 +21,7 @@ import {
 	ensureAttendanceObligationsForPayrollPeriod,
 	materializeTimesheetLinesFromObligations,
 } from "./attendance-obligation.helper";
+import { normalizeDayLaborType } from "./day-labor-type.helper";
 
 const ATTENDANCE_REFRESHABLE_TIMESHEET_STATUSES = new Set(["DRAFT", "REVISED", "REJECTED"]);
 
@@ -130,6 +131,7 @@ export function buildBreakdownFromTimesheetLines(lines: any[] | null | undefined
 				scheduleSnapshot,
 				employeeNotes: line.employeeNotes || line.notes || null,
 				approverNotes: line.approverNotes || null,
+				dayLaborType: line.dayLaborType || null,
 				metadata: {
 					...metadata,
 					...(scheduleSnapshot ? { scheduleSnapshot } : {}),
@@ -313,6 +315,7 @@ export async function syncTimesheetLinesFromBreakdown(
 				reportToIdSnapshot: employee?.reportToId || null,
 				workforceSourceSnapshot: employee?.workforceSource || null,
 				agencyIdSnapshot: employee?.agencyId || null,
+				dayLaborType: normalizeDayLaborType(day?.dayLaborType),
 				isDeleted: false,
 			},
 		});
@@ -439,7 +442,7 @@ export async function generateTimesheetForEmployee(
 	});
 
 	if (existingTimesheet) {
-		console.log(`      â„¹ï¸  Timesheet already exists for this period, skipping...`);
+		console.log(`      Timesheet already exists for this period, skipping...`);
 		return existingTimesheet;
 	}
 

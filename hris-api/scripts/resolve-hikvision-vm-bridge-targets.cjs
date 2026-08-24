@@ -28,13 +28,15 @@ const SKIP_PROBE = ["1", "true", "yes", "on"].includes(
 		.toLowerCase(),
 );
 
-/** Last-known local reverse-path defaults when DB is empty/unavailable. */
-const HOST_FALLBACK_IPS = ["192.168.254.102", "192.168.254.189"];
+/** Last-known local reverse-path defaults when DB is empty/unavailable.
+ * 2026-08-24 truth sync: live TEST A moved from .102 (stale) to .109 per
+ * .wwg/wiki/project-truth.md current-address note. */
+const HOST_FALLBACK_IPS = ["192.168.254.109", "192.168.254.189"];
 
 function hostFallbackTargets() {
 	return HOST_FALLBACK_IPS.map((deviceIp, index) => ({
 		deviceId: null,
-		name: deviceIp === "192.168.254.102" ? "TEST A" : null,
+		name: deviceIp === "192.168.254.109" ? "TEST A" : null,
 		deviceIp,
 		httpDevicePort: 443,
 		sdkDevicePort: 8000,

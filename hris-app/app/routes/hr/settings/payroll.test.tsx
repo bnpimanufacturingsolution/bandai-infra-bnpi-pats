@@ -117,12 +117,10 @@ describe("PayrollSettingsModule cycle tab", () => {
 		expect(bulkGenerateSection).not.toBeNull();
 
 		const section = within(bulkGenerateSection as HTMLElement);
-		const dateInputs = Array.from(
-			bulkGenerateSection!.querySelectorAll('input[type="date"]'),
-		) as HTMLInputElement[];
+		const dateInputs = section.getAllByLabelText("Date") as HTMLInputElement[];
 		expect(dateInputs).toHaveLength(2);
-		fireEvent.change(dateInputs[0], { target: { value: "2026-02-01" } });
-		fireEvent.change(dateInputs[1], { target: { value: "2026-02-28" } });
+		fireEvent.change(dateInputs[0], { target: { value: "02/01/2026" } });
+		fireEvent.change(dateInputs[1], { target: { value: "02/28/2026" } });
 		fireEvent.click(section.getByRole("button", { name: /Generate Periods|Generating/ }));
 
 		expect(mockBulkGeneratePeriods).toHaveBeenCalledWith(

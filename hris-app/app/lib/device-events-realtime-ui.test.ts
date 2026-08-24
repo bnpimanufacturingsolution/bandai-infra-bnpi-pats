@@ -6,6 +6,7 @@ import {
 	getSavedDeviceEventRealtimeBadge,
 	prependRealtimeSavedRow,
 	prependRealtimeSavedRows,
+	resolveActiveSavedDeviceEvent,
 	savedDeviceEventMatchesScope,
 	selectWatcherHeadlineEvent,
 	shouldRefreshSavedEventsAfterSocketEvent,
@@ -72,7 +73,7 @@ describe("device events realtime UI", () => {
 		).to.equal("Live socket");
 	});
 
-	it("labels the exact socket row as a watcher save", () => {
+	it("labels the exact socket row as saved now when source is not the SDK listener", () => {
 		expect(
 			getSavedDeviceEventProcessingLabel({
 				itemId: "event-1",
@@ -80,7 +81,31 @@ describe("device events realtime UI", () => {
 				eventTime: "2026-07-02T02:20:00.000Z",
 				receivedAt: "2026-07-02T02:20:02.000Z",
 			}),
-		).to.equal("Watcher save");
+		).to.equal("Saved now");
+	});
+
+	it("labels a non-listener socket row as saved now even when a source is present", () => {
+		expect(
+			getSavedDeviceEventProcessingLabel({
+				itemId: "event-1",
+				latestRealtimeEventId: "event-1",
+				eventTime: "2026-07-02T02:20:00.000Z",
+				receivedAt: "2026-07-02T02:20:02.000Z",
+				source: "HIKVISION_CALLBACK",
+			}),
+		).to.equal("Saved now");
+	});
+
+	it("labels the exact SDK listener socket row as a listener save", () => {
+		expect(
+			getSavedDeviceEventProcessingLabel({
+				itemId: "event-1",
+				latestRealtimeEventId: "event-1",
+				eventTime: "2026-07-02T02:20:00.000Z",
+				receivedAt: "2026-07-02T02:20:02.000Z",
+				source: "EN_HCNETSDK_ALARM",
+			}),
+		).to.equal("Listener save");
 	});
 
 	it("labels old punch times saved later as synced saves", () => {
@@ -210,6 +235,39 @@ describe("device events realtime UI", () => {
 			"tap-2",
 			"employee-1-old",
 		]);
+	});
+
+	it("resolves a view-event deeplink from a dedicated fetch when the row is not on this page", () => {
+		const fetched = { id: "cmsr688py002xvxwwttxhdsal" };
+		const active = resolveActiveSavedDeviceEvent({
+			action: "view-event",
+			eventId: "cmsr688py002xvxwwttxhdsal",
+			pageRows: [{ id: "page-row-1" }, { id: "page-row-2" }],
+			fetchedEvent: fetched,
+		});
+		expect(active).to.equal(fetched);
+	});
+
+	it("ignores a leftover fetched event when the deeplink id has changed", () => {
+		const leftover = { id: "old-event" };
+		const active = resolveActiveSavedDeviceEvent({
+			action: "view-event",
+			eventId: "cmsr688py002xvxwwttxhdsal",
+			pageRows: [{ id: "page-row-1" }],
+			fetchedEvent: leftover,
+		});
+		expect(active).to.equal(null);
+	});
+
+	it("prefers the current table row when the view-event id is already on the page", () => {
+		const pageRow = { id: "cmsr688py002xvxwwttxhdsal" };
+		const active = resolveActiveSavedDeviceEvent({
+			action: "view-event",
+			eventId: "cmsr688py002xvxwwttxhdsal",
+			pageRows: [pageRow],
+			fetchedEvent: { id: "cmsr688py002xvxwwttxhdsal" },
+		});
+		expect(active).to.equal(pageRow);
 	});
 
 	it("keeps the realtime overlay bounded to the requested size", () => {

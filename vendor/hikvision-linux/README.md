@@ -44,6 +44,46 @@ python -m hikvision_linux_probe --mode isapi-time
 The probe calls `GET /ISAPI/System/time`. It does not write users, change
 device configuration, clear logs, restart the device, or post HRIS events.
 
+HRIS device-console **Preview time / Update time** uses this binary over
+HCNetSDK `NET_DVR_STDXMLConfig`: `--get-time` (read) and `--set-time --local-time
+<ISO+08:00> --execute` (write). That is SDK login on port 8000, not a host HTTP
+PUT from Windows. Rebuild/restart the hot-reload listener after this source
+changes.
+
+## Source layout
+
+```text
+vendor/hikvision-linux/
+  include/hikvision_bio/     types, common, time, runtime, matching module headers
+  src/hikvision_bio/
+    common.cpp               JSONL + STDXML + shared JSON extract helpers
+    time.cpp                 --get-time / --set-time
+    acs.cpp                  ACS classify + alarm_callback
+    identity.cpp             UserInfo / person resolve
+    fingerprint.cpp          fingerprint templates
+    face.cpp                 face templates + stored-face writer
+    copy.cpp                 peer copy
+    spool.cpp                HRIS post + replay
+    runtime.cpp              queues, login/arm
+    main.cpp                 CLI entry
+```
+
+Still one binary: `build/hikvision-biometric-service`. CLI and JSONL are unchanged.
+
+## Rollback
+
+If the new units fail to compile or the listener misbehaves after this split:
+
+| Step | Action |
+|---|---|
+| Soft | Hot-reload wrapper keeps the last ELF if `g++` fails (`keeping existing binary`). Devices stay on the previous binary. |
+| Hard | Revert `301ebb5` then `66868a2` on `develop` (restores `6b670a4` foldered `.inc.cpp` unity). Push. Wrapper rebuilds from `include/` + `src/`. |
+| Last good source | `6b670a4` — `main.cpp` includes `.inc.cpp`; build is `common.cpp` + `time/device_time.cpp` + `main.cpp`. |
+
+Do not go back to `ad98250` (monolith) unless `6b670a4` itself is broken.
+
+Full table: `.wwg/reports/hikvision-cpp-maintainable-units-20260819.md`.
+
 To query recent ACS event history directly from the device:
 
 ```bash

@@ -9,11 +9,15 @@ import {
 import {
 	appendEmployeeScheduleHistory,
 	collectShiftTypeIdsFromEmployeeScheduleData,
+	buildManualPatternEmbeddedSchedule,
 	copyTemplateToEmployeeEmbeddedSchedule,
 	resolveEffectiveShiftFromEmployeeData,
 } from "../../helper/employee-schedule.helper";
 import { invalidateCache } from "../../middleware/cache";
-import { recomputeAttendanceObligationsForRange } from "../../helper/attendance-obligation.helper";
+import {
+	recomputeAttendanceObligationsForRange,
+	recomputeAttendanceObligationsForRangeSafe,
+} from "../../helper/attendance-obligation.helper";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
@@ -294,6 +298,23 @@ export const controller = (prisma: PrismaClient) => {
 				reason: validation.data.reason || null,
 			});
 			source = "template";
+		} else if (Array.isArray(validation.data.pattern) && validation.data.pattern.length > 0) {
+			if (validation.data.pattern.length % 7 === 0 && !isMondayUtc(effectiveStartDate)) {
+				res.status(400).json(
+					buildErrorResponse("Weekly schedules must start on a Monday (UTC).", 400),
+				);
+				return;
+			}
+			nextEmbeddedSchedule = buildManualPatternEmbeddedSchedule({
+				pattern: validation.data.pattern,
+				startDate: effectiveStartDate,
+				assignedByEmployeeId: validation.data.createdByEmployeeId || null,
+				reason: validation.data.reason || "weekly_hours_assignment",
+				graceLateMinutes: validation.data.graceLateMinutes,
+				graceEarlyOutMinutes: validation.data.graceEarlyOutMinutes,
+				version: Number((targetEmployee.embeddedSchedule as any)?.version || 0) + 1,
+			});
+			source = "manual";
 		} else {
 			const manualSnapshot = normalizeManualSnapshot(validation.data.shiftSnapshot);
 			if (!manualSnapshot) {
@@ -335,7 +356,7 @@ export const controller = (prisma: PrismaClient) => {
 				shiftTypeId: validation.data.shiftTypeId || null,
 			},
 		});
-		await recomputeAttendanceObligationsForRange(prisma, {
+		await recomputeAttendanceObligationsForRangeSafe(prisma, {
 			organizationId,
 			employeeId: validation.data.employeeId,
 			fromDate: effectiveStartDate,

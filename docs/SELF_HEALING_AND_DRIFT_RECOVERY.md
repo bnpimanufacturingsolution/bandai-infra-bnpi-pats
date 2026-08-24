@@ -36,6 +36,7 @@ Windows host repo
 | Gap | Why it matters | Target fix |
 |---|---|---|
 | HRIS Kubernetes runtime is opt-in | Compose remains the default proven runtime until a VM runs `enable-k8s-runtime`. | Run the K8s runtime migration after boot proof, then capture a new visual proof. |
+| Failed `hris-api-db-init` Job (Argo runtime Degraded) | Argo selfHeal recreates the Job from **git**. Origin still **has** `prisma-seed`, which can delete UAT/PROD timesheets. Leaving the Failed Job is safer than deleting it. | Commit schema-only Job (`prisma-postgres:push` only), then delete the Failed Job. `docs/DB_INIT_JOB.md`. |
 | Postgres and uploads backup is manual, not scheduled | Container restart does not fix corrupted or deleted data volumes. | Schedule `backup-appliance-data` or move persistence to a managed backup target. |
 | K3s snapshots are not yet wired to external durable storage | Local K3s snapshots help cluster metadata recovery but do not protect against disk loss. | Configure K3s snapshot retention and S3-compatible off-host copy. |
 | VM disk corruption cannot be repaired by Argo or Compose | If the selected VHDX is unreadable, online repair cannot boot. | Restore from the stable VHDX artifact or a known-good archived copy. |

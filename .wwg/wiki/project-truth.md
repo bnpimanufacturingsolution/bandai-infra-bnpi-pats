@@ -1,8 +1,176 @@
-# Project Truth
+## Recruitment identity history (first name + last name + birthday) (2026-08-22)
+
+- Status: `CONFIRMED_CODE`.
+- Match key for previous Bandai record is **first name + last name + birthday only**. Middle name is not part of this check. Email is not the identity key.
+- Sources: `Applicant.person.personalInfo` and `Employee.person.personalInfo` in the same organization.
+- Purpose: **show history**, not block apply. Recruiter drawer shows previous applications (including Rejected) and employee records (including Resigned / Terminated).
+- Public apply collects date of birth. `GET /api/applicant/:id` and create attach `identityHistory`. Same email + same name/birthday reuses the Person so they can apply again.
+- Helper: `hris-api/helper/person-identity-history.helper.ts`. UI: recruiter candidate drawer **Previous Bandai record**.
+- Gap: older applicants with no stored birthday cannot match until DOB exists on that Person.
+
+
+## GitOps db-init Job (2026-08-21)
+
+- Status: `CONFIRMED_CODE` (push authorized 2026-08-22).
+- Runtime Argo **Degraded** on `project-truth-runtime-{dev,uat,prod}` is Failed Job `hris-api-db-init` (`BackoffLimitExceeded`), not G«£Postgres emptyG«•. App/API can be healthy.
+- Job command is `prisma-postgres:push` only. Seed can delete timesheet/attendance rows. **Do not** seed, `prisma-reset`, or `--accept-data-loss` on UAT/PROD.
+- Argo `selfHeal` will recreate the Job from git. **Do not delete** the Failed Job until `origin/develop` is schema-only (`push` only).
+- GitOps Job is schema-only (`prisma-postgres:push`). Operator authorized push 2026-08-22. UAT/PROD dumps on the VM.
+- Operator: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
+
+
+## Employee weekly hours vs schedule templates (2026-08-20)
+
+- Status: `CONFIRMED_CODE`.
+- **Schedule templates** (`/admin/configuration/schedule-templates`) are reusable org patterns (7/14-day cycles, shift types per day). Assign them to many people.
+- **One employeeG«÷s hours** (Zen Monday 06:00G«Ù15:00, Tuesday 07:00G«Ù16:00) live on `Employee.embeddedSchedule.pattern`. HR/admin edit that from:
+  1. Dedicated roster: HR Timekeeping **Schedules** (`/hr/employee-schedules`) and admin **Employee Schedules** (`/admin/configuration/employee-schedules`). Filter by department/section, click a person to see current hours, then **Change schedule**.
+  2. Employee edit form GÂ∆ Active Schedule weekly pattern (`/hr/employees/:id/edit` or admin twin).
+  3. Employee profile **Work Schedule** tab GÂ∆ **Change schedule** GÂ∆ **Days** (weekday start/end/off). `POST /api/employee-schedules` with `pattern`. Takes effect next Monday UTC and recomputes attendance obligations.
+  4. Same modal **Dates** tab: pick a calendar date and set hours for that date only (`POST /api/scheduleOverride`). Not next Monday.
+- A one-off date uses **schedule override**. The Dates tab is that path.
+- Team assign modal can still pick a template or one manual shift for every day; it is not the per-weekday hours editor.
+
+
+## Day labor on timesheet (2026-08-20)
+
+- Status: `CONFIRMED_CODE_LOCAL`. **Do not push** until the operator says so.
+- Lead requirement: Direct vs Indirect **work** can change every day. Line Leader tags people under them. Store it on the timesheet **day**.
+- Field: `Timesheetline.dayLaborType` (`DayLaborType` `DIRECT` \| `INDIRECT`, nullable). Also on `AttendanceObligation` for the same day. **Not** `Employee.workforceSource`.
+- UI: Timesheet day editor GÂ∆ **Day labor**. Persist when the timesheet breakdown is saved.
+- The Workforce **Direct vs Indirect** report remains hire source (BNPI vs Agency). Do not mix the two.
+- Line Leader is not a separate auth role yet; whoever can edit the timesheet day can set the tag (HR / manager / employee-with-edit).
+- Report: `.wwg/reports/direct-indirect-lead-claim-validation-20260820.md`.
+
+
+## Direct vs Indirect labor report UI (2026-08-20)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`. Public DEV until `6aad83c5` is serving is `NEEDS_CONFIRMATION`.
+- Timesheet sheet **2.1.7** is two surfaces. Tardiness / UT / OT stay on `/hr/reports/attendance` (`tab=tardiness` / `tab=overtime`). Direct vs Indirect labor is **not** those tabs.
+- Workforce Analytics (`/hr/reports/workforce`) has three tabs: Agency Attendance (`agency`), Manpower Distribution (`labor`, **default**), Direct vs Indirect (`direct-indirect`). Do not remap `labor` to this report.
+- **DIRECT** = `Employee.workforceSource` is not `AGENCY`. **INDIRECT** = `AGENCY`. Employment type is not the bucket.
+- Metric: `POST /api/metrics` model `Attendance`, `data=["directIndirectLaborSummary"]`. Live local 2026-08-20: **872** direct / **1355** indirect, 15 departments.
+- Gender / Agency / Total Manpower blocks on this tab still come from a client employee roster and can show **0** while the API cards are filled. That is not G«£no Direct people.G«•
+- Operator: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`. Report: `.wwg/reports/direct-indirect-labor-ui-20260820.md`.
+
+
+## UAT/PROD app+API auto-roll (2026-08-20)
+
+- Status: `CONFIRMED_CODE`. ansible-pull after a **rebuild** of `hris-api` / `hris-app` restarts those Deployments in `dev`, `uat`, and `prod` if present. Not GitHub branches. Not docs-only. Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+- Revert: `PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev`. `promote-gitops.yml` remains tag/registry promote.
+
+
+## On-prem DEV/UAT/PROD ports (2026-08-20)
+
+- Status: `CONFIRMED_LIVE`. Operator doc: `docs/ONPREM_PORT_ACCESS.md`. Report: `.wwg/reports/onprem-port-access-20260820.md`.
+- One VM `10.184.37.19` publishes PROD `:3000/:3001`, DEV `:3100/:3101`, UAT `:3200/:3201`. Cloudflare `*.bnpi-hris.tech` is that VM, not a second cloud.
+- VM loopback HTTP **200** on all six. This Windows host WiG«ÊFi **cannot** TCP those LAN ports (`host_not_on_lan`). Public API `/health` **200**.
+- Observe jobs `onprem-{prod,dev,uat}-{api,app}` prove VM bind, not this laptopG«÷s LAN NIC.
+
+
+## GitHub Actions CI / Observe / Validate (2026-08-19 documented 2026-08-20)
+
+- Status: `CONFIRMED_LIVE_20260819`; operator 2026-08-20 authorized push of the CI/Observe harden.
+- Root workflows only: `ci.yml` (per-type tests), `observe-deploy.yml` (GitHub Deployments wait on VM reporter), `validate.yml` (Windows terraform/packer/installer/self-heal). `promote-gitops.yml` is manual.
+- Nested `hris-api/.github` Cloud Run and `hris-app/.github` Firebase workflows **do not run** on `bandai-infra`.
+- Observe environment `success` is the VM reporter. `k8s-runtime-image-state` `services=none` still posts **success** with G«£not rebuilt this SHAG«•. That is not a live API/app image SHA. `/health` has no `buildSha`.
+- Live proof SHA `efc86c56`: CI + Observe + Validate green; VM ansible-pull match; Argo contract apps Synced/Healthy; runtime apps Synced/**Degraded** because Job `hris-api-db-init` Failed `BackoffLimitExceeded`.
+- Full map: `.wwg/reports/devops-ci-observe-validate-20260819.md`. Evidence: `.runtime/devops-ci-validate-20260819/`.
+
+
+## Hikvision biometric device clock and Manila time (2026-08-19)
+
+- Status: `CONFIRMED_CODE_AND_VENDOR`; live 2026-08-19 GET is `NEEDS_CONFIRMATION`.
+- Punch Time In/Out uses **device event time**, not HRIS `receivedAt`. Naive SDK stamps are treated as `Asia/Manila` (`+08:00`). Clocks that differ across terminals break pairing.
+- Admin device console **Preview time / Update time** uses `POST /api/device/:id/time-sync`. Check and write prefer **HCNetSDK STDXML** (`NET_DVR_STDXMLConfig` GET/PUT `/ISAPI/System/time` on the VM listener binary). ISAPI HTTP is fallback if SDK cannot arm. That is Time Settings **manual** sync, **not** NTP. Health still GETs ISAPI for reachability.
+- Vendor MinMoe / DS-K1T **can** set time: panel Time Settings, web Manual or NTP, Hik-Connect, iVMS Batch Time Sync, ISAPI `PUT /ISAPI/System/time`, `PUT /ISAPI/System/time/ntpServers`.
+- Manila on the device is POSIX **`CST-8:00:00`** (UTC+8), DST **off**, `localTime` with `+08:00`. Not IANA `Asia/Manila`. US Central G«£CSTG«• is a different offset.
+- Surviving BNPI Time XML (2026-07-01 through 2026-08-17): `timeMode=manual`, `timeZone=CST-8:00:00`. Offset is already Manila; mode is not fleet NTP. Inter-device drift of tens of seconds was recorded (Main D ~40s ahead of B/E on 2026-08-17).
+- Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`.
+
+
+## EmployeePayroll hourlySalary snapshot (2026-08-19)
+
+- Status: `CONFIRMED_CODE`.
+- **Snapshot only.** `EmployeePayroll.hourlySalary` is a `Float` default `0` written at payroll generate (and the same generate-timesheet / preview engine path). It freezes the **attendance hourly already used for OT and late/UT** on that run. It is not a live formula field after save.
+- **Not Employee input.** `Employee` still has only `basicSalary` + `currency` + `payFrequency`. There is no `Employee.hourlyRate` / `Employee.hourlySalary`. Hire and edit forms do not collect hourly. `basicSalary` remains source of truth.
+- **Formula (derived, then snapshotted):** hourly = daily / `workingHoursPerDay`. BNPI 313 attendance / approved-bucket path uses `BANDAI_WORKING_HOURS_PER_DAY = 8` (`daily = monthly +˘ 12 / 313`, then `/ 8`). Same `hourlyRate` already computed in `resolveBnpiAttendanceDailyRate` / `resolveBandaiApprovedBucketRateBasis`.
+- **Existing rows** stay `0` until unpaid regenerate **or** the optional hourlySalary backfill. Regenerating writes the snapshot; paid money history is not rewritten.
+- **Backfill of existing `0` rows:** `cd hris-api` then `npm run backfill:employee-payroll-hourly-salary` (dry-run default) or `npm run backfill:employee-payroll-hourly-salary:execute`. Fills `EmployeePayroll.hourlySalary` from current `dailySalary` / payroll `metadata` (`hourlyRate`, else daily ++ hours). Does **not** change payroll computation. Stored column is still not used in compute.
+- **Not a Sheet2 register column.** Register mapping stays G Monthly / H Daily / I No. of Days. Do not add an Hourly Salary column to the BNPI computation workbook or treat `hourlySalary` as register parity.
+- **Not SoT. Not used in current computation.** Generate/preview still price OT/late/UT/absent from in-memory `attendanceRate.hourlyRate` (daily ++ hours). They write `hourlySalary` after money is done. They do not read the stored column. The backfill also does not feed compute.
+- Canonical write-up: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
+
+
+## Zen 00010 salary, timesheet, payroll preview (2026-08-17)
+
+- Status: `CONFIRMED_LIVE_DEV`. Timesheet sync **code** is on this `develop` push.
+- Operator could not generate payroll: **Timesheet is missing for this payroll period** on Period 1 Aug 2026 (`PP-20260811-20260826`, 11G«Ù25 Aug Manila). Hire 12 Aug 2026; no DM4/bulk draft existed.
+- **Salary:** `basicSalary` GÈ¶11,000, `SEMI_MONTHLY`, PHP. Monthly display GÈ¶22,000 = Technician `minSalary` floor. Not a Sheet2 register basic.
+- **Timesheet:** `cmswwobaz05mxlp01e8p71f9q` APPROVED. Fourteen `Timesheetline` rows were materialized from `AttendanceObligation` (DEV DB `127.0.0.1:55435`).
+- **Preview after lines (Manila clocks):** 3 ABSENT (14G«Ù16 Aug) GÍ∆GÈ¶2,357.14; late+UT 1,229 min GÍ∆GÈ¶2,011.76; gross GÈ¶6,631.10; SSS GÈ¶675 + PhilHealth GÈ¶331.56 + Pag-IBIG GÈ¶200; net GÈ¶5,424.54. Still preview G«ˆ no `EmployeePayroll` row.
+- **Engine:** generate reads saved lines. Empty lines GÂ∆ daily rate GÈ¶0 GÂ∆ no attendance deduct. `POST /api/payrollPeriod/:id/generate-timesheet` writes payroll from **APPROVED** timesheets; it does not create timesheets.
+- **Code:** `POST /api/timesheet/:id/sync-obligation-lines`; `ensure-period-drafts` accepts `employeeIds`.
+- Math: `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`. Code: `.wwg/reports/zen-payroll-timesheet-code-20260817.md`.
+
+
+## User-facing encoding / boarding notification titles (2026-08-17)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_DEV_ROW`.
+- Operator notification showed `Onboarding Completed! +¶++++G«¶`. That is UTF-8 `=ÉƒÎ` stored as Latin-1 in `checklistItem.controller.ts`, then copied into `notifications.title`.
+- **Product:** boarding complete titles are ASCII: `Onboarding Completed!` and `Exit Clearance Completed!`. Do not put emoji in those literals.
+- Live DEV row `cmswtgafn0cn3lp01zmus0q06` was patched to the ASCII title. New completes stay clean after this SHA is serving.
+- Same pass: documents default-icon compare, enroll ellipsis/bullet, Grafana `Open in Tempo`, migration `Level N - G«™` descriptions, and `POST /api/employee/:id/schedules/set-active` now recomputes `AttendanceObligation` (`ScheduleChanged`) so `/hr/attendance` does not keep a leftover Off Day.
+- Report: `.wwg/reports/mojibake-encoding-20260817.md`.
+
+
+## Device Events TAP display and person-10 inventory (2026-08-17)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL_GET` (commit `a6dce32`). Public DEV UI is `NEEDS_CONFIRMATION` until that SHA is serving.
+- Operator tap Device D serial `9652` person `10` (Check Out, major=5 / minor=38) already set `ATTENDANCE_UPDATED` on attendance `cmsr4ngt2011jvxj4wardyw9f`. The Unknown Vendor / Unknown evidence / Direct No labels were **stale stored taxonomy**, not a failed punch.
+- **Classify:** ACS `major=2` + `minor=38` empty-person is an armed-device exception (not a punch). `major=5` + fingerprint-pass / `minor=38` is `ATTENDANCE` / `TAP`.
+- **GET / UI:** if stored `eventCategory`/`eventAction` is empty, `UNKNOWN`, or `UNKNOWN_VENDOR`, display uses live `classifyDeviceEvent`. SDK listener rows missing evidence stamp as `SDK_CALLBACK` + `directDeviceEvidence=true`. The **list** GET can background-heal stored columns. The **item** GET (`/api/device/events/item/:eventId`) shows the same display taxonomy but does not heal the row.
+- **Callback match:** attendance lookup uses `resolveLinkedEmployeeForDevicePerson` (`deviceEmpId` or padded `employeeId`, e.g. `10`/`00010` and `01515`/`1515`). On match, the callback upserts/links `DeviceUser` and sets `deviceUserId` on the event. Pad does **not** mean `10` = `01515`.
+- **Inventory this session:** DeviceUser `10` on Main B/D/E (`uzaro_zen`) was manually linked ACTIVE to employee `00010` Zen Andrei. The other unmatched DeviceUsers with no HRIS employee were left unmatched.
+- Report: `.wwg/reports/device-event-tap-display-20260817.md`.
+
+
+## Device Events saved-event details deeplink (2026-08-17)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL_API`.
+- Operator URL with `action=view-event&id=<DeviceEvent.id>&page=116` used to open
+  **Device event details** and say the event was not on the current table page.
+- **Cause:** modal resolved only `rows.find(id)` on the current saved page
+  (`limit` default 10, `sort=receivedAt desc`). `page` is leftover table
+  position. New listener rows shift paging; socket prepend is same-tab only.
+- **Contract:** details load by id via `GET /api/device/events/item/:eventId`
+  (org-scoped, uncached). Table `page=` must not gate the modal.
+- Live proof: `cmsr688py002xvxwwttxhdsal` is `ATTENDANCE` / `TAP` / person `10`.
+  Device D `page=116` did not contain it. Item route did.
+- Local Vite (`:5175`) needs API (`:3001`) up. Cached table rows are not API proof.
+- Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
+  Architecture: `.wwg/wiki/05-architecture/device-events-saved-event-deeplink.md`.
+  Evidence: `.runtime/device-event-deeplink-20260817/`.
+
+
+## Hikvision panel Select Status mapping (2026-08-13)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_DEV_DB` (audit only; no mapping implemented).
+- Operator physical: Hikvision terminals show **Select Status** with Check In, Check Out, Break Out, Break In, Overtime In, Overtime Out. Users often pick **Check In** on every device. Devices do not auto-detect in vs out unless T&A mode is Auto/schedule.
+- **Three vocabularies (do not mix):**
+  1. Panel Select Status G«ˆ Hikvision T&A (`attendanceStatus` / `label`).
+  2. `DeviceEvent.eventAction` G«ˆ attendance punches are `TAP` / `TAP_REJECTED`.
+  3. `Attendance.status` G«ˆ day class `PRESENT` / `INCOMPLETE` / `ABSENT` plus `timeIn` / `timeOut`.
+- **Live SDK path (`EN_HCNETSDK_ALARM`):** C++ `alarm_callback` copies ACS extend `byAttendanceStatus` (0G«Ù6) into the POST as `attendanceStatus` + `label` when `byAcsEventInfoExtend==1`. Pre-fix DEV snapshot: 0 / 32,489 SDK rows had the field. Live proof after rebuild: listener logs include `attendanceStatusPresent`. Same tap serial `9619` (person `10`, Device D) was `checkIn` on ISAPI while the pre-fix SDK POST was Not sent.
+- **ISAPI / Sync path (`HIKVISION_CALLBACK`):** `AcsEventInfo.attendanceStatus` + `label` is extracted (`deviceAttendanceStatus` / `panelSelectStatus`) and stamped on persist. Device Events shows **Device status**.
+- **HRIS attendance write:** when the day's punches include panel `checkIn`/`checkOut`, Time In = earliest Check In and Time Out = latest Check Out. Extra Check Ins do not become Time Out. If no panel in/out is present, first/later punch pairing still applies.
+- **Hard ban:** do not treat `currentVerifyMode` as Check In/Out. Do not treat callback-controller `attendanceStatus` as panel status G«ˆ that name is the day class from `determineAttendanceStatus`.
+- Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`. Architecture: `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`. Report: `.wwg/reports/hikvision-select-status-audit-20260813.md`.
+
 
 ## Payroll Preview results on page (2026-08-12)
 
-- **CONFIRMED_LOCAL_IMPLEMENTATION:** Preview Payroll journey is confirm ‚Üí
+- **CONFIRMED_LOCAL_IMPLEMENTATION:** Preview Payroll journey is confirm GÂ∆
   progress in a **modal**, then **page-level results** when
   `previewStep=results` on `/hr/run-payroll`. Completed dry-run employee list
   is not shown inside the modal. Employee payroll summary detail remains a
@@ -10,6 +178,7 @@
 - Evidence: `hris-app/app/components/templates/common/run-payroll-template.tsx`,
   `payroll-preview-modal.ts` (`isPreviewPayrollModalStep`,
   `isPreviewPayrollResultsPage`).
+
 
 ## Payroll Preview includes non-submitted timesheets (2026-08-12)
 
@@ -20,14 +189,14 @@
   lines. Each such row is **estimate-only** and must show workflow readiness
   (e.g. **Timesheet not submitted**, **Pending approval**, **Needs correction**).
 - **Why money is still valid:** payroll math uses **timesheet lines** + benefits /
-  loans / calculator rates. Changing timesheet status from `DRAFT` ‚Üí `SUBMITTED`
-  ‚Üí `APPROVED` does **not** by itself change computed pay when lines are unchanged.
+  loans / calculator rates. Changing timesheet status from `DRAFT` GÂ∆ `SUBMITTED`
+  GÂ∆ `APPROVED` does **not** by itself change computed pay when lines are unchanged.
   Status is a **workflow gate**, not a money formula input.
 - **Start Payroll unchanged:** real generation (`generatePayrollFromTimesheets` /
   Start Payroll job size) still uses **APPROVED + salary + schedule only**.
   Preview must never inflate payable / job total with draft rows.
-- **Summary contract** (`GET ‚Ä¶/generate-timesheet/preview`):
-  - `includedEmployeesCount` = payroll-ready (**APPROVED** + inputs) ‚Äî Start Payroll.
+- **Summary contract** (`GET G«™/generate-timesheet/preview`):
+  - `includedEmployeesCount` = payroll-ready (**APPROVED** + inputs) G«ˆ Start Payroll.
   - `previewComputableEmployeesCount` = all previewable statuses with inputs.
   - `estimatedIncludesNonApproved` = true when preview set is wider than ready.
   - Row fields: `timesheetStatus`, `isPayrollReady`, `readinessKey`,
@@ -36,7 +205,7 @@
   `REVISED` (`PAYROLL_PREVIEW_TIMESHEET_STATUSES`).
 - **Boundary:** employees with **no timesheet** for the period still cannot get
   amounts (no lines). Generate/import timesheets first; then draft rows preview.
-- **Live proof (2026-08-12):** period `PP-20260711-20260726` ‚Äî
+- **Live proof (2026-08-12):** period `PP-20260711-20260726` G«ˆ
   approved 650, payroll-ready 641, **previewComputable 834**,
   `estimatedIncludesNonApproved=true`. Evidence:
   `.runtime/preview-non-submitted-20260812/`.
@@ -45,17 +214,18 @@
   UI `hris-app/.../run-payroll-template.tsx`,
   `hris-app/app/lib/utils/payroll-preview-modal.ts`.
 
-## BNPI Jun 26‚ÄìJul 10 2026 payroll tally investigation (2026-08-11)
+
+## BNPI Jun 26G«ÙJul 10 2026 payroll tally investigation (2026-08-11)
 
 - Status: `INVESTIGATED_CODE_AND_LIVE_PREVIEW` (fleet money not green).
 - Period under study: `PP-20260626-20260711` (Sheet2 payroll computation vs
   Run Payroll / generate-timesheet preview with `calculateRows=true`).
 - **Fleet result (818 compared):** 4 exact money-core tallied; 1 Alexa-near
-  (01792, Œî TotalReceivable ‚àí‚Ç±0.77); majority not tallied. Evidence pack:
+  (01792, +ˆ TotalReceivable GÍ∆GÈ¶0.77); majority not tallied. Evidence pack:
   `.runtime/full-tally-20260811/FINDINGS.md`,
   `.wwg/reports/bnpi-june26-jul10-payroll-tally-20260811.md`.
 - **Register No. of Days (col I) definition (CONFIRMED from code + live proof):**
-  - Target Sheet2 ‚ÄúNo. of Days‚Äù aligns with paid regular days ‚âà sum of Bandai
+  - Target Sheet2 G«£No. of DaysG«• aligns with paid regular days GÎÍ sum of Bandai
     timesheet `approvedBuckets.regularDays` (`sourceRegularDays`).
   - App `payrollRegister.numberOfDays` is currently `totalWorkDays` = count of
     timesheet reporting lines with `status !== REST_DAY` (includes ABSENT and
@@ -66,7 +236,7 @@
 - **Hard ban for tally agents:** do not treat universal day-column mismatch as
   proof that biometrics data is globally wrong. Classify day fail as
   `definition_mismatch` first; only then inspect PRESENT/ABSENT data faults.
-- **Hard ban:** do not claim ‚Äúfixing numberOfDays will tally payroll.‚Äù BNPI
+- **Hard ban:** do not claim G«£fixing numberOfDays will tally payroll.G«• BNPI
   Basic Salary is largely semi-monthly allocation when Bandai buckets drive
   rates; Gross/Net/TotalReceivable residuals are dominated by absent, late,
   OT pay/rate, loans, DMA/MHDMF2 period pin, and tax cascade.
@@ -74,24 +244,44 @@
   attendance daily applies when buckets present; WorkSharing day overrides may
   exist without line schedule rebuild (late residual class `apply_path`).
 
+
+## BNPI Meal Allowance (MLA) coverage expectation (2026-08-07)
+
+- Status: `CONFIRMED_OPERATOR_PRODUCT_TRUTH`.
+- **Coverage expectation:** every Bandai / BNPI employee **should have** an
+  active Meal Allowance (`MLA`) enrollment so payroll can pay MLA for each cut.
+- **Still enrollment-driven:** Run Payroll does **not** invent MLA for employees
+  without a resolving `EmployeeBenefit`. Missing MLA on a payslip is
+  `missing_enrollment` (or date/status/scope), not engine default pay.
+- **Hard ban G«ˆ do not auto-enroll:** agents must **not** implement or run
+  automatic bulk/system enroll of MLA for all employees unless the operator
+  explicitly requests a deliberate enrollment job. Product note GÎ· auto-grant.
+- **Money path when enrolled:** `BenefitType` MLA is compensation with BNPI
+  wiring `RECEIVABLE_ONLY` (post-net; named field `mealAllowance`; adds to
+  TotalReceivable, not GrossPay). Standing/recurring enrollments apply even when
+  MLA is absent from that cutG«÷s compensation mass upload.
+- Operator confirmation: 2026-08-07 G«ˆ all Bandai employees should have MLA;
+  keep enrollment-driven; do not auto-enroll.
+
+
 ## BNPI payroll compensation / deduction source ownership (2026-08-05)
 
 - Status: `CONFIRMED_OPERATOR_PRODUCT_TRUTH`.
 - **Hard ban for payroll tally work:** do **not** assume every compensation or
   deduction on the HRIS Payroll Computation register (or on a generated payslip)
-  must appear in the period‚Äôs **compensation / deduction mass-upload** workbooks.
+  must appear in the periodG«÷s **compensation / deduction mass-upload** workbooks.
 - Run Payroll applies money from **active `EmployeeBenefit` / `EmployeeLoan`
   sources that resolve for the payroll period**, including:
-  1. **Cutoff mass upload** ‚Äî period-scoped (or superseding) enrollments from
+  1. **Cutoff mass upload** G«ˆ period-scoped (or superseding) enrollments from
      DM3 compensation / deduction mass upload for that cut.
-  2. **Recurring / standing enrollments** ‚Äî benefits and deductions already on
+  2. **Recurring / standing enrollments** G«ˆ benefits and deductions already on
      the employee (catalog, prior enrollment, open-horizon or multi-cutoff
      recurring) that remain active and eligible for the period **even when
      those codes are absent from the cutoff mass-upload file**.
-  3. **Engine-only** lines ‚Äî e.g. SSS Cont / PhilHealth / Pag-IBIG (BNPI
+  3. **Engine-only** lines G«ˆ e.g. SSS Cont / PhilHealth / Pag-IBIG (BNPI
      semi-monthly schedule: period 1 full, period 2 zero), W/Tax from taxable
      gross. Not mass-upload rows.
-  4. **Attendance / OT path** ‚Äî basic/absent/UT, approved OT buckets (DM4), not
+  4. **Attendance / OT path** G«ˆ basic/absent/UT, approved OT buckets (DM4), not
      mass-upload compensation.
 - **Tally method:** for each register or payslip line, classify source as
   `mass_upload` | `recurring_enrollment` | `engine` | `ot_attendance` |
@@ -102,30 +292,13 @@
   open-horizon peer exist for the same employee + benefit code, generation
   prefers period-scoped and mass import supersedes open-horizon peers (anti
   double ARP). Recurring truth remains valid when no period-scoped peer exists.
-- Operator confirmation: 2026-08-05 ‚Äî not all compensation/deduction comes from
+- Operator confirmation: 2026-08-05 G«ˆ not all compensation/deduction comes from
   mass upload; recurring benefits apply without a mass-upload row.
 - Related checklists: `docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md`,
   `docs/BNPI_JUNE11_25_2026_PAYROLL_PARITY_CHECKLIST.md`,
   `docs/dm-migration-workflow.md` (DM3 mass upload is additive cutoff path, not
   sole benefit source).
 
-## BNPI Meal Allowance (MLA) coverage expectation (2026-08-07)
-
-- Status: `CONFIRMED_OPERATOR_PRODUCT_TRUTH`.
-- **Coverage expectation:** every Bandai / BNPI employee **should have** an
-  active Meal Allowance (`MLA`) enrollment so payroll can pay MLA for each cut.
-- **Still enrollment-driven:** Run Payroll does **not** invent MLA for employees
-  without a resolving `EmployeeBenefit`. Missing MLA on a payslip is
-  `missing_enrollment` (or date/status/scope), not engine default pay.
-- **Hard ban ‚Äî do not auto-enroll:** agents must **not** implement or run
-  automatic bulk/system enroll of MLA for all employees unless the operator
-  explicitly requests a deliberate enrollment job. Product note ‚â† auto-grant.
-- **Money path when enrolled:** `BenefitType` MLA is compensation with BNPI
-  wiring `RECEIVABLE_ONLY` (post-net; named field `mealAllowance`; adds to
-  TotalReceivable, not GrossPay). Standing/recurring enrollments apply even when
-  MLA is absent from that cut‚Äôs compensation mass upload.
-- Operator confirmation: 2026-08-07 ‚Äî all Bandai employees should have MLA;
-  keep enrollment-driven; do not auto-enroll.
 
 ## Shared DEV/UAT/PROD observability recovery (2026-07-28)
 
@@ -146,6 +319,7 @@
   data. Cloudflare remained enabled/active and all six Argo applications were
   `Synced/Healthy`.
 - Evidence: `.runtime/observability-audit-20260728-142401/`.
+
 
 ## DEV/UAT/PROD data parity snapshot (2026-07-24)
 
@@ -184,6 +358,7 @@ If this file conflicts with lower-priority reports, generated notes, task files,
 
 Project Truth must not be silently overwritten. Requirement evolution is allowed when documented and accepted.
 
+
 ## Credential Recovery Queue Truth (2026-07-24)
 
 - Status: `CONFIRMED_CODE_EVIDENCE_WITH_RUNTIME_BOUNDARY`.
@@ -213,6 +388,7 @@ Project Truth must not be silently overwritten. Requirement evolution is allowed
 - Architecture and evidence:
   `docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md`.
 
+
 ## Confirmed Local DEV and Sync Center Runtime Truth (2026-07-23)
 
 - Canonical Windows hot-reload PostgreSQL is the K3s DEV forward at `127.0.0.1:55435`; compose DEV is not an automatic fallback.
@@ -237,11 +413,16 @@ Project Truth must not be silently overwritten. Requirement evolution is allowed
   through frozen-scope write execution, terminal monitoring, failure repair, and
   post-write physical rereads.
 
+
+# Project Truth
+
+
 ## Product Identity
 
 - Product name: project_truth_hyperv_fresh
 - Status: INFERRED
 - Evidence: package.json (package name)
+
 
 ## Product Category
 
@@ -249,11 +430,13 @@ Project Truth must not be silently overwritten. Requirement evolution is allowed
 - Status: INFERRED
 - Evidence: package/source (frontend framework or route folders detected)
 
+
 ## One-Line Description
 
 - Description: project_truth_hyperv_fresh appears to be a web application.
 - Status: INFERRED
 - Evidence: package.json (package name); package/source (frontend framework or route folders detected)
+
 
 ## Primary Users and Roles
 
@@ -269,6 +452,7 @@ Project Truth must not be silently overwritten. Requirement evolution is allowed
   - Status: OBSERVED
   - Evidence: Existing HRIS role tests and app role types.
 
+
 ## Canonical Scope
 
 Currently includes:
@@ -282,6 +466,7 @@ Currently does not include unless approved:
 - Boundary: mock/demo files detected
   - Status: INFERRED
   - Evidence: README/source/package (safety boundary indicators)
+
 
 ## Canonical Terminology
 
@@ -309,6 +494,7 @@ Critical terms:
   - Meaning: Observed project term; confirm canonical meaning before broad use.
   - Status: NEEDS_CONFIRMATION
   - Evidence: README heading
+
 
 ## Architecture Truth
 
@@ -487,6 +673,7 @@ Do not introduce without approval:
   - Status: CONFIRMED_LOCAL_AND_K3S_RUNTIME_EVIDENCE_WITH_PUBLIC_BOUNDARY
   - Evidence: On 2026-07-22, direct LAN SSH to `infra@10.184.37.19` succeeded. K3s DEV Postgres returned six active rows: B `.20`, A `.21`, C `.22`, D `.23`, E `.24`, and F `.25`, all HTTPS `443` with SDK `8000`. VM probes reached all six on TCP `80/443/8000`; K3s DEV quick health reported all six online. The prior Windows bootstrap mapped only `.20-.23`, which made `.24/.25` fall back to unavailable direct Windows routing and display offline. The default tunnel/predev set was extended to `.20-.25`; after API restart, local quick health and Playwright reported all six online through `env_tunnel_map`, and full authenticated health for `.24/.25` read device system time successfully. Boundary: LAN/K3s and localhost are proven, but public `bnpi-hris.tech` ingress returned Cloudflare 503/TLS resets while the named service remained active; QUIC and two additive HTTP/2 connector attempts from VM source `.19` and `.78` all hit edge TLS/control-stream resets. Evidence root: `.runtime/hikvision-six-device-20260722-143712/`.
 
+
 ## Safety and Production Boundaries
 
 Current boundaries:
@@ -510,6 +697,7 @@ Do not claim production readiness for:
   - Status: CONFIRMED
   - Evidence: hris-app/.react-router/types/app/routes/hr/+types/billings.$id.ts (payments/billing indicator)
 
+
 ## Current Product Direction
 
 Current direction:
@@ -524,6 +712,7 @@ Avoid drifting into:
   - Status: NEEDS_CONFIRMATION
   - Evidence: JS/TS source detected without package dependencies.
 
+
 ## Open Questions
 
 - Question: Confirm product category.
@@ -532,6 +721,7 @@ Avoid drifting into:
 - Question: Confirm remaining non-admin role boundaries.
   - Why it matters: Roles affect permissions, UX, terminology, and task routing.
   - Evidence / uncertainty: Admin device/configuration ownership is confirmed; remaining HR/employee sub-role boundaries remain code-observed unless separately reviewed.
+
 
 ## Update Rules
 
@@ -547,6 +737,7 @@ Update this file when:
 
 For adopted projects, do not treat inferred truth as final confirmed truth until reviewed.
 
+
 ## Device Sync Progress And Availability Boundaries
 
 - Status: CONFIRMED by source, direct API timing, and headless Playwright on 2026-07-15.
@@ -556,3 +747,4 @@ For adopted projects, do not treat inferred truth as final confirmed truth until
 - Device merge and log previews use bounded concurrent availability checks. Offline/unavailable devices are identified and skipped; they must not block available devices. Background refetch preserves the last usable rows rather than replacing the table with a full loading skeleton.
 - Hikvision device-user merge preview must show one selectable merge row per unique device/vendor person ID read from the selected physical devices. Saved HRIS `DeviceUser` rows may attach link/status/manual-link context, but they must not drive the unique-ID count or collapse two different vendor IDs into one selectable unique ID. Duplicate source rows for the same device/user ID are truth/evidence to collapse and report; they must not create duplicate "unique ID" choices. Evidence: `.runtime/merge-strict-device-id-truth-20260721-113511/api-merge-plan-strict-device-id-summary.json`.
 - Evidence: `.runtime/device-preflight-latency-20260715-151721/` and `.runtime/biometric-portability-proof-20260715-114841/playwright-main-c-background/`.
+

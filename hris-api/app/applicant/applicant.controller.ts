@@ -1,3 +1,4 @@
+import path from "path";
 import { Request, Response, NextFunction } from "express";
 import { PrismaClient, Prisma } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger.helper";
@@ -34,10 +35,20 @@ import {
 	initializeApplicantWorkflow,
 	provisionApplicantEmployeeAccountAfterHire,
 } from "../../helper/recruitment-runtime.helper";
+import {
+	attachIdentityHistoryToApplicants,
+	identityHistoryFromPerson,
+} from "../../helper/person-identity-history.helper";
 
 const logger = getLogger();
 const applicantLogger = logger.child({ module: "applicant" });
 const APPLICANT_ACTION_RETRY_LIMIT = 3;
+
+const attachmentPublicId = (prefix: string, id: string, originalname?: string) => {
+	const ext = path.extname(originalname || "").toLowerCase();
+	const safeExt = /^\.[a-z0-9]{1,8}$/.test(ext) ? ext : "";
+	return `${prefix}_${id}_${Date.now()}${safeExt}`;
+};
 
 type AuthRequest = Request & {
 	userId?: string;
@@ -216,6 +227,30 @@ export const controller = (prisma: PrismaClient) => {
 		await invalidateCache.byPattern("cache:applicant:list:*");
 	};
 
+	const attachIdentityHistory = async (
+		organizationId: string,
+		applicant: Record<string, any> | null,
+	) => {
+		if (!applicant) {
+			return applicant;
+		}
+
+		let person = applicant.person;
+		if (!person && applicant.personId) {
+			person = await prisma.person.findFirst({
+				where: { id: applicant.personId, isDeleted: false },
+				select: { personalInfo: true },
+			});
+		}
+
+		applicant.identityHistory = await identityHistoryFromPerson(prisma, {
+			organizationId,
+			person,
+			excludeApplicantId: applicant.id,
+		});
+		return applicant;
+	};
+
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
 		let requestData = req.body;
 		const contentType = req.get("Content-Type") || "";
@@ -364,7 +399,11 @@ export const controller = (prisma: PrismaClient) => {
 					const uploadResult = await uploadToCloudinary(req.file.buffer, {
 						folder: "applicants/resumes",
 						resourceType: "raw",
-						publicId: `resume_${createdApplicant.id}_${Date.now()}`,
+						publicId: attachmentPublicId(
+							"resume",
+							createdApplicant.id,
+							req.file.originalname,
+						),
 					});
 
 					if (uploadResult.success && uploadResult.secureUrl) {
@@ -405,6 +444,9 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			await invalidateApplicantCaches(applicant?.id);
+			if (applicant) {
+				await attachIdentityHistory(linkResult.organizationId, applicant as any);
+			}
 
 			logActivity(req, {
 				userId: (req as any).user?.id || "unknown",
@@ -540,6 +582,14 @@ export const controller = (prisma: PrismaClient) => {
 					? groupDataByField(applicants, effectiveGroupBy as string)
 					: applicants;
 
+			if (document && applicants.length > 0) {
+				await attachIdentityHistoryToApplicants(
+					prisma,
+					requestOrganizationId,
+					applicants as Array<Record<string, any>>,
+				);
+			}
+
 			logActivity(req, {
 				userId: (req as any).user?.id || "unknown",
 				action: config.ACTIVITY_LOG.APPLICANT.ACTIONS.GET_ALL_APPLICANT,
@@ -600,6 +650,8 @@ export const controller = (prisma: PrismaClient) => {
 				res.status(404).json(buildErrorResponse(config.ERROR.APPLICANT.NOT_FOUND, 404));
 				return;
 			}
+
+			await attachIdentityHistory(requestOrganizationId, applicant as any);
 
 			const preHireSetup = await getApplicantPreHireSetupReadiness(prisma, {
 				organizationId: requestOrganizationId,
@@ -1072,11 +1124,21 @@ export const controller = (prisma: PrismaClient) => {
 		const uploadResult = await uploadToCloudinary(req.file.buffer, {
 			folder: "applicants/attachments",
 			resourceType: "raw",
-			publicId: `attachment_${id}_${Date.now()}`,
+			publicId: attachmentPublicId("attachment", id, req.file.originalname),
 		});
 
 		if (!uploadResult.success || !uploadResult.secureUrl) {
-			res.status(500).json(buildErrorResponse("Failed to upload attachment file", 500));
+			applicantLogger.error(
+				`Attachment upload failed for applicant ${id}: ${uploadResult.error || "unknown storage error"}`,
+			);
+			res.status(500).json(
+				buildErrorResponse("Failed to upload attachment file", 500, [
+					{
+						field: "file",
+						message: uploadResult.error || "Storage provider rejected the upload",
+					},
+				]),
+			);
 			return;
 		}
 

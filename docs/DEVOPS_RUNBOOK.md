@@ -4,8 +4,16 @@
 
 | Workflow | Purpose | Runner |
 |---|---|---|
-| `validate.yml` | Static validation for Node, PowerShell, Terraform, and GitOps overlays. | GitHub-hosted Windows runner |
-| `promote-gitops.yml` | Manual GitOps release tag and runtime image tag promotion for DEV/UAT/PROD. | GitHub-hosted Ubuntu runner |
+| `ci.yml` | Per-type product checks: hris-api, hris-app, hris-emp-app, hikvision, zkteco, ansible syntax-check, callback-outbox, gitops kustomize. **Not** deploy proof. | GitHub-hosted Ubuntu |
+| `observe-deploy.yml` | Per-type GitHub Deployments wait for VM `project-truth-report-github-deploy`. Image envs: `success` can mean **not rebuilt**. On-prem jobs: VM curl of DEV/UAT/PROD `:3000/:3001/:3100/:3101/:3200/:3201`. | GitHub-hosted Ubuntu |
+| `validate.yml` | Static validation for Node, PowerShell, Terraform, Packer, installer, self-heal, observability contract, GitOps overlays. **Not** deploy proof. | GitHub-hosted Windows |
+| `promote-gitops.yml` | Manual GitOps release tag and runtime image tag promotion for DEV/UAT/PROD. | GitHub-hosted Ubuntu |
+
+Operator map and honesty tables: `.wwg/reports/devops-ci-observe-validate-20260819.md`. Nested package workflows under `hris-api/.github` and `hris-app/.github` do not run on this monorepo.
+
+On-prem DEV/UAT/PROD ports (LAN vs this PC vs Cloudflare): `docs/ONPREM_PORT_ACCESS.md`.
+
+GitOps schema Job (`hris-api-db-init`), seed ban, backups, and why Failed Jobs are left until git is schema-only: `docs/DB_INIT_JOB.md`.
 
 ## Validate
 
@@ -23,6 +31,35 @@ packer validate image-factory/packer/ubuntu-virtualbox.pkr.hcl
 PowerShell fallback installer build
 temp-path installer install and shortcut contract verification
 ```
+
+## Appliance auto-roll (DEV + UAT + PROD app/API)
+
+On this single-VM appliance, ansible-pull still tracks Git branch **`develop`**. After it imports rebuilt `hris-api-local:develop` / `hris-app-local:develop`, it restarts those Deployments in namespaces **`dev`**, **`uat`**, and **`prod`** when the Deployment exists.
+
+That is **not** “GitHub branch `uat`/`prod` auto-deploys.” Creating those branches does not change the puller or Argo `targetRevision` (still `develop`).
+
+Docs-only pushes still do not rebuild or restart. Callback-outbox exists only in **dev** and is skipped in uat/prod.
+
+Revert to old DEV-only app/API restarts:
+
+```text
+PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev
+```
+
+Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+
+## DB init Job (do not seed UAT/PROD)
+
+Runtime Argo **Degraded** on `hris-api-db-init` Failed does **not** mean Postgres is empty. Live DEV/UAT/PROD APIs can be healthy while that Job is Failed.
+
+| Env | Allowed Job command | Forbidden |
+|---|---|---|
+| GitOps `dev` / `uat` / `prod` | `npm run prisma-postgres:push` only | `prisma-seed`, `prisma-reset`, `--accept-data-loss` |
+| Empty local compose bootstrap | push **and** seed is OK for a blank laptop DB | pointing that compose at UAT/PROD volumes |
+
+Argo runtime apps use `selfHeal: true`. **Do not delete** a Failed `hris-api-db-init` Job while `origin/develop` still contains `prisma-seed` — Argo will recreate the seed Job and can delete timesheets.
+
+Operator page + backup paths + after-commit order: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
 
 ## Promotion
 

@@ -9,6 +9,7 @@ import {
 	getHikvisionObservedClockSkewSeconds,
 	normalizeHikvisionAcsEventListTimes,
 } from "../../../helper/hikvision-event-contract.helper";
+import { extractHikvisionPanelSelectStatus } from "../../../helper/hikvision-panel-select-status.helper";
 import { controller as callbackController } from "./callback.controller";
 
 export const controller = (prisma: PrismaClient) => {
@@ -111,6 +112,7 @@ export const controller = (prisma: PrismaClient) => {
 					return {
 						...event,
 						hrisEmployee: employee ? buildEventEmployeeSnapshot(employee) : null,
+						hrisPanelSelectStatus: extractHikvisionPanelSelectStatus(event),
 					};
 				}),
 			},
@@ -120,6 +122,21 @@ export const controller = (prisma: PrismaClient) => {
 	const getAcsEventList = (data: any) => {
 		const events = data?.AcsEvent?.InfoList;
 		return Array.isArray(events) ? events : [];
+	};
+
+	const annotateAcsEventsWithPanelStatus = (data: any) => {
+		const events = getAcsEventList(data);
+		if (!events.length) return data;
+		return {
+			...data,
+			AcsEvent: {
+				...data.AcsEvent,
+				InfoList: events.map((event: any) => ({
+					...event,
+					hrisPanelSelectStatus: extractHikvisionPanelSelectStatus(event),
+				})),
+			},
+		};
 	};
 
 	const normalizeAcsEventResponseTimes = async (
@@ -239,13 +256,14 @@ export const controller = (prisma: PrismaClient) => {
 				const normalizedData = await normalizeAcsEventResponseTimes(req, data);
 				const syncSummary = await syncAcsEventsToDeviceAttendance(req, normalizedData);
 				const enrichedData = await enrichAcsEventsWithEmployees(req, normalizedData);
+				const annotatedData = annotateAcsEventsWithPanelStatus(enrichedData);
 
 				return res
 					.status(200)
 					.json(
 						buildSuccessResponse(
 							"ACS events retrieved successfully",
-							{ ...enrichedData, hrisSync: syncSummary },
+							{ ...annotatedData, hrisSync: syncSummary },
 							200,
 						),
 					);

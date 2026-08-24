@@ -209,12 +209,35 @@ describe("RequestReviewModal", () => {
 		expect(screen.getByText(/Submitted correction/i)).toBeInTheDocument();
 		expect(screen.getByText("Status: Submitted")).toBeInTheDocument();
 		expect(screen.getByText("Approval updates attendance source records that may affect timesheets and payroll.")).toBeInTheDocument();
+		expect(screen.getAllByText("Attendance Correction").length).toBeGreaterThan(0);
 		expect(screen.getByRole("button", { name: "Approve" })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "Reject" })).toBeInTheDocument();
 		expect(screen.getAllByText("Forgot to clock out")).toHaveLength(2);
 		expect(screen.getByText("Missed Punch")).toBeInTheDocument();
-		expect(screen.getByText("08:15")).toBeInTheDocument();
-		expect(screen.getByText("17:10")).toBeInTheDocument();
+		expect(screen.getByText("8:15 AM")).toBeInTheDocument();
+		expect(screen.getByText("5:10 PM")).toBeInTheDocument();
+	});
+
+	it("shows Complete Task when HR Review is a pending TASK", () => {
+		render(
+			<RequestReviewModal
+				open
+				onOpenChange={vi.fn()}
+				request={{
+					...baseAttendanceCorrectionRequest,
+					currentWorkflowStateKey: "APPROVED",
+					currentStepExecution: {
+						...baseAttendanceCorrectionRequest.currentStepExecution,
+						stepType: "TASK",
+					},
+				} as any}
+				onApprove={vi.fn()}
+				skipRequestFetch
+			/>,
+		);
+
+		expect(screen.getByRole("button", { name: "Complete Task" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Reject" })).not.toBeInTheDocument();
 	});
 
 	it("shows approved leave conversion and timesheet adjustment details when reconciliation metadata exists", () => {

@@ -8,7 +8,7 @@ export const router = (route: Router, controller: IController): Router => {
 	const routes = Router();
 
 	/**
-	 * Public bridge endpoint for the Windows ZKTeco SDK process.
+	 * Public bridge endpoint for the Linux ZKTeco bridge process (vendor/zkteco-linux).
 	 * The bridge cannot attach browser auth tokens, so this path is excluded from app auth.
 	 */
 	routes.post("/events", controller.handleEvent);

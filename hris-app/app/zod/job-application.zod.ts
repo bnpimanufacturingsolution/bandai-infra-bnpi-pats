@@ -45,6 +45,33 @@ const expectedSalarySchema = z
 		message: "Expected salary must be greater than 0.",
 	});
 
+const requiredDateOfBirthSchema = z
+	.string()
+	.trim()
+	.min(1, "Date of birth is required.")
+	.superRefine((value, ctx) => {
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Enter a valid date of birth.",
+			});
+			return;
+		}
+
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+		const selected = new Date(date);
+		selected.setHours(0, 0, 0, 0);
+
+		if (selected > today) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Date of birth cannot be in the future.",
+			});
+		}
+	});
+
 const optionalFutureDateInputSchema = z
 	.string()
 	.trim()
@@ -92,6 +119,7 @@ export const JobApplicationFormSchema = z.object({
 	resume: resumeSchema,
 	firstName: requiredTrimmedString("First name"),
 	lastName: requiredTrimmedString("Last name"),
+	dateOfBirth: requiredDateOfBirthSchema,
 	email: z.preprocess(
 		trimString,
 		z.string().min(1, "Email address is required.").email("Enter a valid email address."),

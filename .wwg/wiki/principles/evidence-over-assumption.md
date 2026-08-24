@@ -3,7 +3,7 @@ type: principle-brief
 status: active
 mutability: high-friction
 scope: agent-reasoning
-last_reviewed: 2026-07-23
+last_reviewed: 2026-08-19
 ---
 
 # Evidence Over Assumption
@@ -85,10 +85,10 @@ Agents repeatedly fail by **assuming** the first `device-event:saved` always has
 
 **Find truth this way (mandatory before claims):**
 
-1. Read `vendor/hikvision-linux/hikvision_biometric_service.cpp`:
-   - `alarm_callback` — person id **only** from `dwEmployeeNo` (empty when 0).
-   - `build_hikvision_callback_json` — `employeeNo` / `employeeNoString` are that same string.
-   - `hris_post_loop` / enrich path — what is filled **before** POST.
+1. Read `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` (callback/JSON) and `src/hikvision_bio/spool.cpp` (POST/enrich):
+   - `alarm_callback` (`acs.cpp`) — person id **only** from `dwEmployeeNo` (empty when 0).
+   - `build_hikvision_callback_json` (`acs.cpp`) — `employeeNo` / `employeeNoString` are that same string.
+   - `hris_post_loop` / enrich path (`spool.cpp`) — what is filled **before** POST.
 2. Read a real saved payload or `.runtime` SDK log (major/minor + `employeeNo`).
 3. State what the wire actually had: **plain** / **empty** / **opaque**.
 

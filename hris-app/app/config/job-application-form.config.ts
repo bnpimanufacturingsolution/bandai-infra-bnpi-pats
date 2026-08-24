@@ -47,6 +47,13 @@ export const defaultJobApplicationConfig: JobApplicationFormConfig = {
 					placeholder: "Doe",
 				},
 				{
+					id: "dateOfBirth",
+					name: "dateOfBirth",
+					label: "Date of Birth",
+					type: "date",
+					required: true,
+				},
+				{
 					id: "email",
 					name: "email",
 					label: "Email Address",

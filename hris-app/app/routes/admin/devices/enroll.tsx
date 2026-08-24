@@ -883,7 +883,7 @@ export function DeviceEnrollmentPanel({
 			deviceId: activePanel === "overview" ? "all" : selectedDeviceId || "all",
 			quick: true,
 		},
-		// Only while Sync Center panels that need counts are visible â€” no background poll.
+		// Only while Sync Center panels that need counts are visible -- no background poll.
 		activePanel === "overview" || activePanel === "users" || Boolean(selectedDeviceId),
 		{ refetchIntervalMs: false, staleTime: 60 * 1000 },
 	);
@@ -4958,7 +4958,7 @@ export function DeviceEnrollmentPanel({
 		.sort((left, right) => {
 			const rankDelta = rankDeviceUserSearchMatch(left) - rankDeviceUserSearchMatch(right);
 			if (rankDelta !== 0) return rankDelta;
-			// On-device (live source) first â€” matches Hikvision Person Management "recent" feel.
+			// On-device (live source) first -- matches Hikvision Person Management "recent" feel.
 			const leftLive = left.sourceUser ? 0 : 1;
 			const rightLive = right.sourceUser ? 0 : 1;
 			if (leftLive !== rightLive) return leftLive - rightLive;
@@ -6571,7 +6571,7 @@ export function DeviceEnrollmentPanel({
 									</span>
 									{hikvisionListenerStatus ? (
 										<>
-											<span className="opacity-40">â€¢</span>
+											<span className="opacity-40">•</span>
 											<span className="truncate">
 												{isFetchingHikvisionListenerStatus
 													? "Refreshing · "
@@ -6616,7 +6616,7 @@ export function DeviceEnrollmentPanel({
 					{isLoadingDevices && devices.length === 0 ? (
 						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
 							<Loader2 className="mr-2 inline-block h-4 w-4 animate-spin" />
-							Loading device listâ€¦ Close is always available if this hangs.
+							Loading device list... Close is always available if this hangs.
 						</div>
 					) : syncCenterDevices.length === 0 ? (
 						<div className="rounded-md border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
@@ -7425,12 +7425,12 @@ export function DeviceEnrollmentPanel({
 											{recentDeletedDeviceUser.sourceDeleted
 												? "not found"
 												: "needs check"}{" "}
-											Â· HRIS row:{" "}
+											· HRIS row:{" "}
 											{recentDeletedDeviceUser.hrisDeleted
 												? "removed"
 												: "needs check"}
 											{recentDeletedDeviceUser.failed
-												? ` Â· ${recentDeletedDeviceUser.failed} selected users failed`
+												? ` · ${recentDeletedDeviceUser.failed} selected users failed`
 												: ""}
 										</span>
 									</div>
@@ -12142,7 +12142,7 @@ export function DeviceEnrollmentPanel({
 													) : detailsDeviceUserSavedLoading ? (
 														<>
 															<Loader2 className="h-5 w-5 animate-spin" />
-															Checking saved templatesâ€¦
+															Checking saved templates...
 														</>
 													) : (
 														"Not captured yet"
@@ -12244,7 +12244,7 @@ export function DeviceEnrollmentPanel({
 															}
 														}}>
 														{rawFpCaptureBusy
-															? "Capturingâ€¦"
+															? "Capturing..."
 															: rawPresent
 																? "Repair: re-capture raw"
 																: "Repair: capture raw"}
@@ -12263,22 +12263,22 @@ export function DeviceEnrollmentPanel({
 																	<p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-800">
 																		Template {idx + 1}
 																		{open
-																			? " Â· full base64"
-																			: " Â· preview"}
+																			? " · full base64"
+																			: " · preview"}
 																	</p>
 																	<p className="mt-1 break-all font-mono text-[10px] leading-4 text-slate-800">
 																		{open
 																			? data
-																			: `${data.slice(0, 120)}${data.length > 120 ? "â€¦" : ""}`}
+																			: `${data.slice(0, 120)}${data.length > 120 ? "..." : ""}`}
 																	</p>
 																	<p className="mt-1 text-[10px] text-emerald-900">
 																		length={data.length} chars
-																		Â· fingerPrintId=
+																		· fingerPrintId=
 																		{String(
 																			tpl?.fingerPrintId ??
 																				"?",
 																		)}{" "}
-																		Â· type=
+																		· type=
 																		{String(
 																			tpl?.fingerType ?? "?",
 																		)}
@@ -12378,7 +12378,7 @@ export function DeviceEnrollmentPanel({
 													{facePresent
 														? "Stored on DeviceUser"
 														: faceCount > 0
-															? "Count only â€” raw not pulled"
+															? "Count only -- raw not pulled"
 															: "No face on device"}
 												</p>
 												<p className="mt-2 leading-5">
@@ -12386,7 +12386,7 @@ export function DeviceEnrollmentPanel({
 														? "Base64 face image custody on DeviceUser (not on DeviceEvent ledger)."
 														: faceCount > 0
 															? "UserInfo reports a face count but raw picture was not captured yet."
-															: "Device UserInfo has numOfFace=0 / no faceURL for this person â€” nothing to store."}
+															: "Device UserInfo has numOfFace=0 / no faceURL for this person -- nothing to store."}
 												</p>
 												{faceCount > 0 ? (
 													<div className="mt-3 flex flex-wrap gap-2">
@@ -12482,11 +12482,11 @@ export function DeviceEnrollmentPanel({
 															className="mx-auto max-h-40 rounded-lg object-contain"
 														/>
 														<p className="mt-2 text-[10px] text-emerald-900">
-															bytesâ‰ˆ
+															bytes~
 															{String(
 																rawFace?.byteLength || b64.length,
 															)}{" "}
-															Â· source=
+															· source=
 															{String(rawFace?.source || "?")}
 														</p>
 													</div>
@@ -12817,8 +12817,8 @@ export function DeviceEnrollmentPanel({
 								<div className="min-w-0">
 									<p className="font-semibold">{deviceUserExportActionLabel}</p>
 									<p className="mt-1 text-xs text-orange-900">
-										{deviceUserExportScopeLabel} Â·{" "}
-										{deviceUserExportScopeCountLabel} Â·{" "}
+										{deviceUserExportScopeLabel} ·{" "}
+										{deviceUserExportScopeCountLabel} ·{" "}
 										{deviceUserExportState.format === "json"
 											? "Package JSON"
 											: deviceUserExportState.format === "excel"

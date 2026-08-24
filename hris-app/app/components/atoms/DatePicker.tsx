@@ -7,6 +7,7 @@ interface DatePickerProps {
 	className?: string;
 	disabled?: boolean;
 	minDate?: string | Date;
+	maxDate?: string | Date;
 }
 
 export function DatePicker({
@@ -16,11 +17,17 @@ export function DatePicker({
 	className,
 	disabled,
 	minDate,
+	maxDate,
 }: DatePickerProps) {
 	const minDateObj = minDate
 		? typeof minDate === "string"
 			? new Date(minDate)
 			: minDate
+		: undefined;
+	const maxDateObj = maxDate
+		? typeof maxDate === "string"
+			? new Date(maxDate)
+			: maxDate
 		: undefined;
 
 	return (
@@ -31,6 +38,7 @@ export function DatePicker({
 			className={className}
 			disabled={disabled}
 			minDate={minDateObj}
+			maxDate={maxDateObj}
 		/>
 	);
 }

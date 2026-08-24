@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "~/components/atoms/Button";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
-import { Input } from "~/components/atoms/Input";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 import { Modal } from "~/components/atoms/Modal";
 import { Select } from "~/components/atoms/Select";
 import { EmployeeTableCell } from "~/components/molecules/EmployeeTableCell";
@@ -305,13 +305,29 @@ export default function TeamSchedulesTab() {
 							<label className="mb-1 block text-sm font-medium text-gray-700">
 								Start Date
 							</label>
-							<Input type="date" {...register("startDate")} />
+							<CalendarDatePicker
+								value={watch("startDate") || ""}
+								onChange={(next) =>
+									setValue("startDate", next, {
+										shouldValidate: true,
+										shouldDirty: true,
+									})
+								}
+							/>
 						</div>
 						<div>
 							<label className="mb-1 block text-sm font-medium text-gray-700">
 								End Date
 							</label>
-							<Input type="date" {...register("endDate")} />
+							<CalendarDatePicker
+								value={watch("endDate") || ""}
+								onChange={(next) =>
+									setValue("endDate", next, {
+										shouldValidate: true,
+										shouldDirty: true,
+									})
+								}
+							/>
 						</div>
 					</div>
 					<div className="flex justify-end gap-3 border-t pt-4">

@@ -1594,6 +1594,8 @@ export const convertHiredApplicantToEmployee = async (
 	const existingContactEmail = normalizeText((existingContactInfo.email as string | undefined) || "");
 	const mergedPersonalInfo = {
 		...existingPersonalInfo,
+		firstName: existingPersonalInfo.firstName,
+		lastName: existingPersonalInfo.lastName,
 		...(draftDateOfBirth ? { dateOfBirth: draftDateOfBirth } : {}),
 		...(draftGender ? { gender: draftGender } : {}),
 		...(draftNationality ? { nationality: draftNationality } : {}),
@@ -1605,7 +1607,7 @@ export const convertHiredApplicantToEmployee = async (
 			personalInfo: mergedPersonalInfo as any,
 			contactInfo: {
 				...existingContactInfo,
-				email: normalizeText(draft?.email) || existingContactEmail,
+				email: existingContactEmail || normalizeText(draft?.email),
 				phones: [
 					{
 						type: "mobile",

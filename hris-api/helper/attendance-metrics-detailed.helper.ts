@@ -315,10 +315,12 @@ function toUTCDateKey(date: Date): string {
 
 function formatTimeForDisplay(value?: Date | null): string | null {
 	if (!value) return null;
-	return value.toLocaleTimeString("en-US", {
-		hour: "2-digit",
+	return new Intl.DateTimeFormat("en-US", {
+		timeZone: "Asia/Manila",
+		hour: "numeric",
 		minute: "2-digit",
-	});
+		hour12: true,
+	}).format(value);
 }
 
 function parseDisplayTimeToMinutes(value?: string | null): number {
@@ -878,17 +880,18 @@ export async function calculateAttendanceMetricsDetailed(
 	}));
 	(metrics as any).approvedOvertimeCount = Number((metrics as any).totalOvertime || 0);
 	(metrics as any).unapprovedOvertimeCount = 0;
-	const denominator = Number((metrics as any).totalScheduledWorkDays || 0);
-	(metrics as any).avgAttendanceRate =
-		denominator > 0
-			? Math.round(
-					((Number((metrics as any).totalPresent || 0) +
-						Number((metrics as any).totalOnLeave || 0)) /
-						denominator) *
-						100,
-				)
-			: 0;
-	(metrics as any).utilizationRate = (metrics as any).avgAttendanceRate;
+	const obligatedToWork = Number(
+		(metrics as any).totalObligatedToWork || (metrics as any).totalScheduledWorkDays || 0,
+	);
+	const clockedInObligated = Number(
+		(metrics as any).totalClockedInObligated ?? (metrics as any).totalClockedIn ?? 0,
+	);
+	(metrics as any).totalObligatedToWork = obligatedToWork;
+	(metrics as any).totalScheduledWorkDays = obligatedToWork;
+	(metrics as any).totalClockedInObligated = clockedInObligated;
+	(metrics as any).utilizationRate =
+		obligatedToWork > 0 ? Math.round((clockedInObligated / obligatedToWork) * 100) : 0;
+	(metrics as any).avgAttendanceRate = (metrics as any).utilizationRate;
 
 	return {
 		metrics,
@@ -1050,7 +1053,22 @@ async function getPostgresTimesheetLineFacet(params: {
 						jsonb_typeof(e."metadata"->'holidayEntries') = 'array' AND
 						jsonb_array_length(e."metadata"->'holidayEntries') > 0
 					)
-				) AS "_isHoliday"
+				) AS "_isHoliday",
+				(
+					e."_displayStatus" IN (
+						'NOT_CLOCKED_IN',
+						'ABSENT',
+						'SCHEDULED',
+						'PRESENT',
+						'INCOMPLETE',
+						'LATE',
+						'HALF_DAY'
+					)
+					AND NOT (
+						e."_displayStatus" IN ('PRESENT', 'INCOMPLETE')
+						AND UPPER(COALESCE(e."_shiftTypeKey", '')) = 'OFF'
+					)
+				) AS "_isObligatedWorkDay"
 			FROM enriched e
 		),
 		final_filtered AS (
@@ -1121,9 +1139,11 @@ async function getPostgresTimesheetLineFacet(params: {
 				COUNT(*) FILTER (WHERE "_isClockedIn" AND "_isOffDay")::int AS "totalWorkedOnRestDay",
 				COUNT(*) FILTER (WHERE "_isClockedIn" AND "_isHoliday")::int AS "totalWorkedOnHoliday",
 				COUNT(*) FILTER (WHERE "_isClockedIn")::int AS "totalClockedIn",
+				COUNT(*) FILTER (WHERE "_isClockedIn" AND "_isObligatedWorkDay")::int AS "totalClockedInObligated",
 				COUNT(*) FILTER (WHERE "_isClockedOut")::int AS "totalClockedOut",
 				COUNT(*) FILTER (WHERE "_isClockedIn" AND NOT "_isLate")::int AS "totalOnTime",
-				COUNT(*) FILTER (WHERE "_displayStatus" NOT IN ('REST_DAY', 'HOLIDAY', 'CANCELLED'))::int AS "totalScheduledWorkDays",
+				COUNT(*) FILTER (WHERE "_isObligatedWorkDay")::int AS "totalScheduledWorkDays",
+				COUNT(*) FILTER (WHERE "_isObligatedWorkDay")::int AS "totalObligatedToWork",
 				COUNT(*) FILTER (WHERE "_isEarlyOut")::int AS "totalEarlyOut",
 				COUNT(*) FILTER (WHERE "_isOvertime")::int AS "totalOvertime",
 				COALESCE(SUM("_hoursWorkedMinutes"), 0)::int AS "totalMinutesWorked",

@@ -202,7 +202,7 @@ export function HRDocumentRequestsPage() {
 		if (Boolean(getMetadataField(request, "documentNumber"))) return false;
 
 		const state = getDocumentRequestState(request);
-		if (state === "APPROVED") return true;
+		if (state === "APPROVED" || state === "COMPLETED") return true;
 
 		const isHrTaskStage =
 			(state === "SUBMITTED" || state === "IN_PROCESS") &&

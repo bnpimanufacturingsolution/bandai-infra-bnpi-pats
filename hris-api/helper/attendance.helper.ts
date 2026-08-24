@@ -18,6 +18,74 @@ const attendanceLogger = logger.child({ module: "attendance-helper" });
 export const BUSINESS_TIME_ZONE = "Asia/Manila";
 const BUSINESS_UTC_OFFSET_MINUTES = 8 * 60;
 
+const NAIVE_UTC_WALL_RE =
+	/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/;
+
+/**
+ * Punches are stored as `timestamp without time zone` UTC wall clocks
+ * (`2026-08-17 05:40:36` means 05:40Z = 1:40 PM Manila).
+ *
+ * Prisma ORM already returns those as UTC instants. `$queryRaw` / node-pg on a
+ * non-UTC host treats the same wall clock as local time, so `toISOString()`
+ * becomes 8 hours early (5:40 AM Manila). Rebuild the instant from the stored
+ * wall-clock components.
+ */
+export function readQueryRawUtcTimestamp(value: unknown): Date | null {
+	if (value == null || value === "") return null;
+
+	if (typeof value === "object" && value && "$date" in (value as Record<string, unknown>)) {
+		return readQueryRawUtcTimestamp((value as { $date: unknown }).$date);
+	}
+
+	if (typeof value === "string") {
+		const trimmed = value.trim();
+		if (!trimmed) return null;
+		if (/[zZ]$/.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
+			const parsed = new Date(trimmed);
+			return Number.isNaN(parsed.getTime()) ? null : parsed;
+		}
+		const naive = trimmed.match(NAIVE_UTC_WALL_RE);
+		if (naive) {
+			const ms = Number((naive[7] || "0").padEnd(3, "0"));
+			return new Date(
+				Date.UTC(
+					Number(naive[1]),
+					Number(naive[2]) - 1,
+					Number(naive[3]),
+					Number(naive[4]),
+					Number(naive[5]),
+					Number(naive[6] || 0),
+					ms,
+				),
+			);
+		}
+		const parsed = new Date(trimmed);
+		return Number.isNaN(parsed.getTime()) ? null : parsed;
+	}
+
+	if (value instanceof Date) {
+		if (Number.isNaN(value.getTime())) return null;
+		return new Date(
+			Date.UTC(
+				value.getFullYear(),
+				value.getMonth(),
+				value.getDate(),
+				value.getHours(),
+				value.getMinutes(),
+				value.getSeconds(),
+				value.getMilliseconds(),
+			),
+		);
+	}
+
+	if (typeof value === "number" && Number.isFinite(value)) {
+		const parsed = new Date(value);
+		return Number.isNaN(parsed.getTime()) ? null : parsed;
+	}
+
+	return null;
+}
+
 type AttendanceSnapshotSource = {
 	id: string;
 	employeeId: string;

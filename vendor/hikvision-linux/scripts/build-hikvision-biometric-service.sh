@@ -12,6 +12,8 @@ COMMON_ARGS=(
   -pthread
   -I"$SDK_ROOT/incEn"
   -I"$SDK_ROOT/consoleDemo/include"
+  -I"$PROJECT_DIR/include"
+  -I"$PROJECT_DIR/src/hikvision_bio"
 )
 
 COMMON_LINK_ARGS=(
@@ -20,8 +22,28 @@ COMMON_LINK_ARGS=(
   -Wl,-rpath,"$SDK_ROOT/lib"
 )
 
+SOURCES=(
+  "$PROJECT_DIR/src/hikvision_bio/common.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/time.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/acs.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/identity.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/fingerprint.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/face.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/copy.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/spool.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/runtime.cpp"
+  "$PROJECT_DIR/src/hikvision_bio/main.cpp"
+)
+
+for source in "${SOURCES[@]}"; do
+  if [[ ! -f "$source" ]]; then
+    echo "missing Hikvision source: $source" >&2
+    exit 1
+  fi
+done
+
 g++ "${COMMON_ARGS[@]}" \
-  "$PROJECT_DIR/hikvision_biometric_service.cpp" \
+  "${SOURCES[@]}" \
   "${COMMON_LINK_ARGS[@]}" \
   -o "$PROJECT_DIR/build/hikvision-biometric-service"
 

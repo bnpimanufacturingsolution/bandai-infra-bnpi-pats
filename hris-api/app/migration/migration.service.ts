@@ -17,7 +17,7 @@ import {
 const logger = getLogger();
 const migrationLogger = logger.child({ module: "migration" });
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Types -----------------------------------------------
 
 export interface MigrationProgress {
 	phase: string;
@@ -61,22 +61,22 @@ interface MigrationExecutionOptions {
 	strictPostActions?: boolean;
 }
 
-// â”€â”€â”€ Lookup Maps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Lookup Maps -----------------------------------------
 
 interface LookupMaps {
-	departmentMap: Map<string, string>; // code â†’ id
-	positionMap: Map<string, string>; // code â†’ id
-	levelMap: Map<string, string>; // name â†’ id
-	levelRankMap: Map<number, string>; // rank â†’ id
-	employeeIdMap: Map<string, string>; // employeeId â†’ id (for reportTo linking)
+	departmentMap: Map<string, string>; // code -> id
+	positionMap: Map<string, string>; // code -> id
+	levelMap: Map<string, string>; // name -> id
+	levelRankMap: Map<number, string>; // rank -> id
+	employeeIdMap: Map<string, string>; // employeeId -> id (for reportTo linking)
 }
 
-// â”€â”€â”€ Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Service ---------------------------------------------
 
 export const migrationService = (prisma: PrismaClient) => {
 	const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-	// â”€â”€â”€ Tuning constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// --- Tuning constants ----------------------------------
 	// MongoDB Atlas free/shared tier supports ~100 connections max.
 	// Keep concurrent writes LOW to avoid saturating the connection pool.
 	const MAX_WRITE_CONCURRENCY = 5; // parallel upserts per window
@@ -123,7 +123,7 @@ export const migrationService = (prisma: PrismaClient) => {
 
 				// Exponential backoff: 500, 1000, 2000, 4000, 8000, 16000ms
 				const delayMs = BASE_RETRY_DELAY_MS * Math.pow(2, attempt);
-				// Add jitter (Â±25%) to prevent all retries hitting at the same moment
+				// Add jitter (+/-25%) to prevent all retries hitting at the same moment
 				const jitter = delayMs * 0.25 * (Math.random() * 2 - 1);
 				const finalDelay = Math.round(delayMs + jitter);
 
@@ -162,11 +162,11 @@ export const migrationService = (prisma: PrismaClient) => {
 	 * outlined in the B-tree indexing document.
 	 *
 	 * Execution order:
-	 * 1. Upsert Levels (rank 1â†’5)
+	 * 1. Upsert Levels (rank 1->5)
 	 * 2. Upsert Departments
 	 * 3. Upsert Positions
 	 * 4. Group employees by department
-	 * 5. Sort each group by roleLevel ascending (topâ†’bottom)
+	 * 5. Sort each group by roleLevel ascending (top->bottom)
 	 * 6. Insert in batches of `batchSize`
 	 * 7. Link reportTo references in a second pass
 	 */
@@ -197,11 +197,11 @@ export const migrationService = (prisma: PrismaClient) => {
 				`Starting migration for org=${config.organizationId}, employees=${employees.length}, batchSize=${config.batchSize}, dryRun=${config.dryRun}`,
 			);
 
-			// â”€â”€ Step 1: Upsert Levels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 1: Upsert Levels ---------------------------
 			const levelsSummary = await upsertLevels(config, input.levels, config.dryRun);
 			result.summary.levels = levelsSummary;
 
-			// â”€â”€ Step 2: Upsert Departments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 2: Upsert Departments ----------------------
 			const deptsSummary = await upsertDepartments(
 				config,
 				input.departments,
@@ -210,7 +210,7 @@ export const migrationService = (prisma: PrismaClient) => {
 			);
 			result.summary.departments = deptsSummary;
 
-			// â”€â”€ Step 3: Upsert Positions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 3: Upsert Positions ------------------------
 			const posSummary = await upsertPositions(
 				config,
 				input.positions,
@@ -219,10 +219,10 @@ export const migrationService = (prisma: PrismaClient) => {
 			);
 			result.summary.positions = posSummary;
 
-			// â”€â”€ Build lookup maps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Build lookup maps -------------------------------
 			const lookups = await buildLookupMaps(config.organizationId);
 
-			// â”€â”€ Step 4â€“6: Group â†’ Sort â†’ Batch Insert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 4-6: Group -> Sort -> Batch Insert -----------
 			const empResult = await insertEmployeesByHierarchy(
 				config,
 				employees,
@@ -236,7 +236,7 @@ export const migrationService = (prisma: PrismaClient) => {
 				failed: empResult.failed,
 			};
 
-			// â”€â”€ Step 7: Link reportTo references â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Step 7: Link reportTo references ----------------
 			if (!config.dryRun) {
 				const strictPostActions = options.strictPostActions === true;
 				await linkReportToReferences(config, employees);
@@ -303,7 +303,7 @@ export const migrationService = (prisma: PrismaClient) => {
 		return result;
 	};
 
-	// â”€â”€â”€ Step 1: Upsert Levels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// --- Step 1: Upsert Levels -------------------------------
 
 	const upsertLevels = async (
 		config: MigrationConfig,
@@ -316,11 +316,11 @@ export const migrationService = (prisma: PrismaClient) => {
 		const levels = levelsInput?.length
 			? levelsInput
 			: [
-					{ name: "Director / Head", rank: 1, description: "Level 1 â€“ Top leadership" },
-					{ name: "Manager / Lead", rank: 2, description: "Level 2 â€“ Management" },
-					{ name: "Senior", rank: 3, description: "Level 3 â€“ Senior staff" },
-					{ name: "Regular", rank: 4, description: "Level 4 â€“ Regular staff" },
-					{ name: "Intern / Junior", rank: 5, description: "Level 5 â€“ Entry level" },
+					{ name: "Director / Head", rank: 1, description: "Level 1 - Top leadership" },
+					{ name: "Manager / Lead", rank: 2, description: "Level 2 - Management" },
+					{ name: "Senior", rank: 3, description: "Level 3 - Senior staff" },
+					{ name: "Regular", rank: 4, description: "Level 4 - Regular staff" },
+					{ name: "Intern / Junior", rank: 5, description: "Level 5 - Entry level" },
 				];
 
 		for (const level of levels) {
@@ -373,7 +373,7 @@ export const migrationService = (prisma: PrismaClient) => {
 		return summary;
 	};
 
-	// â”€â”€â”€ Step 2: Upsert Departments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// --- Step 2: Upsert Departments --------------------------
 
 	const upsertDepartments = async (
 		config: MigrationConfig,
@@ -449,7 +449,7 @@ export const migrationService = (prisma: PrismaClient) => {
 		return summary;
 	};
 
-	// â”€â”€â”€ Step 3: Upsert Positions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// --- Step 3: Upsert Positions ----------------------------
 
 	const upsertPositions = async (
 		config: MigrationConfig,
@@ -534,7 +534,7 @@ export const migrationService = (prisma: PrismaClient) => {
 		return summary;
 	};
 
-	// â”€â”€â”€ Build Lookup Maps â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// --- Build Lookup Maps -----------------------------------
 	// These are loaded once and used for O(1) lookups during batch insert,
 	// analogous to how B-tree indexes provide O(log n) disk lookups.
 
@@ -577,10 +577,10 @@ export const migrationService = (prisma: PrismaClient) => {
 		return { departmentMap, positionMap, levelMap, levelRankMap, employeeIdMap };
 	};
 
-	// â”€â”€â”€ Step 4â€“6: Group â†’ Sort â†’ Batch Insert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// --- Step 4-6: Group -> Sort -> Batch Insert --------------
 	// Follows the migration execution logic:
 	//   1. Group employees by department
-	//   2. For each department, sort by roleLevel ascending (1â†’5)
+	//   2. For each department, sort by roleLevel ascending (1->5)
 	//   3. Insert batch by batch
 
 	const insertEmployeesByHierarchy = async (
@@ -598,7 +598,7 @@ export const migrationService = (prisma: PrismaClient) => {
 		const summary = { created: 0, skipped: 0, failed: 0 };
 		const createdEmployees: CreatedEmployeePostActionInput[] = [];
 
-		// â”€â”€ Group by department â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// -- Group by department -----------------------------
 		const departmentGroups = new Map<string, EmployeeRowInput[]>();
 		for (const emp of employees) {
 			const group = departmentGroups.get(emp.departmentCode) || [];
@@ -608,9 +608,9 @@ export const migrationService = (prisma: PrismaClient) => {
 
 		migrationLogger.info(`Grouped employees into ${departmentGroups.size} departments`);
 
-		// â”€â”€ Process each department in order â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+		// -- Process each department in order ----------------
 		for (const [deptCode, deptEmployees] of departmentGroups) {
-			// Sort by roleLevel ascending (Level 1 first â†’ Level 5 last)
+			// Sort by roleLevel ascending (Level 1 first -> Level 5 last)
 			// This ensures hierarchy is built top-down
 			const sorted = deptEmployees.sort((a, b) => {
 				const levelA = a.levelRank ?? inferRoleLevel(a.role);
@@ -622,7 +622,7 @@ export const migrationService = (prisma: PrismaClient) => {
 				`Processing department=${deptCode}: ${sorted.length} employees, sorted by hierarchy`,
 			);
 
-			// â”€â”€ Batch insert (chunking) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+			// -- Batch insert (chunking) ---------------------
 			const batchSize = config.batchSize;
 			for (let i = 0; i < sorted.length; i += batchSize) {
 				const batch = sorted.slice(i, i + batchSize);
@@ -683,7 +683,7 @@ export const migrationService = (prisma: PrismaClient) => {
 						const isManager = empRoleLevel <= 2;
 
 						if (existedBefore) {
-							// â”€â”€ UPDATE existing employee â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+							// -- UPDATE existing employee --------------------
 							if (!config.skipDuplicates) {
 								const existingId = lookups.employeeIdMap.get(emp.employeeId)!;
 								const embeddedScheduleUpdate =
@@ -720,7 +720,7 @@ export const migrationService = (prisma: PrismaClient) => {
 							}
 							summary.skipped++;
 						} else {
-							// â”€â”€ CREATE new employee â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+							// -- CREATE new employee -------------------------
 							// Step A: Ensure a Person record exists (Employee.personId is required)
 							let person = await withPrismaRetry(
 								`person.findFirst(batch-${batchNum}-${emp.employeeId})`,
@@ -846,7 +846,7 @@ export const migrationService = (prisma: PrismaClient) => {
 					`  Batch ${batchNum}/${totalBatches} done in ${batchMs}ms (created=${summary.created}, skipped=${summary.skipped}, failed=${summary.failed})`,
 				);
 
-				// Cooldown between batches â€” let Atlas connection pool recover
+				// Cooldown between batches - let Atlas connection pool recover
 				if (i + batchSize < sorted.length) {
 					await sleep(BATCH_COOLDOWN_MS);
 				}
@@ -859,7 +859,7 @@ export const migrationService = (prisma: PrismaClient) => {
 		};
 	};
 
-	// â”€â”€â”€ Step 7: Link reportTo references â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// --- Step 7: Link reportTo references --------------------
 	// Second pass: now that all employees exist, link the reporting hierarchy
 
 	const rollbackStrictFailedEmployees = async (params: {
@@ -1043,7 +1043,7 @@ export const migrationService = (prisma: PrismaClient) => {
 		return linked;
 	};
 
-	// â”€â”€â”€ Get Migration Status / Stats â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+	// --- Get Migration Status / Stats ------------------------
 
 	const getMigrationStats = async (organizationId: string) => {
 		const [
@@ -1124,8 +1124,8 @@ export const migrationService = (prisma: PrismaClient) => {
 		};
 	};
 
-	// â”€â”€â”€ Get Hierarchy Tree â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-	// Returns the department â†’ level â†’ employees tree structure
+	// --- Get Hierarchy Tree ----------------------------------
+	// Returns the department -> level -> employees tree structure
 	// Leverages the compound index @@index([departmentId, levelId])
 
 	const getHierarchyTree = async (organizationId: string, departmentCode?: string) => {
@@ -1155,7 +1155,7 @@ export const migrationService = (prisma: PrismaClient) => {
 			}),
 		);
 
-		// Build tree structure grouped by department â†’ level
+		// Build tree structure grouped by department -> level
 		const tree: Record<string, Record<string, any[]>> = {};
 
 		for (const emp of employees) {

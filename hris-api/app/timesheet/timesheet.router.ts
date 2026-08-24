@@ -23,6 +23,7 @@ interface IController {
 	consumeEditPermission(req: Request, res: Response, next: NextFunction): Promise<void>;
 	normalizeBreakdownPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
 	ensurePeriodDrafts(req: Request, res: Response, next: NextFunction): Promise<void>;
+	syncObligationLines(req: Request, res: Response, next: NextFunction): Promise<void>;
 	repairCurrentPeriodCoverage(req: Request, res: Response, next: NextFunction): Promise<void>;
 	lockPeriodTimesheets(req: Request, res: Response, next: NextFunction): Promise<void>;
 	sendReminder(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -264,6 +265,40 @@ export const router = (route: Router, controller: IController): Router => {
 			label: "timesheet:lock-period",
 		}),
 		controller.lockPeriodTimesheets,
+	);
+	/**
+	 * @openapi
+	 * /api/timesheet/{id}/sync-obligation-lines:
+	 *   post:
+	 *     summary: Persist AttendanceObligation rows onto a timesheet
+	 *     description: Materialize missing Timesheetline snapshots from AttendanceObligation for one timesheet. Fills missing dates only; SUBMITTED/APPROVED existing lines are preserved. Allowed on APPROVED when there are zero effective lines.
+	 *     tags: [Timesheet]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: Timesheet ID or code
+	 *     responses:
+	 *       200:
+	 *         description: Obligation lines materialized
+	 *       401:
+	 *         $ref: '#/components/responses/Unauthorized'
+	 *       403:
+	 *         $ref: '#/components/responses/Forbidden'
+	 *       404:
+	 *         description: Timesheet not found
+	 */
+	routes.post(
+		"/:id/sync-obligation-lines",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "timesheet:sync-obligation-lines",
+		}),
+		controller.syncObligationLines,
 	);
 
 	routes.get(

@@ -21,7 +21,7 @@ const TEST_TIMEOUT = 5000;
 // PRIMARY function: deriveRoleAndFlagsFromRecord  (uses isHr / isManager flags)
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-describe("deriveRoleAndFlagsFromRecord â€” spec acceptance criteria", () => {
+describe("deriveRoleAndFlagsFromRecord -- spec acceptance criteria", () => {
 	// Required test cases from spec
 
 	it("isHr=true, isManager=true â†’ hris-hr-manager, isHrManager=true, isManager=false", function () {
@@ -57,7 +57,7 @@ describe("deriveRoleAndFlagsFromRecord â€” spec acceptance criteria", () =>
 	});
 });
 
-describe("deriveRoleAndFlags object API â€” canonical source of truth", () => {
+describe("deriveRoleAndFlags object API -- canonical source of truth", () => {
 	it("department.isHr=true + level.isManager=true => hris-hr-manager", function () {
 		this.timeout(TEST_TIMEOUT);
 		const result = deriveRoleAndFlags({
@@ -93,7 +93,7 @@ describe("deriveRoleAndFlags object API â€” canonical source of truth", () 
 	});
 });
 
-describe("deriveRoleAndFlagsFromRecord â€” missing/null flags treated as false", () => {
+describe("deriveRoleAndFlagsFromRecord -- missing/null flags treated as false", () => {
 	it("dept.isHr=undefined, level.isManager=undefined â†’ hris-employee", function () {
 		this.timeout(TEST_TIMEOUT);
 		const result = deriveRoleAndFlagsFromRecord({}, {});
@@ -123,7 +123,7 @@ describe("deriveRoleAndFlagsFromRecord â€” missing/null flags treated as fa
 	});
 });
 
-describe("deriveRoleAndFlagsFromRecord â€” isManager and isHrManager mutually exclusive", () => {
+describe("deriveRoleAndFlagsFromRecord -- isManager and isHrManager mutually exclusive", () => {
 	it("never both true for any flag combination", function () {
 		this.timeout(TEST_TIMEOUT);
 		const flagCombos = [

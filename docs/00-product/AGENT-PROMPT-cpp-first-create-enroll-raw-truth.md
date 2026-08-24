@@ -76,7 +76,7 @@ LAW (open with tools, do not skip):
    - .wwg/governance/drift-guard.md
    - README.md when needed
 6) Spec: docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md
-7) Source of wire truth: vendor/hikvision-linux/hikvision_biometric_service.cpp
+7) Source of wire truth: vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp
 8) Live logs: /var/log/project-truth/hikvision-hot-reload-listener.jsonl (sudo if needed)
 
 After open: short Current-State Report (what files say / STALE / CONFLICTING /
@@ -166,7 +166,7 @@ D. HARD ORDER OF WORK (do not reorder)
 - HEARTBEAT cycle=1
 
 ### PHASE 1 — C++ SOURCE TRACE (read-only, write trace-map.md)
-Open hikvision_biometric_service.cpp and quote line-backed map:
+Open acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp and quote line-backed map:
 
 1. alarm_callback
    - employee_no assignment

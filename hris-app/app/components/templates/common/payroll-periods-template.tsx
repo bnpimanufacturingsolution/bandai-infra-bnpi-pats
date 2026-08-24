@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 import { Modal } from "~/components/atoms/Modal";
 import { CategoricalText } from "~/components/atoms/CategoricalText";
 import { Badge } from "~/components/atoms/Badge";
@@ -757,13 +758,19 @@ export function PayrollPeriodsManagement({
 										className="block text-sm font-medium text-gray-700 mb-1">
 										Start Date *
 									</label>
-									<Input
-										id="payroll-period-start-date"
-										type="date"
-										aria-invalid={Boolean(errors.startDate)}
-										{...register("startDate", {
-											required: "Start date is required",
-										})}
+									<CalendarDatePicker
+										value={watch("startDate") || ""}
+										onChange={(next) =>
+											setValue("startDate", next, {
+												shouldValidate: true,
+												shouldDirty: true,
+											})
+										}
+										className={
+											errors.startDate
+												? "border-red-300 focus:border-red-500"
+												: ""
+										}
 									/>
 									<ConstraintTokenRow
 										tokens={[{ label: "Required", tone: "default" }]}
@@ -775,13 +782,19 @@ export function PayrollPeriodsManagement({
 										className="block text-sm font-medium text-gray-700 mb-1">
 										End Date *
 									</label>
-									<Input
-										id="payroll-period-end-date"
-										type="date"
-										aria-invalid={Boolean(errors.endDate)}
-										{...register("endDate", {
-											required: "End date is required",
-										})}
+									<CalendarDatePicker
+										value={watch("endDate") || ""}
+										onChange={(next) =>
+											setValue("endDate", next, {
+												shouldValidate: true,
+												shouldDirty: true,
+											})
+										}
+										className={
+											errors.endDate
+												? "border-red-300 focus:border-red-500"
+												: ""
+										}
 									/>
 									<ConstraintTokenRow
 										tokens={[{ label: "Required", tone: "default" }]}
@@ -795,11 +808,19 @@ export function PayrollPeriodsManagement({
 									className="block text-sm font-medium text-gray-700 mb-1">
 									Pay Date *
 								</label>
-								<Input
-									id="payroll-period-pay-date"
-									type="date"
-									aria-invalid={Boolean(errors.payDate)}
-									{...register("payDate", { required: "Pay date is required" })}
+								<CalendarDatePicker
+									value={watch("payDate") || ""}
+									onChange={(next) =>
+										setValue("payDate", next, {
+											shouldValidate: true,
+											shouldDirty: true,
+										})
+									}
+									className={
+										errors.payDate
+											? "border-red-300 focus:border-red-500"
+											: ""
+									}
 								/>
 								<ConstraintTokenRow
 									tokens={[

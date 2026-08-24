@@ -1,4 +1,8 @@
 import { createHash } from "crypto";
+import {
+	extractHikvisionPanelSelectStatus,
+	type HikvisionPanelSelectStatus,
+} from "./hikvision-panel-select-status.helper";
 
 export type HikvisionDeviceEventSource = "HIKVISION_CALLBACK" | "EN_HCNETSDK_ALARM";
 export type HikvisionEvidenceSource =
@@ -23,6 +27,10 @@ export type NormalizedHikvisionEvent = {
 	deviceTime?: string;
 	timeAdjusted?: boolean;
 	deviceClockSkewSeconds?: number;
+	/** Panel Select Status from device (`checkIn`), not Attendance.status PRESENT. */
+	deviceAttendanceStatus?: string;
+	deviceAttendanceLabel?: string;
+	panelSelectStatus?: HikvisionPanelSelectStatus;
 };
 
 export type HikvisionLogSearchRow = {
@@ -108,6 +116,8 @@ export const parseHikvisionBodyPayload = (rawBody: unknown): Record<string, any>
 		verifyMode: getXmlTagValue(text, "verifyMode"),
 		currentVerifyMode: getXmlTagValue(text, "currentVerifyMode"),
 		serialNo: getXmlTagValue(text, "serialNo"),
+		attendanceStatus: getXmlTagValue(text, "attendanceStatus"),
+		label: getXmlTagValue(text, "label"),
 	};
 };
 
@@ -133,6 +143,14 @@ export const extractHikvisionEventData = (
 		return undefined;
 	};
 
+	const panelSelectStatus = extractHikvisionPanelSelectStatus(payload);
+	const deviceAttendanceStatus = String(
+		pick("attendanceStatus", "deviceAttendanceStatus") || panelSelectStatus.code || "",
+	).trim();
+	const deviceAttendanceLabel = String(
+		pick("label", "deviceAttendanceLabel") || panelSelectStatus.label || "",
+	).trim();
+
 	return {
 		deviceId: pick("deviceId", "hikvisionDeviceId"),
 		source: pick("source", "eventSource"),
@@ -150,6 +168,9 @@ export const extractHikvisionEventData = (
 		deviceTime: pick("deviceTime"),
 		timeAdjusted: Boolean(pick("timeAdjusted")),
 		deviceClockSkewSeconds: Number(pick("deviceClockSkewSeconds") || 0),
+		deviceAttendanceStatus: deviceAttendanceStatus || undefined,
+		deviceAttendanceLabel: deviceAttendanceLabel || undefined,
+		panelSelectStatus,
 	};
 };
 
@@ -909,6 +930,10 @@ export const isHikvisionAttendancePunchEvent = (
 	const actionCode = String(event.actionCode || "").trim().toUpperCase();
 	const verifyMode = String(event.verifyMode || "").trim().toLowerCase();
 
+	// Major 2 is ACS exception. Minor 38 there is not MAJOR_EVENT fingerprint pass.
+	// Armed B/D/E emit major=2/minor=38 empty-person every ~301s — not a tap.
+	if (major === "2") return false;
+
 	if (major === "5" && minor === "38") return true;
 	if (major === "5" && minor === "75") return true;
 	if (major === "5" && event.employeeNo && verifyMode) {
@@ -925,6 +950,16 @@ export const isHikvisionAttendancePunchEvent = (
 		"MINOR_FACE_RECOGNITION_PASS",
 		"MINOR_CARD_PASS",
 	].includes(actionCode);
+};
+
+/** Armed-listener ACS exception: empty person, major=2 minor=38, ~5 min per device. */
+export const isHikvisionArmedListenerAcsException = (
+	event: Pick<NormalizedHikvisionEvent, "major" | "minor" | "employeeNo">,
+) => {
+	const major = String(event.major ?? "").trim();
+	const minor = String(event.minor ?? "").trim();
+	const employeeNo = String(event.employeeNo ?? "").trim();
+	return major === "2" && minor === "38" && !employeeNo;
 };
 
 export const isHikvisionAttendancePunchPayload = (payload: Record<string, any>) =>
@@ -959,16 +994,45 @@ export const selectHikvisionPunchPair = (
 		Number.isFinite(rawGapMinutes) && rawGapMinutes > 0
 			? rawGapMinutes * 60 * 1000
 			: 0;
-	const punchTimes = rows
+	const punches = rows
 		.filter((row) =>
 			row.payload && typeof row.payload === "object"
 				? isHikvisionAttendancePunchPayload(row.payload)
 				: true,
 		)
-		.map((row) => (row.eventTime instanceof Date ? row.eventTime : new Date(row.eventTime)))
-		.filter((date) => !Number.isNaN(date.getTime()))
-		.sort((left, right) => left.getTime() - right.getTime());
+		.map((row) => {
+			const eventTime =
+				row.eventTime instanceof Date ? row.eventTime : new Date(row.eventTime);
+			const panel = extractHikvisionPanelSelectStatus(row.payload);
+			return {
+				eventTime,
+				code: panel.present ? panel.code : null,
+			};
+		})
+		.filter((row) => !Number.isNaN(row.eventTime.getTime()))
+		.sort((left, right) => left.eventTime.getTime() - right.eventTime.getTime());
 
+	const checkIns = punches.filter((row) => row.code === "checkIn");
+	const checkOuts = punches.filter((row) => row.code === "checkOut");
+	const unsigned = punches.filter((row) => row.code !== "checkIn" && row.code !== "checkOut");
+	const usesPanelStatus = checkIns.length > 0 || checkOuts.length > 0;
+
+	if (usesPanelStatus) {
+		const timeIn = checkIns[0]?.eventTime || unsigned[0]?.eventTime || null;
+		const eligibleOuts = checkOuts.filter((row) => {
+			if (!timeIn) return true;
+			return row.eventTime.getTime() - timeIn.getTime() >= minPairGapMs;
+		});
+		const timeOut = eligibleOuts[eligibleOuts.length - 1]?.eventTime || null;
+		return {
+			timeIn,
+			timeOut: timeIn && timeOut && timeOut.getTime() > timeIn.getTime() ? timeOut : timeOut && !timeIn ? timeOut : null,
+			count: punches.length,
+			mode: "panel" as const,
+		};
+	}
+
+	const punchTimes = punches.map((row) => row.eventTime);
 	const timeIn = punchTimes[0] || null;
 	const eligibleTimeOuts = timeIn
 		? punchTimes.filter(
@@ -982,6 +1046,7 @@ export const selectHikvisionPunchPair = (
 		timeIn,
 		timeOut,
 		count: punchTimes.length,
+		mode: "time" as const,
 	};
 };
 

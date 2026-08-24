@@ -148,10 +148,11 @@ spec:
         - name: db-init
           image: hris-api-db-init:develop
           imagePullPolicy: Never
+          # No prisma-seed on appliance DBs (seed can delete timesheet/attendance). Schema-only; prisma db push without --accept-data-loss is fail-closed on destructive drift.
           command:
             - sh
             - -c
-            - npm run prisma-postgres:push && npm run prisma-seed
+            - npm run prisma-postgres:push
           env:
             - name: NODE_ENV
               value: development

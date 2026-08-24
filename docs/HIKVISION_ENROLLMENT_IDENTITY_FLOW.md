@@ -6,6 +6,13 @@
 
 This document captures **what you want**, **what the architecture is**, **what the code does today**, and **how to verify the flows stay in sync**.
 
+> **2026-08-24 STALE-ADDRESS NOTICE:** TEST A moved address. Historical examples in this
+> document show `192.168.254.102` (and VM `59000`/`59443` as the TEST A reverse pair).
+> Live truth since 2026-08-13: TEST A = `192.168.254.109:443` via `127.0.0.1:58080`/`58000`;
+> TEST B = `192.168.254.110:443` via `127.0.0.1:58180`/`58100`; VM `59000`/`59443` now belong
+> to the Device 5 reverse pair. The identity-flow architecture itself is unchanged.
+> Source: `.wwg/wiki/project-truth.md` current-address note (2026-08-13).
+
 ---
 
 ## 1. What you want (operator vision)
@@ -19,7 +26,7 @@ Three Hikvision → HRIS event families:
 |---|---|---|
 | **onUserCreate** | User add on panel (op / `addUserInfo` / major=3 then leaf) | DeviceEvent `USER_CREATED` + **DeviceUser** + raw metadata |
 | **onEnrollUser** | Fingerprint enroll (`addFp…` / FP management) | DeviceEvent `FINGERPRINT_ENROLLED` + DeviceUser credential refresh |
-| **onAttendanceTap** | Access auth pass (major=5) | DeviceEvent `TAP` + Attendance if employee linked |
+| **onAttendanceTap** | Access auth pass (major=5) | DeviceEvent `TAP` + Attendance if employee linked. Panel **Select Status** is copied onto the live SDK POST and Device Events; it is **not** used for `timeIn`/`timeOut` yet — see `docs/HIKVISION_SELECT_STATUS_MAPPING.md` |
 
 ### Identity model (operator + schema truth)
 
@@ -166,7 +173,7 @@ SDK alarm (employeeNo="15")
 
 | Step | Location |
 |---|---|
-| SDK JSON body | `vendor/hikvision-linux/hikvision_biometric_service.cpp` (`build_hikvision_callback_json`) |
+| SDK JSON body | `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` (`build_hikvision_callback_json`) |
 | Callback + non-attendance branch | `hris-api/app/hikvision/controller/callback.controller.ts` |
 | Fast identity | `applyFastEnrollmentIdentityOnSdkCallback` in `hris-api/helper/device-person-token.helper.ts` |
 | DeviceUser UserInfo enrich | `enrichEnrollmentLifecycleEvent` same helper |
@@ -378,7 +385,7 @@ Listener modal **armed/receiving** proves transport. Person labels prove identit
 
 | Spec intent | Implemented? | Primary code |
 |---|---|---|
-| SDK callback is the live enroll path | **Yes** | `hikvision_biometric_service.cpp` → `/api/hikvision/callback` |
+| SDK callback is the live enroll path | **Yes** | `src/hikvision_bio/acs.cpp` → `/api/hikvision/callback` |
 | Quick socket on every saved event | **Yes** | `emitDeviceEventSaved` |
 | Plain id on callback when SDK sends it | **Yes** | `applyFastEnrollmentIdentityOnSdkCallback` |
 | Panel opaque → plain without inventing ids | **Yes** | logSearch + inventory delta |
@@ -447,7 +454,7 @@ Invoke-RestMethod -Headers $h -Uri 'http://localhost:3001/api/device/<TEST_A_ID>
 | `hris-api/helper/device-person-token.helper.ts` | Opaque map, inventory delta, fast identity |
 | `hris-api/helper/device-user-sync.helper.ts` | Pad candidates + link decision |
 | `hris-api/app/hikvision/controller/callback.controller.ts` | Callback orchestration |
-| `vendor/hikvision-linux/hikvision_biometric_service.cpp` | SDK → HRIS post |
+| `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` | SDK `alarm_callback` / `build_hikvision_callback_json` → HRIS post |
 
 ---
 

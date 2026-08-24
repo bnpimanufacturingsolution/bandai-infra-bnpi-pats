@@ -198,6 +198,22 @@ run_ansible_pull() {
     "$playbook"
 }
 
+# ansible-pull recurses submodules. hris-emp-app is a private sibling repo the
+# appliance token often cannot read. If the main checkout is already on
+# develop, still apply the playbook so /opt and units stay in sync.
+apply_from_checkout() {
+  if ! git -C "$checkout_root" rev-parse HEAD >/dev/null 2>&1; then
+    echo "ansible-pull checkout is missing; cannot apply locally" >&2
+    return 1
+  fi
+  echo "Applying ${playbook} from existing checkout $(git -C "$checkout_root" rev-parse --short HEAD)" >&2
+  as_root ansible-playbook \
+    -i localhost, \
+    -c local \
+    -l localhost \
+    "${checkout_root}/${playbook}"
+}
+
 main() {
   case "${1:-}" in
     --status|status)
@@ -214,7 +230,10 @@ main() {
     exit 0
   fi
 
-  run_ansible_pull
+  if ! run_ansible_pull; then
+    echo "ansible-pull failed; trying playbook from existing checkout" >&2
+    apply_from_checkout
+  fi
 }
 
 main "$@"

@@ -5,6 +5,7 @@ import { calculateTimekeeping } from "../../helper/timekeeping.helper";
 import { resolveOvertimePolicyApplication } from "../../helper/overtime-approval.helper";
 import {
 	fetchAttendanceEmployeeSnapshotFields,
+	getBusinessDayBounds,
 	normalizeToStartOfDay,
 } from "../../helper/attendance.helper";
 import { applyAttendanceToObligation } from "../../helper/attendance-obligation.helper";
@@ -119,15 +120,26 @@ export async function applyAttendanceBackfill(
 		dependencies.invalidateCacheByPattern || invalidateCache.byPattern;
 	const now = dependencies.now ? dependencies.now() : new Date();
 
+	const businessDayBounds = getBusinessDayBounds(normalized.correctionDate);
 	const sameDayAttendances = await params.prisma.attendance.findMany({
 		where: {
 			organizationId: params.organizationId,
 			employeeId: normalized.employeeId,
 			isDeleted: false,
-			date: {
-				gte: normalized.startOfDay,
-				lte: normalized.endOfDay,
-			},
+			OR: [
+				{
+					date: {
+						gte: businessDayBounds.start,
+						lte: businessDayBounds.end,
+					},
+				},
+				{
+					date: {
+						gte: normalized.startOfDay,
+						lte: normalized.endOfDay,
+					},
+				},
+			],
 		},
 		include: ATTENDANCE_BACKFILL_RELATION_SELECT,
 		orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
@@ -140,7 +152,7 @@ export async function applyAttendanceBackfill(
 		);
 	}
 
-	const attendanceDate = normalizeToStartOfDay(normalized.correctionDate);
+	const attendanceDate = businessDayBounds.start || normalizeToStartOfDay(normalized.correctionDate);
 	const scheduleSnapshot =
 		(await resolveEffectiveShiftFn(params.prisma, {
 			organizationId: params.organizationId,
@@ -180,14 +192,15 @@ export async function applyAttendanceBackfill(
 		data: {
 			organizationId: params.organizationId,
 			employeeId: normalized.employeeId,
-			date: normalized.correctionDate,
+			date: attendanceDate,
 			timeIn: correctedTimeIn,
 			timeOut: correctedTimeOut,
 			status: normalized.status,
 			notes: normalized.notes,
 			scheduleSnapshot: scheduleSnapshot || undefined,
 			isManualEntry: true,
-			ledgerType: "RAW",
+			ledgerType: params.source === "ATTENDANCE_CORRECTION_REQUEST" ? "CORRECTION" : "RAW",
+			sourceRequestId: normalized.sourceRequestId || null,
 			appliedAt: now,
 			appliedBy: params.actorEmployeeId || null,
 			isEffective: true,

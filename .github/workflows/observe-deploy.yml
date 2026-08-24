@@ -1,0 +1,175 @@
+name: Observe VM GitOps deploy
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  observe:
+    name: ${{ matrix.target.id }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: observe-deploy-${{ github.sha }}-${{ matrix.target.environment }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - id: ansible-pull
+            environment: vm-gitops
+            url: https://dev.bnpi-hris.tech/auth/login
+            wait_sec: 1200
+          - id: hris-api
+            environment: hris-api
+            url: https://dev-api.bnpi-hris.tech/health
+            wait_sec: 1200
+          - id: hris-app
+            environment: hris-app
+            url: https://dev.bnpi-hris.tech/auth/login
+            wait_sec: 1200
+          - id: hris-emp-app
+            environment: hris-emp-app
+            url: https://dev-emp.bnpi-hris.tech/auth/login
+            wait_sec: 1200
+          - id: callback-outbox
+            environment: callback-outbox
+            url: https://dev-api.bnpi-hris.tech/health
+            wait_sec: 1200
+          - id: onprem-prod-api
+            environment: onprem-prod-api
+            url: http://10.184.37.19:3001/health
+            wait_sec: 1200
+          - id: onprem-prod-app
+            environment: onprem-prod-app
+            url: http://10.184.37.19:3000/auth/login
+            wait_sec: 1200
+          - id: onprem-dev-api
+            environment: onprem-dev-api
+            url: http://10.184.37.19:3101/health
+            wait_sec: 1200
+          - id: onprem-dev-app
+            environment: onprem-dev-app
+            url: http://10.184.37.19:3100/auth/login
+            wait_sec: 1200
+          - id: onprem-uat-api
+            environment: onprem-uat-api
+            url: http://10.184.37.19:3201/health
+            wait_sec: 1200
+          - id: onprem-uat-app
+            environment: onprem-uat-app
+            url: http://10.184.37.19:3200/auth/login
+            wait_sec: 1200
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+      ENVIRONMENT: ${{ matrix.target.environment }}
+      ENV_URL: ${{ matrix.target.url }}
+      WAIT_SEC: ${{ matrix.target.wait_sec }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Find or create GitHub deployment
+        id: deploy
+        run: |
+          set -euo pipefail
+          echo "## ${{ matrix.target.id }} observe" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Item | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| expected SHA | \`${SHA}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| environment | \`${ENVIRONMENT}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          existing_id="$(gh api "repos/${REPO}/deployments?sha=${SHA}&environment=${ENVIRONMENT}&per_page=10" --jq '.[0].id // empty')"
+          if [ -n "$existing_id" ]; then
+            state="$(gh api "repos/${REPO}/deployments/${existing_id}/statuses" --jq 'if any(.state=="success") then "success" else (.[0].state // "none") end')"
+            echo "| existing deployment | ${existing_id} (${state}) |" >> "$GITHUB_STEP_SUMMARY"
+            echo "id=${existing_id}" >> "$GITHUB_OUTPUT"
+            echo "already=${state}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          payload="$(jq -n --arg ref "$SHA" --arg env "$ENVIRONMENT" --arg desc "Waiting for VM ${ENVIRONMENT} of ${SHA}" '{ref:$ref, environment:$env, auto_merge:false, required_contexts:[], description:$desc}')"
+          id="$(printf '%s' "$payload" | gh api "repos/${REPO}/deployments" --input - --jq .id)"
+          status_payload="$(jq -n --arg env "$ENVIRONMENT" --arg desc "Waiting for VM report (ansible-pull timer every 5 min)" --arg log "$RUN_URL" --arg url "$ENV_URL" '{state:"in_progress", environment:$env, description:$desc, log_url:$log, environment_url:$url}')"
+          printf '%s' "$status_payload" | gh api "repos/${REPO}/deployments/${id}/statuses" --input -
+          echo "| created deployment | ${id} (in_progress) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "id=${id}" >> "$GITHUB_OUTPUT"
+          echo "already=in_progress" >> "$GITHUB_OUTPUT"
+
+      - name: Wait until VM reports deployed
+        if: steps.deploy.outputs.already != 'success'
+        run: |
+          set -euo pipefail
+          deploy_id="${{ steps.deploy.outputs.id }}"
+          deadline=$((SECONDS + WAIT_SEC))
+          state="${{ steps.deploy.outputs.already }}"
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            ids="$(gh api "repos/${REPO}/deployments?sha=${SHA}&environment=${ENVIRONMENT}&per_page=10" --jq '.[].id')"
+            if [ -z "$ids" ]; then
+              ids="$deploy_id"
+            fi
+            state="none"
+            saw_failure=""
+            for id in $ids; do
+              [ -z "$id" ] && continue
+              this="$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq 'if any(.state=="success") then "success" elif any(.state=="failure") then "failure" elif any(.state=="error") then "error" else (.[0].state // "none") end')"
+              echo "deployment=${id} env=${ENVIRONMENT} state=${this} sha=${SHA}"
+              if [ "$this" = "success" ]; then
+                desc="$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq '.[0].description // empty')"
+                echo "| VM report | success (deployment ${id}) |" >> "$GITHUB_STEP_SUMMARY"
+                echo "| VM description | ${desc} |" >> "$GITHUB_STEP_SUMMARY"
+                echo "VM reported success for ${ENVIRONMENT} ${SHA} on deployment ${id}"
+                echo "description=${desc}"
+                exit 0
+              fi
+              state="$this"
+              if [ "$this" = "failure" ] || [ "$this" = "error" ]; then
+                saw_failure="$this"
+              fi
+            done
+            if [ -n "$saw_failure" ]; then
+              echo "| VM report | ${saw_failure} |" >> "$GITHUB_STEP_SUMMARY"
+              echo "VM reported ${saw_failure} for ${ENVIRONMENT} ${SHA}" >&2
+              exit 1
+            fi
+            sleep 20
+          done
+          echo "| VM report | timeout (still ${state}) |" >> "$GITHUB_STEP_SUMMARY"
+          echo "Timed out waiting for VM ${ENVIRONMENT} of ${SHA} (last state=${state})." >&2
+          exit 1
+
+      - name: Record already-deployed
+        if: steps.deploy.outputs.already == 'success'
+        run: |
+          set -euo pipefail
+          id="${{ steps.deploy.outputs.id }}"
+          desc="$(gh api "repos/${REPO}/deployments/${id}/statuses" --jq '.[0].description // empty')"
+          echo "| VM report | already success |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| VM description | ${desc} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "VM already reported ${ENVIRONMENT} success for ${SHA}"
+          echo "description=${desc}"
+
+      - name: Probe public URL (informational)
+        if: success()
+        continue-on-error: true
+        run: |
+          set +e
+          echo "| advertised URL | ${ENV_URL} |" >> "$GITHUB_STEP_SUMMARY"
+          case "${ENV_URL}" in
+            *10.184.37.19*)
+              echo "| GitHub GET | skipped (on-prem LAN; VM already curled 127.0.0.1) |" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+              ;;
+          esac
+          code="$(curl -sS -o /tmp/observe-url.out -w '%{http_code}' --max-time 15 "${ENV_URL}" || true)"
+          echo "| public HTTP | ${code:-000} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "informational GET ${ENV_URL} -> ${code:-000} (does not fail this job)"
+          head -c 240 /tmp/observe-url.out 2>/dev/null || true
+          echo
+          exit 0

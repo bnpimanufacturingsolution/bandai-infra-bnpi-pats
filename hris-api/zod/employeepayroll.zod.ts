@@ -8,6 +8,7 @@ import type { Timesheet } from "./timesheet.zod";
 const PayrollRegisterNumberFieldNames = [
 	"monthlySalary",
 	"dailySalary",
+	"hourlySalary",
 	"numberOfDays",
 	"lateUndertimeAmount",
 	"regularOtHours",

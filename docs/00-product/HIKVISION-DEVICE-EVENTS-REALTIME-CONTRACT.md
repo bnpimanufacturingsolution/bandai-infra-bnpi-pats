@@ -1,6 +1,6 @@
 # Hikvision Device Events realtime contract
 
-Last updated: 2026-07-29
+Last updated: 2026-08-17
 
 ## Goal
 
@@ -17,6 +17,11 @@ When services are up, a physical ACS event (and any successful callback save) mu
 | **Person match** | plain `employeeNo` + HRIS link | Not always available on major=3 |
 
 Saved Events ledger is **independent** of listener readiness. Historical rows stay visible while armed/quiet.
+
+Saved **Device event details** is **independent** of the current table page.
+`action=view-event&id=` loads `GET /api/device/events/item/:eventId`. Socket
+prepend can make a new row clickable on a stale `page=`; a reload must still
+open that id. Contract: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
 
 ## FE join contract
 

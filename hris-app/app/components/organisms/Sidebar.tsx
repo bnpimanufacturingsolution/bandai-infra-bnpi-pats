@@ -1,6 +1,5 @@
-import { NavLink } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { useAuth } from "~/lib/hooks/use-auth";
-import { useLocation } from "react-router";
 import {
 	LayoutDashboard,
 	Users,
@@ -57,6 +56,7 @@ interface SidebarProps {
 export function Sidebar({ onClose }: SidebarProps) {
 	const { user } = useAuth();
 	const location = useLocation();
+	const navigate = useNavigate();
 	const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
 	const navScrollRef = useRef<HTMLElement | null>(null);
 	const pendingScrollTopRef = useRef<number | null>(null);
@@ -253,6 +253,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 							id: "hr-timekeeping-timesheets",
 							label: "Timesheets",
 							path: "/hr/timesheets",
+							icon: <Clock className="w-4 h-4" />,
+						},
+						{
+							id: "hr-timekeeping-schedules",
+							label: "Schedules",
+							path: "/hr/employee-schedules",
 							icon: <Clock className="w-4 h-4" />,
 						},
 						{
@@ -568,8 +574,19 @@ export function Sidebar({ onClose }: SidebarProps) {
 					id={`sidebar-${item.id}`}
 					to={item.path}
 					preventScrollReset
-					onClick={() => {
+					onClick={(event) => {
 						onClose?.();
+						const targetUrl = new URL(item.path, SIDEBAR_URL_PARSE_BASE);
+						const hasTargetQuery = Array.from(targetUrl.searchParams.keys()).length > 0;
+						if (
+							hasTargetQuery ||
+							location.pathname !== targetUrl.pathname ||
+							!location.search
+						) {
+							return;
+						}
+						event.preventDefault();
+						navigate({ pathname: targetUrl.pathname, search: "" });
 					}}
 					className={`
 						px-3 py-2 flex items-center gap-3 rounded-md transition-all duration-200 w-full group relative mb-0.5

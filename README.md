@@ -29,6 +29,7 @@ develop
 - [Health Checks](docs/HEALTHCHECKS.md)
 - [Cloudflare Named Tunnel Runbook](docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md)
 - [GitOps GitHub Watch Runbook](docs/GITOPS_GH_WATCH_RUNBOOK.md)
+- [GitOps DB init Job](docs/DB_INIT_JOB.md)
 - [Self-Healing And Drift Recovery](docs/SELF_HEALING_AND_DRIFT_RECOVERY.md)
 - [Installer Test Report](docs/INSTALLER_TEST_REPORT.md)
 

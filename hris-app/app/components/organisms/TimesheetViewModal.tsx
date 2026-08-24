@@ -187,6 +187,7 @@ const normalizeDayForDirtyCheck = (day: TimesheetBreakdownDay) => ({
 	withinGrace: day.metadata?.withinGrace ?? null,
 	rawEarlyOutMinutes: (day.metadata as any)?.rawEarlyOutMinutes ?? null,
 	graceEarlyOutMinutes: (day.metadata as any)?.graceEarlyOutMinutes ?? null,
+	dayLaborType: day.dayLaborType || null,
 });
 
 const mergeNormalizedDay = (
@@ -200,6 +201,7 @@ const mergeNormalizedDay = (
 		leaveEntries: normalizedDay.leaveEntries ?? baseDay.leaveEntries ?? [],
 		holidayEntries: normalizedDay.holidayEntries ?? baseDay.holidayEntries ?? [],
 		primaryMarker: normalizedDay.primaryMarker ?? baseDay.primaryMarker,
+		dayLaborType: normalizedDay.dayLaborType ?? baseDay.dayLaborType ?? null,
 		metadata: {
 			...(baseDay.metadata || {}),
 			...(normalizedDay.metadata || {}),

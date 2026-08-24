@@ -23,6 +23,16 @@ import {
 	isScheduleChangeWorkflowCode,
 	normalizeScheduleChangeWorkflowStepsForHrApproval,
 } from "./schedule-change-workflow.helper";
+import {
+	isAttendanceCorrectionRequestType,
+	isAttendanceCorrectionWorkflowCode,
+	normalizeAttendanceCorrectionWorkflowSteps,
+} from "./attendance-correction-workflow.helper";
+import {
+	isOvertimeRequestType,
+	isOvertimeWorkflowCode,
+	normalizeOvertimeWorkflowSteps,
+} from "./overtime-workflow.helper";
 
 export const REQUEST_WORKFLOW_CODES = {
 	TIMESHEET_SUBMISSION: "WF-TIMESHEET-DEFAULT",
@@ -307,9 +317,17 @@ export const normalizeWorkflowConfigRecord = (
 	const requestType = source.requestType || fallback?.requestType || null;
 	const shouldNormalizeScheduleChangeWorkflow =
 		isScheduleChangeWorkflowCode(code) || isScheduleChangeRequestType(requestType);
+	const shouldNormalizeAttendanceCorrectionWorkflow =
+		isAttendanceCorrectionWorkflowCode(code) || isAttendanceCorrectionRequestType(requestType);
+	const shouldNormalizeOvertimeWorkflow =
+		isOvertimeWorkflowCode(code) || isOvertimeRequestType(requestType);
 	const steps = isRequisitionWorkflow
 		? buildRecruitmentRequisitionSteps()
-		: normalizeSteps(source.steps ?? fallback?.steps);
+		: shouldNormalizeAttendanceCorrectionWorkflow
+			? normalizeAttendanceCorrectionWorkflowSteps(source.steps ?? fallback?.steps)
+			: shouldNormalizeOvertimeWorkflow
+				? normalizeOvertimeWorkflowSteps(source.steps ?? fallback?.steps)
+			: normalizeSteps(source.steps ?? fallback?.steps);
 	return {
 		code,
 		name: String(source.name || fallback?.name || code).trim(),

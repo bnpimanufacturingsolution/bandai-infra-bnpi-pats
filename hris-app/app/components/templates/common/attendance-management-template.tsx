@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState, useMemo, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
 	Clock,
 	Calendar,
@@ -25,7 +25,14 @@ import { usePositions } from "~/lib/hooks/usePositions";
 import { useLevels } from "~/lib/hooks/useLevels";
 import { formatDate } from "~/lib/utils/text-utils";
 import { formatDuration, formatDurationCompact, formatMinutesDuration } from "~/lib/utils";
+import { formatManilaClockTime } from "~/lib/utils/manila-clock";
 import { filterAttendanceRecordsByPresentDayThreshold } from "~/lib/utils/attendance-threshold";
+import {
+	getAbsenteeismDisplay,
+	getAttendanceCardCounts,
+	getAttendanceUtilizationDisplay,
+	getScheduledNotClockedIn,
+} from "~/lib/utils/attendance-utilization";
 
 import { toast } from "sonner";
 import { GenericImportModal } from "~/components/organisms/shared/GenericImportModal";
@@ -71,6 +78,7 @@ import {
 import {
 	AttendanceDailyTrendSection,
 } from "./AttendanceDailyTrendSection";
+import { AttendanceRateDonut } from "./AttendanceRateDonut";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -81,9 +89,16 @@ import { type AttendanceRecord } from "~/services/metrics.service";
 import { useDepartments } from "~/lib/hooks/useDepartments";
 import { useEmployees } from "~/lib/hooks/useEmployees";
 import {
+	compareClockedInFirst,
 	getAttendanceDisplayStatus,
 	getAttendanceStatusBadgeClass,
+	isOverviewPresentRecord,
 } from "~/lib/utils/attendance-status";
+import {
+	getClockInArrivalIndicator,
+	getClockOutUndertimeIndicator,
+	getWorkedHoursLabel,
+} from "~/lib/utils/attendance-arrival";
 
 interface AttendanceManagementProps {
 	title?: string;
@@ -190,6 +205,32 @@ function parseDurationToMinutes(value?: string | null): number {
 	if (verbose) return Number(verbose[1]) * 60 + Number(verbose[2]);
 
 	return 0;
+}
+
+const ATTENDANCE_ROUTE = "/hr/attendance";
+const ATTENDANCE_OVERVIEW_QUERY_KEYS = ["period", "periodCode", "from", "to"] as const;
+const ATTENDANCE_LIST_CONTEXT_KEYS = [
+	"department",
+	"section",
+	"position",
+	"level",
+	"manager",
+	"employee",
+	"shiftType",
+	"search",
+] as const;
+
+function buildAttendanceOverviewSearch(params: URLSearchParams): string {
+	const next = new URLSearchParams();
+	for (const key of ATTENDANCE_OVERVIEW_QUERY_KEYS) {
+		const value = params.get(key);
+		if (value) next.set(key, value);
+	}
+	return next.toString();
+}
+
+function hasAttendanceListContext(params: URLSearchParams): boolean {
+	return ATTENDANCE_LIST_CONTEXT_KEYS.some((key) => Boolean(params.get(key)));
 }
 
 export function AttendanceManagement({
@@ -1034,6 +1075,17 @@ export function AttendanceManagement({
 		});
 	};
 
+	const attendanceOverviewSearch = buildAttendanceOverviewSearch(searchParams);
+	const attendanceOverviewTo = {
+		pathname: ATTENDANCE_ROUTE,
+		search: attendanceOverviewSearch,
+	} as const;
+
+	const returnToAttendanceOverview = () => {
+		setSearchQuery("");
+		setSearchParams(new URLSearchParams(attendanceOverviewSearch));
+	};
+
 	const clearScopeAndShiftFilters = () => {
 		updateSearchParams((params) => {
 			params.delete("department");
@@ -1378,6 +1430,8 @@ export function AttendanceManagement({
 		totalRestDay: 0,
 		totalHoliday: 0,
 		totalClockedIn: 0,
+		totalClockedInObligated: 0,
+		totalObligatedToWork: 0,
 		totalOnTime: 0,
 		totalScheduledWorkDays: 0,
 		totalCalendarDays: 0,
@@ -1421,17 +1475,12 @@ export function AttendanceManagement({
 		const muted = options.isVirtual || isEmpty;
 		const parsedDate = value ? new Date(value) : null;
 		const hasReadableDate = parsedDate && !Number.isNaN(parsedDate.getTime());
-		const readableTime = hasReadableDate
-			? new Intl.DateTimeFormat("en-US", {
-					hour: "numeric",
-					minute: "2-digit",
-				}).format(parsedDate)
-			: null;
+		const readableTime = hasReadableDate ? formatManilaClockTime(parsedDate) : null;
 
 		return (
 			<span
 				title={value || undefined}
-				className={`inline-flex min-w-0 items-baseline whitespace-nowrap text-[15px] tabular-nums ${
+				className={`inline-flex min-w-0 items-baseline whitespace-nowrap text-[11px] tabular-nums ${
 					muted ? "font-medium italic text-gray-400" : "font-semibold text-slate-950"
 				}`}>
 				{readableTime || value || "-"}
@@ -1461,7 +1510,18 @@ export function AttendanceManagement({
 	};
 
 	const handleMetricFilter = (status: string) => {
-		handleStatusFilterChange(statusFilter === status ? "all" : status);
+		if (statusFilter === status) {
+			if (hasAttendanceListContext(searchParams)) {
+				updateSearchParams((params) => {
+					params.delete("status");
+					params.set("page", "1");
+				});
+				return;
+			}
+			returnToAttendanceOverview();
+			return;
+		}
+		handleStatusFilterChange(status);
 	};
 
 	// Pagination handlers
@@ -1528,11 +1588,7 @@ export function AttendanceManagement({
 		const hasHoliday = item.primaryMarker === "HOLIDAY" || item.status === "HOLIDAY";
 		const hasLeave = item.primaryMarker === "LEAVE" || item.status === "LEAVE";
 		const isRestDay = item.primaryMarker === "REST_DAY" || item.status === "REST_DAY";
-		const withinGrace = Boolean(item.computationMeta?.withinGrace);
-		const rawLateMinutes = Math.max(0, Number(item.computationMeta?.rawLateMinutes) || 0);
 		const hasOvertime = parseDurationToMinutes(item.overtimeHours) > 0;
-		const hasChargeableLate = !withinGrace && parseDurationToMinutes(item.lateHours) > 0;
-		const hasEarlyOut = parseDurationToMinutes(item.earlyOutHours) > 0;
 		const needsClockInAction = item.status === "NOT_CLOCKED_IN";
 
 		const badges: Array<{
@@ -1579,33 +1635,6 @@ export function AttendanceManagement({
 				value: formatDurationCompact(item.overtimeHours),
 				className: "bg-green-100 text-green-700",
 				valueClassName: "bg-green-200/70 text-green-800",
-			});
-		}
-		if (hasChargeableLate) {
-			badges.push({
-				label: "LATE",
-				value: formatDurationCompact(item.lateHours),
-				className: "bg-amber-100 text-amber-700",
-				valueClassName: "bg-amber-200/70 text-amber-800",
-			});
-		}
-		if (withinGrace) {
-			badges.push({
-				label: "GRACE",
-				value:
-					rawLateMinutes > 0
-						? formatMinutesDuration(rawLateMinutes, { compact: true })
-						: undefined,
-				className: "bg-amber-50 text-amber-700 border border-amber-200",
-				valueClassName: "bg-amber-100 text-amber-800",
-			});
-		}
-		if (hasEarlyOut) {
-			badges.push({
-				label: "EO",
-				value: formatDurationCompact(item.earlyOutHours),
-				className: "bg-orange-100 text-orange-700",
-				valueClassName: "bg-orange-200/70 text-orange-800",
 			});
 		}
 		return badges;
@@ -1980,55 +2009,116 @@ export function AttendanceManagement({
 		setSearchQuery("");
 	};
 
-	const returnToAttendanceOverview = () => {
+	const openEmployeePeriodDays = (record: AttendanceRecord) => {
+		const employeeId = record.employeeRefId || getEmployeeProfileId(record);
 		updateSearchParams((params) => {
-			params.delete("view");
-			params.delete("department");
+			params.set("view", "list");
+			params.set("page", "1");
+			if (employeeId) {
+				params.set("employee", employeeId);
+			} else {
+				params.delete("employee");
+			}
+			if (record.departmentId) {
+				params.set("department", record.departmentId);
+			}
 			params.delete("section");
 			params.delete("position");
 			params.delete("level");
 			params.delete("manager");
-			params.delete("employee");
-			params.delete("shiftType");
 			params.delete("search");
 			params.delete("status");
-			params.delete("page");
 		});
 		setSearchQuery("");
+	};
+
+	const getRecordScheduleSnapshot = (item: AttendanceRecord) =>
+		(item as AttendanceRecord & { scheduleSnapshot?: unknown }).scheduleSnapshot;
+
+	const renderEmptyMetric = () => <span className="text-[11px] text-gray-400">-</span>;
+
+	const renderLateCell = (item: AttendanceRecord) => {
+		const arrival = getClockInArrivalIndicator({
+			...item,
+			scheduleSnapshot: getRecordScheduleSnapshot(item),
+		});
+		if (arrival?.kind === "LATE") {
+			return (
+				<div className="text-[11px] font-semibold tabular-nums text-amber-700">
+					{formatDurationCompact(arrival.lateHours)}
+				</div>
+			);
+		}
+		if (arrival?.kind === "GRACE") {
+			return (
+				<div className="text-[11px] font-medium tabular-nums text-amber-700">
+					Grace {arrival.value || ""}
+				</div>
+			);
+		}
+		if (arrival?.kind === "ON_TIME") {
+			return <div className="text-[11px] font-medium text-emerald-700">On time</div>;
+		}
+		return renderEmptyMetric();
+	};
+
+	const renderUndertimeCell = (item: AttendanceRecord) => {
+		const undertime = getClockOutUndertimeIndicator({
+			...item,
+			scheduleSnapshot: getRecordScheduleSnapshot(item),
+		});
+		if (!undertime) return renderEmptyMetric();
+		return (
+			<div className="text-[11px] font-semibold tabular-nums text-orange-700">
+				{undertime.value}
+			</div>
+		);
+	};
+
+	const renderHoursCell = (item: AttendanceRecord) => {
+		const hours = getWorkedHoursLabel(item);
+		if (!hours) return renderEmptyMetric();
+		return <div className="text-[11px] font-semibold tabular-nums text-gray-900">{hours}</div>;
 	};
 
 	const columns: Column<AttendanceRecord>[] = [
 		{
 			key: "employeeName",
 			label: "Employee",
-			width: "250px",
+			pin: "left",
+			width: "220px",
+			className: "min-w-[220px] max-w-[240px]",
+			headerClassName: "min-w-[220px]",
 			render: (value, item) => (
 				<EmployeeTableCell
 					profileId={getEmployeeProfileId(item)}
 					fullName={String(value || item.employeeName || "-")}
 					employeeId={item.employeeId}
 					avatar={getEmployeeAvatar(item)}
+					size="sm"
 				/>
 			),
 		},
 		{
 			key: "date",
 			label: "Shift Date",
-			width: "130px",
+			width: "92px",
+			className: "whitespace-nowrap",
 			render: (value) => (
-				<div className="text-sm text-gray-700">{formatDate(value, "short")}</div>
+				<div className="text-[11px] text-gray-700">{formatDate(value, "short")}</div>
 			),
 		},
 		{
 			key: "status",
 			label: "Status",
-			width: "170px",
+			width: "104px",
+			className: "whitespace-nowrap",
 			render: (_value, item) => {
 				const displayStatus = getAttendanceDisplayStatus(item);
 				return (
 					<div className="min-w-0">
 						<span
-							className={`inline-flex max-w-full items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-semibold leading-4 ${getAttendanceStatusBadgeClass(displayStatus)}`}>
+							className={`inline-flex max-w-full items-center whitespace-nowrap rounded-full border px-1.5 py-0 text-[10px] font-semibold leading-4 ${getAttendanceStatusBadgeClass(displayStatus)}`}>
 							{displayStatus}
 						</span>
 					</div>
@@ -2038,12 +2128,12 @@ export function AttendanceManagement({
 		{
 			key: "behaviorFlags",
 			label: "Indicators",
-			width: "180px",
+			width: "112px",
 			render: (_, item) => {
 				const indicatorBadges = getAttendanceIndicatorBadges(item);
 
 				if (!indicatorBadges.length) {
-					return <span className="text-gray-400 text-sm">-</span>;
+					return renderEmptyMetric();
 				}
 
 				return (
@@ -2068,21 +2158,47 @@ export function AttendanceManagement({
 		{
 			key: "timeIn",
 			label: "Clock In",
-			width: "120px",
+			width: "88px",
+			className: "whitespace-nowrap",
 			render: (value, item) =>
 				renderClockValue(value as string | null | undefined, {
 					isVirtual: item.isVirtual,
 				}),
 		},
 		{
+			key: "lateHours",
+			label: "Late",
+			width: "72px",
+			className: "whitespace-nowrap",
+			headerClassName: "whitespace-nowrap",
+			render: (_value, item) => renderLateCell(item),
+		},
+		{
 			key: "timeOut",
 			label: "Clock Out",
-			width: "120px",
+			width: "88px",
+			className: "whitespace-nowrap",
 			render: (_value, item) =>
 				renderClockValue(item.timeOut, {
 					isVirtual: item.isVirtual,
 					nextDay: isClockOutNextDay(item),
 				}),
+		},
+		{
+			key: "undertimeHours",
+			label: "UT",
+			width: "64px",
+			className: "whitespace-nowrap",
+			headerClassName: "whitespace-nowrap",
+			render: (_value, item) => renderUndertimeCell(item),
+		},
+		{
+			key: "hoursWorked",
+			label: "Hours",
+			width: "64px",
+			className: "whitespace-nowrap",
+			headerClassName: "whitespace-nowrap",
+			render: (_value, item) => renderHoursCell(item),
 		},
 	];
 
@@ -2119,6 +2235,7 @@ export function AttendanceManagement({
 					scheduled: number;
 					present: number;
 					late: number;
+					undertime: number;
 					absent: number;
 					leave: number;
 					missing: number;
@@ -2162,6 +2279,7 @@ export function AttendanceManagement({
 						scheduled: 0,
 						present: 0,
 						late: 0,
+						undertime: 0,
 						absent: 0,
 						leave: 0,
 						missing: 0,
@@ -2181,6 +2299,7 @@ export function AttendanceManagement({
 						scheduled: number;
 						present: number;
 						late: number;
+						undertime: number;
 						absent: number;
 						leave: number;
 						missing: number;
@@ -2210,6 +2329,7 @@ export function AttendanceManagement({
 					scheduled: item.scheduled || 0,
 					present: item.present || 0,
 					late: item.late || 0,
+					undertime: item.undertime || 0,
 					absent: item.absent || 0,
 					leave: item.leave || 0,
 					missing: item.missing || 0,
@@ -2237,7 +2357,7 @@ export function AttendanceManagement({
 					const scheduled = !["REST_DAY", "HOLIDAY", "CANCELLED", "SCHEDULED"].includes(
 						status,
 					);
-					const isPresent = ["PRESENT", "INCOMPLETE"].includes(status);
+					const isPresent = isOverviewPresentRecord(record);
 					const isLate =
 						(record.behaviorFlags || []).includes("TARDINESS") ||
 						parseDurationToMinutes(record.lateHours) > 0;
@@ -2274,6 +2394,7 @@ export function AttendanceManagement({
 					stats.scheduled = serverStats.scheduled ?? stats.scheduled;
 					stats.present = serverStats.present ?? stats.present;
 					stats.late = serverStats.late ?? stats.late;
+					stats.undertime = serverStats.undertime ?? stats.undertime;
 					stats.absent = serverStats.absent ?? stats.absent;
 					stats.leave = serverStats.leave ?? stats.leave;
 					stats.missing = serverStats.missing ?? stats.missing;
@@ -2284,7 +2405,7 @@ export function AttendanceManagement({
 
 				return {
 					...group,
-					previewRows: group.previewRows.slice(0, 5),
+					previewRows: [...group.previewRows].sort(compareClockedInFirst).slice(0, 5),
 					stats,
 				};
 			})
@@ -2458,19 +2579,21 @@ export function AttendanceManagement({
 
 	const metricsLoading =
 		viewMode === "list" ? isLoadingAttendanceMetricsSummary : isLoadingAttendanceOverview;
-	const workDayCount = detailedMetrics.totalScheduledWorkDays || 0;
-	const clockedInCount = detailedMetrics.totalClockedIn || detailedMetrics.totalPresent || 0;
-	const clockedOutCount = detailedMetrics.totalClockedOut || 0;
-	const onTimeCount =
-		detailedMetrics.totalOnTime ||
-		Math.max(0, clockedInCount - (detailedMetrics.totalLate || 0));
-	const lateCount = detailedMetrics.totalLate || 0;
+	const utilizationDisplay = getAttendanceUtilizationDisplay(detailedMetrics);
+	const absenteeismDisplay = getAbsenteeismDisplay(detailedMetrics);
+	const workDayCount = utilizationDisplay.obligated;
+	const cardCounts = getAttendanceCardCounts(detailedMetrics);
+	const scheduledClockedInCount = cardCounts.clockedIn;
+	const lateCount = cardCounts.lateCount;
+	const onTimeCount = cardCounts.onTimeCount;
+	const clockedInCount = cardCounts.clockedIn;
+	const clockedOutCount = cardCounts.clockedOut;
 	const earlyOutCount = detailedMetrics.totalEarlyOut || 0;
 	const leaveCount = detailedMetrics.totalOnLeave || 0;
 	const approvedOvertimeCount = detailedMetrics.approvedOvertimeCount || 0;
 	const unapprovedOvertimeCount = detailedMetrics.unapprovedOvertimeCount || 0;
 	const absentCount = detailedMetrics.totalAbsent || 0;
-	const notClockedInCount = detailedMetrics.totalNotClockedIn || 0;
+	const notClockedInCount = getScheduledNotClockedIn(detailedMetrics);
 	const missingClockInCount = absentCount + notClockedInCount;
 	const restDayCount = detailedMetrics.totalRestDay || 0;
 	const holidayCount = detailedMetrics.totalHoliday || 0;
@@ -2487,8 +2610,7 @@ export function AttendanceManagement({
 	const scheduledRate =
 		calendarDayCount > 0 ? Math.round((workDayCount / calendarDayCount) * 100) : 0;
 	const leaveTypeBreakdown = detailedMetrics.leaveTypeBreakdown || [];
-	const utilizationRate =
-		detailedMetrics.utilizationRate || detailedMetrics.avgAttendanceRate || 0;
+	const utilizationRate = utilizationDisplay.rate;
 	const onTimeRate = workDayCount > 0 ? Math.round((onTimeCount / workDayCount) * 100) : 0;
 	const lateRate = workDayCount > 0 ? Math.round((lateCount / workDayCount) * 100) : 0;
 	const earlyOutRate = workDayCount > 0 ? Math.round((earlyOutCount / workDayCount) * 100) : 0;
@@ -2549,7 +2671,7 @@ export function AttendanceManagement({
 				gauge: "#e11d48",
 				text: "text-rose-700",
 				bar: "bg-rose-600",
-				appliesTo: "attendance",
+				appliesTo: "absenteeism",
 			};
 		}
 		if (activeMetricKey === "EARLY_OUT") {
@@ -2632,14 +2754,13 @@ export function AttendanceManagement({
 								label: "missing schedule",
 							}
 				: { rate: scheduledRate, label: "scheduled" };
+	const clockedInRawRate =
+		workDayCount > 0 ? (scheduledClockedInCount / workDayCount) * 100 : 0;
 	const attendanceGaugeVisual = (() => {
 		if (activeMetricKey === "ON_TIME") return { value: onTimeRate, label: "on time" };
 		if (activeMetricKey === "LATE") return { value: lateRate, label: "late" };
 		if (activeMetricKey === "ABSENT") return { value: getMetricRate(absentCount), label: "absent" };
-		if (activeMetricKey === "EARLY_OUT") return { value: earlyOutRate, label: "early out" };
-		if (activeMetricKey === "CLOCKED_IN") {
-			return { value: getMetricRate(clockedInCount), label: "clocked in" };
-		}
+		if (activeMetricKey === "EARLY_OUT") return { value: earlyOutRate, label: "undertime" };
 		if (activeMetricKey === "CLOCKED_OUT") {
 			return { value: getMetricRate(clockedOutCount, clockedInCount), label: "clocked out" };
 		}
@@ -2652,14 +2773,30 @@ export function AttendanceManagement({
 				label: "overtime",
 			};
 		}
-		return { value: utilizationRate, label: "present" };
+		return {
+			value: clockedInRawRate,
+			label: "clocked in",
+			rateLabel: utilizationDisplay.rateLabel,
+		};
 	})();
+
+	const renderProgressTrack = (percent: number, color: string, hasValue: boolean) => {
+		const width = hasValue ? Math.min(100, Math.max(percent, 8)) : 0;
+		return (
+			<span className="h-1.5 overflow-hidden rounded-full bg-neutral-200">
+				<span
+					className="block h-full rounded-full"
+					style={{ width: `${width}%`, backgroundColor: color }}
+				/>
+			</span>
+		);
+	};
 
 	const renderMetricRow = (
 		label: string,
 		value: number,
 		status: string,
-		options: { total?: number; colorClassName?: string } = {},
+		options: { total?: number; barColor?: string } = {},
 	) => {
 		const total = Math.max(options.total ?? workDayCount, 0);
 		const percent = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
@@ -2668,26 +2805,18 @@ export function AttendanceManagement({
 				type="button"
 				aria-pressed={isMetricActive(status)}
 				onClick={() => handleMetricFilter(status)}
-				className={`group grid w-full cursor-pointer grid-cols-[minmax(92px,0.42fr)_minmax(80px,1fr)_auto] items-center gap-2 border-l-2 px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-400 ${
+				className={`group grid w-full cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-300 ${
 					isMetricActive(status)
-						? "border-l-orange-500 bg-neutral-100"
-						: "border-l-transparent hover:bg-neutral-50"
-				}`}>
-				<span className="truncate text-xs font-medium text-gray-800">{label}</span>
-				<span className="h-1.5 overflow-hidden bg-neutral-200/80">
-					<span
-						className={`block h-full transition-colors ${
-							isMetricActive(status)
-								? activeMetricTone.bar
-								: options.colorClassName || "bg-slate-600"
-						}`}
-						style={{ width: `${percent}%` }}
-					/>
-				</span>
-				<span className="text-xs font-semibold tabular-nums text-gray-950">
+						? "bg-neutral-100"
+						: "hover:bg-neutral-50"
+				}`}
+				style={{ gridTemplateColumns: "minmax(72px,0.4fr) minmax(64px,1fr) auto" }}>
+				<span className="truncate text-[11px] text-neutral-600">{label}</span>
+				{renderProgressTrack(percent, options.barColor || "#64748b", value > 0)}
+				<span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-neutral-800">
 					{displayMetricValue(value)}
 					{total > 0 && (
-						<span className="ml-1 text-xs font-medium text-gray-500">
+						<span className="ml-1 font-normal text-neutral-400">
 							/ {displayMetricText(total)}
 						</span>
 					)}
@@ -2699,27 +2828,18 @@ export function AttendanceManagement({
 	const renderScheduleRow = (
 		label: string,
 		value: number,
-		options: { total?: number; colorClassName?: string; status?: string } = {},
+		options: { total?: number; barColor?: string; status?: string } = {},
 	) => {
 		const total = Math.max(options.total ?? calendarDayCount, 0);
 		const percent = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
 		const content = (
 			<>
-				<span className="truncate text-xs font-medium text-gray-800">{label}</span>
-				<span className="h-1.5 overflow-hidden bg-neutral-200/80">
-					<span
-						className={`block h-full transition-colors ${
-							isMetricActive(options.status)
-								? activeMetricTone.bar
-								: options.colorClassName || "bg-slate-600"
-						}`}
-						style={{ width: `${percent}%` }}
-					/>
-				</span>
-				<span className="text-xs font-semibold tabular-nums text-gray-950">
+				<span className="truncate text-[11px] text-neutral-600">{label}</span>
+				{renderProgressTrack(percent, options.barColor || "#64748b", value > 0)}
+				<span className="text-[11px] font-medium tabular-nums text-neutral-800">
 					{displayMetricValue(value)}
 					{total > 0 && (
-						<span className="ml-1 text-xs font-medium text-gray-500">
+						<span className="ml-1 font-normal text-neutral-400">
 							/ {displayMetricText(total)}
 						</span>
 					)}
@@ -2733,18 +2853,19 @@ export function AttendanceManagement({
 					type="button"
 					aria-pressed={isMetricActive(options.status)}
 					onClick={() => handleMetricFilter(options.status || "")}
-					className={`grid w-full cursor-pointer grid-cols-[minmax(92px,0.42fr)_minmax(80px,1fr)_auto] items-center gap-2 border-l-2 px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-400 ${
+					className={`grid w-full cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-300 ${
 						isMetricActive(options.status)
-							? "border-l-orange-500 bg-neutral-100"
-							: "border-l-transparent hover:bg-neutral-50"
-					}`}>
+							? "bg-neutral-100"
+							: "hover:bg-neutral-50"
+					}`}
+					style={{ gridTemplateColumns: "minmax(72px,0.4fr) minmax(64px,1fr) auto" }}>
 					{content}
 				</button>
 			);
 		}
 
 		return (
-			<div className="grid w-full grid-cols-[minmax(92px,0.42fr)_minmax(80px,1fr)_auto] items-center gap-2 border-l-2 border-l-transparent px-2 py-1.5">
+			<div className="grid w-full items-center gap-2 rounded-md px-1.5 py-1" style={{ gridTemplateColumns: "minmax(72px,0.4fr) minmax(64px,1fr) auto" }}>
 				{content}
 			</div>
 		);
@@ -2753,33 +2874,24 @@ export function AttendanceManagement({
 	const renderCompactScheduleRow = (
 		label: string,
 		value: number,
-		options: { total?: number; colorClassName?: string; status?: string } = {},
+		options: { total?: number; barColor?: string; status?: string } = {},
 	) => {
 		const total = Math.max(options.total ?? calendarDayCount, 0);
 		const percent = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
 		const content = (
 			<>
 				<span className="flex min-w-0 items-baseline justify-between gap-2">
-					<span className="truncate text-xs font-medium text-gray-800">{label}</span>
-					<span className="shrink-0 text-xs font-semibold tabular-nums text-gray-950">
+					<span className="truncate text-[11px] text-neutral-600">{label}</span>
+					<span className="shrink-0 text-[11px] font-medium tabular-nums text-neutral-800">
 						{displayMetricValue(value)}
 						{total > 0 && (
-							<span className="ml-1 text-[11px] font-medium text-gray-500">
+							<span className="ml-1 font-normal text-neutral-400">
 								/ {displayMetricText(total)}
 							</span>
 						)}
 					</span>
 				</span>
-				<span className="h-1.5 overflow-hidden bg-neutral-200/80">
-					<span
-						className={`block h-full transition-colors ${
-							isMetricActive(options.status)
-								? activeMetricTone.bar
-								: options.colorClassName || "bg-slate-600"
-						}`}
-						style={{ width: `${percent}%` }}
-					/>
-				</span>
+				{renderProgressTrack(percent, options.barColor || "#64748b", value > 0)}
 			</>
 		);
 
@@ -2789,10 +2901,10 @@ export function AttendanceManagement({
 					type="button"
 					aria-pressed={isMetricActive(options.status)}
 					onClick={() => handleMetricFilter(options.status || "")}
-					className={`grid w-full cursor-pointer gap-1.5 border-l-2 px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-400 ${
+					className={`grid w-full cursor-pointer gap-1 rounded-md px-1.5 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-300 ${
 						isMetricActive(options.status)
-							? "border-l-orange-500 bg-neutral-100"
-							: "border-l-transparent hover:bg-neutral-50"
+							? "bg-neutral-100"
+							: "hover:bg-neutral-50"
 					}`}>
 					{content}
 				</button>
@@ -2800,7 +2912,7 @@ export function AttendanceManagement({
 		}
 
 		return (
-			<div className="grid w-full gap-1.5 border-l-2 border-l-transparent px-2 py-1.5">
+			<div className="grid w-full gap-1 rounded-md px-1.5 py-1">
 				{content}
 			</div>
 		);
@@ -2810,7 +2922,7 @@ export function AttendanceManagement({
 		label: string,
 		value: number,
 		status: string,
-		options: { total?: number; colorClassName?: string } = {},
+		options: { total?: number; barColor?: string } = {},
 	) => {
 		const total = Math.max(options.total ?? workDayCount, 0);
 		const percent = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
@@ -2820,32 +2932,23 @@ export function AttendanceManagement({
 				type="button"
 				aria-pressed={isMetricActive(status)}
 				onClick={() => handleMetricFilter(status)}
-				className={`grid min-w-0 cursor-pointer gap-1.5 border-l-2 px-2 py-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-slate-400 ${
+				className={`grid min-w-0 cursor-pointer gap-1 rounded-md px-1.5 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-300 ${
 					isMetricActive(status)
-						? "border-l-orange-500 bg-neutral-100"
-						: "border-l-transparent hover:bg-neutral-50"
+						? "bg-neutral-100"
+						: "hover:bg-neutral-50"
 				}`}>
 				<span className="flex min-w-0 items-baseline justify-between gap-3">
-					<span className="truncate text-xs font-medium text-gray-800">{label}</span>
-					<span className="shrink-0 text-xs font-semibold tabular-nums text-gray-950">
+					<span className="truncate text-[11px] text-neutral-600">{label}</span>
+					<span className="shrink-0 text-[11px] font-medium tabular-nums text-neutral-800">
 						{displayMetricValue(value)}
 						{total > 0 && (
-							<span className="ml-1 text-[11px] font-medium text-gray-500">
+							<span className="ml-1 font-normal text-neutral-400">
 								/ {displayMetricText(total)}
 							</span>
 						)}
 					</span>
 				</span>
-				<span className="h-1.5 overflow-hidden bg-neutral-200/80">
-					<span
-						className={`block h-full transition-colors ${
-							isMetricActive(status)
-								? activeMetricTone.bar
-								: options.colorClassName || "bg-slate-600"
-						}`}
-						style={{ width: `${percent}%` }}
-					/>
-				</span>
+				{renderProgressTrack(percent, options.barColor || "#64748b", value > 0)}
 			</button>
 		);
 	};
@@ -2879,30 +2982,19 @@ export function AttendanceManagement({
 		);
 	};
 
-	const renderUtilizationGauge = (value: number, label: string) => {
-		const percent = Math.max(0, Math.min(100, Math.round(value || 0)));
-		const gaugeColor =
-			activeMetricTone.appliesTo === "attendance" ? activeMetricTone.gauge : "#16415f";
-
-		return (
-			<div
-				className="grid h-32 w-32 shrink-0 place-items-center rounded-full transition-colors"
-				style={{
-					background: `conic-gradient(${gaugeColor} ${percent * 3.6}deg, #e5e7eb 0deg)`,
-				}}>
-				<div className="grid h-[92px] w-[92px] place-items-center rounded-full bg-white">
-					<div className="text-center leading-none">
-						<div className="text-xl font-semibold tabular-nums text-neutral-950">
-							{metricsLoading ? "..." : `${percent}%`}
-						</div>
-						<div className="mt-1 text-[10px] font-semibold uppercase text-neutral-500">
-							{label}
-						</div>
-					</div>
-				</div>
-			</div>
-		);
-	};
+	const renderUtilizationGauge = (
+		value: number,
+		label: string,
+		options?: { rateLabel?: string; color?: string },
+	) => (
+		<AttendanceRateDonut
+			value={value}
+			label={label}
+			rateLabel={options?.rateLabel}
+			color={options?.color}
+			isLoading={metricsLoading}
+		/>
+	);
 
 	const renderOverviewMetric = (
 		value: number | string | null,
@@ -2957,6 +3049,7 @@ export function AttendanceManagement({
 							<th className="px-2 py-2 text-right">Sched</th>
 							<th className="px-2 py-2 text-right">Pres</th>
 							<th className="px-2 py-2 text-right">Late</th>
+							<th className="px-2 py-2 text-right">UT</th>
 							<th className="px-2 py-2 text-right">Abs</th>
 							<th className="px-2 py-2 text-right">LV</th>
 							<th className="px-2 py-2 text-right">OT</th>
@@ -3004,6 +3097,14 @@ export function AttendanceManagement({
 											})}
 										</td>
 										<td className="px-2 py-2 text-right">
+											{renderOverviewMetric(group.stats.undertime || 0, {
+												tone:
+													(group.stats.undertime || 0) > 0
+														? "warn"
+														: "default",
+											})}
+										</td>
+										<td className="px-2 py-2 text-right">
 											{renderOverviewMetric(group.stats.absent, {
 												tone: group.stats.absent > 0 ? "danger" : "default",
 											})}
@@ -3029,6 +3130,10 @@ export function AttendanceManagement({
 									</tr>
 									{!isCollapsed &&
 										group.previewRows.map((item) => {
+											const totals = item.periodTotals;
+											const isPeriodRollup = Boolean(
+												item.isPeriodRollup || totals,
+											);
 											const status = getAttendanceDisplayStatus(item);
 											const isScheduled = ![
 												"REST_DAY",
@@ -3036,12 +3141,20 @@ export function AttendanceManagement({
 												"CANCELLED",
 												"SCHEDULED",
 											].includes(status);
-											const isPresent = ["PRESENT", "INCOMPLETE"].includes(
-												status,
-											);
+											const isPresent = isOverviewPresentRecord(item);
 											const isLate =
 												(item.behaviorFlags || []).includes("TARDINESS") ||
 												parseDurationToMinutes(item.lateHours) > 0;
+											const isUndertime =
+												parseDurationToMinutes(item.undertimeHours) > 0 ||
+												parseDurationToMinutes(item.earlyOutHours) > 0;
+											const scheduledCount = totals?.scheduled ?? (isScheduled ? 1 : 0);
+											const presentCount = totals?.present ?? (isPresent ? 1 : 0);
+											const lateCount = totals?.late ?? (isLate ? 1 : 0);
+											const undertimeCount =
+												totals?.undertime ?? (isUndertime ? 1 : 0);
+											const absentCount =
+												totals?.absent ?? (status === "ABSENT" ? 1 : 0);
 
 											return (
 												<tr
@@ -3051,11 +3164,11 @@ export function AttendanceManagement({
 														<div className="flex items-center gap-2">
 															<span
 																className={`h-2 w-2 shrink-0 rounded-full ${
-																	status === "ABSENT"
+																	absentCount > 0 && presentCount === 0
 																		? "bg-rose-600"
-																		: isLate
+																		: lateCount > 0
 																			? "bg-amber-500"
-																			: isPresent
+																			: presentCount > 0
 																				? "bg-emerald-600"
 																				: "bg-slate-400"
 																}`}
@@ -3071,29 +3184,32 @@ export function AttendanceManagement({
 														</div>
 													</td>
 													<td className="px-3 py-2 text-sm text-gray-600">
-														{getShiftLabel(item)}
+														{isPeriodRollup
+															? "period total"
+															: getShiftLabel(item)}
 													</td>
 													<td className="px-2 py-2 text-right tabular-nums">
-														{isScheduled ? 1 : 0}
+														{scheduledCount}
 													</td>
 													<td className="px-2 py-2 text-right tabular-nums">
-														{isPresent ? 1 : 0}
+														{presentCount}
 													</td>
 													<td className="px-2 py-2 text-right">
-														{renderOverviewMetric(isLate ? 1 : 0, {
-															tone: isLate ? "warn" : "default",
+														{renderOverviewMetric(lateCount, {
+															tone: lateCount > 0 ? "warn" : "default",
 														})}
 													</td>
 													<td className="px-2 py-2 text-right">
-														{renderOverviewMetric(
-															status === "ABSENT" ? 1 : 0,
-															{
-																tone:
-																	status === "ABSENT"
-																		? "danger"
-																		: "default",
-															},
-														)}
+														{renderOverviewMetric(undertimeCount, {
+															tone:
+																undertimeCount > 0 ? "warn" : "default",
+														})}
+													</td>
+													<td className="px-2 py-2 text-right">
+														{renderOverviewMetric(absentCount, {
+															tone:
+																absentCount > 0 ? "danger" : "default",
+														})}
 													</td>
 													<td className="px-2 py-2 text-right tabular-nums">
 														{status === "LEAVE" ? 1 : 0}
@@ -3110,16 +3226,29 @@ export function AttendanceManagement({
 													<td className="px-3 py-2 text-right">
 														<div className="flex justify-end">
 															<div className="flex items-center justify-end gap-1">
-																<Button
-																	variant="ghost"
-																	size="icon"
-																	className="h-7 w-7 rounded-md"
-																	onClick={() => openFixAttendance(item)}
-																	title="Fix Attendance"
-																	aria-label={`Fix attendance for ${item.employeeName}`}
-																>
-																	<FileEdit className="h-4 w-4 text-orange-600" />
-																</Button>
+																{isPeriodRollup ? (
+																	<Button
+																		variant="ghost"
+																		size="sm"
+																		className="h-7 rounded-md px-2 text-xs font-bold text-neutral-700"
+																		onClick={() =>
+																			openEmployeePeriodDays(item)
+																		}>
+																		View days
+																	</Button>
+																) : (
+																	<Button
+																		variant="ghost"
+																		size="icon"
+																		className="h-7 w-7 rounded-md"
+																		onClick={() =>
+																			openFixAttendance(item)
+																		}
+																		title="Fix Attendance"
+																		aria-label={`Fix attendance for ${item.employeeName}`}>
+																		<FileEdit className="h-4 w-4 text-orange-600" />
+																	</Button>
+																)}
 																<DropdownMenu>
 																	<DropdownMenuTrigger asChild>
 																		<Button
@@ -3135,13 +3264,25 @@ export function AttendanceManagement({
 																	<DropdownMenuContent
 																		align="end"
 																		className="w-44">
-																		<DropdownMenuItem
-																			onClick={() =>
-																				setSelectedRecord(item)
-																			}>
-																			<ListCheck className="mr-2 h-4 w-4" />
-																			View Details
-																		</DropdownMenuItem>
+																		{isPeriodRollup ? (
+																			<DropdownMenuItem
+																				onClick={() =>
+																					openEmployeePeriodDays(
+																						item,
+																					)
+																				}>
+																				<ListCheck className="mr-2 h-4 w-4" />
+																				View days
+																			</DropdownMenuItem>
+																		) : (
+																			<DropdownMenuItem
+																				onClick={() =>
+																					setSelectedRecord(item)
+																				}>
+																				<ListCheck className="mr-2 h-4 w-4" />
+																				View Details
+																			</DropdownMenuItem>
+																		)}
 																	</DropdownMenuContent>
 																</DropdownMenu>
 															</div>
@@ -3152,12 +3293,21 @@ export function AttendanceManagement({
 										})}
 									{!isCollapsed && (
 										<tr className="border-b border-neutral-200 bg-white">
-											<td colSpan={9} className="px-3 py-2">
+											<td colSpan={10} className="px-3 py-2">
 												<div className="flex items-center justify-between gap-3">
 													<span className="text-xs font-medium text-gray-500">
-														Showing recent {group.previewRows.length} of{" "}
-														{group.stats.totalRecords ||
-															group.previewRows.length}
+														{group.previewRows.some(
+															(row) =>
+																row.isPeriodRollup || row.periodTotals,
+														)
+															? `Showing ${group.previewRows.length} of ${
+																	group.stats.employees ||
+																	group.previewRows.length
+																} employees`
+															: `Showing recent ${group.previewRows.length} of ${
+																	group.stats.totalRecords ||
+																	group.previewRows.length
+																}`}
 													</span>
 													<button
 														type="button"
@@ -3237,55 +3387,41 @@ export function AttendanceManagement({
 			
 			<Card className="overflow-hidden rounded-md border border-neutral-200 bg-white py-0 shadow-none">
 				<CardContent className="p-0">
-					<div className="grid divide-y divide-neutral-200 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.08fr)] xl:divide-y-0">
-						{/* Utilization & Attendance */}
-						<div className="min-w-0 p-4 md:p-5 xl:border-r xl:border-neutral-200">
-							<div className="flex items-end justify-between mb-4">
-								<div>
-									<h3 className="text-sm font-medium text-neutral-600 mb-1">
-										Attendance Utilization
-									</h3>
-									<div className="flex items-baseline gap-2">
-										<span
-											className={`text-3xl font-semibold tabular-nums tracking-tight ${
-												activeMetricTone.appliesTo === "attendance"
-													? activeMetricTone.text
-													: "text-neutral-900"
-											}`}>
-											{metricsLoading ? "..." : `${utilizationRate}%`}
-										</span>
-										<span className="text-sm text-neutral-500 mb-1">
-											utilization rate
-										</span>
-									</div>
-								</div>
+					<div className="grid divide-y divide-neutral-100 lg:grid-cols-2 lg:divide-y-0 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+						<div className="flex h-full min-w-0 flex-col p-3 md:p-4 lg:border-r lg:border-neutral-100">
+							<div className="mb-3 flex items-end justify-between gap-3">
+								<h3 className="text-[11px] font-medium text-neutral-500">
+									Attendance Utilization
+								</h3>
 								<div className="text-right">
-									<div className="text-2xl font-semibold tabular-nums text-neutral-900">
-										{displayMetricText(clockedInCount + leaveCount)}
+									<div className="text-lg font-semibold tabular-nums text-neutral-800">
+										{displayMetricText(scheduledClockedInCount)}
 									</div>
-									<div className="text-xs text-neutral-500">
-										of {displayMetricText(workDayCount)} work days
+									<div className="text-[11px] text-neutral-400">
+										of {displayMetricText(workDayCount)}{" "}
+										{utilizationDisplay.denominatorLabel}
 									</div>
 								</div>
 							</div>
 
-							<div className="grid gap-4 md:grid-cols-[148px_1fr] md:items-center">
+							<div className="flex flex-col gap-3 md:flex-row md:items-center">
 								{renderUtilizationGauge(
 									attendanceGaugeVisual.value,
 									attendanceGaugeVisual.label,
+									{ rateLabel: attendanceGaugeVisual.rateLabel, color: "#334155" },
 								)}
-								<div className="grid gap-1">
+								<div className="grid min-w-0 flex-1 gap-0.5">
 									{renderMetricRow("On time", onTimeCount, "ON_TIME", {
-										colorClassName: "bg-neutral-700",
+										total: Math.max(scheduledClockedInCount, onTimeCount + lateCount),
+										barColor: "#0f766e",
 									})}
 									{renderMetricRow("Late", lateCount, "LATE", {
-										colorClassName: "bg-amber-500",
+										total: Math.max(scheduledClockedInCount, onTimeCount + lateCount),
+										barColor: "#d97706",
 									})}
-									{renderMetricRow("Absent", absentCount, "ABSENT", {
-										colorClassName: "bg-rose-600",
-									})}
-									{renderMetricRow("Early out", earlyOutCount, "EARLY_OUT", {
-										colorClassName: "bg-orange-500",
+									{renderMetricRow("Undertime", earlyOutCount, "EARLY_OUT", {
+										total: Math.max(clockedOutCount, earlyOutCount),
+										barColor: "#ea580c",
 									})}
 									{renderMetricRow(
 										"Approved OT",
@@ -3293,7 +3429,7 @@ export function AttendanceManagement({
 										"OVERTIME",
 										{
 											total: approvedOvertimeCount + unapprovedOvertimeCount,
-											colorClassName: "bg-neutral-700",
+											barColor: "#475569",
 										},
 									)}
 									{renderMetricRow(
@@ -3302,27 +3438,29 @@ export function AttendanceManagement({
 										"OVERTIME",
 										{
 											total: approvedOvertimeCount + unapprovedOvertimeCount,
-											colorClassName: "bg-amber-500",
+											barColor: "#ca8a04",
 										},
 									)}
 								</div>
 							</div>
 
-							<div className="mt-4 border-t border-neutral-100 pt-3">
-								<h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-neutral-600">
-									Clock Presence
-								</h3>
-								<div className="grid gap-2 sm:grid-cols-3">
-									{renderPresenceRow("Clocked in", clockedInCount, "CLOCKED_IN", {
-										colorClassName: "bg-neutral-600",
+							<div className="mt-auto border-t border-neutral-100 pt-2.5">
+								<div className="mb-1.5 flex min-h-5 items-end">
+									<h3 className="text-[11px] font-medium text-neutral-500">
+										Clock presence
+									</h3>
+								</div>
+								<div className="grid gap-1 sm:grid-cols-3">
+									{renderPresenceRow("Clocked in", scheduledClockedInCount, "CLOCKED_IN", {
+										barColor: "#334155",
 									})}
 									{renderPresenceRow(
 										"Clocked out",
 										clockedOutCount,
 										"CLOCKED_OUT",
 										{
-											total: clockedInCount,
-											colorClassName: "bg-neutral-800",
+											total: Math.max(scheduledClockedInCount, clockedInCount),
+											barColor: "#0f172a",
 										},
 									)}
 									{renderPresenceRow(
@@ -3330,244 +3468,107 @@ export function AttendanceManagement({
 										missingClockInCount,
 										"MISSING_CLOCK_IN",
 										{
-											colorClassName: "bg-rose-600",
+											barColor: "#e11d48",
 										},
 									)}
 								</div>
 							</div>
 						</div>
 
-						<div className="grid min-w-0 divide-y divide-neutral-200 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.62fr)] md:divide-x md:divide-y-0">
-							{/* Leaves Balance */}
-							<div className="min-w-0 p-4 md:p-5">
-								<div className="flex items-end justify-between mb-4">
-									<div>
-										<h3 className="text-sm font-medium text-neutral-600 mb-1">
-											Leave Balances
-										</h3>
-										<div className="flex items-baseline gap-2">
-											<span
-												className={`text-2xl font-semibold tabular-nums tracking-tight ${
-													activeMetricTone.appliesTo === "leave"
-														? activeMetricTone.text
-														: "text-neutral-900"
-												}`}>
-												{isLoadingLeaveBalances ? "..." : `${leaveVisualRate}%`}
-											</span>
-											<span className="text-sm text-neutral-500 mb-1">
-												{leaveVisualLabel}
-											</span>
-										</div>
+						<div className="flex h-full min-w-0 flex-col p-3 md:p-4">
+							<div className="mb-3 flex items-end justify-between gap-3">
+								<h3 className="text-[11px] font-medium text-neutral-500">
+									Absenteeism
+								</h3>
+								<div className="text-right">
+									<div className="text-lg font-semibold tabular-nums text-neutral-800">
+										{displayMetricText(absenteeismDisplay.count)}
 									</div>
-									<div className="text-right">
-										<div className="text-xl font-semibold tabular-nums text-neutral-900">
-											{displayMetricValue(leaveCount)}
-										</div>
-										<div className="text-xs text-neutral-500">
-											active leaves
-										</div>
+									<div className="text-[11px] text-neutral-400">
+										of {displayMetricText(absenteeismDisplay.scheduled)}{" "}
+										{absenteeismDisplay.denominatorLabel}
 									</div>
 								</div>
+							</div>
 
-								<div className="space-y-4">
-									<div>
-										<div className="flex items-center justify-between mb-1.5 px-1">
-											<span className="text-xs font-medium text-neutral-600">
-												Total Available
-											</span>
-											<span className="text-sm font-semibold tabular-nums text-neutral-900">
-												{displayLeaveBalanceValue(
-													leaveBalanceTotals.available,
-												)}
-											</span>
-										</div>
-										<div className="mb-3">
-											{renderSegmentedBar(
-												[
-													{
-														key: "available",
-														value: leaveBalanceTotals.available,
-														className: "bg-emerald-600",
-													},
-													{
-														key: "used",
-														value: leaveBalanceTotals.used,
-														className: "bg-amber-500",
-													},
-													{
-														key: "pending",
-														value: leaveBalanceTotals.pending,
-														className: "bg-neutral-500",
-													},
-												],
-												leaveBalanceMeasuredTotal,
-											)}
-										</div>
-										<div className="grid grid-cols-2 gap-4 px-1">
-											<div>
-												<div className="flex items-center justify-between gap-2 mb-1">
-													<span className="text-xs text-neutral-500">
-														Used
-													</span>
-													<span className="text-xs font-medium tabular-nums text-neutral-900">
-														{displayLeaveBalanceValue(
-															leaveBalanceTotals.used,
-														)}
-													</span>
-												</div>
-												<div className="h-1.5 overflow-hidden bg-neutral-200/80">
-													<div
-														className="h-full bg-amber-500"
-														style={{
-															width: `${leaveBalanceMeasuredTotal > 0 ? Math.min(100, Math.round((leaveBalanceTotals.used / leaveBalanceMeasuredTotal) * 100)) : 0}%`,
-														}}
-													/>
-												</div>
-											</div>
-											<div>
-												<div className="flex items-center justify-between gap-2 mb-1">
-													<span className="text-xs text-neutral-500">
-														Pending
-													</span>
-													<span className="text-xs font-medium tabular-nums text-neutral-900">
-														{displayLeaveBalanceValue(
-															leaveBalanceTotals.pending,
-														)}
-													</span>
-												</div>
-												<div className="h-1.5 overflow-hidden bg-neutral-200/80">
-													<div
-														className="h-full bg-neutral-500"
-														style={{
-															width: `${leaveBalanceMeasuredTotal > 0 ? Math.min(100, Math.round((leaveBalanceTotals.pending / leaveBalanceMeasuredTotal) * 100)) : 0}%`,
-														}}
-													/>
-												</div>
-											</div>
-										</div>
-									</div>
-
-									{leaveBalanceTypeRows.length > 0 && (
-										<div className="grid gap-1 mt-4 pt-4 border-t border-neutral-100">
-											{leaveBalanceTypeRows.map((item) => {
-												const leaveStatus = `LEAVE_TYPE:${item.leaveType}`;
-												const periodUsed = getPeriodLeaveUsed(
-													item.leaveType,
-												);
-												const percent = getLeaveBalancePercent(
-													periodUsed,
-													item.totalEntitled,
-												);
-												const color = getLeaveTypeColor(item.leaveType);
-
-												return (
-													<button
-														type="button"
-														key={item.leaveType}
-														aria-pressed={isMetricActive(leaveStatus)}
-														onClick={() => handleMetricFilter(leaveStatus)}
-														className={`cursor-pointer border-l-2 px-2 py-1.5 text-left transition-colors focus-visible:outline-none ring-1 ring-transparent focus-visible:ring-neutral-300 ${
-															isMetricActive(leaveStatus)
-																? "border-l-orange-500 bg-neutral-100"
-																: "border-l-transparent hover:bg-neutral-50"
-														}`}>
-														<div className="flex items-center justify-between gap-3 text-xs mb-1.5">
-															<span className="font-medium text-neutral-700 truncate">
-																{formatLeaveBalanceNumber(
-																	periodUsed,
-																)}
-																/
-																{formatLeaveBalanceNumber(
-																	item.totalEntitled,
-																)}{" "}
-																{getLeaveTypeCode(item.leaveType)}
-															</span>
-															<span className="text-neutral-500 tabular-nums">
-																{formatLeaveBalanceNumber(
-																	item.available,
-																)}{" "}
-																left
-															</span>
-														</div>
-														<div className="h-1.5 overflow-hidden bg-neutral-200/80">
-															<div
-																className="h-full"
-																style={{
-																	width: `${percent}%`,
-																	backgroundColor: color,
-																}}
-															/>
-														</div>
-													</button>
-												);
-											})}
-										</div>
+							<div className="flex flex-col gap-3 md:flex-row md:items-center">
+								{renderUtilizationGauge(
+									activeMetricKey === "ABSENT"
+										? getMetricRate(absentCount)
+										: activeMetricKey === "NOT_CLOCKED_IN" ||
+											  activeMetricKey === "MISSING_CLOCK_IN"
+											? getMetricRate(notClockedInCount)
+											: absenteeismDisplay.rate,
+									activeMetricKey === "ABSENT"
+										? "absent"
+										: activeMetricKey === "NOT_CLOCKED_IN" ||
+											  activeMetricKey === "MISSING_CLOCK_IN"
+											? "not in"
+											: "rate",
+									{ color: "#e11d48" },
+								)}
+								<div className="grid min-w-0 flex-1 gap-0.5">
+									{renderMetricRow("Absent", absentCount, "ABSENT", {
+										barColor: "#f43f5e",
+									})}
+									{renderMetricRow(
+										"Not clocked in",
+										notClockedInCount,
+										"MISSING_CLOCK_IN",
+										{
+											barColor: "#e11d48",
+										},
 									)}
 								</div>
 							</div>
 
-							{/* Schedule Coverage */}
-							<div className="min-w-0 p-4 md:p-5">
-								<div className="mb-3 flex items-end justify-between">
-									<div>
-										<h3 className="text-sm font-medium text-neutral-600 mb-1">
-											Schedule Coverage
-										</h3>
-										<div className="flex items-baseline gap-2">
-											<span
-												className={`text-2xl font-semibold tabular-nums tracking-tight ${
-													activeMetricTone.appliesTo === "schedule"
-														? activeMetricTone.text
-														: "text-neutral-900"
-												}`}>
-												{metricsLoading
-													? "..."
-													: `${scheduleVisual.rate}%`}
-											</span>
-											<span className="text-sm text-neutral-500 mb-1">
-												{scheduleVisual.label}
-											</span>
-										</div>
+							<div className="mt-auto border-t border-neutral-100 pt-2.5">
+								<div className="mb-1.5 flex min-h-5 items-end justify-between gap-3">
+									<h3 className="text-[11px] font-medium text-neutral-500">
+										Schedule coverage
+									</h3>
+									<div className="text-[11px] text-neutral-400">
+										{metricsLoading
+											? "..."
+											: `${scheduleVisual.rate}% ${scheduleVisual.label}`}
 									</div>
 								</div>
-
-								<div className="grid gap-1">
-									{renderCompactScheduleRow("Scheduled", workDayCount, {
+								<div className="grid grid-cols-2 gap-1 xl:grid-cols-4">
+									{renderPresenceRow("Scheduled", workDayCount, "SCHEDULED", {
 										total: calendarDayCount,
-										colorClassName: "bg-neutral-700",
+										barColor: "#64748b",
 									})}
-									{renderCompactScheduleRow("Off-day work", workedOnRestDayCount, {
-										total: Math.max(restDayCount, workedOnRestDayCount),
-										colorClassName: "bg-orange-500",
-										status: "WORKED_REST_DAY",
-									})}
-									{renderCompactScheduleRow("Holiday work", workedOnHolidayCount, {
-										total: Math.max(holidayCount, workedOnHolidayCount),
-										colorClassName: "bg-amber-500",
-										status: "WORKED_HOLIDAY",
-									})}
-									{companyEventDayCount > 0 &&
-										renderCompactScheduleRow(
-											"Company event",
-											companyEventDayCount,
-											{
-												total: calendarDayCount,
-												colorClassName: "bg-orange-500",
-											},
-										)}
-									{employeesMissingScheduleCount > 0 &&
-										renderCompactScheduleRow(
-											"Missing schedule",
-											employeesMissingScheduleCount,
-											{
-												total: Math.max(
-													employeesMissingScheduleCount,
-													workDayCount,
-												),
-												colorClassName: "bg-rose-600",
-												status: "MISSING_SCHEDULE",
-											},
-										)}
+									{renderPresenceRow(
+										"Off-day work",
+										workedOnRestDayCount,
+										"WORKED_REST_DAY",
+										{
+											total: Math.max(restDayCount, workedOnRestDayCount, 1),
+											barColor: "#ea580c",
+										},
+									)}
+									{renderPresenceRow(
+										"Holiday work",
+										workedOnHolidayCount,
+										"WORKED_HOLIDAY",
+										{
+											total: Math.max(holidayCount, workedOnHolidayCount, 1),
+											barColor: "#d97706",
+										},
+									)}
+									{renderPresenceRow(
+										"Missing schedule",
+										employeesMissingScheduleCount,
+										"MISSING_SCHEDULE",
+										{
+											total: Math.max(
+												employeesMissingScheduleCount,
+												workDayCount,
+												1,
+											),
+											barColor: "#e11d48",
+										},
+									)}
 								</div>
 							</div>
 						</div>
@@ -3594,13 +3595,13 @@ export function AttendanceManagement({
 			) : null}
 
 			{viewMode === "list" ? (
-				<button
-					type="button"
-					onClick={returnToAttendanceOverview}
+				<Link
+					to={attendanceOverviewTo}
+					onClick={() => setSearchQuery("")}
 					className="inline-flex w-fit items-center gap-2 text-sm font-medium text-gray-600 transition-colors hover:text-orange-600">
 					<ArrowLeft className="h-4 w-4" />
 					Back to attendance overview
-				</button>
+				</Link>
 			) : null}
 
 			{viewMode === "overview" ? (
@@ -3612,6 +3613,8 @@ export function AttendanceManagement({
 						description={`${activeFilterLabel ? `Showing ${activeFilterLabel} records - ` : ""}Attendance from ${formatDate(metricsDateRange.from, "short")} to ${formatDate(metricsDateRange.to, "short")}`}
 						data={records}
 						columns={columns}
+						density="compact"
+						actionColumnWidth="88px"
 						isLoading={isLoadingTimesheets}
 						emptyMessage="No attendance records found"
 						searchPlaceholder="Search employees..."
@@ -3632,16 +3635,16 @@ export function AttendanceManagement({
 								<Button
 									variant="ghost"
 									size="icon"
-									className="h-8 w-8 rounded-lg"
+									className="h-7 w-7 rounded-md"
 									onClick={() => openFixAttendance(item)}
 									title="Fix Attendance"
 									aria-label={`Fix attendance for ${item.employeeName}`}
 								>
-									<FileEdit className="h-4 w-4 text-orange-600" />
+									<FileEdit className="h-3.5 w-3.5 text-orange-600" />
 								</Button>
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
+										<Button variant="ghost" size="icon" className="h-7 w-7 rounded-md">
 											<MoreVertical className="h-4 w-4" />
 											<span className="sr-only">Attendance actions</span>
 										</Button>

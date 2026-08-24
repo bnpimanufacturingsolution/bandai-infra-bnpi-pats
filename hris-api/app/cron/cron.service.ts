@@ -4,11 +4,11 @@ import { prisma } from "../../config/database";
 import { redisClient } from "../../config/redis";
 
 export const initCronJobs = () => {
-	console.log("⏰ Initializing Cron Jobs...");
+	console.log("Initializing Cron Jobs...");
 
 	// 1. Eligibility Check (Runs every minute for testing)
 	cron.schedule("* * * * *", async () => {
-		console.log("🔍 [Cron] Checking Employee Eligibility...");
+		console.log("[Cron] Checking Employee Eligibility...");
 		try {
 			// Fetch all organizations (assuming multi-tenant)
 			// If Organization model doesn't exist, we can group employees by organizationId
@@ -27,7 +27,7 @@ export const initCronJobs = () => {
 
 				if (candidates.length > 0) {
 					console.log(
-						`✅ [Eligibility] Found ${candidates.length} candidates for Org ${orgId}`,
+						`[Eligibility] Found ${candidates.length} candidates for Org ${orgId}`,
 					);
 					// Log details for debugging
 					candidates.forEach((c) => {
@@ -46,30 +46,30 @@ export const initCronJobs = () => {
 								timestamp: new Date().toISOString(),
 							}),
 						);
-						console.log(`📡 Published eligibility-updated event for Org ${orgId}`);
+						console.log(`Published eligibility-updated event for Org ${orgId}`);
 					} catch (redisError) {
-						console.error("❌ Failed to publish Redis event:", redisError);
+						console.error("Failed to publish Redis event:", redisError);
 					}
 				} else {
 					console.log(`   No candidates found.`);
 				}
 			}
 		} catch (error) {
-			console.error("❌ [Cron] Error checking eligibility:", error);
+			console.error("[Cron] Error checking eligibility:", error);
 		}
 	});
 
 	// Daily midnight job example
 	cron.schedule("0 0 * * *", async () => {
-		console.log("🌙 Running daily midnight maintenance...");
+		console.log("Running daily midnight maintenance...");
 		try {
 			// Example: Clean up old logs or temp files
 			// await prisma.log.deleteMany({ ... })
-			console.log("✅ Daily maintenance completed.");
+			console.log("Daily maintenance completed.");
 		} catch (error) {
-			console.error("❌ Error in daily maintenance:", error);
+			console.error("Error in daily maintenance:", error);
 		}
 	});
 
-	console.log("✅ Cron Jobs initialized and scheduled.");
+	console.log("Cron Jobs initialized and scheduled.");
 };

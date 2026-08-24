@@ -59,4 +59,18 @@ describe("EmployeeTableCell", () => {
 		);
 		expect(screen.getByText("EMP-002")).toBeInTheDocument();
 	});
+
+	it("renders compact type for dense attendance rows", () => {
+		render(
+			<EmployeeTableCell
+				fullName="Adrian Cabugayan Ambal"
+				employeeId="00121"
+				avatar={null}
+				size="sm"
+			/>,
+		);
+
+		expect(screen.getByText("Adrian Cabugayan Ambal")).toHaveClass("text-xs");
+		expect(screen.getByText("00121")).toHaveClass("text-[10px]");
+	});
 });

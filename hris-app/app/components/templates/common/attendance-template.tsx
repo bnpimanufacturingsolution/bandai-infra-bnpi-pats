@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
 	Clock,
@@ -47,6 +47,7 @@ import {
 	matchesAttendanceFilter,
 } from "~/lib/utils/attendance-status";
 import type { AttendanceFilterValue } from "~/lib/utils/attendance-status";
+import { isoToManilaPickerTime } from "~/lib/utils/attendance-adjustment-request";
 import {
 	Select,
 	SelectContent,
@@ -118,6 +119,7 @@ interface AttendanceRawRecord {
 interface AttendanceRecordCard {
 	id: string;
 	date: string;
+	dateKey: string;
 	dateLabel: string;
 	month: string;
 	day: number;
@@ -560,6 +562,7 @@ export default function AttendanceTemplate({
 	hideTimesheetActions = false,
 }: AttendanceTemplateProps = {}) {
 	const [searchParams, setSearchParams] = useSearchParams();
+	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const { user } = useAuth();
 	const employeeId = employeeIdOverride || user?.metadata?.employee?.id || "";
@@ -905,6 +908,7 @@ export default function AttendanceTemplate({
 		return {
 			id: record.id,
 			date: record.date,
+			dateKey: dateStr,
 			dateLabel: dateStr
 				? format(date, "MMM d, yyyy")
 				: format(new Date(record.date), "MMM d, yyyy"),
@@ -1067,9 +1071,9 @@ export default function AttendanceTemplate({
 				/>
 			)}
 
-			<div className="grid gap-5 lg:grid-cols-[minmax(360px,420px)_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)]">
-				{/* Left Column: Current period attendance (cards, no DataTable) */}
-				<div className="space-y-4 lg:order-2">
+			<div className="attendance-period-layout">
+				{/* Attendance log: second on mobile, right column on desktop */}
+				<div className="attendance-period-log space-y-4">
 					<div className="flex flex-col gap-3 rounded-md border border-gray-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
 						<div className="min-w-0">
 							<h2 className="text-sm font-semibold text-gray-950">{recordsTitle}</h2>
@@ -1378,6 +1382,62 @@ export default function AttendanceTemplate({
 															</p>
 														</div>
 													)}
+													{!hideTimesheetActions && item.dateKey && (
+															<div className="mt-3 border-t border-gray-100 pt-3">
+																<Button
+																	type="button"
+																	size="sm"
+																	className="bg-orange-600 text-white hover:bg-orange-700"
+																	onClick={() => {
+																		const params =
+																			new URLSearchParams({
+																				action: "create",
+																				kind: "attendance-adjustment",
+																				date: item.dateKey,
+																			});
+																		if (
+																			item.missingClockOutState ===
+																			"missed"
+																		) {
+																			params.set(
+																				"adjustmentKind",
+																				"CLOCK_OUT",
+																			);
+																		}
+																		const pickerIn =
+																			isoToManilaPickerTime(
+																				r.timeIn,
+																			);
+																		if (pickerIn) {
+																			params.set(
+																				"timeIn",
+																				pickerIn,
+																			);
+																		}
+																		const pickerOut =
+																			isoToManilaPickerTime(
+																				r.timeOut,
+																			);
+																		if (pickerOut) {
+																			params.set(
+																				"timeOut",
+																				pickerOut,
+																			);
+																		}
+																		if (r.id) {
+																			params.set(
+																				"attendanceId",
+																				r.id,
+																			);
+																		}
+																		navigate(
+																			`/employee/requests?${params.toString()}`,
+																		);
+																	}}>
+																	Request time
+																</Button>
+															</div>
+														)}
 												</div>
 											)}
 										</div>
@@ -1409,7 +1469,7 @@ export default function AttendanceTemplate({
 				</div>
 
 				{/* Active attendance and period context */}
-				<div className="flex flex-col gap-5 lg:order-1">
+				<div className="attendance-period-today">
 					{/* Current period summary */}
 					<div className="order-2 rounded-md border border-gray-200 bg-white p-4">
 						<div className="mb-4 flex items-center justify-between gap-3">

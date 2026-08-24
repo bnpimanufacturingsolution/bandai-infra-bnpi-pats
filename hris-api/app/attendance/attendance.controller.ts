@@ -1102,7 +1102,7 @@ export const controller = (prisma: PrismaClient) => {
 			);
 			const resolvedStatus =
 				updatableData.status ||
-				determineAttendanceStatus(timekeepingCalc, !!newTimeOut);
+				determineAttendanceStatus(timekeepingCalc, !!newTimeOut, !!newTimeIn);
 			const overtimeApplication =
 				hasTimeInInput || hasTimeOutInput || hasStatusInput
 					? await resolveOvertimePolicyApplication(
@@ -1530,7 +1530,11 @@ export const controller = (prisma: PrismaClient) => {
 						scheduleSnapshot,
 						attendanceDate,
 					);
-					const computedStatus = determineAttendanceStatus(timekeepingCalc, !!timeOut);
+					const computedStatus = determineAttendanceStatus(
+						timekeepingCalc,
+						!!timeOut,
+						!!timeIn,
+					);
 					const overtimeApplication = await resolveOvertimePolicyApplication(
 						prisma,
 						organizationId,

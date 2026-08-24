@@ -3,6 +3,11 @@ enum WorkforceSource {
   AGENCY
 }
 
+enum DayLaborType {
+  DIRECT
+  INDIRECT
+}
+
 enum AgencyStatus {
   ACTIVE
   INACTIVE

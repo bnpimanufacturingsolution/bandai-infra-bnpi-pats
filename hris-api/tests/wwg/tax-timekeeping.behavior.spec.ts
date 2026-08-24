@@ -227,6 +227,8 @@ describe("determineAttendanceStatus / timeToMinutes / minutesToHours / formatMin
 		expect(determineAttendanceStatus({} as any, false)).to.equal("INCOMPLETE"));
 	it("determineAttendanceStatus returns PRESENT with timeOut", () =>
 		expect(determineAttendanceStatus({} as any, true)).to.equal("PRESENT"));
+	it("determineAttendanceStatus returns INCOMPLETE when clock-out has no clock-in", () =>
+		expect(determineAttendanceStatus({} as any, true, false)).to.equal("INCOMPLETE"));
 	it("timeToMinutes parses HH:mm", () => expect(timeToMinutes("01:30")).to.equal(90));
 	it("minutesToHours converts and rounds", () => expect(minutesToHours(125)).to.equal(2.08));
 	it("formatMinutesAsTime formats hh:mm", () => expect(formatMinutesAsTime(125)).to.equal("2:05"));

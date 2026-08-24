@@ -371,6 +371,103 @@ export const copyTemplateToEmployeeEmbeddedSchedule = (params: {
 	};
 };
 
+export const buildDayHoursShiftSnapshot = (params: {
+	isOff?: boolean;
+	startTime?: string | null;
+	endTime?: string | null;
+	name?: string | null;
+	code?: string | null;
+}) => {
+	if (params.isOff) {
+		return {
+			name: params.name || "Off Day",
+			code: params.code || "OFF",
+			isOff: true,
+			isOvernight: false,
+			timeSlots: [] as Array<{
+				type: string;
+				label?: string | null;
+				startTime: string;
+				endTime: string;
+			}>,
+		};
+	}
+	const startTime = String(params.startTime || "08:00");
+	const endTime = String(params.endTime || "17:00");
+	const startMinutes = toMinutes(startTime) ?? 0;
+	const endMinutes = toMinutes(endTime) ?? 0;
+	return {
+		name: params.name || `${startTime} to ${endTime}`,
+		code:
+			params.code ||
+			`WH_${startTime.replace(":", "")}_${endTime.replace(":", "")}`,
+		isOff: false,
+		isOvernight: endMinutes <= startMinutes,
+		timeSlots: [
+			{
+				type: "work",
+				label: "Work",
+				startTime,
+				endTime,
+			},
+		],
+	};
+};
+
+export const buildManualPatternEmbeddedSchedule = (params: {
+	pattern: Array<{
+		day?: number;
+		shiftTypeId?: string | null;
+		shiftSnapshot?: ShiftTypeSnapshot | null;
+		isOff?: boolean;
+		startTime?: string | null;
+		endTime?: string | null;
+	}>;
+	startDate?: Date | null;
+	assignedByEmployeeId?: string | null;
+	reason?: string | null;
+	graceLateMinutes?: number | null;
+	graceEarlyOutMinutes?: number | null;
+	version?: number;
+	templateName?: string | null;
+	templateCode?: string | null;
+}) => {
+	const sourcePattern = Array.isArray(params.pattern) ? params.pattern : [];
+	const cycleDays = Math.max(7, sourcePattern.length || 7);
+	const padded = Array.from({ length: cycleDays }).map((_, index) => {
+		return sourcePattern.find((item) => Number(item?.day) === index + 1) || sourcePattern[index] || {};
+	});
+	const pattern = padded.map((day, index) => {
+		const shiftSnapshot =
+			day?.shiftSnapshot ||
+			buildDayHoursShiftSnapshot({
+				isOff: Boolean(day?.isOff),
+				startTime: day?.startTime,
+				endTime: day?.endTime,
+			});
+		return {
+			day: index + 1,
+			shiftTypeId: day?.shiftTypeId ? String(day.shiftTypeId) : null,
+			shiftSnapshot,
+		};
+	});
+	return copyTemplateToEmployeeEmbeddedSchedule({
+		template: {
+			id: null,
+			code: params.templateCode || "WEEKLY_HOURS",
+			name: params.templateName || "Weekly hours",
+			cycleDays,
+			graceLateMinutes: params.graceLateMinutes ?? 15,
+			graceEarlyOutMinutes: params.graceEarlyOutMinutes ?? 0,
+			pattern,
+		},
+		assignedByEmployeeId: params.assignedByEmployeeId || null,
+		reason: params.reason || "weekly_hours_assignment",
+		effectiveStartDate: params.startDate || new Date(),
+		version: params.version || 1,
+	});
+};
+
 const scheduleDateKey = (value: unknown) => {
 	if (!value) return null;
 	const date = value instanceof Date ? value : new Date(String(value));
@@ -537,15 +634,15 @@ const resolveEmbeddedScheduleSnapshot = (
 	) {
 		return null;
 	}
+	const storedAnchor = embedded?.cycleAnchorDate || embedded?.scheduleAnchorDate || null;
+	const fallbackStart =
+		embedded?.effectiveStartDate ||
+		employee?.employmentStartDate ||
+		employee?.employmentHireDate ||
+		date;
+	const shouldWeekAlign = !storedAnchor && cycleDays % 7 === 0;
 	const anchorDate = normalizeDateOnly(
-		new Date(
-			embedded?.cycleAnchorDate ||
-				embedded?.scheduleAnchorDate ||
-				embedded?.effectiveStartDate ||
-				employee?.employmentStartDate ||
-				employee?.employmentHireDate ||
-				date,
-		),
+		new Date(shouldWeekAlign ? anchorToMondayUtc(new Date(fallbackStart)) : storedAnchor || fallbackStart),
 	);
 	const diffDays = Math.floor(
 		(targetDay.getTime() - anchorDate.getTime()) / (1000 * 60 * 60 * 24),

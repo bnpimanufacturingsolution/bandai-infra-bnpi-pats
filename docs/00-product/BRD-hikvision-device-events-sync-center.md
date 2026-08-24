@@ -50,7 +50,9 @@ Primary role: `hris-admin`. Secondary role: operations/support reviewer.
 2. Read separately labeled inventory, activity, saved-HRIS, and sync-run totals.
 3. Filter saved rows by runtime path, category, action, employee/user, match
    status, evidence source, and confidence.
-4. Inspect raw evidence in a details drawer without leaving the ledger.
+4. Inspect raw evidence in **Device event details** (`action=view-event&id=`)
+   without leaving the ledger. The modal loads that saved row by id, not by
+   the current table page.
 5. Start a preview-first sync, follow its correlation ID, and reconcile saved
    totals against source rows.
 

@@ -192,7 +192,7 @@ function isSameBusinessDate(left: Date | string, right: Date | string) {
 		getDateKeyInBusinessTimeZone(right instanceof Date ? right : new Date(right));
 }
 
-function getMeaningfulEmploymentTermination(employee: any): Date | null {
+export function getMeaningfulEmploymentTermination(employee: any): Date | null {
 	if (!FINAL_EMPLOYMENT_STATUSES.has(String(employee?.employmentStatus || "").toUpperCase())) {
 		return null;
 	}
@@ -302,6 +302,71 @@ export function deriveAttendanceObligationDisplayStatus(
 	if (businessDate < today) return "ABSENT";
 	if (businessDate > today) return "SCHEDULED";
 	return "NOT_CLOCKED_IN";
+}
+
+const NON_OBLIGATED_DISPLAY_STATUSES = new Set([
+	"REST_DAY",
+	"HOLIDAY",
+	"CANCELLED",
+	"LEAVE",
+]);
+
+const OBLIGATED_DISPLAY_STATUSES = new Set([
+	"NOT_CLOCKED_IN",
+	"ABSENT",
+	"SCHEDULED",
+	"PRESENT",
+	"INCOMPLETE",
+	"LATE",
+	"HALF_DAY",
+]);
+
+export function hasAttendanceWorkSchedule(scheduleSnapshot?: {
+	isOff?: boolean | null;
+	startTime?: string | null;
+	shiftTypeCode?: string | null;
+	shiftTypeName?: string | null;
+	timeSlots?: Array<{ type?: string | null }> | null;
+} | null): boolean {
+	if (!scheduleSnapshot || scheduleSnapshot.isOff === true) return false;
+	if (String(scheduleSnapshot.startTime || "").trim()) return true;
+	if (
+		Array.isArray(scheduleSnapshot.timeSlots) &&
+		scheduleSnapshot.timeSlots.some((slot) => String(slot?.type || "").toLowerCase() === "work")
+	) {
+		return true;
+	}
+	const shift = String(scheduleSnapshot.shiftTypeCode || scheduleSnapshot.shiftTypeName || "")
+		.trim()
+		.toUpperCase();
+	return Boolean(shift) && shift !== "OFF" && shift !== "UNASSIGNED";
+}
+
+/**
+ * A day counts as obligated-to-work when the person is expected to work that
+ * date. Rest day, holiday, leave, and cancelled stay out. Clock-in on an
+ * already-scheduled day must not change this set.
+ */
+export function isObligatedToWorkDay(params: {
+	displayStatus?: string | null;
+	isOffDay?: boolean;
+	isHoliday?: boolean;
+	isClockedIn?: boolean;
+	hasWorkSchedule?: boolean | null;
+}): boolean {
+	const displayStatus = String(params.displayStatus || "").toUpperCase();
+	if (NON_OBLIGATED_DISPLAY_STATUSES.has(displayStatus)) return false;
+	if (params.isHoliday) return false;
+	if (params.isClockedIn && params.isOffDay) return false;
+	return OBLIGATED_DISPLAY_STATUSES.has(displayStatus);
+}
+
+export function computeAttendanceUtilizationRate(
+	clockedInObligated: number,
+	obligatedToWork: number,
+): number {
+	if (obligatedToWork <= 0) return 0;
+	return Math.round((Number(clockedInObligated || 0) / obligatedToWork) * 100);
 }
 
 function getScheduleBreakDisplay(scheduleSnapshot: any): string | null {
@@ -598,6 +663,30 @@ export async function ensureAttendanceObligationsForPayrollPeriod(
 		reason: "PayrollPeriodOpened",
 		payrollPeriodId: payrollPeriod.id,
 	});
+}
+
+export async function recomputeAttendanceObligationsForRangeSafe(
+	prisma: PrismaClient,
+	params: {
+		organizationId: string;
+		employeeId?: string | null;
+		fromDate: Date | string;
+		toDate: Date | string;
+		reason: string;
+		payrollPeriodId?: string | null;
+	},
+) {
+	try {
+		return await recomputeAttendanceObligationsForRange(prisma, params);
+	} catch (error) {
+		return {
+			touched: 0,
+			created: 0,
+			updated: 0,
+			failed: true as const,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
 }
 
 export async function recomputeAttendanceObligationsForRange(
@@ -935,7 +1024,11 @@ export async function applyAttendanceToObligation(
 	const finalStatus =
 		existingNonWorkStatus ||
 		attendance.status ||
-		determineAttendanceStatus(timekeepingCalc, Boolean(attendance.timeOut));
+		determineAttendanceStatus(
+			timekeepingCalc,
+			Boolean(attendance.timeOut),
+			Boolean(attendance.timeIn),
+		);
 	const employeeSnapshot = await fetchAttendanceEmployeeSnapshotFields(prisma, params.employeeId);
 	const data = {
 		organizationId: params.organizationId,
@@ -966,7 +1059,7 @@ export async function applyAttendanceToObligation(
 		undertimeHours:
 			clockFields?.undertimeHours || attendance.undertimeHours || minutesToTimeString(timekeepingCalc.undertimeMinutes),
 		lateHours:
-			clockFields?.lateHours || attendance.lateHours || minutesToTimeString(timekeepingCalc.lateMinutes),
+			clockFields?.lateHours || minutesToTimeString(timekeepingCalc.lateMinutes),
 		earlyOutHours:
 			clockFields?.earlyOutHours || attendance.earlyOutHours || minutesToTimeString(timekeepingCalc.earlyOutMinutes),
 		breakMinutes: clockFields?.breakMinutes ?? attendance.breakMinutes ?? timekeepingCalc.breakMinutes ?? null,
@@ -1146,6 +1239,7 @@ export async function materializeTimesheetLinesFromObligations(
 				reportToIdSnapshot: obligation.reportToIdSnapshot || null,
 				workforceSourceSnapshot: obligation.workforceSourceSnapshot || null,
 				agencyIdSnapshot: obligation.agencyIdSnapshot || null,
+				dayLaborType: obligation.dayLaborType || null,
 				isDeleted: false,
 			},
 		});

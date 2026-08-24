@@ -1558,7 +1558,7 @@ export const createEmployeeHelpers = (prisma: PrismaClient, employeeLogger: Logg
 			employeeLogger.info(`Token found: ${token.substring(0, 20)}...`);
 		}
 
-		employeeLogger.info(`ðŸ” Creating auth account for ${createUserPayload.email}...`);
+		employeeLogger.info(`Creating auth account for ${createUserPayload.email}...`);
 		employeeLogger.info(`Making request to: ${authServiceUrl}`);
 		employeeLogger.info("Create user payload:", JSON.stringify(createUserPayload, null, 2));
 
@@ -1611,7 +1611,7 @@ export const createEmployeeHelpers = (prisma: PrismaClient, employeeLogger: Logg
 		}
 
 		employeeLogger.info(
-			"âœ… Auth account created successfully:",
+			"Auth account created successfully:",
 			JSON.stringify(userResult, null, 2),
 		);
 

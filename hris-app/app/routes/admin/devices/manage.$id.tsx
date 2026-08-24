@@ -10,6 +10,7 @@ import { formatDateTime } from "~/lib/utils/text-utils";
 import { resolveDeviceDisplayAddress } from "~/lib/device-display-address";
 import type { UserInfoTableData, AcsEventTableData } from "~/types/hikvision";
 import { format, subDays } from "date-fns";
+import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 
 type TabType = "users" | "events";
 
@@ -641,11 +642,10 @@ export default function DeviceDetailPage() {
 									<label className="text-sm font-medium text-gray-700">
 										From Date:
 									</label>
-									<input
-										type="date"
+									<CalendarDatePicker
 										value={startDate}
-										onChange={(e) => setStartDate(e.target.value)}
-										className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+										onChange={setStartDate}
+										className="h-10"
 									/>
 								</div>
 
@@ -654,11 +654,10 @@ export default function DeviceDetailPage() {
 									<label className="text-sm font-medium text-gray-700">
 										To Date:
 									</label>
-									<input
-										type="date"
+									<CalendarDatePicker
 										value={endDate}
-										onChange={(e) => setEndDate(e.target.value)}
-										className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+										onChange={setEndDate}
+										className="h-10"
 									/>
 								</div>
 

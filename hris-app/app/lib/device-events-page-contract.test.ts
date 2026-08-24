@@ -20,6 +20,15 @@ describe("device events page UX contract", () => {
 		);
 	});
 
+	it("shows Hikvision panel Select Status as Device status without treating TAP as Check In", () => {
+		expect(routeSource).to.contain('label: "Device status"');
+		expect(routeSource).to.contain("extractHikvisionPanelSelectStatus");
+		expect(routeSource).to.contain("panelSelectStatusLabel");
+		expect(routeSource).to.contain("From device");
+		expect(routeSource).to.contain("Not on wire");
+		expect(routeSource).to.contain('ATTENDANCE: ["TAP", "TAP_REJECTED"]');
+	});
+
 	it("filters event action options by selected event category", () => {
 		expect(routeSource).to.contain("EVENT_ACTIONS_BY_CATEGORY");
 		expect(routeSource).to.contain("getSavedActionOptionsForCategory");
@@ -135,6 +144,12 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain('label: "Evidence"');
 		expect(routeSource).to.contain('label: "Confidence"');
 		expect(routeSource).to.contain('next.set("action", "view-event")');
+		expect(routeSource).to.contain("resolveActiveSavedDeviceEvent");
+		expect(routeSource).to.contain("useDeviceEvent(activeEventId");
+		expect(routeSource).to.contain("Loading saved event…");
+		expect(routeSource).to.contain("This saved event was not found.");
+		expect(routeSource).to.contain("Could not load this saved event.");
+		expect(routeSource).not.to.contain("This event is not in the current table page.");
 		expect(routeSource).to.contain("formatEventSource(activeEvent.source)");
 		expect(routeSource).to.contain("formatEventSourceDetail(activeEvent.source)");
 	});
@@ -150,6 +165,8 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("activeEvent.eventLabel");
 		expect(routeSource).to.contain("activeEvent.eventCategory");
 		expect(routeSource).to.contain("activeEvent.eventAction");
+		expect(routeSource).to.contain('stored === "UNKNOWN_VENDOR"');
+		expect(routeSource).to.contain('event.source === "EN_HCNETSDK_ALARM" ? "SDK_CALLBACK"');
 		expect(routeSource).to.contain("activeEvent.capabilityConfidence");
 		// Misleading advanced filters removed from the toolbar (runtime path / HRIS result / evidence / confidence).
 		expect(routeSource).to.not.contain('label: "Runtime path"');
@@ -227,6 +244,9 @@ describe("device events page UX contract", () => {
 		expect(routeSource).to.contain("Will add to Device Events");
 		expect(routeSource).to.contain("Activity in selected window");
 		expect(routeSource).to.contain("Raw payload");
+		expect(routeSource).to.contain('<Accordion type="single" collapsible');
+		expect(routeSource).to.contain('value="raw-payload"');
+		expect(routeSource).not.to.contain('defaultValue="raw-payload"');
 		expect(routeSource).to.contain("FACE_ENROLLED");
 		expect(routeSource).not.to.contain('const viewMode = (searchParams.get("view")');
 		expect(routeSource).to.contain("Loading saved events…");

@@ -239,7 +239,11 @@ export class AttendanceImportService {
 					behaviorFlags = overtimeApplication.behaviorFlags as Array<
 						"TARDINESS" | "EARLY_OUT" | "OVERTIME"
 					>;
-					computedStatus = determineAttendanceStatus(result, !!row.timeOut);
+					computedStatus = determineAttendanceStatus(
+						result,
+						!!row.timeOut,
+						!!row.timeIn,
+					);
 				} catch (error) {
 					attendanceLogger.warn(
 						`Failed to calculate timekeeping for ${row.employeeId}: ${error}`,

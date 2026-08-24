@@ -338,6 +338,7 @@ Logging is **manual per handler** — no global middleware, decorator, or interc
 | GET | `/api/device/:id` | getById | No | No | No | — |
 | GET | `/api/device/:id/health` | getDeviceHealth | No | No | No | — |
 | GET | `/api/device/events` | getEvents | No | No | No | — |
+| GET | `/api/device/events/item/:eventId` | getEventById | No | No | No | saved-event details deeplink; uncached |
 | POST | `/api/device/` | create | Yes | Yes | No | — |
 | POST | `/api/device/enroll` | enrollDeviceUser | Yes | No | No | activity-only |
 | POST | `/api/device/enroll/import` | importDeviceEnrollment | Yes | No | No | activity-only |

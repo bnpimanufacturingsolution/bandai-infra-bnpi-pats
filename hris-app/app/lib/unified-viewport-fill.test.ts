@@ -9,6 +9,7 @@ describe("isUnifiedViewportFillPath", () => {
 		expect(isUnifiedViewportFillPath("/hr/activity-logs")).toBe(true);
 		expect(isUnifiedViewportFillPath("/hr/audit-logs")).toBe(true);
 		expect(isUnifiedViewportFillPath("/hr/settings/documents")).toBe(true);
+		expect(isUnifiedViewportFillPath("/hr/employee-schedules")).toBe(true);
 	});
 
 	it("keeps page scroll for forms, multi-view, and non-list pages", () => {

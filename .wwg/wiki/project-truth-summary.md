@@ -1,6 +1,133 @@
-# Project Truth Summary
+## 2026-08-22 Recruitment identity history
 
-Last updated: 2026-08-12
+- First name + last name + birthday is the only match key for previous applicant/employee records. Recruiter sees history (rejected, resigned, etc.). Apply is not blocked. Public apply now requires date of birth.
+
+
+## 2026-08-21 GitOps db-init (no UAT/PROD seed)
+
+- Runtime Argo **Degraded** = Failed Job `hris-api-db-init`, not an empty database. Live UAT/PROD still have ~2225 employees and ~129k timesheet lines.
+- **Do not** run `prisma-seed` / `prisma-reset` / `--accept-data-loss` on UAT/PROD. **Do not** delete the Failed Job until `origin/develop` is schema-only (`prisma-postgres:push` only).
+- Operator: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`. Operator authorized **push** 2026-08-22.
+
+
+## 2026-08-21 Employee schedule roster
+
+- Dedicated page: HR Timekeeping **Schedules** `/hr/employee-schedules` and admin `/admin/configuration/employee-schedules`. Table of people, department/section filter, click to see current week then **Change schedule**.
+
+
+## 2026-08-20 10-agent DevOps audit
+
+- CI and Validate are green on `37b443a`. Observe success is **not** G«£this SHA is servingG«• (`services=none` still success; `/health` has no `buildSha`).
+- Runtime Argo overlay apps Healthy; runtime apps Synced/**Degraded** because Job `hris-api-db-init` Failed in **dev, uat, and prod**.
+- Full: `.wwg/reports/devops-audit-20260820.md`.
+
+
+## 2026-08-20 Timesheet GÂˆ schedule
+
+- Changing schedule updates **expected** work windows (`AttendanceObligation`). It does **not** rewrite punches or submitted timesheet lines. Stored late/OT stay vs the schedule frozen at first punch. **Days** = weekly pattern (next Monday). **Dates** = that day (`ScheduleOverride`). Full: `.wwg/reports/timesheet-schedule-connection-20260820.md`.
+
+
+## 2026-08-20 Employee weekly hours
+
+- Templates = reusable org patterns. Per-person Mon/Tue different hours = employee **Work Schedule** GÂ∆ **Change schedule** GÂ∆ **Days**. One calendar date = same modal **Dates** tab (`scheduleOverride`). Roster page is the easy bulk path.
+
+
+## 2026-08-20 Day labor on timesheet (no push)
+
+- Per-day work type `Timesheetline.dayLaborType` Direct/Indirect. Timesheet day editor **Day labor**. Not the BNPI vs Agency report. **Do not push** until operator says.
+
+
+## 2026-08-20 Timesheet 2.1.7 Direct vs Indirect labor UI
+
+- Workforce Analytics has a third tab **Direct vs Indirect** at `/hr/reports/workforce?tab=direct-indirect`.
+- Manpower Distribution stays the default `labor` tab. Tardiness/OT stay on Attendance Reports.
+- Live metric `directIndirectLaborSummary`: 872 direct / 1355 indirect (2026-08-20). Gender/agency/total-manpower on that tab can still be empty from the client roster.
+- Operator: `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`. Full: `.wwg/reports/direct-indirect-labor-ui-20260820.md`.
+
+
+## 2026-08-20 UAT/PROD app+API auto-roll
+
+- `git push origin develop` that rebuilds hris-api/hris-app now restarts those Deployments in **dev, uat, and prod** (skip missing). Not a new git branch. Docs-only still does not roll. Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+
+
+## 2026-08-20 On-prem ports vs this PC
+
+- VM still serves DEV/UAT/PROD on `10.184.37.19` ports `3000/3001`, `3100/3101`, `3200/3201` (loopback HTTP 200).
+- This home WiG«ÊFi cannot open those LAN ports. Use Cloudflare or SSH then `127.0.0.1`. Doc: `docs/ONPREM_PORT_ACCESS.md`.
+
+
+## 2026-08-20 GitHub Actions CI / Observe / Validate
+
+- Three root workflows: **CI** (per-type tests), **Observe VM GitOps deploy** (VM reporter), **Validate** (Windows terraform/packer/installer). Nested Cloud Run/Firebase YAML does not run on this repo.
+- Observe `success` can mean **not rebuilt** (`services=none`). `/health` has no `buildSha`. Runtime Argo can be Synced/**Degraded** (failed `hris-api-db-init` Job) while Observe is green.
+- Operator 2026-08-20 authorized push of the CI/Observe harden. Full: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
+
+
+## 2026-08-19 Hikvision C++ current layout
+
+- Live HCNetSDK sources are `vendor/hikvision-linux/src/hikvision_bio/*.cpp` (`acs.cpp`, `spool.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `time.cpp`, `copy.cpp`, `runtime.cpp`, `common.cpp`, `main.cpp`) plus matching `include/hikvision_bio/*.hpp`. Same binary `hikvision-biometric-service`. The 2026-07-09 monolith `hikvision_biometric_service.cpp` is historical.
+- Rollback: last unity source `6b670a4`; revert `301ebb5` then `66868a2`. Report: `.wwg/reports/hikvision-cpp-maintainable-units-20260819.md`.
+
+
+## 2026-08-19 Hikvision biometric clock / Manila
+
+- Devices can set time (panel / web / iVMS / ISAPI PUT / NTP). HRIS Preview/Update time prefers HCNetSDK STDXML, ISAPI HTTP fallback. Wire TZ `CST-8:00:00` = UTC+8, no DST.
+- Last proven `timeMode=manual`. Attendance uses device punch time. Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`.
+
+
+## 2026-08-19 EmployeePayroll.hourlySalary snapshot
+
+- Generate-time snapshot of derived hourly (daily ++ working hours; BNPI 313 uses 8). Not Employee input. No `Employee.hourlyRate`. Not a Sheet2 column. `basicSalary` stays SoT. Existing `0` rows can be filled by the dry-run-default backfill from current daily/metadata; still unused in compute.
+- Full: `.wwg/wiki/project-truth.md` section **EmployeePayroll hourlySalary snapshot (2026-08-19)**. Report: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
+
+
+## 2026-08-17 Zen 00010 payroll / timesheet
+
+- Missing timesheet blocked generate for Period 1 Aug 2026 (11G«Ù25 Aug Manila).
+- Salary GÈ¶11,000 SEMI_MONTHLY (Technician floor). Timesheet approved; 14 lines attached; preview net GÈ¶5,424.54.
+- API: `POST /api/timesheet/:id/sync-obligation-lines` (this `develop` push).
+- Math: `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`. Code: `.wwg/reports/zen-payroll-timesheet-code-20260817.md`.
+
+
+## 2026-08-17 Encoding / boarding notification titles
+
+- `Onboarding Completed! +¶++++G«¶` was Latin-1 of `=ÉƒÎ` in source, then stored on the notification.
+- Titles are now ASCII. Live DEV row `cmswtgafn0cn3lp01zmus0q06` patched.
+- `set-active` schedule also recomputes attendance obligations so HR Attendance is not leftover Off Day.
+- Report: `.wwg/reports/mojibake-encoding-20260817.md`.
+
+
+## 2026-08-17 Device Events TAP display + person 10
+
+- Operator Check Out on Device D (person `10`, serial `9652`) already updated attendance. Unknown Vendor / Unknown evidence was stale stored taxonomy.
+- GET/UI now reclassify those rows as **Attendance / TAP** and stamp **SDK callback** + direct evidence. Commit `a6dce32` (already on origin; **do not push** further unless asked). Public DEV UI is `NEEDS_CONFIRMATION` until that SHA is serving. List GET can heal stored columns; item GET display-only.
+- Callback next tap matches `deviceEmpId` or padded `employeeId` and links DeviceUser. `10` GÎ· `01515`.
+- DeviceUser `10` on B/D/E linked to Zen Andrei `00010`. Other unmatched ids without an employee were not linked.
+- Report: `.wwg/reports/device-event-tap-display-20260817.md`.
+
+
+## 2026-08-17 Device Events saved-event details deeplink
+
+- `action=view-event&id=` opens **Device event details** by `DeviceEvent.id`.
+- Table `page=` is not the event identity. Do not resolve the modal from the current page only.
+- API: `GET /api/device/events/item/:eventId`. Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
+
+
+## 2026-08-13 Hikvision Select Status GÂ∆ HRIS (audit)
+
+- Panel **Select Status** (Check In / Out, Break In / Out, Overtime In / Out) is real T&A.
+- Live SDK listener **now copies** `byAttendanceStatus` onto the callback JSON. ISAPI `checkIn`/`label` is extracted and shown as Device Events **Device status**.
+- Time In/Out follows panel Check In/Out when present; unsigned punches still pair first/later.
+- Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`. Report: `.wwg/reports/hikvision-select-status-audit-20260813.md`.
+
+
+## 2026-08-13 Device 5 reverse tunnel (host WiG«ÊFi)
+
+- Device 5 (`cmsq47r9t0039vxbwt9rfxk68`) physical `192.168.1.136:80` on the same WiG«ÊFi as the Windows PC `192.168.1.116`.
+- Reverse is on: `ssh-reverse-forward`, VM `https://127.0.0.1:59443` + SDK `127.0.0.1:59000`.
+- TEST A live address is `192.168.254.109:443` via `127.0.0.1:58080` G«ˆ not `192.168.254.102`. Wiki `59000`/`59443` = TEST A is **STALE**.
+- Evidence: `.runtime/device5-reverse-20260813-005641/`.
+
 
 ## 2026-08-12 Preview Payroll results on page
 
@@ -9,11 +136,12 @@ Last updated: 2026-08-12
 - Modal still hosts confirm + progress only; employee detail stays modal.
 - Full: terminology **Payroll Preview**; handoff 2026-08-12 page results.
 
+
 ## 2026-08-12 Payroll Preview includes non-submitted timesheets
 
 - **Preview Payroll** dry-run may include `DRAFT` / `SUBMITTED` / `REJECTED` /
   `REVISED` timesheets (with salary + schedule) and labels them estimate-only.
-- Money uses timesheet **lines** + benefits ‚Äî status alone does not change pay.
+- Money uses timesheet **lines** + benefits G«ˆ status alone does not change pay.
 - **Start Payroll** still APPROVED + payroll-ready only
   (`includedEmployeesCount` unchanged contract).
 - Summary adds `previewComputableEmployeesCount` +
@@ -23,26 +151,29 @@ Last updated: 2026-08-12
 - Full: `.wwg/wiki/project-truth.md` section
   **Payroll Preview includes non-submitted timesheets (2026-08-12)**.
 
-## 2026-08-11 BNPI Jun 26‚ÄìJul 10 payroll tally investigation
 
-- Full-fleet preview vs target Sheet2: **not fleet-tallied** (4 exact + Alexa ‚àí‚Ç±0.77).
-- **No. of Days** register field ‚â† target paid regular days: app counts non-`REST_DAY`
-  timesheet lines (includes ABSENT); target ‚âà sum Bandai `approvedBuckets.regularDays`.
-  Universal day-column mismatch is a **definition/code** issue, not ‚Äúall biometrics wrong.‚Äù
+## 2026-08-11 BNPI Jun 26G«ÙJul 10 payroll tally investigation
+
+- Full-fleet preview vs target Sheet2: **not fleet-tallied** (4 exact + Alexa GÍ∆GÈ¶0.77).
+- **No. of Days** register field GÎ· target paid regular days: app counts non-`REST_DAY`
+  timesheet lines (includes ABSENT); target GÎÍ sum Bandai `approvedBuckets.regularDays`.
+  Universal day-column mismatch is a **definition/code** issue, not G«£all biometrics wrong.G«•
 - Fixing day-count alone does **not** make Gross/Net/TotalReceivable tally.
 - Master evidence: `.runtime/full-tally-20260811/FINDINGS.md` and
   `.wwg/reports/bnpi-june26-jul10-payroll-tally-20260811.md`.
+
 
 ## 2026-08-07 BNPI Meal Allowance (MLA) coverage
 
 - **Coverage expectation:** every Bandai employee **should have** an active MLA
   enrollment.
-- **Still enrollment-driven** ‚Äî payroll does not invent MLA without a resolving
+- **Still enrollment-driven** G«ˆ payroll does not invent MLA without a resolving
   `EmployeeBenefit`.
 - **Do not auto-enroll** all employees unless the operator explicitly orders a
   deliberate enrollment job.
 - Full write-up: `.wwg/wiki/project-truth.md` section
   **BNPI Meal Allowance (MLA) coverage expectation (2026-08-07)**.
+
 
 ## 2026-08-05 BNPI payroll money sources (tally)
 
@@ -50,12 +181,13 @@ Last updated: 2026-08-12
   comes from cutoff mass-upload files.
 - Run Payroll also applies **recurring / standing `EmployeeBenefit` and
   `EmployeeLoan` enrollments** that are active for the period even when the
-  code is **absent** from that cut‚Äôs compensation/deduction mass upload.
+  code is **absent** from that cutG«÷s compensation/deduction mass upload.
 - Tally agents must classify each line as mass-upload, recurring enrollment,
-  engine (tax/contrib schedule), or OT/attendance ‚Äî never ‚Äúmissing mass = must
-  be zero.‚Äù
+  engine (tax/contrib schedule), or OT/attendance G«ˆ never G«£missing mass = must
+  be zero.G«•
 - Full write-up: `.wwg/wiki/project-truth.md` section
   **BNPI payroll compensation / deduction source ownership (2026-08-05)**.
+
 
 ## 2026-07-28 shared observability recovery
 
@@ -68,6 +200,7 @@ Last updated: 2026-08-12
 - Tempo runs supported 2.10.5 with vParquet4 data after the 2.6.1
   poller/compactor race was reproduced and repaired.
 - Evidence: `.runtime/observability-audit-20260728-142401/`.
+
 
 ## 2026-07-24 environment data parity
 
@@ -82,6 +215,12 @@ Last updated: 2026-08-12
 - Public HTTPS remains `NEEDS_CONFIRMATION` from an unfiltered vantage because
   the BNPI workstation resets these hosts during TLS.
 - Evidence: `.runtime/dev-to-uat-prod-20260724-144222/REPORT.md`.
+
+
+# Project Truth Summary
+
+Last updated: 2026-08-12
+
 
 ## Current Runtime Truth
 
@@ -178,6 +317,7 @@ Last updated: 2026-08-12
 - On 2026-07-02, live DEV K3s at `10.184.38.138` had `Main Entrance Device` configured as `10.184.38.215:80` / `http`, with device config merged to include `vendor=Hikvision`, `source=vendor/hikvision-linux`, `sdkPort=8000`, and `webhookPath=/api/hikvision/callback` while preserving existing `hikvisionClockSkew*` evidence. Recent DEV rows for that device were `HIKVISION_CALLBACK` / `ATTENDANCE_CREATED`.
 - UAT temporary Hikvision seed proof on 2026-06-30 passed after correcting the K3s UAT `Main Entrance Device` row `cmqqv5x45002ele3dqt3a233i` to `192.168.254.181:80` / `http` and adding temporary employee mappings `UAT-HIK-001` through `UAT-HIK-005` for device employee numbers `1` through `5`. A callback-shaped event for no. `1` saved device event `cmr0hh22y0025nq011uukvetx` with status `ATTENDANCE_CREATED`, matched `uat-temp-hikvision-employee-1`, created attendance `cmr0hh27a0027nq01elxja5k7`, and rendered in the UAT admin saved-events UI with terminal `Main Entrance Device`, address `192.168.254.181`, and save path `Device callback`.
 
+
 ## Current Drift
 
 - Earlier `10.184.38.91` runtime proof is stale; the 2026-06-29 repair pass used transient address `192.168.254.148`, 2026-07-01 operator/LAN proof used transient address `10.184.38.144`, and the 2026-07-02 DEV serving-path check used transient address `10.184.38.138`. Later 2026-07-02 probes found `10.184.38.138` unreachable; current operator/LAN access should use pure static address `10.184.37.19`, while K3s remains pinned to `10.184.37.78`.
@@ -194,6 +334,7 @@ Last updated: 2026-08-12
 - Device SDK runtime drift: ZKTeco has been converted to a repo-owned Linux/PyZK bridge path; remaining ZKTeco drift is count-parity explanation, realtime push parity, GitOps/K3s runtime, current reachability repair for `10.184.38.9` / `10.184.38.10` after the 2026-07-04 remote proof found them TCP/PyZK-unreachable, and any future gozk adoption would require stable user extraction plus stable history reads. The ZKTeco sync modal/preflight should use `read_sizes()` for quick counts and should not treat live full-history PyZK pulls as a sub-15-second operation. Hikvision now has a Linux/Docker probe scaffold and a successful VM Docker build, but Project Truth has not converted Hikvision into a managed VM/Docker HCNetSDK listener.
 - Hikvision physical discovery has advanced from no reachable-device observation to SADP seeing `DS-K1T201AEF` at `192.168.254.181:8000`; runtime ingestion and cross-environment proof remain open.
 - Hikvision DEV runtime ingestion is now proven for physical-device ACS pull into saved device events, including a DEV K3s watcher that starts with the runtime, and UAT callback-shaped ingestion is proven for employee matching plus attendance creation using temporary employees `1` through `5`. Spontaneous device push callback, Linux HCNetSDK managed runtime, UAT pod-to-device routing, DEV attendance matching for employee no. `1`, and PROD parity remain open.
+
 
 ## Operating Notes
 
@@ -246,3 +387,4 @@ Last updated: 2026-08-12
 - Device-user spreadsheet/package biometric columns now use raw custody for the active Hikvision Device Users journey. CSV/Excel/JSON carry evidenced raw fingerprint `fingerData` and raw face/image blobs only when DeviceUser or matching DeviceEvent payloads prove the bytes; absent bytes remain explicit as `not_enrolled`, `missing_raw_blob`, or `not_requested`. The earlier v2 AES/passphrase envelope proof is historical/stale for this journey and must not drive current UI copy or package requirements.
 - Multi-device merge/preflight must use bounded concurrent reads and skip unavailable devices instead of serially consuming the full device timeout. Refreshing Sync Logs must preserve already loaded rows.
 - For historical `10.184.38.138:3100` / `10.184.38.138:3101` evidence, the serving path pointed to K3s DEV hostPort traffic. Current 2026-07-03 operator/LAN access should use pure static address `10.184.37.19`, and agents should not assume Docker Compose app/API or local feature-branch code is being served without image digest and pod evidence.
+

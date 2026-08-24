@@ -37,6 +37,10 @@ import {
 	DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { useAuth } from "~/lib/hooks/use-auth";
+import {
+	formatOvertimeMinutesAsHours,
+	overtimeDurationToMinutes,
+} from "~/lib/utils/attendance-adjustment-request";
 
 // Helper function to get metadata field
 const getMetadataField = (request: Request, field: string): any => {
@@ -50,7 +54,8 @@ const getRequestState = (request?: Request | null): RequestStatus =>
 interface TimeRequestFormData {
 	description: string;
 	date: string;
-	overtimeHours?: number;
+	overtimeHourPart?: number;
+	overtimeMinutePart?: number;
 	adjustmentType?: string;
 	reason?: string;
 	notes?: string;
@@ -111,7 +116,8 @@ export default function TimeRequestsPage() {
 		defaultValues: {
 			description: "",
 			date: "",
-			overtimeHours: 0,
+			overtimeHourPart: 2,
+			overtimeMinutePart: 50,
 			adjustmentType: "",
 			reason: "",
 			notes: "",
@@ -256,11 +262,20 @@ export default function TimeRequestsPage() {
 			return;
 		}
 
+		const overtimeMinutes = overtimeDurationToMinutes(
+			data.overtimeHourPart,
+			data.overtimeMinutePart,
+		);
+		const overtimeLabel = formatOvertimeMinutesAsHours(overtimeMinutes);
 		const metadata =
 			activeRequestType === "OVERTIME"
 				? {
 						date: data.date || "",
-						overtimeHours: data.overtimeHours || 0,
+						employeeId: requesterId,
+						overtimeHours: overtimeLabel,
+						requestedOvertimeHours: overtimeLabel,
+						requestedOvertimeMinutes: overtimeMinutes,
+						workflowTarget: "HR",
 					}
 				: {
 						date: data.date || "",
@@ -800,26 +815,41 @@ export default function TimeRequestsPage() {
 
 					{/* Conditional fields based on request type */}
 					{activeRequestType === "OVERTIME" ? (
-						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-1">
-								Overtime Hours *
-							</label>
-							<Input
-								type="number"
-								step="0.5"
-								min="0"
-								placeholder="0.0"
-								{...register("overtimeHours", {
-									required: "Overtime hours is required",
-									valueAsNumber: true,
-									min: { value: 0, message: "Overtime hours must be positive" },
-								})}
-							/>
-							{errors.overtimeHours && (
-								<p className="text-red-600 text-sm mt-1">
-									{errors.overtimeHours.message}
-								</p>
-							)}
+						<div className="grid grid-cols-2 gap-3">
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-1">
+									Hours *
+								</label>
+								<Input
+									type="number"
+									step="1"
+									min="0"
+									max="23"
+									placeholder="2"
+									{...register("overtimeHourPart", {
+										required: "Hours are required",
+										valueAsNumber: true,
+										min: { value: 0, message: "Hours must be 0 or more" },
+									})}
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-1">
+									Minutes *
+								</label>
+								<Input
+									type="number"
+									step="1"
+									min="0"
+									max="59"
+									placeholder="50"
+									{...register("overtimeMinutePart", {
+										required: "Minutes are required",
+										valueAsNumber: true,
+										min: { value: 0, message: "Minutes must be 0 or more" },
+									})}
+								/>
+							</div>
 						</div>
 					) : (
 						<>

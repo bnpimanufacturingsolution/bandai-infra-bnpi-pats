@@ -138,3 +138,25 @@ export function getDocumentTypeLabel(value: string): string {
 
 	return labels[value] || value || "-";
 }
+
+export function hasGeneratedDocumentFile(request?: Request | null): boolean {
+	return Boolean(
+		getMetadataField(request, "documentNumber") || getMetadataField(request, "documentUrl"),
+	);
+}
+
+export function getDocumentRequestChangeAfterLabel(params: {
+	requestState: string;
+	documentTypeLabel: string;
+	hasGeneratedFile: boolean;
+}): string {
+	const state = String(params.requestState || "").toUpperCase();
+	if (state === "REJECTED") return "No document generated";
+	if (state === "APPROVED") return `Generate ${params.documentTypeLabel}`;
+	if (state === "COMPLETED") {
+		return params.hasGeneratedFile
+			? `${params.documentTypeLabel} Issued`
+			: "Approved — file not generated";
+	}
+	return params.requestState;
+}

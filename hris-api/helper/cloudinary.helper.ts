@@ -2,12 +2,17 @@ import { UploadApiResponse, UploadApiErrorResponse } from "cloudinary";
 import { Client as MinioClient } from "minio";
 import { getLogger } from "./logger.helper";
 import { cloudinary, cloudinaryConfig } from "../config/cloudinary";
+import {
+	deleteLocalUploadFile,
+	writeLocalUploadFile,
+} from "./local-upload-path.helper";
 
 const logger = getLogger();
 const cloudinaryLogger = logger.child({ module: "cloudinary" });
 const minioLogger = logger.child({ module: "minio" });
+const localLogger = logger.child({ module: "local-storage" });
 
-type StorageProvider = "cloudinary" | "minio" | "gcp";
+type StorageProvider = "cloudinary" | "minio" | "gcp" | "local";
 
 function resolveStorageProvider(): StorageProvider {
 	const rawProvider = (process.env.STORAGE_PROVIDER || "cloudinary").toLowerCase().trim();
@@ -20,6 +25,10 @@ function resolveStorageProvider(): StorageProvider {
 		case "google":
 		case "google-cloud-storage":
 			return "gcp";
+		case "local":
+		case "disk":
+		case "filesystem":
+			return "local";
 		case "cloudinary":
 		case "":
 			return "cloudinary";
@@ -128,6 +137,32 @@ function generateObjectKey(folder: string, publicId?: string): string {
 	return `${normalizedFolder}/${Date.now()}-${randomSuffix}`;
 }
 
+async function uploadToLocal(
+	buffer: Buffer,
+	options: CloudinaryUploadOptions = {},
+): Promise<CloudinaryUploadResult> {
+	const { folder = "uploads", publicId } = options;
+	const objectKey = generateObjectKey(folder, publicId);
+
+	try {
+		const written = await writeLocalUploadFile(objectKey, buffer);
+		localLogger.info(`File uploaded successfully: ${written.absolutePath}`);
+		return {
+			success: true,
+			url: written.url,
+			secureUrl: written.url,
+			publicId: objectKey,
+			bytes: buffer.length,
+		};
+	} catch (error: any) {
+		localLogger.error(`Local upload failed: ${error.message}`);
+		return {
+			success: false,
+			error: error.message,
+		};
+	}
+}
+
 async function uploadToMinio(
 	buffer: Buffer,
 	options: CloudinaryUploadOptions = {},
@@ -184,6 +219,8 @@ export async function uploadToCloudinary(
 	switch (provider) {
 		case "minio":
 			return uploadToMinio(buffer, options);
+		case "local":
+			return uploadToLocal(buffer, options);
 		case "gcp":
 			cloudinaryLogger.error(
 				'STORAGE_PROVIDER is set to "gcp", but GCP storage upload is not implemented in this service yet.',
@@ -373,6 +410,18 @@ export async function deleteFromCloudinary(
 				return true;
 			} catch (error: any) {
 				minioLogger.error(`Failed to delete file ${publicId}: ${error.message}`);
+				return false;
+			}
+		}
+		case "local": {
+			try {
+				const deleted = await deleteLocalUploadFile(publicId);
+				if (deleted) {
+					localLogger.info(`File deleted successfully: ${publicId}`);
+				}
+				return deleted;
+			} catch (error: any) {
+				localLogger.error(`Failed to delete local file ${publicId}: ${error.message}`);
 				return false;
 			}
 		}

@@ -83,6 +83,7 @@ const TICKET_REQUEST_TYPES = [
 	"PROMOTION",
 	"SALARY_CHANGE",
 	"SCHEDULE_CHANGE",
+	"ATTENDANCE_CORRECTION",
 	"OTHER",
 ] as const;
 
@@ -354,7 +355,7 @@ const isReadyToGenerate = (request?: Request | null): boolean => {
 	if (Boolean(getMetadataField(request, "documentNumber"))) return false;
 
 	const state = getRequestState(request);
-	if (state === "APPROVED") return true;
+	if (state === "APPROVED" || state === "COMPLETED") return true;
 
 	return (
 		(state === "SUBMITTED" || state === "IN_PROCESS") && getTaskStepStage(request) === "TASK"

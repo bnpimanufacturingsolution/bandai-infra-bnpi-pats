@@ -94,10 +94,24 @@ export const classifyDeviceEvent = (event: {
 		});
 	}
 
+	const major = String(event.major ?? readPayloadText(event.payload, "major") ?? "").trim();
+	// Major 2 + minor 38 is ACS exception on armed panels, not MAJOR_EVENT tap.
+	if (major === "2" && (minor === "38" || actionCode === "MINOR_FINGERPRINT_COMPARE_PASS")) {
+		return withCompatibilityConfidence({
+			eventCategory: "DEVICE_HEALTH",
+			eventAction: "LISTENER_RECEIVED",
+			eventLabel: "Armed-device ACS exception (not a punch)",
+			eventConfidence: "SUPPORTED",
+			processingLabel,
+			transportLabel,
+		});
+	}
+
 	if (
-		actionCode === "MINOR_FINGERPRINT_COMPARE_PASS" ||
-		eventKind === "attendance_fingerprint_success" ||
-		minor === "38"
+		major !== "2" &&
+		(actionCode === "MINOR_FINGERPRINT_COMPARE_PASS" ||
+			eventKind === "attendance_fingerprint_success" ||
+			minor === "38")
 	) {
 		return withCompatibilityConfidence({
 			eventCategory: "ATTENDANCE",
@@ -344,4 +358,51 @@ export const buildPersistedDeviceEventTaxonomy = (event: Parameters<typeof class
 		eventLabel: taxonomy.eventLabel,
 		eventConfidence: taxonomy.eventConfidence,
 	};
+};
+
+export const isStalePersistedDeviceEventTaxonomy = (event: {
+	eventCategory?: string | null;
+	eventAction?: string | null;
+}) => {
+	const category = String(event.eventCategory || "").trim().toUpperCase();
+	const action = String(event.eventAction || "").trim().toUpperCase();
+	return (
+		!category ||
+		!action ||
+		category === "UNKNOWN" ||
+		category === "UNKNOWN_VENDOR" ||
+		action === "UNKNOWN"
+	);
+};
+
+export const resolveDeviceEventDisplayTaxonomy = (
+	event: Parameters<typeof classifyDeviceEvent>[0] & {
+		eventCategory?: string | null;
+		eventAction?: string | null;
+		eventLabel?: string | null;
+		eventConfidence?: string | null;
+	},
+) => {
+	const runtime = classifyDeviceEvent(event);
+	if (isStalePersistedDeviceEventTaxonomy(event)) return runtime;
+	return {
+		...runtime,
+		eventCategory: String(event.eventCategory || runtime.eventCategory),
+		eventAction: String(event.eventAction || runtime.eventAction),
+		eventLabel: String(event.eventLabel || runtime.eventLabel),
+		eventConfidence: (event.eventConfidence || runtime.eventConfidence) as DeviceEventTaxonomy["eventConfidence"],
+		capabilityConfidence: String(event.eventConfidence || runtime.eventConfidence || "unknown").toLowerCase() as DeviceEventTaxonomy["capabilityConfidence"],
+	};
+};
+
+export const ensureSdkCallbackEvidence = (
+	payload: Record<string, any>,
+	source?: string | null,
+) => {
+	const next = { ...payload };
+	if (String(source || "").trim() === "EN_HCNETSDK_ALARM") {
+		if (!String(next.evidenceSource || "").trim()) next.evidenceSource = "SDK_CALLBACK";
+		if (next.directDeviceEvidence !== true) next.directDeviceEvidence = true;
+	}
+	return next;
 };

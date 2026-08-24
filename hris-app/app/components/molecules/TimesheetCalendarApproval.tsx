@@ -12,6 +12,13 @@ import {
 } from "~/lib/utils/attendance-status";
 import { TimesheetDayTooltipContent } from "~/components/molecules/TimesheetDayTooltipContent";
 import { resolveOvertimeDayBadge } from "~/lib/utils/overtime-candidate";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "~/components/ui/select";
 
 // Extend the base breakdown type with optional leaveType
 export type TimesheetBreakdownDay = TimesheetBreakdown & {
@@ -319,6 +326,23 @@ export function TimesheetCalendarApproval({
 		onApprovalChange(updatedBreakdown);
 	};
 
+	const handleDayLaborChange = (
+		dayKey: string,
+		value: "DIRECT" | "INDIRECT" | "unset",
+	) => {
+		if (!onApprovalChange || !breakdown) return;
+		onApprovalChange(
+			breakdown.map((day) =>
+				getDayBusinessKey(day) === dayKey
+					? {
+							...day,
+							dayLaborType: value === "unset" ? null : value,
+						}
+					: day,
+			),
+		);
+	};
+
 	// Group breakdown by weeks with days aligned to M-T-W-TH-F-S-SU columns
 	const weeks = useMemo(() => {
 		// First, deduplicate days by date
@@ -575,6 +599,12 @@ export function TimesheetCalendarApproval({
 										...(day.earlyOutHours && day.earlyOutHours !== "0:00"
 											? [{ label: "EO", tone: "eo" as const }]
 											: []),
+										...(day.dayLaborType === "DIRECT"
+											? [{ label: "DIR", tone: "meta" as const }]
+											: []),
+										...(day.dayLaborType === "INDIRECT"
+											? [{ label: "IND", tone: "meta" as const }]
+											: []),
 									];
 									const wrapperStateClass = dayStatus.approved
 										? "bg-green-50 ring-1 ring-inset ring-green-300"
@@ -680,8 +710,49 @@ export function TimesheetCalendarApproval({
 																	dayBusinessKey,
 															},
 															nightShift: day.nightShift,
+															dayLaborType: day.dayLaborType,
 														}}
 													/>
+													<div
+														className="pt-1"
+														onPointerDown={(event) =>
+															event.stopPropagation()
+														}>
+														<p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+															Day labor
+														</p>
+														<Select
+															value={
+																day.dayLaborType === "DIRECT" ||
+																day.dayLaborType === "INDIRECT"
+																	? day.dayLaborType
+																	: "unset"
+															}
+															onValueChange={(value) =>
+																handleDayLaborChange(
+																	dayBusinessKey,
+																	value as
+																		| "DIRECT"
+																		| "INDIRECT"
+																		| "unset",
+																)
+															}>
+															<SelectTrigger className="h-8 rounded-sm border-gray-200 bg-white text-xs">
+																<SelectValue />
+															</SelectTrigger>
+															<SelectContent>
+																<SelectItem value="unset">
+																	Not tagged
+																</SelectItem>
+																<SelectItem value="DIRECT">
+																	Direct
+																</SelectItem>
+																<SelectItem value="INDIRECT">
+																	Indirect
+																</SelectItem>
+															</SelectContent>
+														</Select>
+													</div>
 													{hasEmployeeNote && (
 														<div className="text-[10px] text-gray-600 bg-orange-50 p-1.5 rounded mt-1 border border-orange-100">
 															<b className="text-orange-700">Note:</b>{" "}

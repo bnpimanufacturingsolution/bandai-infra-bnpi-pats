@@ -6,6 +6,7 @@ import {
 	extractHikvisionEventData,
 	getHikvisionClockSkewSecondsFromSystemTime,
 	getHikvisionObservedClockSkewSeconds,
+	isHikvisionArmedListenerAcsException,
 	isHikvisionAttendancePunchEvent,
 	normalizeHikvisionAcsEventListTimes,
 	normalizeHikvisionDeviceEventSource,
@@ -29,10 +30,12 @@ describe("hikvision event contract helper", () => {
 				currentVerifyMode: "card",
 				doorNo: 1,
 				serialNo: 987,
+				attendanceStatus: "checkIn",
+				label: "Check In",
 			},
 		});
 
-		expect(event).to.deep.equal({
+		expect(event).to.include({
 			deviceId: "device-1",
 			source: undefined,
 			eventType: "normal",
@@ -49,6 +52,34 @@ describe("hikvision event contract helper", () => {
 			deviceTime: undefined,
 			timeAdjusted: false,
 			deviceClockSkewSeconds: 0,
+			deviceAttendanceStatus: "checkIn",
+			deviceAttendanceLabel: "Check In",
+		});
+		expect(event.panelSelectStatus).to.deep.equal({
+			code: "checkIn",
+			label: "Check In",
+			present: true,
+		});
+	});
+
+	it("copies AcsEventInfo attendanceStatus as panel Select Status, not HR PRESENT", () => {
+		const event = extractHikvisionEventData({
+			deviceId: "cmripjwkw00ffl0013lfxcbxw",
+			AcsEventInfo: {
+				major: 5,
+				minor: 38,
+				employeeNoString: "10",
+				serialNo: 9619,
+				attendanceStatus: "checkIn",
+				label: "Check In",
+			},
+		});
+		expect(event.deviceAttendanceStatus).to.equal("checkIn");
+		expect(event.deviceAttendanceLabel).to.equal("Check In");
+		expect(event.panelSelectStatus).to.deep.equal({
+			code: "checkIn",
+			label: "Check In",
+			present: true,
 		});
 	});
 
@@ -186,6 +217,85 @@ describe("hikvision event contract helper", () => {
 				actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
 			}),
 		).to.equal(true);
+	});
+
+	it("does not treat armed-device major=2 minor=38 exceptions as attendance punches", () => {
+		expect(
+			isHikvisionAttendancePunchEvent({
+				major: 2,
+				minor: 38,
+				actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+			}),
+		).to.equal(false);
+		expect(
+			isHikvisionArmedListenerAcsException({
+				major: 2,
+				minor: 38,
+				employeeNo: "",
+			}),
+		).to.equal(true);
+		expect(
+			isHikvisionArmedListenerAcsException({
+				major: 5,
+				minor: 38,
+				employeeNo: "10",
+			}),
+		).to.equal(false);
+	});
+
+	it("does not use a later Check In as clock out", () => {
+		const pair = selectHikvisionPunchPair([
+			{
+				eventTime: new Date("2026-08-13T00:49:11.000Z"),
+				payload: {
+					major: 5,
+					minor: 38,
+					actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+					attendanceStatus: "checkIn",
+					label: "Check In",
+				},
+			},
+			{
+				eventTime: new Date("2026-08-13T09:10:00.000Z"),
+				payload: {
+					major: 5,
+					minor: 38,
+					actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+					attendanceStatus: "checkIn",
+					label: "Check In",
+				},
+			},
+		]);
+		expect(pair.mode).to.equal("panel");
+		expect(pair.timeIn?.toISOString()).to.equal("2026-08-13T00:49:11.000Z");
+		expect(pair.timeOut).to.equal(null);
+	});
+
+	it("uses panel Check Out as clock out and Check In as clock in", () => {
+		const pair = selectHikvisionPunchPair([
+			{
+				eventTime: new Date("2026-08-13T00:49:11.000Z"),
+				payload: {
+					major: 5,
+					minor: 38,
+					actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+					AcsEventInfo: { attendanceStatus: "checkIn", label: "Check In" },
+				},
+			},
+			{
+				eventTime: new Date("2026-08-13T09:05:00.000Z"),
+				payload: {
+					major: 5,
+					minor: 38,
+					actionCode: "MINOR_FINGERPRINT_COMPARE_PASS",
+					attendanceStatus: "checkOut",
+					label: "Check Out",
+				},
+			},
+		]);
+		expect(pair.mode).to.equal("panel");
+		expect(pair.timeIn?.toISOString()).to.equal("2026-08-13T00:49:11.000Z");
+		expect(pair.timeOut?.toISOString()).to.equal("2026-08-13T09:05:00.000Z");
 	});
 
 	it("selects earliest biometric punch as time in and latest as time out", () => {

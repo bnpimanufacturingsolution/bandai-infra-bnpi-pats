@@ -3,8 +3,21 @@ import type {
 	EmployeeSchedulesResponse,
 	ScheduleOverrideShiftSnapshot,
 } from "~/services/schedules.service";
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock, Layers3, Loader2 } from "lucide-react";
+import {
+	Calendar,
+	ChevronDown,
+	ChevronLeft,
+	ChevronRight,
+	Clock,
+	Layers3,
+	Loader2,
+	Pencil,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link, useLocation } from "react-router";
+import { Button } from "~/components/atoms/Button";
+import { ChangeWeeklyScheduleModal } from "~/components/organisms/employee-detail/change-weekly-schedule-modal";
+import { useAuth } from "~/lib/hooks/use-auth";
 import {
 	useEmployeeScheduleCalendar,
 	useEmployeeSchedules,
@@ -433,9 +446,30 @@ const buildFallbackAssignmentsFromEmployee = (employee: Employee): ScheduleAssig
 	];
 };
 
+const SCHEDULE_EDIT_ROLES = new Set([
+	"hris-hr-manager",
+	"hris-hr-user",
+	"hris-employee-manager",
+	"admin",
+	"hris-admin",
+]);
+
+const employeeDisplayName = (employee?: Employee | null) => {
+	const firstName = employee?.person?.personalInfo?.firstName || "";
+	const lastName = employee?.person?.personalInfo?.lastName || "";
+	return `${firstName} ${lastName}`.trim() || employee?.employeeId || "";
+};
+
 export function ScheduleTab({ employee }: ScheduleTabProps) {
+	const { user } = useAuth();
+	const location = useLocation();
 	const [weekOffset, setWeekOffset] = useState(0);
 	const [expandedOverrideId, setExpandedOverrideId] = useState<string | null>(null);
+	const [changeScheduleOpen, setChangeScheduleOpen] = useState(false);
+	const canChangeSchedule = SCHEDULE_EDIT_ROLES.has(String(user?.role || ""));
+	const employeeEditHref = location.pathname.startsWith("/admin/configuration/employees")
+		? `/admin/configuration/employees/${employee.id}/edit`
+		: `/hr/employees/${employee.id}/edit`;
 	const weekStartDate = useMemo(() => {
 		const start = toStartOfWeekMonday(new Date());
 		return addDays(start, weekOffset * 7);
@@ -637,12 +671,37 @@ export function ScheduleTab({ employee }: ScheduleTabProps) {
 
 	return (
 		<div className="space-y-8">
+			{canChangeSchedule ? (
+				<ChangeWeeklyScheduleModal
+					open={changeScheduleOpen}
+					onOpenChange={setChangeScheduleOpen}
+					employee={employee}
+					employeeName={employeeDisplayName(employee)}
+				/>
+			) : null}
 			<section>
-				<div className="mb-4 flex items-center gap-2">
-					<div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
-						<Layers3 className="h-4 w-4 text-orange-600" />
+				<div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+					<div className="flex items-center gap-2">
+						<div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
+							<Layers3 className="h-4 w-4 text-orange-600" />
+						</div>
+						<h3 className="text-base font-semibold text-gray-900">Active Assignment</h3>
 					</div>
-					<h3 className="text-base font-semibold text-gray-900">Active Assignment</h3>
+					{canChangeSchedule ? (
+						<div className="flex flex-wrap items-center gap-2">
+							<Button
+								type="button"
+								size="sm"
+								onClick={() => setChangeScheduleOpen(true)}
+								data-testid="change-weekly-hours">
+								<Pencil className="h-4 w-4" />
+								Change schedule
+							</Button>
+							<Button type="button" size="sm" variant="outline" asChild>
+								<Link to={employeeEditHref}>Full editor</Link>
+							</Button>
+						</div>
+					) : null}
 				</div>
 				<div className="rounded-xl border border-gray-200 bg-white p-4">
 					{activeAssignment ? (

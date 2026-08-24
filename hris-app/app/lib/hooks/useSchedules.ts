@@ -263,6 +263,9 @@ export const useCreateEmployeeSchedule = () => {
 				queryKey: scheduleQueryKeys.employeeScheduleTimeline.all,
 			});
 			queryClient.invalidateQueries({
+				queryKey: employeesQueryKeys.employees.all,
+			});
+			queryClient.invalidateQueries({
 				queryKey: [...employeesQueryKeys.employees.all, "schedule-calendar"],
 			});
 			queryClient.invalidateQueries({
@@ -274,6 +277,12 @@ export const useCreateEmployeeSchedule = () => {
 			if (variables.employeeId) {
 				queryClient.invalidateQueries({
 					queryKey: scheduleQueryKeys.employeeScheduleTimeline.list(variables.employeeId),
+				});
+				queryClient.invalidateQueries({
+					queryKey: employeesQueryKeys.employees.detail(variables.employeeId),
+				});
+				queryClient.invalidateQueries({
+					queryKey: employeesQueryKeys.employees.schedules(variables.employeeId),
 				});
 			}
 			sonnerToast.success("Employee schedule assigned successfully");

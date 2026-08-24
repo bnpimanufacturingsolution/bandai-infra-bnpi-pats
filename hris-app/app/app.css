@@ -1043,3 +1043,40 @@ body {
 .employee-detail-tab-panel--last-active {
 	border-top-right-radius: 0 !important;
 }
+
+/* My Attendance period layout: Today left, log right. Explicit CSS so local
+   Vite cannot drop Tailwind arbitrary grid/width classes. */
+.attendance-period-layout {
+	display: flex;
+	flex-direction: column;
+	gap: 1.25rem;
+}
+
+.attendance-period-log {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.attendance-period-today {
+	display: flex;
+	width: 100%;
+	flex-direction: column;
+	gap: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+	.attendance-period-layout {
+		flex-direction: row;
+		align-items: flex-start;
+	}
+
+	.attendance-period-log {
+		order: 2;
+	}
+
+	.attendance-period-today {
+		order: 1;
+		width: 420px;
+		flex: 0 0 420px;
+	}
+}

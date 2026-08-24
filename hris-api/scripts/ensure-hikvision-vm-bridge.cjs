@@ -94,11 +94,11 @@ function resolveDeviceIps() {
 		}
 	}
 
-	// Prefer current site TEST A LAN before historical 189.
+	// Prefer current site TEST A LAN (.109 per 2026-08-13 proof; .102 stale).
 	return {
-		deviceIps: ["192.168.254.102"],
-		source: "host-fallback-102",
-		targets: [{ deviceIp: "192.168.254.102" }],
+		deviceIps: ["192.168.254.109"],
+		source: "host-fallback-109",
+		targets: [{ deviceIp: "192.168.254.109" }],
 	};
 }
 

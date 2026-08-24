@@ -27,13 +27,16 @@ terraform.tfstate
 terraform.tfstate.backup
 
 # Sync Center export/import working files (may contain real biometric blobs).
-# Keep package templates out of git; regenerate under templates/ as needed.
-templates/sync-center-device-users/
-templates/
+# Keep package templates out of git; regenerate under /templates as needed.
+# Anchor to repo root so hris-app/app/components/templates is not ignored.
+/templates/sync-center-device-users/
+/templates/
 # Allow committed ops env-compare template under docs/templates/
 !docs/templates/
 !docs/templates/DEV-UAT-PROD-env-compare.xlsx
 !docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md
+# HRIS React page templates must stay in git.
+!hris-app/app/components/templates/
 
 # Local DM migration workbook/source payloads.
 # These are copied from HRIS-PROJECT for local/VM operations and may contain
@@ -50,3 +53,4 @@ docs/FY2025_BNPI Organization Chart - as of March 31, 2026.xlsx
 docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx
 docs/new-cutoff/
 docs/rptLeaveBalance as of June 4, 2026.xlsx
+config.bat

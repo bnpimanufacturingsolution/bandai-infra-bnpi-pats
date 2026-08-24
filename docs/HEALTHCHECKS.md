@@ -32,6 +32,8 @@ http://<guest-lan-ip>:3201/health
 ssh infra@<guest-lan-ip> "hostname; ip -br addr; docker ps || true; sudo kubectl get nodes; sudo kubectl get pods -A; sudo kubectl get svc -A; sudo kubectl get applications -n argocd || true"
 ```
 
+App/API HTTP 200 with Argo runtime **Degraded** is expected when Job `hris-api-db-init` is Failed. That is not an empty database. Do not reseed UAT/PROD or delete that Job to make Argo Healthy. `docs/DB_INIT_JOB.md`.
+
 For host-only HRIS appliance checks without a VM guest IP:
 
 ```powershell

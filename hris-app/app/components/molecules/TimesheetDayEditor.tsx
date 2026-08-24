@@ -16,6 +16,7 @@ import { RotateCcw } from "lucide-react";
 
 type ShiftPreset = "scheduled" | "day" | "night";
 type TimeOutDayOffset = "0" | "1";
+type DayLaborSelect = "unset" | "DIRECT" | "INDIRECT";
 
 interface TimesheetDayEditorProps {
 	day: TimesheetBreakdownDay | null;
@@ -108,6 +109,7 @@ export function TimesheetDayEditor({
 	const [timeOut, setTimeOut] = useState("");
 	const [shiftPreset, setShiftPreset] = useState<ShiftPreset>("scheduled");
 	const [timeOutDayOffset, setTimeOutDayOffset] = useState<TimeOutDayOffset>("0");
+	const [dayLaborType, setDayLaborType] = useState<DayLaborSelect>("unset");
 	const [isSaving, setIsSaving] = useState(false);
 
 	useEffect(() => {
@@ -132,6 +134,11 @@ export function TimesheetDayEditor({
 						? 1
 						: (defaultTimes?.timeOutDayOffset ?? (isDefaultOvernight ? 1 : 0)),
 				) as TimeOutDayOffset,
+			);
+			setDayLaborType(
+				day.dayLaborType === "DIRECT" || day.dayLaborType === "INDIRECT"
+					? day.dayLaborType
+					: "unset",
 			);
 		}
 	}, [
@@ -218,6 +225,7 @@ export function TimesheetDayEditor({
 			...day,
 			timeIn: constructISO(timeIn),
 			timeOut: constructISO(timeOut, shouldRollTimeOutToNextDay),
+			dayLaborType: dayLaborType === "unset" ? null : dayLaborType,
 		};
 		const breakMinutes = Math.max(0, defaultTimes?.breakMinutes || 0);
 		const breakDisplay = defaultTimes?.breakDisplay || "No break";
@@ -409,6 +417,27 @@ export function TimesheetDayEditor({
 							className="h-10 rounded-sm border-gray-200 text-xs"
 						/>
 					</div>
+				</div>
+				<div className="grid gap-1.5">
+					<Label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+						Day labor
+					</Label>
+					<Select
+						value={dayLaborType}
+						onValueChange={(value) => setDayLaborType(value as DayLaborSelect)}
+						disabled={isSaving}>
+						<SelectTrigger className="h-10 rounded-sm border-gray-200 bg-white text-xs">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="unset">Not tagged</SelectItem>
+							<SelectItem value="DIRECT">Direct</SelectItem>
+							<SelectItem value="INDIRECT">Indirect</SelectItem>
+						</SelectContent>
+					</Select>
+					<p className="text-[11px] text-gray-500">
+						Today&apos;s work type. Can change tomorrow. Not the employee Agency/BNPI tag.
+					</p>
 				</div>
 				<div className="grid gap-3 sm:grid-cols-2">
 					<div className="grid gap-1.5">

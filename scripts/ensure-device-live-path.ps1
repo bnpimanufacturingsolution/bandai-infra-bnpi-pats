@@ -84,7 +84,8 @@ function Invoke-VmSshScript {
 }
 
 function Resolve-HikvisionBridgeDeviceIp {
-  param([string]$Fallback = "192.168.254.102")
+  # Live TEST A is .109 (2026-08-13 proof); .102 is stale history.
+  param([string]$Fallback = "192.168.254.109")
 
   if (-not [string]::IsNullOrWhiteSpace($DeviceIp)) {
     return $DeviceIp

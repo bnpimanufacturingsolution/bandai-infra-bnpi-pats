@@ -69,6 +69,14 @@ import {
 import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
 import { useShiftTypes } from "~/lib/hooks/useSchedules";
 import { TimePicker } from "~/components/molecules/TimePicker";
+import {
+	AttendanceAdjustmentRequestModal,
+	type AttendanceTimeRequestFormValues,
+} from "~/components/modals/AttendanceAdjustmentRequestModal";
+import {
+	buildAttendanceAdjustmentRequestPayload,
+	buildOvertimeRequestPayload,
+} from "~/lib/utils/attendance-adjustment-request";
 
 type RequestCreateKind =
 	| "leave"
@@ -76,7 +84,8 @@ type RequestCreateKind =
 	| "personnel-action"
 	| "resignation"
 	| "job-requisition"
-	| "schedule-change";
+	| "schedule-change"
+	| "attendance-adjustment";
 
 type ScheduleChangeFormData = {
 	date: string;
@@ -202,6 +211,7 @@ const getRequestTypeLabel = (request: Request): string => {
 		LEAVE: "Leave Request",
 		DOCUMENT_REQUEST: "Document Request",
 		TIME_ADJUSTMENT: "Time Adjustment",
+		ATTENDANCE_CORRECTION: "Attendance Request",
 		OVERTIME: "Overtime Request",
 		SCHEDULE_CHANGE: "Schedule Change Request",
 		EXPENSE_REIMBURSEMENT: "Expense Reimbursement",
@@ -522,6 +532,11 @@ const REQUEST_TYPE_OPTIONS: Array<{
 		kind: "schedule-change",
 		label: "Schedule Change Request",
 		icon: CalendarClock,
+	},
+	{
+		kind: "attendance-adjustment",
+		label: "Attendance Request",
+		icon: Clock,
 	},
 	{
 		kind: "personnel-action",
@@ -1095,7 +1110,12 @@ export default function EmployeeRequestsHubPage() {
 	const { user } = useAuth();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const employeeId = user?.metadata?.employee?.id || "";
-	const organizationId = user?.organizationId || "";
+	const organizationId =
+		user?.organizationId ||
+		user?.organization?.id ||
+		(user?.metadata as { employee?: { organizationId?: string } } | undefined)?.employee
+			?.organizationId ||
+		"";
 	const leaveRequestPrefill = getLeaveRequestPrefillFromSearchParams(searchParams);
 	const action = searchParams.get("action");
 	const activeRequestId = action === "view" ? searchParams.get("id") || "" : "";
@@ -1105,6 +1125,13 @@ export default function EmployeeRequestsHubPage() {
 		if (kind) return kind;
 		if (type === "schedule-change" || type === "schedule_change") {
 			return "schedule-change";
+		}
+		if (
+			type === "attendance-adjustment" ||
+			type === "attendance_correction" ||
+			type === "attendance-correction"
+		) {
+			return "attendance-adjustment";
 		}
 		return null;
 	}, [searchParams]);
@@ -1267,6 +1294,8 @@ export default function EmployeeRequestsHubPage() {
 			next.set("kind", kind);
 			if (kind === "schedule-change") {
 				next.set("type", "schedule-change");
+			} else if (kind === "attendance-adjustment") {
+				next.set("type", "attendance-adjustment");
 			} else {
 				next.delete("type");
 			}
@@ -1454,6 +1483,42 @@ export default function EmployeeRequestsHubPage() {
 				clearCreateParams();
 			}
 		}
+	};
+
+	const handleCreateAttendanceAdjustment = async (data: AttendanceTimeRequestFormValues) => {
+		if (actionBlock.blocked) {
+			toast.error(actionBlock.message);
+			clearCreateParams();
+			return;
+		}
+		if (!employeeId || !organizationId) {
+			toast.error("Employee context is missing. Please refresh and try again.");
+			return;
+		}
+
+		const payload =
+			data.requestKind === "OVERTIME"
+				? buildOvertimeRequestPayload({
+						employeeId,
+						organizationId,
+						date: data.date,
+						overtimeHourPart: data.overtimeHourPart,
+						overtimeMinutePart: data.overtimeMinutePart,
+						notes: data.notes,
+					})
+				: buildAttendanceAdjustmentRequestPayload({
+						employeeId,
+						organizationId,
+						date: data.date,
+						timeIn: data.timeIn,
+						timeOut: data.timeOut,
+						reasonCategory: data.reasonCategory,
+						notes: data.notes,
+						attendanceId: searchParams.get("attendanceId"),
+						adjustmentKind: data.adjustmentKind,
+					});
+		await createRequestMutation.mutateAsync(payload);
+		clearCreateParams();
 	};
 
 	const handleCreateJobRequisition = async (data: {
@@ -1849,6 +1914,28 @@ export default function EmployeeRequestsHubPage() {
 				onSubmit={handleCreateScheduleChange}
 				isPending={createRequestMutation.isPending}
 				initialDate={searchParams.get("date")}
+			/>
+
+			<AttendanceAdjustmentRequestModal
+				isOpen={action === "create" && createKind === "attendance-adjustment"}
+				onClose={clearCreateParams}
+				onSubmit={handleCreateAttendanceAdjustment}
+				isPending={createRequestMutation.isPending}
+				initialDate={searchParams.get("date")}
+				initialTimeIn={searchParams.get("timeIn")}
+				initialTimeOut={searchParams.get("timeOut")}
+				initialRequestKind={
+					searchParams.get("requestKind") === "OVERTIME"
+						? "OVERTIME"
+						: "ATTENDANCE_ADJUSTMENT"
+				}
+				initialAdjustmentKind={
+					(searchParams.get("adjustmentKind") as
+						| "CLOCK_IN"
+						| "CLOCK_OUT"
+						| "CLOCK_IN_OUT"
+						| null) || undefined
+				}
 			/>
 		</div>
 	);

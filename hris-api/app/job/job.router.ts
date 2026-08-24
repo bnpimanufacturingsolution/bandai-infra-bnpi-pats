@@ -1,6 +1,21 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { cache, cacheShort, cacheMedium, cacheUser } from "../../middleware/cache";
-import verifyToken from "../../middleware/verifyToken";
+import verifyToken, {
+	AuthRequest,
+	tryAuthenticateRequest,
+} from "../../middleware/verifyToken";
+
+const optionalVerifyToken = async (req: Request, res: Response, next: NextFunction) => {
+	const authHeader = req.headers.authorization;
+	const cookieHeader = req.headers.cookie;
+	if (!authHeader && !cookieHeader) {
+		next();
+		return;
+	}
+
+	await tryAuthenticateRequest(req as AuthRequest);
+	next();
+};
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -83,8 +98,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *     summary: Get all jobs
 	 *     description: Retrieve jobs with advanced filtering, pagination, sorting, field selection, and optional grouping
 	 *     tags: [Job]
-	 *     security:
-	 *       - bearerAuth: []
+	 *     security: []
 	 *     parameters:
 	 *       - in: query
 	 *         name: page
@@ -203,15 +217,13 @@ export const router = (route: Router, controller: IController): Router => {
 	 *                           description: Present when pagination="true"
 	 *       400:
 	 *         $ref: '#/components/responses/BadRequest'
-	 *       401:
-	 *         $ref: '#/components/responses/Unauthorized'
 	 *       500:
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
-	// Cache job list with predictable key for invalidation
+	// Public careers list. Optional token still scopes HR users to their org.
 	routes.get(
 		"/",
-		verifyToken,
+		optionalVerifyToken,
 		cache({
 			ttl: 60,
 			keyGenerator: (req: Request) => {
