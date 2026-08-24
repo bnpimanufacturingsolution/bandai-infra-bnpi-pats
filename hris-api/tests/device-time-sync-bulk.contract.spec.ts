@@ -67,4 +67,11 @@ describe("fleet Hikvision time sync contract", () => {
 		expect(controllerSource).to.contain('action: "HIKVISION_TIME_SYNC_ALL"');
 		expect(controllerSource).to.contain("Bulk updated Hikvision clocks to Manila time");
 	});
+
+	it("converts serverTime to ISO exactly once inside the shared core", () => {
+		// Regression pin: the single-device handler consumes core.payload.serverTime
+		// (already an ISO string). A second .toISOString() on it 500s at runtime.
+		const hits = controllerSource.match(/serverTime\.toISOString\(\)/g) || [];
+		expect(hits.length).to.equal(1);
+	});
 });
