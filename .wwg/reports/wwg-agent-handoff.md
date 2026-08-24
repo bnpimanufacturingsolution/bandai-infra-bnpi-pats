@@ -1,5 +1,18 @@
-﻿# WWG Agent Handoff
+# WWG Agent Handoff
 
+## 2026-08-24 - Codebase WWG alignment audit + non-breaking drift repair
+
+| Field | Value |
+|---|---|
+| Ask | 10-parallel-subagent whole-codebase audit vs WWG; then fix all non-breaking drift, well documented |
+| Verdict | ~90% ALIGNED; drift was legacy tooling/stale defaults/labels |
+| Deleted | hris-api/scripts/run-dev-with-hikvision.ps1, run-hikvision-alarmdemo.ps1 (AlarmDemo launchers, zero references) |
+| IP sweep | TEST A .102(stale)->.109(live) in postman env/collection, ensure-device-live-path.ps1, verify-hikvision-isapi-postman.ps1, resolve-hikvision-vm-bridge-targets.cjs, ensure-hikvision-vm-bridge.cjs (host-fallback-109), resolver spec |
+| Labels | Activity log title + saved-events Playwright proof -> Device events; ZKTeco copy -> Linux bridge; mojibake comments cleaned |
+| Docs | docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md STALE banner for .102 examples |
+| Tests | Resolver/bridge spec 6 passing (.109 expectations green); 1 fail = PRE-EXISTING (asserts unmodified start-host-hikvision-vm-ssh-bridge.ps1 API-reverse ownership). Device-health + app contract fails also proven pre-existing (stash baseline / assert untouched files) |
+| Deferred | Compose seed push-only (REC-20260824-COMPOSE-SEED-PUSH-ONLY); emp-app namespaces override (REC-20260824-EMPAPP-NAMESPACES-OVERRIDE) |
+| Report | .wwg/reports/codebase-wwg-alignment-audit-20260824.md |
 ## 2026-08-22 - Recruitment identity history
 
 | Field | Value |

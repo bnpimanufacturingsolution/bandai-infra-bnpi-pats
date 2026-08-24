@@ -4989,7 +4989,7 @@ export const controller = (prisma: PrismaClient) => {
 				statusUrl,
 				latencyMs: null,
 				data: null,
-				error: error?.message || "ZKTeco SDK sidecar status did not respond",
+				error: error?.message || "ZKTeco Linux bridge status did not respond",
 			};
 		}
 	};
@@ -5030,7 +5030,7 @@ export const controller = (prisma: PrismaClient) => {
 				status: "offline",
 				statusUrl: previewUrl.toString(),
 				data: null,
-				error: error?.message || "ZKTeco SDK sidecar preview did not respond",
+				error: error?.message || "ZKTeco Linux bridge preview did not respond",
 			};
 		}
 	};
@@ -5071,7 +5071,7 @@ export const controller = (prisma: PrismaClient) => {
 				status: "offline",
 				statusUrl: syncUrl.toString(),
 				data: null,
-				error: error?.message || "ZKTeco SDK sidecar sync did not respond",
+				error: error?.message || "ZKTeco Linux bridge sync did not respond",
 			};
 		}
 	};
@@ -26996,7 +26996,7 @@ export const controller = (prisma: PrismaClient) => {
 				description: `Hikvision hot-reload listener ${action}`,
 				page: {
 					url: req.originalUrl,
-					title: "Device Attendance",
+					title: "Device Events",
 				},
 			});
 

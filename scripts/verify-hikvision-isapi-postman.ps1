@@ -1,5 +1,5 @@
 param(
-    [string]$DeviceHost = "192.168.254.102",
+    [string]$DeviceHost = "192.168.254.109",
     [string]$Username = "admin",
     [string]$Password = "@1bislangmalakas",
     [string]$EmployeeNo = "15",

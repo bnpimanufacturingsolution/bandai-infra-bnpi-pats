@@ -1,5 +1,12 @@
-﻿# Current Task
+# Current Task
 
+
+## Latest Task Addendum - 2026-08-24 Whole-codebase WWG alignment audit + non-breaking drift repair
+
+- Operator asked to audit the whole codebase against WWG using 10 parallel sub-agents, then approved all **non-breaking** fixes with documentation.
+- Verdict ~90% ALIGNED. Fixed: AlarmDemo launcher scripts deleted; stale TEST A `.102` -> live `.109` across postman env/collection, ensure-device-live-path.ps1, verify-hikvision-isapi-postman.ps1, vm-bridge cjs+spec; activity title + saved-events Playwright proof now Device events; ZKTeco Linux-bridge naming; employee.controller.ts mojibake comments cleaned; docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md got a .102 STALE banner; device-health fixture IP hygiene.
+- Deferred as behavior changes (RECs): compose seed push-only, emp-app namespaces override. Wiki conflation notes (execute=false is API-layer, callback Employee-vs-DeviceUser order per path, Observe wait 20 min) recorded in the report.
+- Canonical: `.wwg/reports/codebase-wwg-alignment-audit-20260824.md`.
 ## Latest Task Addendum - 2026-08-22 Hire keeps applicant public-apply name
 
 - Operator: Yan Rubio card opened as Joshua Rodriguez EMP3334. Adding employee must not change the applicant name.
