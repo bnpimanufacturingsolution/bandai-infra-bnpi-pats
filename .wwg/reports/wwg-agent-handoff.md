@@ -1,5 +1,18 @@
 # WWG Agent Handoff
 
+## 2026-08-24 - Fleet Hikvision time sync (button + endpoint)
+
+| Field | Value |
+|---|---|
+| Ask | Snap A/B/D/E clocks now (authorized); add HRIS button to trigger fleet time sync |
+| Endpoint | POST /api/device/time-sync-all — preview-first, Hikvision-only, deviceIds scope, concurrency 2 |
+| Core | unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallback) |
+| UI | Devices page **Sync device time** -> preview modal -> Update N clocks |
+| Tests | API 8 passing; app 2 passing |
+| Live | Preview 11 targets / 4 readable; scoped execute 4/4 written sdk_stdxml |
+| Evidence | .runtime/time-sync-all-smoke-20260824-151249/smoke.json; SHA af6d607 |
+
+
 ## 2026-08-24 - Codebase WWG alignment audit + non-breaking drift repair
 
 | Field | Value |

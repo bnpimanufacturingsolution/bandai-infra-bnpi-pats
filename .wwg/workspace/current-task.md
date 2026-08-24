@@ -1,5 +1,15 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-24 Fleet Hikvision time sync button + live clock snap
+
+- Operator authorized live write on A/B/D/E, then asked for an HRIS button to trigger fleet time sync.
+- Live snap done twice via SDK STDXML; final state skew A -2s/B +8s->-19s/D -3s/E 0s before second pass -> all within ~19s latency residual after writes. C/F unreachable (C known down; F ECONNRESET open), TEST A/B + Device 5 lanes down as expected.
+- NEW: POST /api/device/time-sync-all (preview-first, execute=false default, deviceIds scope, concurrency 2, honest aggregate) sharing unHikvisionTimeSyncCore with the per-device route.
+- App: **Sync device time** button on Devices page (/admin/configuration/devices) opens preview-first modal with per-device clock/drift/path/status and scoped **Update N clocks**.
+- Tests: api contract 8 passing; app UI contract 2 passing. Live smoke: preview 11/4 readable; scoped execute 4/4 written. Evidence: .runtime/time-sync-all-smoke-20260824-151249/smoke.json.
+- Push af6d607. Dual-app parity exception: admin-only surface.
+# Current Task
+
 
 ## Latest Task Addendum - 2026-08-24 Whole-codebase WWG alignment audit + non-breaking drift repair
 
