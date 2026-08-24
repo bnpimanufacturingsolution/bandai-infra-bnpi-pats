@@ -2,6 +2,12 @@
 
 > Source: operator-provided specification screenshots, transcribed 2026-08-24.
 > Scope: BNPI HRIS module breakdown (modules 1-8) plus technical requirements.
+>
+> Transcription notes:
+> - The three screenshots overlap at module boundaries; overlapping bullets are merged once.
+> - The top edge of the first screenshot shows a cut-off line above "Key Modules &
+>   Functional Scope" that is not legible; its content is unknown (`NEEDS_CONFIRMATION`).
+> - Closing conversational lines from the source are preserved verbatim at the bottom.
 
 ## Key Modules & Functional Scope
 
@@ -67,3 +73,11 @@
 - Integration with government APIs (SSS, Pag-ibig, PhilHealth, BIR)
 - Export formats: PDF, Excel, CSV
 - Daily automated backups with cloud redundancy
+
+---
+
+Closing lines from the source (verbatim):
+
+> Let me know if you need clarification on any module or if you'd like to schedule a walkthrough of the specification.
+>
+> Looking forward to your feedback.
