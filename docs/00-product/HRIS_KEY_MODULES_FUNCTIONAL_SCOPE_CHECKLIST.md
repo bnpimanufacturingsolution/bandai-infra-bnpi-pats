@@ -15,6 +15,12 @@
 | 1.4 | Uniform deduction, loan reports, payroll summary, labor cost analysis | PARTIAL | Uniform `employeepayroll.prisma:98` + UFD code ✅; Payroll summary `routes/hr/reports/payroll.tsx:110` + `metrics.controller.ts:3106` ✅; loan report partial (summary columns only); **labor cost analysis MISSING** (headcount-only `directIndirectLaborSummary`) |
 | 1.5 | Overtime summary (Agency & Direct) | PARTIAL / NEEDS_LIVE_CHECK | `OvertimeTab.tsx:65-71` + `overtimeMetrics` (`metrics.controller.ts:1668`) — filters lack Agency/Direct split; agency-grouped data exists only in attendance summary (`:1778`) |
 
+**Why (gaps):**
+- 1.1 Last pay: never built — termination flow only flips a `finalPayCalculated` boolean; no computation engine was ever scoped.
+- 1.2 Assembly Standing: the allowance name appears nowhere (schema, seeds, mass-upload codes LLA/OBA/UFD only) — either named differently in BNPI files or never in scope. Loan application UI: admin loan-types page exists, but an employee-facing application flow was never built.
+- 1.4 Labor cost analysis: metrics only compute headcount splits (`directIndirectLaborSummary`); a money/rate dimension was never added to any report.
+- 1.5 Agency/Direct OT: OT metrics filter by scope/department/manager only; the `workforceSource` dimension lives in the attendance summary and was never joined into the OT report.
+
 ## Module 2 — Attendance & Timekeeping
 
 | # | Spec item | Status | Evidence |
@@ -25,6 +31,10 @@
 | 2.4 | Leave tardiness/UT monitoring, leave balance, manhour reference | PARTIAL | `LeaveBalanceTab.tsx` + `leaveBalanceMetrics` (`:2430`) ✅; **leave-tardiness columns MISSING**; **manhour reference MISSING** (only audit-sheet label hit) |
 | 2.5 | No work report, daily active manpower, agency attendance | PARTIAL | Agency ✅ `AgencyAttendanceTab.tsx` + `:1778`; **`NoWorkReportTab.tsx` + `DailyManpowerTab.tsx` fully built but ORPHANED** (hooks `useMetrics.ts:776,788`; APIs `:1708,:1743`; imported by no route) — quick win to wire |
 
+**Why (gaps):**
+- 2.4 Leave tardiness/UT: `LeaveBalanceTab` was built around balances only — late/UT columns were never added. Manhour reference: appears only as a label in an audit-sheet spec test; the feature was never implemented anywhere.
+- 2.5 No-work/Daily-manpower: tabs, hooks, and APIs are fully built but were never mounted into the workforce tabs registry — pure wiring gap, likely lost in a route refactor.
+
 ## Module 3 — Leave & Disciplinary Management
 
 | # | Spec item | Status | Evidence |
@@ -32,6 +42,11 @@
 | 3.1 | Leave conversion, annual leave credit uploads | PARTIAL | UI option `employee/requests/pan.tsx:44` ("Leave Conversion") but `request.controller.ts:174` PAN_REQUEST_TYPES **excludes LEAVE_CONVERSION**; OT-comp-leave path exists (`approved-overtime-comp-leave.service.spec.ts`); **no bulk annual-credit upload endpoint** |
 | 3.2 | Disciplinary action monitoring, late attendance tracking | PARTIAL | `admin/disciplinary-action.tsx:48-49` is **mock UI ("replace with actual API calls")**; no `disciplinaryaction` API dir; schema relation commented (`schema.prisma:2185`). Late tracking ✅ via `tardiness-metrics.helper.ts:41` |
 | 3.3 | Lists of pregnant and no-work employees | PARTIAL | No-work: `workforce-metrics.helper.ts:4` + `metrics.service.ts:2068` ✅; pregnant: import column only (`bnpi-manpower-databank-import.helper.ts:74`), no list UI/model |
+
+**Why (gaps):**
+- 3.1 Leave conversion: the UI offers a "Leave Conversion" PAN type, but the backend `PAN_REQUEST_TYPES` was never extended to accept it — request would be rejected. Annual credit bulk upload: only an OT-to-comp-leave path and seed hints exist; no upload endpoint was ever created.
+- 3.2 Disciplinary: the admin page was imported as a mock template (its own comment says "replace with actual API calls"); the Prisma relation is commented out and the backend module was never generated — UI-first scaffolding that stalled.
+- 3.3 Pregnant list: "pregnant" exists only as a databank import column; no employee field flag, model, or list feature was built. No-work backend exists but has no dedicated list UI.
 
 ## Module 4 — Employee Records & Lifecycle
 
@@ -43,6 +58,10 @@
 | 4.4 | PAN, regularization, exit clearance | PRESENT | PAN `PANRequestModal.tsx:99-105` + `request.controller.ts:174,1378`; regularization `hr/employee-status-changes.tsx:168,441`; exit clearance `ExitClearanceSection.tsx` + OFFBOARDING flow |
 | 4.5 | TIN library, 201 filing | PARTIAL | `Employee.tin` `employee.prisma:65`; `tin_id` doc type `documents-tab.tsx:50`; **no TIN library page; no 201-filing module** (nearest: BIR 2316 + document repository) |
 
+**Why (gaps):**
+- 4.2 Org chart builder: current component renders/prints the `reportToId` tree; editing, drag-restructure, and save-back were never implemented — it is a viewer mislabeled as a builder.
+- 4.5 TIN/201: TIN is a plain employee field + a document type; nobody built a library surface (search/validate/report over TINs) or a named 201-filing module — the document repository partially covers the intent.
+
 ## Module 5 — Manpower & Statutory Reports
 
 | # | Spec item | Status | Evidence |
@@ -52,6 +71,10 @@
 | 5.3 | Monthly manpower report (gender, age, headcount, averages) | PRESENT | `ManpowerDistributionTab.tsx` (gender `:32-41,601-653`; headcount `:197-320`; averages `:382-388` + `manpower-distribution-reference.helper.ts:137-193`; exports `:404-489`). Age brackets exist only in unmounted mock `EmployeeSummaryTab.tsx:22-55` |
 | 5.4 | BNPI and agency manpower databanks, turnover rate analysis | PRESENT | Databank import `bnpi-manpower-databank-import.service.ts` + wizard `migration.tsx:9782`; split views `ManpowerDatabankSection.tsx` + `ManpowerDistributionTab.tsx:43-51,656-713`; turnover live `turnover-attrition.tsx:127-233` ↔ `metrics.controller.ts:1889-1925` |
 
+**Why (gaps):**
+- 5.1/5.2 Statutory outputs: contributions are computed as payroll totals for summary cards; actual remittance-form generators (SSS R-3, Pag-ibig MF, PhilHealth RF-1) were never built — BIR 2316 is the only true statutory generator so far.
+- 5.3 Age slice: age brackets exist in a hardcoded, unmounted mock tab (`EmployeeSummaryTab`); the live Manpower Distribution tab never gained an age dimension.
+
 ## Module 6 — Training & Performance
 
 | # | Spec item | Status | Evidence |
@@ -59,6 +82,9 @@
 | 6.1 | Annual training plan and summary | MISSING | No Training model in `prisma/schema/*.prisma`; no module in `hris-api/app/` |
 | 6.2 | Training attendance databank | MISSING | Same absence — no model/routes/service |
 | 6.3 | Post-training evaluation and performance summaries | MISSING (mock-only) | `DevelopmentTab.tsx:38-120`, `OverviewTab.tsx:38`, `GoalsTab.tsx:30`, `FeedbackTab.tsx:38` — hardcoded literals, zero data calls |
+
+**Why (gaps):**
+- 6.1–6.3 The entire Training domain was never modeled — no Prisma model, no API module, no service. The visible "Development/Goals/Feedback" tabs are template scaffolding with hardcoded sample data (no `useQuery`/service calls), so they look present in UI but hold no real feature. This is the single largest spec-vs-app gap.
 
 ## Module 7 — Recruitment & Onboarding
 
@@ -68,12 +94,20 @@
 | 7.2 | Candidate profile screening | PARTIAL | Screening stage + reject actions `recruitment-page.tsx:2955,3585-3586`; `INITIAL_SCREENING` `types/application.ts:50`. **No scorecard/assessment engine** |
 | 7.3 | Recruitment pipeline (application to onboarding) | PRESENT | Stage board `recruitment-page.tsx:941-1067` (single-step drag, signed-contract gate, progress %); hire keeps public-apply name (`applicant-hire-identity.helper.ts`); onboarding `routes/onboarding.tsx`, `hr/onboarding-setup.tsx` |
 
+**Why (gaps):**
+- 7.1 Tracker: activity updates are fully modeled (7 event types) but nothing is literally named "tracker" — the pipeline board serves that role; verdict reflects naming/scope, not missing function.
+- 7.2 Screening: exists as a workflow stage with reject-at-screening actions; a dedicated scorecard/assessment engine was never built.
+
 ## Module 8 — Accounting & Compliance
 
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
 | 8.1 | Monthly: Terminal pay computation with BIR Form 2316, withholding tax (BIR Form 1604-C) | MIXED | **Terminal pay computation MISSING** (zero engine hits); BIR 2316 PRESENT (`bir-2316.generator.ts`, `report.router.ts:44`, UI `BIRReportTab.tsx`); withholding engine PRESENT (`tax-calculator.helper.ts:395-408` + `bir-1601c-metrics.helper.ts`); **BIR 1604-C generator MISSING** (zero `1604` code hits) |
 | 8.2 | Annual: Alphabetical list of employees with BIR documents, BIR Form 1604-CF, BIR Form 2316 | MISSING | No alphalist report anywhere; **no 1604-CF generator/endpoint**; 2316 exists per 8.1 |
+
+**Why (gaps):**
+- 8.1 Terminal pay: no computation engine exists — only incidental comments and the `finalPayCalculated` flag; the monthly compliance form 1604-C has zero code hits (1601-C *metrics* exist, but that is a different form).
+- 8.2 Annual compliance outputs (alphalist, 1604-CF) were never scoped — likely because 2316 (the per-employee half) shipped first and the annual batch forms were deferred.
 
 ## Technical Requirements
 
@@ -85,6 +119,12 @@
 | T.4 | Integration with government APIs (SSS, Pag-ibig, PhilHealth, BIR) | MISSING | No HTTP clients to gov endpoints; only local rate tables (`SSS_CONFIG`, `pagibigRates`) + file-based PDFs — reports ≠ API integration |
 | T.5 | Export formats: PDF, Excel, CSV | PRESENT | CSV `csv-export.ts:11` + server `migration.controller.ts:3741`; Excel xlsx/exceljs (`database-backup.helper.ts:574`, `specialPayroll.controller.ts:471-485`); PDF pdfkit `generate-document.helper.ts:2`; unified tri-format `report-export.ts:4` |
 | T.6 | Daily automated backups with cloud redundancy | PARTIAL | Manual app-DB script `run-database-backup.ts` → `database-backup.helper.ts:416` (pg_dump, retention `:665`); **cron container daily job is an empty placeholder** (`cron.service.ts:63-71`); Grafana-PG automated+validated locally only; **no offsite/cloud copy of HRIS DB dumps** (minio-backup GCS mirror `docker-compose.yml:179-206` covers images bucket only, `MINIO_BACKUP_ENABLED=false`) |
+
+**Why (gaps):**
+- T.2 2FA: a settings toggle stub exists (`useState(true)`, no backend); no totp/mfa library or routes in hris-api — checkbox UI shipped, feature never implemented.
+- T.3 Encryption: AES-256-GCM was built specifically for biometric custody; general field-level PII encryption was never added. Database-at-rest/TLS depends on infra config and was not verifiable from code alone.
+- T.4 Gov APIs: only local rate tables (SSS_CONFIG, pagibigRates) and PDF outputs exist — no HTTP client to any agency endpoint was ever written; "reports" satisfy the letter of outputs, not integration.
+- T.6 Backups: the app-DB backup is a manual script; the cron container's daily job is placeholder example code that was never wired; the only offsite mirror is disabled by default and covers the images bucket, not database dumps.
 
 ## Top gaps (recommended next-work order)
 
