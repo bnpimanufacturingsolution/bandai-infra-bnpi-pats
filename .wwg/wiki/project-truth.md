@@ -642,6 +642,14 @@ Do not claim production readiness for:
 
 ## Current Product Direction
 
+### Government API integrations are an external BNPI-owned dependency (2026-08-26)
+
+- Status: CONFIRMED (operator decision, 2026-08-26)
+- Direct system-to-system integrations with SSS / Pag-ibig / PhilHealth / BIR (spec item T.4) are **not included on the dev side** and cannot be built by agents alone: each agency requires the company (BNPI) to register for API access and issue credentials/keys.
+- Ownership: BNPI management owns obtaining the credentials. Dev-side work remains blocked until keys are provided.
+- Compliant interim route (built and live): file-based reports — PhilHealth RF-1 xlsx (`/api/reports/philhealth/rf1`), Annual BIR pack (`/api/reports/bir/annual-pack`), BIR 2316 PDF. SSS R-3 / Pag-ibig MF generators follow the same pattern when ordered.
+- Agents must not invent endpoints or placeholder credentials for these agencies.
+
 Current direction:
 
 - Direction: Current Working Branch, Main Documents, Normal CLI Flow, VHDX Autopilot, Target Architecture, Target Repo Shape, Image Format Targets, Ownership Rules, app/server

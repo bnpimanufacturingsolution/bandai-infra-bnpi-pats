@@ -29,11 +29,11 @@ Three kinds of blockers exist:
 - Missing: annual alphabetical list of employees with BIR documents; BIR Form 1604-CF generator (xlsx/pdf via existing `exceljs`/PDF helpers); UI button beside BIRReportTab.
 - Effort: medium (generator + report route + button + fixture test). Same shape as 2316 work.
 
-### A2. Item T.4 — Government API integrations (SSS / Pag-ibig / PhilHealth / BIR) — EXTERNAL
+### A2. Item T.4 — Government API integrations (SSS / Pag-ibig / PhilHealth / BIR) — EXTERNAL (BNPI-owned, per operator 2026-08-26)
 
-- Exists: local contribution rate tables only (`config/payroll.config.ts`).
+- Exists: local contribution rate tables only (`config/payroll.config.ts`); file-based reports live (RF-1, Annual BIR pack, BIR 2316).
 - Missing: HTTP clients/auth to government endpoints.
-- Blocker: BNPI must obtain API access/credentials for each agency. Until then, file-based reports (A1 + remittance forms below) are the compliant path. Do not invent endpoints or credentials.
+- Blocker: **recorded in Project Truth as an external BNPI-owned dependency** — each agency requires the company to register for API access and issue credentials/keys; this is not included on the dev side until BNPI provides keys. Agents must not invent endpoints or placeholder credentials.
 
 ---
 

@@ -1,6 +1,11 @@
 # Project Truth Summary
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
+
+## 2026-08-26 Gov API integrations are BNPI-owned (external)
+
+- Direct SSS / Pag-ibig / PhilHealth / BIR API integrations (T.4) are **not on the dev side**: agencies require BNPI to register and issue credentials. Dev work stays blocked until keys exist; agents must not invent endpoints or keys.
+- Compliant interim: file-based reports already live — PhilHealth RF-1 xlsx, Annual BIR pack, BIR 2316 PDF.
 
 ## 2026-08-25 Admin passcode gate (requirement only)
 
