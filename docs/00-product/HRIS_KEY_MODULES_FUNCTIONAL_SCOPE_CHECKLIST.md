@@ -130,38 +130,39 @@
 ## Completion rate
 
 **Scoring:** PRESENT = 1.0 · PARTIAL = 0.5 · MISSING = 0
+**Scope note (2026-08-25):** Module 6 (Training & Performance) is **excluded from this computation** — operator decision: it is a separate future module to be added later, not part of this HRIS build's scored scope. 33 items are scored.
 
 | Measure | Result |
 |---|---|
-| Fully present | **14/36 = 39%** |
-| Weighted score | (14 + 15×0.5) / 36 = 21.5/36 = **~60%** |
-| Missing outright | 7/36 = 19% |
+| Fully present | **17/33 = 52%** |
+| Weighted score | (17 + 12×0.5) / 33 = 23/33 = **~70%** |
+| Missing outright | 4/33 = 12% |
 
-### Per-module rates (updated 2026-08-24 after Stages 1–2)
+### Per-module rates (updated 2026-08-25 after Stages 4, 6–7, 9–10; M6 excluded)
 
 | Module | Weighted | Rate |
 |---|---|---|
 | M2 Attendance & Timekeeping | 4.5/5 | 90% |
-| M4 Employee Records & Lifecycle | 4.0/5 | 80% |
+| M1 Payroll & Compensation | 4.5/5 | 90% |
+| M4 Employee Records & Lifecycle | 4.5/5 | 90% |
 | M5 Manpower & Statutory Reports | 3.0/4 | 75% |
 | M7 Recruitment & Onboarding | 2.0/3 | 67% |
-| M1 Payroll & Compensation | 4.0/5 | 80% |
+| M3 Leave & Disciplinary Management | 2.0/3 | 67% |
 | Technical Requirements | 3.5/6 | 58% |
-| M3 Leave & Disciplinary Management | 1.5/3 | 50% |
 | M8 Accounting & Compliance | 0.5/2 | 25% |
-| M6 Training & Performance | 0.0/3 | 0% |
 
-**Honesty caveat:** PARTIAL = 0.5 is blunt; the true weighted range is roughly **50–62%**. Item 2.5 (orphaned tabs) is ~90% done while 6.3 (mock-only tabs) is ~10%. Weighted by build effort rather than item count, the overall rate drops slightly — the MISSING items (Training module, gov APIs, terminal pay/annual BIR forms) are large builds while many PARTIALs are small wiring jobs.
+> Excluded: M6 Training & Performance (0/3) — separate future module per operator decision 2026-08-25.
+
+**Honesty caveat:** PARTIAL = 0.5 is blunt; the true weighted range is roughly **60–72%** excluding M6. Item 2.5 (orphaned tabs) is ~90% done while 6.3-style mock-only surfaces score generously at 0.5 when half-built. Weighted by build effort rather than item count, the overall rate drops slightly — the remaining MISSING items (gov APIs, terminal pay/annual BIR forms) are large builds while many PARTIALs are small wiring jobs.
 
 ## Top gaps (recommended next-work order)
 
-1. **Training & Performance module** — entirely absent (model, API, UI)
-2. **Government API integrations** — absent; file-based reports only
-3. **2FA** — stub only
-4. **Terminal pay computation + BIR 1604-C / 1604-CF + annual alphalist** — compliance-critical, absent
-5. **Disciplinary action backend** — UI is a mock with zero API/model
-6. **Labor cost analysis + Agency/Direct OT split + Assembly Standing allowance** — payroll reporting gaps
-7. **Leave conversion backend + annual credit bulk upload** — UI exists, backend refuses
-8. **Quick win:** wire the two orphaned built tabs (`NoWorkReportTab`, `DailyManpowerTab`) into `/hr/reports/workforce`
-9. **Backup automation** — wire the empty cron placeholder + offsite copy of HRIS DB dumps
-10. **Last pay computation engine** — flag-only today
+1. **Government API integrations** — absent; file-based reports only
+2. **2FA** — stub only
+3. **Terminal pay computation + BIR 1604-C / 1604-CF + annual alphalist** — compliance-critical, absent
+4. **Annual leave credit upload UI + sample-file execute proof** (3.1 residual)
+5. **Pregnant employees list + no-work cross-link** (3.3 / stage 8)
+6. **Backup automation** — wire the empty cron placeholder + offsite copy of HRIS DB dumps
+7. **Last pay computation engine** — flag-only today
+
+> Deferred out of scored scope: Training & Performance module (M6) — separate future build per operator decision 2026-08-25.
