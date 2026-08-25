@@ -69,6 +69,20 @@ class ReportsService {
 		}
 	}
 
+	async downloadBirAnnualPack(year: number): Promise<Blob> {
+		try {
+			return await hrisApiClient.getBlob(
+				`/api/reports/bir/annual-pack?year=${encodeURIComponent(String(year))}`,
+			);
+		} catch (error: unknown) {
+			const apiError = error as { status?: number; message?: string };
+			if (apiError?.status === 400) {
+				throw new Error("year is a required query parameter.");
+			}
+			throw new Error(apiError?.message || "Failed to download the annual BIR pack.");
+		}
+	}
+
 	async downloadPhilhealthRf1(periodId: string): Promise<Blob> {
 		try {
 			return await hrisApiClient.getBlob(

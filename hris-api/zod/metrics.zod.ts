@@ -54,6 +54,7 @@ const EMPLOYEE_METRICS = z.enum([
 	"leaveBalanceMetrics",
 	"turnoverAttritionReport",
 	"tinLibrary", // Employee TIN compliance library
+	"pregnantEmployees", // M3.3 pregnant employees list (HR/admin-only)
 ]);
 
 // Define available metrics for PayrollPeriod model

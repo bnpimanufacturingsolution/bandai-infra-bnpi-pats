@@ -115,6 +115,7 @@ const employeeRoutes = [
 	route("notifications", "routes/employee/notifications.tsx"),
 	route("help", "routes/employee/help.tsx"),
 	route("requests", "routes/employee/requests.tsx"),
+	route("requests/salary-loan", "routes/employee/requests.salary-loan.tsx"),
 	route("leave-calendar", "routes/employee/leave-calendar.tsx"),
 	route("workflows", "routes/hr/workflows-2.tsx", { id: "employee-workflows" }),
 	...prefix("test", [route("page", "components/templates/hr-reviewer-template.tsx")]),

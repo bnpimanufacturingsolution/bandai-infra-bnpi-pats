@@ -91,6 +91,7 @@ const AVAILABLE_METRICS = {
 		"leaveBalanceMetrics",
 		"turnoverAttritionReport",
 		"tinLibrary",
+		"pregnantEmployees",
 	],
 	PayrollPeriod: [
 		"payrollPeriodByCode",
@@ -2519,6 +2520,40 @@ async function generateEmployeeMetric(
 					duplicateEmployees,
 				},
 				rows,
+			};
+		}
+		case "pregnantEmployees": {
+			const organizationId = String(
+				whereFilter.organizationId || req?.organizationId || "",
+			);
+			const employees = await prisma.employee.findMany({
+				where: { organizationId, isDeleted: false, pregnant: true },
+				select: {
+					id: true,
+					employeeId: true,
+					expectedDueDate: true,
+					person: { select: { personalInfo: true } },
+					department: { select: { name: true } },
+					position: { select: { title: true } },
+				},
+				orderBy: [{ expectedDueDate: "asc" }, { employeeId: "asc" }],
+			});
+			const rows = employees.map((employee) => ({
+				employeeId: employee.id,
+				empCode: employee.employeeId,
+				name: `${employee.person?.personalInfo?.lastName || ""}, ${
+					employee.person?.personalInfo?.firstName || ""
+				}`.replace(/^, |,$/, ""),
+				department: employee.department?.name || "No Department",
+				position: employee.position?.title || "",
+				expectedDueDate: employee.expectedDueDate
+					? new Date(employee.expectedDueDate).toISOString().slice(0, 10)
+					: null,
+			}));
+			return {
+				total: rows.length,
+				rows,
+				privacyNote: "HR/admin-only visibility per M3.3 requirement.",
 			};
 		}
 		default:

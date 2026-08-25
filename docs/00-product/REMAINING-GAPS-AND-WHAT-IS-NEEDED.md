@@ -1,12 +1,14 @@
 # Remaining Gaps — What Is Needed To Complete The Key Modules
 
 > Canonical companion to `HRIS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md` (statuses + evidence live there).
-> Written 2026-08-25 after spec-gap chain stages 0–2 and 4–10 landed on
-> `feature/spec-gap-remediation` (local commits `bd909245`, `a811dba0`, `3dd6bab4`, `8e854abf`,
-> `4f27b68e`, `a827dff3`; NO PUSH yet per chain rule 1).
+> **2026-08-26 chain-completion update:** salary loan application flow, leave tardiness/UT columns,
+> pregnant employees list (flag + tab), age brackets, Annual BIR pack, PhilHealth RF-1 and the
+> 201 File tab are now built and live-proven. Scored completion is **~74%** (18 PRESENT /
+> 13 PARTIAL / 2 MISSING of 33; M6 excluded).
 >
-> **Current scored completion: ~71%** — 16 PRESENT / 15 PARTIAL / 2 MISSING across 33 scored items.
-> M6 Training & Performance is excluded from scoring (separate future module, operator decision 2026-08-25).
+> Local commits on `feature/spec-gap-remediation` (`bd909245` … chain-completion commit); NO PUSH yet.
+>
+> **Current scored completion: ~74%** — see the checklist rate table for per-module numbers.
 
 ## How to read this document
 

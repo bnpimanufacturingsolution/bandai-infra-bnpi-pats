@@ -5,6 +5,7 @@ import { AuthRequest } from "../../middleware/verifyToken";
 import { generateBir2316PdfForEmployee } from "../../helper/bir-2316-report.helper";
 import { getManpowerDistributionWorkbookReference } from "../../helper/manpower-distribution-reference.helper";
 import { generatePhilhealthRf1Workbook } from "../../helper/philhealth-rf1.generator";
+import { generateBirAnnualPackWorkbook } from "../../helper/bir-annual-pack.generator";
 
 const isInvalidYear = (year: number) => Number.isNaN(year) || year < 1900 || year > 3000;
 
@@ -128,9 +129,42 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const downloadBirAnnualPack = async (req: Request, res: Response, _next: NextFunction) => {
+		const authReq = req as AuthRequest;
+		try {
+			const yearRaw = String(req.query.year || "").trim();
+			const year = Number(yearRaw);
+			if (!yearRaw || isInvalidYear(year)) {
+				res.status(400).json(buildErrorResponse("year is a required query parameter", 400));
+				return;
+			}
+
+			if (!authReq.organizationId) {
+				res.status(401).json(buildErrorResponse("Unauthorized access", 401));
+				return;
+			}
+
+			const { buffer, filename } = await generateBirAnnualPackWorkbook(prisma, {
+				organizationId: authReq.organizationId,
+				year,
+			});
+
+			res.setHeader(
+				"Content-Type",
+				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+			);
+			res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+			res.status(200).send(buffer);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : "Internal Server Error";
+			res.status(500).json(buildErrorResponse(message, 500));
+		}
+	};
+
 	return {
 		downloadBir2316,
 		getManpowerDistributionReference,
 		downloadPhilhealthRf1,
+		downloadBirAnnualPack,
 	};
 };

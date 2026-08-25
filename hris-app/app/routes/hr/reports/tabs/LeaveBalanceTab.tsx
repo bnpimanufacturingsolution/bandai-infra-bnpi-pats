@@ -156,6 +156,10 @@ export function LeaveBalanceTab() {
 					carriedOver: balance.carriedOver,
 					periodStart: balance.periodStart,
 					periodEnd: balance.periodEnd,
+					lateInstances: (employee as any).tardiness?.lateInstances ?? 0,
+					lateMinutes: (employee as any).tardiness?.lateMinutes ?? 0,
+					undertimeInstances: (employee as any).tardiness?.undertimeInstances ?? 0,
+					undertimeMinutes: (employee as any).tardiness?.undertimeMinutes ?? 0,
 				})),
 			),
 		[metrics?.employees],
@@ -268,6 +272,9 @@ export function LeaveBalanceTab() {
 			{ header: "Pending", accessor: "pending" as const, align: "right" as const },
 			{ header: "Available", accessor: "available" as const, align: "right" as const },
 			{ header: "Carry Over", accessor: "carriedOver" as const, align: "right" as const },
+			{ header: "Late (min)", accessor: "lateMinutes" as const, align: "right" as const },
+			{ header: "Late Days", accessor: "lateInstances" as const, align: "right" as const },
+			{ header: "UT (min)", accessor: "undertimeMinutes" as const, align: "right" as const },
 		],
 		filtersSummary: [
 			{
@@ -610,6 +617,15 @@ export function LeaveBalanceTab() {
 											<th className="px-6 py-3 text-left font-medium">
 												Available
 											</th>
+											<th className="px-6 py-3 text-right font-medium">
+												Late (min)
+											</th>
+											<th className="px-6 py-3 text-right font-medium">
+												Late Days
+											</th>
+											<th className="px-6 py-3 text-right font-medium">
+												UT (min)
+											</th>
 											<th className="px-6 py-3 text-left font-medium">
 												Period
 											</th>
@@ -644,6 +660,15 @@ export function LeaveBalanceTab() {
 													<td className="px-6 py-3">
 														{row.available.toFixed(2)}
 													</td>
+													<td className="px-6 py-3 text-right">
+														{row.lateMinutes}
+													</td>
+													<td className="px-6 py-3 text-right">
+														{row.lateInstances}
+													</td>
+													<td className="px-6 py-3 text-right">
+														{row.undertimeMinutes}
+													</td>
 													<td className="px-6 py-3">
 														{formatPeriod(
 															row.periodStart,
@@ -655,7 +680,7 @@ export function LeaveBalanceTab() {
 										) : (
 											<tr>
 												<td
-													colSpan={8}
+													colSpan={11}
 													className="px-6 py-8 text-center text-gray-500">
 													No leave balance records found for this filter
 												</td>

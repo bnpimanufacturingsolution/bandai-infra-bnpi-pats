@@ -383,6 +383,29 @@ export default function BIRReportTab() {
 	};
 
 	const handleDownload = async () => {
+		if (selectedDocument === "bir-annual-pack") {
+			setIsDownloading(true);
+			try {
+				const blob = await reportsService.downloadBirAnnualPack(
+					parseInt(selectedYear, 10),
+				);
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = `BIR-Annual-Pack-${selectedYear}.xlsx`;
+				a.click();
+				URL.revokeObjectURL(url);
+			} catch (error) {
+				console.error("Error downloading annual BIR pack:", error);
+				const message =
+					error instanceof Error ? error.message : "Failed to download the annual BIR pack.";
+				toast.error(message);
+			} finally {
+				setIsDownloading(false);
+			}
+			return;
+		}
+
 		if (selectedDocument === "philhealth-rf1") {
 			if (!selectedPeriodId) {
 				toast.error("Please select a payroll period.");
@@ -504,11 +527,14 @@ export default function BIRReportTab() {
 									<SelectItem value="philhealth-rf1">
 										PHILHEALTH RF-1 (XLSX)
 									</SelectItem>
+									<SelectItem value="bir-annual-pack">
+										BIR ANNUAL PACK — ALPHALIST + 1604-CF (XLSX)
+									</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
 
-						{selectedDocument === "philhealth-rf1" && (
+						{(selectedDocument === "philhealth-rf1") && (
 							<div className="flex-1 space-y-2">
 								<label className="text-sm font-medium text-foreground">
 									Payroll Period
@@ -942,7 +968,8 @@ export default function BIRReportTab() {
 								isDownloading
 							}
 							onClick={
-								selectedDocument === "philhealth-rf1"
+								selectedDocument === "philhealth-rf1" ||
+								selectedDocument === "bir-annual-pack"
 									? handleDownload
 									: openExportModal
 							}>
@@ -951,7 +978,9 @@ export default function BIRReportTab() {
 								? "Generating..."
 								: selectedDocument === "philhealth-rf1"
 									? "Download RF-1"
-									: "Export"}
+									: selectedDocument === "bir-annual-pack"
+										? "Download Pack"
+										: "Export"}
 						</Button>
 					</div>
 				</div>

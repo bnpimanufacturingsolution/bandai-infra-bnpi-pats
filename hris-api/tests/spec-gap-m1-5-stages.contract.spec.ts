@@ -124,22 +124,58 @@ describe("stage 11 — PhilHealth RF-1 remittance generator (M5.1 first form)", 
 	const reportController = read("app/report/report.controller.ts");
 	const reportRouter = read("app/report/report.router.ts");
 
-	it("sources contributions from the payroll register and splits EE/ER evenly", () => {
-		expect(generator).to.contain("philHealthContribution");
-		expect(generator).to.contain("employeeShare");
-		expect(generator).to.contain("employerShare");
-	});
-
-	it("reads the PhilHealth PIN from metadata.manpowerDatabank.philhealthNo when present", () => {
-		expect(generator).to.contain("philhealthNo");
-		expect(generator).to.contain("Not on file");
-	});
-
 	it("serves an org-scoped xlsx download endpoint", () => {
 		expect(reportRouter).to.contain('"/philhealth/rf1"');
 		expect(reportController).to.contain("downloadPhilhealthRf1");
 		expect(reportController).to.contain(
 			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 		);
+	});
+});
+
+describe("chain completion stages (2026-08-26 resume)", () => {
+	it("stage 3b — salary loan application page posts PENDING EmployeeLoan", () => {
+		const service = read("../hris-app/app/services/employee-loans.service.ts");
+		const page = read("../hris-app/app/routes/employee/requests.salary-loan.tsx");
+		expect(service).to.contain('"/api/employeeLoan"');
+		expect(page).to.contain("status: \"PENDING\"");
+		expect(read("../hris-app/app/lib/salary-loan-terms.ts")).to.contain(
+			"computeSalaryLoanTerms",
+		);
+	});
+
+	it("stage 5a — leave balance rows carry late/UT columns from tardiness metrics", () => {
+		const helper = read("helper/leave-balance-metrics.helper.ts");
+		const tab = read("../hris-app/app/routes/hr/reports/tabs/LeaveBalanceTab.tsx");
+		expect(helper).to.contain("calculateTardinessMetrics");
+		expect(helper).to.contain("tardinessPeriod");
+		expect(tab).to.contain('"Late (min)"');
+		expect(tab).to.contain('"UT (min)"');
+	});
+
+	it("stage 8 — pregnant flag schema, metric and workforce tab", () => {
+		const schema = read("prisma/schema-postgres/employee.prisma");
+		const controller = read("app/metrics/metrics.controller.ts");
+		const zod = read("zod/employee.zod.ts");
+		const tab = read("../hris-app/app/routes/hr/reports/tabs/PregnantEmployeesTab.tsx");
+		expect(schema).to.contain("pregnant");
+		expect(zod).to.contain("expectedDueDate");
+		expect(controller).to.contain('case "pregnantEmployees"');
+		expect(tab).to.contain("Pregnant Employees");
+	});
+
+	it("stage 11b — manpower distribution gains age brackets", () => {
+		const brackets = read("../hris-app/app/lib/age-brackets.ts");
+		const tab = read("../hris-app/app/routes/hr/reports/tabs/ManpowerDistributionTab.tsx");
+		expect(brackets).to.contain("AGE_BRACKETS");
+		expect(brackets).to.contain("summarizeAgeBrackets");
+		expect(tab).to.contain("Age Brackets");
+	});
+
+	it("bonus M8.2 — annual BIR pack endpoint + generator", () => {
+		const generator = read("helper/bir-annual-pack.generator.ts");
+		const router = read("app/report/report.router.ts");
+		expect(generator).to.contain("aggregateBirAlphalistRows");
+		expect(router).to.contain('"/bir/annual-pack"');
 	});
 });

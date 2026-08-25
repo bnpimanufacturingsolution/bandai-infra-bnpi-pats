@@ -1,5 +1,23 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-26 Chain completion pass: stages 3b/5a/8/11b + Annual BIR pack (local commits)
+
+- Operator: keep going until all chain todos complete. Built and live-proven:
+- **Stage 3b** salary loan application: `/employee/requests/salary-loan` page + `employee-loans.service.ts` + `salary-loan-terms.ts`; POST `/api/employeeLoan` PENDING live-proven (`cmt8tz1d4001hvx7gzskt71z9` for Zen).
+- **Stage 5a** leave tardiness/UT columns: `leaveBalanceMetrics` joins `calculateTardinessMetrics` (period or current-year default); LeaveBalanceTab gains Late(min)/Late Days/UT(min) incl. exports. Live: real minutes across 2229 employees.
+- **Stage 8** pregnant list: `Employee.pregnant`+`expectedDueDate` (additive SQL applied on DEV via dotenv script), zod update path, `pregnantEmployees` metric (controller allow-list + zod), **Pregnant Employees tab** in Workforce reports. Live loop: 0 → set → row 00010 due 2026-12-15 → revert → 0.
+- **Stage 11b** age brackets: `lib/age-brackets.ts` + Age Brackets section on Manpower Distribution.
+- **Bonus M8.2**: Annual BIR pack `GET /api/reports/bir/annual-pack?year=` (alphalist + 1604-CF sheets) + BIRReportTab option; 2026 smoke 10.6KB xlsx both sheets.
+- Tests: API focused 41 passing; app vitest 11 passing. Checklist rows 1.2/2.4/3.3/5.3 updated; rate now ~74% (18P/13Pa/2M).
+- Ops notes: prisma client regen required stopping the dev server (engine DLL lock); metrics has a second allow-list in the controller (not just zod) — both must be extended for new metrics.
+
+## Latest Task Addendum - 2026-08-25 Admin passcode requirement documented (docs-only)
+
+- Operator requirement: **all disruptive/destructive admin actions must ask the acting admin for their personal passcode** as a 2FA substitute before executing; each admin has their own unique passcode; server-side enforcement, not UI-only.
+- Task mode: docs-only. Nothing implemented — no schema, route, or UI changes this pass.
+- Canonical: `docs/00-product/REQUIREMENT-ADMIN-PASSCODE-FOR-DISRUPTIVE-ACTIONS.md` (scope classes, UX contract, security requirements, open questions `NEEDS_CONFIRMATION`, implementation status table all NOT STARTED).
+- When unsure whether an action is disruptive, treat it as disruptive (default-on) until classification is enumerated.
+
 ## Latest Task Addendum - 2026-08-25 Gates answered: PhilHealth RF-1 + 201 filing built (stage 11 first form + stage 10b)
 
 - Operator answered two gates: **remittance first = PhilHealth RF-1 xlsx**; **201 filing = per-employee document checklist**. Assembly Standing (gate 1) and manhour reference (gate 2) still open.

@@ -1,5 +1,31 @@
 # WWG Agent Handoff
 
+## 2026-08-26 - Chain completion pass (stages 3b/5a/8/11b + Annual BIR pack)
+
+| Field | Value |
+|---|---|
+| Stage 3b | Salary loan application `/employee/requests/salary-loan`; PENDING EmployeeLoan via existing `/api/employeeLoan`. Live: `cmt8tz1d4001hvx7gzskt71z9` |
+| Stage 5a | `leaveBalanceMetrics` + tardiness join → Late(min)/Late Days/UT(min) columns on Leave Balance tab; live minutes on 2229 employees |
+| Stage 8 | `Employee.pregnant` + `expectedDueDate` (additive SQL on DEV), `pregnantEmployees` metric, Pregnant Employees workforce tab. Live loop 0→1→0 with zero residue |
+| Stage 11b | Age Brackets section on Manpower Distribution (`lib/age-brackets.ts`, birthdate computed at query time) |
+| Bonus M8.2 | Annual BIR pack endpoint + Alphalist/1604-CF sheets; 2026 smoke xlsx verified |
+| Tests | API focused 41 passing; app vitest 11 passing |
+| Rate | Checklist now ~74% (18P/13Pa/2M, M6 excluded); M3 → 83%, M4 → 100% |
+| Still gated | Assembly Standing allowance name/code; manhour reference definition. External: gov API creds. Out of chain scope: T.2 2FA, T.6 backup cron, terminal pay engine (M8.1) — buildable next if ordered |
+| Boundary | Local commits only, NO PUSH |
+
+## 2026-08-25 - Admin passcode requirement documented (docs-only)
+
+| Field | Value |
+|---|---|
+| Ask | All disruptive/destructive admin actions ask for the acting admin's personal passcode as 2FA substitute; each admin has their own passcode; document it now |
+| Mode | Docs-only. No code/schema/UI changed |
+| Canonical | `docs/00-product/REQUIREMENT-ADMIN-PASSCODE-FOR-DISRUPTIVE-ACTIONS.md` |
+| Enforcement truth | Server-side verification against authenticated actor required; UI prompt alone is not enforcement |
+| Default-on rule | When unsure an action is disruptive, treat it as disruptive until endpoint classification is enumerated |
+| Open questions | Endpoint inventory, format rules, HR-manager scope day one, per-action vs cached window, reset path |
+| Status table | Everything except "Requirement documented" is NOT STARTED |
+
 ## 2026-08-25 - PhilHealth RF-1 + 201 filing built (stage 11 first form + stage 10b)
 
 | Field | Value |

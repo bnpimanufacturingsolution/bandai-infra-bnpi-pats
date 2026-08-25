@@ -11,7 +11,7 @@
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
 | 1.1 | Payroll processing, payslip generation, last pay computation | PARTIAL | Processing: `hris-app/app/routes/hr/run-payroll.tsx` + `run-payroll-template.tsx`; API `hris-api/app/payrollperiod/payrollperiod.router.ts:388,436-510`. Payslips: `employeepayroll.router.ts:504,602` + `helper/payslip-pdf.helper.ts`. **Last pay computation MISSING** — only `finalPayCalculated` flag (`termination.controller.ts:1179`), no engine |
-| 1.2 | BNPI salary loan application, allowance tracking (Line Leader, OB, Assembly Standing) | PARTIAL | `bnpiSalaryLoan` field `employeepayroll.prisma:109`; loan CRUD `employeeLoan.router.ts:311`; LLA `employeepayroll.prisma:124` + `benefitTypeSeeder.ts:43`; OB `:71`. **"Assembly Standing" zero repo hits**; no loan-application UI (only `admin/configuration/loan-types.tsx`) |
+| 1.2 | BNPI salary loan application, allowance tracking (Line Leader, OB, Assembly Standing) | PARTIAL | **2026-08-26: employee salary-loan application flow built** — `/employee/requests/salary-loan` (`requests.salary-loan.tsx` + `employee-loans.service.ts`) posting PENDING `EmployeeLoan` via existing `/api/employeeLoan`; live-proven `cmt8tz1d4001hvx7gzskt71z9`. LLA/OB tracking ✅. **Sole residual: "Assembly Standing" allowance — OPERATOR GATE open** (no name/code anywhere; suggested `ASA`) |
 | 1.3 | Mass uploading of compensation and deductions | PRESENT | `app/migration/bnpi-mass-upload-import.service.ts` + helper (LLA/OBA/UFD codes); DM3 UI |
 | 1.4 | Uniform deduction, loan reports, payroll summary, labor cost analysis | PARTIAL (labor cost CLOSED 2026-08-25) | Uniform + payroll summary ✅; loan report still partial; **labor cost analysis now PRESENT**: `labor-cost-analysis.helper.ts` + `metrics.controller.ts case "laborCostAnalysis"` + Workforce tab `labor-cost` (chips + per-dept table + exports). Live: Jun20–Jul20 → 2 periods, 35 emp, gross ₱668,470.64, 8 dept rows. Evidence `.runtime/spec-gap-m1-5/stage-4-labor-cost/` |
 | 1.5 | Overtime summary (Agency & Direct) | PRESENT (2026-08-24) | `OvertimeTab.tsx` Labor Type filter (All/Direct/Agency) + Direct/Agency OT chips; `overtime-metrics.helper.ts` `split` computed over unfiltered set, optional `workforceSource` filter (DIRECT = not-AGENCY incl. missing). Live smoke: Jun 26–Jul 10 → all 99,075.36h/830 emp; AGENCY filter 0/0. Evidence `.runtime/spec-gap-m1-5/stage-2-ot-split/` |
@@ -29,7 +29,7 @@
 | 2.1 | Daily attendance summary, cut-off encoding | PRESENT | `/hr/attendance` (`attendance-management-template.tsx:1197-1264,1425-1450`); cut-off via `/hr/timesheets` (`timesheets.tsx:244-286`, Lock Period `:1720`) |
 | 2.2 | Monthly/annual perfect attendance reports | PRESENT | `PerfectAttendanceTab.tsx` at `/hr/reports/attendance?tab=perfect`; `metrics.controller.ts:1577` + `perfect-attendance-metrics.helper.ts` |
 | 2.3 | Tardiness/UT/OT details, direct vs indirect labor | PRESENT | `TardinessUndetimeTab.tsx`, `OvertimeTab.tsx`, `/hr/reports/workforce?tab=direct-indirect`; APIs `:1628,:1668,:1821` |
-| 2.4 | Leave tardiness/UT monitoring, leave balance, manhour reference | PARTIAL | `LeaveBalanceTab.tsx` + `leaveBalanceMetrics` (`:2430`) ✅; **leave-tardiness columns MISSING**; **manhour reference MISSING** (only audit-sheet label hit) |
+| 2.4 | Leave tardiness/UT monitoring, leave balance, manhour reference | PARTIAL | **2026-08-26: leave tardiness/UT columns closed** — `leaveBalanceMetrics` now joins `calculateTardinessMetrics` per employee (Late min/days + UT min columns on `LeaveBalanceTab`, exportable); live: real minutes on 2229-row roster (e.g. `003` late 953min/6d). Leave balance ✅. **Sole residual: "manhour reference" — OPERATOR GATE open** |
 | 2.5 | No work report, daily active manpower, agency attendance | PRESENT (2026-08-24) | Agency `AgencyAttendanceTab.tsx`; **`NoWorkReportTab` + `DailyManpowerTab` now wired** into `/hr/reports/workforce` (tabs `no-work`, `daily-manpower`; hooks `useNoWorkReport` `useMetrics.ts:778`, `useDailyActiveManpower`). Pin: `workforce-tabs.contract.test.ts` |
 
 **Why (gaps):**
@@ -42,7 +42,7 @@
 |---|---|---|---|
 | 3.1 | Leave conversion, annual leave credit uploads | PARTIAL | **Stage 6 closed the conversion half:** `LEAVE_CONVERSION` in `PAN_REQUEST_TYPES` (`request.controller.ts:180`) + workflow COMPLETED effect shrinks credits (`pan-post-actions.helper.ts` LEAVE_CONVERSION case); live-proven Zen PERSONAL 10→9 entitled / 9→8 available (`.runtime/spec-gap-m1-5/resume-20260825-173211/`). Annual credit bulk upload: API `POST /api/request/leave-credits/bulk-upload` exists (dry-run default) but has **no UI surface** and no small-sample execute proof yet |
 | 3.2 | Disciplinary action monitoring, late attendance tracking | PRESENT | **Stage 7:** real `DisciplinaryAction` model + `app/disciplinaryAction/` CRUD module + zod; admin page wired to live service (`disciplinaryAction.service.ts`); soft-delete retention; create/list live-proven (`cmt8hgo8t0000vxa4yaggpm0u`, name snapshot "Zen Andrei"). Residual: read-only recent-tardiness display on the action form not added yet. Late tracking ✅ via `tardiness-metrics.helper.ts:41` |
-| 3.3 | Lists of pregnant and no-work employees | PARTIAL | No-work: `workforce-metrics.helper.ts:4` + `metrics.service.ts:2068` ✅; pregnant: import column only (`bnpi-manpower-databank-import.helper.ts:74`), no list UI/model |
+| 3.3 | Lists of pregnant and no-work employees | PRESENT | **2026-08-26 stage 8 closed the pregnant half:** `Employee.pregnant` + `expectedDueDate` (additive migration applied on DEV), zod update path, `pregnantEmployees` metric, **Pregnant Employees tab** on Workforce reports (`tab=pregnant-employees`, HR/admin-only). Live loop proven: set → metric row 00010 w/ due date → revert → 0. No-work: `workforce-metrics.helper.ts` ✅ |
 
 **Why (gaps):**
 - 3.1 Leave conversion (2026-08-25 update): the PAN type + approval effect are now real and live-proven; two root causes were fixed — the `RequestType` enum ALTER and a missing `LEAVE_CONVERSION` entry in the workflow-completion `panTypes` set (`request-runtime.helper.ts`). Remaining gap is the annual credit upload UI + sample-file execute proof.
@@ -69,7 +69,7 @@
 |---|---|---|---|
 | 5.1 | Mandatory reports (SSS, Pag-ibig, PhilHealth) | PARTIAL | **2026-08-25: PhilHealth RF-1 built first (operator choice):** `GET /api/reports/philhealth/rf1?periodId=` xlsx via `helper/philhealth-rf1.generator.ts` (EE/ER split from register premium; PIN from `metadata.manpowerDatabank.philhealthNo`, "Not on file" when absent); UI = BIRReportTab → PHILHEALTH RF-1. Live-proven Jul P1 (10 employees). Contribution tables `config/payroll.config.ts:27-90`. **Remaining: SSS R-3 + Pag-ibig MF generators** |
 | 5.2 | Statutory report generator | PARTIAL | BIR 2316 only: `helper/bir-2316.generator.ts` + `report.router.ts:44` + `BIRReportTab.tsx`. No SSS/HDMF/PHIC statutory pages |
-| 5.3 | Monthly manpower report (gender, age, headcount, averages) | PRESENT | `ManpowerDistributionTab.tsx` (gender `:32-41,601-653`; headcount `:197-320`; averages `:382-388` + `manpower-distribution-reference.helper.ts:137-193`; exports `:404-489`). Age brackets exist only in unmounted mock `EmployeeSummaryTab.tsx:22-55` |
+| 5.3 | Monthly manpower report (gender, age, headcount, averages) | PRESENT | `ManpowerDistributionTab.tsx` (gender/headcount/averages/exports) + **2026-08-26: live Age Brackets section** (`lib/age-brackets.ts`, computed from person birthdate at query time; unmounted mock `EmployeeSummaryTab` superseded) |
 | 5.4 | BNPI and agency manpower databanks, turnover rate analysis | PRESENT | Databank import `bnpi-manpower-databank-import.service.ts` + wizard `migration.tsx:9782`; split views `ManpowerDatabankSection.tsx` + `ManpowerDistributionTab.tsx:43-51,656-713`; turnover live `turnover-attrition.tsx:127-233` ↔ `metrics.controller.ts:1889-1925` |
 
 **Why (gaps):**
@@ -136,11 +136,11 @@
 
 | Measure | Result |
 |---|---|
-| Fully present | **17/33 = 52%** |
-| Weighted score | (17 + 14×0.5) / 33 = 24/33 = **~73%** |
+| Fully present | **18/33 = 55%** |
+| Weighted score | (18 + 13×0.5) / 33 = 24.5/33 = **~74%** |
 | Missing outright | 2/33 = 6% |
 
-### Per-module rates (updated 2026-08-25 after RF-1 + 201 filing; M6 excluded)
+### Per-module rates (updated 2026-08-26 after chain completion pass; M6 excluded)
 
 | Module | Weighted | Rate |
 |---|---|---|
@@ -149,11 +149,12 @@
 | M5 Manpower & Statutory Reports | 3.0/4 | 75% |
 | M1 Payroll & Compensation | 3.5/5 | 70% |
 | M7 Recruitment & Onboarding | 2.0/3 | 67% |
-| M3 Leave & Disciplinary Management | 2.0/3 | 67% |
+| M3 Leave & Disciplinary Management | 2.5/3 | 83% |
 | Technical Requirements | 3.5/6 | 58% |
 | M8 Accounting & Compliance | 0.5/2 | 25% |
 
 > Excluded: M6 Training & Performance (0/3) — separate future module per operator decision 2026-08-25.
+> Outside this checklist's modules-1–5 chain but also closed 2026-08-25/26: Annual BIR pack (alphalist + 1604-CF, item 8.2 half), PhilHealth RF-1 (5.1 first form), 201 File tab (4.5).
 
 **Honesty caveat:** PARTIAL = 0.5 is blunt; the true weighted range is roughly **60–72%** excluding M6. Item 2.5 (orphaned tabs) is ~90% done while 6.3-style mock-only surfaces score generously at 0.5 when half-built. Weighted by build effort rather than item count, the overall rate drops slightly — the remaining MISSING items (gov APIs, terminal pay/annual BIR forms) are large builds while many PARTIALs are small wiring jobs.
 

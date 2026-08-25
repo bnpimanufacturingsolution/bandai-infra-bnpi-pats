@@ -1,5 +1,14 @@
 # Project Truth
 
+## Admin passcode gate for disruptive actions (2026-08-25)
+
+- Status: `CONFIRMED_OPERATOR_REQUIREMENT` — **documented only, NOT implemented**.
+- Requirement: every disruptive/destructive admin task or action that needs validation asks the acting admin for their **personal per-admin passcode** as a substitute for 2FA before the action executes.
+- One passcode belongs to exactly one admin (`User`) and only authorizes that acting admin's own action. Verified server-side against the authenticated actor; wrong/missing passcode never starts the mutation even on direct API calls.
+- Disruptive classes: irreversible data mutation (deletes/resets), fleet/multi-record physical device writes, money-outcome changes (payroll generate/regenerate, lock/close), security/configuration posture changes. Reads/previews/dry-runs (`execute=false`) stay exempt; the passcode gates preview → execute.
+- Default when unsure: treat the action as disruptive until endpoint classification is enumerated.
+- Canonical: `docs/00-product/REQUIREMENT-ADMIN-PASSCODE-FOR-DISRUPTIVE-ACTIONS.md`.
+
 ## Recruitment identity history (first name + last name + birthday) (2026-08-22)
 
 - Status: `CONFIRMED_CODE`.

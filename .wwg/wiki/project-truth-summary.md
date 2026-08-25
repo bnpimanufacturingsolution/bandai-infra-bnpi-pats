@@ -1,6 +1,11 @@
 # Project Truth Summary
 
-Last updated: 2026-08-22
+Last updated: 2026-08-25
+
+## 2026-08-25 Admin passcode gate (requirement only)
+
+- All disruptive/destructive admin actions must ask the acting admin for their **personal passcode** (2FA substitute) before executing. One passcode per admin; server-side verified against the authenticated actor.
+- Documented only — nothing implemented. Scope classes + open questions: `docs/00-product/REQUIREMENT-ADMIN-PASSCODE-FOR-DISRUPTIVE-ACTIONS.md`. Unsure = treat as disruptive.
 
 ## 2026-08-22 Recruitment identity history
 
