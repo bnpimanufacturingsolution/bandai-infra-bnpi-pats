@@ -134,18 +134,18 @@
 
 | Measure | Result |
 |---|---|
-| Fully present | **17/33 = 52%** |
-| Weighted score | (17 + 12×0.5) / 33 = 23/33 = **~70%** |
-| Missing outright | 4/33 = 12% |
+| Fully present | **16/33 = 48%** |
+| Weighted score | (16 + 15×0.5) / 33 = 23.5/33 = **~71%** |
+| Missing outright | 2/33 = 6% |
 
 ### Per-module rates (updated 2026-08-25 after Stages 4, 6–7, 9–10; M6 excluded)
 
 | Module | Weighted | Rate |
 |---|---|---|
 | M2 Attendance & Timekeeping | 4.5/5 | 90% |
-| M1 Payroll & Compensation | 4.5/5 | 90% |
 | M4 Employee Records & Lifecycle | 4.5/5 | 90% |
 | M5 Manpower & Statutory Reports | 3.0/4 | 75% |
+| M1 Payroll & Compensation | 3.5/5 | 70% |
 | M7 Recruitment & Onboarding | 2.0/3 | 67% |
 | M3 Leave & Disciplinary Management | 2.0/3 | 67% |
 | Technical Requirements | 3.5/6 | 58% |
