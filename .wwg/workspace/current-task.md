@@ -1,3 +1,10 @@
+## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain — absent wall = client file contradiction
+
+- **Absent-173 root cause PROVEN as client data contradiction**: 00573's own WorkSharing row flags 7/11, 7/18, 7/25 (Sats) = 0/OFF with shift 07:15-15:15; app correctly built 10 PRESENT + 5 REST (zero ABSENT lines); client Sheet2 still charges 1 absent day × monthly×12/313 (=611.5 exact). Their WS file and their Sheet2 disagree — app followed the operational file.
+- **Post-PH-fix deductions decomposed**: contributions now near-match (SSS ₱4.0k, PH ₱7.1k, PagIBIG ₱5.8k — engine bracket/rounding class); WTax app over ₱13.6k (cascade of absent/loan bases); **loans ₱41.4k = client data** (Payment amounts differ 00374 510 vs 645.69; paid-off loans still active 01202 s2=0 vs app 695.36; TALLIED people show s2=0 loans with dedn matching → client internal regrouping).
+- **Classification: zero remaining engine faults.** All open gaps = client data contradictions (absent ₱263k), client loan data (₱41.4k), client manual leave adjustments (5 rows/₱3.6k), statutory bracket config (₱16.9k), rounding (2 UNMATCH, days ₱235, OT ₱1).
+- Final: TALLIED 67, UNMATCH 2, OT_OK_NEAR_50 187, ALEXA 12 (828 compared). Evidence: `.runtime/tally-jul1125-after-repairs-2026082517362/` + GAP-ELABORATION files.
+
 ## Latest Task Addendum - 2026-08-25 PhilHealth schedule fix — TALLIED 10 → 67 + reset runbook
 
 - **PH schedule proven & implemented**: Sheet2 PH = monthly × 2.5% per cutoff (277/277 exact, no cap ≤85k); daily-rated ₱600 cohort = flat ₱390/cutoff (573/573). New `resolveBandaiPhilHealthCutoffContribution` overrides the gross-based PH in generate+preview (`bandai-philhealth-schedule.spec.ts`). Deductions gap −188k → −98,790.

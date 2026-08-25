@@ -1,3 +1,12 @@
+## 2026-08-25 - Final tally classification: zero engine faults remain
+
+| Field | Value |
+|---|---|
+| Proof | 00573 WS row flags Sats 7/11,18,25 = 0/OFF; app built 10 PRESENT + 5 REST; client Sheet2 still charges 1 absent × monthly×12/313 (611.5 exact) → **client WS file vs client Sheet2 contradiction** |
+| Post-PH deductions | contributions near-match (SSS 4.0k / PH 7.1k / PagIBIG 5.8k — bracket config class); WTax +13.6k cascade; **loans ₱41.4k = client data** (amounts, paid-off still active, TALLIED people with s2=0 loans but dedn matching = client regrouping) |
+| Classification | **No engine faults open.** Absent ₱263k = client contradiction (needs client ruling: WS vs Sheet2 authority); leave 5 rows = client manual; UNMATCH 2 = rounding + 01711 Path B ₱75 basicSalary drift (data) |
+| State | TALLIED 67 / 828, UNMATCH 2, OT_OK_NEAR_50 187 — `.runtime/tally-jul1125-after-repairs-2026082517362/` |
+
 ## 2026-08-25 - Remaining-gap investigation: stale leave import fixed (net gap → +₱15.8k), walls decomposed
 
 | Field | Value |
