@@ -125,6 +125,11 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | raw transport/source path | Runtime path | source, runtime source | HIGH | 2026-07-09 device-event hard cutover |
 | HRIS processing result | HRIS result | status, processing status | HIGH | 2026-07-09 device-event hard cutover |
 | admin destructive employee delete dry-run | Employee hard delete preview | preview hard delete, hard-delete dry-run | HIGH | 2026-07-09 admin employee delete safety implementation |
+| one hour of work by one person | Man-hour / manhours | manhour, person-hour, labor hour | HIGH | Operator definition 2026-08-26; `manhoursReport` metric + Manhours tab (`helper/manhours-metrics.helper.ts`) |
+| assembly duty allowance | Assembly Standing Allowance (ASA) | Assembly Standing, ASA | HIGH | Operator approval 2026-08-26; benefit type + `assemblyStanding` register field, taxable like LLA |
+| per-employee BIR document compliance view | 201 File | 201 filing, employee 201 checklist | HIGH | Operator confirmation 2026-08-26; `Filing201Tab` on employee profile |
+| annual payee list + remittance summary workbook | Annual BIR pack | BIR alphalist, 1604-CF pack | HIGH | 2026-08-26 implementation; `GET /api/reports/bir/annual-pack` |
+| final separation money computation | Terminal pay | last pay, separation pay computation | HIGH | 2026-08-26 engine; `POST /api/reports/terminal-pay/preview` (preview-only; policy items NEEDS_CONFIRMATION) |
 
 ## Terminology Conflicts
 
