@@ -4,10 +4,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { AgencyAttendanceTab } from "./tabs/AgencyAttendanceTab";
 import { DailyManpowerTab } from "./tabs/DailyManpowerTab";
 import { DirectIndirectLaborTab } from "./tabs/DirectIndirectLaborTab";
+import { LaborCostTab } from "./tabs/LaborCostTab";
 import { ManpowerDistributionTab } from "./tabs/ManpowerDistributionTab";
 import { NoWorkReportTab } from "./tabs/NoWorkReportTab";
 
-const visibleTabs = new Set(["agency", "labor", "direct-indirect", "no-work", "daily-manpower"]);
+const visibleTabs = new Set([
+	"agency",
+	"labor",
+	"direct-indirect",
+	"no-work",
+	"daily-manpower",
+	"labor-cost",
+]);
 
 export default function WorkforceAnalyticsPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -31,7 +39,7 @@ export default function WorkforceAnalyticsPage() {
 	return (
 		<div className="flex flex-col gap-6 p-6">
 			<Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-				<TabsList className="grid h-auto w-full grid-cols-1 gap-2 mb-6 sm:grid-cols-5">
+				<TabsList className="grid h-auto w-full grid-cols-1 gap-2 mb-6 sm:grid-cols-6">
 					<TabsTrigger
 						value="agency"
 						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
@@ -57,6 +65,11 @@ export default function WorkforceAnalyticsPage() {
 						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Daily Active Manpower
 					</TabsTrigger>
+					<TabsTrigger
+						value="labor-cost"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+						Labor Cost
+					</TabsTrigger>
 				</TabsList>
 
 				<TabsContent value="agency" className="space-y-4">
@@ -77,6 +90,10 @@ export default function WorkforceAnalyticsPage() {
 
 				<TabsContent value="daily-manpower" className="space-y-4">
 					<DailyManpowerTab />
+				</TabsContent>
+
+				<TabsContent value="labor-cost" className="space-y-4">
+					<LaborCostTab />
 				</TabsContent>
 			</Tabs>
 		</div>

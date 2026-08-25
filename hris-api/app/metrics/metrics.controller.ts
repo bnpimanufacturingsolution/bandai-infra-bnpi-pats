@@ -23,6 +23,7 @@ import {
 import { calculatePerfectAttendanceMetrics } from "../../helper/perfect-attendance-metrics.helper";
 import { calculateTardinessMetrics } from "../../helper/tardiness-metrics.helper";
 import { calculateOvertimeMetrics } from "../../helper/overtime-metrics.helper";
+import { calculateLaborCostAnalysis } from "../../helper/labor-cost-analysis.helper";
 import { calculateLeaveBalanceMetrics } from "../../helper/leave-balance-metrics.helper";
 import { calculateTurnoverAttritionReport } from "../../helper/turnover-attrition-metrics.helper";
 import {
@@ -95,6 +96,7 @@ const AVAILABLE_METRICS = {
 		"payrollRunSummary",
 		"payrollBlockers",
 		"payrollSummary",
+		"laborCostAnalysis",
 		"bir1601CMetrics",
 	],
 	Timesheet: ["timesheetStatistics"],
@@ -3110,6 +3112,33 @@ async function generatePayrollPeriodMetric(
 			};
 		}
 
+		case "laborCostAnalysis": {
+			try {
+				const startDate = whereFilter.payDate?.gte ? new Date(whereFilter.payDate.gte) : null;
+				const endDate = whereFilter.payDate?.lte ? new Date(whereFilter.payDate.lte) : null;
+				if (!startDate || !endDate) {
+					throw new Error("Date range is required for labor cost analysis");
+				}
+				return await calculateLaborCostAnalysis(
+					prisma,
+					organizationId,
+					startDate,
+					endDate,
+					typeof whereFilter.departmentId === "string"
+						? whereFilter.departmentId
+						: undefined,
+					typeof whereFilter.payrollPeriodId === "string"
+						? whereFilter.payrollPeriodId
+						: undefined,
+					typeof whereFilter.workforceSource === "string"
+						? whereFilter.workforceSource
+						: undefined,
+				);
+			} catch (error: any) {
+				logger.error("Error calculating labor cost analysis:", error);
+				throw new Error(`Failed to calculate labor cost analysis: ${error.message}`);
+			}
+		}
 		case "payrollSummary": {
 			const payrollPeriodId = whereFilter.payrollPeriodId;
 			const payDateFilter = whereFilter.payDate;

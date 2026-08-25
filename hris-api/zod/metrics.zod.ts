@@ -64,6 +64,7 @@ const PAYROLL_PERIOD_METRICS = z.enum([
 	"payrollRunSummary",
 	"payrollBlockers",
 	"payrollSummary",
+	"laborCostAnalysis", // Payroll register money per department with Direct/Agency split
 	"bir1601CMetrics",
 ]);
 

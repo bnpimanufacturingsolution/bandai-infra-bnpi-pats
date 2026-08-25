@@ -992,6 +992,50 @@ export interface OvertimeMetricsResponse {
 	};
 }
 
+// Labor Cost Analysis
+export interface LaborCostRow {
+	departmentId: string;
+	department: string;
+	headcount: number;
+	directHeadcount: number;
+	agencyHeadcount: number;
+	basicPay: number;
+	overtimePay: number;
+	allowances: number;
+	grossPay: number;
+	totalDeductions: number;
+	netPay: number;
+	directGrossPay: number;
+	agencyGrossPay: number;
+}
+
+export interface LaborCostAnalysis {
+	periodCount: number;
+	headcount: number;
+	basicPay: number;
+	overtimePay: number;
+	allowances: number;
+	grossPay: number;
+	totalDeductions: number;
+	netPay: number;
+	split: {
+		direct: { headcount: number; grossPay: number };
+		agency: { headcount: number; grossPay: number };
+	};
+	rows: LaborCostRow[];
+}
+
+export interface LaborCostAnalysisResponse {
+	filter?: {
+		dateFrom: string;
+		dateTo: string;
+		departmentId?: string;
+	};
+	metrics: {
+		laborCostAnalysis: LaborCostAnalysis;
+	};
+}
+
 export interface Bir1601CEmployeeBreakdown {
 	employeeId: string;
 	employeeCode: string;
@@ -2005,6 +2049,43 @@ class MetricsService extends APIService {
 	 * @param departmentId Optional department filter
 	 * @returns Promise<OvertimeMetricsResponse> - Overtime metrics
 	 */
+	async getLaborCostAnalysis(
+		dateFrom?: string,
+		dateTo?: string,
+		departmentId?: string,
+		workforceSource?: string,
+		payrollPeriodId?: string,
+	): Promise<LaborCostAnalysisResponse> {
+		try {
+			const payload = {
+				model: "PayrollPeriod",
+				data: ["laborCostAnalysis"],
+				filter: {
+					dateFrom,
+					dateTo,
+					...(departmentId && { departmentId }),
+					...(workforceSource && workforceSource !== "all" && { workforceSource }),
+					...(payrollPeriodId && { payrollPeriodId }),
+				},
+			};
+
+			const response = await hrisApiClient.post<any>("/api/metrics", payload);
+			const metricsData = this.extractMetricsData(response);
+
+			if (!metricsData || !metricsData.metrics) {
+				throw new Error("Failed to fetch labor cost analysis");
+			}
+
+			return metricsData as LaborCostAnalysisResponse;
+		} catch (error: any) {
+			console.error("Error fetching labor cost analysis:", error);
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.message ||
+					"Error fetching labor cost analysis",
+			);
+		}
+	}
 	async getOvertimeMetrics(
 		dateFrom?: string,
 		dateTo?: string,

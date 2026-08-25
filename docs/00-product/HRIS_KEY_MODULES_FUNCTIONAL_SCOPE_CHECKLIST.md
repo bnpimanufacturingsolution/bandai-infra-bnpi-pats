@@ -3,8 +3,8 @@
 > Audit date: 2026-08-24 · Method: 6 parallel read-only agents, code-level presence only (no live runtime checks).
 > Spec source: `docs/00-product/HRIS_KEY_MODULES_FUNCTIONAL_SCOPE.md` (36 items).
 > Verdicts: PRESENT / PARTIAL / MISSING / NEEDS_LIVE_CHECK — each with file:line evidence.
-> Score: **14 PRESENT · 15 PARTIAL · 7 MISSING** (updated 2026-08-24: M1.5 + M2.5 closed by spec-gap chain Stages 1–2)
-> Weighted rate: **(14 + 15×0.5) / 36 = 21.5/36 ≈ 60%**
+> Score: **15 PRESENT · 14 PARTIAL · 7 MISSING** (updated 2026-08-25: M1.4 labor cost closed — chain Stage 4)
+> Weighted rate: **(15 + 14×0.5) / 36 = 22/36 ≈ 61%**
 
 ## Module 1 — Payroll & Compensation
 
@@ -13,13 +13,13 @@
 | 1.1 | Payroll processing, payslip generation, last pay computation | PARTIAL | Processing: `hris-app/app/routes/hr/run-payroll.tsx` + `run-payroll-template.tsx`; API `hris-api/app/payrollperiod/payrollperiod.router.ts:388,436-510`. Payslips: `employeepayroll.router.ts:504,602` + `helper/payslip-pdf.helper.ts`. **Last pay computation MISSING** — only `finalPayCalculated` flag (`termination.controller.ts:1179`), no engine |
 | 1.2 | BNPI salary loan application, allowance tracking (Line Leader, OB, Assembly Standing) | PARTIAL | `bnpiSalaryLoan` field `employeepayroll.prisma:109`; loan CRUD `employeeLoan.router.ts:311`; LLA `employeepayroll.prisma:124` + `benefitTypeSeeder.ts:43`; OB `:71`. **"Assembly Standing" zero repo hits**; no loan-application UI (only `admin/configuration/loan-types.tsx`) |
 | 1.3 | Mass uploading of compensation and deductions | PRESENT | `app/migration/bnpi-mass-upload-import.service.ts` + helper (LLA/OBA/UFD codes); DM3 UI |
-| 1.4 | Uniform deduction, loan reports, payroll summary, labor cost analysis | PARTIAL | Uniform `employeepayroll.prisma:98` + UFD code ✅; Payroll summary `routes/hr/reports/payroll.tsx:110` + `metrics.controller.ts:3106` ✅; loan report partial (summary columns only); **labor cost analysis MISSING** (headcount-only `directIndirectLaborSummary`) |
+| 1.4 | Uniform deduction, loan reports, payroll summary, labor cost analysis | PARTIAL (labor cost CLOSED 2026-08-25) | Uniform + payroll summary ✅; loan report still partial; **labor cost analysis now PRESENT**: `labor-cost-analysis.helper.ts` + `metrics.controller.ts case "laborCostAnalysis"` + Workforce tab `labor-cost` (chips + per-dept table + exports). Live: Jun20–Jul20 → 2 periods, 35 emp, gross ₱668,470.64, 8 dept rows. Evidence `.runtime/spec-gap-m1-5/stage-4-labor-cost/` |
 | 1.5 | Overtime summary (Agency & Direct) | PRESENT (2026-08-24) | `OvertimeTab.tsx` Labor Type filter (All/Direct/Agency) + Direct/Agency OT chips; `overtime-metrics.helper.ts` `split` computed over unfiltered set, optional `workforceSource` filter (DIRECT = not-AGENCY incl. missing). Live smoke: Jun 26–Jul 10 → all 99,075.36h/830 emp; AGENCY filter 0/0. Evidence `.runtime/spec-gap-m1-5/stage-2-ot-split/` |
 
 **Why (gaps):**
 - 1.1 Last pay: never built — termination flow only flips a `finalPayCalculated` boolean; no computation engine was ever scoped.
 - 1.2 Assembly Standing: the allowance name appears nowhere (schema, seeds, mass-upload codes LLA/OBA/UFD only) — either named differently in BNPI files or never in scope. Loan application UI: admin loan-types page exists, but an employee-facing application flow was never built.
-- 1.4 Labor cost analysis: metrics only compute headcount splits (`directIndirectLaborSummary`); a money/rate dimension was never added to any report.
+- 1.4 Labor cost analysis: RESOLVED 2026-08-25 (chain Stage 4) — money dimension added via payroll-register aggregation per department with Direct/Agency split.
 - 1.5 Agency/Direct OT: RESOLVED 2026-08-24 (chain Stage 2) — `workforceSource` joined into overtime metrics with always-on split + filter.
 
 ## Module 2 — Attendance & Timekeeping
@@ -145,7 +145,7 @@
 | M4 Employee Records & Lifecycle | 4.0/5 | 80% |
 | M5 Manpower & Statutory Reports | 3.0/4 | 75% |
 | M7 Recruitment & Onboarding | 2.0/3 | 67% |
-| M1 Payroll & Compensation | 3.5/5 | 70% |
+| M1 Payroll & Compensation | 4.0/5 | 80% |
 | Technical Requirements | 3.5/6 | 58% |
 | M3 Leave & Disciplinary Management | 1.5/3 | 50% |
 | M8 Accounting & Compliance | 0.5/2 | 25% |
