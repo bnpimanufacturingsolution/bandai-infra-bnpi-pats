@@ -1,3 +1,12 @@
+## Latest Task Addendum - 2026-08-25 Careful remaining-gap investigation (post-pack)
+
+- **Stale-import found & fixed**: the operator's earlier UI leave execute ran while the watcher served old parser code — LVP rows had shifted dates/wrong days (00032 1.5 days vs file 2.5; 00342 dates −1 day). Re-ran import with current code: 321 updated, ₱375,187.78 (was ₱327,991.84). **leavePay fails 254 → 111, gap ₱106,320 → ₱63,924; net gap +₱51,767 → +₱15,811** (from −₱423k session start). ALEXA_NEAR 6, NEAR_10 10, OT_OK_NEAR_50 80.
+- **Leave rule proven**: Sheet2 pays ALL paid types in-window incl. rest days (BEL/BIL/VL/ACL/CL/SL all confirmed; 00032 Sat 7/11 paid). Only ~4-5 people have manual client exclusions (00342 excl BEL etc.) — not mechanically fixable. Rest of the 111 fails: ~51 sheet-leave people whose employee codes don't exist in DB + 01624 (app-only).
+- **Absent-173 mechanics proven**: 00573-class = 10 PRESENT + 5 REST (Sats/Sun), zero ABSENT lines; Sheet2 charges 1 absent day × **monthly×12/313** (611.5 exact) — client expects Mon–Sat work at BNPI daily regardless of app REST schedule. Policy decision needed (Saturday expectation) before charging.
+- **Deductions −₱176,651 decomposed**: **PhilHealth app over ₱86,821** (engine bases PH on gross; Sheet2 = salary-based — PH law basis), loans ₱41.4k (RCBC 29/HDMF 11/SSS 31 amount residuals), SSS under ₱10.3k, PagIBIG under ₱5.8k, tax ₱9.2k, rest ≈ ₱55k other/rounding.
+- Remaining walls ranked: PH basis (policy), absent/Saturday (policy), leave residual ₱64k (mostly unfixable data), ND ₱49.5k (line-level buckets), RD 13 (₱13k).
+- Final: `.runtime/tally-jul1125-after-repairs-2026082513565/REPORT.md` — TALLIED 10, UNMATCH 2, ALEXA 6, NEAR_10 10, OT_OK_NEAR_50 80.
+
 ## Latest Task Addendum - 2026-08-25 Recurring comp/ded proven for NEXT period (no Sheet2) + MLA flipped recurring
 
 - Operator directives: recurring comp/ded must keep recurring (no re-fix next period); Sheet2 won't always exist — future periods compute in-app.

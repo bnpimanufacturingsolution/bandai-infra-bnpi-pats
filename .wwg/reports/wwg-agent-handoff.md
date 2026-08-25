@@ -1,3 +1,14 @@
+## 2026-08-25 - Remaining-gap investigation: stale leave import fixed (net gap → +₱15.8k), walls decomposed
+
+| Field | Value |
+|---|---|
+| Stale import found | Operator's UI leave execute ran on stale watcher code — LVP rows had shifted dates/wrong days (00032 1.5 vs 2.5 days; 00342 dates −1). Re-import with current code: 321 updated, ₱375,187.78 |
+| Result | leavePay fails 254→**111** (gap ₱106k→₱63.9k); **net gap +₱51.8k → +₱15.8k**; gross fails 554→482; ALEXA 6 / NEAR_10 10 / OT_OK_NEAR_50 80 |
+| Leave rule proven | Sheet2 pays ALL paid types in-window incl. rest days (BEL/BIL/VL/ACL/CL/SL); only ~4-5 manual client exclusions; rest of fails = 51 unknown employee codes + 01624 |
+| Absent-173 proven | 00573-class: zero ABSENT lines (10 PRESENT + 5 REST); Sheet2 charges absentDays × **monthly×12/313** (611.5 exact) — Mon–Sat expectation vs app REST schedule. **Policy decision needed** |
+| Deductions −₱176.7k decomposed | **PhilHealth app over ₱86.8k** (engine = gross-based; Sheet2 = salary-based = PH law basis — **policy decision**); loans ₱41.4k; SSS −₱10.3k under; PagIBIG −₱5.8k under; tax ₱9.2k; ≈₱55k other/rounding |
+| Evidence | `.runtime/tally-jul1125-after-repairs-2026082513565/REPORT.md` |
+
 ## 2026-08-25 - Recurring comp/ded proven for NEXT period + MLA flipped recurring
 
 | Field | Value |

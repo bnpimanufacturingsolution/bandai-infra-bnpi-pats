@@ -70,6 +70,17 @@ describe("BNPI period leave import helpers", () => {
 		expect(parsePeriodLeaveDate("")).to.equal(null);
 	});
 
+	it("normalizes LOCAL-midnight Date objects (SheetJS on UTC+8 host) to the same calendar day", () => {
+		// Simulate SheetJS on a UTC+8 host: local midnight 2026-07-24 is
+		// 2026-07-23T16:00Z in UTC — the ISO day must still be 2026-07-24.
+		const localMidnight = new Date(2026, 6, 24, 0, 0, 0, 0);
+		expect(parsePeriodLeaveDate(localMidnight)?.toISOString().slice(0, 10)).to.equal("2026-07-24");
+		// Offset-carrying strings keep their instant, but calendar-day normalization
+		// applies to plain datetime strings too.
+		const shifted = parsePeriodLeaveDate("2026-07-24T16:00:00Z");
+		expect(shifted?.toISOString().slice(0, 10)).to.equal("2026-07-24");
+	});
+
 	it("selects the first qualifying sheet and parses paid rows", () => {
 		const parsed = parsePeriodLeaveWorkbook(buildLeaveWorkbookBuffer());
 		expect(parsed.sheetNames).to.deep.equal(["Leave (2)", "Leave (1)"]);

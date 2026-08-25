@@ -57,7 +57,14 @@ export const normalizePeriodLeaveEmployeeCode = (value: unknown): string => {
 
 export function parsePeriodLeaveDate(value: unknown): Date | null {
 	if (value == null || value === "") return null;
-	if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+	// SheetJS (cellDates) hands us LOCAL-midnight Date objects; on a UTC+8 host
+	// toISOString() would shift the calendar day backwards. Normalize every
+	// branch to UTC midnight of the calendar day the workbook shows.
+	const fromParts = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d));
+	if (value instanceof Date && !Number.isNaN(value.getTime())) {
+		if (value.getUTCHours() === 0 && value.getUTCMinutes() === 0) return value;
+		return fromParts(value.getFullYear(), value.getMonth() + 1, value.getDate());
+	}
 	const raw = String(value).trim();
 	const m = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
 	if (m) {
@@ -66,10 +73,13 @@ export function parsePeriodLeaveDate(value: unknown): Date | null {
 		const month = Number(m[1]);
 		const day = Number(m[2]);
 		if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-		return new Date(Date.UTC(year, month - 1, day));
+		return fromParts(year, month, day);
 	}
 	const parsed = new Date(raw);
-	return Number.isNaN(parsed.getTime()) ? null : parsed;
+	if (Number.isNaN(parsed.getTime())) return null;
+	// If the string carried a TZ offset/time, use local calendar parts; else UTC.
+	if (/Z|[+-]\d{2}:?\d{2}$/.test(raw)) return parsed;
+	return fromParts(parsed.getFullYear(), parsed.getMonth() + 1, parsed.getDate());
 }
 
 const utcDayKey = (date: Date): string =>
