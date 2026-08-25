@@ -1,3 +1,10 @@
+## 2026-08-25 Period leave import (LVP) + Gross includes leavePay
+
+- `Leave (July 1-31, 2026).xlsx` sheet **Leave (2)** is the cutoff feed: covers 376/376 Sheet2 Jul 11â€“25 leave people; money matches 99.2% via dual basis (dailyRate or Ã—24/313).
+- New: DM3 **Upload leave (period)** â€” imports immediately like other DM3 uploads (preview via `dryRun=true`), with a **payroll-period selector** (default OPEN) so month files land in the chosen cutoff.
+- Engine truth change: **GrossPay now includes leavePay** (generate + preview); Net/TR/tax follow. Register Leave column unchanged.
+- Executed on local clone (5433): PP-20260711-20260726 â†’ 321 created / 6 failed / â‚±327,991.84 (log `cmt86rh9b00s8vgewuoj41i4j`). After-tally pending; baseline at `.runtime/tally-jul1125-before-leave-20260825/`. Canonical Â§14e.
+
 ## 2026-08-22 Recruitment identity history
 
 - First name + last name + birthday is the only match key for previous applicant/employee records. Recruiter sees history (rejected, resigned, etc.). Apply is not blocked. Public apply now requires date of birth.
@@ -22,14 +29,14 @@
 - Full: `.wwg/reports/devops-audit-20260820.md`.
 
 
-## 2026-08-20 Timesheet Gåö schedule
+## 2026-08-20 Timesheet Gï¿½ï¿½ schedule
 
 - Changing schedule updates **expected** work windows (`AttendanceObligation`). It does **not** rewrite punches or submitted timesheet lines. Stored late/OT stay vs the schedule frozen at first punch. **Days** = weekly pattern (next Monday). **Dates** = that day (`ScheduleOverride`). Full: `.wwg/reports/timesheet-schedule-connection-20260820.md`.
 
 
 ## 2026-08-20 Employee weekly hours
 
-- Templates = reusable org patterns. Per-person Mon/Tue different hours = employee **Work Schedule** GåÆ **Change schedule** GåÆ **Days**. One calendar date = same modal **Dates** tab (`scheduleOverride`). Roster page is the easy bulk path.
+- Templates = reusable org patterns. Per-person Mon/Tue different hours = employee **Work Schedule** Gï¿½ï¿½ **Change schedule** Gï¿½ï¿½ **Days**. One calendar date = same modal **Dates** tab (`scheduleOverride`). Roster page is the easy bulk path.
 
 
 ## 2026-08-20 Day labor on timesheet (no push)
@@ -53,7 +60,7 @@
 ## 2026-08-20 On-prem ports vs this PC
 
 - VM still serves DEV/UAT/PROD on `10.184.37.19` ports `3000/3001`, `3100/3101`, `3200/3201` (loopback HTTP 200).
-- This home WiGÇæFi cannot open those LAN ports. Use Cloudflare or SSH then `127.0.0.1`. Doc: `docs/ONPREM_PORT_ACCESS.md`.
+- This home WiGï¿½ï¿½Fi cannot open those LAN ports. Use Cloudflare or SSH then `127.0.0.1`. Doc: `docs/ONPREM_PORT_ACCESS.md`.
 
 
 ## 2026-08-20 GitHub Actions CI / Observe / Validate
@@ -83,15 +90,15 @@
 
 ## 2026-08-17 Zen 00010 payroll / timesheet
 
-- Missing timesheet blocked generate for Period 1 Aug 2026 (11GÇô25 Aug Manila).
-- Salary Gé¦11,000 SEMI_MONTHLY (Technician floor). Timesheet approved; 14 lines attached; preview net Gé¦5,424.54.
+- Missing timesheet blocked generate for Period 1 Aug 2026 (11Gï¿½ï¿½25 Aug Manila).
+- Salary Gï¿½11,000 SEMI_MONTHLY (Technician floor). Timesheet approved; 14 lines attached; preview net Gï¿½5,424.54.
 - API: `POST /api/timesheet/:id/sync-obligation-lines` (this `develop` push).
 - Math: `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`. Code: `.wwg/reports/zen-payroll-timesheet-code-20260817.md`.
 
 
 ## 2026-08-17 Encoding / boarding notification titles
 
-- `Onboarding Completed! +¦++++GÇ¦` was Latin-1 of `=ƒÄë` in source, then stored on the notification.
+- `Onboarding Completed! +ï¿½++++GÇ¦` was Latin-1 of `=ï¿½ï¿½ï¿½` in source, then stored on the notification.
 - Titles are now ASCII. Live DEV row `cmswtgafn0cn3lp01zmus0q06` patched.
 - `set-active` schedule also recomputes attendance obligations so HR Attendance is not leftover Off Day.
 - Report: `.wwg/reports/mojibake-encoding-20260817.md`.
@@ -101,7 +108,7 @@
 
 - Operator Check Out on Device D (person `10`, serial `9652`) already updated attendance. Unknown Vendor / Unknown evidence was stale stored taxonomy.
 - GET/UI now reclassify those rows as **Attendance / TAP** and stamp **SDK callback** + direct evidence. Commit `a6dce32` (already on origin; **do not push** further unless asked). Public DEV UI is `NEEDS_CONFIRMATION` until that SHA is serving. List GET can heal stored columns; item GET display-only.
-- Callback next tap matches `deviceEmpId` or padded `employeeId` and links DeviceUser. `10` Gëá `01515`.
+- Callback next tap matches `deviceEmpId` or padded `employeeId` and links DeviceUser. `10` Gï¿½ï¿½ `01515`.
 - DeviceUser `10` on B/D/E linked to Zen Andrei `00010`. Other unmatched ids without an employee were not linked.
 - Report: `.wwg/reports/device-event-tap-display-20260817.md`.
 
@@ -113,7 +120,7 @@
 - API: `GET /api/device/events/item/:eventId`. Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
 
 
-## 2026-08-13 Hikvision Select Status GåÆ HRIS (audit)
+## 2026-08-13 Hikvision Select Status Gï¿½ï¿½ HRIS (audit)
 
 - Panel **Select Status** (Check In / Out, Break In / Out, Overtime In / Out) is real T&A.
 - Live SDK listener **now copies** `byAttendanceStatus` onto the callback JSON. ISAPI `checkIn`/`label` is extracted and shown as Device Events **Device status**.
@@ -121,11 +128,11 @@
 - Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`. Report: `.wwg/reports/hikvision-select-status-audit-20260813.md`.
 
 
-## 2026-08-13 Device 5 reverse tunnel (host WiGÇæFi)
+## 2026-08-13 Device 5 reverse tunnel (host WiGï¿½ï¿½Fi)
 
-- Device 5 (`cmsq47r9t0039vxbwt9rfxk68`) physical `192.168.1.136:80` on the same WiGÇæFi as the Windows PC `192.168.1.116`.
+- Device 5 (`cmsq47r9t0039vxbwt9rfxk68`) physical `192.168.1.136:80` on the same WiGï¿½ï¿½Fi as the Windows PC `192.168.1.116`.
 - Reverse is on: `ssh-reverse-forward`, VM `https://127.0.0.1:59443` + SDK `127.0.0.1:59000`.
-- TEST A live address is `192.168.254.109:443` via `127.0.0.1:58080` GÇö not `192.168.254.102`. Wiki `59000`/`59443` = TEST A is **STALE**.
+- TEST A live address is `192.168.254.109:443` via `127.0.0.1:58080` Gï¿½ï¿½ not `192.168.254.102`. Wiki `59000`/`59443` = TEST A is **STALE**.
 - Evidence: `.runtime/device5-reverse-20260813-005641/`.
 
 
@@ -141,7 +148,7 @@
 
 - **Preview Payroll** dry-run may include `DRAFT` / `SUBMITTED` / `REJECTED` /
   `REVISED` timesheets (with salary + schedule) and labels them estimate-only.
-- Money uses timesheet **lines** + benefits GÇö status alone does not change pay.
+- Money uses timesheet **lines** + benefits Gï¿½ï¿½ status alone does not change pay.
 - **Start Payroll** still APPROVED + payroll-ready only
   (`includedEmployeesCount` unchanged contract).
 - Summary adds `previewComputableEmployeesCount` +
@@ -152,11 +159,11 @@
   **Payroll Preview includes non-submitted timesheets (2026-08-12)**.
 
 
-## 2026-08-11 BNPI Jun 26GÇôJul 10 payroll tally investigation
+## 2026-08-11 BNPI Jun 26Gï¿½ï¿½Jul 10 payroll tally investigation
 
-- Full-fleet preview vs target Sheet2: **not fleet-tallied** (4 exact + Alexa GêÆGé¦0.77).
-- **No. of Days** register field Gëá target paid regular days: app counts non-`REST_DAY`
-  timesheet lines (includes ABSENT); target Gëê sum Bandai `approvedBuckets.regularDays`.
+- Full-fleet preview vs target Sheet2: **not fleet-tallied** (4 exact + Alexa Gï¿½ï¿½Gï¿½0.77).
+- **No. of Days** register field Gï¿½ï¿½ target paid regular days: app counts non-`REST_DAY`
+  timesheet lines (includes ABSENT); target Gï¿½ï¿½ sum Bandai `approvedBuckets.regularDays`.
   Universal day-column mismatch is a **definition/code** issue, not GÇ£all biometrics wrong.GÇ¥
 - Fixing day-count alone does **not** make Gross/Net/TotalReceivable tally.
 - Master evidence: `.runtime/full-tally-20260811/FINDINGS.md` and
@@ -167,7 +174,7 @@
 
 - **Coverage expectation:** every Bandai employee **should have** an active MLA
   enrollment.
-- **Still enrollment-driven** GÇö payroll does not invent MLA without a resolving
+- **Still enrollment-driven** Gï¿½ï¿½ payroll does not invent MLA without a resolving
   `EmployeeBenefit`.
 - **Do not auto-enroll** all employees unless the operator explicitly orders a
   deliberate enrollment job.
@@ -181,9 +188,9 @@
   comes from cutoff mass-upload files.
 - Run Payroll also applies **recurring / standing `EmployeeBenefit` and
   `EmployeeLoan` enrollments** that are active for the period even when the
-  code is **absent** from that cutGÇÖs compensation/deduction mass upload.
+  code is **absent** from that cutGï¿½ï¿½s compensation/deduction mass upload.
 - Tally agents must classify each line as mass-upload, recurring enrollment,
-  engine (tax/contrib schedule), or OT/attendance GÇö never GÇ£missing mass = must
+  engine (tax/contrib schedule), or OT/attendance Gï¿½ï¿½ never GÇ£missing mass = must
   be zero.GÇ¥
 - Full write-up: `.wwg/wiki/project-truth.md` section
   **BNPI payroll compensation / deduction source ownership (2026-08-05)**.

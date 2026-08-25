@@ -18,6 +18,7 @@ interface IMigrationController {
 	importDm3CompensationMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3DeductionMassUpload(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importDm3WorkSharingSchedule(req: Request, res: Response, next: NextFunction): Promise<void>;
+	importDm3PeriodLeave(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listDm3MassUploadImports(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getDm3MassUploadImport(req: Request, res: Response, next: NextFunction): Promise<void>;
 	downloadDm3MassUploadImportReport(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -340,6 +341,11 @@ export const router = (route: Router, controller: IMigrationController): Router 
 		"/dm3/import-worksharing-schedule",
 		uploadImportFile,
 		controller.importDm3WorkSharingSchedule,
+	);
+	routes.post(
+		"/dm3/import-period-leave",
+		uploadImportFile,
+		controller.importDm3PeriodLeave,
 	);
 	routes.get("/dm3/mass-upload-imports", controller.listDm3MassUploadImports);
 	routes.get(

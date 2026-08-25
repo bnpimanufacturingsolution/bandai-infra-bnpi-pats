@@ -241,7 +241,7 @@ const BNPI_RECEIVABLE_ONLY_CODES = new Set([
 	"MLA",
 ]);
 
-async function ensureBenefitType(
+export async function ensureBenefitType(
 	prisma: PrismaClient,
 	organizationId: string,
 	code: string,
@@ -655,6 +655,7 @@ export type Dm3ImportActivityKind =
 	| "compensation"
 	| "deduction"
 	| "worksharing-schedule"
+	| "period-leave"
 	| "dm1-workbook"
 	| "dm2-workbook"
 	| "dm4-workbook"
@@ -666,7 +667,7 @@ export type MigrationUploadActivityKind = Dm3ImportActivityKind;
 export const DM_UPLOAD_ACTIVITY_KINDS_BY_WORKBOOK: Record<string, Dm3ImportActivityKind[]> = {
 	dm1: ["dm1-workbook"],
 	dm2: ["dm2-workbook"],
-	dm3: ["workbook", "manpower-databank", "compensation", "deduction", "worksharing-schedule"],
+	dm3: ["workbook", "manpower-databank", "compensation", "deduction", "worksharing-schedule", "period-leave"],
 	dm4: ["dm4-workbook", "dm4-overtime"],
 };
 
@@ -690,6 +691,7 @@ export function isKnownUploadActivityKind(kind?: string | null): kind is Dm3Impo
 		value === "compensation" ||
 		value === "deduction" ||
 		value === "worksharing-schedule" ||
+		value === "period-leave" ||
 		value === "dm1-workbook" ||
 		value === "dm2-workbook" ||
 		value === "dm4-workbook" ||

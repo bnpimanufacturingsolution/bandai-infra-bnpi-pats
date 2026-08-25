@@ -157,6 +157,19 @@ const BANDAI_APPROVED_BUCKET_MULTIPLIERS = {
 	legalHolidayOt: 2.6,
 	nightDiffPremium: 0.1,
 };
+/**
+ * Sheet2 truth (Jul 11-25 proof): Path A daily-rated people earn the FULL
+ * special-holiday work premium (1.3), Path B monthly people earn the 30%
+ * premium-only. Exported so tests pin the same rule the engine uses.
+ */
+export function resolveBandaiSpecialHolidayWorkMultiplier(
+	path: "A" | "B",
+): number {
+	return path === "A"
+		? BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayFull
+		: BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayPremium;
+}
+
 
 const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 	["G", "Monthly Salary", "monthlySalary"],
@@ -628,9 +641,12 @@ function calculateBandaiApprovedBucketPay(
 	});
 	const dailyRate = rateBasis.exactDailyRate;
 	const hourlyRate = rateBasis.exactHourlyRate;
-	const specialHolidayWorkMultiplier = rateBasis.useSourceDailyRate
-		? BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayFull
-		: BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayPremium;
+	// Sheet2 truth (Jul 11-25 proof): Path A daily-rated people earn the FULL
+	// special-holiday work premium (1.3 — their holiday basic is inside paid
+	// days × daily), while Path B monthly people earn the 30% premium only
+	// (their holiday basic sits in period basic). useSourceDailyRate is a stale
+	// always-false diagnostic and must not drive this choice.
+	const specialHolidayWorkMultiplier = resolveBandaiSpecialHolidayWorkMultiplier(rateBasis.path);
 	const overtimePay = roundToCentavo(
 		totals.regOtHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.regularOt,
 	);
@@ -640,9 +656,19 @@ function calculateBandaiApprovedBucketPay(
 	const restDayOtPay = roundToCentavo(
 		totals.rdOtHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.restDayOt,
 	);
+	// Sheet2 splits premium vs excess into two columns:
+	//   "Spc Hol OT"            = spclHrs  × hourly × work multiplier (0.3/1.3)
+	//   "Sun/Spc Hol OT Exc"    = spclOtHrs × hourly × 1.69
+	// Keep specialHolidayPay as the combined money (gross continuity) and expose
+	// the split for the register columns.
+	const specialHolidayPremiumPay = roundToCentavo(
+		totals.spclHrs * hourlyRate * specialHolidayWorkMultiplier,
+	);
+	const specialHolidayExcessPay = roundToCentavo(
+		totals.spclOtHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayOt,
+	);
 	const specialHolidayPay = roundToCentavo(
-		totals.spclHrs * hourlyRate * specialHolidayWorkMultiplier +
-			totals.spclOtHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayOt,
+		specialHolidayPremiumPay + specialHolidayExcessPay,
 	);
 	const legalHolidayPay = roundToCentavo(
 		totals.rholHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.legalHoliday +
@@ -675,6 +701,8 @@ function calculateBandaiApprovedBucketPay(
 		overtimePay,
 		restDayPay,
 		restDayOtPay,
+		specialHolidayPremiumPay,
+		specialHolidayExcessPay,
 		specialHolidayPay,
 		legalHolidayPay,
 		nightDiffPay,
@@ -718,8 +746,7 @@ function calculateBandaiApprovedBucketDayPay(
 			numberFromApprovedBucket(bucket.spclOtHrs) *
 				hourlyRate *
 				BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayOt,
-	);
-	const legalHolidayPay = roundToCentavo(
+	);	const legalHolidayPay = roundToCentavo(
 		numberFromApprovedBucket(bucket.rholHrs) *
 			hourlyRate *
 			BANDAI_APPROVED_BUCKET_MULTIPLIERS.legalHoliday +
@@ -2243,7 +2270,7 @@ export async function generatePayrollFromTimesheets(
 				};
 			const payrollSourceAmounts = payrollSource.amounts;
 			let grossPayWithSources = roundToCentavo(
-				grossPay + payrollSourceAmounts.grossIncludedBenefits,
+				grossPay + payrollSourceAmounts.grossIncludedBenefits + payrollSourceAmounts.leavePay,
 			);
 
 			// Get all payroll periods for this employee in the same month
@@ -4131,12 +4158,16 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		restDayHoursPay: roundToCentavo(bucket ? Number(bucket.restDayPay || 0) : 0),
 		restDayOtHours: roundToCentavo(Number(bucketHours.rdOtHrs || 0)),
 		restDayOtPay: roundToCentavo(bucket ? Number(bucket.restDayOtPay || 0) : 0),
-		specialHolidayOtHours: roundToCentavo(
-			Number(bucketHours.spclHrs || 0) + Number(bucketHours.spclOtHrs || 0),
+		// Sheet2 splits special-holiday premium (spclHrs × mult) from the 1.69
+		// excess (spclOtHrs). Hours columns split the same way.
+		specialHolidayOtHours: roundToCentavo(Number(bucketHours.spclHrs || 0)),
+		specialHolidayOtPay: roundToCentavo(
+			bucket ? Number(bucket.specialHolidayPremiumPay || 0) : 0,
 		),
-		specialHolidayOtPay: roundToCentavo(bucket ? Number(bucket.specialHolidayPay || 0) : 0),
-		sunSpecialHolidayOtExcessHours: 0,
-		sunSpecialHolidayOtExcessPay: 0,
+		sunSpecialHolidayOtExcessHours: roundToCentavo(Number(bucketHours.spclOtHrs || 0)),
+		sunSpecialHolidayOtExcessPay: roundToCentavo(
+			bucket ? Number(bucket.specialHolidayExcessPay || 0) : 0,
+		),
 		specialHolidayRestDayOtHours: 0,
 		specialHolidayRestDayOtPay: 0,
 		specialRestDayExcessHours: 0,
@@ -4214,6 +4245,11 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		thirteenthMonthPay: sourceBy([], ["13th Month"], ["COMPENSATION"]),
 		aclVlConversion: sourceBy([], ["ACL/VL Conversion"], ["COMPENSATION"]),
 		otMealAllowance: sourceBy(["OTM"], ["OT Meal Allowance"], ["COMPENSATION"]),
+		attendanceRecognitionProgram: sourceBy(
+			["ARP"],
+			["Attendance Recognition Program"],
+			["COMPENSATION"],
+		),
 		perfectAttendance: sourceBy(["PFA"], ["Perfect Attendance"], ["COMPENSATION"]),
 		mealAllowance: sourceBy(["MLA"], ["Meal Allowance"], ["COMPENSATION"]),
 		lineLeaderAllowance: sourceBy(["LLA"], ["Line Leader Allowance"], ["COMPENSATION"]),
@@ -5067,7 +5103,7 @@ function calculatePayrollPreviewDataset(params: {
 				)
 				.reduce((sum, payroll) => sum + payroll.grossPay, 0);
 			const grossPayWithSources = roundToCentavo(
-				grossPay + payrollSourceAmounts.grossIncludedBenefits,
+				grossPay + payrollSourceAmounts.grossIncludedBenefits + payrollSourceAmounts.leavePay,
 			);
 			const actualMonthlyGross = previousPeriodsGross + grossPayWithSources;
 

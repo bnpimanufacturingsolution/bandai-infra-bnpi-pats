@@ -64,6 +64,7 @@ import {
 	startManpowerDatabankImport,
 } from "./bnpi-manpower-databank-import.service";
 import { importWorkSharingScheduleUpload } from "./bnpi-worksharing-schedule-import.service";
+import { importPeriodLeave } from "./bnpi-period-leave-import.service";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 
@@ -3471,6 +3472,115 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const importDm3PeriodLeave = async (
+		req: Request,
+		res: Response,
+		_next: NextFunction,
+	) => {
+		armHeavyMassUploadTimeouts(req, res);
+		try {
+			const uploadedFile = resolveUploadedMigrationFile(req);
+			if (!uploadedFile?.buffer) {
+				res.status(400).json(
+					buildErrorResponse(
+						"File is required. Upload the period Leave .xlsx as multipart field 'file'.",
+						400,
+					),
+				);
+				return;
+			}
+			const parsedBody = parseMultipartJsonBody(req);
+			if (parsedBody.error) {
+				res.status(400).json(buildErrorResponse(parsedBody.error, 400));
+				return;
+			}
+			const organizationId = String(
+				parsedBody.body?.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+
+			// Executes on upload like the other DM3 mass uploads (partial success is
+			// honest). Preview is opt-in via dryRun=true. Multer text fields arrive as
+			// strings ("true"), so coerce both shapes before the gate.
+			const dryRunRaw = parsedBody.body?.dryRun;
+			const dryRun = dryRunRaw === true || String(dryRunRaw).toLowerCase() === "true";
+			const sourceFilename = uploadedFile.originalname || "Leave.xlsx";
+			const summary = await importPeriodLeave({
+				prisma,
+				organizationId,
+				buffer: uploadedFile.buffer,
+				sourceFilename,
+				migrationRunId: resolveMassUploadMigrationRunId(parsedBody.body, req),
+				startedByUserId: getMigrationRequestUserId(req),
+				persistLog: !dryRun,
+				dryRun,
+				sheetName: parsedBody.body?.sheetName || null,
+				payrollPeriodId: parsedBody.body?.payrollPeriodId || null,
+			});
+
+			const okCount = Number(summary.created || 0) + Number(summary.updated || 0);
+			const failedCount = Number(summary.failed || 0);
+			const actionLabel = dryRun ? "previewed" : "imported";
+			const userActivityMessage = `Leave file "${sourceFilename}" ${actionLabel} - ${okCount} planned/succeeded (${summary.created} new, ${summary.updated} updated), ${failedCount} failed`;
+			if (!dryRun) {
+				logMigrationActivity(
+					req,
+					config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
+					userActivityMessage,
+					config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
+				);
+				logMigrationAudit(req, {
+					auditAction: config.AUDIT_LOG.ACTIONS.CREATE,
+					entityId: summary.importLogId || organizationId,
+					description: userActivityMessage,
+					changesAfter: {
+						kind: "period-leave",
+						importLogId: summary.importLogId || null,
+						sourceFilename,
+						total: summary.total,
+						created: summary.created,
+						updated: summary.updated,
+						failed: summary.failed,
+						status: summary.status,
+					},
+				});
+			}
+
+			res.status(200).json(
+				buildSuccessResponse(
+					dryRun
+						? "Leave import preview (no writes)"
+						: "Period leave import finished",
+					{
+						summary,
+						importLogId: summary.importLogId || null,
+						userActivity: dryRun
+							? null
+							: {
+									kind: "period-leave",
+									message: userActivityMessage,
+									importLogId: summary.importLogId || null,
+								},
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			migrationLogger.error(`DM3 period leave import failed: ${error?.message || "Unknown error"}`, {
+				error,
+			});
+			res.status(500).json(
+				buildErrorResponse(
+					`Period leave import failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
+	};
+
 	const importDm3WorkSharingSchedule = async (
 		req: Request,
 		res: Response,
@@ -5609,6 +5719,7 @@ export const controller = (prisma: PrismaClient) => {
 		importDm3EmployeeBenefitsLoans,
 		importDm3CompensationMassUpload,
 		importDm3DeductionMassUpload,
+		importDm3PeriodLeave,
 		importDm3WorkSharingSchedule,
 		listDm3MassUploadImports,
 		getDm3MassUploadImport,

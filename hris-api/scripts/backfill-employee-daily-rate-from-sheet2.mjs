@@ -86,7 +86,7 @@ function loadDailyByCode(xlsxPath) {
 async function ensureColumn(prisma) {
 	try {
 		await prisma.$executeRawUnsafe(
-			`ALTER TABLE "Employee" ADD COLUMN IF NOT EXISTS "dailyRate" DOUBLE PRECISION`,
+			`ALTER TABLE employees ADD COLUMN IF NOT EXISTS "dailyRate" DOUBLE PRECISION`,
 		);
 	} catch (e) {
 		// Column may already exist or Prisma client may reject unknown field on updates.
@@ -108,7 +108,7 @@ async function main() {
 
 	// Raw query so we work even before prisma generate knows dailyRate
 	const emps = await prisma.$queryRawUnsafe(
-		`SELECT id, "employeeId", "dailyRate", "basicSalary" FROM "Employee" WHERE "isDeleted" = false`,
+		`SELECT id, "employeeId", "dailyRate", "basicSalary" FROM employees WHERE "isDeleted" = false`,
 	);
 
 	let updated = 0;
@@ -132,12 +132,12 @@ async function main() {
 		if (!dryRun) {
 			if (nextN == null) {
 				await prisma.$executeRawUnsafe(
-					`UPDATE "Employee" SET "dailyRate" = NULL, "updatedAt" = NOW() WHERE id = $1`,
+					`UPDATE employees SET "dailyRate" = NULL, "updatedAt" = NOW() WHERE id = $1`,
 					emp.id,
 				);
 			} else {
 				await prisma.$executeRawUnsafe(
-					`UPDATE "Employee" SET "dailyRate" = $1, "updatedAt" = NOW() WHERE id = $2`,
+					`UPDATE employees SET "dailyRate" = $1, "updatedAt" = NOW() WHERE id = $2`,
 					nextN,
 					emp.id,
 				);

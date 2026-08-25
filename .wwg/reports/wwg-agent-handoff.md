@@ -1,13 +1,53 @@
+## 2026-08-25 - Recurring comp/ded proven for NEXT period + MLA flipped recurring
+
+| Field | Value |
+|---|---|
+| Directive | Recurring comp/ded must keep recurring; Sheet2 won't always exist â€” future periods compute in-app |
+| MLA fix | Flipped to **open-horizon EVERY_CUTOFF** (824 rows; supersedes old 831; future COMP mass period-row supersedes it) â€” repair script mode â†’ "open" |
+| Proof (PP-20260726-20260811, no Sheet2) | DMA 335/â‚±110,300 + MLA 824/â‚±412,000 via engine resolver; loans 1,356/â‚±831,766 (EmployeeLoan window SQL) |
+| Doctrine | findings **Â§14g**: Sheet2 = parity harness only; app-native map â€” attendance/late/absent/leave/statutory/recurring comp+loans native; OT still needs the cut's rptOvertimeDetails until in-app approved-OT |
+| Evidence | `.runtime/recurring-next-period-proof-20260825/proof.json` |
+
+## 2026-08-25 - Jul 11-25 tally fix pack â€” 802/828 improved, UNMATCH 694â†’2, net gap âˆ’â‚±423kâ†’+â‚±52k
+
+| Field | Value |
+|---|---|
+| Directive | Recurring comp/ded can't rely on the single cut file â€” fix comp FROM Sheet2, always with proof |
+| Root finding | Local clone had lost ALL earlier brute repairs (DB refresh): Jul COMP/DED, WS, OT buckets, prior-DED loans, DMA, dailyRate absent â€” proven via import-log history |
+| New scripts | `repair-bnpi-comp-from-sheet2.mjs` (12 codes, DMA open-horizon, period-pinned+supersede, canonical labels) + `run-jul1125-tally-fix-pack.mjs` (9-step orchestrator, dry-run default, `--execute`, `--step=N`, per-step proof) |
+| Engine fixes | (1) register **arp** column missing â€” added; (2) **special-holiday split proven**: Path A work premium = **1.3** (stale `useSourceDailyRate` forced 0.3), Path B = 0.3, excess spclOtHrsÃ—1.69 â†’ own register column; new exported `resolveBandaiSpecialHolidayWorkMultiplier` + `bandai-special-holiday-split.spec.ts` |
+| Proof | 828 compared vs true July Sheet2: UNMATCH **694â†’2**, TALLIED **0â†’10**, NEAR_10 9, OT_OK_NEAR_50 **76**, **802/828 improved**; gross fails 826â†’554 (gap âˆ’â‚±324kâ†’âˆ’â‚±117k); **net gap âˆ’â‚±423kâ†’+â‚±52k**; late 322â†’**55**; MATCH: OT â‚±1.33M, DMA, MLA, ARP â‚±335.5k, PFA, AON, LLA, TSA, OBA, OAD, HYS, ABS, MTX, basicPay, numberOfDays |
+| Open walls | absent 173 (Sheet2 â‚±269k vs app â‚±6k), deductions over â‚±170k, leave day-count 201 (â‚±106k), ND â‚±49.5k (line-level bucket analysis needed), RD Hrs Pay 13 |
+| Evidence | `.runtime/jul1125-tally-fix-*/`, `.runtime/tally-jul1125-after-repairs-2026082512195/REPORT.md`, `.runtime/tally-jul1125-before-leave-julysheet2/` |
+| Boundary | Local clone 5433 only â€” VM replay required; REC-20260825-LOCAL-CLONE-SNAPSHOT-BRUTE-REPAIRS |
+
+## 2026-08-25 - Period leave import (LVP) + Gross includes leavePay
+
+| Field | Value |
+|---|---|
+| Ask | Tally Jul 11â€“25: operator supplied `Leave (July 1-31, 2026).xlsx`; prove fit, then import path |
+| Fit proven | Sheet **Leave (2)**: 376/376 Sheet2 leave people; formula match **373/376** â€” Path A `daysÃ—dailySalary` (217), Path B `daysÃ—monthlyÃ—12/313` (156); residuals 00342/01176/01321 (âˆ’1 day on Sheet2), 01624 (Sheet2 â‚±0) |
+| API | `POST /api/migration/dm3/import-period-leave` â€” **executes on upload** like other DM3 uploads (default); preview opt-in `dryRun=true`; `payrollPeriodId`/`sheetName` overrides; upsert `employee\|LVP type\|payrollPeriodId`; log kind `period-leave`; summary adds `periodCandidates[]` |
+| Engine | **GrossPay now includes `payrollSourceAmounts.leavePay`** at generate+preview â€” Net/TR/tax follow. Register Leave column unchanged. |
+| UI | DM3 card **Upload leave (period)**: **payroll-period selector** (default OPEN period, sends `payrollPeriodId`) + single **Import** button; no confirm step (operator feedback). Result panel + Upload activity click-through identical to comp/ded. |
+| Tests | Backend spec **9/9** (sheet pick, filters, dual basis w/ Sheet2 sample â‚±2913.74, explicit dry-run no-write, execute create+update+log, **default-executes**, missing-emps fail); app migration route tests **20/20** |
+| Live execute (local DB 5433) | Window `2026-07-11..25`: **321 created / 0 updated / 6 failed** (01827/01834/01835/01836/01838/01841 not in employees), **â‚±327,991.84**, importLog `cmt86rh9b00s8vgewuoj41i4j`; GET log returns summary+importLog (activity click-through proven). Preview opt-in: 0 writes. |
+| Infra fix | `hris-app/app/services/payroll-periods.service.ts` was UTF-16 LE (oxc/vitest "binary" once the modal's `usePayrollPeriods` import chain loaded it) â†’ converted to UTF-8, zero content change |
+| Pre-existing | 6 app-lib vitest fails + 2 migration.tsx tsc errors proven pre-existing via git stash run |
+| Tally state | **After-leave tally DONE** (true July Sheet2): before `.runtime/tally-jul1125-before-leave-julysheet2/` (828 compared / TALLIED 0 / OT_MATCH_ONLY 134 / UNMATCH 694 / leave fails 366) â†’ after `.runtime/tally-jul1125-after-leave-julysheet2/REPORT.md` â€” **283 improved / 23 worsened**, leave exact **113/366**, 201 underpaid (rest-day/day-count residual), app-only 1 (â‚±506.07), Î£ Sheet2 â‚±434,311.72 vs app â‚±327,991.84 (gap â‚±106,319.88); bands still TALLIED 0 â†’ deductions/tax wall dominates. First attempts mis-compared JUNE Sheet2 (hardcoded default) â†’ `SUPERSEDED.md` in old dirs; jul script now honors `TARGET_XLSX`. |
+| Parity | HR-only exception: admin-only migration surface (no emp-app counterpart) |
+| Canonical | `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` Â§14e; REC-20260825-PERIOD-LEAVE-EXPLICIT-PERIOD **Implemented** |
+
 ## 2026-08-24 - Fleet Hikvision time sync (button + endpoint)
 
 | Field | Value |
 |---|---|
 | Ask | Snap A/B/D/E clocks now (authorized); add HRIS button to trigger fleet time sync |
-| Endpoint | POST /api/device/time-sync-all GÇö preview-first, Hikvision-only, deviceIds scope, concurrency 2 |
+| Endpoint | POST /api/device/time-sync-all Gï¿½ï¿½ preview-first, Hikvision-only, deviceIds scope, concurrency 2 |
 | Core | 
 unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallback) |
 | UI | Devices page **Sync device time** -> preview modal -> Update N clocks |
-| Tests | API contract 9 + behavior 8; app contract 2 + RTL modal 4 GÇö all passing |
+| Tests | API contract 9 + behavior 8; app contract 2 + RTL modal 4 Gï¿½ï¿½ all passing |
 | Live | Preview 11 targets / 4 readable; scoped execute 4/4 written sdk_stdxml |
 | Evidence | .runtime/time-sync-all-smoke-20260824-151249/smoke.json; SHA af6d607 |
 
@@ -47,7 +87,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Sources | Applicants and employees in the org |
 | UI | Recruiter drawer: Previous Bandai record + Full history |
 | Apply | Date of birth required; same identity may apply again |
-| Block? | No GÇö history only |
+| Block? | No Gï¿½ï¿½ history only |
 | Helper | `hris-api/helper/person-identity-history.helper.ts` |
 
 
@@ -60,7 +100,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Job command | `npm run prisma-postgres:push` (no seed) |
 | Jobs | Complete 1/1 in **dev, uat, prod** |
 | Prisma | GÇ£already in syncGÇ¥ all three |
-| Argo runtime | Synced / **Healthy** +ù3 |
+| Argo runtime | Synced / **Healthy** +ï¿½3 |
 | UAT/PROD counts | Unchanged 2225 / 10979 / 129535 |
 | Tunnel | active |
 | Operator page | `docs/DB_INIT_JOB.md` |
@@ -71,8 +111,8 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Field | Value |
 |---|---|
 | Ask | Table of employees to see/edit current hours; filter by department and section |
-| HR | Timekeeping GåÆ **Schedules** `/hr/employee-schedules` |
-| Admin | Configuration GåÆ **Employee Schedules** `/admin/configuration/employee-schedules` |
+| HR | Timekeeping Gï¿½ï¿½ **Schedules** `/hr/employee-schedules` |
+| Admin | Configuration Gï¿½ï¿½ **Employee Schedules** `/admin/configuration/employee-schedules` |
 | Edit | Same **Change schedule** Days/Dates modal |
 | API | Existing `POST /api/employee-schedules` + `POST /api/scheduleOverride` |
 
@@ -135,7 +175,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Ask | Compress table; freeze employee name on horizontal scroll; smaller text |
 | Fix | DataTable `density=compact`; employee `pin: left`; smaller avatars/times/badges |
 | Tests | vitest 31 |
-| Browser | `.runtime/attendance-records-compact-20260820/result.json` GÇö Shift Date scrolled away, Employee stayed |
+| Browser | `.runtime/attendance-records-compact-20260820/result.json` Gï¿½ï¿½ Shift Date scrolled away, Employee stayed |
 
 
 ## 2026-08-20 - Attendance overview return from list filters
@@ -143,7 +183,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Field | Value |
 |---|---|
 | Symptom | Clocked In (and other overview filters) set `?status=&view=list`. Sidebar Attendance stayed on that URL. |
-| Fix | Back link GåÆ `/hr/attendance` (date/period kept). Metric toggle-off returns to overview. Sidebar same-path click clears search. |
+| Fix | Back link Gï¿½ï¿½ `/hr/attendance` (date/period kept). Metric toggle-off returns to overview. Sidebar same-path click clears search. |
 | Tests | vitest 23 (attendance 19 + sidebar 4) |
 | Browser | `.runtime/attendance-overview-return-20260820/result.json` |
 
@@ -206,19 +246,19 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Observe tip | run 32368517802 waiting VM report (stacked on `e7b6704`) |
 | VM apply stamp | `885c331` `services=none` (docs-only; images not rebuilt) |
 | Argo overlay | Synced/Healthy `37b443a` |
-| Argo runtime | Synced/**Degraded** GÇö `hris-api-db-init` Failed +ù3 ns |
-| Ports | VM 6+ù200; this PC LAN timeout; public APIs 200 no `buildSha` |
+| Argo runtime | Synced/**Degraded** Gï¿½ï¿½ `hris-api-db-init` Failed +ï¿½3 ns |
+| Ports | VM 6+ï¿½200; this PC LAN timeout; public APIs 200 no `buildSha` |
 | Tunnel | `cloudflared-bnpi-hris.service` active+enabled |
 | Report | `.wwg/reports/devops-audit-20260820.md` |
 
 
-## 2026-08-20 - Timesheet Gåö schedule connection
+## 2026-08-20 - Timesheet Gï¿½ï¿½ schedule connection
 
 | Field | Value |
 |---|---|
 | Status | `AUDITED_CODE` |
-| Days tab | Weekly pattern GåÆ obligations from next Monday |
-| Dates tab | That calendar date GåÆ `ScheduleOverride` + obligation that day |
+| Days tab | Weekly pattern Gï¿½ï¿½ obligations from next Monday |
+| Dates tab | That calendar date Gï¿½ï¿½ `ScheduleOverride` + obligation that day |
 | Punches / timesheet lines / stored late | **Not** rewritten by schedule change |
 | Report | `.wwg/reports/timesheet-schedule-connection-20260820.md` |
 
@@ -237,7 +277,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 ## 2026-08-20 - Sheet2 vs confidential-files import gaps (TR)
 
 - Status: `INVESTIGATED`.
-- Jul pack has Bio/WS/OT/COMP/DED only — **no period leave-usage file**.
+- Jul pack has Bio/WS/OT/COMP/DED only ï¿½ **no period leave-usage file**.
 - Sheet2 **Leave**: **376 people / ?445k**; local Jul `LEAVE` lines = **0**; preview `leavePay=0`.
 - Other weak/missing Jul mass: MLA (0 in Jul COMP; prior open-horizon 831), HYS, OAD,
   UFD, DMA (0 in Jul COMP). Gifts/CTC/shuttle/ACL conversion = ?0 this cut.
@@ -250,8 +290,8 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Field | Value |
 |---|---|
 | Calendar | Click multiple days; same hours apply to all |
-| Break | Start/end, default 12:00GÇô13:00, can uncheck |
-| Bugfix | Picking another date no longer resets start/end to 08:00GÇô17:00 |
+| Break | Start/end, default 12:00Gï¿½ï¿½13:00, can uncheck |
+| Bugfix | Picking another date no longer resets start/end to 08:00Gï¿½ï¿½17:00 |
 
 
 ## 2026-08-20 - 2.1.7 readiness re-check
@@ -259,7 +299,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Field | Value |
 |---|---|
 | Verdict | `READY_WITH_RESIDUAL` |
-| Screenshot GÇ£not shown in UIGÇ¥ | **STALE** GÇö tab is mounted |
+| Screenshot GÇ£not shown in UIGÇ¥ | **STALE** Gï¿½ï¿½ tab is mounted |
 | Re-proof | vitest 3, Playwright 1, API 872/1355 |
 | Residual | roster Gender/Agency/Total Manpower = 0; public DEV SHA unproven |
 | Report | `.wwg/reports/direct-indirect-labor-ui-20260820.md` |
@@ -293,16 +333,16 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Field | Value |
 |---|---|
 | Ask | Set hours on an actual calendar date, not only next Monday |
-| Days tab | Unchanged weekday pattern GåÆ `POST /api/employee-schedules` `pattern` |
-| Dates tab | Calendar date + hours GåÆ `POST /api/scheduleOverride` |
-| UI | Work Schedule GåÆ Change schedule GåÆ Days / Dates |
+| Days tab | Unchanged weekday pattern Gï¿½ï¿½ `POST /api/employee-schedules` `pattern` |
+| Dates tab | Calendar date + hours Gï¿½ï¿½ `POST /api/scheduleOverride` |
+| UI | Work Schedule Gï¿½ï¿½ Change schedule Gï¿½ï¿½ Days / Dates |
 
 
 ## 2026-08-20 - Employee weekly hours change
 
 | Field | Value |
 |---|---|
-| Ask | Set Zen Monday 6GÇô3, Tuesday 7GÇô4 (per employee, not only org templates) |
+| Ask | Set Zen Monday 6Gï¿½ï¿½3, Tuesday 7Gï¿½ï¿½4 (per employee, not only org templates) |
 | Already existed | Admin `/admin/configuration/schedule-templates`; employee edit Active Schedule weekly pattern |
 | Gap | Work Schedule tab was view-only; team assign was one shift for every day |
 | Now | **Change schedule** on `/employee/:id?tab=schedule` and admin employee profile |
@@ -346,8 +386,8 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 |---|---|
 | Status | `IMPLEMENTED_SOURCE` (VM rebuild `NEEDS_CONFIRMATION`) |
 | Supersedes | 2026-08-19 foldered `.inc.cpp` include/src split |
-| Headers | `vendor/hikvision-linux/include/hikvision_bio/` GÇö `types.hpp`, `common.hpp`, `time.hpp`, `runtime.hpp`, `prelude.hpp`, `acs.hpp`, `identity.hpp`, `fingerprint.hpp`, `face.hpp`, `copy.hpp`, `spool.hpp` |
-| Sources | `vendor/hikvision-linux/src/hikvision_bio/` GÇö `common.cpp`, `time.cpp`, `acs.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `copy.cpp`, `spool.cpp`, `runtime.cpp`, `main.cpp` |
+| Headers | `vendor/hikvision-linux/include/hikvision_bio/` Gï¿½ï¿½ `types.hpp`, `common.hpp`, `time.hpp`, `runtime.hpp`, `prelude.hpp`, `acs.hpp`, `identity.hpp`, `fingerprint.hpp`, `face.hpp`, `copy.hpp`, `spool.hpp` |
+| Sources | `vendor/hikvision-linux/src/hikvision_bio/` Gï¿½ï¿½ `common.cpp`, `time.cpp`, `acs.cpp`, `identity.cpp`, `fingerprint.cpp`, `face.cpp`, `copy.cpp`, `spool.cpp`, `runtime.cpp`, `main.cpp` |
 | Split | fingerprint vs face are separate units; leftover `.inc.cpp` dumps removed |
 | Binary / CLI | same `hikvision-biometric-service`; CLI/JSONL unchanged; wrapper still syncs whole include/ + src/ |
 | Time | still SDK STDXML GET/PUT `/ISAPI/System/time`, `CST-8:00:00`, `execute=false` default; no NTP |
@@ -361,7 +401,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 - Optional script fills existing `EmployeePayroll.hourlySalary = 0` from current `dailySalary` / payroll `metadata`. Still **not** used in OT/late/UT/absent/gross.
 - Dry-run default: `cd hris-api` then `npm run backfill:employee-payroll-hourly-salary`.
 - Writes only on `npm run backfill:employee-payroll-hourly-salary:execute`. Column only; paid money history is not regenerated.
-- Derive: `computeEmployeePayrollHourlySalarySnapshot` GÇö prefer metadata `hourlyRate`, else daily ++ hours (BNPI 313 uses 8).
+- Derive: `computeEmployeePayrollHourlySalarySnapshot` Gï¿½ï¿½ prefer metadata `hourlyRate`, else daily ++ hours (BNPI 313 uses 8).
 - WWG: project-truth hourlySalary bullet + summary one-liner + current-task addendum + snapshot report **Backfill** section.
 
 
@@ -383,7 +423,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 - Devices **can** set time: panel Time Settings, web Manual/NTP, Hik-Connect, iVMS Batch Time Sync, ISAPI `PUT /ISAPI/System/time`, NTP `ntpServers`.
 - HRIS today: **GET only**. Health badge Readable. No SET/NTP writer.
 - Manila on wire: `CST-8:00:00` + DST off + `+08:00`. Already matches BNPI GET. Preferred fleet: NTP + that TZ.
-- Last XML: `timeMode=manual`; B/D/E 2026-08-17 drifted ~20GÇô61s vs API. Live today `NEEDS_CONFIRMATION`.
+- Last XML: `timeMode=manual`; B/D/E 2026-08-17 drifted ~20Gï¿½ï¿½61s vs API. Live today `NEEDS_CONFIRMATION`.
 - Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`. REC-20260819-HIKVISION-DEVICE-NTP-FLEET.
 
 
@@ -392,7 +432,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 - Status: `EXECUTED_LIVE_DEV`. K3s DEV via `127.0.0.1:55435`.
 - Dry-run: scanned 46, wouldUpdate 46, alreadySet 0. Execute: **updated 46 / errors 0**.
 - Source: `metadata.hourlyRate`. Second dry-run: alreadySet 46, wouldUpdate 0.
-- Money fields not rewritten. Sample `cmsednryg0190nxvsgfr4utaa` daily 1471.43 GåÆ hourly 196.19.
+- Money fields not rewritten. Sample `cmsednryg0190nxvsgfr4utaa` daily 1471.43 Gï¿½ï¿½ hourly 196.19.
 
 
 ## 2026-08-19 - Local attendance request missing on public DEV
@@ -414,7 +454,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 |---|---|
 | Symptom | OT form was a number spinner; 2h 50m not enterable. Workflow was manager. Approve did not write payable OT. |
 | UI | DatePicker + Hours/Minutes. Example 2:50. |
-| Workflow | `WF-OVERTIME-DEFAULT` employee GåÆ **HR** GåÆ system |
+| Workflow | `WF-OVERTIME-DEFAULT` employee Gï¿½ï¿½ **HR** Gï¿½ï¿½ system |
 | Apply | HR approve writes `timesheet_lines.overtimeHours` `2:50` (170 min) |
 | Tests | vitest 7; mocha 3 |
 
@@ -425,7 +465,7 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 |---|---|
 | Before | `infra` had no git login (`gh` missing, no `~/.git-credentials`); ansible-pull already worked via `argocd/project-truth-repo-creds` as `g-zenr` |
 | After | `credential.helper=store`; `~/.git-credentials` mode 0600; `user.name=g-zenr` |
-| Proof | `git ls-remote` as `infra` GåÆ `6f973877ca13` develop |
+| Proof | `git ls-remote` as `infra` Gï¿½ï¿½ `6f973877ca13` develop |
 | LAN SSH | still timeout from this host (`192.168.1.26` Wi-Fi, not on `10.184.37.0/24`); use `ssh project-truth-hris` |
 | Evidence | `.runtime/vm-git-login-20260819/` |
 
@@ -435,10 +475,10 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 | Field | Value |
 |---|---|
 | Gap | Actions tab had no live GÇ£is this SHA deployedGÇ¥ signal |
-| Workflow | `.github/workflows/observe-deploy.yml` GÇö environment `vm-gitops` |
+| Workflow | `.github/workflows/observe-deploy.yml` Gï¿½ï¿½ environment `vm-gitops` |
 | VM report | `project-truth-report-github-deploy` after ansible-pull state |
 | How to watch | `gh run list --workflow observe-deploy.yml --branch develop` |
-| Live proof | SHA `e8046073` GÇö Action [32257214024](https://github.com/hrisworkforcesystem-coder/bandai-infra/actions/runs/32257214024) success; VM `synced_at=2026-08-19T13:20:58Z`; deployment `5983215227` |
+| Live proof | SHA `e8046073` Gï¿½ï¿½ Action [32257214024](https://github.com/hrisworkforcesystem-coder/bandai-infra/actions/runs/32257214024) success; VM `synced_at=2026-08-19T13:20:58Z`; deployment `5983215227` |
 
 
 ## 2026-08-19 - CI checks per deploy type
@@ -454,8 +494,8 @@ unHikvisionTimeSyncCore shared by single + fleet (SDK STDXML first, ISAPI fallba
 
 | Step | Last working | Now |
 |---|---|---|
-| Host `git push origin develop` | yes | **yes** GÇö GitHub tip `68dd7ae` (2026-08-19T04:59:02Z) |
-| VM `ansible-pull` | last **success** `bedf705` at **2026-08-12T09:51:24Z** | **fail every ~5 min** GÇö GitHub `403` `Your account is suspended` |
+| Host `git push origin develop` | yes | **yes** Gï¿½ï¿½ GitHub tip `68dd7ae` (2026-08-19T04:59:02Z) |
+| VM `ansible-pull` | last **success** `bedf705` at **2026-08-12T09:51:24Z** | **fail every ~5 min** Gï¿½ï¿½ GitHub `403` `Your account is suspended` |
 | Listener rebuild | ELF **2026-08-13 06:59** | **not since** |
 
 Host push still works (same as last time). VM pull does **not**. SDK listener is not receiving those pushes.
@@ -473,7 +513,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 | `/opt` + git source | still **monolith** `hikvision_biometric_service.cpp`; no `src/hikvision_bio/` |
 | Git source SHA | `/var/lib/project-truth/source` `a6fdd26a` (not `e1ddfba`) |
 | Why not updating | `ansible-pull` **failed**: GitHub `403` `Your account is suspended` on `https://github.com/hrisworkforcesystem-coder/bandai-infra.git` |
-| Scratch compile | **OK** GÇö new 10 TUs linked at `/tmp/hikvision-units-proof/build/hikvision-biometric-service` 2026-08-19 04:58 UTC. **Did not replace** the running ELF. |
+| Scratch compile | **OK** Gï¿½ï¿½ new 10 TUs linked at `/tmp/hikvision-units-proof/build/hikvision-biometric-service` 2026-08-19 04:58 UTC. **Did not replace** the running ELF. |
 
 
 ## 2026-08-19 - SDK callback listener deployed via LAN (GitOps still 403)
@@ -481,7 +521,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 | Field | Value |
 |---|---|
 | Status | `DEPLOYED_LAN` |
-| How | Host scp GåÆ `/opt` `include/`+`src/` + new wrapper GåÆ `systemctl restart` (ansible-pull still 403) |
+| How | Host scp Gï¿½ï¿½ `/opt` `include/`+`src/` + new wrapper Gï¿½ï¿½ `systemctl restart` (ansible-pull still 403) |
 | ELF | `/home/infra/.../build/hikvision-biometric-service` **2026-08-19 05:21 UTC** size `1548384` (was 2026-08-13 `1499832`) |
 | Process | started **2026-08-19 05:20:59** `sdk_login`/`sdk_alarm_arm` ok; `acs_alarm_received` at 05:21:40Z |
 | Rollback ELF | `hikvision-biometric-service.bak-20260813` |
@@ -493,7 +533,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 | Field | Value |
 |---|---|
 | Status | `AUDITED_LIVE` |
-| Sheet claim | 98.08% GÇö **wrong** |
+| Sheet claim | 98.08% Gï¿½ï¿½ **wrong** |
 | Report | `audits/payroll-management-2026-08-19.md` |
 | Records | **46** `EmployeePayroll` (35 Jun P1 + 11 Jul P1). Payslip files **0**. Special runs **0**. Loans **1321**. Corrections **0** |
 | Current Aug | OPEN `PP-20260811-20260826`. Approved timesheets **0**. Zen TS `cmswwobaz05mxlp01e8p71f9q` **404** |
@@ -504,8 +544,8 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 | Field | Value |
 |---|---|
-| Cause | VM secret `argocd/project-truth-repo-creds` used **suspended** GitHub user `ernestdodz` GåÆ `403` |
-| Fix | Replaced secret with this PCGÇÖs working `gh` token (`x-access-token` / `g-zenr`) |
+| Cause | VM secret `argocd/project-truth-repo-creds` used **suspended** GitHub user `ernestdodz` Gï¿½ï¿½ `403` |
+| Fix | Replaced secret with this PCGï¿½ï¿½s working `gh` token (`x-access-token` / `g-zenr`) |
 | Second fail | submodule `hris-emp-app` **404** (token cannot read that private sibling) |
 | Script | `project-truth-ansible-pull` now applies the playbook from the main checkout if submodule fetch fails |
 | Applied | `d73b464` at **2026-08-19T06:00:30Z** (`ansible-pull-state`) |
@@ -515,7 +555,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 ## 2026-08-18 - WorkSharing flag=0 ABSENT fix (proof + repair + re-tally)
 
 - Status: `PROOFED_FIXED_LOCAL_RETALLIED`.
-- Proof: Rio-class (file Absent=0, app>0) **82 people / 140 ABSENT lines** — **100%** on
+- Proof: Rio-class (file Absent=0, app>0) **82 people / 140 ABSENT lines** ï¿½ **100%** on
   WorkSharing flag **0**; leave requests **0**; OT details ? holiday-off source.
 - Bug: WS import only wrote flag=1 overrides; flag=0 left work template ? empty=ABSENT.
 - Fix: parse `dayOffAssignments`; import `isOff` overrides; repair **1715** lines ? REST_DAY.
@@ -528,19 +568,19 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 ## 2026-08-18 - Absent residual explained (bio vs computation)
 
 - Status: `DOCUMENTED` (superseded in part by WS-off fix above).
-- Report: `.runtime/absent-residual-explained-20260818/REPORT.md` + §5.4
+- Report: `.runtime/absent-residual-explained-20260818/REPORT.md` + ï¿½5.4
 
 
 ## 2026-08-18 - Recurring DED mass / Amount vs Payment documented
 
 - Status: `DOCUMENTED`.
-- Canonical: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` **§14c**.
+- Canonical: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` **ï¿½14c**.
 - WWG: `.wwg/reports/bnpi-recurring-deduction-mass-loans-20260818.md` + findings summary updated.
 - Captures: past mass = primary recurring source; Payment vs Amount (still owed);
   multi-cutoff horizon; Jul proof; FAQ (most loans match ? TOTAL DEDN/TR tallied).
 
 
-## 2026-08-18 - Full Jul 11–25 re-tally after loan fix
+## 2026-08-18 - Full Jul 11ï¿½25 re-tally after loan fix
 
 - Status: `RE_TALLIED_LOCAL`.
 - Period `PP-20260711-20260726` / `cmryhzl500032vgakz1uy1k7l`, 828 compared.
@@ -559,7 +599,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - Re-tally: **DMA fail 332?0**, match **496?828** (`fieldFailCounts.dma=0`).
 - Evidence: `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`,
   `.runtime/dma-open-horizon-repair-20260818/`.
-- Docs: canonical §14d.
+- Docs: canonical ï¿½14d.
 - **Operator note:** local `5433` is testing only. Brute/data repairs (DMA upsert, loan
   horizon, WS-off REST_DAY, late/EO recompute, prior DED reimport, dailyRate backfill)
   must be **replayed on VM DB later**. Code path is git-durable; data is not until VM.
@@ -581,7 +621,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 - Status: `IMPLEMENTED_LOCAL_PROVEN` (local clone `5433` only).
 - Problem: Sheet2 Jul loans recur from prior mass; DB loans had `endDate` = one cut
-  (`maxTermMonths=1` / workbook seed) so payroll applied ?0 for Jul 11–25.
+  (`maxTermMonths=1` / workbook seed) so payroll applied ?0 for Jul 11ï¿½25.
 - Fix: multi-cutoff term (floor 24 mo), never-shrink endDate on mass import;
   repair script extended 1280 ACTIVE loans; reimported prior DED mass oldest?newest
   (org `cmryhwpv70000vgaktlmrubmx`).
@@ -596,16 +636,16 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 ## 2026-08-17 - Zen 00010 timesheet lines + sync API
 
-- Status: `IMPLEMENTED_DOCUMENTED` GÇö operator asked to push leftover timesheet sync + docs.
-- Missing timesheet GåÆ created/approved `cmswwobaz05mxlp01e8p71f9q`; 14 lines materialized; preview deducts absent/late.
+- Status: `IMPLEMENTED_DOCUMENTED` Gï¿½ï¿½ operator asked to push leftover timesheet sync + docs.
+- Missing timesheet Gï¿½ï¿½ created/approved `cmswwobaz05mxlp01e8p71f9q`; 14 lines materialized; preview deducts absent/late.
 - `POST /api/timesheet/:id/sync-obligation-lines` + `ensure-period-drafts` `employeeIds`.
 - Reports: `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`, `.wwg/reports/zen-payroll-timesheet-code-20260817.md`.
 
 
-## 2026-08-17 - FILE_DUAL Basic Path A (paidDays × dailyRate)
+## 2026-08-17 - FILE_DUAL Basic Path A (paidDays ï¿½ dailyRate)
 
 - Status: `IMPLEMENTED_LOCAL_PROVEN` / VM **blocked** (same as OT dual).
-- Engine: Path A if `dailyRate > 0` ? `basicPay = paidRegularDays × dailyRate`
+- Engine: Path A if `dailyRate > 0` ? `basicPay = paidRegularDays ï¿½ dailyRate`
   (`approvedBuckets.regularDays`); suppress full-day Absent-Amt on Path A.
   Path B keeps `periodBasic` + full-day absent.
 - Register: no longer forces `basicPay = periodBasic`; Path A days = paid regular days.
@@ -616,7 +656,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
   - absent fails **603 ? 222**
   - OT pay still **1**; Gross **~805**; TR **~827**; TALLIED **1**
 - Evidence: `.runtime/full-tally-jul11-25-after-basic-path-a-20260817/COMPARE-BEFORE-AFTER.md`
-- Docs: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` §14b
+- Docs: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` ï¿½14b
 - Next: absent residual / DMA / late / loans package; VM migrate when up.
   Aligning Basic alone does **not** unlock fleet TR (product lock already known).
 
@@ -630,7 +670,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 ## 2026-08-17 - Encoding / boarding titles + set-active recompute
 
-- Status: `IMPLEMENTED_DOCUMENTED` GÇö operator asked to document and push `develop`.
+- Status: `IMPLEMENTED_DOCUMENTED` Gï¿½ï¿½ operator asked to document and push `develop`.
 - Boarding titles ASCII. Documents icon compare, enroll copy, Grafana Tempo title, level descriptions cleaned.
 - `set-active` calls `recomputeAttendanceObligationsForRange` after assign.
 - Report: `.wwg/reports/mojibake-encoding-20260817.md`.
@@ -641,7 +681,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 - Status: `IMPLEMENTED_DOCUMENTED_LOCAL` (`a6dce32` already on `origin/develop` from before the no-push instruction).
 - Operator serial 9652 person 10 Check Out: attendance was already updated. Unknown Vendor / Unknown evidence = stale stored taxonomy.
-- GET/UI reclassify stale UNKNOWN GåÆ TAP; SDK evidence stamp; callback pad match + DeviceUser link on next tap.
+- GET/UI reclassify stale UNKNOWN Gï¿½ï¿½ TAP; SDK evidence stamp; callback pad match + DeviceUser link on next tap.
 - Data: DeviceUser 10 on B/D/E linked to `00010` Zen Andrei. Other unmatched left unmatched.
 - Proof: local GET TAP/`SDK_CALLBACK` on `cmsr688py002xvxwwttxhdsal`. Report: `.wwg/reports/device-event-tap-display-20260817.md`.
 - Do not push unless asked. Public DEV UI until API SHA rolls is `NEEDS_CONFIRMATION`.
@@ -679,7 +719,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - Status: `DOCUMENTED_LOCAL_API_PROVEN`.
 - Local `:3001` skip persist proven (smoke serial `GROK-DOC-M2-38-20260817`, 0 DB rows).
 - Canonical: `.wwg/reports/device-events-dup-20260817.md` + project-truth + terminology **Armed-device ACS exception**.
-- CONFLICTING: live `2/38` still saved `02:51:12Z` after API start GÇö do not claim every writer is on the skip.
+- CONFLICTING: live `2/38` still saved `02:51:12Z` after API start Gï¿½ï¿½ do not claim every writer is on the skip.
 - No push (operator standing order).
 
 
@@ -698,7 +738,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - Canonical: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md`
 - WWG short: `.wwg/reports/bnpi-payroll-app-vs-file-findings-20260813.md`
 - Product locks: empty bio = ABSENT kept; do not Path-A-only OT.
-- Key counts (Jun 26–Jul 10): Basic unmatch 481; OT hrs ~817/818; OT pay unmatch ~482;
+- Key counts (Jun 26ï¿½Jul 10): Basic unmatch 481; OT hrs ~817/818; OT pay unmatch ~482;
   Rio-pattern absent peers 472; TR exact ~4; aligning Basic alone does not unlock TR.
 - File OT dual path proven on April register: Path A Daily/8 (545), Path B BNPI monthly (249).
 - Runtime evidence under `.runtime/unmatch-non-rio-20260813/`, `april-ot-rate-20260813/`,
@@ -738,14 +778,14 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - Tests: `hikvision-panel-select-status.test.ts` 7 green. HEAD still `f93adc5`. **Do not push.**
 
 
-## 2026-08-13 - Hikvision Select Status GåÆ HRIS audit
+## 2026-08-13 - Hikvision Select Status Gï¿½ï¿½ HRIS audit
 
 - Status: `AUDITED_NO_IMPLEMENTATION`.
 - Panel Select Status is real T&A. Live `EN_HCNETSDK_ALARM` POST has **no** in/out field (0 / 32,489). ISAPI Sync can nest `attendanceStatus`+`label` (689 rows; 678 `checkIn`). HRIS pairing ignores it (first punch in, later out).
 - C++ already has ACS extend pointer and only copies `byEmployeeNo`.
 - ZK `attStateName` is also unused for pairing (time first/last).
 - Documented, **not committed**: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`, `.wwg/reports/hikvision-select-status-audit-20260813.md`, `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`.
-- 10 reports: `.runtime/hikvision-status-audit-20260813/01`GÇô`10` + `11-lead-synthesis.md`.
+- 10 reports: `.runtime/hikvision-status-audit-20260813/01`Gï¿½ï¿½`10` + `11-lead-synthesis.md`.
 - RECs: `REC-20260813-HIKVISION-SDK-ATTENDANCE-STATUS-WIRE`, `REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP`.
 
 
@@ -761,8 +801,8 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 ## 2026-08-13 - Timesheet Check In/Out from panel
 
 - Status: `IMPLEMENTED`.
-- Panel Check In GåÆ Time In. Panel Check Out GåÆ Time Out. Two Check Ins do not close the day.
-- Fallback: no panel status GåÆ first/last punch.
+- Panel Check In Gï¿½ï¿½ Time In. Panel Check Out Gï¿½ï¿½ Time Out. Two Check Ins do not close the day.
+- Fallback: no panel status Gï¿½ï¿½ first/last punch.
 
 
 ## 2026-08-13 - Select Status copied (document + push)
@@ -785,8 +825,8 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 ## 2026-08-13 - Device 5 reverse tunnel (192.168.1.136)
 
 - Status: `LIVE_AND_TRUTH_SYNCED`.
-- Device 5 `cmsq47r9t0039vxbwt9rfxk68` = physical `192.168.1.136:80` on PC WiGÇæFi `192.168.1.116`.
-- Reverse: `ssh-reverse-forward` GåÆ VM `127.0.0.1:59443` (HTTPS/ISAPI) and `127.0.0.1:59000` (SDK).
+- Device 5 `cmsq47r9t0039vxbwt9rfxk68` = physical `192.168.1.136:80` on PC WiGï¿½ï¿½Fi `192.168.1.116`.
+- Reverse: `ssh-reverse-forward` Gï¿½ï¿½ VM `127.0.0.1:59443` (HTTPS/ISAPI) and `127.0.0.1:59000` (SDK).
 - Proof: host TCP open; VM listeners `59443`/`59000`; pack ISAPI `401` on `58480`; local quick health `online`.
 - STALE: TEST A at `192.168.254.102` and TEST A owning `59000`/`59443`. Live TEST A `.109:58080`, TEST B `.110:58180`.
 - Evidence: `.runtime/device5-reverse-20260813-005641/`.
@@ -799,7 +839,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
   `previewStep=results` shows the employee table **on the page** (not in a
   dialog). Employee detail remains a modal over the page.
 - URL example:
-  `/hr/run-payroll?periodView=past&periodCode=PP-…&action=preview-payroll&previewStep=results&page=1&limit=10`
+  `/hr/run-payroll?periodView=past&periodCode=PP-ï¿½&action=preview-payroll&previewStep=results&page=1&limit=10`
 - Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts` helpers
   `isPreviewPayrollModalStep` / `isPreviewPayrollResultsPage`.
 - Tests: `hris-app/app/lib/utils/payroll-preview-modal.test.ts`.
@@ -831,10 +871,10 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - Status: `FIXED_LOCAL_CLONE`.
 - Problem: ~397 employees with matching OT **hours** used
   `periodBasic/regularDays` OT rate when that daily = ?700, so app OT pay ?
-  pure BNPI `periodBasic×24/313/8×1.25`.
+  pure BNPI `periodBasicï¿½24/313/8ï¿½1.25`.
 - Fix: `resolveBandaiApprovedBucketRateBasis` always `BNPI_DIRECT_313_APPROVED_BUCKETS`
   for approved-bucket OT/premium pay. Source daily kept diagnostic only.
-- Proof: `.runtime/ot-rate-proof-20260812/` — after fix, hours-matched BNPI OT
+- Proof: `.runtime/ot-rate-proof-20260812/` ï¿½ after fix, hours-matched BNPI OT
   self-consistency **719/719** (was 322/719). Sheet2 OT mismatches may increase
   where file uses ~?93.75/hr (operator chose BNPI, not Sheet2 OT $).
 - Absent policy unchanged: empty biometrics = full-day ABSENT.
@@ -847,42 +887,42 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - Status: `STEP1_APPLIED_LOCAL_CLONE` / `STEP2_PROBED_NO_WRITES`.
 - Period `PP-20260626-20260711`: re-imported WorkSharing day flags (9114 overrides
   updated) and recomputed late/EO/UT + scheduleSnapshot on **9785** PRESENT/INCOMPLETE lines.
-- **Rio 01360:** late minutes **183GåÆ0**, UT/Late-Amt **277.72GåÆ0**, Gross **12591GåÆ12869**;
-  Jul 4 remains ABSENT (no punches in biometrics file or DB) GÇö true absence.
-- **Alexa 01792:** multi-day late collapsed; shortfall still ~Gé¦420.41 (late 2:55 + EO 2:35)
-  Gëê prior near-tally residual vs target ~419.64.
+- **Rio 01360:** late minutes **183Gï¿½ï¿½0**, UT/Late-Amt **277.72Gï¿½ï¿½0**, Gross **12591Gï¿½ï¿½12869**;
+  Jul 4 remains ABSENT (no punches in biometrics file or DB) Gï¿½ï¿½ true absence.
+- **Alexa 01792:** multi-day late collapsed; shortfall still ~Gï¿½420.41 (late 2:55 + EO 2:35)
+  Gï¿½ï¿½ prior near-tally residual vs target ~419.64.
 - Step2 tool `repair-period-false-absent-from-punches.ts`: **1597** ABSENT all have
-  **zero** punches on line/attendance GåÆ bucket A = 0; no status flips.
+  **zero** punches on line/attendance Gï¿½ï¿½ bucket A = 0; no status flips.
 - Evidence: `.runtime/attend-repair-20260812-093657/REPORT.md`.
 
 
-## 2026-08-12 - BNPI OT rate always 313 (not source-daily Gëñ700)
+## 2026-08-12 - BNPI OT rate always 313 (not source-daily Gï¿½ï¿½700)
 
 - Status: `FIXED_LOCAL_CLONE`.
 - Problem: ~397 employees with matching OT **hours** used
-  `periodBasic/regularDays` OT rate when that daily Gëñ Gé¦700, so app OT pay Gëá
-  pure BNPI `periodBasic+ù24/313/8+ù1.25`.
+  `periodBasic/regularDays` OT rate when that daily Gï¿½ï¿½ Gï¿½700, so app OT pay Gï¿½ï¿½
+  pure BNPI `periodBasic+ï¿½24/313/8+ï¿½1.25`.
 - Fix: `resolveBandaiApprovedBucketRateBasis` always `BNPI_DIRECT_313_APPROVED_BUCKETS`
   for approved-bucket OT/premium pay. Source daily kept diagnostic only.
-- Proof: `.runtime/ot-rate-proof-20260812/` GÇö after fix, hours-matched BNPI OT
+- Proof: `.runtime/ot-rate-proof-20260812/` Gï¿½ï¿½ after fix, hours-matched BNPI OT
   self-consistency **719/719** (was 322/719). Sheet2 OT mismatches may increase
-  where file uses ~Gé¦93.75/hr (operator chose BNPI, not Sheet2 OT $).
+  where file uses ~Gï¿½93.75/hr (operator chose BNPI, not Sheet2 OT $).
 - Absent policy unchanged: empty biometrics = full-day ABSENT.
 - Tests: `tests/bandai-ot-rate-basis.spec.ts` (3) green.
 - Scan after: `.runtime/payroll-scan-after-ot-rate-20260812/`.
 
 
-## 2026-08-11 - BNPI Jun 26GÇôJul 10 full payroll tally investigation
+## 2026-08-11 - BNPI Jun 26Gï¿½ï¿½Jul 10 full payroll tally investigation
 
 - Status: `INVESTIGATED_NOT_FLEET_TALLIED` (no fleet money fix claimed).
 - Period: `PP-20260626-20260711`. Compared **818** app preview rows vs **860**
   target Sheet2 rows (unlocked payroll computation workbook).
 - **Fleet money:** only **4** exact tallied (`00269`, `00344`, `01687`, `01729`);
-  **1** Alexa-near (`01792`, +ö TotalReceivable **GêÆGé¦0.77** late residual);
-  **346** OT match only; **463** unmatch. ~81% \|+ö Total\| > Gé¦500.
+  **1** Alexa-near (`01792`, +ï¿½ TotalReceivable **Gï¿½ï¿½Gï¿½0.77** late residual);
+  **346** OT match only; **463** unmatch. ~81% \|+ï¿½ Total\| > Gï¿½500.
 - **Alexa (01792):** OT + absent match after BNPI 313 / OT bucket path; late +0.77.
 - **Rio (01360):** OT/AON/PFA/MLA/HDMF SL match; absent/late/DMA/RCBC/SSS/tax far
-  (+ö Total **+Gé¦2,195.73**). WorkSharing overrides exist; line schedules often not rebuilt.
+  (+ï¿½ Total **+Gï¿½2,195.73**). WorkSharing overrides exist; line schedules often not rebuilt.
 - **No. of Days always fails (818/818):** **code definition**, not universal biometrics
   failure. Target = sum `approvedBuckets.regularDays`; app = non-`REST_DAY` line count
   (includes ABSENT). Alexa 9 vs app 13 (buckets=9); Rio 12 vs app 13 (buckets=12).
@@ -894,7 +934,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
   REC-20260811-PAYROLL-WS-LINE-REBUILD, REC-20260811-PAYROLL-PERIOD-PIN-ENROLLMENTS.
 
 
-## 2026-08-11 - BNPI Jun 26–Jul 10 full payroll tally investigation
+## 2026-08-11 - BNPI Jun 26ï¿½Jul 10 full payroll tally investigation
 
 - Status: `INVESTIGATED_NOT_FLEET_TALLIED` (no fleet money fix claimed).
 - Period: `PP-20260626-20260711`. Compared **818** app preview rows vs **860**
@@ -918,8 +958,8 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 ## 2026-08-11 - Mass-upload apply gaps closed (COMP/DED present data)
 
-- Status: `FIXED_LOCAL_CLONE` for mass-upload **presentGåÆapply** path.
-- Scope: Jun 26GÇôJul 10 compensation + deduction mass upload only (not target file).
+- Status: `FIXED_LOCAL_CLONE` for mass-upload **presentGï¿½ï¿½apply** path.
+- Scope: Jun 26Gï¿½ï¿½Jul 10 compensation + deduction mass upload only (not target file).
 - Before: multi-row ABS last-write-wins; 00147 double installments; loan source codes null.
 - After live re-measure: **apply-gap rows = 0** (all mass COMP/DED codes match payroll sources).
 - Code: sum multi-row COMP import; installment dedupe + amount refresh; loan DEDCODE on sources.
@@ -931,7 +971,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 - Status: `IMPLEMENTED_LOCAL`.
 - `/hr/run-payroll` **Preview Payroll** now opens a multi-step modal aligned with
-  Start Payroll: confirm GåÆ progress GåÆ results + employee detail, with **Preview only**
+  Start Payroll: confirm Gï¿½ï¿½ progress Gï¿½ï¿½ results + employee detail, with **Preview only**
   chrome and no writes.
 - API: `calculateRows=true` on timesheet payroll preview for full dry-run row amounts.
 - Tests: `hris-app/app/lib/utils/payroll-preview-modal.test.ts` green.
@@ -1007,7 +1047,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
   Every package has 874 valid rows and all 1,646 FP slots.
 - A/F/D/E contain all 806 face blobs. B contains 711 readable face blobs and 95
   explicit `missing_raw_blob` rows caused by physical face-picture 404s.
-- Five existing-path import previews succeeded. BGåÆA and EGåÆB expose one
+- Five existing-path import previews succeeded. BGï¿½ï¿½A and EGï¿½ï¿½B expose one
   `displayName` conflict at ID `1616`; the other three previews are 874 matches.
 - No physical import ran: all five compatible `DS-K1T341CMFW V3.3.40` targets
   are populated with 874 users. A new blank/frozen compatible device is required.
@@ -1023,10 +1063,10 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - Protected audit decoded 1,634 FP slots and 313 faces; 9 FP and 493 face rows remain explicit `missing_raw_blob`. See `.runtime/sdk-export-import-20260728-152250/`.
 - Product projection is exactly seven columns; package schema/endpoints are unchanged; new package users are SDK-focused and omit HRIS identity/link duplication.
 - Import false-success/conflict gates were hardened. No write ran because every readable Main Entrance peer already contains 874 users and Main A preview found 1 conflict; offline devices cannot be used as a backed-up target.
-- Continue only after a new compatible device is added and becomes authenticated/inventory-readable. Then run backup GåÆ fresh preview GåÆ smallest multimodal canary GåÆ independent FP/face reread GåÆ remaining scope.
+- Continue only after a new compatible device is added and becomes authenticated/inventory-readable. Then run backup Gï¿½ï¿½ fresh preview Gï¿½ï¿½ smallest multimodal canary Gï¿½ï¿½ independent FP/face reread Gï¿½ï¿½ remaining scope.
 - No new recommendation was identified; the remaining work is the expected physical-device boundary already stated by the user.
 
-# 2026-07-28 GÇö Fast exact Hikvision inventory
+# 2026-07-28 Gï¿½ï¿½ Fast exact Hikvision inventory
 
 - Main B exact UserInfo inventory improved from 21.993s sequential average to
   5.417s at page concurrency 8, with identical 874-row hash and biometric
@@ -1053,7 +1093,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 
 
-# 2026-07-28 — Fast exact Hikvision inventory
+# 2026-07-28 ï¿½ Fast exact Hikvision inventory
 
 - Main B exact UserInfo inventory improved from 21.993s sequential average to
   5.417s at page concurrency 8, with identical 874-row hash and biometric
@@ -1110,9 +1150,9 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - **Primary prompt:**
   `docs/00-product/AGENT-PROMPT-overnight-agent-owned-blocker-fix-and-gap-burn.md`
 - Explicit: UI GÇ£Exporting source credentialGÇ¥ / owner scan incomplete = **code/export
-  defect**, not physical action. Multi-agent root loop: previewGåÆdryRunGåÆwriteGåÆmatch;
+  defect**, not physical action. Multi-agent root loop: previewGï¿½ï¿½dryRunGï¿½ï¿½writeGï¿½ï¿½match;
   fix gate/budget/unique-person; burn until unique face/FP + residual fall.
-- Proven burn: residual 2813GåÆ~2k; unique face 690GåÆ~500; non-B FDLib rereads; FP
+- Proven burn: residual 2813Gï¿½ï¿½~2k; unique face 690Gï¿½ï¿½~500; non-B FDLib rereads; FP
   still scan-gated. Fixes: `cec3b6f` preview, `39d5a7d` unique-person+retry budget.
 - Evidence: `.runtime/overnight-gap-loop-20260725-075850/`.
 
@@ -1165,10 +1205,10 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
   fingerprint (not bare Bad Request).
 - Baseline plan: 3254 credentialWrites (FP 503 / face 2629 / card 122).
 - **Verified this session (physical reread):** ~**429 face** + **2 fingerprint**
-  GåÆ remaining **2823** (from 3254).
-  - Face: FDLib picture import primarily AGåÆB; B LOCALS faceURL 404 is
+  Gï¿½ï¿½ remaining **2823** (from 3254).
+  - Face: FDLib picture import primarily AGï¿½ï¿½B; B LOCALS faceURL 404 is
     cosmetic/half-success while model/FDLib reread passes.
-  - Fingerprint proven: vendor **1616** FGåÆB and **901** AGåÆB stored template
+  - Fingerprint proven: vendor **1616** FGï¿½ï¿½B and **901** AGï¿½ï¿½B stored template
     reread pass.
 - Residual: face `target_write_unsupported` (FDLib capability on non-B);
   FP mostly `target_owner_scan_incomplete` (owner checksum exports). Prefer
@@ -1209,13 +1249,13 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 
 - Status: `PARTIALLY FULFILLED`. Evidence root: `.runtime/merge-device-users-overnight-20260722-205845/`; full closeout: `WAKEUP-REPORT.md`.
 - Fresh accepted scope was Main Entrance B/A/D/E/F. Main Entrance C was excluded after repeated `EHOSTUNREACH` user reads; TEST A/B remained outside the proven normal HTTP/SDK scope.
-- Fresh before/after physical counts: B `687GåÆ812`, A `697GåÆ813`, D `744GåÆ849`, E `740GåÆ822`, F `715GåÆ748`. Device records increased `3583GåÆ4044` (+461); unique union stayed 865; peer gaps fell `742GåÆ281`.
+- Fresh before/after physical counts: B `687Gï¿½ï¿½812`, A `697Gï¿½ï¿½813`, D `744Gï¿½ï¿½849`, E `740Gï¿½ï¿½822`, F `715Gï¿½ï¿½748`. Device records increased `3583Gï¿½ï¿½4044` (+461); unique union stayed 865; peer gaps fell `742Gï¿½ï¿½281`.
 - Final plan `3e08ac56-2f8f-4b91-8c69-b9eed346df95` read all five devices cleanly with zero errors. All remaining 281 peer gaps are on 205 IDs with unresolved conflicts; zero conflict-free rows remain. The loop stopped rather than guessing source identity fields.
 - Biometric boundary: zero readable raw fingerprint records and zero readable raw face records were available. Final evidence is 1,746 fingerprint count-only records, 1,351 face count-only records, and explicit not-enrolled rows. Nothing count-only was called synchronized raw data.
 - Failure-only retry was proven: canary timeouts were retried as only eight remaining rows; seven were ledger successes and the eighth immediate-verification failure was subsequently present on physical reread. Later stale-inventory false noops were detected by fresh reread, repaired in code, and retried rather than accepted.
 - Corrected jobs applied 280/280 physical writes with zero already-matched and zero failures: `f457c844...`, `32dea565...`, `5c812f2b...`, `24e40a51...`.
 - Repairs pushed to `develop`: `6977afd`, `8a52316`, `a32f264`, `a037f4b`, `fb8750e`. VM ansible/GitOps runtime proved exact deployed commit `fb8750e`; the named Cloudflare tunnel stayed active.
-- Close health: canonical `127.0.0.1:55435` PostgreSQL handshake and Prisma query pass; local API health/login/auth-me pass; frontend `:5175` passes; public DEV health passes; all 18 AGÇôF HTTP/HTTPS/SDK forwards pass and remain running.
+- Close health: canonical `127.0.0.1:55435` PostgreSQL handshake and Prisma query pass; local API health/login/auth-me pass; frontend `:5175` passes; public DEV health passes; all 18 AGï¿½ï¿½F HTTP/HTTPS/SDK forwards pass and remain running.
 - Validation: API typecheck pass; 30 focused Hikvision contracts pass; Device Users UI contract pass; targeted frontend ESLint 0 errors; deployed headless Playwright terminal-job proof pass. Full frontend typecheck has unrelated existing failures and was not called green.
 
 
@@ -1288,7 +1328,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 # 2026-07-22 Merge Users Selected-ID Matrix Review Handoff
 
 - Status: `GREEN_NO_WRITE_EXECUTED`. The merge review flow was verified through the real non-mutating plan endpoint and browser modal, but the real merge job was not started.
-- User problem addressed: the prior +óGé¼+ôNeeds decision+óGé¼-¥ view was misleading because it could show duplicate rows for the same unique device ID. The review modal also hid the most important operator question: what selected ID writes from which source device to which target devices, and whether fingerprint/face will be copied.
+- User problem addressed: the prior +ï¿½Gï¿½+ï¿½Needs decision+ï¿½Gï¿½-ï¿½ view was misleading because it could show duplicate rows for the same unique device ID. The review modal also hid the most important operator question: what selected ID writes from which source device to which target devices, and whether fingerprint/face will be copied.
 - Frontend changed: `mergeList=issues` now renders one row per unique selected ID. The final review modal shows metrics for selected unique IDs, peer copy attempts, fingerprint gaps, face gaps, and conflicts resolved; per-target and per-source matrices; and a full selected-ID write matrix with physical source, targets, biometric source evidence, selected-device coverage/gaps, copy count, and an Edit action back to the row before starting.
 - Backend changed: device-user merge job progress now includes `writeMatrix` and uses that matrix for `totalWrites`, so the job polling contract can match the final review counts. The matrix includes selected unique IDs, total writes, fingerprint gaps, face gaps, per-target/per-source summaries, and per-row source/target/coverage details.
 - Browser proof: Playwright on `http://localhost:5175/admin/configuration/devices?action=device-users&syncPanel=users` authenticated as `admin@bandai.local`, hit `POST /api/device/hikvision/sdk-users/merge/plan`, used recommended sources, and opened the final review without pressing Start. The modal showed `754` selected unique IDs, `3,770` peer copy attempts, `3,493` fingerprint gaps, `3,655` face gaps, `1093/1093` conflicts resolved, `Writes by target device`, `Sources used`, `Selected ID write matrix`, `Physical source`, `Fingerprint`, `Face`, and `Edit`. Row proof for ID `1`: fingerprint `Source 2`, `5/6 devices; 1 gap`; face `Source 1`, `6/6 devices; aligned`; copy `5`.
@@ -1754,7 +1794,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
   - Job `834d6273-74d8-416f-aecf-8fd92430a062` with local `HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY=2`: `29` captured, removed transient `Unauthorized` class, final fingerprint raw `627`, missing `91`.
   - Remaining sample repair for users `1008`, `1076`, `1143` returned exact HTTP `422` bodies: `no_fingerprint_data_from_device` and `no_face_on_device`.
 - UI evidence:
-  - `browser-review-sync-dialog.png/.txt`: review modal shows `718 enrolled +é-+ 627 raw +é-+ 91 missing_raw_blob` and `356 enrolled +é-+ 311 raw +é-+ 45 missing_raw_blob`.
+  - `browser-review-sync-dialog.png/.txt`: review modal shows `718 enrolled +ï¿½-+ 627 raw +ï¿½-+ 91 missing_raw_blob` and `356 enrolled +ï¿½-+ 311 raw +ï¿½-+ 45 missing_raw_blob`.
   - `browser-details-1004.png/.txt`: repaired user shows `2 of 2 stored` and raw face stored.
   - `browser-details-1008-search-open.png/.txt`: remaining no-data user shows `2 missing_raw_blob`, raw repair buttons, and count-only missing face truth.
 - Validation:
@@ -1853,7 +1893,7 @@ Host push still works (same as last time). VM pull does **not**. SDK listener is
 - Recommendation capture: No new recommendations were identified.
 
 
-# 2026-07-19 +óGé¼GÇ¥ Raw fingerprint enrollment custody race repaired
+# 2026-07-19 +ï¿½Gï¿½GÇ¥ Raw fingerprint enrollment custody race repaired
 
 - The C++ listener was not the failing layer: TEST A person `18` produced one raw template, attached it to the callback, and received HTTP success.
 - Root cause was a last-writer-wins race in API UserInfo enrichment. A stale inventory snapshot could overwrite the DeviceUser raw metadata after the callback, while DeviceEvent still retained the template.

@@ -624,7 +624,106 @@ Evidence: `.runtime/dma-tally-20260818/REPORT.md`, `.runtime/dma-open-horizon-re
 
 ---
 
-## 15. Document history
+## 14e. Period leave import (LVP) — Sheet2 "Leave" gap closed (2026-08-25)
+
+**Operator feed:** `confidential-files/Leave (July 1-31, 2026).xlsx` — sheet **`Leave (2)`**
+(strict subset of `Leave (1)`; empirically matches Sheet2 at 99.2% money).
+
+### Proven fit vs Jul 11–25 Sheet2 (analysis, pre-import)
+
+| Check | Result |
+|---|---|
+| Sheet2 Leave people / ₱ | **376** / **₱445,111.72** |
+| File coverage of those people | **376/376 (100%)** |
+| Money formula reproduced | **373/376 (99.2%)** ±₱1 |
+| Path A (`days × dailySalary`) | 217 people |
+| Path B (`days × monthly × 12/313`) | 156 people |
+| Residuals | 00342/01176/01321 pay one day fewer on Sheet2; 01624 file-paid but Sheet2 ₱0 |
+
+### Implementation status
+
+| Item | Status |
+|---|---|
+| Helper | `hris-api/helper/bnpi-period-leave-import.helper.ts` — sheet pick (first qualifying = `EmployeeNumber`+`DateOfLeave`), paid+window filter, dual daily basis (Path A `dailyRate`; Path B `basicSalary × 24 / 313`, unrounded rate, cent-rounded amount), `LVP` code constants |
+| Service | `hris-api/app/migration/bnpi-period-leave-import.service.ts` — preview-first (`dryRun` defaults true), explicit `payrollPeriodId` override, upsert keyed `employee|LVP benefitType|payrollPeriodId` (period-pinned RECURRING/EVERY_CUTOFF like COMP mass), notes carry sheet/days/dates/basis/source, durable log kind `period-leave` |
+| Endpoint | `POST /api/migration/dm3/import-period-leave` (multipart `file`; optional `dryRun=true`; `payrollPeriodId`; `sheetName`) — **executes on upload by default** like the other DM3 mass uploads (operator decision 2026-08-25); multer string booleans coerced |
+| Engine | **`leavePay` now included in GrossPay**: `grossPayWithSources = grossPay + grossIncludedBenefits + payrollSourceAmounts.leavePay` at both generate and preview sites in `payroll-period.helper.ts`. Register `leavePay` unchanged (already sourced). Net/TR/tax follow Gross. |
+| UI | Admin → Configuration → Migration → DM3 card **Upload leave (period)** → **payroll-period selector** (default OPEN period, sends `payrollPeriodId`) + single **Import** button (immediate execute per operator feedback). Failures render in the result panel and in Upload activity click-through (kind `period-leave`). |
+| Tests | `hris-api/tests/bnpi-period-leave-import.spec.ts` (9): sheet pick, window/paid filter, dual basis incl. Sheet2 sample 00032 (₱2913.74), explicit dry-run no-writes, execute create+update+log, **default-executes contract**, missing-employee failures |
+| Local DB state | **Executed 2026-08-25** on local clone (5433): PP-20260711-20260726 → **321 created / 0 updated / 6 failed** (missing emps 01827/01834/01835/01836/01838/01841), **₱327,991.84**, log `cmt86rh9b00s8vgewuoj41i4j`. Superseded by the full **§14f tally fix pack** same day — final tally `.runtime/tally-jul1125-after-repairs-2026082508243/REPORT.md`. Baseline (pre-leave, reconstructed vs July Sheet2): `.runtime/tally-jul1125-before-leave-julysheet2/`. |
+
+## 14f. Jul 11–25 tally fix pack — comp from Sheet2 + replay (2026-08-25)
+
+The local clone was refreshed after the 8/17–8/20 sessions and lost every brute
+repair. Operator directive: recurring comp/ded cannot rely on the single cut
+file — fix compensation **from Sheet2**, always with proof.
+
+| Step | What ran | Proof |
+|---|---|---|
+| DM4 Jul bio + approved OT | `/api/migration/runs` (options.sourceFiles paths) | OT buckets landed (₱1.33M fleet); strict verify gate flaps non-convergent (known) |
+| WorkSharing Jul | `import-worksharing-schedule` | 841 updated, OFF overrides restored |
+| Late/UT recompute | `repair-period-late-ut-from-punches --apply` | punches vs rebuilt schedules |
+| dailyRate | `backfill-employee-daily-rate-from-sheet2` (July Sheet2) | 569 Path A |
+| **Comp from Sheet2** | **`repair-bnpi-comp-from-sheet2.mjs`** — DMA open-horizon (329 upd + 6 ins); period-pinned MLA 824 (831 open superseded), ARP 673, AON 33, LLA 65, TSA 10, OBA 33, OAD 5, HYS 66, ABS 48, MTX 153, PFA 1 | `.runtime/comp-from-sheet2-*/` |
+| Deductions | Jul DED mass + prior DED Jan→Jun + loan horizon 24mo | loans back to June-residual level (RCBC 29 / HDMF 11 / SSS 31) |
+| Register fix | **`arp` register column was missing** — added `attendanceRecognitionProgram` sourceBy(["ARP"],…). **Special-holiday split proven**: Path A work premium = 1.3 (stale `useSourceDailyRate` forced 0.3), Path B = 0.3; excess spclOtHrs×1.69 → own register column (`resolveBandaiSpecialHolidayWorkMultiplier`) | ARP 668 fails → **0** (₱335,500); premium gross recovered ≈₱206k |
+
+**Final proof (828 compared):** UNMATCH **694 → 2**; TALLIED **0 → 10**; NEAR_10 9;
+OT_OK_NEAR_50 **76**; **802/828 improved**; gross fails 826 → **554** (gap
+−₱324k → −₱117k); **net gap −₱423k → +₱52k**; late 322 → **55**. Now matching:
+OT ₱1.33M, DMA, MLA, ARP, PFA, AON, LLA, TSA, OBA, OAD, HYS, ABS, MTX,
+basicPay, numberOfDays. Remaining walls: absent policy 173 (Sheet2 ₱269k vs
+app ₱6k), deductions over ₱170k (contrib/loan/tax cascade), leave day-count
+201 (₱106k), ND ₱49.5k, RD Hrs Pay 13.
+Pack orchestrator: `run-jul1125-tally-fix-pack.mjs` (dry-run default,
+`--execute`, `--step=N`). Local clone only — VM replay required.
+
+---
+
+## 14g. Recurring comp/ded + future periods WITHOUT Sheet2 (2026-08-25 doctrine)
+
+Operator directives: (1) recurring comp/ded must keep recurring — next period
+should not need re-fixing; (2) Sheet2 will not always exist — future periods
+must compute from the app itself.
+
+### Recurring status after this session
+
+| Component | Mechanism | Recurs next period? |
+|---|---|---|
+| **DMA** | open-horizon EVERY_CUTOFF (§14d) | **Yes** — proven |
+| **MLA** | **flipped to open-horizon EVERY_CUTOFF** (824 rows; supersedes old 831; a future period-scoped COMP mass row supersedes it automatically) | **Yes** — proven |
+| **Loans** | EmployeeLoan enrollments from prior DED mass + 24-mo horizon | **Yes** — proven (1,356 loans / ₱831,766 overlap next period) |
+| ARP/PFA/AON/LLA/TSA/OBA/OAD/HYS/ABS/MTX | period-pinned (cut-specific adjustments) | No — by design; future cuts get them from that cut's COMP mass or app workflow |
+| Statutory (SSS/PhilHealth/Pag-IBIG/W-Tax) | engine schedules | **Yes** — native |
+| Absent / Late / UT | schedules + biometric punches (native engine) | **Yes** — native |
+| Leave pay | app leave module / period-leave import | **Yes** — native going forward |
+| OT / premium buckets | DM4 `rptOvertimeDetails` (client file) today; in-app approved-OT workflow is the future-native path | Needs that cut's OT file until in-app OT covers it |
+
+**Recurrence proof (next period PP-20260726-20260811, Sheet2 NOT used):**
+DMA 335 people / ₱110,300 · MLA 824 / ₱412,000 (engine resolver) ·
+loans 1,356 / ₱831,766 (SQL window). Evidence:
+`.runtime/recurring-next-period-proof-20260825/proof.json`.
+
+### Sheet2 = parity harness, not a dependency
+
+Sheet2 computation files are used ONLY to (a) migrate historical cutoffs and
+(b) audit/tally proof. A future period runs entirely in-app:
+schedules + punches → attendance money; approved OT → buckets; leave module →
+leave pay; recurring enrollments (DMA/MLA/loans) → comp/ded; statutory engine →
+contributions/tax. When the client later supplies a Sheet2 for audit, the same
+`_tmp-full-period-tally-compare-jul.mjs` harness measures drift.
+
+### Period selection honesty (learned live)
+
+Month-wide leave files span two cutoffs; the max-paid-days auto-pick favored the
+**prior** cut for this July file (562 vs 555 days). Shipped fix (operator feedback
+2026-08-25): the DM3 leave modal has a **payroll-period selector** (default OPEN
+period) sending `payrollPeriodId`, and the endpoint **executes on upload** by
+default. Summary still returns `periodCandidates[]` (days/emps/chosen) for honesty.
+
+---
+
+
 
 | Date | Change |
 |---|---|
@@ -633,3 +732,4 @@ Evidence: `.runtime/dma-tally-20260818/REPORT.md`, `.runtime/dma-open-horizon-re
 | 2026-08-17 | FILE_DUAL Basic Path A: paidDays×dailyRate, suppress Path A full-day absent, register uses computed basicPay; re-tally basic fails 481→1 |
 | 2026-08-17/18 | §14c recurring DED mass, Amount vs Payment, multi-cutoff loan horizon, Jul re-tally after loan fix |
 | 2026-08-18 | §14d DMA open-horizon EVERY_CUTOFF; Jul DMA fails 332→0; note local DB test-only — brute data fixes replay on VM later |
+| 2026-08-25 | §14e period leave import (LVP): Leave (2) feed proven vs Sheet2 (99.2%), DM3 endpoint + UI card, engine Gross now includes leavePay; operator feedback → immediate execute + period selector; executed on local clone 321 created / ₱327,991.84; after-tally pending |
