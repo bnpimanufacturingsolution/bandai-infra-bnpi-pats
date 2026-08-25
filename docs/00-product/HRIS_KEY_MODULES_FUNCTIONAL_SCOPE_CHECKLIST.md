@@ -3,7 +3,8 @@
 > Audit date: 2026-08-24 · Method: 6 parallel read-only agents, code-level presence only (no live runtime checks).
 > Spec source: `docs/00-product/HRIS_KEY_MODULES_FUNCTIONAL_SCOPE.md` (36 items).
 > Verdicts: PRESENT / PARTIAL / MISSING / NEEDS_LIVE_CHECK — each with file:line evidence.
-> Score: **12 PRESENT · 17 PARTIAL · 7 MISSING**
+> Score: **14 PRESENT · 15 PARTIAL · 7 MISSING** (updated 2026-08-24: M1.5 + M2.5 closed by spec-gap chain Stages 1–2)
+> Weighted rate: **(14 + 15×0.5) / 36 = 21.5/36 ≈ 60%**
 
 ## Module 1 — Payroll & Compensation
 
@@ -13,13 +14,13 @@
 | 1.2 | BNPI salary loan application, allowance tracking (Line Leader, OB, Assembly Standing) | PARTIAL | `bnpiSalaryLoan` field `employeepayroll.prisma:109`; loan CRUD `employeeLoan.router.ts:311`; LLA `employeepayroll.prisma:124` + `benefitTypeSeeder.ts:43`; OB `:71`. **"Assembly Standing" zero repo hits**; no loan-application UI (only `admin/configuration/loan-types.tsx`) |
 | 1.3 | Mass uploading of compensation and deductions | PRESENT | `app/migration/bnpi-mass-upload-import.service.ts` + helper (LLA/OBA/UFD codes); DM3 UI |
 | 1.4 | Uniform deduction, loan reports, payroll summary, labor cost analysis | PARTIAL | Uniform `employeepayroll.prisma:98` + UFD code ✅; Payroll summary `routes/hr/reports/payroll.tsx:110` + `metrics.controller.ts:3106` ✅; loan report partial (summary columns only); **labor cost analysis MISSING** (headcount-only `directIndirectLaborSummary`) |
-| 1.5 | Overtime summary (Agency & Direct) | PARTIAL / NEEDS_LIVE_CHECK | `OvertimeTab.tsx:65-71` + `overtimeMetrics` (`metrics.controller.ts:1668`) — filters lack Agency/Direct split; agency-grouped data exists only in attendance summary (`:1778`) |
+| 1.5 | Overtime summary (Agency & Direct) | PRESENT (2026-08-24) | `OvertimeTab.tsx` Labor Type filter (All/Direct/Agency) + Direct/Agency OT chips; `overtime-metrics.helper.ts` `split` computed over unfiltered set, optional `workforceSource` filter (DIRECT = not-AGENCY incl. missing). Live smoke: Jun 26–Jul 10 → all 99,075.36h/830 emp; AGENCY filter 0/0. Evidence `.runtime/spec-gap-m1-5/stage-2-ot-split/` |
 
 **Why (gaps):**
 - 1.1 Last pay: never built — termination flow only flips a `finalPayCalculated` boolean; no computation engine was ever scoped.
 - 1.2 Assembly Standing: the allowance name appears nowhere (schema, seeds, mass-upload codes LLA/OBA/UFD only) — either named differently in BNPI files or never in scope. Loan application UI: admin loan-types page exists, but an employee-facing application flow was never built.
 - 1.4 Labor cost analysis: metrics only compute headcount splits (`directIndirectLaborSummary`); a money/rate dimension was never added to any report.
-- 1.5 Agency/Direct OT: OT metrics filter by scope/department/manager only; the `workforceSource` dimension lives in the attendance summary and was never joined into the OT report.
+- 1.5 Agency/Direct OT: RESOLVED 2026-08-24 (chain Stage 2) — `workforceSource` joined into overtime metrics with always-on split + filter.
 
 ## Module 2 — Attendance & Timekeeping
 
@@ -29,11 +30,11 @@
 | 2.2 | Monthly/annual perfect attendance reports | PRESENT | `PerfectAttendanceTab.tsx` at `/hr/reports/attendance?tab=perfect`; `metrics.controller.ts:1577` + `perfect-attendance-metrics.helper.ts` |
 | 2.3 | Tardiness/UT/OT details, direct vs indirect labor | PRESENT | `TardinessUndetimeTab.tsx`, `OvertimeTab.tsx`, `/hr/reports/workforce?tab=direct-indirect`; APIs `:1628,:1668,:1821` |
 | 2.4 | Leave tardiness/UT monitoring, leave balance, manhour reference | PARTIAL | `LeaveBalanceTab.tsx` + `leaveBalanceMetrics` (`:2430`) ✅; **leave-tardiness columns MISSING**; **manhour reference MISSING** (only audit-sheet label hit) |
-| 2.5 | No work report, daily active manpower, agency attendance | PARTIAL | Agency ✅ `AgencyAttendanceTab.tsx` + `:1778`; **`NoWorkReportTab.tsx` + `DailyManpowerTab.tsx` fully built but ORPHANED** (hooks `useMetrics.ts:776,788`; APIs `:1708,:1743`; imported by no route) — quick win to wire |
+| 2.5 | No work report, daily active manpower, agency attendance | PRESENT (2026-08-24) | Agency `AgencyAttendanceTab.tsx`; **`NoWorkReportTab` + `DailyManpowerTab` now wired** into `/hr/reports/workforce` (tabs `no-work`, `daily-manpower`; hooks `useNoWorkReport` `useMetrics.ts:778`, `useDailyActiveManpower`). Pin: `workforce-tabs.contract.test.ts` |
 
 **Why (gaps):**
 - 2.4 Leave tardiness/UT: `LeaveBalanceTab` was built around balances only — late/UT columns were never added. Manhour reference: appears only as a label in an audit-sheet spec test; the feature was never implemented anywhere.
-- 2.5 No-work/Daily-manpower: tabs, hooks, and APIs are fully built but were never mounted into the workforce tabs registry — pure wiring gap, likely lost in a route refactor.
+- 2.5 No-work/Daily-manpower: RESOLVED 2026-08-24 (chain Stage 1) — both tabs wired into the workforce registry; root cause was a lost route-mount during an earlier refactor.
 
 ## Module 3 — Leave & Disciplinary Management
 
@@ -132,19 +133,19 @@
 
 | Measure | Result |
 |---|---|
-| Fully present | **12/36 = 33%** |
-| Weighted score | (12 + 17×0.5) / 36 = 20.5/36 = **~57%** |
+| Fully present | **14/36 = 39%** |
+| Weighted score | (14 + 15×0.5) / 36 = 21.5/36 = **~60%** |
 | Missing outright | 7/36 = 19% |
 
-### Per-module rates
+### Per-module rates (updated 2026-08-24 after Stages 1–2)
 
 | Module | Weighted | Rate |
 |---|---|---|
-| M2 Attendance & Timekeeping | 4.0/5 | 80% |
+| M2 Attendance & Timekeeping | 4.5/5 | 90% |
 | M4 Employee Records & Lifecycle | 4.0/5 | 80% |
 | M5 Manpower & Statutory Reports | 3.0/4 | 75% |
 | M7 Recruitment & Onboarding | 2.0/3 | 67% |
-| M1 Payroll & Compensation | 3.0/5 | 60% |
+| M1 Payroll & Compensation | 3.5/5 | 70% |
 | Technical Requirements | 3.5/6 | 58% |
 | M3 Leave & Disciplinary Management | 1.5/3 | 50% |
 | M8 Accounting & Compliance | 0.5/2 | 25% |

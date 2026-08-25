@@ -961,14 +961,24 @@ export interface OvertimeMetricsEmployee {
 	employeeId: string;
 	name: string;
 	department: string;
+	workforceSource: "DIRECT" | "AGENCY";
 	overtimeCount: number;
 	totalOvertimeHours: number;
+}
+
+export interface OvertimeLaborSplit {
+	totalOvertimeHours: number;
+	employeesWithOvertime: number;
 }
 
 export interface OvertimeMetrics {
 	totalOvertimeHours: number;
 	employeesWithOvertime: number;
 	employees: OvertimeMetricsEmployee[];
+	split: {
+		direct: OvertimeLaborSplit;
+		agency: OvertimeLaborSplit;
+	};
 }
 
 export interface OvertimeMetricsResponse {
@@ -1999,6 +2009,7 @@ class MetricsService extends APIService {
 		dateFrom?: string,
 		dateTo?: string,
 		departmentId?: string,
+		workforceSource?: string,
 	): Promise<OvertimeMetricsResponse> {
 		try {
 			const payload = {
@@ -2008,6 +2019,8 @@ class MetricsService extends APIService {
 					dateFrom,
 					dateTo,
 					...(departmentId && { departmentId }),
+					...(workforceSource &&
+						workforceSource !== "all" && { workforceSource }),
 				},
 			};
 

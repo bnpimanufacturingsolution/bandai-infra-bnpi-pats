@@ -1685,21 +1685,28 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 						})
 					)?.organizationId;
 
-				if (!organizationId) {
-					return {
-						totalOvertimeHours: 0,
-						employeesWithOvertime: 0,
-						employees: [],
-					};
-				}
+			if (!organizationId) {
+				return {
+					totalOvertimeHours: 0,
+					employeesWithOvertime: 0,
+					employees: [],
+					split: {
+						direct: { totalOvertimeHours: 0, employeesWithOvertime: 0 },
+						agency: { totalOvertimeHours: 0, employeesWithOvertime: 0 },
+					},
+				};
+			}
 
-				return await calculateOvertimeMetrics(
-					prisma,
-					organizationId,
-					startDate,
-					endDate,
-					whereFilter.departmentId,
-				);
+			return await calculateOvertimeMetrics(
+				prisma,
+				organizationId,
+				startDate,
+				endDate,
+				whereFilter.departmentId,
+				typeof whereFilter.workforceSource === "string"
+					? whereFilter.workforceSource
+					: undefined,
+			);
 			} catch (error: any) {
 				logger.error("Error calculating overtime metrics:", error);
 				throw new Error(`Failed to calculate overtime metrics: ${error.message}`);

@@ -232,8 +232,20 @@ export const queryKeys = {
 			] as const,
 		tardinessMetrics: (dateFrom?: string, dateTo?: string, departmentId?: string) =>
 			[...queryKeys.metrics.all, "tardinessMetrics", dateFrom, dateTo, departmentId] as const,
-		overtimeMetrics: (dateFrom?: string, dateTo?: string, departmentId?: string) =>
-			[...queryKeys.metrics.all, "overtimeMetrics", dateFrom, dateTo, departmentId] as const,
+		overtimeMetrics: (
+			dateFrom?: string,
+			dateTo?: string,
+			departmentId?: string,
+			workforceSource?: string,
+		) =>
+			[
+				...queryKeys.metrics.all,
+				"overtimeMetrics",
+				dateFrom,
+				dateTo,
+				departmentId,
+				workforceSource ?? "all",
+			] as const,
 		noWorkReport: (dateFrom?: string, departmentId?: string, reportToId?: string) =>
 			[...queryKeys.metrics.all, "noWorkReport", dateFrom, departmentId, reportToId] as const,
 		dailyActiveManpower: (dateFrom?: string, departmentId?: string, reportToId?: string) =>
@@ -763,10 +775,16 @@ export const useTardinessMetrics = (dateFrom?: string, dateTo?: string, departme
 /**
  * Hook to fetch overtime metrics
  */
-export const useOvertimeMetrics = (dateFrom?: string, dateTo?: string, departmentId?: string) => {
+export const useOvertimeMetrics = (
+	dateFrom?: string,
+	dateTo?: string,
+	departmentId?: string,
+	workforceSource?: string,
+) => {
 	return useQuery<OvertimeMetricsResponse>({
-		queryKey: queryKeys.metrics.overtimeMetrics(dateFrom, dateTo, departmentId),
-		queryFn: () => metricsService.getOvertimeMetrics(dateFrom, dateTo, departmentId),
+		queryKey: queryKeys.metrics.overtimeMetrics(dateFrom, dateTo, departmentId, workforceSource),
+		queryFn: () =>
+			metricsService.getOvertimeMetrics(dateFrom, dateTo, departmentId, workforceSource),
 		enabled: !!dateFrom && !!dateTo,
 		staleTime: 5 * 60 * 1000, // 5 minutes
 	});
