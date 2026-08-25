@@ -1,5 +1,12 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-25 Remaining-gaps roadmap documented
+
+- Operator asked for the remaining work to be well documented.
+- Canonical roadmap: `docs/00-product/REMAINING-GAPS-AND-WHAT-IS-NEEDED.md` — every PARTIAL/MISSING row with exists→missing→effort→blocker class (OPERATOR GATE / EXTERNAL / BUILDABLE).
+- Completion math corrected to exact row statuses: ~71% weighted (16 PRESENT / 15 PARTIAL / 2 MISSING of 33 scored; M6 excluded as future module). Commit `a827dff3`.
+- Checklist links the roadmap at the Completion rate section.
+
 ## Latest Task Addendum - 2026-08-25 Spec-gap chain stages 6/7/9/10 resumed + closed (local commit)
 
 - Operator's laptop died mid-chain; resume recovered DB forward 55435 + API 3001, then re-proved the two red smokes.

@@ -129,6 +129,8 @@
 
 ## Completion rate
 
+> Remaining-work roadmap (what each gap needs + blockers): `REMAINING-GAPS-AND-WHAT-IS-NEEDED.md`
+
 **Scoring:** PRESENT = 1.0 · PARTIAL = 0.5 · MISSING = 0
 **Scope note (2026-08-25):** Module 6 (Training & Performance) is **excluded from this computation** — operator decision: it is a separate future module to be added later, not part of this HRIS build's scored scope. 33 items are scored.
 
