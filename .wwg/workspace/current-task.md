@@ -1,3 +1,12 @@
+## Latest Task Addendum - 2026-08-25 PhilHealth schedule fix — TALLIED 10 → 67 + reset runbook
+
+- **PH schedule proven & implemented**: Sheet2 PH = monthly × 2.5% per cutoff (277/277 exact, no cap ≤85k); daily-rated ₱600 cohort = flat ₱390/cutoff (573/573). New `resolveBandaiPhilHealthCutoffContribution` overrides the gross-based PH in generate+preview (`bandai-philhealth-schedule.spec.ts`). Deductions gap −188k → −98,790.
+- **TALLIED 10 → 67** (828 compared), OT_OK_NEAR_50 187, ALEXA 12. Remaining: absent/Saturday policy ₱263k, deductions ₱99k, leave ₱64k, ND ₱49.5k, gross ₱227k (absent-driven).
+- **TZ bug fixed**: SheetJS local-midnight dates on UTC+8 shifted leave dates −1 day — re-import recovered 50 people / ₱375k→₱444k; leavePay fails → 5. TZ regression test added.
+- **E2E matrix runner**: `run-payroll-tally-matrix.mjs` — 26 PASS / 0 FAIL (DB, API pins, unit specs, tally, recurrence, pending decisions).
+- **Runbook**: `docs/LOCAL_DB_RESET_PERIOD_RUNBOOK.md` — fresh DB → tallied period (pack + leave + proof), app-native mode for future periods without Sheet2.
+- Pushed: 5a5dd05c (pack), dd16ebfd (TZ + matrix), PH fix + runbook this push.
+
 ## Latest Task Addendum - 2026-08-25 Careful remaining-gap investigation (post-pack)
 
 - **Stale-import found & fixed**: the operator's earlier UI leave execute ran while the watcher served old parser code — LVP rows had shifted dates/wrong days (00032 1.5 days vs file 2.5; 00342 dates −1 day). Re-ran import with current code: 321 updated, ₱375,187.78 (was ₱327,991.84). **leavePay fails 254 → 111, gap ₱106,320 → ₱63,924; net gap +₱51,767 → +₱15,811** (from −₱423k session start). ALEXA_NEAR 6, NEAR_10 10, OT_OK_NEAR_50 80.

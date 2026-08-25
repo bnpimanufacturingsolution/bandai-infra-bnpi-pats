@@ -170,6 +170,28 @@ export function resolveBandaiSpecialHolidayWorkMultiplier(
 		: BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayPremium;
 }
 
+/**
+ * Bandai PhilHealth cutoff contribution — proven against the Jul 11-25 Sheet2
+ * register (2026-08-25, 277/277 monthly + 573/573 daily-rated exact):
+ * - Monthly-rated (Daily Salary blank): monthly rate x 2.5% per cutoff
+ *   (no cap observed through ₱85,000/month).
+ * - Daily-rated (Daily Salary > 0, e.g. ₱600 cohort): flat ₱390 per cutoff.
+ * The gross-based percentage engine overcharged fleet PhilHealth by ~₱87k.
+ */
+export const BANDAI_PHILHEALTH_DAILY_CUTOFF_FLAT = 390;
+export const BANDAI_PHILHEALTH_MONTHLY_RATE = 0.025;
+
+export function resolveBandaiPhilHealthCutoffContribution(params: {
+	monthlyRate?: number | null;
+	dailyRate?: number | null;
+}): number {
+	const dailyRate = Number(params.dailyRate || 0);
+	if (dailyRate > 0) return roundToCentavo(BANDAI_PHILHEALTH_DAILY_CUTOFF_FLAT);
+	const monthlyRate = Number(params.monthlyRate || 0);
+	if (!(monthlyRate > 0)) return 0;
+	return roundToCentavo(monthlyRate * BANDAI_PHILHEALTH_MONTHLY_RATE);
+}
+
 
 const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 	["G", "Monthly Salary", "monthlySalary"],
@@ -2332,6 +2354,13 @@ export async function generatePayrollFromTimesheets(
 				),
 				pagIbig: roundToCentavo(monthlyContributions.pagIbig * contributionSplitFactor),
 			};
+			// Bandai PhilHealth truth (Jul 11-25 Sheet2 proof): monthly-rated =
+			// monthly rate x 2.5% / 2; daily-rated = flat ₱390 per cutoff. The
+			// gross-based percentage overcharged fleet PH by ~₱87k.
+			periodContributions.philHealth = resolveBandaiPhilHealthCutoffContribution({
+				monthlyRate: estimatedMonthlyRate,
+				dailyRate: (employee as { dailyRate?: number | null }).dailyRate,
+			});
 
 			// Calculate tax based on period gross pay
 			const periodTaxableIncome =
@@ -5132,6 +5161,13 @@ function calculatePayrollPreviewDataset(params: {
 				),
 				pagIbig: roundToCentavo(monthlyContributions.pagIbig * contributionSplitFactor),
 			};
+			// Bandai PhilHealth truth (Jul 11-25 Sheet2 proof): monthly-rated =
+			// monthly rate x 2.5% / 2; daily-rated = flat ₱390 per cutoff. The
+			// gross-based percentage overcharged fleet PH by ~₱87k.
+			periodContributions.philHealth = resolveBandaiPhilHealthCutoffContribution({
+				monthlyRate: estimatedMonthlyRate,
+				dailyRate: (employee as { dailyRate?: number | null }).dailyRate,
+			});
 
 			const periodTaxableIncome =
 				grossPayWithSources -
