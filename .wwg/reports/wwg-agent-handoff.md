@@ -1,3 +1,16 @@
+## 2026-08-25 - WS-vs-Sheet2 absent disagreement — fleet classification (179 people)
+
+| Class | People | Meaning |
+|---|---:|---|
+| A | **164** | WS flags OFF on the days Sheet2 charges absent; worked all WS-ON days (00021: WS ON 10 = worked 10, Sheet2 still charges 1 absent) → client WS-vs-Sheet2 calendar contradiction |
+| B | **14** | WS-ON > worked, but line-level check (00105: 13/13 PRESENT with punches) shows **client punches vs client Sheet2 worked-days contradiction** — app followed punches |
+| C/other | 1 | not in WS file |
+
+Both classes = client-side data contradictions; app followed the operational
+sources (WS flags + biometric punches). Evidence:
+`.runtime/ws-vs-sheet2-disagreement-2026082518413/` (REPORT.md + summary.json
+with full per-employee classification).
+
 ## 2026-08-25 - Final tally classification: zero engine faults remain
 
 | Field | Value |
