@@ -40,13 +40,13 @@
 
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
-| 3.1 | Leave conversion, annual leave credit uploads | PARTIAL | UI option `employee/requests/pan.tsx:44` ("Leave Conversion") but `request.controller.ts:174` PAN_REQUEST_TYPES **excludes LEAVE_CONVERSION**; OT-comp-leave path exists (`approved-overtime-comp-leave.service.spec.ts`); **no bulk annual-credit upload endpoint** |
-| 3.2 | Disciplinary action monitoring, late attendance tracking | PARTIAL | `admin/disciplinary-action.tsx:48-49` is **mock UI ("replace with actual API calls")**; no `disciplinaryaction` API dir; schema relation commented (`schema.prisma:2185`). Late tracking ✅ via `tardiness-metrics.helper.ts:41` |
+| 3.1 | Leave conversion, annual leave credit uploads | PARTIAL | **Stage 6 closed the conversion half:** `LEAVE_CONVERSION` in `PAN_REQUEST_TYPES` (`request.controller.ts:180`) + workflow COMPLETED effect shrinks credits (`pan-post-actions.helper.ts` LEAVE_CONVERSION case); live-proven Zen PERSONAL 10→9 entitled / 9→8 available (`.runtime/spec-gap-m1-5/resume-20260825-173211/`). Annual credit bulk upload: API `POST /api/request/leave-credits/bulk-upload` exists (dry-run default) but has **no UI surface** and no small-sample execute proof yet |
+| 3.2 | Disciplinary action monitoring, late attendance tracking | PRESENT | **Stage 7:** real `DisciplinaryAction` model + `app/disciplinaryAction/` CRUD module + zod; admin page wired to live service (`disciplinaryAction.service.ts`); soft-delete retention; create/list live-proven (`cmt8hgo8t0000vxa4yaggpm0u`, name snapshot "Zen Andrei"). Residual: read-only recent-tardiness display on the action form not added yet. Late tracking ✅ via `tardiness-metrics.helper.ts:41` |
 | 3.3 | Lists of pregnant and no-work employees | PARTIAL | No-work: `workforce-metrics.helper.ts:4` + `metrics.service.ts:2068` ✅; pregnant: import column only (`bnpi-manpower-databank-import.helper.ts:74`), no list UI/model |
 
 **Why (gaps):**
-- 3.1 Leave conversion: the UI offers a "Leave Conversion" PAN type, but the backend `PAN_REQUEST_TYPES` was never extended to accept it — request would be rejected. Annual credit bulk upload: only an OT-to-comp-leave path and seed hints exist; no upload endpoint was ever created.
-- 3.2 Disciplinary: the admin page was imported as a mock template (its own comment says "replace with actual API calls"); the Prisma relation is commented out and the backend module was never generated — UI-first scaffolding that stalled.
+- 3.1 Leave conversion (2026-08-25 update): the PAN type + approval effect are now real and live-proven; two root causes were fixed — the `RequestType` enum ALTER and a missing `LEAVE_CONVERSION` entry in the workflow-completion `panTypes` set (`request-runtime.helper.ts`). Remaining gap is the annual credit upload UI + sample-file execute proof.
+- 3.2 Disciplinary (2026-08-25 update): mock comment removed; backend module, model, and admin page are live end-to-end. The generated template controller spec was replaced with a repo-contract spec (12 passing) after it kept testing the old name/description/type scaffold.
 - 3.3 Pregnant list: "pregnant" exists only as a databank import column; no employee field flag, model, or list feature was built. No-work backend exists but has no dedicated list UI.
 
 ## Module 4 — Employee Records & Lifecycle
@@ -54,14 +54,14 @@
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
 | 4.1 | Certificate of employment generation | PRESENT | `request.controller.ts:4545-4610` (COE PDF) + `generate-document.helper.ts:172`; UI `resignation-requests-template.tsx:267,763` |
-| 4.2 | Organizational chart builder | PARTIAL | `OrganizationChartTab.tsx:162,1763` (view/print/fullscreen; drag = pan only); `Employee.reportToId` hierarchy — **no edit/build/save** |
+| 4.2 | Organizational chart builder | PRESENT | **Stage 9:** HR-only edit mode — `OrgReassignManagerPanel.tsx` on `OrganizationChartTab`; `PATCH /api/employee/:id/report-to` (`employee.router.ts:588`) with self-report guard, cycle walk (depth 100), org scoping, audit log `ORG_CHART_REASSIGN_MANAGER`. Live-proven: cycle attempt → 400 "reporting cycle"; reassign → 200 |
 | 4.3 | Monthly birthday celebrants (employees and kids) | PRESENT | `celebrations/celebrations.controller.ts:10-47` (EMPLOYEE_BIRTHDAY \| CHILD_BIRTHDAY); `celebrations/birthdays.tsx:149,340` + admin twin |
 | 4.4 | PAN, regularization, exit clearance | PRESENT | PAN `PANRequestModal.tsx:99-105` + `request.controller.ts:174,1378`; regularization `hr/employee-status-changes.tsx:168,441`; exit clearance `ExitClearanceSection.tsx` + OFFBOARDING flow |
-| 4.5 | TIN library, 201 filing | PARTIAL | `Employee.tin` `employee.prisma:65`; `tin_id` doc type `documents-tab.tsx:50`; **no TIN library page; no 201-filing module** (nearest: BIR 2316 + document repository) |
+| 4.5 | TIN library, 201 filing | PARTIAL | **Stage 10 closed the library half:** admin `/admin/configuration/tin-library` (`admin/tin-library.tsx`) over `tinLibrary` metric reading Postgres truth `metadata.manpowerDatabank.tin` (2229 rows live: 0 withTin / 2229 missing / 0 duplicates — source data has no TIN values yet). **201 filing remains a DECISION GATE** (proposed default: per-employee document checklist; awaiting operator) |
 
 **Why (gaps):**
-- 4.2 Org chart builder: current component renders/prints the `reportToId` tree; editing, drag-restructure, and save-back were never implemented — it is a viewer mislabeled as a builder.
-- 4.5 TIN/201: TIN is a plain employee field + a document type; nobody built a library surface (search/validate/report over TINs) or a named 201-filing module — the document repository partially covers the intent.
+- 4.2 Org chart builder (2026-08-25 update): edit mode + manager reassignment are real and live-proven; drag-restructure remains pan-only viewing chrome.
+- 4.5 TIN/201 (2026-08-25 update): TIN library surface is live (missing/duplicate detection); 201 filing scope still awaits the operator decision gate.
 
 ## Module 5 — Manpower & Statutory Reports
 

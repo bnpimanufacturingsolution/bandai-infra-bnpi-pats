@@ -1,5 +1,16 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-25 Spec-gap chain stages 6/7/9/10 resumed + closed (local commit)
+
+- Operator's laptop died mid-chain; resume recovered DB forward 55435 + API 3001, then re-proved the two red smokes.
+- Leave conversion root causes fixed: (1) `RequestType` enum ALTER applied on K3s DEV; (2) workflow COMPLETED `panTypes` set in `request-runtime.helper.ts` lacked `LEAVE_CONVERSION` — added it plus a `LEAVE_CONVERSION` case in `pan-post-actions.helper.ts` (accepts leaveType|conversionLeaveType, days|conversionDays). Live: request COMPLETED, Zen PERSONAL entitled 10→9 / available 9→8. Actors: hr-manager@seed.local creates (bypass to FOR_APPROVAL), hr-user@seed.local approves (self-approval guard).
+- tinLibrary metric healthy after clean restart: 2229 rows, 0 withTin / 2229 missing / 0 duplicates (source data has no TIN values yet). Original failure not reproducible post-crash.
+- Disciplinary create/list live-proven (`cmt8hgo8t0000vxa4yaggpm0u`, name snapshot "Zen Andrei"); `ABSENTIEESM`→`ABSENTEEISM` typo fixed in zod + admin page; stale template spec (934 lines) replaced with repo-contract spec.
+- Org reassign live-proven: cycle attempt → 400 reporting-cycle; PATCH report-to → 200.
+- Tests: API focused 25 passing (+8 regression sanity), app vitest disciplinary contract 2 passing.
+- Local commit `3dd6bab4` on `feature/spec-gap-remediation`. NO PUSH (chain rule 1). Evidence: `.runtime/spec-gap-m1-5/resume-20260825-173211/`.
+- Chain remaining: stage 3+11 blocked on Stage-0 operator gates; stage 5 manhour gate open; upload UI/sample proof (3.1 residual); pregnant list (stage 8) not started.
+
 ## Latest Task Addendum - 2026-08-25 Frontend mock-data audit (hris-app)
 
 - Operator asked for an audit of frontend pages using mock data. Audit-only, no code changed.

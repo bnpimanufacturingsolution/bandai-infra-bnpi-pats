@@ -1,5 +1,19 @@
 # WWG Agent Handoff
 
+## 2026-08-25 - Spec-gap chain stages 6/7/9/10 resumed after crash (local commit 3dd6bab4)
+
+| Field | Value |
+|---|---|
+| Context | Operator laptop died mid-chain; working tree had stages 6/7/9/10 uncommitted with 2 red smokes |
+| Recovery | K3s DEV DB forward 55435 + API 3001 restarted; enum ALTER confirmed applied |
+| Leave conversion | Root cause: workflow COMPLETED `panTypes` missing `LEAVE_CONVERSION` (+ enum at first-smoke time). Fixed in `request-runtime.helper.ts` + new case in `pan-post-actions.helper.ts`; dual metadata keys accepted. Live proof: Zen PERSONAL entitled 10→9, available 9→8, request COMPLETED |
+| TIN library | Metric healthy post-restart: 2229 rows / 0 withTin / 2229 missing / 0 duplicates — source data simply has no TINs; original failure not reproducible |
+| Disciplinary | Create/list live-proven with employeeName snapshot; ABSENTIEESM typo fixed; template spec replaced by repo-contract spec (12 passing) |
+| Org reassign | Cycle guard 400 + PATCH report-to 200 live-proven (`PATCH /api/employee/:id/report-to`) |
+| Tests | API focused 25 passing + regression sanity 8 passing; app vitest 2 passing |
+| Evidence | `.runtime/spec-gap-m1-5/resume-20260825-173211/RESUME-SUMMARY.json` |
+| Boundary | NO PUSH — chain rule 1. Stages 3/5/11 gated on operator answers; upload UI + pregnant list still open |
+
 ## 2026-08-25 - Frontend mock-data audit (hris-app)
 
 | Field | Value |
