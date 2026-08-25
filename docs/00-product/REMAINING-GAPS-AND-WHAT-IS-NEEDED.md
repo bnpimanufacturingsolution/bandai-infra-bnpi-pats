@@ -101,15 +101,26 @@ Three kinds of blockers exist:
 
 ---
 
-## C. Operator gate answers (updated 2026-08-25)
+## C. Operator gate answers (updated 2026-08-26)
 
-Answered this session:
-1. ~~Statutory formats~~ → **PhilHealth RF-1 as xlsx first — BUILT** (live-proven; SSS R-3 / Pag-ibig MF remain).
+Answered:
+1. ~~Statutory formats~~ → **PhilHealth RF-1 first — BUILT**, then SSS R-3 + Pag-ibig MF also built (all three live).
 2. ~~201 filing scope~~ → **per-employee document checklist — BUILT** (`201 File` tab on employee profile).
+3. ~~Assembly Standing~~ → **create ASA, taxable like LLA — BUILT end-to-end** (catalog, register column, Sheet2 CX, mass-upload code, payslip row; live-proven).
+4. ~~Manhour reference~~ → **standard definition (one man-hour = one hour of work by one person) — BUILT** (`manhoursReport` + Manhours tab).
 
-Still open:
-3. **Assembly Standing allowance**: create as new benefit type (suggested code `ASA`, taxable like Line Leader Allowance) — or tell us its real BNPI name/code. Source: spec line "allowance tracking (Line Leader, OB, Assembly Standing)" in `HRIS_KEY_MODULES_FUNCTIONAL_SCOPE.md`.
-4. **Manhour reference**: what should it show? Source: spec line "Leave Tardiness and Undertime monitoring, leave balance tracking, manhour reference".
+### Pending operator questions (parked 2026-08-26 — operator to answer when ready)
+
+These block final closure of the last PARTIAL items. Buildable with flagged assumptions if operator prefers.
+
+1. **Terminal pay tax basis (8.1):** (a) normal withholding table, (b) BIR final-tax rules for separated employees (>₱90k 13th-month threshold), or (c) compute and flag for accountant review?
+2. **Terminal pay leave monetization:** Vacation + Personal only, or also Sick Leave? 13th-month pro-rata confirmed included?
+3. **Uniform deduction report (1.4):** remaining balance per employee, or totals per cutoff? Amortized one-time deduction?
+4. **Loan report (1.4):** all loans with running balances per employee/period, xlsx export — confirm format.
+5. **Recruitment polish (7.1/7.2):** is a screening-funnel summary + activity-feed polish enough, or something specific?
+6. **Login 2FA (T.2):** TOTP for everyone vs admin/HR only? Or does the admin-passcode requirement doc cover this item?
+7. **Backups (T.6):** offsite target (Google Drive / other machine / VM-only) and retention days?
+8. **Encryption at rest (T.3):** scope — biometric templates only, salary fields, all PII? At-rest only or also in-LAN transit?
 
 ## D. Evidence
 
