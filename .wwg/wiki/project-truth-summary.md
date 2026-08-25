@@ -2,6 +2,11 @@
 
 Last updated: 2026-08-26
 
+## 2026-08-26 Manhour reference definition (gate closed)
+
+- Operator: a **man-hour = one hour of work done by one person** (Google/Wikipedia standard definition).
+- HRIS implementation: `manhoursReport` Attendance metric + **Manhours tab** on Attendance reports (`tab=manhours`). Hours come from Attendance ledger `totalMinutesWorked` (auto-calculated, net of breaks); per-employee and per-department rollups for any date range. Live Aug 1–26: 66 people / 1,144.4 man-hours.
+
 ## 2026-08-26 Gov API integrations are BNPI-owned (external)
 
 - Direct SSS / Pag-ibig / PhilHealth / BIR API integrations (T.4) are **not on the dev side**: agencies require BNPI to register and issue credentials. Dev work stays blocked until keys exist; agents must not invent endpoints or keys.

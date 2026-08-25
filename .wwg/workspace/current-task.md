@@ -1,5 +1,13 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-26 Manhour reference built (gate #2 closed) — rate ~86%
+
+- Operator answered gate 2 with the standard definition: **one man-hour = one hour of work done by one person**. Recorded in Project Truth summary.
+- Built: `manhours-metrics.helper.ts` + `manhoursReport` Attendance metric (zod + controller allow-list) + **Manhours tab** on `/hr/reports/attendance?tab=manhours` (per-employee + per-department + date range). Hours = Attendance `totalMinutesWorked` (net of breaks, closed punches only).
+- Live Aug 1–26: 66 people / 118 days / **1,144.4 man-hours**; top dept Production 886.7h.
+- Checklist 2.4 → PRESENT. Rate now **~86%** (23P/9Pa/0M). M2 joins M3/M5/M4 at 100%.
+- Remaining PARTIALs: 1.1, 1.2 (gate ASA), 1.4, 7.1, 7.2, 8.1 (tax policy), T.2 2FA, T.3 (scope gate), T.6 backups.
+
 ## Latest Task Addendum - 2026-08-26 Statutory suite + upload UI + terminal pay engine (chain ~84%)
 
 - **SSS R-3 + Pag-ibig MF** generators: `statutory-remittance.generator.ts` + `GET /api/reports/{sss/r3|pagibig/mf}?periodId=`; SSS EE/ER/EC split from bracket table scaled to register truth; Pag-ibig 50/50 match. UI: BIR Report tab picker. Live-proven Jul P1 (10 rows each, "Not on file" markers).

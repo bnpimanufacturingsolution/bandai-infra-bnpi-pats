@@ -172,6 +172,17 @@ describe("chain completion stages (2026-08-26 resume)", () => {
 		expect(tab).to.contain("Age Brackets");
 	});
 
+	it("stage 5b — manhour reference metric + tab (operator definition)", () => {
+		const helper = read("helper/manhours-metrics.helper.ts");
+		const controller = read("app/metrics/metrics.controller.ts");
+		const zod = read("zod/metrics.zod.ts");
+		const tab = read("../hris-app/app/routes/hr/reports/tabs/ManhoursTab.tsx");
+		expect(helper).to.contain("totalMinutesWorked");
+		expect(controller).to.contain('case "manhoursReport"');
+		expect(zod).to.contain('"manhoursReport"');
+		expect(tab).to.contain("Manhours Report");
+	});
+
 	it("bonus M8.2 — annual BIR pack endpoint + generator", () => {
 		const generator = read("helper/bir-annual-pack.generator.ts");
 		const router = read("app/report/report.router.ts");

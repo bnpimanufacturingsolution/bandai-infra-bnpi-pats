@@ -22,6 +22,7 @@ import {
 } from "../../helper/attendance-obligation-metrics.helper";
 import { calculatePerfectAttendanceMetrics } from "../../helper/perfect-attendance-metrics.helper";
 import { calculateTardinessMetrics } from "../../helper/tardiness-metrics.helper";
+import { calculateManhoursMetrics } from "../../helper/manhours-metrics.helper";
 import { calculateOvertimeMetrics } from "../../helper/overtime-metrics.helper";
 import { calculateLaborCostAnalysis } from "../../helper/labor-cost-analysis.helper";
 import { calculateLeaveBalanceMetrics } from "../../helper/leave-balance-metrics.helper";
@@ -77,6 +78,7 @@ const AVAILABLE_METRICS = {
 		"attendanceDailyTrendByDepartment", // Day-by-department attendance trend chart data
 		"perfectAttendanceMetrics", // Perfect attendance (zero absences + zero tardiness)
 		"tardinessMetrics", // Tardiness, undertime, and early out metrics
+		"manhoursReport", // M2.4 manhour reference — hours worked per person
 		"overtimeMetrics", // Overtime metrics
 		"noWorkReport", // Employees scheduled but with no attendance record
 		"dailyActiveManpower", // Employees with attendance activity for the day
@@ -1667,6 +1669,44 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 			} catch (error: any) {
 				logger.error("Error calculating tardiness metrics:", error);
 				throw new Error(`Failed to calculate tardiness metrics: ${error.message}`);
+			}
+		}
+		case "manhoursReport": {
+			try {
+				const startDate = whereFilter.date?.gte ? new Date(whereFilter.date.gte) : null;
+				const endDate = whereFilter.date?.lte ? new Date(whereFilter.date.lte) : null;
+				if (!startDate || !endDate) {
+					throw new Error("Date range is required for manhours report");
+				}
+				const organizationId =
+					whereFilter.organizationId ||
+					(
+						await prisma.employee.findFirst({
+							where: { isDeleted: false },
+							select: { organizationId: true },
+						})
+					)?.organizationId;
+				if (!organizationId) {
+					return {
+						period: {
+							from: startDate.toISOString().slice(0, 10),
+							to: endDate.toISOString().slice(0, 10),
+						},
+						grandTotals: { employees: 0, daysWorked: 0, totalMinutes: 0, totalHours: 0 },
+						employees: [],
+						departments: [],
+					};
+				}
+				return await calculateManhoursMetrics(
+					prisma,
+					organizationId,
+					startDate,
+					endDate,
+					whereFilter.departmentId,
+				);
+			} catch (error: any) {
+				logger.error("Error calculating manhours metrics:", error);
+				throw new Error(`Failed to calculate manhours metrics: ${error.message}`);
 			}
 		}
 		case "overtimeMetrics": {

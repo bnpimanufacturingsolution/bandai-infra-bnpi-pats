@@ -29,7 +29,7 @@
 | 2.1 | Daily attendance summary, cut-off encoding | PRESENT | `/hr/attendance` (`attendance-management-template.tsx:1197-1264,1425-1450`); cut-off via `/hr/timesheets` (`timesheets.tsx:244-286`, Lock Period `:1720`) |
 | 2.2 | Monthly/annual perfect attendance reports | PRESENT | `PerfectAttendanceTab.tsx` at `/hr/reports/attendance?tab=perfect`; `metrics.controller.ts:1577` + `perfect-attendance-metrics.helper.ts` |
 | 2.3 | Tardiness/UT/OT details, direct vs indirect labor | PRESENT | `TardinessUndetimeTab.tsx`, `OvertimeTab.tsx`, `/hr/reports/workforce?tab=direct-indirect`; APIs `:1628,:1668,:1821` |
-| 2.4 | Leave tardiness/UT monitoring, leave balance, manhour reference | PARTIAL | **2026-08-26: leave tardiness/UT columns closed** — `leaveBalanceMetrics` now joins `calculateTardinessMetrics` per employee (Late min/days + UT min columns on `LeaveBalanceTab`, exportable); live: real minutes on 2229-row roster (e.g. `003` late 953min/6d). Leave balance ✅. **Sole residual: "manhour reference" — OPERATOR GATE open** |
+| 2.4 | Leave tardiness/UT monitoring, leave balance, manhour reference | PRESENT | **Fully closed 2026-08-26.** Leave tardiness/UT columns: joined into `leaveBalanceMetrics` + tab (live). Manhour reference: operator definition recorded in Project Truth ("one man-hour = one hour of work done by one person") → `manhoursReport` metric from Attendance `totalMinutesWorked` (net of breaks) + **Manhours tab** on Attendance reports (`tab=manhours`, per-employee + per-department, date range). Live Aug 1–26: 66 people / 1,144.4 man-hours |
 | 2.5 | No work report, daily active manpower, agency attendance | PRESENT (2026-08-24) | Agency `AgencyAttendanceTab.tsx`; **`NoWorkReportTab` + `DailyManpowerTab` now wired** into `/hr/reports/workforce` (tabs `no-work`, `daily-manpower`; hooks `useNoWorkReport` `useMetrics.ts:778`, `useDailyActiveManpower`). Pin: `workforce-tabs.contract.test.ts` |
 
 **Why (gaps):**
@@ -136,18 +136,18 @@
 
 | Measure | Result |
 |---|---|
-| Fully present | **22/32 = 69%** |
-| Weighted score | (22 + 10×0.5) / 32 = 27/32 = **~84%** |
+| Fully present | **23/32 = 72%** |
+| Weighted score | (23 + 9×0.5) / 32 = 27.5/32 = **~86%** |
 | Missing outright | 0/32 = 0% |
 
-### Per-module rates (updated 2026-08-26 chain-completion pass; M6 + T.4 excluded)
+### Per-module rates (updated 2026-08-26 after manhour reference closed; M6 + T.4 excluded)
 
 | Module | Weighted | Rate |
 |---|---|---|
+| M2 Attendance & Timekeeping | 5.0/5 | 100% |
 | M3 Leave & Disciplinary Management | 3.0/3 | 100% |
 | M5 Manpower & Statutory Reports | 4.0/4 | 100% |
 | M4 Employee Records & Lifecycle | 5.0/5 | 100% |
-| M2 Attendance & Timekeeping | 4.5/5 | 90% |
 | M1 Payroll & Compensation | 4.0/5 | 80% |
 | M8 Accounting & Compliance | 1.5/2 | 75% |
 | Technical Requirements | 3.5/5 | 70% |

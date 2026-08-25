@@ -37,6 +37,7 @@ const ATTENDANCE_METRICS = z.enum([
 	"attendanceDailyTrendByDepartment", // Day-by-department attendance trend chart data
 	"perfectAttendanceMetrics", // Perfect attendance (zero absences + zero tardiness)
 	"tardinessMetrics", // Tardiness, undertime, and overtime metrics
+	"manhoursReport", // M2.4 manhour reference — hours worked per person
 	"overtimeMetrics", // Overtime metrics
 	"noWorkReport", // Employees scheduled to work but with no attendance record
 	"dailyActiveManpower", // Employees with PRESENT/INCOMPLETE/time-in activity
