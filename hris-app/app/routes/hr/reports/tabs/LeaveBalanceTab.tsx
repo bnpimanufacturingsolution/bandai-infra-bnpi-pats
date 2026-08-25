@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -27,6 +28,15 @@ import { ReportExportDialog } from "../components/ReportExportDialog";
 import { ReportEmployeeCell } from "../components/ReportEmployeeCell";
 import { ReportScopeDateFilters } from "../components/ReportScopeDateFilters";
 import { useReportScopeFilters } from "../useReportScopeFilters";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogHeader,
+	DialogTitle,
+} from "~/components/ui/dialog";
+import leaveCreditsService from "~/services/leave-credits.service";
+import { parseLeaveCreditsCsv, type ParsedLeaveCreditRow } from "~/lib/leave-credits-upload";
 
 function formatMetricLeaveType(value: string) {
 	return humanizeEnumValue(value);
@@ -36,6 +46,10 @@ function formatPeriod(start?: string | Date | null, end?: string | Date | null) 
 	if (!start && !end) return "-";
 	if (start && end) return `${formatReportDate(start)} - ${formatReportDate(end)}`;
 	return formatReportDate(start || end);
+}
+
+function executeLabel(execute: boolean) {
+	return execute ? "Execute finished" : "Dry-run finished";
 }
 
 /**
@@ -76,6 +90,16 @@ export function LeaveBalanceTab() {
 		() => searchParams.get("leaveType") || "all",
 	);
 	const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+	const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+	const [uploadYear, setUploadYear] = useState(() => String(new Date().getFullYear()));
+	const [uploadText, setUploadText] = useState("");
+	const [uploadResults, setUploadResults] = useState<any>(null);
+	const [uploadBusy, setUploadBusy] = useState(false);
+
+	const parsedUploadRows = useMemo(
+		() => parseLeaveCreditsCsv(uploadText),
+		[uploadText],
+	);
 
 	const { data: departmentsData } = useDepartments({ limit: 1000 });
 	const departments = departmentsData?.departments || [];
@@ -338,6 +362,34 @@ export function LeaveBalanceTab() {
 		setIsExportModalOpen(true);
 	};
 
+	const runUpload = async (execute: boolean) => {
+		const rows: ParsedLeaveCreditRow[] = parsedUploadRows.rows;
+		if (!rows.length) {
+			toast.error(
+				parsedUploadRows.errors[0] || "Paste or upload rows before continuing.",
+			);
+			return;
+		}
+		setUploadBusy(true);
+		try {
+			const result = await leaveCreditsService.bulkUpload({
+				year: Number(uploadYear) || new Date().getFullYear(),
+				execute,
+				rows,
+			});
+			setUploadResults(result.data);
+			if (execute) toast.success(result.message || "Leave credits uploaded.");
+			else toast.info(result.message || "Dry-run finished.");
+		} catch (error) {
+			console.error(error);
+			const message =
+				error instanceof Error ? error.message : "Leave credits upload failed.";
+			toast.error(message);
+		} finally {
+			setUploadBusy(false);
+		}
+	};
+
 	const handleExport = async (
 		format: "pdf" | "csv",
 		exportState: { includeFiltersSummary: boolean; groupBy?: string },
@@ -359,6 +411,92 @@ export function LeaveBalanceTab() {
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-6">
+			<Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+				<DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+					<DialogHeader>
+						<DialogTitle>Annual leave credits bulk upload</DialogTitle>
+						<DialogDescription>
+							Paste CSV rows (employeeId, leaveType, totalEntitled) or choose a
+							.csv file. Dry-run first; execute only after reviewing results.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4">
+						<div className="flex items-center gap-3">
+							<label className="text-sm font-medium">Year</label>
+							<Input
+								type="number"
+								className="w-28"
+								value={uploadYear}
+								onChange={(event) => setUploadYear(event.target.value)}
+							/>
+							<input
+								type="file"
+								accept=".csv,text/csv"
+								onChange={(event) => {
+									const file = event.target.files?.[0];
+									if (!file) return;
+									const reader = new FileReader();
+									reader.onload = () => setUploadText(String(reader.result || ""));
+									reader.readAsText(file);
+								}}
+							/>
+						</div>
+						<textarea
+							className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+							placeholder={"employeeId,leaveType,totalEntitled\ncmsp...,VACATION_LEAVE,10"}
+							value={uploadText}
+							onChange={(event) => setUploadText(event.target.value)}
+						/>
+						<p className="text-xs text-muted-foreground">
+							Parsed: {parsedUploadRows.rows.length} row(s)
+							{parsedUploadRows.errors.length > 0
+								? ` · ${parsedUploadRows.errors.length} parse error(s): ${parsedUploadRows.errors.slice(0, 3).join("; ")}`
+								: ""}
+						</p>
+						{uploadResults ? (
+							<div className="rounded-md border p-2 text-xs space-y-1">
+								<p>
+									{executeLabel(uploadResults.execute)} —{" "}
+									{uploadResults.wouldUpdate}/{uploadResults.total} rows
+									{uploadResults.errors > 0
+										? `, ${uploadResults.errors} error(s)`
+										: ""}
+								</p>
+								<div className="max-h-40 overflow-y-auto">
+									{uploadResults.results.map((row: any, index: number) => (
+										<p key={index} className={row.ok ? "" : "text-red-600"}>
+											{row.employeeId || "?"} / {row.leaveType}:{" "}
+											{row.ok ? `ok (${row.action ?? "dry"})` : row.error}
+										</p>
+									))}
+								</div>
+							</div>
+						) : null}
+						<div className="flex justify-end gap-2">
+							<Button variant="outline" onClick={() => setIsUploadModalOpen(false)}>
+								Close
+							</Button>
+							<Button
+								variant="outline"
+								disabled={uploadBusy || parsedUploadRows.rows.length === 0}
+								onClick={() => runUpload(false)}>
+								Dry run
+							</Button>
+							<Button
+								disabled={
+									uploadBusy ||
+									parsedUploadRows.rows.length === 0 ||
+									!uploadResults ||
+									uploadResults.execute
+								}
+								onClick={() => runUpload(true)}>
+								Execute upload
+							</Button>
+						</div>
+					</div>
+				</DialogContent>
+			</Dialog>
+
 				<div className="flex flex-col xl:flex-row gap-4 items-end justify-between">
 					<div className="flex flex-1 flex-col md:flex-row gap-2 md:gap-4 w-full flex-wrap">
 						<ReportScopeDateFilters
@@ -461,6 +599,12 @@ export function LeaveBalanceTab() {
 							onClick={handleClearFilters}
 							className="flex-1 md:flex-none text-muted-foreground hover:text-foreground h-10 px-4">
 							Clear Filters
+						</Button>
+						<Button
+							variant="outline"
+							className="flex-1 md:flex-none"
+							onClick={() => setIsUploadModalOpen(true)}>
+							Upload credits
 						</Button>
 						<Button
 							variant="outline"

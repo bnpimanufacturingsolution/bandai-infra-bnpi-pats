@@ -1,5 +1,19 @@
 # WWG Agent Handoff
 
+## 2026-08-26 - Statutory suite + leave credits upload UI + terminal pay engine (~84%)
+
+| Field | Value |
+|---|---|
+| SSS R-3 | `GET /api/reports/sss/r3?periodId=` xlsx; bracket-based EE/ER/EC scaled to register truth; missing SS No. = "Not on file". Live Jul P1: 10 rows |
+| Pag-ibig MF | `GET /api/reports/pagibig/mf?periodId=` xlsx; 50/50 match of stored remittance. Live Jul P1: 10 rows |
+| UI | BIR Report tab document picker now: 2316 / 1601-C / RF-1 / R-3 / MF / Annual pack |
+| Leave credits upload | Upload credits modal on Leave Balance tab (CSV → dry-run → execute). Live proof: Zen PERSONAL entitled 10→12, available recomputed 9→11 |
+| Terminal pay engine | `POST /api/reports/terminal-pay/preview` (preview-only): unpaid final net + 13th-month pro-rata + BNPI-313 leave conversion − active loans. Policy flags NEEDS_CONFIRMATION (SIL scope, withholding basis) recorded in output notes |
+| Tests | API focused 48 passing; app vitest 14 passing |
+| Rate | ~84% (22P/10Pa/0M of 32); M3/M5/M4 at 100% |
+| Remaining PARTIALs | 1.1, 1.2 (gate ASA), 1.4, 2.4 (gate manhour), 7.1, 7.2, 8.1 (tax policy gate), T.2 2FA, T.3 (scope gate), T.6 backups |
+| Boundary | Local commits only, NO PUSH |
+
 ## 2026-08-26 - Chain completion pass (stages 3b/5a/8/11b + Annual BIR pack)
 
 | Field | Value |

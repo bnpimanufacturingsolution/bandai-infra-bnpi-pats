@@ -40,7 +40,7 @@
 
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
-| 3.1 | Leave conversion, annual leave credit uploads | PARTIAL | **Stage 6 closed the conversion half:** `LEAVE_CONVERSION` in `PAN_REQUEST_TYPES` (`request.controller.ts:180`) + workflow COMPLETED effect shrinks credits (`pan-post-actions.helper.ts` LEAVE_CONVERSION case); live-proven Zen PERSONAL 10→9 entitled / 9→8 available (`.runtime/spec-gap-m1-5/resume-20260825-173211/`). Annual credit bulk upload: API `POST /api/request/leave-credits/bulk-upload` exists (dry-run default) but has **no UI surface** and no small-sample execute proof yet |
+| 3.1 | Leave conversion, annual leave credit uploads | PRESENT | **Fully closed 2026-08-26.** Conversion: live-proven (entitled shrink on approval). Annual credit upload: API `POST /api/request/leave-credits/bulk-upload` (dry-run default, per-row results) + **Upload credits modal** on Leave Balance tab (CSV parse → dry-run → execute). Live sample proof: dry-run 1/1 → execute written=1 errors=0 → Zen PERSONAL entitled 10→12, available recomputed 9→11 | |
 | 3.2 | Disciplinary action monitoring, late attendance tracking | PRESENT | **Stage 7:** real `DisciplinaryAction` model + `app/disciplinaryAction/` CRUD module + zod; admin page wired to live service (`disciplinaryAction.service.ts`); soft-delete retention; create/list live-proven (`cmt8hgo8t0000vxa4yaggpm0u`, name snapshot "Zen Andrei"). Residual: read-only recent-tardiness display on the action form not added yet. Late tracking ✅ via `tardiness-metrics.helper.ts:41` |
 | 3.3 | Lists of pregnant and no-work employees | PRESENT | **2026-08-26 stage 8 closed the pregnant half:** `Employee.pregnant` + `expectedDueDate` (additive migration applied on DEV), zod update path, `pregnantEmployees` metric, **Pregnant Employees tab** on Workforce reports (`tab=pregnant-employees`, HR/admin-only). Live loop proven: set → metric row 00010 w/ due date → revert → 0. No-work: `workforce-metrics.helper.ts` ✅ |
 
@@ -67,8 +67,8 @@
 
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
-| 5.1 | Mandatory reports (SSS, Pag-ibig, PhilHealth) | PARTIAL | **2026-08-25: PhilHealth RF-1 built first (operator choice):** `GET /api/reports/philhealth/rf1?periodId=` xlsx via `helper/philhealth-rf1.generator.ts` (EE/ER split from register premium; PIN from `metadata.manpowerDatabank.philhealthNo`, "Not on file" when absent); UI = BIRReportTab → PHILHEALTH RF-1. Live-proven Jul P1 (10 employees). Contribution tables `config/payroll.config.ts:27-90`. **Remaining: SSS R-3 + Pag-ibig MF generators** |
-| 5.2 | Statutory report generator | PARTIAL | BIR 2316 only: `helper/bir-2316.generator.ts` + `report.router.ts:44` + `BIRReportTab.tsx`. No SSS/HDMF/PHIC statutory pages |
+| 5.1 | Mandatory reports (SSS, Pag-ibig, PhilHealth) | PRESENT | **All three built 2026-08-25/26** (operator chose RF-1 first): `GET /api/reports/{philhealth/rf1|sss/r3|pagibig/mf}?periodId=` xlsx from register truth (`philhealth-rf1.generator.ts`, `statutory-remittance.generator.ts`); UI = BIR Report tab document picker. Live-proven Jul P1 (10 employees each; missing PIN/SS/MID numbers render "Not on file"). Contribution tables `config/payroll.config.ts` |
+| 5.2 | Statutory report generator | PRESENT | Generator suite now covers BIR 2316 PDF, BIR annual pack (alphalist + 1604-CF), PhilHealth RF-1, SSS R-3, Pag-ibig MF — all org-scoped xlsx/pdf endpoints under `/api/reports/*` with focused unit specs |
 | 5.3 | Monthly manpower report (gender, age, headcount, averages) | PRESENT | `ManpowerDistributionTab.tsx` (gender/headcount/averages/exports) + **2026-08-26: live Age Brackets section** (`lib/age-brackets.ts`, computed from person birthdate at query time; unmounted mock `EmployeeSummaryTab` superseded) |
 | 5.4 | BNPI and agency manpower databanks, turnover rate analysis | PRESENT | Databank import `bnpi-manpower-databank-import.service.ts` + wizard `migration.tsx:9782`; split views `ManpowerDatabankSection.tsx` + `ManpowerDistributionTab.tsx:43-51,656-713`; turnover live `turnover-attrition.tsx:127-233` ↔ `metrics.controller.ts:1889-1925` |
 
@@ -136,22 +136,22 @@
 
 | Measure | Result |
 |---|---|
-| Fully present | **19/32 = 59%** |
-| Weighted score | (19 + 13×0.5) / 32 = 25.5/32 = **~80%** |
+| Fully present | **22/32 = 69%** |
+| Weighted score | (22 + 10×0.5) / 32 = 27/32 = **~84%** |
 | Missing outright | 0/32 = 0% |
 
-### Per-module rates (updated 2026-08-26: M6 excluded as future module; T.4 excluded as external BNPI-owned per operator decision)
+### Per-module rates (updated 2026-08-26 chain-completion pass; M6 + T.4 excluded)
 
 | Module | Weighted | Rate |
 |---|---|---|
+| M3 Leave & Disciplinary Management | 3.0/3 | 100% |
+| M5 Manpower & Statutory Reports | 4.0/4 | 100% |
 | M4 Employee Records & Lifecycle | 5.0/5 | 100% |
 | M2 Attendance & Timekeeping | 4.5/5 | 90% |
-| M3 Leave & Disciplinary Management | 2.5/3 | 83% |
-| M5 Manpower & Statutory Reports | 3.0/4 | 75% |
-| M1 Payroll & Compensation | 3.5/5 | 70% |
-| M7 Recruitment & Onboarding | 2.0/3 | 67% |
-| Technical Requirements | 3.5/5 | 70% |
+| M1 Payroll & Compensation | 4.0/5 | 80% |
 | M8 Accounting & Compliance | 1.5/2 | 75% |
+| Technical Requirements | 3.5/5 | 70% |
+| M7 Recruitment & Onboarding | 2.0/3 | 67% |
 
 > Excluded from scoring: **M6 Training & Performance** (separate future module) and **T.4 Government API integrations** (external BNPI-owned dependency — agencies must issue credentials to the company; recorded in Project Truth 2026-08-26).
 > Outside this checklist's modules-1–5 chain but also closed 2026-08-25/26: Annual BIR pack (alphalist + 1604-CF, item 8.2 half), PhilHealth RF-1 (5.1 first form), 201 File tab (4.5).

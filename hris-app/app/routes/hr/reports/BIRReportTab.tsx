@@ -68,7 +68,9 @@ export default function BIRReportTab() {
 
 	const { data: payrollPeriodsData, isLoading: periodsLoading } = usePayrollPeriods(
 		{ limit: 50 },
-		selectedDocument === "philhealth-rf1",
+		selectedDocument === "philhealth-rf1" ||
+			selectedDocument === "sss-r3" ||
+			selectedDocument === "pagibig-mf",
 	);
 	const payrollPeriods = useMemo(() => {
 		const list =
@@ -383,6 +385,38 @@ export default function BIRReportTab() {
 	};
 
 	const handleDownload = async () => {
+		if (selectedDocument === "sss-r3" || selectedDocument === "pagibig-mf") {
+			if (!selectedPeriodId) {
+				toast.error("Please select a payroll period.");
+				return;
+			}
+
+			setIsDownloading(true);
+			try {
+				const period = payrollPeriods.find((p: any) => p.id === selectedPeriodId);
+				const isSss = selectedDocument === "sss-r3";
+				const blob = isSss
+					? await reportsService.downloadSssR3(selectedPeriodId)
+					: await reportsService.downloadPagibigMf(selectedPeriodId);
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = isSss
+					? `SSS-R3-${period?.code || selectedPeriodId}.xlsx`
+					: `Pagibig-MF-${period?.code || selectedPeriodId}.xlsx`;
+				a.click();
+				URL.revokeObjectURL(url);
+			} catch (error) {
+				console.error("Error downloading remittance report:", error);
+				const message =
+					error instanceof Error ? error.message : "Failed to download the remittance report.";
+				toast.error(message);
+			} finally {
+				setIsDownloading(false);
+			}
+			return;
+		}
+
 		if (selectedDocument === "bir-annual-pack") {
 			setIsDownloading(true);
 			try {
@@ -527,6 +561,10 @@ export default function BIRReportTab() {
 									<SelectItem value="philhealth-rf1">
 										PHILHEALTH RF-1 (XLSX)
 									</SelectItem>
+									<SelectItem value="sss-r3">SSS R-3 (XLSX)</SelectItem>
+									<SelectItem value="pagibig-mf">
+										PAG-IBIG MF (XLSX)
+									</SelectItem>
 									<SelectItem value="bir-annual-pack">
 										BIR ANNUAL PACK — ALPHALIST + 1604-CF (XLSX)
 									</SelectItem>
@@ -534,7 +572,9 @@ export default function BIRReportTab() {
 							</Select>
 						</div>
 
-						{(selectedDocument === "philhealth-rf1") && (
+						{(selectedDocument === "philhealth-rf1" ||
+							selectedDocument === "sss-r3" ||
+							selectedDocument === "pagibig-mf") && (
 							<div className="flex-1 space-y-2">
 								<label className="text-sm font-medium text-foreground">
 									Payroll Period
@@ -965,10 +1005,14 @@ export default function BIRReportTab() {
 								(selectedDocument === "2316" && !selectedEmployeeId) ||
 								(selectedDocument === "1601-C" && isBir1601CLoading) ||
 								(selectedDocument === "philhealth-rf1" && !selectedPeriodId) ||
+								(selectedDocument === "sss-r3" && !selectedPeriodId) ||
+								(selectedDocument === "pagibig-mf" && !selectedPeriodId) ||
 								isDownloading
 							}
 							onClick={
 								selectedDocument === "philhealth-rf1" ||
+								selectedDocument === "sss-r3" ||
+								selectedDocument === "pagibig-mf" ||
 								selectedDocument === "bir-annual-pack"
 									? handleDownload
 									: openExportModal
@@ -978,9 +1022,13 @@ export default function BIRReportTab() {
 								? "Generating..."
 								: selectedDocument === "philhealth-rf1"
 									? "Download RF-1"
-									: selectedDocument === "bir-annual-pack"
-										? "Download Pack"
-										: "Export"}
+									: selectedDocument === "sss-r3"
+										? "Download R-3"
+										: selectedDocument === "pagibig-mf"
+											? "Download MF"
+											: selectedDocument === "bir-annual-pack"
+												? "Download Pack"
+												: "Export"}
 						</Button>
 					</div>
 				</div>

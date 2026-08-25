@@ -1,5 +1,12 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-26 Statutory suite + upload UI + terminal pay engine (chain ~84%)
+
+- **SSS R-3 + Pag-ibig MF** generators: `statutory-remittance.generator.ts` + `GET /api/reports/{sss/r3|pagibig/mf}?periodId=`; SSS EE/ER/EC split from bracket table scaled to register truth; Pag-ibig 50/50 match. UI: BIR Report tab picker. Live-proven Jul P1 (10 rows each, "Not on file" markers).
+- **3.1 residual closed**: Upload credits modal on Leave Balance tab (CSV parse → dry-run → execute) over `POST /api/request/leave-credits/bulk-upload`. Live sample: dry 1/1 → execute written=1 → Zen PERSONAL entitled 10→12, available recomputed.
+- **Terminal pay engine (M8.1/M1.1)**: `terminal-pay.helper.ts` + `POST /api/reports/terminal-pay/preview` (preview-only). Components: unpaid final net, 13th-month pro-rata, leave conversion on BNPI 313 daily rate, less active loan balances. Policy items flagged NEEDS_CONFIRMATION (SIL monetization, withholding basis). Live smoke Zen: gross 6472.36 / net −8527.64 (honest negative with outstanding loan).
+- Tests: API focused 48 passing; app vitest 14 passing. Checklist flips: 3.1/5.1/5.2 → PRESENT; rate now ~84% (22P/10Pa/0M of 32; M6+T.4 excluded per operator).
+
 ## Latest Task Addendum - 2026-08-26 Chain completion pass: stages 3b/5a/8/11b + Annual BIR pack (local commits)
 
 - Operator: keep going until all chain todos complete. Built and live-proven:

@@ -2,13 +2,14 @@
 
 > Canonical companion to `HRIS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md` (statuses + evidence live there).
 > **2026-08-26 chain-completion update:** salary loan application flow, leave tardiness/UT columns,
-> pregnant employees list (flag + tab), age brackets, Annual BIR pack, PhilHealth RF-1 and the
-> 201 File tab are now built and live-proven. Scored completion is **~74%** (18 PRESENT /
-> 13 PARTIAL / 2 MISSING of 33; M6 excluded).
+> pregnant employees list (flag + tab), age brackets, Annual BIR pack, PhilHealth RF-1, SSS R-3,
+> Pag-ibig MF, the 201 File tab, the annual leave credits upload UI (with live sample proof) and
+> the terminal-pay preview engine are now built and live-proven. Scored completion is **~84%**
+> (22 PRESENT / 10 PARTIAL / 0 MISSING of 32; M6 and T.4 excluded).
 >
 > Local commits on `feature/spec-gap-remediation` (`bd909245` … chain-completion commit); NO PUSH yet.
 >
-> **Current scored completion: ~74%** — see the checklist rate table for per-module numbers.
+> **Current scored completion: ~84%** — see the checklist rate table for per-module numbers.
 
 ## How to read this document
 
