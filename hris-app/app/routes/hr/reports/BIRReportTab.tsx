@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/atoms/Car
 import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
 import { useDepartments } from "~/lib/hooks/useDepartments";
 import { useBir1601CMetrics } from "~/lib/hooks/useMetrics";
+import { usePayrollPeriods } from "~/lib/hooks/usePayrollPeriods";
 import { buildReportFileName, exportRowsToCsv, exportRowsToPdf } from "~/lib/utils/report-export";
 import { ReportExportDialog } from "./components/ReportExportDialog";
 import { ReportEmployeeCell } from "./components/ReportEmployeeCell";
@@ -59,8 +60,23 @@ export default function BIRReportTab() {
 		searchParams.get("employeeId") || "all",
 	);
 	const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+	const [selectedPeriodId, setSelectedPeriodId] = useState<string>(
+		searchParams.get("periodId") || "",
+	);
 	const [isDownloading, setIsDownloading] = useState(false);
 	const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+	const { data: payrollPeriodsData, isLoading: periodsLoading } = usePayrollPeriods(
+		{ limit: 50 },
+		selectedDocument === "philhealth-rf1",
+	);
+	const payrollPeriods = useMemo(() => {
+		const list =
+			(payrollPeriodsData as any)?.data?.payrollPeriods ||
+			(payrollPeriodsData as any)?.payrollPeriods ||
+			[];
+		return Array.isArray(list) ? list : [];
+	}, [payrollPeriodsData]);
 
 	const monthOptions = [
 		{ value: "1", label: "January" },
@@ -367,6 +383,33 @@ export default function BIRReportTab() {
 	};
 
 	const handleDownload = async () => {
+		if (selectedDocument === "philhealth-rf1") {
+			if (!selectedPeriodId) {
+				toast.error("Please select a payroll period.");
+				return;
+			}
+
+			setIsDownloading(true);
+			try {
+				const period = payrollPeriods.find((p: any) => p.id === selectedPeriodId);
+				const blob = await reportsService.downloadPhilhealthRf1(selectedPeriodId);
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement("a");
+				a.href = url;
+				a.download = `PhilHealth-RF1-${period?.code || selectedPeriodId}.xlsx`;
+				a.click();
+				URL.revokeObjectURL(url);
+			} catch (error) {
+				console.error("Error downloading PhilHealth RF-1:", error);
+				const message =
+					error instanceof Error ? error.message : "Failed to download PhilHealth RF-1.";
+				toast.error(message);
+			} finally {
+				setIsDownloading(false);
+			}
+			return;
+		}
+
 		if (selectedDocument !== "2316") {
 			return;
 		}
@@ -458,9 +501,36 @@ export default function BIRReportTab() {
 								<SelectContent>
 									<SelectItem value="2316">BIR FORM 2316</SelectItem>
 									<SelectItem value="1601-C">BIR FORM 1601-C</SelectItem>
+									<SelectItem value="philhealth-rf1">
+										PHILHEALTH RF-1 (XLSX)
+									</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
+
+						{selectedDocument === "philhealth-rf1" && (
+							<div className="flex-1 space-y-2">
+								<label className="text-sm font-medium text-foreground">
+									Payroll Period
+								</label>
+								<Select
+									value={selectedPeriodId}
+									onValueChange={setSelectedPeriodId}
+									disabled={periodsLoading}>
+									<SelectTrigger>
+										<SelectValue placeholder="Select payroll period" />
+									</SelectTrigger>
+									<SelectContent>
+										{payrollPeriods.map((period: any) => (
+											<SelectItem key={period.id} value={period.id}>
+												{period.name}
+												{period.code ? ` (${period.code})` : ""}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+						)}
 
 						{selectedDocument === "2316" && (
 							<div className="flex-1 space-y-2">
@@ -868,11 +938,20 @@ export default function BIRReportTab() {
 								!selectedYear ||
 								(selectedDocument === "2316" && !selectedEmployeeId) ||
 								(selectedDocument === "1601-C" && isBir1601CLoading) ||
+								(selectedDocument === "philhealth-rf1" && !selectedPeriodId) ||
 								isDownloading
 							}
-							onClick={openExportModal}>
+							onClick={
+								selectedDocument === "philhealth-rf1"
+									? handleDownload
+									: openExportModal
+							}>
 							<Download className="size-5" />
-							{isDownloading ? "Generating..." : "Export"}
+							{isDownloading
+								? "Generating..."
+								: selectedDocument === "philhealth-rf1"
+									? "Download RF-1"
+									: "Export"}
 						</Button>
 					</div>
 				</div>

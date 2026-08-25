@@ -1,5 +1,13 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-25 Gates answered: PhilHealth RF-1 + 201 filing built (stage 11 first form + stage 10b)
+
+- Operator answered two gates: **remittance first = PhilHealth RF-1 xlsx**; **201 filing = per-employee document checklist**. Assembly Standing (gate 1) and manhour reference (gate 2) still open.
+- **RF-1:** `helper/philhealth-rf1.generator.ts` + `GET /api/reports/philhealth/rf1?periodId=` (org-scoped xlsx via exceljs; EE/ER split of stored premium; PIN from `metadata.manpowerDatabank.philhealthNo`, else "Not on file"). UI: BIRReportTab → Document Type **PHILHEALTH RF-1** → period select → Download. Live: Jul P1 `cmpxw13as001b7zws2xg6rzuf` = 200, 10 employee rows; empty periods proven too. Evidence `.runtime/spec-gap-m1-5/stage-11-rf1-and-10b-201/`.
+- **201 File tab:** `filing-201-documents.ts` (required/optional requirements over existing doc types) + `filing-201-tab.tsx` on employee profile (`tab=filing-201`). Logic unit-tested; live browser proof pending app build.
+- Tests: API focused 35 passing; app vitest 5 passing. Local commits only, NO PUSH.
+- Incident: a PowerShell regex replace corrupted `report.router.ts` and crashed the dev watcher — fixed with the Edit tool; avoid regex file rewrites.
+
 ## Latest Task Addendum - 2026-08-25 Remaining-gaps roadmap documented
 
 - Operator asked for the remaining work to be well documented.

@@ -1,5 +1,19 @@
 # WWG Agent Handoff
 
+## 2026-08-25 - PhilHealth RF-1 + 201 filing built (stage 11 first form + stage 10b)
+
+| Field | Value |
+|---|---|
+| Gates answered | Remittance first = **PhilHealth RF-1 xlsx**; 201 = **per-employee doc checklist**. Still open: Assembly Standing, manhour reference |
+| RF-1 API | `GET /api/reports/philhealth/rf1?periodId=` — org-scoped xlsx (exceljs) from `helper/philhealth-rf1.generator.ts`; EE/ER = even split of stored register premium; PIN from `metadata.manpowerDatabank.philhealthNo` else "Not on file" |
+| RF-1 UI | BIRReportTab → Document Type **PHILHEALTH RF-1** → payroll-period select → Download RF-1 |
+| RF-1 live | Jul P1 `cmpxw13as001b7zws2xg6rzuf`: 200 OK, 10 employee rows; empty future periods also proven (0 rows honest) |
+| 201 tab | `filing-201-tab.tsx` on employee profile (`tab=filing-201`) + `filing-201-documents.ts` requirements over existing document types; unit-tested |
+| Tests | API focused 35 passing; app vitest 5 passing |
+| Evidence | `.runtime/spec-gap-m1-5/stage-11-rf1-and-10b-201/STAGE-NOTES.json` + xlsx smokes |
+| Incident | Regex file rewrite corrupted `report.router.ts`, crashed watcher; fixed via Edit tool — do not use regex replaces for code edits |
+| Boundary | Local commits only, NO PUSH |
+
 ## 2026-08-25 - Spec-gap chain stages 6/7/9/10 resumed after crash (local commit 3dd6bab4)
 
 | Field | Value |

@@ -98,13 +98,15 @@ Three kinds of blockers exist:
 
 ---
 
-## C. Operator gate answers currently pending (fast path)
+## C. Operator gate answers (updated 2026-08-25)
 
-Answering these three unlocks most of the remaining chain:
+Answered this session:
+1. ~~Statutory formats~~ → **PhilHealth RF-1 as xlsx first — BUILT** (live-proven; SSS R-3 / Pag-ibig MF remain).
+2. ~~201 filing scope~~ → **per-employee document checklist — BUILT** (`201 File` tab on employee profile).
 
-1. **Assembly Standing allowance**: create as new benefit type (suggested code `ASA`, taxable like Line Leader Allowance) — or tell us its real BNPI name/code.
-2. **Manhour reference**: what should it show?
-3. **Statutory formats**: which remittance form first (default proposal: PhilHealth RF-1 xlsx)? And confirm 201-filing default slice (per-employee document checklist).
+Still open:
+3. **Assembly Standing allowance**: create as new benefit type (suggested code `ASA`, taxable like Line Leader Allowance) — or tell us its real BNPI name/code. Source: spec line "allowance tracking (Line Leader, OB, Assembly Standing)" in `HRIS_KEY_MODULES_FUNCTIONAL_SCOPE.md`.
+4. **Manhour reference**: what should it show? Source: spec line "Leave Tardiness and Undertime monitoring, leave balance tracking, manhour reference".
 
 ## D. Evidence
 

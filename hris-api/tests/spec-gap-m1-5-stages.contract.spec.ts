@@ -101,3 +101,45 @@ describe("stage 10 — TIN library", () => {
 		expect(controller).to.contain("duplicateEmployees");
 	});
 });
+
+describe("stage 10b — 201 filing checklist", () => {
+	const filing201 = read("../hris-app/app/lib/filing-201-documents.ts");
+
+	it("pins the baseline 201 requirements over existing document types", () => {
+		expect(filing201).to.contain('"tin_id"');
+		expect(filing201).to.contain('"philhealth_id"');
+		expect(filing201).to.contain('"pagibig_id"');
+		expect(filing201).to.contain('buildFiling201Checklist');
+	});
+
+	it("exposes the 201 tab on the employee profile", () => {
+		const page = read("../hris-app/app/routes/employee/employee.$id.tsx");
+		expect(page).to.contain('"filing-201"');
+		expect(page).to.contain("Filing201Tab");
+	});
+});
+
+describe("stage 11 — PhilHealth RF-1 remittance generator (M5.1 first form)", () => {
+	const generator = read("helper/philhealth-rf1.generator.ts");
+	const reportController = read("app/report/report.controller.ts");
+	const reportRouter = read("app/report/report.router.ts");
+
+	it("sources contributions from the payroll register and splits EE/ER evenly", () => {
+		expect(generator).to.contain("philHealthContribution");
+		expect(generator).to.contain("employeeShare");
+		expect(generator).to.contain("employerShare");
+	});
+
+	it("reads the PhilHealth PIN from metadata.manpowerDatabank.philhealthNo when present", () => {
+		expect(generator).to.contain("philhealthNo");
+		expect(generator).to.contain("Not on file");
+	});
+
+	it("serves an org-scoped xlsx download endpoint", () => {
+		expect(reportRouter).to.contain('"/philhealth/rf1"');
+		expect(reportController).to.contain("downloadPhilhealthRf1");
+		expect(reportController).to.contain(
+			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		);
+	});
+});
