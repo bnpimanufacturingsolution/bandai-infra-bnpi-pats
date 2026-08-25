@@ -2,6 +2,11 @@
 
 Last updated: 2026-08-26
 
+## 2026-08-26 Assembly Standing Allowance = ASA (gate closed)
+
+- Operator approved: create as new **taxable** benefit type, code **ASA**, mirroring Line Leader Allowance.
+- Wired end-to-end: `assemblyStanding` register column (additive SQL on DEV), BenefitType seeded (`cmt98fp4k0000vx7s36mrz8wn`), Sheet2 column CX, mass-upload code `ASA`, payslip post-net row, source-display maps, metrics + update whitelist. Live write/read-back proven (500 persisted, then reset).
+
 ## 2026-08-26 Manhour reference definition (gate closed)
 
 - Operator: a **man-hour = one hour of work done by one person** (Google/Wikipedia standard definition).

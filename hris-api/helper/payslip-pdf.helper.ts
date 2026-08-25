@@ -70,6 +70,7 @@ type PayslipPayrollLike = {
 	perfectAttendance?: number;
 	mealAllowance?: number;
 	lineLeaderAllowance?: number;
+	assemblyStanding?: number;
 	totalReceivable?: number;
 	metadata?: {
 		payrollSourceDetails?: unknown;
@@ -295,6 +296,15 @@ export const buildPayslipFormulaProof = (payroll: PayslipPayrollLike): PayslipFo
 					{
 						label: "Line Leader Allowance",
 						amount: Number(payroll.lineLeaderAllowance || 0),
+						kind: "item" as const,
+					},
+				]
+			: []),
+		...(includeRegisterField("assemblyStanding")
+			? [
+					{
+						label: "Assembly Standing Allowance",
+						amount: Number((payroll as any).assemblyStanding || 0),
 						kind: "item" as const,
 					},
 				]

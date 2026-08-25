@@ -163,6 +163,7 @@ const appendEmployeePayrollComputationViewFields = (fields?: string): string | u
 		"perfectAttendance",
 		"mealAllowance",
 		"lineLeaderAllowance",
+		"assemblyStanding",
 		"totalReceivable",
 		"metadata",
 		"dailyBreakdown",
@@ -421,6 +422,7 @@ export const buildEmployeePayrollComputationView = (employeePayroll: Record<stri
 		registerRow("Perfect Attendance", "perfectAttendance", "ADD", employeePayroll.perfectAttendance, "ADDED_AFTER_NETPAY", "Saved post-net receivable field."),
 		registerRow("Meal Allowance", "mealAllowance", "ADD", employeePayroll.mealAllowance, "ADDED_AFTER_NETPAY", "Saved post-net receivable field."),
 		registerRow("Line Leader Allowance", "lineLeaderAllowance", "ADD", employeePayroll.lineLeaderAllowance, "ADDED_AFTER_NETPAY", "Saved post-net receivable field."),
+		registerRow("Assembly Standing", "assemblyStanding", "ADD", (employeePayroll as any).assemblyStanding ?? 0, "ADDED_AFTER_NETPAY", "Saved post-net receivable field."),
 		...sourceRowsForRole(sourceByRole.postNet, "ADDED_AFTER_NETPAY", "ADD"),
 	]
 		.filter((item): item is NonNullable<typeof item> => Boolean(item))

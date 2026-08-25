@@ -1,5 +1,13 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-26 ASA allowance built (gate #1 closed) — rate ~88%
+
+- Operator approved: **Assembly Standing = new taxable benefit type, code ASA** (like LLA).
+- Wired every LLA surface: `assemblyStanding` register column (additive SQL on DEV, table `employee_payrolls`), BenefitType seeded live (`cmt98fp4k0000vx7s36mrz8wn`), Sheet2 export column **CX**, mass-upload code `ASA` (sourceBy + display maps), payslip post-net row "Assembly Standing Allowance", metrics select/summary, employeePayroll update whitelist + register row.
+- Live proof: PATCH register row → assemblyStanding=500 → GET back 500 → reset to 0 (zero residue). Catalog shows ASA taxable=true.
+- Checklist 1.2 → PRESENT. Rate now **~88%** (24P/8Pa/0M); M1 at 90%.
+- Remaining PARTIALs: 1.1 last-pay polish, 1.4 uniform+loan reports, 7.1/7.2 recruitment polish, 8.1 withholding policy (engine built, NEEDS_CONFIRMATION flags), T.2 login 2FA, T.3 encryption scope gate, T.6 backup cron.
+
 ## Latest Task Addendum - 2026-08-26 Manhour reference built (gate #2 closed) — rate ~86%
 
 - Operator answered gate 2 with the standard definition: **one man-hour = one hour of work done by one person**. Recorded in Project Truth summary.

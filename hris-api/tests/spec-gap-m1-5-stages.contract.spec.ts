@@ -172,6 +172,17 @@ describe("chain completion stages (2026-08-26 resume)", () => {
 		expect(tab).to.contain("Age Brackets");
 	});
 
+	it("stage 3a — Assembly Standing allowance wired end-to-end as ASA", () => {
+		const schema = read("prisma/schema-postgres/employeepayroll.prisma");
+		const seeder = read("prisma/seeds/benefitTypeSeeder.ts");
+		const periodHelper = read("helper/payroll-period.helper.ts");
+		const displayHelper = read("helper/payroll-source-display.helper.ts");
+		expect(schema).to.contain("assemblyStanding");
+		expect(seeder).to.contain('code: "ASA"');
+		expect(periodHelper).to.contain('"Assembly Standing", "assemblyStanding"');
+		expect(displayHelper).to.contain('ASA: "assemblyStanding"');
+	});
+
 	it("stage 5b — manhour reference metric + tab (operator definition)", () => {
 		const helper = read("helper/manhours-metrics.helper.ts");
 		const controller = read("app/metrics/metrics.controller.ts");

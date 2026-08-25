@@ -11,7 +11,7 @@
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
 | 1.1 | Payroll processing, payslip generation, last pay computation | PARTIAL | Processing: `hris-app/app/routes/hr/run-payroll.tsx` + `run-payroll-template.tsx`; API `hris-api/app/payrollperiod/payrollperiod.router.ts:388,436-510`. Payslips: `employeepayroll.router.ts:504,602` + `helper/payslip-pdf.helper.ts`. **Last pay computation MISSING** — only `finalPayCalculated` flag (`termination.controller.ts:1179`), no engine |
-| 1.2 | BNPI salary loan application, allowance tracking (Line Leader, OB, Assembly Standing) | PARTIAL | **2026-08-26: employee salary-loan application flow built** — `/employee/requests/salary-loan` (`requests.salary-loan.tsx` + `employee-loans.service.ts`) posting PENDING `EmployeeLoan` via existing `/api/employeeLoan`; live-proven `cmt8tz1d4001hvx7gzskt71z9`. LLA/OB tracking ✅. **Sole residual: "Assembly Standing" allowance — OPERATOR GATE open** (no name/code anywhere; suggested `ASA`) |
+| 1.2 | BNPI salary loan application, allowance tracking (Line Leader, OB, Assembly Standing) | PRESENT | **Fully closed 2026-08-26.** Loan application: `/employee/requests/salary-loan` → PENDING `EmployeeLoan` (live-proven). **Assembly Standing built per operator decision (code ASA, taxable like LLA):** `assemblyStanding` register column (additive SQL applied on DEV), benefit type seeded (`cmt98fp4k0000vx7s36mrz8wn`), Sheet2 column CX, mass-upload code ASA mapping, payslip post-net row, source-display maps, metrics + update whitelist. Live write/read-back proof: 500 persisted then reset. LLA/OB tracking ✅ |
 | 1.3 | Mass uploading of compensation and deductions | PRESENT | `app/migration/bnpi-mass-upload-import.service.ts` + helper (LLA/OBA/UFD codes); DM3 UI |
 | 1.4 | Uniform deduction, loan reports, payroll summary, labor cost analysis | PARTIAL (labor cost CLOSED 2026-08-25) | Uniform + payroll summary ✅; loan report still partial; **labor cost analysis now PRESENT**: `labor-cost-analysis.helper.ts` + `metrics.controller.ts case "laborCostAnalysis"` + Workforce tab `labor-cost` (chips + per-dept table + exports). Live: Jun20–Jul20 → 2 periods, 35 emp, gross ₱668,470.64, 8 dept rows. Evidence `.runtime/spec-gap-m1-5/stage-4-labor-cost/` |
 | 1.5 | Overtime summary (Agency & Direct) | PRESENT (2026-08-24) | `OvertimeTab.tsx` Labor Type filter (All/Direct/Agency) + Direct/Agency OT chips; `overtime-metrics.helper.ts` `split` computed over unfiltered set, optional `workforceSource` filter (DIRECT = not-AGENCY incl. missing). Live smoke: Jun 26–Jul 10 → all 99,075.36h/830 emp; AGENCY filter 0/0. Evidence `.runtime/spec-gap-m1-5/stage-2-ot-split/` |
@@ -136,11 +136,11 @@
 
 | Measure | Result |
 |---|---|
-| Fully present | **23/32 = 72%** |
-| Weighted score | (23 + 9×0.5) / 32 = 27.5/32 = **~86%** |
+| Fully present | **24/32 = 75%** |
+| Weighted score | (24 + 8×0.5) / 32 = 28/32 = **~88%** |
 | Missing outright | 0/32 = 0% |
 
-### Per-module rates (updated 2026-08-26 after manhour reference closed; M6 + T.4 excluded)
+### Per-module rates (updated 2026-08-26 after ASA allowance closed; M6 + T.4 excluded)
 
 | Module | Weighted | Rate |
 |---|---|---|
@@ -148,7 +148,7 @@
 | M3 Leave & Disciplinary Management | 3.0/3 | 100% |
 | M5 Manpower & Statutory Reports | 4.0/4 | 100% |
 | M4 Employee Records & Lifecycle | 5.0/5 | 100% |
-| M1 Payroll & Compensation | 4.0/5 | 80% |
+| M1 Payroll & Compensation | 4.5/5 | 90% |
 | M8 Accounting & Compliance | 1.5/2 | 75% |
 | Technical Requirements | 3.5/5 | 70% |
 | M7 Recruitment & Onboarding | 2.0/3 | 67% |
