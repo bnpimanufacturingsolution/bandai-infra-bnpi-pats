@@ -104,7 +104,7 @@
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
 | 8.1 | Monthly: Terminal pay computation with BIR Form 2316, withholding tax (BIR Form 1604-C) | MIXED | **Terminal pay computation MISSING** (zero engine hits); BIR 2316 PRESENT (`bir-2316.generator.ts`, `report.router.ts:44`, UI `BIRReportTab.tsx`); withholding engine PRESENT (`tax-calculator.helper.ts:395-408` + `bir-1601c-metrics.helper.ts`); **BIR 1604-C generator MISSING** (zero `1604` code hits) |
-| 8.2 | Annual: Alphabetical list of employees with BIR documents, BIR Form 1604-CF, BIR Form 2316 | MISSING | No alphalist report anywhere; **no 1604-CF generator/endpoint**; 2316 exists per 8.1 |
+| 8.2 | Annual: Alphabetical list of employees with BIR documents, BIR Form 1604-CF, BIR Form 2316 | PRESENT (2026-08-26) | **Annual BIR pack built:** `GET /api/reports/bir/annual-pack?year=` → xlsx with Alphalist of Payees sheet (TIN from databank truth, gross/taxable/withheld aggregated across cutoffs) + 1604-CF summary sheet; UI option on BIR Report tab. Live smoke 2026: 10.6KB, both sheets verified (`bir-annual-pack.generator.spec.ts` 3 passing). BIR 2316 per-employee PDF already existed |
 
 **Why (gaps):**
 - 8.1 Terminal pay: no computation engine exists — only incidental comments and the `finalPayCalculated` flag; the monthly compliance form 1604-C has zero code hits (1601-C *metrics* exist, but that is a different form).
@@ -136,24 +136,24 @@
 
 | Measure | Result |
 |---|---|
-| Fully present | **18/33 = 55%** |
-| Weighted score | (18 + 13×0.5) / 33 = 24.5/33 = **~74%** |
-| Missing outright | 2/33 = 6% |
+| Fully present | **19/32 = 59%** |
+| Weighted score | (19 + 13×0.5) / 32 = 25.5/32 = **~80%** |
+| Missing outright | 0/32 = 0% |
 
-### Per-module rates (updated 2026-08-26 after chain completion pass; M6 excluded)
+### Per-module rates (updated 2026-08-26: M6 excluded as future module; T.4 excluded as external BNPI-owned per operator decision)
 
 | Module | Weighted | Rate |
 |---|---|---|
 | M4 Employee Records & Lifecycle | 5.0/5 | 100% |
 | M2 Attendance & Timekeeping | 4.5/5 | 90% |
+| M3 Leave & Disciplinary Management | 2.5/3 | 83% |
 | M5 Manpower & Statutory Reports | 3.0/4 | 75% |
 | M1 Payroll & Compensation | 3.5/5 | 70% |
 | M7 Recruitment & Onboarding | 2.0/3 | 67% |
-| M3 Leave & Disciplinary Management | 2.5/3 | 83% |
-| Technical Requirements | 3.5/6 | 58% |
-| M8 Accounting & Compliance | 0.5/2 | 25% |
+| Technical Requirements | 3.5/5 | 70% |
+| M8 Accounting & Compliance | 1.5/2 | 75% |
 
-> Excluded: M6 Training & Performance (0/3) — separate future module per operator decision 2026-08-25.
+> Excluded from scoring: **M6 Training & Performance** (separate future module) and **T.4 Government API integrations** (external BNPI-owned dependency — agencies must issue credentials to the company; recorded in Project Truth 2026-08-26).
 > Outside this checklist's modules-1–5 chain but also closed 2026-08-25/26: Annual BIR pack (alphalist + 1604-CF, item 8.2 half), PhilHealth RF-1 (5.1 first form), 201 File tab (4.5).
 
 **Honesty caveat:** PARTIAL = 0.5 is blunt; the true weighted range is roughly **60–72%** excluding M6. Item 2.5 (orphaned tabs) is ~90% done while 6.3-style mock-only surfaces score generously at 0.5 when half-built. Weighted by build effort rather than item count, the overall rate drops slightly — the remaining MISSING items (gov APIs, terminal pay/annual BIR forms) are large builds while many PARTIALs are small wiring jobs.
