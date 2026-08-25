@@ -24,7 +24,7 @@ describe("labor cost analysis contract", () => {
 
 	it("splits Direct vs Agency with DIRECT = not-AGENCY (incl. missing)", () => {
 		expect(helperSource).to.contain('=== "AGENCY" ? "AGENCY" : "DIRECT"');
-		expect(helperSource).to.contain("splitAcc[source].headcount");
+		expect(helperSource).to.contain('splitAcc[source === "AGENCY" ? "agency" : "direct"].headcount');
 	});
 
 	it("dedupes employee headcount across periods", () => {

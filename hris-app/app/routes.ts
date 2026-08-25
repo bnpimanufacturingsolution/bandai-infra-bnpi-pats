@@ -85,6 +85,7 @@ const adminRoutes = [
 	route("activity-logs", "routes/admin/activity-logs.tsx"),
 	route("settings", "routes/admin/settings.tsx"),
 	route("disciplinary-action", "routes/admin/disciplinary-action.tsx"),
+	route("tin-library", "routes/admin/tin-library.tsx"),
 	route("messages", "routes/admin/messages.tsx"),
 	route("notifications", "routes/admin/notifications.tsx"),
 	route("help", "routes/admin/help.tsx"),

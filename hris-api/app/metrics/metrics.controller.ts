@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { Prisma, PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger.helper";
@@ -90,6 +90,7 @@ const AVAILABLE_METRICS = {
 		"eligibilityCandidates",
 		"leaveBalanceMetrics",
 		"turnoverAttritionReport",
+		"tinLibrary",
 	],
 	PayrollPeriod: [
 		"payrollPeriodByCode",
@@ -2468,6 +2469,57 @@ async function generateEmployeeMetric(
 				whereFilter.periodFrom,
 				whereFilter.periodTo,
 			);
+		}
+		case "tinLibrary": {
+			const organizationId = String(
+				whereFilter.organizationId || req?.organizationId || "",
+			);
+			// Postgres truth: TIN lives in metadata.manpowerDatabank.tin (imported
+			// from BNPI databank). The mongo-era Employee.tin column is not here.
+			const employees = await prisma.employee.findMany({
+				where: { organizationId, isDeleted: false },
+				select: {
+					id: true,
+					employeeId: true,
+					metadata: true,
+					person: { select: { personalInfo: true } },
+					department: { select: { name: true } },
+				},
+			});
+			const tinCounts = new Map<string, number>();
+			const tinOf = (employee: (typeof employees)[number]) => {
+				const md = (employee.metadata as any)?.manpowerDatabank || {};
+				return String(md.tin || "").trim() || null;
+			};
+			for (const employee of employees) {
+				const tin = tinOf(employee);
+				if (tin) tinCounts.set(tin, (tinCounts.get(tin) || 0) + 1);
+			}
+			const rows = employees.map((employee) => {
+				const tin = tinOf(employee);
+				const duplicate = tin ? (tinCounts.get(tin) || 0) > 1 : false;
+				return {
+					employeeId: employee.id,
+					empCode: employee.employeeId,
+					name: `${employee.person?.personalInfo?.firstName || ""} ${
+						employee.person?.personalInfo?.lastName || ""
+					}`.trim(),
+					department: employee.department?.name || "No Department",
+					tin,
+					status: duplicate ? "DUPLICATE" : tin ? "OK" : "MISSING",
+				};
+			});
+			const withTin = rows.filter((r) => r.tin).length;
+			const duplicateEmployees = rows.filter((r) => r.status === "DUPLICATE").length;
+			return {
+				summary: {
+					total: rows.length,
+					withTin,
+					missing: rows.length - withTin,
+					duplicateEmployees,
+				},
+				rows,
+			};
 		}
 		default:
 			throw new Error(`Unknown employee metric: ${metric}`);

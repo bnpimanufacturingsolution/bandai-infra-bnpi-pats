@@ -992,6 +992,25 @@ export interface OvertimeMetricsResponse {
 	};
 }
 
+// TIN Library
+export interface TinLibraryRow {
+	employeeId: string;
+	empCode: string;
+	name: string;
+	department: string;
+	tin: string | null;
+	status: "OK" | "MISSING" | "DUPLICATE";
+}
+
+export interface TinLibraryResponse {
+	filter?: Record<string, unknown>;
+	metrics: {
+		tinLibrary: {
+			summary: { total: number; withTin: number; missing: number; duplicateEmployees: number };
+			rows: TinLibraryRow[];
+		};
+	};
+}
 // Labor Cost Analysis
 export interface LaborCostRow {
 	departmentId: string;
@@ -2325,6 +2344,23 @@ class MetricsService extends APIService {
 	/**
 	 * Get leave balance metrics
 	 */
+	async getTinLibrary(): Promise<TinLibraryResponse> {
+		try {
+			const payload = {
+				model: "Employee",
+				data: ["tinLibrary"],
+				filter: {},
+			};
+			const response = await hrisApiClient.post<any>("/api/metrics", payload);
+			const metricsData = this.extractMetricsData(response);
+			if (!metricsData || !metricsData.metrics) {
+				throw new Error("Failed to fetch TIN library");
+			}
+			return metricsData as TinLibraryResponse;
+		} catch (error: any) {
+			throw new Error(error.data?.errors?.[0]?.message || error.message || "Error fetching TIN library");
+		}
+	}
 	async getLeaveBalanceMetrics(
 		filter: {
 			departmentId?: string;

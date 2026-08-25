@@ -1,5 +1,15 @@
 # Current Task
 
+## Latest Task Addendum - 2026-08-25 Frontend mock-data audit (hris-app)
+
+- Operator asked for an audit of frontend pages using mock data. Audit-only, no code changed.
+- LIVE full-mock: `/time-logging` (MOCK_USERS, Math.random clock events, routes.ts:209) and `/employee/benefits` (MOCK_PRODUCTS, routes.ts:103).
+- LIVE partial/fallback: `/calendar` leaves from 2 hardcoded rows; `/hr/dashboard` sample company news; `/hr/announcements` shows 23 generated rows when the real list is empty.
+- Dev tools `/pdf-mapper` + `/pdf-generator-demo` use BIR2316 mock by design.
+- Cleared: production BIR 2316 PDF download passes REAL employee data into helpers from `bir-2316-mock-data.ts` — misleading name only.
+- Dead code with mocks: hr/approvals/*Tab x3, TeamAttendanceTab (Math.random KPIs over real roster), employee/attendance-approval.$employeeId, hr-public/interview-scheduling-page, ScannerInterface, leave-calendar-template + dead libs `mock-data.ts`, `mock-soa-billings.ts` (billings migrated to useStatementOfAccounts).
+- Canonical: `.wwg/reports/frontend-mock-data-audit-20260825.md` (7 Proposed RECs). emp-app pending submodule checkout.
+
 ## Latest Task Addendum - 2026-08-24 Toast X removal canonized
 
 - Operator: X on success/error toasts was supposed to be gone; it reappeared on the fleet clock-sync toast.

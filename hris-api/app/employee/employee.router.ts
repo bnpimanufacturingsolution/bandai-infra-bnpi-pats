@@ -10,6 +10,7 @@ interface IController {
 	reserveEmployeeId(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
+	updateReportTo(req: Request, res: Response, next: NextFunction): Promise<void>;
 	setActiveEmployeeSchedule(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getEmployeeSchedules(req: Request, res: Response, next: NextFunction): Promise<void>;
 	deactivateEmployeeSchedule(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -584,6 +585,7 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.patch("/:id", uploadEmployeeDocuments, controller.update);
+	routes.patch("/:id/report-to", controller.updateReportTo);
 
 	/**
 	 * @openapi

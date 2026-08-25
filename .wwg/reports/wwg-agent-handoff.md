@@ -1,5 +1,18 @@
 # WWG Agent Handoff
 
+## 2026-08-25 - Frontend mock-data audit (hris-app)
+
+| Field | Value |
+|---|---|
+| Ask | Audit frontend for pages using mock data |
+| Live full-mock | `/time-logging` (MOCK_USERS + Math.random clock events), `/employee/benefits` (MOCK_PRODUCTS catalog, no API) |
+| Live partial/fallback | `/calendar` leave layer = 2 hardcoded leaves; `/hr/dashboard` sample company news; `/hr/announcements` renders 23 fake rows when API list is empty |
+| Dev tools | `/pdf-mapper`, `/pdf-generator-demo` (BIR 2316 mapping, mock by design) |
+| False alarm cleared | BIR 2316 PDF download uses REAL employee data; `bir-2316-mock-data.ts` only supplies mapping helpers + dev-tool mock |
+| Dead code w/ mocks | 8 orphaned files incl. hr/approvals/*Tab x3, TeamAttendanceTab (fabricated KPIs), attendance-approval.$employeeId, interview-scheduling-page, ScannerInterface, leave-calendar-template; dead libs mock-data.ts + mock-soa-billings.ts (billings now on useStatementOfAccounts) |
+| Canonical | `.wwg/reports/frontend-mock-data-audit-20260825.md` |
+| Next | 7 Proposed RECs in report; audit-only, no code changed |
+
 ## 2026-08-24 - Toast close (X) button removed + canonized
 
 | Field | Value |

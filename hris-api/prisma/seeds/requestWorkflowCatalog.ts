@@ -280,6 +280,14 @@ export const DEFAULT_REQUEST_WORKFLOW_TEMPLATES = [
 		states: SEEDED_LIFECYCLE_STATES,
 	},
 	{
+		code: "WF-PAN-LEAVE-CONVERSION",
+		name: "PAN Leave Conversion Workflow",
+		requestType: "LEAVE_CONVERSION",
+		description: "PAN workflow: HR submission, HR approval, leave conversion completion",
+		steps: buildPanSteps("Leave Conversion Completion"),
+		states: SEEDED_LIFECYCLE_STATES,
+	},
+	{
 		code: "WF-RESIGNATION-DEFAULT",
 		name: "Resignation Workflow",
 		requestType: "RESIGNATION",

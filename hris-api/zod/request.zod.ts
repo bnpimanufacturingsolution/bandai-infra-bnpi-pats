@@ -18,6 +18,7 @@ export const RequestType = z.enum([
 	"PROMOTION",
 	"SALARY_CHANGE",
 	"TRANSFER",
+	"LEAVE_CONVERSION",
 	"SCHEDULE_CHANGE",
 	"OTHER",
 ]);

@@ -810,6 +810,13 @@ export const useOvertimeMetrics = (
 /**
  * Hook to fetch no-work report metrics
  */
+export const useTinLibrary = () => {
+	return useQuery<TinLibraryResponse>({
+		queryKey: [...queryKeys.metrics.all, "tinLibrary"] as const,
+		queryFn: () => metricsService.getTinLibrary(),
+		staleTime: 5 * 60 * 1000,
+	});
+};
 export const useLaborCostAnalysis = (
 	dateFrom?: string,
 	dateTo?: string,

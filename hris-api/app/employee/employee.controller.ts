@@ -4875,6 +4875,100 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	/**
+	 * Org chart builder (spec gap M4.2): reassign an employee's manager with
+	 * cycle prevention. HR/admin only.
+	 */
+	const updateReportTo = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const { id } = req.params;
+			const newReportToId = String(req.body?.reportToId || "").trim();
+			const organizationId = String((req as any).organizationId || "");
+			if (!id) {
+				res.status(400).json(buildErrorResponse("Employee ID is required", 400));
+				return;
+			}
+			const role = String((req as any).role ?? ((req as any).user?.role || ""));
+			const allowedRoles = new Set(["hris-admin", "hris-hr-manager", "admin", "super_admin", "superadmin"]);
+			if (!allowedRoles.has(role)) {
+				res.status(403).json(buildErrorResponse("Only admin/HR can restructure the org chart", 403));
+				return;
+			}
+
+			const employee = await prisma.employee.findFirst({
+				where: { id, organizationId, isDeleted: false },
+				select: { id: true, employeeId: true },
+			});
+			if (!employee) {
+				res.status(404).json(buildErrorResponse("Employee not found", 404));
+				return;
+			}
+
+			let nextReportToId: string | null = null;
+			if (newReportToId && newReportToId !== "none") {
+				if (newReportToId === id) {
+					res.status(400).json(buildErrorResponse("An employee cannot report to themselves", 400));
+					return;
+				}
+				const manager = await prisma.employee.findFirst({
+					where: { id: newReportToId, organizationId, isDeleted: false },
+					select: { id: true, reportToId: true },
+				});
+				if (!manager) {
+					res.status(404).json(buildErrorResponse("New manager not found", 404));
+					return;
+				}
+				// Cycle guard: walk up the chain from the new manager; if we reach the
+				// employee being reassigned, this would create a loop.
+				let cursor = manager.reportToId;
+				let depth = 0;
+				while (cursor && depth < 100) {
+					if (cursor === id) {
+						res.status(400).json(
+							buildErrorResponse(
+								"Cannot reassign: this would create a reporting cycle",
+								400,
+							),
+						);
+						return;
+					}
+					const parent = await prisma.employee.findFirst({
+						where: { id: cursor, organizationId },
+						select: { reportToId: true },
+					});
+					cursor = parent?.reportToId || null;
+					depth += 1;
+				}
+				nextReportToId = newReportToId;
+			}
+
+			const before = await prisma.employee.findFirst({
+				where: { id },
+				select: { reportToId: true },
+			});
+
+			const updated = await prisma.employee.update({
+				where: { id },
+				data: { reportToId: nextReportToId },
+				select: { id: true, employeeId: true, reportToId: true },
+			});
+
+			await logAudit(req, {
+				userId: String((req as any).user?.id || "unknown"),
+				action: "ORG_CHART_REASSIGN_MANAGER",
+				entityType: "Employee",
+				entityId: id,
+				changesBefore: { reportToId: before?.reportToId || null },
+				changesAfter: { reportToId: updated.reportToId },
+				description: `Org chart: ${employee.employeeId || id} now reports to ${nextReportToId || "none"}`,
+				page: { url: req.originalUrl, title: "Org chart" },
+			});
+
+			res.status(200).json(buildSuccessResponse("Manager reassigned", { employee: updated }));
+		} catch (error: any) {
+			res.status(500).json(buildErrorResponse(error?.message || "Failed to reassign manager", 500));
+		}
+	};
 	const update = async (req: Request, res: Response, _next: NextFunction) => {
 		const { id } = req.params;
 		let requestData = req.body;
@@ -9285,6 +9379,7 @@ export const controller = (prisma: PrismaClient) => {
 		getAll,
 		getById,
 		update,
+	updateReportTo,
 		setActiveEmployeeSchedule,
 		getEmployeeSchedules,
 		deactivateEmployeeSchedule,

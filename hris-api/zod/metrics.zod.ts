@@ -53,6 +53,7 @@ const EMPLOYEE_METRICS = z.enum([
 	"eligibilityCandidates",
 	"leaveBalanceMetrics",
 	"turnoverAttritionReport",
+	"tinLibrary", // Employee TIN compliance library
 ]);
 
 // Define available metrics for PayrollPeriod model
