@@ -1,239 +1,4 @@
-<<<<<<< HEAD
-## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain — absent wall = client file contradiction
-
-- **Absent-173 root cause PROVEN as client data contradiction**: 00573's own WorkSharing row flags 7/11, 7/18, 7/25 (Sats) = 0/OFF with shift 07:15-15:15; app correctly built 10 PRESENT + 5 REST (zero ABSENT lines); client Sheet2 still charges 1 absent day × monthly×12/313 (=611.5 exact). Their WS file and their Sheet2 disagree — app followed the operational file.
-- **Post-PH-fix deductions decomposed**: contributions now near-match (SSS ₱4.0k, PH ₱7.1k, PagIBIG ₱5.8k — engine bracket/rounding class); WTax app over ₱13.6k (cascade of absent/loan bases); **loans ₱41.4k = client data** (Payment amounts differ 00374 510 vs 645.69; paid-off loans still active 01202 s2=0 vs app 695.36; TALLIED people show s2=0 loans with dedn matching → client internal regrouping).
-- **Classification: zero remaining engine faults.** All open gaps = client data contradictions (absent ₱263k), client loan data (₱41.4k), client manual leave adjustments (5 rows/₱3.6k), statutory bracket config (₱16.9k), rounding (2 UNMATCH, days ₱235, OT ₱1).
-- Final: TALLIED 67, UNMATCH 2, OT_OK_NEAR_50 187, ALEXA 12 (828 compared). Evidence: `.runtime/tally-jul1125-after-repairs-2026082517362/` + GAP-ELABORATION files.
-
-## Latest Task Addendum - 2026-08-25 PhilHealth schedule fix — TALLIED 10 → 67 + reset runbook
-
-- **PH schedule proven & implemented**: Sheet2 PH = monthly × 2.5% per cutoff (277/277 exact, no cap ≤85k); daily-rated ₱600 cohort = flat ₱390/cutoff (573/573). New `resolveBandaiPhilHealthCutoffContribution` overrides the gross-based PH in generate+preview (`bandai-philhealth-schedule.spec.ts`). Deductions gap −188k → −98,790.
-- **TALLIED 10 → 67** (828 compared), OT_OK_NEAR_50 187, ALEXA 12. Remaining: absent/Saturday policy ₱263k, deductions ₱99k, leave ₱64k, ND ₱49.5k, gross ₱227k (absent-driven).
-- **TZ bug fixed**: SheetJS local-midnight dates on UTC+8 shifted leave dates −1 day — re-import recovered 50 people / ₱375k→₱444k; leavePay fails → 5. TZ regression test added.
-- **E2E matrix runner**: `run-payroll-tally-matrix.mjs` — 26 PASS / 0 FAIL (DB, API pins, unit specs, tally, recurrence, pending decisions).
-- **Runbook**: `docs/LOCAL_DB_RESET_PERIOD_RUNBOOK.md` — fresh DB → tallied period (pack + leave + proof), app-native mode for future periods without Sheet2.
-=======
-﻿## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain â€” absent wall = client file contradiction
-
-- **Absent-173 root cause PROVEN as client data contradiction**: 00573's own WorkSharing row flags 7/11, 7/18, 7/25 (Sats) = 0/OFF with shift 07:15-15:15; app correctly built 10 PRESENT + 5 REST (zero ABSENT lines); client Sheet2 still charges 1 absent day Ã— monthlyÃ—12/313 (=611.5 exact). Their WS file and their Sheet2 disagree â€” app followed the operational file.
-- **Post-PH-fix deductions decomposed**: contributions now near-match (SSS â‚±4.0k, PH â‚±7.1k, PagIBIG â‚±5.8k â€” engine bracket/rounding class); WTax app over â‚±13.6k (cascade of absent/loan bases); **loans â‚±41.4k = client data** (Payment amounts differ 00374 510 vs 645.69; paid-off loans still active 01202 s2=0 vs app 695.36; TALLIED people show s2=0 loans with dedn matching â†’ client internal regrouping).
-- **Classification: zero remaining engine faults.** All open gaps = client data contradictions (absent â‚±263k), client loan data (â‚±41.4k), client manual leave adjustments (5 rows/â‚±3.6k), statutory bracket config (â‚±16.9k), rounding (2 UNMATCH, days â‚±235, OT â‚±1).
-- Final: TALLIED 67, UNMATCH 2, OT_OK_NEAR_50 187, ALEXA 12 (828 compared). Evidence: `.runtime/tally-jul1125-after-repairs-2026082517362/` + GAP-ELABORATION files.
-
-## Latest Task Addendum - 2026-08-25 PhilHealth schedule fix â€” TALLIED 10 â†’ 67 + reset runbook
-
-- **PH schedule proven & implemented**: Sheet2 PH = monthly Ã— 2.5% per cutoff (277/277 exact, no cap â‰¤85k); daily-rated â‚±600 cohort = flat â‚±390/cutoff (573/573). New `resolveBandaiPhilHealthCutoffContribution` overrides the gross-based PH in generate+preview (`bandai-philhealth-schedule.spec.ts`). Deductions gap âˆ’188k â†’ âˆ’98,790.
-- **TALLIED 10 â†’ 67** (828 compared), OT_OK_NEAR_50 187, ALEXA 12. Remaining: absent/Saturday policy â‚±263k, deductions â‚±99k, leave â‚±64k, ND â‚±49.5k, gross â‚±227k (absent-driven).
-- **TZ bug fixed**: SheetJS local-midnight dates on UTC+8 shifted leave dates âˆ’1 day â€” re-import recovered 50 people / â‚±375kâ†’â‚±444k; leavePay fails â†’ 5. TZ regression test added.
-- **E2E matrix runner**: `run-payroll-tally-matrix.mjs` â€” 26 PASS / 0 FAIL (DB, API pins, unit specs, tally, recurrence, pending decisions).
-- **Runbook**: `docs/LOCAL_DB_RESET_PERIOD_RUNBOOK.md` â€” fresh DB â†’ tallied period (pack + leave + proof), app-native mode for future periods without Sheet2.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Pushed: 5a5dd05c (pack), dd16ebfd (TZ + matrix), PH fix + runbook this push.
-
-## Latest Task Addendum - 2026-08-25 Careful remaining-gap investigation (post-pack)
-
-<<<<<<< HEAD
-- **Stale-import found & fixed**: the operator's earlier UI leave execute ran while the watcher served old parser code — LVP rows had shifted dates/wrong days (00032 1.5 days vs file 2.5; 00342 dates −1 day). Re-ran import with current code: 321 updated, ₱375,187.78 (was ₱327,991.84). **leavePay fails 254 → 111, gap ₱106,320 → ₱63,924; net gap +₱51,767 → +₱15,811** (from −₱423k session start). ALEXA_NEAR 6, NEAR_10 10, OT_OK_NEAR_50 80.
-- **Leave rule proven**: Sheet2 pays ALL paid types in-window incl. rest days (BEL/BIL/VL/ACL/CL/SL all confirmed; 00032 Sat 7/11 paid). Only ~4-5 people have manual client exclusions (00342 excl BEL etc.) — not mechanically fixable. Rest of the 111 fails: ~51 sheet-leave people whose employee codes don't exist in DB + 01624 (app-only).
-- **Absent-173 mechanics proven**: 00573-class = 10 PRESENT + 5 REST (Sats/Sun), zero ABSENT lines; Sheet2 charges 1 absent day × **monthly×12/313** (611.5 exact) — client expects Mon–Sat work at BNPI daily regardless of app REST schedule. Policy decision needed (Saturday expectation) before charging.
-- **Deductions −₱176,651 decomposed**: **PhilHealth app over ₱86,821** (engine bases PH on gross; Sheet2 = salary-based — PH law basis), loans ₱41.4k (RCBC 29/HDMF 11/SSS 31 amount residuals), SSS under ₱10.3k, PagIBIG under ₱5.8k, tax ₱9.2k, rest ≈ ₱55k other/rounding.
-- Remaining walls ranked: PH basis (policy), absent/Saturday (policy), leave residual ₱64k (mostly unfixable data), ND ₱49.5k (line-level buckets), RD 13 (₱13k).
-- Final: `.runtime/tally-jul1125-after-repairs-2026082513565/REPORT.md` — TALLIED 10, UNMATCH 2, ALEXA 6, NEAR_10 10, OT_OK_NEAR_50 80.
-
-## Latest Task Addendum - 2026-08-25 Recurring comp/ded proven for NEXT period (no Sheet2) + MLA flipped recurring
-
-- Operator directives: recurring comp/ded must keep recurring (no re-fix next period); Sheet2 won't always exist — future periods compute in-app.
-- **MLA flipped to open-horizon EVERY_CUTOFF** (824 rows; old 831 superseded set stays ended; a future period-scoped COMP mass supersedes automatically). Repair script MLA mode → "open" for idempotent reruns.
-- **Recurrence proof for PP-20260726-20260811 (Sheet2 NOT used)**: DMA 335/₱110,300 + MLA 824/₱412,000 via the engine's own `resolvePayrollBenefitSources`; loans 1,356/₱831,766 overlapping via EmployeeLoan window SQL. Evidence: `.runtime/recurring-next-period-proof-20260825/proof.json`.
-- Doctrine written: findings **§14g** — Sheet2 = parity harness only; app-native map (attendance/late/absent/leave/statutory/recurring comp+loans native; OT still needs the cut's rptOvertimeDetails until in-app approved-OT covers it).
-
-## Latest Task Addendum - 2026-08-25 Jul 11-25 tally fix pack (comp from Sheet2 + full replay) — 802/828 improved
-
-- Operator directive: recurring comp/ded cannot rely on the single cut file — fix compensation FROM Sheet2, always with proof.
-- Discovery: local clone had LOST all earlier brute repairs (DB refresh) — Jul COMP/DED mass, WS, OT buckets, prior-DED loans, DMA, dailyRate all absent (import history proved it).
-- New scripts: `repair-bnpi-comp-from-sheet2.mjs` (12 codes; DMA open-horizon; others period-pinned + supersede; canonical register labels) and orchestrator `run-jul1125-tally-fix-pack.mjs` (9 steps, dry-run default, `--execute`, `--step=N`, proof JSON per step).
-- Replayed: DM4 Jul bio+OT (OT landed; strict verify gate non-convergent flap = known, documented), WS Jul (841 upd), late recompute re-run AFTER final materialization (sequencing matters), dailyRate 569 Path A, comp-from-Sheet2 (DMA 329+6, MLA 824+831 superseded, ARP 673, AON 33, LLA 65, TSA 10, OBA 33, OAD 5, HYS 66, ABS 48, MTX 153, PFA 1), Jul DED mass, prior DED Jan-Jun, loan horizon 24mo.
-- Engine fixes: (1) register **arp** column was missing — added; (2) **special-holiday premium split proven from Sheet2** — Path A work premium = **1.3 full** (was wrongly 0.3 via stale always-false `useSourceDailyRate`), Path B = 0.3; excess spclOtHrs × 1.69 moved to its own register column **Sun/Spc Hol OT Exc** (new `resolveBandaiSpecialHolidayWorkMultiplier` exported + pinned by `bandai-special-holiday-split.spec.ts`).
-- **Final proof (828 compared, true July Sheet2)**: UNMATCH **694 → 2**; TALLIED **0 → 10**; NEAR_10 9; OT_OK_NEAR_50 **76**; **802/828 improved** (top: 00835 +₱39,392, 01049 +₱34,096, 00021 +₱26,795); gross fails 826→**554**, gross gap −₱324k→−₱117k; **net gap −₱423k→+₱52k**; late fails 322→**55** (₱109k recovered). MATCH: OT ₱1.33M, DMA, MLA, ARP ₱335.5k, PFA, AON, LLA, TSA, OBA, OAD, HYS, ABS, MTX, basicPay, numberOfDays. Loans: RCBC 29 / HDMF 11 / SSS 31.
-- Still open: absent policy 173 (Sheet2 ₱269k vs app ₱6k), deductions over ₱170k (contrib/loan/tax cascade), leave day-count 201 (₱106k), ND ₱49.5k (needs line-level bucket analysis), RD Hrs Pay 13 (₱13k).
-- Evidence: `.runtime/jul1125-tally-fix-*/` + `.runtime/tally-jul1125-after-repairs-2026082512195/REPORT.md`. Local clone only — VM replay still required.
-
-## Latest Task Addendum - 2026-08-25 BNPI period leave import (LVP) closes Sheet2 Leave gap
-
-- Feed proven: `Leave (July 1-31, 2026).xlsx` sheet **Leave (2)** covers **376/376** Sheet2 Jul 11–25 leave people; money reproduces **99.2%** via dual basis (Path A `days×dailySalary` 217; Path B `days×monthly×12/313` 156).
-=======
-- **Stale-import found & fixed**: the operator's earlier UI leave execute ran while the watcher served old parser code â€” LVP rows had shifted dates/wrong days (00032 1.5 days vs file 2.5; 00342 dates âˆ’1 day). Re-ran import with current code: 321 updated, â‚±375,187.78 (was â‚±327,991.84). **leavePay fails 254 â†’ 111, gap â‚±106,320 â†’ â‚±63,924; net gap +â‚±51,767 â†’ +â‚±15,811** (from âˆ’â‚±423k session start). ALEXA_NEAR 6, NEAR_10 10, OT_OK_NEAR_50 80.
-- **Leave rule proven**: Sheet2 pays ALL paid types in-window incl. rest days (BEL/BIL/VL/ACL/CL/SL all confirmed; 00032 Sat 7/11 paid). Only ~4-5 people have manual client exclusions (00342 excl BEL etc.) â€” not mechanically fixable. Rest of the 111 fails: ~51 sheet-leave people whose employee codes don't exist in DB + 01624 (app-only).
-- **Absent-173 mechanics proven**: 00573-class = 10 PRESENT + 5 REST (Sats/Sun), zero ABSENT lines; Sheet2 charges 1 absent day Ã— **monthlyÃ—12/313** (611.5 exact) â€” client expects Monâ€“Sat work at BNPI daily regardless of app REST schedule. Policy decision needed (Saturday expectation) before charging.
-- **Deductions âˆ’â‚±176,651 decomposed**: **PhilHealth app over â‚±86,821** (engine bases PH on gross; Sheet2 = salary-based â€” PH law basis), loans â‚±41.4k (RCBC 29/HDMF 11/SSS 31 amount residuals), SSS under â‚±10.3k, PagIBIG under â‚±5.8k, tax â‚±9.2k, rest â‰ˆ â‚±55k other/rounding.
-- Remaining walls ranked: PH basis (policy), absent/Saturday (policy), leave residual â‚±64k (mostly unfixable data), ND â‚±49.5k (line-level buckets), RD 13 (â‚±13k).
-- Final: `.runtime/tally-jul1125-after-repairs-2026082513565/REPORT.md` â€” TALLIED 10, UNMATCH 2, ALEXA 6, NEAR_10 10, OT_OK_NEAR_50 80.
-
-## Latest Task Addendum - 2026-08-25 Recurring comp/ded proven for NEXT period (no Sheet2) + MLA flipped recurring
-
-- Operator directives: recurring comp/ded must keep recurring (no re-fix next period); Sheet2 won't always exist â€” future periods compute in-app.
-- **MLA flipped to open-horizon EVERY_CUTOFF** (824 rows; old 831 superseded set stays ended; a future period-scoped COMP mass supersedes automatically). Repair script MLA mode â†’ "open" for idempotent reruns.
-- **Recurrence proof for PP-20260726-20260811 (Sheet2 NOT used)**: DMA 335/â‚±110,300 + MLA 824/â‚±412,000 via the engine's own `resolvePayrollBenefitSources`; loans 1,356/â‚±831,766 overlapping via EmployeeLoan window SQL. Evidence: `.runtime/recurring-next-period-proof-20260825/proof.json`.
-- Doctrine written: findings **Â§14g** â€” Sheet2 = parity harness only; app-native map (attendance/late/absent/leave/statutory/recurring comp+loans native; OT still needs the cut's rptOvertimeDetails until in-app approved-OT covers it).
-
-## Latest Task Addendum - 2026-08-25 Jul 11-25 tally fix pack (comp from Sheet2 + full replay) â€” 802/828 improved
-
-- Operator directive: recurring comp/ded cannot rely on the single cut file â€” fix compensation FROM Sheet2, always with proof.
-- Discovery: local clone had LOST all earlier brute repairs (DB refresh) â€” Jul COMP/DED mass, WS, OT buckets, prior-DED loans, DMA, dailyRate all absent (import history proved it).
-- New scripts: `repair-bnpi-comp-from-sheet2.mjs` (12 codes; DMA open-horizon; others period-pinned + supersede; canonical register labels) and orchestrator `run-jul1125-tally-fix-pack.mjs` (9 steps, dry-run default, `--execute`, `--step=N`, proof JSON per step).
-- Replayed: DM4 Jul bio+OT (OT landed; strict verify gate non-convergent flap = known, documented), WS Jul (841 upd), late recompute re-run AFTER final materialization (sequencing matters), dailyRate 569 Path A, comp-from-Sheet2 (DMA 329+6, MLA 824+831 superseded, ARP 673, AON 33, LLA 65, TSA 10, OBA 33, OAD 5, HYS 66, ABS 48, MTX 153, PFA 1), Jul DED mass, prior DED Jan-Jun, loan horizon 24mo.
-- Engine fixes: (1) register **arp** column was missing â€” added; (2) **special-holiday premium split proven from Sheet2** â€” Path A work premium = **1.3 full** (was wrongly 0.3 via stale always-false `useSourceDailyRate`), Path B = 0.3; excess spclOtHrs Ã— 1.69 moved to its own register column **Sun/Spc Hol OT Exc** (new `resolveBandaiSpecialHolidayWorkMultiplier` exported + pinned by `bandai-special-holiday-split.spec.ts`).
-- **Final proof (828 compared, true July Sheet2)**: UNMATCH **694 â†’ 2**; TALLIED **0 â†’ 10**; NEAR_10 9; OT_OK_NEAR_50 **76**; **802/828 improved** (top: 00835 +â‚±39,392, 01049 +â‚±34,096, 00021 +â‚±26,795); gross fails 826â†’**554**, gross gap âˆ’â‚±324kâ†’âˆ’â‚±117k; **net gap âˆ’â‚±423kâ†’+â‚±52k**; late fails 322â†’**55** (â‚±109k recovered). MATCH: OT â‚±1.33M, DMA, MLA, ARP â‚±335.5k, PFA, AON, LLA, TSA, OBA, OAD, HYS, ABS, MTX, basicPay, numberOfDays. Loans: RCBC 29 / HDMF 11 / SSS 31.
-- Still open: absent policy 173 (Sheet2 â‚±269k vs app â‚±6k), deductions over â‚±170k (contrib/loan/tax cascade), leave day-count 201 (â‚±106k), ND â‚±49.5k (needs line-level bucket analysis), RD Hrs Pay 13 (â‚±13k).
-- Evidence: `.runtime/jul1125-tally-fix-*/` + `.runtime/tally-jul1125-after-repairs-2026082512195/REPORT.md`. Local clone only â€” VM replay still required.
-
-## Latest Task Addendum - 2026-08-25 BNPI period leave import (LVP) closes Sheet2 Leave gap
-
-- Feed proven: `Leave (July 1-31, 2026).xlsx` sheet **Leave (2)** covers **376/376** Sheet2 Jul 11â€“25 leave people; money reproduces **99.2%** via dual basis (Path A `daysÃ—dailySalary` 217; Path B `daysÃ—monthlyÃ—12/313` 156).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Shipped: helper+service (`bnpi-period-leave-import.*`), `POST /api/migration/dm3/import-period-leave`, DM3 card **Upload leave (period)**, durable log kind `period-leave`.
-- Engine truth change: **GrossPay now includes `leavePay`** at both generate+preview sites. Net/TR/tax follow.
-- Operator feedback applied (same day): upload now **imports immediately** like other DM3 uploads (default execute; preview only via `dryRun=true`); amber preview/Confirm step removed; **payroll-period selector** added to the modal (default OPEN period, sends `payrollPeriodId`) so month-wide files cannot silently land in the prior cutoff (REC-20260825-PERIOD-LEAVE-EXPLICIT-PERIOD **Implemented**).
-- Tests: backend spec **9/9** (incl. default-executes contract); app migration route tests 20/20. Pre-existing fails documented separately (6 app-lib vitest; 2 migration.tsx tsc).
-<<<<<<< HEAD
-- Live local DB (5433) execute proof: window `2026-07-11..25`, **321 created / 0 updated / 6 failed** (missing emps 01827/01834/01835/01836/01838/01841), **₱327,991.84**, log `cmt86rh9b00s8vgewuoj41i4j` retrievable via `GET /dm3/mass-upload-imports/:id` (summary+importLog → activity click-through works). Opt-in preview: 0 writes.
-- Infra fix: `hris-app/app/services/payroll-periods.service.ts` was **UTF-16 LE** (broke vitest oxc transform when the leave modal's period hook pulled it in) → converted to UTF-8, no content change.
-- Baseline (pre-leave, true July Sheet2): `.runtime/tally-jul1125-before-leave-julysheet2/` — 828 compared, TALLIED 0, OT_MATCH_ONLY 134, UNMATCH 694, leavePay fails 366. **After-leave tally done**: `.runtime/tally-jul1125-after-leave-julysheet2/REPORT.md` — 283 improved / 23 worsened; leave exact 113/366, 201 underpaid (rest-day/day-count residual), app-only 1; Σ Sheet2 ₱434,311.72 vs app ₱327,991.84 (gap ₱106,319.88); bands still TALLIED 0 — deductions/tax wall dominates (worst-now ΔGross −36k class). First tally attempts had compared JUNE Sheet2 by mistake (hardcoded target) → superseded notes in old dirs; jul script now honors `TARGET_XLSX`. Canonical: findings §14e.
-=======
-- Live local DB (5433) execute proof: window `2026-07-11..25`, **321 created / 0 updated / 6 failed** (missing emps 01827/01834/01835/01836/01838/01841), **â‚±327,991.84**, log `cmt86rh9b00s8vgewuoj41i4j` retrievable via `GET /dm3/mass-upload-imports/:id` (summary+importLog â†’ activity click-through works). Opt-in preview: 0 writes.
-- Infra fix: `hris-app/app/services/payroll-periods.service.ts` was **UTF-16 LE** (broke vitest oxc transform when the leave modal's period hook pulled it in) â†’ converted to UTF-8, no content change.
-- Baseline (pre-leave, true July Sheet2): `.runtime/tally-jul1125-before-leave-julysheet2/` â€” 828 compared, TALLIED 0, OT_MATCH_ONLY 134, UNMATCH 694, leavePay fails 366. **After-leave tally done**: `.runtime/tally-jul1125-after-leave-julysheet2/REPORT.md` â€” 283 improved / 23 worsened; leave exact 113/366, 201 underpaid (rest-day/day-count residual), app-only 1; Î£ Sheet2 â‚±434,311.72 vs app â‚±327,991.84 (gap â‚±106,319.88); bands still TALLIED 0 â€” deductions/tax wall dominates (worst-now Î”Gross âˆ’36k class). First tally attempts had compared JUNE Sheet2 by mistake (hardcoded target) â†’ superseded notes in old dirs; jul script now honors `TARGET_XLSX`. Canonical: findings Â§14e.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-## Latest Task Addendum - 2026-08-24 Fleet Hikvision time sync button + live clock snap
-
-- Operator authorized live write on A/B/D/E, then asked for an HRIS button to trigger fleet time sync.
-- Live snap done twice via SDK STDXML; final state skew A -2s/B +8s->-19s/D -3s/E 0s before second pass -> all within ~19s latency residual after writes. C/F unreachable (C known down; F ECONNRESET open), TEST A/B + Device 5 lanes down as expected.
-- NEW: POST /api/device/time-sync-all (preview-first, execute=false default, deviceIds scope, concurrency 2, honest aggregate) sharing 
-unHikvisionTimeSyncCore with the per-device route.
-- App: **Sync device time** button on Devices page (/admin/configuration/devices) opens preview-first modal with per-device clock/drift/path/status and scoped **Update N clocks**.
-- Tests: api contract 8 passing; app UI contract 2 passing. Live smoke: preview 11/4 readable; scoped execute 4/4 written. Evidence: .runtime/time-sync-all-smoke-20260824-151249/smoke.json.
-- Push af6d607. Dual-app parity exception: admin-only surface.
-
-<<<<<<< HEAD
-=======
-
 # Current Task
-
-## Latest Task Addendum - 2026-08-26 ASA allowance built (gate #1 closed) â€” rate ~88%
-
-- Operator approved: **Assembly Standing = new taxable benefit type, code ASA** (like LLA).
-- Wired every LLA surface: `assemblyStanding` register column (additive SQL on DEV, table `employee_payrolls`), BenefitType seeded live (`cmt98fp4k0000vx7s36mrz8wn`), Sheet2 export column **CX**, mass-upload code `ASA` (sourceBy + display maps), payslip post-net row "Assembly Standing Allowance", metrics select/summary, employeePayroll update whitelist + register row.
-- Live proof: PATCH register row â†’ assemblyStanding=500 â†’ GET back 500 â†’ reset to 0 (zero residue). Catalog shows ASA taxable=true.
-- Checklist 1.2 â†’ PRESENT. Rate now **~88%** (24P/8Pa/0M); M1 at 90%.
-- Remaining PARTIALs: 1.1 last-pay polish, 1.4 uniform+loan reports, 7.1/7.2 recruitment polish, 8.1 withholding policy (engine built, NEEDS_CONFIRMATION flags), T.2 login 2FA, T.3 encryption scope gate, T.6 backup cron.
-
-## Latest Task Addendum - 2026-08-26 Manhour reference built (gate #2 closed) â€” rate ~86%
-
-- Operator answered gate 2 with the standard definition: **one man-hour = one hour of work done by one person**. Recorded in Project Truth summary.
-- Built: `manhours-metrics.helper.ts` + `manhoursReport` Attendance metric (zod + controller allow-list) + **Manhours tab** on `/hr/reports/attendance?tab=manhours` (per-employee + per-department + date range). Hours = Attendance `totalMinutesWorked` (net of breaks, closed punches only).
-- Live Aug 1â€“26: 66 people / 118 days / **1,144.4 man-hours**; top dept Production 886.7h.
-- Checklist 2.4 â†’ PRESENT. Rate now **~86%** (23P/9Pa/0M). M2 joins M3/M5/M4 at 100%.
-- Remaining PARTIALs: 1.1, 1.2 (gate ASA), 1.4, 7.1, 7.2, 8.1 (tax policy), T.2 2FA, T.3 (scope gate), T.6 backups.
-
-## Latest Task Addendum - 2026-08-26 Statutory suite + upload UI + terminal pay engine (chain ~84%)
-
-- **SSS R-3 + Pag-ibig MF** generators: `statutory-remittance.generator.ts` + `GET /api/reports/{sss/r3|pagibig/mf}?periodId=`; SSS EE/ER/EC split from bracket table scaled to register truth; Pag-ibig 50/50 match. UI: BIR Report tab picker. Live-proven Jul P1 (10 rows each, "Not on file" markers).
-- **3.1 residual closed**: Upload credits modal on Leave Balance tab (CSV parse â†’ dry-run â†’ execute) over `POST /api/request/leave-credits/bulk-upload`. Live sample: dry 1/1 â†’ execute written=1 â†’ Zen PERSONAL entitled 10â†’12, available recomputed.
-- **Terminal pay engine (M8.1/M1.1)**: `terminal-pay.helper.ts` + `POST /api/reports/terminal-pay/preview` (preview-only). Components: unpaid final net, 13th-month pro-rata, leave conversion on BNPI 313 daily rate, less active loan balances. Policy items flagged NEEDS_CONFIRMATION (SIL monetization, withholding basis). Live smoke Zen: gross 6472.36 / net âˆ’8527.64 (honest negative with outstanding loan).
-- Tests: API focused 48 passing; app vitest 14 passing. Checklist flips: 3.1/5.1/5.2 â†’ PRESENT; rate now ~84% (22P/10Pa/0M of 32; M6+T.4 excluded per operator).
-
-## Latest Task Addendum - 2026-08-26 Chain completion pass: stages 3b/5a/8/11b + Annual BIR pack (local commits)
-
-- Operator: keep going until all chain todos complete. Built and live-proven:
-- **Stage 3b** salary loan application: `/employee/requests/salary-loan` page + `employee-loans.service.ts` + `salary-loan-terms.ts`; POST `/api/employeeLoan` PENDING live-proven (`cmt8tz1d4001hvx7gzskt71z9` for Zen).
-- **Stage 5a** leave tardiness/UT columns: `leaveBalanceMetrics` joins `calculateTardinessMetrics` (period or current-year default); LeaveBalanceTab gains Late(min)/Late Days/UT(min) incl. exports. Live: real minutes across 2229 employees.
-- **Stage 8** pregnant list: `Employee.pregnant`+`expectedDueDate` (additive SQL applied on DEV via dotenv script), zod update path, `pregnantEmployees` metric (controller allow-list + zod), **Pregnant Employees tab** in Workforce reports. Live loop: 0 â†’ set â†’ row 00010 due 2026-12-15 â†’ revert â†’ 0.
-- **Stage 11b** age brackets: `lib/age-brackets.ts` + Age Brackets section on Manpower Distribution.
-- **Bonus M8.2**: Annual BIR pack `GET /api/reports/bir/annual-pack?year=` (alphalist + 1604-CF sheets) + BIRReportTab option; 2026 smoke 10.6KB xlsx both sheets.
-- Tests: API focused 41 passing; app vitest 11 passing. Checklist rows 1.2/2.4/3.3/5.3 updated; rate now ~74% (18P/13Pa/2M).
-- Ops notes: prisma client regen required stopping the dev server (engine DLL lock); metrics has a second allow-list in the controller (not just zod) â€” both must be extended for new metrics.
-
-## Latest Task Addendum - 2026-08-25 Admin passcode requirement documented (docs-only)
-
-- Operator requirement: **all disruptive/destructive admin actions must ask the acting admin for their personal passcode** as a 2FA substitute before executing; each admin has their own unique passcode; server-side enforcement, not UI-only.
-- Task mode: docs-only. Nothing implemented â€” no schema, route, or UI changes this pass.
-- Canonical: `docs/00-product/REQUIREMENT-ADMIN-PASSCODE-FOR-DISRUPTIVE-ACTIONS.md` (scope classes, UX contract, security requirements, open questions `NEEDS_CONFIRMATION`, implementation status table all NOT STARTED).
-- When unsure whether an action is disruptive, treat it as disruptive (default-on) until classification is enumerated.
-
-## Latest Task Addendum - 2026-08-25 Gates answered: PhilHealth RF-1 + 201 filing built (stage 11 first form + stage 10b)
-
-- Operator answered two gates: **remittance first = PhilHealth RF-1 xlsx**; **201 filing = per-employee document checklist**. Assembly Standing (gate 1) and manhour reference (gate 2) still open.
-- **RF-1:** `helper/philhealth-rf1.generator.ts` + `GET /api/reports/philhealth/rf1?periodId=` (org-scoped xlsx via exceljs; EE/ER split of stored premium; PIN from `metadata.manpowerDatabank.philhealthNo`, else "Not on file"). UI: BIRReportTab â†’ Document Type **PHILHEALTH RF-1** â†’ period select â†’ Download. Live: Jul P1 `cmpxw13as001b7zws2xg6rzuf` = 200, 10 employee rows; empty periods proven too. Evidence `.runtime/spec-gap-m1-5/stage-11-rf1-and-10b-201/`.
-- **201 File tab:** `filing-201-documents.ts` (required/optional requirements over existing doc types) + `filing-201-tab.tsx` on employee profile (`tab=filing-201`). Logic unit-tested; live browser proof pending app build.
-- Tests: API focused 35 passing; app vitest 5 passing. Local commits only, NO PUSH.
-- Incident: a PowerShell regex replace corrupted `report.router.ts` and crashed the dev watcher â€” fixed with the Edit tool; avoid regex file rewrites.
-
-## Latest Task Addendum - 2026-08-25 Remaining-gaps roadmap documented
-
-- Operator asked for the remaining work to be well documented.
-- Canonical roadmap: `docs/00-product/REMAINING-GAPS-AND-WHAT-IS-NEEDED.md` â€” every PARTIAL/MISSING row with existsâ†’missingâ†’effortâ†’blocker class (OPERATOR GATE / EXTERNAL / BUILDABLE).
-- Completion math corrected to exact row statuses: ~71% weighted (16 PRESENT / 15 PARTIAL / 2 MISSING of 33 scored; M6 excluded as future module). Commit `a827dff3`.
-- Checklist links the roadmap at the Completion rate section.
-
-## Latest Task Addendum - 2026-08-25 Spec-gap chain stages 6/7/9/10 resumed + closed (local commit)
-
-- Operator's laptop died mid-chain; resume recovered DB forward 55435 + API 3001, then re-proved the two red smokes.
-- Leave conversion root causes fixed: (1) `RequestType` enum ALTER applied on K3s DEV; (2) workflow COMPLETED `panTypes` set in `request-runtime.helper.ts` lacked `LEAVE_CONVERSION` â€” added it plus a `LEAVE_CONVERSION` case in `pan-post-actions.helper.ts` (accepts leaveType|conversionLeaveType, days|conversionDays). Live: request COMPLETED, Zen PERSONAL entitled 10â†’9 / available 9â†’8. Actors: hr-manager@seed.local creates (bypass to FOR_APPROVAL), hr-user@seed.local approves (self-approval guard).
-- tinLibrary metric healthy after clean restart: 2229 rows, 0 withTin / 2229 missing / 0 duplicates (source data has no TIN values yet). Original failure not reproducible post-crash.
-- Disciplinary create/list live-proven (`cmt8hgo8t0000vxa4yaggpm0u`, name snapshot "Zen Andrei"); `ABSENTIEESM`â†’`ABSENTEEISM` typo fixed in zod + admin page; stale template spec (934 lines) replaced with repo-contract spec.
-- Org reassign live-proven: cycle attempt â†’ 400 reporting-cycle; PATCH report-to â†’ 200.
-- Tests: API focused 25 passing (+8 regression sanity), app vitest disciplinary contract 2 passing.
-- Local commit `3dd6bab4` on `feature/spec-gap-remediation`. NO PUSH (chain rule 1). Evidence: `.runtime/spec-gap-m1-5/resume-20260825-173211/`.
-- Chain remaining: stage 3+11 blocked on Stage-0 operator gates; stage 5 manhour gate open; upload UI/sample proof (3.1 residual); pregnant list (stage 8) not started.
-
-## Latest Task Addendum - 2026-08-25 Frontend mock-data audit (hris-app)
-
-- Operator asked for an audit of frontend pages using mock data. Audit-only, no code changed.
-- LIVE full-mock: `/time-logging` (MOCK_USERS, Math.random clock events, routes.ts:209) and `/employee/benefits` (MOCK_PRODUCTS, routes.ts:103).
-- LIVE partial/fallback: `/calendar` leaves from 2 hardcoded rows; `/hr/dashboard` sample company news; `/hr/announcements` shows 23 generated rows when the real list is empty.
-- Dev tools `/pdf-mapper` + `/pdf-generator-demo` use BIR2316 mock by design.
-- Cleared: production BIR 2316 PDF download passes REAL employee data into helpers from `bir-2316-mock-data.ts` â€” misleading name only.
-- Dead code with mocks: hr/approvals/*Tab x3, TeamAttendanceTab (Math.random KPIs over real roster), employee/attendance-approval.$employeeId, hr-public/interview-scheduling-page, ScannerInterface, leave-calendar-template + dead libs `mock-data.ts`, `mock-soa-billings.ts` (billings migrated to useStatementOfAccounts).
-- Canonical: `.wwg/reports/frontend-mock-data-audit-20260825.md` (7 Proposed RECs). emp-app pending submodule checkout.
-
-
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-## Latest Task Addendum - 2026-08-24 Toast X removal canonized
-
-- Operator: X on success/error toasts was supposed to be gone; it reappeared on the fleet clock-sync toast.
-- Cause: sonner closeButton on global Toaster since standalone-era import 4ce3712d (2026-06-17); the no-X memory was the custom toms/Toast surface.
-- Fixed root.tsx; canonized in DESIGN.md (Toasts), terminology (Toast close button), pinned by 	oast-ux-contract.test.ts. emp-app check pending (submodule not checked out locally).
-
-## Latest Task Addendum - 2026-08-24 Whole-codebase WWG alignment audit + non-breaking drift repair
-
-- Operator asked to audit the whole codebase against WWG using 10 parallel sub-agents, then approved all **non-breaking** fixes with documentation.
-- Verdict ~90% ALIGNED. Fixed: AlarmDemo launcher scripts deleted; stale TEST A `.102` -> live `.109` across postman env/collection, ensure-device-live-path.ps1, verify-hikvision-isapi-postman.ps1, vm-bridge cjs+spec; activity title + saved-events Playwright proof now Device events; ZKTeco Linux-bridge naming; employee.controller.ts mojibake comments cleaned; docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md got a .102 STALE banner; device-health fixture IP hygiene.
-- Deferred as behavior changes (RECs): compose seed push-only, emp-app namespaces override. Wiki conflation notes (execute=false is API-layer, callback Employee-vs-DeviceUser order per path, Observe wait 20 min) recorded in the report.
-- Canonical: `.wwg/reports/codebase-wwg-alignment-audit-20260824.md`.
-
-## Latest Task Addendum - 2026-08-22 Hire keeps applicant public-apply name
-
-- Operator: Yan Rubio card opened as Joshua Rodriguez EMP3334. Adding employee must not change the applicant name.
-- Source of identity is the public job application person (first name, last name, email). Add Employee from recruitment reuses that Person and locks those fields.
-- Drawer shows the applicant name if the linked employee is a different person.
-
-
-## Latest Task Addendum - 2026-08-22 db-init repair (push authorized)
-
-- Operator authorized **push**. SHA `4f978c0a`. Jobs Complete; Argo runtime **Healthy**; UAT/PROD counts unchanged.
-- Operator page: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
-
-<<<<<<< HEAD
-
-## Latest Task Addendum - 2026-08-22 Hire keeps applicant public-apply name
-
-- Operator: Yan Rubio card opened as Joshua Rodriguez EMP3334. Adding employee must not change the applicant name.
-- Source of identity is the public job application person (first name, last name, email). Add Employee from recruitment reuses that Person and locks those fields.
-- Drawer shows the applicant name if the linked employee is a different person.
-=======
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
 
 ## Latest Task Addendum - 2026-08-22 Recruitment previous-application history
 
@@ -242,24 +7,60 @@ unHikvisionTimeSyncCore with the per-device route.
 - Not a hire block. Employee create still has its own name+birthday 409 for active employees.
 - Board: amber **History** chip on the kanban card and table row when first+last+birthday matched. Click the person for full history in the right drawer. No chip if birthday is missing.
 
+## Latest Task Addendum - 2026-08-26 Statutory suite + upload UI + terminal pay engine (chain ~84%)
+
+- **SSS R-3 + Pag-ibig MF** generators: `statutory-remittance.generator.ts` + `GET /api/reports/{sss/r3|pagibig/mf}?periodId=`; SSS EE/ER/EC split from bracket table scaled to register truth; Pag-ibig 50/50 match. UI: BIR Report tab picker. Live-proven Jul P1 (10 rows each, "Not on file" markers).
+- **3.1 residual closed**: Upload credits modal on Leave Balance tab (CSV parse â†’ dry-run â†’ execute) over `POST /api/request/leave-credits/bulk-upload`. Live sample: dry 1/1 â†’ execute written=1 â†’ Zen PERSONAL entitled 10â†’12, available recomputed.
+- **Terminal pay engine (M8.1/M1.1)**: `terminal-pay.helper.ts` + `POST /api/reports/terminal-pay/preview` (preview-only). Components: unpaid final net, 13th-month pro-rata, leave conversion on BNPI 313 daily rate, less active loan balances. Policy items flagged NEEDS_CONFIRMATION (SIL monetization, withholding basis). Live smoke Zen: gross 6472.36 / net âˆ’8527.64 (honest negative with outstanding loan).
+- Tests: API focused 48 passing; app vitest 14 passing. Checklist flips: 3.1/5.1/5.2 â†’ PRESENT; rate now ~84% (22P/10Pa/0M of 32; M6+T.4 excluded per operator).
 
 ## Latest Task Addendum - 2026-08-21 Dedicated employee schedule page
 
 - Operator: dedicated page to change employee time schedules without opening each profile.
-<<<<<<< HEAD
-- HR `/hr/employee-schedules` (Timekeeping G�� Schedules) and admin `/admin/configuration/employee-schedules`.
-=======
-- HR `/hr/employee-schedules` (Timekeeping Gï¿½ï¿½ Schedules) and admin `/admin/configuration/employee-schedules`.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- HR `/hr/employee-schedules` (Timekeeping → Schedules) and admin `/admin/configuration/employee-schedules`.
 - Table of active employees, current week hours, department/section filter, click row to preview then Change schedule (same Days/Dates modal).
 
+## Latest Task Addendum - 2026-08-20 Dates calendar multi-select + break
 
-## Latest Task Addendum - 2026-08-20 Document on-prem port access
+- Dates tab is a clickable calendar (multiple days). Hours + break apply to every selected date.
+- Changing the date no longer resets start/end back to 08:00–17:00.
+- Break start/end optional (default 12:00–13:00). Days tab unchanged.
 
-- Operator: document that on-prem ports still exist; this PC cannot reach them; Cloudflare is the same VM.
-- Canonical operator page: `docs/ONPREM_PORT_ACCESS.md`. Evidence: `.wwg/reports/onprem-port-access-20260820.md`.
-- Live: VM six binds 200; this PC six LAN tcp=false; public APIs 200; Observe onprem jobs green.
+## Latest Task Addendum - 2026-08-20 10-agent DevOps audit
 
+- Operator: audit DevOps with 10 subagents. Audit only (no playbook/workflow/Job edits).
+- Tip SHA `37b443a`: CI+Validate green; Observe waiting VM reporter; last apply `885c331` `services=none`.
+- Runtime Argo still Synced/Degraded on failed `hris-api-db-init` (dev/uat/prod).
+- Canonical: `.wwg/reports/devops-audit-20260820.md`.
+
+## Latest Task Addendum - 2026-08-20 Timesheet ↔ schedule connection audit
+
+- Operator: audit timesheet vs schedule because schedule can change (that is the process).
+- Three layers: live schedule → obligation expected windows → punches/timesheet snapshots.
+- Schedule change **does** recompute obligations. **Does not** rewrite punches or timesheet lines or stored late/OT.
+- **Days** tab = weekly pattern (next Monday). **Dates** tab = that calendar day (`ScheduleOverride`).
+- Canonical: `.wwg/reports/timesheet-schedule-connection-20260820.md`.
+
+## Latest Task Addendum - 2026-08-20 Change schedule Days vs Dates
+
+- Operator: weekly hours modal should also set hours on a real calendar date, not only next Monday.
+- Keep **Days** tab (weekday pattern) unchanged. Add **Dates** tab: calendar date + start/end. Saves `ScheduleOverride` for that date.
+- Tests: weekly helper date mapping; modal Days vs Dates payloads.
+
+## Latest Task Addendum - 2026-08-20 Employee weekly hours (Mon 6–3, Tue 7–4)
+
+- Operator asked where to change one employee’s shift (Zen Monday 6–3, Tuesday 7–4). Admin Schedule Templates already exist as reusable patterns.
+- Per-person weekly hours already lived on HR/Admin employee edit → Active Schedule. Work Schedule tab was view-only.
+- Added **Change schedule** on the employee Work Schedule tab: 7 weekday start/end/off editor. Saves `POST /api/employee-schedules` with a `pattern`. Takes effect next Monday.
+- Tests: mocha helper 6; vitest 6 (helper + modal + tab).
+- 2026-08-20: landed on `origin/develop` so VM ansible-pull / Docker can deploy DEV.
+
+## Latest Task Addendum - 2026-08-20 Day labor timesheet property (NO PUSH)
+
+- Operator: implement the lead requirement; **stop pushing to develop until they say so**.
+- Added `Timesheetline.dayLaborType` / `AttendanceObligation.dayLaborType` (`DIRECT` \| `INDIRECT`, nullable).
+- Timesheet day editor: **Day labor** select. Persist via existing breakdown save. Distinct from hire-source report.
+- Operator later: audit then push if sure. Audit: persist is PATCH breakdown on Submit/Approve (day Save is preview, same as clocks). Prisma generate includes `DayLaborType`. SQL still must be applied on DB.
 
 ## Latest Task Addendum - 2026-08-20 Lead 2.1.7 meaning vs shipped
 
@@ -293,31 +94,6 @@ unHikvisionTimeSyncCore with the per-device route.
 - Live VM bind proof: prod/dev/uat API `:3001/:3101/:3201` and app `:3000/:3100/:3200` all HTTP 200.
 - Observe matrix adds `onprem-{prod,dev,uat}-{api,app}`. Down port posts GitHub Deployment **failure** (fail-fast false).
 
-
-## Latest Task Addendum - 2026-08-20 Document CI/Observe/Validate (no push)
-
-- Operator: document DevOps CI well; **do not deploy**; **do not push** until ordered.
-- Canonical: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
-<<<<<<< HEAD
-- Live tip at proof: `efc86c56` G�� CI + Observe + Validate success; VM pull match; images `services=none`; runtime Argo **Degraded** (`hris-api-db-init` Failed).
-- Observe success G�� live pod SHA. `/health` has no `buildSha`. Nested Cloud Run/Firebase workflows do not run on this repo.
-=======
-- Live tip at proof: `efc86c56` Gï¿½ï¿½ CI + Observe + Validate success; VM pull match; images `services=none`; runtime Argo **Degraded** (`hris-api-db-init` Failed).
-- Observe success Gï¿½ï¿½ live pod SHA. `/health` has no `buildSha`. Nested Cloud Run/Firebase workflows do not run on this repo.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-
-## Latest Task Addendum - 2026-08-20 Attendance list filters return to overview
-
-<<<<<<< HEAD
-- Operator: `/hr/attendance` overview; click Clocked In (or any metric) G�� URL becomes `?status=CLOCKED_IN&view=list`. No way back to the clean attendance route.
-=======
-- Operator: `/hr/attendance` overview; click Clocked In (or any metric) Gï¿½ï¿½ URL becomes `?status=CLOCKED_IN&view=list`. No way back to the clean attendance route.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Fix: Back link is a real `/hr/attendance` Link (keeps date/period). Clicking the same metric again returns to overview. Sidebar Attendance resets list query params on the same path.
-- Tests: attendance-management 19; Sidebar 4. Browser: `.runtime/attendance-overview-return-20260820/`.
-
-
 ## Latest Task Addendum - 2026-08-20 Non-breaking DevOps CI/Observe harden (push authorized)
 
 - Operator: improve without breaking, then **do it** (push `develop`). VM ansible-pull will pick up the SHA.
@@ -342,47 +118,31 @@ unHikvisionTimeSyncCore with the per-device route.
 - Operator later: audit then push if sure. Audit: persist is PATCH breakdown on Submit/Approve (day Save is preview, same as clocks). Prisma generate includes `DayLaborType`. SQL still must be applied on DB.
 
 
-## Latest Task Addendum - 2026-08-20 Dates calendar multi-select + break
+## Latest Task Addendum - 2026-08-19 infra git login on VM
 
-- Dates tab is a clickable calendar (multiple days). Hours + break apply to every selected date.
-<<<<<<< HEAD
-- Changing the date no longer resets start/end back to 08:00G��17:00.
-- Break start/end optional (default 12:00G��13:00). Days tab unchanged.
-=======
-- Changing the date no longer resets start/end back to 08:00Gï¿½ï¿½17:00.
-- Break start/end optional (default 12:00Gï¿½ï¿½13:00). Days tab unchanged.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Operator: git was not interactively logged in for `infra` (no `gh`, no `~/.git-credentials`; ansible-pull still used Argo secret).
+- Fix: `infra` git `credential.helper=store` from `argocd/project-truth-repo-creds` (`x-access-token` / GitHub `g-zenr`). Mode 0600.
+- Proof: `git ls-remote` as `infra` → `6f973877ca13` `refs/heads/develop`.
+- LAN `ssh infra@10.184.37.19` still times out from this PC (Wi-Fi `192.168.1.26`, no `10.184.37.x`). Use `ssh project-truth-hris`.
+- Evidence: `.runtime/vm-git-login-20260819/infra-git-login-proof.txt`.
 
+## Latest Task Addendum - 2026-08-19 Promote attendance request UI to develop
 
-## Latest Task Addendum - 2026-08-20 durable WS-off vs OT ABSENT revive
+- Local Vite on `bryan-task` showed **Request time** / attendance request. Public DEV `https://dev.bnpi-hris.tech` did not.
+- Cause: GitOps DEV serves `develop` `b409ca4`. The attendance request work lived only on `bryan-task` `3bad2d1`. Merging `develop` into `bryan-task` does not deploy the feature.
+- Layout (Today left / log right) was still uncommitted local CSS. Promote the committed attendance request + related API/UI from `3bad2d1` onto `develop`.
 
-- Task mode: bug fix (OT apply ignored schedule OFF overrides).
-- Operator proof: 01116 Jul 21 showed ABSENT despite WS flag=0 after rebuild.
-- Fix: OT patch honors effective OFF override; stamps scheduleSnapshot; re-repair 1715.
-- Proof: 01116 REST_DAY; OT dry-run does not force ABSENT; absent app-over 505?0.
-<<<<<<< HEAD
-- Local test DB only � VM replay later.
-- Evidence: `.runtime/reverse-reinvestigate-20260820/PROOF-01116.md`
+## Latest Task Addendum - 2026-08-20 Attendance records compact + sticky employee
 
+- Operator: Attendance Records list needs smaller type and a frozen employee name when scrolling right.
+- Fix: compact DataTable density; smaller employee/time/status cells; Employee column `pin: left`.
+- Tests: DataTable 9; EmployeeTableCell 3; attendance 19. Browser: `.runtime/attendance-records-compact-20260820/`.
 
-## Latest Task Addendum - 2026-08-20 Timesheet G�� schedule connection audit
+## Latest Task Addendum - 2026-08-20 Attendance list filters return to overview
 
-- Operator: audit timesheet vs schedule because schedule can change (that is the process).
-- Three layers: live schedule G�� obligation expected windows G�� punches/timesheet snapshots.
-=======
-- Local test DB only ï¿½ VM replay later.
-- Evidence: `.runtime/reverse-reinvestigate-20260820/PROOF-01116.md`
-
-
-## Latest Task Addendum - 2026-08-20 Timesheet Gï¿½ï¿½ schedule connection audit
-
-- Operator: audit timesheet vs schedule because schedule can change (that is the process).
-- Three layers: live schedule Gï¿½ï¿½ obligation expected windows Gï¿½ï¿½ punches/timesheet snapshots.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Schedule change **does** recompute obligations. **Does not** rewrite punches or timesheet lines or stored late/OT.
-- **Days** tab = weekly pattern (next Monday). **Dates** tab = that calendar day (`ScheduleOverride`).
-- Canonical: `.wwg/reports/timesheet-schedule-connection-20260820.md`.
-
+- Operator: `/hr/attendance` overview; click Clocked In (or any metric) → URL becomes `?status=CLOCKED_IN&view=list`. No way back to the clean attendance route.
+- Fix: Back link is a real `/hr/attendance` Link (keeps date/period). Clicking the same metric again returns to overview. Sidebar Attendance resets list query params on the same path.
+- Tests: attendance-management 19; Sidebar 4. Browser: `.runtime/attendance-overview-return-20260820/`.
 
 ## Latest Task Addendum - 2026-08-20 10-agent DevOps audit
 
@@ -392,21 +152,18 @@ unHikvisionTimeSyncCore with the per-device route.
 - Canonical: `.wwg/reports/devops-audit-20260820.md`.
 
 
-<<<<<<< HEAD
-## Latest Task Addendum - 2026-08-20 Employee weekly hours (Mon 6G��3, Tue 7G��4)
+## Latest Task Addendum - 2026-08-19 Payroll Management sheet live audit
 
-- Operator asked where to change one employeeG��s shift (Zen Monday 6G��3, Tuesday 7G��4). Admin Schedule Templates already exist as reusable patterns.
-- Per-person weekly hours already lived on HR/Admin employee edit G�� Active Schedule. Work Schedule tab was view-only.
-=======
-## Latest Task Addendum - 2026-08-20 Employee weekly hours (Mon 6Gï¿½ï¿½3, Tue 7Gï¿½ï¿½4)
+- Operator asked to audit sheet **3 Payroll Management** (claimed 98.08%) with actual users, and whether generate payslip / payroll creates records.
+- Report: `audits/payroll-management-2026-08-19.md`. Evidence: `.runtime/payroll-mgmt-audit-20260819-204314/`.
+- **Not 100%.** `EmployeePayroll` rows exist (**46** = 35 Jun P1 + 11 Jul P1). **No payslip PDFs.** Current Aug cut: 0 approved timesheets; Zen `00010` timesheet `cmswwobaz05mxlp01e8p71f9q` is **404**.
+- Actors: Maria Santos `hr-manager@seed.local`, Juan Mendoza `employee@seed.local`, Zen via HR API.
 
-- Operator asked where to change one employeeGï¿½ï¿½s shift (Zen Monday 6Gï¿½ï¿½3, Tuesday 7Gï¿½ï¿½4). Admin Schedule Templates already exist as reusable patterns.
-- Per-person weekly hours already lived on HR/Admin employee edit Gï¿½ï¿½ Active Schedule. Work Schedule tab was view-only.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Added **Change schedule** on the employee Work Schedule tab: 7 weekday start/end/off editor. Saves `POST /api/employee-schedules` with a `pattern`. Takes effect next Monday.
-- Tests: mocha helper 6; vitest 6 (helper + modal + tab).
-- 2026-08-20: landed on `origin/develop` so VM ansible-pull / Docker can deploy DEV.
+## Latest Task Addendum - 2026-08-19 DEV pull/push GitOps operator report
 
+- Operator asked how to pull latest (VM / `https://dev.bnpi-hris.tech` / `develop`) and how a push to `develop` shows on DEV.
+- Report: `audits/dev-bnpi-hris-pull-push-gitops-2026-08-19.md`. Indexed in `audits/README.md`.
+- Truth: do not pull code from the website. Pull `origin/develop`. DEV updates only after `git push origin develop` and VM ansible-pull rebuilds `hris-*-local:develop`.
 
 ## Latest Task Addendum - 2026-08-20 Change schedule Days vs Dates
 
@@ -448,39 +205,29 @@ unHikvisionTimeSyncCore with the per-device route.
 - Check + update now go through **HCNetSDK STDXML** first: C++ `--get-time` / `--set-time` via `NET_DVR_STDXMLConfig` GET/PUT `/ISAPI/System/time` (same SDK session as FP/face).
 - HRIS: `runHikvisionDeviceTimeOnVm` then ISAPI HTTP fallback if VM SDK command cannot arm.
 - API: `POST /api/device/:id/time-sync` (`execute=false` default). Response `transport=sdk_stdxml|isapi_http`.
-<<<<<<< HEAD
-- UI: Preview time G�� confirm Update time. Modal shows check path.
-=======
-- UI: Preview time Gï¿½ï¿½ confirm Update time. Modal shows check path.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- UI: Preview time → confirm Update time. Modal shows check path.
 - Does not enable NTP. Listener binary on the VM must rebuild from this C++ before SDK path is live.
 
+## Latest Task Addendum - 2026-08-19 Hikvision bio time / Manila sync research
 
-## Latest Task Addendum - 2026-08-19 Absent-day correction must create a punch
+- Operator: can Hikvision biometric terminals set time manually, and can we sync all devices together to Manila time?
+- Verdict: **Yes** on the device (panel / web / Hik-Connect / iVMS Batch Time Sync / ISAPI PUT / NTP). **HRIS does not SET** today — GET `/ISAPI/System/time` only.
+- Manila mapping: device `timeZone=CST-8:00:00`, DST off, `localTime` `+08:00`. Same offset as `Asia/Manila`. Do not send IANA names to the panel.
+- Live BNPI XML (stale 2026-08-17 and earlier): always `timeMode=manual`. Clocks already +08 but **not** fleet-NTP; B/D/E differed by ~40s. Today’s clocks `NEEDS_CONFIRMATION` (localhost:3001 down; VM ping false).
+- Attendance uses **device punch time**, not `receivedAt`. Aligning clocks is required for Time In/Out.
+- Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`.
+- Boundary: research only. No PUT. No NTP write. No clock-writer feature this pass.
 
-<<<<<<< HEAD
-- Operator: `REQ-1786424090600` completed for Zen Aug 14 (8:00G��16:00 Manila) but My Attendance still showed **Absent / no record**.
-- Cause: that day is a virtual `absent-2026-08-14` row. Apply required a real Attendance and failed. Completing a missed whole day must **backfill**.
-- Fix: completed `ATTENDANCE_CORRECTION` now backfills when attendanceId is virtual/missing. Live apply created PRESENT `cmszhlo6a00018h4sy78fjinn` 08:00G��16:00 Manila.
-=======
-- Operator: `REQ-1786424090600` completed for Zen Aug 14 (8:00Gï¿½ï¿½16:00 Manila) but My Attendance still showed **Absent / no record**.
-- Cause: that day is a virtual `absent-2026-08-14` row. Apply required a real Attendance and failed. Completing a missed whole day must **backfill**.
-- Fix: completed `ATTENDANCE_CORRECTION` now backfills when attendanceId is virtual/missing. Live apply created PRESENT `cmszhlo6a00018h4sy78fjinn` 08:00Gï¿½ï¿½16:00 Manila.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Tests: apply-request + backfill 5 passing; payload + modal 19 passing.
+## Latest Task Addendum - 2026-08-19 hourlySalary backfill script
 
-
-## Latest Task Addendum - 2026-08-19 Attendance correction HR Review must finish
-
-- Operator: Maria Santos (`hr-manager@seed.local`) approved Zen's Aug 18 missed clock-out, but Zen's request stayed **Approved / HR Review pending**.
-- Cause: manager approval flipped the request to APPROVED while HR Review is a TASK. My Approvals hid Complete Task (`stepType !== TASK`). Apply also 500'd (`deriveBehaviorFlags` missing) and missed Manila-day rows (`2026-08-17T16:00Z`).
-<<<<<<< HEAD
-- Fix: HR actors can complete HR Review; if the manager who approved is HR, HR Review + SYSTEM auto-complete. Apply uses Manila day bounds. Live `REQ-1786424090599` is **COMPLETED**; Zen Aug 18 effective row is PRESENT 08:00G��17:00 Manila.
-=======
-- Fix: HR actors can complete HR Review; if the manager who approved is HR, HR Review + SYSTEM auto-complete. Apply uses Manila day bounds. Live `REQ-1786424090599` is **COMPLETED**; Zen Aug 18 effective row is PRESENT 08:00Gï¿½ï¿½17:00 Manila.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Tests: workflow helper 2 passing; request-approval-action + RequestReviewModal 15 passing.
-
+- Operator: backfill current EmployeePayroll rows for the new `hourlySalary` snapshot. Dry-run default. Does **not** change payroll computation.
+- Commands (`hris-api`):
+  - `npm run backfill:employee-payroll-hourly-salary` — dry-run (default; no writes)
+  - `npm run backfill:employee-payroll-hourly-salary:execute` — write `hourlySalary` only
+- Derive: prefer metadata `hourlyRate`, else `dailySalary` (or metadata daily) ÷ `workingHoursPerDay` (BNPI 313 uses 8). Same helper as generate: `computeEmployeePayrollHourlySalarySnapshot`.
+- Does **not** rewrite money (OT/late/UT/absent/gross/net), Employee input, Sheet2 columns, or paid/published/lock flags.
+- WWG: project-truth + summary + this addendum + handoff + snapshot report Backfill section.
+- Boundary: no product compute edits; no commit/push this pass.
 
 ## Latest Task Addendum - 2026-08-19 EmployeePayroll.hourlySalary snapshot
 
@@ -490,40 +237,67 @@ unHikvisionTimeSyncCore with the per-device route.
 - Tests: `hris-api/tests/employee-payroll-hourly-salary-snapshot.spec.ts` (5 green).
 - Canonical: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
 
+## Latest Task Addendum - 2026-08-17 Document all code changes
 
-## Latest Task Addendum - 2026-08-19 Hikvision bio time / Manila sync research
+- Operator: make sure all code changes are well documented.
+- Canonical: `.wwg/reports/zen-payroll-timesheet-code-20260817.md` (this thread’s code + live DEV).
+- Math (Manila): `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`.
+- Encoding pack already documented + pushed `7b5030b`.
+- Operator then asked to push every leftover change. Pack: timesheet `sync-obligation-lines` + `ensure-period-drafts` `employeeIds` + WWG reports.
 
-- Operator: can Hikvision biometric terminals set time manually, and can we sync all devices together to Manila time?
-<<<<<<< HEAD
-- Verdict: **Yes** on the device (panel / web / Hik-Connect / iVMS Batch Time Sync / ISAPI PUT / NTP). **HRIS does not SET** today G�� GET `/ISAPI/System/time` only.
-- Manila mapping: device `timeZone=CST-8:00:00`, DST off, `localTime` `+08:00`. Same offset as `Asia/Manila`. Do not send IANA names to the panel.
-- Live BNPI XML (stale 2026-08-17 and earlier): always `timeMode=manual`. Clocks already +08 but **not** fleet-NTP; B/D/E differed by ~40s. TodayG��s clocks `NEEDS_CONFIRMATION` (localhost:3001 down; VM ping false).
-=======
-- Verdict: **Yes** on the device (panel / web / Hik-Connect / iVMS Batch Time Sync / ISAPI PUT / NTP). **HRIS does not SET** today Gï¿½ï¿½ GET `/ISAPI/System/time` only.
-- Manila mapping: device `timeZone=CST-8:00:00`, DST off, `localTime` `+08:00`. Same offset as `Asia/Manila`. Do not send IANA names to the panel.
-- Live BNPI XML (stale 2026-08-17 and earlier): always `timeMode=manual`. Clocks already +08 but **not** fleet-NTP; B/D/E differed by ~40s. TodayGï¿½ï¿½s clocks `NEEDS_CONFIRMATION` (localhost:3001 down; VM ping false).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Attendance uses **device punch time**, not `receivedAt`. Aligning clocks is required for Time In/Out.
-- Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`.
-- Boundary: research only. No PUT. No NTP write. No clock-writer feature this pass.
+## Latest Task Addendum - 2026-08-17 SHE uses icon + label
 
+- Operator: when making UI, full use of icons and button labels.
+- Details modal: outline buttons with UserRound + full labels; fact rows icon+label; Raw payload Braces + label.
+- Doctrine: Shrink ≠ strip icons. SHE + DESIGN.md + grok rule 06.
 
-## Latest Task Addendum - 2026-08-19 hourlySalary backfill script
+## Latest Task Addendum - 2026-08-17 Persist SHE design doctrine
 
-- Operator: backfill current EmployeePayroll rows for the new `hourlySalary` snapshot. Dry-run default. Does **not** change payroll computation.
-- Commands (`hris-api`):
-<<<<<<< HEAD
-  - `npm run backfill:employee-payroll-hourly-salary` G�� dry-run (default; no writes)
-  - `npm run backfill:employee-payroll-hourly-salary:execute` G�� write `hourlySalary` only
-=======
-  - `npm run backfill:employee-payroll-hourly-salary` Gï¿½ï¿½ dry-run (default; no writes)
-  - `npm run backfill:employee-payroll-hourly-salary:execute` Gï¿½ï¿½ write `hourlySalary` only
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Derive: prefer metadata `hourlyRate`, else `dailySalary` (or metadata daily) ++ `workingHoursPerDay` (BNPI 313 uses 8). Same helper as generate: `computeEmployeePayrollHourlySalarySnapshot`.
-- Does **not** rewrite money (OT/late/UT/absent/gross/net), Employee input, Sheet2 columns, or paid/published/lock flags.
-- WWG: project-truth + summary + this addendum + handoff + snapshot report Backfill section.
-- Boundary: no product compute edits; no commit/push this pass.
+- Operator: always be able to pull Shrink / Hide / Embody.
+- Active principle: `.wwg/wiki/principles/shrink-hide-embody.md`
+- Always-on reminder: `.grok/rules/06-shrink-hide-embody.md`
+- Also: `DESIGN.md`, terminology **SHE**.
 
+## Latest Task Addendum - 2026-08-17 Device event details SHE cleanup
+
+- Operator: clean details modal; remembered Shrink + Embody, forgot Hide (Maeda SHE).
+- Shrink: `max-w-lg`, one definition list, no 4-card grid.
+- Hide: raw payload stays a quiet closed accordion.
+- Embody: person, event, time, result, source, terminal, device status only.
+
+## Latest Task Addendum - 2026-08-17 Device event details drop payload grid
+
+- UI: remove Device payload field grid from details modal. Keep Terminal; Device status stays on that card. Raw payload remains a closed accordion.
+
+## Latest Task Addendum - 2026-08-17 Device event details raw payload accordion
+
+- Task mode: UI. **Do not push** unless asked.
+- Operator: Device event details raw JSON is always open; put it in an accordion, closed by default.
+- `events.tsx` details modal: `Accordion type=single collapsible`, no `defaultValue`.
+
+## Latest Task Addendum - 2026-08-17 Encoding pack documented + push
+
+- Operator: document the encoding/schedule-hook changes and push `develop`.
+- Canonical: `.wwg/reports/mojibake-encoding-20260817.md` + project-truth.
+- Device event details accordion / payload-grid UI in `events.tsx` is **not** in this push (separate local addendum).
+
+## Latest Task Addendum - 2026-08-17 Device Events view-event deeplink
+
+- Task mode: bug fix + document (no push).
+- Operator deep link `page=116&action=view-event&id=cmsr688py002xvxwwttxhdsal`
+  opened **Device event details** empty (first “not on this page”, then “not found”).
+- Cause: modal used current table page only; `page` goes stale; then local API `:3001` was down while Vite `:5175` still showed cached rows.
+- Fix: `GET /api/device/events/item/:eventId` + `useDeviceEvent`; modal no longer requires the row on the page.
+- Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
+- Live: item route returns TAP / person `10`. Did not push.
+
+## Latest Task Addendum - 2026-08-17 Dup updates documented + live skip proof
+
+- Operator: confirm we are on the updates; document them.
+- Local `:3001` **is** on `935963a` skip: smoke `GROK-DOC-M2-38-20260817` → `acs_exception_not_punch`, DB 0 rows.
+- Git: `a801c4b` + `935963a` (+ later `a6dce32` TAP display).
+- CONFLICTING: live B `2/38` serial 8564 still saved `02:51:12Z` after this API start — possible second writer. Not pushed this pass.
+- Canonical report: `.wwg/reports/device-events-dup-20260817.md`.
 
 ## Latest Task Addendum - 2026-08-19 GitHub Action observe VM deploy
 
@@ -533,18 +307,24 @@ unHikvisionTimeSyncCore with the per-device route.
 - Validate workflow is not deploy proof.
 
 
-## Latest Task Addendum - 2026-08-19 infra git login on VM
+## Latest Task Addendum - 2026-08-17 Duplicate per active device
 
-- Operator: git was not interactively logged in for `infra` (no `gh`, no `~/.git-credentials`; ansible-pull still used Argo secret).
-- Fix: `infra` git `credential.helper=store` from `argocd/project-truth-repo-creds` (`x-access-token` / GitHub `g-zenr`). Mode 0600.
-<<<<<<< HEAD
-- Proof: `git ls-remote` as `infra` G�� `6f973877ca13` `refs/heads/develop`.
-=======
-- Proof: `git ls-remote` as `infra` Gï¿½ï¿½ `6f973877ca13` `refs/heads/develop`.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- LAN `ssh infra@10.184.37.19` still times out from this PC (Wi-Fi `192.168.1.26`, no `10.184.37.x`). Use `ssh project-truth-hris`.
-- Evidence: `.runtime/vm-git-login-20260819/infra-git-login-proof.txt`.
+- Operator: extras appear on each **active** device.
+- Live: only armed B/D/E. Each emits `major=2`/`minor=38` empty-person every **301s**. IPs and serials are per panel. Not one tap cloned.
+- Real taps are `major=5`/`minor=38` and always have person id (590 SDK + 788 callback).
+- Noise: **4,541** SDK exception rows mislabeled fingerprint pass.
+- Fix: do not persist that exception; taxonomy is device health; C++ classify requires major=5.
+- Evidence: `.runtime/device-event-dup-20260817/per-active-device/FINDINGS.md`.
 
+## Latest Task Addendum - 2026-08-17 Device Events look duplicated on Sync
+
+- Task mode: bug fix (DeviceEvent persist + Sync skip + UI honesty).
+- Operator: Saved events 63,933; rows look unknown / no person id; CUID device names; thought Sync duplicated logs.
+- Live: 63,940 rows. Screenshot is live SDK fingerprint taps with empty `dwEmployeeNo`, not four copies of one tap. CUIDs are Main D/E.
+- True extra rows: C++ `identity_repost` + dedupe key includes `employeeNo` (serial 5560 = empty + 1838 + 320 + 186). 963 serial groups / 1,992 rows.
+- Fix: serial-only collapse (any source / empty person), Sync skip by serial, one ACS `searchID` per job, persist taxonomy + evidence, socket device name, banner **Listener save**.
+- Evidence: `.runtime/device-event-dup-20260817/FINDINGS.md`.
+- REC: `REC-20260817-DEVICEEVENT-SERIAL-COLLAPSE` (C++ multi-guess + SYNC_SIGNAL vs logSearch leftover).
 
 ## Latest Task Addendum - 2026-08-19 Promote attendance request UI to develop
 
@@ -578,27 +358,18 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-08-19 Period overview totals, not duplicate days
 
-<<<<<<< HEAD
-- Operator: Active Timesheet 8/11G��8/25 repeated Zen five times (PRES 1/1/1). Clocked In list said no records.
-=======
-- Operator: Active Timesheet 8/11Gï¿½ï¿½8/25 repeated Zen five times (PRES 1/1/1). Clocked In list said no records.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Operator: Active Timesheet 8/11–8/25 repeated Zen five times (PRES 1/1/1). Clocked In list said no records.
 - Cause: department expand previewed 5 **days**. Clocked In scanned 5000 obligation rows (~67s) so the page timed out empty.
 - Fix: multi-day expand is **one row per employee** with SCHED/PRES/LATE/UT/ABS day totals. View days opens that person's daily list. Clocked In pages from scheduled punches (live 122 rows in 1.3s).
 - Live GA/HR Zen: 14 scheduled, 6 present, 4 late, 4 undertime, 8 absent.
 - Tests: schedule helper 13 passing; attendance template 16 passing.
 
+## Latest Task Addendum - 2026-08-19 Absent-day correction must create a punch
 
-## Latest Task Addendum - 2026-08-19 Overtime request date + 2h 50m + HR payable OT
-
-- Operator: OT form used a number spinner; 2 hours 50 minutes could not be entered. Workflow was manager-first. Approved employee OT did not write payable hours.
-<<<<<<< HEAD
-- Fix: DatePicker; Hours + Minutes (example 2:50). Workflow is employee G�� HR G�� system. HR approve writes `timesheetline.overtimeHours` (`2:50` / 170 min).
-=======
-- Fix: DatePicker; Hours + Minutes (example 2:50). Workflow is employee Gï¿½ï¿½ HR Gï¿½ï¿½ system. HR approve writes `timesheetline.overtimeHours` (`2:50` / 170 min).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Tests: payload vitest 7; overtime workflow/apply mocha 3.
-
+- Operator: `REQ-1786424090600` completed for Zen Aug 14 (8:00–16:00 Manila) but My Attendance still showed **Absent / no record**.
+- Cause: that day is a virtual `absent-2026-08-14` row. Apply required a real Attendance and failed. Completing a missed whole day must **backfill**.
+- Fix: completed `ATTENDANCE_CORRECTION` now backfills when attendanceId is virtual/missing. Live apply created PRESENT `cmszhlo6a00018h4sy78fjinn` 08:00–16:00 Manila.
+- Tests: apply-request + backfill 5 passing; payload + modal 19 passing.
 
 ## Latest Task Addendum - 2026-08-18 Overview PRES collapsed vs expand
 
@@ -614,56 +385,20 @@ unHikvisionTimeSyncCore with the per-device route.
 - Live TimesheetConfig: `requireManagerApprovedOvertime=true`, `enableAutoApprove=false`, OT flag threshold 60 minutes.
 - Extra punch hours become OT candidates. They do **not** write payable `overtimeHours` until a manager OT request is approved, or the approved OT workbook (DM4.3) is applied to timesheet lines.
 - Run Payroll only uses **APPROVED** timesheets. Payable OT is `timesheet_lines.overtimeHours` / Bandai `approvedBuckets`, not raw attendance.
-<<<<<<< HEAD
-- Live: Jun 26G��Jul 10 has 725 people / 15,239 hrs payable line OT (workbook path). Current Aug 11G��26 has 0 line OT. OVERTIME request type is unused in this clone.
-=======
-- Live: Jun 26Gï¿½ï¿½Jul 10 has 725 people / 15,239 hrs payable line OT (workbook path). Current Aug 11Gï¿½ï¿½26 has 0 line OT. OVERTIME request type is unused in this clone.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Live: Jun 26–Jul 10 has 725 people / 15,239 hrs payable line OT (workbook path). Current Aug 11–26 has 0 line OT. OVERTIME request type is unused in this clone.
 - Evidence: `.runtime/ot-audit/`.
 
+## Latest Task Addendum - 2026-08-18 Overview PRES collapsed vs expand
 
-## Latest Task Addendum - 2026-08-18 DMA open-horizon recurring
+- Operator: department rows showed PRES 6 / 3 / 2, but expanding Production listed Aileen/Alberto with PRES 0.
+- Collapsed PRES was leftover AttendanceObligation PRESENT/INCOMPLETE (`_isClockedIn`). Expand is a 5-name preview, not those punchers.
+- API now overwrites department `present` from scheduled punches and ranks clocked-in first. Live 2026-08-17: Production present=1, first preview = Joys `00680`. Live 2026-08-18: present=0.
+- Overview person PRES = has `timeIn`. Expand sorts clocked-in first so the department total and the open list use the same punch definition.
 
-<<<<<<< HEAD
-- Task mode: data + import fix (DMA recurring) for Jul 11�25 tally.
-=======
-- Task mode: data + import fix (DMA recurring) for Jul 11ï¿½25 tally.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Request: fix DMA for recurring; amounts = latest Sheet2 Jul per employee.
-- Finding: expired period-scoped workbook DMA + no Jul COMP DMA rows ? app 0.
-- Done:
-  1. `isOpenHorizonCompensationCode(DMA)` + COMP mass + workbook apply open-horizon.
-  2. Local repair from Jul Sheet2 (335 apply Jul; 2 missing emps).
-  3. Re-tally: DMA fails **332?0**.
-- Evidence: `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`
-<<<<<<< HEAD
-- Docs: canonical �14d + handoff.
-=======
-- Docs: canonical ï¿½14d + handoff.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- **Local DB = testing only.** Brute/data fixes proved locally must be replayed on
-  **VM DB later** (DMA, loans, WS-off, late/EO, prior DED, dailyRate, etc.).
-- Still open: Gross/absent reverse/late/TR; VM data replay.
+## Latest Task Addendum - 2026-08-17 Utilization rate lives in the circle
 
-
-## Latest Task Addendum - 2026-08-18 document recurring DED / Amount vs Payment
-
-- Task mode: docs / truth-sync.
-<<<<<<< HEAD
-- Documented in canonical �14c + WWG report:
-  past deduction mass uploads as primary recurring source;
-  Payment (this cutoff) vs Amount (still owed);
-  multi-cutoff horizon; Jul re-tally after loan fix; operator FAQ.
-- Paths: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` �14c,
-=======
-- Documented in canonical ï¿½14c + WWG report:
-  past deduction mass uploads as primary recurring source;
-  Payment (this cutoff) vs Amount (still owed);
-  multi-cutoff horizon; Jul re-tally after loan fix; operator FAQ.
-- Paths: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` ï¿½14c,
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-  `.wwg/reports/bnpi-recurring-deduction-mass-loans-20260818.md`.
-
+- Operator: `<1%` sat in the header while the circle said `0% CLOCKED IN`.
+- Removed the duplicate header percent. Circle shows the clock-in rate (`<1%` when 1/866) with label clocked in.
 
 ## Latest Task Addendum - 2026-08-17 Overview cards use schedule late/UT
 
@@ -671,63 +406,6 @@ unHikvisionTimeSyncCore with the per-device route.
 - Cards were counting stored obligation lateHours (still 0:00). Table computes from schedule + punches.
 - Metrics now use the same scheduled-day timekeeping: Late 1, On time 0, Undertime 1 for Zen.
 - Late/On time rate is among clocked-in; Undertime among clocked-out. Utilization shows `<1%` when 1/866.
-
-
-## Latest Task Addendum - 2026-08-17 multi-cutoff loans + prior DED mass
-
-<<<<<<< HEAD
-- Task mode: data + engine fix (loan horizon) for Jul 11�25 deduction tally.
-=======
-- Task mode: data + engine fix (loan horizon) for Jul 11ï¿½25 deduction tally.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Request: use prior deduction mass (recurring) to improve Jul tally.
-- Finding: Jul cut mass incomplete; main blocker was short `endDate` on loans.
-- Done:
-  1. Multi-cutoff term + never-shrink endDate in mass import.
-  2. Local repair: 1280 loans overlap Jul (was 88).
-  3. Reimport prior+cut DED mass oldest?newest (Bandai org).
-  4. Preview proof: loan apply fleet improved (HDMF/SSS/SSSELN app-zero?0).
-  5. Full re-tally 2026-08-18: hdmfSl 353?11, sssSl 300?31, rcbc 132?29.
-- Evidence: `.runtime/prior-deduction-recur-20260817/`,
-  `.runtime/tally-after-loan-20260818/`.
-- Still open: Gross/absent/late/DMA; TOTAL DEDN package beyond loans.
-<<<<<<< HEAD
-- Docs: canonical �14c (2026-08-18).
-=======
-- Docs: canonical ï¿½14c (2026-08-18).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-
-## Latest Task Addendum - 2026-08-17 FILE_DUAL Basic Path A
-
-- Task mode: engine fix (FILE_DUAL Basic) + local proof.
-- Request: proceed with Path A Basic recommendation
-<<<<<<< HEAD
-  (`basicPay = paidDays � dailyRate`, no Absent double-count on Path A).
-- Implementation:
-  1. `resolveBandaiRegisterBasicPay` � Path A paidDays�dailyRate; Path B periodBasic.
-  2. Full-day Absent-Amt suppressed when Path A (`suppressFullDayAbsentDeduction`).
-  3. Register uses computed `basicPay` + Path A paid regular days (not non-REST line count).
-  4. Wired in generate + preview paths in `payroll-period.helper.ts`.
-- Proof (local clone `5433`, period Jun 26�Jul 10): basicPay **481?1**, absent **603?222**,
-  numberOfDays **818?263**; OT still 1; Gross/TR still fleet-unmatched.
-- Evidence: `.runtime/full-tally-jul11-25-after-basic-path-a-20260817/`
-- Tests: 11 green (basic 5 + OT dual 6).
-- Next residual: absent residual, DMA, late, loans � not Basic formula.
-=======
-  (`basicPay = paidDays ï¿½ dailyRate`, no Absent double-count on Path A).
-- Implementation:
-  1. `resolveBandaiRegisterBasicPay` ï¿½ Path A paidDaysï¿½dailyRate; Path B periodBasic.
-  2. Full-day Absent-Amt suppressed when Path A (`suppressFullDayAbsentDeduction`).
-  3. Register uses computed `basicPay` + Path A paid regular days (not non-REST line count).
-  4. Wired in generate + preview paths in `payroll-period.helper.ts`.
-- Proof (local clone `5433`, period Jun 26ï¿½Jul 10): basicPay **481?1**, absent **603?222**,
-  numberOfDays **818?263**; OT still 1; Gross/TR still fleet-unmatched.
-- Evidence: `.runtime/full-tally-jul11-25-after-basic-path-a-20260817/`
-- Tests: 11 green (basic 5 + OT dual 6).
-- Next residual: absent residual, DMA, late, loans ï¿½ not Basic formula.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
 
 ## Latest Task Addendum - 2026-08-17 Same table + Late/UT/Hours columns
 
@@ -737,57 +415,12 @@ unHikvisionTimeSyncCore with the per-device route.
 - New columns: Late (next to Clock In), UT (next to Clock Out), Hours.
 - All Statuses now applies the same schedule arrival as Clocked In, so Zen is not a dash.
 
-
-## Latest Task Addendum - 2026-08-17 Clocked-in table shows schedule punches
-
-- Card showed Clocked in 1/866; table filter Clocked in was empty.
-- Count comes from Attendance punches on scheduled people; table only listed AttendanceObligation PRESENT/INCOMPLETE (Zen has a punch, no obligation row).
-- Fix: CLOCKED_IN filter merges scheduled+clocked-in attendance rows. Live: 1 row **Zen Andrei** INCOMPLETE 1:40 PM.
-- Tests: schedule helper 7 passing.
-
-
-## Latest Task Addendum - 2026-08-17 Include Zen Andrei in scheduled today
-
-- Zen Andrei `00010` / device 10 is a real DIRECT employee with `REGULAR_14DAY_ROTATION`.
-- Was excluded by (1) `employmentTerminationDate=1970-01-01` treated as terminated, (2) missing `cycleAnchorDate` so Mon 8/17 mapped to rotation day 6 OFF.
-- Fix: ignore non-final + year<=1971 termination; week-align 14-day templates when anchor is missing (same as assign path).
-<<<<<<< HEAD
-- Live after fix: Zen `inScheduledToday=true`; scheduled count 853G��866.
-=======
-- Live after fix: Zen `inScheduledToday=true`; scheduled count 853Gï¿½ï¿½866.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Tests: schedule + employee-schedule + obligation 27 passing.
-
-
-## Latest Task Addendum - 2026-08-17 Not clocked in uses scheduled over
-
-- Operator: 0 clock-ins but UI showed **76 / 1706** not clocked in. 1700+ employees are scheduled.
-- Cause: utilization denominator is `Employee.embeddedSchedule` (1706); not-clocked-in still counted leftover AttendanceObligation rows (76).
-<<<<<<< HEAD
-- Fix: `notClockedIn = scheduled G�� clockedIn G�� absent` on the same 1706. Zero punches G�� 1706 / 1706.
-- API overwrites `totalNotClockedIn` from `attendance-schedule-utilization`. UI derives the same if API is stale.
-- Table: `MISSING_CLOCK_IN` / `NOT_CLOCKED_IN` merges virtual scheduled rows so the list matches the card, not 76 leftover obligation rows.
-- Also: 1706 was Mon+Tue (UTC 23:59 spilling into Manila 8/18). Today is one calendar day (~853 scheduled, 0 punches G�� 853 not clocked in).
-=======
-- Fix: `notClockedIn = scheduled Gï¿½ï¿½ clockedIn Gï¿½ï¿½ absent` on the same 1706. Zero punches Gï¿½ï¿½ 1706 / 1706.
-- API overwrites `totalNotClockedIn` from `attendance-schedule-utilization`. UI derives the same if API is stale.
-- Table: `MISSING_CLOCK_IN` / `NOT_CLOCKED_IN` merges virtual scheduled rows so the list matches the card, not 76 leftover obligation rows.
-- Also: 1706 was Mon+Tue (UTC 23:59 spilling into Manila 8/18). Today is one calendar day (~853 scheduled, 0 punches Gï¿½ï¿½ 853 not clocked in).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Tests: schedule helper + attendance-utilization display.
-
-
 ## Latest Task Addendum - 2026-08-17 Clock-out UT + Hours column
 
 - Operator: after LATE appeared, also want ON TIME/LATE, undertime on clock-out, and total hours that day.
 - Indicators: LATE / ON TIME / GRACE on clock-in; UT on early clock-out. New Hours column = worked time.
 - API arrival now fills earlyOutHours / undertimeHours / hoursWorked when timeOut exists.
-<<<<<<< HEAD
-- Example: Zen 1:40 PMG��2:55 PM vs 08:00G��17:00 G�� LATE + UT + Hours 1h 15m.
-=======
-- Example: Zen 1:40 PMGï¿½ï¿½2:55 PM vs 08:00Gï¿½ï¿½17:00 Gï¿½ï¿½ LATE + UT + Hours 1h 15m.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
+- Example: Zen 1:40 PM–2:55 PM vs 08:00–17:00 → LATE + UT + Hours 1h 15m.
 
 ## Latest Task Addendum - 2026-08-17 Clock-in Indicators LATE / ON TIME
 
@@ -799,143 +432,42 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-08-17 Zen Monday is a work day
 
-<<<<<<< HEAD
-- Operator: Rest Day should not sit in Gǣscheduled to workGǥ; update Zen today; clock showed 5:40 AM.
-- DB: Regular Day override 2026-08-17 + cycleAnchorDate this Monday; obligation REST_DAY G�� INCOMPLETE with punch.
-=======
-- Operator: Rest Day should not sit in GÇ£scheduled to workGÇ¥; update Zen today; clock showed 5:40 AM.
-- DB: Regular Day override 2026-08-17 + cycleAnchorDate this Monday; obligation REST_DAY Gï¿½ï¿½ INCOMPLETE with punch.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Operator: Rest Day should not sit in “scheduled to work”; update Zen today; clock showed 5:40 AM.
+- DB: Regular Day override 2026-08-17 + cycleAnchorDate this Monday; obligation REST_DAY → INCOMPLETE with punch.
 - Clock: table used browser TZ; 05:40Z is 1:40 PM Manila. `renderClockValue` / `format12HourTime` now use Asia/Manila.
 - Rest days stay out of the 866; Zen is a work-day clock-in.
 
+## Latest Task Addendum - 2026-08-17 Clocked-in table shows schedule punches
 
-## Latest Task Addendum - 2026-08-17 Encoding pack documented + push
+- Card showed Clocked in 1/866; table filter Clocked in was empty.
+- Count comes from Attendance punches on scheduled people; table only listed AttendanceObligation PRESENT/INCOMPLETE (Zen has a punch, no obligation row).
+- Fix: CLOCKED_IN filter merges scheduled+clocked-in attendance rows. Live: 1 row **Zen Andrei** INCOMPLETE 1:40 PM.
+- Tests: schedule helper 7 passing.
 
-- Operator: document the encoding/schedule-hook changes and push `develop`.
-- Canonical: `.wwg/reports/mojibake-encoding-20260817.md` + project-truth.
-- Device event details accordion / payload-grid UI in `events.tsx` is **not** in this push (separate local addendum).
+## Latest Task Addendum - 2026-08-17 Include Zen Andrei in scheduled today
 
+- Zen Andrei `00010` / device 10 is a real DIRECT employee with `REGULAR_14DAY_ROTATION`.
+- Was excluded by (1) `employmentTerminationDate=1970-01-01` treated as terminated, (2) missing `cycleAnchorDate` so Mon 8/17 mapped to rotation day 6 OFF.
+- Fix: ignore non-final + year<=1971 termination; week-align 14-day templates when anchor is missing (same as assign path).
+- Live after fix: Zen `inScheduledToday=true`; scheduled count 853→866.
+- Tests: schedule + employee-schedule + obligation 27 passing.
 
-## Latest Task Addendum - 2026-08-17 Device event details raw payload accordion
+## Latest Task Addendum - 2026-08-17 Not clocked in uses scheduled over
 
-- Task mode: UI. **Do not push** unless asked.
-- Operator: Device event details raw JSON is always open; put it in an accordion, closed by default.
-- `events.tsx` details modal: `Accordion type=single collapsible`, no `defaultValue`.
+- Operator: 0 clock-ins but UI showed **76 / 1706** not clocked in. 1700+ employees are scheduled.
+- Cause: utilization denominator is `Employee.embeddedSchedule` (1706); not-clocked-in still counted leftover AttendanceObligation rows (76).
+- Fix: `notClockedIn = scheduled − clockedIn − absent` on the same 1706. Zero punches ⇒ 1706 / 1706.
+- API overwrites `totalNotClockedIn` from `attendance-schedule-utilization`. UI derives the same if API is stale.
+- Table: `MISSING_CLOCK_IN` / `NOT_CLOCKED_IN` merges virtual scheduled rows so the list matches the card, not 76 leftover obligation rows.
+- Also: 1706 was Mon+Tue (UTC 23:59 spilling into Manila 8/18). Today is one calendar day (~853 scheduled, 0 punches → 853 not clocked in).
+- Tests: schedule helper + attendance-utilization display.
 
+## Latest Task Addendum - 2026-08-13 Utilization over = regular-day schedules
 
-## Latest Task Addendum - 2026-08-17 SHE uses icon + label
-
-- Operator: when making UI, full use of icons and button labels.
-- Details modal: outline buttons with UserRound + full labels; fact rows icon+label; Raw payload Braces + label.
-<<<<<<< HEAD
-- Doctrine: Shrink G�� strip icons. SHE + DESIGN.md + grok rule 06.
-=======
-- Doctrine: Shrink Gï¿½ï¿½ strip icons. SHE + DESIGN.md + grok rule 06.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-
-## Latest Task Addendum - 2026-08-17 Device Event other-info TAP display
-
-- Task mode: bug fix + truth sync. **Do not push** unless asked (`a6dce32` already on origin from earlier).
-- Operator tap Device D person 10 serial 9652: attendance updated; UI still showed Unknown Vendor / Unknown evidence.
-- Cause: GET copied stale stored UNKNOWN taxonomy; payload lacked evidenceSource on old rows.
-- Fix: GET reclassifies stale UNKNOWN to TAP for major=5 punches; stamp SDK_CALLBACK + direct evidence; UI prefers live taxonomy; callback matches employee by pad/deviceEmpId/employeeId and links DeviceUser on next tap.
-- Live local GET `cmsr688py002xvxwwttxhdsal` now `ATTENDANCE` / `TAP` / `SDK_CALLBACK` / `direct=true`.
-- DeviceUser 10 on B/D/E linked ACTIVE to `00010` Zen Andrei. Did not auto-link the other 50 unmatched (no HRIS employee).
-- Full write-up: `.wwg/reports/device-event-tap-display-20260817.md`.
-
-
-## Latest Task Addendum - 2026-08-17 Dup updates documented + live skip proof
-
-- Operator: confirm we are on the updates; document them.
-<<<<<<< HEAD
-- Local `:3001` **is** on `935963a` skip: smoke `GROK-DOC-M2-38-20260817` G�� `acs_exception_not_punch`, DB 0 rows.
-- Git: `a801c4b` + `935963a` (+ later `a6dce32` TAP display).
-- CONFLICTING: live B `2/38` serial 8564 still saved `02:51:12Z` after this API start G�� possible second writer. Not pushed this pass.
-=======
-- Local `:3001` **is** on `935963a` skip: smoke `GROK-DOC-M2-38-20260817` Gï¿½ï¿½ `acs_exception_not_punch`, DB 0 rows.
-- Git: `a801c4b` + `935963a` (+ later `a6dce32` TAP display).
-- CONFLICTING: live B `2/38` serial 8564 still saved `02:51:12Z` after this API start Gï¿½ï¿½ possible second writer. Not pushed this pass.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Canonical report: `.wwg/reports/device-events-dup-20260817.md`.
-
-
-## Latest Task Addendum - 2026-08-17 Utilization rate lives in the circle
-
-- Operator: `<1%` sat in the header while the circle said `0% CLOCKED IN`.
-- Removed the duplicate header percent. Circle shows the clock-in rate (`<1%` when 1/866) with label clocked in.
-
-
-## Latest Task Addendum - 2026-08-17 Document all code changes
-
-- Operator: make sure all code changes are well documented.
-<<<<<<< HEAD
-- Canonical: `.wwg/reports/zen-payroll-timesheet-code-20260817.md` (this threadG��s code + live DEV).
-=======
-- Canonical: `.wwg/reports/zen-payroll-timesheet-code-20260817.md` (this threadGï¿½ï¿½s code + live DEV).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Math (Manila): `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`.
-- Encoding pack already documented + pushed `7b5030b`.
-- Operator then asked to push every leftover change. Pack: timesheet `sync-obligation-lines` + `ensure-period-drafts` `employeeIds` + WWG reports.
-
-
-## Latest Task Addendum - 2026-08-17 Persist SHE design doctrine
-
-- Operator: always be able to pull Shrink / Hide / Embody.
-- Active principle: `.wwg/wiki/principles/shrink-hide-embody.md`
-- Always-on reminder: `.grok/rules/06-shrink-hide-embody.md`
-- Also: `DESIGN.md`, terminology **SHE**.
-
-
-## Latest Task Addendum - 2026-08-17 Device event details drop payload grid
-
-- UI: remove Device payload field grid from details modal. Keep Terminal; Device status stays on that card. Raw payload remains a closed accordion.
-
-
-## Latest Task Addendum - 2026-08-17 Device event details SHE cleanup
-
-- Operator: clean details modal; remembered Shrink + Embody, forgot Hide (Maeda SHE).
-- Shrink: `max-w-lg`, one definition list, no 4-card grid.
-- Hide: raw payload stays a quiet closed accordion.
-- Embody: person, event, time, result, source, terminal, device status only.
-
-
-## Latest Task Addendum - 2026-08-17 Device Events look duplicated on Sync
-
-- Task mode: bug fix (DeviceEvent persist + Sync skip + UI honesty).
-- Operator: Saved events 63,933; rows look unknown / no person id; CUID device names; thought Sync duplicated logs.
-- Live: 63,940 rows. Screenshot is live SDK fingerprint taps with empty `dwEmployeeNo`, not four copies of one tap. CUIDs are Main D/E.
-- True extra rows: C++ `identity_repost` + dedupe key includes `employeeNo` (serial 5560 = empty + 1838 + 320 + 186). 963 serial groups / 1,992 rows.
-- Fix: serial-only collapse (any source / empty person), Sync skip by serial, one ACS `searchID` per job, persist taxonomy + evidence, socket device name, banner **Listener save**.
-- Evidence: `.runtime/device-event-dup-20260817/FINDINGS.md`.
-- REC: `REC-20260817-DEVICEEVENT-SERIAL-COLLAPSE` (C++ multi-guess + SYNC_SIGNAL vs logSearch leftover).
-
-
-## Latest Task Addendum - 2026-08-17 Duplicate per active device
-
-- Operator: extras appear on each **active** device.
-- Live: only armed B/D/E. Each emits `major=2`/`minor=38` empty-person every **301s**. IPs and serials are per panel. Not one tap cloned.
-- Real taps are `major=5`/`minor=38` and always have person id (590 SDK + 788 callback).
-- Noise: **4,541** SDK exception rows mislabeled fingerprint pass.
-- Fix: do not persist that exception; taxonomy is device health; C++ classify requires major=5.
-- Evidence: `.runtime/device-event-dup-20260817/per-active-device/FINDINGS.md`.
-
-
-## Latest Task Addendum - 2026-08-17 Device Events view-event deeplink
-
-- Task mode: bug fix + document (no push).
-- Operator deep link `page=116&action=view-event&id=cmsr688py002xvxwwttxhdsal`
-<<<<<<< HEAD
-  opened **Device event details** empty (first Gǣnot on this pageGǥ, then Gǣnot foundGǥ).
-=======
-  opened **Device event details** empty (first GÇ£not on this pageGÇ¥, then GÇ£not foundGÇ¥).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Cause: modal used current table page only; `page` goes stale; then local API `:3001` was down while Vite `:5175` still showed cached rows.
-- Fix: `GET /api/device/events/item/:eventId` + `useDeviceEvent`; modal no longer requires the row on the page.
-- Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
-- Live: item route returns TAP / person `10`. Did not push.
-
+- Operator: 42 grew on clock-in; wants all employees with a regular work schedule today (~2000), not obligation rows.
+- Denominator now comes from `Employee.embeddedSchedule` regular (not off) days. Live: **11 clocked in / 1706 scheduled**, 1%. Clock-in does not add to 1706.
+- 1360 remain Missing schedule (no embedded schedule). Those are not in the over.
+- Helper: `attendance-schedule-utilization.helper.ts`. Tests: 4 passing.
 
 ## Latest Task Addendum - 2026-08-13 Attendance Utilization obligated-to-work
 
@@ -945,145 +477,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - UI label: `of N scheduled to work`.
 - Tests: API obligation helper 16 passing; app utilization + template 15 passing.
 
-
-## Latest Task Addendum - 2026-08-13 Utilization over = regular-day schedules
-
-- Operator: 42 grew on clock-in; wants all employees with a regular work schedule today (~2000), not obligation rows.
-- Denominator now comes from `Employee.embeddedSchedule` regular (not off) days. Live: **11 clocked in / 1706 scheduled**, 1%. Clock-in does not add to 1706.
-- 1360 remain Missing schedule (no embedded schedule). Those are not in the over.
-- Helper: `attendance-schedule-utilization.helper.ts`. Tests: 4 passing.
-
-
-## Latest Task Addendum - 2026-08-13 Device status column (display only)
-
-- Task mode: UI display of already-stored ISAPI Select Status. No pairing. No C++. **Do not push.**
-- Device Events saved/live rows show **Device status** from `AcsEventInfo.attendanceStatus` + `label`.
-- Missing field = `Not sent` / `Not on wire`. Device sent `undefined` = `Unset`.
-- Helper: `hris-app/app/lib/hikvision-panel-select-status.ts`.
-- Time In/Out still first/later punch.
-
-
-## Latest Task Addendum - 2026-08-13 BNPI app vs file findings documented
-
-- Task mode: docs / investigation close-out (no engine change in this addendum).
-- Canonical write-up: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md`
-- WWG: `.wwg/reports/bnpi-payroll-app-vs-file-findings-20260813.md` + handoff entry.
-- Locks: empty bio = ABSENT; OT dual file formula recommended (Path A Daily/8 + Path B BNPI).
-- Next if requested: implement FILE_DUAL OT + Daily Salary import; rescan OT pay.
-
-
-## Latest Task Addendum - 2026-08-13 Device status on biometric APIs
-
-- Task mode: API + UI display. No pairing. No C++. **Do not push.**
-- `GET /api/device/events` now returns `panelSelectStatus` from payload/AcsEventInfo.
-- Live `POST .../acs-events` InfoList items get `hrisPanelSelectStatus`.
-- Callback/sync persist stamps `payload.panelSelectStatus` when present.
-- Pairing still first/later punch.
-
-
-## Latest Task Addendum - 2026-08-13 Timesheet uses panel Check In/Out
-
-- Task mode: pairing fix after live status copy.
-- `selectHikvisionPunchPair` mode `panel`: Time In = earliest Check In, Time Out = latest Check Out. Later Check In is not out.
-- Unsigned punches keep first/last pairing.
-- Spec + REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP Implemented.
-
-
-## Latest Task Addendum - 2026-08-13 Select Status copy (ready to push)
-
-- Task mode: implement + document + push `develop`.
-- C++ copies `byAttendanceStatus`; API extract copies `AcsEventInfo.attendanceStatus`; UI **Device status**.
-- Pairing unchanged. Live proof: Device D serial 9619 ISAPI `checkIn`; rebuilt listener logs `attendanceStatusPresent`.
-- Spec: `docs/HIKVISION_SELECT_STATUS_MAPPING.md`.
-
-
-## Latest Task Addendum - 2026-08-13 Hikvision Select Status audit
-
-- Task mode: deep audit only (no mapping implementation).
-- Operator: Hikvision **Select Status** (Check In / Out, Break In / Out, Overtime In / Out); users Check In on all devices; suspect status is not on the mapped device response.
-- Result: live SDK callback never sends it; ISAPI Sync can store unused `AcsEventInfo.attendanceStatus`; HRIS pairs first tap = in, later = out.
-- Live DEV residual: 689 nested statuses (678 checkIn, 6 checkOut, 2 undefined, 1 overtimeOut, 1 breakOut, 1 breakIn).
-- Documented (not committed): spec `docs/HIKVISION_SELECT_STATUS_MAPPING.md`, WWG report `.wwg/reports/hikvision-select-status-audit-20260813.md`, architecture `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`.
-- Evidence: `.runtime/hikvision-status-audit-20260813/` (10 agent reports + lead synthesis).
-- Next only if operator asks: wire C++ `byAttendanceStatus` and/or honor panel status in pairing. Do not commit this pack unless asked.
-
-
-<<<<<<< HEAD
-## Latest Task Addendum - 2026-08-13 Device 5 reverse on host WiG��Fi
-=======
-## Latest Task Addendum - 2026-08-13 Device 5 reverse on host WiGï¿½ï¿½Fi
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-- Task mode: live runtime + truth sync (no code feature).
-- Operator: Windows PC `192.168.1.116`, biometric `192.168.1.136` (Device 5).
-- Device 5 `cmsq47r9t0039vxbwt9rfxk68` saved `ssh-reverse-forward`, runtime `https://127.0.0.1:59443`, SDK `127.0.0.1:59000`.
-- Host TCP `80`/`443`/`8000` open; VM listeners `59443`/`59000` (plus leftover `58480`/`58400`); pack-captured ISAPI `401` is on `58480`.
-- Live TEST A/B remain `.109`/`.110` on `58080`/`58180`. Do not reuse wiki `.102` or claim `59000`/`59443` belong to TEST A.
-- Evidence: `.runtime/device5-reverse-20260813-005641/`.
-- WWG: project-truth + summary + terminology reverse-tunnel term + this addendum.
-
-
-## Latest Task Addendum - 2026-08-13 Vendor SDK setup vs byAttendanceStatus
-
-- Task mode: investigation. No C++. Not pushed.
-- Listener setup **does** use vendor HCNetSDK 6.1.9.48 on the VM.
-<<<<<<< HEAD
-- That header **has** `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` (0G��6 = panel six).
-=======
-- That header **has** `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` (0Gï¿½ï¿½6 = panel six).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- C++ already opens that struct for `byEmployeeNo` and does not copy the status byte.
-- HRIS setup does not configure panel T&A mode.
-- Evidence: `.runtime/hikvision-status-audit-20260813/16-vendor-sdk-setup-investigation.md`.
-
-
-## Latest Task Addendum - 2026-08-12 Preview Payroll without submitted timesheet
-
-- Task mode: product feature (Run Payroll Preview only).
-- Request: allow viewing payroll preview money when timesheet is not submitted,
-  with clear not-submitted indication, because status does not change money when
-  lines are unchanged.
-- Implementation:
-  1. API `previewPayrollFromTimesheets` lists statuses
-     APPROVED|DRAFT|SUBMITTED|REJECTED|REVISED with salary+schedule.
-  2. Keeps `includedEmployeesCount` = APPROVED ready (Start Payroll contract).
-  3. Adds `previewComputableEmployeesCount`, `estimatedIncludesNonApproved`,
-     row `timesheetStatus` / `isPayrollReady` / readiness labels.
-  4. UI badges + copy; Run Preview enabled when computable &gt; 0 even if payable=0.
-- Start Payroll / generate path **unchanged** (APPROVED only).
-- Tests: `hris-api/tests/payroll-preview-readiness.spec.ts` (mocha 4);
-  `hris-app/.../payroll-preview-modal.test.ts` (6).
-- Live: `PP-20260711-20260726` ready 641 / preview 834 /
-  `estimatedIncludesNonApproved=true`.
-- Evidence: `.runtime/preview-non-submitted-20260812/`.
-- Docs: project-truth, summary, terminology, handoff, e2e agent prompt,
-  logging-audit note.
-
-
-## Latest Task Addendum - 2026-08-12 Preview Payroll results on page
-
-- Task mode: product UX (Run Payroll Preview).
-- Request: loading/confirm may stay in modal; after processing, results must
-  render on the page (not in the modal), e.g.
-<<<<<<< HEAD
-  `/hr/run-payroll?�&action=preview-payroll&previewStep=results&page=1&limit=10`.
-=======
-  `/hr/run-payroll?ï¿½&action=preview-payroll&previewStep=results&page=1&limit=10`.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Implementation:
-  1. Modal open only for `previewStep` confirm | progress.
-  2. `previewStep=results` replaces Run Payroll main body with page table
-     (search/pagination/scope filters + View Details).
-  3. Helpers: `isPreviewPayrollModalStep`, `isPreviewPayrollResultsPage`.
-- Tests: `payroll-preview-modal.test.ts` (includes page vs modal contract).
-- Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts`.
-
-
-<<<<<<< HEAD
-## Latest Task Addendum - 2026-08-11 BNPI Jun 26�Jul 10 full payroll tally log
-=======
-## Latest Task Addendum - 2026-08-11 BNPI Jun 26ï¿½Jul 10 full payroll tally log
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+## Latest Task Addendum - 2026-08-11 BNPI Jun 26–Jul 10 full payroll tally log
 
 - Task mode: investigation / evidence log (no fleet money repair claimed).
 - Compared live preview vs target Sheet2 for period `PP-20260626-20260711`.
@@ -1095,27 +489,24 @@ unHikvisionTimeSyncCore with the per-device route.
 - Handoff entry + RECs: numberOfDays buckets, WS line rebuild, period-pin enrollments.
 - Next if requested: implement day-count mapping and/or WS line rebuild + re-run bulk compare.
 
+## Latest Task Addendum - 2026-08-07 Preview Payroll modal parity with Start Payroll
 
-<<<<<<< HEAD
-## Latest Task Addendum - 2026-08-11 BNPI Jun 26G��Jul 10 full payroll tally log
-
-- Task mode: investigation / evidence log (no fleet money repair claimed).
-- Compared live preview vs target Sheet2 for period `PP-20260626-20260711`.
-- **Result:** 4 exact tallied; Alexa near (G��G�0.77); Rio and most employees not tallied.
-=======
-## Latest Task Addendum - 2026-08-11 BNPI Jun 26Gï¿½ï¿½Jul 10 full payroll tally log
-
-- Task mode: investigation / evidence log (no fleet money repair claimed).
-- Compared live preview vs target Sheet2 for period `PP-20260626-20260711`.
-- **Result:** 4 exact tallied; Alexa near (Gï¿½ï¿½Gï¿½0.77); Rio and most employees not tallied.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- **Day-count 818/818 fail:** code definition (non-rest lines vs paid regularDays buckets),
-  not universal biometrics failure. Fixing day-count alone will not tally payroll.
-- Master log: `.runtime/full-tally-20260811/FINDINGS.md`
-- WWG: `.wwg/reports/bnpi-june26-jul10-payroll-tally-20260811.md`
-- Handoff entry + RECs: numberOfDays buckets, WS line rebuild, period-pin enrollments.
-- Next if requested: implement day-count mapping and/or WS line rebuild + re-run bulk compare.
-
+- Task mode: product UX feature (Run Payroll).
+- Request: Preview Payroll must use the same screen journey as Start Payroll,
+  with clear preview-only differentiation, then show computed list + details.
+- Implementation:
+  1. **Preview Payroll** opens a modal (no full-page swap of Run Payroll body).
+  2. Steps: **Start Payroll Preview** (confirm) → **Preview running** → **Payroll Preview** results.
+  3. Dry-run only via `GET …/generate-timesheet/preview?calculateRows=true` (API param added).
+  4. Results table: Basic / Gross / Deduct. / Net + **View Details**.
+  5. Detail modal: **Payroll summary (Preview)** + PREVIEW banner; no payslips.
+  6. Footer: Close | optional **Start real payroll…**
+- Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts`, payrollperiod controller
+  `calculateRows`, service/hook param pass-through.
+- Tests: `payroll-preview-modal.test.ts` (4) green.
+- Live API: period `PP-20260726-20260811` reachable; local DB had 0 approved TS in
+  sample so amounts empty — endpoint accepts `calculateRows` without period mutation.
+- Evidence: `.runtime/preview-payroll-modal-20260807-140641/`.
 
 ## Latest Task Addendum - 2026-08-07 Benefits enroll Select employees from drawer
 
@@ -1128,46 +519,20 @@ unHikvisionTimeSyncCore with the per-device route.
   2. `EmployeeBenefitForm` keeps local picker open state (URL is mirror, not sole gate).
   3. `Modal` portals to `document.body` at `z-[100]` so layout overflow cannot clip it.
   4. Employee picker uses **server-side search** + structural filters; shows
-<<<<<<< HEAD
-     GǣShowing N of M G�� search to find othersGǥ (was silent first-1000 client-only).
-=======
-     GÇ£Showing N of M Gï¿½ï¿½ search to find othersGÇ¥ (was silent first-1000 client-only).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+     “Showing N of M — search to find others” (was silent first-1000 client-only).
 - Proof: `.runtime/benefits-enroll-fix-20260807-121034/report.json` pass.
 - Tests: `EmployeeMultiSelectModal.test.tsx` green.
 
 
 ## Latest Task Addendum - 2026-08-07 Preview Payroll modal parity with Start Payroll
 
-- Task mode: product UX feature (Run Payroll).
-- Request: Preview Payroll must use the same screen journey as Start Payroll,
-  with clear preview-only differentiation, then show computed list + details.
-- Implementation:
-  1. **Preview Payroll** opens a modal (no full-page swap of Run Payroll body).
-<<<<<<< HEAD
-  2. Steps: **Start Payroll Preview** (confirm) G�� **Preview running** G�� **Payroll Preview** results.
-  3. Dry-run only via `GET GǪ/generate-timesheet/preview?calculateRows=true` (API param added).
-  4. Results table: Basic / Gross / Deduct. / Net + **View Details**.
-  5. Detail modal: **Payroll summary (Preview)** + PREVIEW banner; no payslips.
-  6. Footer: Close | optional **Start real payrollGǪ**
-=======
-  2. Steps: **Start Payroll Preview** (confirm) Gï¿½ï¿½ **Preview running** Gï¿½ï¿½ **Payroll Preview** results.
-  3. Dry-run only via `GET GÇª/generate-timesheet/preview?calculateRows=true` (API param added).
-  4. Results table: Basic / Gross / Deduct. / Net + **View Details**.
-  5. Detail modal: **Payroll summary (Preview)** + PREVIEW banner; no payslips.
-  6. Footer: Close | optional **Start real payrollGÇª**
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts`, payrollperiod controller
-  `calculateRows`, service/hook param pass-through.
-- Tests: `payroll-preview-modal.test.ts` (4) green.
-- Live API: period `PP-20260726-20260811` reachable; local DB had 0 approved TS in
-<<<<<<< HEAD
-  sample so amounts empty G�� endpoint accepts `calculateRows` without period mutation.
-=======
-  sample so amounts empty Gï¿½ï¿½ endpoint accepts `calculateRows` without period mutation.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Evidence: `.runtime/preview-payroll-modal-20260807-140641/`.
-
+- Task mode: performance + standard.
+- Enrolled column must not hydrate documents: `document=false&pagination=false&count=true`
+  → payload `{ count }` only.
+- Encoded in DESIGN.md, `.grok/rules/05-datatable-full-height.md` (section B),
+  terminology, DataTable/AdminTablePageShell docs.
+- Service: `countByBenefitTypeId` / `countByBenefitTypeIds`.
+- Tests: `employee-benefit-count.test.ts` assert count-only URL shape.
 
 ## Latest Task Addendum - 2026-08-05 Benefits Management enrolled count under-report
 
@@ -1178,11 +543,7 @@ unHikvisionTimeSyncCore with the per-device route.
   that sample window (live API proof).
 - Fix: per-type API count via `countByBenefitTypeId` +
   `useEmployeeBenefitCountsByTypeIds`; drawer uses accurate total and shows
-<<<<<<< HEAD
-  GǣShowing N of MGǥ when list is capped.
-=======
-  GÇ£Showing N of MGÇ¥ when list is capped.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+  “Showing N of M” when list is capped.
 - Tests: `employee-benefit-count.test.ts` green.
 - Live: MLA `pagination.total=831`.
 
@@ -1197,42 +558,10 @@ unHikvisionTimeSyncCore with the per-device route.
   2. `AdminTablePageShell` (or equivalent flex height chain)
   3. `DataTable` `containedScroll`
 - Code:
-<<<<<<< HEAD
-  - `benefits-management-template.tsx` G�� shell + `containedScroll`
-  - `unified-layout.tsx` + `unified-viewport-fill.ts` G�� HR viewport-fill mode
-=======
-  - `benefits-management-template.tsx` Gï¿½ï¿½ shell + `containedScroll`
-  - `unified-layout.tsx` + `unified-viewport-fill.ts` Gï¿½ï¿½ HR viewport-fill mode
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+  - `benefits-management-template.tsx` — shell + `containedScroll`
+  - `unified-layout.tsx` + `unified-viewport-fill.ts` — HR viewport-fill mode
   - `DESIGN.md`, `.grok/rules/05-datatable-full-height.md`, terminology
 - Tests: `unified-viewport-fill.test.ts`
-
-
-## Latest Task Addendum - 2026-08-05 Count-only DataTable column standard
-
-- Task mode: performance + standard.
-- Enrolled column must not hydrate documents: `document=false&pagination=false&count=true`
-<<<<<<< HEAD
-  G�� payload `{ count }` only.
-=======
-  Gï¿½ï¿½ payload `{ count }` only.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Encoded in DESIGN.md, `.grok/rules/05-datatable-full-height.md` (section B),
-  terminology, DataTable/AdminTablePageShell docs.
-- Service: `countByBenefitTypeId` / `countByBenefitTypeIds`.
-- Tests: `employee-benefit-count.test.ts` assert count-only URL shape.
-
-
-## Latest Task Addendum - 2026-08-05 Payroll tally: mass upload ? sole money source
-
-- Operator clarification ? Project Truth **CONFIRMED**.
-- Not all compensation/deduction comes from cutoff mass-upload files; recurring
-  / standing enrollments apply when they resolve for the period.
-- Agents must classify each line: `mass_upload` | `recurring_enrollment` |
-  `engine` | `ot_attendance` | `missing_enrollment`.
-- Truth: `.wwg/wiki/project-truth.md`, summary, terminology; parity checklist +
-  `docs/dm-migration-workflow.md` corrected (mass upload is additive, not sole).
-
 
 ## Latest Task Addendum - 2026-08-05 Fix invisible View Payroll Report on completed period
 
@@ -1240,34 +569,17 @@ unHikvisionTimeSyncCore with the per-device route.
 - Symptom: on `/hr/run-payroll?periodView=past` for a COMPLETED period, the
   **View Payroll Report** control above Special Payroll looked missing.
 - Root cause: button used `bg-emerald-700` / `hover:bg-emerald-800`, which are
-<<<<<<< HEAD
-  not present in the compiled Tailwind CSS for this app G�� transparent
+  not present in the compiled Tailwind CSS for this app → transparent
   background + white text = invisible. DOM still had the button.
-- Fix: `hris-app/.../run-payroll-template.tsx` G�� use `bg-emerald-600
+- Fix: `hris-app/.../run-payroll-template.tsx` — use `bg-emerald-600
   hover:bg-emerald-500` (proven to resolve) for View Payroll Report and current
   period month chip.
-- Proof: Playwright `.runtime/view-payroll-btn-*/after-fix.{png,json}` G��
-=======
-  not present in the compiled Tailwind CSS for this app Gï¿½ï¿½ transparent
-  background + white text = invisible. DOM still had the button.
-- Fix: `hris-app/.../run-payroll-template.tsx` Gï¿½ï¿½ use `bg-emerald-600
-  hover:bg-emerald-500` (proven to resolve) for View Payroll Report and current
-  period month chip.
-- Proof: Playwright `.runtime/view-payroll-btn-*/after-fix.{png,json}` Gï¿½ï¿½
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Proof: Playwright `.runtime/view-payroll-btn-*/after-fix.{png,json}` —
   computed bg `oklch(...)` non-transparent; green button visible above Special
   Payroll.
 
 
-<<<<<<< HEAD
-## Latest Task Addendum - 2026-08-05 Payroll tally: mass upload G�� sole money source
-
-- Operator clarification G�� Project Truth **CONFIRMED**.
-=======
-## Latest Task Addendum - 2026-08-05 Payroll tally: mass upload Gï¿½ï¿½ sole money source
-
-- Operator clarification Gï¿½ï¿½ Project Truth **CONFIRMED**.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Operator clarification → Project Truth **CONFIRMED**.
 - Not all compensation/deduction comes from cutoff mass-upload files; recurring
   / standing enrollments apply when they resolve for the period.
 - Agents must classify each line: `mass_upload` | `recurring_enrollment` |
@@ -1282,15 +594,9 @@ unHikvisionTimeSyncCore with the per-device route.
 - Finish line: Run Payroll cannot stack open-horizon + period-scoped same COMCODE;
   re-import of period-scoped mass upload supersedes open-horizon peers.
 - Code:
-<<<<<<< HEAD
-  - `hris-api/helper/payroll-benefit-source.helper.ts` G��
+  - `hris-api/helper/payroll-benefit-source.helper.ts` —
     `preferPeriodScopedPayrollBenefitSources` in `resolvePayrollBenefitSources`
-  - `hris-api/app/migration/bnpi-mass-upload-import.service.ts` G��
-=======
-  - `hris-api/helper/payroll-benefit-source.helper.ts` Gï¿½ï¿½
-    `preferPeriodScopedPayrollBenefitSources` in `resolvePayrollBenefitSources`
-  - `hris-api/app/migration/bnpi-mass-upload-import.service.ts` Gï¿½ï¿½
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+  - `hris-api/app/migration/bnpi-mass-upload-import.service.ts` —
     `supersedeOpenHorizonBenefitsForPeriodScoped` after compensation/deduction benefit write
 - Tests: payroll-benefit-source + mass-upload summary specs green (stack + supersede cases).
 - Operator note: existing dirty open-horizon rows still need one regenerate (resolve now
@@ -1307,11 +613,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Persist `mass_upload_import_logs` (local clone applied on `127.0.0.1:5433`)
   - `GET /api/migration/dm3/mass-upload-imports` list/detail/CSV
   - UI: keep modal open with result tables; history table on DM3 page
-<<<<<<< HEAD
-- Local runtime: `npm run dev:local` G�� `.env.local-clone` G�� container
-=======
-- Local runtime: `npm run dev:local` Gï¿½ï¿½ `.env.local-clone` Gï¿½ï¿½ container
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Local runtime: `npm run dev:local` → `.env.local-clone` → container
   `hris-local-dev-clone` port `5433` (not shared VM `15433`/`55435`).
 - Proof: import of 2 failing rows returned per-row messages + `importLogId`;
   history listed log linked to run `cmryj0vpm00huvgaks2t2js57`.
@@ -1323,13 +625,8 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: product feature (dedicated Special Payroll, separate from regular).
 - Plan: `docs/00-product/AGENT-PROMPT-special-payroll-one-time.md` (`PLAN_ACCEPTED`).
-<<<<<<< HEAD
-- Finish line: dedicated `SpecialPayrollRun` / `Line` / `Payslip` records; preview G��
-  create G�� release/cancel; manual + `.xlsx` mass upload; separate employee payslips
-=======
-- Finish line: dedicated `SpecialPayrollRun` / `Line` / `Payslip` records; preview Gï¿½ï¿½
-  create Gï¿½ï¿½ release/cancel; manual + `.xlsx` mass upload; separate employee payslips
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Finish line: dedicated `SpecialPayrollRun` / `Line` / `Payslip` records; preview →
+  create → release/cancel; manual + `.xlsx` mass upload; separate employee payslips
   with Special Payroll badge; regular payroll generation unchanged.
 - Code surfaces:
   - API: `hris-api/app/specialPayroll/*`, helper/zod, additive SQL migration
@@ -1340,114 +637,6 @@ unHikvisionTimeSyncCore with the per-device route.
   DEV DB `55435` was not reachable at implement time so table apply is deferred.
 - Tests: `tests/special-payroll.helper.spec.ts`, `tests/special-payroll.service.spec.ts`
   (10 passing).
-
-
-# Latest Task Addendum - 2026-07-28 SDK Device-User Export / Import
-
-- Status: `PARTIALLY_FULFILLED`; implementation and source export proof are complete, while physical import is gated on the user's future compatible target device.
-- Existing schema/endpoints remain in use. CSV/Excel now contain exactly seven SDK columns, package users omit duplicate HRIS identity/link data, and model/firmware are read once into device-manifest metadata.
-- Fresh Main Entrance Device B proof confirmed 874 unique IDs and 0 duplicates. Protected row validation decoded 1,634 fingerprint slots and 313 faces across all 874 rows with 0 invalid rows.
-- Explicit residuals: fingerprint `not_enrolled=46`, `missing_raw_blob=9`; face `not_enrolled=68`, `missing_raw_blob=493`.
-- Main Entrance A import preview returned 0 new / 873 match / 1 conflict. All five inventory-readable Main Entrance panels already have 874 users; offline C/TEST A/TEST B cannot pass backup/read gates. No physical write was started.
-- The existing import path now surfaces conflicts first, rejects conflict execution, and cannot hide a requested face failure behind fingerprint success.
-- Evidence: `.runtime/sdk-export-import-20260728-152250/`; report: `.wwg/reports/sdk-device-user-export-import-20260728.md`.
-
-<<<<<<< HEAD
-# 2026-07-28 G�� Hikvision UserInfo pagination concurrency proof
-=======
-# 2026-07-28 Gï¿½ï¿½ Hikvision UserInfo pagination concurrency proof
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-- Read-only Main B benchmark proved one stable `searchID` can serve bounded
-  concurrent `UserInfo/Search` positions without losing snapshot consistency.
-- Main B concurrency 1/2/4/6/8 all returned 874 unique IDs, identical sorted
-  row hash, 825 FP users / 1,646 FP slots, and 806 face users. Concurrency 8
-  averaged 5.417s versus 21.993s sequential.
-- Main A/F/D also matched sequential hashes at concurrency 8. Main E showed
-  intermittent 401/502 page failures at both sequential and parallel levels,
-  proving incomplete reads must be rejected rather than deduplicated into a
-  smaller result.
-- Implementation now defaults read-only UserInfo pages to concurrency 8,
-  retries each failed page three times with a serialized final attempt, requires
-  rows and unique IDs to equal `totalMatches`, and discards/falls back to a new
-  serialized search when validation fails. Physical writes remain serialized.
-- Evidence/report:
-  `.runtime/hikvision-pagination-benchmark-20260728/` and
-  `.wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md`.
-
-
-# Latest Task Addendum - 2026-07-28 DEV/UAT/PROD Employee Portal Recovery
-
-- Status: `FULFILLED`; evidence root `.runtime/employee-portals-recovery-20260728-122800/`.
-- Root cause: all three `hris-emp-app` pods were `ErrImageNeverPull`; the employee image was absent from K3s, leaving host ports `3300/3310/3320` closed and causing the named Cloudflare connector's exact origin dial `connection refused` errors.
-- Durable repair: governed VM ansible-pull now detects, builds, imports, and restarts the employee image in PROD/DEV/UAT; GitOps image tags and promotion coverage include the employee app; public unauthenticated employee calendar/birthday routes are exact-match guarded; biometric kiosk polling is fail-closed unless explicitly enabled.
-- Runtime schema drift in the three employee databases was repaired only after fresh full backups. PROD/DEV/UAT now expose the required benefit and payroll columns.
-- Final proof: all three VM-local origins, paired APIs, public login pages, same-host API routes, valid linked-employee logins, authenticated refresh, and logout pass. Playwright recorded zero unexpected page, console, request, CORS, mixed-content, or HTTP 5xx errors.
-- The VM-managed Cloudflare service remained enabled and active. All six Argo applications were `Synced/Healthy` at the deployed revision. Direct LAN SSH/HTTP from this Windows host timed out; the documented `ssh project-truth-hris` fallback passed and all VM-local plus public paths were independently proven.
-
-
-
-<<<<<<< HEAD
-# 2026-07-28 G�� Five-device raw SDK package completion
-=======
-# 2026-07-28 Gï¿½ï¿½ Five-device raw SDK package completion
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-- Status: `PACKAGES_AND_PREVIEWS_FULFILLED_PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARGET_DEVICE`.
-- B/A/F/D/E each have two agreeing final 874-user inventories with 825
-  fingerprint users / 1,646 slots and 806 face users. Main E's incomplete
-  parallel read was discarded and replaced by two agreeing serialized reads.
-- Five independent schema-v1 JSON packages and exact seven-column CSV
-  projections passed full row-by-row decode/reparse audit.
-- Final raw custody: all devices have 1,646 FP slots; A/F/D/E have all 806 face
-  blobs; B has 711 readable faces and 95 explicit physical-404 face gaps.
-- All five existing-path import previews parsed the full packages. No physical
-  write ran because every compatible available target is populated with 874 users.
-- Full evidence/report:
-  `.wwg/reports/sdk-device-user-export-import-20260728.md`.
-
-<<<<<<< HEAD
-# 2026-07-28 � Five-device raw SDK package completion
-=======
-# 2026-07-28 ï¿½ Five-device raw SDK package completion
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-- Status: `PACKAGES_AND_PREVIEWS_FULFILLED_PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARGET_DEVICE`.
-- B/A/F/D/E each have two agreeing final 874-user inventories with 825
-  fingerprint users / 1,646 slots and 806 face users. Main E's incomplete
-  parallel read was discarded and replaced by two agreeing serialized reads.
-- Five independent schema-v1 JSON packages and exact seven-column CSV
-  projections passed full row-by-row decode/reparse audit.
-- Final raw custody: all devices have 1,646 FP slots; A/F/D/E have all 806 face
-  blobs; B has 711 readable faces and 95 explicit physical-404 face gaps.
-- All five existing-path import previews parsed the full packages. No physical
-  write ran because every compatible available target is populated with 874 users.
-- Full evidence/report:
-  `.wwg/reports/sdk-device-user-export-import-20260728.md`.
-
-<<<<<<< HEAD
-# 2026-07-28 � Hikvision UserInfo pagination concurrency proof
-=======
-# 2026-07-28 ï¿½ Hikvision UserInfo pagination concurrency proof
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-- Read-only Main B benchmark proved one stable `searchID` can serve bounded
-  concurrent `UserInfo/Search` positions without losing snapshot consistency.
-- Main B concurrency 1/2/4/6/8 all returned 874 unique IDs, identical sorted
-  row hash, 825 FP users / 1,646 FP slots, and 806 face users. Concurrency 8
-  averaged 5.417s versus 21.993s sequential.
-- Main A/F/D also matched sequential hashes at concurrency 8. Main E showed
-  intermittent 401/502 page failures at both sequential and parallel levels,
-  proving incomplete reads must be rejected rather than deduplicated into a
-  smaller result.
-- Implementation now defaults read-only UserInfo pages to concurrency 8,
-  retries each failed page three times with a serialized final attempt, requires
-  rows and unique IDs to equal `totalMatches`, and discards/falls back to a new
-  serialized search when validation fails. Physical writes remain serialized.
-- Evidence/report:
-  `.runtime/hikvision-pagination-benchmark-20260728/` and
-  `.wwg/reports/hikvision-userinfo-pagination-benchmark-20260728.md`.
-
 
 ## Latest Task Addendum - 2026-07-28 shared observability recovery
 
@@ -1484,21 +673,13 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator hypothesis: overtime upload can be removed because OT is already in
   biometrics raw data.
-<<<<<<< HEAD
-- **Verdict: FALSE G�� do not remove DM4 overtime upload.**
-=======
-- **Verdict: FALSE Gï¿½ï¿½ do not remove DM4 overtime upload.**
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- **Verdict: FALSE — do not remove DM4 overtime upload.**
 - Evidence:
   - Biometrics `Biometrics Data_Jun 26 - Jul 10.xlsx` = punch ledger only
     (`No.`, `Date/Time`; 23,255 rows, 877 device nos).
   - Approved OT `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx` =
     OVERTIME/ND/HOLIDAY WORK DETAIL REPORT with Reg OTHrs / ND / Spcl / RHol /
-<<<<<<< HEAD
-    RD buckets (DM4.3 G�� effective Timesheetline).
-=======
-    RD buckets (DM4.3 Gï¿½ï¿½ effective Timesheetline).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+    RD buckets (DM4.3 → effective Timesheetline).
   - Source-trace guardrail: raw biometrics = attendance evidence, not payroll
     OT truth (`validate-bandai-payroll-source-trace.ts`).
 - Docs/UI truth sync (kept OT upload): `docs/dm-migration-workflow.md`,
@@ -1508,32 +689,16 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-07-27 DM3 Upload employee databank
 
-- Task mode: product feature (DM3 migration UX + import service).
-- Finish line: `/admin/configuration/migration?workbook=dm3` has
-  **Upload employee databank** that create/updates employees from BNPI
-  Manpower Databank `.xlsx` without requiring a full DM3 re-upload.
-- Behavior: auto-pick latest day sheet (or sheet named Manpower Databank);
-<<<<<<< HEAD
-  match `ID No.` G�� `EMP_ID`; create missing + update existing; preserve
-=======
-  match `ID No.` Gï¿½ï¿½ `EMP_ID`; create missing + update existing; preserve
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-  `basicSalary` / email / statutory IDs; no delete of missing IDs.
-- Code: helper/service/API + DM3 UI button/modal; docs in
-  `docs/dm-migration-workflow.md`.
-
-
-## Latest Task Addendum - 2026-07-25 Stable overnight gap-convergence job card
-
-- Companion card (still valid):
-  `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
-
-
-## Latest Task Addendum - 2026-07-25 Multi-agent overnight gap loop
-
-- Companion prompt:
-  `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
-
+- Task mode: product UX + docs truth sync (DM3 migration).
+- Finish line: `/admin/configuration/migration?workbook=dm3` no longer offers
+  **Upload statutory benefits**. Operator path for cutoff benefits/deductions is
+  compensation mass upload + deduction mass upload only.
+- Code: removed `upload=statutory` kind, UI button/step/modal copy, and
+  `POST /api/migration/dm3/import-statutory-benefits-upload` route/controller.
+- Offline parser/service retained for scripts/tests only
+  (`bnpi-statutory-benefits-import.helper.ts`, `importStatutoryBenefitsUpload`).
+- Docs: `docs/dm-migration-workflow.md`,
+  `docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md`.
 
 ## Latest Task Addendum - 2026-07-25 Agent-owned blocker fix + gap burn (primary)
 
@@ -1542,15 +707,9 @@ unHikvisionTimeSyncCore with the per-device route.
 - Companions:
   - `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
   - `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
-<<<<<<< HEAD
-- Treat UI GǣExporting source credentialGǥ / owner scan incomplete as **agent-owned
-  export/gate code work**, not physical enroll. PreviewG��dryRunG��execute match.
-- Live progress: residual 2813G��~19xxG��22xx; unique face 690G��~48xG��51x; faceReady
-=======
-- Treat UI GÇ£Exporting source credentialGÇ¥ / owner scan incomplete as **agent-owned
-  export/gate code work**, not physical enroll. PreviewGï¿½ï¿½dryRunGï¿½ï¿½execute match.
-- Live progress: residual 2813Gï¿½ï¿½~19xxGï¿½ï¿½22xx; unique face 690Gï¿½ï¿½~48xGï¿½ï¿½51x; faceReady
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Treat UI “Exporting source credential” / owner scan incomplete as **agent-owned
+  export/gate code work**, not physical enroll. Preview→dryRun→execute match.
+- Live progress: residual 2813→~19xx–22xx; unique face 690→~48x–51x; faceReady
   burning on A/D/E/F; fpReady still 0 until unlock. Fix budget burn + unique-person
   selection (`39d5a7d`).
 - Evidence: `.runtime/overnight-gap-loop-20260725-075850/`.
@@ -1583,11 +742,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: authorized durable credential recovery writes on five Main
   Entrance devices (A/B/D/E/F). Exclude Main C and TEST A/B.
-<<<<<<< HEAD
-- Proven session: ~429 face + ~12 FP verified mostly **G�� B**; residual non-B
-=======
-- Proven session: ~429 face + ~12 FP verified mostly **Gï¿½ï¿½ B**; residual non-B
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Proven session: ~429 face + ~12 FP verified mostly **→ B**; residual non-B
   blocked by face attestation + FP owner scan. Grafana/Loki used.
 - Evidence:
   `.runtime/overnight-biometric-convergence-20260724-230000/STATUS.md`.
@@ -1618,31 +773,35 @@ unHikvisionTimeSyncCore with the per-device route.
 - Evidence: `.runtime/dev-to-uat-prod-20260724-144222/REPORT.md`.
 - No new recommendations were identified.
 
+## Latest Task Addendum - 2026-07-24 Credential recovery architecture handoff
 
-# Latest Task Addendum - 2026-07-23 Agent-Owned Fresh Revalidation
+- Task mode: docs-only architecture truth and ordered execution handoff. No
+  physical credential write or runtime mutation was authorized for this
+  documentation turn.
+- Confirmed defect: `Recovery queued` is currently a planner/UI classification,
+  not a durable worker-owned queue. `Ready now 0` means no selectable reviewed
+  operation in that plan; it does not prove recovery is running.
+- Historical screenshot baseline: 3,257 potential operations, 505 fingerprint,
+  2,630 face, 122 card, ready 0, recovery queued 3,237, and headline physical
+  action 20. Backend stage physical identity action was 18; this classification
+  disagreement remains `CONFLICTING`. These counts must be refreshed before
+  implementation or writes.
+- Architecture record:
+  `docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md`.
+- Ordered owner prompt for the later implementation/write run:
+  `docs/00-product/AGENT-PROMPT-durable-credential-recovery-and-live-gap-convergence.md`.
+- Finish line for that later run: durable restart-safe recovery tasks,
+  deduplicated source custody, honest live counters, bounded multi-target
+  concurrency, physical-reread-owned fingerprint/face gap reductions, focused
+  tests, browser proof, GitOps exact-SHA deployment, and truth sync.
 
-- Status: `PARTIALLY FULFILLED`; new evidence root `.runtime/merge-device-users-overnight-20260723-050702/`.
-- The earlier five-device clean plan is now `STALE` for execution. Four new read-only plans never produced a stable zero-error scope: validity shifted across 4/5, 1/2, 1/5, and 3/5 devices. The latest plan `39f0ab6c-5cf6-443d-888a-51a3ef9f75fb` had 865 unique IDs, 1,081 conflicts, 186 missing target records, and E/A Unauthorized reads.
-- No new merge job, canary, or physical write was started. Automatic source selection remains prohibited while read errors and conflicts exist.
-- Runtime repairs made in this pass: bounded optional TEST bridge bootstrap; canonical DB watcher log contention tolerance; transient Prisma transport retry; direct-LAN-to-Cloudflare SSH fallback hardening; reverse API port `53001`; listener spool replay moved after SDK arm; bounded listener log scan.
-- Fresh listener execution armed Main Entrance A/B/D/E/F while C returned HCNetSDK error 7. Final SSH status became unavailable after three direct-LAN timeouts and repeated Cloudflare Access banner timeouts, so final armed state is `NEEDS_CONFIRMATION` rather than green.
-- Final Playwright truth: admin login and Sync Center render, but Merge reports 0/8 available and Listener reports status unreachable. This is a failed exit gate, not a completed merge.
-- Focused validation: 37 API Hikvision contracts, 13 frontend device UI/events contracts, the PowerShell bridge contract, and API TypeScript typecheck passed.
+## Latest Task Addendum - 2026-07-23 Five-device truth and actual merge execution
 
-
-# Latest Task Addendum - 2026-07-23 Overnight Merge Device Users Closeout
-
-- Status: `PARTIALLY FULFILLED`; evidence root `.runtime/merge-device-users-overnight-20260722-205845/`; wakeup report `WAKEUP-REPORT.md`.
-- Accepted live scope: Main Entrance B/A/D/E/F. Main Entrance C and TEST A/B are excluded from completion claims.
-- Fresh physical records increased from 3,583 to 4,044 while the unique union stayed 865. Final peer gaps are 281, all on 205 unresolved-conflict IDs; zero conflict-free rows remain.
-- No readable raw fingerprint or face custody existed. Count-only enrollment remains explicitly unresolved and was not fabricated or called synced.
-<<<<<<< HEAD
-- Code repairs through `fb8750e` are pushed to `develop` and deployed to the DEV VM runtime. Runtime DB/API/app/AG��F tunnels and focused API/UI/browser validation are green at close.
-=======
-- Code repairs through `fb8750e` are pushed to `develop` and deployed to the DEV VM runtime. Runtime DB/API/app/AGï¿½ï¿½F tunnels and focused API/UI/browser validation are green at close.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Remaining boundary requires new physical connectivity evidence for excluded devices or human conflict adjudication; automatic source guessing is prohibited.
-
+- Operator evidence: exactly five Main Entrance biometric devices are currently online; Main Entrance Device C is not. Any API/UI claim of six online is `CONFLICTING` until its cache/mapping/probe semantics are root-caused.
+- Prior loop boundary: it stopped at a read-only partial merge plan and issued zero write requests. That did not fulfill the requested merge.
+- Active execution contract: `docs/00-product/AGENT-PROMPT-five-device-live-merge-root-cause-owner-loop.md`.
+- Finish line: reconcile the five-versus-six conflict, prove exactly five authenticated/full-readable devices excluding Main C, validate the frozen five-device plan, start the authorized physical merge job, monitor and repair it to terminal state, reread all five targets, prove convergence, then truth-sync/push/exact-SHA CI.
+- Unknown errors are open defects. Logs must identify device, target, request/stage, duration, and underlying API/SDK/tunnel cause; insufficient observability must be repaired.
 
 ## Latest Task Addendum - 2026-07-23 Local DEV + Sync Center green owner loop
 
@@ -1798,193 +957,6 @@ unHikvisionTimeSyncCore with the per-device route.
   - App-wide frontend typecheck remains blocked by unrelated existing drift outside this device surface.
 - Recommendation capture: No new recommendations were identified.
 
-
-# Latest Task Addendum - 2026-07-22 Merge Job 77df35c4 Terminal Failed-Stale
-
-- Terminal status: live job `77df35c4-6c9b-4a68-9201-8ffc71fcb14b` reached `status=failed`, `currentStage=failed_stale`, `processedWrites=428`, `successfulWrites=361`, `failedWrites=67`, `totalWrites=2551`. Evidence: `.runtime/merge-users-final-run-20260722-042955/active-job-77df35c4-6c9b-4a68-9201-8ffc71fcb14b/terminal-poll-20260722-155537.json`.
-- Failure reason from backend: `Merge job interrupted (stale processing snapshot). Worker not active in this API process.` The API had restarted; do not claim completion.
-- Failure grouping from merge ledger: 67 failures = 56 circuit skips, 9 timeouts, 2 other errors. By pair: E -> F 31, E -> C 31, B -> E 3, B -> C 1, B -> F 1. Evidence: `.runtime/merge-ledger/77df35c4-6c9b-4a68-9201-8ffc71fcb14b/failure.jsonl`.
-- Fresh non-mutating post-failure rereads were run by pair because the four-device plan exceeded/closed the request boundary. Evidence root: `.runtime/merge-users-final-run-20260722-042955/pair-rereads-after-77df35c4-failed-stale-20260722-1559/`.
-- Post-failure pair truth:
-  - E-C: both devices read `740`, `missing=0`, `plannedWrites=0`; aligned for presence, conflicts remain `588`.
-  - E-F: E `740`, F `687`, `unionUsers=852`, `missing=277`, `plannedWrites=277`.
-  - B-E: B `687`, E `740`, `missing=53`, `plannedWrites=53`.
-  - B-C: B `687`, C `740`, `missing=53`, `plannedWrites=53`.
-  - B-F: B `687`, F `687`, `unionUsers=837`, `missing=300`, `plannedWrites=300`.
-- Safe retry boundary: backend provided no `retryPlanId`; the running job scope was already a mismatch (`852/2551` vs intended `569/2845`), and fresh plans still include conflicts/source-choice decisions. Do not start a new write retry automatically from guessed choices. A safe retry needs a reviewed remaining-scope plan or backend-generated retry plan.
-
-
-## Latest Task Addendum - 2026-07-22 Overnight local dev stack recovery (login + DB + device health)
-
-- Task mode: recoverable overnight loop for host-local `npm run dev` stack.
-- Job card: `docs/00-product/AGENT-PROMPT-overnight-local-dev-stack-recovery.md`
-- **Live snapshot at task open (re-probe; do not treat as done):**
-<<<<<<< HEAD
-  - `3001` API **CLOSED** G�� cannot login (no API process).
-  - `5175` app **LISTEN** G�� frontend up alone does not equal working login.
-  - `55435` DEV DB forward **CLOSED** G�� Prisma cannot reach K3s DEV Postgres.
-  - Hikvision tunnel ports `10080/10081/18000` **CLOSED** G�� local device health via tunnel map cannot be green.
-  - Host Wi-Fi `192.168.1.110`; `ping 10.184.37.19` **False** G�� use `ssh project-truth-hris` for DB/device tunnels, not direct LAN.
-- **Why login fails (causal chain, evidence-backed):**
-  1. Login requires API on `:3001` + Prisma G�� `DATABASE_URL` `@127.0.0.1:55435`.
-  2. When `55435` is down, login returns 500 with `Can't reach database server at 127.0.0.1:55435` (seen in `.runtime/local-api-watch/latest.log`).
-  3. `/health` can still say healthy while DB is down G�� health alone is not acceptance.
-- **Device health (from WWG handoff, mark STALE until re-proven):**
-  - Earlier same-day: Main Entrance AG��F online after six-device tunnel (`.runtime/device-a-f-reach-20260722-143906/`).
-  - TEST A/B separate boundary; not part of `.20-.25` tunnel map.
-  - Current host probe: tunnels down G�� local device health **NEEDS_CONFIRMATION** / expected offline until tunnels restored.
-=======
-  - `3001` API **CLOSED** Gï¿½ï¿½ cannot login (no API process).
-  - `5175` app **LISTEN** Gï¿½ï¿½ frontend up alone does not equal working login.
-  - `55435` DEV DB forward **CLOSED** Gï¿½ï¿½ Prisma cannot reach K3s DEV Postgres.
-  - Hikvision tunnel ports `10080/10081/18000` **CLOSED** Gï¿½ï¿½ local device health via tunnel map cannot be green.
-  - Host Wi-Fi `192.168.1.110`; `ping 10.184.37.19` **False** Gï¿½ï¿½ use `ssh project-truth-hris` for DB/device tunnels, not direct LAN.
-- **Why login fails (causal chain, evidence-backed):**
-  1. Login requires API on `:3001` + Prisma Gï¿½ï¿½ `DATABASE_URL` `@127.0.0.1:55435`.
-  2. When `55435` is down, login returns 500 with `Can't reach database server at 127.0.0.1:55435` (seen in `.runtime/local-api-watch/latest.log`).
-  3. `/health` can still say healthy while DB is down Gï¿½ï¿½ health alone is not acceptance.
-- **Device health (from WWG handoff, mark STALE until re-proven):**
-  - Earlier same-day: Main Entrance AGï¿½ï¿½F online after six-device tunnel (`.runtime/device-a-f-reach-20260722-143906/`).
-  - TEST A/B separate boundary; not part of `.20-.25` tunnel map.
-  - Current host probe: tunnels down Gï¿½ï¿½ local device health **NEEDS_CONFIRMATION** / expected offline until tunnels restored.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Finish line: EXIT GATE in overnight job card (DB + API health + login token + me + app + tunnel proof + device JSON + WWG stamp).
-- Evidence root: `.runtime/overnight-dev-stack-recovery-20260722-200655/`
-- Boundary: no merge completion claims; no inventing device online counts.
-
-## Latest Task Addendum - 2026-07-22 Merge listener truth and TEST A/B boundary
-
-- Task mode: mixed live runtime recovery, listener-status UX hardening, and merge-plan evidence.
-- Runtime status:
-  - Local API `http://localhost:3001` was recovered after it dropped; health and admin login passed again.
-  - Frontend `http://localhost:5175` was restarted and browser-proven after the listener modal patch.
-  - DEV DB forward `127.0.0.1:55435` stayed open.
-  - `.20/.21/.22/.23` Hikvision host tunnels stayed active; Cloudflare was not disabled.
-- Merge/run truth:
-  - Original job `a9d3acf7-7dee-406a-9198-c413fbd699d4` is not pollable after API restart, so completion was not invented.
-  - Current valid four-device reread for `.20/.21/.22/.23`: `validForFinalCounts=true`, `unionUsers=698`, `sourceRows=2759`, `dedupedDeviceRecords=2759`, `conflicts=862`, `missing=33`, `missingHrisLinks=47`, `plannedWrites=2094`.
-  - Current six-device reread after TEST A/B host-local forward remains `validForFinalCounts=false`; TEST A and TEST B still fail HTTP user reread with `fetch failed`, and one run also saw Main Entrance Device A `Unauthorized`. These six-device counts are diagnostic only and must not be used as final truth.
-  - TEST B isolated peer copy for employee `9` succeeded earlier with `fingerprintCount=2`, `faceCount=0`; TEST A clean retry remains deterministic SDK login failure `lastError=9`.
-- Listener/UI truth:
-  - Backend listener endpoint currently reports Main Entrance Device B armed and TEST A login failed on SDK `58000`.
-  - The listener modal now waits long enough for the VM status call and distinguishes HRIS post failure from SDK login failure. Browser proof shows `0 receiving / 1 armed / 1 login failed`, Main B `Armed, waiting for tap`, TEST A `Login failed (9)`, and `HRIS callback post failed after reading 10.184.37.20`.
-- Evidence:
-  - Browser: `.runtime/merge-users-final-run-20260722-042955/browser-listener-modal-live-20260722-145705/`.
-  - Valid four-device plan: `.runtime/merge-users-final-run-20260722-042955/fresh-four-device-plan-current-20260722-144103/`.
-  - Invalid six-device diagnostic plan: `.runtime/merge-users-final-run-20260722-042955/fresh-six-device-plan-after-host-forward-20260722-143756/`.
-  - TEST A/B host-local forward proof: `.runtime/merge-users-final-run-20260722-042955/testab-host-local-forward-20260722-143736/`.
-- Validation:
-  - `hris-api`: typecheck passed.
-  - `hris-api`: Hikvision biometric sync contract passed (`16` passing).
-  - `hris-app`: Device Users UI contract passed.
-  - `hris-app`: targeted ESLint for `events.tsx` and `enroll.tsx` exited `0` with existing warnings only.
-- Boundary:
-  - Do not claim all `852` or current six-device unique IDs are fully synced.
-  - Do not claim fingerprint/face bytes are repaired from counts alone.
-  - Do not start a blind six-device retry while TEST A/B cannot provide reliable HTTP reread and TEST A still has SDK login `9`.
-
-
-# Latest Task Addendum - 2026-07-21 Sync Center DB/Live Gate Removal + Four Device Proof
-
-- Task mode: mixed live runtime repair, admin UX/performance regression repair, predev/bridge guard repair, and same-environment browser/API validation.
-- Final status for this run: `FULFILLED_WITH_WARNINGS`.
-- Runtime truth: direct LAN SSH to `infra@10.184.37.19` timed out from the Windows host; fallback `ssh project-truth-hris` worked. `cloudflared-bnpi-hris.service` remained active. Fast VM reachability proved `.20`, `.21`, `.22`, `.23` reachable on device ports `80`, `443`, and `8000` (ICMP for `.20` missed once, but all required TCP ports were open).
-- Bridge/predev truth: host-local Hikvision SSH tunnel now maps all four devices (`.20-.23`) to local HTTP/HTTPS/SDK ports, and the generated `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP` is a single-line env value. Local API quick health proved all four devices `online` through `env_tunnel_map`.
-- Sync Center UX repair: removed the Sync Center `Checking DB + live path` / Keep Ready / Prove-fix blocking strip from `enroll.tsx`. Sync Center preview now requests `quick=true`, treats skipped live source counts as neutral `saved_preview`, and does not block on DB/live/source readiness before rendering HRIS DeviceUser counts.
-- Device proof: API health final showed all four target devices online in 404ms-1777ms. Quick Sync Center preview returned target HRIS user counts `.20=459`, `.21=687`, `.22=416`, `.23=399` in 2454ms with neutral saved-preview status. Separate live source-count endpoint succeeded for all four in 1574ms-4784ms. Device Users endpoint returned saved totals for all four in about 2.5s-2.7s.
-- Listener proof: local API listener endpoint returned running/armed/receiving overall with four SDK device rows; `.20` was receiving and `.21-.23` were armed.
-- Browser proof: Playwright against `http://127.0.0.1:5175` proved `/admin/configuration/devices`, Sync Center, and Device Users visible for `.20-.23`; no `Checking DB + live path`, `Prove / fix now`, or `Keep ready ON` text was present. Network trace showed `sync-preview?quick=true`, quick per-device health, and listener status; screenshots and trace are under `.runtime/sync-center-four-hikvision-20260721-090712/`.
-- Validation: backend focused contracts passed 17/17; frontend focused Sync Center/Device Users contract passed 1/1; API typecheck passed. Frontend `typecheck:test` still fails outside touched device scope at `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)`, already covered by existing recommendation `REC-20260706-TEST-TYPECHECK-MOCKS`.
-- Boundary/warning: stale non-target Hikvision devices remain in saved config/list results, but they no longer block the four target devices in the same local testing journey. No biometric bytes were fabricated from counts.
-- Evidence root: `.runtime/sync-center-four-hikvision-20260721-090712/`.
-
-
-# Latest Task Addendum - 2026-07-21 Overnight Hikvision Listener Green Loop
-
-- Task mode: mixed admin runtime repair, Hikvision listener/device-event proof, API/UI validation, and focused code repair.
-- Final status for this run: `GREEN_WITH_BOUNDARY`.
-- Runtime truth: direct LAN SSH to `infra@10.184.37.19` timed out from the Windows host, but fallback `ssh project-truth-hris` worked. `cloudflared-bnpi-hris.service` stayed active. VM reverse/API ports `53001`, `59000`, and `59443` were proven listening.
-- Listener truth: `project-truth-hikvision-hot-reload-listener.service` is active/running with PID `2912473`. Final logs show four intended Hikvision devices A/B/C/D logged in, SDK-armed, and free of unhandled login failures. Final UI/API state is truthful `Ready for tap proof` after callback freshness aged out.
-- Callback truth: HRIS post path through `http://127.0.0.1:53001` is proven by successful `hikvision_callback_post_result` and `hris_contract_post ok=true` logs. Fresh physical tap proof remains the boundary for changing quiet devices from armed to receiving.
-- Code truth: `hris-api/app/device/device.controller.ts` restored `summaryScope=facets` handling for saved Device Events facet counts. The VM listener source/binary contains a session-list concurrency repair, but this checkout has no tracked C++ diff for `vendor/hikvision-linux/hikvision_biometric_service.cpp`; review durable source promotion before claiming repo-level C++ completion.
-- Validation: API typecheck passed; focused API contracts passed 32/32; focused frontend contracts passed 31/31; live API/browser proof passed. Evidence root: `.runtime/overnight-hikvision-listener-green-20260721-065548/`.
-
-
-# Latest Task Addendum - 2026-07-21 New Cutoff Payroll Dry-Run/Seed Proof
-
-- Task mode: mixed payroll source-truth dry-run, local DEV data seeding, and reconciliation evidence. Status: `PARTIALLY_FULFILLED`.
-- Same testing lane was used: local API `127.0.0.1:3001`, app `127.0.0.1:5175`, and DEV Postgres through `127.0.0.1:55435`. Cloudflare tunnel/runtime controls were not touched.
-- Workbook intake completed for all provided new-cutoff XLSX files. Passworded HRIS Payroll Computation workbooks were decrypted with `officecrypto-tool` into the evidence folder after SheetJS/ExcelJS limitations were verified.
-- July 15 period (`2026-06-26` to `2026-07-10`) was seeded in DEV after dry-run proof:
-  - Biometrics attendance: 9,811 importable employee-days; 517 grouped unmatched rows; applied into effective attendance.
-  - Approved timesheets: 812 new timesheets and 9,603 lines created from seeded attendance; final period state had 832 approved timesheets and 9,860 effective lines.
-  - OT repair: applied scoped source-bucket metadata to 9,773 timesheet lines; 87 OT workbook rows remained missing from effective source lines.
-  - Mass uploads: applied 1,307 EmployeeBenefit rows and 65 EmployeeLoan rows from the July 15 compensation/deduction uploads. Nineteen employee IDs remained unmatched and were not fabricated.
-- July 15 comparison after attendance/OT/mass-upload seed still had severe source gaps, so payroll generation was intentionally not run. Summary: 859 workbook rows, 838 employees matched, 824 approved timesheets found, 0 exact/tolerance row matches; categories included `SOURCE_MISSING_APPROVED_OT=553`, `SOURCE_MISSING_ALLOWANCE=124`, `SOURCE_MISSING_MANUAL_ADJUSTMENT=73`, `SOURCE_MISSING_DEDUCTION_OR_LOAN=43`, `TIMESHEET_NOT_FOUND=14`, `EMPLOYEE_NOT_FOUND=21`, and `SOURCE_MISSING_STATUTORY_CONFIG=6`.
-- June 30 period (`2026-06-11` to `2026-06-25`) remained dry-run only: no biometrics workbook was provided, DEV has no attendance/timesheets for the period, and compensation code `INC` covered 816 rows / about PHP 9.9M without a governed payroll classification. No June 30 payroll generation was attempted.
-- July 30 period (`2026-07-11` to `2026-07-25`) has biometrics evidence only and no comparator workbook in `docs/new-cutoff`; payroll tally remains `NEEDS_CONFIRMATION`.
-- Validation: `hris-api npm run test:regression:payroll-source-truth` passed 52 specs; `hris-api npm run typecheck` passed.
-- Evidence root: `.runtime/overnight-payroll-new-cutoff-20260721-144322/`.
-
-
-# Latest Task Addendum - 2026-07-21 Device C DeviceUser Gap Repair
-
-- Task mode: mixed backend truth repair, admin UI wording repair, real endpoint execution, and local API restart.
-- Root cause: bulk DeviceUser sync job planning built the decision matrix with `vendorUserCount: null`, so `needs_attention_only` trusted saved HRIS DeviceUser rows and skipped live source identity reads even when Sync Center preview proved Device C had `687` physical users and only `416` saved HRIS rows.
-- Backend repair: `buildDeviceUserSyncJobDecisionMatrix` now reads the fast Hikvision source user count before deciding whether missing DeviceUser records are zero. If the live device count shows missing source IDs, the job marks `sourceReadRequired=true` and includes `Reading source users needed for identity gaps`.
-- UI repair: live job cards no longer label failed raw capture attempts as honest remaining HRIS "raw gaps"; they show `Device no-data` / `raw reads failed` because Device C returned 404/no-data for face raw reads.
-- Runtime proof: after API restart, dry-run for Device C showed `missingDeviceUsers=271`, `sourceReadRequired=true`, `sourceReadSkipped=false`. Real job `690dbe6d-c751-4dc3-9dff-f1f70738012a` completed with `totalSourceRecords=687`, `created=271`, `updated=416`, `linked=640`, `unmatched=46`.
-- Final endpoint proof: fresh `GET /api/device/sync-preview?deviceId=cmripjwbx00ewl001ihcke210&quick=true` returned Main Entrance Device C `fromDevice=687`, `savedInHris=687`, `gap=0`, `missingDeviceUsers=0`, `needsLink=46`, `alreadyPresent=641`.
-- Merge proof: fresh merge plan returned `687` unique IDs and no duplicate unique IDs for the checked scope.
-- Boundary: 118 face raw reads failed because the device returned 404/no-data. HRIS did not fabricate biometric bytes from counts.
-- Evidence root: `.runtime/device-c-repaired-sync-20260721-1153/`.
-
-
-## Latest Task Addendum - 2026-07-21 Sync Center missing-record decision matrix
-
-- Task mode: Mixed admin UX/performance feature and backend fast-path repair.
-- Implemented:
-  - Sync Center now builds a `syncDecisionMatrix` before starting a Device Users sync job.
-  - The matrix classifies `missing_device_user_record`, `missing_employee_link`, `missing_raw_fingerprint_blob`, `missing_raw_face_blob`, `already_present`, `stale_count_only_or_live_no_data`, and `unsupported_by_sync`.
-  - Default Device Users sync mode is now `needs_attention_only`; the job skips source-device rereads when the matrix says saved HRIS state is enough, and raw-custody capture returns from saved state when no missing raw blobs exist.
-  - The review modal shows `What Sync can fix`, bucket counts, bucket filters, selected fastest valid plan, and truthful stage copy.
-- Evidence:
-  - API proof: `.runtime/sync-center-decision-matrix-20260721-110520/api-sync-preview-decision-matrix-final.json`.
-  - Browser proof: `.runtime/sync-center-decision-matrix-20260721-110520/browser-sync-center-review-modal.json` and `.runtime/sync-center-decision-matrix-20260721-110520/browser-sync-center-review-modal.png`.
-- Validation:
-  - Backend contract: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` passed (`15` passing).
-  - Backend typecheck: `npx tsc --noEmit --pretty false` passed.
-  - Frontend contract: `hris-app/app/routes/admin/devices/device-user-ui-contract.test.ts` passed (`1` passing).
-  - Frontend broad `tsconfig.test` typecheck still fails outside this scope at `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)`, covered by existing `REC-20260706-TEST-TYPECHECK-MOCKS`.
-- Recommendation capture: No new recommendations were identified.
-
-
-## Latest Task Addendum - 2026-07-21 Four Hikvision devices online/armed
-
-- Task mode: Mixed live runtime repair, native listener regression repair, and evidence closeout.
-- Evidence: `.runtime/hikvision-four-device-online-20260721-064751/`.
-- Runtime repaired:
-  - Canonical VM access used `ssh project-truth-hris` after direct LAN SSH to `10.184.37.19` timed out from the Windows host.
-  - VM direct TCP to `10.184.37.20`, `.21`, `.22`, and `.23` passed on ports `80`, `443`, and `8000`; no extra device bridge was required for the VM listener.
-  - Host local API reverse `VM 127.0.0.1:53001 -> Windows 127.0.0.1:3001` was restored; VM `/health` through `53001` returned healthy.
-  - The managed `project-truth-hikvision-hot-reload-listener.service` was rebuilt/restarted after deploying the fixed native listener source.
-- Device proof:
-  - HRIS config contains the four target Hikvision rows only as saved addresses `10.184.37.20`, `.21`, `.22`, `.23`, all HTTPS `443` with SDK `8000`.
-  - Final API health returned `online` for all four target devices using the local tunnel map while preserving saved addresses.
-  - Final listener/readiness API returned green readiness and all four listener devices with `lastLoginOk=true`, `armed=true`, and `receivingCallbacks=true`.
-  - Raw VM logs show fresh `sdk_login`, `sdk_alarm_arm`, `device_armed`, `acs_alarm_received`, and successful callback post results for the target devices in this run.
-  - Playwright against `http://127.0.0.1:5175/admin/configuration/devices` found all four target IPs present with online/ready/armed text nearby.
-- Validation:
-  - VM native build passed: `HIKVISION_LINUX_SDK_ROOT=... bash scripts/build-hikvision-biometric-service.sh`.
-  - Focused backend contract passed: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` (`14` passing).
-  - Focused listener-status helper passed: `hris-api/tests/hikvision-listener-status.helper.spec.ts` (`10` passing).
-  - Broad `npm --prefix hris-api test -- ...` was accidentally expansive and failed on unrelated existing suite drift plus stale compose DB `10.184.37.19:15433`; focused reruns above passed.
-- Boundary:
-  - Cloudflare tunnel remained active.
-  - No stale `.167`, `.168`, `.102`, or old rows were used as the four-device proof.
-  - A recommendation was added for the `ensure-device-live-path.ps1` API reverse bridge argument-list bug discovered during recovery.
-
-
 ## Latest Task Addendum - 2026-07-21 Sync Center Needs link click rows
 
 - Task mode: Focused admin UX regression repair.
@@ -2089,55 +1061,26 @@ unHikvisionTimeSyncCore with the per-device route.
   - Frontend broad `tsconfig.test` typecheck still fails on unrelated existing `TimesheetsTab.test.tsx` React Query fixture drift, already covered by `REC-20260706-TEST-TYPECHECK-MOCKS`.
 - Recommendation capture: No new recommendations were identified.
 
+## Latest Task Addendum - 2026-07-21 Four Hikvision devices online/armed
 
-## Latest Task Addendum - 2026-07-20 Local Windows remote-dev CF SSH / DB tunnel bootstrap
-
-- Task mode: Regression repair + workstation bootstrap (docs + scripts).
-- Problem: Remote Windows host could not complete `hris-api` `npm run dev` / login because LAN SSH to `10.184.37.19` is closed, K3s DEV ClusterIP `10.43.130.9:5432` refused Postgres, local `55435` tunnel half-died, and Hikvision reverse port `59443` was held by stale VM `sshd`.
-- Repo changes:
-<<<<<<< HEAD
-  - `scripts/start-k8s-dev-db-access.ps1` G�� Postgres wire check + compose DEV `127.0.0.1:15433` fallback for SSH `-L` to local `55435`.
-  - `scripts/start-host-hikvision-vm-ssh-bridge.ps1` G�� clear reverse ports with `fuser -k`.
-  - `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md` G�� operator log.
-=======
-  - `scripts/start-k8s-dev-db-access.ps1` Gï¿½ï¿½ Postgres wire check + compose DEV `127.0.0.1:15433` fallback for SSH `-L` to local `55435`.
-  - `scripts/start-host-hikvision-vm-ssh-bridge.ps1` Gï¿½ï¿½ clear reverse ports with `fuser -k`.
-  - `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md` Gï¿½ï¿½ operator log.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Workstation-only (not git): `node-health-appliance_ed25519`, SSH config `project-truth-hris`, cloudflared install, VM `authorized_keys` public key append.
-- Operator recipe for API-only local dev: `HIKVISION_VM_BRIDGE_ENABLED=false`, `HRIS_SKIP_DEVICE_LIVE_PATH=true`, `npm.cmd run dev`; success = `Server running at http://localhost:3001`.
-- Evidence: `.runtime/local-dev-cf-ssh-db-tunnel-20260720/`.
-- Boundary: not a push to `origin/develop`; not a K3s health claim; UI "Unable to connect" was empty `:3001`, not auth body.
-
-
-## Latest Task Addendum - 2026-07-20 Raw biometric package export/import alignment
-
-- Task mode: Mixed owner-requirement correction across Device Users export/import API, admin UI, contracts, and WWG truth.
-- Owner correction: the active Hikvision Device Users sync/export/import journey must not require encrypted bundles or passphrases. It must copy/export evidenced raw fingerprint `fingerData` blobs and raw face/image blobs when present.
-- Required custody behavior:
-  - DeviceUser remains the durable current raw biometric custody plane.
-  - Matching DeviceEvent payloads can provide fallback raw custody for lifecycle ledger journeys.
-  - CSV/Excel/Package JSON use raw blob columns/statuses, not `encrypted:v2` envelope cells.
-  - Missing bytes stay explicit as `not_enrolled`, `missing_raw_blob`, or `not_requested`; no values are fabricated from credential counts.
-- Stale context: 2026-07-14/2026-07-15 encrypted envelope/passphrase export proof is historical for this journey and must not drive current modal copy, API requirements, or tests.
-
-
-## Latest Task Addendum - 2026-07-20 Remote local-dev Hikvision tunnel proof
-
-- Task mode: Focused local-dev runtime access repair for far-away work against a LAN-only Hikvision device.
-- Goal: Keep the saved HRIS device row visible as `10.184.37.21:443` / SDK `8000`, while allowing a Windows localhost API launched by `npm run dev` to reach the device through SSH forwards.
-- Implemented:
-  - Added `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP` support for Hikvision HTTP/ISAPI base URL resolution, device health network probes, and SDK endpoint selection.
-  - Added `scripts/start-hikvision-remote-device-tunnel.ps1`, which starts `127.0.0.1:10080 -> 10.184.37.21:80`, `127.0.0.1:10443 -> 10.184.37.21:443`, and `127.0.0.1:18000 -> 10.184.37.21:8000`, then writes the ignored local API env line.
-  - Preserved the tunnel-map line when `hris-api/scripts/ensure-bnpi-db-access.cjs` regenerates `hris-api/.env.development.local`.
-- Proof:
-  - Tunnel helper returned `running`, PID `17684`, with TCP OK for `127.0.0.1:10080`, `:10443`, and `:18000`.
-  - Local API `GET /api/device/cmrht5s2w00ei7zgsre8y3o5n/health` returned `summary.status=online` for Main Entrance Device A, while the response still showed saved device address `10.184.37.21` and `checks.network.source=env_tunnel_map`.
-  - Playwright against `http://localhost:5175/admin/configuration/devices` found Main Entrance Device A and `Online`; all seven device health calls returned HTTP 200.
-- Evidence:
-  - `.runtime/hikvision-remote-device-tunnel-last.json`
-  - `.runtime/remote-device-tunnel-proof-20260720-161455/device-a-health-with-tunnel-map.json`
-  - `.runtime/remote-device-browser-proof-20260720082234/summary.json`
+- Task mode: Mixed live runtime repair, native listener regression repair, and evidence closeout.
+- Evidence: `.runtime/hikvision-four-device-online-20260721-064751/`.
+- Runtime repaired:
+  - Canonical VM access used `ssh project-truth-hris` after direct LAN SSH to `10.184.37.19` timed out from the Windows host.
+  - VM direct TCP to `10.184.37.20`, `.21`, `.22`, and `.23` passed on ports `80`, `443`, and `8000`; no extra device bridge was required for the VM listener.
+  - Host local API reverse `VM 127.0.0.1:53001 -> Windows 127.0.0.1:3001` was restored; VM `/health` through `53001` returned healthy.
+  - The managed `project-truth-hikvision-hot-reload-listener.service` was rebuilt/restarted after deploying the fixed native listener source.
+- Device proof:
+  - HRIS config contains the four target Hikvision rows only as saved addresses `10.184.37.20`, `.21`, `.22`, `.23`, all HTTPS `443` with SDK `8000`.
+  - Final API health returned `online` for all four target devices using the local tunnel map while preserving saved addresses.
+  - Final listener/readiness API returned green readiness and all four listener devices with `lastLoginOk=true`, `armed=true`, and `receivingCallbacks=true`.
+  - Raw VM logs show fresh `sdk_login`, `sdk_alarm_arm`, `device_armed`, `acs_alarm_received`, and successful callback post results for the target devices in this run.
+  - Playwright against `http://127.0.0.1:5175/admin/configuration/devices` found all four target IPs present with online/ready/armed text nearby.
+- Validation:
+  - VM native build passed: `HIKVISION_LINUX_SDK_ROOT=... bash scripts/build-hikvision-biometric-service.sh`.
+  - Focused backend contract passed: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` (`14` passing).
+  - Focused listener-status helper passed: `hris-api/tests/hikvision-listener-status.helper.spec.ts` (`10` passing).
+  - Broad `npm --prefix hris-api test -- ...` was accidentally expansive and failed on unrelated existing suite drift plus stale compose DB `10.184.37.19:15433`; focused reruns above passed.
 - Boundary:
   - On the current LAN, `ssh project-truth-hris` through Cloudflare still reset at the edge, so the helper used direct LAN fallback `infra@10.184.37.19` for this proof. Far-away work should use `project-truth-hris` when Cloudflare Access is reachable from that network.
 
@@ -2183,20 +1126,21 @@ unHikvisionTimeSyncCore with the per-device route.
 - UI clarity repair: the Sync device users review modal now labels counts as `Fingerprint inventory vs raw bytes` and `Face inventory vs raw bytes`, with `inventory enrolled / raw stored / raw no-data/missing` wording and explicit copy that no blobs are fabricated.
 - Same-environment Playwright proof: local app `http://127.0.0.1:5175` opened TEST A Sync Center and verified the clarified modal copy (`playwright-modal-copy-proof.png`, `.txt`, `.json`).
 
+## Latest Task Addendum - 2026-07-20 TEST A missing raw root-cause follow-up
 
-## Latest Task Addendum - 2026-07-20 `npm run dev:local` one-shot local clone
-
-<<<<<<< HEAD
-- Task mode: Dev ergonomics G�� one command for isolated local API.
-- `npm run dev` G�� unchanged shared DEV tunnel path.
-- `npm run dev:local` G�� single script `scripts/run-dev-local.cjs`: ensure env file, start Docker clone container, predev skips, API watch on `5433`.
-=======
-- Task mode: Dev ergonomics Gï¿½ï¿½ one command for isolated local API.
-- `npm run dev` Gï¿½ï¿½ unchanged shared DEV tunnel path.
-- `npm run dev:local` Gï¿½ï¿½ single script `scripts/run-dev-local.cjs`: ensure env file, start Docker clone container, predev skips, API watch on `5433`.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Boundary: empty new container still needs prior dump/restore for real data.
-
+- Task mode: Focused biometric custody root-cause repair with raw SQL, direct live device/API proof, backend contract tests, and same-environment Playwright proof.
+- Evidence: `.runtime/test-a-missing-raw-root-cause-20260720-111215/`.
+- Current TEST A SQL custody aggregate:
+  - `394` DeviceUser rows.
+  - `348` rows are raw-ok or not enrolled.
+  - `45` rows are missing both fingerprint and face raw blobs.
+  - `1` row is missing fingerprint raw only.
+  - Fingerprint slots: `718` reported, `628` stored raw templates, `91` missing raw blobs.
+  - Face slots: `356` reported, `311` stored raw faces, `45` missing raw blobs.
+- Live capture classification for visible/sample rows `83`, `839`, `984`, `1008`, `1076`, and `1143`: all six are stale/count-only inventory rows where `UserInfo` reports enrolled counts/face URL but live raw endpoints return `no_fingerprint_data_from_device` and `no_face_on_device`. No parser/merge/probe code bug was proven for these rows, and no raw blob was fabricated.
+- Code bug repaired in this pass: manual raw fingerprint/face capture endpoints no longer return HTTP `422` with a `status: "success"` body on no-data. They now return compact `status: "error"` bodies with `capture.reason`, preserving truthful no-data classification for UI/API consumers and avoiding large stale metadata payloads on failure.
+- Validation: focused backend helper/contract tests passed (`20` passing), and `hris-api` `tsc --noEmit --pretty false` passed.
+- Browser proof: local Playwright against `http://127.0.0.1:5175` opened TEST A Device Users Sync Center and issued the same local API calls through the authenticated browser context. All twelve sample capture calls returned compact HTTP `422` / `status: "error"` bodies with exact no-data reasons.
 
 ## Latest Task Addendum - 2026-07-20 TEST A raw biometric repair loop
 
@@ -2209,11 +1153,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Local recovery setting `HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY=2` removed transient `Unauthorized` failures; job `834d6273-74d8-416f-aecf-8fd92430a062` captured `29` more and reduced fingerprint missing to `91`.
   - Final preview: source users `314`, HRIS DeviceUsers `394`, fingerprint slots `718`, fingerprint raw `627`, fingerprint missing `91`; face reported `356`, face raw `311`, face missing `45`.
 - Remaining boundary: per-row sample repair for users `1008`, `1076`, and `1143` returned HTTP `422` with exact bodies `no_fingerprint_data_from_device` and `no_face_on_device`. These rows remain `missing_raw_blob`; no raw blobs were fabricated.
-<<<<<<< HEAD
-- UI proof: Sync review modal shows raw custody counts (`718 enrolled +�-+ 627 raw +�-+ 91 missing_raw_blob`, `356 enrolled +�-+ 311 raw +�-+ 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
-=======
-- UI proof: Sync review modal shows raw custody counts (`718 enrolled +ï¿½-+ 627 raw +ï¿½-+ 91 missing_raw_blob`, `356 enrolled +ï¿½-+ 311 raw +ï¿½-+ 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- UI proof: Sync review modal shows raw custody counts (`718 enrolled Â· 627 raw Â· 91 missing_raw_blob`, `356 enrolled Â· 311 raw Â· 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
 - Evidence: `.runtime/test-a-raw-repair-loop-20260720-103434/`.
 
 
@@ -2236,31 +1176,51 @@ unHikvisionTimeSyncCore with the per-device route.
 
 # Latest Task Addendum - 2026-07-20 DeviceUser Raw Biometric Export/Import Proof
 
-- Task mode: mixed biometric custody repair, export/import correctness, and admin modal UX hardening.
-- Current TEST A runtime truth from the completed proof: 394 exported DeviceUser rows, 338 linked, 56 unlinked; 361 rows report fingerprints and 316 rows carry raw fingerprint blobs; the latest package preview carries 628 raw fingerprint templates against the previously proven 718 enrolled template slots; 356 rows report face and 311 carry raw face blobs.
-- Sync recovery loop: TEST A biometrics-only jobs `e692290a-1d4f-4965-887f-c107bd473992` and `8d3a48df-a85e-44e2-abd3-3120d21e046f` completed with zero new captures and cached existing custody; all-Hikvision recovery job `6c7e3e4c-f722-4b00-a57c-81e06ab709d4` remained stalled on Main Entrance Device B fetch failures and is not proof that TEST A is incomplete.
-- Export proof: real browser downloads for CSV, Excel, and Package JSON have 394 rows/users, no duplicate columns, no encrypted/passphrase copy, explicit `not_enrolled` / `missing_raw_blob` statuses, and multi-fingerprint cells using the `FPn("...")` pattern.
-- Import proof: full 22,968,896-byte Package JSON preview succeeded non-mutating on a proof API with `HRIS_API_BODY_LIMIT=75mb`; matching users 394, conflicts 0, missing HRIS employees 55; execute without `confirmation="IMPORT DEVICE USERS"` was rejected with HTTP 400.
-- UI proof: export modal shows the current action, scope, row count, and biometric readiness while preview/export is running; CSV import modal shows preview-first wording and package-data status without raw/developer copy.
-- Remaining boundary: 46 rows still have `Reported biometric enrollment exists but no evidenced raw blob is stored`; this is retained as `partial_missing_requested_raw_blobs`, not fabricated from counts.
-- Evidence: `.runtime/device-user-raw-export-proof-20260720-110129/final-evidence-summary.json`, `browser-export-download-proof.json`, `api-import-proof-3002-summary.json`, and screenshots in the same directory.
+- Task mode: Mixed owner-requirement correction across Device Users export/import API, admin UI, contracts, and WWG truth.
+- Owner correction: the active Hikvision Device Users sync/export/import journey must not require encrypted bundles or passphrases. It must copy/export evidenced raw fingerprint `fingerData` blobs and raw face/image blobs when present.
+- Required custody behavior:
+  - DeviceUser remains the durable current raw biometric custody plane.
+  - Matching DeviceEvent payloads can provide fallback raw custody for lifecycle ledger journeys.
+  - CSV/Excel/Package JSON use raw blob columns/statuses, not `encrypted:v2` envelope cells.
+  - Missing bytes stay explicit as `not_enrolled`, `missing_raw_blob`, or `not_requested`; no values are fabricated from credential counts.
+- Stale context: 2026-07-14/2026-07-15 encrypted envelope/passphrase export proof is historical for this journey and must not drive current modal copy, API requirements, or tests.
 
+## Latest Task Addendum - 2026-07-19 C++-first create/enroll raw wire truth
 
-# Latest Task Addendum - 2026-07-19 Raw fingerprint callback/UserInfo race repair
+- Task mode: Mixed regression repair across C++ listener identity enrichment, biometric custody, realtime, and admin UI truth.
+- Evidence: `.runtime/cpp-first-create-enroll-raw-20260719-200043/`.
+- Listener truth: major=3 create/enroll ACS may carry empty `dwEmployeeNo`; do not claim first-callback plain identity. Serialized, completion-checked UserInfo inventory scans now prevent interleaved partial baselines from producing false deltas. A post-rebuild create of `99200129` resolved through a one-person inventory delta and posted plain identity; that new user honestly had `numOfFP=0` and no face.
+- Enrollment truth: TEST A person `15` has `numOfFP=1`, `numOfFace=0`. Rewriting person 15's own template (donor=false) proved status 6, sticky read-back, and one 684-character raw template. Existing-person ACS remained empty/zero-template, then HRIS logSearch resolved plain `15` and automatic ISAPI capture stored the raw template on DeviceUser and FINGERPRINT_ENROLLED DeviceEvent payloads without manual Capture.
+- Realtime/UI truth: `device-event:saved` delivered saved lifecycle rows with plain `employeeNo=15`; opaque tokens stayed only in payload evidence. Device user details renders stored raw fingerprint data and labels manual capture as repair-only.
+- Face boundary: person `15` has no face on the device, so raw face remains honestly absent. Earlier person `1` face proof is historical and is not reused as proof for this path.
 
-- Task mode: Biometric persistence regression repair plus operator-journey hardening.
-- Root cause: the C++ listener successfully read and posted the raw template, and the enrollment DeviceEvent retained it, but a slower UserInfo enrichment could overwrite DeviceUser with metadata read before the callback completed.
-- Repair: DeviceUser UserInfo enrichment now uses an `updatedAt` optimistic merge/retry and preserves current raw fingerprint/face custody across a concurrent callback write.
-<<<<<<< HEAD
-- User journey: the Device Users details modal refetches the saved HRIS row and shows `Checking saved templates+�G�-�` during that read; it does not show `Not captured yet` until absence is confirmed.
-=======
-- User journey: the Device Users details modal refetches the saved HRIS row and shows `Checking saved templates+ï¿½Gï¿½-ï¿½` during that read; it does not show `Not captured yet` until absence is confirmed.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Live TEST A proof: exact event `cmrrwqkpc009l7zaogna1hbkd` for person `18` replayed successfully; after 20 seconds DeviceUser retained one 684-character raw template from `cpp_sdk_callback_raw`. Users `15` and `18` both rendered `1 stored` in headless browser proof.
-- Verification: 22 focused backend tests, 14 C++ source-contract tests, and 1 modal Playwright regression passed. The current C++ source also built/linked against the VM HCNetSDK in an isolated output path.
-- Evidence: `.runtime/fingerprint-enroll-raw-race-20260719/summary.md` and screenshots in the same directory.
-- Boundary: do not infer a person id from an empty first major=3 callback; raw capture starts after plain device-person identity is evidenced.
+## Latest Task Addendum - 2026-07-19 Create+Enroll raw blob ledger journey
 
+- Task mode: Meaningful feature / journey truth + live proof.
+- Evidence: `.runtime/create-enroll-raw-ledger-journey-20260719-194709/summary.json`
+- Exit: `GREEN_WITH_REAL_BLOCKER` (synthetic sticky clone still device anti-dupe; physical unique enroll out of scope).
+- Proven:
+  - Ledger: `USER_CREATED` + `FINGERPRINT_ENROLLED` plain `16` same DeviceUser
+  - DeviceUser raw FP: persons `15`/`16`/`1` with 684-char base64 (not AES)
+  - DeviceUser raw face: person `1` 14019-byte JPEG when `numOfFace=1`; `15`/`16` honest no-face
+  - Capture API works with `req.organizationId`
+  - UI: always refetch DeviceUser on details open; raw FP + face sections
+- Auto path: schedule raw FP (+ face when present) after plain identity; enrich preserves raw
+- Recommendation: Physical panel unique FP enroll for new person sticky (Proposed â€” prior REC).
+
+## Latest Task Addendum - 2026-07-19 Backend helper module resolution repair
+
+- Task mode: Backend TypeScript regression repair.
+- Reported symptom: VS Code/TypeScript showed `TS2307` in `hris-api/app/device/device.controller.ts` for dynamic imports of `device-user-raw-fingerprint.helper` and `hikvision-event-contract.helper`.
+- Root cause: `hris-api` uses `module: Node16` / `moduleResolution: node16`; dynamic imports need the emitted `.js` specifier. Static imports in the same tree remained resolvable, but the extensionless dynamic imports failed.
+- Implemented:
+  - Changed the three dynamic helper imports in `device.controller.ts` to `.helper.js`, matching existing project import style.
+  - Added a narrow local type for recent lifecycle event backfill rows in `device-person-token.helper.ts`, clearing the strict type errors exposed after the missing modules were fixed.
+- Proof:
+  - `npx tsc --noEmit --pretty false` passed in `hris-api`.
+  - Focused backend tests passed 63/63: `device-events-api-contract`, `device-person-token.helper`, `device-user-raw-fingerprint.helper`, and `hikvision-event-contract.helper`.
+  - Focused backend lint passed for `device.controller.ts` and the three helper files.
+- Recommendation capture: No new recommendations were identified.
 
 ## Latest Task Addendum - 2026-07-19 Device Events saved filter facets
 
@@ -2280,99 +1240,6 @@ unHikvisionTimeSyncCore with the per-device route.
   - `hris-app` source-contract test still fails on a pre-existing expectation that `events.tsx` contains `useDeviceHealthMap`.
   - `hris-api` typecheck remains blocked by pre-existing missing module `../../helper/device-user-raw-fingerprint.helper` and existing helper type errors.
 - Recommendation capture: No new recommendations were identified.
-
-
-## Latest Task Addendum - 2026-07-19 Backend helper module resolution repair
-
-- Task mode: Backend TypeScript regression repair.
-- Reported symptom: VS Code/TypeScript showed `TS2307` in `hris-api/app/device/device.controller.ts` for dynamic imports of `device-user-raw-fingerprint.helper` and `hikvision-event-contract.helper`.
-- Root cause: `hris-api` uses `module: Node16` / `moduleResolution: node16`; dynamic imports need the emitted `.js` specifier. Static imports in the same tree remained resolvable, but the extensionless dynamic imports failed.
-- Implemented:
-  - Changed the three dynamic helper imports in `device.controller.ts` to `.helper.js`, matching existing project import style.
-  - Added a narrow local type for recent lifecycle event backfill rows in `device-person-token.helper.ts`, clearing the strict type errors exposed after the missing modules were fixed.
-- Proof:
-  - `npx tsc --noEmit --pretty false` passed in `hris-api`.
-  - Focused backend tests passed 63/63: `device-events-api-contract`, `device-person-token.helper`, `device-user-raw-fingerprint.helper`, and `hikvision-event-contract.helper`.
-  - Focused backend lint passed for `device.controller.ts` and the three helper files.
-- Recommendation capture: No new recommendations were identified.
-
-
-## 2026-07-19 Hikvision Storage And Network Visualization Addendum
-
-- Task mode: docs-only architecture clarification from operator runtime evidence.
-- Observed network evidence:
-  - From `project-truth-db-access` / `infra@project-truth-node`, `ping 192.168.254.102` returned `Time to live exceeded` from `61.245.16.174`.
-  - Interpretation: the shell does not have a direct ICMP/L3 route to the private Hikvision device LAN. This is not proof that the panel is down and not proof that HRIS model storage failed.
-  - Architecture boundary: Cloudflare DB/SSH access is not a general LAN route; use selected TCP reverse forwards or a site agent on the device LAN for HCNetSDK/ISAPI evidence.
-- Storage documentation updated:
-  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` now documents what is created/updated on panel user create and fingerprint enroll:
-    - `DeviceEvent` rows for `USER_CREATED` and `FINGERPRINT_ENROLLED`.
-    - one `DeviceUser` row for the current physical user identity (`vendorUserId=15`).
-    - actual fingerprint template custody belongs to encrypted `DeviceUser.vendorMetadata.biometricBundle` / `_hrisDeviceMetadata.biometricExport` after the SDK biometric export worker reads template bytes; `DeviceEvent` stores proof/evidence only.
-    - optional `DevicePersonToken` when Hikvision operation logs expose only an opaque token.
-    - optional `Employee` link when an existing HRIS employee safely matches.
-- Architecture twin updated:
-  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` now records that `Employee.deviceEmpId` is plain for device matching, while `Employee.employeeId` may be padded/display-coded.
-
-
-## 2026-07-19 Device Person 15 Architecture Documentation Addendum
-
-- Task mode: docs-only architecture clarification following the Device Events / Device Users `15` vs `00015` identity repair.
-- Operator intent documented:
-  - Device user/person `15` created on the physical Hikvision device must appear as DeviceUser `vendorUserId=15`.
-  - Device Events should resolve to the plain device person id `15` when DeviceUser or callback evidence exists.
-  - Clicking `Device user` must navigate to Device User `15`, not a padded HRIS employee code.
-  - Clicking an employee record may show the HRIS-padded code/device id `00015` when that employee is safely linked.
-- Architecture verdict: the three-plane model remains correct: `DeviceUser` is physical-device identity/current inventory, `DeviceEvent` is saved event/history evidence, and `Employee` is the HRIS person record. Padding belongs only to HRIS employee matching/display; it must not rewrite `DeviceUser.vendorUserId`.
-- Documentation updated:
-  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` now includes a modal/click flowchart, ER diagram, decision table, and implementation-owner map for this contract.
-
-
-## 2026-07-19 Reverse Tunnel Stability Hardening Addendum
-
-- Task mode: focused runtime hardening for Device Events Keep Ready / predev live path.
-- Root cause identified:
-  - The reverse tunnel itself can be healthy while the UI still shows six direct off-LAN device SDK login failures.
-  - The older Keep Ready proof could also trust a stale Windows `ssh.exe` process or host-local `127.0.0.1:59000` instead of proving the VM-side reverse listener ports actually exist.
-- Implemented hardening:
-  - `scripts/ensure-device-live-path.ps1` now proves VM-side `127.0.0.1:59000` and `127.0.0.1:59443` before treating the Hikvision reverse bridge as healthy.
-  - If a local SSH bridge process exists but VM reverse ports are not proven, Keep Ready records `reverse_bridge_stale` and rebinds the bridge.
-  - `hris-api/scripts/ensure-device-live-path.cjs` fast path now requires VM SDK reverse proof instead of accepting a host-local SDK port as enough.
-- Runtime proof after hardening:
-  - `node hris-api/scripts/ensure-device-live-path.cjs` fast-passed with VM `53001=true` and VM `59000=true`, and listener `service_started` showed `hrisApiBase=http://127.0.0.1:53001`.
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensure-device-live-path.ps1` returned `ok=true`, DB tunnel open, VM reverse ports open, API reverse open, and listener API base already host-aligned.
-  - Listener status after hardening showed TEST A on `127.0.0.1:59000` with `lastLoginOk=true`, `armed=true`, `receivingCallbacks=true`, and `postingToHris=true`.
-
-## Latest Task Addendum - 2026-07-19 Create+Enroll flow C++ EXIT GATE
-
-- Task mode: Meaningful C++ fix + live synthetic proof.
-- Commit: `05f4320` on `develop`.
-- Evidence: `.runtime/create-enroll-flow-proof-20260719-181730/summary.json`
-- C++: full inventory (319 users), delayed identity re-POST, ISAPI FP fallback, arm baseline seed.
-- Live G6 quote: `callback_identity_inventory_delta employeeNo=99182448` then `post_result employeeNo=99182448` with `identitySource=inventory_delta`.
-<<<<<<< HEAD
-- G3+�G�GǣG5: create/enroll plain DeviceUser+events + raw 684-char template (API). Device synthetic FP re-read may still show numOfFP=0 (labeled donor blob path).
-=======
-- G3+ï¿½Gï¿½GÇ£G5: create/enroll plain DeviceUser+events + raw 684-char template (API). Device synthetic FP re-read may still show numOfFP=0 (labeled donor blob path).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-- Recommendation capture: Device FP write stickiness after FingerPrintDownload.
-
-
-## Latest Task Addendum - 2026-07-19 Create+Enroll architecture reality marathon
-
-- Task mode: Meaningful feature / wire-path harden + live proof (non-stop marathon).
-- Evidence: `.runtime/create-enroll-arch-reality-20260719-183434/summary.json`
-- Exit: `GREEN_WITH_REAL_BLOCKER` (not donor fake-green).
-- **Root cause of synthetic FP stickiness:** `FingerPrintDownload` HTTP OK but `FingerPrintProgress` `cardReaderRecvStatus=5` `errorMsg=15` when cloning person-15 template onto a new employeeNo (device anti-dupe). Re-read stays `numOfFP=0`.
-- **Code:**
-  - C++: template enrich after inventory_delta/op-sync; ISAPI write verifies Progress + re-read fingerData
-  - HRIS: `writeAndVerifyFingerprintOnDevice` / `parseFingerPrintProgress`; device.controller uses verify path
-  - Proof scripts: ban donor-as-success
-- **Proven green:** create plain + inventory_delta; person-15 device-owned raw 684; unit 6/6; reverse ports; rebuilt listener with `progressRecvOk`
-- **Still open:** physical unique panel enroll for new person sticky F8; live C++ `fingerprintCount>=1` on ACS for person already having FP
-- Job card: `docs/00-product/AGENT-PROMPT-create-enroll-architecture-reality-marathon.md`
-- Recommendation capture: Physical panel enroll proof for F8 sticky on new person (Proposed).
-
 
 ## Latest Task Addendum - 2026-07-19 Keep-ready reverse-tunnel stability
 
@@ -2412,35 +1279,17 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-07-19 Raw fingerprint template on DeviceUser (not AES)
 
-- Task mode: Bug fix / product expectation correction + live proof.
-<<<<<<< HEAD
-- Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser +�G�Gǥ do **not** default to encrypted-only custody.
-- Implemented:
-  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` +�G�Gǥ ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
-=======
-- Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser +ï¿½Gï¿½GÇ¥ do **not** default to encrypted-only custody.
-- Implemented:
-  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` +ï¿½Gï¿½GÇ¥ ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-  - `enrichEnrollmentLifecycleEvent` schedules raw capture after FINGERPRINT_ENROLLED / USER_CREATED / USER_UPDATED when plain person id is known.
-  - DeviceEvent gets pointer/status only (`rawFingerprintCustody`, `raw_on_device_user`); full blobs stay on DeviceUser.
-  - Device user details UI shows raw present + first 120 chars preview.
-- Live proof (TEST A person `15`, device `192.168.254.102`):
-  - `rawPresent=true`, `fingerprintCount=1`, `firstTemplateChars=684`, `isAesEnvelope=false`
-  - API `GET /api/device/<TEST A>/users?vendorUserId=15` returns raw templates under vendorMetadata + rawPayload
-  - Evidence: `.runtime/raw-fp-live-2026-07-19T09-39-38-797Z/`, `.runtime/user15-raw-fp-viewable.json`
-- Focused tests: raw-fingerprint helper + person-token 18/18 pass.
-- Recommendation capture: No new recommendations were identified.
-
+- Task mode: Live proof / evidence closeout.
+- Evidence dir: `.runtime/live-cpp-enroll-proof-20260719-180128/summary.json`
+- Proven green: host TCP/API, reverse :59000/:59443/:53001, rebuilt binary with enrich, listener armed/receiving, synthetic create `99180240` on device, DeviceUser raw template 684 chars (not AES), plain employeeNo on USER_CREATED/FINGERPRINT_ENROLLED ledger rows, API users returns raw.
+- ACS live truth: major=3 still often `employeeNo=""`; enrich ran; inventory delta did not always attach plain in-window (`no_new_plain` / baseline). Do not claim ACS first packet always plain.
+- Device FP write returned OK but `numOfFP` stayed 0 on re-read (3 retries); raw custody used donor-15 template path with explicit source label.
+- Recommendation capture: Investigate C++ inventory pagination / delta when pageEmployees stuck at 30; improve FingerPrintDownloadâ†’Upload re-read for synthetic write.
 
 ## Latest Task Addendum - 2026-07-19 C++ plain-id enrich + raw templates + anti-assumption WWG
 
 - Task mode: Regression repair + governance + C++ wire-path harden.
-<<<<<<< HEAD
-- Operator pushback: stop assuming first socket always has plain id; **trace** C++ ACS +�G��G�� POST +�G��G�� socket. Proven: major=3 often empty `dwEmployeeNo`; major=5 taps often plain; logSearch often opaque.
-=======
-- Operator pushback: stop assuming first socket always has plain id; **trace** C++ ACS +ï¿½Gï¿½ï¿½Gï¿½ï¿½ POST +ï¿½Gï¿½ï¿½Gï¿½ï¿½ socket. Proven: major=3 often empty `dwEmployeeNo`; major=5 taps often plain; logSearch often opaque.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Operator pushback: stop assuming first socket always has plain id; **trace** C++ ACS â†’ POST â†’ socket. Proven: major=3 often empty `dwEmployeeNo`; major=5 taps often plain; logSearch often opaque.
 - Governance:
   - `.grok/rules/02-sdk-callback-wire-truth.md` (always-on)
   - `AGENTS.md` hard ban on inventing callback person id
@@ -2449,82 +1298,25 @@ unHikvisionTimeSyncCore with the per-device route.
   - `enrich_hris_job_before_post` before POST: inventory delta multipass when ACS person empty; attach raw FP templates (+ face when card known)
   - Callback JSON: `identitySource`, `fingerprints[]` raw base64, `faceTemplate`/`facePicture`, `fingerprintCount`
 - HRIS:
-<<<<<<< HEAD
-  - Accept callback fingerprints/face +�G��G�� DeviceUser raw store immediately
-  - Socket: plain-only `employeeNo`; include deviceUser; UI +�G�+�Resolving person id+�G�-�+�G�-� when empty/resolving
-=======
-  - Accept callback fingerprints/face +ï¿½Gï¿½ï¿½Gï¿½ï¿½ DeviceUser raw store immediately
-  - Socket: plain-only `employeeNo`; include deviceUser; UI +ï¿½Gï¿½+ï¿½Resolving person id+ï¿½Gï¿½-ï¿½+ï¿½Gï¿½-ï¿½ when empty/resolving
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+  - Accept callback fingerprints/face â†’ DeviceUser raw store immediately
+  - Socket: plain-only `employeeNo`; include deviceUser; UI â€œResolving person idâ€¦â€ when empty/resolving
 - Rebuild/redeploy listener binary on VM still required for C++ path to run live.
 - Recommendation capture: No new recommendations were identified.
 
+## Latest Task Addendum - 2026-07-19 Raw fingerprint template on DeviceUser (not AES)
 
-## Latest Task Addendum - 2026-07-19 Live proof EXIT GATE (C++ enrich + synthetic enroll)
-
-- Task mode: Live proof / evidence closeout.
-- Evidence dir: `.runtime/live-cpp-enroll-proof-20260719-180128/summary.json`
-- Proven green: host TCP/API, reverse :59000/:59443/:53001, rebuilt binary with enrich, listener armed/receiving, synthetic create `99180240` on device, DeviceUser raw template 684 chars (not AES), plain employeeNo on USER_CREATED/FINGERPRINT_ENROLLED ledger rows, API users returns raw.
-- ACS live truth: major=3 still often `employeeNo=""`; enrich ran; inventory delta did not always attach plain in-window (`no_new_plain` / baseline). Do not claim ACS first packet always plain.
-- Device FP write returned OK but `numOfFP` stayed 0 on re-read (3 retries); raw custody used donor-15 template path with explicit source label.
-<<<<<<< HEAD
-- Recommendation capture: Investigate C++ inventory pagination / delta when pageEmployees stuck at 30; improve FingerPrintDownload+�G��G��Upload re-read for synthetic write.
-=======
-- Recommendation capture: Investigate C++ inventory pagination / delta when pageEmployees stuck at 30; improve FingerPrintDownload+ï¿½Gï¿½ï¿½Gï¿½ï¿½Upload re-read for synthetic write.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-
-## Latest Task Addendum - 2026-07-19 Create+Enroll raw blob ledger journey
-
-- Task mode: Meaningful feature / journey truth + live proof.
-- Evidence: `.runtime/create-enroll-raw-ledger-journey-20260719-194709/summary.json`
-- Exit: `GREEN_WITH_REAL_BLOCKER` (synthetic sticky clone still device anti-dupe; physical unique enroll out of scope).
-- Proven:
-  - Ledger: `USER_CREATED` + `FINGERPRINT_ENROLLED` plain `16` same DeviceUser
-  - DeviceUser raw FP: persons `15`/`16`/`1` with 684-char base64 (not AES)
-  - DeviceUser raw face: person `1` 14019-byte JPEG when `numOfFace=1`; `15`/`16` honest no-face
-  - Capture API works with `req.organizationId`
-  - UI: always refetch DeviceUser on details open; raw FP + face sections
-- Auto path: schedule raw FP (+ face when present) after plain identity; enrich preserves raw
-<<<<<<< HEAD
-- Recommendation: Physical panel unique FP enroll for new person sticky (Proposed +�G�Gǥ prior REC).
-=======
-- Recommendation: Physical panel unique FP enroll for new person sticky (Proposed +ï¿½Gï¿½GÇ¥ prior REC).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
-
-## Latest Task Addendum - 2026-07-19 SDK enrollment plain person id on callback
-
-- Task mode: Bug fix / runtime identity path + unit proof.
-<<<<<<< HEAD
-- Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` +�G�Gǥ without treating multipass logSearch as the only path.
-- Clarified architecture (not a secret second poller inventing people):
-  - Live path is still the HCNetSDK ACS alarm callback +�G��G�� `/api/hikvision/callback`.
-  - When `dwEmployeeNo` / plain `employeeNo` is present on that callback, HRIS now runs the fast identity path.
-  - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens +�G��G�� plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
-=======
-- Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` +ï¿½Gï¿½GÇ¥ without treating multipass logSearch as the only path.
-- Clarified architecture (not a secret second poller inventing people):
-  - Live path is still the HCNetSDK ACS alarm callback +ï¿½Gï¿½ï¿½Gï¿½ï¿½ `/api/hikvision/callback`.
-  - When `dwEmployeeNo` / plain `employeeNo` is present on that callback, HRIS now runs the fast identity path.
-  - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens +ï¿½Gï¿½ï¿½Gï¿½ï¿½ plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Task mode: Bug fix / product expectation correction + live proof.
+- Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser â€” do **not** default to encrypted-only custody.
 - Implemented:
-  - `applyFastEnrollmentIdentityOnSdkCallback` / `isHikvisionEnrollmentLifecycleCallback` in `hris-api/helper/device-person-token.helper.ts`.
-  - Immediate `DeviceUser` upsert (stub + HRIS link via `deviceEmpId` / `employeeId` code match), `DeviceEvent` MATCHED/UNMATCHED with plain `employeeNo`, first `device-event:saved` socket.
-  - Background `enrichEnrollmentLifecycleEvent` still pulls full UserInfo into `DeviceUser.rawPayload` / `vendorMetadata` and re-sockets.
-  - `callback.controller.ts` non-attendance enrollment path uses the fast path and no longer forces `IGNORED` over identity when plain id is applied.
-- Proof:
-<<<<<<< HEAD
-  - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` +�G��G�� 17/17 pass.
-- Boundary:
-  - Plain device person id +�GǦ-� HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
-=======
-  - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` +ï¿½Gï¿½ï¿½Gï¿½ï¿½ 17/17 pass.
-- Boundary:
-  - Plain device person id +ï¿½GÇ¦-ï¿½ HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-  - Empty-person major=3 signals still need logSearch / inventory delta for plain id; we do not invent person numbers.
+  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` â€” ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
+  - `enrichEnrollmentLifecycleEvent` schedules raw capture after FINGERPRINT_ENROLLED / USER_CREATED / USER_UPDATED when plain person id is known.
+  - DeviceEvent gets pointer/status only (`rawFingerprintCustody`, `raw_on_device_user`); full blobs stay on DeviceUser.
+  - Device user details UI shows raw present + first 120 chars preview.
+- Live proof (TEST A person `15`, device `192.168.254.102`):
+  - `rawPresent=true`, `fingerprintCount=1`, `firstTemplateChars=684`, `isAesEnvelope=false`
+  - API `GET /api/device/<TEST A>/users?vendorUserId=15` returns raw templates under vendorMetadata + rawPayload
+  - Evidence: `.runtime/raw-fp-live-2026-07-19T09-39-38-797Z/`, `.runtime/user15-raw-fp-viewable.json`
+- Focused tests: raw-fingerprint helper + person-token 18/18 pass.
 - Recommendation capture: No new recommendations were identified.
 
 
@@ -2612,11 +1404,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Legacy fallback still preferred historical `192.168.254.189`.
   - Resolver ranked DB reverse rows but did not probe which candidate the **host** can reach right now.
 - Implemented:
-<<<<<<< HEAD
-  - `resolve-hikvision-vm-bridge-targets.cjs` now probes host TCP (sdk/http/443/80, ~300+�G�Gǣ400ms) and ranks `reverseBridge + hostReachable` first. Source becomes `db-reverse-bridge-host-reachable` when LIVE.
-=======
-  - `resolve-hikvision-vm-bridge-targets.cjs` now probes host TCP (sdk/http/443/80, ~300+ï¿½Gï¿½GÇ£400ms) and ranks `reverseBridge + hostReachable` first. Source becomes `db-reverse-bridge-host-reachable` when LIVE.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+  - `resolve-hikvision-vm-bridge-targets.cjs` now probes host TCP (sdk/http/443/80, ~300â€“400ms) and ranks `reverseBridge + hostReachable` first. Source becomes `db-reverse-bridge-host-reachable` when LIVE.
   - Fallback order when DB is down: `192.168.254.102` then `192.168.254.189`.
   - `ensure-hikvision-vm-bridge.cjs` fast-paths only when **local bridge matches resolved IPs AND VM :59000 is open**; otherwise stop + rebind.
   - `ensure-device-live-path.ps1` prefers host-reachable targets from the same resolver.
@@ -2630,18 +1418,22 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-07-19 Enrollment identity architecture docs
 
-- Task mode: Docs / architecture sync.
-- Goal: Capture operator vision for panel/SDK user create + enroll identity, verify architecture correctness, document exact flows, and provide diagrams so agents stay synced to the spec.
-- Written:
-<<<<<<< HEAD
-  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` +�G�Gǥ full spec, identity planes, Flow A/B/C/D, mermaid sequence, acceptance, gaps.
-  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` +�G�Gǥ WWG architecture twin.
-=======
-  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` +ï¿½Gï¿½GÇ¥ full spec, identity planes, Flow A/B/C/D, mermaid sequence, acceptance, gaps.
-  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` +ï¿½Gï¿½GÇ¥ WWG architecture twin.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-  - Pointer in `docs/HIKVISION_RUNTIME_TRUTH.md`.
-- Architecture verdict: Operator vision is correct; implementation is aligned with the happy path and panel-opaque path, with explicit boundary that plain person id may trail the first socket by a few seconds when major=3 has empty `dwEmployeeNo`.
+- Task mode: Bug fix / runtime identity path + unit proof.
+- Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` â€” without treating multipass logSearch as the only path.
+- Clarified architecture (not a secret second poller inventing people):
+  - Live path is still the HCNetSDK ACS alarm callback â†’ `/api/hikvision/callback`.
+  - When `dwEmployeeNo` / plain `employeeNo` is present on that callback, HRIS now runs the fast identity path.
+  - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens â†’ plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
+- Implemented:
+  - `applyFastEnrollmentIdentityOnSdkCallback` / `isHikvisionEnrollmentLifecycleCallback` in `hris-api/helper/device-person-token.helper.ts`.
+  - Immediate `DeviceUser` upsert (stub + HRIS link via `deviceEmpId` / `employeeId` code match), `DeviceEvent` MATCHED/UNMATCHED with plain `employeeNo`, first `device-event:saved` socket.
+  - Background `enrichEnrollmentLifecycleEvent` still pulls full UserInfo into `DeviceUser.rawPayload` / `vendorMetadata` and re-sockets.
+  - `callback.controller.ts` non-attendance enrollment path uses the fast path and no longer forces `IGNORED` over identity when plain id is applied.
+- Proof:
+  - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` â†’ 17/17 pass.
+- Boundary:
+  - Plain device person id â‰  HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
+  - Empty-person major=3 signals still need logSearch / inventory delta for plain id; we do not invent person numbers.
 - Recommendation capture: No new recommendations were identified.
 
 
@@ -2675,25 +1467,15 @@ unHikvisionTimeSyncCore with the per-device route.
 - Truth sync: Project Truth and Project Truth summary now state that processing device-user sync snapshots older than 30 minutes without progress evidence are stale and require a fresh admin-triggered run.
 - Recommendation capture: No new recommendations were identified.
 
-<<<<<<< HEAD
-Status: IMPLEMENTED + PROVEN +�G�Gǥ Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
-=======
-Status: IMPLEMENTED + PROVEN +ï¿½Gï¿½GÇ¥ Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
-
+Status: IMPLEMENTED + PROVEN â€” Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
 
 ## Latest Task Addendum - 2026-07-16 Device admin UX clarity pass
 
 - Task mode: Meaningful UX feature + contract tests + Playwright journey proof.
 - Goal: Device management / Device events / Sync logs / Sync users journey is admin-friendly, not engineer-verbose; loading is honest; Sync logs not repeated/noisy; no redundant filter columns; no primary VM jargon.
 - Implemented:
-<<<<<<< HEAD
-  - `hris-app/app/routes/admin/devices/events.tsx` +�G�Gǥ Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
-  - `hris-app/app/routes/admin/devices/manage.tsx` +�G�Gǥ +�G�+�Checking device connection+�G�-�+�G�-� / +�G�+�Reading users from device+�G�-�+�G�-�.
-=======
-  - `hris-app/app/routes/admin/devices/events.tsx` +ï¿½Gï¿½GÇ¥ Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
-  - `hris-app/app/routes/admin/devices/manage.tsx` +ï¿½Gï¿½GÇ¥ +ï¿½Gï¿½+ï¿½Checking device connection+ï¿½Gï¿½-ï¿½+ï¿½Gï¿½-ï¿½ / +ï¿½Gï¿½+ï¿½Reading users from device+ï¿½Gï¿½-ï¿½+ï¿½Gï¿½-ï¿½.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+  - `hris-app/app/routes/admin/devices/events.tsx` â€” Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
+  - `hris-app/app/routes/admin/devices/manage.tsx` â€” â€œChecking device connectionâ€¦â€ / â€œReading users from deviceâ€¦â€.
   - Contract + Playwright smoke (3 tests) updated and green.
   - Non-stop agent loop prompt: `docs/00-product/AGENT-PROMPT-device-admin-ux-clarity-loop.md`
 - Evidence: `.runtime/device-ux-clarity-20260716-221328/`, screenshots under `.runtime/device-ux-clarity-proof/screenshots/`
@@ -2724,17 +1506,10 @@ Status: IMPLEMENTED + PROVEN +ï¿½Gï¿½GÇ¥ Device admin UX clarity (friend
   - Argo apps at revision `7309928` (includes event-first `ee42f4a`); PROD/DEV/UAT `hris-api`/`hris-app` Running on `hris-api-local:develop` / app images; tunnel active.
   - `GET https://api.bnpi-hris.tech/api/device/sync-preview` returns per-device `eventRows[]` + `sources[]` with live ZKTeco Ready rows (e.g. `.235` willAdd `2035` / already `20267`).
   - `GET https://dev-api.bnpi-hris.tech/api/device/sync-preview` returns Hikvision 16-row event catalogs with already-in-HRIS by action even when sources unavailable.
-<<<<<<< HEAD
-  - Public browser: admin login +�G��G�� Device events +�G��G�� Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
+  - Public browser: admin login â†’ Device events â†’ Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
 - Residual still open:
   - Hikvision TCP from VM fail for configured addresses; PROD Main Entrance Device missing access credentials in preview error.
-  - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK +�G�Gǥ investigate bridge/read path, not modal contract.
-=======
-  - Public browser: admin login +ï¿½Gï¿½ï¿½Gï¿½ï¿½ Device events +ï¿½Gï¿½ï¿½Gï¿½ï¿½ Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
-- Residual still open:
-  - Hikvision TCP from VM fail for configured addresses; PROD Main Entrance Device missing access credentials in preview error.
-  - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK +ï¿½Gï¿½GÇ¥ investigate bridge/read path, not modal contract.
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+  - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK â€” investigate bridge/read path, not modal contract.
   - `project-truth-runtime-dev` Argo app Synced/Degraded.
   - Per-type operation **willAdd** precision still needs per-action logSearch classification when Hikvision sources are reachable.
   - ansible-pull commit `e156c70` lags Argo serving revision `7309928`.
@@ -2745,11 +1520,7 @@ Status: IMPLEMENTED + PROVEN +ï¿½Gï¿½GÇ¥ Device admin UX clarity (friend
 - Task mode: Meaningful feature + API contract + UI + tests + Playwright proof.
 - Commit: `ee42f4a` on `develop`.
 - Evidence: `.runtime/sync-logs-event-first-20260716-215712/`
-<<<<<<< HEAD
-- Goal: Sync logs modal is event-first +�G�Gǥ per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
-=======
-- Goal: Sync logs modal is event-first +ï¿½Gï¿½GÇ¥ per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
->>>>>>> 289aac211028dd7d1a62ed5212cb7f31aa467ab3
+- Goal: Sync logs modal is event-first â€” per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
 - Implemented:
   - `hris-api/helper/sync-logs-event-rows.helper.ts` catalog + dual-source builders.
   - `GET /api/device/sync-preview` now returns `eventRows[]`, `sources[]`, operation log total probe (`ContentMgmt/logSearch`), attendance total (`AccessControl/AcsEvent`), and already-in-HRIS by `eventAction`.
