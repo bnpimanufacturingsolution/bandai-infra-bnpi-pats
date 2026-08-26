@@ -185,6 +185,47 @@ describe("BNPI WorkSharingSchedule import helper", () => {
 		expect(byDate["2026-07-01"]).to.equal("06:00 to 14:00");
 		expect(byDate["2026-07-02"]).to.equal("06:00 to 14:00");
 		expect(byDate["2026-07-03"]).to.equal("08:15 to 16:15");
+		// Explicit 0 on a date with no flag=1 → day off (not ABSENT workday)
+		expect(parsed.dayOffAssignments || []).to.have.length(0);
+	});
+
+	it("emits day-off assignments for explicit WorkSharing flag=0", () => {
+		const buffer = buildSampleWorkbookBuffer({
+			rows: [
+				[
+					"Employeeid",
+					"EmployeeName",
+					"Department",
+					"Division",
+					"Position",
+					"Shift",
+					"2026-07-11",
+					"2026-07-12",
+					"2026-07-18",
+				],
+				[
+					270,
+					"Vergara, Jo-Anne R.",
+					"Production",
+					"Assembly 1",
+					"Staff",
+					"07:15 to 15:15",
+					1,
+					1,
+					0,
+				],
+			],
+		});
+		const parsed = parseWorkSharingScheduleWorkbook(buffer);
+		expect(parsed.dayAssignments.map((d) => d.dateKey).sort()).to.deep.equal([
+			"2026-07-11",
+			"2026-07-12",
+		]);
+		expect(parsed.dayOffAssignments).to.have.length(1);
+		expect(parsed.dayOffAssignments[0]).to.include({
+			employeeExternalId: "00270",
+			dateKey: "2026-07-18",
+		});
 	});
 
 	it("builds operator notes for assignments", () => {

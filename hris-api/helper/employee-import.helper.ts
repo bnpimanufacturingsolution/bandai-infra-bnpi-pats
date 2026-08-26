@@ -59,6 +59,9 @@ export interface EmployeeImportRow {
 	PHILHEALTH: string;
 	PAGIBIG: string;
 	BASIC_SALARY: string;
+	/** Register Daily Salary → Path A OT (hourly = dailyRate/8). Empty → Path B BNPI. */
+	DAILY_SALARY?: string;
+	DAILY_RATE?: string;
 	// Optional - Hire Date (now optional, will default to current date if not provided)
 	HIRE_DATE?: string;
 	// Optional Person Info
@@ -922,6 +925,12 @@ export class EmployeeImportHelper {
 				embeddedSchedule: importedEmbeddedSchedule || undefined,
 				workLocation: (row.WORK_LOCATION || "ONSITE") as any,
 				basicSalary: parseFloat(row.BASIC_SALARY),
+				dailyRate: (() => {
+					const raw = row.DAILY_SALARY ?? row.DAILY_RATE;
+					if (raw == null || String(raw).trim() === "") return undefined;
+					const n = parseFloat(String(raw).replace(/,/g, ""));
+					return Number.isFinite(n) && n > 0 ? n : undefined;
+				})(),
 				currency: row.CURRENCY || "PHP",
 				payFrequency: (row.PAY_FREQUENCY || "MONTHLY") as any,
 				deviceEmpId: row.DEVICE_ID || undefined,
@@ -940,6 +949,10 @@ export class EmployeeImportHelper {
 							sourceWorkbook: "docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx",
 							sourceSheet: "Basic Salary",
 							sourceField: "Basic Salary",
+						},
+						dailyRate: {
+							sourceField: "Daily Salary",
+							note: "Path A OT when > 0; Path B BNPI when missing",
 						},
 					},
 					scheduleImport: {

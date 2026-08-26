@@ -255,7 +255,7 @@ async function applyManpowerRow(params: {
 			employeeUpdate.employmentTerminationDate = row.separationDate;
 		}
 
-		// Explicitly do NOT set basicSalary, payFrequency, leaveBalances, embeddedSchedule, reportToId.
+		// Explicitly do NOT set basicSalary, dailyRate, payFrequency, leaveBalances, embeddedSchedule, reportToId.
 
 		await prisma.employee.update({
 			where: { id: existing.id },

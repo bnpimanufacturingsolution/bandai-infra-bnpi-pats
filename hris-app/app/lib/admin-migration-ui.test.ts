@@ -7,6 +7,7 @@ import {
 	getCountLabel,
 	getStatusClassName,
 	getStatusLabel,
+	isWorkbookSourceInputsPanelReady,
 	type AdminMigrationStepStatus,
 } from "./admin-migration-ui";
 
@@ -78,6 +79,44 @@ describe("admin migration UI helpers", () => {
 			const step = { ...baseStep, count: 1200 };
 
 			expect(getCountLabel(step)).toBe("1,200 employees");
+		});
+	});
+
+	describe("source inputs panel", () => {
+		it("shows the catalog when a workbook has mapped or downloadable sources", () => {
+			expect(
+				isWorkbookSourceInputsPanelReady([
+					{
+						downloadable: true,
+						sheetMappings: [{ step: "DM4.1", sheet: "Attendance History" }],
+					},
+				]),
+			).toBe(true);
+		});
+
+		it("shows DM4 the same way as other DM workbooks", () => {
+			const dm4Sources = [
+				{
+					downloadable: true,
+					sheetMappings: [
+						{ step: "DM4.1", sheet: "Attendance History" },
+						{ step: "DM4.2", sheet: "Timesheets" },
+					],
+				},
+				{
+					downloadable: false,
+					sheetMappings: [{ step: "DM4.3", sheet: "rptOvertimeDetails" }],
+				},
+			];
+
+			expect(isWorkbookSourceInputsPanelReady(dm4Sources)).toBe(true);
+		});
+
+		it("hides the catalog when no mapped or downloadable sources exist", () => {
+			expect(isWorkbookSourceInputsPanelReady([])).toBe(false);
+			expect(isWorkbookSourceInputsPanelReady([{ downloadable: false, sheetMappings: [] }])).toBe(
+				false,
+			);
 		});
 	});
 

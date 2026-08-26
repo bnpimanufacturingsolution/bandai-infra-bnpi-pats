@@ -75,6 +75,77 @@ const payrollLogger = logger.child({ module: "payroll-period-helper" });
 export const BANDAI_DIRECT_ANNUAL_WORK_DAYS = 313;
 export const BANDAI_SOURCE_DAILY_RATE_MAX = 700;
 export const BANDAI_WORKING_HOURS_PER_DAY = 8;
+
+/**
+ * Preview dry-run may compute money from any timesheet that already has lines.
+ * Status is a workflow gate for real Start Payroll only — money math uses
+ * timesheet lines + benefits/loans, not DRAFT vs SUBMITTED vs APPROVED.
+ * Keep Start Payroll / generatePayrollFromTimesheets on APPROVED only.
+ */
+export const PAYROLL_READY_TIMESHEET_STATUS = "APPROVED" as const;
+export const PAYROLL_PREVIEW_TIMESHEET_STATUSES = [
+	"APPROVED",
+	"DRAFT",
+	"SUBMITTED",
+	"REJECTED",
+	"REVISED",
+] as const;
+export type PayrollPreviewTimesheetStatus =
+	(typeof PAYROLL_PREVIEW_TIMESHEET_STATUSES)[number];
+
+export type PayrollPreviewReadiness = {
+	isPayrollReady: boolean;
+	readinessKey:
+		| "payroll_ready"
+		| "not_submitted"
+		| "pending_approval"
+		| "needs_correction"
+		| "unknown";
+	readinessLabel: string;
+};
+
+/** Map timesheet workflow status → preview UI readiness (money still estimated). */
+export function resolvePayrollPreviewReadiness(
+	status: string | null | undefined,
+): PayrollPreviewReadiness {
+	const normalized = String(status || "")
+		.trim()
+		.toUpperCase();
+	if (normalized === "APPROVED") {
+		return {
+			isPayrollReady: true,
+			readinessKey: "payroll_ready",
+			readinessLabel: "Payroll-ready",
+		};
+	}
+	if (normalized === "DRAFT" || normalized === "") {
+		return {
+			isPayrollReady: false,
+			readinessKey: "not_submitted",
+			readinessLabel: "Timesheet not submitted",
+		};
+	}
+	if (normalized === "SUBMITTED") {
+		return {
+			isPayrollReady: false,
+			readinessKey: "pending_approval",
+			readinessLabel: "Pending approval",
+		};
+	}
+	if (normalized === "REJECTED" || normalized === "REVISED") {
+		return {
+			isPayrollReady: false,
+			readinessKey: "needs_correction",
+			readinessLabel: "Needs correction",
+		};
+	}
+	return {
+		isPayrollReady: false,
+		readinessKey: "unknown",
+		readinessLabel: `Timesheet ${normalized || "unknown"}`,
+	};
+}
+
 const BANDAI_APPROVED_BUCKET_MULTIPLIERS = {
 	regularOt: 1.25,
 	restDay: 1.3,
@@ -86,6 +157,41 @@ const BANDAI_APPROVED_BUCKET_MULTIPLIERS = {
 	legalHolidayOt: 2.6,
 	nightDiffPremium: 0.1,
 };
+/**
+ * Sheet2 truth (Jul 11-25 proof): Path A daily-rated people earn the FULL
+ * special-holiday work premium (1.3), Path B monthly people earn the 30%
+ * premium-only. Exported so tests pin the same rule the engine uses.
+ */
+export function resolveBandaiSpecialHolidayWorkMultiplier(
+	path: "A" | "B",
+): number {
+	return path === "A"
+		? BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayFull
+		: BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayPremium;
+}
+
+/**
+ * Bandai PhilHealth cutoff contribution — proven against the Jul 11-25 Sheet2
+ * register (2026-08-25, 277/277 monthly + 573/573 daily-rated exact):
+ * - Monthly-rated (Daily Salary blank): monthly rate x 2.5% per cutoff
+ *   (no cap observed through ₱85,000/month).
+ * - Daily-rated (Daily Salary > 0, e.g. ₱600 cohort): flat ₱390 per cutoff.
+ * The gross-based percentage engine overcharged fleet PhilHealth by ~₱87k.
+ */
+export const BANDAI_PHILHEALTH_DAILY_CUTOFF_FLAT = 390;
+export const BANDAI_PHILHEALTH_MONTHLY_RATE = 0.025;
+
+export function resolveBandaiPhilHealthCutoffContribution(params: {
+	monthlyRate?: number | null;
+	dailyRate?: number | null;
+}): number {
+	const dailyRate = Number(params.dailyRate || 0);
+	if (dailyRate > 0) return roundToCentavo(BANDAI_PHILHEALTH_DAILY_CUTOFF_FLAT);
+	const monthlyRate = Number(params.monthlyRate || 0);
+	if (!(monthlyRate > 0)) return 0;
+	return roundToCentavo(monthlyRate * BANDAI_PHILHEALTH_MONTHLY_RATE);
+}
+
 
 const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 	["G", "Monthly Salary", "monthlySalary"],
@@ -186,34 +292,61 @@ const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 ] as const;
 
 /**
- * Rate basis for Bandai approved-bucket OT / premium pay.
+ * Rate basis for Bandai approved-bucket OT / premium pay (FILE_DUAL).
  *
- * Product (2026-08-12): always use BNPI direct 313 for SEMI_MONTHLY period basic:
+ * Path A (file daily-rated): when register Daily Salary is stored as dailyRate > 0:
+ *   hourly = dailyRate / 8   (e.g. 600/8 = ₱75 → OT × 1.25)
+ *
+ * Path B (file monthly-rated / default): when dailyRate is missing or ≤ 0:
  *   daily = periodBasic × 24 / 313  (= monthly×12/313 when periodBasic is half-month)
  *   hourly = daily / 8
  *
- * Source daily (periodBasic / regularDays) is retained as a diagnostic only.
- * It must not price OT — that path underpaid ~397 employees vs pure BNPI when
- * allocation daily ≤ BANDAI_SOURCE_DAILY_RATE_MAX (700).
+ * Allocation daily (periodBasic / regularDays) is diagnostic only — never prices OT.
+ * Product (2026-08-13): hardcode FILE_DUAL; no Admin toggle in first ship.
  */
 export function resolveBandaiApprovedBucketRateBasis(params: {
 	periodBasic: number;
 	sourceRegularDays: number;
+	/** Register Daily Salary; > 0 selects Path A. */
+	dailyRate?: number | null;
 }) {
 	const periodBasic = Number(params.periodBasic || 0);
 	const sourceRegularDays = Number(params.sourceRegularDays || 0);
+	const registerDailyRate = Number(params.dailyRate || 0);
 	const sourceDailyRate = sourceRegularDays > 0 ? periodBasic / sourceRegularDays : 0;
 	// Diagnostic only: would the legacy dual-path have used source daily?
 	const wouldUseSourceDailyRate =
 		sourceDailyRate > 0 && sourceDailyRate <= BANDAI_SOURCE_DAILY_RATE_MAX;
+
+	if (registerDailyRate > 0) {
+		const dailyRate = registerDailyRate;
+		const hourlyRate = dailyRate / BANDAI_WORKING_HOURS_PER_DAY;
+		return {
+			method: "FILE_DAILY_OVER_8_APPROVED_BUCKETS" as const,
+			path: "A" as const,
+			sourceRegularDays: roundToCentavo(sourceRegularDays),
+			sourceDailyRate: roundToCentavo(sourceDailyRate),
+			registerDailyRate: roundToCentavo(registerDailyRate),
+			useSourceDailyRate: false,
+			wouldUseSourceDailyRate,
+			annualWorkDays: BANDAI_DIRECT_ANNUAL_WORK_DAYS,
+			workingHoursPerDay: BANDAI_WORKING_HOURS_PER_DAY,
+			exactDailyRate: dailyRate,
+			exactHourlyRate: hourlyRate,
+			dailyRate: roundToCentavo(dailyRate),
+			hourlyRate: roundToCentavo(hourlyRate),
+		};
+	}
+
 	const dailyRate = (periodBasic * 24) / BANDAI_DIRECT_ANNUAL_WORK_DAYS;
 	const hourlyRate = dailyRate / BANDAI_WORKING_HOURS_PER_DAY;
 
 	return {
-		method: "BNPI_DIRECT_313_APPROVED_BUCKETS",
+		method: "BNPI_DIRECT_313_APPROVED_BUCKETS" as const,
+		path: "B" as const,
 		sourceRegularDays: roundToCentavo(sourceRegularDays),
 		sourceDailyRate: roundToCentavo(sourceDailyRate),
-		/** Always false for OT pricing — BNPI 313 is authoritative. */
+		registerDailyRate: 0,
 		useSourceDailyRate: false,
 		wouldUseSourceDailyRate,
 		annualWorkDays: BANDAI_DIRECT_ANNUAL_WORK_DAYS,
@@ -222,6 +355,60 @@ export function resolveBandaiApprovedBucketRateBasis(params: {
 		exactHourlyRate: hourlyRate,
 		dailyRate: roundToCentavo(dailyRate),
 		hourlyRate: roundToCentavo(hourlyRate),
+	};
+}
+
+/**
+ * Register Basic Salary for FILE_DUAL workforce classes.
+ *
+ * Path A (dailyRate > 0): file Basic = paid regular days × Daily Salary.
+ *   paidRegularDays must match Sheet2 "No. of Days" (Bandai approvedBuckets.regularDays sum).
+ *   Full-day ABSENT is already excluded from paid days → do not also full-day Absent-Amt
+ *   (would double-count). Late/EO shortfall still applies on worked days.
+ *
+ * Path B: keep period basic (Employee.basicSalary); full-day absent still charged.
+ */
+export function resolveBandaiRegisterBasicPay(params: {
+	periodBasic: number;
+	registerDailyRate?: number | null;
+	/** Sum of approvedBuckets.regularDays for the period (preferred). */
+	paidRegularDays?: number | null;
+	/** Fallback when no buckets: count of PRESENT/INCOMPLETE (not ABSENT). */
+	presentFallbackDays?: number | null;
+}): {
+	basicPay: number;
+	paidRegularDays: number;
+	path: "A" | "B";
+	method: "FILE_PAID_DAYS_X_DAILY" | "PERIOD_BASIC";
+	/** When true, set full-day absentDeduction = 0 (days already out of Basic). */
+	suppressFullDayAbsentDeduction: boolean;
+	registerDailyRate: number;
+} {
+	const periodBasic = Number(params.periodBasic || 0);
+	const registerDailyRate = Number(params.registerDailyRate || 0);
+	if (registerDailyRate > 0) {
+		// Prefer explicit bucket sum (including 0). Only fall back when buckets absent.
+		const hasBucketDays =
+			params.paidRegularDays !== null && params.paidRegularDays !== undefined;
+		const paidRegularDays = hasBucketDays
+			? Math.max(0, Number(params.paidRegularDays))
+			: Math.max(0, Number(params.presentFallbackDays || 0));
+		return {
+			basicPay: roundToCentavo(paidRegularDays * registerDailyRate),
+			paidRegularDays: roundToCentavo(paidRegularDays),
+			path: "A",
+			method: "FILE_PAID_DAYS_X_DAILY",
+			suppressFullDayAbsentDeduction: true,
+			registerDailyRate: roundToCentavo(registerDailyRate),
+		};
+	}
+	return {
+		basicPay: roundToCentavo(periodBasic),
+		paidRegularDays: 0,
+		path: "B",
+		method: "PERIOD_BASIC",
+		suppressFullDayAbsentDeduction: false,
+		registerDailyRate: 0,
 	};
 }
 
@@ -429,7 +616,12 @@ function getBandaiApprovedBuckets(day: any): Record<string, any> | null {
 	return Object.keys(approvedBuckets).length ? approvedBuckets : null;
 }
 
-function calculateBandaiApprovedBucketPay(days: any[], periodBasic: number) {
+function calculateBandaiApprovedBucketPay(
+	days: any[],
+	periodBasic: number,
+	/** Register Daily Salary; > 0 → Path A hourly = dailyRate/8 */
+	employeeDailyRate?: number | null,
+) {
 	if (!(periodBasic > 0)) return null;
 
 	const totals = {
@@ -467,12 +659,16 @@ function calculateBandaiApprovedBucketPay(days: any[], periodBasic: number) {
 	const rateBasis = resolveBandaiApprovedBucketRateBasis({
 		periodBasic,
 		sourceRegularDays: totals.regularDays,
+		dailyRate: employeeDailyRate,
 	});
 	const dailyRate = rateBasis.exactDailyRate;
 	const hourlyRate = rateBasis.exactHourlyRate;
-	const specialHolidayWorkMultiplier = rateBasis.useSourceDailyRate
-		? BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayFull
-		: BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayPremium;
+	// Sheet2 truth (Jul 11-25 proof): Path A daily-rated people earn the FULL
+	// special-holiday work premium (1.3 — their holiday basic is inside paid
+	// days × daily), while Path B monthly people earn the 30% premium only
+	// (their holiday basic sits in period basic). useSourceDailyRate is a stale
+	// always-false diagnostic and must not drive this choice.
+	const specialHolidayWorkMultiplier = resolveBandaiSpecialHolidayWorkMultiplier(rateBasis.path);
 	const overtimePay = roundToCentavo(
 		totals.regOtHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.regularOt,
 	);
@@ -482,9 +678,19 @@ function calculateBandaiApprovedBucketPay(days: any[], periodBasic: number) {
 	const restDayOtPay = roundToCentavo(
 		totals.rdOtHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.restDayOt,
 	);
+	// Sheet2 splits premium vs excess into two columns:
+	//   "Spc Hol OT"            = spclHrs  × hourly × work multiplier (0.3/1.3)
+	//   "Sun/Spc Hol OT Exc"    = spclOtHrs × hourly × 1.69
+	// Keep specialHolidayPay as the combined money (gross continuity) and expose
+	// the split for the register columns.
+	const specialHolidayPremiumPay = roundToCentavo(
+		totals.spclHrs * hourlyRate * specialHolidayWorkMultiplier,
+	);
+	const specialHolidayExcessPay = roundToCentavo(
+		totals.spclOtHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayOt,
+	);
 	const specialHolidayPay = roundToCentavo(
-		totals.spclHrs * hourlyRate * specialHolidayWorkMultiplier +
-			totals.spclOtHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayOt,
+		specialHolidayPremiumPay + specialHolidayExcessPay,
 	);
 	const legalHolidayPay = roundToCentavo(
 		totals.rholHrs * hourlyRate * BANDAI_APPROVED_BUCKET_MULTIPLIERS.legalHoliday +
@@ -503,9 +709,11 @@ function calculateBandaiApprovedBucketPay(days: any[], periodBasic: number) {
 	return {
 		source: "Timesheetline.metadata.bandaiPayrollSourceRepair.approvedBuckets",
 		formula: rateBasis.method,
+		path: rateBasis.path,
 		sourceDayCount,
 		sourceRegularDays: rateBasis.sourceRegularDays,
 		sourceDailyRate: rateBasis.sourceDailyRate,
+		registerDailyRate: rateBasis.registerDailyRate,
 		dailyRate: rateBasis.dailyRate,
 		hourlyRate: rateBasis.hourlyRate,
 		annualWorkDays: rateBasis.annualWorkDays,
@@ -515,6 +723,8 @@ function calculateBandaiApprovedBucketPay(days: any[], periodBasic: number) {
 		overtimePay,
 		restDayPay,
 		restDayOtPay,
+		specialHolidayPremiumPay,
+		specialHolidayExcessPay,
 		specialHolidayPay,
 		legalHolidayPay,
 		nightDiffPay,
@@ -558,8 +768,7 @@ function calculateBandaiApprovedBucketDayPay(
 			numberFromApprovedBucket(bucket.spclOtHrs) *
 				hourlyRate *
 				BANDAI_APPROVED_BUCKET_MULTIPLIERS.specialHolidayOt,
-	);
-	const legalHolidayPay = roundToCentavo(
+	);	const legalHolidayPay = roundToCentavo(
 		numberFromApprovedBucket(bucket.rholHrs) *
 			hourlyRate *
 			BANDAI_APPROVED_BUCKET_MULTIPLIERS.legalHoliday +
@@ -1393,6 +1602,7 @@ export async function generatePayrollFromTimesheets(
 							id: true,
 							employeeId: true,
 							basicSalary: true,
+							dailyRate: true,
 							payFrequency: true,
 							embeddedSchedule: true,
 							scheduleOverrides: {
@@ -1733,8 +1943,16 @@ export async function generatePayrollFromTimesheets(
 				}
 			}
 
-			// Bandai OT buckets first — when present, attendance deductions use BNPI 313 daily.
-			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(validatedDays, periodBasic);
+			// Bandai OT buckets first — FILE_DUAL hourly (Path A dailyRate/8, Path B BNPI 313).
+			// Attendance deductions still use resolveBnpiAttendanceDailyRate (not dual in this PR).
+			const registerDailyRate = Number(
+				(employee as { dailyRate?: number | null }).dailyRate ?? 0,
+			);
+			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(
+				validatedDays,
+				periodBasic,
+				registerDailyRate > 0 ? registerDailyRate : null,
+			);
 			const attendanceRate = resolveBnpiAttendanceDailyRate({
 				periodBasic,
 				estimatedMonthlyRate,
@@ -1746,7 +1964,28 @@ export async function generatePayrollFromTimesheets(
 			const hourlyRate = attendanceRate.hourlyRate;
 			const minuteRate = attendanceRate.minuteRate;
 			workingHoursPerDay = attendanceRate.workingHoursPerDay;
-			const absentDeduction = roundToCentavo(daysAbsent * dailyRate);
+
+			// Path A Basic = paid regular days × dailyRate (file Basic Salary).
+			// paid days = sum approvedBuckets.regularDays (matches Sheet2 No. of Days).
+			let presentFallbackDays = 0;
+			for (const day of validatedDays) {
+				if (day.status === "PRESENT" || day.status === "INCOMPLETE") {
+					presentFallbackDays += 1;
+				}
+			}
+			const paidRegularDaysFromBuckets = bandaiApprovedBucketPay
+				? Number(bandaiApprovedBucketPay.hours?.regularDays || 0)
+				: null;
+			const registerBasic = resolveBandaiRegisterBasicPay({
+				periodBasic,
+				registerDailyRate: registerDailyRate > 0 ? registerDailyRate : null,
+				paidRegularDays: paidRegularDaysFromBuckets,
+				presentFallbackDays,
+			});
+			// Path A: full-day ABSENT already excluded from paid days — no second full-day deduct.
+			const absentDeduction = registerBasic.suppressFullDayAbsentDeduction
+				? 0
+				: roundToCentavo(daysAbsent * dailyRate);
 
 			// Base multipliers (ordinary day) from calculator
 			const baseWorkMultiplier =
@@ -1973,7 +2212,10 @@ export async function generatePayrollFromTimesheets(
 						: 0;
 
 				const dayRegularPay = day.status === "PRESENT" ? roundToCentavo(dailyRate) : 0;
-				const dayAbsentDeduction = day.status === "ABSENT" ? roundToCentavo(dailyRate) : 0;
+				const dayAbsentDeduction =
+					day.status === "ABSENT" && !registerBasic.suppressFullDayAbsentDeduction
+						? roundToCentavo(dailyRate)
+						: 0;
 				const resolvedDayRegularPay = approvedBucketDayPay
 					? approvedBucketDayPay.regularPay
 					: dayRegularPay;
@@ -2030,8 +2272,8 @@ export async function generatePayrollFromTimesheets(
 				};
 			});
 
-			// For timesheet-based payroll, basicPay is the period basic salary
-			const basicPay = periodBasic;
+			// Path A: paidDays×dailyRate; Path B: period basic (Employee.basicSalary).
+			const basicPay = registerBasic.basicPay;
 
 			// Calculate gross pay: basic pay - absent - undertime + overtime + night diff + holiday
 			const grossPay = roundToCentavo(
@@ -2050,7 +2292,7 @@ export async function generatePayrollFromTimesheets(
 				};
 			const payrollSourceAmounts = payrollSource.amounts;
 			let grossPayWithSources = roundToCentavo(
-				grossPay + payrollSourceAmounts.grossIncludedBenefits,
+				grossPay + payrollSourceAmounts.grossIncludedBenefits + payrollSourceAmounts.leavePay,
 			);
 
 			// Get all payroll periods for this employee in the same month
@@ -2112,6 +2354,13 @@ export async function generatePayrollFromTimesheets(
 				),
 				pagIbig: roundToCentavo(monthlyContributions.pagIbig * contributionSplitFactor),
 			};
+			// Bandai PhilHealth truth (Jul 11-25 Sheet2 proof): monthly-rated =
+			// monthly rate x 2.5% / 2; daily-rated = flat ₱390 per cutoff. The
+			// gross-based percentage overcharged fleet PH by ~₱87k.
+			periodContributions.philHealth = resolveBandaiPhilHealthCutoffContribution({
+				monthlyRate: estimatedMonthlyRate,
+				dailyRate: (employee as { dailyRate?: number | null }).dailyRate,
+			});
 
 			// Calculate tax based on period gross pay
 			const periodTaxableIncome =
@@ -2224,6 +2473,8 @@ export async function generatePayrollFromTimesheets(
 				hourlyRate,
 				workingHoursPerDay,
 				totalWorkDays,
+				paidRegularDays: registerBasic.paidRegularDays,
+				registerDailyRate: registerBasic.registerDailyRate,
 				basicPay,
 				absentDeduction,
 				lateDeduction,
@@ -3066,12 +3317,22 @@ export async function previewPayrollFromTimesheets(
 	const year = periodDate.getFullYear();
 	const month = periodDate.getMonth() + 1;
 
-	const baseWhere = buildPayrollPreviewBaseWhere({
+	// Preview list/calc: any workflow status with lines (estimate). Real payroll counts stay APPROVED-only.
+	const previewBaseWhere = buildPayrollPreviewBaseWhere({
 		payrollPeriodId,
 		organizationId,
 		payFrequency: payrollPeriodData.payFrequency || null,
 		departmentId: options?.departmentId,
 		sectionId: options?.sectionId,
+		statuses: [...PAYROLL_PREVIEW_TIMESHEET_STATUSES],
+	});
+	const approvedBaseWhere = buildPayrollPreviewBaseWhere({
+		payrollPeriodId,
+		organizationId,
+		payFrequency: payrollPeriodData.payFrequency || null,
+		departmentId: options?.departmentId,
+		sectionId: options?.sectionId,
+		statuses: [PAYROLL_READY_TIMESHEET_STATUS],
 	});
 	const employeeScopeWhere = buildPayrollScopeEmployeeWhere({
 		organizationId,
@@ -3079,16 +3340,22 @@ export async function previewPayrollFromTimesheets(
 		departmentId: options?.departmentId,
 		sectionId: options?.sectionId,
 	});
-	const summaryWhere = buildPayrollPreviewIncludedWhere({
-		baseWhere,
+	// Payable / Start Payroll job size — must remain APPROVED + payroll inputs only.
+	const payrollReadyWhere = buildPayrollPreviewIncludedWhere({
+		baseWhere: approvedBaseWhere,
+		query: "",
+	});
+	// Preview table pagination — includes not-submitted / pending / correction when inputs exist.
+	const previewComputableWhere = buildPayrollPreviewIncludedWhere({
+		baseWhere: previewBaseWhere,
 		query: "",
 	});
 	const filteredWhere = buildPayrollPreviewIncludedWhere({
-		baseWhere,
+		baseWhere: previewBaseWhere,
 		query: normalizedQuery,
 		employeeId: detailEmployeeId || undefined,
 	});
-	const excludedWhere = buildPayrollPreviewExcludedWhere({ baseWhere });
+	const excludedWhere = buildPayrollPreviewExcludedWhere({ baseWhere: approvedBaseWhere });
 	const notReadyEmployeeWhere = buildPayrollPreviewNotReadyEmployeeWhere({
 		employeeScopeWhere,
 		payrollPeriodId,
@@ -3102,6 +3369,7 @@ export async function previewPayrollFromTimesheets(
 		scopeEmployeesCount,
 		approvedTimesheetsCount,
 		includedEmployeesCount,
+		previewComputableEmployeesCount,
 		notSubmittedEmployeesCount,
 		totalItems,
 	] = await Promise.all([
@@ -3109,10 +3377,13 @@ export async function previewPayrollFromTimesheets(
 			where: employeeScopeWhere,
 		}),
 		prisma.timesheet.count({
-			where: baseWhere,
+			where: approvedBaseWhere,
 		}),
 		prisma.timesheet.count({
-			where: summaryWhere,
+			where: payrollReadyWhere,
+		}),
+		prisma.timesheet.count({
+			where: previewComputableWhere,
 		}),
 		prisma.employee.count({
 			where: notSubmittedEmployeeWhere,
@@ -3258,13 +3529,18 @@ export async function previewPayrollFromTimesheets(
 		summary: {
 			scopeEmployeesCount,
 			approvedTimesheetsCount,
+			/** APPROVED + salary + schedule — Start Payroll / payable count (unchanged contract). */
 			includedEmployeesCount,
+			/** Dry-run rows available including not-submitted / pending timesheets. */
+			previewComputableEmployeesCount,
 			excludedEmployeesCount: Math.max(0, scopeEmployeesCount - includedEmployeesCount),
 			approvedExcludedEmployeesCount: Math.max(
 				0,
 				approvedTimesheetsCount - includedEmployeesCount,
 			),
 			notSubmittedEmployeesCount,
+			/** True when estimates include rows that are not payroll-ready (workflow). */
+			estimatedIncludesNonApproved: previewComputableEmployeesCount > includedEmployeesCount,
 			estimatedGrossPay: roundToCentavo(estimatedGrossPay),
 			estimatedTotalDeductions: roundToCentavo(estimatedTotalDeductions),
 			estimatedNetPay: roundToCentavo(estimatedNetPay),
@@ -3285,6 +3561,7 @@ export async function previewPayrollFromTimesheets(
 
 const payrollPreviewTimesheetSelect = {
 	id: true,
+	status: true,
 	employeeId: true,
 	timesheetlines: {
 		where: {
@@ -3300,6 +3577,7 @@ const payrollPreviewTimesheetSelect = {
 			id: true,
 			employeeId: true,
 			basicSalary: true,
+			dailyRate: true,
 			payFrequency: true,
 			embeddedSchedule: true,
 			person: {
@@ -3349,6 +3627,7 @@ const payrollPreviewListTimesheetSelect = {
 			id: true,
 			employeeId: true,
 			basicSalary: true,
+			dailyRate: true,
 			payFrequency: true,
 			person: {
 				select: {
@@ -3375,6 +3654,7 @@ const payrollPreviewExcludedEmployeeSelect = {
 	id: true,
 	employeeId: true,
 	basicSalary: true,
+	dailyRate: true,
 	payFrequency: true,
 	embeddedSchedule: true,
 	person: {
@@ -3414,6 +3694,8 @@ function buildPayrollPreviewIncludedEmployees(timesheets: any[]) {
 			employee.employeeId ||
 			employee.id ||
 			"Unknown employee";
+		const timesheetStatus = String(timesheet.status || "MISSING");
+		const readiness = resolvePayrollPreviewReadiness(timesheetStatus);
 
 		return {
 			employeeId: employee.id || timesheet.employeeId || null,
@@ -3424,6 +3706,10 @@ function buildPayrollPreviewIncludedEmployees(timesheets: any[]) {
 			payFrequency: employee.payFrequency || "MONTHLY",
 			basicSalary: employee.basicSalary || 0,
 			timesheetId: timesheet.id,
+			timesheetStatus,
+			isPayrollReady: readiness.isPayrollReady,
+			readinessKey: readiness.readinessKey,
+			readinessLabel: readiness.readinessLabel,
 			payrollComputationStatus: "DETAIL_REQUIRED",
 		};
 	});
@@ -3435,14 +3721,24 @@ function buildPayrollPreviewBaseWhere(params: {
 	payFrequency?: PayFrequency | null;
 	departmentId?: string | null;
 	sectionId?: string | null;
+	/** Default APPROVED only. Preview list uses PAYROLL_PREVIEW_TIMESHEET_STATUSES. */
+	statuses?: readonly string[] | string[];
 }): Prisma.TimesheetWhereInput {
 	const { payrollPeriodId, organizationId, payFrequency } = params;
 	const scope = normalizePayrollScope(params);
+	const statuses =
+		params.statuses && params.statuses.length > 0
+			? [...params.statuses]
+			: [PAYROLL_READY_TIMESHEET_STATUS];
+	const statusFilter =
+		statuses.length === 1
+			? (statuses[0] as any)
+			: ({ in: statuses as any[] } as const);
 
 	return {
 		organizationId,
 		payrollPeriodId,
-		status: "APPROVED",
+		status: statusFilter,
 		isDeleted: false,
 		employee: {
 			is: {
@@ -3795,6 +4091,10 @@ type BandaiPayrollRegisterInput = {
 	hourlyRate?: number;
 	workingHoursPerDay?: number;
 	totalWorkDays: number;
+	/** When set (Path A), register No. of Days uses paid regular days. */
+	paidRegularDays?: number;
+	/** Register Daily Salary column when Path A (file Daily Salary). */
+	registerDailyRate?: number;
 	basicPay: number;
 	absentDeduction: number;
 	lateDeduction: number;
@@ -3854,16 +4154,26 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 	const totalReceivable = roundToCentavo(
 		input.netPay + input.payrollSourceAmounts.receivableOnlyBenefits,
 	);
+	const isPathARegister = Number(input.registerDailyRate || 0) > 0;
+	const registerDaily = isPathARegister
+		? Number(input.registerDailyRate)
+		: input.dailyRate;
+	// Path A: Sheet2 "No. of Days" = paid regular days (bucket sum), not non-REST count.
+	const registerDays = isPathARegister
+		? Number(input.paidRegularDays || 0)
+		: input.totalWorkDays;
 	const sourceRow = {
 		monthlySalary: roundToCentavo(input.estimatedMonthlyRate),
-		dailySalary: roundToCentavo(input.dailyRate),
+		dailySalary: roundToCentavo(registerDaily),
 		hourlySalary: computeEmployeePayrollHourlySalarySnapshot({
 			dailyRate: input.dailyRate,
 			hourlyRate: input.hourlyRate,
 			workingHoursPerDay: input.workingHoursPerDay,
 		}),
-		numberOfDays: roundToCentavo(input.totalWorkDays),
-		basicPay: roundToCentavo(input.periodBasic),
+		numberOfDays: roundToCentavo(registerDays),
+		// Use computed basicPay (Path A: paidDays×dailyRate; Path B: periodBasic).
+		// Previously forced periodBasic and ignored Path A proration.
+		basicPay: roundToCentavo(input.basicPay),
 		absentDeduction: roundToCentavo(input.absentDeduction),
 		// shortfallDeduction is already late+earlyOut; do not triple-sum for register UT/Late-Amt.
 		lateUndertimeAmount: roundToCentavo(
@@ -3877,12 +4187,16 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		restDayHoursPay: roundToCentavo(bucket ? Number(bucket.restDayPay || 0) : 0),
 		restDayOtHours: roundToCentavo(Number(bucketHours.rdOtHrs || 0)),
 		restDayOtPay: roundToCentavo(bucket ? Number(bucket.restDayOtPay || 0) : 0),
-		specialHolidayOtHours: roundToCentavo(
-			Number(bucketHours.spclHrs || 0) + Number(bucketHours.spclOtHrs || 0),
+		// Sheet2 splits special-holiday premium (spclHrs × mult) from the 1.69
+		// excess (spclOtHrs). Hours columns split the same way.
+		specialHolidayOtHours: roundToCentavo(Number(bucketHours.spclHrs || 0)),
+		specialHolidayOtPay: roundToCentavo(
+			bucket ? Number(bucket.specialHolidayPremiumPay || 0) : 0,
 		),
-		specialHolidayOtPay: roundToCentavo(bucket ? Number(bucket.specialHolidayPay || 0) : 0),
-		sunSpecialHolidayOtExcessHours: 0,
-		sunSpecialHolidayOtExcessPay: 0,
+		sunSpecialHolidayOtExcessHours: roundToCentavo(Number(bucketHours.spclOtHrs || 0)),
+		sunSpecialHolidayOtExcessPay: roundToCentavo(
+			bucket ? Number(bucket.specialHolidayExcessPay || 0) : 0,
+		),
 		specialHolidayRestDayOtHours: 0,
 		specialHolidayRestDayOtPay: 0,
 		specialRestDayExcessHours: 0,
@@ -3960,6 +4274,11 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		thirteenthMonthPay: sourceBy([], ["13th Month"], ["COMPENSATION"]),
 		aclVlConversion: sourceBy([], ["ACL/VL Conversion"], ["COMPENSATION"]),
 		otMealAllowance: sourceBy(["OTM"], ["OT Meal Allowance"], ["COMPENSATION"]),
+		attendanceRecognitionProgram: sourceBy(
+			["ARP"],
+			["Attendance Recognition Program"],
+			["COMPENSATION"],
+		),
 		perfectAttendance: sourceBy(["PFA"], ["Perfect Attendance"], ["COMPENSATION"]),
 		mealAllowance: sourceBy(["MLA"], ["Meal Allowance"], ["COMPENSATION"]),
 		lineLeaderAllowance: sourceBy(["LLA"], ["Line Leader Allowance"], ["COMPENSATION"]),
@@ -4637,7 +4956,14 @@ function calculatePayrollPreviewDataset(params: {
 				}
 			}
 
-			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(validatedDays, periodBasic);
+			const registerDailyRatePreview = Number(
+				(employee as { dailyRate?: number | null }).dailyRate ?? 0,
+			);
+			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(
+				validatedDays,
+				periodBasic,
+				registerDailyRatePreview > 0 ? registerDailyRatePreview : null,
+			);
 			const attendanceRate = resolveBnpiAttendanceDailyRate({
 				periodBasic,
 				estimatedMonthlyRate,
@@ -4649,7 +4975,26 @@ function calculatePayrollPreviewDataset(params: {
 			const hourlyRate = attendanceRate.hourlyRate;
 			const minuteRate = attendanceRate.minuteRate;
 			workingHoursPerDay = attendanceRate.workingHoursPerDay;
-			const absentDeduction = roundToCentavo(daysAbsent * dailyRate);
+
+			let presentFallbackDaysPreview = 0;
+			for (const day of validatedDays) {
+				if (day.status === "PRESENT" || day.status === "INCOMPLETE") {
+					presentFallbackDaysPreview += 1;
+				}
+			}
+			const paidRegularDaysPreview = bandaiApprovedBucketPay
+				? Number(bandaiApprovedBucketPay.hours?.regularDays || 0)
+				: null;
+			const registerBasicPreview = resolveBandaiRegisterBasicPay({
+				periodBasic,
+				registerDailyRate:
+					registerDailyRatePreview > 0 ? registerDailyRatePreview : null,
+				paidRegularDays: paidRegularDaysPreview,
+				presentFallbackDays: presentFallbackDaysPreview,
+			});
+			const absentDeduction = registerBasicPreview.suppressFullDayAbsentDeduction
+				? 0
+				: roundToCentavo(daysAbsent * dailyRate);
 
 			const baseWorkMultiplier =
 				getRateMultiplier(params.rateMultipliers, "ordinaryDay", "work") ?? 1.0;
@@ -4758,12 +5103,18 @@ function calculatePayrollPreviewDataset(params: {
 				totalRestDayPay = bandaiApprovedBucketPay.restDayPay + bandaiApprovedBucketPay.restDayOtPay;
 			}
 
-			const basicPay = roundToCentavo(periodBasic - absentDeduction - shortfallDeduction);
+			// Basic Salary column = Path A paidDays×daily or Path B periodBasic.
+			const basicPay = registerBasicPreview.basicPay;
 			const overtimePay = roundToCentavo(totalOvertimePay);
 			const nightDiffPay = roundToCentavo(totalNightDiffPay);
 			const holidayPay = roundToCentavo(totalHolidayPay + totalRestDayPay);
 			const grossPay = roundToCentavo(
-				basicPay + overtimePay + nightDiffPay + holidayPay,
+				basicPay -
+					absentDeduction -
+					shortfallDeduction +
+					overtimePay +
+					nightDiffPay +
+					holidayPay,
 			);
 
 			const employeePayrollsThisMonth =
@@ -4781,7 +5132,7 @@ function calculatePayrollPreviewDataset(params: {
 				)
 				.reduce((sum, payroll) => sum + payroll.grossPay, 0);
 			const grossPayWithSources = roundToCentavo(
-				grossPay + payrollSourceAmounts.grossIncludedBenefits,
+				grossPay + payrollSourceAmounts.grossIncludedBenefits + payrollSourceAmounts.leavePay,
 			);
 			const actualMonthlyGross = previousPeriodsGross + grossPayWithSources;
 
@@ -4810,6 +5161,13 @@ function calculatePayrollPreviewDataset(params: {
 				),
 				pagIbig: roundToCentavo(monthlyContributions.pagIbig * contributionSplitFactor),
 			};
+			// Bandai PhilHealth truth (Jul 11-25 Sheet2 proof): monthly-rated =
+			// monthly rate x 2.5% / 2; daily-rated = flat ₱390 per cutoff. The
+			// gross-based percentage overcharged fleet PH by ~₱87k.
+			periodContributions.philHealth = resolveBandaiPhilHealthCutoffContribution({
+				monthlyRate: estimatedMonthlyRate,
+				dailyRate: (employee as { dailyRate?: number | null }).dailyRate,
+			});
 
 			const periodTaxableIncome =
 				grossPayWithSources -
@@ -4849,6 +5207,8 @@ function calculatePayrollPreviewDataset(params: {
 				hourlyRate,
 				workingHoursPerDay,
 				totalWorkDays,
+				paidRegularDays: registerBasicPreview.paidRegularDays,
+				registerDailyRate: registerBasicPreview.registerDailyRate,
 				basicPay,
 				absentDeduction,
 				lateDeduction,
@@ -4874,6 +5234,9 @@ function calculatePayrollPreviewDataset(params: {
 
 			if (!params.includeRows) continue;
 
+			const timesheetStatus = String(timesheet.status || "MISSING");
+			const readiness = resolvePayrollPreviewReadiness(timesheetStatus);
+
 			rows.push({
 				employeeId: employee.id,
 				employeeCode: employee.employeeId,
@@ -4883,6 +5246,10 @@ function calculatePayrollPreviewDataset(params: {
 				payFrequency: employee.payFrequency || "MONTHLY",
 				basicSalary: employee.basicSalary,
 				timesheetId: timesheet.id,
+				timesheetStatus,
+				isPayrollReady: readiness.isPayrollReady,
+				readinessKey: readiness.readinessKey,
+				readinessLabel: readiness.readinessLabel,
 				basicPay,
 				overtimePay,
 				nightDiffPay,
@@ -4934,6 +5301,12 @@ function calculatePayrollPreviewDataset(params: {
 					overtimeRate: roundToCentavo(hourlyRate * baseOtMultiplier),
 					nightDiffRate: roundToCentavo(hourlyRate * baseNightDiffPremiumMultiplier),
 					zeroSalaryGuardrailApplied: zeroSalaryGuardrail.applied,
+					timesheetStatus,
+					isPayrollReady: readiness.isPayrollReady,
+					readinessKey: readiness.readinessKey,
+					readinessLabel: readiness.readinessLabel,
+					/** Status does not change money; lines/benefits do. Workflow gate for Start Payroll only. */
+					estimateOnly: !readiness.isPayrollReady,
 				},
 			});
 		} catch (error) {

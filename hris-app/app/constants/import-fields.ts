@@ -20,6 +20,12 @@ export const REQUIRED_FIELDS = [
 		label: "Basic Salary",
 		description: "Payroll-period basic salary amount",
 	},
+	{
+		key: "DAILY_SALARY",
+		label: "Daily Salary",
+		description:
+			"Optional register Daily Salary (Path A OT: hourly = daily/8). Leave blank for monthly Path B BNPI.",
+	},
 	{ key: "PAY_FREQUENCY", label: "Pay Frequency", description: "MONTHLY, SEMI_MONTHLY, etc." },
 	{
 		key: "HIRE_DATE",

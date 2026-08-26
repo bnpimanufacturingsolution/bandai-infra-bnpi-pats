@@ -61,6 +61,21 @@ export type WorkSharingDayAssignment = {
 	sourceRow: number;
 };
 
+/**
+ * Explicit WorkSharing flag=0 day (not scheduled).
+ * Must become REST_DAY / isOff — otherwise empty bio charges ABSENT vs computation.
+ */
+export type WorkSharingDayOffAssignment = {
+	employeeExternalId: string;
+	sourceEmployeeId: string;
+	employeeName: string;
+	date: Date;
+	dateKey: string;
+	sourceSheet: string;
+	sourceRow: number;
+	reason: string;
+};
+
 export type ParseWorkSharingWorkbookResult = {
 	sheetName: string;
 	dateColumns: WorkSharingDateColumn[];
@@ -68,6 +83,8 @@ export type ParseWorkSharingWorkbookResult = {
 	assignments: WorkSharingSourceAssignment[];
 	/** Day-level shifts (employee × date with flag 1). */
 	dayAssignments: WorkSharingDayAssignment[];
+	/** Day-level offs (employee × date with explicit flag 0 and no flag 1). */
+	dayOffAssignments: WorkSharingDayOffAssignment[];
 	skippedRows: Array<{ row: number; reason: string }>;
 	effectiveFrom: string;
 	effectiveTo: string;
@@ -193,6 +210,13 @@ export function isWorkSharingActiveFlag(value: unknown): boolean {
 	return text === "1" || text.toLowerCase() === "true" || text.toLowerCase() === "yes";
 }
 
+/** Explicit off flag (0). Empty/blank is unknown — not treated as off. */
+export function isWorkSharingOffFlag(value: unknown): boolean {
+	if (value === false || value === 0) return true;
+	const text = clean(value);
+	return text === "0" || text.toLowerCase() === "false" || text.toLowerCase() === "no";
+}
+
 export function pickWorkSharingSheetName(sheetNames: string[]): string | null {
 	if (!sheetNames.length) return null;
 	return (
@@ -291,6 +315,11 @@ export function parseWorkSharingScheduleWorkbook(
 			}
 		>
 	>();
+	/** Track explicit 0/1 per emp|date across multi-shift rows (1 wins). */
+	const dayFlagVotes = new Map<
+		string,
+		{ on: boolean; off: boolean; meta: { sourceEmployeeId: string; employeeName: string; sourceRow: number } }
+	>();
 
 	for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
 		const row = rows[rowIndex] || [];
@@ -330,26 +359,42 @@ export function parseWorkSharingScheduleWorkbook(
 
 		let activeOnAnyDay = false;
 		for (const column of dateColumns) {
-			if (!isWorkSharingActiveFlag(row[column.index])) continue;
-			activeOnAnyDay = true;
 			const dateKey = toWorkSharingDateKey(column.date);
-			dayAssignments.push({
-				...meta,
-				date: column.date,
-				dateKey,
-			});
+			const voteKey = `${employeeExternalId}|${dateKey}`;
+			const cell = row[column.index];
+			const vote = dayFlagVotes.get(voteKey) || {
+				on: false,
+				off: false,
+				meta: {
+					sourceEmployeeId,
+					employeeName: meta.employeeName,
+					sourceRow,
+				},
+			};
+			if (isWorkSharingActiveFlag(cell)) {
+				vote.on = true;
+				activeOnAnyDay = true;
+				dayAssignments.push({
+					...meta,
+					date: column.date,
+					dateKey,
+				});
 
-			let shiftMap = employeeShiftBuckets.get(employeeExternalId);
-			if (!shiftMap) {
-				shiftMap = new Map();
-				employeeShiftBuckets.set(employeeExternalId, shiftMap);
+				let shiftMap = employeeShiftBuckets.get(employeeExternalId);
+				if (!shiftMap) {
+					shiftMap = new Map();
+					employeeShiftBuckets.set(employeeExternalId, shiftMap);
+				}
+				let bucket = shiftMap.get(shiftLabel);
+				if (!bucket) {
+					bucket = { meta, dates: [] };
+					shiftMap.set(shiftLabel, bucket);
+				}
+				if (!bucket.dates.includes(dateKey)) bucket.dates.push(dateKey);
+			} else if (isWorkSharingOffFlag(cell)) {
+				vote.off = true;
 			}
-			let bucket = shiftMap.get(shiftLabel);
-			if (!bucket) {
-				bucket = { meta, dates: [] };
-				shiftMap.set(shiftLabel, bucket);
-			}
-			if (!bucket.dates.includes(dateKey)) bucket.dates.push(dateKey);
+			dayFlagVotes.set(voteKey, vote);
 		}
 
 		if (!activeOnAnyDay) {
@@ -364,6 +409,23 @@ export function parseWorkSharingScheduleWorkbook(
 			}
 			skippedRows.push({ row: sourceRow, reason: "no_active_day_flags" });
 		}
+	}
+
+	const dayOffAssignments: WorkSharingDayOffAssignment[] = [];
+	for (const [voteKey, vote] of dayFlagVotes) {
+		if (vote.on || !vote.off) continue;
+		const [employeeExternalId, dateKey] = voteKey.split("|");
+		const date = new Date(`${dateKey}T00:00:00.000Z`);
+		dayOffAssignments.push({
+			employeeExternalId,
+			sourceEmployeeId: vote.meta.sourceEmployeeId,
+			employeeName: vote.meta.employeeName,
+			date,
+			dateKey,
+			sourceSheet: sheetName,
+			sourceRow: vote.meta.sourceRow,
+			reason: `WorkSharing day flag OFF (row ${vote.meta.sourceRow})`,
+		});
 	}
 
 	// Primary assignment = shift with most active days (ties: first seen / lowest sourceRow).
@@ -406,12 +468,18 @@ export function parseWorkSharingScheduleWorkbook(
 			a.employeeExternalId.localeCompare(b.employeeExternalId) ||
 			a.dateKey.localeCompare(b.dateKey),
 	);
+	dayOffAssignments.sort(
+		(a, b) =>
+			a.employeeExternalId.localeCompare(b.employeeExternalId) ||
+			a.dateKey.localeCompare(b.dateKey),
+	);
 
 	return {
 		sheetName,
 		dateColumns,
 		assignments,
 		dayAssignments,
+		dayOffAssignments,
 		skippedRows,
 		effectiveFrom: toWorkSharingDateKey(effectiveFrom),
 		effectiveTo: toWorkSharingDateKey(effectiveTo),

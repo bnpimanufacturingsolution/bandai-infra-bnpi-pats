@@ -34,6 +34,7 @@ const IMPORT_MODAL_STATE_PARAMS = [
  *   (all benefits and deductions; statutory/monthly-payment register is not a UI path)
  * - `manpower-databank` → DM3 BNPI employee roster refresh (create/update master data)
  * - `worksharing-schedule` → DM3.2 BNPI WorkSharingSchedule employee schedule assignments
+ * - `period-leave` → DM3 BNPI period leave usage (paid days -> LVP leave pay)
  * - `biometrics` / `overtime` → DM4 attendance sources
  */
 const WORKBOOK_PAGE_STATE_PARAMS = ["workbook", "runId", "importJobId", "upload"] as const;
@@ -47,13 +48,33 @@ export type WorkbookUploadKind =
 	| "compensation"
 	| "deduction"
 	| "manpower-databank"
-	| "worksharing-schedule";
+	| "worksharing-schedule"
+	| "period-leave";
 
 export const ADMIN_MIGRATION_WORKBOOK_IDS = ["dm1", "dm2", "dm3", "dm4"] as const;
 export type AdminMigrationWorkbookId = (typeof ADMIN_MIGRATION_WORKBOOK_IDS)[number];
 
 export function isAdminMigrationWorkbookId(value: string | null | undefined): value is AdminMigrationWorkbookId {
 	return Boolean(value && (ADMIN_MIGRATION_WORKBOOK_IDS as readonly string[]).includes(value));
+}
+
+export type WorkbookSourceInputLike = {
+	downloadable?: boolean;
+	sheetMappings?: unknown[];
+};
+
+/**
+ * Source-input catalog panel is shown on every DM workbook page (including DM4)
+ * when at least one mapped or downloadable source exists.
+ */
+export function isWorkbookSourceInputsPanelReady(
+	sources: WorkbookSourceInputLike[] | null | undefined,
+): boolean {
+	return (sources || []).some(
+		(source) =>
+			Boolean(source.downloadable) ||
+			(Array.isArray(source.sheetMappings) && source.sheetMappings.length > 0),
+	);
 }
 
 function workbookUploadParamValue(kind: WorkbookUploadKind): string {
@@ -72,7 +93,8 @@ export function getWorkbookUploadKind(
 		value === "compensation" ||
 		value === "deduction" ||
 		value === "manpower-databank" ||
-		value === "worksharing-schedule"
+		value === "worksharing-schedule" ||
+		value === "period-leave"
 	) {
 		return value;
 	}
