@@ -151,6 +151,7 @@ const hrRoutes = [
 	route("jobs", "routes/hr/jobs.tsx"),
 	route("attendance", "routes/hr/attendance.tsx"),
 	route("time-corrections", "routes/hr/time-corrections.tsx"),
+	route("day-status-review", "routes/hr/day-status-review.tsx"),
 	route("performance", "routes/hr/performance.tsx"),
 	route("tasks", "routes/hr/tasks.tsx"),
 	route("performance/:type", "routes/hr/performance.$type.tsx"),

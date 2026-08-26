@@ -28,6 +28,9 @@ import {
 } from "./employee-schedule.helper";
 import { buildBreakdownFromTimesheetLines } from "./timesheet.helper";
 import {
+	applyUniversalBandaiMlaSources,
+	BANDAI_UNIVERSAL_MLA_ORG_IDS,
+	BANDAI_UNIVERSAL_MLA_WORKFORCE_SOURCE,
 	resolvePayrollBenefitSources,
 	type PayrollBenefitSourceInput,
 } from "./payroll-benefit-source.helper";
@@ -4665,12 +4668,34 @@ export async function buildPayrollSourceAmountsByEmployeeId(
 		}
 	}
 
-	const resolvedBenefits = resolvePayrollBenefitSources(
-		employeeBenefits.map((row: any) => ({
-			...row,
-			payrollPeriodCode: row.payrollPeriod?.code || null,
-		})) as PayrollBenefitSourceInput[],
-		periodForEnsure,
+	let mlaScopedEmployeeIds: string[] | undefined;
+	if (BANDAI_UNIVERSAL_MLA_ORG_IDS.has(params.organizationId)) {
+		const directEmployees = await prisma.employee.findMany({
+			where: {
+				id: { in: uniqueEmployeeIds },
+				organizationId: params.organizationId,
+				workforceSource: BANDAI_UNIVERSAL_MLA_WORKFORCE_SOURCE,
+			},
+			select: { id: true },
+		});
+		const directSet = new Set(directEmployees.map((e: any) => e.id));
+		mlaScopedEmployeeIds = uniqueEmployeeIds.filter((id) => directSet.has(id));
+	}
+
+	const resolvedBenefits = applyUniversalBandaiMlaSources(
+		resolvePayrollBenefitSources(
+			employeeBenefits.map((row: any) => ({
+				...row,
+				payrollPeriodCode: row.payrollPeriod?.code || null,
+			})) as PayrollBenefitSourceInput[],
+			periodForEnsure,
+		),
+		{
+			organizationId: params.organizationId,
+			employeeIds: uniqueEmployeeIds,
+			scopedEmployeeIds: mlaScopedEmployeeIds,
+			period: periodForEnsure,
+		},
 	);
 
 	for (const source of resolvedBenefits) {

@@ -29,6 +29,8 @@ const payrollperiod_zod_2 = require("../../zod/payrollperiod.zod");
 const tax_calculator_helper_1 = require("../../helper/tax-calculator.helper");
 const payroll_period_helper_1 = require("../../helper/payroll-period.helper");
 const payroll_period_code_helper_1 = require("../../helper/payroll-period-code.helper");
+const day_status_resolution_helper_1 = require("../../helper/day-status-resolution.helper");
+const bnpi_period_leave_import_helper_1 = require("../../helper/bnpi-period-leave-import.helper");
 const payroll_generation_job_service_1 = require("./payroll-generation-job.service");
 const payroll_cycle_helper_1 = require("./payroll-cycle.helper");
 const logger = (0, logger_helper_1.getLogger)();
@@ -1803,6 +1805,235 @@ const controller = (prisma) => {
             res.status(500).json((0, error_handler_1.buildErrorResponse)("Failed bulk payroll period adjustment", 500));
         }
     });
+    /**
+     * READ-ONLY day-status resolution for a payroll period under the Mon–Sat
+     * schedule truth (REC-20260826-DAY-STATUS-REVIEW-QUEUE). Classifies every
+     * scheduled employee-day by evidence precedence and surfaces bare
+     * no-shows as a REVIEW QUEUE. Never writes; never prices payroll.
+     */
+    const isDayStatusReviewer = (role) => ["super_admin", "admin", "hris-admin", "hris-hr-manager", "hris-hr-user"].includes(role || "");
+    const resolvePeriodIdentifier = (organizationId, id) => __awaiter(void 0, void 0, void 0, function* () {
+        let period = yield prisma.payrollPeriod.findFirst({ where: { id, organizationId, isDeleted: false } });
+        if (!period) {
+            period = yield prisma.payrollPeriod.findFirst({ where: { code: id, organizationId, isDeleted: false }, orderBy: { startDate: "desc" } });
+        }
+        return period;
+    });
+    const loadDayStatusBaseSources = (organizationId, period) => __awaiter(void 0, void 0, void 0, function* () {
+        const windowStart = period.startDate.toISOString().slice(0, 10);
+        const windowEnd = period.endDate.toISOString().slice(0, 10);
+        const employees = yield prisma.employee.findMany({
+            where: { organizationId, isDeleted: false },
+            select: { id: true, employeeId: true, employmentHireDate: true, employmentTerminationDate: true, person: { select: { personalInfo: true } } },
+        });
+        const idToCode = new Map();
+        const dayStatusEmployees = [];
+        for (const e of employees) {
+            const code = String(e.employeeId || "").trim().padStart(5, "0");
+            if (!code) continue;
+            idToCode.set(e.id, code);
+            const info = (e.person && e.person.personalInfo) || {};
+            let term = e.employmentTerminationDate ? new Date(e.employmentTerminationDate).toISOString().slice(0, 10) : null;
+            if (term && new Date(`${term}T00:00:00Z`).getUTCFullYear() <= 1971) term = null;
+            dayStatusEmployees.push({
+                code,
+                name: [info.firstName, info.lastName].filter(Boolean).join(" ").trim(),
+                tenureStart: e.employmentHireDate ? new Date(e.employmentHireDate).toISOString().slice(0, 10) : null,
+                tenureEnd: term,
+            });
+        }
+        const punches = yield prisma.attendance.findMany({
+            where: { organizationId, isDeleted: false, date: { gte: period.startDate, lte: period.endDate } },
+            select: { employeeId: true, date: true },
+        });
+        const punchKeys = new Set();
+        for (const p of punches) {
+            const code = idToCode.get(p.employeeId);
+            if (!code) continue;
+            punchKeys.add(`${code}|${new Date(p.date).toISOString().slice(0, 10)}`);
+        }
+        // Imported PAID leave (LVP) day dates live in the benefit notes token.
+        const leaveByCodeDate = new Map();
+        let lvpRows = 0;
+        try {
+            const lvpType = yield prisma.benefitType.findFirst({
+                where: { organizationId, isDeleted: false, code: { equals: "LVP", mode: "insensitive" } },
+                select: { id: true },
+            });
+            if (lvpType) {
+                const rows = yield prisma.employeeBenefit.findMany({
+                    where: { organizationId, isDeleted: false, payrollPeriodId: period.id, benefitTypeId: lvpType.id },
+                    select: { employeeId: true, notes: true },
+                });
+                lvpRows = rows.length;
+                for (const row of rows) {
+                    const code = idToCode.get(row.employeeId);
+                    if (!code) continue;
+                    const cur = leaveByCodeDate.get(code) || new Map();
+                    for (const date of day_status_resolution_helper_1.parseBenefitNotesLeaveDates(row.notes)) {
+                        cur.set(date, { date, days: 1, paidFlag: true, label: "LVP import" });
+                    }
+                    if (cur.size) leaveByCodeDate.set(code, cur);
+                }
+            }
+        }
+        catch (leaveErr) {
+            payrollPeriodLogger.warn(`day-status-review: LVP evidence load failed (continuing without): ${leaveErr}`);
+        }
+        return { window: { start: windowStart, end: windowEnd }, employees: dayStatusEmployees, punchKeys, leaveByCodeDate, lvpRows };
+    });
+    const buildDayStatusReviewPayload = (period, baseSources, options) => {
+        const resolution = day_status_resolution_helper_1.buildDayStatusResolution({
+            window: baseSources.window,
+            employees: baseSources.employees,
+            punchKeys: baseSources.punchKeys,
+            schedulePositiveKeys: (options && options.schedulePositiveKeys) || undefined,
+            leaveByCodeDate: baseSources.leaveByCodeDate,
+            awolByCodeDate: (options && options.awolByCodeDate) || undefined,
+        });
+        const offset = Math.max(0, Number((options && options.offset) || 0) || 0);
+        const limitRaw = Number((options && options.limit) == null ? 1000 : (options && options.limit));
+        const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 1000, 1), 5000);
+        const items = resolution.reviewItems.slice(offset, offset + limit);
+        return {
+            period: { id: period.id, code: period.code || null, name: period.name || null, startDate: baseSources.window.start, endDate: baseSources.window.end },
+            scheduleModel: "MON_SAT_SUNDAY_REST",
+            precedence: [
+                "OUT_OF_TENURE",
+                "REST_SUNDAY",
+                "PRESENT_PUNCH",
+                "PRESENT_SCHEDULE_POSITIVE",
+                "ABSENT_AWOL_EVIDENCED",
+                "LEAVE_PAID/LEAVE_UNPAID",
+                "REVIEW_NO_EVIDENCE",
+            ],
+            readOnly: true,
+            estimateNote: "ESTIMATE_ONLY: exposure = reviewDays x daily basis. Never priced into payroll without an explicit operator-approved write path.",
+            scope: Object.assign(Object.assign({}, resolution.scope), { importedPaidLeaveRows: baseSources.lvpRows }),
+            buckets: resolution.buckets,
+            weekdayHistogramReview: resolution.weekdayHistogramReview,
+            reviewQueue: { total: resolution.reviewItems.length, offset, limit, returned: items.length, truncated: offset + items.length < resolution.reviewItems.length, items },
+            evidencedAbsent: { total: resolution.evidencedAbsentItems.length, items: resolution.evidencedAbsentItems.slice(0, 1000) },
+            perEmployee: resolution.perEmployee,
+            refinement: (options && options.refinement) || null,
+        };
+    };
+    const getDayStatusReview = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b;
+        try {
+            const organizationId = req.organizationId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.organizationId);
+            if (!organizationId) {
+                res.status(401).json((0, error_handler_1.buildErrorResponse)("Organization context missing", 401));
+                return;
+            }
+            if (!isDayStatusReviewer(req.role)) {
+                res.status(403).json((0, error_handler_1.buildErrorResponse)("You are not authorized to view the day-status review", 403));
+                return;
+            }
+            const period = yield resolvePeriodIdentifier(organizationId, req.params.id);
+            if (!period) {
+                res.status(404).json((0, error_handler_1.buildErrorResponse)("Payroll period not found", 404));
+                return;
+            }
+            const baseSources = yield loadDayStatusBaseSources(organizationId, period);
+            const payload = buildDayStatusReviewPayload(period, baseSources, {
+                limit: req.query.limit,
+                offset: req.query.offset,
+            });
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((req.user && req.user.id) || "unknown"),
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.DAY_STATUS_REVIEW,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.DAY_STATUS_REVIEWED}: ${period.code || period.id}`,
+                page: { url: req.originalUrl, title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.DAY_STATUS_REVIEW },
+            });
+            res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)(constant_1.config.SUCCESS.PAYROLLPERIOD.RETRIEVED, payload, 200));
+        }
+        catch (error) {
+            payrollPeriodLogger.error(`Failed day-status review: ${error}`);
+            res.status(500).json((0, error_handler_1.buildErrorResponse)("Failed day-status review", 500));
+        }
+    });
+    /**
+     * Refine the day-status resolution with Leave / AWOL workbooks IN MEMORY.
+     * Parses the uploads, re-classifies, returns the refined queue. Persists NOTHING.
+     */
+    const refineDayStatusReviewWithWorkbooks = (req, res, _next) => __awaiter(void 0, void 0, void 0, function* () {
+        var _a, _b, _c, _d;
+        try {
+            const organizationId = req.organizationId || ((_a = req.user) === null || _a === void 0 ? void 0 : _a.organizationId);
+            if (!organizationId) {
+                res.status(401).json((0, error_handler_1.buildErrorResponse)("Organization context missing", 401));
+                return;
+            }
+            if (!isDayStatusReviewer(req.role)) {
+                res.status(403).json((0, error_handler_1.buildErrorResponse)("You are not authorized to refine the day-status review", 403));
+                return;
+            }
+            const period = yield resolvePeriodIdentifier(organizationId, req.params.id);
+            if (!period) {
+                res.status(404).json((0, error_handler_1.buildErrorResponse)("Payroll period not found", 404));
+                return;
+            }
+            const files = req.files || {};
+            const leaveFile = (_b = files.leaveFile) === null || _b === void 0 ? void 0 : _b[0];
+            const awolFile = (_c = files.awolFile) === null || _c === void 0 ? void 0 : _c[0];
+            if (!leaveFile && !awolFile) {
+                res.status(400).json((0, error_handler_1.buildErrorResponse)("Upload at least one workbook as multipart field 'leaveFile' or 'awolFile'.", 400));
+                return;
+            }
+            const winStart = period.startDate.toISOString().slice(0, 10);
+            const winEnd = period.endDate.toISOString().slice(0, 10);
+            const baseSources = yield loadDayStatusBaseSources(organizationId, period);
+            const refinement = { leaveWorkbook: null, awolWorkbook: null };
+            if (leaveFile) {
+                const parsed = bnpi_period_leave_import_helper_1.parsePeriodLeaveWorkbook(leaveFile.buffer);
+                const merged = baseSources.leaveByCodeDate;
+                let inWindow = 0;
+                for (const row of parsed.rows) {
+                    if (!row.code || !row.date) continue;
+                    const k = row.date.toISOString().slice(0, 10);
+                    if (k < winStart || k > winEnd) continue;
+                    inWindow += 1;
+                    const cur = merged.get(row.code) || new Map();
+                    cur.set(k, { date: k, days: row.days || 1, paidFlag: row.paid, label: row.leaveType || "" });
+                    merged.set(row.code, cur);
+                }
+                refinement.leaveWorkbook = { filename: leaveFile.originalname, sheetName: parsed.sheetName || null, rowsParsed: parsed.rows.length, rowsInWindow: inWindow };
+            }
+            const awolByCodeDate = new Map();
+            if (awolFile) {
+                const parsedAwol = bnpi_period_leave_import_helper_1.parsePeriodLeaveWorkbook(awolFile.buffer);
+                let awolInWindow = 0;
+                for (const row of parsedAwol.rows) {
+                    if (!row.code || !row.date) continue;
+                    const k = row.date.toISOString().slice(0, 10);
+                    if (k < winStart || k > winEnd) continue;
+                    awolInWindow += 1;
+                    const cur = awolByCodeDate.get(row.code) || new Map();
+                    cur.set(k, { date: k, days: row.days || 1, paidFlag: false, label: [row.leaveType, row.status].filter(Boolean).join(" ").trim() });
+                    awolByCodeDate.set(row.code, cur);
+                }
+                refinement.awolWorkbook = { filename: awolFile.originalname, sheetName: parsedAwol.sheetName || null, rowsParsed: parsedAwol.rows.length, rowsInWindow: awolInWindow };
+            }
+            const payload = buildDayStatusReviewPayload(period, baseSources, {
+                limit: (_d = req.body) === null || _d === void 0 ? void 0 : _d.limit,
+                offset: (req.body || {}).offset,
+                awolByCodeDate,
+                refinement,
+            });
+            (0, activityLogger_1.logActivity)(req, {
+                userId: ((req.user && req.user.id) || "unknown"),
+                action: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.ACTIONS.DAY_STATUS_REVIEW_WORKBOOK_REFINE,
+                description: `${constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.DESCRIPTIONS.DAY_STATUS_REVIEW_WORKBOOK_REFINED}: ${period.code || period.id}`,
+                page: { url: req.originalUrl, title: constant_1.config.ACTIVITY_LOG.PAYROLLPERIOD.PAGES.DAY_STATUS_REVIEW },
+            });
+            res.status(200).json((0, success_handler_helper_1.buildSuccessResponse)(constant_1.config.SUCCESS.PAYROLLPERIOD.RETRIEVED, payload, 200));
+        }
+        catch (error) {
+            payrollPeriodLogger.error(`Failed day-status workbook refinement: ${error}`);
+            res.status(500).json((0, error_handler_1.buildErrorResponse)("Failed day-status workbook refinement", 500));
+        }
+    });
     return {
         create,
         getAll,
@@ -1823,6 +2054,8 @@ const controller = (prisma) => {
         updateConfig,
         bulkGenerate,
         bulkAdjust,
+        getDayStatusReview,
+        refineDayStatusReviewWithWorkbooks,
     };
 };
 exports.controller = controller;
