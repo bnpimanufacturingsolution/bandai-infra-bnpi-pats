@@ -22,7 +22,7 @@ import {
  * Sourced from the `pregnantEmployees` employee metric (Employee.pregnant flag
  * + optional expectedDueDate set from the admin employee edit surface).
  */
-export default function PregnantEmployeesTab() {
+export function PregnantEmployeesTab() {
 	const { data, isLoading, error } = useMetrics("Employee", ["pregnantEmployees"]);
 
 	const rows = useMemo(() => {

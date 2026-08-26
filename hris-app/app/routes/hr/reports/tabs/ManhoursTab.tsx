@@ -30,7 +30,7 @@ const monthStartIso = () => {
  * one hour of work done by one person. Hours come from the Attendance ledger
  * (`totalMinutesWorked`, net of breaks) for the selected date range.
  */
-export default function ManhoursTab() {
+export function ManhoursTab() {
 	const [dateFrom, setDateFrom] = useState(monthStartIso());
 	const [dateTo, setDateTo] = useState(todayIso());
 
