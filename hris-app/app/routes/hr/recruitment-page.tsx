@@ -200,35 +200,6 @@ const applicantMatchesLinkedEmployee = (applicant: any) => {
 	return true;
 };
 
-const normalizeHireIdentityValue = (value: unknown) =>
-	String(value || "")
-		.trim()
-		.toLowerCase()
-		.replace(/\s+/g, " ");
-
-const applicantMatchesLinkedEmployee = (applicant: any) => {
-	const applicantInfo = applicant?.person?.personalInfo || {};
-	const employeeInfo = applicant?.convertedToEmployee?.person?.personalInfo || {};
-	const applicantFirst = normalizeHireIdentityValue(applicantInfo.firstName);
-	const applicantLast = normalizeHireIdentityValue(applicantInfo.lastName);
-	const employeeFirst = normalizeHireIdentityValue(employeeInfo.firstName);
-	const employeeLast = normalizeHireIdentityValue(employeeInfo.lastName);
-	if (!applicantFirst || !applicantLast || !employeeFirst || !employeeLast) {
-		return false;
-	}
-	if (applicantFirst !== employeeFirst || applicantLast !== employeeLast) {
-		return false;
-	}
-	const applicantEmail = normalizeHireIdentityValue(applicant?.person?.contactInfo?.email);
-	const employeeEmail = normalizeHireIdentityValue(
-		applicant?.convertedToEmployee?.person?.contactInfo?.email,
-	);
-	if (applicantEmail && employeeEmail && applicantEmail !== employeeEmail) {
-		return false;
-	}
-	return true;
-};
-
 const isApplicantEmployeeLinked = (applicant: any) =>
 	Boolean(applicant?.convertedToEmployeeId || applicant?.convertedToEmployee?.id);
 
@@ -267,17 +238,10 @@ const buildLegalPersonName = (pi: any) =>
 	[pi?.firstName, pi?.middleName, pi?.lastName].filter(Boolean).join(" ").trim() || "";
 
 /** Prefer nested `convertedToEmployee` only when it is the same person as the applicant. */
-/** Prefer nested `convertedToEmployee` only when it is the same person as the applicant. */
 const resolveHireEmployeePresentation = (applicant: any) => {
 	const emp = applicant?.convertedToEmployee;
 	const empPi = emp?.person?.personalInfo;
 	const fromEmp = empPi ? buildLegalPersonName(empPi) : "";
-	const applicantName = buildFullName(applicant);
-	const identityMatches = applicantMatchesLinkedEmployee(applicant);
-	const displayName = identityMatches && fromEmp ? fromEmp : applicantName || fromEmp;
-	const email = identityMatches
-		? emp?.person?.contactInfo?.email ?? applicant?.person?.contactInfo?.email ?? null
-		: applicant?.person?.contactInfo?.email ?? emp?.person?.contactInfo?.email ?? null;
 	const applicantName = buildFullName(applicant);
 	const identityMatches = applicantMatchesLinkedEmployee(applicant);
 	const displayName = identityMatches && fromEmp ? fromEmp : applicantName || fromEmp;
@@ -298,8 +262,6 @@ const resolveHireEmployeePresentation = (applicant: any) => {
 		department,
 		linkId,
 		isLinked: Boolean(linkId),
-		identityMatches,
-		linkedEmployeeName: fromEmp || null,
 		identityMatches,
 		linkedEmployeeName: fromEmp || null,
 	};
@@ -3243,10 +3205,6 @@ function ApplicantWorkflowDrawer({
 
 	const hireView = resolveHireEmployeePresentation(applicant);
 	/** Hired + linked: skip the generic applicant header—employee teaser replaces it. */
-	const employeeLinkedHired =
-		actionState === "HIRED" && hireView.isLinked && hireView.identityMatches !== false;
-	const linkedEmployeeMismatch =
-		actionState === "HIRED" && hireView.isLinked && hireView.identityMatches === false;
 	const employeeLinkedHired =
 		actionState === "HIRED" && hireView.isLinked && hireView.identityMatches !== false;
 	const linkedEmployeeMismatch =

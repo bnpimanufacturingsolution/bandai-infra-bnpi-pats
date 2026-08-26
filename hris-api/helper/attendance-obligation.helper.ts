@@ -736,7 +736,22 @@ export async function recomputeAttendanceObligationsForRange(
 				},
 			],
 		},
-		include: { person: true, department: true },
+		select: {
+			id: true,
+			employeeId: true,
+			organizationId: true,
+			employmentStartDate: true,
+			employmentHireDate: true,
+			employmentTerminationDate: true,
+			payFrequency: true,
+			departmentId: true,
+			reportToId: true,
+			workforceSource: true,
+			agencyId: true,
+			embeddedSchedule: true,
+			department: { select: { id: true, name: true } },
+			person: { select: { personalInfo: true } },
+		},
 	});
 
 	const employeeIds = employees.map((employee) => employee.id);
