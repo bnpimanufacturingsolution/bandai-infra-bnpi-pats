@@ -1,4 +1,4 @@
-import { hrisApiClient } from "./api-client";
+import { hrisApiClient } from "../lib/api-client";
 
 export type DisciplinaryActionStatus = "OPEN" | "ONGOING" | "RESOLVED" | "DISMISSED";
 
