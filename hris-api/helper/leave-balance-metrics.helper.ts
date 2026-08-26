@@ -6,6 +6,7 @@
 
 import { PrismaClient, Prisma } from "../generated/prisma";
 import { getEmployeeName, buildEmployeeFilter } from "./attendance-metrics-common.helper";
+import { calculateTardinessMetrics } from "./tardiness-metrics.helper";
 
 export interface LeaveBalanceDetail {
 	leaveType: string;
@@ -18,11 +19,19 @@ export interface LeaveBalanceDetail {
 	periodEnd?: string | null;
 }
 
+export interface LeaveTardinessColumn {
+	lateInstances: number;
+	lateMinutes: number;
+	undertimeInstances: number;
+	undertimeMinutes: number;
+}
+
 export interface EmployeeLeaveBalance {
 	id: string;
 	employeeId: string;
 	name: string;
 	department: string;
+	tardiness: LeaveTardinessColumn;
 	leaveBalances: LeaveBalanceDetail[];
 }
 
@@ -39,6 +48,7 @@ export interface LeaveBalanceMetricsResponse {
 	totalEmployees: number;
 	leaveTypeSummary: LeaveTypeSummary[];
 	employees: EmployeeLeaveBalance[];
+	tardinessPeriod: { from: string; to: string };
 }
 
 /**
@@ -192,9 +202,44 @@ export async function calculateLeaveBalanceMetrics(
 		});
 	});
 
+	// Tardiness/UT columns (stage 5 interpretation): join the existing
+	// tardiness metrics for the filtered period — defaulting to the current
+	// calendar year when no period is given — onto employees-with-balance rows.
+	const now = new Date();
+	const rangeStart = periodFromDate || new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+	const rangeEnd = periodToDate || new Date(Date.UTC(now.getUTCFullYear(), 11, 31, 23, 59, 59));
+	const tardiness = await calculateTardinessMetrics(
+		prisma,
+		organizationId,
+		rangeStart,
+		rangeEnd,
+		departmentId,
+	);
+	const tardinessByEmployee = new Map<string, LeaveTardinessColumn>();
+	for (const entry of tardiness.employees) {
+		tardinessByEmployee.set(entry.id, {
+			lateInstances: entry.tardinessCount,
+			lateMinutes: entry.totalLateMinutes,
+			undertimeInstances: entry.undertimeCount,
+			undertimeMinutes: entry.totalUndertimeMinutes,
+		});
+	}
+
 	return {
 		totalEmployees: employeeLeaveBalances.length,
 		leaveTypeSummary: leaveTypeSummary.sort((a, b) => a.leaveType.localeCompare(b.leaveType)),
-		employees: employeeLeaveBalances,
+		employees: employeeLeaveBalances.map((emp) => ({
+			...emp,
+			tardiness: tardinessByEmployee.get(emp.id) || {
+				lateInstances: 0,
+				lateMinutes: 0,
+				undertimeInstances: 0,
+				undertimeMinutes: 0,
+			},
+		})),
+		tardinessPeriod: {
+			from: rangeStart.toISOString().slice(0, 10),
+			to: rangeEnd.toISOString().slice(0, 10),
+		},
 	};
 }

@@ -2,10 +2,22 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { AgencyAttendanceTab } from "./tabs/AgencyAttendanceTab";
+import { DailyManpowerTab } from "./tabs/DailyManpowerTab";
 import { DirectIndirectLaborTab } from "./tabs/DirectIndirectLaborTab";
+import { LaborCostTab } from "./tabs/LaborCostTab";
 import { ManpowerDistributionTab } from "./tabs/ManpowerDistributionTab";
+import { NoWorkReportTab } from "./tabs/NoWorkReportTab";
+import { PregnantEmployeesTab } from "./tabs/PregnantEmployeesTab";
 
-const visibleTabs = new Set(["agency", "labor", "direct-indirect"]);
+const visibleTabs = new Set([
+	"agency",
+	"labor",
+	"direct-indirect",
+	"no-work",
+	"daily-manpower",
+	"labor-cost",
+	"pregnant-employees",
+]);
 
 export default function WorkforceAnalyticsPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -29,7 +41,7 @@ export default function WorkforceAnalyticsPage() {
 	return (
 		<div className="flex flex-col gap-6 p-6">
 			<Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-				<TabsList className="grid h-auto w-full grid-cols-1 gap-2 mb-6 sm:grid-cols-3">
+				<TabsList className="grid h-auto w-full grid-cols-1 gap-2 mb-6 sm:grid-cols-7">
 					<TabsTrigger
 						value="agency"
 						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
@@ -45,7 +57,27 @@ export default function WorkforceAnalyticsPage() {
 						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Direct vs Indirect
 					</TabsTrigger>
-				</TabsList>
+					<TabsTrigger
+						value="no-work"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+						No Work Report
+					</TabsTrigger>
+					<TabsTrigger
+						value="daily-manpower"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+						Daily Active Manpower
+					</TabsTrigger>
+				<TabsTrigger
+					value="labor-cost"
+					className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+					Labor Cost
+				</TabsTrigger>
+				<TabsTrigger
+					value="pregnant-employees"
+					className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+					Pregnant Employees
+				</TabsTrigger>
+			</TabsList>
 
 				<TabsContent value="agency" className="space-y-4">
 					<AgencyAttendanceTab />
@@ -57,6 +89,22 @@ export default function WorkforceAnalyticsPage() {
 
 				<TabsContent value="direct-indirect" className="space-y-4">
 					<DirectIndirectLaborTab />
+				</TabsContent>
+
+				<TabsContent value="no-work" className="space-y-4">
+					<NoWorkReportTab />
+				</TabsContent>
+
+				<TabsContent value="daily-manpower" className="space-y-4">
+					<DailyManpowerTab />
+				</TabsContent>
+
+				<TabsContent value="labor-cost" className="space-y-4">
+					<LaborCostTab />
+				</TabsContent>
+
+				<TabsContent value="pregnant-employees" className="space-y-4">
+					<PregnantEmployeesTab />
 				</TabsContent>
 			</Tabs>
 		</div>

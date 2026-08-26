@@ -10,6 +10,7 @@ import {
 	buildManpowerEmployeeListPath,
 	type ManpowerEmployeeListLinkInput,
 } from "~/lib/utils/manpower-distribution-links";
+import { summarizeAgeBrackets } from "~/lib/age-brackets";
 import {
 	buildManpowerDatabank,
 	formatEmploymentTypeLabel,
@@ -192,6 +193,17 @@ export function ManpowerDistributionTab() {
 	const databank = useMemo(
 		() => buildManpowerDatabank(rosterEmployees),
 		[rosterEmployees],
+	);
+
+	const ageSummary = useMemo(
+		() =>
+			summarizeAgeBrackets(
+				employees.map((employee) => ({
+					dateOfBirth:
+						(employee.person?.personalInfo as any)?.dateOfBirth || null,
+				})),
+			),
+		[employees],
 	);
 
 	const distribution = useMemo(() => {
@@ -650,6 +662,32 @@ const employmentTypeExportColumns: ReportExportColumn<ManpowerDatabankEmployment
 								getRowKey={(row) => row.department}
 								emptyMessage="No gender summary rows found"
 							/>
+						</section>
+
+						<section className="space-y-3">
+							<h3 className="text-sm font-semibold text-neutral-900">
+								Age Brackets
+							</h3>
+							<ReportTable
+								columns={[
+									{ key: "label", header: "Age Bracket" },
+									{
+										key: "count",
+										header: "Employees",
+										align: "right",
+										render: (row) => formatNumber(row.count),
+									},
+								]}
+								rows={ageSummary.rows}
+								getRowKey={(row) => row.id}
+								emptyMessage="No age data"
+							/>
+							<p className="text-xs text-neutral-500">
+								Average age: {ageSummary.averageAge ?? "—"} · Known birthdates:{" "}
+								{formatNumber(ageSummary.withAge)} · Unknown:{" "}
+								{formatNumber(ageSummary.withoutAge)} (computed from person
+								birthdate at query time)
+							</p>
 						</section>
 
 						<section className="space-y-3">

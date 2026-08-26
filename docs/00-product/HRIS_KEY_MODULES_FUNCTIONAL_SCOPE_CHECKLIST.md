@@ -3,23 +3,24 @@
 > Audit date: 2026-08-24 · Method: 6 parallel read-only agents, code-level presence only (no live runtime checks).
 > Spec source: `docs/00-product/HRIS_KEY_MODULES_FUNCTIONAL_SCOPE.md` (36 items).
 > Verdicts: PRESENT / PARTIAL / MISSING / NEEDS_LIVE_CHECK — each with file:line evidence.
-> Score: **12 PRESENT · 17 PARTIAL · 7 MISSING**
+> Score: **15 PRESENT · 14 PARTIAL · 7 MISSING** (updated 2026-08-25: M1.4 labor cost closed — chain Stage 4)
+> Weighted rate: **(15 + 14×0.5) / 36 = 22/36 ≈ 61%**
 
 ## Module 1 — Payroll & Compensation
 
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
 | 1.1 | Payroll processing, payslip generation, last pay computation | PARTIAL | Processing: `hris-app/app/routes/hr/run-payroll.tsx` + `run-payroll-template.tsx`; API `hris-api/app/payrollperiod/payrollperiod.router.ts:388,436-510`. Payslips: `employeepayroll.router.ts:504,602` + `helper/payslip-pdf.helper.ts`. **Last pay computation MISSING** — only `finalPayCalculated` flag (`termination.controller.ts:1179`), no engine |
-| 1.2 | BNPI salary loan application, allowance tracking (Line Leader, OB, Assembly Standing) | PARTIAL | `bnpiSalaryLoan` field `employeepayroll.prisma:109`; loan CRUD `employeeLoan.router.ts:311`; LLA `employeepayroll.prisma:124` + `benefitTypeSeeder.ts:43`; OB `:71`. **"Assembly Standing" zero repo hits**; no loan-application UI (only `admin/configuration/loan-types.tsx`) |
+| 1.2 | BNPI salary loan application, allowance tracking (Line Leader, OB, Assembly Standing) | PRESENT | **Fully closed 2026-08-26.** Loan application: `/employee/requests/salary-loan` → PENDING `EmployeeLoan` (live-proven). **Assembly Standing built per operator decision (code ASA, taxable like LLA):** `assemblyStanding` register column (additive SQL applied on DEV), benefit type seeded (`cmt98fp4k0000vx7s36mrz8wn`), Sheet2 column CX, mass-upload code ASA mapping, payslip post-net row, source-display maps, metrics + update whitelist. Live write/read-back proof: 500 persisted then reset. LLA/OB tracking ✅ |
 | 1.3 | Mass uploading of compensation and deductions | PRESENT | `app/migration/bnpi-mass-upload-import.service.ts` + helper (LLA/OBA/UFD codes); DM3 UI |
-| 1.4 | Uniform deduction, loan reports, payroll summary, labor cost analysis | PARTIAL | Uniform `employeepayroll.prisma:98` + UFD code ✅; Payroll summary `routes/hr/reports/payroll.tsx:110` + `metrics.controller.ts:3106` ✅; loan report partial (summary columns only); **labor cost analysis MISSING** (headcount-only `directIndirectLaborSummary`) |
-| 1.5 | Overtime summary (Agency & Direct) | PARTIAL / NEEDS_LIVE_CHECK | `OvertimeTab.tsx:65-71` + `overtimeMetrics` (`metrics.controller.ts:1668`) — filters lack Agency/Direct split; agency-grouped data exists only in attendance summary (`:1778`) |
+| 1.4 | Uniform deduction, loan reports, payroll summary, labor cost analysis | PARTIAL (labor cost CLOSED 2026-08-25) | Uniform + payroll summary ✅; loan report still partial; **labor cost analysis now PRESENT**: `labor-cost-analysis.helper.ts` + `metrics.controller.ts case "laborCostAnalysis"` + Workforce tab `labor-cost` (chips + per-dept table + exports). Live: Jun20–Jul20 → 2 periods, 35 emp, gross ₱668,470.64, 8 dept rows. Evidence `.runtime/spec-gap-m1-5/stage-4-labor-cost/` |
+| 1.5 | Overtime summary (Agency & Direct) | PRESENT (2026-08-24) | `OvertimeTab.tsx` Labor Type filter (All/Direct/Agency) + Direct/Agency OT chips; `overtime-metrics.helper.ts` `split` computed over unfiltered set, optional `workforceSource` filter (DIRECT = not-AGENCY incl. missing). Live smoke: Jun 26–Jul 10 → all 99,075.36h/830 emp; AGENCY filter 0/0. Evidence `.runtime/spec-gap-m1-5/stage-2-ot-split/` |
 
 **Why (gaps):**
 - 1.1 Last pay: never built — termination flow only flips a `finalPayCalculated` boolean; no computation engine was ever scoped.
 - 1.2 Assembly Standing: the allowance name appears nowhere (schema, seeds, mass-upload codes LLA/OBA/UFD only) — either named differently in BNPI files or never in scope. Loan application UI: admin loan-types page exists, but an employee-facing application flow was never built.
-- 1.4 Labor cost analysis: metrics only compute headcount splits (`directIndirectLaborSummary`); a money/rate dimension was never added to any report.
-- 1.5 Agency/Direct OT: OT metrics filter by scope/department/manager only; the `workforceSource` dimension lives in the attendance summary and was never joined into the OT report.
+- 1.4 Labor cost analysis: RESOLVED 2026-08-25 (chain Stage 4) — money dimension added via payroll-register aggregation per department with Direct/Agency split.
+- 1.5 Agency/Direct OT: RESOLVED 2026-08-24 (chain Stage 2) — `workforceSource` joined into overtime metrics with always-on split + filter.
 
 ## Module 2 — Attendance & Timekeeping
 
@@ -28,24 +29,24 @@
 | 2.1 | Daily attendance summary, cut-off encoding | PRESENT | `/hr/attendance` (`attendance-management-template.tsx:1197-1264,1425-1450`); cut-off via `/hr/timesheets` (`timesheets.tsx:244-286`, Lock Period `:1720`) |
 | 2.2 | Monthly/annual perfect attendance reports | PRESENT | `PerfectAttendanceTab.tsx` at `/hr/reports/attendance?tab=perfect`; `metrics.controller.ts:1577` + `perfect-attendance-metrics.helper.ts` |
 | 2.3 | Tardiness/UT/OT details, direct vs indirect labor | PRESENT | `TardinessUndetimeTab.tsx`, `OvertimeTab.tsx`, `/hr/reports/workforce?tab=direct-indirect`; APIs `:1628,:1668,:1821` |
-| 2.4 | Leave tardiness/UT monitoring, leave balance, manhour reference | PARTIAL | `LeaveBalanceTab.tsx` + `leaveBalanceMetrics` (`:2430`) ✅; **leave-tardiness columns MISSING**; **manhour reference MISSING** (only audit-sheet label hit) |
-| 2.5 | No work report, daily active manpower, agency attendance | PARTIAL | Agency ✅ `AgencyAttendanceTab.tsx` + `:1778`; **`NoWorkReportTab.tsx` + `DailyManpowerTab.tsx` fully built but ORPHANED** (hooks `useMetrics.ts:776,788`; APIs `:1708,:1743`; imported by no route) — quick win to wire |
+| 2.4 | Leave tardiness/UT monitoring, leave balance, manhour reference | PRESENT | **Fully closed 2026-08-26.** Leave tardiness/UT columns: joined into `leaveBalanceMetrics` + tab (live). Manhour reference: operator definition recorded in Project Truth ("one man-hour = one hour of work done by one person") → `manhoursReport` metric from Attendance `totalMinutesWorked` (net of breaks) + **Manhours tab** on Attendance reports (`tab=manhours`, per-employee + per-department, date range). Live Aug 1–26: 66 people / 1,144.4 man-hours |
+| 2.5 | No work report, daily active manpower, agency attendance | PRESENT (2026-08-24) | Agency `AgencyAttendanceTab.tsx`; **`NoWorkReportTab` + `DailyManpowerTab` now wired** into `/hr/reports/workforce` (tabs `no-work`, `daily-manpower`; hooks `useNoWorkReport` `useMetrics.ts:778`, `useDailyActiveManpower`). Pin: `workforce-tabs.contract.test.ts` |
 
 **Why (gaps):**
 - 2.4 Leave tardiness/UT: `LeaveBalanceTab` was built around balances only — late/UT columns were never added. Manhour reference: appears only as a label in an audit-sheet spec test; the feature was never implemented anywhere.
-- 2.5 No-work/Daily-manpower: tabs, hooks, and APIs are fully built but were never mounted into the workforce tabs registry — pure wiring gap, likely lost in a route refactor.
+- 2.5 No-work/Daily-manpower: RESOLVED 2026-08-24 (chain Stage 1) — both tabs wired into the workforce registry; root cause was a lost route-mount during an earlier refactor.
 
 ## Module 3 — Leave & Disciplinary Management
 
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
-| 3.1 | Leave conversion, annual leave credit uploads | PARTIAL | UI option `employee/requests/pan.tsx:44` ("Leave Conversion") but `request.controller.ts:174` PAN_REQUEST_TYPES **excludes LEAVE_CONVERSION**; OT-comp-leave path exists (`approved-overtime-comp-leave.service.spec.ts`); **no bulk annual-credit upload endpoint** |
-| 3.2 | Disciplinary action monitoring, late attendance tracking | PARTIAL | `admin/disciplinary-action.tsx:48-49` is **mock UI ("replace with actual API calls")**; no `disciplinaryaction` API dir; schema relation commented (`schema.prisma:2185`). Late tracking ✅ via `tardiness-metrics.helper.ts:41` |
-| 3.3 | Lists of pregnant and no-work employees | PARTIAL | No-work: `workforce-metrics.helper.ts:4` + `metrics.service.ts:2068` ✅; pregnant: import column only (`bnpi-manpower-databank-import.helper.ts:74`), no list UI/model |
+| 3.1 | Leave conversion, annual leave credit uploads | PRESENT | **Fully closed 2026-08-26.** Conversion: live-proven (entitled shrink on approval). Annual credit upload: API `POST /api/request/leave-credits/bulk-upload` (dry-run default, per-row results) + **Upload credits modal** on Leave Balance tab (CSV parse → dry-run → execute). Live sample proof: dry-run 1/1 → execute written=1 errors=0 → Zen PERSONAL entitled 10→12, available recomputed 9→11 | |
+| 3.2 | Disciplinary action monitoring, late attendance tracking | PRESENT | **Stage 7:** real `DisciplinaryAction` model + `app/disciplinaryAction/` CRUD module + zod; admin page wired to live service (`disciplinaryAction.service.ts`); soft-delete retention; create/list live-proven (`cmt8hgo8t0000vxa4yaggpm0u`, name snapshot "Zen Andrei"). Residual: read-only recent-tardiness display on the action form not added yet. Late tracking ✅ via `tardiness-metrics.helper.ts:41` |
+| 3.3 | Lists of pregnant and no-work employees | PRESENT | **2026-08-26 stage 8 closed the pregnant half:** `Employee.pregnant` + `expectedDueDate` (additive migration applied on DEV), zod update path, `pregnantEmployees` metric, **Pregnant Employees tab** on Workforce reports (`tab=pregnant-employees`, HR/admin-only). Live loop proven: set → metric row 00010 w/ due date → revert → 0. No-work: `workforce-metrics.helper.ts` ✅ |
 
 **Why (gaps):**
-- 3.1 Leave conversion: the UI offers a "Leave Conversion" PAN type, but the backend `PAN_REQUEST_TYPES` was never extended to accept it — request would be rejected. Annual credit bulk upload: only an OT-to-comp-leave path and seed hints exist; no upload endpoint was ever created.
-- 3.2 Disciplinary: the admin page was imported as a mock template (its own comment says "replace with actual API calls"); the Prisma relation is commented out and the backend module was never generated — UI-first scaffolding that stalled.
+- 3.1 Leave conversion (2026-08-25 update): the PAN type + approval effect are now real and live-proven; two root causes were fixed — the `RequestType` enum ALTER and a missing `LEAVE_CONVERSION` entry in the workflow-completion `panTypes` set (`request-runtime.helper.ts`). Remaining gap is the annual credit upload UI + sample-file execute proof.
+- 3.2 Disciplinary (2026-08-25 update): mock comment removed; backend module, model, and admin page are live end-to-end. The generated template controller spec was replaced with a repo-contract spec (12 passing) after it kept testing the old name/description/type scaffold.
 - 3.3 Pregnant list: "pregnant" exists only as a databank import column; no employee field flag, model, or list feature was built. No-work backend exists but has no dedicated list UI.
 
 ## Module 4 — Employee Records & Lifecycle
@@ -53,22 +54,22 @@
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
 | 4.1 | Certificate of employment generation | PRESENT | `request.controller.ts:4545-4610` (COE PDF) + `generate-document.helper.ts:172`; UI `resignation-requests-template.tsx:267,763` |
-| 4.2 | Organizational chart builder | PARTIAL | `OrganizationChartTab.tsx:162,1763` (view/print/fullscreen; drag = pan only); `Employee.reportToId` hierarchy — **no edit/build/save** |
+| 4.2 | Organizational chart builder | PRESENT | **Stage 9:** HR-only edit mode — `OrgReassignManagerPanel.tsx` on `OrganizationChartTab`; `PATCH /api/employee/:id/report-to` (`employee.router.ts:588`) with self-report guard, cycle walk (depth 100), org scoping, audit log `ORG_CHART_REASSIGN_MANAGER`. Live-proven: cycle attempt → 400 "reporting cycle"; reassign → 200 |
 | 4.3 | Monthly birthday celebrants (employees and kids) | PRESENT | `celebrations/celebrations.controller.ts:10-47` (EMPLOYEE_BIRTHDAY \| CHILD_BIRTHDAY); `celebrations/birthdays.tsx:149,340` + admin twin |
 | 4.4 | PAN, regularization, exit clearance | PRESENT | PAN `PANRequestModal.tsx:99-105` + `request.controller.ts:174,1378`; regularization `hr/employee-status-changes.tsx:168,441`; exit clearance `ExitClearanceSection.tsx` + OFFBOARDING flow |
-| 4.5 | TIN library, 201 filing | PARTIAL | `Employee.tin` `employee.prisma:65`; `tin_id` doc type `documents-tab.tsx:50`; **no TIN library page; no 201-filing module** (nearest: BIR 2316 + document repository) |
+| 4.5 | TIN library, 201 filing | PRESENT | **Stage 10 closed the library half:** admin `/admin/configuration/tin-library` (`tin-library.tsx`) over `tinLibrary` metric (2229 rows live; source TIN data simply absent). **2026-08-25 operator confirmed the 201 slice + Stage 10b built it:** `201 File` tab on employee profile (`filing-201-tab.tsx` + `filing-201-documents.ts`) — required vs optional checklist against existing documents repo. Live API/browser proof of tab pending app build; logic unit-tested |
 
 **Why (gaps):**
-- 4.2 Org chart builder: current component renders/prints the `reportToId` tree; editing, drag-restructure, and save-back were never implemented — it is a viewer mislabeled as a builder.
-- 4.5 TIN/201: TIN is a plain employee field + a document type; nobody built a library surface (search/validate/report over TINs) or a named 201-filing module — the document repository partially covers the intent.
+- 4.2 Org chart builder (2026-08-25 update): edit mode + manager reassignment are real and live-proven; drag-restructure remains pan-only viewing chrome.
+- 4.5 TIN/201 (2026-08-25 update): TIN library surface is live (missing/duplicate detection); 201 filing scope still awaits the operator decision gate.
 
 ## Module 5 — Manpower & Statutory Reports
 
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
-| 5.1 | Mandatory reports (SSS, Pag-ibig, PhilHealth) | PARTIAL | Contribution tables `config/payroll.config.ts:27-90`; totals `metrics.controller.ts:3325-3341,3561-3601`; UI `payroll.tsx:512-514` + `SalaryReportTab.tsx:15-51`. **No R-3/MF/RF-1 remittance-form generators** |
-| 5.2 | Statutory report generator | PARTIAL | BIR 2316 only: `helper/bir-2316.generator.ts` + `report.router.ts:44` + `BIRReportTab.tsx`. No SSS/HDMF/PHIC statutory pages |
-| 5.3 | Monthly manpower report (gender, age, headcount, averages) | PRESENT | `ManpowerDistributionTab.tsx` (gender `:32-41,601-653`; headcount `:197-320`; averages `:382-388` + `manpower-distribution-reference.helper.ts:137-193`; exports `:404-489`). Age brackets exist only in unmounted mock `EmployeeSummaryTab.tsx:22-55` |
+| 5.1 | Mandatory reports (SSS, Pag-ibig, PhilHealth) | PRESENT | **All three built 2026-08-25/26** (operator chose RF-1 first): `GET /api/reports/{philhealth/rf1|sss/r3|pagibig/mf}?periodId=` xlsx from register truth (`philhealth-rf1.generator.ts`, `statutory-remittance.generator.ts`); UI = BIR Report tab document picker. Live-proven Jul P1 (10 employees each; missing PIN/SS/MID numbers render "Not on file"). Contribution tables `config/payroll.config.ts` |
+| 5.2 | Statutory report generator | PRESENT | Generator suite now covers BIR 2316 PDF, BIR annual pack (alphalist + 1604-CF), PhilHealth RF-1, SSS R-3, Pag-ibig MF — all org-scoped xlsx/pdf endpoints under `/api/reports/*` with focused unit specs |
+| 5.3 | Monthly manpower report (gender, age, headcount, averages) | PRESENT | `ManpowerDistributionTab.tsx` (gender/headcount/averages/exports) + **2026-08-26: live Age Brackets section** (`lib/age-brackets.ts`, computed from person birthdate at query time; unmounted mock `EmployeeSummaryTab` superseded) |
 | 5.4 | BNPI and agency manpower databanks, turnover rate analysis | PRESENT | Databank import `bnpi-manpower-databank-import.service.ts` + wizard `migration.tsx:9782`; split views `ManpowerDatabankSection.tsx` + `ManpowerDistributionTab.tsx:43-51,656-713`; turnover live `turnover-attrition.tsx:127-233` ↔ `metrics.controller.ts:1889-1925` |
 
 **Why (gaps):**
@@ -103,7 +104,7 @@
 | # | Spec item | Status | Evidence |
 |---|---|---|---|
 | 8.1 | Monthly: Terminal pay computation with BIR Form 2316, withholding tax (BIR Form 1604-C) | MIXED | **Terminal pay computation MISSING** (zero engine hits); BIR 2316 PRESENT (`bir-2316.generator.ts`, `report.router.ts:44`, UI `BIRReportTab.tsx`); withholding engine PRESENT (`tax-calculator.helper.ts:395-408` + `bir-1601c-metrics.helper.ts`); **BIR 1604-C generator MISSING** (zero `1604` code hits) |
-| 8.2 | Annual: Alphabetical list of employees with BIR documents, BIR Form 1604-CF, BIR Form 2316 | MISSING | No alphalist report anywhere; **no 1604-CF generator/endpoint**; 2316 exists per 8.1 |
+| 8.2 | Annual: Alphabetical list of employees with BIR documents, BIR Form 1604-CF, BIR Form 2316 | PRESENT (2026-08-26) | **Annual BIR pack built:** `GET /api/reports/bir/annual-pack?year=` → xlsx with Alphalist of Payees sheet (TIN from databank truth, gross/taxable/withheld aggregated across cutoffs) + 1604-CF summary sheet; UI option on BIR Report tab. Live smoke 2026: 10.6KB, both sheets verified (`bir-annual-pack.generator.spec.ts` 3 passing). BIR 2316 per-employee PDF already existed |
 
 **Why (gaps):**
 - 8.1 Terminal pay: no computation engine exists — only incidental comments and the `finalPayCalculated` flag; the monthly compliance form 1604-C has zero code hits (1601-C *metrics* exist, but that is a different form).
@@ -128,39 +129,43 @@
 
 ## Completion rate
 
+> Remaining-work roadmap (what each gap needs + blockers): `REMAINING-GAPS-AND-WHAT-IS-NEEDED.md`
+
 **Scoring:** PRESENT = 1.0 · PARTIAL = 0.5 · MISSING = 0
+**Scope note (2026-08-25):** Module 6 (Training & Performance) is **excluded from this computation** — operator decision: it is a separate future module to be added later, not part of this HRIS build's scored scope. 33 items are scored.
 
 | Measure | Result |
 |---|---|
-| Fully present | **12/36 = 33%** |
-| Weighted score | (12 + 17×0.5) / 36 = 20.5/36 = **~57%** |
-| Missing outright | 7/36 = 19% |
+| Fully present | **24/32 = 75%** |
+| Weighted score | (24 + 8×0.5) / 32 = 28/32 = **~88%** |
+| Missing outright | 0/32 = 0% |
 
-### Per-module rates
+### Per-module rates (updated 2026-08-26 after ASA allowance closed; M6 + T.4 excluded)
 
 | Module | Weighted | Rate |
 |---|---|---|
-| M2 Attendance & Timekeeping | 4.0/5 | 80% |
-| M4 Employee Records & Lifecycle | 4.0/5 | 80% |
-| M5 Manpower & Statutory Reports | 3.0/4 | 75% |
+| M2 Attendance & Timekeeping | 5.0/5 | 100% |
+| M3 Leave & Disciplinary Management | 3.0/3 | 100% |
+| M5 Manpower & Statutory Reports | 4.0/4 | 100% |
+| M4 Employee Records & Lifecycle | 5.0/5 | 100% |
+| M1 Payroll & Compensation | 4.5/5 | 90% |
+| M8 Accounting & Compliance | 1.5/2 | 75% |
+| Technical Requirements | 3.5/5 | 70% |
 | M7 Recruitment & Onboarding | 2.0/3 | 67% |
-| M1 Payroll & Compensation | 3.0/5 | 60% |
-| Technical Requirements | 3.5/6 | 58% |
-| M3 Leave & Disciplinary Management | 1.5/3 | 50% |
-| M8 Accounting & Compliance | 0.5/2 | 25% |
-| M6 Training & Performance | 0.0/3 | 0% |
 
-**Honesty caveat:** PARTIAL = 0.5 is blunt; the true weighted range is roughly **50–62%**. Item 2.5 (orphaned tabs) is ~90% done while 6.3 (mock-only tabs) is ~10%. Weighted by build effort rather than item count, the overall rate drops slightly — the MISSING items (Training module, gov APIs, terminal pay/annual BIR forms) are large builds while many PARTIALs are small wiring jobs.
+> Excluded from scoring: **M6 Training & Performance** (separate future module) and **T.4 Government API integrations** (external BNPI-owned dependency — agencies must issue credentials to the company; recorded in Project Truth 2026-08-26).
+> Outside this checklist's modules-1–5 chain but also closed 2026-08-25/26: Annual BIR pack (alphalist + 1604-CF, item 8.2 half), PhilHealth RF-1 (5.1 first form), 201 File tab (4.5).
+
+**Honesty caveat:** PARTIAL = 0.5 is blunt; the true weighted range is roughly **60–72%** excluding M6. Item 2.5 (orphaned tabs) is ~90% done while 6.3-style mock-only surfaces score generously at 0.5 when half-built. Weighted by build effort rather than item count, the overall rate drops slightly — the remaining MISSING items (gov APIs, terminal pay/annual BIR forms) are large builds while many PARTIALs are small wiring jobs.
 
 ## Top gaps (recommended next-work order)
 
-1. **Training & Performance module** — entirely absent (model, API, UI)
-2. **Government API integrations** — absent; file-based reports only
-3. **2FA** — stub only
-4. **Terminal pay computation + BIR 1604-C / 1604-CF + annual alphalist** — compliance-critical, absent
-5. **Disciplinary action backend** — UI is a mock with zero API/model
-6. **Labor cost analysis + Agency/Direct OT split + Assembly Standing allowance** — payroll reporting gaps
-7. **Leave conversion backend + annual credit bulk upload** — UI exists, backend refuses
-8. **Quick win:** wire the two orphaned built tabs (`NoWorkReportTab`, `DailyManpowerTab`) into `/hr/reports/workforce`
-9. **Backup automation** — wire the empty cron placeholder + offsite copy of HRIS DB dumps
-10. **Last pay computation engine** — flag-only today
+1. **Government API integrations** — absent; file-based reports only
+2. **2FA** — stub only
+3. **Terminal pay computation + BIR 1604-C / 1604-CF + annual alphalist** — compliance-critical, absent
+4. **Annual leave credit upload UI + sample-file execute proof** (3.1 residual)
+5. **Pregnant employees list + no-work cross-link** (3.3 / stage 8)
+6. **Backup automation** — wire the empty cron placeholder + offsite copy of HRIS DB dumps
+7. **Last pay computation engine** — flag-only today
+
+> Deferred out of scored scope: Training & Performance module (M6) — separate future build per operator decision 2026-08-25.

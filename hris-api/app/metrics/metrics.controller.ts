@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { Prisma, PrismaClient } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger.helper";
@@ -22,7 +22,9 @@ import {
 } from "../../helper/attendance-obligation-metrics.helper";
 import { calculatePerfectAttendanceMetrics } from "../../helper/perfect-attendance-metrics.helper";
 import { calculateTardinessMetrics } from "../../helper/tardiness-metrics.helper";
+import { calculateManhoursMetrics } from "../../helper/manhours-metrics.helper";
 import { calculateOvertimeMetrics } from "../../helper/overtime-metrics.helper";
+import { calculateLaborCostAnalysis } from "../../helper/labor-cost-analysis.helper";
 import { calculateLeaveBalanceMetrics } from "../../helper/leave-balance-metrics.helper";
 import { calculateTurnoverAttritionReport } from "../../helper/turnover-attrition-metrics.helper";
 import {
@@ -76,6 +78,7 @@ const AVAILABLE_METRICS = {
 		"attendanceDailyTrendByDepartment", // Day-by-department attendance trend chart data
 		"perfectAttendanceMetrics", // Perfect attendance (zero absences + zero tardiness)
 		"tardinessMetrics", // Tardiness, undertime, and early out metrics
+		"manhoursReport", // M2.4 manhour reference — hours worked per person
 		"overtimeMetrics", // Overtime metrics
 		"noWorkReport", // Employees scheduled but with no attendance record
 		"dailyActiveManpower", // Employees with attendance activity for the day
@@ -89,12 +92,15 @@ const AVAILABLE_METRICS = {
 		"eligibilityCandidates",
 		"leaveBalanceMetrics",
 		"turnoverAttritionReport",
+		"tinLibrary",
+		"pregnantEmployees",
 	],
 	PayrollPeriod: [
 		"payrollPeriodByCode",
 		"payrollRunSummary",
 		"payrollBlockers",
 		"payrollSummary",
+		"laborCostAnalysis",
 		"bir1601CMetrics",
 	],
 	Timesheet: ["timesheetStatistics"],
@@ -1665,6 +1671,44 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 				throw new Error(`Failed to calculate tardiness metrics: ${error.message}`);
 			}
 		}
+		case "manhoursReport": {
+			try {
+				const startDate = whereFilter.date?.gte ? new Date(whereFilter.date.gte) : null;
+				const endDate = whereFilter.date?.lte ? new Date(whereFilter.date.lte) : null;
+				if (!startDate || !endDate) {
+					throw new Error("Date range is required for manhours report");
+				}
+				const organizationId =
+					whereFilter.organizationId ||
+					(
+						await prisma.employee.findFirst({
+							where: { isDeleted: false },
+							select: { organizationId: true },
+						})
+					)?.organizationId;
+				if (!organizationId) {
+					return {
+						period: {
+							from: startDate.toISOString().slice(0, 10),
+							to: endDate.toISOString().slice(0, 10),
+						},
+						grandTotals: { employees: 0, daysWorked: 0, totalMinutes: 0, totalHours: 0 },
+						employees: [],
+						departments: [],
+					};
+				}
+				return await calculateManhoursMetrics(
+					prisma,
+					organizationId,
+					startDate,
+					endDate,
+					whereFilter.departmentId,
+				);
+			} catch (error: any) {
+				logger.error("Error calculating manhours metrics:", error);
+				throw new Error(`Failed to calculate manhours metrics: ${error.message}`);
+			}
+		}
 		case "overtimeMetrics": {
 			try {
 				// buildFilter transforms dateFrom/dateTo into date.gte/date.lte
@@ -1685,21 +1729,28 @@ async function generateAttendanceMetric(prisma: PrismaClient, metric: string, wh
 						})
 					)?.organizationId;
 
-				if (!organizationId) {
-					return {
-						totalOvertimeHours: 0,
-						employeesWithOvertime: 0,
-						employees: [],
-					};
-				}
+			if (!organizationId) {
+				return {
+					totalOvertimeHours: 0,
+					employeesWithOvertime: 0,
+					employees: [],
+					split: {
+						direct: { totalOvertimeHours: 0, employeesWithOvertime: 0 },
+						agency: { totalOvertimeHours: 0, employeesWithOvertime: 0 },
+					},
+				};
+			}
 
-				return await calculateOvertimeMetrics(
-					prisma,
-					organizationId,
-					startDate,
-					endDate,
-					whereFilter.departmentId,
-				);
+			return await calculateOvertimeMetrics(
+				prisma,
+				organizationId,
+				startDate,
+				endDate,
+				whereFilter.departmentId,
+				typeof whereFilter.workforceSource === "string"
+					? whereFilter.workforceSource
+					: undefined,
+			);
 			} catch (error: any) {
 				logger.error("Error calculating overtime metrics:", error);
 				throw new Error(`Failed to calculate overtime metrics: ${error.message}`);
@@ -2460,6 +2511,91 @@ async function generateEmployeeMetric(
 				whereFilter.periodTo,
 			);
 		}
+		case "tinLibrary": {
+			const organizationId = String(
+				whereFilter.organizationId || req?.organizationId || "",
+			);
+			// Postgres truth: TIN lives in metadata.manpowerDatabank.tin (imported
+			// from BNPI databank). The mongo-era Employee.tin column is not here.
+			const employees = await prisma.employee.findMany({
+				where: { organizationId, isDeleted: false },
+				select: {
+					id: true,
+					employeeId: true,
+					metadata: true,
+					person: { select: { personalInfo: true } },
+					department: { select: { name: true } },
+				},
+			});
+			const tinCounts = new Map<string, number>();
+			const tinOf = (employee: (typeof employees)[number]) => {
+				const md = (employee.metadata as any)?.manpowerDatabank || {};
+				return String(md.tin || "").trim() || null;
+			};
+			for (const employee of employees) {
+				const tin = tinOf(employee);
+				if (tin) tinCounts.set(tin, (tinCounts.get(tin) || 0) + 1);
+			}
+			const rows = employees.map((employee) => {
+				const tin = tinOf(employee);
+				const duplicate = tin ? (tinCounts.get(tin) || 0) > 1 : false;
+				return {
+					employeeId: employee.id,
+					empCode: employee.employeeId,
+					name: `${employee.person?.personalInfo?.firstName || ""} ${
+						employee.person?.personalInfo?.lastName || ""
+					}`.trim(),
+					department: employee.department?.name || "No Department",
+					tin,
+					status: duplicate ? "DUPLICATE" : tin ? "OK" : "MISSING",
+				};
+			});
+			const withTin = rows.filter((r) => r.tin).length;
+			const duplicateEmployees = rows.filter((r) => r.status === "DUPLICATE").length;
+			return {
+				summary: {
+					total: rows.length,
+					withTin,
+					missing: rows.length - withTin,
+					duplicateEmployees,
+				},
+				rows,
+			};
+		}
+		case "pregnantEmployees": {
+			const organizationId = String(
+				whereFilter.organizationId || req?.organizationId || "",
+			);
+			const employees = await prisma.employee.findMany({
+				where: { organizationId, isDeleted: false, pregnant: true },
+				select: {
+					id: true,
+					employeeId: true,
+					expectedDueDate: true,
+					person: { select: { personalInfo: true } },
+					department: { select: { name: true } },
+					position: { select: { title: true } },
+				},
+				orderBy: [{ expectedDueDate: "asc" }, { employeeId: "asc" }],
+			});
+			const rows = employees.map((employee) => ({
+				employeeId: employee.id,
+				empCode: employee.employeeId,
+				name: `${employee.person?.personalInfo?.lastName || ""}, ${
+					employee.person?.personalInfo?.firstName || ""
+				}`.replace(/^, |,$/, ""),
+				department: employee.department?.name || "No Department",
+				position: employee.position?.title || "",
+				expectedDueDate: employee.expectedDueDate
+					? new Date(employee.expectedDueDate).toISOString().slice(0, 10)
+					: null,
+			}));
+			return {
+				total: rows.length,
+				rows,
+				privacyNote: "HR/admin-only visibility per M3.3 requirement.",
+			};
+		}
 		default:
 			throw new Error(`Unknown employee metric: ${metric}`);
 	}
@@ -3103,6 +3239,33 @@ async function generatePayrollPeriodMetric(
 			};
 		}
 
+		case "laborCostAnalysis": {
+			try {
+				const startDate = whereFilter.payDate?.gte ? new Date(whereFilter.payDate.gte) : null;
+				const endDate = whereFilter.payDate?.lte ? new Date(whereFilter.payDate.lte) : null;
+				if (!startDate || !endDate) {
+					throw new Error("Date range is required for labor cost analysis");
+				}
+				return await calculateLaborCostAnalysis(
+					prisma,
+					organizationId,
+					startDate,
+					endDate,
+					typeof whereFilter.departmentId === "string"
+						? whereFilter.departmentId
+						: undefined,
+					typeof whereFilter.payrollPeriodId === "string"
+						? whereFilter.payrollPeriodId
+						: undefined,
+					typeof whereFilter.workforceSource === "string"
+						? whereFilter.workforceSource
+						: undefined,
+				);
+			} catch (error: any) {
+				logger.error("Error calculating labor cost analysis:", error);
+				throw new Error(`Failed to calculate labor cost analysis: ${error.message}`);
+			}
+		}
 		case "payrollSummary": {
 			const payrollPeriodId = whereFilter.payrollPeriodId;
 			const payDateFilter = whereFilter.payDate;
@@ -3250,6 +3413,7 @@ async function generatePayrollPeriodMetric(
 							perfectAttendance: true,
 							mealAllowance: true,
 							lineLeaderAllowance: true,
+							assemblyStanding: true,
 							totalReceivable: true,
 							metadata: true,
 							timesheetSnapshot: true,
@@ -3533,6 +3697,7 @@ async function generatePayrollPeriodMetric(
 						perfectAttendance: ep.perfectAttendance || 0,
 						mealAllowance: ep.mealAllowance || 0,
 						lineLeaderAllowance: ep.lineLeaderAllowance || 0,
+						assemblyStanding: (ep as any).assemblyStanding || 0,
 						totalReceivable: ep.totalReceivable || metadata?.totalReceivable || netPay + receivableAdd,
 						receivableAdd,
 						workDays: numberOfDays,

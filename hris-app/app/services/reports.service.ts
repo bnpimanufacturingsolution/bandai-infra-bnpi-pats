@@ -68,6 +68,71 @@ class ReportsService {
 			throw new Error(apiError?.message || "Failed to download BIR Form 2316.");
 		}
 	}
+
+	async downloadBirAnnualPack(year: number): Promise<Blob> {
+		try {
+			return await hrisApiClient.getBlob(
+				`/api/reports/bir/annual-pack?year=${encodeURIComponent(String(year))}`,
+			);
+		} catch (error: unknown) {
+			const apiError = error as { status?: number; message?: string };
+			if (apiError?.status === 400) {
+				throw new Error("year is a required query parameter.");
+			}
+			throw new Error(apiError?.message || "Failed to download the annual BIR pack.");
+		}
+	}
+
+	async downloadSssR3(periodId: string): Promise<Blob> {
+		try {
+			return await hrisApiClient.getBlob(
+				`/api/reports/sss/r3?periodId=${encodeURIComponent(periodId)}`,
+			);
+		} catch (error: unknown) {
+			const apiError = error as { status?: number; message?: string };
+			if (apiError?.status === 404) {
+				throw new Error("Payroll period not found for SSS R-3.");
+			}
+			if (apiError?.status === 400) {
+				throw new Error("periodId is a required query parameter.");
+			}
+			throw new Error(apiError?.message || "Failed to download SSS R-3.");
+		}
+	}
+
+	async downloadPagibigMf(periodId: string): Promise<Blob> {
+		try {
+			return await hrisApiClient.getBlob(
+				`/api/reports/pagibig/mf?periodId=${encodeURIComponent(periodId)}`,
+			);
+		} catch (error: unknown) {
+			const apiError = error as { status?: number; message?: string };
+			if (apiError?.status === 404) {
+				throw new Error("Payroll period not found for Pag-ibig MF.");
+			}
+			if (apiError?.status === 400) {
+				throw new Error("periodId is a required query parameter.");
+			}
+			throw new Error(apiError?.message || "Failed to download Pag-ibig MF.");
+		}
+	}
+
+	async downloadPhilhealthRf1(periodId: string): Promise<Blob> {
+		try {
+			return await hrisApiClient.getBlob(
+				`/api/reports/philhealth/rf1?periodId=${encodeURIComponent(periodId)}`,
+			);
+		} catch (error: unknown) {
+			const apiError = error as { status?: number; message?: string };
+			if (apiError?.status === 404) {
+				throw new Error("Payroll period not found for PhilHealth RF-1.");
+			}
+			if (apiError?.status === 400) {
+				throw new Error("periodId is a required query parameter.");
+			}
+			throw new Error(apiError?.message || "Failed to download PhilHealth RF-1.");
+		}
+	}
 }
 
 export default new ReportsService();

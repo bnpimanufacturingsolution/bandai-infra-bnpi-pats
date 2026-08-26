@@ -23,6 +23,7 @@ import metricsService, {
 	type OvertimeMetricsResponse,
 	type PayrollSummaryResponse,
 	type NoWorkReportResponse,
+	type LaborCostAnalysisResponse,
 	type DailyActiveManpowerResponse,
 	type AgencyAttendanceSummaryResponse,
 	type DirectIndirectLaborSummaryResponse,
@@ -232,8 +233,36 @@ export const queryKeys = {
 			] as const,
 		tardinessMetrics: (dateFrom?: string, dateTo?: string, departmentId?: string) =>
 			[...queryKeys.metrics.all, "tardinessMetrics", dateFrom, dateTo, departmentId] as const,
-		overtimeMetrics: (dateFrom?: string, dateTo?: string, departmentId?: string) =>
-			[...queryKeys.metrics.all, "overtimeMetrics", dateFrom, dateTo, departmentId] as const,
+		laborCostAnalysis: (
+			dateFrom?: string,
+			dateTo?: string,
+			departmentId?: string,
+			workforceSource?: string,
+			payrollPeriodId?: string,
+		) =>
+			[
+				...queryKeys.metrics.all,
+				"laborCostAnalysis",
+				dateFrom,
+				dateTo,
+				departmentId,
+				workforceSource ?? "all",
+				payrollPeriodId ?? "",
+			] as const,
+		overtimeMetrics: (
+			dateFrom?: string,
+			dateTo?: string,
+			departmentId?: string,
+			workforceSource?: string,
+		) =>
+			[
+				...queryKeys.metrics.all,
+				"overtimeMetrics",
+				dateFrom,
+				dateTo,
+				departmentId,
+				workforceSource ?? "all",
+			] as const,
 		noWorkReport: (dateFrom?: string, departmentId?: string, reportToId?: string) =>
 			[...queryKeys.metrics.all, "noWorkReport", dateFrom, departmentId, reportToId] as const,
 		dailyActiveManpower: (dateFrom?: string, departmentId?: string, reportToId?: string) =>
@@ -763,10 +792,16 @@ export const useTardinessMetrics = (dateFrom?: string, dateTo?: string, departme
 /**
  * Hook to fetch overtime metrics
  */
-export const useOvertimeMetrics = (dateFrom?: string, dateTo?: string, departmentId?: string) => {
+export const useOvertimeMetrics = (
+	dateFrom?: string,
+	dateTo?: string,
+	departmentId?: string,
+	workforceSource?: string,
+) => {
 	return useQuery<OvertimeMetricsResponse>({
-		queryKey: queryKeys.metrics.overtimeMetrics(dateFrom, dateTo, departmentId),
-		queryFn: () => metricsService.getOvertimeMetrics(dateFrom, dateTo, departmentId),
+		queryKey: queryKeys.metrics.overtimeMetrics(dateFrom, dateTo, departmentId, workforceSource),
+		queryFn: () =>
+			metricsService.getOvertimeMetrics(dateFrom, dateTo, departmentId, workforceSource),
 		enabled: !!dateFrom && !!dateTo,
 		staleTime: 5 * 60 * 1000, // 5 minutes
 	});
@@ -775,6 +810,40 @@ export const useOvertimeMetrics = (dateFrom?: string, dateTo?: string, departmen
 /**
  * Hook to fetch no-work report metrics
  */
+export const useTinLibrary = () => {
+	return useQuery<TinLibraryResponse>({
+		queryKey: [...queryKeys.metrics.all, "tinLibrary"] as const,
+		queryFn: () => metricsService.getTinLibrary(),
+		staleTime: 5 * 60 * 1000,
+	});
+};
+export const useLaborCostAnalysis = (
+	dateFrom?: string,
+	dateTo?: string,
+	departmentId?: string,
+	workforceSource?: string,
+	payrollPeriodId?: string,
+) => {
+	return useQuery<LaborCostAnalysisResponse>({
+		queryKey: queryKeys.metrics.laborCostAnalysis(
+			dateFrom,
+			dateTo,
+			departmentId,
+			workforceSource,
+			payrollPeriodId,
+		),
+		queryFn: () =>
+			metricsService.getLaborCostAnalysis(
+				dateFrom,
+				dateTo,
+				departmentId,
+				workforceSource,
+				payrollPeriodId,
+			),
+		enabled: !!dateFrom && !!dateTo,
+		staleTime: 5 * 60 * 1000,
+	});
+};
 export const useNoWorkReport = (dateFrom?: string, departmentId?: string, reportToId?: string) => {
 	return useQuery<NoWorkReportResponse>({
 		queryKey: queryKeys.metrics.noWorkReport(dateFrom, departmentId, reportToId),

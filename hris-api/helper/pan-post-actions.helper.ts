@@ -49,6 +49,7 @@ export async function applyPanCompletionSideEffects(
 			employmentType: true,
 			probationEndDate: true,
 			workLocation: true,
+			leaveBalances: true,
 		},
 	});
 
@@ -177,6 +178,43 @@ export async function applyPanCompletionSideEffects(
 			employeeUpdateData.employmentTerminationDate = metadata.lastWorkingDay
 				? new Date(metadata.lastWorkingDay)
 				: new Date(effectiveDate);
+			break;
+		}
+		case "LEAVE_CONVERSION": {
+			// Convert leave credits to cash: shrink totalEntitled by the converted
+			// days and recompute available. Money handling stays in payroll.
+			// Accepts leaveType|conversionLeaveType and days|conversionDays.
+			const conversionLeaveType = String(
+				metadata.leaveType || metadata.conversionLeaveType || "",
+			).trim();
+			const conversionDays = Number(metadata.days || metadata.conversionDays || 0);
+			if (!conversionLeaveType || !(conversionDays > 0)) {
+				break;
+			}
+			const conversionBalances = Array.isArray(currentEmployee.leaveBalances)
+				? [...(currentEmployee.leaveBalances as Record<string, any>[])]
+				: [];
+			const conversionIndex = conversionBalances.findIndex(
+				(balance) => balance?.leaveType === conversionLeaveType,
+			);
+			if (conversionIndex === -1) {
+				break;
+			}
+			const conversionBalance = conversionBalances[conversionIndex];
+			const nextTotal = Math.max(
+				0,
+				Number(conversionBalance.totalEntitled || 0) - conversionDays,
+			);
+			conversionBalances[conversionIndex] = {
+				...conversionBalance,
+				totalEntitled: nextTotal,
+				available: Math.max(
+					0,
+					nextTotal -
+						(Number(conversionBalance.used || 0) + Number(conversionBalance.pending || 0)),
+				),
+			};
+			employeeUpdateData.leaveBalances = conversionBalances;
 			break;
 		}
 		default:

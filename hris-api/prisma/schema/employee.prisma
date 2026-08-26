@@ -152,6 +152,10 @@ model Employee {
   employeeLeaveBalances    EmployeeLeaveBalance[]
   leaveBalancesLastUpdated DateTime?
 
+  // Special-list flags (M3.3): pregnant employees no-work coverage
+  pregnant                 Boolean                @default(false)
+  expectedDueDate          DateTime?
+
   // Compensation
   basicSalary  Float
   /// Register Daily Salary (Path A OT: hourly = dailyRate/8). Null/0 → Path B BNPI 313.

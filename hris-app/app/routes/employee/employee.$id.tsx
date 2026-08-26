@@ -4,6 +4,7 @@ import { Button } from "~/components/atoms/Button";
 import { Card, CardContent } from "~/components/atoms/Card";
 import { CompensationTab } from "~/components/organisms/employee-detail/compensation-tab";
 import { DocumentsTab } from "~/components/organisms/employee-detail/documents-tab";
+import { Filing201Tab } from "~/components/organisms/employee-detail/filing-201-tab";
 import { EmploymentDetailsTab } from "~/components/organisms/employee-detail/employment-details-tab";
 import { LeaveBalanceTab } from "~/components/organisms/employee-detail/leave-balance-tab";
 import { OnboardingTab } from "~/components/organisms/employee-detail/onboarding-tab";
@@ -19,6 +20,7 @@ import {
 	Calendar,
 	Clock,
 	FileText,
+	FolderOpen,
 	User,
 } from "lucide-react";
 
@@ -29,6 +31,7 @@ const tabs = [
 	{ id: "compensation", label: "Compensation", icon: Briefcase },
 	{ id: "leave-balance", label: "Leave Balance", icon: Calendar },
 	{ id: "documents", label: "Documents", icon: FileText },
+	{ id: "filing-201", label: "201 File", icon: FolderOpen },
 ] as const;
 
 const knownTabIds = new Set<string>([...tabs.map((tab) => tab.id), "boarding"]);
@@ -218,6 +221,9 @@ export default function EmployeeDetailPage() {
 						) : null}
 						{activeTab === "documents" ? (
 							<DocumentsTab employee={employee} canEdit={isOwnProfile} />
+						) : null}
+						{activeTab === "filing-201" ? (
+							<Filing201Tab employeeId={employee.id} />
 						) : null}
 						{activeTab === "boarding" ? <OnboardingTab employee={employee} /> : null}
 				</div>

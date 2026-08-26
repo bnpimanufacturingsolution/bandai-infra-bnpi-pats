@@ -31,6 +31,7 @@ import {
 	Minimize2,
 } from "lucide-react";
 import { useAuth } from "~/lib/hooks/use-auth";
+import { OrgReassignManagerPanel } from "./OrgReassignManagerPanel";
 import {
 	buildOrganizationReportingDeepLink,
 	type Employee as BaseEmployee,
@@ -1570,6 +1571,7 @@ export default function OrganizationChartTab({
 
 	return (
 		<div className="space-y-4">
+			<OrgReassignManagerPanel />
 			<style>{`
 				@media print {
 					body * {

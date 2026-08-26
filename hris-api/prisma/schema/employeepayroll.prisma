@@ -122,6 +122,7 @@ model EmployeePayroll {
   perfectAttendance                Float @default(0)
   mealAllowance                    Float @default(0)
   lineLeaderAllowance              Float @default(0)
+  assemblyStanding                 Float @default(0)
   totalReceivable                  Float @default(0)
 
   // Timesheet snapshot - frozen at payroll generation time

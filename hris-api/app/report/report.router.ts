@@ -2,6 +2,11 @@ import { Router, Request, Response, NextFunction } from "express";
 
 interface IController {
 	downloadBir2316(req: Request, res: Response, next: NextFunction): Promise<void>;
+	downloadPhilhealthRf1(req: Request, res: Response, next: NextFunction): Promise<void>;
+	downloadBirAnnualPack(req: Request, res: Response, next: NextFunction): Promise<void>;
+	downloadSssR3(req: Request, res: Response, next: NextFunction): Promise<void>;
+	downloadPagibigMf(req: Request, res: Response, next: NextFunction): Promise<void>;
+	terminalPayPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getManpowerDistributionReference(
 		req: Request,
 		res: Response,
@@ -42,6 +47,11 @@ export const router = (route: Router, controller: IController): Router => {
 	 *               format: binary
 	 */
 	routes.get("/bir/2316", controller.downloadBir2316);
+	routes.get("/philhealth/rf1", controller.downloadPhilhealthRf1);
+	routes.get("/bir/annual-pack", controller.downloadBirAnnualPack);
+	routes.get("/sss/r3", controller.downloadSssR3);
+	routes.get("/pagibig/mf", controller.downloadPagibigMf);
+	routes.post("/terminal-pay/preview", controller.terminalPayPreview);
 	routes.get("/manpower-distribution/reference", controller.getManpowerDistributionReference);
 
 	route.use(path, routes);
