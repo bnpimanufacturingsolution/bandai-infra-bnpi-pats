@@ -7,7 +7,6 @@ import { TardinessUndetimeTab } from "./tabs/TardinessUndetimeTab";
 import { OvertimeTab } from "./tabs/OvertimeTab";
 import { LeaveBalanceTab } from "./tabs/LeaveBalanceTab";
 import { ManhoursTab } from "./tabs/ManhoursTab";
-
 const visibleTabs = new Set(["trend", "perfect", "tardiness", "overtime", "leave", "manhours"]);
 
 /**
