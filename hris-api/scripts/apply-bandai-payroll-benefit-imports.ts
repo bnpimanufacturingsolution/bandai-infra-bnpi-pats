@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "../generated/prisma";
+import { isOpenHorizonCompensationCode } from "../helper/bnpi-mass-upload-import.helper";
 
 const prisma = new PrismaClient();
 const repoRoot = path.resolve(__dirname, "..", "..");
@@ -186,7 +187,8 @@ async function main() {
 				minAmount: toNumber(row.MIN_AMOUNT),
 				maxAmount: toNumber(row.MAX_AMOUNT),
 				interestRate: toNumber(row.INTEREST_RATE, 0) || 0,
-				maxTermMonths: toNumber(row.MAX_TERM_MONTHS, 1) || 1,
+				// BNPI loans recur across cutoffs; never seed 1-month types from workbook.
+				maxTermMonths: Math.max(toNumber(row.MAX_TERM_MONTHS, 24) || 24, 24),
 				minServiceMonths: toNumber(row.MIN_SERVICE_MONTHS),
 				isActive: toBool(row.IS_ACTIVE, true),
 				isDeleted: false,
@@ -351,44 +353,75 @@ async function main() {
 			continue;
 		}
 		const startDate = toDate(row.START_DATE);
-		const endDate = toDate(row.END_DATE);
+		const sheetEndDate = toDate(row.END_DATE);
+		const openHorizon = isOpenHorizonCompensationCode(row.CODE_OR_NAME);
 		const payrollPeriodCode = String(row.PAYROLL_PERIOD_CODE || "").trim();
-		const payrollPeriod = payrollPeriodCode
-			? payrollPeriodByKey.get(payrollPeriodCode.toUpperCase())
-			: payrollPeriodByKey.get(dateKey(startDate, endDate));
+		const payrollPeriod = openHorizon
+			? null
+			: payrollPeriodCode
+				? payrollPeriodByKey.get(payrollPeriodCode.toUpperCase())
+				: payrollPeriodByKey.get(dateKey(startDate, sheetEndDate));
 		const existing = await prisma.employeeBenefit.findFirst({
 			where: {
 				organizationId: organization.id,
 				employeeId: employee.id,
 				benefitTypeId: benefitType.id,
-				...(payrollPeriod
-					? { OR: [{ payrollPeriodId: payrollPeriod.id }, { startDate, endDate }] }
-					: { startDate, endDate }),
 				isDeleted: false,
+				...(openHorizon
+					? {}
+					: payrollPeriod
+						? { OR: [{ payrollPeriodId: payrollPeriod.id }, { startDate, endDate: sheetEndDate }] }
+						: { startDate, endDate: sheetEndDate }),
 			},
-			select: { id: true },
+			select: { id: true, startDate: true },
+			orderBy: openHorizon ? [{ payrollPeriodId: "asc" }, { updatedAt: "desc" }] : undefined,
 		});
 		if (existing) employeeBenefitUpdates += 1;
 		else employeeBenefitCreates += 1;
 
 		if (!execute) continue;
-		const totalInstallments = toNumber(row.INSTALLMENTS, 1) || 1;
-		const payload = {
-			name: benefitType.name,
-			totalAmount: amount,
-			totalInstallments,
-			installmentAmount: amount / totalInstallments,
-			remainingBalance: amount,
-			amount,
-			payrollPeriodId: payrollPeriod?.id,
-			startDate,
-			endDate,
-			status: row.STATUS || "ACTIVE",
-			notes: row.NOTES || null,
-			remarks: row.NOTES || null,
-			isActive: true,
-			isDeleted: false,
-		};
+		const totalInstallments = openHorizon ? 0 : toNumber(row.INSTALLMENTS, 1) || 1;
+		const openStart =
+			openHorizon && existing?.startDate && existing.startDate.getTime() < startDate.getTime()
+				? existing.startDate
+				: startDate;
+		const payload = openHorizon
+			? {
+					name: benefitType.name,
+					totalAmount: amount,
+					totalInstallments: 0,
+					installmentAmount: amount,
+					remainingBalance: amount,
+					amount,
+					payrollPeriodId: null,
+					startDate: openStart,
+					endDate: null,
+					startPayrollCutOff: openStart,
+					endPayrollCutOff: null,
+					scheduleMode: "RECURRING",
+					recurrenceFrequency: "EVERY_CUTOFF",
+					status: row.STATUS || "ACTIVE",
+					notes: [row.NOTES, "open-horizon EVERY_CUTOFF (DMA)"].filter(Boolean).join(" | "),
+					remarks: row.NOTES || null,
+					isActive: true,
+					isDeleted: false,
+				}
+			: {
+					name: benefitType.name,
+					totalAmount: amount,
+					totalInstallments,
+					installmentAmount: amount / totalInstallments,
+					remainingBalance: amount,
+					amount,
+					payrollPeriodId: payrollPeriod?.id,
+					startDate,
+					endDate: sheetEndDate,
+					status: row.STATUS || "ACTIVE",
+					notes: row.NOTES || null,
+					remarks: row.NOTES || null,
+					isActive: true,
+					isDeleted: false,
+				};
 		if (existing) {
 			await prisma.employeeBenefit.update({ where: { id: existing.id }, data: payload as any });
 		} else {
@@ -413,34 +446,48 @@ async function main() {
 			continue;
 		}
 		const startDate = toDate(row.START_DATE);
-		const endDate = toDate(row.END_DATE);
+		// Workbook START/END is the *source cut*, not the loan horizon. Keep multi-cutoff endDate.
+		const sheetEndDate = toDate(row.END_DATE);
 		const existing = await (prisma as any).employeeLoan.findFirst({
 			where: {
 				organizationId: organization.id,
 				employeeId: employee.id,
 				loanTypeId: loanType.id,
-				startDate,
-				endDate,
 				isDeleted: false,
+				status: { in: ["PENDING", "APPROVED", "ACTIVE"] },
 			},
-			select: { id: true },
+			select: { id: true, endDate: true, monthlyPayment: true },
 		});
 		if (existing) employeeLoanUpdates += 1;
 		else employeeLoanCreates += 1;
 
 		if (!execute) continue;
-		const termMonths = toNumber(row.INSTALLMENTS, loanType.maxTermMonths || 1) || 1;
-		const monthlyPayment = termMonths > 0 ? amount / termMonths : amount;
+		const termMonths = Math.max(
+			toNumber(row.INSTALLMENTS, loanType.maxTermMonths || 24) || 24,
+			24,
+		);
+		// Sheet AMOUNT for loans is the per-cutoff payment on the register, not principal.
+		const monthlyPayment = amount;
+		const principalAmount = amount * termMonths;
+		const horizonEnd = new Date(startDate.getTime());
+		horizonEnd.setUTCMonth(horizonEnd.getUTCMonth() + termMonths);
+		const existingEnd = existing?.endDate ? new Date(existing.endDate) : null;
+		const endDate =
+			existingEnd && existingEnd.getTime() > horizonEnd.getTime()
+				? existingEnd
+				: horizonEnd.getTime() > sheetEndDate.getTime()
+					? horizonEnd
+					: sheetEndDate;
 		const payload = {
-			principalAmount: amount,
+			principalAmount,
 			interestRate: Number(loanType.interestRate || 0),
-			totalAmount: amount,
+			totalAmount: principalAmount,
 			termMonths,
 			monthlyPayment,
 			startDate,
 			endDate,
 			amountPaid: 0,
-			balance: amount,
+			balance: principalAmount,
 			status: row.STATUS || "ACTIVE",
 			notes: row.NOTES || null,
 			isDeleted: false,

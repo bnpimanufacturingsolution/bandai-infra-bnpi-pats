@@ -63,7 +63,6 @@ export default function App() {
 					<Toaster
 						richColors
 						position="top-right"
-						closeButton
 						swipeDirections={["top", "right", "bottom", "left"]}
 					/>
 					{ReactQueryDevtools ? (

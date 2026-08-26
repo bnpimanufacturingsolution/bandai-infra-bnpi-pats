@@ -22,6 +22,7 @@ import devicesService, {
 	type DeleteDeviceUsersRequest,
 	type DeviceEventsResetScope,
 	type HikvisionDeviceTimeSyncResponse,
+	type HikvisionDeviceTimeSyncAllResponse,
 	type HikvisionListenerAction,
 	type HikvisionListenerStatus,
 	type DeviceLiveReadiness,
@@ -1049,6 +1050,29 @@ export const useMockHikvisionFaceTally = () => {
 		},
 		onError: (error: any) => {
 			sonnerToast.error(error?.message || "Failed to update synthetic face tally");
+		},
+	});
+};
+
+export const useHikvisionDeviceTimeSyncAll = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (payload: { execute?: boolean; deviceIds?: string[] }) => {
+			return await devicesService.syncHikvisionDeviceTimeAll(payload);
+		},
+		onSuccess: (result: HikvisionDeviceTimeSyncAllResponse) => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.devices.all });
+			if (result.execute) {
+				sonnerToast.success(
+					result.written > 0
+						? `Updated clocks on ${result.written}/${result.totalTargets} Hikvision devices`
+						: "No Hikvision clock could be written this run",
+				);
+			}
+		},
+		onError: (error: any) => {
+			sonnerToast.error(error?.message || "Failed to run Hikvision bulk time sync");
 		},
 	});
 };

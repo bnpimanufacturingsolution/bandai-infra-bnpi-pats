@@ -200,6 +200,35 @@ const applicantMatchesLinkedEmployee = (applicant: any) => {
 	return true;
 };
 
+const normalizeHireIdentityValue = (value: unknown) =>
+	String(value || "")
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, " ");
+
+const applicantMatchesLinkedEmployee = (applicant: any) => {
+	const applicantInfo = applicant?.person?.personalInfo || {};
+	const employeeInfo = applicant?.convertedToEmployee?.person?.personalInfo || {};
+	const applicantFirst = normalizeHireIdentityValue(applicantInfo.firstName);
+	const applicantLast = normalizeHireIdentityValue(applicantInfo.lastName);
+	const employeeFirst = normalizeHireIdentityValue(employeeInfo.firstName);
+	const employeeLast = normalizeHireIdentityValue(employeeInfo.lastName);
+	if (!applicantFirst || !applicantLast || !employeeFirst || !employeeLast) {
+		return false;
+	}
+	if (applicantFirst !== employeeFirst || applicantLast !== employeeLast) {
+		return false;
+	}
+	const applicantEmail = normalizeHireIdentityValue(applicant?.person?.contactInfo?.email);
+	const employeeEmail = normalizeHireIdentityValue(
+		applicant?.convertedToEmployee?.person?.contactInfo?.email,
+	);
+	if (applicantEmail && employeeEmail && applicantEmail !== employeeEmail) {
+		return false;
+	}
+	return true;
+};
+
 const isApplicantEmployeeLinked = (applicant: any) =>
 	Boolean(applicant?.convertedToEmployeeId || applicant?.convertedToEmployee?.id);
 
@@ -238,10 +267,17 @@ const buildLegalPersonName = (pi: any) =>
 	[pi?.firstName, pi?.middleName, pi?.lastName].filter(Boolean).join(" ").trim() || "";
 
 /** Prefer nested `convertedToEmployee` only when it is the same person as the applicant. */
+/** Prefer nested `convertedToEmployee` only when it is the same person as the applicant. */
 const resolveHireEmployeePresentation = (applicant: any) => {
 	const emp = applicant?.convertedToEmployee;
 	const empPi = emp?.person?.personalInfo;
 	const fromEmp = empPi ? buildLegalPersonName(empPi) : "";
+	const applicantName = buildFullName(applicant);
+	const identityMatches = applicantMatchesLinkedEmployee(applicant);
+	const displayName = identityMatches && fromEmp ? fromEmp : applicantName || fromEmp;
+	const email = identityMatches
+		? emp?.person?.contactInfo?.email ?? applicant?.person?.contactInfo?.email ?? null
+		: applicant?.person?.contactInfo?.email ?? emp?.person?.contactInfo?.email ?? null;
 	const applicantName = buildFullName(applicant);
 	const identityMatches = applicantMatchesLinkedEmployee(applicant);
 	const displayName = identityMatches && fromEmp ? fromEmp : applicantName || fromEmp;
@@ -262,6 +298,8 @@ const resolveHireEmployeePresentation = (applicant: any) => {
 		department,
 		linkId,
 		isLinked: Boolean(linkId),
+		identityMatches,
+		linkedEmployeeName: fromEmp || null,
 		identityMatches,
 		linkedEmployeeName: fromEmp || null,
 	};
@@ -3209,6 +3247,10 @@ function ApplicantWorkflowDrawer({
 		actionState === "HIRED" && hireView.isLinked && hireView.identityMatches !== false;
 	const linkedEmployeeMismatch =
 		actionState === "HIRED" && hireView.isLinked && hireView.identityMatches === false;
+	const employeeLinkedHired =
+		actionState === "HIRED" && hireView.isLinked && hireView.identityMatches !== false;
+	const linkedEmployeeMismatch =
+		actionState === "HIRED" && hireView.isLinked && hireView.identityMatches === false;
 	const firstMissingSetupField = preHireMissingFields[0]?.field || null;
 
 	const copyToClipboard = (text: string, label: string) => {
@@ -3252,6 +3294,17 @@ function ApplicantWorkflowDrawer({
 									{hireView.email || "—"}
 								</p>
 							</div>
+						</div>
+					) : null}
+
+					{linkedEmployeeMismatch ? (
+						<div className="mb-5 rounded-xl bg-amber-50/90 px-3 py-3 text-sm text-amber-900 ring-1 ring-amber-100">
+							<p className="font-medium">Employee record does not match this applicant</p>
+							<p className="mt-1 leading-snug text-[#5f5f63]">
+								The job application is {buildFullName(applicant)}. The linked employee is{" "}
+								{hireView.linkedEmployeeName || hireView.employeeCode || "a different person"}.
+								Hire must keep the name and email from the public application.
+							</p>
 						</div>
 					) : null}
 

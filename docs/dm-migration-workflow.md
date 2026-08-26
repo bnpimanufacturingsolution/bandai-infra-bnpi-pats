@@ -331,7 +331,11 @@ the period reopened before invoking the scoped run-payroll contract, otherwise
 the HR payroll UI can show stale net-pay rows from the pre-repair snapshot. The
 run-payroll preview/job counts must come from the selected department/section
 scope and the generated row must match the refreshed comparison for sampled
-employees before treating DM5 payroll proof as complete.
+employees before treating DM5 payroll proof as complete. **Start Payroll / job
+totals** use APPROVED payroll-ready only (`includedEmployeesCount`). **Preview
+Payroll** may also show estimate-only non-APPROVED timesheets
+(`previewComputableEmployeesCount`, readiness badges); do not treat those rows
+as generate-ready without approval.
 
 DM3 employee workbook imports from `/admin/configuration/migration` use the employee
 import endpoint in full provisioning mode but defer shared employee post-actions
@@ -549,6 +553,13 @@ must carry the payroll-register Sheet2 `Basic Salary` period amount so payroll
 preview and generated payroll rows do not double the period pay. DM5 payroll
 history must not be used to backfill salary unless the same payroll-approved
 value is explicitly written back into DM3 employee master data.
+
+**Daily Salary (FILE_DUAL OT, 2026-08-13):** Sheet2 `Daily Salary` maps to optional
+import column `DAILY_SALARY` (or `DAILY_RATE`) → `Employee.dailyRate`. When
+`dailyRate > 0`, Bandai approved-bucket OT/premiums use Path A
+`hourly = dailyRate / 8` (e.g. 600 → ₱75 × 1.25). When blank/0, Path B BNPI
+`periodBasic × 24 / 313 / 8` remains. Manpower databank import must not clear
+`dailyRate`. See `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md`.
 
 BNPI employee email is also DM3 employee master/contact data when it exists in
 the Manpower Databank or another approved HR/IT source. Migration mappers and

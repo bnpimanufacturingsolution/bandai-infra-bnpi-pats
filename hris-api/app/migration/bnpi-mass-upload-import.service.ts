@@ -2,12 +2,16 @@
 import type { PrismaClient } from "../../generated/prisma";
 import {
 	aggregateCompensationMassUploadRowsByEmployeeCodeStart,
+	BANDAI_LOAN_MIN_TERM_MONTHS,
 	compensationBenefitLabel,
 	DEDUCTION_BENEFIT_CODE_LABELS,
+	isOpenHorizonCompensationCode,
 	normalizeMassUploadRow,
 	padEmployeeId,
 	parseCompensationMassUploadRow,
 	parseDeductionMassUploadRow,
+	resolveBandaiLoanEndDate,
+	resolveBandaiMassUploadLoanTermMonths,
 	resolveCompensationCodePayrollRole,
 	resolveDeductionCodePayrollRole,
 } from "../../helper/bnpi-mass-upload-import.helper";
@@ -237,7 +241,7 @@ const BNPI_RECEIVABLE_ONLY_CODES = new Set([
 	"MLA",
 ]);
 
-async function ensureBenefitType(
+export async function ensureBenefitType(
 	prisma: PrismaClient,
 	organizationId: string,
 	code: string,
@@ -344,7 +348,17 @@ async function ensureLoanType(prisma: PrismaClient, organizationId: string, name
 		},
 		select: { id: true, name: true, interestRate: true, maxTermMonths: true },
 	});
-	if (existing) return existing;
+	if (existing) {
+		// Lift one-cutoff misconfig (maxTermMonths=1) so mass import uses multi-cutoff terms.
+		if (Number(existing.maxTermMonths || 0) < BANDAI_LOAN_MIN_TERM_MONTHS) {
+			return prisma.loanType.update({
+				where: { id: existing.id },
+				data: { maxTermMonths: BANDAI_LOAN_MIN_TERM_MONTHS },
+				select: { id: true, name: true, interestRate: true, maxTermMonths: true },
+			});
+		}
+		return existing;
+	}
 
 	return prisma.loanType.create({
 		data: {
@@ -353,7 +367,7 @@ async function ensureLoanType(prisma: PrismaClient, organizationId: string, name
 			category: "OTHER",
 			description: `Auto-created from BNPI deduction mass upload (${name})`,
 			interestRate: 0,
-			maxTermMonths: 12,
+			maxTermMonths: BANDAI_LOAN_MIN_TERM_MONTHS,
 			minAmount: 0,
 			maxAmount: 0,
 			minServiceMonths: 0,
@@ -641,6 +655,7 @@ export type Dm3ImportActivityKind =
 	| "compensation"
 	| "deduction"
 	| "worksharing-schedule"
+	| "period-leave"
 	| "dm1-workbook"
 	| "dm2-workbook"
 	| "dm4-workbook"
@@ -652,7 +667,7 @@ export type MigrationUploadActivityKind = Dm3ImportActivityKind;
 export const DM_UPLOAD_ACTIVITY_KINDS_BY_WORKBOOK: Record<string, Dm3ImportActivityKind[]> = {
 	dm1: ["dm1-workbook"],
 	dm2: ["dm2-workbook"],
-	dm3: ["workbook", "manpower-databank", "compensation", "deduction", "worksharing-schedule"],
+	dm3: ["workbook", "manpower-databank", "compensation", "deduction", "worksharing-schedule", "period-leave"],
 	dm4: ["dm4-workbook", "dm4-overtime"],
 };
 
@@ -676,6 +691,7 @@ export function isKnownUploadActivityKind(kind?: string | null): kind is Dm3Impo
 		value === "compensation" ||
 		value === "deduction" ||
 		value === "worksharing-schedule" ||
+		value === "period-leave" ||
 		value === "dm1-workbook" ||
 		value === "dm2-workbook" ||
 		value === "dm4-workbook" ||
@@ -1260,6 +1276,40 @@ export async function importCompensationMassUpload(params: {
 		}
 	}
 
+	// Open-horizon COMP (e.g. DMA): one active enrollment per employee+type.
+	const openHorizonTypeIds = Array.from(typeIds).filter((typeId) => {
+		for (const [code, type] of benefitTypeCache.entries()) {
+			if (type.id === typeId && isOpenHorizonCompensationCode(code)) return true;
+		}
+		return false;
+	});
+	if (openHorizonTypeIds.length > 0) {
+		const openExisting = await params.prisma.employeeBenefit.findMany({
+			where: {
+				organizationId: params.organizationId,
+				isDeleted: false,
+				benefitTypeId: { in: openHorizonTypeIds },
+				employeeId: { in: employees.map((e) => e.id) },
+			},
+			select: {
+				id: true,
+				employeeId: true,
+				benefitTypeId: true,
+				payrollPeriodId: true,
+				startDate: true,
+				endDate: true,
+				isActive: true,
+				status: true,
+			},
+			orderBy: [{ updatedAt: "desc" }],
+		});
+		for (const row of openExisting) {
+			const key = `${row.employeeId}|${row.benefitTypeId}|open`;
+			if (existingByKey.has(key)) continue;
+			existingByKey.set(key, row.id);
+		}
+	}
+
 	for (const row of okWriteRows) {
 		try {
 			const employeePk = employeeByCode.get(row.employeeId);
@@ -1287,39 +1337,80 @@ export async function importCompensationMassUpload(params: {
 			}
 
 			const benefitType = await ensureType(row.code);
-			const key = `${employeePk}|${benefitType.id}|${period.id}`;
+			const openHorizon = isOpenHorizonCompensationCode(row.code);
+			const key = openHorizon
+				? `${employeePk}|${benefitType.id}|open`
+				: `${employeePk}|${benefitType.id}|${period.id}`;
 			const existingId = existingByKey.get(key);
 			const sourceRowsNote =
 				row.sourceRowNumbers.length > 1
 					? ` rows ${row.sourceRowNumbers.join("+")} (summed)`
 					: ` row ${row.rowNumber}`;
 
-			const payload = normalizeEmployeeBenefitPayload({
-				organizationId: params.organizationId,
-				employeeId: employeePk,
-				benefitTypeId: benefitType.id,
-				payrollPeriodId: period.id,
-				amount: row.amount,
-				totalAmount: row.amount,
-				// One period only: pin to period bounds so Run Payroll Adjustments (filter by
-				// payrollPeriodId) and generation both see the same cutoff-scoped enrollment.
-				startDate: period.startDate,
-				endDate: period.endDate,
-				startPayrollCutOff: period.startDate,
-				endPayrollCutOff: period.endDate,
-				scheduleMode: "RECURRING",
-				recurrenceFrequency: "EVERY_CUTOFF",
-				totalInstallments: 0,
-				attendanceBased: false,
-				isActive: true,
-				status: "ACTIVE",
-				name: benefitType.name,
-				notes: `BNPI Compensation Mass Upload${sourceRowsNote}; COMCODE=${row.code}; period=${period.code || period.id}`,
-				currency: "PHP",
-				agreedToTerms: true,
-			});
+			const existingMeta = openHorizon && existingId
+				? await params.prisma.employeeBenefit.findUnique({
+						where: { id: existingId },
+						select: { startDate: true },
+					})
+				: null;
+			const openStart =
+				existingMeta?.startDate && existingMeta.startDate.getTime() < period.startDate.getTime()
+					? existingMeta.startDate
+					: period.startDate;
 
-			let periodScopedId = existingId || "";
+			const payload = normalizeEmployeeBenefitPayload(
+				openHorizon
+					? {
+							organizationId: params.organizationId,
+							employeeId: employeePk,
+							benefitTypeId: benefitType.id,
+							// Open-horizon: apply every cutoff until a later period-scoped
+							// mass row supersedes (see supersedeOpenHorizonBenefitsForPeriodScoped).
+							payrollPeriodId: null,
+							amount: row.amount,
+							totalAmount: row.amount,
+							startDate: openStart,
+							endDate: null,
+							startPayrollCutOff: openStart,
+							endPayrollCutOff: null,
+							scheduleMode: "RECURRING",
+							recurrenceFrequency: "EVERY_CUTOFF",
+							totalInstallments: 0,
+							attendanceBased: false,
+							isActive: true,
+							status: "ACTIVE",
+							name: benefitType.name,
+							notes: `BNPI Compensation Mass Upload${sourceRowsNote}; COMCODE=${row.code}; open-horizon EVERY_CUTOFF; seedPeriod=${period.code || period.id}`,
+							currency: "PHP",
+							agreedToTerms: true,
+						}
+					: {
+							organizationId: params.organizationId,
+							employeeId: employeePk,
+							benefitTypeId: benefitType.id,
+							payrollPeriodId: period.id,
+							amount: row.amount,
+							totalAmount: row.amount,
+							// One period only: pin to period bounds so Run Payroll Adjustments (filter by
+							// payrollPeriodId) and generation both see the same cutoff-scoped enrollment.
+							startDate: period.startDate,
+							endDate: period.endDate,
+							startPayrollCutOff: period.startDate,
+							endPayrollCutOff: period.endDate,
+							scheduleMode: "RECURRING",
+							recurrenceFrequency: "EVERY_CUTOFF",
+							totalInstallments: 0,
+							attendanceBased: false,
+							isActive: true,
+							status: "ACTIVE",
+							name: benefitType.name,
+							notes: `BNPI Compensation Mass Upload${sourceRowsNote}; COMCODE=${row.code}; period=${period.code || period.id}`,
+							currency: "PHP",
+							agreedToTerms: true,
+						},
+			);
+
+			let writtenId = existingId || "";
 			if (existingId) {
 				await params.prisma.employeeBenefit.update({
 					where: { id: existingId },
@@ -1338,7 +1429,7 @@ export async function importCompensationMassUpload(params: {
 					data: payload as any,
 					select: { id: true },
 				});
-				periodScopedId = created.id;
+				writtenId = created.id;
 				existingByKey.set(key, created.id);
 				pushImportSuccess(state, {
 					row: row.rowNumber,
@@ -1349,15 +1440,17 @@ export async function importCompensationMassUpload(params: {
 					periodCode: period.code,
 				});
 			}
-			await supersedeOpenHorizonBenefitsForPeriodScoped({
-				prisma: params.prisma,
-				organizationId: params.organizationId,
-				employeeId: employeePk,
-				benefitTypeId: benefitType.id,
-				period,
-				keepBenefitId: periodScopedId,
-				code: row.code,
-			});
+			if (!openHorizon) {
+				await supersedeOpenHorizonBenefitsForPeriodScoped({
+					prisma: params.prisma,
+					organizationId: params.organizationId,
+					employeeId: employeePk,
+					benefitTypeId: benefitType.id,
+					period,
+					keepBenefitId: writtenId,
+					code: row.code,
+				});
+			}
 			trackPeriodCode(state.summary, period.code);
 		} catch (error: any) {
 			pushImportError(state, {
@@ -1579,10 +1672,13 @@ export async function importDeductionMassUpload(params: {
 					);
 				}
 				const loanType = loanTypeCache.get(row.loanTypeName)!;
-				const termMonths = Math.max(1, Number(loanType.maxTermMonths || 12));
 				const principal = row.principalAmount;
 				const monthlyPayment = row.paymentAmount;
-				const endDate = addMonths(loanStart, termMonths);
+				const termMonths = resolveBandaiMassUploadLoanTermMonths({
+					maxTermMonths: loanType.maxTermMonths,
+					principalAmount: principal,
+					paymentAmount: monthlyPayment,
+				});
 				const existing = await params.prisma.employeeLoan.findFirst({
 					where: {
 						organizationId: params.organizationId,
@@ -1591,7 +1687,13 @@ export async function importDeductionMassUpload(params: {
 						isDeleted: false,
 						status: { in: ["PENDING", "APPROVED", "ACTIVE"] },
 					},
-					select: { id: true },
+					select: { id: true, endDate: true },
+				});
+				// Multi-cutoff horizon; never shrink an existing later endDate on re-import.
+				const endDate = resolveBandaiLoanEndDate({
+					startDate: loanStart,
+					termMonths,
+					existingEndDate: existing?.endDate ?? null,
 				});
 
 				const loanData = {

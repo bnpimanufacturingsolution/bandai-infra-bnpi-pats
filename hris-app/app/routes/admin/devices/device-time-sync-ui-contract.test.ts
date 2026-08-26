@@ -27,4 +27,25 @@ describe("admin Hikvision time-sync UI contract", () => {
 		expect(deviceController).toContain("runHikvisionDeviceTimeOnVm");
 		expect(manage).toContain("SDK (HCNetSDK STDXML)");
 	});
+
+	it("exposes a fleet Sync device time button with preview-first bulk flow", () => {
+		const manage = readAppFile("app/routes/admin/devices/manage.tsx");
+		const modal = readAppFile("app/routes/admin/devices/device-time-sync-all-modal.tsx");
+		const deviceHooks = readAppFile("app/lib/hooks/useDevices.ts");
+		const deviceService = readAppFile("app/services/devices.service.ts");
+		const deviceController = readAppFile("../hris-api/app/device/device.controller.ts");
+		const deviceRouter = readAppFile("../hris-api/app/device/device.router.ts");
+
+		expect(manage).toContain("Sync device time");
+		expect(manage).toContain("DeviceTimeSyncAllModal");
+		expect(manage).toContain("useHikvisionDeviceTimeSyncAll");
+		expect(modal).toContain("Preview only");
+		expect(modal).toContain("Update ");
+		expect(modal).toContain('mutate({ execute: true })');
+		expect(deviceHooks).toContain("syncHikvisionDeviceTimeAll");
+		expect(deviceService).toContain("/time-sync-all");
+		expect(deviceRouter).toContain('"/time-sync-all"');
+		expect(deviceController).toContain("syncAllHikvisionDevicesTime");
+		expect(deviceController).toContain("runHikvisionTimeSyncCore");
+	});
 });

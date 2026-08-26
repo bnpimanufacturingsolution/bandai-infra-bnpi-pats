@@ -41,7 +41,7 @@ const apiBase = 'http://localhost:3001';
 
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
   await page.waitForLoadState('networkidle', { timeout: 45000 }).catch(() => {});
-  await page.getByText('Device attendance').waitFor({ timeout: 30000 });
+  await page.getByText('Device events').waitFor({ timeout: 30000 });
   await page.getByText('Main Entrance Device').first().waitFor({ timeout: 30000 });
   await page.getByText('Ernst tey Malasa').first().waitFor({ timeout: 30000 });
   const text = await page.locator('body').innerText({ timeout: 10000 });
@@ -53,7 +53,7 @@ const apiBase = 'http://localhost:3001';
     title: await page.title(),
     finalUrl: page.url(),
     contains: {
-      deviceAttendance: text.includes('Device attendance'),
+      deviceEvents: text.includes('Device events'),
       mainEntranceDevice: text.includes('Main Entrance Device'),
       ernstTeyMalasa: text.includes('Ernst tey Malasa'),
       savedRowsLive: text.includes('Saved rows live') || text.includes('Saved-row updates on'),

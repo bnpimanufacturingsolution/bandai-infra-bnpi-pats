@@ -2,6 +2,8 @@
 
 **Status:** Active operator / agent checklist  
 **Last investigation:** 2026-07-26  
+**Session findings (2026-08-13):** `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md`  
+  (absent policy, Basic 481, OT dual Path A/B, TR impact, recommendations)  
 **Target register:** `confidential-files/HRIS Payroll Computation June_26 - July 10, 2026.xlsx`  
 **Period:** `2026-06-26` → `2026-07-10` (BNPI semi-monthly **period 2**, pay date ~2026-07-15)  
 **Password (register):** `9090` (sensitive; local/client handling only)

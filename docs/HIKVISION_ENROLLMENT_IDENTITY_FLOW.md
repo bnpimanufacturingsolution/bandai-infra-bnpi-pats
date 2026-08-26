@@ -6,6 +6,13 @@
 
 This document captures **what you want**, **what the architecture is**, **what the code does today**, and **how to verify the flows stay in sync**.
 
+> **2026-08-24 STALE-ADDRESS NOTICE:** TEST A moved address. Historical examples in this
+> document show `192.168.254.102` (and VM `59000`/`59443` as the TEST A reverse pair).
+> Live truth since 2026-08-13: TEST A = `192.168.254.109:443` via `127.0.0.1:58080`/`58000`;
+> TEST B = `192.168.254.110:443` via `127.0.0.1:58180`/`58100`; VM `59000`/`59443` now belong
+> to the Device 5 reverse pair. The identity-flow architecture itself is unchanged.
+> Source: `.wwg/wiki/project-truth.md` current-address note (2026-08-13).
+
 ---
 
 ## 1. What you want (operator vision)

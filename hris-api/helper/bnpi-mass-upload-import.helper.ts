@@ -75,6 +75,26 @@ export function resolveCompensationCodePayrollRole(
 	return COMPENSATION_CODE_PAYROLL_ROLES[key] || null;
 }
 
+/**
+ * COMP codes that must enroll as open-horizon (payrollPeriodId null, no period
+ * endDate pin) so EVERY_CUTOFF applies until a later period-scoped mass row
+ * supersedes them.
+ *
+ * DMA is catalog/register recurring: Sheet2 still pays De Minimis even when the
+ * cut's Compensation Mass Upload has 0 DMA rows. Period-scoped workbook seeds
+ * (e.g. Apr 26–May 10 only) caused Jul app DMA=0.
+ *
+ * ARP/PFA/MLA stay period-scoped (attendance / cut-specific receivable).
+ */
+export const OPEN_HORIZON_COMPENSATION_CODES = new Set<string>(["DMA"]);
+
+export function isOpenHorizonCompensationCode(code: string | null | undefined): boolean {
+	const key = String(code || "")
+		.trim()
+		.toUpperCase();
+	return Boolean(key) && OPEN_HORIZON_COMPENSATION_CODES.has(key);
+}
+
 /** Deduction-direction benefit codes created from mass upload / statutory import. */
 export const DEDUCTION_CODE_PAYROLL_ROLES: Record<
 	string,
@@ -147,6 +167,62 @@ export const DEDUCTION_BENEFIT_CODE_LABELS: Record<string, string> = {
 	MHDMF2: "Modified HDMF 2",
 	UNIDED: "Unidentified Deduction",
 };
+
+/**
+ * BNPI loans recur across cutoffs. LoanType.maxTermMonths was often seeded as 1
+ * (one workbook cut), which made EmployeeLoan.endDate expire before the next period
+ * so payroll applied ₱0 even when monthlyPayment still matched Sheet2.
+ *
+ * Mass Payment is per-cutoff (~2 cutoffs/month). Principal/Payment ≈ remaining cutoffs.
+ */
+export const BANDAI_LOAN_MIN_TERM_MONTHS = 24;
+export const BANDAI_LOAN_MAX_TERM_MONTHS = 120;
+
+export function resolveBandaiMassUploadLoanTermMonths(params: {
+	maxTermMonths?: number | null;
+	principalAmount?: number | null;
+	paymentAmount?: number | null;
+	/** Floor when LoanType is misconfigured as 1. Default 24 months. */
+	minimumTermMonths?: number | null;
+}): number {
+	const minimum = Math.max(
+		1,
+		Number(
+			params.minimumTermMonths === null || params.minimumTermMonths === undefined
+				? BANDAI_LOAN_MIN_TERM_MONTHS
+				: params.minimumTermMonths,
+		) || BANDAI_LOAN_MIN_TERM_MONTHS,
+	);
+	const typeTerm = Math.max(0, Number(params.maxTermMonths || 0));
+	// Trust type term only when it already looks multi-cutoff; ignore 1-month misconfig.
+	const typeTermEffective = typeTerm >= 12 ? typeTerm : 0;
+	const principal = Number(params.principalAmount || 0);
+	const payment = Number(params.paymentAmount || 0);
+	let fromPrincipalMonths = 0;
+	if (principal > 0 && payment > 0) {
+		const cutoffs = Math.ceil(principal / payment);
+		fromPrincipalMonths = Math.ceil(cutoffs / 2);
+	}
+	const raw = Math.max(minimum, typeTermEffective, fromPrincipalMonths);
+	return Math.min(Math.max(raw, 1), BANDAI_LOAN_MAX_TERM_MONTHS);
+}
+
+/** endDate = start + termMonths; never shrink below an existing later endDate. */
+export function resolveBandaiLoanEndDate(params: {
+	startDate: Date;
+	termMonths: number;
+	existingEndDate?: Date | null;
+}): Date {
+	const start = new Date(params.startDate.getTime());
+	const term = Math.max(1, Number(params.termMonths || 1));
+	const computed = new Date(start.getTime());
+	computed.setUTCMonth(computed.getUTCMonth() + term);
+	const existing = params.existingEndDate ? new Date(params.existingEndDate.getTime()) : null;
+	if (existing && !Number.isNaN(existing.getTime()) && existing.getTime() > computed.getTime()) {
+		return existing;
+	}
+	return computed;
+}
 
 export function detectMassUploadKindFromHeaders(headers: string[]): MassUploadKind | null {
 	const normalized = headers.map((h) => normalizeImportHeaderKey(h));

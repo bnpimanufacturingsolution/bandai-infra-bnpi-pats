@@ -23,7 +23,8 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 		expect(source).to.include("hostReachable");
 		expect(source).to.include("db-reverse-bridge-host-reachable");
 		expect(source).to.include("host-fallback-reachable-over-db-stale");
-		expect(source).to.include("192.168.254.102");
+		expect(source).to.not.include("192.168.254.102");
+		expect(source).to.include("192.168.254.109");
 		expect(source).to.include("TEST A");
 		expect(source).to.include("probeTcp");
 	});
@@ -32,7 +33,7 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 		const source = fs.readFileSync(ensureScript, "utf8");
 		expect(source).to.include("localBridgeMatches");
 		expect(source).to.include("localMatches");
-		expect(source).to.include("host-fallback-102");
+		expect(source).to.include("host-fallback-109");
 		expect(source).to.include('envValue("HIKVISION_VM_BRIDGE_SSH_TARGET", "auto")');
 		expect(source).to.include("infra@10.184.37.19");
 		expect(source).to.include("project-truth-hris");
@@ -52,7 +53,7 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 				windowsHide: true,
 				env: {
 					...process.env,
-					HIKVISION_VM_BRIDGE_DEVICE_IP: "192.168.254.102",
+					HIKVISION_VM_BRIDGE_DEVICE_IP: "192.168.254.109",
 					HIKVISION_BRIDGE_PROBE_MS: "200",
 				},
 			},
@@ -61,7 +62,7 @@ describe("resolve-hikvision-vm-bridge-targets", () => {
 		const parsed = JSON.parse(String(result.stdout || "{}"));
 		expect(parsed.ok).to.equal(true);
 		expect(parsed.source).to.equal("env:HIKVISION_VM_BRIDGE_DEVICE_IP");
-		expect(parsed.targets[0].deviceIp).to.equal("192.168.254.102");
+		expect(parsed.targets[0].deviceIp).to.equal("192.168.254.109");
 		expect(parsed.targets[0]).to.have.property("hostReachable");
 		expect(parsed.targets[0]).to.have.property("openPorts");
 	});

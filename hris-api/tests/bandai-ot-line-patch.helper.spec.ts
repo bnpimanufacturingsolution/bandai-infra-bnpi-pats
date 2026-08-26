@@ -101,6 +101,38 @@ describe("bandai-ot-line-patch.helper", () => {
 			expect(patch!.changes.overtimeHours).to.equal("0:00");
 		});
 
+		it("honors effective OFF override even when line template snapshot isOff=false (01116 shape)", () => {
+			const patch = buildBandaiOtLinePatch({
+				line: {
+					status: "ABSENT",
+					scheduleSnapshot: {
+						isOff: false,
+						code: "WS_0715_1515_BR_1100_1130",
+						source: "template",
+					},
+					overtimeHours: "0:00",
+					metadata: null,
+				},
+				source: zeroSource({ date: "2026-07-21", employeeNo: "01116" }),
+				effectiveScheduleSnapshot: {
+					code: "WS_OFF",
+					name: "WorkSharing Off",
+					isOff: true,
+					source: "WORKSHARING_DAY_FLAG_OFF",
+				},
+				appliedAt: "2026-08-20T00:00:00.000Z",
+			});
+			expect(patch).to.not.equal(null);
+			expect(patch!.changes.status).to.equal("REST_DAY");
+			expect(patch!.changes.primaryMarker).to.equal("REST_DAY");
+			expect(patch!.changes.scheduleSnapshot?.isOff).to.equal(true);
+			expect(String(patch!.changes.scheduleSnapshot?.code || "")).to.match(/OFF/i);
+			expect(patch!.reasons.some((r) => /REST_DAY/i.test(r))).to.equal(true);
+			expect(patch!.reasons.some((r) => /ABSENT/i.test(r) && /scheduled workday/i.test(r))).to.equal(
+				false,
+			);
+		});
+
 		it("does not convert LEAVE to ABSENT", () => {
 			const patch = buildBandaiOtLinePatch({
 				line: {

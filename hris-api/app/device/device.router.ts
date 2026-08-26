@@ -136,6 +136,7 @@ export const router = (route: Router, controller: IController): Router => {
 	routes.post("/hikvision/listener", controller.controlHikvisionListener);
 
 	routes.get("/:id/health", controller.getDeviceHealth);
+	routes.post("/time-sync-all", controller.syncAllHikvisionDevicesTime);
 	routes.post("/:id/time-sync", controller.syncHikvisionDeviceTime);
 	routes.post("/:id/hikvision/log-search", controller.searchHikvisionDeviceLogs);
 	routes.get("/users", controller.listDeviceUsers);

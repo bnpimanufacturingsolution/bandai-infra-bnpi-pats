@@ -40,6 +40,7 @@ import {
 	type HikvisionDeviceTimeSyncResponse,
 } from "~/services/devices.service";
 import { CreateDeviceSchema, type CreateDevice } from "~/zod/device.zod";
+import { DeviceTimeSyncAllModal } from "./device-time-sync-all-modal";
 import {
 	useDevices,
 	useDevice,
@@ -53,6 +54,7 @@ import {
 	useDeleteDevice,
 	useResetDeviceEvents,
 	useHikvisionDeviceTimeSync,
+	useHikvisionDeviceTimeSyncAll,
 	useSyncDeviceUsers,
 	useTriggerHikvisionAttendanceImport,
 } from "~/lib/hooks/useDevices";
@@ -858,6 +860,13 @@ export default function DevicesManagePage() {
 	const updateDeviceMutation = useUpdateDevice();
 	const deleteDeviceMutation = useDeleteDevice();
 
+	const [timeSyncAllOpen, setTimeSyncAllOpen] = useState(false);
+	const hikvisionDevices = items
+		.filter((d: any) =>
+			String(d?.config?.vendor || "").toLowerCase().includes("hikvision"),
+		)
+		.map((d: any) => ({ id: String(d.id), name: String(d.name), address: d.address ?? null }));
+
 	const { register, handleSubmit, reset, setValue, watch } = useForm<DeviceFormData>({
 		resolver: zodResolver(DeviceFormSchema),
 		defaultValues: {
@@ -1312,6 +1321,14 @@ export default function DevicesManagePage() {
 					<div className="flex flex-wrap items-center justify-end gap-2">
 						<Button
 							variant="outline"
+							onClick={() => setTimeSyncAllOpen(true)}
+							disabled={hikvisionDevices.length === 0}
+							className="h-9 px-3 text-xs">
+							<Clock3 className="h-4 w-4 mr-2" />
+							Sync device time
+						</Button>
+						<Button
+							variant="outline"
 							onClick={openAllEvents}
 							className="h-9 px-3 text-xs">
 							<Activity className="h-4 w-4 mr-2" />
@@ -1346,6 +1363,12 @@ export default function DevicesManagePage() {
 					/* your Excel logic */
 				}}
 				containedScroll
+			/>
+
+			<DeviceTimeSyncAllModal
+				open={timeSyncAllOpen}
+				onClose={() => setTimeSyncAllOpen(false)}
+				devices={hikvisionDevices}
 			/>
 
 			{/* Edit / Create Modal */}

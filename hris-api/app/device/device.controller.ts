@@ -4989,7 +4989,7 @@ export const controller = (prisma: PrismaClient) => {
 				statusUrl,
 				latencyMs: null,
 				data: null,
-				error: error?.message || "ZKTeco SDK sidecar status did not respond",
+				error: error?.message || "ZKTeco Linux bridge status did not respond",
 			};
 		}
 	};
@@ -5030,7 +5030,7 @@ export const controller = (prisma: PrismaClient) => {
 				status: "offline",
 				statusUrl: previewUrl.toString(),
 				data: null,
-				error: error?.message || "ZKTeco SDK sidecar preview did not respond",
+				error: error?.message || "ZKTeco Linux bridge preview did not respond",
 			};
 		}
 	};
@@ -5071,7 +5071,7 @@ export const controller = (prisma: PrismaClient) => {
 				status: "offline",
 				statusUrl: syncUrl.toString(),
 				data: null,
-				error: error?.message || "ZKTeco SDK sidecar sync did not respond",
+				error: error?.message || "ZKTeco Linux bridge sync did not respond",
 			};
 		}
 	};
@@ -25606,6 +25606,117 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	/**
+	 * Shared Hikvision clock read/write core used by both the per-device route
+	 * and the fleet `/time-sync-all` route. SDK STDXML first, ISAPI HTTP fallback.
+	 * Never mutates unless execute=true. Returns a discriminated result so
+	 * callers can render per-device rows without throwing mid-fleet.
+	 */
+	const runHikvisionTimeSyncCore = async (
+		req: Request,
+		device: {
+			id: string;
+			name?: string | null;
+			address?: string | null;
+			config?: unknown;
+			access?: unknown;
+		},
+		execute: boolean,
+	): Promise<
+		| { ok: true; payload: any }
+		| { ok: false; status: number; message: string }
+	> => {
+		const serverTime = new Date();
+		const manilaTime = formatHikvisionManilaLocalTime(serverTime);
+		const plannedWrite = {
+			timeMode: HIKVISION_MANUAL_TIME_MODE,
+			localTime: manilaTime,
+			timeZone: HIKVISION_MANILA_TIME_ZONE,
+		};
+		let transport: "sdk_stdxml" | "isapi_http" = "sdk_stdxml";
+		let before;
+		let after = null;
+		let wrote = false;
+		let sdkError: string | null = null;
+
+		try {
+			const sdk = await runHikvisionDeviceTimeOnVm({
+				device,
+				execute,
+				localTime: manilaTime,
+				timeZone: HIKVISION_MANILA_TIME_ZONE,
+			});
+			transport = "sdk_stdxml";
+			before = {
+				localTime: String(sdk.read.localTime || "").trim() || null,
+				timeMode: String(sdk.read.timeMode || "").trim() || null,
+				timeZone: String(sdk.read.timeZone || "").trim() || null,
+				skewSeconds: hikvisionClockSkewSeconds(
+					String(sdk.read.localTime || "").trim() || null,
+					serverTime,
+				),
+			};
+			if (execute) {
+				after = {
+					localTime: String(sdk.write?.localTime || "").trim() || null,
+					timeMode: String(sdk.write?.timeMode || "").trim() || null,
+					timeZone: String(sdk.write?.timeZone || "").trim() || null,
+					skewSeconds: hikvisionClockSkewSeconds(
+						String(sdk.write?.localTime || "").trim() || null,
+						new Date(),
+					),
+				};
+				wrote = String(sdk.write?.ok || "").toLowerCase() === "true";
+			}
+		} catch (error: any) {
+			sdkError = error?.message || "SDK time command failed";
+			try {
+				const read = await readHikvisionSystemTime(req, device.id);
+				transport = "isapi_http";
+				before = {
+					...read.snapshot,
+					skewSeconds: hikvisionClockSkewSeconds(read.snapshot.localTime, serverTime),
+				};
+				if (execute) {
+					const putResult = await writeHikvisionSystemTime(req, device.id, manilaTime);
+					const afterRead = await readHikvisionSystemTime(req, device.id);
+					after = {
+						...afterRead.snapshot,
+						skewSeconds: hikvisionClockSkewSeconds(afterRead.snapshot.localTime, new Date()),
+					};
+					wrote =
+						hikvisionTimePutSucceeded(putResult.put) || after.localTime === manilaTime;
+				}
+			} catch (isapiError: any) {
+				return {
+					ok: false,
+					status: 502,
+					message:
+						isapiError?.data?.errorCause ||
+						isapiError?.message ||
+						sdkError ||
+						"Could not read or write Hikvision system time",
+				};
+			}
+		}
+
+		return {
+			ok: true,
+			payload: {
+				execute,
+				wrote,
+				device: { id: device.id, name: device.name },
+				serverTime: serverTime.toISOString(),
+				manilaTime,
+				before,
+				plannedWrite,
+				after,
+				transport,
+				sdkError,
+			},
+		};
+	};
+
 	const syncHikvisionDeviceTime = async (req: Request, res: Response, _next: NextFunction) => {
 		try {
 			const organizationId = (req as any).organizationId;
@@ -25655,80 +25766,21 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const serverTime = new Date();
-			const manilaTime = formatHikvisionManilaLocalTime(serverTime);
-			const plannedWrite = {
-				timeMode: HIKVISION_MANUAL_TIME_MODE,
-				localTime: manilaTime,
-				timeZone: HIKVISION_MANILA_TIME_ZONE,
-			};
-			let transport: "sdk_stdxml" | "isapi_http" = "sdk_stdxml";
-			let before;
-			let after = null;
-			let wrote = false;
-			let sdkError: string | null = null;
-
-			try {
-				const sdk = await runHikvisionDeviceTimeOnVm({
-					device,
-					execute,
-					localTime: manilaTime,
-					timeZone: HIKVISION_MANILA_TIME_ZONE,
-				});
-				transport = "sdk_stdxml";
-				before = {
-					localTime: String(sdk.read.localTime || "").trim() || null,
-					timeMode: String(sdk.read.timeMode || "").trim() || null,
-					timeZone: String(sdk.read.timeZone || "").trim() || null,
-					skewSeconds: hikvisionClockSkewSeconds(
-						String(sdk.read.localTime || "").trim() || null,
-						serverTime,
-					),
-				};
-				if (execute) {
-					after = {
-						localTime: String(sdk.write?.localTime || "").trim() || null,
-						timeMode: String(sdk.write?.timeMode || "").trim() || null,
-						timeZone: String(sdk.write?.timeZone || "").trim() || null,
-						skewSeconds: hikvisionClockSkewSeconds(
-							String(sdk.write?.localTime || "").trim() || null,
-							new Date(),
-						),
-					};
-					wrote = String(sdk.write?.ok || "").toLowerCase() === "true";
-				}
-			} catch (error: any) {
-				sdkError = error?.message || "SDK time command failed";
-				try {
-					const read = await readHikvisionSystemTime(req, device.id);
-					transport = "isapi_http";
-					before = {
-						...read.snapshot,
-						skewSeconds: hikvisionClockSkewSeconds(read.snapshot.localTime, serverTime),
-					};
-					if (execute) {
-						const putResult = await writeHikvisionSystemTime(req, device.id, manilaTime);
-						const afterRead = await readHikvisionSystemTime(req, device.id);
-						after = {
-							...afterRead.snapshot,
-							skewSeconds: hikvisionClockSkewSeconds(afterRead.snapshot.localTime, new Date()),
-						};
-						wrote =
-							hikvisionTimePutSucceeded(putResult.put) || after.localTime === manilaTime;
-					}
-				} catch (isapiError: any) {
-					res.status(502).json(
-						buildErrorResponse(
-							isapiError?.data?.errorCause ||
-								isapiError?.message ||
-								sdkError ||
-								"Could not read or write Hikvision system time",
-							502,
-						),
-					);
-					return;
-				}
+			const core = await runHikvisionTimeSyncCore(req, device, execute);
+			if (!core.ok) {
+				res.status(core.status).json(buildErrorResponse(core.message, core.status));
+				return;
 			}
+			const {
+				serverTime,
+				manilaTime,
+				before,
+				plannedWrite,
+				after,
+				transport,
+				sdkError,
+				wrote,
+			} = core.payload;
 
 			if (execute) {
 				logActivity(req, {
@@ -25750,8 +25802,8 @@ export const controller = (prisma: PrismaClient) => {
 						execute,
 						wrote,
 						device: { id: device.id, name: device.name },
-						serverTime: serverTime.toISOString(),
-						manilaTime,
+					serverTime,
+					manilaTime,
 						before,
 						plannedWrite,
 						after,
@@ -25763,6 +25815,141 @@ export const controller = (prisma: PrismaClient) => {
 		} catch (error: any) {
 			res.status(500).json(
 				buildErrorResponse(error?.message || "Hikvision time update failed", 500),
+			);
+		}
+	};
+
+	/**
+	 * Fleet Hikvision clock sync: POST /api/device/time-sync-all
+	 * Body: { execute?: boolean (default false = preview), deviceIds?: string[] }
+	 * Hikvision devices only. Bounded concurrency 2. Per-device results never
+	 * abort the fleet; failures stay explicit rows in the response.
+	 */
+	const syncAllHikvisionDevicesTime = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = (req as any).organizationId;
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+				return;
+			}
+			const execute = req.body?.execute === true;
+			const requestedIds: string[] | null = Array.isArray(req.body?.deviceIds)
+				? req.body.deviceIds.map((v: any) => String(v)).filter(Boolean)
+				: null;
+
+			const devices = await prisma.device.findMany({
+				where: { organizationId: String(organizationId), isDeleted: false },
+				select: {
+					id: true,
+					organizationId: true,
+					name: true,
+					address: true,
+					port: true,
+					protocol: true,
+					config: true,
+					access: true,
+				},
+			});
+
+			let targets = devices.filter((d) => !isZktecoDevice(d) && isHikvisionDevice(d));
+			if (requestedIds) {
+				const wanted = new Set(requestedIds);
+				targets = targets.filter((d) => wanted.has(d.id));
+			}
+
+			type TimeRow = {
+				deviceId: string;
+				name: string;
+				address: string | null;
+				ok: boolean;
+				transport: string | null;
+				wrote: boolean;
+				before: any;
+				after: any;
+				plannedWrite: any;
+				error: string | null;
+			};
+			const results: TimeRow[] = [];
+			let cursor = 0;
+			const worker = async () => {
+				while (cursor < targets.length) {
+					const index = cursor++;
+					const device = targets[index];
+					try {
+						const core = await runHikvisionTimeSyncCore(req, device, execute);
+						results.push({
+							deviceId: device.id,
+							name: device.name,
+							address: device.address ?? null,
+							ok: core.ok,
+							transport: core.ok ? core.payload.transport : null,
+							wrote: core.ok ? Boolean(core.payload.wrote) : false,
+							before: core.ok ? core.payload.before : null,
+							after: core.ok ? core.payload.after : null,
+							plannedWrite: core.ok ? core.payload.plannedWrite : null,
+							error: core.ok ? null : core.message,
+						});
+					} catch (error: any) {
+						results.push({
+							deviceId: device.id,
+							name: device.name,
+							address: device.address ?? null,
+							ok: false,
+							transport: null,
+							wrote: false,
+							before: null,
+							after: null,
+							plannedWrite: null,
+							error: error?.message || "Hikvision time sync failed",
+						});
+					}
+				}
+			};
+			await Promise.all([worker(), worker()]);
+			results.sort((a, b) => {
+				const ia = targets.findIndex((t) => t.id === a.deviceId);
+				const ib = targets.findIndex((t) => t.id === b.deviceId);
+				return ia - ib;
+			});
+
+			const readable = results.filter((r) => r.ok).length;
+			const written = results.filter((r) => r.ok && r.wrote).length;
+			const failed = results.length - readable;
+
+			const actorId = String((req as any).userId || (req as any).user?.id || "unknown");
+			logActivity(req, {
+				userId: actorId,
+				action: "HIKVISION_TIME_SYNC_ALL",
+				description: `Hikvision bulk time sync (${execute ? "execute" : "preview"}) on ${targets.length} devices: readable ${readable}, written ${written}, failed ${failed}`,
+				page: { url: req.originalUrl, title: "Device time" },
+			}).catch(() => undefined);
+			if (execute) {
+				await logAudit(req, {
+					userId: actorId,
+					action: "HIKVISION_TIME_SYNC_ALL",
+					description: `Bulk updated Hikvision clocks to Manila time on ${written}/${targets.length} devices`,
+					page: { url: req.originalUrl, title: "Device time" },
+				}).catch(() => undefined);
+			}
+
+			res.status(execute && written === 0 && readable > 0 ? 207 : 200).json(
+				buildSuccessResponse(
+					execute
+						? `Hikvision bulk time update finished: ${written}/${targets.length} written`
+						: `Hikvision bulk time preview: ${readable}/${targets.length} readable`,
+					{
+						execute,
+						totalTargets: targets.length,
+						readable,
+						written,
+						failed,
+						results,
+					},
+				),
+			);
+		} catch (error: any) {
+			res.status(500).json(
+				buildErrorResponse(error?.message || "Hikvision bulk time sync failed", 500),
 			);
 		}
 	};
@@ -26996,7 +27183,7 @@ export const controller = (prisma: PrismaClient) => {
 				description: `Hikvision hot-reload listener ${action}`,
 				page: {
 					url: req.originalUrl,
-					title: "Device Attendance",
+					title: "Device Events",
 				},
 			});
 
@@ -28983,6 +29170,7 @@ export const controller = (prisma: PrismaClient) => {
 		getEvents,
 		getDeviceHealth,
 		syncHikvisionDeviceTime,
+		syncAllHikvisionDevicesTime,
 		getHikvisionListenerStatus,
 		getDeviceLiveReadiness,
 		proveDeviceLivePath,
