@@ -41,6 +41,7 @@ export function OvertimeTab() {
 	} = useReportScopeFilters();
 	const [selectedDepartment, setSelectedDepartment] = useState("all");
 	const [selectedManager, setSelectedManager] = useState("all");
+	const [workforceSource, setWorkforceSource] = useState("all");
 	const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
 	const { data: departmentsData } = useDepartments({ limit: 1000 });
@@ -66,6 +67,7 @@ export function OvertimeTab() {
 		fromIso,
 		toIso,
 		selectedDepartment === "all" ? undefined : selectedDepartment,
+		workforceSource,
 	);
 
 	const metrics = data?.metrics?.overtimeMetrics;
@@ -91,6 +93,7 @@ export function OvertimeTab() {
 	const handleClearFilters = () => {
 		setSelectedDepartment("all");
 		setSelectedManager("all");
+		setWorkforceSource("all");
 		clearScopeFilters();
 	};
 
@@ -100,6 +103,7 @@ export function OvertimeTab() {
 				{ header: "Employee ID", accessor: "employeeId" },
 				{ header: "Name", accessor: "name" },
 				{ header: "Department", accessor: "department" },
+				{ header: "Labor Type", accessor: "workforceSource" },
 				{ header: "Days with OT", accessor: "overtimeCount" },
 				{
 					header: "Total OT Hours",
@@ -126,6 +130,7 @@ export function OvertimeTab() {
 				{ header: "Employee ID", accessor: "employeeId" },
 				{ header: "Name", accessor: "name" },
 				{ header: "Department", accessor: "department" },
+				{ header: "Labor Type", accessor: "workforceSource" },
 				{ header: "Days with OT", accessor: "overtimeCount" },
 				{
 					header: "Total OT Hours",
@@ -211,6 +216,19 @@ export function OvertimeTab() {
 							/>
 						</div>
 						<div className="w-full md:w-[160px]">
+							<label className="block text-sm font-medium mb-1">Labor Type</label>
+							<Select value={workforceSource} onValueChange={setWorkforceSource}>
+								<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">All Labor</SelectItem>
+									<SelectItem value="DIRECT">Direct</SelectItem>
+									<SelectItem value="AGENCY">Agency</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="w-full md:w-[160px]">
 							<label className="block text-sm font-medium mb-1">Manager</label>
 							<Select value={selectedManager} onValueChange={setSelectedManager}>
 								<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm">
@@ -256,7 +274,7 @@ export function OvertimeTab() {
 					</div>
 				) : (
 					<>
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+						<div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 							<Card>
 								<CardHeader className="pb-2">
 									<CardTitle className="text-sm font-medium">
@@ -283,6 +301,32 @@ export function OvertimeTab() {
 									<p className="text-xs text-gray-500">Hours</p>
 								</CardContent>
 							</Card>
+							<Card>
+								<CardHeader className="pb-2">
+									<CardTitle className="text-sm font-medium">Direct OT</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<div className="text-2xl font-bold">
+										{metrics?.split?.direct?.totalOvertimeHours?.toFixed(2) || 0}
+									</div>
+									<p className="text-xs text-gray-500">
+										{metrics?.split?.direct?.employeesWithOvertime || 0} employees
+									</p>
+								</CardContent>
+							</Card>
+							<Card>
+								<CardHeader className="pb-2">
+									<CardTitle className="text-sm font-medium">Agency OT</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<div className="text-2xl font-bold">
+										{metrics?.split?.agency?.totalOvertimeHours?.toFixed(2) || 0}
+									</div>
+									<p className="text-xs text-gray-500">
+										{metrics?.split?.agency?.employeesWithOvertime || 0} employees
+									</p>
+								</CardContent>
+							</Card>
 						</div>
 
 						{/* Table */}
@@ -296,6 +340,9 @@ export function OvertimeTab() {
 										<th className="px-6 py-3 text-left font-medium">Name</th>
 										<th className="px-6 py-3 text-left font-medium">
 											Department
+										</th>
+										<th className="px-6 py-3 text-left font-medium">
+											Labor Type
 										</th>
 										<th className="px-6 py-3 text-left font-medium">
 											Days with OT
@@ -318,6 +365,7 @@ export function OvertimeTab() {
 													/>
 												</td>
 												<td className="px-6 py-3">{emp.department}</td>
+												<td className="px-6 py-3">{emp.workforceSource}</td>
 												<td className="px-6 py-3">{emp.overtimeCount}</td>
 												<td className="px-6 py-3">
 													{emp.totalOvertimeHours.toFixed(2)} hrs
@@ -327,7 +375,7 @@ export function OvertimeTab() {
 									) : (
 										<tr>
 											<td
-												colSpan={5}
+												colSpan={6}
 												className="px-6 py-8 text-center text-gray-500">
 												No overtime records found for this period
 											</td>

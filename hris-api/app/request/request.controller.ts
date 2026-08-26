@@ -177,6 +177,7 @@ const PAN_REQUEST_TYPES = new Set([
 	"SALARY_CHANGE",
 	"TRANSFER",
 	"TERMINATION",
+	"LEAVE_CONVERSION",
 ]);
 
 const PAN_REQUESTER_BYPASS_ROLES = new Set([
@@ -516,6 +517,132 @@ const generateRequestCode = async (
 };
 
 export const controller = (prisma: PrismaClient) => {
+
+/**
+ * Annual leave credit bulk upload (spec gap M3.1).
+ * POST /api/request/leave-credits/bulk-upload
+ * Body: { year, execute?: boolean, rows: [{ employeeId, leaveType, totalEntitled }] }
+ * Dry-run by default. Upserts the matching leaveBalances[] entry per row.
+ * Admin/HR only.
+ */
+const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+	try {
+		const organizationId = (req as any).organizationId;
+		if (!organizationId) {
+			res.status(400).json(buildErrorResponse("Organization ID not found", 400));
+			return;
+		}
+		const role = String((req as any).role ?? ((req as any).user?.role || ""));
+		const allowedRoles = new Set(["hris-admin", "hris-hr-manager", "admin", "super_admin", "superadmin"]);
+		if (!allowedRoles.has(role)) {
+			res.status(403).json(buildErrorResponse("Only admin/HR can upload leave credits", 403));
+			return;
+		}
+
+		const year = Number(req.body?.year || new Date().getFullYear());
+		const execute = req.body?.execute === true;
+		const rowsInput = Array.isArray(req.body?.rows) ? req.body.rows : [];
+		if (!rowsInput.length) {
+			res.status(400).json(buildErrorResponse("rows[] is required (employeeId, leaveType, totalEntitled)", 400));
+			return;
+		}
+
+		const results: any[] = [];
+		let wouldUpdate = 0;
+		let errors = 0;
+
+		for (const row of rowsInput) {
+			const employeeId = String(row?.employeeId || "").trim();
+			const leaveType = String(row?.leaveType || "").trim();
+			const entitled = Number(row?.totalEntitled);
+			try {
+				if (!employeeId || !leaveType || !Number.isFinite(entitled) || entitled < 0) {
+					throw new Error("row must include employeeId, leaveType and totalEntitled >= 0");
+				}
+				const employee = await prisma.employee.findFirst({
+					where: { id: employeeId, organizationId: String(organizationId), isDeleted: false },
+					select: { id: true, leaveBalances: true },
+				});
+				if (!employee) throw new Error("Employee not found in this organization");
+
+				const balances = Array.isArray(employee.leaveBalances as any[])
+					? [...(employee.leaveBalances as any[])]
+					: [];
+				const index = balances.findIndex((b: any) => b.leaveType === leaveType);
+				const before = index === -1 ? null : balances[index];
+				const next = index === -1
+					? {
+						leaveType,
+						year,
+						totalEntitled: entitled,
+						used: 0,
+						pending: 0,
+						available: entitled,
+					}
+					: {
+						...before,
+						year,
+						totalEntitled: entitled,
+						available: Math.max(
+							0,
+							entitled - (Number(before.used || 0) + Number(before.pending || 0)),
+						),
+					};
+
+				if (execute) {
+					if (index === -1) balances.push(next);
+					else balances[index] = next;
+					await prisma.employee.update({
+						where: { id: employee.id },
+						data: { leaveBalances: balances, leaveBalancesLastUpdated: new Date() },
+					});
+				}
+				wouldUpdate += 1;
+				results.push({
+					employeeId,
+					leaveType,
+					totalEntitled: entitled,
+					action: index === -1 ? "create" : "update",
+					beforeAvailable: before ? Number(before.available || 0) : null,
+					wouldBeAvailable: next.available,
+					ok: true,
+					error: null,
+				});
+			} catch (rowError: any) {
+				errors += 1;
+				results.push({
+					employeeId,
+					leaveType,
+					totalEntitled: entitled,
+					ok: false,
+					error: rowError?.message || "Row failed",
+				});
+			}
+		}
+
+		if (execute) {
+			await logAudit(req, {
+				userId: String((req as any).userId || (req as any).user?.id || "unknown"),
+				action: "LEAVE_CREDITS_BULK_UPLOAD",
+				description: `Annual leave credits ${year}: ${wouldUpdate}/${rowsInput.length} rows written (errors ${errors})`,
+				page: { url: req.originalUrl, title: "Leave credits" },
+			});
+		}
+
+		res.status(execute && errors > 0 ? 207 : 200).json(
+			buildSuccessResponse(
+				execute
+					? `Leave credits upload finished: ${wouldUpdate}/${rowsInput.length} written`
+					: `Dry-run: ${wouldUpdate}/${rowsInput.length} rows would update`,
+				{ year, execute, total: rowsInput.length, wouldUpdate, errors, results },
+			),
+		);
+	} catch (error: any) {
+		res.status(500).json(
+			buildErrorResponse(error?.message || "Leave credit upload failed", 500),
+		);
+	}
+};
 	const getTerminationSeparationType = (
 		metadata: Record<string, any> | null | undefined,
 	): "RESIGNATION" | "TERMINATION" => {
@@ -3893,6 +4020,7 @@ export const controller = (prisma: PrismaClient) => {
 			"SALARY_CHANGE",
 			"TRANSFER",
 			"TERMINATION",
+			"LEAVE_CONVERSION",
 		];
 		if (PAN_TYPES.includes(request.type)) {
 			try {
@@ -4024,16 +4152,79 @@ export const controller = (prisma: PrismaClient) => {
 							}
 							break;
 
-						case "TERMINATION":
-							// For approved/completed PAN termination requests, set final separation status
-							// based on the selected termination type.
-							const separationType = getTerminationSeparationType(metadata);
-							employeeUpdateData.employmentStatus =
-								separationType === "RESIGNATION" ? "RESIGNED" : "TERMINATED";
-							employeeUpdateData.employmentTerminationDate = metadata.lastWorkingDay
-								? new Date(metadata.lastWorkingDay)
-								: new Date(effectiveDate);
+					case "TERMINATION":
+						// For approved/completed PAN termination requests, set final separation status
+						// based on the selected termination type.
+						const separationType = getTerminationSeparationType(metadata);
+						employeeUpdateData.employmentStatus =
+							separationType === "RESIGNATION" ? "RESIGNED" : "TERMINATED";
+						employeeUpdateData.employmentTerminationDate = metadata.lastWorkingDay
+							? new Date(metadata.lastWorkingDay)
+							: new Date(effectiveDate);
+						break;
+
+						case "LEAVE_CONVERSION": {
+							// Convert leave credits to cash: shrink totalEntitled by the
+							// converted days, recompute available. Money handling stays
+							// in payroll (mass upload / special payroll), not here.
+							// Accepts leaveType|conversionLeaveType and days|conversionDays.
+							const conversionLeaveType = String(
+								metadata.leaveType || metadata.conversionLeaveType || "",
+							).trim();
+							const conversionDays = Number(
+								metadata.days || metadata.conversionDays || 0,
+							);
+							if (!conversionLeaveType || !(conversionDays > 0)) {
+								requestLogger.warn(
+									`LEAVE_CONVERSION ${requestId} missing leaveType/days metadata; skipping effect`,
+								);
+								break;
+							}
+							const conversionEmployee = await prisma.employee.findUnique({
+								where: { id: targetEmployeeId },
+								select: { leaveBalances: true },
+							});
+							const conversionBalances = Array.isArray(
+								conversionEmployee?.leaveBalances as any[],
+							)
+								? [...(conversionEmployee!.leaveBalances as any[])]
+								: [];
+							const conversionIndex = conversionBalances.findIndex(
+								(balance: any) => balance.leaveType === conversionLeaveType,
+							);
+							if (conversionIndex === -1) {
+								requestLogger.warn(
+									`LEAVE_CONVERSION ${requestId}: no ${conversionLeaveType} balance for ${targetEmployeeId}; skipping`,
+								);
+								break;
+							}
+							const conversionBalance = conversionBalances[conversionIndex];
+							const nextTotal = Math.max(
+								0,
+								Number(conversionBalance.totalEntitled || 0) - conversionDays,
+							);
+							conversionBalances[conversionIndex] = {
+								...conversionBalance,
+								totalEntitled: nextTotal,
+								available: Math.max(
+									0,
+									nextTotal -
+										(Number(conversionBalance.used || 0) +
+											Number(conversionBalance.pending || 0)),
+								),
+							};
+							await prisma.employee.update({
+								where: { id: targetEmployeeId },
+								data: {
+									leaveBalances: conversionBalances,
+									leaveBalancesLastUpdated: now,
+								},
+							});
+							requestLogger.info(
+								`LEAVE_CONVERSION ${requestId}: ${targetEmployeeId} ${conversionLeaveType} -${conversionDays}d (entitled now ${nextTotal})`,
+							);
 							break;
+						}
 					}
 
 					if (Object.keys(employeeUpdateData).length > 0) {
@@ -5327,5 +5518,6 @@ HR Department`;
 		startOffboarding,
 		delegateStep,
 		escalateStep,
+		bulkUploadLeaveCredits,
 	};
 };

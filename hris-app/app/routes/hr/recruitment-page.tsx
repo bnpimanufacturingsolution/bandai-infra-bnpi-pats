@@ -3266,17 +3266,6 @@ function ApplicantWorkflowDrawer({
 						</div>
 					) : null}
 
-					{linkedEmployeeMismatch ? (
-						<div className="mb-5 rounded-xl bg-amber-50/90 px-3 py-3 text-sm text-amber-900 ring-1 ring-amber-100">
-							<p className="font-medium">Employee record does not match this applicant</p>
-							<p className="mt-1 leading-snug text-[#5f5f63]">
-								The job application is {buildFullName(applicant)}. The linked employee is{" "}
-								{hireView.linkedEmployeeName || hireView.employeeCode || "a different person"}.
-								Hire must keep the name and email from the public application.
-							</p>
-						</div>
-					) : null}
-
 					{employeeLinkedHired ? (
 						<div className="border-b border-[#e8dede] pb-5">
 							<RecruitmentEmployeeTeaser

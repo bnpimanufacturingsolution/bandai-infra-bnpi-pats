@@ -240,6 +240,8 @@ export const EmployeeSchema = z.object({
 		.optional()
 		.nullable(),
 	workLocation: z.enum(["ONSITE", "REMOTE", "HYBRID"]),
+	pregnant: z.boolean().optional(),
+	expectedDueDate: z.coerce.date().optional().nullable(),
 	leaveBalances: z.array(LeaveBalanceDetailSchema).optional(),
 	leaveBalancesLastUpdated: z.coerce.date().optional().nullable(),
 	basicSalary: z.number(),

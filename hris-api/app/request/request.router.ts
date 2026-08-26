@@ -14,6 +14,7 @@ interface IController {
 	startOffboarding(req: Request, res: Response, next: NextFunction): Promise<void>;
 	delegateStep(req: Request, res: Response, next: NextFunction): Promise<void>;
 	escalateStep(req: Request, res: Response, next: NextFunction): Promise<void>;
+	bulkUploadLeaveCredits(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -574,6 +575,11 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         description: Internal server error
 	 */
+	// Annual leave credit bulk upload (spec gap M3.1). Dry-run by default;
+	// execute=true writes. Admin/HR guarded inside the handler.
+	// Registered BEFORE /:id routes so "leave-credits" is not eaten as an id.
+	routes.post("/leave-credits/bulk-upload", controller.bulkUploadLeaveCredits);
+
 	routes.post("/:id/start-offboarding", controller.startOffboarding);
 	routes.post("/:id/delegate-step", controller.delegateStep);
 	routes.post("/:id/escalate-step", controller.escalateStep);

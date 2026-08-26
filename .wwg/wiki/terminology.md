@@ -88,6 +88,8 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | Indirect labor | `Employee.workforceSource` `AGENCY`; Direct vs Indirect tab | Labor bucket when `workforceSource` is `AGENCY`. UI label **Indirect**. Not the Agency Attendance tab. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
 | Manpower Distribution | `/hr/reports/workforce?tab=labor` | Default Workforce Analytics tab (monthly manpower + databank). Must not be replaced by Direct vs Indirect. | CONFIRMED_LOCAL_IMPLEMENTATION |
 | Day labor | `Timesheetline.dayLaborType`; Timesheet day editor 2026-08-20 | Per-day work type **DIRECT** \| **INDIRECT** on the timesheet line. Line Leader / supervisor tags people for that calendar day. Distinct from hire source `Employee.workforceSource` (DIRECT vs AGENCY). Null = not tagged. | CONFIRMED_LOCAL_IMPLEMENTATION_WITH_BOUNDARY |
+| Disruptive admin action | Operator requirement 2026-08-25; `docs/00-product/REQUIREMENT-ADMIN-PASSCODE-FOR-DISRUPTIVE-ACTIONS.md` | Admin task/action that irreversibly mutates data, writes physical devices at scale, changes money outcomes, or changes security/config posture. Requires the acting admin's passcode before execute. Reads/previews/dry-runs (`execute=false`) exempt. Unsure = treat as disruptive until endpoint classification exists. Requirement documented, NOT implemented. | CONFIRMED_OPERATOR_REQUIREMENT_NOT_IMPLEMENTED |
+| Admin passcode | Operator requirement 2026-08-25; same doc | Personal secret code owned by exactly one admin (`User`), used as a 2FA substitute to authorize that admin's own disruptive actions. Stored hashed, unique per admin, verified server-side against the authenticated actor, never shared across admins, never UI-only enforcement. Not yet in schema/code. | CONFIRMED_OPERATOR_REQUIREMENT_NOT_IMPLEMENTED |
 
 ## Canonical Term Candidates
 
@@ -126,6 +128,11 @@ Status: Inferred from repository evidence. Requires human/agent review before be
 | raw transport/source path | Runtime path | source, runtime source | HIGH | 2026-07-09 device-event hard cutover |
 | HRIS processing result | HRIS result | status, processing status | HIGH | 2026-07-09 device-event hard cutover |
 | admin destructive employee delete dry-run | Employee hard delete preview | preview hard delete, hard-delete dry-run | HIGH | 2026-07-09 admin employee delete safety implementation |
+| one hour of work by one person | Man-hour / manhours | manhour, person-hour, labor hour | HIGH | Operator definition 2026-08-26; `manhoursReport` metric + Manhours tab (`helper/manhours-metrics.helper.ts`) |
+| assembly duty allowance | Assembly Standing Allowance (ASA) | Assembly Standing, ASA | HIGH | Operator approval 2026-08-26; benefit type + `assemblyStanding` register field, taxable like LLA |
+| per-employee BIR document compliance view | 201 File | 201 filing, employee 201 checklist | HIGH | Operator confirmation 2026-08-26; `Filing201Tab` on employee profile |
+| annual payee list + remittance summary workbook | Annual BIR pack | BIR alphalist, 1604-CF pack | HIGH | 2026-08-26 implementation; `GET /api/reports/bir/annual-pack` |
+| final separation money computation | Terminal pay | last pay, separation pay computation | HIGH | 2026-08-26 engine; `POST /api/reports/terminal-pay/preview` (preview-only; policy items NEEDS_CONFIRMATION) |
 
 ## Terminology Conflicts
 

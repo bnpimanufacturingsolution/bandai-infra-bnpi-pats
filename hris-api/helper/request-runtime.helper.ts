@@ -2636,6 +2636,7 @@ export async function updateRequestStepProgress(
 		"SALARY_CHANGE",
 		"TRANSFER",
 		"TERMINATION",
+		"LEAVE_CONVERSION",
 	]);
 	if (isWorkflowCompleted && panTypes.has(String(request.type || "").toUpperCase())) {
 		const targetEmployeeId = String(request.targetEmployeeId || request.requesterId || "");

@@ -390,6 +390,7 @@ const statusmodule = require("./app/status")(prisma);
 const timesheetline = require("./app/timesheetline")(prisma);
 const section = require("./app/section")(prisma);
 const leaveType = require("./app/leaveType")(prisma);
+const disciplinaryActionModule = require("./app/disciplinaryAction")(prisma);
 
 const apiBodyLimit = process.env.HRIS_API_BODY_LIMIT || "75mb";
 app.use(express.json({ limit: apiBodyLimit }));
@@ -744,6 +745,7 @@ app.use(config.baseApiPath, requesttransaction);
 app.use(config.baseApiPath, timesheetline);
 app.use(config.baseApiPath, section);
 app.use(config.baseApiPath, leaveType);
+app.use(config.baseApiPath, disciplinaryActionModule);
 
 // Store app instance globally for docs generation after all routes are registered
 global.app = app;

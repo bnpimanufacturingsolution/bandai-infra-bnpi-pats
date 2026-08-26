@@ -794,6 +794,19 @@ export const config = {
 			ERROR_UPDATING: "Error updating leavetype",
 			ORDER_MUST_BE_ASC_OR_DESC: "Order must be asc or desc",
 		},
+		DISCIPLINARYACTION: {
+			VALIDATION_FAILED: "DisciplinaryAction validation failed",
+			INVALID_ID_FORMAT: "Invalid disciplinaryaction ID format",
+			NOT_FOUND: "DisciplinaryAction not found",
+			CREATE_FAILED: "Error creating disciplinaryaction",
+			UPDATE_FAILED: "Error updating disciplinaryaction",
+			DELETE_FAILED: "Error deleting disciplinaryaction",
+			GET_FAILED: "Error getting disciplinaryaction",
+			GET_ALL_FAILED: "Error getting disciplinaryactions",
+			ERROR_GETTING: "Error getting disciplinaryaction",
+			ERROR_UPDATING: "Error updating disciplinaryaction",
+			ORDER_MUST_BE_ASC_OR_DESC: "Order must be asc or desc",
+		},
 	},
 
 	SUCCESS: {
@@ -1276,9 +1289,40 @@ export const config = {
 			RETRIEVED_ALL: "LeaveTypes retrieved successfully",
 			GETTING_BY_ID: "Getting leavetype by ID",
 		},
+		DISCIPLINARYACTION: {
+			CREATED: "DisciplinaryAction created successfully",
+			UPDATED: "DisciplinaryAction updated successfully",
+			DELETED: "DisciplinaryAction deleted successfully",
+			RETRIEVED: "DisciplinaryAction retrieved successfully",
+			RETRIEVED_ALL: "DisciplinaryActions retrieved successfully",
+			GETTING_BY_ID: "Getting disciplinaryaction by ID",
+		},
 	},
 
 	ACTIVITY_LOG: {
+		DISCIPLINARYACTION: {
+			ACTIONS: {
+				CREATE_DISCIPLINARYACTION: "CREATE_DISCIPLINARYACTION",
+				GET_ALL_DISCIPLINARYACTION: "GET_ALL_DISCIPLINARYACTION",
+				GET_DISCIPLINARYACTION: "GET_DISCIPLINARYACTION",
+				UPDATE_DISCIPLINARYACTION: "UPDATE_DISCIPLINARYACTION",
+				DELETE_DISCIPLINARYACTION: "DELETE_DISCIPLINARYACTION",
+			},
+			DESCRIPTIONS: {
+				DISCIPLINARYACTION_CREATED: "Created new disciplinaryaction",
+				DISCIPLINARYACTION_UPDATED: "Updated disciplinaryaction",
+				DISCIPLINARYACTION_DELETED: "Deleted disciplinaryaction",
+				DISCIPLINARYACTION_RETRIEVED: "Retrieved disciplinaryaction details",
+				DISCIPLINARYACTIONS_RETRIEVED: "Retrieved disciplinaryaction list",
+			},
+			PAGES: {
+				DISCIPLINARYACTION_CREATION: "DisciplinaryAction Creation",
+				DISCIPLINARYACTION_UPDATE: "DisciplinaryAction Update",
+				DISCIPLINARYACTION_DELETION: "DisciplinaryAction Deletion",
+				DISCIPLINARYACTION_DETAILS: "DisciplinaryAction Details",
+				DISCIPLINARYACTION_LIST: "DisciplinaryAction List",
+			},
+		},
 		LEAVETYPE: {
 			ACTIONS: {
 				CREATE_LEAVETYPE: "CREATE_LEAVETYPE",
@@ -3041,6 +3085,7 @@ export const config = {
 			LEAVE_SETTING: "leavesetting",
 			WORKFORCE_RECRUITMENT_SETTING: "workforcerecruitmentsetting",
 			TERMINATION: "termination",
+			DISCIPLINARYACTION: "disciplinaryaction",
 		},
 		SEVERITY: {
 			LOW: "LOW" as const,
@@ -3116,6 +3161,7 @@ export const config = {
 			LEAVE_SETTING: "leavesetting",
 			WORKFORCE_RECRUITMENT_SETTING: "workforcerecruitmentsetting",
 			TERMINATION: "termination",
+			DISCIPLINARYACTION: "disciplinaryaction",
 		},
 		AGENCY: {
 			DESCRIPTIONS: {
@@ -3609,6 +3655,14 @@ export const config = {
 				USER_DELETED: "Deleted user account",
 			},
 		},
+		DISCIPLINARYACTION: {
+			DESCRIPTIONS: {
+				DISCIPLINARYACTION_CREATED: "Created new disciplinaryaction",
+				DISCIPLINARYACTION_UPDATED: "Updated disciplinaryaction",
+				DISCIPLINARYACTION_DELETED: "Deleted disciplinaryaction",
+			},
+		},
+
 		TEMPLATE: {
 			DESCRIPTIONS: {
 				TEMPLATE_CREATED: "Created new template",

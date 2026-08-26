@@ -37,6 +37,7 @@ const ATTENDANCE_METRICS = z.enum([
 	"attendanceDailyTrendByDepartment", // Day-by-department attendance trend chart data
 	"perfectAttendanceMetrics", // Perfect attendance (zero absences + zero tardiness)
 	"tardinessMetrics", // Tardiness, undertime, and overtime metrics
+	"manhoursReport", // M2.4 manhour reference — hours worked per person
 	"overtimeMetrics", // Overtime metrics
 	"noWorkReport", // Employees scheduled to work but with no attendance record
 	"dailyActiveManpower", // Employees with PRESENT/INCOMPLETE/time-in activity
@@ -53,6 +54,8 @@ const EMPLOYEE_METRICS = z.enum([
 	"eligibilityCandidates",
 	"leaveBalanceMetrics",
 	"turnoverAttritionReport",
+	"tinLibrary", // Employee TIN compliance library
+	"pregnantEmployees", // M3.3 pregnant employees list (HR/admin-only)
 ]);
 
 // Define available metrics for PayrollPeriod model
@@ -64,6 +67,7 @@ const PAYROLL_PERIOD_METRICS = z.enum([
 	"payrollRunSummary",
 	"payrollBlockers",
 	"payrollSummary",
+	"laborCostAnalysis", // Payroll register money per department with Direct/Agency split
 	"bir1601CMetrics",
 ]);
 

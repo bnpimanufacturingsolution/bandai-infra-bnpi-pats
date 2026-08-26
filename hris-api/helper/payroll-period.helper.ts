@@ -288,6 +288,7 @@ const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 	["CT", "Perfect Attendance", "perfectAttendance"],
 	["CU", "Meal Allowance", "mealAllowance"],
 	["CV", "Line Leader Allowance", "lineLeaderAllowance"],
+	["CX", "Assembly Standing", "assemblyStanding"],
 	["CW", "TotalReceivable", "totalReceivable"],
 ] as const;
 
@@ -2987,6 +2988,7 @@ export async function generatePayrollFromTimesheets(
 						perfectAttendance: employeePayroll.perfectAttendance,
 						mealAllowance: employeePayroll.mealAllowance,
 						lineLeaderAllowance: employeePayroll.lineLeaderAllowance,
+						assemblyStanding: (employeePayroll as any).assemblyStanding ?? 0,
 						totalReceivable: employeePayroll.totalReceivable,
 						// Required so PDF expands enrollment lines (Rice Subsidy, etc.)
 						// instead of only register totals like "De Minimis Allowance".
@@ -4282,6 +4284,7 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		perfectAttendance: sourceBy(["PFA"], ["Perfect Attendance"], ["COMPENSATION"]),
 		mealAllowance: sourceBy(["MLA"], ["Meal Allowance"], ["COMPENSATION"]),
 		lineLeaderAllowance: sourceBy(["LLA"], ["Line Leader Allowance"], ["COMPENSATION"]),
+		assemblyStanding: (sourceBy as any)(["ASA"], ["Assembly Standing"], ["COMPENSATION"]) ?? 0,
 		totalReceivable,
 	};
 	const columns = BANDAI_PAYROLL_REGISTER_COLUMNS.map(([column, label, field]) => ({

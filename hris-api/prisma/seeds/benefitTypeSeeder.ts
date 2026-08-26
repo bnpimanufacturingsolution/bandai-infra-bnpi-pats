@@ -49,6 +49,16 @@ export const DEFAULT_BENEFIT_TYPES: BenefitTypeDefinition[] = [
 		isActive: true,
 	},
 	{
+		code: "ASA",
+		name: "Assembly Standing Allowance",
+		description: "Allowance for assembly standing duty (operator-approved 2026-08-26, taxable like LLA)",
+		category: BenefitCategory.ALLOWANCE,
+		payrollDirection: BenefitPayrollDirection.COMPENSATION,
+		reconciliationAction: "KEEP_AS_BENEFIT",
+		isTaxable: true,
+		isActive: true,
+	},
+	{
 		code: "MLA",
 		name: "Meal Allowance",
 		description: "Reconciled meal compensation allowance catalog entry",

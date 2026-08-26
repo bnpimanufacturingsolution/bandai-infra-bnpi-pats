@@ -90,6 +90,7 @@ const PayrollRegisterNumberFieldNames = [
 	"perfectAttendance",
 	"mealAllowance",
 	"lineLeaderAllowance",
+	"assemblyStanding",
 	"totalReceivable",
 ] as const;
 const PayrollRegisterNumberFields = Object.fromEntries(
