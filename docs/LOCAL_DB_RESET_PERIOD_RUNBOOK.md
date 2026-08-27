@@ -33,9 +33,8 @@ On the **DM3 & DM4** tabs for the target cutoff (e.g. June 26 – July 10 or Jul
 1. **DM3 Upload compensation**: `Compensation Mass Upload MM.DD.YY.xlsx`
 2. **DM3 Upload deduction**: `Deduction Mass Upload MM.DD.YY.xlsx`
 3. **DM3 Upload leave (period)**: `Leave (July).xlsx` (Select sheet `Leave (2)` or `Paid`, select target cutoff).
-4. **DM4 Upload biometrics + OT**: `Biometrics Data_*.xlsx` + `rptOvertimeDetails - *.xlsx`.
-
-*(Note: WorkSharing schedule upload is completely retired; default Monday–Saturday schedule templates apply automatically).*
+4. **DM3 Upload worksharing schedule**: `WorkSharingSchedule - [Period].xlsx` (Assigns period shift rotations, e.g. `06:00 to 14:00`, `06:45 to 15:45`, `18:45 to 03:45`, `20:00 to 05:00`).
+5. **DM4 Upload biometrics + OT**: `Biometrics Data_*.xlsx` + `rptOvertimeDetails - *.xlsx`.
 
 ---
 

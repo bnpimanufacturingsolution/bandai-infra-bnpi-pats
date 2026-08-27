@@ -47,7 +47,8 @@ export type WorkbookUploadKind =
 	| "compensation"
 	| "deduction"
 	| "manpower-databank"
-	| "period-leave";
+	| "period-leave"
+	| "worksharing-schedule";
 
 export const ADMIN_MIGRATION_WORKBOOK_IDS = ["dm1", "dm2", "dm3", "dm4"] as const;
 export type AdminMigrationWorkbookId = (typeof ADMIN_MIGRATION_WORKBOOK_IDS)[number];
@@ -91,7 +92,8 @@ export function getWorkbookUploadKind(
 		value === "compensation" ||
 		value === "deduction" ||
 		value === "manpower-databank" ||
-		value === "period-leave"
+		value === "period-leave" ||
+		value === "worksharing-schedule"
 	) {
 		return value;
 	}

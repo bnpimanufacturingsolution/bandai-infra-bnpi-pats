@@ -69,11 +69,12 @@ describe("admin migration route contract", () => {
 			"deduction",
 			"manpower-databank",
 			"period-leave",
+			"worksharing-schedule",
 		];
 		expect(new Set(kinds).size).toBe(kinds.length);
 		expect(kinds).toContain("dm4-overtime");
 		expect(kinds).toContain("dm1-workbook");
-		expect(kinds).not.toContain("worksharing-schedule");
+		expect(kinds).toContain("worksharing-schedule");
 		expect(kinds).toContain("period-leave");
 	});
 
@@ -97,6 +98,27 @@ describe("admin migration route contract", () => {
 		expect(full.biometricFiles).toEqual(biometrics);
 		expect(full.approvedOvertimeFiles).toEqual(overtime);
 		expect(full.sourceFiles).toEqual([...biometrics, ...overtime]);
+	});
+
+	it("builds correct URL query params for workbook deep links and tabs", () => {
+		const base = new URLSearchParams("tab=migration");
+		const opened = buildOpenWorkbookSearchParams(base, "dm3");
+		expect(opened.get("workbook")).toBe("dm3");
+		expect(opened.get("tab")).toBe("migration");
+		expect(opened.has("upload")).toBe(false);
+
+		const withUpload = buildOpenWorkbookUploadSearchParams(opened);
+		expect(withUpload.get("workbook")).toBe("dm3");
+		expect(withUpload.get("upload")).toBe("1");
+
+		const closedUpload = buildCloseWorkbookUploadSearchParams(withUpload);
+		expect(closedUpload.get("workbook")).toBe("dm3");
+		expect(closedUpload.has("upload")).toBe(false);
+
+		const closedPage = buildCloseWorkbookSearchParams(closedUpload);
+		expect(closedPage.has("workbook")).toBe(false);
+		expect(closedPage.has("upload")).toBe(false);
+		expect(closedPage.get("tab")).toBe("migration");
 	});
 
 	it("scopes biometrics-only Import attendance to selected biometrics without OT", () => {
@@ -189,11 +211,13 @@ describe("admin migration route contract", () => {
 		expect(closedPage.get("tab")).toBe("migration");
 	});
 
-	it("rejects retired work sharing schedule upload kind", () => {
+	it("opens DM3 worksharing schedule upload modal via dedicated upload kind", () => {
 		const dm3 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm3");
-		const schedule = new URLSearchParams(dm3);
-		schedule.set("upload", "worksharing-schedule");
-		expect(getWorkbookUploadKind(schedule)).toBe(null);
+		const schedule = buildOpenWorkbookUploadSearchParams(dm3, "worksharing-schedule");
+		expect(schedule.get("workbook")).toBe("dm3");
+		expect(schedule.get("upload")).toBe("worksharing-schedule");
+		expect(getWorkbookUploadKind(schedule)).toBe("worksharing-schedule");
+		expect(isWorkbookUploadOpen(schedule)).toBe(true);
 	});
 
 	it("opens DM3 period leave upload modal via dedicated upload kind", () => {
