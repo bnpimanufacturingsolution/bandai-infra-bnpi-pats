@@ -57,6 +57,21 @@ Admin → Migration → DM3 → **Upload leave (period)** → pick the cutoff �
 ```powershell
 node scripts/run-payroll-tally-matrix.mjs        # E2E matrix (DB+API+unit+tally+recurrence)
 ```
+
+Per-cutoff register tally (works for ANY period; auto-resolves period from DB,
+auto-unlocks the client Sheet2 via Excel COM password 9090):
+
+```powershell
+cd hris-api
+npm run tally:period -- --period=PP-20260626-20260711
+# or by id / custom workbook:
+npx tsx scripts/run-period-tally-compare.mjs --period=cmryhzl4d0030vgaka9dd2v99 --target-xlsx="...unlocked.xlsx"
+```
+
+Evidence lands in `.runtime/tally-<PERIODCODE>-<stamp>/`
+(`REPORT.md`, `summary.json`, `all-results.json`, `compare.csv`).
+Known built-in registers: Apr 26–May 10, Jun 26–Jul 10, Jul 11–25
+(other cutoffs need `--target-xlsx` until added to `KNOWN_TARGETS`).
 Tally report lands in `.runtime/tally-jul1125-after-repairs-<stamp>/REPORT.md`.
 
 **Proven result for Jul 11–25 (this exact path):** TALLIED **67** / 828, UNMATCH 2,
@@ -66,7 +81,8 @@ OT_OK_NEAR_50 187, ALEXA 12, matrix 26 PASS / 0 FAIL.
 
 Skip steps 4, 5, 3-leave and the tally:
 - Cut-specific comp/ded → that period's COMP/DED mass upload (same DM3 cards)
-- Recurring DMA/MLA/loans → already open-horizon, apply automatically
+- **MLA → universal: every Bandai (DIRECT) employee gets ₱500 every cutoff automatically** (engine guarantee + `repair-bnpi-mla-universal.ts` backfill; agency excluded)
+- Recurring DMA/loans → already open-horizon, apply automatically
 - Leave → HR leave module (app-native)
 - Attendance/late → biometrics + schedules (native)
 - OT → still needs the client's `rptOvertimeDetails` until in-app approved OT fully replaces it

@@ -652,6 +652,21 @@ Evidence: `.runtime/dma-tally-20260818/REPORT.md`, `.runtime/dma-open-horizon-re
 | Tests | `hris-api/tests/bnpi-period-leave-import.spec.ts` (9): sheet pick, window/paid filter, dual basis incl. Sheet2 sample 00032 (₱2913.74), explicit dry-run no-writes, execute create+update+log, **default-executes contract**, missing-employee failures |
 | Local DB state | **Executed 2026-08-25** on local clone (5433): PP-20260711-20260726 → **321 created / 0 updated / 6 failed** (missing emps 01827/01834/01835/01836/01838/01841), **₱327,991.84**, log `cmt86rh9b00s8vgewuoj41i4j`. Superseded by the full **§14f tally fix pack** same day — final tally `.runtime/tally-jul1125-after-repairs-2026082508243/REPORT.md`. Baseline (pre-leave, reconstructed vs July Sheet2): `.runtime/tally-jul1125-before-leave-julysheet2/`. |
 
+### Multi-file hazard (discovered 2026-08-26, fix pending — REC-20260826-PERIOD-LEAVE-MULTI-FILE-MERGE)
+
+The upsert is one LVP row per employee+cutoff and the update path **overwrites** the amount
+with the current file's in-window aggregate only — sequential month-file imports do NOT merge.
+A cutoff spanning two client month files (e.g. Jun 26–Jul 10 fed by the June + July ledgers)
+must therefore be imported from ONE combined workbook; importing June then July leaves
+employees with leave on both halves holding only their July days (last import wins).
+
+Live proof on the local DB: PP-20260626-20260711 has **101/387 LVP rows underpaid**
+(136 lost leave days ≈ ₱90,377.61) after a June→July sequence — stored notes carry only
+July dates (e.g. 00922 stored 0.5d vs correct 4.5d). Dry-runs vs both real workbooks
+confirmed window filtering works (June: 208 people/287.5 days kept, 1161 skipped;
+July: 283/453, 1022 skipped; combined correct = 390 people/740.5 days).
+Evidence: `.runtime/verify-period-leave-20260826/REPORT.md`.
+
 ## 14f. Jul 11–25 tally fix pack — comp from Sheet2 + replay (2026-08-25)
 
 The local clone was refreshed after the 8/17–8/20 sessions and lost every brute
@@ -691,7 +706,7 @@ must compute from the app itself.
 | Component | Mechanism | Recurs next period? |
 |---|---|---|
 | **DMA** | open-horizon EVERY_CUTOFF (§14d) | **Yes** — proven |
-| **MLA** | **flipped to open-horizon EVERY_CUTOFF** (824 rows; supersedes old 831; a future period-scoped COMP mass row supersedes it automatically) | **Yes** — proven |
+| **MLA** | **UNIVERSAL since 2026-08-26 (operator directive): every Bandai (DIRECT) employee, every cutoff, forever.** Engine injects ₱500 RECEIVABLE_ONLY when no enrollment resolves (`applyUniversalBandaiMlaSources`); backfill script `repair-bnpi-mla-universal.ts` keeps rows in sync. Agency excluded. | **Yes** — guaranteed at run/preview |
 | **Loans** | EmployeeLoan enrollments from prior DED mass + 24-mo horizon | **Yes** — proven (1,356 loans / ₱831,766 overlap next period) |
 | ARP/PFA/AON/LLA/TSA/OBA/OAD/HYS/ABS/MTX | period-pinned (cut-specific adjustments) | No — by design; future cuts get them from that cut's COMP mass or app workflow |
 | Statutory (SSS/PhilHealth/Pag-IBIG/W-Tax) | engine schedules | **Yes** — native |

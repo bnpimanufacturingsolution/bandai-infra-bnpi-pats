@@ -215,3 +215,68 @@ export function resolvePayrollBenefitSources(
 		.filter((source): source is PayrollBenefitSource => source !== null);
 	return preferPeriodScopedPayrollBenefitSources(resolved, period);
 }
+
+/**
+ * BNPI universal Meal Allowance policy (operator directive 2026-08-26):
+ * MLA applies to EVERY Bandai employee FOREVER — every payroll run/preview must
+ * include it, even when no EmployeeBenefit enrollment row exists (e.g. future
+ * hires, fresh replays). Client register truth: flat ₱500/cutoff, outside
+ * GrossPay, added on the receivable side (RECEIVABLE_ONLY), non-taxable.
+ */
+export const BANDAI_UNIVERSAL_MLA_ORG_IDS = new Set(["cmryhwpv70000vgaktlmrubmx"]);
+export const BANDAI_UNIVERSAL_MLA_CODE = "MLA";
+export const BANDAI_UNIVERSAL_MLA_NAME = "Meal Allowance";
+export const BANDAI_UNIVERSAL_MLA_AMOUNT = 500;
+/** Agency workers are excluded: policy covers Bandai (DIRECT) employees only. */
+export const BANDAI_UNIVERSAL_MLA_WORKFORCE_SOURCE = "DIRECT";
+
+export function applyUniversalBandaiMlaSources(
+	sources: PayrollBenefitSource[],
+	ctx: {
+		organizationId: string;
+		employeeIds: string[];
+		/**
+		 * Bandai-scope allow-list (DIRECT employees). When provided, injection is
+		 * limited to these ids so agency workers never receive the universal MLA.
+		 */
+		scopedEmployeeIds?: string[];
+		period: PayrollBenefitSourcePeriod;
+	},
+): PayrollBenefitSource[] {
+	if (!BANDAI_UNIVERSAL_MLA_ORG_IDS.has(ctx.organizationId)) return sources;
+	const candidates = Array.isArray(ctx.scopedEmployeeIds)
+		? ctx.scopedEmployeeIds
+		: ctx.employeeIds;
+	const withMla = new Set<string>();
+	for (const source of sources) {
+		if (
+			source.direction === "COMPENSATION" &&
+			String(source.code || "").toUpperCase() === BANDAI_UNIVERSAL_MLA_CODE &&
+			source.amount > 0
+		) {
+			withMla.add(source.employeeId);
+		}
+	}
+	let injected = 0;
+	for (const employeeId of candidates) {
+		if (!employeeId || withMla.has(employeeId)) continue;
+		sources.push({
+			id: `universal-bandai-mla:${employeeId}`,
+			employeeId,
+			code: BANDAI_UNIVERSAL_MLA_CODE,
+			name: BANDAI_UNIVERSAL_MLA_NAME,
+			benefitTypeName: BANDAI_UNIVERSAL_MLA_NAME,
+			direction: "COMPENSATION",
+			reconciliationAction: "RECEIVABLE_ONLY",
+			isTaxable: false,
+			amount: BANDAI_UNIVERSAL_MLA_AMOUNT,
+			installmentIds: [],
+			startDate: ctx.period.startDate,
+			endDate: ctx.period.endDate,
+			payrollPeriodId: ctx.period.id,
+			payrollPeriodCode: null,
+		});
+		injected += 1;
+	}
+	return sources;
+}

@@ -2667,6 +2667,8 @@ export const config = {
 				BULK_ADJUST_PAYROLL: "BULK_ADJUST_PAYROLL",
 				UPDATE_PAYROLL_CONFIG: "UPDATE_PAYROLL_CONFIG",
 				GET_PAYROLL_CONFIG: "GET_PAYROLL_CONFIG",
+				DAY_STATUS_REVIEW: "DAY_STATUS_REVIEW",
+				DAY_STATUS_REVIEW_WORKBOOK_REFINE: "DAY_STATUS_REVIEW_WORKBOOK_REFINE",
 			},
 			DESCRIPTIONS: {
 				PAYROLLPERIOD_CREATED: "Created new payrollperiod",
@@ -2684,6 +2686,8 @@ export const config = {
 				PAYROLL_BULK_ADJUSTED: "Bulk adjusted payroll periods",
 				PAYROLL_CONFIG_UPDATED: "Updated payroll period config",
 				PAYROLL_CONFIG_RETRIEVED: "Retrieved payroll period config",
+				DAY_STATUS_REVIEWED: "Reviewed period day-status resolution",
+				DAY_STATUS_REVIEW_WORKBOOK_REFINED: "Refined period day-status resolution with workbooks",
 			},
 			PAGES: {
 				PAYROLLPERIOD_CREATION: "Payrollperiod Creation",
@@ -2693,6 +2697,7 @@ export const config = {
 				PAYROLLPERIOD_LIST: "Payrollperiod List",
 				PAYROLL_GENERATION: "Payroll Generation",
 				PAYROLL_CONFIG: "Payroll Config",
+				DAY_STATUS_REVIEW: "Day-status Review",
 			},
 		},
 		AGENCY: {

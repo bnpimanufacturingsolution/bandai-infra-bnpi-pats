@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from "express";
+import multer from "multer";
 import { cache, cacheShort, cacheMedium, cacheUser } from "../../middleware/cache";
 import { requestTimeout } from "../../middleware/requestTimeout";
 import { config } from "../../config/config";
@@ -27,7 +28,18 @@ interface IController {
 	updateConfig(req: Request, res: Response, next: NextFunction): Promise<void>;
 	bulkGenerate(req: Request, res: Response, next: NextFunction): Promise<void>;
 	bulkAdjust(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getDayStatusReview(req: Request, res: Response, next: NextFunction): Promise<void>;
+	refineDayStatusReviewWithWorkbooks(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
+
+/** In-memory Leave/AWOL workbook upload for the READ-ONLY day-status refine. */
+const uploadDayStatusWorkbooks = multer({
+	storage: multer.memoryStorage(),
+	limits: { fileSize: 50 * 1024 * 1024, files: 2 },
+}).fields([
+	{ name: "leaveFile", maxCount: 1 },
+	{ name: "awolFile", maxCount: 1 },
+]);
 
 export const router = (route: Router, controller: IController): Router => {
 	const routes = Router();
@@ -505,6 +517,34 @@ export const router = (route: Router, controller: IController): Router => {
 			label: "payrollperiod:schedule-deltas",
 		}),
 		controller.getScheduleDeltas,
+	);
+
+	/**
+	 * READ-ONLY day-status resolution (Mon–Sat schedule truth, Sunday REST).
+	 * Punch > WS-positive > AWOL evidence > leave ledger > REVIEW queue.
+	 * Bare no-shows are surfaced for HR review, never silently auto-charged.
+	 */
+	routes.get(
+		"/:id/day-status-review",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "payrollperiod:day-status-review",
+		}),
+		controller.getDayStatusReview,
+	);
+
+	/**
+	 * Refine the day-status resolution with Leave/AWOL workbooks IN MEMORY
+	 * (multipart leaveFile/awolFile). Persists nothing; read-only classification.
+	 */
+	routes.post(
+		"/:id/day-status-review/workbook",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "payrollperiod:day-status-workbook-refine",
+		}),
+		uploadDayStatusWorkbooks,
+		controller.refineDayStatusReviewWithWorkbooks,
 	);
 
 	routes.get("/:id/generate-timesheet/progress", controller.getActiveTimesheetGenerationProgress);
