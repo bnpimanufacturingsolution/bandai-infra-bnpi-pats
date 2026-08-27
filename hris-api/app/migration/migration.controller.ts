@@ -3600,14 +3600,24 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			const dryRun = req.query?.dryRun === "true" || req.body?.dryRun === true;
-			const { importBnpiWorkSharingScheduleFile } = await import("./bnpi-worksharing-schedule-import.service");
-			const summary = await importBnpiWorkSharingScheduleFile({
+			const buffer =
+				file.buffer || (file.path ? fs.readFileSync(file.path) : null);
+			if (!buffer) {
+				res.status(400).json(
+					buildErrorResponse(
+						"Failed to read uploaded WorkSharing file content",
+						400,
+					),
+				);
+				return;
+			}
+
+			const summary = await importWorkSharingScheduleUpload({
 				prisma,
 				organizationId,
-				filePath: file.path,
-				sourceFilename: file.originalname,
-				dryRun,
+				buffer,
+				sourceFilename:
+					file.originalname || file.filename || "WorkSharingSchedule.xlsx",
 				migrationRunId: req.body?.migrationRunId || null,
 				startedByUserId: (req as any).user?.id || null,
 			});

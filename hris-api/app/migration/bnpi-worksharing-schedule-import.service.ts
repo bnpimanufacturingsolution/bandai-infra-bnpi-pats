@@ -237,6 +237,36 @@ async function ensureWorkSharingShiftAndTemplate(
 	};
 }
 
+export async function importBnpiWorkSharingScheduleFile(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	filePath?: string;
+	buffer?: Buffer;
+	sourceFilename?: string;
+	dryRun?: boolean;
+	migrationRunId?: string | null;
+	startedByUserId?: string | null;
+	persistLog?: boolean;
+}): Promise<WorkSharingScheduleImportSummary> {
+	const fs = await import("fs");
+	const buffer =
+		params.buffer || (params.filePath ? fs.readFileSync(params.filePath) : null);
+	if (!buffer) {
+		throw new Error(
+			"No file buffer or file path provided for WorkSharing schedule import",
+		);
+	}
+	return importWorkSharingScheduleUpload({
+		prisma: params.prisma,
+		organizationId: params.organizationId,
+		buffer,
+		sourceFilename: params.sourceFilename,
+		migrationRunId: params.migrationRunId,
+		startedByUserId: params.startedByUserId,
+		persistLog: params.persistLog,
+	});
+}
+
 export async function importWorkSharingScheduleUpload(params: {
 	prisma: PrismaClient;
 	organizationId: string;
