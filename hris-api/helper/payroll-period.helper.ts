@@ -296,6 +296,41 @@ const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 ] as const;
 
 /**
+ * Identify if an employee is a direct/daily operator based on position title or explicit dailyRate.
+ */
+export function isDirectOperatorEmployee(employee: any): boolean {
+	const pos = String(
+		employee?.position?.title ||
+		employee?.position?.name ||
+		employee?.position ||
+		"",
+	).trim().toLowerCase();
+	return (
+		pos === "operator" ||
+		pos === "senior operator" ||
+		pos.includes("operator") ||
+		pos.includes("assembler") ||
+		pos.includes("production staff") ||
+		pos.includes("qa inspector")
+	);
+}
+
+/**
+ * Resolve standard daily rate for Bandai Namco Philippines employees.
+ * Operators default to 600.00 if dailyRate is not explicitly set in the database.
+ */
+export function resolveEmployeeDailyRate(employee: any): number {
+	const explicit = Number(
+		(employee as { dailyRate?: number | null })?.dailyRate ?? 0,
+	);
+	if (explicit > 0) return explicit;
+	if (isDirectOperatorEmployee(employee)) {
+		return 600.0;
+	}
+	return 0;
+}
+
+/**
  * Rate basis for Bandai approved-bucket OT / premium pay (FILE_DUAL).
  *
  * Path A (file daily-rated): when register Daily Salary is stored as dailyRate > 0:
@@ -393,9 +428,11 @@ export function resolveBandaiRegisterBasicPay(params: {
 	if (registerDailyRate > 0) {
 		// Prefer explicit bucket sum (including 0). Only fall back when buckets absent.
 		const hasBucketDays =
-			params.paidRegularDays !== null && params.paidRegularDays !== undefined;
+			params.paidRegularDays !== null &&
+			params.paidRegularDays !== undefined &&
+			Number(params.paidRegularDays) > 0;
 		const paidRegularDays = hasBucketDays
-			? Math.max(0, Number(params.paidRegularDays))
+			? Number(params.paidRegularDays)
 			: Math.max(0, Number(params.presentFallbackDays || 0));
 		return {
 			basicPay: roundToCentavo(paidRegularDays * registerDailyRate),
@@ -1949,9 +1986,7 @@ export async function generatePayrollFromTimesheets(
 
 			// Bandai OT buckets first — FILE_DUAL hourly (Path A dailyRate/8, Path B BNPI 313).
 			// Attendance deductions still use resolveBnpiAttendanceDailyRate (not dual in this PR).
-			const registerDailyRate = Number(
-				(employee as { dailyRate?: number | null }).dailyRate ?? 0,
-			);
+			const registerDailyRate = resolveEmployeeDailyRate(employee);
 			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(
 				validatedDays,
 				periodBasic,
@@ -4168,8 +4203,8 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		? Number(input.paidRegularDays || 0)
 		: input.totalWorkDays;
 	const sourceRow = {
-		monthlySalary: roundToCentavo(input.estimatedMonthlyRate),
-		dailySalary: roundToCentavo(registerDaily),
+		monthlySalary: isPathARegister ? 0 : roundToCentavo(input.estimatedMonthlyRate),
+		dailySalary: isPathARegister ? roundToCentavo(registerDaily) : 0,
 		hourlySalary: computeEmployeePayrollHourlySalarySnapshot({
 			dailyRate: input.dailyRate,
 			hourlyRate: input.hourlyRate,
@@ -4984,9 +5019,7 @@ function calculatePayrollPreviewDataset(params: {
 				}
 			}
 
-			const registerDailyRatePreview = Number(
-				(employee as { dailyRate?: number | null }).dailyRate ?? 0,
-			);
+			const registerDailyRatePreview = resolveEmployeeDailyRate(employee);
 			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(
 				validatedDays,
 				periodBasic,

@@ -927,9 +927,15 @@ export class EmployeeImportHelper {
 				basicSalary: parseFloat(row.BASIC_SALARY),
 				dailyRate: (() => {
 					const raw = row.DAILY_SALARY ?? row.DAILY_RATE;
-					if (raw == null || String(raw).trim() === "") return undefined;
-					const n = parseFloat(String(raw).replace(/,/g, ""));
-					return Number.isFinite(n) && n > 0 ? n : undefined;
+					if (raw != null && String(raw).trim() !== "") {
+						const n = parseFloat(String(raw).replace(/,/g, ""));
+						if (Number.isFinite(n) && n > 0) return n;
+					}
+					const pos = String(row.POSITION || "").toLowerCase();
+					if (pos.includes("operator") || pos.includes("assembler")) {
+						return 600.0;
+					}
+					return undefined;
 				})(),
 				currency: row.CURRENCY || "PHP",
 				payFrequency: (row.PAY_FREQUENCY || "MONTHLY") as any,
