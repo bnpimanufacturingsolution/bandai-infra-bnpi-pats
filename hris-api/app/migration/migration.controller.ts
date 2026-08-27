@@ -3586,12 +3586,52 @@ export const controller = (prisma: PrismaClient) => {
 		res: Response,
 		_next: NextFunction,
 	) => {
-		res.status(410).json(
-			buildErrorResponse(
-				"WorkSharingSchedule import is retired (REC-20260826-DAY-STATUS-REVIEW-QUEUE). WorkSharing 0 flags are ambiguous (Rest | Absent | Leave). Use universal Monday–Saturday schedule truth and Day-Status Review (/hr/day-status-review) instead.",
-				410,
-			),
-		);
+		try {
+			const organizationId = String(
+				req.body?.organizationId || req.query?.organizationId || (req as any).organizationId || "",
+			).trim();
+			if (!organizationId) {
+				res.status(400).json(buildErrorResponse("organizationId is required", 400));
+				return;
+			}
+			const file = (req as any).file;
+			if (!file) {
+				res.status(400).json(buildErrorResponse("WorkSharing schedule Excel file is required", 400));
+				return;
+			}
+
+			const dryRun = req.query?.dryRun === "true" || req.body?.dryRun === true;
+			const { importBnpiWorkSharingScheduleFile } = await import("./bnpi-worksharing-schedule-import.service");
+			const summary = await importBnpiWorkSharingScheduleFile({
+				prisma,
+				organizationId,
+				filePath: file.path,
+				sourceFilename: file.originalname,
+				dryRun,
+				migrationRunId: req.body?.migrationRunId || null,
+				startedByUserId: (req as any).user?.id || null,
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					dryRun
+						? "WorkSharing schedule import preview (no writes)"
+						: "WorkSharing schedule import finished successfully",
+					{ summary, importLogId: summary.importLogId || null },
+					200,
+				),
+			);
+		} catch (error: any) {
+			migrationLogger.error(`DM3 WorkSharing schedule import failed: ${error?.message || "Unknown error"}`, {
+				error,
+			});
+			res.status(500).json(
+				buildErrorResponse(
+					`WorkSharing schedule import failed: ${error?.message || "Unknown error"}`,
+					500,
+				),
+			);
+		}
 	};
 
 	const listDm3MassUploadImports = async (
