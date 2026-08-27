@@ -1,7 +1,9 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import fs from "node:fs";
 import path from "node:path";
 import * as XLSX from "xlsx";
 import { Prisma, PrismaClient } from "../generated/prisma";
+import { config } from "../config/config";
 import {
 	AUTO_APPROVED_BY,
 	AUTO_APPROVED_REASON,
@@ -12,8 +14,33 @@ import {
 	type BandaiOtSourceRow,
 } from "../helper/bandai-ot-line-patch.helper";
 
-const prisma = new PrismaClient();
+dotenv.config();
+const localEnvPath = path.resolve(__dirname, "..", ".env.development.local");
+if (fs.existsSync(localEnvPath)) {
+	dotenv.config({ path: localEnvPath, override: true });
+}
+
+const dbUrl =
+	process.env.WRITE_DATABASE_URL?.trim() ||
+	process.env.PG_DATABASE_URL?.trim() ||
+	process.env.DATABASE_URL?.trim() ||
+	config.writeDatabaseUrl;
+
+const prisma = new PrismaClient({
+	...(dbUrl ? { datasources: { db: { url: dbUrl } } } : {}),
+});
 const repoRoot = path.resolve(__dirname, "..", "..");
+
+function resolveRepoOrLocalPath(candidatePath: string): string {
+	if (path.isAbsolute(candidatePath)) return candidatePath;
+	const fromCwd = path.resolve(process.cwd(), candidatePath);
+	if (fs.existsSync(fromCwd)) return fromCwd;
+	const fromRepo = path.resolve(repoRoot, candidatePath);
+	if (fs.existsSync(fromRepo)) return fromRepo;
+	const fromDir = path.resolve(__dirname, "..", candidatePath);
+	if (fs.existsSync(fromDir)) return fromDir;
+	return fromCwd;
+}
 
 const readArg = (name: string, fallback?: string) => {
 	const prefix = `${name}=`;
@@ -28,7 +55,7 @@ const autoApproveEnabled = apply && !process.argv.includes("--no-auto-approve");
 // (even when no line patches are planned this run).
 const autoApproveWithOt = process.argv.includes("--auto-approve-with-ot");
 const periodCode = readArg("--periodCode", "PP-20260426-20260511")!;
-const overtimeWorkbookPath = path.resolve(
+const overtimeWorkbookPath = resolveRepoOrLocalPath(
 	readArg(
 		"--overtime-workbook",
 		path.join(repoRoot, "docs", "Bandai Payroll", "2026 rptOvertimeDetails.xlsx"),

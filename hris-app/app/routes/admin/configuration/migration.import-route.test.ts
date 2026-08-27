@@ -68,13 +68,12 @@ describe("admin migration route contract", () => {
 			"compensation",
 			"deduction",
 			"manpower-databank",
-			"worksharing-schedule",
 			"period-leave",
 		];
 		expect(new Set(kinds).size).toBe(kinds.length);
 		expect(kinds).toContain("dm4-overtime");
 		expect(kinds).toContain("dm1-workbook");
-		expect(kinds).toContain("worksharing-schedule");
+		expect(kinds).not.toContain("worksharing-schedule");
 		expect(kinds).toContain("period-leave");
 	});
 
@@ -190,13 +189,11 @@ describe("admin migration route contract", () => {
 		expect(closedPage.get("tab")).toBe("migration");
 	});
 
-	it("opens DM3 work sharing schedule upload modal via dedicated upload kind", () => {
+	it("rejects retired work sharing schedule upload kind", () => {
 		const dm3 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm3");
-		const schedule = buildOpenWorkbookUploadSearchParams(dm3, "worksharing-schedule");
-		expect(schedule.get("workbook")).toBe("dm3");
-		expect(schedule.get("upload")).toBe("worksharing-schedule");
-		expect(getWorkbookUploadKind(schedule)).toBe("worksharing-schedule");
-		expect(isWorkbookUploadOpen(schedule)).toBe(true);
+		const schedule = new URLSearchParams(dm3);
+		schedule.set("upload", "worksharing-schedule");
+		expect(getWorkbookUploadKind(schedule)).toBe(null);
 	});
 
 	it("opens DM3 period leave upload modal via dedicated upload kind", () => {

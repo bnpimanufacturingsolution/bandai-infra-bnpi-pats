@@ -85,6 +85,7 @@
 		"seed:pan": "npx tsx prisma/seed-pan.ts",
 		"zod-generate": "node scripts/zod-generate.js",
 		"tally:period": "tsx scripts/run-period-tally-compare.mjs",
+		"tally:fix": "dotenv -o -e .env -e .env.development.local -- node scripts/run-post-import-tally-fix.mjs",
     "test:tax": "ts-node scripts/test-tax-calculator.ts",
 		"test:payroll": "ts-node scripts/test-payroll-calculation.ts",
 		"example:tax": "ts-node helper/tax-calculator.example.ts",

@@ -3870,7 +3870,7 @@ export function RunPayrollTemplate() {
 								</AccordionContent>
 							</AccordionItem>
 
-							{/* Schedule deltas — WorkSharing / assignment history under OT stack */}
+							{/* Schedule deltas — assignment history under OT stack */}
 							<AccordionItem value="schedule-deltas" className="border-t border-gray-100">
 								<AccordionTrigger className="rounded-md px-2 py-2.5 hover:no-underline hover:bg-gray-50/80">
 									<div className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-2">
@@ -3880,7 +3880,7 @@ export function RunPayrollTemplate() {
 												Schedule changes
 											</span>
 											<span className="hidden truncate text-[11px] text-gray-400 sm:inline">
-												WorkSharing · before → after
+												Assignments · before → after
 											</span>
 										</div>
 										<div className="flex shrink-0 items-center gap-1.5">
@@ -3917,13 +3917,13 @@ export function RunPayrollTemplate() {
 										<code className="rounded bg-gray-100 px-1 text-[10px]">
 											EmployeeScheduleHistory
 										</code>{" "}
-										from WorkSharing backfill (template before → after). Already-matching
+										(template before → after). Already-matching
 										schedules are skipped at apply time (no history row).
 									</p>
 									<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-4">
 										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
 											<p className="truncate text-[11px] text-gray-500">
-												Workshare deltas
+												Schedule deltas
 											</p>
 											<p className="mt-0.5 text-xs font-semibold tabular-nums text-gray-900">
 												{formatCount(
@@ -3974,12 +3974,7 @@ export function RunPayrollTemplate() {
 											))
 										) : payrollScheduleDeltasError ? (
 											<div className="px-3 py-3 text-xs text-amber-800">
-												Could not load schedule deltas. Restart API if route 404.
-												Apply WorkSharing via{" "}
-												<code className="rounded bg-gray-100 px-1 text-[10px]">
-													backfill-employee-schedules-from-worksharing.ts
-												</code>
-												.
+												Could not load schedule deltas.
 											</div>
 										) : (payrollScheduleDeltas?.rows || []).length > 0 ? (
 											(payrollScheduleDeltas?.rows || []).map((row) => (
@@ -4032,10 +4027,8 @@ export function RunPayrollTemplate() {
 											))
 										) : (
 											<div className="px-3 py-3 text-xs leading-relaxed text-gray-600">
-												<strong className="text-gray-800">0 workshare deltas</strong>{" "}
-												for this period window. Either schedules already matched
-												(backfill skip) or WorkSharing has not been applied yet for
-												this cutoff.
+												<strong className="text-gray-800">0 schedule deltas</strong>{" "}
+												for this period window. Schedules already matched current templates.
 											</div>
 										)}
 									</div>

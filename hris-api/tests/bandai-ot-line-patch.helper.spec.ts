@@ -192,5 +192,43 @@ describe("bandai-ot-line-patch.helper", () => {
 				patch!.changes.metadata.bandaiPayrollSourceRepair.approvedBuckets.regOtHrs,
 			).to.equal(3);
 		});
+
+		it("is idempotent: returns null when line already has target status, zero hours, and matching approvedBuckets", () => {
+			const source = zeroSource({ date: "2026-06-27", employeeNo: "01211" });
+			const initialLine = {
+				status: "ABSENT",
+				primaryMarker: "ABSENT",
+				hoursWorked: "0:00",
+				regularHours: "0:00",
+				overtimeHours: "0:00",
+				lateHours: "0:00",
+				earlyOutHours: "0:00",
+				undertimeHours: "0:00",
+				notes: "BNPI OT source: scheduled workday with zero regular/OT/premium buckets; marked absent.",
+				scheduleSnapshot: { isOff: false, code: "WS_0815_1615" },
+				metadata: null,
+			};
+			const firstPatch = buildBandaiOtLinePatch({
+				line: initialLine,
+				source,
+				appliedAt: "2026-08-27T00:00:00.000Z",
+			});
+			expect(firstPatch).to.not.equal(null);
+
+			// Apply the patch to simulate DB state
+			const patchedLine = {
+				...initialLine,
+				...firstPatch!.changes,
+				metadata: firstPatch!.changes.metadata,
+			};
+
+			// Second pass (verification dry-run) must return null
+			const secondPatch = buildBandaiOtLinePatch({
+				line: patchedLine,
+				source,
+				appliedAt: "2026-08-27T00:00:00.000Z",
+			});
+			expect(secondPatch).to.equal(null);
+		});
 	});
 });

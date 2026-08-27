@@ -15,6 +15,14 @@
 import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
+
+process.env.PG_DATABASE_URL =
+	process.env.PG_DATABASE_URL ||
+	process.env.DATABASE_URL ||
+	"postgresql://postgres:postgres@127.0.0.1:5433/hris?schema=public";
+process.env.DATABASE_URL = process.env.PG_DATABASE_URL;
+process.env.WRITE_DATABASE_URL = process.env.PG_DATABASE_URL;
+
 import { PrismaClient } from "../generated/prisma";
 import { computeDm4BiometricDayMetrics } from "../helper/dm4-biometric-day-metrics.helper";
 import { resolveEffectiveShift } from "../helper/employee-schedule.helper";

@@ -1,4 +1,127 @@
-## 2026-08-25 - WS-vs-Sheet2 absent disagreement â€” fleet classification (179 people)
+## 2026-08-27b - WorkSharing retired across UI/API/docs & unified tally:fix orchestrator shipped
+
+| Field | Value |
+|---|---|
+| WorkSharing Retirement | Completely removed from DM3 UI (`migration.tsx`, `admin-migration-ui.ts`, `run-payroll-template.tsx`). `POST /api/migration/dm3/import-worksharing-schedule` disabled returning `410 Gone`. Manifests updated (`docs/dm-source-input-manifest.json`). Runbooks and operating rules updated across docs. |
+| Mon–Sat Schedule Truth | Default Monday–Saturday schedule templates apply directly without period-specific WorkSharing uploads. Ambiguities are safely managed via the Day-Status Review queue (`/hr/day-status-review`). |
+| Unified Tally Fix Script | Created single unified command: `npm run tally:fix -- --period=<PERIOD_CODE>` (`hris-api/scripts/run-post-import-tally-fix.mjs`). Runs 1. MLA universal guarantee → 2. Prior deduction history Jan–Jun → 3. Loan 24-month horizon floor → 4. Late/UT recompute → 5. Live Sheet2 register tally comparison. Idempotent across multiple periods. |
+| Test Suite Status | Frontend Vitest 23/23 passing. Backend Mocha 26/26 passing. Playwright headless browser test passing on DM3 page. Live execution verified on `PP-20260626-20260711` and `PP-20260711-20260726`. |
+
+## 2026-08-27 - Day-status review UI & workbook refinement endpoints shipped + proven
+
+| Field | Value |
+|---|---|
+| Feature | Read-only Day-Status Resolution & Review Queue under Mon–Sat schedule truth (Sunday REST). REC-20260826-DAY-STATUS-REVIEW-QUEUE Implemented. |
+| API Endpoints | `GET /api/payrollperiod/:id/day-status-review` (DB-only) + `POST /api/payrollperiod/:id/day-status-review/workbook` (in-memory multipart `leaveFile` / `awolFile` refinement). Persists nothing; zero payroll charges. |
+| Helper & Specs | `hris-api/helper/day-status-resolution.helper.ts` (12/12 unit tests passing). `hris-app/app/services/day-status-review.spec.ts` (3/3 vitest tests passing). |
+| Frontend | `hris-app/app/routes/hr/day-status-review.tsx`, service `day-status-review.service.ts`, route `day-status-review` registered in `routes.ts`, sidebar submenu entry under HR Timekeeping. |
+| Live Endpoint Proof | PP-20260626-20260711: DB-only review 18,889; Refined with combined June+July leave + AWOL workbooks: LEAVE_PAID 657 (+115 days recovered), LEAVE_UNPAID 208, AWOL_EVIDENCED 244, REVIEW_NO_EVIDENCE 18,322. PP-20260711-20260726: DB-only review 19,093; Refined: LEAVE_PAID 607, LEAVE_UNPAID 209, AWOL_EVIDENCED 186, REVIEW_NO_EVIDENCE 18,698. Evidence: `.runtime/day-status-live/`. |
+| Browser Proof | Playwright headless verified `/auth/login`, `/hr/day-status-review` period selection, bucket chips, workbook refinement file upload, and DataTable pagination. Screenshots in `.runtime/browser-evidence/day-status-review/`. |
+
+## 2026-08-26i - Mon–Sat + Leave/AWOL simulation: charged cohort 0→56/50 matches, fleet-net worse (₱463–573k/window new false charges, mostly Saturdays)
+
+| Field | Value |
+|---|---|
+| Ask | Drop WS file (universal Mon–Sat schedule, Sunday rest) + use Leave + Awol files as discriminators — does payroll tallying improve? |
+| Method | READ-ONLY day-status pipeline sim over register∩DB people, both July cutoffs; variants V1–V6 incl. no-AWOL ablation. Evidence: `.runtime/monsat-tally-sim-2026-08-26T11-16/REPORT-MONSAT-TALLY.md` |
+| Sunday | **Zero** Sunday punches in 19,507 cells (both windows); client WS claims Sunday work 1,453× unsupported by biometrics → Mon–Sat with Sunday REST is safe; future Sunday work auto-PRESENT via punch |
+| Charged cohort | Exact-day match vs Sheet2 Absent-Amt: ~0 today → **56/172** (Jun26–Jul10), **50/174** (Jul11–25); best money V2 (+unpaid-as-absent): ₱298.7k→₱165.7k and ₱270.1k→₱139.0k error |
+| Fleet net | Auto-charging bare no-evidence days adds **₱462.8k/₱573.5k** false charges on 405/494 uncharged people — 72–98% Saturdays; weekday no-evidence collapses to 83/13 days fleet-wide (person-specific Saturday pattern = what WS encoded) |
+| AWOL verdict | Ablation-proven zero tally contribution (V1≡V6; sole-source 0/172 & 0/174); stays DA/disciplinary evidence label for 244/186 pool days |
+| Leave verdict | Structurally essential under Mon–Sat: resolves 859/1,629 (53%) / 816/1,888 (43%) missed scheduled days into LEAVE classes |
+| Residual | Ceiling violations 18/5 (charged > all available missed days); ACTIVE-no-punch cohort (01236-class) uncharged by client; Alexa unchanged |
+| REC | REC-20260826-DAY-STATUS-REVIEW-QUEUE (Proposed): Mon–Sat+Sun-rest schedule truth; pipeline punch>WS1>ledger/AWOL; bare no-evidence → review queue, not silent ABSENT |
+
+## 2026-08-26h - Universal MLA shipped + proven (818→0 register fails)
+
+| Field | Value |
+|---|---|
+| Directive | MLA = ALL Bandai (DIRECT) employees, every cutoff, FOREVER; docs + engine + script. Supersedes 2026-08-07 "do not auto-enroll". |
+| Engine | `applyUniversalBandaiMlaSources` in payroll-benefit-source.helper.ts; wired into `buildPayrollSourceAmountsByEmployeeId` (single seam for preview+generate); ₱500 RECEIVABLE_ONLY non-taxable; agency excluded via DIRECT scope query. |
+| Script | `repair-bnpi-mla-universal.ts` (dry-run default / `--execute`) — executed: 846 DIRECT actives, 824 covered, **+23 created**. |
+| Proof | Jun26–Jul10 tally: register MLA fails **818 → 0**; Alexa appMLA=500/dMLA=0 (residual Δ+1,434.98 = absent+PH walls). Tests 37 pass incl. new spec. Live API check: source id `universal-bandai-mla:<empId>` RECEIVABLE_ONLY. |
+| Ops note | tsx-watch reload flaky — after engine edits, restart API and verify live response before measuring (two false-negative runs cost time). |
+| Docs | project-truth-summary 2026-08-26h · findings §14g MLA row · runbook app-native bullet. Not pushed (money-path change awaiting operator review). |
+
+## 2026-08-26g - AWOL workbook: DA-tracker; resolves 101/799 silent zeros; NOT the register-absence source
+
+| Field | Value |
+|---|---|
+| File | `confidential-files/Awol (July 1-31, 2026).xlsx` — 157 ppl / 726 day-rows Jul 1–31, LeaveType=AWOL, all Unpaid, "For DA Issuance"; same ledger schema (existing helper parses). Remarks: blank 433 / RD 152 / "no file" 115 / AWOL 24 / Resigned 2. |
+| Coverage | Jun26–Jul10: **347 day-rows / 114 people**; Jul11–25: 257 / 92. Resolves **101/799** silent zeros as ABSENT. |
+| Not the source | Register Absent-Amt: **0/177** people match AWOL-days==implied (top cohort 00021/00050… has no rows). Conflicts to rule on: 172 punched-on-AWOL, 92 on WS=1. Alexa absent from file though register charges her 3 absences. |
+| Use | Day-status evidence feed (partial) + proof client tracks daily absences. Future ingest = explicit precedence rules + operator order; never LVP pay (Unpaid). |
+| Evidence | `.runtime/verify-period-leave-20260826/awol-inspect-proof.txt`, `awol-triangulation-proof.txt`; addendum in `REPORT-WS-ZERO-FINDING.md` |
+
+## 2026-08-26f - WS `0` ambiguity confirmed by client — triangulated; absent walls are missing-input, not engine faults
+
+| Field | Value |
+|---|---|
+| Finding | WS `1`=worked; `0` = Rest OR Absent OR Leave (client has no discriminator either). Supersedes our "WS=0 = OFF override" reading and dissolves the Absent-173/Alexa "client contradiction" class. |
+| Triangulation (858 register people, 3,437 zero-days Jun26–Jul09*) | punched-anyway **2,151 (63%)** ↔ RD Hrs Pay>0 on 224 people; leave-ledger **487**; silent **799**. App today: 432 REST_DAY on zeros, 11 ABSENT lines vs register charging 175 people / ₱628,413.64. |
+| Rule fit | silent-zeros==impliedAbsentDays: 53/175; +WS1-no-shows: 30/175 → client day-level absences are NOT mechanically recoverable. |
+| Lacking | day-level absence truth from client; conflict priority (punch vs ledger vs WS); UNPAID type-A taxonomy; holiday calendar; half-day convention; manual-exclusion list (~5 people). |
+| Boundary | READ-ONLY investigation (no DB/product writes). WS file quirks: no Jul-10 column, duplicate employee rows (merged). Alexa app-line anomalies (REST on punched 07-07 / on WS=1 06-30) flagged for separate DM4 look. |
+| Report | `.runtime/verify-period-leave-20260826/REPORT-WS-ZERO-FINDING.md` |
+
+## 2026-08-26e - All-period tally script shipped + proven (import → tally:period → REPORT)
+
+| Field | Value |
+|---|---|
+| Ask | One tally script for ALL periods: import then run script. |
+| Shipped | `scripts/run-period-tally-compare.mjs` (`npm run tally:period -- --period=<CODE|id>`), helper `tally-compare.helper.ts`, spec 8/8 (`tests/tally-compare.helper.spec.ts`), runbook Phase 4 updated. |
+| Capabilities | Period auto-resolve by code/id; built-in register map Apr26–May10 / Jun26–Jul10 / Jul11–25 + `--target-xlsx`; **Excel COM auto-unlock (password 9090)**; read-only vs HRIS; evidence REPORT/summary/all-results/compare.csv under `.runtime/tally-<PERIODCODE>-<stamp>/`; Leave/leavePay compared but non-core. |
+| Proof 1 parity | PP-20260626-20260711: 818 compared, TALLIED 0 / MATCH_ONLY 813 / NEAR_50 4 / UNMATCH 1; Alexa +934.98 — identical to `_tmp` baseline. |
+| Proof 2 multi | PP-20260711-20260726: 828 compared, TALLIED 22 / ALEXA_NEAR 10 / NEAR_50 49 / MATCH_ONLY 388 / UNMATCH 359 (live truth, not the post-pack snapshot). |
+| Evidence | `.runtime/verify-period-leave-20260826/TALLY-SCRIPT-DELIVERY.md`; outputs in `.runtime/tally-PP-20260626-20260711-*` and `.runtime/tally-PP-20260711-20260726-*`. |
+
+## 2026-08-26d - Folder-imports alone ≠ tally: fleet 0/818 TALLIED after Jun26–Jul10 uploads (proven)
+
+| Field | Value |
+|---|---|
+| Ask | After reset + importing all june26-july10 folder files — tally? Alexa? which script first? |
+| Empirical | Today's post-upload harness run = that exact state: **TALLIED 0/818** (OT_MATCH_ONLY 813, OT_OK_NEAR_50 4, UNMATCH 1). Fails: totalDedn 818, mla 818, gross 676, monthlySalary 556, late 388, tax 331, absent 167, days 100; TR app-under 758. |
+| Alexa | NO — absent −1834.50 (policy), MLA −500 (seam), PH +398.75 (engine-vs-register); OT/days/basic match. |
+| Scripts | No jun26–jul10 orchestrator exists (July pack is cutoff-specific). Env-parameterized steps: late-UT recompute → dailyRate backfill → comp-from-Sheet2 with `PERIOD_ID=cmryhzl4d0030vgaka9dd2v99 P_START=2026-06-26 P_END=2026-07-10 TARGET_XLSX=<unlocked>` (seeds this window's DMA/MLA) → prior-DED oldest→newest → LEAVE merged workbook → THEN generate → `_tmp-full-period-tally-compare.mjs`. |
+| Expectation ceiling | Full pipeline ⇒ Jul11–25-class result (~TALLIED 67/828 + NEAR bands); remainder = client contradictions needing rulings (absent/Saturday, loans data, PH basis, manual leave exclusions). |
+| Evidence | `.runtime/verify-period-leave-20260826/fleet-field-fails-proof.txt`, `tally-rerun-stdout.txt` |
+
+## 2026-08-26c - Reset replay order: oldest→newest for recurring continuity; "run payroll to lock" is NOT an import guard
+
+| Field | Value |
+|---|---|
+| Ask | After DB reset, must we import old → run payroll (lock) → import new so data won't mix? |
+| Mixing | Impossible — writes keyed `payrollPeriodId` or explicit open-horizon; live isolation proven (Apr=1261 / Jun26–Jul10=1694 / Jul11–25=1473 period-scoped rows; today's imports touched only Jun26–Jul11). |
+| Lock reality | Migration services never check `isPaid`; imports write into generated/paid periods. Only stored snapshots lock (PATCH 409 `PAYROLL_SNAPSHOT_LOCKED` spec; generate skips paid employees controller:1865). Late import after generate = stale register until regenerate/reset. |
+| Order proof | Recurring continuity needs oldest-first seeding: 824 active MLA ALL start >2026-07-10, ZERO cover Jun26–Jul10, 831 legacy hard-ended 07-10 (fleet-wide Alexa seam). Loans order-safe via never-shrink endDate (1,356 overlap both future cutoffs); supersede auto-ran 1,094×. Precedent `import-prior-deduction-mass-history.mjs` "oldest → newest". |
+| Canonical sequence | Per cutoff OLDEST→NEWEST: DM4 bio+OT → COMP(+recurring already seeded) → DED cumulative → LEAVE (one combined workbook for two-month spans; WorkSharing retired — REC-20260826-DAY-STATUS-REVIEW-QUEUE) → THEN generate payroll. Full table in `.runtime/verify-period-leave-20260826/RESET-ORDER-PROOF.md`. |
+
+## 2026-08-26b - Alexa 01792 tally break: NOT the leave import — absent/MLA/PH trio
+
+| Field | Value |
+|---|---|
+| Ask | Alexa (01792) tallied before on Jun26–Jul10; after today's leave imports it doesn't. Why? |
+| Verdict | Leave import innocent — ALL her ledger rows UNPAID type A → zero LVP rows (incl deleted), leavePay=0 both eras; Sheet2 Leave col = `-`. Band ALEXA_NEAR ±0.77 → OT_MATCH_ONLY +934.98 from three other deltas. |
+| Absent −1834.50 | Today's DM4 re-upload rebuilt her timesheet to **9 PRESENT + 6 REST_DAY, ZERO ABSENT**; Sheet2 charges 3 absences × 611.50 (monthly×12/313). Same WS-vs-Sheet2/Saturday contradiction class as Absent-173. Side win: numberOfDays now 9 = matches target. |
+| MLA −500 | Legacy MLA (→2026-07-10) superseded COMPLETED by Aug-25 comp replay; open-horizon replacement starts **2026-07-11** → Jun26–Jul10 cut has NO active MLA. Fleet seam audit needed around 2026-07-10/11. |
+| Dedn +398.75 | Exactly 15,950×2.5% — new salary-based PH cutoff schedule charges per law; client file shows 0 for her. Policy/client-contradiction class. |
+| Reconcile | +1833.73 gross − 500 MLA − 398.75 PH = +934.98 TR delta ✓ |
+| Remedies | None executed (money mutations need operator order): MLA seam repair, absent policy ruling, PH basis confirmation. |
+| Evidence | `.runtime/verify-period-leave-20260826/ALEXA-FORENSICS.md` + `alexa-diff-proof.txt` + `tally-rerun-stdout.txt`; fresh harness run backed up prior evidence to `.runtime/full-tally-20260811-before-recheck-20260826/`. |
+
+## 2026-08-26 - Period leave import verified: persists to DB, but sequential month files OVERWRITE (Jun26–Jul10 damaged)
+
+| Field | Value |
+|---|---|
+| Ask | Does DM3 Upload leave (period) save to DB? For cutoff Jun 26–Jul 10, does importing the June + July month leave files cover the period? |
+| Persistence | YES — `EmployeeBenefit` rows (LVP "Leave Pay") period-pinned + durable `MassUploadImportLog` kind `period-leave`; payroll consumes via `resolvePayrollBenefitSources` → register `leavePay` → GrossPay. Live log fetch `cmt86rh9b00s8vgewuoj41i4j` (321 created / ₱327,991.84) + DB counts per period (Apr:358/₱433.5k, Jun26–Jul10:387/₱404.9k, Jul11–25:371/₱443.9k). |
+| Window filter | Proven live dry-runs vs real workbooks targeting `PP-20260626-20260711`: June file keeps 208 people/287.5 days (skips 1161 out-of-window), July file keeps 283/453 (skips 1022). Combined correct = 390 people / 740.5 days. |
+| Hazard PROVEN | Upsert is one LVP row per employee+cutoff and update OVERWRITES with current file's in-window aggregate — no merge. Importing June then July leaves dual-half employees with July-only days. Live DB damage: **101/387 rows underpaid, 136 lost days ≈ ₱90,377.61** (e.g., 00922 stored 0.5d vs correct 4.5d; 01044 1d vs 3d; notes carry only July dates). Re-importing June alone would ping-pong wipe July days instead. |
+| Operator rule today | Cutoff spans two client month files → merge both qualifying sheets into ONE workbook, import once against the chosen cutoff. Single-cutoff months keep using their monthly file as-is. |
+| REC | REC-20260826-PERIOD-LEAVE-MULTI-FILE-MERGE (Proposed): merge-on-update or multi-workbook accumulation. Not implemented this pass. |
+| Evidence | `.runtime/verify-period-leave-20260826/REPORT.md` (dry-runs, DB proofs, impact math) |
+
+## 2026-08-25 - WS-vs-Sheet2 absent disagreement — fleet classification (179 people)
 
 | Class | People | Meaning |
 |---|---:|---|

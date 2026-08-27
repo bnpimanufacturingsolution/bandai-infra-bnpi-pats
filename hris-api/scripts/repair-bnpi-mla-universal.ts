@@ -20,7 +20,7 @@ process.env.PG_DATABASE_URL =
 process.env.DATABASE_URL = process.env.PG_DATABASE_URL;
 process.env.WRITE_DATABASE_URL = process.env.WRITE_DATABASE_URL || process.env.PG_DATABASE_URL;
 
-const ORG_ID = process.env.ORG_ID || "cmryhwpv70000vgaktlmrubmx";
+const DEFAULT_ORG_ID = process.env.ORG_ID || "cmryhwpv70000vgaktlmrubmx";
 const EXECUTE = process.argv.includes("--execute");
 const AMOUNT_DEFAULT = Number(process.env.MLA_AMOUNT || 500);
 
@@ -31,6 +31,16 @@ async function main() {
 	const { ensureBenefitType } = await import("../app/migration/bnpi-mass-upload-import.service");
 	const prisma = new PrismaClient();
 	try {
+		let org = await prisma.organization.findUnique({ where: { id: DEFAULT_ORG_ID } });
+		if (!org) {
+			org = await prisma.organization.findFirst({
+				where: { isDeleted: false },
+				orderBy: { createdAt: "asc" },
+			});
+		}
+		if (!org) throw new Error("No organization found in database.");
+		const ORG_ID = org.id;
+
 		const benefitType = await ensureBenefitType(prisma as any, ORG_ID, "MLA", {
 			name: "Meal Allowance",
 			direction: "COMPENSATION",

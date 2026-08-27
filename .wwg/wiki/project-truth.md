@@ -272,8 +272,9 @@
   rates; Gross/Net/TotalReceivable residuals are dominated by absent, late,
   OT pay/rate, loans, DMA/MHDMF2 period pin, and tax cascade.
 - Alexa-era path notes: OT bucket hours apply fleet-wide strongly; BNPI 313
-  attendance daily applies when buckets present; WorkSharing day overrides may
-  exist without line schedule rebuild (late residual class `apply_path`).
+  attendance daily applies when buckets present; WorkSharing file upload is retired
+  (REC-20260826-DAY-STATUS-REVIEW-QUEUE) in favor of Monday–Saturday schedule truth
+  and Day-Status Review (`/hr/day-status-review`).
 
 
 ## BNPI Meal Allowance (MLA) coverage expectation (2026-08-07)

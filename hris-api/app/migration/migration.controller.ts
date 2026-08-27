@@ -1,4 +1,4 @@
-﻿import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction } from "express";
 import { PrismaClient } from "../../generated/prisma";
 import * as XLSX from "xlsx";
 import * as fs from "fs";
@@ -3586,101 +3586,12 @@ export const controller = (prisma: PrismaClient) => {
 		res: Response,
 		_next: NextFunction,
 	) => {
-		armHeavyMassUploadTimeouts(req, res);
-		try {
-			const uploadedFile = resolveUploadedMigrationFile(req);
-			if (!uploadedFile?.buffer) {
-				res.status(400).json(
-					buildErrorResponse(
-						"File is required. Upload WorkSharingSchedule .xlsx as multipart field 'file'.",
-						400,
-					),
-				);
-				return;
-			}
-			const parsedBody = parseMultipartJsonBody(req);
-			if (parsedBody.error) {
-				res.status(400).json(buildErrorResponse(parsedBody.error, 400));
-				return;
-			}
-			const organizationId = String(
-				parsedBody.body?.organizationId || (req as any).organizationId || "",
-			).trim();
-			if (!organizationId) {
-				res.status(400).json(buildErrorResponse("organizationId is required", 400));
-				return;
-			}
-
-			const sourceFilename = uploadedFile.originalname || "WorkSharingSchedule.xlsx";
-			const summary = await importWorkSharingScheduleUpload({
-				prisma,
-				organizationId,
-				buffer: uploadedFile.buffer,
-				sourceFilename,
-				migrationRunId: resolveMassUploadMigrationRunId(parsedBody.body, req),
-				startedByUserId: getMigrationRequestUserId(req),
-				persistLog: true,
-			});
-
-			const okCount = Number(summary.created || 0) + Number(summary.updated || 0);
-			const failedCount = Number(summary.failed || 0);
-			const skippedCount = Number(summary.skipped || 0);
-			const userActivityMessage = `Uploaded work sharing schedule "${sourceFilename}" - ${okCount} succeeded (${summary.created} new, ${summary.updated} updated), ${skippedCount} skipped, ${failedCount} failed`;
-			logMigrationActivity(
-				req,
-				config.ACTIVITY_LOG.MIGRATION.ACTIONS.IMPORT_MIGRATION_DATA,
-				userActivityMessage,
-				config.ACTIVITY_LOG.MIGRATION.PAGES.MIGRATION_IMPORT,
-			);
-			logMigrationAudit(req, {
-				auditAction: config.AUDIT_LOG.ACTIONS.CREATE,
-				entityId: summary.importLogId || organizationId,
-				description: userActivityMessage,
-				changesAfter: {
-					kind: "worksharing-schedule",
-					importLogId: summary.importLogId || null,
-					sourceFilename,
-					total: summary.total,
-					created: summary.created,
-					updated: summary.updated,
-					skipped: summary.skipped,
-					failed: summary.failed,
-					status: summary.status,
-					effectiveFrom: summary.effectiveFrom || null,
-					effectiveTo: summary.effectiveTo || null,
-					sheetName: summary.sheetName || null,
-				},
-			});
-
-			res.status(summary.failed > 0 && okCount === 0 ? 207 : 200).json(
-				buildSuccessResponse(
-					summary.failed > 0
-						? "Work sharing schedule import completed with issues."
-						: "Work sharing schedule imported.",
-					{
-						summary,
-						importLogId: summary.importLogId || null,
-						userActivity: {
-							kind: "worksharing-schedule",
-							message: userActivityMessage,
-							importLogId: summary.importLogId || null,
-						},
-					},
-					summary.failed > 0 && okCount === 0 ? 207 : 200,
-				),
-			);
-		} catch (error: any) {
-			migrationLogger.error(
-				`DM3 work sharing schedule upload failed: ${error?.message || "Unknown error"}`,
-				{ error },
-			);
-			res.status(500).json(
-				buildErrorResponse(
-					`Work sharing schedule upload failed: ${error?.message || "Unknown error"}`,
-					500,
-				),
-			);
-		}
+		res.status(410).json(
+			buildErrorResponse(
+				"WorkSharingSchedule import is retired (REC-20260826-DAY-STATUS-REVIEW-QUEUE). WorkSharing 0 flags are ambiguous (Rest | Absent | Leave). Use universal Monday–Saturday schedule truth and Day-Status Review (/hr/day-status-review) instead.",
+				410,
+			),
+		);
 	};
 
 	const listDm3MassUploadImports = async (
