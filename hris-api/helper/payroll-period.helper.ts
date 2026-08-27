@@ -443,9 +443,10 @@ export function resolveBandaiRegisterBasicPay(params: {
 			registerDailyRate: roundToCentavo(registerDailyRate),
 		};
 	}
+	const presentDays = Math.max(0, Number(params.presentFallbackDays || 0));
 	return {
 		basicPay: roundToCentavo(periodBasic),
-		paidRegularDays: 0,
+		paidRegularDays: roundToCentavo(presentDays),
 		path: "B",
 		method: "PERIOD_BASIC",
 		suppressFullDayAbsentDeduction: false,
@@ -2022,9 +2023,11 @@ export async function generatePayrollFromTimesheets(
 				presentFallbackDays,
 			});
 			// Path A: full-day ABSENT already excluded from paid days — no second full-day deduct.
+			// Path B (Monthly Staff): absent days = base 12 days minus worked days.
+			const pathBDaysAbsent = Math.max(0, 12 - presentFallbackDays);
 			const absentDeduction = registerBasic.suppressFullDayAbsentDeduction
 				? 0
-				: roundToCentavo(daysAbsent * dailyRate);
+				: roundToCentavo(pathBDaysAbsent * dailyRate);
 
 			// Base multipliers (ordinary day) from calculator
 			const baseWorkMultiplier =
@@ -4198,10 +4201,11 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 	const registerDaily = isPathARegister
 		? Number(input.registerDailyRate)
 		: input.dailyRate;
-	// Path A: Sheet2 "No. of Days" = paid regular days (bucket sum), not non-REST count.
-	const registerDays = isPathARegister
-		? Number(input.paidRegularDays || 0)
-		: input.totalWorkDays;
+	// Path A & B: Sheet2 "No. of Days" = paid regular days (worked days count).
+	const registerDays =
+		input.paidRegularDays !== undefined && input.paidRegularDays !== null && Number(input.paidRegularDays) > 0
+			? Number(input.paidRegularDays)
+			: input.totalWorkDays;
 	const sourceRow = {
 		monthlySalary: isPathARegister ? 0 : roundToCentavo(input.estimatedMonthlyRate),
 		dailySalary: isPathARegister ? roundToCentavo(registerDaily) : 0,
@@ -5053,9 +5057,10 @@ function calculatePayrollPreviewDataset(params: {
 				paidRegularDays: paidRegularDaysPreview,
 				presentFallbackDays: presentFallbackDaysPreview,
 			});
+			const pathBDaysAbsentPreview = Math.max(0, 12 - presentFallbackDaysPreview);
 			const absentDeduction = registerBasicPreview.suppressFullDayAbsentDeduction
 				? 0
-				: roundToCentavo(daysAbsent * dailyRate);
+				: roundToCentavo(pathBDaysAbsentPreview * dailyRate);
 
 			const baseWorkMultiplier =
 				getRateMultiplier(params.rateMultipliers, "ordinaryDay", "work") ?? 1.0;

@@ -132,6 +132,7 @@ export function withoutPremiumMetadata(metadata: Record<string, any>): Record<st
 export function isScheduledRestDay(
 	line: BandaiOtLineLike,
 	effectiveScheduleSnapshot?: Record<string, any> | null,
+	dateInput?: string | Date | null,
 ): boolean {
 	const snap =
 		effectiveScheduleSnapshot ||
@@ -143,11 +144,40 @@ export function isScheduledRestDay(
 	if (snap && typeof snap === "object") {
 		if (snap.isOff === true) return true;
 		const code = String(snap.code || snap.shiftTypeCode || "").toUpperCase();
-		if (code === "OFF" || code === "WS_OFF") return true;
+		if (code === "OFF" || code === "WS_OFF" || code === "REST_DAY") return true;
+	}
+
+	const rawDate =
+		dateInput ||
+		(line as any)?.date ||
+		snap?.date ||
+		(line.metadata && typeof line.metadata === "object" ? (line.metadata as any)?.date : null);
+	if (rawDate) {
+		const d = new Date(rawDate);
+		if (!isNaN(d.getTime())) {
+			const dayOfWeek = d.getUTCDay();
+			// Sunday (0) is a universal rest day in Bandai Namco unless explicitly scheduled with an active work shift
+			if (dayOfWeek === 0) {
+				const shiftCode = String(snap?.code || snap?.shiftTypeCode || "").toUpperCase();
+				const hasExplicitSundayWorkShift =
+					shiftCode.startsWith("WS_") && shiftCode !== "WS_OFF";
+				if (!hasExplicitSundayWorkShift) {
+					return true;
+				}
+			}
+			// If line was already marked REST_DAY on a Saturday or Sunday, preserve it
+			if (
+				(dayOfWeek === 6 || dayOfWeek === 0) &&
+				String(line.status).toUpperCase() === "REST_DAY"
+			) {
+				return true;
+			}
+		}
+	}
+
+	if (snap && typeof snap === "object") {
 		if (snap.isOff === false) return false;
 	}
-	// Without a schedule snapshot, only treat explicit OFF codes as rest.
-	// Do not treat status=REST_DAY alone as authoritative (prior OT bug mislabeled absences).
 	return false;
 }
 
@@ -253,7 +283,7 @@ export function buildBandaiOtLinePatch(params: {
 		appliedAt: params.appliedAt,
 	});
 	const effectiveSnap = params.effectiveScheduleSnapshot ?? null;
-	const scheduledOff = isScheduledRestDay(line, effectiveSnap);
+	const scheduledOff = isScheduledRestDay(line, effectiveSnap, source?.date);
 
 	// Always refresh approved bucket metadata when source differs or is missing.
 	// Payroll pays OT from approvedBuckets, not raw biometric overtimeHours alone.
@@ -315,7 +345,7 @@ export function buildBandaiOtLinePatch(params: {
 				}
 			}
 			// Keep line snapshot aligned with OFF override so rematerialization / UI agree.
-			const lineSnapOff = isScheduledRestDay(line);
+			const lineSnapOff = isScheduledRestDay(line, null, source?.date);
 			if (!lineSnapOff || status !== "REST_DAY") {
 				changes.scheduleSnapshot = buildOffDayScheduleSnapshot(
 					effectiveSnap || (line.scheduleSnapshot as Record<string, any> | null),

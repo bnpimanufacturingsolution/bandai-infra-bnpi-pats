@@ -606,10 +606,80 @@ export async function importWorkSharingScheduleUpload(params: {
 		}
 	}
 
-	// Positive shift assignments (flag=1) assign the exact shift schedule for that date.
-	// Flag=0 days are non-destructive (do not create WS_OFF overrides) so standard Mon-Sat obligations remain intact.
-	summary.dayOffOverridesCreated = 0;
-	summary.dayOffOverridesUpdated = 0;
+	// Day-level overrides from WorkSharing off date flags (flag=0 -> WS_OFF).
+	const dayOffAssignments = (parsed as any).dayOffAssignments || [];
+	if (dayOffAssignments.length > 0) {
+		const wsOffSnapshot = {
+			code: "WS_OFF",
+			name: "WorkSharing Off",
+			isOff: true,
+			isOvernight: false,
+			shiftHour: 0,
+			timeSlots: [],
+			source: "WORKSHARING_DAY_FLAG_OFF",
+		};
+		for (const day of dayOffAssignments) {
+			const employee = employeesByExternalId.get(day.employeeExternalId);
+			if (!employee) continue;
+			const dayDate = new Date(day.date);
+			dayDate.setUTCHours(0, 0, 0, 0);
+			const reason = `WorkSharing day off flag: 0 (row ${day.sourceRow})`;
+
+			const existing = await (params.prisma as any).scheduleOverride.findFirst({
+				where: {
+					organizationId: params.organizationId,
+					employeeId: employee.id,
+					date: dayDate,
+					isDeleted: false,
+				},
+				select: { id: true },
+			});
+
+			if (existing?.id) {
+				await (params.prisma as any).scheduleOverride.update({
+					where: { id: existing.id },
+					data: {
+						shiftTypeId: null,
+						shiftSnapshot: wsOffSnapshot,
+						reason,
+						isDeleted: false,
+					},
+				});
+				summary.dayOffOverridesUpdated = (summary.dayOffOverridesUpdated || 0) + 1;
+			} else {
+				try {
+					await (params.prisma as any).scheduleOverride.create({
+						data: {
+							organizationId: params.organizationId,
+							employeeId: employee.id,
+							date: dayDate,
+							shiftTypeId: null,
+							shiftSnapshot: wsOffSnapshot,
+							reason,
+							isDeleted: false,
+						},
+					});
+					summary.dayOffOverridesCreated = (summary.dayOffOverridesCreated || 0) + 1;
+				} catch {
+					await (params.prisma as any).scheduleOverride.updateMany({
+						where: {
+							organizationId: params.organizationId,
+							employeeId: employee.id,
+							date: dayDate,
+						},
+						data: {
+							shiftTypeId: null,
+							shiftSnapshot: wsOffSnapshot,
+							reason,
+							isDeleted: false,
+						},
+					});
+					summary.dayOffOverridesUpdated = (summary.dayOffOverridesUpdated || 0) + 1;
+				}
+			}
+			affectedEmployeeIds.add(employee.id);
+		}
+	}
 
 	if (affectedEmployeeIds.size > 0) {
 		const materialization = await ensureDm3ScheduleBackedAttendanceObligations(params.prisma, {

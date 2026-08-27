@@ -33,13 +33,27 @@ describe("bandai-ot-line-patch.helper", () => {
 	describe("isScheduledRestDay", () => {
 		it("reads scheduleSnapshot.isOff", () => {
 			expect(isScheduledRestDay({ scheduleSnapshot: { isOff: true } })).to.equal(true);
-			expect(isScheduledRestDay({ scheduleSnapshot: { isOff: false } })).to.equal(false);
+			expect(isScheduledRestDay({ scheduleSnapshot: { isOff: false } }, null, "2026-06-29")).to.equal(false);
 		});
 
-		it("does not treat status=REST_DAY alone as schedule off (avoids absense mislabel)", () => {
-			expect(isScheduledRestDay({ status: "REST_DAY" })).to.equal(false);
-			expect(isScheduledRestDay({ status: "PRESENT" })).to.equal(false);
+		it("does not treat status=REST_DAY alone as schedule off on normal weekdays", () => {
+			expect(isScheduledRestDay({ status: "REST_DAY" }, null, "2026-06-29")).to.equal(false);
+			expect(isScheduledRestDay({ status: "PRESENT" }, null, "2026-06-29")).to.equal(false);
 			expect(isScheduledRestDay({ scheduleSnapshot: { code: "OFF" } })).to.equal(true);
+		});
+
+		it("treats Sunday as universal rest day unless explicitly scheduled with active shift", () => {
+			// Sunday 2026-06-28
+			expect(isScheduledRestDay({ status: "REST_DAY" }, null, "2026-06-28")).to.equal(true);
+			expect(isScheduledRestDay({ scheduleSnapshot: { isOff: false } }, null, "2026-06-28")).to.equal(true);
+			// Explicit active Sunday shift overrides
+			expect(
+				isScheduledRestDay(
+					{ scheduleSnapshot: { code: "WS_0815_1615", isOff: false } },
+					null,
+					"2026-06-28",
+				),
+			).to.equal(false);
 		});
 	});
 

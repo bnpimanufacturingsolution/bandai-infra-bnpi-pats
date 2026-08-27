@@ -120,11 +120,20 @@ async function main() {
 		),
 	);
 
-	// Step 5: Tally Compare
+	// Step 5: WorkSharing Off-Days & Sunday Absence Repair
+	results.push(
+		runStep(
+			5,
+			`WorkSharing Off-Days & Sunday Absence Repair (${periodCode})`,
+			`npx tsx scripts/repair-absent-on-worksharing-off-days.ts --period=${periodCode} --execute`,
+		),
+	);
+
+	// Step 6: Tally Compare
 	if (!skipTally) {
 		results.push(
 			runStep(
-				5,
+				6,
 				`Live Payroll Preview vs Sheet2 Register Tally Compare (${periodCode})`,
 				`npx tsx scripts/run-period-tally-compare.mjs --period=${periodCode}`,
 			),
