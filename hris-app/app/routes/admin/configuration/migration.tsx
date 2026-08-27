@@ -4254,7 +4254,8 @@ export default function AdminMigrationPage() {
 		(workbookUploadKind === "compensation" ||
 			workbookUploadKind === "deduction" ||
 			workbookUploadKind === "manpower-databank" ||
-			workbookUploadKind === "period-leave")
+			workbookUploadKind === "period-leave" ||
+			workbookUploadKind === "worksharing-schedule")
 			? workbookUploadKind
 			: null;
 	const isDm3WorkbookUploadModal =
