@@ -493,6 +493,7 @@ function formatMassUploadUserActivityMessage(params: {
 	sourceFilename?: string | null;
 	created?: number;
 	updated?: number;
+	skipped?: number;
 	failed?: number;
 	total?: number;
 	status?: string | null;
@@ -520,9 +521,20 @@ function formatMassUploadUserActivityMessage(params: {
 											: kind === "dm4-overtime"
 												? "DM4 overtime"
 												: "Upload";
-	const ok = Number(params.created || 0) + Number(params.updated || 0);
+	const created = Number(params.created || 0);
+	const updated = Number(params.updated || 0);
 	const failed = Number(params.failed || 0);
+	const total = Number(params.total || 0);
+	const skipped = Number(params.skipped || 0);
 	const status = String(params.status || "").toLowerCase();
+
+	if (kind === "worksharing-schedule") {
+		const effectiveOk =
+			created + updated > 0 ? created + updated : Math.max(0, total - failed);
+		return `${title} · ${effectiveOk} ok · ${failed} fail`;
+	}
+
+	const ok = created + updated;
 	// Prefer explicit status for durable DM4 runs when counts were historically zeroed.
 	if (
 		(kind === "dm4-workbook" || kind === "dm4-overtime") &&
@@ -3847,6 +3859,7 @@ export default function AdminMigrationPage() {
 				sourceFilename: item.sourceFilename,
 				created: item.created,
 				updated: item.updated,
+				skipped: item.skipped,
 				failed: item.failed,
 				total: item.total,
 				status: item.status,
@@ -3862,6 +3875,7 @@ export default function AdminMigrationPage() {
 				status: item.status,
 				created: item.created,
 				updated: item.updated,
+				skipped: item.skipped,
 				failed: item.failed,
 				total: item.total,
 			},
@@ -7948,7 +7962,9 @@ export default function AdminMigrationPage() {
 									? "Compensation upload"
 									: role === "period-leave"
 										? "Leave upload"
-										: "Deduction upload",
+										: role === "worksharing-schedule"
+											? "WorkSharing schedule"
+											: "Deduction upload",
 							status: "Failed",
 							message: userMessage,
 							eventType: "USER_MASS_UPLOAD",
@@ -7961,6 +7977,7 @@ export default function AdminMigrationPage() {
 								sourceFilename,
 								created,
 								updated,
+								skipped: Number(summary.skipped || 0),
 								failed,
 								total,
 							},
@@ -7975,6 +7992,7 @@ export default function AdminMigrationPage() {
 						sourceFilename,
 						created,
 						updated,
+						skipped: Number(summary.skipped || 0),
 						failed,
 						total,
 						status: summary.status,
@@ -8008,7 +8026,9 @@ export default function AdminMigrationPage() {
 								? "Compensation upload"
 								: role === "period-leave"
 									? "Leave upload"
-									: "Deduction upload",
+									: role === "worksharing-schedule"
+										? "WorkSharing schedule"
+										: "Deduction upload",
 						status: massUploadHistoryStatusToSheetStatus(
 							summary.status || (failed > 0 ? (created + updated > 0 ? "partial" : "failed") : "completed"),
 						),
@@ -8049,7 +8069,11 @@ export default function AdminMigrationPage() {
 							: `Importing ${label.toLowerCase()} mass upload…`,
 					success: (result) =>
 						result.userMessage ||
-						`Uploaded ${result.label.toLowerCase()} file — ${result.created + result.updated} succeeded, ${result.failed} failed.`,
+						`Uploaded ${result.label.toLowerCase()} file — ${
+							result.created + result.updated > 0
+								? `${result.created + result.updated} updated`
+								: `${result.total ? result.total - result.failed : 0} verified ok`
+						}, ${result.failed} failed.`,
 					error: (error: any) =>
 						error?.data?.errors?.[0]?.message ||
 						error?.message ||
@@ -8240,6 +8264,11 @@ export default function AdminMigrationPage() {
 							<Badge variant="outline" className="rounded-md px-2.5 py-1 text-[11px] text-sky-700">
 								Updated {Number(resultForRole.summary.updated || 0)}
 							</Badge>
+							{Number(resultForRole.summary.skipped || 0) > 0 ? (
+								<Badge variant="outline" className="rounded-md px-2.5 py-1 text-[11px] text-indigo-700">
+									Unchanged / Current {Number(resultForRole.summary.skipped || 0)}
+								</Badge>
+							) : null}
 							<Badge
 								variant="outline"
 								className={`rounded-md px-2.5 py-1 text-[11px] ${
