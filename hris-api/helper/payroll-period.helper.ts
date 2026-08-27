@@ -443,10 +443,16 @@ export function resolveBandaiRegisterBasicPay(params: {
 			registerDailyRate: roundToCentavo(registerDailyRate),
 		};
 	}
-	const presentDays = Math.max(0, Number(params.presentFallbackDays || 0));
+	const hasBucketDays =
+		params.paidRegularDays !== null &&
+		params.paidRegularDays !== undefined &&
+		Number(params.paidRegularDays) > 0;
+	const paidRegularDays = hasBucketDays
+		? Number(params.paidRegularDays)
+		: Math.max(0, Number(params.presentFallbackDays || 0));
 	return {
 		basicPay: roundToCentavo(periodBasic),
-		paidRegularDays: roundToCentavo(presentDays),
+		paidRegularDays: roundToCentavo(paidRegularDays),
 		path: "B",
 		method: "PERIOD_BASIC",
 		suppressFullDayAbsentDeduction: false,
@@ -2016,15 +2022,19 @@ export async function generatePayrollFromTimesheets(
 			const paidRegularDaysFromBuckets = bandaiApprovedBucketPay
 				? Number(bandaiApprovedBucketPay.hours?.regularDays || 0)
 				: null;
+			const effectiveWorkedDays =
+				paidRegularDaysFromBuckets !== null && paidRegularDaysFromBuckets > 0
+					? paidRegularDaysFromBuckets
+					: presentFallbackDays;
 			const registerBasic = resolveBandaiRegisterBasicPay({
 				periodBasic,
 				registerDailyRate: registerDailyRate > 0 ? registerDailyRate : null,
-				paidRegularDays: paidRegularDaysFromBuckets,
+				paidRegularDays: effectiveWorkedDays,
 				presentFallbackDays,
 			});
 			// Path A: full-day ABSENT already excluded from paid days — no second full-day deduct.
 			// Path B (Monthly Staff): absent days = base 12 days minus worked days.
-			const pathBDaysAbsent = Math.max(0, 12 - presentFallbackDays);
+			const pathBDaysAbsent = Math.max(0, 12 - effectiveWorkedDays);
 			const absentDeduction = registerBasic.suppressFullDayAbsentDeduction
 				? 0
 				: roundToCentavo(pathBDaysAbsent * dailyRate);
@@ -4203,7 +4213,7 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		: input.dailyRate;
 	// Path A & B: Sheet2 "No. of Days" = paid regular days (worked days count).
 	const registerDays =
-		input.paidRegularDays !== undefined && input.paidRegularDays !== null && Number(input.paidRegularDays) > 0
+		input.paidRegularDays !== undefined && input.paidRegularDays !== null
 			? Number(input.paidRegularDays)
 			: input.totalWorkDays;
 	const sourceRow = {
@@ -5050,14 +5060,21 @@ function calculatePayrollPreviewDataset(params: {
 			const paidRegularDaysPreview = bandaiApprovedBucketPay
 				? Number(bandaiApprovedBucketPay.hours?.regularDays || 0)
 				: null;
+			const effectiveWorkedDaysPreview =
+				paidRegularDaysPreview !== null && paidRegularDaysPreview > 0
+					? paidRegularDaysPreview
+					: presentFallbackDaysPreview;
 			const registerBasicPreview = resolveBandaiRegisterBasicPay({
 				periodBasic,
 				registerDailyRate:
 					registerDailyRatePreview > 0 ? registerDailyRatePreview : null,
-				paidRegularDays: paidRegularDaysPreview,
+				paidRegularDays: effectiveWorkedDaysPreview,
 				presentFallbackDays: presentFallbackDaysPreview,
 			});
-			const pathBDaysAbsentPreview = Math.max(0, 12 - presentFallbackDaysPreview);
+			const pathBDaysAbsentPreview = Math.max(
+				0,
+				12 - effectiveWorkedDaysPreview,
+			);
 			const absentDeduction = registerBasicPreview.suppressFullDayAbsentDeduction
 				? 0
 				: roundToCentavo(pathBDaysAbsentPreview * dailyRate);
