@@ -910,6 +910,8 @@ export function pageMergedScheduledAttendanceRecords<
 		employeeRefId?: string | null;
 		date?: string | null;
 		employeeName?: string | null;
+		timeIn?: string | null;
+		status?: string | null;
 	},
 >(params: {
 	existingRows: T[];
@@ -922,31 +924,49 @@ export function pageMergedScheduledAttendanceRecords<
 }) {
 	const mode = params.mode || "not_clocked_in";
 	const allowedIds = Array.isArray(params.employeeIds) ? new Set(params.employeeIds) : null;
-	const existingByKey = new Map(
-		params.existingRows.map((row) => [
-			`${String(row.employeeRefId || "").trim()}:${String(row.date || "")}`,
-			row,
-		]),
+	const scheduledByKey = new Map(
+		params.scheduledDays.map((day) => [`${day.employeeRefId}:${day.date}`, day]),
 	);
 	const scheduledRows: Array<T | ReturnType<typeof buildVirtualScheduledAttendanceRow>> = [];
 	const seenKeys = new Set<string>();
 
 	for (const existing of params.existingRows) {
-		const key = `${String(existing.employeeRefId || "").trim()}:${String(existing.date || "")}`;
 		if (allowedIds && existing.employeeRefId && !allowedIds.has(existing.employeeRefId)) continue;
+		const key = `${String(existing.employeeRefId || "").trim()}:${String(existing.date || "")}`;
 		seenKeys.add(key);
-		scheduledRows.push(existing);
+
+		const scheduledDay = scheduledByKey.get(key);
+		const enhancedRow = scheduledDay
+			? applyScheduleArrivalToAttendanceRow(existing, scheduledDay.scheduleSnapshot)
+			: existing;
+
+		if (mode === "clocked_in") {
+			const isClockedIn = Boolean(enhancedRow.timeIn);
+			if (!isClockedIn) continue;
+		} else {
+			const isClockedIn = Boolean(enhancedRow.timeIn);
+			if (isClockedIn) continue;
+		}
+
+		scheduledRows.push(enhancedRow);
 	}
 
 	for (const day of params.scheduledDays) {
 		if (!day.employeeRefId || !day.date) continue;
-		if (mode === "clocked_in" ? !day.clockedIn : day.clockedIn) continue;
 		if (allowedIds && !allowedIds.has(day.employeeRefId)) continue;
 		const key = `${day.employeeRefId}:${day.date}`;
 		if (seenKeys.has(key)) continue;
 		seenKeys.add(key);
+
+		if (mode === "clocked_in") {
+			if (!day.clockedIn) continue;
+		} else {
+			if (day.clockedIn) continue;
+		}
+
 		scheduledRows.push(buildVirtualScheduledAttendanceRow(day));
 	}
+
 	const kept = params.keepRow
 		? scheduledRows.filter((row) => params.keepRow!(row))
 		: scheduledRows;

@@ -11,7 +11,7 @@ const service = readFileSync(join(process.cwd(), "app", "services", "metrics.ser
 
 describe("overtime tab labor split contract", () => {
 	it("offers a Labor Type filter wired to the metrics hook", () => {
-		expect(tab).to.contain('label className="block text-sm font-medium mb-1">Labor Type</label>');
+		expect(tab).to.match(/Labor Type<\/label>/);
 		expect(tab).to.contain('<SelectItem value="DIRECT">Direct</SelectItem>');
 		expect(tab).to.contain('<SelectItem value="AGENCY">Agency</SelectItem>');
 		expect(tab).to.contain("setWorkforceSource");

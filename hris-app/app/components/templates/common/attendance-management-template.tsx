@@ -3478,7 +3478,6 @@ export function AttendanceManagement({
 										clockedOutCount,
 										"CLOCKED_OUT",
 										{
-											total: Math.max(scheduledClockedInCount, clockedInCount),
 											barColor: "#0f172a",
 										},
 									)}

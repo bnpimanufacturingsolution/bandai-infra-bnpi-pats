@@ -175,9 +175,7 @@ function matchesStatus(
 		Array.isArray(row?.behaviorFlags) && row.behaviorFlags.includes("TARDINESS")
 			? true
 			: timeStringToMinutes(row?.lateHours) > 0;
-	const isEarlyOut = timeStringToMinutes(row?.earlyOutHours) > 0;
-	const isOvertime = timeStringToMinutes(row?.overtimeHours) > 0;
-	const isClockedIn = status === "PRESENT" || status === "INCOMPLETE";
+	const isClockedIn = Boolean(row?.timeIn);
 	const isClockedOut = Boolean(row?.timeOut);
 
 	if (normalized === "ON_TIME") return isClockedIn && !isLate;
@@ -603,6 +601,9 @@ function buildPostgresStatusCondition(status?: string) {
 		return Prisma.sql`f."_displayStatus" = 'LEAVE' AND f."_metadataLeaveType" = ${leaveType}`;
 	}
 
+	if (normalized === "PRESENT") return Prisma.sql`f."_isClockedIn" = true`;
+	if (normalized === "ABSENT")
+		return Prisma.sql`f."_displayStatus" IN ('ABSENT', 'NOT_CLOCKED_IN')`;
 	if (normalized === "ON_TIME") return Prisma.sql`f."_isClockedIn" = true AND f."_isLate" = false`;
 	if (normalized === "LATE") return Prisma.sql`f."_isLate" = true`;
 	if (normalized === "EARLY_OUT") return Prisma.sql`f."_isEarlyOut" = true`;
@@ -770,7 +771,7 @@ async function getPostgresObligationFacet(params: {
 				(COALESCE(e."behaviorFlags", ARRAY[]::text[]) @> ARRAY['TARDINESS']::text[] OR e."_lateMinutes" > 0) AS "_isLate",
 				(e."_earlyOutMinutes" > 0) AS "_isEarlyOut",
 				(e."_overtimeMinutes" > 0) AS "_isOvertime",
-				(e."_displayStatus" IN ('PRESENT', 'INCOMPLETE')) AS "_isClockedIn",
+				(e."timeIn" IS NOT NULL) AS "_isClockedIn",
 				(e."timeOut" IS NOT NULL) AS "_isClockedOut",
 				(UPPER(e."_shiftTypeKey") = 'OFF') AS "_isOffDay",
 				(
@@ -975,9 +976,9 @@ async function getPostgresObligationTrendFacet(params: {
 				e.*,
 				UPPER(e."_shiftTypeKey") AS "_shiftTypeKeyUpper",
 				(COALESCE(e."behaviorFlags", ARRAY[]::text[]) @> ARRAY['TARDINESS']::text[] OR e."_lateMinutes" > 0) AS "_isLate",
-				(e."_earlyOutMinutes" > 0) AS "_isEarlyOut",
+				(e."_earlyOutMinutes" > 0 OR e."_undertimeMinutes" > 0) AS "_isEarlyOut",
 				(e."_overtimeMinutes" > 0) AS "_isOvertime",
-				(e."_displayStatus" IN ('PRESENT', 'INCOMPLETE')) AS "_isClockedIn",
+				(e."timeIn" IS NOT NULL) AS "_isClockedIn",
 				(e."timeOut" IS NOT NULL) AS "_isClockedOut",
 				(UPPER(e."_shiftTypeKey") = 'OFF') AS "_isOffDay",
 				(
@@ -1476,7 +1477,7 @@ function buildObligationAggregationPipeline(params: {
 				},
 				_isEarlyOut: { $gt: ["$_earlyOutMinutes", 0] },
 				_isOvertime: { $gt: ["$_overtimeMinutes", 0] },
-				_isClockedIn: { $in: ["$_displayStatus", ["PRESENT", "INCOMPLETE"]] },
+				_isClockedIn: { $ne: [{ $ifNull: ["$timeIn", null] }, null] },
 				_isClockedOut: { $ne: [{ $ifNull: ["$timeOut", null] }, null] },
 				_isOffDay: { $eq: ["$_shiftTypeKeyUpper", "OFF"] },
 				_isHoliday: {

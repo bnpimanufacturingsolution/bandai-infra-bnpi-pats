@@ -2434,4 +2434,5 @@ class MetricsService extends APIService {
 
 // Export singleton instance
 const metricsService = new MetricsService();
+export { metricsService };
 export default metricsService;
