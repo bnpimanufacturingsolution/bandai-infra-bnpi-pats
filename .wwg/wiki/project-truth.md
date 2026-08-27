@@ -1,4 +1,9 @@
+<<<<<<< HEAD
+
+# Project Truth
+=======
 ## Day-Status Review & Resolution Pipeline (2026-08-27)
+>>>>>>> de0f765296d2a117773d8d8647a794bc6cc09cdf
 
 - Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`.
 - Schedule truth: Universal Monday–Saturday schedule with Sunday rest (zero Sunday punches across 19,507 cells proves Sunday REST is safe; future Sunday work auto-classified PRESENT via punch).

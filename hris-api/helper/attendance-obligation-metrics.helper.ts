@@ -12,6 +12,7 @@ import {
 	applyScheduledDayArrivalToRows,
 	buildPeriodRollupAttendanceRow,
 	buildVirtualScheduledAttendanceRow,
+	countActiveScheduledEmployees,
 	countRegularScheduleWorkUtilization,
 	pageMergedScheduledAttendanceRecords,
 	pickScheduledDepartmentPreviewDays,
@@ -174,9 +175,7 @@ function matchesStatus(
 		Array.isArray(row?.behaviorFlags) && row.behaviorFlags.includes("TARDINESS")
 			? true
 			: timeStringToMinutes(row?.lateHours) > 0;
-	const isEarlyOut = timeStringToMinutes(row?.earlyOutHours) > 0;
-	const isOvertime = timeStringToMinutes(row?.overtimeHours) > 0;
-	const isClockedIn = status === "PRESENT" || status === "INCOMPLETE";
+	const isClockedIn = Boolean(row?.timeIn);
 	const isClockedOut = Boolean(row?.timeOut);
 
 	if (normalized === "ON_TIME") return isClockedIn && !isLate;
@@ -602,6 +601,9 @@ function buildPostgresStatusCondition(status?: string) {
 		return Prisma.sql`f."_displayStatus" = 'LEAVE' AND f."_metadataLeaveType" = ${leaveType}`;
 	}
 
+	if (normalized === "PRESENT") return Prisma.sql`f."_isClockedIn" = true`;
+	if (normalized === "ABSENT")
+		return Prisma.sql`f."_displayStatus" IN ('ABSENT', 'NOT_CLOCKED_IN')`;
 	if (normalized === "ON_TIME") return Prisma.sql`f."_isClockedIn" = true AND f."_isLate" = false`;
 	if (normalized === "LATE") return Prisma.sql`f."_isLate" = true`;
 	if (normalized === "EARLY_OUT") return Prisma.sql`f."_isEarlyOut" = true`;
@@ -769,7 +771,7 @@ async function getPostgresObligationFacet(params: {
 				(COALESCE(e."behaviorFlags", ARRAY[]::text[]) @> ARRAY['TARDINESS']::text[] OR e."_lateMinutes" > 0) AS "_isLate",
 				(e."_earlyOutMinutes" > 0) AS "_isEarlyOut",
 				(e."_overtimeMinutes" > 0) AS "_isOvertime",
-				(e."_displayStatus" IN ('PRESENT', 'INCOMPLETE')) AS "_isClockedIn",
+				(e."timeIn" IS NOT NULL) AS "_isClockedIn",
 				(e."timeOut" IS NOT NULL) AS "_isClockedOut",
 				(UPPER(e."_shiftTypeKey") = 'OFF') AS "_isOffDay",
 				(
@@ -974,9 +976,9 @@ async function getPostgresObligationTrendFacet(params: {
 				e.*,
 				UPPER(e."_shiftTypeKey") AS "_shiftTypeKeyUpper",
 				(COALESCE(e."behaviorFlags", ARRAY[]::text[]) @> ARRAY['TARDINESS']::text[] OR e."_lateMinutes" > 0) AS "_isLate",
-				(e."_earlyOutMinutes" > 0) AS "_isEarlyOut",
+				(e."_earlyOutMinutes" > 0 OR e."_undertimeMinutes" > 0) AS "_isEarlyOut",
 				(e."_overtimeMinutes" > 0) AS "_isOvertime",
-				(e."_displayStatus" IN ('PRESENT', 'INCOMPLETE')) AS "_isClockedIn",
+				(e."timeIn" IS NOT NULL) AS "_isClockedIn",
 				(e."timeOut" IS NOT NULL) AS "_isClockedOut",
 				(UPPER(e."_shiftTypeKey") = 'OFF') AS "_isOffDay",
 				(
@@ -1475,7 +1477,7 @@ function buildObligationAggregationPipeline(params: {
 				},
 				_isEarlyOut: { $gt: ["$_earlyOutMinutes", 0] },
 				_isOvertime: { $gt: ["$_overtimeMinutes", 0] },
-				_isClockedIn: { $in: ["$_displayStatus", ["PRESENT", "INCOMPLETE"]] },
+				_isClockedIn: { $ne: [{ $ifNull: ["$timeIn", null] }, null] },
 				_isClockedOut: { $ne: [{ $ifNull: ["$timeOut", null] }, null] },
 				_isOffDay: { $eq: ["$_shiftTypeKeyUpper", "OFF"] },
 				_isHoliday: {
@@ -1847,36 +1849,24 @@ export async function calculateAttendanceObligationDetailed(
 		reportToId,
 		employeeId,
 	});
-	const skipObligationFacet = mergeScheduledClockedIn;
-	const facet = skipObligationFacet
-		? {
-				records: [],
-				totalRecords: [{ total: 0 }],
-				calendarDays: [{ total: getBusinessDateKeys(startDate, endDate).length }],
-				metrics: [],
-				shiftTypeBreakdown: [],
-				departmentBreakdown: [],
-				departmentPreviewRecords: [],
-				leaveTypeBreakdown: [],
-			}
-		: await getPostgresObligationFacet({
-				prisma,
-				organizationId,
-				startDate,
-				endDate,
-				limit: mergeScheduledList ? 5000 : safeLimit,
-				page: mergeScheduledList ? 1 : safePage,
-				search,
-				status,
-				departmentId,
-				sectionId,
-				positionId,
-				levelId,
-				reportToId,
-				employeeId,
-				shiftType,
-				employeeIds,
-			});
+	const facet = await getPostgresObligationFacet({
+		prisma,
+		organizationId,
+		startDate,
+		endDate,
+		limit: mergeScheduledList ? 5000 : safeLimit,
+		page: mergeScheduledList ? 1 : safePage,
+		search,
+		status,
+		departmentId,
+		sectionId,
+		positionId,
+		levelId,
+		reportToId,
+		employeeId,
+		shiftType,
+		employeeIds,
+	});
 	const rows = Array.isArray(facet.records) ? facet.records : [];
 
 	const normalizeObligationRow = (row: any) => {
@@ -2070,26 +2060,53 @@ export async function calculateAttendanceObligationDetailed(
 		0,
 		metrics.totalOvertime - metrics.approvedOvertimeCount,
 	);
-	const obligatedToWork = scheduleUtilization.scheduledWorkDays;
-	const clockedInObligated = scheduleUtilization.clockedInOnScheduledDays;
-	const notClockedInObligated = scheduleUtilization.notClockedInOnScheduledDays;
+	const facetMetrics = facet.metrics?.[0] || {};
+	const facetClockedIn = Number(facetMetrics.totalClockedInObligated || facetMetrics.totalClockedIn || facetMetrics.totalPresent || 0);
+	const clockedInObligated = Math.max(facetClockedIn, scheduleUtilization.clockedInOnScheduledDays);
+	const scheduledTimekeeping = summarizeScheduledDayTimekeeping(
+		scheduleUtilization.scheduledDays,
+	);
+
+	// Always use the full active-employee roster count as the authoritative
+	// "scheduled to work" denominator. This bypasses schedule resolution which
+	// can silently under-count employees whose embeddedSchedule pattern entries
+	// have a shiftTypeId but no denormalized shiftSnapshot (resolveEffectiveShift
+	// returns null for those, landing them in missingScheduleDays instead of
+	// scheduledWorkDays). The obligation-row COUNT(*) path has the same problem:
+	// only 23 rows existed for today while ~785 employees are actually scheduled.
+	const rosterScheduledCount = await countActiveScheduledEmployees(prisma, {
+		organizationId,
+		startDate,
+		endDate,
+		departmentId,
+		sectionId,
+		positionId,
+		levelId,
+		reportToId,
+		employeeId,
+	});
+
+	// Use roster count when it is larger than the schedule-resolution count.
+	// This ensures we never regress on dates where resolution was correct
+	// (roster count == resolution count) while always fixing under-count days.
+	const obligatedToWork = Math.max(rosterScheduledCount, scheduleUtilization.scheduledWorkDays);
+
 	metrics.totalObligatedToWork = obligatedToWork;
 	metrics.totalScheduledWorkDays = obligatedToWork;
 	metrics.totalClockedInObligated = clockedInObligated;
 	metrics.totalClockedIn = clockedInObligated;
-	// Same population as the utilization over: scheduled regular days minus punches.
-	// Do not keep the leftover obligation-row NOT_CLOCKED_IN count (was 76 vs 1706).
-	metrics.totalNotClockedIn = notClockedInObligated;
-	const scheduledTimekeeping = summarizeScheduledDayTimekeeping(
-		scheduleUtilization.scheduledDays,
-	);
-	metrics.totalLate = scheduledTimekeeping.lateCount;
-	metrics.totalOnTime = scheduledTimekeeping.onTimeCount;
-	metrics.totalEarlyOut = scheduledTimekeeping.undertimeCount;
-	metrics.totalLateMinutes = scheduledTimekeeping.lateMinutes;
-	metrics.totalUndertimeMinutes = scheduledTimekeeping.undertimeMinutes;
-	if (scheduledTimekeeping.clockedOutCount > 0) {
-		metrics.totalClockedOut = scheduledTimekeeping.clockedOutCount;
+	metrics.totalPresent = Math.max(Number(facetMetrics.totalPresent || 0), clockedInObligated);
+	// Recompute not-clocked-in from the authoritative denominator so the
+	// "762 / 23" absurdity cannot happen: not-clocked-in = scheduled - clocked-in.
+	metrics.totalNotClockedIn = Math.max(0, obligatedToWork - clockedInObligated);
+
+	metrics.totalLate = Math.max(Number(facetMetrics.totalLate || 0), scheduledTimekeeping.lateCount);
+	metrics.totalOnTime = Math.max(Number(facetMetrics.totalOnTime || 0), scheduledTimekeeping.onTimeCount);
+	metrics.totalEarlyOut = Math.max(Number(facetMetrics.totalEarlyOut || 0), scheduledTimekeeping.undertimeCount);
+	metrics.totalLateMinutes = Math.max(Number(facetMetrics.totalLateMinutes || 0), scheduledTimekeeping.lateMinutes);
+	metrics.totalUndertimeMinutes = Math.max(Number(facetMetrics.totalUndertimeMinutes || 0), scheduledTimekeeping.undertimeMinutes);
+	if (Number(facetMetrics.totalClockedOut || 0) > 0 || scheduledTimekeeping.clockedOutCount > 0) {
+		metrics.totalClockedOut = Math.max(Number(facetMetrics.totalClockedOut || 0), scheduledTimekeeping.clockedOutCount);
 	}
 	metrics.utilizationRate = computeAttendanceUtilizationRate(
 		clockedInObligated,

@@ -1590,6 +1590,10 @@ export function AttendanceManagement({
 		const isRestDay = item.primaryMarker === "REST_DAY" || item.status === "REST_DAY";
 		const hasOvertime = parseDurationToMinutes(item.overtimeHours) > 0;
 		const needsClockInAction = item.status === "NOT_CLOCKED_IN";
+		const hasTimeIn = Boolean(item.timeIn);
+		const hasTimeOut = Boolean(item.timeOut);
+		const isMissingClockIn = !hasTimeIn && hasTimeOut;
+		const isMissingClockOut = hasTimeIn && !hasTimeOut && !hasLeave && !hasHoliday && !isRestDay;
 
 		const badges: Array<{
 			label: string;
@@ -1597,6 +1601,21 @@ export function AttendanceManagement({
 			className: string;
 			valueClassName?: string;
 		}> = [];
+		if (isMissingClockIn) {
+			badges.push({
+				label: "MISSING",
+				value: "Clock In",
+				className: "bg-rose-100 text-rose-700",
+				valueClassName: "bg-rose-200/70 text-rose-800",
+			});
+		} else if (isMissingClockOut) {
+			badges.push({
+				label: "MISSING",
+				value: "Clock Out",
+				className: "bg-amber-100 text-amber-700",
+				valueClassName: "bg-amber-200/70 text-amber-800",
+			});
+		}
 		if (hasHoliday) {
 			badges.push({
 				label: "HOL",
@@ -3459,7 +3478,6 @@ export function AttendanceManagement({
 										clockedOutCount,
 										"CLOCKED_OUT",
 										{
-											total: Math.max(scheduledClockedInCount, clockedInCount),
 											barColor: "#0f172a",
 										},
 									)}

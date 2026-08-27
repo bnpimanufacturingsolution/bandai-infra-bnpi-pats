@@ -1044,7 +1044,7 @@ async function getPostgresTimesheetLineFacet(params: {
 				(COALESCE(e."behaviorFlags", ARRAY[]::text[]) @> ARRAY['TARDINESS']::text[] OR e."_lateMinutes" > 0) AS "_isLate",
 				(e."_earlyOutMinutes" > 0) AS "_isEarlyOut",
 				(e."_overtimeMinutes" > 0) AS "_isOvertime",
-				(e."_displayStatus" IN ('PRESENT', 'INCOMPLETE')) AS "_isClockedIn",
+				(e."timeIn" IS NOT NULL) AS "_isClockedIn",
 				(e."timeOut" IS NOT NULL) AS "_isClockedOut",
 				(UPPER(e."_shiftTypeKey") = 'OFF') AS "_isOffDay",
 				(

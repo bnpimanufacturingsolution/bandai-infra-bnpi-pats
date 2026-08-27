@@ -41,22 +41,34 @@ export default function AttendanceReportsPage() {
 		<div className="flex flex-col gap-6">
 			<Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
 				<TabsList className="grid h-auto w-full grid-cols-2 gap-2 mb-6 md:grid-cols-6">
-					<TabsTrigger value="trend" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+					<TabsTrigger
+						value="trend"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Daily Trend
 					</TabsTrigger>
-					<TabsTrigger value="perfect" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+					<TabsTrigger
+						value="perfect"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Perfect Attendance
 					</TabsTrigger>
-					<TabsTrigger value="tardiness" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+					<TabsTrigger
+						value="tardiness"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Tardiness & Undertime
 					</TabsTrigger>
-					<TabsTrigger value="overtime" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+					<TabsTrigger
+						value="overtime"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Overtime
 					</TabsTrigger>
-					<TabsTrigger value="leave" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+					<TabsTrigger
+						value="leave"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Leave Balance
 					</TabsTrigger>
-					<TabsTrigger value="manhours" className="whitespace-normal text-center text-xs leading-tight md:text-sm">
+					<TabsTrigger
+						value="manhours"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Manhours
 					</TabsTrigger>
 				</TabsList>

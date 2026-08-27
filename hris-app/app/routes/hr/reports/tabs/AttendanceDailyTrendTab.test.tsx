@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AttendanceDailyTrendTab } from "./AttendanceDailyTrendTab";
 
 const useAttendanceDailyTrendByDepartmentMock = vi.fn();
+const useAttendanceMetricsDetailedMock = vi.fn();
 const useDepartmentsMock = vi.fn();
+const usePositionsMock = vi.fn();
 const useEmployeesMock = vi.fn();
 const useReportScopeFiltersMock = vi.fn();
 const setSearchParamsMock = vi.fn();
@@ -13,10 +16,16 @@ const setSearchParamsMock = vi.fn();
 vi.mock("~/lib/hooks/useMetrics", () => ({
 	useAttendanceDailyTrendByDepartment: (...args: unknown[]) =>
 		useAttendanceDailyTrendByDepartmentMock(...args),
+	useAttendanceMetricsDetailed: (...args: unknown[]) =>
+		useAttendanceMetricsDetailedMock(...args),
 }));
 
 vi.mock("~/lib/hooks/useDepartments", () => ({
 	useDepartments: (...args: unknown[]) => useDepartmentsMock(...args),
+}));
+
+vi.mock("~/lib/hooks/usePositions", () => ({
+	usePositions: (...args: unknown[]) => usePositionsMock(...args),
 }));
 
 vi.mock("~/lib/hooks/useEmployees", () => ({
@@ -75,6 +84,41 @@ describe("AttendanceDailyTrendTab", () => {
 				],
 			},
 		});
+		usePositionsMock.mockReturnValue({
+			data: {
+				positions: [
+					{ id: "pos-1", title: "Operator" },
+					{ id: "pos-2", title: "Supervisor" },
+				],
+			},
+		});
+		useAttendanceMetricsDetailedMock.mockReturnValue({
+			data: {
+				metrics: {
+					attendanceObligationDetailed: {
+						records: [
+							{
+								id: "rec-1",
+								employeeRefId: "mgr-1",
+								employeeId: "EMP-001",
+								employeeName: "Mila Reyes",
+								departmentName: "Operations",
+								date: "2026-06-01",
+								status: "PRESENT",
+								timeIn: "2026-06-01T08:00:00.000Z",
+								timeOut: "2026-06-01T17:00:00.000Z",
+								lateHours: "0:00",
+								undertimeHours: "0:00",
+								hoursWorked: "8:00",
+							},
+						],
+						totalRecords: 1,
+					},
+				},
+			},
+			isLoading: false,
+			error: null,
+		});
 		useAttendanceDailyTrendByDepartmentMock.mockReturnValue({
 			data: {
 				metrics: {
@@ -129,21 +173,37 @@ describe("AttendanceDailyTrendTab", () => {
 		});
 	});
 
-	it("renders the department trend summary and toggles chart mode", async () => {
+	it("renders the department trend summary, metric tabs, and toggles chart/table mode", async () => {
 		const user = userEvent.setup();
 
-		render(<AttendanceDailyTrendTab />);
+		render(
+			<MemoryRouter>
+				<AttendanceDailyTrendTab />
+			</MemoryRouter>,
+		);
 
-		expect(screen.getByText("Daily Trend by Department")).toBeInTheDocument();
+		expect(
+			screen.getByText("Daily Present (Clocked In) Trend by Department"),
+		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /present \(clocked in\)/i })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /absent/i })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /late \(tardiness\)/i })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /undertime/i })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /all scheduled/i })).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: /export report/i })).toBeInTheDocument();
 		expect(screen.getByText("Operations")).toBeInTheDocument();
 		expect(screen.getByText("People")).toBeInTheDocument();
-		expect(screen.getByText("Total Records")).toBeInTheDocument();
+		expect(screen.getByText("Total Present (Clocked In)")).toBeInTheDocument();
 		expect(screen.getByText("Peak Day")).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: /line/i })).toHaveAttribute(
 			"aria-pressed",
 			"true",
 		);
 		expect(screen.getByRole("button", { name: /stacked bars/i })).toHaveAttribute(
+			"aria-pressed",
+			"false",
+		);
+		expect(screen.getByRole("button", { name: /table/i })).toHaveAttribute(
 			"aria-pressed",
 			"false",
 		);
@@ -158,5 +218,18 @@ describe("AttendanceDailyTrendTab", () => {
 			"aria-pressed",
 			"true",
 		);
+
+		await user.click(screen.getByRole("button", { name: /table/i }));
+		expect(screen.getByRole("button", { name: /table/i })).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		);
+		expect(screen.getByText("Mila Reyes")).toBeInTheDocument();
+		expect(screen.getByPlaceholderText(/search employee/i)).toBeInTheDocument();
+
+		await user.click(screen.getByRole("button", { name: /late \(tardiness\)/i }));
+		expect(
+			screen.getByText("Daily Tardiness Trend by Department"),
+		).toBeInTheDocument();
 	});
 });

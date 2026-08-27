@@ -495,228 +495,219 @@ export function LeaveBalanceTab() {
 						</div>
 					</div>
 				</DialogContent>
-			</Dialog>
-
-				<div className="flex flex-col xl:flex-row gap-4 items-end justify-between">
-					<div className="flex flex-1 flex-col md:flex-row gap-2 md:gap-4 w-full flex-wrap">
-						<ReportScopeDateFilters
-							scope={scope}
-							activeMonth={activeMonth}
-							activeYear={activeYear}
-							yearOptions={yearOptions}
-							dateRange={dateRange}
-							onScopeChange={setScope}
-							onMonthChange={setMonth}
-							onYearChange={setYear}
-							onDateRangeChange={setDateRange}
+			</Dialog>				{/* Top Filters Bar - Single Line Toolbar */}
+				<div className="flex items-end gap-2 overflow-x-auto pb-1.5 pt-0.5 no-scrollbar flex-nowrap w-full">
+					<ReportScopeDateFilters
+						scope={scope}
+						activeMonth={activeMonth}
+						activeYear={activeYear}
+						yearOptions={yearOptions}
+						dateRange={dateRange}
+						onScopeChange={setScope}
+						onMonthChange={setMonth}
+						onYearChange={setYear}
+						onDateRangeChange={setDateRange}
+					/>
+					<div className="shrink-0 w-[140px]">
+						<label className="block text-[11px] font-medium text-neutral-500 mb-0.5">Department</label>
+						<DepartmentSectionPicker
+							variant="report"
+							departments={departments}
+							sections={sections}
+							departmentId={selectedDepartment}
+							sectionId={selectedSection}
+							onDepartmentChange={(value) => {
+								setSelectedDepartment(value);
+								setSelectedSection("all");
+								setSelectedManager("all");
+								setSelectedEmployee("all");
+							}}
+							onSectionChange={(departmentId, sectionId) => {
+								setSelectedDepartment(departmentId);
+								setSelectedSection(sectionId);
+								setSelectedManager("all");
+								setSelectedEmployee("all");
+							}}
 						/>
-						<div className="w-full md:w-[160px]">
-							<label className="block text-sm font-medium mb-1">Department</label>
-							<DepartmentSectionPicker
-								variant="report"
-								departments={departments}
-								sections={sections}
-								departmentId={selectedDepartment}
-								sectionId={selectedSection}
-								onDepartmentChange={(value) => {
-									setSelectedDepartment(value);
-									setSelectedSection("all");
-									setSelectedManager("all");
-									setSelectedEmployee("all");
-								}}
-								onSectionChange={(departmentId, sectionId) => {
-									setSelectedDepartment(departmentId);
-									setSelectedSection(sectionId);
-									setSelectedManager("all");
-									setSelectedEmployee("all");
-								}}
-							/>
-						</div>
-						<div className="w-full md:w-[160px]">
-							<label className="block text-sm font-medium mb-1">Manager</label>
-							<Select
-								value={selectedManager}
-								onValueChange={(value) => {
-									setSelectedManager(value);
-									setSelectedEmployee("all");
-								}}>
-								<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">All Managers</SelectItem>
-									{managers.map((emp: any) => (
-										<SelectItem key={`manager-${emp.id}`} value={emp.id}>
-											{emp.person?.personalInfo?.firstName}{" "}
-											{emp.person?.personalInfo?.lastName}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-						<div className="w-full md:w-[180px]">
-							<label className="block text-sm font-medium mb-1">Employee</label>
-							<Select
-								value={selectedEmployee}
-								onValueChange={(value) => {
-									setSelectedEmployee(value);
-								}}>
-								<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">All Employees</SelectItem>
-									{employees.map((emp: any) => (
-										<SelectItem key={`employee-${emp.id}`} value={emp.id}>
-											{emp.person?.personalInfo?.firstName}{" "}
-											{emp.person?.personalInfo?.lastName}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-						<div className="w-full md:w-[180px]">
-							<label className="block text-sm font-medium mb-1">Leave Type</label>
-							<Select value={selectedLeaveType} onValueChange={setSelectedLeaveType}>
-								<SelectTrigger className="h-9 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">All Leave Types</SelectItem>
-									{leaveTypeOptions.map((type) => (
-										<SelectItem key={type} value={type}>
-											{formatMetricLeaveType(type)}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
+					</div>
+					<div className="shrink-0 w-[130px]">
+						<label className="block text-[11px] font-medium text-neutral-500 mb-0.5">Manager</label>
+						<Select
+							value={selectedManager}
+							onValueChange={(value) => {
+								setSelectedManager(value);
+								setSelectedEmployee("all");
+							}}>
+							<SelectTrigger className="h-8 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm">
+								<SelectValue placeholder="All Managers" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">All Managers</SelectItem>
+								{managers.map((emp: any) => (
+									<SelectItem key={`manager-${emp.id}`} value={emp.id}>
+										{emp.person?.personalInfo?.firstName}{" "}
+										{emp.person?.personalInfo?.lastName}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="shrink-0 w-[140px]">
+						<label className="block text-[11px] font-medium text-neutral-500 mb-0.5">Employee</label>
+						<Select
+							value={selectedEmployee}
+							onValueChange={(value) => {
+								setSelectedEmployee(value);
+							}}>
+							<SelectTrigger className="h-8 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm">
+								<SelectValue placeholder="All Employees" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">All Employees</SelectItem>
+								{employees.map((emp: any) => (
+									<SelectItem key={`employee-${emp.id}`} value={emp.id}>
+										{emp.person?.personalInfo?.firstName}{" "}
+										{emp.person?.personalInfo?.lastName}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="shrink-0 w-[140px]">
+						<label className="block text-[11px] font-medium text-neutral-500 mb-0.5">Leave Type</label>
+						<Select value={selectedLeaveType} onValueChange={setSelectedLeaveType}>
+							<SelectTrigger className="h-8 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm">
+								<SelectValue placeholder="All Leave Types" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">All Leave Types</SelectItem>
+								{leaveTypeOptions.map((type) => (
+									<SelectItem key={type} value={type}>
+										{formatMetricLeaveType(type)}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
 					</div>
 
-					<div className="flex gap-2 shrink-0 w-full md:w-auto mt-4 md:mt-0 items-center">
+					<div className="flex gap-1.5 shrink-0 items-end ml-auto">
 						<Button
 							variant="ghost"
 							onClick={handleClearFilters}
-							className="flex-1 md:flex-none text-muted-foreground hover:text-foreground h-10 px-4">
+							className="text-muted-foreground hover:text-foreground h-8 px-2.5 text-xs">
 							Clear Filters
-						</Button>
-						<Button
-							variant="outline"
-							className="flex-1 md:flex-none"
-							onClick={() => setIsUploadModalOpen(true)}>
-							Upload credits
-						</Button>
-						<Button
-							variant="outline"
-							className="flex-1 md:flex-none"
-							onClick={openExportModal}>
-							<Download className="w-4 h-4 mr-2" />
-							Export
 						</Button>
 					</div>
 				</div>
 
 				{isLoading ? (
-					<div className="text-center py-8 text-gray-500">Loading metrics...</div>
+					<div className="text-center py-8 text-gray-500 text-xs">Loading metrics...</div>
 				) : error ? (
-					<div className="text-center py-8 text-red-500">
+					<div className="text-center py-8 text-red-500 text-xs">
 						Error loading metrics: {error.message}
 					</div>
 				) : (
 					<>
-						<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-							<Card>
-								<CardHeader className="pb-2">
-									<CardTitle className="text-sm font-medium">
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+							<Card className="py-3 px-4 border-l-4 border-l-blue-500">
+								<CardHeader className="p-0 pb-1">
+									<CardTitle className="text-xs font-medium text-muted-foreground">
 										Total Used Leaves
 									</CardTitle>
 								</CardHeader>
-								<CardContent>
-									<div className="text-2xl font-bold">
+								<CardContent className="p-0">
+									<div className="text-xl font-bold text-neutral-900">
 										{totals.totalUsedLeaves.toFixed(2)}
 									</div>
-									<p className="text-xs text-gray-500">
+									<p className="text-[11px] text-muted-foreground">
 										Days across filtered leave balances
 									</p>
 								</CardContent>
 							</Card>
-							<Card>
-								<CardHeader className="pb-2">
-									<CardTitle className="text-sm font-medium">
+							<Card className="py-3 px-4 border-l-4 border-l-emerald-500">
+								<CardHeader className="p-0 pb-1">
+									<CardTitle className="text-xs font-medium text-muted-foreground">
 										Avg Balance Remaining
 									</CardTitle>
 								</CardHeader>
-								<CardContent>
-									<div className="text-2xl font-bold">
+								<CardContent className="p-0">
+									<div className="text-xl font-bold text-emerald-700">
 										{totals.avgBalanceRemaining.toFixed(2)}
 									</div>
-									<p className="text-xs text-gray-500">
-										Days per leave balance entry
-									</p>
+									<p className="text-[11px] text-muted-foreground">Days per leave entitlement</p>
 								</CardContent>
 							</Card>
-							<Card>
-								<CardHeader className="pb-2">
-									<CardTitle className="text-sm font-medium">
-										Employees w/ 0 Balance
+							<Card className="py-3 px-4 border-l-4 border-l-amber-500">
+								<CardHeader className="p-0 pb-1">
+									<CardTitle className="text-xs font-medium text-muted-foreground">
+										Zero Balance
 									</CardTitle>
 								</CardHeader>
-								<CardContent>
-									<div className="text-2xl font-bold">
+								<CardContent className="p-0">
+									<div className="text-xl font-bold text-amber-600">
 										{totals.employeesWithZeroBalance}
 									</div>
-									<p className="text-xs text-gray-500">
-										Employees with at least one depleted balance
-									</p>
+									<p className="text-[11px] text-muted-foreground">Leave categories fully exhausted</p>
 								</CardContent>
 							</Card>
 						</div>
 
-						<div className="space-y-4">
-							<div className="border rounded-lg overflow-hidden">
-								<table className="w-full text-sm">
-									<thead className="bg-gray-100">
+						{/* Leave Type Summary Card */}
+						<div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+							<div className="flex items-center justify-between p-3 bg-neutral-50/70 border-b border-neutral-200">
+								<div className="flex items-center gap-2">
+									<h3 className="text-xs font-semibold text-neutral-900">
+										Leave Type Summary
+									</h3>
+									<span className="text-[10px] bg-neutral-200/80 text-neutral-700 font-semibold px-2 py-0.5 rounded">
+										{leaveTypeSummary.length} Types
+									</span>
+								</div>
+							</div>
+							<div className="overflow-x-auto">
+								<table className="w-full text-xs">
+									<thead className="bg-neutral-50 border-b border-neutral-200 text-neutral-600 font-semibold text-[11px]">
 										<tr>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Leave Type
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Employees
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Avg Entitled
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Avg Used
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Avg Available
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Utilization
 											</th>
 										</tr>
 									</thead>
-									<tbody>
+									<tbody className="divide-y divide-neutral-100">
 										{leaveTypeSummary.length > 0 ? (
 											leaveTypeSummary.map((leave) => (
-												<tr key={leave.leaveType} className="border-t">
-													<td className="px-6 py-3 font-medium">
+												<tr key={leave.leaveType} className="hover:bg-neutral-50/80 transition-colors">
+													<td className="px-3 py-2 font-medium text-xs">
 														{formatMetricLeaveType(leave.leaveType)}
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{leave.employeeCount}
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{leave.avgEntitled.toFixed(2)} days
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{leave.avgUsed.toFixed(2)} days
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{leave.avgAvailable.toFixed(2)} days
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{leave.utilizationRate.toFixed(2)}%
 													</td>
 												</tr>
@@ -725,7 +716,7 @@ export function LeaveBalanceTab() {
 											<tr>
 												<td
 													colSpan={6}
-													className="px-6 py-8 text-center text-gray-500">
+													className="px-4 py-8 text-center text-gray-500 text-xs">
 													No leave type metrics found for this filter
 												</td>
 											</tr>
@@ -735,85 +726,113 @@ export function LeaveBalanceTab() {
 							</div>
 						</div>
 
-						<div className="space-y-4">
-							<div className="border rounded-lg overflow-hidden">
-								<table className="w-full text-sm">
-									<thead className="bg-gray-100">
+						{/* Employee Detailed Balances Card */}
+						<div className="border rounded-lg bg-white shadow-sm overflow-hidden">
+							<div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-neutral-50/70 border-b border-neutral-200">
+								<div className="flex items-center gap-2">
+									<h3 className="text-xs font-semibold text-neutral-900">
+										Employee Leave Balances
+									</h3>
+									<span className="text-[10px] bg-neutral-200/80 text-neutral-700 font-semibold px-2 py-0.5 rounded">
+										{employeeRows.length} Records
+									</span>
+								</div>
+
+								{/* Actions in Table Header */}
+								<div className="flex items-center gap-2">
+									<Button
+										variant="outline"
+										className="h-8 text-xs px-2.5 shadow-sm bg-white hover:bg-neutral-50"
+										onClick={() => setIsUploadModalOpen(true)}>
+										Upload credits
+									</Button>
+									<Button
+										variant="outline"
+										className="h-8 text-xs px-3 shadow-sm bg-white hover:bg-neutral-50 gap-1.5 font-medium"
+										onClick={openExportModal}>
+										<Download className="w-3.5 h-3.5" />
+										Export Report
+									</Button>
+								</div>
+							</div>
+							<div className="overflow-x-auto">
+								<table className="w-full text-xs">
+									<thead className="bg-neutral-50 border-b border-neutral-200 text-neutral-600 font-semibold text-[11px]">
 										<tr>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Employee
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Department
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Leave Type
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Entitled
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Used
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Pending
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Available
 											</th>
-											<th className="px-6 py-3 text-right font-medium">
+											<th className="px-3 py-2 text-right">
 												Late (min)
 											</th>
-											<th className="px-6 py-3 text-right font-medium">
+											<th className="px-3 py-2 text-right">
 												Late Days
 											</th>
-											<th className="px-6 py-3 text-right font-medium">
+											<th className="px-3 py-2 text-right">
 												UT (min)
 											</th>
-											<th className="px-6 py-3 text-left font-medium">
+											<th className="px-3 py-2 text-left">
 												Period
 											</th>
 										</tr>
 									</thead>
-									<tbody>
+									<tbody className="divide-y divide-neutral-100">
 										{employeeRows.length > 0 ? (
 											employeeRows.map((row, index) => (
 												<tr
 													key={`${row.employeeId}-${row.leaveType}-${index}`}
-													className="border-t">
-													<td className="px-6 py-3 font-medium">
+													className="hover:bg-neutral-50/80 transition-colors">
+													<td className="px-3 py-2 text-xs font-medium">
 														<ReportEmployeeCell
 															rosterEmployees={allEmployees}
 															employeeId={row.employeeId}
 															fullName={row.employeeName}
 														/>
 													</td>
-													<td className="px-6 py-3">{row.department}</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs text-neutral-700">{row.department}</td>
+													<td className="px-3 py-2 text-xs">
 														{formatMetricLeaveType(row.leaveType)}
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{row.totalEntitled.toFixed(2)}
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{row.used.toFixed(2)}
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{row.pending.toFixed(2)}
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs">
 														{row.available.toFixed(2)}
 													</td>
-													<td className="px-6 py-3 text-right">
+													<td className="px-3 py-2 text-right text-xs">
 														{row.lateMinutes}
 													</td>
-													<td className="px-6 py-3 text-right">
+													<td className="px-3 py-2 text-right text-xs">
 														{row.lateInstances}
 													</td>
-													<td className="px-6 py-3 text-right">
+													<td className="px-3 py-2 text-right text-xs">
 														{row.undertimeMinutes}
 													</td>
-													<td className="px-6 py-3">
+													<td className="px-3 py-2 text-xs text-neutral-500">
 														{formatPeriod(
 															row.periodStart,
 															row.periodEnd,
@@ -825,7 +844,7 @@ export function LeaveBalanceTab() {
 											<tr>
 												<td
 													colSpan={11}
-													className="px-6 py-8 text-center text-gray-500">
+													className="px-4 py-8 text-center text-gray-500 text-xs">
 													No leave balance records found for this filter
 												</td>
 											</tr>

@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain â€” absent wall = client file contradiction
+=======
 ## Latest Task Addendum - 2026-08-27 Day-status review UI & workbook refinement endpoints delivered and proven
+>>>>>>> de0f765296d2a117773d8d8647a794bc6cc09cdf
 
 - **Delivered**: Read-only day-status resolution pipeline under Mon–Sat schedule truth (Sunday REST).
 - **Precedence**: `OUT_OF_TENURE` > `REST_SUNDAY` > `PRESENT_PUNCH` > `PRESENT_SCHEDULE_POSITIVE` > `ABSENT_AWOL_EVIDENCED` > `LEAVE_PAID` > `LEAVE_UNPAID` > `REVIEW_NO_EVIDENCE`.

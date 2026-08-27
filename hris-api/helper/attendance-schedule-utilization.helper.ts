@@ -71,11 +71,13 @@ export function eachBusinessDate(startDate: Date, endDate: Date): Date[] {
 
 function isClockedInAttendance(attendance?: {
 	timeIn?: Date | string | null;
+	timeOut?: Date | string | null;
 	status?: string | null;
 } | null): boolean {
 	if (!attendance) return false;
-	if (attendance.timeIn) return true;
-	return CLOCKED_IN_STATUSES.has(String(attendance.status || "").toUpperCase());
+	if (attendance.timeIn || attendance.timeOut) return true;
+	const s = String(attendance.status || "").toUpperCase();
+	return CLOCKED_IN_STATUSES.has(s) || s === "CLOCKED_OUT" || s === "COMPLETED";
 }
 
 export function summarizeRegularScheduleUtilization(params: {
@@ -87,13 +89,7 @@ export function summarizeRegularScheduleUtilization(params: {
 		reportToId?: string | null;
 		departmentId?: string | null;
 		department?: { id?: string | null; name?: string | null } | null;
-		person?: {
-			personalInfo?: {
-				firstName?: string | null;
-				middleName?: string | null;
-				lastName?: string | null;
-			} | null;
-		} | null;
+		person?: any;
 		employmentHireDate?: Date | string | null;
 		employmentStartDate?: Date | string | null;
 		employmentTerminationDate?: Date | string | null;
@@ -125,9 +121,11 @@ export function summarizeRegularScheduleUtilization(params: {
 		for (const attendance of employee.attendances || []) {
 			const key = attendance.timeIn
 				? getDateKeyInBusinessTimeZone(new Date(attendance.timeIn))
-				: attendance.date
-					? getDateKeyInBusinessTimeZone(new Date(attendance.date))
-					: "";
+				: attendance.timeOut
+					? getDateKeyInBusinessTimeZone(new Date(attendance.timeOut))
+					: attendance.date
+						? getDateKeyInBusinessTimeZone(new Date(attendance.date))
+						: "";
 			if (!key) continue;
 			attendanceByDate.set(key, attendance);
 		}
@@ -211,6 +209,97 @@ function scheduleUtilizationCacheKey(
 	].join("|");
 }
 
+/**
+ * Count employees who are expected to work on a given date range by querying
+ * the Employee roster directly. This is the authoritative "scheduled to work"
+ * denominator — it does NOT depend on AttendanceObligation rows being
+ * materialized, nor on schedule resolution succeeding for every employee.
+ *
+ * Criteria: active (or not yet terminated), started on or before endDate,
+ * has an embeddedSchedule that is NOT a pure off-day schedule.
+ *
+ * Note: "isOff" at the root of embeddedSchedule means the entire schedule is
+ * an off-day pattern. We also check the common {set: {isOff: true}} wrapper
+ * form. Individual days within a pattern may be off — those are handled by the
+ * schedule resolution — but an employee with at least one non-off day in their
+ * rotation counts here.
+ */
+export async function countActiveScheduledEmployees(
+	prisma: PrismaClient,
+	params: {
+		organizationId: string;
+		startDate: Date;
+		endDate: Date;
+	} & EmployeeScopeFilter,
+): Promise<number> {
+	const employeeWhere = {
+		...buildEmployeeFilter(params.organizationId, {
+			departmentId: params.departmentId,
+			sectionId: params.sectionId,
+			positionId: params.positionId,
+			levelId: params.levelId,
+			reportToId: params.reportToId,
+			employeeId: params.employeeId,
+		}),
+		AND: [
+			{
+				OR: [
+					{ employmentStartDate: null },
+					{ employmentStartDate: { lte: params.endDate } },
+				],
+			},
+			{
+				OR: [
+					{ employmentStatus: { in: ["ACTIVE", "ONBOARDING"] as any } },
+					{ employmentTerminationDate: { gte: params.startDate } },
+				],
+			},
+			// Must have an embeddedSchedule at all
+			{
+				NOT: {
+					OR: [
+						{ embeddedSchedule: { equals: null as any } },
+					],
+				},
+			},
+		],
+	};
+
+	// Fetch employee IDs + embeddedSchedule so we can filter out pure off-day employees
+	const employees = await prisma.employee.findMany({
+		where: employeeWhere as any,
+		select: {
+			id: true,
+			embeddedSchedule: true,
+		},
+	});
+
+	let scheduled = 0;
+	for (const employee of employees) {
+		const raw = employee.embeddedSchedule as any;
+		if (!raw) continue;
+
+		// Unwrap {set: {...}} form
+		const embedded = raw?.set && typeof raw.set === "object" && !Array.isArray(raw.set)
+			? raw.set
+			: raw;
+
+		// Skip employees whose entire schedule is marked as off
+		if (embedded?.isOff === true) continue;
+
+		// Must have at least one pattern day that is a work day (isOff != true)
+		const pattern = Array.isArray(embedded?.pattern) ? embedded.pattern : [];
+		if (pattern.length === 0) continue;
+
+		const hasWorkDay = pattern.some((day: any) => day?.isOff !== true && (day?.shiftSnapshot || day?.shiftTypeId));
+		if (!hasWorkDay) continue;
+
+		scheduled += 1;
+	}
+
+	return scheduled;
+}
+
 export async function countRegularScheduleWorkUtilization(
 	prisma: PrismaClient,
 	params: {
@@ -292,6 +381,7 @@ export async function countRegularScheduleWorkUtilization(
 				OR: [
 					{ date: { gte: params.startDate, lte: params.endDate } },
 					{ timeIn: { gte: startBounds.start, lte: endBounds.end } },
+					{ timeOut: { gte: startBounds.start, lte: endBounds.end } },
 				],
 			},
 			select: {
@@ -820,6 +910,8 @@ export function pageMergedScheduledAttendanceRecords<
 		employeeRefId?: string | null;
 		date?: string | null;
 		employeeName?: string | null;
+		timeIn?: string | null;
+		status?: string | null;
 	},
 >(params: {
 	existingRows: T[];
@@ -832,24 +924,49 @@ export function pageMergedScheduledAttendanceRecords<
 }) {
 	const mode = params.mode || "not_clocked_in";
 	const allowedIds = Array.isArray(params.employeeIds) ? new Set(params.employeeIds) : null;
-	const existingByKey = new Map(
-		params.existingRows.map((row) => [
-			`${String(row.employeeRefId || "").trim()}:${String(row.date || "")}`,
-			row,
-		]),
+	const scheduledByKey = new Map(
+		params.scheduledDays.map((day) => [`${day.employeeRefId}:${day.date}`, day]),
 	);
 	const scheduledRows: Array<T | ReturnType<typeof buildVirtualScheduledAttendanceRow>> = [];
+	const seenKeys = new Set<string>();
+
+	for (const existing of params.existingRows) {
+		if (allowedIds && existing.employeeRefId && !allowedIds.has(existing.employeeRefId)) continue;
+		const key = `${String(existing.employeeRefId || "").trim()}:${String(existing.date || "")}`;
+		seenKeys.add(key);
+
+		const scheduledDay = scheduledByKey.get(key);
+		const enhancedRow = scheduledDay
+			? applyScheduleArrivalToAttendanceRow(existing, scheduledDay.scheduleSnapshot)
+			: existing;
+
+		if (mode === "clocked_in") {
+			const isClockedIn = Boolean(enhancedRow.timeIn);
+			if (!isClockedIn) continue;
+		} else {
+			const isClockedIn = Boolean(enhancedRow.timeIn);
+			if (isClockedIn) continue;
+		}
+
+		scheduledRows.push(enhancedRow);
+	}
+
 	for (const day of params.scheduledDays) {
 		if (!day.employeeRefId || !day.date) continue;
-		if (mode === "clocked_in" ? !day.clockedIn : day.clockedIn) continue;
 		if (allowedIds && !allowedIds.has(day.employeeRefId)) continue;
-		const existing = existingByKey.get(`${day.employeeRefId}:${day.date}`);
-		scheduledRows.push(
-			existing
-				? applyScheduleArrivalToAttendanceRow(existing, day.scheduleSnapshot)
-				: buildVirtualScheduledAttendanceRow(day),
-		);
+		const key = `${day.employeeRefId}:${day.date}`;
+		if (seenKeys.has(key)) continue;
+		seenKeys.add(key);
+
+		if (mode === "clocked_in") {
+			if (!day.clockedIn) continue;
+		} else {
+			if (day.clockedIn) continue;
+		}
+
+		scheduledRows.push(buildVirtualScheduledAttendanceRow(day));
 	}
+
 	const kept = params.keepRow
 		? scheduledRows.filter((row) => params.keepRow!(row))
 		: scheduledRows;
