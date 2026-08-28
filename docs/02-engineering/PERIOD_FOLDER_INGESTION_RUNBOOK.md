@@ -1,8 +1,8 @@
-# BNPI Automated Period Folder Ingestion Runbook
+# BNPI Automated Payroll Files Folder Ingestion Runbook
 
 ## Overview
 
-The **Period Folder Ingestion Orchestrator** (`hris-api/scripts/import-period-folder.mjs`, CLI `npm run import:period`) enables complete, one-command ingestion and synchronization of any cutoff period directly from a folder of `.xlsx` files without manual file sorting, renaming, or Sheet2 dependence.
+The **Payroll Files Ingestion Orchestrator** (`hris-api/scripts/import-payroll-files-folder.mjs`, CLI `npm run import:payroll-files` / `npm run payroll:import-files`) enables complete, one-command ingestion and synchronization of all payroll cutoff files directly from a folder of `.xlsx` workbooks without manual file sorting, renaming, or Sheet2 dependence.
 
 ---
 
@@ -10,11 +10,12 @@ The **Period Folder Ingestion Orchestrator** (`hris-api/scripts/import-period-fo
 
 ```bash
 # In hris-api directory:
-npm run import:period -- --dir="confidential-files/june26-july10"
-npm run import:period -- --dir="confidential-files/july11-july25"
+npm run import:payroll-files -- --dir="confidential-files/june26-july10"
+npm run import:payroll-files -- --dir="confidential-files/july11-july25"
 
-# Or using relative/absolute paths:
-node scripts/import-period-folder.mjs --dir="C:/path/to/cutoff-folder"
+# Or using aliases / direct script:
+npm run payroll:import-files -- --dir="confidential-files/july11-july25"
+node scripts/import-payroll-files-folder.mjs --dir="confidential-files/july11-july25"
 ```
 
 ---
