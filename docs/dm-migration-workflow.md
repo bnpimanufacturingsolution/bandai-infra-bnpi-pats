@@ -726,6 +726,15 @@ Do not drop these from planning just because they are currently template-only in
   employee approvals, and request detail pages.
 - For attendance/timesheet/payroll source-of-truth behavior, read
   `docs/attendance-timesheet-payroll-tally-prd.md` before changing DM4 or DM5.
+- For automated cutoff period ingestion from folders, see
+  `docs/02-engineering/PERIOD_FOLDER_INGESTION_RUNBOOK.md` (`npm run import:period`).
+
+## Automated Period Folder Ingestion Orchestrator
+
+For operational cutoff ingestion, `hris-api/scripts/import-period-folder.mjs` (`npm run import:period`) provides a one-command pipeline:
+- **2-Tier Fingerprint Engine**: Automatically classifies workbooks via filename fuzzy matching and column header fingerprinting.
+- **Dependency Ingestion**: Sequentially uploads WorkSharing, Leave, Compensation, Deduction, Biometrics, and Overtime details.
+- **Post-Import Synchronizations**: Automatically runs Late/UT punch recalculation, Sunday/off-day alignment, loan horizon extensions, and universal MLA guarantees.
 
 ## Maintenance Rules For Future Agents
 

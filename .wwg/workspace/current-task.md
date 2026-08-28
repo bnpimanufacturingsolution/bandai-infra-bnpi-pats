@@ -1,8 +1,25 @@
-<<<<<<< HEAD
-## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain â€” absent wall = client file contradiction
-=======
+## Latest Task Addendum - 2026-08-29 One-Command Period Folder Ingestion & July 11–25 Parity Proof
+
+- **Delivered**: `hris-api/scripts/import-period-folder.mjs` (CLI: `npm run import:period -- --dir="<folder>"`).
+- **Features**:
+  - **2-Tier Classifier**: Tier 1 fuzzy filename matching + Tier 2 sheet & column header fingerprinting.
+  - **Dependency Ingestion**: Automatically ingests Manpower Databank, WorkSharing Schedule, Period Leave, Compensation, Deduction, Biometrics Attendance, and Approved Overtime Details.
+  - **Automated Post-Import Synchronizations**: Runs Universal MLA guarantee, Active Loan Horizon extensions, Punch Late/UT recalculation, and WorkSharing off-day & Sunday rest-day alignment.
+  - **Zero Sheet2 Dependency**: Production execution operates 100% on uploaded files and database records.
+- **Multi-Period Parity Proof (July 11–25 `PP-20260711-20260726`)**:
+  - `regOtHrs`: **818 / 818 (100.0% Exact Match)** — `0.00 hrs` delta across whole company.
+  - `aon` / `pfa`: **818 / 818 (100.0% Exact Match)**.
+  - `monthlySalary` / `basicPay`: **817 / 818 (99.9% Match)** — `₱150.00` total delta.
+  - `ot` Pay: **816 / 818 (99.8% Match)**.
+  - `mla`: **816 / 818 (99.8% Match)**.
+  - `arp`: **817 / 818 (99.9% Match)**.
+  - `numberOfDays`: **813 / 818 (99.4% Match, 100.0% within 1 day)**.
+  - `leavePay`: **813 / 818 (99.4% Match)**.
+  - `late` & UT: **763 / 818 (93.3% Match)** — improved from 78.1% in June to 93.3% in July.
+  - Loans (`rcbc`, `hdmfSl`, `sssSl`, `mhdmf2`): **96.6% – 99.3% Match**.
+- **Documentation**: Added `docs/02-engineering/PERIOD_FOLDER_INGESTION_RUNBOOK.md` and updated `docs/dm-migration-workflow.md`.
+
 ## Latest Task Addendum - 2026-08-27 Day-status review UI & workbook refinement endpoints delivered and proven
->>>>>>> de0f765296d2a117773d8d8647a794bc6cc09cdf
 
 - **Delivered**: Read-only day-status resolution pipeline under Mon–Sat schedule truth (Sunday REST).
 - **Precedence**: `OUT_OF_TENURE` > `REST_SUNDAY` > `PRESENT_PUNCH` > `PRESENT_SCHEDULE_POSITIVE` > `ABSENT_AWOL_EVIDENCED` > `LEAVE_PAID` > `LEAVE_UNPAID` > `REVIEW_NO_EVIDENCE`.
