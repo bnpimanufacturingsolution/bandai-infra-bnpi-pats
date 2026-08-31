@@ -1,3 +1,15 @@
+## Latest Task Addendum - 2026-08-31 April 26–May 10 tally: 0/830 tallied — absent policy wall (same as Jul periods)
+
+- Ran `npm run tally:period -- --period=PP-20260426-20260511` against client Sheet2 register (830 employees, 850 in register).
+- **Result: 0 TALLIED.** OT_MATCH_ONLY 826, OT_OK_NEAR_50 2, UNMATCH 2.
+- **Absent wall (dominant):** 268 people charged ₱218,467 absent in app vs ₱0 in Sheet2. App follows Mon-Sat schedule truth; client does not charge those same days. Same root cause as Jun26–Jul10 and Jul11–25.
+- **PFA mismatch:** 164 people, -₱32,800 — separate data issue (contribution basis or rate).
+- **Loan differences:** hdmfSl 21/-₱12.6k, rcbc 14/₱-8.5k, sssSl 6/-₱3.8k.
+- **Late:** 31 people, -₱9,066.
+- Cascade: absent → gross (-₱351k) → tax (-₱44k) → deductions (+₱215k) → net (-₱566k) → totalReceivable (-₱1.02M).
+- Evidence: `.runtime/tally-PP-20260426-20260511-2026-08-31T03-10-16/`
+- Status: Documented, awaiting absent policy ruling before repair.
+
 ## Latest Task Addendum - 2026-08-29 One-Command Period Folder Ingestion & July 11–25 Parity Proof
 
 - **Delivered**: `hris-api/scripts/import-period-folder.mjs` (CLI: `npm run import:period -- --dir="<folder>"`).

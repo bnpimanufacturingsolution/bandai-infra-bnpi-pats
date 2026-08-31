@@ -54,3 +54,8 @@ docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx
 docs/new-cutoff/
 docs/rptLeaveBalance as of June 4, 2026.xlsx
 config.bat
+
+# Payroll import file folders (local staging, not source-controlled)
+july11-july25/
+june26-july10/
+test-results/
