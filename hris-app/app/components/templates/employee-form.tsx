@@ -2414,6 +2414,7 @@ export function EmployeeForm({ presentation = "page", onRequestClose }: Employee
 					),
 					expiryDate: formatDateForInput(employee.person?.identification?.expiryDate),
 				},
+				children: employee.person?.children || [],
 			},
 			employee: {
 				organizationId: employee.organizationId || user?.organizationId || "",

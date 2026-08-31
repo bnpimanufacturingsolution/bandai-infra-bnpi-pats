@@ -101,6 +101,16 @@ export interface FormData {
 			issuingCountry: string;
 			expiryDate: string;
 		};
+		children?: Array<{
+			id?: string;
+			firstName: string;
+			middleName?: string;
+			lastName?: string;
+			dateOfBirth: string;
+			gender?: "male" | "female" | "other" | "not_applicable";
+			isDependent?: boolean;
+			notes?: string;
+		}>;
 	};
 	employee: {
 		organizationId: string;
@@ -1178,6 +1188,19 @@ export function AddEmployee() {
 					issuingCountry: data.person.identification.issuingCountry,
 					expiryDate: formatDateToISO(data.person.identification.expiryDate),
 				},
+				children:
+					data.person.children && data.person.children.length > 0
+						? data.person.children.map((beneficiary: any) => ({
+								id: beneficiary.id,
+								firstName: beneficiary.firstName,
+								middleName: beneficiary.middleName || null,
+								lastName: beneficiary.lastName || null,
+								dateOfBirth: formatDateToISO(beneficiary.dateOfBirth),
+								gender: beneficiary.gender || null,
+								isDependent: beneficiary.isDependent ?? true,
+								notes: beneficiary.notes || null,
+							}))
+						: [],
 			},
 			employee: {
 				organizationId: organizationId, // Use authenticated user's organizationId

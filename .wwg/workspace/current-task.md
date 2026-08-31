@@ -1,3 +1,35 @@
+## Latest Task Addendum - 2026-08-31 Beneficiaries (children) persistence fix — controller schema bypass + default fields query
+
+- **Diagnosed and Fixed persistence issue**: The employee composite PATCH route was crashing with a `PrismaClientValidationError` because the raw `children` array was passed directly into `prisma.person.update()`. We updated the controller to strip `children` before updating the `Person` record and to use the `syncPersonBeneficiaries()` utility to handle relation syncing.
+- **Fixed missing imports**: Imported `syncPersonBeneficiaries` from `employee.helper.ts` in `employee.controller.ts`.
+- **Restored deleted controller code**: Discarded accidental working copy modifications that had removed variable declarations (`personId`, `userId`, `uploadedAvatarUrl`) which caused a `ReferenceError` on update.
+- **Resolved query defaults & soft-delete filtering**:
+  - Frontend: Added `"person.children"` to default fields query in `useEmployees.ts` so that beneficiaries are requested and loaded.
+  - Backend: Added `applyEmployeePersonChildrenSelectionDefaults()` to `employee.controller.ts` to filter out soft-deleted children when `person.children` fields are selected in list or single employee queries.
+
+## Latest Task Addendum - 2026-08-31 Beneficiaries (children) feature — backend CRUD + frontend form + display
+
+### Naming Convention (Important)
+- **User-facing term**: "Beneficiaries" (used in UI labels, section headers, button text, comments)
+- **Prisma relation**: `person.children` (cannot change without a migration — this is the schema-defined relation name)
+- **API payload key**: `person.children` (must match the Prisma relation for the API to work)
+- **Backend function/variable names**: `syncPersonBeneficiaries`, `beneficiaries` (not `children`)
+- **Frontend local variable names**: `beneficiaries`, `addBeneficiary`, `removeBeneficiary` (not `children`, `addChild`, `removeChild`)
+- **Exception**: Form field paths like `person.children.${index}.firstName` must use `children` to match the API payload structure
+
+This convention ensures the user sees "Beneficiaries" everywhere in the UI while the backend code maintains clean, consistent naming that matches the domain language. The Prisma relation name is a technical constraint that cannot be changed without a database migration.
+
+### What was built
+- **Backend**: `syncPersonBeneficiaries()` function in `hris-api/helper/employee.helper.ts` handles upsert/delete of beneficiary records
+- **Backend**: Employee controller create/update flows call `syncPersonBeneficiaries` after person creation/update
+- **Backend**: Employee GET endpoint includes beneficiaries in the person response (where `isDeleted=false`)
+- **Frontend**: Beneficiaries section added to `PersonalDetailsForm.tsx` with dynamic add/remove rows (firstName, middleName, lastName, dateOfBirth, gender, isDependent toggle)
+- **Frontend**: Read-only beneficiaries display added to `personal-info-tab.tsx` using `Baby` icon
+- **Frontend**: Employee form types and API service types updated with `children` array (matching API payload)
+
+### Purpose
+Beneficiaries (children/dependents) are tracked for birthday gift eligibility during payroll generation — ₱300 per birthday per person (employee + each dependent beneficiary with birthday in the payroll month).
+
 ## Latest Task Addendum - 2026-08-31 April 26–May 10 tally: 0/830 tallied — absent policy wall (same as Jul periods)
 
 - Ran `npm run tally:period -- --period=PP-20260426-20260511` against client Sheet2 register (830 employees, 850 in register).

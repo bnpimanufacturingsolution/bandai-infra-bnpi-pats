@@ -16,6 +16,7 @@ interface CalendarDatePickerProps {
 	placeholder?: string;
 	className?: string;
 	disabled?: boolean;
+	defaultMonth?: Date;
 }
 
 export function CalendarDatePicker({
@@ -27,6 +28,7 @@ export function CalendarDatePicker({
 	placeholder = "MM/DD/YYYY",
 	className,
 	disabled,
+	defaultMonth,
 }: CalendarDatePickerProps) {
 	const [open, setOpen] = React.useState(false);
 	const [inputValue, setInputValue] = React.useState("");
@@ -54,7 +56,7 @@ export function CalendarDatePicker({
 	// Parse the value if it's a string (YYYY-MM-DD format)
 	const parsedValue = value ? parse(value, "yyyy-MM-dd", new Date()) : undefined;
 	const selectedDate = parsedValue && isValid(parsedValue) ? parsedValue : undefined;
-	const defaultCalendarMonth = selectedDate || today;
+	const defaultCalendarMonth = defaultMonth || selectedDate || today;
 
 	const calendarRange = React.useMemo(() => {
 		const start = minDate || new Date(today.getFullYear() - 125, 0, 1);

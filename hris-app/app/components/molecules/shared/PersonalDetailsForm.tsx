@@ -2,7 +2,7 @@ import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
 import { Card, CardContent } from "~/components/atoms/Card";
 import { CalendarDatePicker } from "~/components/ui/calendar-date-picker";
-import { useState } from "react";
+import React, { useState } from "react";
 import { Plus, X, Phone, MapPin, User } from "lucide-react";
 
 export type SectionStatus = "not-started" | "in-progress" | "completed";
@@ -91,6 +91,19 @@ export function PersonalDetailsForm({ form, onComplete, status }: PersonalDetail
 	// Watch the phones array to manage dynamic phone fields
 	const phones = watch("person.contactInfo.phones") || [];
 
+	// Watch the beneficiaries array
+	const beneficiaries = watch("person.children") || [];
+
+	// Default month for beneficiary DOB pickers — use employee's birth month
+	const employeeDobStr = watch("person.personalInfo.dateOfBirth") || "";
+	const beneficiaryDefaultMonth = React.useMemo(() => {
+		if (employeeDobStr) {
+			const parsed = new Date(employeeDobStr);
+			if (!isNaN(parsed.getTime())) return parsed;
+		}
+		return undefined;
+	}, [employeeDobStr]);
+
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		const isValid = await trigger("person");
@@ -118,6 +131,27 @@ export function PersonalDetailsForm({ form, onComplete, status }: PersonalDetail
 			isPrimary: i === index,
 		}));
 		setValue("person.contactInfo.phones", newPhones);
+	};
+
+	const addBeneficiary = () => {
+		const newBeneficiaries = [
+			...beneficiaries,
+			{
+				firstName: "",
+				middleName: "",
+				lastName: "",
+				dateOfBirth: "",
+				gender: "male",
+				isDependent: true,
+				notes: "",
+			},
+		];
+		setValue("person.children", newBeneficiaries);
+	};
+
+	const removeBeneficiary = (index: number) => {
+		const newBeneficiaries = beneficiaries.filter((_: any, i: number) => i !== index);
+		setValue("person.children", newBeneficiaries);
 	};
 
 	return (
@@ -853,11 +887,116 @@ export function PersonalDetailsForm({ form, onComplete, status }: PersonalDetail
 											{errors.person.identification.expiryDate.message}
 										</p>
 									)}
-								</div>
 							</div>
 						</div>
+					</div>
 
-						{!isCompleted && (
+					{/* Beneficiaries Section */}
+					<div className="space-y-4">
+						<h3 className="text-lg font-medium text-gray-900">
+							Beneficiaries
+						</h3>
+
+						{beneficiaries.length > 0 ? (
+							<div className="space-y-4">
+								{beneficiaries.map((beneficiary: any, index: number) => (
+									<div
+										key={index}
+										className="p-4 border border-gray-200 rounded-lg space-y-4">
+										<div className="flex justify-end">
+											<button
+												type="button"
+												onClick={() => removeBeneficiary(index)}
+												className="text-red-500 hover:text-red-700">
+												<X className="h-4 w-4" />
+											</button>
+										</div>
+										<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+											<div>
+												<label className="block text-sm font-medium text-gray-700 mb-2">
+													First Name *
+												</label>
+												<Input
+													type="text"
+													placeholder="First name"
+													{...register(`person.children.${index}.firstName`, {
+														required: "First name is required",
+													})}
+												/>
+											</div>
+											<div>
+												<label className="block text-sm font-medium text-gray-700 mb-2">
+													Middle Name
+												</label>
+												<Input
+													type="text"
+													placeholder="Middle name"
+													{...register(`person.children.${index}.middleName`)}
+												/>
+											</div>
+											<div>
+												<label className="block text-sm font-medium text-gray-700 mb-2">
+													Last Name
+												</label>
+												<Input
+													type="text"
+													placeholder="Last name"
+													{...register(`person.children.${index}.lastName`)}
+												/>
+											</div>
+										</div>
+										<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+											<div>
+												<label className="block text-sm font-medium text-gray-700 mb-2">
+													Date of Birth *
+												</label>
+												<CalendarDatePicker
+													value={
+														watch(`person.children.${index}.dateOfBirth`) || ""
+													}
+													onChange={(next) =>
+														setValue(`person.children.${index}.dateOfBirth`, next, {
+															shouldValidate: true,
+															shouldDirty: true,
+														})
+													}
+													defaultMonth={beneficiaryDefaultMonth}
+												/>
+											</div>
+											<div>
+												<label className="block text-sm font-medium text-gray-700 mb-2">
+													Gender
+												</label>
+												<select
+													className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+													{...register(`person.children.${index}.gender`)}>
+													<option value="male">Male</option>
+													<option value="female">Female</option>
+													<option value="other">Other</option>
+													<option value="not_applicable">Not applicable</option>
+												</select>
+											</div>
+										</div>
+									</div>
+								))}
+							</div>
+						) : (
+							<p className="text-sm text-gray-500 italic">
+								No beneficiaries added yet
+							</p>
+						)}
+
+						<Button
+							type="button"
+							variant="outline"
+							onClick={addBeneficiary}
+							className="mt-2">
+							<Plus className="h-4 w-4 mr-2" />
+							Add Beneficiary
+						</Button>
+					</div>
+
+					{!isCompleted && (
 							<div className="pt-6 border-t border-gray-200">
 								<Button
 									type="submit"

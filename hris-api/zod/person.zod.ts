@@ -104,6 +104,17 @@ export const MetadataSchema = z.object({
 	isDeleted: z.boolean().optional(),
 });
 
+export const ChildSchema = z.object({
+	id: ObjectIdSchema.optional(),
+	firstName: z.string().min(1, "Beneficiary first name is required"),
+	middleName: OptionalStringSchema,
+	lastName: OptionalStringSchema,
+	dateOfBirth: z.coerce.date(),
+	gender: GenderTypeSchema.optional(),
+	isDependent: z.boolean().optional(),
+	notes: OptionalStringSchema,
+});
+
 // Main schemas
 export const PersonSchema = z.object({
 	id: ObjectIdSchema,
@@ -127,6 +138,7 @@ export const CreatePersonSchema = z.object({
 	contactInfo: ContactInfoSchema,
 	identification: IdentificationSchema.optional(),
 	metadata: MetadataSchema.optional(),
+	children: z.array(ChildSchema).optional(),
 });
 
 export const UpdatePersonSchema = z.object({
@@ -137,6 +149,7 @@ export const UpdatePersonSchema = z.object({
 	contactInfo: ContactInfoSchema.optional(),
 	identification: IdentificationSchema.optional(),
 	metadata: MetadataSchema.optional(),
+	children: z.array(ChildSchema).optional(),
 });
 
 export const GroupBySchema = z.object({
@@ -152,3 +165,4 @@ export type PersonalInfoType = z.infer<typeof PersonalInfoSchema>;
 export type ContactInfoType = z.infer<typeof ContactInfoSchema>;
 export type IdentificationType = z.infer<typeof IdentificationSchema>;
 export type MetadataType = z.infer<typeof MetadataSchema>;
+export type ChildType = z.infer<typeof ChildSchema>;

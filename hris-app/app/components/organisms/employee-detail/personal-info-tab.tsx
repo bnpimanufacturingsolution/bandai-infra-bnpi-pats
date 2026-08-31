@@ -15,6 +15,7 @@ import {
 	Phone,
 	Settings,
 	User,
+	Baby,
 } from "lucide-react";
 
 interface PersonalInfoTabProps {
@@ -106,6 +107,7 @@ export function PersonalInfoTab({
 
 	const addressLines = formatAddressLines(primaryAddress);
 	const age = calculateAge(personalInfo.dateOfBirth);
+	const children = employee.person?.children || [];
 
 	const contactRows: Array<{
 		label: string;
@@ -259,6 +261,42 @@ export function PersonalInfoTab({
 					emptyMessage="No personal details available."
 				/>
 			</div>
+
+			{/* Beneficiaries Section */}
+			<section className="rounded-2xl border border-border bg-white shadow-sm">
+				<div className="flex items-center gap-3 border-b border-border bg-muted/30 px-5 py-4">
+					<div className="rounded-xl bg-primary/10 p-2 text-primary">
+						<Baby className="h-4 w-4" />
+					</div>
+					<h3 className="text-base font-semibold text-foreground">Beneficiaries</h3>
+				</div>
+
+				{children.length > 0 ? (
+					<div className="divide-y divide-border/70 px-5">
+						{children.map((child: any, index: number) => (
+							<div
+								key={child.id || index}
+								className="flex items-start justify-between gap-4 py-4">
+								<div className="min-w-0 space-y-1">
+									<p className="text-sm font-medium text-foreground">
+										{child.firstName} {child.middleName} {child.lastName}
+									</p>
+									<p className="text-xs text-muted-foreground">
+										DOB: {formatDate(child.dateOfBirth)}
+										{child.gender ? ` • ${formatEnumLabel(child.gender)}` : ""}
+										{child.isDependent ? " • Dependent" : ""}
+									</p>
+								</div>
+							</div>
+						))}
+					</div>
+				) : (
+					<div className="px-5 py-8 text-center text-sm text-muted-foreground">
+						<Baby className="mx-auto mb-2 h-5 w-5 opacity-40" />
+						<p>No beneficiaries registered.</p>
+					</div>
+				)}
+			</section>
 
 			{isOwnProfile ? (
 				<section

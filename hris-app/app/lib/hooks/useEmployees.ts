@@ -248,6 +248,7 @@ export const useEmployee = (id: string, fields?: string | string[], params?: Api
 		"person.personalInfo",
 		"person.contactInfo",
 		"person.identification",
+		"person.children",
 		"department.id",
 		"department.name",
 		"department.code",

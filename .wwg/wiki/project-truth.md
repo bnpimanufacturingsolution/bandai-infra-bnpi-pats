@@ -40,6 +40,21 @@
 - Gap: older applicants with no stored birthday cannot match until DOB exists on that Person.
 
 
+## Beneficiaries (children/dependents) (2026-08-31)
+
+- Status: `CONFIRMED_CODE`.
+- **User-facing term**: "Beneficiaries" (UI labels, section headers, button text, comments).
+- **Prisma relation**: `person.children` (schema constraint; cannot change without migration).
+- **API payload key**: `person.children` (must match Prisma relation for the API to work).
+- **Backend function/variable names**: `syncPersonBeneficiaries`, `beneficiaries` (not `children`).
+- **Frontend local variable names**: `beneficiaries`, `addBeneficiary`, `removeBeneficiary` (not `children`, `addChild`, `removeChild`).
+- **Exception**: Form field paths like `person.children.${index}.firstName` must use `children` to match the API payload structure.
+- Purpose: Track employee dependents for birthday gift eligibility during payroll generation — ₱300 per birthday per person (employee + each dependent beneficiary with birthday in the payroll month).
+- Backend: `syncPersonBeneficiaries()` in `hris-api/helper/employee.helper.ts` handles upsert/delete. Called in employee create/update flows. GET endpoint includes beneficiaries where `isDeleted=false`.
+- Frontend: `PersonalDetailsForm.tsx` has dynamic add/remove rows (firstName, middleName, lastName, dateOfBirth, gender, isDependent toggle). `personal-info-tab.tsx` has read-only display with `Baby` icon.
+- Terminology: `.wwg/wiki/terminology.md` "Beneficiaries vs children" conflict entry.
+
+
 ## GitOps db-init Job (2026-08-21)
 
 - Status: `CONFIRMED_CODE` (push authorized 2026-08-22).

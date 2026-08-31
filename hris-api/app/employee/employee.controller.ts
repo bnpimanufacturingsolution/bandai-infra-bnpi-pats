@@ -27,7 +27,7 @@ import {
 	normalizeAndValidateFieldSelection,
 	appendAndConditions,
 } from "../../helper/query-builder.helper";
-import { processGroupedCounts } from "../../helper/employee.helper";
+import { processGroupedCounts, syncPersonBeneficiaries } from "../../helper/employee.helper";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler.helper";
 import { groupDataByField } from "../../helper/dataGrouping";
 import {
@@ -238,6 +238,29 @@ const applyEmployeeBenefitSelectionDefaults = (fieldSelections: Record<string, a
 						select: { ...EMPLOYEE_BENEFIT_PROFILE_SCALAR_SELECT },
 					}),
 		};
+	}
+};
+
+const applyEmployeePersonChildrenSelectionDefaults = (fieldSelections: Record<string, any>) => {
+	if (!fieldSelections?.person) return;
+
+	if (typeof fieldSelections.person === "object") {
+		const personSelect = fieldSelections.person.select;
+		if (personSelect && personSelect.children) {
+			if (personSelect.children === true) {
+				personSelect.children = {
+					where: { isDeleted: false },
+				};
+			} else if (typeof personSelect.children === "object") {
+				personSelect.children = {
+					...personSelect.children,
+					where: {
+						...(personSelect.children.where || {}),
+						isDeleted: false,
+					},
+				};
+			}
+		}
 	}
 };
 
@@ -4556,6 +4579,7 @@ export const controller = (prisma: PrismaClient) => {
 			if (findManyQueryAny.select) {
 				applyEmployeeDocumentSelectionDefaults(findManyQueryAny.select);
 				applyEmployeeBenefitSelectionDefaults(findManyQueryAny.select);
+				applyEmployeePersonChildrenSelectionDefaults(findManyQueryAny.select);
 			}
 			if (document) {
 				if (findManyQueryAny.select) {
@@ -4767,6 +4791,7 @@ export const controller = (prisma: PrismaClient) => {
 				if (fieldSelections) {
 					applyEmployeeDocumentSelectionDefaults(fieldSelections);
 					applyEmployeeBenefitSelectionDefaults(fieldSelections);
+					applyEmployeePersonChildrenSelectionDefaults(fieldSelections);
 					if (includeDerivedSchedules) {
 						fieldSelections.embeddedSchedule = true;
 					}
@@ -4775,7 +4800,23 @@ export const controller = (prisma: PrismaClient) => {
 					// Default includes for employee
 					// Note: schedule is embedded, no need to include as relation
 					query.include = {
-						person: true,
+						person: {
+							include: {
+								children: {
+									where: { isDeleted: false },
+									select: {
+										id: true,
+										firstName: true,
+										middleName: true,
+										lastName: true,
+										dateOfBirth: true,
+										gender: true,
+										isDependent: true,
+										notes: true,
+									},
+								},
+							},
+						},
 						department: true,
 						section: true,
 						position: true,
@@ -5132,11 +5173,19 @@ export const controller = (prisma: PrismaClient) => {
 					const personValidation = UpdatePersonSchema.partial().safeParse(person);
 					if (personValidation.success) {
 						try {
+							// Strip children from person data — handled by syncPersonBeneficiaries
+							const { children: _children, ...personDataForPrisma } = personValidation.data;
 							await prisma.person.update({
 								where: { id: personId },
-								data: personValidation.data,
+								data: personDataForPrisma,
 							});
 							employeeLogger.info(`Person updated successfully: ${personId}`);
+
+							// Sync beneficiaries if provided
+							if (person.children && Array.isArray(person.children)) {
+								employeeLogger.info(`Syncing beneficiaries for person ${personId}`);
+								await syncPersonBeneficiaries(prisma, personId, person.children);
+							}
 
 							// Update user metadata if person info changed (affects personalInfo in metadata)
 							if (userId && existingEmployee) {

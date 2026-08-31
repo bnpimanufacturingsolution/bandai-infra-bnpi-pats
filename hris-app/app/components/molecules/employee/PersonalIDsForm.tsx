@@ -1,3 +1,4 @@
+import React from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Controller, useWatch } from "react-hook-form";
 import { FormCharHint } from "~/components/molecules/FormCharHint";
@@ -10,6 +11,7 @@ import {
 	parseDateInputAsUtcDate,
 } from "~/lib/utils/date-validation";
 import type { FormData } from "~/types/employee-form.types";
+import { Plus, X } from "lucide-react";
 
 interface PersonalIDsFormProps {
 	form: UseFormReturn<FormData>;
@@ -122,12 +124,44 @@ export function PersonalIDsForm({ form, lockApplicantIdentity = false }: Persona
 		.length;
 	const postalLen = (useWatch({ control, name: "person.contactInfo.address.0.postalCode" }) ?? "")
 		.length;
+
+	// Watch the beneficiaries array
+	const beneficiaries = useWatch({ control, name: "person.children" }) || [];
+	const employeeDobStr = useWatch({ control, name: "person.personalInfo.dateOfBirth" }) ?? "";
+	const beneficiaryDefaultMonth = React.useMemo(() => {
+		if (employeeDobStr) {
+			const parsed = new Date(employeeDobStr);
+			if (!isNaN(parsed.getTime())) return parsed;
+		}
+		return undefined;
+	}, [employeeDobStr]);
 	const zipLen = (useWatch({ control, name: "person.contactInfo.address.0.zipCode" }) ?? "")
 		.length;
 	const idNumberLen = (useWatch({ control, name: "person.identification.number" }) ?? "").length;
 	const minAllowedDate = parseDateInputAsUtcDate(MIN_ALLOWED_DATE_INPUT) || undefined;
 	const maxAllowedDate = parseDateInputAsUtcDate(MAX_ALLOWED_DATE_INPUT) || undefined;
 	const maxDateOfBirth = new Date();
+
+	const addBeneficiary = () => {
+		const newBeneficiaries = [
+			...beneficiaries,
+			{
+				firstName: "",
+				middleName: "",
+				lastName: "",
+				dateOfBirth: "",
+				gender: "male",
+				isDependent: true,
+				notes: "",
+			},
+		];
+		form.setValue("person.children", newBeneficiaries);
+	};
+
+	const removeBeneficiary = (index: number) => {
+		const newBeneficiaries = beneficiaries.filter((_: any, i: number) => i !== index);
+		form.setValue("person.children", newBeneficiaries);
+	};
 
 	return (
 		<div className="space-y-8">
@@ -780,6 +814,114 @@ export function PersonalIDsForm({ form, lockApplicantIdentity = false }: Persona
 						)}
 					</div>
 				</div>
+			</div>
+
+			{/* Beneficiaries Section */}
+			<div className="space-y-4">
+				<h3 className="text-lg font-medium text-gray-900">
+					Beneficiaries
+				</h3>
+
+				{beneficiaries.length > 0 ? (
+					<div className="space-y-4">
+						{beneficiaries.map((beneficiary: any, index: number) => (
+							<div
+								key={index}
+								className="p-4 border border-gray-200 rounded-lg space-y-4">
+								<div className="flex justify-end">
+									<button
+										type="button"
+										onClick={() => removeBeneficiary(index)}
+										className="text-red-500 hover:text-red-700">
+										<X className="h-4 w-4" />
+									</button>
+								</div>
+								<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+									<div>
+										<label className="block text-sm font-medium text-gray-700 mb-2">
+											First Name *
+										</label>
+										<input
+											type="text"
+											placeholder="First name"
+											className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+											{...form.register(`person.children.${index}.firstName`, {
+												required: "First name is required",
+											})}
+										/>
+									</div>
+									<div>
+										<label className="block text-sm font-medium text-gray-700 mb-2">
+											Middle Name
+										</label>
+										<input
+											type="text"
+											placeholder="Middle name"
+											className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+											{...form.register(`person.children.${index}.middleName`)}
+										/>
+									</div>
+									<div>
+										<label className="block text-sm font-medium text-gray-700 mb-2">
+											Last Name
+										</label>
+										<input
+											type="text"
+											placeholder="Last name"
+											className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+											{...form.register(`person.children.${index}.lastName`)}
+										/>
+									</div>
+								</div>
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<label className="block text-sm font-medium text-gray-700 mb-2">
+											Date of Birth *
+										</label>
+										<Controller
+											name={`person.children.${index}.dateOfBirth` as any}
+											control={control}
+											render={({ field }) => (
+											<CalendarDatePicker
+												value={field.value || ""}
+												onChange={field.onChange}
+												minDate={minAllowedDate}
+												maxDate={maxDateOfBirth}
+												defaultMonth={beneficiaryDefaultMonth}
+											/>
+											)}
+										/>
+									</div>
+									<div>
+										<label className="block text-sm font-medium text-gray-700 mb-2">
+											Gender
+										</label>
+										<select
+											className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+											{...form.register(`person.children.${index}.gender` as any)}>
+											<option value="male">Male</option>
+											<option value="female">Female</option>
+											<option value="other">Other</option>
+											<option value="not_applicable">Not applicable</option>
+										</select>
+									</div>
+								</div>
+							</div>
+						))}
+					</div>
+				) : (
+					<p className="text-sm text-gray-500 italic">
+						No beneficiaries added yet
+					</p>
+				)}
+
+				<button
+					type="button"
+					onClick={addBeneficiary}
+					className="inline-flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+					<Plus className="h-4 w-4" />
+					Add Beneficiary
+				</button>
 			</div>
 		</div>
 	);

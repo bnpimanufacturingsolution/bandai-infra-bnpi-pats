@@ -247,8 +247,8 @@ const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 	["BB", "Adjustment Non-Tax", "adjustmentNonTax"],
 	["BC", "Excess Deduction", "excessDeduction"],
 	["BD", "De Minimis Allowance", "deMinimisAllowance"],
-	["BE", "Christmas Gift (Kid)", "christmasGiftKid"],
-	["BF", "Birthday Gift (Kid)", "birthdayGiftKid"],
+	["BE", "Christmas Gift (Beneficiary)", "christmasGiftKid"],
+	["BF", "Birthday Gift (Beneficiary)", "birthdayGiftKid"],
 	["BG", "Birthday Gift (Employee)", "birthdayGiftEmployee"],
 	["BH", "GrossPay", "grossPay"],
 	["BI", "W/Tax", "taxAmount"],
@@ -3636,6 +3636,14 @@ const payrollPreviewTimesheetSelect = {
 			person: {
 				select: {
 					personalInfo: true,
+					children: {
+						where: { isDeleted: false },
+						select: {
+							dateOfBirth: true,
+							firstName: true,
+							isDependent: true,
+						},
+					},
 				},
 			},
 			department: {
@@ -3710,11 +3718,19 @@ const payrollPreviewExcludedEmployeeSelect = {
 	dailyRate: true,
 	payFrequency: true,
 	embeddedSchedule: true,
-	person: {
-		select: {
-			personalInfo: true,
-		},
-	},
+						person: {
+							select: {
+								personalInfo: true,
+								children: {
+									where: { isDeleted: false },
+									select: {
+										dateOfBirth: true,
+										firstName: true,
+										isDependent: true,
+									},
+								},
+							},
+						},
 	department: {
 		select: {
 			id: true,
@@ -4339,6 +4355,35 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		assemblyStanding: (sourceBy as any)(["ASA"], ["Assembly Standing"], ["COMPENSATION"]) ?? 0,
 		totalReceivable,
 	};
+
+	// ── Birthday Gift auto-detection ──────────────────────────────────────────
+	// ₱300 per birthday (employee + each dependent beneficiary) in the payroll period month.
+	const BIRTHDAY_GIFT_AMOUNT = 300;
+	const employeePerson = input.employee?.person;
+	const employeeDob = employeePerson?.personalInfo?.dateOfBirth;
+	const periodStartDate = input.payrollPeriodData?.startDate;
+	if (employeeDob && periodStartDate) {
+		const dob = new Date(employeeDob);
+		const periodMonth = new Date(periodStartDate).getUTCMonth();
+		const periodYear = new Date(periodStartDate).getUTCFullYear();
+		// Employee birthday in payroll period month
+		if (dob.getUTCMonth() === periodMonth && dob.getUTCFullYear() === periodYear) {
+			sourceRow.birthdayGiftEmployee = BIRTHDAY_GIFT_AMOUNT;
+		}
+		// Beneficiary birthdays in payroll period month (isDependent=true or null)
+		const allChildren = employeePerson?.children || [];
+		const birthdayBeneficiaries = allChildren.filter((child: any) => {
+			if (!child.dateOfBirth) return false;
+			if (child.isDependent === false) return false;
+			const childDob = new Date(child.dateOfBirth);
+			return childDob.getUTCMonth() === periodMonth && childDob.getUTCFullYear() === periodYear;
+		});
+		if (birthdayBeneficiaries.length > 0) {
+			sourceRow.birthdayGiftKid = birthdayBeneficiaries.length * BIRTHDAY_GIFT_AMOUNT;
+		}
+	}
+	// ── End Birthday Gift ─────────────────────────────────────────────────────
+
 	const columns = BANDAI_PAYROLL_REGISTER_COLUMNS.map(([column, label, field]) => ({
 		column,
 		label,

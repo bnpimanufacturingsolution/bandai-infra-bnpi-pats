@@ -267,6 +267,16 @@ export interface Employee {
 			issuingCountry: string;
 			expiryDate: string;
 		};
+		children?: Array<{
+			id: string;
+			firstName: string;
+			middleName?: string;
+			lastName?: string;
+			dateOfBirth: string;
+			gender?: "male" | "female" | "other" | "not_applicable";
+			isDependent?: boolean;
+			notes?: string;
+		}>;
 		metadata?: any;
 		id: string;
 		organizationId: string;
