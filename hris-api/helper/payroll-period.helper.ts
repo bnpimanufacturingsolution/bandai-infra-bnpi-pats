@@ -4367,16 +4367,20 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		const periodMonth = new Date(periodStartDate).getUTCMonth();
 		const periodYear = new Date(periodStartDate).getUTCFullYear();
 		// Employee birthday in payroll period month
-		if (dob.getUTCMonth() === periodMonth && dob.getUTCFullYear() === periodYear) {
+		if (dob.getUTCMonth() === periodMonth) {
 			sourceRow.birthdayGiftEmployee = BIRTHDAY_GIFT_AMOUNT;
 		}
-		// Beneficiary birthdays in payroll period month (isDependent=true or null)
+		// Beneficiary birthdays in payroll period month (isDependent=true or null, age <= 12)
 		const allChildren = employeePerson?.children || [];
 		const birthdayBeneficiaries = allChildren.filter((child: any) => {
 			if (!child.dateOfBirth) return false;
 			if (child.isDependent === false) return false;
 			const childDob = new Date(child.dateOfBirth);
-			return childDob.getUTCMonth() === periodMonth && childDob.getUTCFullYear() === periodYear;
+			if (childDob.getUTCMonth() !== periodMonth) return false;
+			
+			// Enforce age limit (until 12 years old only)
+			const age = periodYear - childDob.getUTCFullYear();
+			return age >= 0 && age <= 12;
 		});
 		if (birthdayBeneficiaries.length > 0) {
 			sourceRow.birthdayGiftKid = birthdayBeneficiaries.length * BIRTHDAY_GIFT_AMOUNT;

@@ -6,6 +6,7 @@
 - **Resolved query defaults & soft-delete filtering**:
   - Frontend: Added `"person.children"` to default fields query in `useEmployees.ts` so that beneficiaries are requested and loaded.
   - Backend: Added `applyEmployeePersonChildrenSelectionDefaults()` to `employee.controller.ts` to filter out soft-deleted children when `person.children` fields are selected in list or single employee queries.
+- **Enforced Beneficiary Age Limit for Birthday Gifts**: Enforced a rule in `payroll-period.helper.ts` restricting child beneficiary birthday gifts to children who are 12 years old or under in the payroll period year. Also fixed a bug in the employee birthday matching logic that compared birth year to the payroll period year.
 
 ## Latest Task Addendum - 2026-08-31 Beneficiaries (children) feature — backend CRUD + frontend form + display
 
