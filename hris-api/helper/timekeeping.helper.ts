@@ -51,13 +51,16 @@ function formatBreakDisplayFromSchedule(schedule: EmployeeSchedule | null, date:
 /**
  * Determine attendance status based on timekeeping calculations
  * LEAVE must be explicitly set by leave workflow and is never auto-derived here.
+ *
+ * An employee is PRESENT as soon as they clock in (timeIn exists).
+ * No need to wait for clock-out. INCOMPLETE only when there is no timeIn.
  */
 export function determineAttendanceStatus(
 	_calc: TimekeepingCalculation,
-	hasTimeOut: boolean,
+	_hasTimeOut: boolean,
 	hasTimeIn = true,
 ): AttendanceStatus {
-	if (!hasTimeIn || !hasTimeOut) {
+	if (!hasTimeIn) {
 		return "INCOMPLETE";
 	}
 
