@@ -1,2 +1,0 @@
-title,description,type,startDate,endDate,isAllDay,timezone,year,tags,status
-Sample Foundation Day,Company holiday used by the migration sample pack,HOLIDAY,2026-04-09T00:00:00.000Z,2026-04-09T23:59:59.000Z,true,Asia/Manila,2026,"[""holiday"",""sample-pack""]",ACTIVE

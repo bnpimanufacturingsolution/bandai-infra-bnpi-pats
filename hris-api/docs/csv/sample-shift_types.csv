@@ -1,2 +1,0 @@
-code,name,isOvernight,isOff,timeSlots,isActive
-DAY-STD,Standard Day Shift,false,false,"[{""label"":""work"",""startTime"":""09:00"",""endTime"":""18:00""}]",true

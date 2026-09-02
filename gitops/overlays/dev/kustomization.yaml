@@ -1,8 +1,0 @@
-namespace: dev
-
-resources:
-  - ../../base
-  - namespace.yaml
-
-patches:
-  - path: environment-patch.yaml

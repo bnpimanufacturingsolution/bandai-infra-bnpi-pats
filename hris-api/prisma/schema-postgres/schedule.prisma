@@ -1,6 +1,0 @@
-// Scheduling models were split into:
-// - shiftType.prisma
-// - scheduleTemplate.prisma
-// - scheduleOverride.prisma
-// - departmentScheduleTemplate.prisma
-// Shared schedule types/enums live in scheduleTypes.prisma
