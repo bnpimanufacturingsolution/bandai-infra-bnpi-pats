@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "generatedFrom": [
+    "docs/dm-migration-workflow.md",
+    "hris-api/scripts/create-dm-migration-workbooks.cjs",
+    "data/import/bnpi-dm4-demo-sources.json"
+  ],
+  "items": [
+    {
+      "id": "dm1-template-workbook",
+      "dmPhase": "dm1",
+      "displayName": "DM1 master data migration workbook",
+      "sourceRef": "data/import/DM1-master-data-migration.xlsx",
+      "description": "Generated DM1 workbook from import CSVs.",
+      "sheetMappings": [
+        { "step": "DM1.1", "sheet": "Departments", "rowCount": 12 },
+        { "step": "DM1.2", "sheet": "Sections", "rowCount": 27 },
+        { "step": "DM1.3", "sheet": "Levels", "rowCount": 0 },
+        { "step": "DM1.4", "sheet": "Positions", "rowCount": 22 },
+        { "step": "DM1.5", "sheet": "Shift Types Schedules", "rowCount": 24 },
+        { "step": "DM1.6", "sheet": "Agencies", "rowCount": 5 }
+      ],
+      "downloadable": true,
+      "confidential": false
+    },
+    {
+      "id": "dm1-workflow-doc",
+      "dmPhase": "dm1",
+      "displayName": "DM migration workflow source of truth",
+      "sourceRef": "docs/dm-migration-workflow.md",
+      "description": "Canonical DM0 through FINAL workflow, dependency, and wired-sheet documentation.",
+      "sheetMappings": [
+        { "step": "DM1", "sheet": "Workflow documentation" },
+        { "step": "DM2", "sheet": "Workflow documentation" }
+      ],
+      "downloadable": true,
+      "confidential": false
+    },
+    {
+      "id": "dm-stage-migration-list",
+      "dmPhase": "dm1",
+      "displayName": "DM stage migration list",
+      "sourceRef": "docs/hris-dm-stage-migration-list.xlsx",
+      "description": "Stage workbook/list used as migration planning evidence.",
+      "sheetMappings": [
+        { "step": "DM1", "sheet": "Stage list" },
+        { "step": "DM2", "sheet": "Stage list" }
+      ],
+      "downloadable": true,
+      "confidential": false
+    },
+    {
+      "id": "dm2-template-workbook",
+      "dmPhase": "dm2",
+      "displayName": "DM2 policy data migration workbook",
+      "sourceRef": "data/import/DM2-policy-data-migration.xlsx",
+      "description": "Generated DM2 workbook from policy/catalog import CSVs.",
+      "sheetMappings": [
+        { "step": "DM2.1", "sheet": "Holidays", "rowCount": 23 },
+        { "step": "DM2.2", "sheet": "Leave Types", "rowCount": 12 },
+        { "step": "DM2.3", "sheet": "Benefit Types", "rowCount": 15 },
+        { "step": "DM2.4", "sheet": "Loan Types", "rowCount": 8 },
+        { "step": "DM2.5", "sheet": "201 Document Types", "rowCount": 0 }
+      ],
+      "downloadable": true,
+      "confidential": false
+    },
+    {
+      "id": "dm2-workflow-doc",
+      "dmPhase": "dm2",
+      "displayName": "DM migration workflow source of truth",
+      "sourceRef": "docs/dm-migration-workflow.md",
+      "description": "Canonical DM2 policy/catalog dependency and wired-sheet documentation.",
+      "sheetMappings": [
+        { "step": "DM2", "sheet": "Workflow documentation" }
+      ],
+      "downloadable": true,
+      "confidential": false
+    },
+    {
+      "id": "dm2-stage-migration-list",
+      "dmPhase": "dm2",
+      "displayName": "DM stage migration list",
+      "sourceRef": "docs/hris-dm-stage-migration-list.xlsx",
+      "description": "Stage workbook/list used as migration planning evidence.",
+      "sheetMappings": [
+        { "step": "DM2", "sheet": "Stage list" }
+      ],
+      "downloadable": true,
+      "confidential": false
+    },
+    {
+      "id": "dm3-generated-workbook",
+      "dmPhase": "dm3",
+      "displayName": "DM3 employee data migration workbook",
+      "sourceRef": "data/import/DM3-employee-data-migration.xlsx",
+      "description": "Generated DM3 workbook assembled from employee source transformations.",
+      "sheetMappings": [
+        { "step": "DM3.1", "sheet": "Employees", "rowCount": 2212 },
+        { "step": "DM3.2", "sheet": "Employee Schedule Assignments", "rowCount": 764 },
+        { "step": "DM3.3", "sheet": "Reporting Lines", "rowCount": 805 },
+        { "step": "DM3.4", "sheet": "Employee Documents 201 Files", "rowCount": 0 },
+        { "step": "DM3.5", "sheet": "Opening Leave Balances", "rowCount": 2428 },
+        { "step": "DM3.6", "sheet": "Employee Benefits Loans", "rowCount": 3486 }
+      ],
+      "downloadable": true,
+      "confidential": false
+    },
+    {
+      "id": "dm3-bnpi-masterlist",
+      "dmPhase": "dm3",
+      "displayName": "BNPI masterlist",
+      "sourceRef": "docs/BNPI_MASTERLIST.xlsx",
+      "description": "BNPI employee master source. The DM workflow documents 857 active filtered employee rows for import.",
+      "sheetMappings": [
+        { "step": "DM3.1", "sheet": "Manpower Databank", "rowCount": 857 },
+        { "step": "DM1.2", "sheet": "Manpower Databank section wording" }
+      ],
+      "downloadable": true,
+      "confidential": true
+    },
+    {
+      "id": "dm3-breaktime-schedule",
+      "dmPhase": "dm3",
+      "displayName": "Breaktime schedule",
+      "sourceRef": "docs/Breaktime Schedule.xlsx",
+      "description": "BNPI recurring schedule assignment evidence by employee id, section sheet, work schedule, and lunch break.",
+      "sheetMappings": [
+        { "step": "DM3.2", "sheet": "Section schedule sheets" }
+      ],
+      "downloadable": true,
+      "confidential": true
+    },
+    {
+      "id": "dm3-org-chart",
+      "dmPhase": "dm3",
+      "displayName": "FY2025 BNPI organization chart",
+      "sourceRef": "docs/FY2025_BNPI Organization Chart - as of March 31, 2026.xlsx",
+      "description": "Visual organization chart source for typed employee-ID reporting relationships.",
+      "sheetMappings": [
+        { "step": "DM3.3", "sheet": "Updated Org Chart", "rowCount": 289 }
+      ],
+      "downloadable": true,
+      "confidential": true
+    },
+    {
+      "id": "dm3-leave-balance",
+      "dmPhase": "dm3",
+      "displayName": "Leave balance as of June 4, 2026",
+      "sourceRef": "docs/rptLeaveBalance as of June 4, 2026.xlsx",
+      "description": "BNPI opening leave balance source for VL, SL, and ACL by employee id.",
+      "sheetMappings": [
+        { "step": "DM3.5", "sheet": "rptLeaveBalance", "rowCount": 855 }
+      ],
+      "downloadable": true,
+      "confidential": true
+    },
+    {
+      "id": "dm3-payroll-basic-salary",
+      "dmPhase": "dm3",
+      "displayName": "Payroll computation basic salary source",
+      "sourceRef": "docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx",
+      "description": "Payroll-approved period Basic Salary source for DM3 Employees.BASIC_SALARY. The local workbook is password-protected.",
+      "sheetMappings": [
+        { "step": "DM3.1", "sheet": "Sheet2 / Basic Salary" }
+      ],
+      "downloadable": true,
+      "confidential": true
+    },
+    {
+      "id": "dm3-agency-workbooks",
+      "dmPhase": "dm3",
+      "displayName": "Agency workforce source workbooks",
+      "sourceRef": "docs/AGENCY/*.xlsx",
+      "description": "Agency employee source workbooks for Avance, Cepol, CGSI, Kohsai, and Natcorp.",
+      "sheetMappings": [
+        { "step": "DM1.6", "sheet": "Agencies" },
+        { "step": "DM3.1", "sheet": "Agency employee rows", "rowCount": 1355 }
+      ],
+      "downloadable": false,
+      "confidential": true
+    },
+    {
+      "id": "dm4-template-workbook",
+      "dmPhase": "dm4",
+      "displayName": "DM4 attendance and timesheet workbook",
+      "sourceRef": "data/import/DM4-attendance-timesheet-migration.xlsx",
+      "description": "Template-only workbook. DM4 import uses source biometric workbooks and approved overtime proof through durable runs.",
+      "sheetMappings": [
+        { "step": "DM4.1", "sheet": "Attendance History", "rowCount": 1 },
+        { "step": "DM4.2", "sheet": "Timesheets", "rowCount": 1 }
+      ],
+      "downloadable": true,
+      "confidential": false
+    },
+    {
+      "id": "dm4-biometric-folder",
+      "dmPhase": "dm4",
+      "displayName": "BNPI 2026 biometric workbooks",
+      "sourceRef": "docs/2026-20260527T124252Z-3-001/2026",
+      "description": "Folder reference resolved by the DM4 durable run into concrete biometric workbook files.",
+      "sheetMappings": [
+        { "step": "DM4.1", "sheet": "Attendance History" },
+        { "step": "DM4.2", "sheet": "Timesheets" }
+      ],
+      "downloadable": false,
+      "confidential": true
+    },
+    {
+      "id": "dm4-approved-overtime",
+      "dmPhase": "dm4",
+      "displayName": "2026 approved overtime details",
+      "sourceRef": "docs/Bandai Payroll/2026 rptOvertimeDetails.xlsx",
+      "description": "Approved overtime/rest-day/holiday detail source for DM4.3 effective timesheet line updates.",
+      "sheetMappings": [
+        { "step": "DM4.3", "sheet": "rptOvertimeDetails", "rowCount": 121421 }
+      ],
+      "downloadable": true,
+      "confidential": true
+    },
+    {
+      "id": "dm5-payroll-history",
+      "dmPhase": "dm5",
+      "displayName": "DM5 payroll history workbook",
+      "sourceRef": "Not configured",
+      "description": "Planned after payroll setup, employees, and DM4 timesheet/approved-OT proof.",
+      "sheetMappings": [
+        { "step": "DM5.1", "sheet": "Payroll History" }
+      ],
+      "downloadable": false,
+      "confidential": false
+    },
+    {
+      "id": "dm6-request-history",
+      "dmPhase": "dm6",
+      "displayName": "DM6 request and approval history workbook",
+      "sourceRef": "Not configured",
+      "description": "Planned after workflow templates and employees are stable.",
+      "sheetMappings": [
+        { "step": "DM6.1", "sheet": "Requests / Approval History" }
+      ],
+      "downloadable": false,
+      "confidential": false
+    },
+    {
+      "id": "final-reconciliation",
+      "dmPhase": "final",
+      "displayName": "Final reconciliation and sign-off",
+      "sourceRef": "Manual QA",
+      "description": "Manual reconciliation and sign-off phase after DM5 and DM6.",
+      "sheetMappings": [
+        { "step": "FINAL.1", "sheet": "Reconciliation / Sign-off" }
+      ],
+      "downloadable": false,
+      "confidential": false
+    }
+  ]
+}

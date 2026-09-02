@@ -1,0 +1,80 @@
+{
+  "title": "Infrastructure Dashboard",
+  "uid": "infrastructure",
+  "tags": ["infrastructure", "monitoring"],
+  "panels": [
+    {
+      "title": "CPU Usage",
+      "targets": [
+        {
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Memory Usage",
+      "targets": [
+        {
+          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Disk Usage",
+      "targets": [
+        {
+          "expr": "(1 - (node_filesystem_avail_bytes{fstype=~\"ext4|xfs\"} / node_filesystem_size_bytes{fstype=~\"ext4|xfs\"})) * 100"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Network I/O",
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total[5m])",
+          "legendFormat": "Receive"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total[5m])",
+          "legendFormat": "Transmit"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Disk I/O",
+      "targets": [
+        {
+          "expr": "rate(node_disk_read_bytes_total[5m])",
+          "legendFormat": "Read"
+        },
+        {
+          "expr": "rate(node_disk_written_bytes_total[5m])",
+          "legendFormat": "Write"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "type": "timeseries"
+    },
+    {
+      "title": "System Load",
+      "targets": [
+        {
+          "expr": "node_load1"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 37,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" }
+}

@@ -1,0 +1,54 @@
+{
+  "title": "Trace Dashboard",
+  "uid": "traces",
+  "tags": ["traces", "tracing"],
+  "panels": [
+    {
+      "title": "Slow Requests (>1s)",
+      "datasource": "Tempo",
+      "targets": [
+        {
+          "expr": "{duration>1s}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "type": "nodeGraph"
+    },
+    {
+      "title": "Top 10 Slowest Requests",
+      "datasource": "Tempo",
+      "targets": [
+        {
+          "expr": "topk(10, {duration})"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "type": "timeseries"
+    },
+    {
+      "title": "Trace Search Results",
+      "datasource": "Tempo",
+      "targets": [
+        {
+          "expr": "topk(10, {duration})"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "type": "table"
+    },
+    {
+      "title": "Service Dependency Map",
+      "datasource": "Tempo",
+      "targets": [
+        {
+          "expr": "dependencies()"
+        }
+      ],
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 16 },
+      "type": "nodeGraph"
+    }
+  ],
+  "schemaVersion": 37,
+  "version": 1,
+  "time": { "from": "now-6h", "to": "now" }
+}
