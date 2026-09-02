@@ -1,3 +1,17 @@
+## Latest Task Addendum - 2026-09-02 Auto Approve Timesheet made functional (submit paths + UI toggle)
+
+- **Enabled the admin "Auto Approve Timesheet" toggle end-to-end**: when `TimesheetConfig.enableAutoApprove` is ON, timesheet submissions now land directly as `APPROVED` with no approval Request created and no review step (Bandai requirement: automatic approval on submission). When OFF, behavior is unchanged (SUBMITTED + approval request). Already-SUBMITTED timesheets keep requiring manual approval — the flag affects future submissions only.
+- **Implementation (`hris-api/app/timesheet/timesheet.controller.ts`)**:
+  - New pure helpers exported next to `evaluateTimesheetSubmitEligibility`: `resolveTimesheetSubmissionOutcome(enableAutoApprove)` → `{ status, autoApproved }` and `buildAutoApprovedSubmissionMetadata(existingMetadata, submittedAt, submittedBy)` (mirrors the manual APPROVE snapshot shape: `snapshotState: "APPROVED"`, `snapshotLockedAt/LockedBy`, plus `autoApproved: true` and `autoApprovedReason: "ORG_POLICY_ENABLE_AUTO_APPROVE"` for audit).
+  - All 3 submission paths honor the policy: action `SUBMIT` case (~3410/3478, request creation guarded at ~3633), employee `submit` resubmit branch (~4588/4664, request guarded at ~4769), and new-timesheet auto-generate branch (~4836 passes `submissionOutcome.status` to `generateTimesheetForEmployee`, ~4860 stamps auto-approve metadata / skips request).
+  - `getConfig`/`updateConfig` now return `approvalRequired: !enableAutoApprove` (was hardcoded `true`).
+- **UI (`hris-app/app/routes/admin/rules-policies/timesheet.tsx`)**: removed `disabled` from the Auto Approve toggle (page already persisted the field) and added an "Auto approve: Approved on submit / Manual review" chip to the Source Of Truth Snapshot grid.
+- **Tests**: new `hris-api/tests/timesheet-auto-approve.spec.ts` (6 tests: OFF keeps SUBMITTED flow incl. undefined/null, ON lands APPROVED, auto-approve never bypasses the edit-permission resubmission gate, metadata shape + no mutation). Scoped run: 15 passing (6 new + 9 existing eligibility/refresh), exit 0.
+- **Endpoint proof**: admin login → `GET /api/timesheet/config` → `PATCH { enableAutoApprove: true }` → GET shows `enableAutoApprove: true, approvalRequired: false` → restored to `false/true`. Evidence: `.runtime/endpoint-proof-auto-approve-20260902-144020/` (4 JSON captures).
+- **Typecheck**: `tsc --noEmit` on hris-api reports zero errors mentioning timesheet files (pre-existing errors in unrelated files remain, e.g. statutory-remittance.generator.ts, apiActivityLogging.ts). Note: hris-app ESLint is broken at tool level on this host (`createRequire` redeclaration crash before any file is linted — reproduced on untouched `setup.tsx`; pre-existing, not caused by this task).
+- **Not touched**: workflow engine, request-runtime, notifications, payroll, device code. No Prisma migration (column already existed, `timesheet.prisma:34`).
+
+
 ## Latest Task Addendum - 2026-08-31 Beneficiaries (children) persistence fix — controller schema bypass + default fields query
 
 - **Diagnosed and Fixed persistence issue**: The employee composite PATCH route was crashing with a `PrismaClientValidationError` because the raw `children` array was passed directly into `prisma.person.update()`. We updated the controller to strip `children` before updating the `Person` record and to use the `syncPersonBeneficiaries()` utility to handle relation syncing.
