@@ -43,7 +43,7 @@ From `GET /api/timesheet/config` on 2026-08-18:
 | Setting | Live value | Effect |
 |---|---|---|
 | `requireManagerApprovedOvertime` | **true** | Extra hours stay candidate until approved. Code treats unset as true (`!== false`). |
-| `enableAutoApprove` | **false** | Submitting a timesheet does **not** auto-approve it. |
+| `enableAutoApprove` | **false** | Submitting a timesheet does **not** auto-approve it. Functional since 2026-09-02: when admin sets it true, submissions land directly `APPROVED` (approvedBy/approvalDate + `autoApproved` metadata) with no approval request; config responses also derive `approvalRequired = !enableAutoApprove`. |
 | `overtimeFlagThresholdMinutes` | **60** | Candidate / OVERTIME flag only if overtime ≥ 1 hour |
 
 Seeds and `getOrCreateNormalizedTimesheetConfig` also default `requireManagerApprovedOvertime` to true.
