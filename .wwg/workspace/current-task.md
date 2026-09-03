@@ -1,3 +1,11 @@
+## Latest Task Addendum - 2026-09-03: Stray ssh/cloudflared console windows during npm run dev (fixed)
+
+- **Symptom:** on a desktop session, `npm run dev` left two stray console windows on the taskbar: `C:\Windows\System32\OpenSSH\ssh.exe` and `C:\Program Files (x86)\cloudflared\cloudflared.exe`.
+- **Root cause:** `scripts/start-hikvision-remote-device-tunnel.ps1` created its detached long-lived ssh.exe via WMI `Win32_Process.Create` without `CREATE_NO_WINDOW` — WMI-created console processes get a brand-new VISIBLE console on interactive desktop sessions; the cloudflared `access ssh` ProxyCommand child rides beside it. The DB-forward and vm-bridge ssh paths were already `Start-Process -WindowStyle Hidden`, which is why only this pair appeared.
+- **Fix (`a2e0eb15`):** build the tunnel ssh through `Start-Process -WindowStyle Hidden` (same proven detached pattern as `start-k8s-dev-db-access.ps1`). Start-Process children are not in the caller's Job Object, so the tunnel still survives predev/npm exiting. First attempt with `Win32_ProcessStartup` via `Invoke-CimMethod` failed (ReturnValue=21, invalid embedded CIM instance) — abandoned for the Start-Process path.
+- **Live proof:** tunnel restarted via `project-truth-hris` → status `running`, all 18 forwards `TcpOk=true` (10080-10085/10443-10448/18000-18005), new ssh PID 14440 `MainWindowHandle=0`, survived launcher shell exit with listeners still bound. Pushed to `origin/develop`.
+- No new recommendations identified.
+
 ## Latest Task Addendum - 2026-09-03: Dev workstation onboarding automation (SSH + DEV DB access)
 
 - **Problem:** a second dev machine (`C:\Users\Argel`) running `npm run dev` hard-failed at predev step 4/9 `ensure-bnpi-db-access`: `scripts/start-k8s-dev-db-access.ps1` throws `SSH key not found at %USERPROFILE%\.ssh\node-health-appliance_ed25519` (workstation-only file, never committed), then predev mislabeled the failure as `ensure-dev-port-ownership` (parallel-phase reporting bug).
