@@ -32,8 +32,15 @@ function Stop-ExistingTunnel {
   if (-not (Test-Path -LiteralPath $pidFile)) { return }
   $record = Get-Content -Raw -LiteralPath $pidFile | ConvertFrom-Json
   try {
-    Stop-Process -Id $record.ProcessId -Force -ErrorAction Stop
-    Write-Host "Stopped Hikvision remote device tunnel PID $($record.ProcessId)"
+    # The recorded PID is the conhost --headless wrapper; kill its whole tree
+    # (conhost + ssh + cloudflared ProxyCommand child), not just the wrapper.
+    $taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
+    & $taskkill /PID $record.ProcessId /T /F *> $null
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "Stopped Hikvision remote device tunnel tree PID $($record.ProcessId)"
+    } else {
+      Write-Host "Hikvision remote device tunnel PID $($record.ProcessId) is not running"
+    }
   } catch {
     Write-Host "Hikvision remote device tunnel PID $($record.ProcessId) is not running"
   }
@@ -83,8 +90,7 @@ function Test-SshTarget {
 function Start-Tunnel {
   param([string]$Target, [bool]$UseKey, [object[]]$ForwardSpecs)
   # Log via OpenSSH -E so we do not attach redirected handles that die with the
-  # parent shell/job. Create the process through WMI so agent/tool Job Objects
-  # do not kill the tunnel when the launcher session exits.
+  # parent shell/job.
   $logPath = Join-Path $runRoot 'ssh.log'
   $argParts = @(
     '-N',
@@ -104,22 +110,18 @@ function Start-Tunnel {
   }
   $argParts += $Target
 
-  $commandLine = @($sshExe) + $argParts -join ' '
-  $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
-    CommandLine = $commandLine
-    CurrentDirectory = $repoRoot
-  }
-  if ($null -eq $created -or [int]$created.ReturnValue -ne 0) {
-    throw "Failed to create detached SSH tunnel process (ReturnValue=$($created.ReturnValue)). Command: $commandLine"
-  }
-
-  $processId = [int]$created.ProcessId
-  $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
-  if (-not $process) {
-    throw "SSH tunnel process $processId was created but is not running. See $logPath"
-  }
-  # Fake a process object shape used by the readiness loop.
-  return $process
+  # Start-Process -WindowStyle Hidden: the tunnel and its inherited
+  # cloudflared ProxyCommand child must never own a visible console window
+  # (WMI Win32_Process.Create without CREATE_NO_WINDOW spawned the stray
+  # "System32\...\ssh.exe" + "Program Files\...\cloudflared.exe" windows
+  # during npm run dev). Start-Process children are not in the caller's Job
+  # Object, so the detached tunnel survives predev/npm exiting — same
+  # proven pattern as start-k8s-dev-db-access.ps1.
+  return Start-Process -FilePath $sshExe `
+    -ArgumentList $argParts `
+    -WindowStyle Hidden `
+    -WorkingDirectory $repoRoot `
+    -PassThru
 }
 
 function Set-LocalApiTunnelEnv {
