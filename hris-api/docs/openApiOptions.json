@@ -1,0 +1,67 @@
+{
+	"failOnErrors": true,
+	"definition": {
+		"openapi": "3.1.0",
+		"info": {
+			"title": "1BIS Backend API",
+			"version": "1.0.0",
+			"description": "Welcome to the 1BIS API documentation. This is a RESTful API that allows you to interact with the 1BIS backend services.",
+			"contact": {
+				"name": "1BIS Support",
+				"email": "support@1bis.com",
+				"url": "https://1bis.com/support"
+			},
+			"license": {
+				"name": "MIT",
+				"url": "https://opensource.org/licenses/MIT"
+			},
+			"termsOfService": "https://1bis.com/terms"
+		},
+		"servers": [
+			{
+				"url": "/api",
+				"description": "Development server"
+			},
+			{
+				"url": "https://api.1bis.com/api",
+				"description": "Production server"
+			}
+		],
+		"tags": [
+			{
+				"name": "Template",
+				"description": "Template management operations",
+				"externalDocs": {
+					"description": "Find out more about templates",
+					"url": "https://1bis.com/docs/templates"
+				}
+			},
+			{
+				"name": "Documentation",
+				"description": "API documentation endpoints"
+			}
+		],
+		"security": [
+			{
+				"bearerAuth": []
+			}
+		],
+		"components": {
+			"securitySchemes": {
+				"bearerAuth": {
+					"type": "http",
+					"scheme": "bearer",
+					"bearerFormat": "JWT",
+					"description": "JWT Authorization header using the Bearer scheme. Example: 'Authorization: Bearer {token}'"
+				},
+				"apiKey": {
+					"type": "apiKey",
+					"in": "header",
+					"name": "X-API-Key",
+					"description": "API Key for authentication"
+				}
+			}
+		}
+	},
+	"apis": ["./docs/models/*.yaml", "./app/**/*.router.ts", "./dist/**/*.router.js"]
+}

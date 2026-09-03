@@ -1,0 +1,19 @@
+model ActivityLogging {
+  id             String    @id @default(cuid())
+  employeeId     String?
+  employee       Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  headers        Json?
+  ip             String
+  path           String
+  method         String
+  page           Json?
+  action         String
+  description    String
+  payload        Json? // Request/Response payload (can contain {entry: {...}, exit: {...}})
+  organizationId String?
+  entityType     String?
+  archive        Json?
+  isDeleted      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}

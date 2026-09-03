@@ -1,0 +1,12 @@
+[Unit]
+Description=Project Truth LAN config
+Before=network-online.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/project-truth-lan-config
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Project Truth OS-level Git sync
+After=network-online.target k3s.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=PROJECT_TRUTH_REPO_URL=https://github.com/hrisworkforcesystem-coder/bandai-infra.git
+Environment=PROJECT_TRUTH_BRANCH=develop
+EnvironmentFile=-/etc/project-truth/os-sync.env
+ExecStart=/usr/local/bin/project-truth-os-sync

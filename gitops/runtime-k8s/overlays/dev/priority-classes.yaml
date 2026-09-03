@@ -1,0 +1,10 @@
+# DEV owns only its cluster-scoped PriorityClass. Other environment apps own theirs.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: project-truth-dev
+  labels:
+    app.kubernetes.io/part-of: project-truth
+value: 10000
+globalDefault: false
+description: Project Truth DEV - lowest preference; keeps recovery burst limits without starving PROD

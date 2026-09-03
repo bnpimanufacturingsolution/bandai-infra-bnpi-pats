@@ -1,0 +1,48 @@
+model BoardingProcess {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId String @db.ObjectId
+
+  employeeId String   @db.ObjectId
+  employee   Employee @relation("EmployeeBoardingProcesses", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  departmentId String?     @db.ObjectId
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  type   BoardingType
+  status BoardingStatus @default(NOT_STARTED)
+
+  startDate          DateTime  @default(now())
+  targetDate         DateTime // Complete date for onboarding, last working day for offboarding
+  actualCompleteDate DateTime?
+
+  exitReason String? // For offboarding only
+
+  assignedToId   String?
+  assignedToName String?
+
+  checklistItems ChecklistItem[]
+  notes          Note[]
+
+  metadata Json? // Flexible field for additional data
+
+  lastViewedAt         DateTime?
+  reminderFrequency    String? // DAILY, WEEKLY, etc.
+  completionPercentage Int       @default(0) // Cache this for performance
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum BoardingType {
+  ONBOARDING
+  OFFBOARDING
+}
+
+enum BoardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}

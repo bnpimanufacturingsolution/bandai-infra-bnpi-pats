@@ -1,0 +1,11 @@
+employeeId,date,timeIn,timeBreak,timeOut,status,notes,deviceEmpId,metadata,scheduleSnapshot
+BNEI-001,2099-01-02T00:00:00.000Z,2099-01-02T09:00:00.000Z,2099-01-02T12:00:00.000Z,2099-01-02T18:00:00.000Z,PRESENT,Sample attendance row,DEV-001,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+BNEI-002,2099-01-03T00:00:00.000Z,2099-01-03T09:00:00.000Z,2099-01-03T12:00:00.000Z,2099-01-03T18:00:00.000Z,PRESENT,Sample attendance row,DEV-002,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+BNEI-003,2099-01-04T00:00:00.000Z,2099-01-04T09:00:00.000Z,2099-01-04T12:00:00.000Z,2099-01-04T18:00:00.000Z,PRESENT,Sample attendance row,DEV-003,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+00050,2099-01-05T00:00:00.000Z,2099-01-05T09:00:00.000Z,2099-01-05T12:00:00.000Z,2099-01-05T18:00:00.000Z,PRESENT,Sample attendance row,DEV-004,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+00062,2099-01-06T00:00:00.000Z,2099-01-06T09:00:00.000Z,2099-01-06T12:00:00.000Z,2099-01-06T18:00:00.000Z,PRESENT,Sample attendance row,DEV-005,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+00065,2099-01-07T00:00:00.000Z,2099-01-07T09:00:00.000Z,2099-01-07T12:00:00.000Z,2099-01-07T18:00:00.000Z,PRESENT,Sample attendance row,DEV-006,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+00073,2099-01-08T00:00:00.000Z,2099-01-08T09:00:00.000Z,2099-01-08T12:00:00.000Z,2099-01-08T18:00:00.000Z,PRESENT,Sample attendance row,DEV-007,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+00083,2099-01-09T00:00:00.000Z,2099-01-09T09:00:00.000Z,2099-01-09T12:00:00.000Z,2099-01-09T18:00:00.000Z,PRESENT,Sample attendance row,DEV-008,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+00088,2099-01-10T00:00:00.000Z,2099-01-10T09:00:00.000Z,2099-01-10T12:00:00.000Z,2099-01-10T18:00:00.000Z,PRESENT,Sample attendance row,DEV-009,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"
+00104,2099-01-11T00:00:00.000Z,2099-01-11T09:00:00.000Z,2099-01-11T12:00:00.000Z,2099-01-11T18:00:00.000Z,PRESENT,Sample attendance row,DEV-010,"{""source"":""sample-pack""}","{""shiftTypeCode"":""DAY-STD""}"

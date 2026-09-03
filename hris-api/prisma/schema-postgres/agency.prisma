@@ -1,0 +1,36 @@
+enum WorkforceSource {
+  DIRECT
+  AGENCY
+}
+
+enum DayLaborType {
+  DIRECT
+  INDIRECT
+}
+
+enum AgencyStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Agency {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  status         AgencyStatus @default(ACTIVE)
+  contactName    String?
+  contactEmail   String?
+  contactPhone   String?
+  metadata       Json?
+  isDeleted      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  employees Employee[]
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+  @@map("agencies")
+}

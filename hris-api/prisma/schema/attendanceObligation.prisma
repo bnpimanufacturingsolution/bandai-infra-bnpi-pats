@@ -1,0 +1,67 @@
+model AttendanceObligation {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId  String
+  employee        Employee      @relation(fields: [employeeId], references: [id])
+  employeeId      String        @db.ObjectId
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id])
+  payrollPeriodId String        @db.ObjectId
+
+  date         DateTime @db.Date
+  businessDate String
+  timezone     String   @default("Asia/Manila")
+  status       String   @default("EXPECTED")
+  phase        String   @default("PLANNED")
+
+  attendance      Attendance?    @relation(fields: [attendanceId], references: [id])
+  attendanceId    String?        @db.ObjectId
+  timesheet       Timesheet?     @relation(fields: [timesheetId], references: [id])
+  timesheetId     String?        @db.ObjectId
+  timesheetline   Timesheetline? @relation(fields: [timesheetlineId], references: [id])
+  timesheetlineId String?        @db.ObjectId
+
+  expectedStartAt DateTime?
+  expectedEndAt   DateTime?
+  timeIn          DateTime?
+  timeBreak       DateTime?
+  timeOut         DateTime?
+
+  hoursWorked    String?
+  regularHours   String?
+  overtimeHours  String?
+  undertimeHours String?
+  lateHours      String?
+  earlyOutHours  String?
+  breakMinutes   Int?
+
+  behaviorFlags       String[] @default([])
+  scheduleSnapshot    Json?
+  scheduleFingerprint String?
+  source              String
+  sourceRequestId     String?  @db.ObjectId
+  metadata            Json?
+
+  employeeCodeSnapshot    String?
+  employeeNameSnapshot    String?
+  departmentIdSnapshot    String?          @db.ObjectId
+  departmentNameSnapshot  String?
+  reportToIdSnapshot      String?          @db.ObjectId
+  workforceSourceSnapshot WorkforceSource?
+  agencyIdSnapshot        String?          @db.ObjectId
+  dayLaborType            DayLaborType?
+
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([organizationId, employeeId, payrollPeriodId, date])
+  @@index([organizationId, payrollPeriodId, status, isDeleted])
+  @@index([organizationId, date, status, isDeleted])
+  @@index([organizationId, employeeId, date, isDeleted])
+  @@index([organizationId, departmentIdSnapshot, date, isDeleted])
+  @@index([organizationId, reportToIdSnapshot, date, isDeleted])
+  @@index([attendanceId])
+  @@index([timesheetId])
+  @@index([timesheetlineId])
+  @@map("attendance_obligations")
+}

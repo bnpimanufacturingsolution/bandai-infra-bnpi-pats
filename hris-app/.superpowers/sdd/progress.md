@@ -1,0 +1,6 @@
+Task 1: complete (commits e262b9b..751deda, review approved; minor follow-ups recorded)
+Task 2/3: complete (commits cfd3cd7..cbb0beb, review approved; schedule contract/helper/controller tests passing)
+Task 4: complete (commits a84bf28..4a730b7, review approved; focused payroll tests and source-truth suite passing)
+Task 5: complete (commit a419b320, frontend schedule selector + 21 focused Vitest tests passing)
+Task 6: complete (docs + testing-strategy + focused evidence commands; API 1e18c8d5, app 92b350b0)
+Task 7: complete (full verification handoff; see task-7-report.md — 78 API focused, 84 payroll source-truth, 21 app focused)

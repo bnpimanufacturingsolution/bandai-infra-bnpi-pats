@@ -1,0 +1,75 @@
+{
+  "kind": "skills",
+  "target": "C:\\Users\\Renz\\Documents\\hris\\hris-api",
+  "targetDisplay": ".",
+  "command": "wwg dev refresh skills --target C:\\Users\\Renz\\Documents\\hris\\hris-api",
+  "dryRun": false,
+  "sourceArtifactsRead": [],
+  "missingCanonicalSources": [],
+  "writes": [
+    {
+      "path": "workspace/skills/change-classifier.skill.md",
+      "action": "unchanged",
+      "ownership": "wwg-generated"
+    },
+    {
+      "path": "workspace/skills/context-skill-maintenance.skill.md",
+      "action": "unchanged",
+      "ownership": "wwg-generated"
+    },
+    {
+      "path": "workspace/skills/drift-detector.skill.md",
+      "action": "unchanged",
+      "ownership": "wwg-generated"
+    },
+    {
+      "path": "workspace/skills/regression-guardrail-maintenance.skill.md",
+      "action": "unchanged",
+      "ownership": "wwg-generated"
+    },
+    {
+      "path": "workspace/skills/task-router.skill.md",
+      "action": "unchanged",
+      "ownership": "wwg-generated"
+    },
+    {
+      "path": "workspace/skills/README.md",
+      "action": "unchanged",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "SKILL_INDEX"
+    },
+    {
+      "path": "workspace/skills/skill-index.md",
+      "action": "skipped",
+      "ownership": "wwg-generated",
+      "reason": "Generated section SKILL_INDEX was not found.",
+      "sectionName": "SKILL_INDEX"
+    },
+    {
+      "path": ".wwg/config/skill-manifest.yaml",
+      "action": "updated",
+      "ownership": "wwg-generated",
+      "reason": "Skill Manifest records project skill state only; recommended/reference-only skills are not runtime-active."
+    }
+  ],
+  "filesCreated": [],
+  "filesUpdated": [
+    ".wwg/config/skill-manifest.yaml"
+  ],
+  "filesSkipped": [
+    "workspace/skills/skill-index.md - Generated section SKILL_INDEX was not found."
+  ],
+  "generatedSectionsUpdated": [],
+  "warnings": [
+    ".wwg/config/skill-manifest.yaml: Skill Manifest records project skill state only; recommended/reference-only skills are not runtime-active.",
+    "workspace/skills/skill-index.md: Generated section SKILL_INDEX was not found."
+  ],
+  "validationPerformed": [
+    "Verified wwg.project.yaml exists and can be parsed.",
+    "Compiled generation inputs deterministically without LLM calls.",
+    "Applied generated-section safety rules.",
+    "Recorded markdown and JSON generation reports.",
+    "Generated project-local Skill Manifest from profile recommendations, registry metadata, local evidence, and governed compatibility copy policy without activating skills."
+  ],
+  "registryUpdated": true
+}

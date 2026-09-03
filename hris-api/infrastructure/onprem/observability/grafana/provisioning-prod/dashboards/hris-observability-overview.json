@@ -1,0 +1,107 @@
+{
+  "uid": "hris-observability-overview",
+  "title": "HRIS Observability Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "tags": ["hris", "onprem", "observability"],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Up Targets",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(up)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Container CPU Cores (sum)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(container_cpu_usage_seconds_total{id=~\".*(docker-[a-f0-9]+\\\\.scope|cri-containerd-[a-f0-9]+\\\\.scope)$\"}[5m]))", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cores"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Container Memory (GiB)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum(container_memory_working_set_bytes{id=~\".*(docker-[a-f0-9]+\\\\.scope|cri-containerd-[a-f0-9]+\\\\.scope)$\"}) / 1024 / 1024 / 1024", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "gbytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Node CPU Busy (%)",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Container CPU by Runtime Cgroup",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum by (id) (rate(container_cpu_usage_seconds_total{id=~\".*(docker-[a-f0-9]+\\\\.scope|cri-containerd-[a-f0-9]+\\\\.scope)$\"}[5m]))",
+          "legendFormat": "{{id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Container Memory by Runtime Cgroup",
+      "datasource": "Prometheus",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum by (id) (container_memory_working_set_bytes{id=~\".*(docker-[a-f0-9]+\\\\.scope|cri-containerd-[a-f0-9]+\\\\.scope)$\"})",
+          "legendFormat": "{{id}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

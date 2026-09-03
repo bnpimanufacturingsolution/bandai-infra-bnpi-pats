@@ -1,0 +1,11 @@
+workflowCode,workflowSourceKey,requestCode,requestSourceKey,stepNumber,stepName,stepType,assigneeType,assigneeRole,assigneeEmployeeId,status,completedAt,comments,metadata,isRequired
+WF-REQ-2026-0001,WF-RUN-0001,REQ-2026-0001,REQ-SRC-0001,1,Request Submission,SUBMISSION,REQUESTER,Requester,BNEI-001,COMPLETED,2026-04-05T09:00:00.000Z,Submitted by employee,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0001,WF-RUN-0001,REQ-2026-0001,REQ-SRC-0001,2,Manager Approval,APPROVAL,SUPERVISOR,Manager,BNEI-001,PENDING,,Awaiting manager review,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0002,WF-RUN-0002,REQ-2026-0002,REQ-SRC-0002,1,Request Submission,SUBMISSION,REQUESTER,Requester,BNEI-002,COMPLETED,2026-04-06T09:00:00.000Z,Submitted by employee,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0002,WF-RUN-0002,REQ-2026-0002,REQ-SRC-0002,2,Manager Approval,APPROVAL,SUPERVISOR,Manager,BNEI-001,PENDING,,Awaiting manager review,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0003,WF-RUN-0003,REQ-2026-0003,REQ-SRC-0003,1,Request Submission,SUBMISSION,REQUESTER,Requester,BNEI-003,COMPLETED,2026-04-07T09:00:00.000Z,Submitted by employee,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0003,WF-RUN-0003,REQ-2026-0003,REQ-SRC-0003,2,Manager Approval,APPROVAL,SUPERVISOR,Manager,BNEI-002,PENDING,,Awaiting manager review,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0004,WF-RUN-0004,REQ-2026-0004,REQ-SRC-0004,1,Request Submission,SUBMISSION,REQUESTER,Requester,00050,COMPLETED,2026-04-08T09:00:00.000Z,Submitted by employee,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0004,WF-RUN-0004,REQ-2026-0004,REQ-SRC-0004,2,Manager Approval,APPROVAL,SUPERVISOR,Manager,BNEI-001,PENDING,,Awaiting manager review,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0005,WF-RUN-0005,REQ-2026-0005,REQ-SRC-0005,1,Request Submission,SUBMISSION,REQUESTER,Requester,00062,COMPLETED,2026-04-09T09:00:00.000Z,Submitted by employee,"{""source"":""sample-pack""}",true
+WF-REQ-2026-0005,WF-RUN-0005,REQ-2026-0005,REQ-SRC-0005,2,Manager Approval,APPROVAL,SUPERVISOR,Manager,BNEI-001,PENDING,,Awaiting manager review,"{""source"":""sample-pack""}",true

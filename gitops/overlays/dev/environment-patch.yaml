@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: project-truth-environment
+data:
+  environment: dev
+  release_tag: "dev"
+  runtime_image_tag: "develop"
+  app_port: "3100"
+  api_port: "3101"
+  postgres_host_port: "15433"
+  start_command: project-truth-hris-env-start dev
+  seed_command: project-truth-hris-env-seed dev

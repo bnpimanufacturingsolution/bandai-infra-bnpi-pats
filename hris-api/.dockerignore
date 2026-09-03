@@ -1,0 +1,46 @@
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist
+coverage
+.cache
+.next
+out
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# VCS
+.git
+.gitignore
+
+# OS / Editor
+.DS_Store
+*.swp
+*.swo
+*.tmp
+*.log
+.vscode
+.idea
+
+# Docker
+Dockerfile
+Dockerfile.*
+docker-compose*.yml
+
+# Prisma generated cache
+.prisma
+
+# Logs
+logs
+**/*.log
+
+# Assets cache
+assets/**/*.map 

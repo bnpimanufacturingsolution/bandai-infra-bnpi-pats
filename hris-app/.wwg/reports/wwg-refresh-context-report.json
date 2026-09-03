@@ -1,0 +1,101 @@
+{
+  "kind": "context",
+  "target": "C:\\Users\\uzaro\\Documents\\Projects\\BANDA HRIS\\hris-app",
+  "targetDisplay": ".",
+  "command": "wwg refresh-context --target C:\\Users\\uzaro\\Documents\\Projects\\BANDA HRIS\\hris-app",
+  "dryRun": false,
+  "sourceArtifactsRead": [
+    "wiki/02-project/project-brief.md",
+    "wiki/03-requirements/functional-requirements.md",
+    "wiki/05-architecture/deployment-model.md",
+    "wiki/05-architecture/security-model.md",
+    "wiki/05-architecture/system-overview.md",
+    "wiki/06-domain/entities.md",
+    "wiki/06-domain/rules.md",
+    "wiki/06-domain/workflows.md",
+    "wiki/07-ux/screens.md",
+    "wiki/07-ux/user-journeys.md",
+    "wiki/12-maintenance/context-maintenance-matrix.md",
+    "wiki/12-maintenance/drift-policy.md",
+    "wiki/12-maintenance/maintenance-contract.md",
+    "wiki/index.md",
+    "wiki/principles/README.md"
+  ],
+  "missingCanonicalSources": [],
+  "writes": [
+    {
+      "path": "workspace/context/project-context.md",
+      "action": "updated",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT",
+      "addedLines": 0,
+      "removedLines": 0
+    },
+    {
+      "path": "workspace/context/architecture-context.md",
+      "action": "updated",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT",
+      "addedLines": 0,
+      "removedLines": 0
+    },
+    {
+      "path": "workspace/context/domain-context.md",
+      "action": "updated",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT",
+      "addedLines": 0,
+      "removedLines": 0
+    },
+    {
+      "path": "workspace/context/ux-context.md",
+      "action": "updated",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT",
+      "addedLines": 0,
+      "removedLines": 0
+    },
+    {
+      "path": "workspace/context/governance-context.md",
+      "action": "updated",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT",
+      "addedLines": 0,
+      "removedLines": 0
+    },
+    {
+      "path": "workspace/context/context-maintenance-matrix.md",
+      "action": "updated",
+      "ownership": "wwg-co-maintained",
+      "sectionName": "COMPILED_CONTEXT",
+      "addedLines": 0,
+      "removedLines": 0
+    }
+  ],
+  "filesCreated": [],
+  "filesUpdated": [
+    "workspace/context/project-context.md",
+    "workspace/context/architecture-context.md",
+    "workspace/context/domain-context.md",
+    "workspace/context/ux-context.md",
+    "workspace/context/governance-context.md",
+    "workspace/context/context-maintenance-matrix.md"
+  ],
+  "filesSkipped": [],
+  "generatedSectionsUpdated": [
+    "workspace/context/project-context.md#COMPILED_CONTEXT",
+    "workspace/context/architecture-context.md#COMPILED_CONTEXT",
+    "workspace/context/domain-context.md#COMPILED_CONTEXT",
+    "workspace/context/ux-context.md#COMPILED_CONTEXT",
+    "workspace/context/governance-context.md#COMPILED_CONTEXT",
+    "workspace/context/context-maintenance-matrix.md#COMPILED_CONTEXT"
+  ],
+  "warnings": [],
+  "validationPerformed": [
+    "Verified wwg.project.yaml exists and can be parsed.",
+    "Compiled generation inputs deterministically without LLM calls.",
+    "Applied generated-section safety rules.",
+    "Recorded markdown and JSON generation reports."
+  ],
+  "registryUpdated": true
+}

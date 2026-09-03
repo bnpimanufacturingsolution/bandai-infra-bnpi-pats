@@ -1,0 +1,58 @@
+enum CalendarItemType {
+  HOLIDAY // Holidays visible to all users
+  EVENT // Events that can be assigned to specific users
+  COMPANY_EVENT // Company-wide events
+  MEETING // Regular meetings
+  DEADLINE // Task deadlines
+  REMINDER // Personal reminders
+  BIRTHDAY // Emplyoee Birthday
+}
+
+enum ItemStatus {
+  ACTIVE
+  CANCELLED
+  COMPLETED
+  DRAFT
+}
+
+model CalendarItem {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId String
+  year           Int? // Year for grouping calendar items
+  title          String
+  description    String?
+
+  type CalendarItemType
+
+  startDate DateTime
+  endDate   DateTime
+  isAllDay  Boolean  @default(false)
+  timezone  String   @default("UTC")
+
+  recurrence Json?
+
+  metadata Json?
+
+  reminders Json?
+
+  tags String[]
+
+  status ItemStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedEmployee   Employee? @relation(fields: [assignedEmployeeId], references: [id])
+  assignedEmployeeId String?   @db.ObjectId
+
+  @@index([type])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([tags])
+  @@index([status])
+  @@index([organizationId])
+  @@index([year])
+  @@index([organizationId, year])
+  @@map("calendar_items")
+}

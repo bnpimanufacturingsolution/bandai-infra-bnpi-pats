@@ -1,0 +1,149 @@
+enum ApplicationSource {
+  WEBSITE
+  REFERRAL
+  JOB_BOARD
+  SOCIAL_MEDIA
+  RECRUITER
+  INTERNAL
+  WALK_IN
+  OTHER
+}
+
+enum RecruitmentActivityType {
+  NOTE
+  INTERVIEW
+  REJECTION
+  OFFER
+  ASSIGNMENT
+  EMAIL_EVENT
+  SYSTEM_EVENT
+}
+
+enum ApplicantAttachmentType {
+  RESUME
+  CONTRACT
+  PORTFOLIO
+  CERTIFICATE
+  OTHER
+}
+
+model Applicant {
+  id             String  @id @default(cuid())
+  organizationId String
+  applicantId    String? // Optional unique identifier for the applicant
+
+  // Personal Information (can reference Person or store directly)
+  personId     String? // Optional reference to Person model
+  person       Person? @relation(fields: [personId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  portfolioUrl String?
+
+  // Application Details
+  jobId String?
+  job   Job?    @relation(fields: [jobId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  positionId String?
+  position   Position? @relation(fields: [positionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  // Application Information
+  appliedDate                  DateTime           @default(now())
+  applicationSource            ApplicationSource?
+  workflowInstanceId           String?
+  currentWorkflowStateKey      String             @default("APPLIED")
+  currentStepExecutionId       String?
+  lastCompletedStepExecutionId String?
+
+  // Expected Salary & Availability
+  expectedSalary   Float?
+  currency         String?   @default("PHP")
+  availabilityDate DateTime? // When can they start
+  noticePeriod     Int? // Days of notice period in current job
+  metadata         Json?
+
+  // Referral Information
+  referredBy    String? // Employee ID who referred this applicant
+  referralBonus Float?
+
+  // Soft delete & timestamps
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  // Can add relation to Employee if they get hired (converted from applicant to employee)
+  convertedToEmployeeId      String? // Reference to Employee ID if hired
+  convertedToEmployee        Employee?               @relation("ApplicantConvertedEmployee", fields: [convertedToEmployeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  workflowInstance           WorkflowInstance?       @relation("ApplicantWorkflowInstance", fields: [workflowInstanceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  currentStepExecution       WorkflowStepExecution?  @relation("ApplicantCurrentWorkflowStep", fields: [currentStepExecutionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  lastCompletedStepExecution WorkflowStepExecution?  @relation("ApplicantLastCompletedWorkflowStep", fields: [lastCompletedStepExecutionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stepExecutions             WorkflowStepExecution[] @relation("ApplicantWorkflowStepExecutions")
+  activities                 RecruitmentActivity[]
+  attachments                ApplicantAttachment[]
+
+  @@index([organizationId])
+  @@index([applicantId]) // Index for applicantId if provided
+  @@index([positionId])
+  @@index([jobId])
+  @@index([departmentId])
+  @@index([appliedDate])
+  @@index([personId])
+  @@index([workflowInstanceId])
+  @@index([currentWorkflowStateKey])
+  @@index([currentStepExecutionId])
+  @@index([lastCompletedStepExecutionId])
+  @@index([convertedToEmployeeId])
+  @@map("applicants")
+}
+
+model RecruitmentActivity {
+  id                 String                  @id @default(cuid())
+  organizationId     String
+  applicantId        String
+  workflowInstanceId String?
+  stepExecutionId    String?
+  stateKey           String?
+  type               RecruitmentActivityType
+  title              String
+  details            Json?
+  actorEmployeeId    String?
+  occurredAt         DateTime                @default(now())
+  isDeleted          Boolean                 @default(false)
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+
+  applicant        Applicant              @relation(fields: [applicantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workflowInstance WorkflowInstance?      @relation("RecruitmentActivityWorkflowInstance", fields: [workflowInstanceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stepExecution    WorkflowStepExecution? @relation("RecruitmentActivityStepExecution", fields: [stepExecutionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  actorEmployee    Employee?              @relation("RecruitmentActivityActor", fields: [actorEmployeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([organizationId, applicantId, occurredAt])
+  @@index([workflowInstanceId])
+  @@index([stepExecutionId])
+  @@index([actorEmployeeId])
+  @@map("recruitment_activities")
+}
+
+model ApplicantAttachment {
+  id                   String                  @id @default(cuid())
+  organizationId       String
+  applicantId          String
+  type                 ApplicantAttachmentType
+  name                 String
+  url                  String
+  mimeType             String?
+  size                 Int?
+  uploadedByEmployeeId String?
+  uploadedAt           DateTime                @default(now())
+  isDeleted            Boolean                 @default(false)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  applicant          Applicant @relation(fields: [applicantId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  uploadedByEmployee Employee? @relation("ApplicantAttachmentUploader", fields: [uploadedByEmployeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([organizationId, applicantId, uploadedAt])
+  @@index([uploadedByEmployeeId])
+  @@map("applicant_attachments")
+}

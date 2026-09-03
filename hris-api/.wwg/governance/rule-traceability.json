@@ -1,0 +1,366 @@
+{
+  "schemaVersion": 1,
+  "kind": "wwg.governance.ruleTraceability",
+  "generatedAt": "2026-05-16T16:01:05.548Z",
+  "sourceBaselineReportPath": ".wwg/reports/adoption-regression-report.md",
+  "records": [
+    {
+      "id": "trace-core-feature-workflow",
+      "truthOrBehaviorName": "Core feature workflow",
+      "sourceEvidence": [
+        "README.md: README headings or route files"
+      ],
+      "sourceType": "docs",
+      "expectedCheckType": "process checklist",
+      "existingEvidence": [],
+      "coverageStatus": "partial",
+      "confidence": "medium",
+      "relatedGapIds": [
+        "gap-uncovered-behavior-core-feature-workflow"
+      ],
+      "relatedSafeCandidateIds": [
+        "candidate-core-feature-workflow-regression"
+      ],
+      "recommendedNextAction": "Convert related report-first candidates into confirmed verification evidence before claiming coverage."
+    },
+    {
+      "id": "trace-main-entry-point-behavior",
+      "truthOrBehaviorName": "Main entry point behavior",
+      "sourceEvidence": [
+        "dist/lib-entry.js: entry point candidate",
+        "app/Rule/index.ts: entry point candidate",
+        "app/activityLogging/index.ts: entry point candidate",
+        "app/agency/index.ts: entry point candidate",
+        "app/applicant/index.ts: entry point candidate",
+        "app/attendance/index.ts: entry point candidate",
+        "app/auditLogging/index.ts: entry point candidate",
+        "app/auth/index.ts: entry point candidate",
+        "app/benefitType/index.ts: entry point candidate",
+        "app/boardingProcess/index.ts: entry point candidate",
+        "app/boardingTemplate/index.ts: entry point candidate",
+        "app/calculator/index.ts: entry point candidate",
+        "app/calendar-item/index.ts: entry point candidate"
+      ],
+      "sourceType": "code",
+      "expectedCheckType": "executable test",
+      "existingEvidence": [],
+      "coverageStatus": "partial",
+      "confidence": "high",
+      "relatedGapIds": [
+        "gap-uncovered-behavior-main-entry-point-behavior"
+      ],
+      "relatedSafeCandidateIds": [
+        "candidate-main-entry-point-behavior-regression"
+      ],
+      "recommendedNextAction": "Convert related report-first candidates into confirmed verification evidence before claiming coverage."
+    },
+    {
+      "id": "trace-runtime-build-behavior",
+      "truthOrBehaviorName": "Runtime/build behavior",
+      "sourceEvidence": [
+        "package.json: scripts"
+      ],
+      "sourceType": "scripts",
+      "expectedCheckType": "CI check",
+      "existingEvidence": [
+        "tests/query-builder-search-fields.spec.ts",
+        "lint: eslint app/**/*.ts index.ts lib-entry.Qts",
+        "test: mocha --require ts-node/register tests/**/*.spec.ts",
+        "typecheck: tsc --noEmit",
+        "test:tax: ts-node scripts/test-tax-calculator.ts",
+        "test:payroll: ts-node scripts/test-payroll-calculation.ts",
+        "test:bir: ts-node scripts/test-bir-2316.ts",
+        "test:bir-part4: ts-node scripts/test-bir-part4.ts",
+        "test:attendance-debug: ts-node scripts/test-attendance-debug.ts",
+        "test:attendance-metrics: ts-node scripts/test-attendance-metrics.ts",
+        "test:attendance-clock-in: ts-node scripts/test-attendance-clock-in.ts",
+        "check:attendance-status: ts-node scripts/check-attendance-status.ts",
+        "test:payroll-attendance: ts-node scripts/test-payroll-attendance.ts",
+        "test:bulk-adjust-endpoint: ts-node scripts/test-bulk-adjust-endpoint.ts",
+        "test:bulk-adjust-function: node -r ts-node/register scripts/test-bulk-adjust-function.ts",
+        "test:generate-employee-payroll: ts-node scripts/test-generate-employee-payroll.ts",
+        "metrics:attendance: ts-node scripts/test-attendance-all-metrics.ts",
+        "metrics:attendance:detailed: ts-node scripts/test-attendance-all-metrics.ts --detailed",
+        "metrics:reports: npx tsx scripts/test-attendance-metrics-reports.ts",
+        "metrics:reports:detailed: npx tsx scripts/test-attendance-metrics-reports.ts --detailed",
+        "test:attendance-summary: npx tsx scripts/test-attendance-summary.ts",
+        "test:timekeeping: ts-node scripts/test-timekeeping.ts",
+        "test:org-chart: npx tsx scripts/test-org-chart.ts",
+        "test:workforce: ts-node scripts/test-workforce.ts",
+        "test:notification-debug: ts-node scripts/test-notification-debug.ts",
+        "test:document-workflow: ts-node test-document-workflow.ts",
+        "wwg:test-check: npx @homedesk/wwg test-check"
+      ],
+      "coverageStatus": "partial",
+      "confidence": "high",
+      "relatedGapIds": [],
+      "relatedSafeCandidateIds": [],
+      "recommendedNextAction": "Review existing evidence and strengthen it into explicit behavior coverage if needed."
+    },
+    {
+      "id": "trace-data-persistence-behavior",
+      "truthOrBehaviorName": "Data persistence behavior",
+      "sourceEvidence": [
+        "ioredis: persistence indicator"
+      ],
+      "sourceType": "code",
+      "expectedCheckType": "executable test",
+      "existingEvidence": [
+        "tests/prisma-datasource.helper.spec.ts",
+        "lint: eslint app/**/*.ts index.ts lib-entry.Qts",
+        "test: mocha --require ts-node/register tests/**/*.spec.ts",
+        "typecheck: tsc --noEmit",
+        "test:tax: ts-node scripts/test-tax-calculator.ts",
+        "test:payroll: ts-node scripts/test-payroll-calculation.ts",
+        "test:bir: ts-node scripts/test-bir-2316.ts",
+        "test:bir-part4: ts-node scripts/test-bir-part4.ts",
+        "test:attendance-debug: ts-node scripts/test-attendance-debug.ts",
+        "test:attendance-metrics: ts-node scripts/test-attendance-metrics.ts",
+        "test:attendance-clock-in: ts-node scripts/test-attendance-clock-in.ts",
+        "check:attendance-status: ts-node scripts/check-attendance-status.ts",
+        "test:payroll-attendance: ts-node scripts/test-payroll-attendance.ts",
+        "test:bulk-adjust-endpoint: ts-node scripts/test-bulk-adjust-endpoint.ts",
+        "test:bulk-adjust-function: node -r ts-node/register scripts/test-bulk-adjust-function.ts",
+        "test:generate-employee-payroll: ts-node scripts/test-generate-employee-payroll.ts",
+        "metrics:attendance: ts-node scripts/test-attendance-all-metrics.ts",
+        "metrics:attendance:detailed: ts-node scripts/test-attendance-all-metrics.ts --detailed",
+        "metrics:reports: npx tsx scripts/test-attendance-metrics-reports.ts",
+        "metrics:reports:detailed: npx tsx scripts/test-attendance-metrics-reports.ts --detailed",
+        "test:attendance-summary: npx tsx scripts/test-attendance-summary.ts",
+        "test:timekeeping: ts-node scripts/test-timekeeping.ts",
+        "test:org-chart: npx tsx scripts/test-org-chart.ts",
+        "test:workforce: ts-node scripts/test-workforce.ts",
+        "test:notification-debug: ts-node scripts/test-notification-debug.ts",
+        "test:document-workflow: ts-node test-document-workflow.ts",
+        "wwg:test-check: npx @homedesk/wwg test-check"
+      ],
+      "coverageStatus": "partial",
+      "confidence": "high",
+      "relatedGapIds": [],
+      "relatedSafeCandidateIds": [
+        "candidate-persistence-migration-check"
+      ],
+      "recommendedNextAction": "Review existing evidence and strengthen it into explicit behavior coverage if needed."
+    },
+    {
+      "id": "trace-auth-and-permission-behavior",
+      "truthOrBehaviorName": "Auth and permission behavior",
+      "sourceEvidence": [
+        "bcryptjs: auth/security indicator"
+      ],
+      "sourceType": "code",
+      "expectedCheckType": "executable test",
+      "existingEvidence": [
+        "tests_legacy/controllers/auth.controller.spec.ts",
+        "lint: eslint app/**/*.ts index.ts lib-entry.Qts",
+        "test: mocha --require ts-node/register tests/**/*.spec.ts",
+        "typecheck: tsc --noEmit",
+        "test:tax: ts-node scripts/test-tax-calculator.ts",
+        "test:payroll: ts-node scripts/test-payroll-calculation.ts",
+        "test:bir: ts-node scripts/test-bir-2316.ts",
+        "test:bir-part4: ts-node scripts/test-bir-part4.ts",
+        "test:attendance-debug: ts-node scripts/test-attendance-debug.ts",
+        "test:attendance-metrics: ts-node scripts/test-attendance-metrics.ts",
+        "test:attendance-clock-in: ts-node scripts/test-attendance-clock-in.ts",
+        "check:attendance-status: ts-node scripts/check-attendance-status.ts",
+        "test:payroll-attendance: ts-node scripts/test-payroll-attendance.ts",
+        "test:bulk-adjust-endpoint: ts-node scripts/test-bulk-adjust-endpoint.ts",
+        "test:bulk-adjust-function: node -r ts-node/register scripts/test-bulk-adjust-function.ts",
+        "test:generate-employee-payroll: ts-node scripts/test-generate-employee-payroll.ts",
+        "metrics:attendance: ts-node scripts/test-attendance-all-metrics.ts",
+        "metrics:attendance:detailed: ts-node scripts/test-attendance-all-metrics.ts --detailed",
+        "metrics:reports: npx tsx scripts/test-attendance-metrics-reports.ts",
+        "metrics:reports:detailed: npx tsx scripts/test-attendance-metrics-reports.ts --detailed",
+        "test:attendance-summary: npx tsx scripts/test-attendance-summary.ts",
+        "test:timekeeping: ts-node scripts/test-timekeeping.ts",
+        "test:org-chart: npx tsx scripts/test-org-chart.ts",
+        "test:workforce: ts-node scripts/test-workforce.ts",
+        "test:notification-debug: ts-node scripts/test-notification-debug.ts",
+        "test:document-workflow: ts-node test-document-workflow.ts",
+        "wwg:test-check: npx @homedesk/wwg test-check"
+      ],
+      "coverageStatus": "partial",
+      "confidence": "high",
+      "relatedGapIds": [],
+      "relatedSafeCandidateIds": [
+        "candidate-auth-permission-test"
+      ],
+      "recommendedNextAction": "Review existing evidence and strengthen it into explicit behavior coverage if needed."
+    },
+    {
+      "id": "trace-payment-behavior",
+      "truthOrBehaviorName": "Payment behavior",
+      "sourceEvidence": [
+        "repository scan: no payment/billing indicators"
+      ],
+      "sourceType": "code",
+      "expectedCheckType": "executable test",
+      "existingEvidence": [],
+      "coverageStatus": "partial",
+      "confidence": "low",
+      "relatedGapIds": [
+        "gap-uncovered-behavior-payment-behavior"
+      ],
+      "relatedSafeCandidateIds": [
+        "candidate-payment-failure-path-test",
+        "candidate-payment-behavior-regression"
+      ],
+      "recommendedNextAction": "Convert related report-first candidates into confirmed verification evidence before claiming coverage."
+    },
+    {
+      "id": "trace-deployment-runtime-readiness",
+      "truthOrBehaviorName": "Deployment/runtime readiness",
+      "sourceEvidence": [
+        ".github/workflows/deploy-local-tailscale.yml: deployment config",
+        ".github/workflows/deploy.yml: deployment config",
+        ".github/workflows/infra-validate.yml: deployment config",
+        ".github/workflows/rollback.yml: deployment config",
+        "Dockerfile: deployment config",
+        "docker-compose.yml: deployment config",
+        "exports/local-infra/docker-compose.yml: deployment config",
+        "infrastructure/onprem/observability/docker-compose.yml: deployment config"
+      ],
+      "sourceType": "config",
+      "expectedCheckType": "operational readiness check",
+      "existingEvidence": [],
+      "coverageStatus": "partial",
+      "confidence": "high",
+      "relatedGapIds": [
+        "gap-uncovered-behavior-deployment-runtime-readiness"
+      ],
+      "relatedSafeCandidateIds": [
+        "candidate-deployment-runtime-readiness-regression"
+      ],
+      "recommendedNextAction": "Convert related report-first candidates into confirmed verification evidence before claiming coverage."
+    },
+    {
+      "id": "trace-api-route-behavior",
+      "truthOrBehaviorName": "API route behavior",
+      "sourceEvidence": [
+        "app/hikvision/controller/access.control.controller.ts",
+        "app/hikvision/controller/callback.controller.ts",
+        "app/hikvision/controller/users.controller.ts",
+        "app/hikvision/routes/access.control.router.ts",
+        "app/hikvision/routes/callback.router.ts"
+      ],
+      "sourceType": "code",
+      "expectedCheckType": "executable test",
+      "existingEvidence": [
+        "tests_legacy/routers/systemProvisioning.router.spec.ts",
+        "lint: eslint app/**/*.ts index.ts lib-entry.Qts",
+        "test: mocha --require ts-node/register tests/**/*.spec.ts",
+        "typecheck: tsc --noEmit",
+        "test:tax: ts-node scripts/test-tax-calculator.ts",
+        "test:payroll: ts-node scripts/test-payroll-calculation.ts",
+        "test:bir: ts-node scripts/test-bir-2316.ts",
+        "test:bir-part4: ts-node scripts/test-bir-part4.ts",
+        "test:attendance-debug: ts-node scripts/test-attendance-debug.ts",
+        "test:attendance-metrics: ts-node scripts/test-attendance-metrics.ts",
+        "test:attendance-clock-in: ts-node scripts/test-attendance-clock-in.ts",
+        "check:attendance-status: ts-node scripts/check-attendance-status.ts",
+        "test:payroll-attendance: ts-node scripts/test-payroll-attendance.ts",
+        "test:bulk-adjust-endpoint: ts-node scripts/test-bulk-adjust-endpoint.ts",
+        "test:bulk-adjust-function: node -r ts-node/register scripts/test-bulk-adjust-function.ts",
+        "test:generate-employee-payroll: ts-node scripts/test-generate-employee-payroll.ts",
+        "metrics:attendance: ts-node scripts/test-attendance-all-metrics.ts",
+        "metrics:attendance:detailed: ts-node scripts/test-attendance-all-metrics.ts --detailed",
+        "metrics:reports: npx tsx scripts/test-attendance-metrics-reports.ts",
+        "metrics:reports:detailed: npx tsx scripts/test-attendance-metrics-reports.ts --detailed",
+        "test:attendance-summary: npx tsx scripts/test-attendance-summary.ts",
+        "test:timekeeping: ts-node scripts/test-timekeeping.ts",
+        "test:org-chart: npx tsx scripts/test-org-chart.ts",
+        "test:workforce: ts-node scripts/test-workforce.ts",
+        "test:notification-debug: ts-node scripts/test-notification-debug.ts",
+        "test:document-workflow: ts-node test-document-workflow.ts",
+        "wwg:test-check: npx @homedesk/wwg test-check"
+      ],
+      "coverageStatus": "partial",
+      "confidence": "medium",
+      "relatedGapIds": [],
+      "relatedSafeCandidateIds": [
+        "candidate-api-route-test"
+      ],
+      "recommendedNextAction": "Review existing evidence and strengthen it into explicit behavior coverage if needed."
+    },
+    {
+      "id": "trace-configuration-and-environment-behavior",
+      "truthOrBehaviorName": "Configuration and environment behavior",
+      "sourceEvidence": [
+        "Dockerfile",
+        "docker-compose.yml",
+        "exports/local-infra/docker-compose.yml",
+        "generated/prisma-postgres/package.json",
+        "generated/prisma/package.json",
+        "infrastructure/onprem/observability/docker-compose.yml",
+        "package.json",
+        "tsconfig.json"
+      ],
+      "sourceType": "config",
+      "expectedCheckType": "operational readiness check",
+      "existingEvidence": [],
+      "coverageStatus": "partial",
+      "confidence": "medium",
+      "relatedGapIds": [
+        "gap-uncovered-behavior-configuration-and-environment-behavior"
+      ],
+      "relatedSafeCandidateIds": [
+        "candidate-configuration-contract-check",
+        "candidate-configuration-and-environment-behavior-regression"
+      ],
+      "recommendedNextAction": "Convert related report-first candidates into confirmed verification evidence before claiming coverage."
+    },
+    {
+      "id": "trace-process-and-approval-workflow",
+      "truthOrBehaviorName": "Process and approval workflow",
+      "sourceEvidence": [
+        ".wwg/governance/human-approval-matrix.md",
+        ".wwg/governance/infrastructure-readiness-checklist.md",
+        ".wwg/governance/maintenance-review-checklist.md",
+        ".wwg/governance/project-readiness-checklist.md",
+        ".wwg/governance/recommendation-policy.md",
+        ".wwg/governance/release-checklist.md",
+        ".wwg/workspace/testing/manual-verification-checklist.md",
+        ".wwg/workspace/testing/non-technical-regression-checklist.md"
+      ],
+      "sourceType": "docs",
+      "expectedCheckType": "process checklist",
+      "existingEvidence": [
+        "tests_legacy/controllers/boardingProcess.controller.spec.ts",
+        "lint: eslint app/**/*.ts index.ts lib-entry.Qts",
+        "test: mocha --require ts-node/register tests/**/*.spec.ts",
+        "typecheck: tsc --noEmit",
+        "test:tax: ts-node scripts/test-tax-calculator.ts",
+        "test:payroll: ts-node scripts/test-payroll-calculation.ts",
+        "test:bir: ts-node scripts/test-bir-2316.ts",
+        "test:bir-part4: ts-node scripts/test-bir-part4.ts",
+        "test:attendance-debug: ts-node scripts/test-attendance-debug.ts",
+        "test:attendance-metrics: ts-node scripts/test-attendance-metrics.ts",
+        "test:attendance-clock-in: ts-node scripts/test-attendance-clock-in.ts",
+        "check:attendance-status: ts-node scripts/check-attendance-status.ts",
+        "test:payroll-attendance: ts-node scripts/test-payroll-attendance.ts",
+        "test:bulk-adjust-endpoint: ts-node scripts/test-bulk-adjust-endpoint.ts",
+        "test:bulk-adjust-function: node -r ts-node/register scripts/test-bulk-adjust-function.ts",
+        "test:generate-employee-payroll: ts-node scripts/test-generate-employee-payroll.ts",
+        "metrics:attendance: ts-node scripts/test-attendance-all-metrics.ts",
+        "metrics:attendance:detailed: ts-node scripts/test-attendance-all-metrics.ts --detailed",
+        "metrics:reports: npx tsx scripts/test-attendance-metrics-reports.ts",
+        "metrics:reports:detailed: npx tsx scripts/test-attendance-metrics-reports.ts --detailed",
+        "test:attendance-summary: npx tsx scripts/test-attendance-summary.ts",
+        "test:timekeeping: ts-node scripts/test-timekeeping.ts",
+        "test:org-chart: npx tsx scripts/test-org-chart.ts",
+        "test:workforce: ts-node scripts/test-workforce.ts",
+        "test:notification-debug: ts-node scripts/test-notification-debug.ts",
+        "test:document-workflow: ts-node test-document-workflow.ts",
+        "wwg:test-check: npx @homedesk/wwg test-check"
+      ],
+      "coverageStatus": "partial",
+      "confidence": "medium",
+      "relatedGapIds": [],
+      "relatedSafeCandidateIds": [
+        "candidate-process-regression-checklist",
+        "candidate-approval-flow-check"
+      ],
+      "recommendedNextAction": "Review existing evidence and strengthen it into explicit behavior coverage if needed."
+    }
+  ]
+}

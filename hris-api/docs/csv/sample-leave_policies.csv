@@ -1,0 +1,2 @@
+leaveType,enabled,isPaid,requiresApproval,minAdvanceNoticeDays,maxDaysPerRequest,allowHalfDay,requireAttachment,allowedEmploymentTypes
+VACATION,true,true,true,1,10,true,false,"[""REGULAR"",""PROBATIONARY""]"

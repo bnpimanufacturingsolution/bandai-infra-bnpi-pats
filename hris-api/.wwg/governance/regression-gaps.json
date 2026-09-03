@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "kind": "wwg.governance.regressionGaps",
+  "generatedAt": "2026-05-16T16:01:05.548Z",
+  "sourceBaselineReportPath": ".wwg/reports/adoption-regression-report.md",
+  "gaps": [
+    {
+      "id": "gap-uncovered-behavior-core-feature-workflow",
+      "title": "Uncovered behavior: Core feature workflow",
+      "source": "baseline",
+      "severity": "high",
+      "blockingClassification": "adoption-nonblocking-readiness-blocking",
+      "confidence": "medium",
+      "affectedBehaviorOrWorkflow": "Core feature workflow",
+      "expectedVerificationPath": "Pair technical test commands with process and approval checklist review.",
+      "recommendedAction": "Map this behavior to a report-first candidate before generating or editing executable tests.",
+      "status": "open",
+      "waiver": null,
+      "note": "Detected tests do not obviously map to this behavior by path/name.",
+      "relatedCandidateIds": [
+        "candidate-core-feature-workflow-regression"
+      ],
+      "relatedTraceabilityIds": [
+        "trace-core-feature-workflow"
+      ]
+    },
+    {
+      "id": "gap-uncovered-behavior-main-entry-point-behavior",
+      "title": "Uncovered behavior: Main entry point behavior",
+      "source": "baseline",
+      "severity": "high",
+      "blockingClassification": "adoption-nonblocking-readiness-blocking",
+      "confidence": "medium",
+      "affectedBehaviorOrWorkflow": "Main entry point behavior",
+      "expectedVerificationPath": "Pair technical test commands with process and approval checklist review.",
+      "recommendedAction": "Map this behavior to a report-first candidate before generating or editing executable tests.",
+      "status": "open",
+      "waiver": null,
+      "note": "Detected tests do not obviously map to this behavior by path/name.",
+      "relatedCandidateIds": [
+        "candidate-main-entry-point-behavior-regression"
+      ],
+      "relatedTraceabilityIds": [
+        "trace-main-entry-point-behavior"
+      ]
+    },
+    {
+      "id": "gap-uncovered-behavior-payment-behavior",
+      "title": "Uncovered behavior: Payment behavior",
+      "source": "baseline",
+      "severity": "medium",
+      "blockingClassification": "adoption-nonblocking-advisory",
+      "confidence": "medium",
+      "affectedBehaviorOrWorkflow": "Payment behavior",
+      "expectedVerificationPath": "Pair technical test commands with process and approval checklist review.",
+      "recommendedAction": "Map this behavior to a report-first candidate before generating or editing executable tests.",
+      "status": "open",
+      "waiver": null,
+      "note": "Detected tests do not obviously map to this behavior by path/name.",
+      "relatedCandidateIds": [
+        "candidate-payment-failure-path-test",
+        "candidate-payment-behavior-regression"
+      ],
+      "relatedTraceabilityIds": [
+        "trace-payment-behavior"
+      ]
+    },
+    {
+      "id": "gap-uncovered-behavior-deployment-runtime-readiness",
+      "title": "Uncovered behavior: Deployment/runtime readiness",
+      "source": "baseline",
+      "severity": "medium",
+      "blockingClassification": "adoption-nonblocking-advisory",
+      "confidence": "medium",
+      "affectedBehaviorOrWorkflow": "Deployment/runtime readiness",
+      "expectedVerificationPath": "Pair technical test commands with process and approval checklist review.",
+      "recommendedAction": "Map this behavior to a report-first candidate before generating or editing executable tests.",
+      "status": "open",
+      "waiver": null,
+      "note": "Detected tests do not obviously map to this behavior by path/name.",
+      "relatedCandidateIds": [
+        "candidate-deployment-runtime-readiness-regression"
+      ],
+      "relatedTraceabilityIds": [
+        "trace-deployment-runtime-readiness"
+      ]
+    },
+    {
+      "id": "gap-uncovered-behavior-configuration-and-environment-behavior",
+      "title": "Uncovered behavior: Configuration and environment behavior",
+      "source": "baseline",
+      "severity": "medium",
+      "blockingClassification": "adoption-nonblocking-advisory",
+      "confidence": "medium",
+      "affectedBehaviorOrWorkflow": "Configuration and environment behavior",
+      "expectedVerificationPath": "Pair technical test commands with process and approval checklist review.",
+      "recommendedAction": "Map this behavior to a report-first candidate before generating or editing executable tests.",
+      "status": "open",
+      "waiver": null,
+      "note": "Detected tests do not obviously map to this behavior by path/name.",
+      "relatedCandidateIds": [
+        "candidate-configuration-contract-check",
+        "candidate-configuration-and-environment-behavior-regression"
+      ],
+      "relatedTraceabilityIds": [
+        "trace-configuration-and-environment-behavior"
+      ]
+    }
+  ]
+}

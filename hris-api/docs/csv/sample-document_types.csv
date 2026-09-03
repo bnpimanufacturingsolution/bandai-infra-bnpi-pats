@@ -1,0 +1,2 @@
+code,name,category,uploadBy,isRequired,isEmployeeVisible,isActive,displayOrder,fields,metadata
+GOV_ID,Government ID,IDENTITY,HR,true,true,true,1,"[{""key"":""idType"",""label"":""ID Type"",""type"":""text""}]","{""source"":""sample-pack""}"

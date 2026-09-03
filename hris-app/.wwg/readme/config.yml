@@ -1,0 +1,70 @@
+readme:
+  enabled: true
+  file: README.md
+  role: project-front-door
+  audience:
+    - project-owner
+    - developer
+    - agent
+    - evaluator
+  modeDetection:
+    newRepositorySignals:
+      - generatedByWWG
+      - noExistingReadme
+      - freshProjectTruth
+    inProgressSignals:
+      - hasWWGConfig
+      - hasProjectTruth
+      - hasExistingReadme
+    existingRepositorySignals:
+      - adoptedByWWG
+      - inferredProjectTruth
+      - existingSourceBeforeWWG
+  length:
+    targetMinLines: 80
+    targetMaxLines: 220
+    warnAboveLines: 250
+    strongWarnAboveLines: 350
+  commands:
+    maxCommandsPerWorkflow: 6
+    preferHappyPath: true
+    fullReferenceDoc: docs/command-reference.md
+  sections:
+    requireProjectDescription: true
+    requireWhy: true
+    requireInstall: true
+    requireDocsMap: true
+    requireCurrentStatus: true
+    requireAgentSectionWhenWWGPresent: true
+    requireChangelogLink: true
+  routing:
+    moveDetailedCommandsToDocs: true
+    moveGovernanceDoctrineToDocs: true
+    moveChangelogRulesToDocs: true
+    moveWizardDetailsToDocs: true
+    moveInfrastructureDetailsToDocs: true
+    moveMaintenanceDetailsToDocs: true
+    moveDogfoodInternalsToDocs: true
+    movePhaseHistoryToInternalDocs: true
+  classification:
+    keepConciseFrontDoorSections: true
+    conciseSectionMaxLines: 12
+    conciseMostlyBulletMaxLines: 18
+    bloatedDocumentationLinkThreshold: 20
+  language:
+    preferProductLanguage: true
+    avoidImplementationHistory: true
+    avoidPhaseLabels: true
+    avoidInternalJargon: true
+    allowCommandNames: true
+  preservation:
+    backupBeforeLargeRewrite: true
+    preserveHumanAuthoredIdentity: true
+    preserveLicenseLink: true
+    preserveValidExternalLinks: true
+    preserveBadges: true
+  validation:
+    blockPhasePollution: true
+    warnOnCommandSprawl: true
+    warnOnReadmeBloat: true
+    warnOnMissingDocsRouting: true

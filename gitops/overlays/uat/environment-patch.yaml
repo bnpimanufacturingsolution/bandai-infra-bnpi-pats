@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: project-truth-environment
+data:
+  environment: uat
+  release_tag: "uat"
+  runtime_image_tag: "develop"
+  app_port: "3200"
+  api_port: "3201"
+  postgres_host_port: "15434"
+  start_command: project-truth-hris-env-start uat
+  seed_command: project-truth-hris-env-seed uat

@@ -1,0 +1,287 @@
+model EmployeePayroll {
+  id              String        @id @default(cuid())
+  organizationId  String // Multi-tenancy support
+  employee        Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Cascade)
+  payrollPeriodId String
+
+  // Direct link to timesheet - source of truth (one-to-one)
+  timesheet   Timesheet? @relation(fields: [timesheetId], references: [id])
+  timesheetId String?    @unique
+
+  // Earnings
+  basicPay     Float @default(0)
+  overtimePay  Float @default(0)
+  nightDiffPay Float @default(0)
+  holidayPay   Float @default(0)
+  allowances   Float @default(0)
+  bonuses      Float @default(0)
+
+  // Deductions
+  taxAmount              Float @default(0)
+  sssContribution        Float @default(0)
+  philHealthContribution Float @default(0)
+  pagibigContribution    Float @default(0)
+  loanDeductions         Float @default(0)
+  absentDeduction        Float @default(0)
+  lateDeduction          Float @default(0)
+  earlyOutDeduction      Float @default(0)
+  otherDeductions        Float @default(0)
+
+  // Totals
+  grossPay        Float @default(0)
+  taxableIncome   Float @default(0) // Gross pay minus contributions (SSS, PhilHealth, PagIbig)
+  totalDeductions Float @default(0)
+  netPay          Float @default(0)
+
+  // Payroll register fields - BNPI payroll computation workbook projection
+  monthlySalary                    Float @default(0)
+  dailySalary                      Float @default(0)
+  // WRITE-ONLY generate snapshot of derived hourly (daily / workingHoursPerDay).
+  // Not an Employee input. Not a Sheet2 column. Do not read this for OT/late/absent/gross.
+  hourlySalary                     Float @default(0)
+  numberOfDays                     Float @default(0)
+  lateUndertimeAmount              Float @default(0)
+  regularOtHours                   Float @default(0)
+  restDayHours                     Float @default(0)
+  restDayHoursPay                  Float @default(0)
+  restDayOtHours                   Float @default(0)
+  restDayOtPay                     Float @default(0)
+  specialHolidayOtHours            Float @default(0)
+  specialHolidayOtPay              Float @default(0)
+  sunSpecialHolidayOtExcessHours   Float @default(0)
+  sunSpecialHolidayOtExcessPay     Float @default(0)
+  specialHolidayRestDayOtHours     Float @default(0)
+  specialHolidayRestDayOtPay       Float @default(0)
+  specialRestDayExcessHours        Float @default(0)
+  specialRestDayExcessOtPay        Float @default(0)
+  legalHolidayOtHours              Float @default(0)
+  legalHolidayOtPay                Float @default(0)
+  legalHolidayExcessPay            Float @default(0)
+  legalHolidayRestDayPay           Float @default(0)
+  legalHolidayExcess1Pay           Float @default(0)
+  legalHolidayRestDayExcessPay     Float @default(0)
+  leavePay                         Float @default(0)
+  christmasGift                    Float @default(0)
+  specialBonus                     Float @default(0)
+  mandatoryContributionAdjustment  Float @default(0)
+  guaranteedBonus                  Float @default(0)
+  hysMealAllowance                 Float @default(0)
+  obAllowance                      Float @default(0)
+  otherAdjustment                  Float @default(0)
+  overtimeMealAllowance            Float @default(0)
+  sportsfestOt                     Float @default(0)
+  fringeBenefit                    Float @default(0)
+  annualIncentive                  Float @default(0)
+  technicalSkillsAllowance         Float @default(0)
+  aclVlConversionTaxable           Float @default(0)
+  adjustmentOverusedLeave          Float @default(0)
+  thirteenthMonthAdjustment        Float @default(0)
+  productionIncentives             Float @default(0)
+  otherCompensation                Float @default(0)
+  adjustmentBasic                  Float @default(0)
+  adjustmentOtNd                   Float @default(0)
+  adjustmentNonTax                 Float @default(0)
+  excessDeduction                  Float @default(0)
+  deMinimisAllowance               Float @default(0)
+  christmasGiftKid                 Float @default(0)
+  birthdayGiftKid                  Float @default(0)
+  birthdayGiftEmployee             Float @default(0)
+  fringeBenefitTax                 Float @default(0)
+  sssEmergencyLoan                 Float @default(0)
+  philHealthContributionAdjustment Float @default(0)
+  excessInternetUsage              Float @default(0)
+  taxPayable                       Float @default(0)
+  adjustmentBasicDeduction         Float @default(0)
+  excessMlBenefits                 Float @default(0)
+  uniformDeduction                 Float @default(0)
+  sssLoanRestructuringProgram      Float @default(0)
+  phicOnePercentDifferential       Float @default(0)
+  modifiedHdmf2                    Float @default(0)
+  communityTaxCertificate          Float @default(0)
+  hdmfContributionAdjustment       Float @default(0)
+  personalCallsUsage               Float @default(0)
+  healthInsurance                  Float @default(0)
+  shuttleService                   Float @default(0)
+  negativeAdjustment               Float @default(0)
+  bnpiEmergencyLoan                Float @default(0)
+  bnpiSalaryLoan                   Float @default(0)
+  rcbcLoan                         Float @default(0)
+  hdmfCalamityLoan                 Float @default(0)
+  hdmfSalaryLoan                   Float @default(0)
+  sssCalamityLoan                  Float @default(0)
+  sssSalaryLoan                    Float @default(0)
+  adjustmentHolidayPay             Float @default(0)
+  communityTaxCert                 Float @default(0)
+  oneKChristmasGift                Float @default(0)
+  taxRefund                        Float @default(0)
+  thirteenthMonthPay               Float @default(0)
+  aclVlConversion                  Float @default(0)
+  otMealAllowance                  Float @default(0)
+  perfectAttendance                Float @default(0)
+  mealAllowance                    Float @default(0)
+  lineLeaderAllowance              Float @default(0)
+  assemblyStanding                 Float @default(0)
+  totalReceivable                  Float @default(0)
+
+  // Timesheet snapshot - frozen at payroll generation time
+  // Stores complete hours/attendance data for audit trail
+  timesheetSnapshot Json? // {
+  //   totalHoursWorked: "39:20",
+  //   totalRegularHours: "39:20",
+  //   totalOvertimeHours: "0:00",
+  //   totalUndertimeHours: "0:40",
+  //   totalLateHours: "0:23",
+  //   totalEarlyOutHours: "0:17",
+  //   totalDays: 13,
+  //   daysPresent: 5,
+  //   daysAbsent: 4,
+  //   daysRestDay: 3,
+  //   daysLeave: 0,
+  //   metadata: {
+  //     totalMinutesWorked: 2360,
+  //     totalRegularMinutes: 2360,
+  //     totalOvertimeMinutes: 0,
+  //     totalUndertimeMinutes: 40,
+  //     totalLateMinutes: 23,
+  //     totalEarlyOutMinutes: 17
+  //   }
+  // }
+
+  // Payroll calculation metadata - stores rates and computation details
+  // For audit trail and transparency
+  metadata Json? // {
+  //   dailyRate: 3173.91,
+  //   hourlyRate: 396.74,
+  //   minuteRate: 6.61,
+  //   monthlyRate: 95000,
+  //   workingDays: 22,
+  //   workingHoursPerDay: 8,
+  //   payFrequency: "MONTHLY",
+  //   periodDays: 15,
+  //   expectedWorkingDays: 10,
+  //   actualWorkingDays: 5,
+  //   absentDays: 6,
+  //   restDays: 4,
+  //   overtimeRate: 595.11,
+  //   nightDiffRate: 79.19,
+  //   calculatedAt: "2026-01-19T01:34:33.245Z",
+  //   calculationMethod: "TIMESHEET_BASED"
+  // }
+
+  // Rate calculation breakdown - detailed formulas and step-by-step calculations
+  // Shows exactly how each rate was derived for full transparency
+  rateBreakdown Json? // {
+  //   dailyRate: {
+  //     formula: "Period Basic Salary ÷ Total Work Days",
+  //     calculation: "₱47,500.00 ÷ 15 days",
+  //     inputs: {
+  //       periodBasicSalary: 47500,
+  //       totalWorkDays: 15
+  //     },
+  //     result: 3173.91
+  //   },
+  //   hourlyRate: {
+  //     formula: "Daily Rate ÷ Working Hours Per Day",
+  //     calculation: "₱3,173.91 ÷ 8 hours",
+  //     inputs: {
+  //       dailyRate: 3173.91,
+  //       workingHoursPerDay: 8
+  //     },
+  //     result: 396.74
+  //   },
+  //   minuteRate: {
+  //     formula: "Hourly Rate ÷ 60 Minutes",
+  //     calculation: "₱396.74 ÷ 60 minutes",
+  //     inputs: {
+  //       hourlyRate: 396.74
+  //     },
+  //     result: 6.61
+  //   },
+  //   overtimeRate: {
+  //     formula: "Hourly Rate × 1.5 (150% multiplier)",
+  //     calculation: "₱396.74 × 1.5",
+  //     inputs: {
+  //       hourlyRate: 396.74,
+  //       multiplier: 1.5
+  //     },
+  //     result: 595.11
+  //   },
+  //   nightDiffRate: {
+  //     formula: "Hourly Rate × 0.2 (20% night differential)",
+  //     calculation: "₱396.74 × 0.2",
+  //     inputs: {
+  //       hourlyRate: 396.74,
+  //       multiplier: 0.2
+  //     },
+  //     result: 79.19
+  //   }
+  // }
+
+  // Daily breakdown - day-by-day attendance and earnings detail
+  // Complete audit trail showing status and pay for each day
+  // Note: Full attendance/schedule details available via timesheet relation
+  dailyBreakdown Json? // [
+  //   {
+  //     date: "2026-01-01",
+  //     dayOfWeek: "Wednesday",
+  //     dayType: "WORK_DAY", // WORK_DAY, REST_DAY, HOLIDAY
+  //     status: "PRESENT", // PRESENT, ABSENT, LEAVE, REST_DAY
+  //     earnings: {
+  //       regularPay: 396.74,
+  //       overtimePay: 0,
+  //       nightDiffPay: 0,
+  //       holidayPay: 0,
+  //       totalDayPay: 396.74
+  //     },
+  //     deductions: {
+  //       absentDeduction: 0,
+  //       latePenalty: 0,
+  //       earlyOutPenalty: 0,
+  //       shortfallPenalty: 0,
+  //       totalDayDeductions: 0
+  //     },
+  //     netDayPay: 396.74
+  //   }
+  // ]
+
+  // Status
+  isPaid             Boolean   @default(false)
+  paidAt             DateTime?
+  paymentMethod      String? // BANK_TRANSFER, CASH, CHECK
+  referenceNumber    String?
+  isPublished        Boolean   @default(false)
+  publishedAt        DateTime?
+  publishedBy        String?
+  payslipGeneratedAt DateTime?
+  payslipReleasedAt  DateTime?
+  payslipReleasedBy  String?
+  hasPaymentIssue    Boolean   @default(false)
+  paymentIssueAt     DateTime?
+  paymentIssueBy     String?
+  paymentIssueNote   String?
+  snapshotLockedAt   DateTime?
+  snapshotLockedBy   String?
+  snapshotLockReason String?
+  generationRunId    String?
+  generationKey      String?
+
+  notes     String?
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  soaLineItems SOALineItem[]
+  sourcePayrollCorrections  PayrollCorrection[] @relation("PayrollCorrectionSourcePayroll")
+  appliedPayrollCorrections PayrollCorrection[] @relation("PayrollCorrectionAppliedPayroll")
+
+  @@unique([employeeId, payrollPeriodId])
+  @@index([organizationId])
+  @@index([payrollPeriodId])
+  @@index([organizationId, employeeId, isDeleted])
+  @@index([organizationId, payrollPeriodId, isPaid, isDeleted])
+  @@index([organizationId, payrollPeriodId, isPublished, isDeleted])
+  @@map("employee_payrolls")
+}

@@ -1,0 +1,122 @@
+groups:
+  - name: hris-observability-alerts
+    rules:
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Prometheus target is down"
+          description: "Target {{ $labels.instance }} in job {{ $labels.job }} has been down for more than 2 minutes."
+
+      - alert: HighHostCpuUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High host CPU usage"
+          description: "Host CPU usage is above 85% for 10 minutes on {{ $labels.instance }}."
+
+      - alert: HighHostMemoryUsage
+        expr: ((node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High host memory usage"
+          description: "Host memory usage is above 90% for 10 minutes on {{ $labels.instance }}."
+
+      - alert: BlackboxProbeFailing
+        expr: probe_success == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "HTTP health probe failed"
+          description: "Blackbox probe failed for {{ $labels.instance }} for more than 2 minutes."
+
+      - alert: HrisApiHighErrorRate
+        expr: sum(rate(hris_api_http_requests_total{status_code=~"5.."}[5m])) by (instance) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "HRIS API elevated 5xx rate"
+          description: "HRIS API instance {{ $labels.instance }} is returning elevated 5xx responses."
+
+      - alert: HrisApiHighLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(hris_api_http_request_duration_seconds_bucket[5m])) by (le, instance)) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "HRIS API p95 latency is high"
+          description: "HRIS API instance {{ $labels.instance }} p95 latency is above 2 seconds."
+
+      - alert: OTelCollectorNotReceivingSpans
+        expr: sum(rate(otelcol_receiver_accepted_spans[10m])) == 0
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "OpenTelemetry Collector is not receiving spans"
+          description: "No spans have been accepted by the collector for 15 minutes."
+
+      - alert: OTelCollectorDroppedTelemetry
+        expr: sum(rate(otelcol_processor_dropped_spans[5m])) + sum(rate(otelcol_exporter_send_failed_spans[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "OpenTelemetry Collector is dropping or failing spans"
+          description: "Collector dropped spans or failed span exports in the last 5 minutes."
+
+      - alert: HighHostDiskUsage
+        expr: 100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/"}) > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High host disk usage (>85%)"
+          description: "Root filesystem on {{ $labels.instance }} is above 85% used. Run project-truth-disk-guard; check observability rolling backups and container images."
+
+      - alert: CriticalHostDiskUsage
+        expr: 100 * (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint="/"}) > 95
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Critical host disk usage (>95%)"
+          description: "Root filesystem on {{ $labels.instance }} is above 95% used. DiskPressure/HRIS outage risk. Run sudo project-truth-disk-guard --apply immediately."
+
+      - alert: LowHostDiskFreeSpace
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/"} < 30 * 1024 * 1024 * 1024
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Low host free disk space (<30 GiB)"
+          description: "Root filesystem free space on {{ $labels.instance }} is below 30 GiB. Prefer prune via project-truth-disk-guard before image builds or retained VHDX work."
+
+      - alert: CriticalLowHostDiskFreeSpace
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint="/"} < 10 * 1024 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Critical low host free disk space (<10 GiB)"
+          description: "Root filesystem free space on {{ $labels.instance }} is below 10 GiB. Immediate prune required to avoid DiskPressure."

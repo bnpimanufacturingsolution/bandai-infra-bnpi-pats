@@ -1,0 +1,590 @@
+---
+- name: Project Truth VM pull reconciliation
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+
+  vars:
+    project_truth_repo_root: "{{ playbook_dir | dirname }}"
+    project_truth_install_root: "{{ lookup('env', 'PROJECT_TRUTH_ROOT') | default('/opt/project-truth', true) }}"
+    project_truth_state_dir: /var/lib/project-truth
+    project_truth_primary_lan_ip: "10.184.37.19"
+    project_truth_secondary_lan_ip: "10.184.37.78"
+    project_truth_lan_cidr: "24"
+    project_truth_lan_gateway: "10.184.38.254"
+    project_truth_lan_dns: "10.184.1.144,10.184.37.1"
+    project_truth_lan_search_domains: "bhk.local"
+    project_truth_lan_static_routes: "10.184.38.0/24@10.184.37.250"
+    project_truth_command_files:
+      - project-truth-status
+      - project-truth-progress
+      - project-truth-monitor
+      - project-truth-hris-env-start
+      - project-truth-hris-env-seed
+      - project-truth-hris-dev-current-restore
+      - project-truth-hris-start
+      - project-truth-hris-status
+      - project-truth-hris-seed
+      - project-truth-hris-observability-start
+      - project-truth-db-access
+      - project-truth-lan-config
+      - project-truth-lan-summary
+      - project-truth-clean-console
+      - project-truth-console-session-hook
+      - project-truth-trycloudflare-start
+      - project-truth-tunnel-gateway
+      - project-truth-cloudflare-vm-tunnel
+      - project-truth-ansible-pull
+      - project-truth-os-sync
+      - project-truth-disk-guard
+      - project-truth-report-github-deploy
+    project_truth_systemd_units:
+      - project-truth-hris.service
+      - project-truth-lan-config.service
+      - project-truth-lan-summary.service
+      - project-truth-clean-console.service
+      - project-truth-hikvision-hot-reload-listener.service
+      - project-truth-trycloudflare.service
+      - project-truth-ansible-pull.service
+      - project-truth-ansible-pull.timer
+      - project-truth-os-sync.service
+      - project-truth-os-sync.timer
+      - project-truth-disk-guard.service
+      - project-truth-disk-guard.timer
+    project_truth_enabled_services:
+      - project-truth-hris.service
+      - project-truth-lan-config.service
+      - project-truth-lan-summary.service
+      - project-truth-clean-console.service
+      - project-truth-hikvision-hot-reload-listener.service
+
+  tasks:
+    - name: Ensure Project Truth state directory exists
+      ansible.builtin.file:
+        path: "{{ project_truth_state_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Ensure install root exists
+      ansible.builtin.file:
+        path: "{{ project_truth_install_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Sync checked-out repository into install root
+      ansible.builtin.command:
+        argv:
+          - rsync
+          - -a
+          - --delete
+          - --exclude
+          - .git
+          - --exclude
+          - .env
+          - --exclude
+          - .env.*
+          - --exclude
+          - node_modules
+          - --exclude
+          - "*/node_modules"
+          - --exclude
+          - logs
+          - --exclude
+          - .runtime
+          - --exclude
+          - hris-api/infrastructure/onprem/observability/.env
+          - --exclude
+          - hris-api/infrastructure/onprem/observability/backup/.env
+          - "{{ project_truth_repo_root }}/"
+          - "{{ project_truth_install_root }}/"
+      changed_when: true
+
+    - name: Build and import K3s runtime images when the pulled commit changes
+      ansible.builtin.shell: |
+        set -euo pipefail
+        commit="$(git -C "{{ project_truth_repo_root }}" rev-parse HEAD)"
+        state_file="{{ project_truth_state_dir }}/k8s-runtime-image-state"
+        if [ -f "$state_file" ] && grep -qx "commit=${commit}" "$state_file"; then
+          exit 0
+        fi
+        # When state_file is missing, sed exits non-zero. Under set -o pipefail that
+        # aborts the whole task with empty stdout/stderr before any build starts.
+        # Only read previous_commit when the file exists; tolerate empty content.
+        previous_commit=""
+        if [ -f "$state_file" ]; then
+          previous_commit="$(
+            sed -n 's/^commit=//p' "$state_file" | head -n 1 || true
+          )"
+        fi
+
+        runtime_job_root="/var/lib/project-truth/k8s/dev/uploads/project-truth-runtime"
+        for job_kind in device-user-merge-jobs device-user-sync-jobs; do
+          job_dir="$runtime_job_root/$job_kind"
+          [ -d "$job_dir" ] || continue
+          for snapshot in "$job_dir"/*.json; do
+            [ -f "$snapshot" ] || continue
+            if [ -n "$(find "$snapshot" -mmin -5 -print -quit)" ] &&
+               jq -e '.status == "processing"' "$snapshot" >/dev/null 2>&1; then
+              echo "Deferring runtime image rollout: active DEV device job snapshot $snapshot"
+              exit 0
+            fi
+          done
+        done
+
+        build_api=1
+        build_db_init=1
+        build_app=1
+        build_emp_app=1
+        build_callback_outbox=1
+        if [ -n "$previous_commit" ] &&
+           git -C "{{ project_truth_repo_root }}" cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
+          changed_files="$(
+            git -C "{{ project_truth_repo_root }}" diff --name-only "$previous_commit" "$commit"
+          )"
+          build_api=0
+          build_db_init=0
+          build_app=0
+          build_emp_app=0
+          build_callback_outbox=0
+          if grep -Eq '^(hris-api/|vendor/hikvision-linux/|scripts/project-truth-hikvision-)' <<<"$changed_files"; then
+            build_api=1
+          fi
+          if grep -Eq '^(hris-api/prisma/|hris-api/scripts/.*seed|hris-api/Dockerfile)' <<<"$changed_files"; then
+            build_db_init=1
+          fi
+          if grep -Eq '^hris-app/' <<<"$changed_files"; then
+            build_app=1
+          fi
+          if grep -Eq '^(hris-emp-app/|appliance/dockerfiles/hris-emp-app\.)' <<<"$changed_files"; then
+            build_emp_app=1
+          fi
+          if grep -Eq '^services/callback-outbox/' <<<"$changed_files"; then
+            build_callback_outbox=1
+          fi
+          if grep -Eq '^appliance/docker-compose' <<<"$changed_files"; then
+            build_api=1
+            build_db_init=1
+            build_app=1
+            build_emp_app=1
+            build_callback_outbox=1
+          fi
+          runtime_changes="$(
+            grep -E '^gitops/runtime-k8s/' <<<"$changed_files" || true
+          )"
+          if [ -n "$runtime_changes" ]; then
+            runtime_non_api_changes="$(
+              grep -Ev '^gitops/runtime-k8s/overlays/dev/(hris-api-credential-recovery-env\.patch\.yaml|kustomization\.yaml)$' \
+                <<<"$runtime_changes" || true
+            )"
+            if [ -n "$runtime_non_api_changes" ]; then
+              build_api=1
+              build_db_init=1
+              build_app=1
+              build_emp_app=1
+              build_callback_outbox=1
+            elif grep -q 'hris-api-credential-recovery-env.patch.yaml' \
+              "{{ project_truth_repo_root }}/gitops/runtime-k8s/overlays/dev/kustomization.yaml"; then
+              build_api=1
+            else
+              echo "Refusing to treat an unrecognized DEV kustomization-only change as API-only" >&2
+              exit 1
+            fi
+          fi
+        fi
+
+        services=()
+        images=()
+        deployments=()
+        if [ "$build_api" = "1" ]; then
+          services+=(hris-api)
+          images+=(hris-api-local:develop)
+          deployments+=(hris-api)
+        fi
+        if [ "$build_db_init" = "1" ]; then
+          services+=(hris-api-db-init)
+          images+=(hris-api-db-init:develop)
+        fi
+        if [ "$build_app" = "1" ]; then
+          services+=(hris-app)
+          images+=(hris-app-local:develop)
+          deployments+=(hris-app)
+        fi
+        if [ "$build_emp_app" = "1" ]; then
+          services+=(hris-emp-app)
+          images+=(hris-emp-app-local:develop)
+        fi
+        if [ "${build_callback_outbox:-0}" = "1" ]; then
+          images+=(hris-callback-outbox:develop)
+          deployments+=(hris-callback-outbox)
+        fi
+        if [ -z "${images[*]:-}" ]; then
+          printf 'commit=%s\nsynced_at=%s\nservices=none\n' \
+            "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_file"
+          exit 0
+        fi
+
+        echo "Runtime image selection: services=${services[*]:-none} images=${images[*]}"
+        cd "{{ project_truth_install_root }}/appliance"
+        export PROJECT_TRUTH_BUILD_SHA="$commit"
+        if [ -n "${services[*]:-}" ]; then
+          if docker compose version >/dev/null 2>&1; then
+            docker compose build "${services[@]}"
+          else
+            docker-compose build "${services[@]}"
+          fi
+        fi
+        if [ "${build_callback_outbox:-0}" = "1" ]; then
+          docker build -t hris-callback-outbox:develop \
+            "{{ project_truth_repo_root }}/services/callback-outbox"
+        fi
+
+        for image in "${images[@]}"; do
+          docker image inspect "$image" >/dev/null
+        done
+
+        mkdir -p /var/lib/rancher/k3s/agent/images
+        mkdir -p /var/lib/project-truth/callback-outbox
+        archive="/tmp/project-truth-k8s-runtime-selected-images.tar"
+        docker save -o "$archive" "${images[@]}"
+        cp "$archive" /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-zz-selected-images.tar
+        k3s ctr -n k8s.io images import "$archive"
+        # App/API images are tagged :develop with imagePullPolicy Never.
+        # Restart every namespace that actually has the Deployment so a
+        # develop rebuild updates DEV, UAT, and PROD on this appliance.
+        # Override: PROJECT_TRUTH_ROLLOUT_NAMESPACES="dev" (old DEV-only).
+        rollout_namespaces="${PROJECT_TRUTH_ROLLOUT_NAMESPACES:-dev uat prod}"
+        for env_name in $rollout_namespaces; do
+          for deployment in "${deployments[@]}"; do
+            if ! kubectl -n "$env_name" get deploy "$deployment" >/dev/null 2>&1; then
+              echo "skip rollout $env_name/$deployment (not in this namespace)"
+              continue
+            fi
+            echo "rollout restart $env_name/$deployment"
+            kubectl -n "$env_name" rollout restart "deployment/$deployment" >/dev/null
+            kubectl -n "$env_name" rollout status "deployment/$deployment" --timeout=180s
+          done
+        done
+        if [ "$build_emp_app" = "1" ]; then
+          for employee_env_name in prod dev uat; do
+            kubectl -n "$employee_env_name" rollout restart deployment/hris-emp-app >/dev/null
+            kubectl -n "$employee_env_name" rollout status deployment/hris-emp-app --timeout=180s
+          done
+        fi
+        printf 'commit=%s\nsynced_at=%s\nservices=%s\n' \
+          "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${images[*]}" > "$state_file"
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Keep legacy Docker Compose app/API containers off the K3s LAN ports
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for container_name in hris-app hris-api hris-app-dev hris-api-dev hris-app-uat hris-api-uat; do
+          if docker ps -a --format '{{"{{.Names}}"}}' | grep -qx "$container_name"; then
+            docker stop "$container_name" >/dev/null 2>&1 || true
+          fi
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Install Project Truth commands
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/appliance/bin/{{ item }}.sh"
+        dest: "/usr/local/bin/{{ item }}"
+        remote_src: true
+        mode: "0755"
+      loop: "{{ project_truth_command_files }}"
+      when: item != 'project-truth-tunnel-gateway'
+
+    - name: Install Project Truth tunnel gateway command
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/appliance/bin/project-truth-tunnel-gateway.py"
+        dest: /usr/local/bin/project-truth-tunnel-gateway
+        remote_src: true
+        mode: "0755"
+
+    - name: Install managed Hikvision listener scripts
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/scripts/{{ item.src }}"
+        dest: "/usr/local/bin/{{ item.dest }}"
+        remote_src: true
+        mode: "0755"
+      loop:
+        - src: project-truth-hikvision-hot-reload-listener.sh
+          dest: project-truth-hikvision-hot-reload-listener
+        - src: project-truth-hikvision-hot-reload-daemon.sh
+          dest: project-truth-hikvision-hot-reload-daemon
+
+    - name: Install Project Truth systemd units
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/appliance/systemd/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        remote_src: true
+        mode: "0644"
+      loop: "{{ project_truth_systemd_units }}"
+
+    - name: Install login profile helper
+      ansible.builtin.copy:
+        src: "{{ project_truth_install_root }}/appliance/profile.d/project-truth-hris-help.sh"
+        dest: /etc/profile.d/project-truth-hris-help.sh
+        remote_src: true
+        mode: "0644"
+
+    - name: Keep console session hook in PAM login
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/login
+        line: session optional pam_exec.so quiet /usr/local/bin/project-truth-console-session-hook
+        insertafter: EOF
+        create: false
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restore VM-managed BNPI Cloudflare tunnel after accidental local-mode guard
+      ansible.builtin.shell: |
+        set -euo pipefail
+        rm -f /etc/systemd/system/cloudflared-bnpi-hris.service.d/10-project-truth-cloud-mode.conf
+        rm -f /etc/project-truth/cloud-mode.env
+        rm -f /usr/local/bin/project-truth-cloud-mode
+        systemctl daemon-reload
+        if [ -f /etc/cloudflared/config.yml ] && ls /etc/cloudflared/*.json >/dev/null 2>&1; then
+          systemctl enable --now cloudflared-bnpi-hris.service
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Enable Project Truth services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        enabled: true
+      loop: "{{ project_truth_enabled_services }}"
+
+    - name: Use ansible-pull as the standard VM pull timer
+      ansible.builtin.systemd:
+        name: project-truth-ansible-pull.timer
+        enabled: true
+        state: started
+
+    - name: Ensure disk-guard config directory exists
+      ansible.builtin.file:
+        path: /etc/project-truth
+        state: directory
+        mode: "0755"
+
+    - name: Install disk-guard default env if missing
+      ansible.builtin.copy:
+        dest: /etc/project-truth/disk-guard.env
+        force: false
+        mode: "0644"
+        content: |
+          # Project Truth disk guard retention (see appliance/bin/project-truth-disk-guard.sh)
+          # Alert when use > 85% or free < 30 GiB; critical at > 95% or free < 10 GiB.
+          DISK_GUARD_WARN_PCT=85
+          DISK_GUARD_CRIT_PCT=95
+          DISK_GUARD_WARN_FREE_GIB=30
+          DISK_GUARD_CRIT_FREE_GIB=10
+          DISK_GUARD_JOURNAL_VACUUM=7d
+          DISK_GUARD_JOURNAL_MAX_SIZE=500M
+          DISK_GUARD_OBS_ROLLING_DAYS=3
+          DISK_GUARD_OBS_ROLLING_KEEP=24
+          DISK_GUARD_OBS_FULL_DAYS=14
+          DISK_GUARD_OBS_FULL_KEEP=7
+          DISK_GUARD_RETAINED_VHDX_KEEP=1
+          DISK_GUARD_TMP_DAYS=2
+          DISK_GUARD_K8S_IMAGE_TAR_DAYS=3
+          DISK_GUARD_APPLY=1
+          DISK_GUARD_PRUNE_IMAGES=1
+
+    - name: Ensure disk-guard state and log directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /var/lib/project-truth/disk-guard
+        - /var/log/project-truth
+
+    - name: Enable Project Truth disk-guard daily timer
+      ansible.builtin.systemd:
+        name: project-truth-disk-guard.timer
+        enabled: true
+        state: started
+
+    - name: Keep legacy OS sync timer disabled unless explicitly started
+      ansible.builtin.systemd:
+        name: project-truth-os-sync.timer
+        enabled: false
+        state: stopped
+      failed_when: false
+
+    - name: Persist canonical Project Truth LAN address order
+      ansible.builtin.copy:
+        dest: /etc/project-truth/lan.env
+        mode: "0644"
+        content: |
+          PROJECT_TRUTH_LAN_MODE=static
+          PROJECT_TRUTH_LAN_IFACE=eth0
+          PROJECT_TRUTH_LAN_IP={{ project_truth_primary_lan_ip }}
+          PROJECT_TRUTH_LAN_ADDRESSES={{ project_truth_primary_lan_ip }}/{{ project_truth_lan_cidr }},{{ project_truth_secondary_lan_ip }}/{{ project_truth_lan_cidr }}
+          PROJECT_TRUTH_LAN_GATEWAY={{ project_truth_lan_gateway }}
+          PROJECT_TRUTH_LAN_DNS={{ project_truth_lan_dns }}
+          PROJECT_TRUTH_LAN_SEARCH_DOMAINS={{ project_truth_lan_search_domains }}
+          PROJECT_TRUTH_LAN_STATIC_ROUTES={{ project_truth_lan_static_routes }}
+
+    - name: Reconcile Project Truth LAN config
+      ansible.builtin.command:
+        argv:
+          - project-truth-lan-config
+      environment:
+        PROJECT_TRUTH_SKIP_TTY1_WRITE: "1"
+      changed_when: false
+      failed_when: false
+
+    - name: Prefer canonical Project Truth IP for K3s node identity
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/config.yaml
+        mode: "0600"
+        content: |
+          node-ip: {{ project_truth_primary_lan_ip }}
+          advertise-address: {{ project_truth_primary_lan_ip }}
+          tls-san:
+            - {{ project_truth_primary_lan_ip }}
+            - {{ project_truth_secondary_lan_ip }}
+            - 127.0.0.1
+      register: project_truth_k3s_config
+
+    - name: Restart K3s only when the canonical node IP config changed
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
+      when: project_truth_k3s_config.changed
+      failed_when: false
+
+    - name: Wait for K3s API after canonical node IP reconciliation
+      ansible.builtin.command:
+        argv:
+          - kubectl
+          - get
+          - nodes
+      register: project_truth_kubectl_after_ip
+      retries: 30
+      delay: 5
+      until: project_truth_kubectl_after_ip.rc == 0
+      changed_when: false
+      failed_when: false
+      when: project_truth_k3s_config.changed
+
+    - name: Repair CoreDNS upstream resolvers for Argo Git access
+      ansible.builtin.shell: |
+        set -euo pipefail
+        kubectl -n kube-system get configmap coredns -o yaml |
+          sed 's#forward \. /etc/resolv.conf#forward . 1.1.1.1 8.8.8.8#g' |
+          kubectl apply -f -
+        kubectl -n kube-system rollout restart deploy/coredns
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Release stale retained runtime PV claim refs
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for env_name in dev uat prod; do
+          for volume_name in "hris-postgres-${env_name}" "hris-uploads-${env_name}"; do
+            phase="$(kubectl get pv "$volume_name" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            claim_uid="$(kubectl get pv "$volume_name" -o jsonpath='{.spec.claimRef.uid}' 2>/dev/null || true)"
+            if [ "$phase" = "Released" ] && [ -n "$claim_uid" ]; then
+              kubectl patch pv "$volume_name" --type=merge -p '{"spec":{"claimRef":null}}'
+            fi
+          done
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Reapply Argo CD platform config
+      ansible.builtin.command: kubectl apply -k gitops/argocd/platform
+      args:
+        chdir: "{{ project_truth_install_root }}"
+      changed_when: false
+      failed_when: false
+      when: (project_truth_install_root + '/gitops/argocd/platform') is directory
+
+    - name: Reapply Argo CD contract applications
+      ansible.builtin.command: kubectl apply -n argocd -f gitops/argocd/applications
+      args:
+        chdir: "{{ project_truth_install_root }}"
+      changed_when: false
+      failed_when: false
+      when: (project_truth_install_root + '/gitops/argocd/applications') is directory
+
+    - name: Reapply Argo CD runtime applications
+      ansible.builtin.command: kubectl apply -n argocd -f gitops/argocd/runtime-applications
+      args:
+        chdir: "{{ project_truth_install_root }}"
+      changed_when: false
+      failed_when: false
+      when: (project_truth_install_root + '/gitops/argocd/runtime-applications') is directory
+
+    - name: Hard refresh Argo CD applications
+      ansible.builtin.shell: |
+        set -o pipefail
+        kubectl get applications -n argocd -o name 2>/dev/null |
+          while read -r app_name; do
+            kubectl -n argocd annotate "$app_name" argocd.argoproj.io/refresh=hard --overwrite >/dev/null 2>&1 || true
+          done
+      args:
+        executable: /bin/bash
+      changed_when: false
+      failed_when: false
+
+    - name: Read pulled commit
+      ansible.builtin.command:
+        argv:
+          - git
+          - -C
+          - "{{ project_truth_repo_root }}"
+          - rev-parse
+          - HEAD
+      register: project_truth_commit
+      changed_when: false
+
+    - name: Record ansible-pull state
+      ansible.builtin.copy:
+        dest: "{{ project_truth_state_dir }}/ansible-pull-state"
+        mode: "0644"
+        content: |
+          repo_url={{ lookup('env', 'PROJECT_TRUTH_REPO_URL') | default('https://github.com/hrisworkforcesystem-coder/bandai-infra.git', true) }}
+          branch={{ lookup('env', 'PROJECT_TRUTH_BRANCH') | default('develop', true) }}
+          commit={{ project_truth_commit.stdout }}
+          synced_at={{ ansible_date_time.iso8601 }}
+          apply_engine=ansible-pull
+
+    - name: Report GitHub deployment success for this pull
+      ansible.builtin.command:
+        argv:
+          - project-truth-report-github-deploy
+      failed_when: false
+      changed_when: false
+
+    - name: Keep experimental TryCloudflare disabled by default
+      ansible.builtin.systemd:
+        name: project-truth-trycloudflare.service
+        enabled: false
+        state: stopped
+      failed_when: false
+
+    - name: Refresh LAN summary
+      ansible.builtin.command:
+        argv:
+          - project-truth-lan-summary
+          - --quiet
+      changed_when: false
+      failed_when: false

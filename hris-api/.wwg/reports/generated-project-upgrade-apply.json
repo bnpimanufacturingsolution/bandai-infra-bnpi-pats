@@ -1,0 +1,271 @@
+{
+  "projectPath": "C:\\Users\\Renz\\Documents\\hris\\hris-api",
+  "appliedAt": "2026-05-16T16:03:30.972Z",
+  "command": "wwg upgrade --apply-generated-sections",
+  "appliedChanges": [
+    {
+      "filePath": ".wwg/governance/drift-guard.md",
+      "action": "applied",
+      "category": "generated-section",
+      "reason": "Generated section was updated from merge guidance candidate snippet.",
+      "generatedSection": "WWG_ADOPTION_DRIFT_GUARD"
+    }
+  ],
+  "skippedChanges": [],
+  "refusedChanges": [
+    {
+      "filePath": ".wwg/wiki/project-truth.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": ".wwg/wiki/terminology.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": ".wwg/workspace/context/project-context.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": "AGENTS.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": "README.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": ".wwg/wiki/project-truth.md",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Project Truth is project-specific canonical truth."
+    },
+    {
+      "filePath": ".wwg/wiki/terminology.md",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Terminology contains accepted project vocabulary."
+    },
+    {
+      "filePath": "CHANGELOG.md",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Changelog history is project evidence."
+    },
+    {
+      "filePath": ".wwg/reports/**",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Reports preserve evidence and historical decisions."
+    },
+    {
+      "filePath": "custom governance rules",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Local governance may encode approvals, compliance, or safety rules."
+    },
+    {
+      "filePath": "custom skills",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Team-modified skills may contain local operating contracts."
+    },
+    {
+      "filePath": "user-written docs",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Project documentation may be customer-facing or team-specific."
+    },
+    {
+      "filePath": "secrets/config files",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Secrets and deployment config can change security posture."
+    },
+    {
+      "filePath": "files outside generated markers",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Unmarked content has no reliable generated-section boundary."
+    }
+  ],
+  "safeAddsApplied": [],
+  "generatedSectionsUpdated": [
+    {
+      "filePath": ".wwg/governance/drift-guard.md",
+      "action": "applied",
+      "category": "generated-section",
+      "reason": "Generated section was updated from merge guidance candidate snippet.",
+      "generatedSection": "WWG_ADOPTION_DRIFT_GUARD"
+    }
+  ],
+  "mergeReviewRefused": [
+    {
+      "filePath": ".wwg/wiki/project-truth.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": ".wwg/wiki/terminology.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": ".wwg/workspace/context/project-context.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": "AGENTS.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    },
+    {
+      "filePath": "README.md",
+      "action": "refused",
+      "category": "merge-review",
+      "reason": "File requires merge/review and was not updated automatically."
+    }
+  ],
+  "neverOverwriteRefused": [
+    {
+      "filePath": ".wwg/wiki/project-truth.md",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Project Truth is project-specific canonical truth."
+    },
+    {
+      "filePath": ".wwg/wiki/terminology.md",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Terminology contains accepted project vocabulary."
+    },
+    {
+      "filePath": "CHANGELOG.md",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Changelog history is project evidence."
+    },
+    {
+      "filePath": ".wwg/reports/**",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Reports preserve evidence and historical decisions."
+    },
+    {
+      "filePath": "custom governance rules",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Local governance may encode approvals, compliance, or safety rules."
+    },
+    {
+      "filePath": "custom skills",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Team-modified skills may contain local operating contracts."
+    },
+    {
+      "filePath": "user-written docs",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Project documentation may be customer-facing or team-specific."
+    },
+    {
+      "filePath": "secrets/config files",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Secrets and deployment config can change security posture."
+    },
+    {
+      "filePath": "files outside generated markers",
+      "action": "refused",
+      "category": "never-overwrite",
+      "reason": "Unmarked content has no reliable generated-section boundary."
+    }
+  ],
+  "candidateReportsUsed": [
+    ".wwg/reports/generated-project-upgrade-review.json",
+    ".wwg/reports/generated-project-upgrade-candidates.json",
+    ".wwg/reports/generated-project-merge-guidance.json"
+  ],
+  "candidateArtifactsUsed": [],
+  "integrityChecks": [
+    {
+      "check": "reports/generated-project-upgrade-review.json is valid JSON",
+      "status": "pass",
+      "detail": "ok"
+    },
+    {
+      "check": "reports/generated-project-upgrade-candidates.json is valid JSON",
+      "status": "pass",
+      "detail": "ok"
+    },
+    {
+      "check": "reports/generated-project-merge-guidance.json is valid JSON",
+      "status": "pass",
+      "detail": "ok"
+    },
+    {
+      "check": "review report target path matches current project",
+      "status": "pass",
+      "detail": "C:\\Users\\Renz\\Documents\\hris\\hris-api"
+    },
+    {
+      "check": "candidate report target path matches current project",
+      "status": "pass",
+      "detail": "C:\\Users\\Renz\\Documents\\hris\\hris-api"
+    },
+    {
+      "check": "merge guidance report target path matches current project",
+      "status": "pass",
+      "detail": "C:\\Users\\Renz\\Documents\\hris\\hris-api"
+    },
+    {
+      "check": "candidate report is read-only",
+      "status": "pass",
+      "detail": "ok"
+    },
+    {
+      "check": "candidate report requires human review",
+      "status": "pass",
+      "detail": "ok"
+    },
+    {
+      "check": "merge guidance is read-only",
+      "status": "pass",
+      "detail": "ok"
+    }
+  ],
+  "validationRecommendation": "Run `wwg validate`, then rerun `wwg audit` after any applied upgrade-safe additions or generated-section updates.",
+  "validationResults": [
+    "Validation was not run by the apply flow.",
+    "Read-only audit remains the default; this apply flow runs only when explicit apply flags are provided."
+  ],
+  "readOnlyDefaultPreserved": true,
+  "vorterBoundaryChecks": [
+    "Apply flow does not touch `.vorter/`.",
+    "Apply flow does not claim WWG activates, loads, injects, mounts, routes, or executes runtime skills."
+  ],
+  "nextRecommendedActions": [
+    "Review the apply report.",
+    "Run validation.",
+    "Rerun `wwg audit` to confirm remaining merge/review items."
+  ],
+  "reportPaths": {
+    "markdown": ".wwg/reports/generated-project-upgrade-apply.md",
+    "json": ".wwg/reports/generated-project-upgrade-apply.json"
+  }
+}

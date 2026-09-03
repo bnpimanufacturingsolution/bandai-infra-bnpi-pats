@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hikvision callback event flows — Project Truth</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --border: #2d3a4d;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --accent: #3b82f6;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --violet: #a78bfa;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+      padding: 2rem 1.5rem 4rem;
+    }
+    h1 { font-size: 1.5rem; margin: 0 0 0.35rem; }
+    h2 { font-size: 1.15rem; margin: 2.25rem 0 0.75rem; color: #fff; }
+    h3 { font-size: 0.95rem; margin: 0 0 0.5rem; color: var(--cyan); }
+    p, li { color: var(--muted); font-size: 0.9rem; }
+    .lead { max-width: 52rem; margin-bottom: 1.5rem; }
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
+      background: #1e3a5f;
+      color: #93c5fd;
+      margin-bottom: 0.75rem;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+    }
+    .card.create { border-top: 3px solid var(--violet); }
+    .card.enroll { border-top: 3px solid var(--amber); }
+    .card.tap { border-top: 3px solid var(--green); }
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-top: 0.75rem;
+    }
+    .step {
+      background: #0f1724;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.8rem;
+      color: var(--text);
+    }
+    .step strong { color: #fff; }
+    .arrow {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.75rem;
+      line-height: 1;
+    }
+    .id-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 1rem 0;
+    }
+    .id-table th, .id-table td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+    }
+    .id-table th { background: #152033; color: #fff; }
+    .id-table code {
+      background: #0c1220;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      color: var(--cyan);
+    }
+    .highlight { color: var(--amber); font-weight: 600; }
+    .ok { color: var(--green); }
+    .pipe {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      margin: 1rem 0;
+      font-size: 0.8rem;
+    }
+    .pipe span {
+      background: #152033;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.4rem 0.65rem;
+      color: var(--text);
+    }
+    .pipe .arr { background: transparent; border: none; color: var(--muted); padding: 0; }
+    .must {
+      background: #13251a;
+      border: 1px solid #1f6b3a;
+      border-radius: 10px;
+      padding: 1rem 1.1rem;
+      margin-top: 1rem;
+    }
+    .must h3 { color: var(--green); }
+    .must ol { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+    .must li { color: var(--text); margin: 0.35rem 0; }
+    .note {
+      font-size: 0.8rem;
+      color: var(--muted);
+      border-left: 3px solid var(--accent);
+      padding-left: 0.75rem;
+      margin: 1rem 0;
+    }
+    footer { margin-top: 2.5rem; font-size: 0.75rem; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="badge">Callback only · HCNetSDK listener · no invent-people poller</div>
+  <h1>Hikvision callback event flows</h1>
+  <p class="lead">
+    What really happens when the physical terminal fires an ACS alarm that the
+    <strong style="color:#fff">HCNetSDK listener</strong> posts to
+    <code style="color:var(--cyan)">POST /api/hikvision/callback</code>.
+    Three event families: <strong style="color:#fff">User create</strong>,
+    <strong style="color:#fff">Enroll (fingerprint)</strong>,
+    <strong style="color:#fff">Attendance tap</strong>.
+  </p>
+
+  <h2>1. Shared live path (always)</h2>
+  <div class="pipe">
+    <span>Hikvision panel</span><span class="arr">→</span>
+    <span>HCNetSDK alarm callback</span><span class="arr">→</span>
+    <span>Listener posts JSON</span><span class="arr">→</span>
+    <span><code>/api/hikvision/callback</code></span><span class="arr">→</span>
+    <span>DeviceEvent + socket</span>
+  </div>
+  <p class="note">
+    Multipass logSearch / UserInfo is only a <em>follow-up on the same callback path</em>
+    when the first ACS packet has no plain person id. It is not a separate product poller inventing people.
+  </p>
+
+  <h2>2. Your identity model (must stay true)</h2>
+  <table class="id-table">
+    <thead>
+      <tr>
+        <th>Where</th>
+        <th>Field</th>
+        <th>Example value</th>
+        <th>Meaning</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Physical device / UserInfo</td>
+        <td><code>employeeNo</code></td>
+        <td class="highlight">15</td>
+        <td>Plain person number typed/created on terminal</td>
+      </tr>
+      <tr>
+        <td>DeviceUser (inventory)</td>
+        <td><code>vendorUserId</code> / <code>employeeNo</code></td>
+        <td class="highlight">15</td>
+        <td>Same plain device person id + raw UserInfo metadata</td>
+      </tr>
+      <tr>
+        <td>DeviceEvent (ledger)</td>
+        <td><code>employeeNo</code></td>
+        <td class="highlight">15</td>
+        <td>Plain id when resolved (never leave opaque as the label)</td>
+      </tr>
+      <tr>
+        <td>Employee (HRIS)</td>
+        <td><code>deviceEmpId</code></td>
+        <td class="highlight">15</td>
+        <td>Plain device person id — same as vendorUserId (NOT padded)</td>
+      </tr>
+      <tr>
+        <td>Employee (HRIS)</td>
+        <td><code>employeeId</code></td>
+        <td class="highlight">00015</td>
+        <td>Business / display code (may use leading zeros); not deviceEmpId</td>
+      </tr>
+      <tr>
+        <td>DeviceEvent schema</td>
+        <td><code>employeeNo</code></td>
+        <td class="highlight">String?</td>
+        <td>Yes — optional string column for plain device person id</td>
+      </tr>
+      <tr>
+        <td>Op log only</td>
+        <td>opaque token</td>
+        <td><code>QVEwgvx/…==</code></td>
+        <td>Privacy id in logSearch — map via DevicePersonToken, do not show as employee no.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    <strong class="ok">Match rule:</strong>
+    device plain <code>15</code> links when
+    <code>Employee.deviceEmpId === "15"</code> (exact plain).
+    Also try <code>Employee.employeeId</code> pad variants (e.g. <code>00015</code>) for org codes only.
+  </p>
+
+  <h2>3. Three event families from the callback</h2>
+  <div class="grid-3">
+    <section class="card create">
+      <h3>onUserCreate</h3>
+      <p>Device user management — person added on terminal (Hikvision major operation / addUserInfo).</p>
+      <div class="flow">
+        <div class="step"><strong>1. Hikvision</strong> — panel creates person <code>15</code></div>
+        <div class="arrow">↓ ACS alarm (may be major=3 empty plain, or MINOR_ADD_USER_INFO)</div>
+        <div class="step"><strong>2. Listener → callback</strong> — save DeviceEvent USER_CREATED (+ socket)</div>
+        <div class="arrow">↓ resolve plain person id</div>
+        <div class="step"><strong>3. DeviceUser upsert</strong> — <code>vendorUserId=15</code> + <code>rawPayload</code> / <code>vendorMetadata</code> from UserInfo</div>
+        <div class="step"><strong>4. Link Employee</strong> — if <code>deviceEmpId === "15"</code> (plain) → set FKs + MATCHED; <code>employeeId</code> may display as <code>00015</code></div>
+        <div class="step"><strong>5. Socket again</strong> — UI shows <strong>User 15</strong> (or employee name if linked)</div>
+      </div>
+    </section>
+
+    <section class="card enroll">
+      <h3>onEnrollUser (fingerprint)</h3>
+      <p>Credential enroll on existing/new person (addFp / fingerprint management minors + logSearch leaves).</p>
+      <div class="flow">
+        <div class="step"><strong>1. Hikvision</strong> — enroll FP for person <code>15</code></div>
+        <div class="arrow">↓ ACS alarm + often opaque op log</div>
+        <div class="step"><strong>2. Listener → callback</strong> — DeviceEvent FINGERPRINT_ENROLLED (+ socket)</div>
+        <div class="arrow">↓ same plain-id resolve as create</div>
+        <div class="step"><strong>3. DeviceUser</strong> — ensure row <code>15</code>; refresh UserInfo counts (numOfFP) into metadata</div>
+        <div class="step"><strong>4. Link Employee</strong> — same plain <code>deviceEmpId === "15"</code></div>
+        <div class="step"><strong>5. Templates</strong> — raw FP bytes stay encrypted on DeviceUser custody plane, <em>not</em> on DeviceEvent</div>
+      </div>
+    </section>
+
+    <section class="card tap">
+      <h3>onAttendanceTap</h3>
+      <p>Access success (major=5 auth pass) — attendance punch, not user inventory create.</p>
+      <div class="flow">
+        <div class="step"><strong>1. Hikvision</strong> — person <code>15</code> taps (FP/face/card)</div>
+        <div class="arrow">↓ ACS alarm with plain employeeNo when available</div>
+        <div class="step"><strong>2. Listener → callback</strong> — DeviceEvent ATTENDANCE / TAP</div>
+        <div class="step"><strong>3. Resolve person</strong> — DeviceUser(15) first, else Employee.deviceEmpId pad match</div>
+        <div class="step"><strong>4. If matched</strong> — create/update Attendance + timesheet projection</div>
+        <div class="step"><strong>5. Socket</strong> — live Device Events row; does <em>not</em> create DeviceUser unless missing and plain known</div>
+      </div>
+    </section>
+  </div>
+
+  <h2>4. onUserCreate — required product model (your expectation)</h2>
+  <div class="must">
+    <h3>Must happen for create on one device (e.g. TEST A)</h3>
+    <ol>
+      <li><strong>Callback receives</strong> the create (directly or via major=3 → logSearch leave <code>addUserInfo</code>).</li>
+      <li><strong>DeviceEvent</strong> saved with action <code>USER_CREATED</code> and eventually plain <code>employeeNo = "15"</code>.</li>
+      <li><strong>DeviceUser created/updated</strong> for that device:
+        <code>vendorUserId = "15"</code>, <code>employeeNo = "15"</code>,
+        plus <strong>raw vendor metadata</strong> (<code>rawPayload</code> / <code>vendorMetadata</code> from UserInfo/Search).</li>
+      <li><strong>Employee match:</strong> primary key is plain
+        <code>Employee.deviceEmpId === "15"</code> (same as device).
+        <code>Employee.employeeId</code> may be <code>00015</code> for display/org code.
+        On match set FKs → status <span class="ok">MATCHED / ACTIVE</span>.</li>
+      <li><strong>If no Employee</strong> with that pad: DeviceUser stays <strong>UNMATCHED</strong>; event still shows <strong>User 15</strong> (device person), not HRIS employee name.</li>
+      <li><strong>Socket</strong> so Device Events updates without refresh; Device Users list can open
+        <code>deviceUserDetails=15</code>.</li>
+    </ol>
+  </div>
+
+  <h2>5. Side-by-side: what Hikvision sends vs what HRIS stores</h2>
+  <table class="id-table">
+    <thead>
+      <tr>
+        <th>Event family</th>
+        <th>Typical Hikvision signal</th>
+        <th>First callback may have plain id?</th>
+        <th>HRIS primary write</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>User create</td>
+        <td>Operation / addUserInfo · or major=3 + log leaf</td>
+        <td>Often <strong>no</strong> on major=3; yes if dwEmployeeNo &gt; 0</td>
+        <td>DeviceEvent USER_CREATED + DeviceUser + metadata</td>
+      </tr>
+      <tr>
+        <td>Enroll FP</td>
+        <td>FP management minor · or addFpByEmployeeNo leaf</td>
+        <td>Same as create (opaque common)</td>
+        <td>DeviceEvent FINGERPRINT_ENROLLED + DeviceUser credential summary</td>
+      </tr>
+      <tr>
+        <td>Attendance tap</td>
+        <td>major=5 auth pass</td>
+        <td>Usually <strong>yes</strong> (employeeNo on ACS)</td>
+        <td>DeviceEvent TAP + Attendance if employee linked</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>6. One diagram: create person 15 end-to-end</h2>
+  <pre style="background:#0c1220;border:1px solid var(--border);border-radius:12px;padding:1rem;overflow:auto;font-size:0.78rem;color:#cbd5e1;line-height:1.35;">
+PANEL create user 15
+        │
+        ▼
+HCNetSDK LISTENER  ──callback──►  hris-api /api/hikvision/callback
+        │                              │
+        │                              ├─► DeviceEvent  USER_CREATED
+        │                              │      employeeNo: "15"     (plain when resolved)
+        │                              │      deviceUserId ──────┐
+        │                              │      employeeId  ?      │  if Employee.deviceEmpId
+        │                              │                         │  in {15, 00015, …}
+        │                              │                         │
+        │                              └─► DeviceUser            │
+        │                                     vendorUserId: "15"◄┘
+        │                                     employeeNo:   "15"
+        │                                     rawPayload + vendorMetadata  ◄── UserInfo
+        │                                     employeeId → Employee(deviceEmpId "15")
+        │                                                    employeeId code "00015"
+        │
+        ▼
+Socket device-event:saved  →  Device Events UI
+   · show "User 15" or employee name
+   · click device person → Device Users details for vendorUserId 15
+   · click employee → HRIS employee (employeeId may display 00015)
+  </pre>
+
+  <footer>
+    Project Truth · callback-only enrollment identity ·
+    Spec: docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md ·
+    Open this file in a browser for the visual cards.
+  </footer>
+</body>
+</html>

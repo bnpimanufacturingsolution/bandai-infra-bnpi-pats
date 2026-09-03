@@ -1,0 +1,12 @@
+[Unit]
+Description=Project Truth LAN IP and URL login summary
+After=network-online.target project-truth-lan-config.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/project-truth-lan-summary --quiet
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

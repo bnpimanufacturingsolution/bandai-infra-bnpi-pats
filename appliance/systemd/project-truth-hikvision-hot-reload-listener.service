@@ -1,0 +1,30 @@
+[Unit]
+Description=Project Truth Hikvision hot reload listener
+Wants=network-online.target docker.service
+After=network-online.target docker.service project-truth-hris.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+# Default API base is host reverse (VM:53001 → Windows host:3001) for host-local
+# Device Events sockets. The listener script prefers a healthy 53001 over 3101 even
+# if an older EnvironmentFile still says localhost:3101 (unless FORCE=1).
+# Pure VM K3s DEV only: set EnvironmentFile to HIKVISION_HOT_RELOAD_API_BASE=http://localhost:3101
+# and HIKVISION_HOT_RELOAD_FORCE_API_BASE=1, or leave 53001 down so script falls back.
+Environment=HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:53001
+Environment=HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api
+Environment=HIKVISION_HOT_RELOAD_DEVICE_FETCH_LIMIT=200
+Environment=HIKVISION_POSTGRES_CONTAINER=hris-postgres-dev
+Environment=HIKVISION_HOT_RELOAD_LOGIN_EMAIL=admin@bandai.local
+Environment=HIKVISION_HOT_RELOAD_LOGIN_PASSWORD=password123
+Environment=HIKVISION_HOT_RELOAD_LOGIN_APP_CODE=hris
+EnvironmentFile=-/etc/project-truth/hikvision-hot-reload.env
+ExecStart=/usr/local/bin/project-truth-hikvision-hot-reload-daemon
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

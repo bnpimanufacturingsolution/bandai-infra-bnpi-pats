@@ -1,0 +1,77 @@
+enum RequestTransactionEventCategory {
+  LIFECYCLE
+  WORKFLOW
+  ASSIGNMENT
+  BUSINESS_CHANGE
+  ARTIFACT
+  SYSTEM
+}
+
+enum RequestTransactionEventKey {
+  REQUEST_CREATED
+  REQUEST_UPDATED
+  REQUEST_CANCELLED
+  WORKFLOW_STATE_CHANGED
+  STEP_ASSIGNED
+  STEP_APPROVED
+  STEP_REJECTED
+  STEP_COMPLETED
+  STEP_SKIPPED
+  STEP_DELEGATED
+  DOCUMENT_GENERATED
+}
+
+enum RequestTransactionActorType {
+  EMPLOYEE
+  MANAGER
+  HR
+  SYSTEM
+  UNKNOWN
+}
+
+enum RequestTransactionVisibility {
+  SHARED
+  INTERNAL
+}
+
+model RequestTransaction {
+  id                 String  @id @default(cuid())
+  organizationId     String
+  requestId          String
+  workflowInstanceId String?
+  stepExecutionId    String?
+  actorEmployeeId    String?
+
+  request          Request                @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  workflowInstance WorkflowInstance?      @relation(fields: [workflowInstanceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  stepExecution    WorkflowStepExecution? @relation(fields: [stepExecutionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  actorEmployee    Employee?              @relation("RequestTransactionActor", fields: [actorEmployeeId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  sequenceNumber    Int
+  eventCategory     RequestTransactionEventCategory
+  eventKey          RequestTransactionEventKey
+  eventSource       String?
+  actorType         RequestTransactionActorType     @default(UNKNOWN)
+  actorRole         String?
+  actorDisplayName  String?
+  title             String
+  description       String?
+  comments          String?
+  fromStateKey      String?
+  toStateKey        String?
+  fieldChanges      Json?
+  metadata          Json?
+  visibility        RequestTransactionVisibility    @default(SHARED)
+  isSystemGenerated Boolean                         @default(false)
+  occurredAt        DateTime                        @default(now())
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+
+  @@unique([requestId, sequenceNumber])
+  @@index([organizationId, requestId, occurredAt])
+  @@index([workflowInstanceId])
+  @@index([stepExecutionId])
+  @@index([actorEmployeeId])
+  @@index([requestId, eventCategory, occurredAt])
+  @@map("request_transactions")
+}

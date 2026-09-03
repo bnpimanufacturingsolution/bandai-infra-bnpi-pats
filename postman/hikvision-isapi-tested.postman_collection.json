@@ -1,0 +1,624 @@
+{
+  "info": {
+    "name": "Hikvision ISAPI Tested - TEST A",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Generated after live TEST A proof in C:\\Users\\stari\\bandai-infra\\.runtime\\hikvision-http-host-real-proof-20260719T231308. Import with the paired environment."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://192.168.254.109"
+    },
+    {
+      "key": "employeeNo",
+      "value": "99788140"
+    },
+    {
+      "key": "callbackHost",
+      "value": "192.168.254.173"
+    },
+    {
+      "key": "callbackPort",
+      "value": "53001"
+    },
+    {
+      "key": "callbackPath",
+      "value": "/api/hikvision/callback"
+    },
+    {
+      "key": "callbackUrl",
+      "value": "http://192.168.254.173:53001/api/hikvision/callback"
+    },
+    {
+      "key": "startTime",
+      "value": "2026-07-18T23:13:09+08:00"
+    },
+    {
+      "key": "endTime",
+      "value": "2026-07-20T23:13:09+08:00"
+    }
+  ],
+  "item": [
+    {
+      "name": "System deviceInfo",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/System/deviceInfo",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "System",
+            "deviceInfo"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Security userCheck",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/Security/userCheck",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "Security",
+            "userCheck"
+          ]
+        }
+      }
+    },
+    {
+      "name": "HTTPHosts list",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/Event/notification/httpHosts",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "Event",
+            "notification",
+            "httpHosts"
+          ]
+        }
+      }
+    },
+    {
+      "name": "HTTPHosts capabilities",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/Event/notification/httpHosts/capabilities",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "Event",
+            "notification",
+            "httpHosts",
+            "capabilities"
+          ]
+        }
+      }
+    },
+    {
+      "name": "HTTPHost slot 1 get",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/Event/notification/httpHosts/1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "Event",
+            "notification",
+            "httpHosts",
+            "1"
+          ]
+        }
+      }
+    },
+    {
+      "name": "HTTPHost slot 1 put callback",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/xml"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/Event/notification/httpHosts/1",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "Event",
+            "notification",
+            "httpHosts",
+            "1"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<HttpHostNotification version=\"2.0\" xmlns=\"http://www.isapi.org/ver20/XMLSchema\">\n<id>1</id>\n<url>/api/hikvision/callback</url>\n<protocolType>HTTP</protocolType>\n<parameterFormatType>JSON</parameterFormatType>\n<addressingFormatType>ipaddress</addressingFormatType>\n<ipAddress>192.168.254.173</ipAddress>\n<ipv6Address>::</ipv6Address>\n<portNo>53001</portNo>\n<httpAuthenticationMethod>none</httpAuthenticationMethod>\n<SubscribeEvent>\n<heartbeat>30</heartbeat>\n<eventMode>list</eventMode>\n<EventList>\n<Event>\n<type>LocalUserChange</type>\n</Event>\n</EventList>\n</SubscribeEvent>\n</HttpHostNotification>"
+        }
+      }
+    },
+    {
+      "name": "HTTPHost slot 1 test",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/Event/notification/httpHosts/1/test",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "Event",
+            "notification",
+            "httpHosts",
+            "1",
+            "test"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Alert stream",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/Event/notification/alertStream",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "Event",
+            "notification",
+            "alertStream"
+          ]
+        }
+      }
+    },
+    {
+      "name": "UserInfo search employee",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/AccessControl/UserInfo/Search?format=json",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "AccessControl",
+            "UserInfo",
+            "Search?format=json"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"UserInfoSearchCond\": {\n    \"searchID\": \"postman-user-search\",\n    \"searchResultPosition\": 0,\n    \"maxResults\": 10,\n    \"EmployeeNoList\": [\n      {\n        \"employeeNo\": \"{{employeeNo}}\"\n      }\n    ]\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "UserInfo record employee",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/AccessControl/UserInfo/Record?format=json",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "AccessControl",
+            "UserInfo",
+            "Record?format=json"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"UserInfo\": {\n    \"employeeNo\": \"{{employeeNo}}\",\n    \"name\": \"PT HTTPHost {{employeeNo}}\",\n    \"userType\": \"normal\",\n    \"Valid\": {\n      \"enable\": true,\n      \"beginTime\": \"{{validBeginTime}}\",\n      \"endTime\": \"{{validEndTime}}\",\n      \"timeType\": \"local\"\n    },\n    \"doorRight\": \"1\",\n    \"RightPlan\": [\n      {\n        \"doorNo\": 1,\n        \"planTemplateNo\": \"1\"\n      }\n    ]\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "UserInfo modify employee",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/AccessControl/UserInfo/Modify?format=json",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "AccessControl",
+            "UserInfo",
+            "Modify?format=json"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"UserInfo\": {\n    \"employeeNo\": \"{{employeeNo}}\",\n    \"name\": \"PT HTTPHost MOD {{employeeNo}}\",\n    \"userType\": \"normal\",\n    \"Valid\": {\n      \"enable\": true,\n      \"beginTime\": \"{{validBeginTime}}\",\n      \"endTime\": \"{{validEndTime}}\",\n      \"timeType\": \"local\"\n    },\n    \"doorRight\": \"1\",\n    \"RightPlan\": [\n      {\n        \"doorNo\": 1,\n        \"planTemplateNo\": \"1\"\n      }\n    ]\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "AcsEvent recent",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/AccessControl/AcsEvent?format=json",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "AccessControl",
+            "AcsEvent?format=json"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"AcsEventCond\": {\n    \"searchID\": \"postman-acs\",\n    \"searchResultPosition\": 0,\n    \"maxResults\": 30,\n    \"timeReverseOrder\": true,\n    \"major\": 0,\n    \"minor\": 0,\n    \"startTime\": \"{{startTime}}\",\n    \"endTime\": \"{{endTime}}\"\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "ContentMgmt logSearch Information",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/xml"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/ContentMgmt/logSearch",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "ContentMgmt",
+            "logSearch"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "<CMSearchDescription version=\"2.0\" xmlns=\"http://www.hikvision.com/ver20/XMLSchema\">\n<searchID>postman-logsearch</searchID>\n<metaId>log.hikvision.com/Information</metaId>\n<timeSpanList><timeSpan><startTime>{{startTime}}</startTime><endTime>{{endTime}}</endTime></timeSpan></timeSpanList>\n<maxResults>30</maxResults>\n<searchResultPostion>0</searchResultPostion>\n</CMSearchDescription>"
+        }
+      }
+    },
+    {
+      "name": "FingerPrintUpload read employee",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/AccessControl/FingerPrintUpload?format=json",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "AccessControl",
+            "FingerPrintUpload?format=json"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"FingerPrintCond\": {\n    \"searchID\": \"postman-fp-read\",\n    \"searchResultPosition\": 0,\n    \"employeeNo\": \"{{employeeNo}}\",\n    \"maxResults\": 8\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "FingerPrintDownload write template",
+      "request": {
+        "auth": {
+          "type": "digest",
+          "digest": [
+            {
+              "key": "username",
+              "value": "{{hikvision_username}}",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "{{hikvision_password}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/ISAPI/AccessControl/FingerPrintDownload?format=json",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "ISAPI",
+            "AccessControl",
+            "FingerPrintDownload?format=json"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"FingerPrintCfg\": {\n    \"employeeNo\": \"{{employeeNo}}\",\n    \"enableCardReader\": [\n      1\n    ],\n    \"fingerPrintID\": 1,\n    \"fingerType\": 0,\n    \"fingerData\": \"{{fingerData}}\"\n  }\n}"
+        }
+      }
+    }
+  ]
+}

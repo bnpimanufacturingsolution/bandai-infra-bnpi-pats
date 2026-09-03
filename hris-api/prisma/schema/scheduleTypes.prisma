@@ -1,0 +1,28 @@
+type ShiftTimeSlot {
+  type      String
+  label     String?
+  startTime String
+  endTime   String
+}
+
+type ShiftTypeSnapshot {
+  name        String?
+  code        String?
+  isOvernight Boolean         @default(false)
+  isOff       Boolean         @default(false)
+  timeSlots   ShiftTimeSlot[]
+  shiftHour   Float           @default(0)
+}
+
+type ScheduleTemplatePatternDay {
+  day           Int
+  shiftTypeId   String?            @db.ObjectId
+  shiftSnapshot ShiftTypeSnapshot?
+  shiftHour     Float              @default(0)
+}
+
+enum DepartmentScheduleTemplateSource {
+  department_default
+  department_head_created
+  department_head_linked
+}

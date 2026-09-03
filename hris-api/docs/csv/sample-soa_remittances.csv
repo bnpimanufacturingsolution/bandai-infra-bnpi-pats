@@ -1,0 +1,2 @@
+soaNumber,amount,paymentMethod,referenceNumber,paymentDate,category,status,notes,metadata
+SOA-2099-01,1200,BANK_TRANSFER,SOA-PAY-0001,2099-02-05T00:00:00.000Z,GOVERNMENT,PENDING,Sample remittance row,"{""source"":""sample-pack""}"

@@ -1,0 +1,22 @@
+model DepartmentScheduleTemplate {
+  id                  String                           @id @default(cuid())
+  organizationId      String
+  departmentId        String
+  scheduleTemplateId  String
+  source              DepartmentScheduleTemplateSource @default(department_head_linked)
+  createdByEmployeeId String?
+  isActive            Boolean                          @default(true)
+  isDeleted           Boolean                          @default(false)
+  createdAt           DateTime                         @default(now())
+  updatedAt           DateTime                         @updatedAt
+
+  department        Department       @relation("DepartmentScheduleTemplates", fields: [departmentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  scheduleTemplate  ScheduleTemplate @relation(fields: [scheduleTemplateId], references: [id], onDelete: NoAction, onUpdate: Cascade)
+  createdByEmployee Employee?        @relation("DepartmentScheduleTemplatesCreatedBy", fields: [createdByEmployeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@unique([departmentId, scheduleTemplateId], map: "department_schedule_template_unique")
+  @@index([organizationId, departmentId, isDeleted])
+  @@index([organizationId, scheduleTemplateId, isDeleted])
+  @@index([createdByEmployeeId])
+  @@map("department_schedule_templates")
+}

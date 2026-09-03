@@ -1,0 +1,187 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hris-postgres
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgresdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-hris}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  hris-api-db-init:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+      target: db-init
+    image: hris-api-db-init:develop
+    container_name: hris-api-db-init
+    restart: "no"
+    env_file:
+      - ./env/hris-api.env
+    # Empty local bootstrap may seed; UAT/PROD/GitOps must not seed.
+    command: >
+      sh -c "npm run prisma-postgres:push
+      && npm run prisma-seed"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  hris-api:
+    build:
+      context: ../hris-api
+      dockerfile: Dockerfile
+      args:
+        PROJECT_TRUTH_BUILD_SHA: ${PROJECT_TRUTH_BUILD_SHA:-local-unattested}
+    image: hris-api-local:develop
+    container_name: hris-api
+    restart: unless-stopped
+    env_file:
+      - ./env/hris-api.env
+    environment:
+      PG_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/hris
+      STORAGE_PROVIDER: local
+      LOCAL_UPLOAD_ROOT: /app/uploads
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: hris-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=onprem,service.namespace=hris
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: "1.0"
+      API_ACTIVITY_LOGGING_ENABLED: "true"
+      API_ACTIVITY_LOG_INCLUDE_READS: "true"
+      API_ACTIVITY_LOG_EXCLUDED_PATHS: /health,/metrics
+      LOG_FORMAT: json
+      ZKTECO_BRIDGE_STATUS_URL: ${ZKTECO_BRIDGE_STATUS_URL:-http://zkteco-linux-bridge:4371/status}
+      PROJECT_TRUTH_VM_HOST: ${PROJECT_TRUTH_VM_HOST:-10.184.37.19}
+      PROJECT_TRUTH_VM_USER: ${PROJECT_TRUTH_VM_USER:-infra}
+      PROJECT_TRUTH_VM_SSH_KEY: /var/run/project-truth/ssh/node-health-appliance_ed25519
+      PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION: vm-container
+      PROJECT_TRUTH_HIKVISION_VM_API_BASE: http://127.0.0.1:3001
+    volumes:
+      - apiuploads:/app/uploads
+      - ../data/import:/data/import:ro
+      - ../source-inputs-organized:/source-inputs-organized:ro
+      - ../docs:/docs:ro
+      - /var/lib/project-truth/ssh:/var/run/project-truth/ssh:ro
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+      - hris-observability
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  hris-app:
+    build:
+      context: ../hris-app
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: hris-app-local:develop
+    container_name: hris-app
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      HRIS_API_ORIGIN: "http://hris-api:3001"
+    ports:
+      - "3000:3000"
+    networks:
+      - default
+      - hris-observability
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  hris-emp-app:
+    build:
+      context: ..
+      dockerfile: appliance/dockerfiles/hris-emp-app.Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: hris-emp-app-local:develop
+    container_name: hris-emp-app
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HRIS_API_ORIGIN: "http://host.docker.internal:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3300:3000"
+    depends_on:
+      hris-api:
+        condition: service_started
+    networks:
+      - default
+      - hris-observability
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  zkteco-linux-bridge:
+    build:
+      context: ../vendor/zkteco-linux
+      dockerfile: Dockerfile
+    image: project-truth-zkteco-linux:develop
+    container_name: project-truth-zkteco-linux-bridge
+    restart: unless-stopped
+    command:
+      - --mode
+      - bridge
+      - --latest
+      - "${ZKTECO_SYNC_LATEST:-1}"
+      - --poll-seconds
+      - "${ZKTECO_POLL_SECONDS:-60}"
+      - --webhook-url
+      - http://hris-api:3001/api/zkteco/events
+    environment:
+      ZKTECO_STATUS_HOST: 0.0.0.0
+      ZKTECO_STATUS_PORT: 4371
+      ZKTECO_WEBHOOK_TIMEOUT: ${ZKTECO_WEBHOOK_TIMEOUT:-15}
+    ports:
+      - "4371:4371"
+    depends_on:
+      hris-api:
+        condition: service_healthy
+    networks:
+      - default
+      - hris-observability
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:4371/health', timeout=5).read()\nPY"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgresdata:
+  apiuploads:
+
+networks:
+  hris-observability:
+    external: true
+    name: hris-observability

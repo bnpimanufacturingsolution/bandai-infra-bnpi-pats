@@ -1,0 +1,46 @@
+model Notification {
+  id             String @id @default(cuid())
+  organizationId String
+
+  // Source employee who triggered the notification (optional for system notifications)
+  sourceEmployeeId String?
+  sourceEmployee   Employee? @relation("NotificationSource", fields: [sourceEmployeeId], references: [id], onDelete: SetNull)
+
+  // Category for filtering (e.g., "BOARDING", "REQUEST", "APPROVAL", "SYSTEM", "ANNOUNCEMENT")
+  category String @default("SYSTEM")
+
+  title       String
+  description String // Renamed from message for consistency
+
+  type     NotificationType @default(INFO)
+  eventKey String?
+
+  // Multi-recipient support with read/unread tracking
+  recipients Json
+
+  metadata Json?
+
+  // Archive support for soft delete
+  archive Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, category])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, eventKey])
+  @@index([sourceEmployeeId])
+  @@map("notifications")
+}
+
+// Embedded type for tracking recipients
+// Embedded type for individual recipient tracking
+// Archive type for soft delete with metadata
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  ALERT
+  REMINDER
+}

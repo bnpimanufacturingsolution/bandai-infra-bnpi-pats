@@ -1,0 +1,3826 @@
+{
+  "summary": {
+    "minimumPerFunction": 5,
+    "totalExportedFunctions": 545,
+    "passingFunctions": 508,
+    "failingFunctions": 37,
+    "generatedAt": "2026-06-01T03:36:46.012Z"
+  },
+  "rows": [
+    {
+      "name": "workforceRecruitmentSettingModule",
+      "file": "app/workforceRecruitmentSetting/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/workforceRecruitmentSetting/workforceRecruitmentSetting.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/workforceRecruitmentSetting/workforceRecruitmentSetting.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "workflowEngineModule",
+      "file": "app/workflowEngine/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/workflowEngine/workflowEngine.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/workflowEngine/workflowEngine.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "workflowConfigModule",
+      "file": "app/workflowConfig/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/workflowConfig/workflowConfig.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/workflowConfig/workflowConfig.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "timesheetlineModule",
+      "file": "app/timesheetline/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/timesheetline/timesheetline.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/timesheetline/timesheetline.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "timesheetModule",
+      "file": "app/timesheet/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "evaluateTimesheetSubmitEligibility",
+      "file": "app/timesheet/timesheet.controller.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 9,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/timesheet/timesheet.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/timesheet/timesheet.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "terminationModule",
+      "file": "app/termination/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/termination/termination.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/termination/termination.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "templateItemItemItemModule",
+      "file": "app/templateItem/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/templateItem/templateItem.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/templateItem/templateItem.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "templateModule",
+      "file": "app/template/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/template/template.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/template/template.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "systemProvisioningModule",
+      "file": "app/systemProvisioning/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/systemProvisioning/systemProvisioning.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/systemProvisioning/systemProvisioning.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "buildProvisioningPreview",
+      "file": "app/systemProvisioning/systemProvisioning.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "runSystemProvisioning",
+      "file": "app/systemProvisioning/systemProvisioning.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "statusModule",
+      "file": "app/status/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/status/status.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/status/status.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "getKnownModuleSlugs",
+      "file": "app/status/status.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "getStatusTimeline",
+      "file": "app/status/status.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "getStatusTimelineBatch",
+      "file": "app/status/status.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "getStatusIncidentHistory",
+      "file": "app/status/status.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "getStatusIncidentByKey",
+      "file": "app/status/status.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "buildStatusPayload",
+      "file": "app/status/status.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "recordHttpOutcome",
+      "file": "app/status/status.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "startStatusSampler",
+      "file": "app/status/status.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "statementofaccountModule",
+      "file": "app/statementofaccount/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/statementofaccount/statementofaccount.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/statementofaccount/statementofaccount.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "soaremittanceModule",
+      "file": "app/soaremittance/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/soaremittance/soaremittance.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/soaremittance/soaremittance.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "soalineitemModule",
+      "file": "app/soalineitem/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/soalineitem/soalineitem.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/soalineitem/soalineitem.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "shiftTypeModule",
+      "file": "app/shiftType/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/shiftType/shiftType.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/shiftType/shiftType.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "sectionModule",
+      "file": "app/section/index.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "controller",
+      "file": "app/section/section.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/section/section.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "scheduleTemplateModule",
+      "file": "app/scheduleTemplate/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/scheduleTemplate/scheduleScheduleTemplate.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/scheduleTemplate/scheduleScheduleTemplate.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "scheduleOverrideModule",
+      "file": "app/scheduleOverride/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/scheduleOverride/scheduleOverride.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/scheduleOverride/scheduleOverride.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "RuleModule",
+      "file": "app/Rule/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/Rule/rule.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/Rule/rule.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "requestTransactionModule",
+      "file": "app/requestTransaction/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/requestTransaction/requestTransaction.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/requestTransaction/requestTransaction.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "requestModule",
+      "file": "app/request/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/request/request.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/request/request.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "reportModule",
+      "file": "app/report/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/report/report.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/report/report.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "positionModule",
+      "file": "app/position/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/position/position.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/position/position.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "personModule",
+      "file": "app/person/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/person/person.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/person/person.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "payrollPeriodModule",
+      "file": "app/payrollperiod/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "getMergedCycleRules",
+      "file": "app/payrollperiod/payroll-cycle.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "computePayDateFromEndDate",
+      "file": "app/payrollperiod/payroll-cycle.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "buildPeriodsFromRange",
+      "file": "app/payrollperiod/payroll-cycle.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/payrollperiod/payrollperiod.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "notificationModule",
+      "file": "app/notification/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/notification/notification.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/notification/notification.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "noteModule",
+      "file": "app/note/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/note/note.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/note/note.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "buildEnterpriseAttendancePayload",
+      "file": "app/migration/enterprise-migration.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 5,
+      "pass": true
+    },
+    {
+      "name": "buildEnterpriseEmployeePayrollPayload",
+      "file": "app/migration/enterprise-migration.service.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 9,
+      "pass": true
+    },
+    {
+      "name": "enterpriseMigrationService",
+      "file": "app/migration/enterprise-migration.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 5,
+      "pass": true
+    },
+    {
+      "name": "migrationModule",
+      "file": "app/migration/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "resolveMigrationDm4SourceFiles",
+      "file": "app/migration/migration-dry-run.service.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "getMigrationStepRegistry",
+      "file": "app/migration/migration-step-registry.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "getMigrationStepPlan",
+      "file": "app/migration/migration-step-registry.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "controller",
+      "file": "app/migration/migration.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/migration/migration.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "migrationService",
+      "file": "app/migration/migration.service.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 686,
+      "pass": true
+    },
+    {
+      "name": "metricsModule",
+      "file": "app/metrics/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/metrics/metrics.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/metrics/metrics.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "loanTypeModule",
+      "file": "app/loanType/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/loanType/loanType.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/loanType/loanType.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "levelModule",
+      "file": "app/level/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/level/level.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/level/level.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "leaveTypeModule",
+      "file": "app/leaveType/index.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "controller",
+      "file": "app/leaveType/leaveType.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/leaveType/leaveType.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "leaveSettingModule",
+      "file": "app/leaveSetting/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/leaveSetting/leaveSetting.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/leaveSetting/leaveSetting.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "jobModule",
+      "file": "app/job/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/job/job.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/job/job.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/hikvision/hikvision.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "hikvisionModule",
+      "file": "app/hikvision/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/hikvision/routes/access.control.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/hikvision/routes/callback.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/hikvision/routes/public.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/hikvision/routes/users.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/hikvision/controller/access.control.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/hikvision/controller/callback.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/hikvision/controller/users.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/guide/guide.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/guide/guide.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "guideModule",
+      "file": "app/guide/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/employeeSchedule/employeeSchedule.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/employeeSchedule/employeeSchedule.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "employeeScheduleModule",
+      "file": "app/employeeSchedule/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/employeepayroll/employeepayroll.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/employeepayroll/employeepayroll.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "employeePayrollModule",
+      "file": "app/employeepayroll/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/employeeLoan/employeeLoan.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/employeeLoan/employeeLoan.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "employeeLoanModule",
+      "file": "app/employeeLoan/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/employeeDocuments/employeeDocuments.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/employeeDocuments/employeeDocuments.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/employeeBenefit/employeeBenefit.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/employeeBenefit/employeeBenefit.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "employeeBenefitModule",
+      "file": "app/employeeBenefit/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "shouldBackfillAttendanceObligationsAfterReportToResolution",
+      "file": "app/employee/employee-import.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 11,
+      "pass": true
+    },
+    {
+      "name": "resolveEmployeeImportExecutionOptions",
+      "file": "app/employee/employee-import.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 11,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/employee/employee.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/employee/employee.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "employeeModule",
+      "file": "app/employee/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/documentType/documentType.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/documentType/documentType.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "documentTypeModule",
+      "file": "app/documentType/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/documentFolder/documentFolder.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/documentFolder/documentFolder.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/document/document.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/document/document.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "documentModule",
+      "file": "app/document/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/docs/docs.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/docs/docs.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "docsModule",
+      "file": "app/docs/docs.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "generateEndpointsFromApp",
+      "file": "app/docs/endpointGenerator.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "generateEndpointsFromAppInstance",
+      "file": "app/docs/endpointGenerator.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/device/device.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/device/device.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "deviceModule",
+      "file": "app/device/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/department/department.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/department/department.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "departmentModule",
+      "file": "app/department/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/dashboard/dashboard.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/dashboard/dashboard.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "dashboardModule",
+      "file": "app/dashboard/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "initCronJobs",
+      "file": "app/cron/cron.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/checklistItem/checklistItem.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/checklistItem/checklistItem.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "checklistItemModule",
+      "file": "app/checklistItem/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/celebrations/celebrations.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/celebrations/celebrations.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "celebrationsModule",
+      "file": "app/celebrations/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/calendar-item/calendar-item.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/calendar-item/calendar-item.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "calendarItemModule",
+      "file": "app/calendar-item/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/calculator/calculator.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/calculator/calculator.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "calculatorModule",
+      "file": "app/calculator/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/boardingTemplate/boardingtemplate.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/boardingTemplate/boardingTemplate.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "boardingTemplateModule",
+      "file": "app/boardingTemplate/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/boardingProcess/boardingProcess.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/boardingProcess/boardingProcess.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "boardingProcessModule",
+      "file": "app/boardingProcess/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/benefitType/benefitType.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/benefitType/benefitType.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "benefitTypeModule",
+      "file": "app/benefitType/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "resolveLocalLoginUserByIdentifier",
+      "file": "app/auth/auth.controller.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 4,
+      "pass": false
+    },
+    {
+      "name": "controller",
+      "file": "app/auth/auth.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/auth/auth.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "authModule",
+      "file": "app/auth/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/auditLogging/auditLogging.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/auditLogging/auditLogging.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "auditLoggingModule",
+      "file": "app/auditLogging/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "normalizeAttendanceImportStatus",
+      "file": "app/attendance/attendance-import.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 11,
+      "pass": true
+    },
+    {
+      "name": "buildAttendanceImportTimesheetKey",
+      "file": "app/attendance/attendance-import.service.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 11,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/attendance/attendance.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/attendance/attendance.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "attendanceModule",
+      "file": "app/attendance/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/applicant/applicant.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/applicant/applicant.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "applicantModule",
+      "file": "app/applicant/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/agency/agency.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/agency/agency.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "agencyModule",
+      "file": "app/agency/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "controller",
+      "file": "app/activityLogging/activityLogging.controller.ts",
+      "testFilesMatched": 5,
+      "testCasesCount": 149,
+      "pass": true
+    },
+    {
+      "name": "router",
+      "file": "app/activityLogging/activityLogging.router.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "activityLoggingModule",
+      "file": "app/activityLogging/index.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 685,
+      "pass": true
+    },
+    {
+      "name": "parseTimeToMinutes",
+      "file": "helper/attendance-metrics-common.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getEmployeeName",
+      "file": "helper/attendance-metrics-common.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildEmployeeFilter",
+      "file": "helper/attendance-metrics-common.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "deriveAttendanceObligationDisplayStatus",
+      "file": "helper/attendance-obligation.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1085,
+      "pass": true
+    },
+    {
+      "name": "buildTimesheetBreakdownFromObligations",
+      "file": "helper/attendance-obligation.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1085,
+      "pass": true
+    },
+    {
+      "name": "getAttendanceEmployeeDisplayName",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildAttendanceEmployeeSnapshotFields",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildAttendanceTimekeepingFields",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getDateKeyInBusinessTimeZone",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getBusinessDayDate",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getBusinessDayBounds",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getTodayBusinessDayBounds",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isSameBusinessDay",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "normalizeToStartOfDay",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "normalizeToEndOfDay",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getEffectiveEmploymentStartDate",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isBeforeEffectiveEmploymentStartDate",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildAttendanceDateQuery",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "analyzeAttendanceAction",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatAttendanceDate",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getTodayStartUTC",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getTodayEndUTC",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getApprovedAttendanceLedgerWhereClause",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatAttendanceRecordsForAPI",
+      "file": "helper/attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildAuthCookieOptions",
+      "file": "helper/auth-cookie.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "wrapTextToWidth",
+      "file": "helper/bir-2316-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getBoxMappingForField",
+      "file": "helper/bir-2316-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "extractFieldNumber",
+      "file": "helper/bir-2316-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "resetFieldOccurrenceTracker",
+      "file": "helper/bir-2316-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "mapFieldNameToData",
+      "file": "helper/bir-2316-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatFieldValue",
+      "file": "helper/bir-2316-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "generateBir2316PdfForEmployee",
+      "file": "helper/bir-2316-report.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "generateBIRForm2316",
+      "file": "helper/bir-2316.generator.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "validateBIRForm2316",
+      "file": "helper/bir-2316.generator.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "printBIRForm2316",
+      "file": "helper/bir-2316.generator.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "calculateBIRPart4",
+      "file": "helper/bir-part4.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatPHP",
+      "file": "helper/bir-part4.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 100,
+      "pass": true
+    },
+    {
+      "name": "printBIRPart4",
+      "file": "helper/bir-part4.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isSystemGeneratedDocumentChecklistItem",
+      "file": "helper/boarding-documents.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getPendingActiveDocumentChecklistCandidates",
+      "file": "helper/boarding-documents.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "createDocumentChecklistItems",
+      "file": "helper/boarding-documents.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "syncOnboardingProcessProgress",
+      "file": "helper/boarding-documents.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "reconcileEmployeeOnboardingState",
+      "file": "helper/boarding-documents.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "createBoardingProcess",
+      "file": "helper/boarding.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildBulkDefaultPassword",
+      "file": "helper/bulk-password.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1078,
+      "pass": true
+    },
+    {
+      "name": "buildLegacyBulkDefaultPassword",
+      "file": "helper/bulk-password.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildBulkPasswordCandidates",
+      "file": "helper/bulk-password.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "extractPublicIdFromUrl",
+      "file": "helper/cloudinary.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getCloudinaryUrl",
+      "file": "helper/cloudinary.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildConfigCodeAcronym",
+      "file": "helper/config-code.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "suggestUniqueConfigCode",
+      "file": "helper/config-code.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "groupDataByField",
+      "file": "helper/dataGrouping.ts",
+      "testFilesMatched": 3,
+      "testCasesCount": 1205,
+      "pass": true
+    },
+    {
+      "name": "enrichBreakdownWithLeaveHolidayContext",
+      "file": "helper/day-context.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "enrichAttendanceRecordsWithLeaveHolidayContext",
+      "file": "helper/day-context.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "enrichAttendanceRecordsBatchWithLeaveHolidayContext",
+      "file": "helper/day-context.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "createDefaultLeaveBalances",
+      "file": "helper/default-leave-balances.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "inferDocumentFieldValidationRule",
+      "file": "helper/document-field-validation.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "normalizeDocumentFieldValueForValidation",
+      "file": "helper/document-field-validation.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 5,
+      "pass": true
+    },
+    {
+      "name": "validateDocumentFieldValue",
+      "file": "helper/document-field-validation.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 13,
+      "pass": true
+    },
+    {
+      "name": "getDocumentFieldValidationHint",
+      "file": "helper/document-field-validation.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "applyInferredDocumentFieldValidation",
+      "file": "helper/document-field-validation.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getLegacyDocumentReview",
+      "file": "helper/document-review.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildPendingDocumentReviewData",
+      "file": "helper/document-review.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildDocumentReviewCompatibilityMetadata",
+      "file": "helper/document-review.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "extractDocumentReviewSnapshot",
+      "file": "helper/document-review.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getDocumentReviewStatusValue",
+      "file": "helper/document-review.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "createDocumentReviewEvent",
+      "file": "helper/document-review.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "sendForgotPasswordEmail",
+      "file": "helper/email.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "sendWelcomeEmail",
+      "file": "helper/email.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "sendApplicationStatusUpdateEmail",
+      "file": "helper/email.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "mailer",
+      "file": "helper/email.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildEmployeeActionBlockedPayload",
+      "file": "helper/employee-action-block.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 21,
+      "pass": true
+    },
+    {
+      "name": "normalizeEmploymentStatus",
+      "file": "helper/employee-action-block.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 13,
+      "pass": true
+    },
+    {
+      "name": "isEmployeeSelfServiceBlockedStatus",
+      "file": "helper/employee-action-block.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 13,
+      "pass": true
+    },
+    {
+      "name": "getEmployeeActionBlock",
+      "file": "helper/employee-action-block.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 21,
+      "pass": true
+    },
+    {
+      "name": "normalizeEmployeeBenefitPayload",
+      "file": "helper/employee-benefit-program.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildBenefitInstallments",
+      "file": "helper/employee-benefit-program.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "sendEmployeeCredentialsEmail",
+      "file": "helper/employee-credentials-email.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "validateEmployeeMutationDatePayload",
+      "file": "helper/employee-date-validation.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getUtcDayRange",
+      "file": "helper/employee-date-validation.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "computeEmployeeDocumentCompliance",
+      "file": "helper/employee-document-compliance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "normalizeEmployeeDocumentTypeKey",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getDocumentReviewSnapshot",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getDocumentReviewStatus",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isDocumentApprovedForCompliance",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isDocumentPendingApproval",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isDocumentRejected",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getDocumentTypeFields",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getRequiredDocumentTypeFields",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getDocumentFieldValue",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "documentMatchesType",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "resolveDocumentTypeRequirementMeta",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isEmployeeVisibleActionableDocumentType",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isEmployeeDocumentValueEmpty",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "evaluateEmployeeDocumentCompleteness",
+      "file": "helper/employee-document-priority.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatEmployeeId",
+      "file": "helper/employee-id-code.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "reserveNextEmployeeId",
+      "file": "helper/employee-id-code.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "runEmployeePostActions",
+      "file": "helper/employee-post-actions.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "toLegacyScheduleSnapshotForDate",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "toShiftTypeSnapshot",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "normalizeEmployeeScheduleSnapshot",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "copyShiftTypeToTemplatePatternDay",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "anchorToMondayUtc",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "copyTemplateToEmployeeEmbeddedSchedule",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "appendEmployeeScheduleHistory",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "collectShiftTypeIdsFromEmployeeScheduleData",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1077,
+      "pass": true
+    },
+    {
+      "name": "resolveEffectiveShiftFromEmployeeData",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1077,
+      "pass": true
+    },
+    {
+      "name": "normalizeEmployeeScheduleEntries",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getActiveEmployeeScheduleEntry",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "toScheduleSnapshotFromEntry",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "resolveEmployeeActiveSchedule",
+      "file": "helper/employee-schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "convertEmployeeToBIR2316Input",
+      "file": "helper/employee-to-bir2316.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "processGroupedCounts",
+      "file": "helper/employee.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "createEmployeeHelpers",
+      "file": "helper/employee.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1076,
+      "pass": true
+    },
+    {
+      "name": "checkMissingCredentials",
+      "file": "helper/employee.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildErrorResponse",
+      "file": "helper/error-handler.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatZodErrors",
+      "file": "helper/error-handler.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "limitErrorDetails",
+      "file": "helper/error-handler.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "handleError",
+      "file": "helper/error-helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "extractPrismaMessage",
+      "file": "helper/error-helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "generateCertificateOfEmployment",
+      "file": "helper/generate-document.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "generatePayslip",
+      "file": "helper/generate-document.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "generateDocument",
+      "file": "helper/generate-document.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isValidEntityId",
+      "file": "helper/id-validation.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "normalizeLeaveType",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getDefaultLeavePolicySeed",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "ensureDefaultLeaveTypes",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "repairSeededDefaultLeaveTypePolicies",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "removeSeededDefaultLeaveTypes",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "selfRepairLeaveTypePoliciesFromLegacyConfig",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "getOrCreateLeavePolicies",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getExistingLeavePolicies",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "getLeavePolicyByType",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "validateLeaveRequestPolicy",
+      "file": "helper/leave-policy.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isHalfDaySessionCutoffReached",
+      "file": "helper/leave-session.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 7,
+      "pass": true
+    },
+    {
+      "name": "resolveLeaveSessionWindows",
+      "file": "helper/leave-session.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 7,
+      "pass": true
+    },
+    {
+      "name": "isValidEmailAddress",
+      "file": "helper/local-user-account.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "sanitizeUserNameSegment",
+      "file": "helper/local-user-account.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "buildSafeUserName",
+      "file": "helper/local-user-account.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 2,
+      "pass": false
+    },
+    {
+      "name": "resolveMigrationDefaultPassword",
+      "file": "helper/local-user-account.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 2,
+      "pass": false
+    },
+    {
+      "name": "ensureLocalUserAccount",
+      "file": "helper/local-user-account.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 2,
+      "pass": false
+    },
+    {
+      "name": "getLogger",
+      "file": "helper/logger.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildWhereClause",
+      "file": "helper/metrics.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildRequestTargetUrl",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildTimesheetTargetUrl",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "publishNotification",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "publishRequestCreatedNotification",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "publishDocumentReviewSubmittedNotification",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "publishRequestDecisionNotification",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "publishRequestCancelledNotification",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "publishTimesheetDecisionFallbackNotification",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "publishTimesheetReminderNotification",
+      "file": "helper/notification-dispatch.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 2,
+      "pass": false
+    },
+    {
+      "name": "calculatePayrollBreakdown",
+      "file": "helper/payroll-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 15,
+      "pass": true
+    },
+    {
+      "name": "generatePayrollPeriodCode",
+      "file": "helper/payroll-period-code.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "convertTimeToDecimal",
+      "file": "helper/payroll-period.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "ensureUnlockedWorkbook",
+      "file": "helper/payroll-reconciliation.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "parseBandaiPayrollWorkbook",
+      "file": "helper/payroll-reconciliation.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "writeWorkbookPreviewMarkdown",
+      "file": "helper/payroll-reconciliation.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "writeComparisonMarkdown",
+      "file": "helper/payroll-reconciliation.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "writeJson",
+      "file": "helper/payroll-reconciliation.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "writeText",
+      "file": "helper/payroll-reconciliation.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "writeComparisonCsv",
+      "file": "helper/payroll-reconciliation.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "calculateDailyRate",
+      "file": "helper/payroll-with-attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "calculateAttendanceSummary",
+      "file": "helper/payroll-with-attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "calculateAbsenceDeduction",
+      "file": "helper/payroll-with-attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "calculatePayrollWithAttendance",
+      "file": "helper/payroll-with-attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 15,
+      "pass": true
+    },
+    {
+      "name": "calculatePayrollFromAttendance",
+      "file": "helper/payroll-with-attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 15,
+      "pass": true
+    },
+    {
+      "name": "formatPayrollSummary",
+      "file": "helper/payroll-with-attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "comparePayrollWithAbsences",
+      "file": "helper/payroll-with-attendance.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildLegacyPayslipDocumentNumber",
+      "file": "helper/payslip-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildPayslipDocumentNumber",
+      "file": "helper/payslip-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "resolvePayslipReferenceNumber",
+      "file": "helper/payslip-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildPayslipFilename",
+      "file": "helper/payslip-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildPayslipDeductionRows",
+      "file": "helper/payslip-pdf.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "validatePrismaDatasourceUrl",
+      "file": "helper/prisma-datasource.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 14,
+      "pass": true
+    },
+    {
+      "name": "assertValidPrismaDatasourceUrl",
+      "file": "helper/prisma-datasource.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 14,
+      "pass": true
+    },
+    {
+      "name": "extractProvisioningState",
+      "file": "helper/provisioning-state.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "mergeBrandingProvisioning",
+      "file": "helper/provisioning-state.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isHrSettingsComplete",
+      "file": "helper/provisioning-state.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildProvisioningAccessSnapshot",
+      "file": "helper/provisioning-state.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildSeededProvisioningState",
+      "file": "helper/provisioning-state.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildSeededOrganizationBranding",
+      "file": "helper/provisioning-state.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildFilterConditions",
+      "file": "helper/query-builder.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildSearchConditions",
+      "file": "helper/query-builder.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1083,
+      "pass": true
+    },
+    {
+      "name": "getNestedFields",
+      "file": "helper/query-builder.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "normalizeAndValidateFieldSelection",
+      "file": "helper/query-builder.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1083,
+      "pass": true
+    },
+    {
+      "name": "groupDataByField",
+      "file": "helper/query-builder.helper.ts",
+      "testFilesMatched": 3,
+      "testCasesCount": 1205,
+      "pass": true
+    },
+    {
+      "name": "buildFindManyQuery",
+      "file": "helper/query-builder.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "calculateRatesWithBreakdown",
+      "file": "helper/rate-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatRateCalculationOutput",
+      "file": "helper/rate-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatRateCalculationResponse",
+      "file": "helper/rate-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatRateCalculationForUI",
+      "file": "helper/rate-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "initializeApplicantWorkflow",
+      "file": "helper/recruitment-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getApplicantPreHireSetupReadiness",
+      "file": "helper/recruitment-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "provisionApplicantEmployeeAccountAfterHire",
+      "file": "helper/recruitment-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "convertHiredApplicantToEmployee",
+      "file": "helper/recruitment-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "executeApplicantAction",
+      "file": "helper/recruitment-runtime.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1077,
+      "pass": true
+    },
+    {
+      "name": "buildAssigneeResolutionMetadata",
+      "file": "helper/request-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "getDefaultWorkflowStates",
+      "file": "helper/request-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "normalizeWorkflowStates",
+      "file": "helper/request-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "getStateLabel",
+      "file": "helper/request-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "getStepEnterState",
+      "file": "helper/request-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "getFinalStateForSteps",
+      "file": "helper/request-runtime.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "resolveRequestTransactionActorType",
+      "file": "helper/request-transaction.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "buildRequestFieldChanges",
+      "file": "helper/request-transaction.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "getMatchingRequestTypePostActions",
+      "file": "helper/request-type-post-action.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "hasRequestTypePostAction",
+      "file": "helper/request-type-post-action.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "REQUEST_TYPE_POST_ACTION",
+      "file": "helper/request-type-post-action.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "isScheduleChangeRequestType",
+      "file": "helper/schedule-change-workflow.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "isScheduleChangeWorkflowCode",
+      "file": "helper/schedule-change-workflow.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "isStaleScheduleChangeHrTaskExecution",
+      "file": "helper/schedule-change-workflow.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 5,
+      "pass": true
+    },
+    {
+      "name": "hasScheduleChangeWorkflowStepDrift",
+      "file": "helper/schedule-change-workflow.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "calculateShiftHourFromSlots",
+      "file": "helper/schedule-normalization.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 3,
+      "pass": false
+    },
+    {
+      "name": "calculateShiftHour",
+      "file": "helper/schedule-normalization.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 3,
+      "pass": false
+    },
+    {
+      "name": "normalizeTemplatePatternDay",
+      "file": "helper/schedule-normalization.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "calculateScheduleTemplateTotals",
+      "file": "helper/schedule-normalization.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "normalizeShiftTypeTotals",
+      "file": "helper/schedule-normalization.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "normalizeScheduleTemplateTotals",
+      "file": "helper/schedule-normalization.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "getScheduleIndex",
+      "file": "helper/schedule-work-metrics.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getScheduleBoundaries",
+      "file": "helper/schedule-work-metrics.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "calculateStrictScheduleMetrics",
+      "file": "helper/schedule-work-metrics.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "findShiftForDay",
+      "file": "helper/schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "validateAttendanceTime",
+      "file": "helper/schedule.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getSeedAuthConfig",
+      "file": "helper/seed-auth.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildSeedAuthHeaders",
+      "file": "helper/seed-auth.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildSeedAuthUrl",
+      "file": "helper/seed-auth.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "loginSeedAuth",
+      "file": "helper/seed-auth.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "resolveSeedOrganization",
+      "file": "helper/seed-auth.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "ensureSeedRoles",
+      "file": "helper/seed-auth.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "resolveSeedRoleId",
+      "file": "helper/seed-auth.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildPagination",
+      "file": "helper/success-handler.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1120,
+      "pass": true
+    },
+    {
+      "name": "calculateWithholdingTax",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "calculateSSSContribution",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "calculatePhilHealthContribution",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "calculatePagIbigContribution",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "calculateTotalContributions",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "calculatePayroll",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 70,
+      "pass": true
+    },
+    {
+      "name": "exampleCalculation",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getTaxBracket",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "formatPHP",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 100,
+      "pass": true
+    },
+    {
+      "name": "roundToCentavo",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 100,
+      "pass": true
+    },
+    {
+      "name": "roundUpToPeso",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 100,
+      "pass": true
+    },
+    {
+      "name": "calculateYTDWithholdingTax",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "getContributionBreakdown",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "calculateProratedPayroll",
+      "file": "helper/tax-calculator.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "determineAttendanceStatus",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "deriveBehaviorFlags",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "timeToMinutes",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "deriveGracePeriodStatus",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "calculateTimekeeping",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1077,
+      "pass": true
+    },
+    {
+      "name": "calculateTotalMinutes",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "minutesToHours",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "formatMinutesAsTime",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "generateTimesheetSummary",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "generateDailyBreakdown",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "formatTimekeepingSummary",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "computeNightShiftForDay",
+      "file": "helper/timekeeping.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 55,
+      "pass": true
+    },
+    {
+      "name": "normalizeTimesheetRulesConfig",
+      "file": "helper/timesheet-config.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "mergeTimesheetConfigRules",
+      "file": "helper/timesheet-config.helper.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "buildTimesheetDaySnapshotMetadata",
+      "file": "helper/timesheet-line-version.helper.ts",
+      "testFilesMatched": 3,
+      "testCasesCount": 1090,
+      "pass": true
+    },
+    {
+      "name": "isTimesheetAttendanceRefreshAllowed",
+      "file": "helper/timesheet.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 9,
+      "pass": true
+    },
+    {
+      "name": "buildBreakdownFromTimesheetLines",
+      "file": "helper/timesheet.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "validateTimesheetCode",
+      "file": "helper/timesheet.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "convertStringBooleans",
+      "file": "helper/transformObject.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1120,
+      "pass": true
+    },
+    {
+      "name": "transformFormDataToObject",
+      "file": "helper/transformObject.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1120,
+      "pass": true
+    },
+    {
+      "name": "validateQueryParams",
+      "file": "helper/validation-helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 20,
+      "pass": true
+    },
+    {
+      "name": "normalizeWorkflowConfigRecord",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 24,
+      "pass": true
+    },
+    {
+      "name": "getSeededWorkflowConfigs",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 3,
+      "testCasesCount": 37,
+      "pass": true
+    },
+    {
+      "name": "extractWorkflowConfigs",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 24,
+      "pass": true
+    },
+    {
+      "name": "mergeWithSeededWorkflowConfigs",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 3,
+      "testCasesCount": 37,
+      "pass": true
+    },
+    {
+      "name": "getWorkflowConfigByCode",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 32,
+      "pass": true
+    },
+    {
+      "name": "getRequestWorkflowConfig",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 24,
+      "pass": true
+    },
+    {
+      "name": "setWorkflowConfigInBranding",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 24,
+      "pass": true
+    },
+    {
+      "name": "removeWorkflowConfigFromBranding",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 24,
+      "pass": true
+    },
+    {
+      "name": "resetWorkflowConfigInBranding",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 24,
+      "pass": true
+    },
+    {
+      "name": "seedWorkflowConfigsInBranding",
+      "file": "helper/workflow-config.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 24,
+      "pass": true
+    },
+    {
+      "name": "normalizeWorkforceRecruitmentPolicyInput",
+      "file": "helper/workforce-recruitment.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "buildWorkforceRecruitmentPolicyCreateInput",
+      "file": "helper/workforce-recruitment.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "serializeWorkforceRecruitmentSetting",
+      "file": "helper/workforce-recruitment.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "getOrCreateWorkforceRecruitmentSetting",
+      "file": "helper/workforce-recruitment.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "isDepartmentJobRequisitionMetadata",
+      "file": "helper/workforce-recruitment.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "resolveWorkforcePolicy",
+      "file": "helper/workforce-recruitment.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "countCurrentHeadcount",
+      "file": "helper/workforce-recruitment.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "buildHiringRequisitionDescription",
+      "file": "helper/workforce-recruitment.helper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "shouldSkipAuditLog",
+      "file": "utils/auditLogger.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1078,
+      "pass": true
+    },
+    {
+      "name": "isValidEmail",
+      "file": "utils/email.validator.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1120,
+      "pass": true
+    },
+    {
+      "name": "validateEmailOptions",
+      "file": "utils/email.validator.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1120,
+      "pass": true
+    },
+    {
+      "name": "convertFormDataTypes",
+      "file": "utils/formDataHelper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 20,
+      "pass": true
+    },
+    {
+      "name": "convertWithPreset",
+      "file": "utils/formDataHelper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 20,
+      "pass": true
+    },
+    {
+      "name": "filterDatabaseFields",
+      "file": "utils/formDataHelper.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 20,
+      "pass": true
+    },
+    {
+      "name": "exampleDirectRedisUsage",
+      "file": "utils/redisExample.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "redisHealthCheck",
+      "file": "utils/redisExample.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "exampleCachedEndpoint",
+      "file": "utils/redisExample.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "exampleUserSpecificCache",
+      "file": "utils/redisExample.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "exampleSessionManagement",
+      "file": "utils/redisExample.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "exampleCacheInvalidation",
+      "file": "utils/redisExample.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "examplePubSub",
+      "file": "utils/redisExample.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "deriveRoleAndFlags",
+      "file": "utils/role-derivation.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 53,
+      "pass": true
+    },
+    {
+      "name": "deriveRoleAndFlagsFromRecord",
+      "file": "utils/role-derivation.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 53,
+      "pass": true
+    },
+    {
+      "name": "isManagerLevel",
+      "file": "utils/role-derivation.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 53,
+      "pass": true
+    },
+    {
+      "name": "isHrDepartment",
+      "file": "utils/role-derivation.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 53,
+      "pass": true
+    },
+    {
+      "name": "getOrganizationId",
+      "file": "utils/tenantContext.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 25,
+      "pass": true
+    },
+    {
+      "name": "tenantContext",
+      "file": "utils/tenantContext.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 25,
+      "pass": true
+    },
+    {
+      "name": "apiDebugLoggingMiddleware",
+      "file": "middleware/apiDebugLogging.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "cache",
+      "file": "middleware/cache.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "cacheUser",
+      "file": "middleware/cache.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "cachePublic",
+      "file": "middleware/cache.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "invalidateCache",
+      "file": "middleware/cache.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "httpMetricsMiddleware",
+      "file": "middleware/observability.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "rateLimiter",
+      "file": "middleware/rateLimiter.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1082,
+      "pass": true
+    },
+    {
+      "name": "slowDownMiddleware",
+      "file": "middleware/rateLimiter.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "requestTimeout",
+      "file": "middleware/requestTimeout.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 25,
+      "pass": true
+    },
+    {
+      "name": "tenantContextMiddleware",
+      "file": "middleware/tenant.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 25,
+      "pass": true
+    },
+    {
+      "name": "enforceTenant",
+      "file": "middleware/tenantEnforce.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 25,
+      "pass": true
+    },
+    {
+      "name": "uploadApplicantResume",
+      "file": "middleware/upload.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "uploadApplicantContract",
+      "file": "middleware/upload.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "uploadEmployeeDocuments",
+      "file": "middleware/upload.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "uploadCSV",
+      "file": "middleware/upload.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "uploadDocument",
+      "file": "middleware/upload.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "uploadXLSX",
+      "file": "middleware/upload.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "uploadImportFile",
+      "file": "middleware/upload.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "uploadImportFiles",
+      "file": "middleware/upload.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "tryAuthenticateRequest",
+      "file": "middleware/verifyToken.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "__setVerifyTokenDependenciesForTests",
+      "file": "middleware/verifyToken.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "__resetVerifyTokenDependenciesForTests",
+      "file": "middleware/verifyToken.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 38,
+      "pass": true
+    },
+    {
+      "name": "runWithDbRequestContext",
+      "file": "config/database.ts",
+      "testFilesMatched": 0,
+      "testCasesCount": 0,
+      "pass": false
+    },
+    {
+      "name": "getEmployeeMailer",
+      "file": "config/employee-email.config.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "getAnnualizationDivisor",
+      "file": "config/payroll.config.ts",
+      "testFilesMatched": 2,
+      "testCasesCount": 1120,
+      "pass": true
+    },
+    {
+      "name": "getSecurityConfig",
+      "file": "config/security.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    },
+    {
+      "name": "hikvisionFetch",
+      "file": "lib/hikvision-client.ts",
+      "testFilesMatched": 1,
+      "testCasesCount": 1075,
+      "pass": true
+    }
+  ]
+}
