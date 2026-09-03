@@ -6,12 +6,19 @@ on LAN `10.184.37.19` and must use **Cloudflare Access SSH** for local
 
 Evidence pack (gitignored): `.runtime/local-dev-cf-ssh-db-tunnel-20260720/`.
 
+## Automated one-time setup (2026-09-03)
+
+The missing-key blocker is now self-service: `cd hris-api; npm run setup:ssh`
+(`scripts/setup-dev-ssh-access.ps1`) generates the key, writes the ssh config,
+installs the public key on the VM (LAN-first, Cloudflare Access sign-in
+fallback), and verifies. `npm run dev` also offers this interactively when the
+DB forward is blocked. See `docs/DEV_WORKSTATION_ONBOARDING.md`.
+
 ## Symptoms fixed
 
 | Symptom | Root cause |
 |---|---|
-| `SSH key not found at ...\node-health-appliance_ed25519` | Key missing on workstation |
-| Login 500 `Can't reach database server at 127.0.0.1:55435` | Local SSH DB tunnel down or half-dead |
+| `SSH key not found at ...\node-health-appliance_ed25519` | Key missing on workstation || Login 500 `Can't reach database server at 127.0.0.1:55435` | Local SSH DB tunnel down or half-dead |
 | Tunnel TCP open but Prisma still fails | Forward target K3s `10.43.130.9:5432` refused; compose `15433` OK |
 | `remote port forwarding failed for listen port 59443` | Stale VM reverse-forward `sshd` still held 59443/59000 |
 | UI **Unable to connect to the server** | Nothing listening on `:3001` (predev hung; API never reached `server.ready`) |

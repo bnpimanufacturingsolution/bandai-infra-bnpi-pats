@@ -189,12 +189,13 @@ function runStep(step, index, total, runState) {
 	return code;
 }
 
-/** Run steps that share a phase in parallel (still all execute). */
+/** Run steps that share a phase in parallel (still all execute). Returns {code, failedId}. */
 function runPhaseParallel(steps, indexOffset, total, runState) {
 	const { spawn } = require("child_process");
 	return new Promise((resolve) => {
 		if (steps.length === 1) {
-			resolve(runStep(steps[0], indexOffset, total, runState));
+			const code = runStep(steps[0], indexOffset, total, runState);
+			resolve({ code, failedId: code !== 0 ? steps[0].id : null });
 			return;
 		}
 
@@ -202,6 +203,7 @@ function runPhaseParallel(steps, indexOffset, total, runState) {
 			`[predev] PHASE parallel: ${steps.map((s) => s.id).join(" + ")}`,
 		);
 		const results = [];
+		let failedId = null;
 		let remaining = steps.length;
 
 		steps.forEach((step, i) => {
@@ -221,7 +223,7 @@ function runPhaseParallel(steps, indexOffset, total, runState) {
 					ms: 0,
 				});
 				remaining -= 1;
-				if (remaining === 0) resolve(Math.max(0, ...results));
+				if (remaining === 0) resolve({ code: Math.max(0, ...results), failedId });
 				return;
 			}
 
@@ -250,10 +252,16 @@ function runPhaseParallel(steps, indexOffset, total, runState) {
 						ms,
 						exitCode,
 					});
+					if (failedId === null) failedId = step.id;
 				}
 				writeStatus(runState);
 				remaining -= 1;
-				if (remaining === 0) resolve(Math.max(...results.map((c) => c || 0)));
+				if (remaining === 0) {
+					resolve({
+						code: Math.max(...results.map((c) => c || 0)),
+						failedId,
+					});
+				}
 			});
 		});
 	});
@@ -316,13 +324,16 @@ function main() {
 
 		let indexOffset = 0;
 		for (const group of phases) {
-			const code =
+			const outcome =
 				group.steps.length > 1
 					? await runPhaseParallel(group.steps, indexOffset, total, runState)
-					: runStep(group.steps[0], indexOffset, total, runState);
+					: (() => {
+							const code = runStep(group.steps[0], indexOffset, total, runState);
+							return { code, failedId: code !== 0 ? group.steps[0].id : null };
+						})();
 			indexOffset += group.steps.length;
-			if (code !== 0) {
-				failed = { step: group.steps[0], code };
+			if (outcome.code !== 0) {
+				failed = { stepId: outcome.failedId || group.steps[0].id, code: outcome.code };
 				break;
 			}
 		}
@@ -333,10 +344,10 @@ function main() {
 			runState.status = "failed";
 			runState.finishedAt = nowIso();
 			runState.totalMs = Date.now() - t0;
-			runState.failedStep = failed.step.id;
+			runState.failedStep = failed.stepId;
 			writeStatus(runState);
 			banner(
-				`[predev] FAILED at ${failed.step.id} (exit ${failed.code}) after ${totalSec}s`,
+				`[predev] FAILED at ${failed.stepId} (exit ${failed.code}) after ${totalSec}s`,
 			);
 			logLine(`[predev] See log: ${logPath}`);
 			try {

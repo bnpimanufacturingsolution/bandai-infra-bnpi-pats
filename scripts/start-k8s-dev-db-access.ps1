@@ -10,8 +10,9 @@ $runtimeRoot = Join-Path $repoRoot '.runtime\k8s-dev-db-tcp'
 $pidFile = Join-Path $runtimeRoot 'k8s-dev-db-access-active.json'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $runRoot = Join-Path $runtimeRoot "k8s-dev-db-access-$stamp"
-$sshKey = Join-Path $env:USERPROFILE '.ssh\node-health-appliance_ed25519'
-$sshExe = (Get-Command ssh.exe -ErrorAction Stop).Source
+$sshKey = if ($env:PROJECT_TRUTH_SSH_KEY) { $env:PROJECT_TRUTH_SSH_KEY } else { Join-Path $env:USERPROFILE '.ssh\node-health-appliance_ed25519' }
+$setupSshScript = Join-Path $PSScriptRoot 'setup-dev-ssh-access.ps1'
+$sshExe = Get-Command ssh.exe -ErrorAction SilentlyContinue
 $vmHost = '10.184.37.19'
 $vmUser = 'infra'
 $sshAlias = 'project-truth-hris'
@@ -139,8 +140,32 @@ if ($StopExisting) {
 }
 
 if (-not (Test-Path -LiteralPath $sshKey)) {
-  throw "SSH key not found at $sshKey"
+	$pubKey = if (Test-Path -LiteralPath "$sshKey.pub") { (Get-Content -LiteralPath "$sshKey.pub" | Select-Object -First 1).Trim() } else { $null }
+	@"
+
+K3s DEV DB forward needs the workstation SSH key, which is missing:
+
+    $sshKey
+
+This is a ONE-TIME workstation setup. Fix it with the guided onboarding
+(generates the key, writes the ssh config, installs it on the VM, verifies):
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$setupSshScript"
+
+A browser sign-in to the 1bis.solutions.tech Cloudflare Access account may be
+requested during onboarding. After it finishes, re-run npm run dev.
+"@ | Write-Host -ForegroundColor Yellow
+	if ($pubKey) {
+		Write-Host "A .pub file exists but the private key is missing. Give this public key line to the operator to append to the VM infra authorized_keys:" -ForegroundColor Yellow
+		Write-Host "  $pubKey" -ForegroundColor Yellow
+	}
+	throw "SSH key not found at $sshKey. Run scripts/setup-dev-ssh-access.ps1 once to onboard this workstation (see message above)."
 }
+
+if (-not $sshExe) {
+	throw "ssh.exe not found on PATH. Install the Windows OpenSSH Client optional feature, then re-run."
+}
+$sshExe = $sshExe.Source
 
 $pgHandshakeTimeoutMs = Get-PostgresHandshakeTimeoutMs
 
