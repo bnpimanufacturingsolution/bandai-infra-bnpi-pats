@@ -1,4 +1,10 @@
 # WWG Agent Handoff
+## 2026-09-03 - Payroll domain audit (read-only)
+
+- Report: `.wwg/reports/payroll-audit-20260903.md`. Domain intact post-restore: register rules (Basic Path A/B, 313 basis, FILE_DUAL) verified live in `generatePayrollFromTimesheets`/`previewPayrollFromTimesheets` (`payroll-period.helper.ts:2002/2029/:5091/:5116`); Run Payroll OT readiness wired (`payrollperiod.controller.ts:1079`); **184/184 tests passing** (22 runnable payroll specs, TESTEXIT=0).
+- 5 findings (F1 org-policy auto-approve mislabeled as "Manager approved" in OT readiness — latent, flag OFF; F2 vitest dead spec for PayrollGenerationJobService; F3 test-only calculator with contradicting rate basis; F4 OT-import auto-approve chain is ops-script-only; F5 hris-api CI scope = source-truth only) → RECs registered: REC-20260903-OT-READINESS-POLICY-AUTOAPPROVE-LABEL, REC-20260903-PAYROLL-GENJOB-VITEST-DEAD-SPEC, REC-20260903-PAYROLL-CALC-HELPER-TEST-ONLY.
+- No code/config/data changes; audit-only. Next: owner triage of the 3 Proposed RECs.
+
 
 ## 2026-09-03 - develop gutting incident: RESOLVED
 
