@@ -54,7 +54,7 @@ const REJECT_BEHAVIOR_OPTIONS: SelectOption[] = [
 
 const defaultDraft: TimesheetRuleDraft = {
 	enableEditBeforeSubmission: true,
-	enableAutoApprove: false,
+	enableAutoApprove: true,
 	rejectBehavior: "REVISE",
 	workTimeRounding: {
 		enabled: false,
@@ -81,7 +81,8 @@ const defaultDraft: TimesheetRuleDraft = {
 };
 
 const normalizeConfigDraft = (config?: TimesheetConfig): TimesheetRuleDraft => ({
-	enableEditBeforeSubmission: config?.enableEditBeforeSubmission ?? defaultDraft.enableEditBeforeSubmission,
+	enableEditBeforeSubmission:
+		config?.enableEditBeforeSubmission ?? defaultDraft.enableEditBeforeSubmission,
 	enableAutoApprove: config?.enableAutoApprove ?? defaultDraft.enableAutoApprove,
 	rejectBehavior: config?.rejectBehavior ?? defaultDraft.rejectBehavior,
 	workTimeRounding: config?.workTimeRounding ?? defaultDraft.workTimeRounding,
@@ -144,7 +145,11 @@ export default function AdminTimesheetRulesPage() {
 				className="h-9 rounded-md bg-orange-600 text-white hover:bg-orange-700"
 				disabled={!isDirty || isSaving}
 				onClick={saveDraft}>
-				{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+				{isSaving ? (
+					<Loader2 className="h-4 w-4 animate-spin" />
+				) : (
+					<Save className="h-4 w-4" />
+				)}
 				{isSaving ? "Saving..." : "Save Changes"}
 			</Button>
 		</>
@@ -164,7 +169,10 @@ export default function AdminTimesheetRulesPage() {
 		<RulesPoliciesShell title="Timesheet Settings" actions={headerActions}>
 			<div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
 				<section className="min-w-0 rounded-lg border border-gray-200 bg-white p-3">
-					<SectionHeader icon={<Clock3 className="h-4 w-4" />} title="Work Time And Overtime" />
+					<SectionHeader
+						icon={<Clock3 className="h-4 w-4" />}
+						title="Work Time And Overtime"
+					/>
 					<div className="mt-3 overflow-hidden rounded-md border border-gray-200 bg-white">
 						<RowToggle
 							label="Work Time Rounding"
@@ -246,7 +254,10 @@ export default function AdminTimesheetRulesPage() {
 									type="number"
 									min={0}
 									step={1}
-									value={draft.overtimeQualification.minimumMinutesBeforeQualification}
+									value={
+										draft.overtimeQualification
+											.minimumMinutesBeforeQualification
+									}
 									onChange={(event) =>
 										setDraft((current) => ({
 											...current,
@@ -262,11 +273,15 @@ export default function AdminTimesheetRulesPage() {
 									className="h-10 rounded-md border-gray-200 bg-white text-sm"
 									disabled={!draft.overtimeQualification.enabled || isSaving}
 								/>
-								<ConstraintTokenRow tokens={[{ label: "Minutes", tone: "subtle" }]} />
+								<ConstraintTokenRow
+									tokens={[{ label: "Minutes", tone: "subtle" }]}
+								/>
 							</Field>
 							<Field label="OT Round Increment">
 								<Select
-									value={String(draft.overtimeQualification.rounding.incrementMinutes)}
+									value={String(
+										draft.overtimeQualification.rounding.incrementMinutes,
+									)}
 									onChange={(value) =>
 										setDraft((current) => ({
 											...current,
@@ -307,7 +322,10 @@ export default function AdminTimesheetRulesPage() {
 				</section>
 
 				<section className="min-w-0 rounded-lg border border-gray-200 bg-white p-3">
-					<SectionHeader icon={<ShieldCheck className="h-4 w-4" />} title="Review And Locking" />
+					<SectionHeader
+						icon={<ShieldCheck className="h-4 w-4" />}
+						title="Review And Locking"
+					/>
 					<div className="mt-3 overflow-hidden rounded-md border border-gray-200 bg-white">
 						<RowToggle
 							label="Employee Edit Before Submit"
@@ -322,6 +340,7 @@ export default function AdminTimesheetRulesPage() {
 							onCheckedChange={(enableAutoApprove) =>
 								setDraft((current) => ({ ...current, enableAutoApprove }))
 							}
+							disabled={isSaving}
 						/>
 						<div className="border-t border-gray-100 px-3 py-3">
 							<Field label="Reject Behavior">
@@ -330,7 +349,8 @@ export default function AdminTimesheetRulesPage() {
 									onChange={(value) =>
 										setDraft((current) => ({
 											...current,
-											rejectBehavior: value as TimesheetRuleDraft["rejectBehavior"],
+											rejectBehavior:
+												value as TimesheetRuleDraft["rejectBehavior"],
 										}))
 									}
 									options={REJECT_BEHAVIOR_OPTIONS}
@@ -344,7 +364,10 @@ export default function AdminTimesheetRulesPage() {
 							onCheckedChange={(enabled) =>
 								setDraft((current) => ({
 									...current,
-									payrollFinalization: { ...current.payrollFinalization, enabled },
+									payrollFinalization: {
+										...current.payrollFinalization,
+										enabled,
+									},
 								}))
 							}
 						/>
@@ -381,12 +404,47 @@ export default function AdminTimesheetRulesPage() {
 			</div>
 
 			<section className="rounded-lg border border-gray-200 bg-white p-3">
-				<SectionHeader icon={<CheckCircle2 className="h-4 w-4" />} title="Source Of Truth Snapshot" />
-				<div className="mt-3 grid gap-0 overflow-hidden rounded-md border border-gray-200 divide-y divide-gray-100 md:grid-cols-4 md:divide-x md:divide-y-0">
-					<Snapshot label="Work rounding" value={draft.workTimeRounding.enabled ? `${draft.workTimeRounding.mode} / ${draft.workTimeRounding.incrementMinutes} min` : "Off"} />
-					<Snapshot label="OT threshold" value={draft.overtimeQualification.enabled ? `${draft.overtimeQualification.minimumMinutesBeforeQualification} min excess` : "Off"} />
-					<Snapshot label="Payroll lock" value={draft.payrollFinalization.lockTimesheetOnCutoffFinalization ? "Cutoff finalization" : "Manual only"} />
-					<Snapshot label="Auto approve" value={draft.enableAutoApprove ? "Approved on submit" : "Manual review"} />
+				<SectionHeader
+					icon={<CheckCircle2 className="h-4 w-4" />}
+					title="Source Of Truth Snapshot"
+				/>
+				<div className="mt-3 grid gap-0 overflow-hidden rounded-md border border-gray-200 bg-white divide-y divide-gray-100 md:grid-cols-4 md:divide-x md:divide-y-0">
+					<Snapshot
+						label="Approval mode"
+						value={
+							draft.enableAutoApprove
+								? "Auto (payroll-ready on submit)"
+								: "Manual (manager approval)"
+						}
+					/>
+					<Snapshot
+						label="Work rounding"
+						value={
+							draft.workTimeRounding.enabled
+								? `${draft.workTimeRounding.mode} / ${draft.workTimeRounding.incrementMinutes} min`
+								: "Off"
+						}
+					/>
+					<Snapshot
+						label="OT threshold"
+						value={
+							draft.overtimeQualification.enabled
+								? `${draft.overtimeQualification.minimumMinutesBeforeQualification} min excess`
+								: "Off"
+						}
+					/>
+					<Snapshot
+						label="Payroll lock"
+						value={
+							draft.payrollFinalization.lockTimesheetOnCutoffFinalization
+								? "Cutoff finalization"
+								: "Manual only"
+						}
+					/>
+					<Snapshot
+						label="Auto approve"
+						value={draft.enableAutoApprove ? "Approved on submit" : "Manual review"}
+					/>
 				</div>
 			</section>
 		</RulesPoliciesShell>

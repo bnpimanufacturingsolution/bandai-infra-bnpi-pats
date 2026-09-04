@@ -90,7 +90,10 @@ const HR_ROLE_KEYS = new Set([
 	"super_admin",
 	"superadmin",
 ]);
-const MANAGER_ROLE_KEYS = new Set(["hris-employee-manager"]);
+const MANAGER_ROLE_KEYS = new Set([
+	"hris-employee-manager",
+	"hris-line-leader",
+]);
 const hasManagerProfileFlag = (employee?: Record<string, any> | null) =>
 	employee?.isManager === true ||
 	employee?.isManager === "true" ||

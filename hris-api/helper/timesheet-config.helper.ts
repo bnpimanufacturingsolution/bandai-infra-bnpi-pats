@@ -162,6 +162,32 @@ export function mergeTimesheetConfigRules(record: any) {
 	};
 }
 
+export const AUTO_APPROVE_SYSTEM_ACTOR = "SYSTEM_AUTO_APPROVE";
+
+export function resolveTimesheetAutoApprovalEnabled(value: unknown): boolean {
+	return value === true;
+}
+
+export function buildTimesheetAutoApprovalPatch(
+	existingMetadata?: Record<string, unknown> | null,
+	now: Date = new Date(),
+) {
+	return {
+		status: "APPROVED" as const,
+		approvedBy: AUTO_APPROVE_SYSTEM_ACTOR,
+		approvalDate: now,
+		metadata: {
+			...(existingMetadata || {}),
+			snapshotState: "APPROVED",
+			snapshotLockedAt: now.toISOString(),
+			snapshotLockedBy: AUTO_APPROVE_SYSTEM_ACTOR,
+			snapshotType: "TIMESHEET_PERIOD",
+			autoApproved: true,
+			autoApprovedAt: now.toISOString(),
+		},
+	};
+}
+
 export async function getOrCreateNormalizedTimesheetConfig(
 	prisma: PrismaClient,
 	organizationId: string,
@@ -185,7 +211,7 @@ export async function getOrCreateNormalizedTimesheetConfig(
 		record = await prisma.timesheetConfig.create({
 			data: {
 				organizationId,
-				enableAutoApprove: false,
+				enableAutoApprove: true,
 				enableEditBeforeSubmission: true,
 				rejectBehavior: "REVISE",
 				overtimeFlagThresholdMinutes:

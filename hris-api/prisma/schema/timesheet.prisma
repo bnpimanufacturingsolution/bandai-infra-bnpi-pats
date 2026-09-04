@@ -31,7 +31,10 @@ model TimesheetConfig {
   organizationId String @unique // One config per organization
 
   // Auto-approval settings
-  enableAutoApprove Boolean @default(false)
+  // Operator default (2026-09-03): submitted timesheets approve automatically so
+  // they convert into payroll without a manual approval step. Admins can switch
+  // an organization to manual approval from Timesheet Settings.
+  enableAutoApprove Boolean @default(true)
 
   // Employee editing permissions
   enableEditBeforeSubmission Boolean @default(true)

@@ -2,6 +2,7 @@
 // Spec gap M3.2: replaces the mock admin page with a real backend.
 
 enum DisciplinaryActionStatus {
+  DRAFT
   OPEN
   ONGOING
   RESOLVED

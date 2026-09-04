@@ -40,6 +40,7 @@ export function isUnifiedViewportFillPath(pathname: string): boolean {
 		path === "/hr/benefit-types" ||
 		path === "/hr/activity-logs" ||
 		path === "/hr/audit-logs" ||
+		path === "/hr/disciplinary-action" ||
 		path === "/hr/settings/documents" ||
 		path === "/hr/employee-schedules"
 	) {

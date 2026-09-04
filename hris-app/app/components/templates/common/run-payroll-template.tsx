@@ -2293,7 +2293,7 @@ export function RunPayrollTemplate() {
 											readiness.key === "not_submitted"
 												? "Estimate only — timesheet not submitted. Money uses the same lines as after submit."
 												: readiness.key === "pending_approval"
-													? "Estimate only — timesheet pending approval. Start Payroll still requires approval."
+													? "Estimate only — timesheet pending auto-approval. Start Payroll auto-approves it."
 													: "Estimate only — not payroll-ready yet."
 										}>
 										{readiness.label}
@@ -4358,7 +4358,8 @@ export function RunPayrollTemplate() {
 							<p className="mt-1 text-xs text-neutral-500">
 								Dry-run using timesheet lines and current adjustments (including not
 								submitted, clearly labeled). No payroll records will be created.
-								Start Payroll still requires approved timesheets.
+								Start Payroll auto-generates any missing timesheets from current
+								attendance and auto-approves them.
 							</p>
 						)}
 					</div>

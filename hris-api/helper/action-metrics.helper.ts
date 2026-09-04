@@ -872,11 +872,54 @@ export async function getUserActionMetrics(params: {
 }): Promise<ActionMetricsResponse> {
 	const { prisma, authReq } = params;
 	const organizationId = authReq.organizationId;
-	const authEmployeeId = authReq.metadata?.employee?.id;
+	let authEmployeeId = authReq.metadata?.employee?.id;
 	const role = authReq.role;
 
-	if (!organizationId || !authEmployeeId) {
-		throw new Error("Employee context is required for action metrics");
+	if (!authEmployeeId && authReq.user?.id) {
+		const linkedEmp = await prisma.employee.findFirst({
+			where: { userId: authReq.user.id, isDeleted: false },
+			select: { id: true },
+		});
+		if (linkedEmp) {
+			authEmployeeId = linkedEmp.id;
+		}
+	}
+
+	if (!organizationId) {
+		throw new Error("Organization context is required for action metrics");
+	}
+
+	if (!authEmployeeId) {
+		return {
+			total: 0,
+			summary: { total: 0, high: 0, medium: 0, low: 0 },
+			counts: {
+				dashboard: 0,
+				tickets: { total: 0 },
+				requests: { total: 0 },
+				approvals: { total: 0, requests: 0, timesheet: 0 },
+				documents: {
+					total: 0,
+					missing: 0,
+					rejected: 0,
+					expired: 0,
+					needsUpdate: 0,
+					pendingApproval: 0,
+					hrPendingApproval: 0,
+					optional: 0,
+				},
+				timesheets: { total: 0 },
+				notifications: { total: 0 },
+			},
+			items: {
+				dashboard: [],
+				documents: [],
+				onboardingDocuments: [],
+			},
+			categories: {
+				documents: [],
+			},
+		};
 	}
 
 	const documentEmployeeId = params.targetEmployeeId || authEmployeeId;

@@ -156,6 +156,7 @@ vi.mock("~/lib/hooks/useTimesheets", () => ({
 	useLockPeriodTimesheets: () => ({ mutateAsync: vi.fn(), isPending: false }),
 	useSendTimesheetReminder: () => ({ mutate: vi.fn(), isPending: false }),
 	useEnsurePeriodDrafts: () => ({ mutateAsync: vi.fn(), isPending: false }),
+	useEnsureAutoApprovedTimesheets: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 describe("HR timesheets view modal wiring", () => {

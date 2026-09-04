@@ -4,10 +4,14 @@ import {
 	BarChart3,
 	ChevronLeft,
 	ChevronRight,
+	Clock,
 	Download,
 	LineChart as LineChartIcon,
+	Moon,
 	Search,
+	Sun,
 	Table2,
+	Users,
 } from "lucide-react";
 import {
 	Bar,
@@ -36,6 +40,7 @@ import { DepartmentSectionPicker } from "~/components/molecules/DepartmentSectio
 import { useDepartments } from "~/lib/hooks/useDepartments";
 import { usePositions } from "~/lib/hooks/usePositions";
 import { useEmployees } from "~/lib/hooks/useEmployees";
+import { useShiftTypes } from "~/lib/hooks/useSchedules";
 import {
 	useAttendanceDailyTrendByDepartment,
 	useAttendanceMetricsDetailed,
@@ -51,6 +56,7 @@ import {
 	type ReportExportColumn,
 	type ReportExportFormat,
 } from "~/lib/utils/report-export";
+import { buildShiftGroupings, getRecordShiftInfo, type ShiftInfo } from "~/lib/utils/attendance-shift";
 import { toast } from "sonner";
 
 export type TrendChartMode = "line" | "stacked" | "table";
@@ -240,6 +246,10 @@ export function AttendanceDailyTrendTab() {
 	const [selectedManager, setSelectedManager] = useState(
 		() => searchParams.get("reportToId") || "all",
 	);
+	const [selectedShiftFilter, setSelectedShiftFilter] = useState(
+		() => searchParams.get("shiftType") || "all",
+	);
+	const [selectedActiveShiftCard, setSelectedActiveShiftCard] = useState<string>("all");
 	const [searchQuery, setSearchQuery] = useState("");
 	const [chartMode, setChartMode] = useState<TrendChartMode>("line");
 	const [tablePage, setTablePage] = useState(1);
@@ -268,6 +278,12 @@ export function AttendanceDailyTrendTab() {
 		[employeesData],
 	);
 
+	const { data: shiftTypesData } = useShiftTypes({ limit: 1000 });
+	const shiftTypeList = useMemo(() => {
+		const list = (shiftTypesData as any)?.shiftTypes || (shiftTypesData as any)?.data || [];
+		return Array.isArray(list) ? list : [];
+	}, [shiftTypesData]);
+
 	const managers = useMemo(() => {
 		if (selectedDepartment === "all") return allEmployees;
 		return allEmployees.filter((employee: any) => employee.department?.id === selectedDepartment);
@@ -280,6 +296,8 @@ export function AttendanceDailyTrendTab() {
 		activeMetricConfig.statusParam,
 		selectedDepartment === "all" ? undefined : selectedDepartment,
 		selectedManager === "all" ? undefined : selectedManager,
+		undefined,
+		selectedShiftFilter === "all" ? undefined : selectedShiftFilter,
 	);
 
 	const { data: detailedData, isLoading: isDetailedLoading } = useAttendanceMetricsDetailed(
@@ -295,7 +313,7 @@ export function AttendanceDailyTrendTab() {
 		undefined,
 		selectedManager === "all" ? undefined : selectedManager,
 		undefined,
-		undefined,
+		selectedShiftFilter === "all" ? undefined : selectedShiftFilter,
 		{ enabled: true },
 	);
 
@@ -354,6 +372,22 @@ export function AttendanceDailyTrendTab() {
 
 	const totalTablePages = Math.max(1, Math.ceil(detailedTotalRecords / pageSize));
 
+	// Group and aggregate records by Shift (seeded with all configured organization shifts)
+	const shiftGroupings = useMemo(() => {
+		return buildShiftGroupings(shiftTypeList, detailedRecords);
+	}, [shiftTypeList, detailedRecords]);
+
+	// Filtered records in Shift view
+	const shiftViewRecords = useMemo(() => {
+		if (selectedActiveShiftCard === "all") {
+			return detailedRecords;
+		}
+		return detailedRecords.filter((row: any) => {
+			const info = getRecordShiftInfo(row);
+			return info.fullLabel === selectedActiveShiftCard || info.shiftKey === selectedActiveShiftCard;
+		});
+	}, [detailedRecords, selectedActiveShiftCard]);
+
 	const peakDay = useMemo(() => {
 		return chartData.reduce<TrendSeriesRow | null>((best, current) => {
 			if (!best) return current;
@@ -371,6 +405,8 @@ export function AttendanceDailyTrendTab() {
 		setSelectedDepartment("all");
 		setSelectedPosition("all");
 		setSelectedManager("all");
+		setSelectedShiftFilter("all");
+		setSelectedActiveShiftCard("all");
 		setSearchQuery("");
 		setMetricKey("PRESENT");
 		setTablePage(1);
@@ -404,14 +440,28 @@ export function AttendanceDailyTrendTab() {
 			nextSearchParams.delete("reportToId");
 		}
 
+		if (selectedShiftFilter !== "all") {
+			nextSearchParams.set("shiftType", selectedShiftFilter);
+		} else {
+			nextSearchParams.delete("shiftType");
+		}
+
 		if (nextSearchParams.toString() !== searchParams.toString()) {
 			setSearchParams(nextSearchParams, { replace: true });
 		}
-	}, [searchParams, metricKey, selectedDepartment, selectedPosition, selectedManager, setSearchParams]);
+	}, [
+		searchParams,
+		metricKey,
+		selectedDepartment,
+		selectedPosition,
+		selectedManager,
+		selectedShiftFilter,
+		setSearchParams,
+	]);
 
 	const handleExport = async (formatType: ReportExportFormat) => {
 		try {
-			if (chartMode === "table") {
+			if (chartMode === "table" || chartMode === "shift") {
 				// Fetch full unpaged records for export
 				toast.loading("Preparing employee export data...", { id: "export-progress" });
 				const fullData = await metricsService.getAttendanceMetricsDetailed(
@@ -427,7 +477,7 @@ export function AttendanceDailyTrendTab() {
 					undefined,
 					selectedManager === "all" ? undefined : selectedManager,
 					undefined,
-					undefined,
+					selectedShiftFilter === "all" ? undefined : selectedShiftFilter,
 				);
 				const fullPayload =
 					fullData?.metrics?.attendanceObligationDetailed ||
@@ -440,6 +490,8 @@ export function AttendanceDailyTrendTab() {
 					{ header: "Employee ID", accessor: (row) => row.employeeId || "-" },
 					{ header: "Employee Name", accessor: (row) => row.employeeName || "-" },
 					{ header: "Department", accessor: (row) => row.departmentName || "Unassigned" },
+					{ header: "Shift", accessor: (row) => getRecordShiftInfo(row).shiftName },
+					{ header: "Shift Schedule", accessor: (row) => getRecordShiftInfo(row).windowLabel },
 					{ header: "Date", accessor: (row) => formatDayLabel(row.date) },
 					{ header: "Status", accessor: (row) => row.status || "-" },
 					{ header: "Clock In", accessor: (row) => formatTime(row.timeIn) },
@@ -453,9 +505,9 @@ export function AttendanceDailyTrendTab() {
 					format: formatType,
 					config: {
 						reportKey: "daily-trend-employee-records",
-						title: `${activeMetricConfig.label} - Employee Records`,
+						title: `${activeMetricConfig.label} - Shift & Employee Records`,
 						fileBaseName: buildReportFileName(
-							`daily-trend-${metricKey.toLowerCase()}-records`,
+							`daily-trend-${metricKey.toLowerCase()}-shift-records`,
 							fromIso,
 							"to",
 							toIso,
@@ -469,6 +521,7 @@ export function AttendanceDailyTrendTab() {
 							{ label: "Department", value: selectedDepartment },
 							{ label: "Position", value: selectedPosition },
 							{ label: "Manager", value: selectedManager },
+							{ label: "Shift", value: selectedShiftFilter },
 							{ label: "Total Matched", value: formatCount(exportRows.length) },
 						],
 					},
@@ -519,6 +572,7 @@ export function AttendanceDailyTrendTab() {
 							{ label: "Date Range", value: dateRangeLabel },
 							{ label: "Department", value: selectedDepartment },
 							{ label: "Manager", value: selectedManager },
+							{ label: "Shift", value: selectedShiftFilter },
 						],
 					},
 				});
@@ -537,7 +591,7 @@ export function AttendanceDailyTrendTab() {
 				<div>
 					<CardTitle>{activeMetricConfig.chartTitle}</CardTitle>
 					<CardDescription>
-						{activeMetricConfig.recordDescription} grouped by business day and department for the selected range
+						{activeMetricConfig.recordDescription} grouped by business day, department, and shift schedule
 					</CardDescription>
 				</div>
 				<div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50/90 p-1">
@@ -647,6 +701,30 @@ export function AttendanceDailyTrendTab() {
 							</SelectContent>
 						</Select>
 					</div>
+					<div className="shrink-0 w-[150px]">
+						<div className="mb-0.5 text-[11px] font-medium text-neutral-500">Shift Schedule</div>
+						<Select
+							value={selectedShiftFilter}
+							onValueChange={(val) => {
+								setSelectedShiftFilter(val);
+								setSelectedActiveShiftCard(val);
+								setTablePage(1);
+							}}>
+							<SelectTrigger
+								aria-label="Shift filter"
+								className="h-8 w-full rounded-md border-neutral-200 bg-white text-xs shadow-sm">
+								<SelectValue placeholder="All Shifts" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="all">All Shifts</SelectItem>
+								{shiftTypeList.map((st: any) => (
+									<SelectItem key={`shift-${st.id || st.code}`} value={st.code || st.id || st.name}>
+										{st.name || st.code}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
 
 					<div className="flex gap-1.5 shrink-0 items-end ml-auto">
 						<Button
@@ -727,14 +805,16 @@ export function AttendanceDailyTrendTab() {
 							title={
 								chartMode === "table"
 									? `${activeMetricConfig.label} - Employee Records`
-									: "Attendance Trend Chart"
+									: chartMode === "shift"
+										? `Shift Attendance & Breakdown (${activeMetricConfig.label})`
+										: "Attendance Trend Chart"
 							}
 							description={
-								chartMode === "table"
+								chartMode === "table" || chartMode === "shift"
 									? `Showing ${detailedRecords.length} of ${detailedTotalRecords} records for ${dateRangeLabel}`
 									: `${dateRangeLabel} - ${trend?.departments.length || 0} department series`
 							}
-							height={chartMode === "table" ? "min-h-[480px]" : "h-[420px]"}
+							height={chartMode === "table" || chartMode === "shift" ? "min-h-[480px]" : "h-[420px]"}
 							headerActions={
 								<div className="flex flex-wrap items-center gap-2">
 									{chartMode === "table" ? (
@@ -810,6 +890,7 @@ export function AttendanceDailyTrendTab() {
 													<tr>
 														<th className="py-2.5 px-3">Employee</th>
 														<th className="py-2.5 px-3">Department</th>
+														<th className="py-2.5 px-3">Shift Schedule</th>
 														<th className="py-2.5 px-3">Date</th>
 														<th className="py-2.5 px-3">Status</th>
 														<th className="py-2.5 px-3">Clock In</th>
@@ -820,62 +901,231 @@ export function AttendanceDailyTrendTab() {
 													</tr>
 												</thead>
 												<tbody className="divide-y divide-neutral-100 bg-white">
-													{detailedRecords.map((row: any, idx: number) => (
-														<tr key={row.id || `${row.employeeId}-${row.date}-${idx}`} className="hover:bg-neutral-50/80 transition-colors">
-															<td className="py-2 px-3">
-																<ReportEmployeeCell
-																	rosterEmployees={allEmployees}
-																	employeeId={row.employeeRefId || row.employeeId}
-																	employeeCode={row.employeeId}
-																	fullName={row.employeeName}
-																/>
-															</td>
-															<td className="py-2 px-3 text-neutral-700 font-medium">
-																{row.departmentName || "Unassigned"}
-															</td>
-															<td className="py-2 px-3 text-neutral-600 whitespace-nowrap">
-																{formatDayLabel(row.date)}
-															</td>
-															<td className="py-2 px-3">
-																<Badge
-																	variant={
-																		row.status === "PRESENT"
-																			? "success-soft"
-																			: row.status === "LATE"
-																				? "warning-soft"
-																				: row.status === "ABSENT" || row.status === "NOT_CLOCKED_IN"
-																					? "destructive-soft"
-																					: "neutral-soft"
-																	}
-																	className="text-[11px] px-2 py-0.5">
-																	{row.status || "-"}
-																</Badge>
-															</td>
-															<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
-																{formatTime(row.timeIn)}
-															</td>
-															<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
-																{formatTime(row.timeOut)}
-															</td>
-															<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
-																{row.lateHours && row.lateHours !== "0:00" ? (
-																	<span className="text-amber-600 font-medium">{row.lateHours}</span>
-																) : (
-																	"-"
-																)}
-															</td>
-															<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
-																{row.undertimeHours && row.undertimeHours !== "0:00" ? (
-																	<span className="text-orange-600 font-medium">{row.undertimeHours}</span>
-																) : (
-																	"-"
-																)}
-															</td>
-															<td className="py-2 px-3 font-mono font-medium text-neutral-900 whitespace-nowrap">
-																{row.hoursWorked || "-"}
-															</td>
-														</tr>
-													))}
+													{detailedRecords.map((row: any, idx: number) => {
+														const shiftInfo = getRecordShiftInfo(row);
+														return (
+															<tr
+																key={row.id || `${row.employeeId}-${row.date}-${idx}`}
+																className="hover:bg-neutral-50/80 transition-colors">
+																<td className="py-2 px-3">
+																	<ReportEmployeeCell
+																		rosterEmployees={allEmployees}
+																		employeeId={row.employeeRefId || row.employeeId}
+																		employeeCode={row.employeeId}
+																		fullName={row.employeeName}
+																	/>
+																</td>
+																<td className="py-2 px-3 text-neutral-700 font-medium">
+																	{row.departmentName || "Unassigned"}
+																</td>
+																<td className="py-2 px-3">
+																	<div className="flex flex-col">
+																		<span className="font-medium text-neutral-900 flex items-center gap-1">
+																			{shiftInfo.isNightShift ? (
+																				<Moon className="h-3 w-3 text-indigo-600" />
+																			) : (
+																				<Sun className="h-3 w-3 text-amber-600" />
+																			)}
+																			{shiftInfo.shiftName}
+																		</span>
+																		<span className="text-[11px] text-neutral-500">
+																			{shiftInfo.windowLabel}
+																		</span>
+																	</div>
+																</td>
+																<td className="py-2 px-3 text-neutral-600 whitespace-nowrap">
+																	{formatDayLabel(row.date)}
+																</td>
+																<td className="py-2 px-3">
+																	<Badge
+																		variant={
+																			row.status === "PRESENT"
+																				? "success-soft"
+																				: row.status === "LATE"
+																					? "warning-soft"
+																					: row.status === "ABSENT" ||
+																							row.status === "NOT_CLOCKED_IN"
+																						? "destructive-soft"
+																						: "neutral-soft"
+																		}
+																		className="text-[11px] px-2 py-0.5">
+																		{row.status || "-"}
+																	</Badge>
+																</td>
+																<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
+																	{formatTime(row.timeIn)}
+																</td>
+																<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
+																	{formatTime(row.timeOut)}
+																</td>
+																<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
+																	{row.lateHours && row.lateHours !== "0:00" ? (
+																		<span className="text-amber-600 font-medium">
+																			{row.lateHours}
+																		</span>
+																	) : (
+																		"-"
+																	)}
+																</td>
+																<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
+																	{row.undertimeHours && row.undertimeHours !== "0:00" ? (
+																		<span className="text-orange-600 font-medium">
+																			{row.undertimeHours}
+																		</span>
+																	) : (
+																		"-"
+																	)}
+																</td>
+																<td className="py-2 px-3 font-mono font-medium text-neutral-900 whitespace-nowrap">
+																	{row.hoursWorked || "-"}
+																</td>
+															</tr>
+														);
+													})}
+												</tbody>
+											</table>
+										</div>
+										<div className="flex items-center justify-between border-t border-neutral-100 pt-3 text-xs text-neutral-500">
+											<div>
+												Showing {(tablePage - 1) * pageSize + 1} to{" "}
+												{Math.min(tablePage * pageSize, detailedTotalRecords)} of{" "}
+												{detailedTotalRecords} results
+											</div>
+											<div className="flex items-center gap-1.5">
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={tablePage <= 1}
+													onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+													className="h-8 px-2.5 text-xs">
+													<ChevronLeft className="h-4 w-4 mr-1" />
+													Previous
+												</Button>
+												<span className="px-2 font-medium text-neutral-700">
+													Page {tablePage} of {totalTablePages}
+												</span>
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={tablePage >= totalTablePages}
+													onClick={() => setTablePage((p) => Math.min(totalTablePages, p + 1))}
+													className="h-8 px-2.5 text-xs">
+													Next
+													<ChevronRight className="h-4 w-4 ml-1" />
+												</Button>
+											</div>
+										</div>
+									</div>
+								)
+							) : chartMode === "table" ? (
+								isDetailedLoading ? (
+									<div className="flex h-64 items-center justify-center text-sm text-neutral-500">
+										Loading employee records...
+									</div>
+								) : detailedRecords.length === 0 ? (
+									<div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-neutral-200 bg-neutral-50 text-sm text-neutral-500">
+										No employee records found for the selected filters
+									</div>
+								) : (
+									<div className="flex flex-col justify-between h-full space-y-4">
+										<div className="overflow-x-auto rounded-lg border border-neutral-200">
+											<table className="w-full text-left text-xs">
+												<thead className="border-b border-neutral-200 bg-neutral-50 text-neutral-600 font-semibold">
+													<tr>
+														<th className="py-2.5 px-3">Employee</th>
+														<th className="py-2.5 px-3">Department</th>
+														<th className="py-2.5 px-3">Shift Schedule</th>
+														<th className="py-2.5 px-3">Date</th>
+														<th className="py-2.5 px-3">Status</th>
+														<th className="py-2.5 px-3">Clock In</th>
+														<th className="py-2.5 px-3">Clock Out</th>
+														<th className="py-2.5 px-3">Late</th>
+														<th className="py-2.5 px-3">Undertime</th>
+														<th className="py-2.5 px-3">Hours</th>
+													</tr>
+												</thead>
+												<tbody className="divide-y divide-neutral-100 bg-white">
+													{detailedRecords.map((row: any, idx: number) => {
+														const shiftInfo = getRecordShiftInfo(row);
+														return (
+															<tr
+																key={row.id || `${row.employeeId}-${row.date}-${idx}`}
+																className="hover:bg-neutral-50/80 transition-colors">
+																<td className="py-2 px-3">
+																	<ReportEmployeeCell
+																		rosterEmployees={allEmployees}
+																		employeeId={row.employeeRefId || row.employeeId}
+																		employeeCode={row.employeeId}
+																		fullName={row.employeeName}
+																	/>
+																</td>
+																<td className="py-2 px-3 text-neutral-700 font-medium">
+																	{row.departmentName || "Unassigned"}
+																</td>
+																<td className="py-2 px-3">
+																	<div className="flex flex-col">
+																		<span className="font-medium text-neutral-900 flex items-center gap-1">
+																			{shiftInfo.isNightShift ? (
+																				<Moon className="h-3 w-3 text-indigo-600" />
+																			) : (
+																				<Sun className="h-3 w-3 text-amber-600" />
+																			)}
+																			{shiftInfo.shiftName}
+																		</span>
+																		<span className="text-[11px] text-neutral-500">
+																			{shiftInfo.windowLabel}
+																		</span>
+																	</div>
+																</td>
+																<td className="py-2 px-3 text-neutral-600 whitespace-nowrap">
+																	{formatDayLabel(row.date)}
+																</td>
+																<td className="py-2 px-3">
+																	<Badge
+																		variant={
+																			row.status === "PRESENT"
+																				? "success-soft"
+																				: row.status === "LATE"
+																					? "warning-soft"
+																					: row.status === "ABSENT" ||
+																							row.status === "NOT_CLOCKED_IN"
+																						? "destructive-soft"
+																						: "neutral-soft"
+																		}
+																		className="text-[11px] px-2 py-0.5">
+																		{row.status || "-"}
+																	</Badge>
+																</td>
+																<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
+																	{formatTime(row.timeIn)}
+																</td>
+																<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
+																	{formatTime(row.timeOut)}
+																</td>
+																<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
+																	{row.lateHours && row.lateHours !== "0:00" ? (
+																		<span className="text-amber-600 font-medium">
+																			{row.lateHours}
+																		</span>
+																	) : (
+																		"-"
+																	)}
+																</td>
+																<td className="py-2 px-3 font-mono text-neutral-700 whitespace-nowrap">
+																	{row.undertimeHours && row.undertimeHours !== "0:00" ? (
+																		<span className="text-orange-600 font-medium">
+																			{row.undertimeHours}
+																		</span>
+																	) : (
+																		"-"
+																	)}
+																</td>
+																<td className="py-2 px-3 font-mono font-medium text-neutral-900 whitespace-nowrap">
+																	{row.hoursWorked || "-"}
+																</td>
+															</tr>
+														);
+													})}
 												</tbody>
 											</table>
 										</div>
@@ -971,7 +1221,7 @@ export function AttendanceDailyTrendTab() {
 							)}
 						</ChartCard>
 
-						{chartMode !== "table" ? (
+						{chartMode !== "table" && chartMode !== "shift" ? (
 							<div className="rounded-lg border border-neutral-200 bg-white p-4">
 								<div className="flex flex-wrap gap-3">
 									{departmentSeries.map((department) => {
@@ -1014,7 +1264,7 @@ export function AttendanceDailyTrendTab() {
 					{
 						format: "pdf",
 						label: "Export PDF",
-						helperText: `Download the current ${chartMode === "table" ? "employee table" : "department trend"} report as a formatted PDF.`,
+						helperText: `Download the current ${chartMode === "table" || chartMode === "shift" ? "employee table" : "department trend"} report as a formatted PDF.`,
 					},
 					{
 						format: "xlsx",

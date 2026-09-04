@@ -10,6 +10,7 @@ const useAttendanceMetricsDetailedMock = vi.fn();
 const useDepartmentsMock = vi.fn();
 const usePositionsMock = vi.fn();
 const useEmployeesMock = vi.fn();
+const useShiftTypesMock = vi.fn();
 const useReportScopeFiltersMock = vi.fn();
 const setSearchParamsMock = vi.fn();
 
@@ -30,6 +31,10 @@ vi.mock("~/lib/hooks/usePositions", () => ({
 
 vi.mock("~/lib/hooks/useEmployees", () => ({
 	useEmployees: (...args: unknown[]) => useEmployeesMock(...args),
+}));
+
+vi.mock("~/lib/hooks/useSchedules", () => ({
+	useShiftTypes: (...args: unknown[]) => useShiftTypesMock(...args),
 }));
 
 vi.mock("../useReportScopeFilters", () => ({
@@ -63,6 +68,14 @@ describe("AttendanceDailyTrendTab", () => {
 				departments: [
 					{ id: "dept-ops", name: "Operations" },
 					{ id: "dept-people", name: "People" },
+				],
+			},
+		});
+		useShiftTypesMock.mockReturnValue({
+			data: {
+				shiftTypes: [
+					{ id: "st-night", name: "Night Shift", code: "NS-12" },
+					{ id: "st-day", name: "Day Shift", code: "DS-12" },
 				],
 			},
 		});
@@ -105,11 +118,17 @@ describe("AttendanceDailyTrendTab", () => {
 								departmentName: "Operations",
 								date: "2026-06-01",
 								status: "PRESENT",
-								timeIn: "2026-06-01T08:00:00.000Z",
-								timeOut: "2026-06-01T17:00:00.000Z",
+								timeIn: "2026-06-01T18:00:00.000Z",
+								timeOut: "2026-06-02T06:00:00.000Z",
 								lateHours: "0:00",
 								undertimeHours: "0:00",
-								hoursWorked: "8:00",
+								hoursWorked: "12:00",
+								scheduleSnapshot: {
+									shiftTypeName: "Night Shift",
+									shiftTypeCode: "NS-12",
+									startTime: "18:00",
+									endTime: "06:00",
+								},
 							},
 						],
 						totalRecords: 1,
@@ -173,7 +192,7 @@ describe("AttendanceDailyTrendTab", () => {
 		});
 	});
 
-	it("renders the department trend summary, metric tabs, and toggles chart/table mode", async () => {
+	it("renders the department trend summary, metric tabs, and toggles chart/table modes", async () => {
 		const user = userEvent.setup();
 
 		render(
@@ -219,6 +238,7 @@ describe("AttendanceDailyTrendTab", () => {
 			"true",
 		);
 
+		// Switch to Table View
 		await user.click(screen.getByRole("button", { name: /table/i }));
 		expect(screen.getByRole("button", { name: /table/i })).toHaveAttribute(
 			"aria-pressed",

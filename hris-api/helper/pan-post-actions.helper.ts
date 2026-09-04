@@ -126,7 +126,7 @@ export async function applyPanCompletionSideEffects(
 			break;
 		}
 		case "TRANSFER": {
-			if (metadata.newDepartment) {
+			if (metadata.newDepartmentId || metadata.newDepartment) {
 				let departmentId = metadata.newDepartmentId;
 				if (!departmentId && metadata.newDepartment) {
 					const department = await prisma.department.findFirst({
@@ -148,6 +148,50 @@ export async function applyPanCompletionSideEffects(
 				}
 			}
 
+			if (metadata.newPositionId || metadata.newPosition) {
+				let positionId = metadata.newPositionId;
+				if (!positionId && metadata.newPosition) {
+					const position = await prisma.position.findFirst({
+						where: {
+							title: {
+								equals: metadata.newPosition,
+								mode: "insensitive",
+							},
+							isDeleted: false,
+						},
+						select: { id: true },
+					});
+					if (position) {
+						positionId = position.id;
+					}
+				}
+				if (positionId) {
+					employeeUpdateData.positionId = positionId;
+				}
+			}
+
+			if (metadata.newSectionId || metadata.newSection) {
+				let sectionId = metadata.newSectionId;
+				if (!sectionId && metadata.newSection) {
+					const section = await prisma.section.findFirst({
+						where: {
+							name: {
+								equals: metadata.newSection,
+								mode: "insensitive",
+							},
+							isDeleted: false,
+						},
+						select: { id: true },
+					});
+					if (section) {
+						sectionId = section.id;
+					}
+				}
+				if (sectionId) {
+					employeeUpdateData.sectionId = sectionId;
+				}
+			}
+
 			if (metadata.newLocation) {
 				const validLocations = ["ONSITE", "REMOTE", "HYBRID"];
 				const normalizedLoc = String(metadata.newLocation).toUpperCase();
@@ -158,6 +202,33 @@ export async function applyPanCompletionSideEffects(
 
 			if (metadata.newSupervisorId) {
 				employeeUpdateData.reportToId = String(metadata.newSupervisorId);
+			} else if (employeeUpdateData.departmentId) {
+				const deptManager = await prisma.employee.findFirst({
+					where: {
+						departmentId: employeeUpdateData.departmentId,
+						isDeleted: false,
+						employmentStatus: "ACTIVE",
+						OR: [
+							{ isManager: true },
+							{ isHrManager: true },
+							{
+								role: {
+									in: [
+										"hris-employee-manager",
+										"hris-hr-manager",
+										"hris-line-leader",
+									],
+								},
+							},
+						],
+						NOT: { id: params.targetEmployeeId },
+					},
+					select: { id: true },
+					orderBy: { createdAt: "asc" },
+				});
+				if (deptManager) {
+					employeeUpdateData.reportToId = deptManager.id;
+				}
 			}
 			break;
 		}

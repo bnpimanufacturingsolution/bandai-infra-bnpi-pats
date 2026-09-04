@@ -1,6 +1,12 @@
 import dotenv from "dotenv";
+import fs from "fs";
+import path from "path";
 
 dotenv.config();
+const localDevEnv = path.resolve(process.cwd(), ".env.development.local");
+if (fs.existsSync(localDevEnv)) {
+	dotenv.config({ path: localDevEnv, override: true });
+}
 
 const ALWAYS_ALLOWED_ORIGINS = [
 	"http://localhost:3000",

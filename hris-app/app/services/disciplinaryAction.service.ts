@@ -1,6 +1,6 @@
 import { hrisApiClient } from "../lib/api-client";
 
-export type DisciplinaryActionStatus = "OPEN" | "ONGOING" | "RESOLVED" | "DISMISSED";
+export type DisciplinaryActionStatus = "DRAFT" | "OPEN" | "ONGOING" | "RESOLVED" | "DISMISSED";
 
 export interface DisciplinaryAction {
 	id: string;
@@ -32,16 +32,14 @@ export const disciplinaryActionService = {
 		employeeId?: string;
 	}): Promise<DisciplinaryActionListResponse> {
 		const response = await hrisApiClient.get<any>("/api/disciplinaryAction", {
-			params: {
-				document: true,
-				pagination: true,
-				count: true,
-				page: params.page ?? 1,
-				limit: params.limit ?? 20,
-				...(params.query && { query: params.query }),
-				...(params.status && { "filter[status]": params.status }),
-				...(params.employeeId && { "filter[employeeId]": params.employeeId }),
-			},
+			document: true,
+			pagination: true,
+			count: true,
+			page: params.page ?? 1,
+			limit: params.limit ?? 20,
+			...(params.query && { query: params.query }),
+			...(params.status && { "filter[status]": params.status }),
+			...(params.employeeId && { "filter[employeeId]": params.employeeId }),
 		});
 		return (response.data?.data || response.data) as DisciplinaryActionListResponse;
 	},

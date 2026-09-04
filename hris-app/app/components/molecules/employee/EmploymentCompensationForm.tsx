@@ -1,8 +1,8 @@
 import type { UseFormReturn } from "react-hook-form";
 import { Controller, useForm } from "react-hook-form";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
-import { Loader2, RotateCcw } from "lucide-react";
+import { Link, useSearchParams } from "react-router";
+import { Loader2, RotateCcw, ShieldCheck, Building2, Award, ArrowRight } from "lucide-react";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
 import { Select } from "~/components/atoms/Select";
@@ -887,6 +887,25 @@ export function EmploymentCompensationForm({
 					)}
 				</div>
 
+				{employeeId && (
+					<div className="bg-blue-50/70 border border-blue-200 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+						<div className="flex items-center gap-2 text-blue-950">
+							<Building2 className="h-4 w-4 text-blue-600 shrink-0" />
+							<div>
+								<span className="font-semibold block">Need to change department or position?</span>
+								<span className="text-blue-800/80">
+									Organizational reassignments must be submitted through a Personnel Action Notice (PAN).
+								</span>
+							</div>
+						</div>
+						<Link
+							to={`/hr/personnel-actions/transfer?employeeId=${employeeId}`}
+							className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors shrink-0">
+							Initiate Transfer (PAN) <ArrowRight className="h-3.5 w-3.5" />
+						</Link>
+					</div>
+				)}
+
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 					<div data-field-path="employee.departmentId">
 						<label className="block text-sm font-normal text-muted-foreground/70">
@@ -1058,7 +1077,16 @@ export function EmploymentCompensationForm({
 			</div>
 			{/* Compensation Section */}
 			<div className="space-y-6 pt-6 border-t border-border">
-				<h3 className="text-lg font-semibold text-foreground">Compensation</h3>
+				<div className="flex flex-wrap items-center justify-between gap-2">
+					<h3 className="text-lg font-semibold text-foreground">Compensation</h3>
+					{employeeId && (
+						<Link
+							to={`/hr/personnel-actions/promotion?employeeId=${employeeId}`}
+							className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition-colors">
+							<Award className="h-3.5 w-3.5" /> Request Promotion / Salary Increase (PAN) <ArrowRight className="h-3.5 w-3.5" />
+						</Link>
+					)}
+				</div>
 
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 					<div data-field-path="employee.basicSalary">

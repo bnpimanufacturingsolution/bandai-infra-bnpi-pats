@@ -2,21 +2,33 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { AttendanceDailyTrendTab } from "./tabs/AttendanceDailyTrendTab";
+import { ShiftAttendanceTab } from "./tabs/ShiftAttendanceTab";
 import { PerfectAttendanceTab } from "./tabs/PerfectAttendanceTab";
 import { TardinessUndetimeTab } from "./tabs/TardinessUndetimeTab";
 import { OvertimeTab } from "./tabs/OvertimeTab";
 import { LeaveBalanceTab } from "./tabs/LeaveBalanceTab";
 import { ManhoursTab } from "./tabs/ManhoursTab";
-const visibleTabs = new Set(["trend", "perfect", "tardiness", "overtime", "leave", "manhours"]);
+
+const visibleTabs = new Set([
+	"trend",
+	"shift",
+	"perfect",
+	"tardiness",
+	"overtime",
+	"leave",
+	"manhours",
+]);
 
 /**
  * Attendance & Time Tracking Reports Page
  * Contains tabs for:
  * - Daily Trend by Department
+ * - Shift Attendance
  * - Perfect Attendance
  * - Tardiness & Undertime
  * - Overtime
  * - Leave Balance
+ * - Manhours
  */
 export default function AttendanceReportsPage() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -40,11 +52,16 @@ export default function AttendanceReportsPage() {
 	return (
 		<div className="flex flex-col gap-6">
 			<Tabs value={currentTab} onValueChange={handleTabChange} className="w-full">
-				<TabsList className="grid h-auto w-full grid-cols-2 gap-2 mb-6 md:grid-cols-6">
+				<TabsList className="grid h-auto w-full grid-cols-2 gap-2 mb-6 sm:grid-cols-3 md:grid-cols-7">
 					<TabsTrigger
 						value="trend"
 						className="whitespace-normal text-center text-xs leading-tight md:text-sm">
 						Daily Trend
+					</TabsTrigger>
+					<TabsTrigger
+						value="shift"
+						className="whitespace-normal text-center text-xs leading-tight md:text-sm font-medium">
+						Shift Attendance
 					</TabsTrigger>
 					<TabsTrigger
 						value="perfect"
@@ -76,6 +93,11 @@ export default function AttendanceReportsPage() {
 				{/* Daily Trend Tab */}
 				<TabsContent value="trend" className="space-y-4">
 					<AttendanceDailyTrendTab />
+				</TabsContent>
+
+				{/* Shift Attendance Tab */}
+				<TabsContent value="shift" className="space-y-4">
+					<ShiftAttendanceTab />
 				</TabsContent>
 
 				{/* Perfect Attendance Tab */}

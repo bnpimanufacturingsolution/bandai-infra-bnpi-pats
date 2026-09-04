@@ -26,7 +26,10 @@ import {
 	resolveEmployeeActiveSchedule,
 	resolveEffectiveShiftFromEmployeeData,
 } from "./employee-schedule.helper";
-import { buildBreakdownFromTimesheetLines } from "./timesheet.helper";
+import {
+	buildBreakdownFromTimesheetLines,
+	ensurePayrollPeriodTimesheetsAutoApproved,
+} from "./timesheet.helper";
 import {
 	applyUniversalBandaiMlaSources,
 	BANDAI_UNIVERSAL_MLA_ORG_IDS,
@@ -1618,6 +1621,34 @@ export async function generatePayrollFromTimesheets(
 			`Holiday dates: ${Array.from(holidayMap.keys())
 				.map((key) => `${key} (${holidayMap.get(key)?.holidayTitle})`)
 				.join(", ")}`,
+		);
+	}
+
+	// System auto-approval lane (2026-09-04): no employee-submit →
+	// manager-approve step. Generate missing timesheets from current
+	// attendance, refresh auto-approved lines, and convert legacy
+	// DRAFT/SUBMITTED rows — so payroll runs any time on live data.
+	// Paid/locked sheets are never touched. A failure here must not fail
+	// payroll; generation proceeds with whatever APPROVED set exists.
+	try {
+		const ensured = await ensurePayrollPeriodTimesheetsAutoApproved(prisma, {
+			organizationId,
+			payrollPeriodId,
+			actorEmployeeId: typeof processedBy === "string" ? processedBy : null,
+			departmentId: options?.departmentId,
+			sectionId: options?.sectionId,
+			limit: 5000,
+		});
+		payrollLogger.info(
+			`Payroll auto-approve ensure for period ${payrollPeriodId}: ` +
+				`eligible=${ensured.eligibleEmployees} created=${ensured.created} ` +
+				`autoApproved=${ensured.autoApproved} lines=${ensured.refreshedLines} ` +
+				`preservedManual=${ensured.preservedManual} skippedPaid=${ensured.skippedPaid} ` +
+				`errors=${ensured.errors.length}`,
+		);
+	} catch (ensureError) {
+		payrollLogger.warn(
+			`Payroll auto-approve ensure skipped for period ${payrollPeriodId}: ${ensureError}`,
 		);
 	}
 

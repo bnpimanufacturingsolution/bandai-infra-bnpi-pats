@@ -59,6 +59,7 @@ function getMonthDifference(startDate: Date, endDate: Date): number {
  * Calculate attendance statistics for a specific employee
  */
 async function calculateEmployeeAttendanceStats(
+	prisma: PrismaClient,
 	employee: any,
 	startDate: Date,
 	endDate: Date,
@@ -73,14 +74,34 @@ async function calculateEmployeeAttendanceStats(
 	const activeSchedule = resolveEmployeeActiveSchedule(employee);
 
 	if (!activeSchedule) {
-		console.log(
-			`[Eligibility] Employee ${employee.employeeId} has no schedule. Skipping attendance check.`,
-		);
 		return { stats: { PRESENT: 0, LEAVE: 0, ABSENT: 0 }, records: [] };
 	}
 
+	const attendances = await prisma.attendance.findMany({
+		where: {
+			employeeId: employee.id,
+			isDeleted: false,
+			date: {
+				gte: startDate,
+				lte: endDate,
+			},
+		},
+		select: {
+			date: true,
+			status: true,
+		},
+	});
+
+	// Build O(1) date index map
+	const attendanceMap = new Map<string, any>();
+	for (const a of attendances) {
+		if (a.date) {
+			const dStr = new Date(a.date).toISOString().split("T")[0];
+			attendanceMap.set(dStr, a);
+		}
+	}
+
 	const cursorDate = new Date(startDate);
-	// normalize start date
 	cursorDate.setHours(0, 0, 0, 0);
 	const endDateTime = new Date(endDate);
 	endDateTime.setHours(23, 59, 59, 999);
@@ -91,37 +112,23 @@ async function calculateEmployeeAttendanceStats(
 		// Check if this is a work day
 		const shift = findShiftForDay(activeSchedule, dayOfWeek);
 
-		// If no shift or isRestDay, skip
 		if (!shift || shift.isRestDay) {
 			cursorDate.setDate(cursorDate.getDate() + 1);
 			continue;
 		}
 
-		// Check attendance for this day
-		const dayStart = new Date(cursorDate);
-		dayStart.setHours(0, 0, 0, 0);
-		const dayEnd = new Date(cursorDate);
-		dayEnd.setHours(23, 59, 59, 999);
-
-		const attendance = employee.attendances.find((a: any) => {
-			if (!a.date) return false;
-			const d = new Date(a.date);
-			return d >= dayStart && d <= dayEnd;
-		});
-
 		const dateStr = cursorDate.toISOString().split("T")[0];
+		const attendance = attendanceMap.get(dateStr);
 
 		if (attendance) {
 			if (attendance.status === "LEAVE") {
 				leave++;
 				records.push({ date: dateStr, status: "LEAVE", type: "ACTUAL" });
 			} else {
-				// PRESENT and INCOMPLETE are both considered present for eligibility
 				present++;
 				records.push({ date: dateStr, status: attendance.status, type: "ACTUAL" });
 			}
 		} else {
-			// Expected to work but no record found
 			absent++;
 			records.push({ date: dateStr, status: "ABSENT", type: "VIRTUAL" });
 		}
@@ -132,57 +139,13 @@ async function calculateEmployeeAttendanceStats(
 	return { stats: { PRESENT: present, LEAVE: leave, ABSENT: absent }, records };
 }
 
-async function fetchEmployeeAvatar(
-	prisma: PrismaClient,
-	userId: string | null | undefined,
-	req?: Request,
-) {
-	const resolvedUserId = String(userId || "").trim();
-	if (!resolvedUserId) return undefined;
-
-	if (!appConfig.idpEnabled) {
-		const localUser = await prisma.user.findUnique({
-			where: { id: resolvedUserId },
-			select: {
-				metadata: true,
-			},
-		});
-
-		const localAvatar =
-			localUser?.metadata && typeof localUser.metadata === "object"
-				? (localUser.metadata as Record<string, any>).avatar
-				: undefined;
-
-		return typeof localAvatar === "string" && localAvatar.trim().length > 0
-			? localAvatar.trim()
-			: undefined;
-	}
-
-	if (!req) return undefined;
-
-	const headers: Record<string, string> = {};
-	const cookieToken = (req as any)?.cookies?.token as string | undefined;
-	const authHeader = req.headers.authorization;
-	const token =
-		cookieToken ||
-		(authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : authHeader || undefined);
-	if (token) {
-		headers.Authorization = `Bearer ${token}`;
-	}
-
-	const resp = await fetch(`${appConfig.authBaseUrl}/api/user/${resolvedUserId}`, {
-		method: "GET",
-		headers,
-	});
-	if (!resp.ok) return undefined;
-
-	const json = await resp.json();
-	const user = json?.data || json?.user || json;
-	const avatar =
-		typeof user?.avatar === "string" && user.avatar.trim().length > 0
-			? user.avatar.trim()
-			: undefined;
-	return avatar;
+function getEmployeeAvatar(employee: any): string | undefined {
+	const photo =
+		employee?.person?.personalInfo?.photo ||
+		employee?.person?.photo ||
+		employee?.avatar ||
+		undefined;
+	return typeof photo === "string" && photo.trim().length > 0 ? photo.trim() : undefined;
 }
 
 /**
@@ -215,6 +178,7 @@ async function checkPromotionEligibility(
 	sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
 	const { stats, records } = await calculateEmployeeAttendanceStats(
+		prisma,
 		employee,
 		sixMonthsAgo,
 		referenceDate,
@@ -240,7 +204,7 @@ async function checkPromotionEligibility(
 		employeeId: employee.employeeId,
 		id: employee.id,
 		employeeName: `${employee.person?.personalInfo?.firstName} ${employee.person?.personalInfo?.lastName}`,
-		avatar: await fetchEmployeeAvatar(prisma, employee.userId, req),
+		avatar: getEmployeeAvatar(employee),
 		department: employee.department?.name || "N/A",
 		position: employee.position?.title || "N/A",
 		currentEmploymentStatus: employee.employmentStatus,
@@ -299,6 +263,7 @@ async function checkRegularizationEligibility(
 
 	// 3. Attendance Check
 	const { stats, records } = await calculateEmployeeAttendanceStats(
+		prisma,
 		employee,
 		hireDate,
 		referenceDate,
@@ -324,7 +289,7 @@ async function checkRegularizationEligibility(
 		employeeId: employee.employeeId,
 		id: employee.id,
 		employeeName: `${employee.person?.personalInfo?.firstName} ${employee.person?.personalInfo?.lastName}`,
-		avatar: await fetchEmployeeAvatar(prisma, employee.userId, req),
+		avatar: getEmployeeAvatar(employee),
 		department: employee.department?.name || "N/A",
 		position: employee.position?.title || "N/A",
 		currentEmploymentStatus: employee.employmentStatus,
@@ -365,6 +330,7 @@ async function checkTerminationEligibility(
 	threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
 	const { stats, records } = await calculateEmployeeAttendanceStats(
+		prisma,
 		employee,
 		threeMonthsAgo,
 		referenceDate,
@@ -390,7 +356,7 @@ async function checkTerminationEligibility(
 			employeeId: employee.employeeId,
 			id: employee.id,
 			employeeName: `${employee.person?.personalInfo?.firstName} ${employee.person?.personalInfo?.lastName}`,
-			avatar: await fetchEmployeeAvatar(prisma, employee.userId, req),
+			avatar: getEmployeeAvatar(employee),
 			department: employee.department?.name || "N/A",
 			position: employee.position?.title || "N/A",
 			currentEmploymentStatus: employee.employmentStatus,
@@ -422,14 +388,80 @@ export async function getEligibilityCandidates(
 	organizationId: string,
 	req?: Request,
 ): Promise<EligibilityCandidate[]> {
-	console.log(`[Eligibility] Starting check for Organization: ${organizationId}`);
+	const referenceDate = new Date();
 
-	// Fetch all active employees with necessary relations - INCLUDING ATTENDANCE AND SCHEDULE
+	// 1. Fetch Transfer requests in a single batch query
+	// Only include PENDING transfers (not COMPLETED - those are already done)
+	const transferRequests = await prisma.request.findMany({
+		where: {
+			organizationId,
+			type: "TRANSFER",
+			isDeleted: false,
+			currentWorkflowStateKey: {
+				in: ["OPEN", "SUBMITTED", "FOR_APPROVAL", "APPROVED"],
+			},
+		},
+		include: {
+			targetEmployee: {
+				include: {
+					person: { select: { personalInfo: true } },
+					department: true,
+					position: true,
+				},
+			},
+		},
+		orderBy: { createdAt: "desc" },
+	});
+
+	const transferCandidates: EligibilityCandidate[] = [];
+	const seenTransferEmployeeIds = new Set<string>();
+
+	for (const tr of transferRequests) {
+		const emp = tr.targetEmployee;
+		if (!emp || seenTransferEmployeeIds.has(emp.id)) continue;
+		seenTransferEmployeeIds.add(emp.id);
+
+		const metadata = (tr.metadata as any) || {};
+		const newDept = metadata.newDepartment || "New Department";
+		const state = String(tr.currentWorkflowStateKey || "PENDING");
+		const hireDate = emp.employmentHireDate || emp.createdAt;
+		const name =
+			`${emp.person?.personalInfo?.firstName || ""} ${emp.person?.personalInfo?.lastName || ""}`.trim() ||
+			emp.employeeId ||
+			"Employee";
+
+		transferCandidates.push({
+			id: emp.id,
+			employeeId: emp.employeeId || "",
+			employeeName: name,
+			avatar: emp.person?.personalInfo?.photo || undefined,
+			department: emp.department?.name || "N/A",
+			position: emp.position?.title || "N/A",
+			currentEmploymentStatus: emp.employmentStatus,
+			hireDate: new Date(hireDate),
+			tenureMonths: getMonthDifference(new Date(hireDate), referenceDate),
+			eligibleFor: "TRANSFER",
+			eligibilityReason: `Transfer (${state}): ${tr.description || `Reassignment to ${newDept}`}`,
+			matchScore: 85,
+			metrics: {
+				attendanceRate: 100,
+				presentDays: 0,
+				absentDays: 0,
+				leaveDays: 0,
+				totalWorkingDays: 0,
+				lates: 0,
+				records: [],
+			},
+		});
+	}
+
+	// 2. Fetch all active employees (excluding those already in transfer)
 	const employees = await prisma.employee.findMany({
 		where: {
 			organizationId,
 			isDeleted: false,
 			employmentStatus: "ACTIVE",
+			NOT: { id: { in: Array.from(seenTransferEmployeeIds) } },
 		},
 		include: {
 			person: {
@@ -439,47 +471,25 @@ export async function getEligibilityCandidates(
 			},
 			department: true,
 			position: true,
-			attendances: {
-				// Needed for attendance calc
-				where: {
-					isDeleted: false,
-					// Optimize: only fetch last 6 months
-					date: {
-						gte: new Date(new Date().setMonth(new Date().getMonth() - 6)),
-					},
-				},
-			},
 		},
 	});
 
-	console.log(`[Eligibility] Found ${employees.length} active employees to check`);
+	// 3. Evaluate employees in parallel
+	const evaluationResults = await Promise.all(
+		employees.map(async (emp) => {
+			const termCandidate = await checkTerminationEligibility(prisma, emp, referenceDate, req);
+			if (termCandidate) return termCandidate;
 
-	const candidates: EligibilityCandidate[] = [];
-	const referenceDate = new Date();
+			const regCandidate = await checkRegularizationEligibility(prisma, emp, referenceDate, req);
+			if (regCandidate) return regCandidate;
 
-	for (const emp of employees) {
-		// Check Termination first (critical)
-		const termCandidate = await checkTerminationEligibility(prisma, emp, referenceDate, req);
-		if (termCandidate) {
-			candidates.push(termCandidate);
-			continue;
-		}
+			const promoCandidate = await checkPromotionEligibility(prisma, emp, referenceDate, req);
+			if (promoCandidate) return promoCandidate;
 
-		// Check Regularization
-		const regCandidate = await checkRegularizationEligibility(prisma, emp, referenceDate, req);
-		if (regCandidate) {
-			candidates.push(regCandidate);
-			continue;
-		}
+			return null;
+		}),
+	);
 
-		// Check Promotion
-		const promoCandidate = await checkPromotionEligibility(prisma, emp, referenceDate, req);
-		if (promoCandidate) {
-			candidates.push(promoCandidate);
-			continue;
-		}
-	}
-
-	console.log(`[Eligibility] Analysis Complete. Found ${candidates.length} candidates.`);
-	return candidates;
+	const otherCandidates = evaluationResults.filter((c): c is EligibilityCandidate => c !== null);
+	return [...transferCandidates, ...otherCandidates];
 }

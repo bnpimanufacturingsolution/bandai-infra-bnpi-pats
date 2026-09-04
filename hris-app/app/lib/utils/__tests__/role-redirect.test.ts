@@ -55,6 +55,7 @@ describe("role redirect utilities", () => {
 		expect(getRoleDisplayName("hris-hr-manager")).toBe("HR Manager");
 		expect(getRoleDisplayName("hris-hr-user")).toBe("HR User");
 		expect(getRoleDisplayName("hris-employee-manager")).toBe("Employee Manager");
+		expect(getRoleDisplayName("hris-line-leader")).toBe("Line Leader");
 		expect(getRoleDisplayName("hris-employee")).toBe("Employee");
 		expect(getRoleDisplayName("hris-timekeeper")).toBe("Time Keeper");
 		expect(getRoleDisplayName("super_admin")).toBe("Super Administrator");

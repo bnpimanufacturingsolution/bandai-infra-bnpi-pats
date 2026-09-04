@@ -235,6 +235,50 @@ export const useEnsurePeriodDrafts = () => {
 	});
 };
 
+export const useEnsureAutoApprovedTimesheets = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: async (input: { payrollPeriodId: string; createLimit?: number }) => {
+			return await timesheetService.ensureAutoApprovedTimesheets(input.payrollPeriodId, {
+				createLimit: input.createLimit,
+			});
+		},
+		onSuccess: (result) => {
+			queryClient.invalidateQueries({ queryKey: timesheetQueryKeys.timesheets.all });
+			queryClient.invalidateQueries({ queryKey: timesheetlineQueryKeys.timesheetlines.all });
+			const created = result.created ?? 0;
+			const approved = result.autoApproved ?? 0;
+			const lines = result.refreshedLines ?? 0;
+			const remaining = result.remainingToPrepare;
+			const errorCount = result.errors?.length ?? 0;
+			const details = [
+				`${created} timesheet${created === 1 ? "" : "s"} created`,
+				`${approved} auto-approved`,
+				`${lines} attendance line${lines === 1 ? "" : "s"} synced`,
+			];
+			if (remaining === null) {
+				details.push("more may remain");
+			} else if (remaining && remaining > 0) {
+				details.push(`${remaining} remaining`);
+			}
+			if (created > 0 || approved > 0 || lines > 0) {
+				toast.success(`Generate complete: ${details.join(", ")}.`);
+			} else if (errorCount === 0) {
+				toast.info(`Already ready: ${details.join(", ")}.`);
+			}
+			if (errorCount > 0) {
+				toast.warning(
+					`${errorCount} employee${errorCount === 1 ? "" : "s"} could not be generated.`,
+				);
+			}
+		},
+		onError: (error: any) => {
+			toast.error(error?.message || "Failed to generate auto-approved timesheets");
+		},
+	});
+};
+
 export const useCurrentPeriodRepair = () => {
 	const queryClient = useQueryClient();
 

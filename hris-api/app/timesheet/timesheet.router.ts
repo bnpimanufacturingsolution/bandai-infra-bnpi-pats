@@ -23,6 +23,7 @@ interface IController {
 	consumeEditPermission(req: Request, res: Response, next: NextFunction): Promise<void>;
 	normalizeBreakdownPreview(req: Request, res: Response, next: NextFunction): Promise<void>;
 	ensurePeriodDrafts(req: Request, res: Response, next: NextFunction): Promise<void>;
+	ensureAutoApprovedTimesheets(req: Request, res: Response, next: NextFunction): Promise<void>;
 	syncObligationLines(req: Request, res: Response, next: NextFunction): Promise<void>;
 	repairCurrentPeriodCoverage(req: Request, res: Response, next: NextFunction): Promise<void>;
 	lockPeriodTimesheets(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -249,6 +250,14 @@ export const router = (route: Router, controller: IController): Router => {
 			label: "timesheet:ensure-period-drafts",
 		}),
 		controller.ensurePeriodDrafts,
+	);
+	routes.post(
+		"/ensure-auto-approved",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "timesheet:ensure-auto-approved",
+		}),
+		controller.ensureAutoApprovedTimesheets,
 	);
 	routes.post(
 		"/current-period-repair",

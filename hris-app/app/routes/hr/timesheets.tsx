@@ -32,6 +32,7 @@ import {
 	useLockPeriodTimesheets,
 	useSendTimesheetReminder,
 	useEnsurePeriodDrafts,
+	useEnsureAutoApprovedTimesheets,
 } from "~/lib/hooks/useTimesheets";
 import { useTimesheetStatistics } from "~/lib/hooks/useMetrics";
 import { usePayrollPeriods } from "~/lib/hooks/usePayrollPeriods";
@@ -218,6 +219,7 @@ export default function TimesheetsPage() {
 	const employeeFilter = searchParams.get("employeeId") || undefined;
 	const shouldPrepareDrafts = searchParams.get("prepareDrafts") === "1";
 	const ensurePeriodDraftsMutation = useEnsurePeriodDrafts();
+	const ensureAutoApprovedMutation = useEnsureAutoApprovedTimesheets();
 
 	// Fetch departments for filter
 	const { data: departmentsData } = useDepartments({
@@ -578,15 +580,6 @@ export default function TimesheetsPage() {
 		return `${firstName} ${lastName}`.trim() || manager.employeeId || manager.employeeCode || "Unassigned";
 	};
 
-	const getSupervisorName = (item: Timesheet) => {
-		const manager = item.employee?.reportTo as any;
-		if (!manager) return "assigned supervisor";
-		const firstName = manager.firstName || manager.person?.personalInfo?.firstName || "";
-		const lastName = manager.lastName || manager.person?.personalInfo?.lastName || "";
-		const name = `${firstName} ${lastName}`.trim();
-		return name || manager.employeeId || "assigned supervisor";
-	};
-
 	const getReminderTarget = (item: Timesheet) => {
 		const status = getTimesheetDisplayStatus(item);
 		const employeeName =
@@ -597,9 +590,9 @@ export default function TimesheetsPage() {
 
 		if (status === "SUBMITTED") {
 			return {
-				label: "Manager approval",
-				target: getSupervisorName(item),
-				kind: "manager_approval" as const,
+				label: "Auto-approval",
+				target: "System (automatic)",
+				kind: null,
 			};
 		}
 
@@ -648,7 +641,6 @@ export default function TimesheetsPage() {
 
 	const renderActions = (item: Timesheet) => {
 		const status = getTimesheetDisplayStatus(item);
-		const shouldRemindManager = status === "SUBMITTED";
 		const shouldRemindToSubmit = status === "DRAFT";
 		const shouldRemindToCorrect = status === "REJECTED" || status === "REVISED";
 
@@ -677,16 +669,9 @@ export default function TimesheetsPage() {
 						<UserRound className="h-4 w-4 mr-2" /> Open Employee Profile
 					</DropdownMenuItem>
 
-					{shouldRemindManager || shouldRemindToSubmit || shouldRemindToCorrect ? (
+					{shouldRemindToSubmit || shouldRemindToCorrect ? (
 						<>
 							<DropdownMenuSeparator />
-							{shouldRemindManager ? (
-								<DropdownMenuItem
-									disabled={sendReminderMutation.isPending}
-									onClick={() => handleReminderAction(item, "manager_approval")}>
-									<Bell className="h-4 w-4 mr-2" /> Remind Manager
-								</DropdownMenuItem>
-							) : null}
 							{shouldRemindToSubmit ? (
 								<DropdownMenuItem
 									disabled={sendReminderMutation.isPending}
@@ -931,9 +916,9 @@ export default function TimesheetsPage() {
 			meta: `${metrics.draft} draft / ${metrics.actionRequired} correction`,
 		},
 		{
-			label: "Manager approval",
+			label: "Pending approval",
 			value: metrics.submitted,
-			meta: "Submitted, waiting review",
+			meta: "Submitted, auto-approves on generate",
 		},
 		{
 			label: "Payroll ready",
@@ -967,7 +952,7 @@ export default function TimesheetsPage() {
 	const getTimesheetBusinessStatus = (item: Timesheet) => {
 		const status = getTimesheetDisplayStatus(item);
 		if (status === "DRAFT") return "Needs Employee Submission";
-		if (status === "SUBMITTED") return "Needs Manager Approval";
+		if (status === "SUBMITTED") return "Pending Auto-Approval";
 		if (status === "REJECTED" || status === "REVISED") return "Needs Employee Correction";
 		if (status === "APPROVED" || status === "LOCKED") return "Payroll Ready";
 		return status || "-";
@@ -1052,7 +1037,7 @@ export default function TimesheetsPage() {
 	};
 	const businessStatusOrder = [
 		"Needs Employee Submission",
-		"Needs Manager Approval",
+		"Pending Auto-Approval",
 		"Needs Employee Correction",
 		"Payroll Ready",
 	];
@@ -1101,8 +1086,8 @@ export default function TimesheetsPage() {
 				const readableLabel =
 					item.label === "Needs Employee Submission"
 						? "awaiting employee submission"
-						: item.label === "Needs Manager Approval"
-							? "awaiting manager approval"
+						: item.label === "Pending Auto-Approval"
+							? "pending auto-approval"
 							: item.label === "Needs Employee Correction"
 								? "needing employee correction"
 								: item.label === "Payroll Ready"
@@ -1374,8 +1359,26 @@ export default function TimesheetsPage() {
 		}
 	};
 
-	const handleLockSelectedPeriod = () => {
-		if (!activePeriodId || lockPeriodMutation.isPending) return;
+	const handleGenerateAutoApproved = async () => {
+		if (!activePeriodId || ensureAutoApprovedMutation.isPending) return;
+		try {
+			// Small timeout-safe batches; Start Payroll finishes any remainder
+			// in its background worker, so this loop is progress, not a gate.
+			// remainingToPrepare === 0 means done; null/undefined means more
+			// may remain, so keep looping up to the attempt cap.
+			for (let attempt = 0; attempt < 60; attempt += 1) {
+				const result = await ensureAutoApprovedMutation.mutateAsync({
+					payrollPeriodId: activePeriodId,
+					createLimit: 40,
+				});
+				if (result.remainingToPrepare === 0) break;
+			}
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to generate auto-approved timesheets.");
+		}
+	};
+
+	const handleLockSelectedPeriod = () => {		if (!activePeriodId || lockPeriodMutation.isPending) return;
 		const label =
 			activeTab === "past"
 				? selectedPastPeriod?.name || selectedPeriodCode || "this payroll period"
@@ -1439,12 +1442,12 @@ export default function TimesheetsPage() {
 		},
 		{
 			key: "submitted",
-			title: "Needs Manager Approval",
+			title: "Pending Auto-Approval",
 			status: ["SUBMITTED"],
 			count: metrics.submitted,
 			rows: timesheetQueuesData?.timesheetQueues?.submitted?.timesheets || [],
-			emptyTitle: "No manager approvals in queue",
-			viewAllLabel: "View all manager approvals",
+			emptyTitle: "No pending auto-approvals in queue",
+			viewAllLabel: "View all pending auto-approvals",
 		},
 		{
 			key: "correction",
@@ -1677,6 +1680,12 @@ export default function TimesheetsPage() {
 			</div>
 
 			<Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
+				<div className="rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+					Timesheets are auto-approved by the system — no manager approval needed.
+					Attendance syncs automatically; use Generate + Auto-approve to refresh the
+					whole period before payroll. Starting payroll also generates any missing
+					timesheets itself.
+				</div>
 				<div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 pb-3">
 					<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
 						<TabsList className="h-9 w-fit shrink-0 rounded-md">
@@ -1691,6 +1700,17 @@ export default function TimesheetsPage() {
 						{renderScopeFilters()}
 					</div>
 					<div className="flex shrink-0 items-center gap-2">
+						<Button
+							type="button"
+							size="sm"
+							className="h-9 w-fit rounded-md px-3 text-sm font-medium"
+							disabled={!activePeriodId || ensureAutoApprovedMutation.isPending}
+							onClick={() => void handleGenerateAutoApproved()}>
+							{ensureAutoApprovedMutation.isPending ? (
+								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+							) : null}
+							{ensureAutoApprovedMutation.isPending ? "Generating..." : "Generate + Auto-approve"}
+						</Button>
 						<Button
 							type="button"
 							variant="outline"
@@ -1743,8 +1763,8 @@ export default function TimesheetsPage() {
 									filterValues={advancedFilterValues}
 									renderActions={renderActions}
 									isLoading={isLoading}
-									emptyMessage="No timesheets found"
-									emptyDescription="Timesheets will appear here once submitted."
+								emptyMessage="No timesheets found"
+								emptyDescription="Timesheets appear here once generated — use Generate + Auto-approve."
 									searchWidth="w-80"
 									searchPlaceholder="Search timesheets..."
 									itemsPerPage={limitParam}

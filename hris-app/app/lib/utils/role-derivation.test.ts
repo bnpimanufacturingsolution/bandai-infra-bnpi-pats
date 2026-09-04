@@ -326,6 +326,7 @@ describe("roleLabel", () => {
 		["hris-hr-manager", "HR Manager"],
 		["hris-hr-user", "HR User"],
 		["hris-employee-manager", "Employee Manager"],
+		["hris-line-leader", "Line Leader"],
 		["hris-employee", "Employee"],
 	];
 

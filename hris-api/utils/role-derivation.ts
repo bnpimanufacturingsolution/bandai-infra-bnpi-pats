@@ -26,6 +26,7 @@ export type HrisRole =
 	| "hris-hr-manager"
 	| "hris-hr-user"
 	| "hris-employee-manager"
+	| "hris-line-leader"
 	| "hris-employee";
 
 export interface DerivedRoleFlags {
@@ -73,7 +74,7 @@ const roleFromFlags = (isHrDept: boolean, isMgrLvl: boolean): HrisRole => {
 const withFlags = (role: HrisRole): DerivedRoleFlags => ({
 	role,
 	isHrManager: role === "hris-hr-manager",
-	isManager: role === "hris-employee-manager",
+	isManager: role === "hris-employee-manager" || role === "hris-line-leader",
 });
 
 /**

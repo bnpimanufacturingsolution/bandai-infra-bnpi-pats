@@ -25,7 +25,9 @@ model Rule {
   category       RuleCategory
   severity       SeverityLevel
   description    String
-  consequences   String? // Consequences for violation
+  consequences   String? // Free-text consequences summary for violation
+  /// Per-severity next-step plan: { LOW: { action, employeeStep, managerStep, responseWindowDays }, MEDIUM: ..., HIGH: ..., CRITICAL: ... }
+  consequencePlan Json?
   isActive       Boolean       @default(true)
   effectiveDate  DateTime      @default(now())
   expiryDate     DateTime? // Optional expiry date
