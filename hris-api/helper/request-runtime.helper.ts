@@ -693,6 +693,7 @@ const ROLE_RANK_MAP: Record<string, number> = {
 	"hris-timekeeper": 2,
 	"hris-hr-user": 3,
 	"hris-employee-manager": 4,
+	"hris-line-leader": 4,
 	"hris-hr-manager": 5,
 	"hris-admin": 6,
 	admin: 6,

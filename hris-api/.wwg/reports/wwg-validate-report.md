@@ -8,7 +8,7 @@ critical: 0, high: 2, medium: 0, low: 16, info: 12
 
 ## Command
 
-`wwg validate --target C:\Users\stari\bandai-infra\hris-api`
+`wwg validate --target C:\uzaro\bandai-infra\hris-api`
 
 ## Repository Type Detected
 

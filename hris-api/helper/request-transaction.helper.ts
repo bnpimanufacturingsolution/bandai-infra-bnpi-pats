@@ -45,6 +45,7 @@ const ROLE_TO_ACTOR_TYPE: Record<string, RequestTransactionActorType> = {
 	"hris-hr-manager": RequestTransactionActorType.HR,
 	"hris-hr-user": RequestTransactionActorType.HR,
 	"hris-employee-manager": RequestTransactionActorType.MANAGER,
+	"hris-line-leader": RequestTransactionActorType.MANAGER,
 	"hris-employee": RequestTransactionActorType.EMPLOYEE,
 	admin: RequestTransactionActorType.HR,
 	super_admin: RequestTransactionActorType.HR,

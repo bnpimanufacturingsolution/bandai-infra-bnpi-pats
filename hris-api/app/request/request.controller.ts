@@ -4105,9 +4105,11 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 							// Salary already handled by common metadata.newSalary parsing above.
 							break;
 
-						case "TRANSFER":
+						case "TRANSFER": {
+							let resolvedDepartmentId: string | null = null;
+
 							// Update Department
-							if (metadata.newDepartment) {
+							if (metadata.newDepartmentId || metadata.newDepartment) {
 								let departmentId = metadata.newDepartmentId;
 
 								if (!departmentId && metadata.newDepartment) {
@@ -4127,21 +4129,116 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 
 								if (departmentId) {
 									employeeUpdateData.departmentId = departmentId;
+									resolvedDepartmentId = departmentId;
 								}
 							}
+
+							// Update Position
+							if (metadata.newPositionId || metadata.newPosition) {
+								let positionId = metadata.newPositionId;
+
+								if (!positionId && metadata.newPosition) {
+									const position = await prisma.position.findFirst({
+										where: {
+											title: {
+												equals: metadata.newPosition,
+												mode: "insensitive",
+											},
+											isDeleted: false,
+										},
+									});
+									if (position) {
+										positionId = position.id;
+									}
+								}
+
+								if (positionId) {
+									employeeUpdateData.positionId = positionId;
+								}
+							}
+
+							// Update Section
+							if (metadata.newSectionId || metadata.newSection) {
+								let sectionId = metadata.newSectionId;
+
+								if (!sectionId && metadata.newSection) {
+									const section = await prisma.section.findFirst({
+										where: {
+											name: {
+												equals: metadata.newSection,
+												mode: "insensitive",
+											},
+											isDeleted: false,
+										},
+									});
+									if (section) {
+										sectionId = section.id;
+									}
+								}
+
+								if (sectionId) {
+									employeeUpdateData.sectionId = sectionId;
+								}
+							}
+
 							// Update Location
 							if (metadata.newLocation) {
-								// Validate against enum if strict, or map to closest
 								const validLocations = ["ONSITE", "REMOTE", "HYBRID"];
 								const normalizedLoc = metadata.newLocation.toUpperCase();
 								if (validLocations.includes(normalizedLoc)) {
 									employeeUpdateData.workLocation = normalizedLoc;
 								}
 							}
+
+							// Update Supervisor / Reporting Line
 							if (metadata.newSupervisorId) {
 								employeeUpdateData.reportToId = String(metadata.newSupervisorId);
+							} else if (resolvedDepartmentId) {
+								// Auto-resolve Department Head / Manager for the new department
+								const deptManager = await prisma.employee.findFirst({
+									where: {
+										departmentId: resolvedDepartmentId,
+										isDeleted: false,
+										employmentStatus: "ACTIVE",
+										OR: [
+											{ isManager: true },
+											{ isHrManager: true },
+											{
+												role: {
+													in: [
+														"hris-employee-manager",
+														"hris-hr-manager",
+														"hris-line-leader",
+													],
+												},
+											},
+										],
+										NOT: { id: targetEmployeeId },
+									},
+									orderBy: { createdAt: "asc" },
+								});
+								if (deptManager) {
+									employeeUpdateData.reportToId = deptManager.id;
+								}
+							}
+
+							// If direct report transfer IDs are specified (e.g. employee becomes a team lead)
+							if (
+								Array.isArray(metadata.directReportTransferIds) &&
+								metadata.directReportTransferIds.length > 0
+							) {
+								await prisma.employee.updateMany({
+									where: {
+										id: { in: metadata.directReportTransferIds },
+										organizationId: request.organizationId,
+									},
+									data: {
+										reportToId: targetEmployeeId,
+									},
+								});
 							}
 							break;
+						}
 
 						case "REGULARIZATION":
 							employeeUpdateData.employmentType = "REGULAR";

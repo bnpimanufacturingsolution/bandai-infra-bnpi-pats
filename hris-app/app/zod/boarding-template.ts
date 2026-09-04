@@ -6,6 +6,7 @@ import { BoardingTypeSchema } from "./boarding-process";
 export const HrisRoleSchema = z.enum([
 	"hris-employee",
 	"hris-employee-manager",
+	"hris-line-leader",
 	"hris-hr-user",
 	"hris-hr-manager",
 ]);

@@ -24,7 +24,9 @@ import {
 	TrendingDown,
 	TrendingUp,
 	BarChart3,
+	History,
 	ListCheck,
+	Gavel,
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useActionMetrics } from "~/lib/hooks/useMetrics";
@@ -225,6 +227,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 							icon: <Award className="w-4 h-4" />,
 						},
 						{
+							id: "hr-personnel-action-history",
+							label: "Personnel Action History",
+							path: "/hr/personnel-actions-history",
+							icon: <History className="w-4 h-4" />,
+						},
+						{
 							id: "tasks",
 							label: "Tasks",
 							path: "/hr/tasks",
@@ -273,6 +281,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 							label: "Day-status Review",
 							path: "/hr/day-status-review",
 							icon: <CalendarRange className="w-4 h-4" />,
+						},
+						{
+							id: "hr-discipline-actions",
+							label: "Disciplinary Action",
+							path: "/hr/disciplinary-action",
+							icon: <Gavel className="w-4 h-4" />,
 						},
 					],
 				},

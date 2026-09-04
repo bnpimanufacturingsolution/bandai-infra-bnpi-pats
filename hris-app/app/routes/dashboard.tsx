@@ -29,7 +29,8 @@ export default function Dashboard() {
 			// HR roles see HR dashboard
 			return <HrUserDashboard />;
 		case "hris-employee-manager":
-			// Managers see employee dashboard with manager features
+		case "hris-line-leader":
+			// Managers and Line Leaders see employee dashboard with manager features
 			return <ManagerDashboard />;
 		case "hris-employee":
 			// Regular employees see employee dashboard

@@ -1115,6 +1115,15 @@ export async function materializeTimesheetLinesFromObligations(
 		fromDate: Date | string;
 		toDate: Date | string;
 		skipEnsureAttendanceObligations?: boolean;
+		/**
+		 * System auto-approval refresh lane (2026-09-04): when true, rebuild
+		 * lines from current obligations even on SUBMITTED/APPROVED snapshots.
+		 * Used only for system auto-approved timesheets
+		 * (`metadata.autoApproved === true`) so fresh punches keep reflecting
+		 * until payroll locks the sheet. Manual manager approvals are never
+		 * force-refreshed — pass false (default) for those paths.
+		 */
+		forceRefreshLines?: boolean;
 	},
 ) {
 	if (!params.skipEnsureAttendanceObligations) {
@@ -1148,25 +1157,29 @@ export async function materializeTimesheetLinesFromObligations(
 		},
 	});
 	const preserveExistingSnapshotLines =
-		Boolean(timesheet?.lockedAt) ||
-		["SUBMITTED", "APPROVED"].includes(String(timesheet?.status || "").toUpperCase());
-	const existingEffectiveLines = preserveExistingSnapshotLines
-		? await (prisma as any).timesheetline.findMany({
-				where: {
-					organizationId: params.organizationId,
-					timesheetId: params.timesheetId,
-					isDeleted: false,
-					isEffective: true,
-				},
-				orderBy: [{ date: "asc" }, { revisionNo: "desc" }],
-			})
-		: [];
-	const existingEffectiveLineByDate = new Map(
-		existingEffectiveLines.map((line: any) => [
-			getDateKeyInBusinessTimeZone(line.date),
-			line,
-		]),
-	);
+		!params.forceRefreshLines &&
+		(Boolean(timesheet?.lockedAt) ||
+			["SUBMITTED", "APPROVED"].includes(String(timesheet?.status || "").toUpperCase()));
+	// Preload effective lines once per sheet: per-date write decisions below
+	// reuse this map instead of re-querying per day. First-wins with
+	// revisionNo/updatedAt desc ordering matches the per-row findFirst pick;
+	// the create-collision fallback still guards write races.
+	const existingEffectiveLines = await (prisma as any).timesheetline.findMany({
+		where: {
+			organizationId: params.organizationId,
+			timesheetId: params.timesheetId,
+			isDeleted: false,
+			isEffective: true,
+		},
+		orderBy: [{ date: "asc" }, { revisionNo: "desc" }, { updatedAt: "desc" }],
+	});
+	const existingEffectiveLineByDate = new Map<string, any>();
+	for (const line of existingEffectiveLines) {
+		const key = getDateKeyInBusinessTimeZone((line as any).date);
+		if (!existingEffectiveLineByDate.has(key)) {
+			existingEffectiveLineByDate.set(key, line);
+		}
+	}
 
 	const activeDateKeys = new Set<string>();
 	const lines: any[] = [];
@@ -1220,6 +1233,8 @@ export async function materializeTimesheetLinesFromObligations(
 			date,
 			versionMode: "update",
 			ledgerType: "SNAPSHOT",
+			preloadedLine: existingEffectiveLineByDate.get(dateKey) ?? null,
+			skipExistingLineLookup: true,
 			data: {
 				organizationId: params.organizationId,
 				employeeId: params.employeeId,

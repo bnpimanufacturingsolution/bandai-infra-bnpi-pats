@@ -438,4 +438,10 @@ describe("MANAGER_LEVELS and NON_MANAGER_LEVELS are complete", () => {
 	it("NON_MANAGER_LEVELS includes Senior, Mid, Junior, Entry", () => {
 		expect(NON_MANAGER_LEVELS).to.include.members(["Senior", "Mid", "Junior", "Entry"]);
 	});
+
+	it("recognizes hris-line-leader with isManager=true", () => {
+		const result = deriveRoleAndFlags({ department: { isHr: false }, level: { isManager: true } });
+		expect(result.isManager).to.equal(true);
+	});
 });
+

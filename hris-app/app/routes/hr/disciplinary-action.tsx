@@ -5,24 +5,26 @@ import { Modal } from "~/components/atoms/Modal";
 import { Badge } from "~/components/atoms/Badge";
 import { Select, type SelectOption } from "~/components/atoms/Select";
 import { DataTable, type Column } from "~/components/atoms/DataTable";
-import { AlertTriangle, Plus, Eye, Edit, Trash2 } from "lucide-react";
+import { AlertTriangle, Plus, Eye, Edit, Trash2, MoreVertical, CheckCircle } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
 import {
 	disciplinaryActionService,
 	type DisciplinaryAction,
 	type DisciplinaryActionStatus,
 } from "~/services/disciplinaryAction.service";
+import {
+	disciplinaryRulesService,
+	type DisciplinaryRule,
+} from "~/services/disciplinaryRules.service";
 import { useEmployees } from "~/lib/hooks/useEmployees";
-
-const offenseOptions: SelectOption[] = [
-	{ value: "TARDINESS", label: "Tardiness" },
-	{ value: "ABSENTEEISM", label: "Absenteeism" },
-	{ value: "MISCONDUCT", label: "Misconduct" },
-	{ value: "POLICY_VIOLATION", label: "Policy Violation" },
-	{ value: "PERFORMANCE", label: "Performance" },
-	{ value: "OTHER", label: "Other" },
-];
 
 const severityOptions: SelectOption[] = [
 	{ value: "LOW", label: "Low" },
@@ -31,6 +33,7 @@ const severityOptions: SelectOption[] = [
 ];
 
 const statusOptions: SelectOption[] = [
+	{ value: "DRAFT", label: "Draft" },
 	{ value: "OPEN", label: "Open" },
 	{ value: "ONGOING", label: "Ongoing" },
 	{ value: "RESOLVED", label: "Resolved" },
@@ -39,6 +42,8 @@ const statusOptions: SelectOption[] = [
 
 const statusBadgeVariant = (status: DisciplinaryActionStatus) => {
 	switch (status) {
+		case "DRAFT":
+			return "info" as const;
 		case "OPEN":
 			return "destructive" as const;
 		case "ONGOING":
@@ -48,6 +53,23 @@ const statusBadgeVariant = (status: DisciplinaryActionStatus) => {
 		default:
 			return "secondary" as const;
 	}
+};
+
+/**
+ * Review workflow (operator rule 2026-09-03): DRAFT --confirm--> OPEN
+ * --start--> ONGOING --resolve--> RESOLVED; DISMISSED is reachable while the
+ * case is still in review/ongoing. Terminal states offer no transitions.
+ */
+const STATUS_TRANSITIONS: Partial<Record<DisciplinaryActionStatus, Array<{ to: DisciplinaryActionStatus; label: string; danger?: boolean }>>> = {
+	DRAFT: [{ to: "OPEN", label: "Confirm case (notify employee & manager)" }],
+	OPEN: [
+		{ to: "ONGOING", label: "Mark Ongoing" },
+		{ to: "DISMISSED", label: "Dismiss case", danger: true },
+	],
+	ONGOING: [
+		{ to: "RESOLVED", label: "Mark Resolved" },
+		{ to: "DISMISSED", label: "Dismiss case", danger: true },
+	],
 };
 
 interface ActionFormData {
@@ -63,7 +85,7 @@ interface ActionFormData {
 
 const emptyForm: ActionFormData = {
 	employeeId: "",
-	offenseType: "TARDINESS",
+	offenseType: "",
 	offenseDate: new Date().toISOString().slice(0, 10),
 	description: "",
 	severity: "MEDIUM",
@@ -71,6 +93,10 @@ const emptyForm: ActionFormData = {
 	actionTaken: "",
 	resolutionNotes: "",
 };
+
+/** Severity values accepted by the DA API (rule-book CRITICAL maps to HIGH). */
+const normalizeSeverity = (severity: string): string =>
+	severity === "CRITICAL" ? "HIGH" : severity;
 
 export default function DisciplinaryActionPage() {
 	const queryClient = useQueryClient();
@@ -111,6 +137,48 @@ export default function DisciplinaryActionPage() {
 		for (const option of employeeOptions) map.set(option.value, option.label);
 		return map;
 	}, [employeeOptions]);
+
+	// Offense types come from the operator-configured Disciplinary Rule Book.
+	const { data: rulesData } = useQuery({
+		queryKey: ["disciplinary-rules", "options"],
+		queryFn: () => disciplinaryRulesService.list({ page: 1, limit: 1000 }),
+	});
+	const rules = useMemo(() => (rulesData?.rules || []).filter((r) => r.isActive), [rulesData]);
+
+	const offenseOptions: SelectOption[] = useMemo(() => {
+		const options: SelectOption[] = rules.map((rule) => ({
+			value: rule.code || rule.title,
+			label: `${rule.code ? `${rule.code} — ` : ""}${rule.title}`,
+		}));
+		// Keep legacy/manual offense values selectable when editing existing cases.
+		if (editing && !options.some((o) => o.value === editing.offenseType)) {
+			options.unshift({ value: editing.offenseType, label: `${editing.offenseType} (legacy)` });
+		}
+		return options;
+	}, [rules, editing]);
+
+	const ruleByTypeValue = useMemo(() => {
+		const map = new Map<string, DisciplinaryRule>();
+		for (const rule of rules) map.set(rule.code || rule.title, rule);
+		return map;
+	}, [rules]);
+
+	const ruleTitleByCode = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const rule of rules) if (rule.code) map.set(rule.code, rule.title);
+		return map;
+	}, [rules]);
+
+	const onOffenseTypeChange = (value: string) => {
+		const rule = ruleByTypeValue.get(value);
+		setForm((prev) => ({
+			...prev,
+			offenseType: value,
+			severity: rule ? normalizeSeverity(rule.severity) : prev.severity,
+			// Prefill description from the rule book so HR edits rather than types.
+			description: rule && !prev.description ? rule.description : prev.description,
+		}));
+	};
 
 	const { data, isLoading } = useQuery({
 		queryKey: ["disciplinary-actions", page, debouncedSearch, statusFilter],
@@ -153,8 +221,8 @@ export default function DisciplinaryActionPage() {
 	};
 
 	const onSubmit = async () => {
-		if (!form.employeeId || !form.description) {
-			toast.error("Employee and description are required");
+		if (!form.employeeId || !form.offenseType || !form.description) {
+			toast.error("Employee, offense rule, and description are required");
 			return;
 		}
 		try {
@@ -204,6 +272,23 @@ export default function DisciplinaryActionPage() {
 		}
 	};
 
+	const handleStatusChange = async (
+		action: DisciplinaryAction,
+		to: DisciplinaryActionStatus,
+	) => {
+		if (to === "DISMISSED" && !window.confirm(`Dismiss this ${action.status} case? The employee and manager will be notified of the dismissal.`))
+			return;
+		if (to === "OPEN" && !window.confirm(`Confirm this case as official? The employee and their manager will be notified with the next step.`))
+			return;
+		try {
+			await disciplinaryActionService.update(action.id, { status: to });
+			toast.success(to === "OPEN" ? "Case confirmed — employee and manager notified" : `Case marked ${to.toLowerCase()}`);
+			refresh();
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to update case status");
+		}
+	};
+
 	const columns: Column<DisciplinaryAction>[] = [
 		{
 			key: "employee",
@@ -214,7 +299,8 @@ export default function DisciplinaryActionPage() {
 		{
 			key: "offenseType",
 			label: "Offense",
-			render: (_value, action) => action.offenseType.replaceAll("_", " "),
+			render: (_value, action) =>
+				ruleTitleByCode.get(action.offenseType) || action.offenseType.replaceAll("_", " "),
 		},
 		{
 			key: "offenseDate",
@@ -241,27 +327,44 @@ export default function DisciplinaryActionPage() {
 			key: "rowActions",
 			label: "Actions",
 			render: (_value, action) => (
-				<div className="flex items-center gap-1">
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={() => {
-							setViewing(action);
-							setIsViewModalOpen(true);
-						}}>
-						<Eye className="h-4 w-4" />
-					</Button>
-					<Button variant="ghost" size="sm" onClick={() => openEdit(action)}>
-						<Edit className="h-4 w-4" />
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						className="text-red-600"
-						onClick={() => handleDelete(action)}>
-						<Trash2 className="h-4 w-4" />
-					</Button>
-				</div>
+				<DropdownMenu>
+					<DropdownMenuTrigger asChild>
+						<Button variant="outline" size="sm" className="flex items-center justify-center w-8 h-8 p-0">
+							<MoreVertical className="h-4 w-4" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="end" className="w-56">
+						<DropdownMenuItem onClick={() => { setViewing(action); setIsViewModalOpen(true); }}>
+							<Eye className="h-4 w-4 mr-2" />
+							View Details
+						</DropdownMenuItem>
+						<DropdownMenuItem onClick={() => openEdit(action)}>
+							<Edit className="h-4 w-4 mr-2" />
+							Edit
+						</DropdownMenuItem>
+						{(STATUS_TRANSITIONS[action.status] || []).length > 0 ? (
+							<>
+								<DropdownMenuSeparator />
+								{(STATUS_TRANSITIONS[action.status] || []).map((transition) => (
+									<DropdownMenuItem
+										key={transition.to}
+										onClick={() => handleStatusChange(action, transition.to)}
+										className={transition.danger ? "text-red-600 focus:text-red-600 focus:bg-red-50" : undefined}>
+										<CheckCircle className="h-4 w-4 mr-2" />
+										{transition.label}
+									</DropdownMenuItem>
+								))}
+							</>
+						) : null}
+						<DropdownMenuSeparator />
+						<DropdownMenuItem
+							onClick={() => handleDelete(action)}
+							className="text-red-600 focus:text-red-600 focus:bg-red-50">
+							<Trash2 className="h-4 w-4 mr-2" />
+							Delete
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
 			),
 		},
 	];
@@ -320,7 +423,7 @@ export default function DisciplinaryActionPage() {
 
 			<Modal
 				open={isModalOpen}
-				onClose={() => setIsModalOpen(false)}
+				onOpenChange={setIsModalOpen}
 				title={editing ? "Edit disciplinary action" : "File disciplinary action"}>
 				<div className="space-y-3">
 					{!editing ? (
@@ -339,12 +442,19 @@ export default function DisciplinaryActionPage() {
 
 					<div className="grid grid-cols-1 gap-3 md:grid-cols-2">
 						<div>
-							<label className="mb-1 block text-sm font-medium">Offense Type</label>
+							<label className="mb-1 block text-sm font-medium">Offense (from Rule Book)</label>
 							<Select
+								placeholder="Select rule…"
 								options={offenseOptions}
 								value={form.offenseType}
-								onChange={(value) => setForm((prev) => ({ ...prev, offenseType: value }))}
+								onChange={onOffenseTypeChange}
 							/>
+							{(() => {
+								const rule = ruleByTypeValue.get(form.offenseType);
+								return rule?.consequences ? (
+									<p className="mt-1 text-xs text-slate-500">{rule.consequences}</p>
+								) : null;
+							})()}
 						</div>
 						<div>
 							<label className="mb-1 block text-sm font-medium">Offense Date</label>
@@ -425,14 +535,14 @@ export default function DisciplinaryActionPage() {
 
 			<Modal
 				open={isViewModalOpen}
-				onClose={() => setIsViewModalOpen(false)}
+				onOpenChange={setIsViewModalOpen}
 				title="Disciplinary action details">
 				{viewing ? (
 					<div className="space-y-2 text-sm">
 						<div className="flex items-center gap-2">
 							<AlertTriangle className="h-4 w-4 text-amber-500" />
 							<span className="font-semibold">
-								{viewing.offenseType.replaceAll("_", " ")} · {viewing.severity}
+								{ruleTitleByCode.get(viewing.offenseType) || viewing.offenseType.replaceAll("_", " ")} · {viewing.severity}
 							</span>
 						</div>
 						<p>
@@ -444,11 +554,31 @@ export default function DisciplinaryActionPage() {
 							{viewing.offenseDate?.slice(0, 10)}
 						</p>
 						<p>
-							<span className="text-slate-500">Status:</span> {viewing.status}
+							<span className="text-slate-500">Status:</span>{" "}
+							<Badge variant={statusBadgeVariant(viewing.status)}>{viewing.status}</Badge>
 						</p>
 						<p>
 							<span className="text-slate-500">Description:</span> {viewing.description}
 						</p>
+						{(() => {
+							const rule = ruleByTypeValue.get(viewing.offenseType);
+							const plan = rule?.consequencePlan as Record<string, { action?: string; employeeStep?: string; managerStep?: string; responseWindowDays?: number }> | null | undefined;
+							const step = plan?.[viewing.severity as "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"];
+							return step?.employeeStep ? (
+								<div className="rounded-md border border-blue-200 bg-blue-50 p-2">
+									<p className="font-semibold text-blue-900">Next step ({step.action})</p>
+									<p className="mt-1 text-blue-800">
+										<span className="font-medium">Employee:</span> {step.employeeStep}
+										{step.responseWindowDays ? ` (${step.responseWindowDays} calendar day(s) to respond)` : ""}
+									</p>
+									{step.managerStep ? (
+										<p className="mt-1 text-blue-800">
+											<span className="font-medium">Manager:</span> {step.managerStep}
+										</p>
+									) : null}
+								</div>
+							) : null;
+						})()}
 						{viewing.actionTaken ? (
 							<p>
 								<span className="text-slate-500">Action taken:</span> {viewing.actionTaken}

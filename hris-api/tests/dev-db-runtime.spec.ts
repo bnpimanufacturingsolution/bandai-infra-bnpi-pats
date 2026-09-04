@@ -5,6 +5,14 @@ import path from "path";
 const runtimeHelper = require("../scripts/dev-db-runtime.cjs");
 
 describe("dev DB runtime resolver", () => {
+	it("infers the dev environment for the canonical K3s DEV forward port 55435", () => {
+		const datasource = runtimeHelper.parseDatasourceUrl(
+			"postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public",
+		);
+
+		expect(runtimeHelper.inferEnvironment(datasource)).to.equal("dev");
+	});
+
 	it("prefers a reachable alternate Project Truth VM IP when the configured host is stale", async () => {
 		const datasource = runtimeHelper.parseDatasourceUrl(
 			"postgresql://postgres:postgres@10.184.37.241:15433/hris?schema=public",

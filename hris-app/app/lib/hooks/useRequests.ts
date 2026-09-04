@@ -166,7 +166,10 @@ export const useCreateRequest = (
 		},
 		onError: (error: any) => {
 			if (showErrorToast) {
-				sonnerToast.error(error?.message || "Failed to create request");
+				const toastErr = getToastErrorMessage(error);
+				sonnerToast.error(toastErr.title, {
+					description: toastErr.description,
+				});
 			}
 		},
 	});

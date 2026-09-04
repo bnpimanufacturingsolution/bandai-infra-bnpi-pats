@@ -22,6 +22,7 @@ import {
 	generateUniqueTimesheetCode,
 	refreshTimesheetForAttendanceDate,
 	ensurePeriodDraftsAndTodayLinesFromAggregate,
+	ensurePayrollPeriodTimesheetsAutoApproved,
 	repairCurrentPeriodAttendanceTimesheetCoverage,
 	syncTimesheetLinesFromBreakdown,
 	attachTimesheetBreakdownFromLines,
@@ -81,6 +82,8 @@ import {
 	getOrCreateNormalizedTimesheetConfig,
 	mergeTimesheetConfigRules,
 	normalizeTimesheetRulesConfig,
+	resolveTimesheetAutoApprovalEnabled,
+	buildTimesheetAutoApprovalPatch,
 } from "../../helper/timesheet-config.helper";
 import { applyApprovedOvertimeCompensatoryCredit } from "./approved-overtime-comp-leave.service";
 import { createOvertimeRequestForTimesheetLine } from "./overtime-request.service";
@@ -1557,6 +1560,7 @@ export const controller = (prisma: PrismaClient) => {
 	const isManagerRole = (role?: string) =>
 		[
 			"hris-employee-manager",
+			"hris-line-leader",
 			"hris-hr-user",
 			"hris-hr-manager",
 			"hris-admin",
@@ -3345,6 +3349,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			// Prepare update data
 			const updateData: any = {};
+			let submitAutoApproved = false;
 			let normalizedBreakdownForLineSync: any[] | null = null;
 			let lineVersionMode: "update" | "version" = "update";
 			let versionDayKeys: Set<string> | undefined;
@@ -3454,6 +3459,18 @@ export const controller = (prisma: PrismaClient) => {
 						});
 					}
 					delete (updateData as any).__skipObligationMaterialize;
+					if (resolveTimesheetAutoApprovalEnabled(timesheetConfig.enableAutoApprove)) {
+						Object.assign(
+							updateData,
+							buildTimesheetAutoApprovalPatch(
+								{ ...existingMetadata, ...((updateData.metadata as any) || {}) },
+								updateData.submittedAt,
+							),
+						);
+						updateData.submittedAt = updateData.submittedAt || new Date();
+						updateData.submittedBy = updateData.submittedBy || actingEmployeeId;
+						submitAutoApproved = true;
+					}
 					break;
 
 				case "APPROVE":
@@ -3562,7 +3579,7 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			attachTimesheetBreakdownFromLines(updatedTimesheet as any);
 
-			if (action === "SUBMIT") {
+			if (action === "SUBMIT" && !submitAutoApproved) {
 				await createOrReuseTimesheetSubmissionRequest({
 					authReq,
 					timesheet: {
@@ -3573,6 +3590,21 @@ export const controller = (prisma: PrismaClient) => {
 					},
 					reason: notes,
 				});
+			}
+
+			if (action === "SUBMIT" && submitAutoApproved) {
+				try {
+					await publishTimesheetDecisionFallbackNotification(prisma, (authReq as any).io, {
+						timesheetId: existingTimesheet.id,
+						status: "APPROVED",
+						sourceEmployeeId: actingEmployeeId || null,
+						comment: "Auto-approved by timesheet approval settings",
+					});
+				} catch (notificationError) {
+					timesheetLogger.warn(
+						`Failed to publish auto-approval notification for ${existingTimesheet.id}: ${notificationError}`,
+					);
+				}
 			}
 
 			if (action === "APPROVE" || action === "REJECT") {
@@ -4178,8 +4210,100 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const syncObligationLines = async (req: Request, res: Response, _next: NextFunction) => {
+		const ensureAutoApprovedTimesheets = async (req: Request, res: Response, _next: NextFunction) => {
 		const authReq = req as AuthRequest;
+		const organizationId = authReq.organizationId;
+		const payrollPeriodId = String(req.body?.payrollPeriodId || "").trim();
+		const requestedCreateLimit = Number(req.body?.createLimit);
+		const createLimit = Number.isFinite(requestedCreateLimit)
+			? Math.min(Math.max(Math.floor(requestedCreateLimit), 1), 500)
+			: 250;
+		const requestedEmployeeIds = Array.isArray(req.body?.employeeIds)
+			? req.body.employeeIds.map((value: unknown) => String(value || "").trim()).filter(Boolean)
+			: [];
+		const departmentId =
+			typeof req.body?.departmentId === "string" && req.body.departmentId.trim() !== ""
+				? req.body.departmentId.trim()
+				: null;
+		const sectionId =
+			typeof req.body?.sectionId === "string" && req.body.sectionId.trim() !== ""
+				? req.body.sectionId.trim()
+				: null;
+
+		if (!organizationId) {
+			res.status(401).json(buildErrorResponse("Unauthorized access", 401));
+			return;
+		}
+
+		if (!isTimesheetPolicyManager(authReq.role)) {
+			res.status(403).json(buildErrorResponse("You are not authorized to prepare timesheets", 403));
+			return;
+		}
+
+		if (!payrollPeriodId) {
+			res.status(400).json(buildErrorResponse("payrollPeriodId is required", 400));
+			return;
+		}
+
+		try {
+			const actorEmployeeId = authReq.metadata?.employee?.id || null;
+			const ensured = await ensurePayrollPeriodTimesheetsAutoApproved(prisma, {
+				organizationId,
+				payrollPeriodId,
+				actorEmployeeId,
+				employeeIds: requestedEmployeeIds,
+				departmentId,
+				sectionId,
+				limit: createLimit,
+			});
+
+			if (ensured.created > 0 || ensured.autoApproved > 0 || ensured.refreshedLines > 0) {
+				await invalidateCache.byPattern("cache:timesheet:list:*");
+				await invalidateCache.byPattern("cache:timesheet:view:*");
+				await invalidateCache.byPattern("cache:timesheetline:list:*");
+				await invalidateCache.byPattern("cache:metrics:*");
+			}
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: "TIMESHEET_ENSURE_AUTO_APPROVED",
+				description: `Timesheets ensured auto-approved for period ${payrollPeriodId}: ${ensured.created} created, ${ensured.autoApproved} auto-approved`,
+				page: {
+					url: req.originalUrl,
+					title: "Timesheet Auto-Approve Ensure",
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Timesheets generated and auto-approved successfully",
+					{
+						payrollPeriodId,
+						eligibleEmployees: ensured.eligibleEmployees,
+						created: ensured.created,
+						autoApproved: ensured.autoApproved,
+						refreshedLines: ensured.refreshedLines,
+						preservedManual: ensured.preservedManual,
+						skippedLocked: ensured.skippedLocked,
+						skippedPaid: ensured.skippedPaid,
+						remainingToPrepare: ensured.remainingToPrepare,
+						createLimit: ensured.createLimit,
+						errors: ensured.errors,
+					},
+					200,
+				),
+			);
+		} catch (error: any) {
+			if (String(error?.message || "") === "PAYROLL_PERIOD_NOT_FOUND") {
+				res.status(404).json(buildErrorResponse("Payroll period not found", 404));
+				return;
+			}
+			timesheetLogger.error(`Failed to ensure auto-approved timesheets: ${error}`);
+			res.status(500).json(buildErrorResponse("Failed to generate auto-approved timesheets", 500));
+		}
+	};
+
+	const syncObligationLines = async (req: Request, res: Response, _next: NextFunction) => {		const authReq = req as AuthRequest;
 		const organizationId = authReq.organizationId;
 		const id = String(req.params.id || "").trim();
 
@@ -4516,6 +4640,11 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const timesheetConfig = await getOrCreateTimesheetConfig(authReq.organizationId!);
+			const autoApproveEnabled = resolveTimesheetAutoApprovalEnabled(
+				timesheetConfig.enableAutoApprove,
+			);
+
 			// Check if timesheet exists for current period
 			const existingTimesheet = await prisma.timesheet.findFirst({
 				where: {
@@ -4614,6 +4743,22 @@ export const controller = (prisma: PrismaClient) => {
 				manualEditDayKeys = submitBreakdownPersistence.manualEditDayKeys;
 				skipObligationMaterialize = submitBreakdownPersistence.skipObligationMaterialize;
 				Object.assign(updateData, submitBreakdownPersistence.summaryPatch);
+				if (autoApproveEnabled) {
+					const existingMetadata = {
+						...(existingTimesheet.metadata &&
+						typeof existingTimesheet.metadata === "object" &&
+						!Array.isArray(existingTimesheet.metadata)
+							? (existingTimesheet.metadata as Record<string, unknown>)
+							: {}),
+						...((updateData.metadata as any) || {}),
+					};
+					Object.assign(
+						updateData,
+						buildTimesheetAutoApprovalPatch(existingMetadata, updateData.submittedAt),
+					);
+					updateData.submittedAt = updateData.submittedAt || new Date();
+					updateData.submittedBy = updateData.submittedBy || employeeId;
+				}
 
 				if (!Array.isArray(normalizedBreakdownForLineSync) && !skipObligationMaterialize) {
 					// Normal first submission snapshots from AttendanceObligation.
@@ -4675,18 +4820,35 @@ export const controller = (prisma: PrismaClient) => {
 				}
 				attachTimesheetBreakdownFromLines(updatedTimesheet as any);
 
-				await createOrReuseTimesheetSubmissionRequest({
-					authReq,
-					timesheet: {
-						id: updatedTimesheet.id,
-						code: updatedTimesheet.code,
-						employeeId: updatedTimesheet.employeeId,
-						payrollPeriod: { code: payrollPeriod.code },
-					},
-					reason: notes,
-				});
+				if (!autoApproveEnabled) {
+					await createOrReuseTimesheetSubmissionRequest({
+						authReq,
+						timesheet: {
+							id: updatedTimesheet.id,
+							code: updatedTimesheet.code,
+							employeeId: updatedTimesheet.employeeId,
+							payrollPeriod: { code: payrollPeriod.code },
+						},
+						reason: notes,
+					});
+				} else {
+					try {
+						await publishTimesheetDecisionFallbackNotification(prisma, (authReq as any).io, {
+							timesheetId: updatedTimesheet.id,
+							status: "APPROVED",
+							sourceEmployeeId: employeeId || null,
+							comment: "Auto-approved by timesheet approval settings",
+						});
+					} catch (notificationError) {
+						timesheetLogger.warn(
+							`Failed to publish auto-approval notification for ${updatedTimesheet.id}: ${notificationError}`,
+						);
+					}
+				}
 
-				timesheetLogger.info(`Timesheet resubmitted: ${updatedTimesheet.id}`);
+				timesheetLogger.info(
+					`Timesheet resubmitted: ${updatedTimesheet.id}${autoApproveEnabled ? " (auto-approved)" : ""}`,
+				);
 
 				logActivity(req, {
 					userId: authReq.userId || "unknown",
@@ -4750,6 +4912,35 @@ export const controller = (prisma: PrismaClient) => {
 					fromDate: payrollPeriod.startDate,
 					toDate: payrollPeriod.endDate,
 				});
+
+				if (autoApproveEnabled) {
+					submittedTimesheet = await prisma.timesheet.update({
+						where: { id: submittedTimesheet.id },
+						data: buildTimesheetAutoApprovalPatch(
+							(submittedTimesheet.metadata as Record<string, unknown>) || null,
+						),
+						include: {
+							attendances: true,
+							timesheetlines: {
+								where: { isDeleted: false, isEffective: true },
+								orderBy: { date: "asc" },
+							},
+						},
+					});
+					try {
+						await publishTimesheetDecisionFallbackNotification(prisma, (authReq as any).io, {
+							timesheetId: submittedTimesheet.id,
+							status: "APPROVED",
+							sourceEmployeeId: employeeId || null,
+							comment: "Auto-approved by timesheet approval settings",
+						});
+					} catch (notificationError) {
+						timesheetLogger.warn(
+							`Failed to publish auto-approval notification for ${submittedTimesheet.id}: ${notificationError}`,
+						);
+					}
+				}
+
 				submittedTimesheet = await prisma.timesheet.findUnique({
 					where: { id: submittedTimesheet.id },
 					include: {
@@ -4762,19 +4953,21 @@ export const controller = (prisma: PrismaClient) => {
 				});
 				attachTimesheetBreakdownFromLines(submittedTimesheet as any);
 
-				await createOrReuseTimesheetSubmissionRequest({
-					authReq,
-					timesheet: {
-						id: submittedTimesheet.id,
-						code: submittedTimesheet.code,
-						employeeId: submittedTimesheet.employeeId,
-						payrollPeriod: { code: payrollPeriod.code },
-					},
-					reason: notes,
-				});
+				if (!autoApproveEnabled) {
+					await createOrReuseTimesheetSubmissionRequest({
+						authReq,
+						timesheet: {
+							id: submittedTimesheet.id,
+							code: submittedTimesheet.code,
+							employeeId: submittedTimesheet.employeeId,
+							payrollPeriod: { code: payrollPeriod.code },
+						},
+						reason: notes,
+					});
+				}
 
 				timesheetLogger.info(
-					`Timesheet auto-generated and submitted for employee ${employeeId}: ${newTimesheet.id}`,
+					`Timesheet auto-generated and submitted for employee ${employeeId}: ${newTimesheet.id}${autoApproveEnabled ? " (auto-approved)" : ""}`,
 				);
 
 				logActivity(req, {
@@ -5496,8 +5689,12 @@ export const controller = (prisma: PrismaClient) => {
 				"Timesheet configuration retrieved successfully",
 				{
 					...timesheetConfig,
-					approvalRequired: true,
-					blockPayrollOnUnsubmitted: true,
+					approvalRequired: !resolveTimesheetAutoApprovalEnabled(
+						timesheetConfig.enableAutoApprove,
+					),
+					blockPayrollOnUnsubmitted: !resolveTimesheetAutoApprovalEnabled(
+						timesheetConfig.enableAutoApprove,
+					),
 				},
 				200,
 			);
@@ -5590,8 +5787,12 @@ export const controller = (prisma: PrismaClient) => {
 				"Timesheet configuration updated successfully",
 				{
 					...mergeTimesheetConfigRules(updatedConfig),
-					approvalRequired: true,
-					blockPayrollOnUnsubmitted: true,
+					approvalRequired: !resolveTimesheetAutoApprovalEnabled(
+						updatedConfig.enableAutoApprove,
+					),
+					blockPayrollOnUnsubmitted: !resolveTimesheetAutoApprovalEnabled(
+						updatedConfig.enableAutoApprove,
+					),
 				},
 				200,
 			);
@@ -5907,6 +6108,7 @@ export const controller = (prisma: PrismaClient) => {
 		listPayrollCorrections,
 		normalizeBreakdownPreview,
 		ensurePeriodDrafts,
+		ensureAutoApprovedTimesheets,
 		syncObligationLines,
 		repairCurrentPeriodCoverage,
 		lockPeriodTimesheets,

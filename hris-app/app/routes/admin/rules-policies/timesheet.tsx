@@ -54,7 +54,7 @@ const REJECT_BEHAVIOR_OPTIONS: SelectOption[] = [
 
 const defaultDraft: TimesheetRuleDraft = {
 	enableEditBeforeSubmission: true,
-	enableAutoApprove: false,
+	enableAutoApprove: true,
 	rejectBehavior: "REVISE",
 	workTimeRounding: {
 		enabled: false,
@@ -322,7 +322,7 @@ export default function AdminTimesheetRulesPage() {
 							onCheckedChange={(enableAutoApprove) =>
 								setDraft((current) => ({ ...current, enableAutoApprove }))
 							}
-							disabled
+							disabled={isSaving}
 						/>
 						<div className="border-t border-gray-100 px-3 py-3">
 							<Field label="Reject Behavior">
@@ -383,7 +383,8 @@ export default function AdminTimesheetRulesPage() {
 
 			<section className="rounded-lg border border-gray-200 bg-white p-3">
 				<SectionHeader icon={<CheckCircle2 className="h-4 w-4" />} title="Source Of Truth Snapshot" />
-				<div className="mt-3 grid gap-0 overflow-hidden rounded-md border border-gray-200 divide-y divide-gray-100 md:grid-cols-3 md:divide-x md:divide-y-0">
+				<div className="mt-3 grid gap-0 overflow-hidden rounded-md border border-gray-200 bg-white divide-y divide-gray-100 md:grid-cols-4 md:divide-x md:divide-y-0">
+					<Snapshot label="Approval mode" value={draft.enableAutoApprove ? "Auto (payroll-ready on submit)" : "Manual (manager approval)"} />
 					<Snapshot label="Work rounding" value={draft.workTimeRounding.enabled ? `${draft.workTimeRounding.mode} / ${draft.workTimeRounding.incrementMinutes} min` : "Off"} />
 					<Snapshot label="OT threshold" value={draft.overtimeQualification.enabled ? `${draft.overtimeQualification.minimumMinutesBeforeQualification} min excess` : "Off"} />
 					<Snapshot label="Payroll lock" value={draft.payrollFinalization.lockTimesheetOnCutoffFinalization ? "Cutoff finalization" : "Manual only"} />

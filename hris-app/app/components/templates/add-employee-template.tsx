@@ -701,13 +701,17 @@ export function AddEmployee() {
 			map.set(roleName, roleId);
 		});
 
-		["hris-hr-manager", "hris-hr-user", "hris-employee-manager", "hris-employee"].forEach(
-			(roleName) => {
-				if (!map.has(roleName)) {
-					map.set(roleName, roleName);
-				}
-			},
-		);
+		[
+			"hris-hr-manager",
+			"hris-hr-user",
+			"hris-employee-manager",
+			"hris-line-leader",
+			"hris-employee",
+		].forEach((roleName) => {
+			if (!map.has(roleName)) {
+				map.set(roleName, roleName);
+			}
+		});
 
 		return map;
 	}, [roles]);
@@ -717,6 +721,7 @@ export function AddEmployee() {
 			HR_MANAGER: roleIdByName.get("hris-hr-manager") || "hris-hr-manager",
 			HR_USER: roleIdByName.get("hris-hr-user") || "hris-hr-user",
 			EMPLOYEE_MANAGER: roleIdByName.get("hris-employee-manager") || "hris-employee-manager",
+			LINE_LEADER: roleIdByName.get("hris-line-leader") || "hris-line-leader",
 			EMPLOYEE: roleIdByName.get("hris-employee") || "hris-employee",
 		}),
 		[roleIdByName],

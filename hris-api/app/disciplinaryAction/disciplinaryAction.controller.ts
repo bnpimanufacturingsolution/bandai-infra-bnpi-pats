@@ -18,9 +18,26 @@ import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
 import { redisClient } from "../../config/redis";
 import { invalidateCache } from "../../middleware/cache";
+import {
+	buildAutoEvaluateProposals,
+	buildAutoEvaluateProposalKey,
+	DISCIPLINARY_AUTO_OFFENSE_TYPE,
+	DISCIPLINARY_AUTO_RULE_VERSION,
+	DISCIPLINARY_ESCALATION_LOOKBACK_DAYS,
+} from "../../helper/disciplinary-escalation.helper";
+import { notifyDisciplinaryStateChange } from "../../helper/disciplinary-notify.helper";
 
 const logger = getLogger();
 const disciplinaryActionLogger = logger.child({ module: "disciplinaryAction" });
+
+const AUTO_EVALUATE_ROLES = ["super_admin", "admin", "hris-admin", "hris-hr-manager", "hris-hr-user"];
+
+const toDayString = (value: unknown): string | null => {
+	if (!value) return null;
+	const parsed = new Date(String(value));
+	if (Number.isNaN(parsed.getTime())) return null;
+	return parsed.toISOString().slice(0, 10);
+};
 
 export const controller = (prisma: PrismaClient) => {
 	const create = async (req: Request, res: Response, _next: NextFunction) => {
@@ -370,6 +387,41 @@ export const controller = (prisma: PrismaClient) => {
 				data: prismaData,
 			});
 
+			// Operator rule 2026-09-03: on DRAFT -> OPEN (case becomes official) and
+			// on RESOLVED, notify the employee + their manager with the rule-book
+			// consequence plan for the case severity as the next step.
+			if (
+				String(existingDisciplinaryAction.status) !== String(updatedDisciplinaryAction.status)
+			) {
+				let ruleConsequencePlan: unknown = null;
+				try {
+					const matchedRule = await prisma.rule.findFirst({
+						where: {
+							organizationId: String((req as any).organizationId || ""),
+							isDeleted: false,
+							code: { equals: String(updatedDisciplinaryAction.offenseType || ""), mode: "insensitive" },
+						},
+						select: { consequencePlan: true },
+					});
+					ruleConsequencePlan = matchedRule?.consequencePlan ?? null;
+				} catch (ruleError) {
+					disciplinaryActionLogger.warn("Failed to load rule consequence plan:", ruleError);
+				}
+				await notifyDisciplinaryStateChange({
+					prisma,
+					io: (req as any).io ?? null,
+					organizationId: String((req as any).organizationId || ""),
+					disciplinaryActionId: updatedDisciplinaryAction.id,
+					employeeId: updatedDisciplinaryAction.employeeId,
+					employeeName: updatedDisciplinaryAction.employeeName,
+					offenseType: String(updatedDisciplinaryAction.offenseType || "OFFENSE"),
+					severity: updatedDisciplinaryAction.severity,
+					status: String(updatedDisciplinaryAction.status),
+					consequencePlan: ruleConsequencePlan as any,
+					changedByLabel: (req as any).user?.userName || (req as any).user?.email || null,
+				});
+			}
+
 			try {
 				await invalidateCache.byPattern(`cache:disciplinaryAction:byId:${id}:*`);
 				await invalidateCache.byPattern("cache:disciplinaryAction:list:*");
@@ -502,5 +554,270 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { create, getAll, getById, update, remove };
+	/**
+	 * Attendance-driven auto-escalation (operator-accepted 2026-09-02).
+	 * Scans evidenced absent days (ABSENT effective timesheet lines +
+	 * ABSENT_AWOL_EVIDENCED AWOL-ledger rows) in the requested window, clusters
+	 * them into occurrences, and proposes/files DRAFT disciplinary actions.
+	 * REVIEW_NO_EVIDENCE days are never converted into charges. execute=false
+	 * (default) is a read-only preview.
+	 */
+	const autoEvaluate = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = String((req as any).organizationId || "");
+			if (!organizationId) {
+				res.status(401).json(buildErrorResponse("Organization context missing", 401));
+				return;
+			}
+			if (!AUTO_EVALUATE_ROLES.includes(String((req as any).role || ""))) {
+				res.status(403).json(buildErrorResponse("You are not authorized to run disciplinary auto-evaluation", 403));
+				return;
+			}
+
+			const body = (req.body || {}) as Record<string, unknown>;
+			const execute = body.execute === true;
+			const dateFrom = toDayString(body.dateFrom);
+			const dateTo = toDayString(body.dateTo);
+			if (!dateFrom || !dateTo || dateFrom > dateTo) {
+				res.status(400).json(buildErrorResponse("body.dateFrom and body.dateTo (YYYY-MM-DD, from <= to) are required", 400));
+				return;
+			}
+
+			const lookbackDays = Math.min(
+				Math.max(Number(body.lookbackDays) || DISCIPLINARY_ESCALATION_LOOKBACK_DAYS, 1),
+				3650,
+			);
+			const lookbackStart = new Date(`${dateFrom}T00:00:00Z`);
+			lookbackStart.setUTCDate(lookbackStart.getUTCDate() - lookbackDays);
+			const lookbackStartDay = lookbackStart.toISOString().slice(0, 10);
+
+			// Evidence source 1: effective ABSENT timesheet lines in the window.
+			const absentLines = await prisma.timesheetline.findMany({
+				where: {
+					organizationId,
+					isDeleted: false,
+					isEffective: true,
+					status: "ABSENT",
+					date: { gte: new Date(`${dateFrom}T00:00:00Z`), lte: new Date(`${dateTo}T23:59:59.999Z`) },
+				},
+				select: {
+					employeeId: true,
+					date: true,
+					employee: { select: { employeeId: true, isDeleted: false } },
+				},
+			});
+
+			// Evidence source 2: AWOL-ledger labeled days come through the day-status
+			// ABSENT_AWOL_EVIDENCED class. That pipeline loads AWOL EmployeeBenefit
+			// notes per payroll period; this engine accepts explicit rows instead so
+			// the caller (UI) can pass the refined day-status review result.
+			const awolRowsRaw = Array.isArray(body.evidencedAbsentDays) ? body.evidencedAbsentDays : [];
+			type AwolRow = { code?: unknown; employeeId?: unknown; date?: unknown };
+			const awolRows = (awolRowsRaw as AwolRow[])
+				.map((row) => ({
+					code: String(row.code ?? row.employeeId ?? "").trim(),
+					date: toDayString(row.date),
+				}))
+				.filter((row): row is { code: string; date: string } =>
+					Boolean(row.code && row.date && row.date >= dateFrom && row.date <= dateTo),
+				);
+
+			// Resolve employee identity by padded employeeId code (same pad rule as
+			// day-status review: 5-digit display code).
+			const employees = await prisma.employee.findMany({
+				where: { organizationId, isDeleted: false },
+				select: {
+					id: true,
+					employeeId: true,
+					person: { select: { personalInfo: true } },
+				},
+			});
+			const employeeIdByCode = new Map<string, { id: string; name: string }>();
+			const codeByEmployeeId = new Map<string, string>();
+			for (const e of employees) {
+				const code = String(e.employeeId || "").trim().padStart(5, "0");
+				if (!code) continue;
+				const info = (e.person && e.person.personalInfo) || {};
+				employeeIdByCode.set(code, {
+					id: e.id,
+					name: [info.firstName, info.lastName].filter(Boolean).join(" ").trim() || code,
+				});
+				codeByEmployeeId.set(e.id, code);
+			}
+
+			// Map ABSENT lines onto padded codes.
+			const evidencedRows: Array<{ code: string; date: string; source: string }> = [];
+			for (const line of absentLines) {
+				const code = codeByEmployeeId.get(line.employeeId);
+				if (!code) continue;
+				evidencedRows.push({
+					code,
+					date: new Date(line.date).toISOString().slice(0, 10),
+					source: "TIMESHEET_ABSENT_LINE",
+				});
+			}
+			for (const row of awolRows) {
+				evidencedRows.push({ code: row.code, date: row.date, source: "AWOL_LEDGER" });
+			}
+
+			// Prior attempts: non-dismissed ABSENTEEISM DAs in the lookback window.
+			const priorCases = await prisma.disciplinaryAction.findMany({
+				where: {
+					organizationId,
+					isDeleted: false,
+					status: { not: "DISMISSED" },
+					offenseType: { equals: DISCIPLINARY_AUTO_OFFENSE_TYPE, mode: "insensitive" },
+					offenseDate: { gte: new Date(`${lookbackStartDay}T00:00:00Z`), lt: new Date(`${dateFrom}T00:00:00Z`) },
+				},
+				select: { employeeId: true },
+			});
+			const priorAttemptsByCode = new Map<string, number>();
+			for (const c of priorCases) {
+				const code = codeByEmployeeId.get(c.employeeId);
+				if (!code) continue;
+				priorAttemptsByCode.set(code, (priorAttemptsByCode.get(code) || 0) + 1);
+			}
+
+			const proposals = buildAutoEvaluateProposals({
+				evidencedAbsentRows: evidencedRows.map((r) => ({ code: r.code, date: r.date })),
+				employeeIdByCode,
+				priorAttemptsByCode,
+			});
+
+			// Dedup: skip occurrences already covered by an existing auto-filed or
+			// manual case (metadata.autoRule.dedupKey or same employee+window manual).
+			const existingAuto = await prisma.disciplinaryAction.findMany({
+				where: {
+					organizationId,
+					isDeleted: false,
+					offenseType: { equals: DISCIPLINARY_AUTO_OFFENSE_TYPE, mode: "insensitive" },
+					offenseDate: { gte: new Date(`${dateFrom}T00:00:00Z`), lte: new Date(`${dateTo}T23:59:59.999Z`) },
+				},
+				select: { id: true, employeeId: true, offenseDate: true, metadata: true },
+			});
+			const existingKeys = new Set<string>();
+			for (const c of existingAuto) {
+				const meta = c.metadata as Record<string, unknown> | null;
+				const autoRule = meta && typeof meta === "object" ? (meta.autoRule as Record<string, unknown> | null) : null;
+				if (autoRule && typeof autoRule.dedupKey === "string") {
+					existingKeys.add(autoRule.dedupKey);
+				} else {
+					const code = codeByEmployeeId.get(c.employeeId);
+					if (code) existingKeys.add(`${code}|${new Date(c.offenseDate).toISOString().slice(0, 10)}`);
+				}
+			}
+
+			const skippedDuplicates: string[] = [];
+			const actionable = proposals.filter((p) => {
+				if (existingKeys.has(p.dedupKey)) {
+					skippedDuplicates.push(p.dedupKey);
+					return false;
+				}
+				// manual-case overlap: any existing case for the employee on the occurrence start day
+				const manualKey = `${p.employeeCode}|${p.offenseDate}`;
+				if (existingKeys.has(manualKey)) {
+					skippedDuplicates.push(manualKey);
+					return false;
+				}
+				return true;
+			});
+
+			if (!execute) {
+				res.status(200).json(buildSuccessResponse(
+					"Disciplinary auto-evaluation preview (dry-run, no records written)",
+					{
+						execute: false,
+						window: { start: dateFrom, end: dateTo },
+						lookbackDays,
+						scope: {
+							absentTimesheetLines: absentLines.length,
+							awolLedgerRows: awolRows.length,
+							priorCasesInLookback: priorCases.length,
+						},
+						proposals: actionable,
+						proposalCount: actionable.length,
+						skippedDuplicates,
+						ruleVersion: DISCIPLINARY_AUTO_RULE_VERSION,
+					},
+					200,
+				));
+				return;
+			}
+
+			const created = [] as Array<Record<string, unknown>>;
+			for (const p of actionable) {
+				const row = await prisma.disciplinaryAction.create({
+					data: {
+						organizationId,
+						employeeId: p.employeeId,
+						employeeName: p.employeeName,
+						offenseType: p.offenseType,
+						offenseDate: new Date(`${p.offenseDate}T00:00:00Z`),
+						description: p.description,
+						severity: p.severity,
+						status: "DRAFT",
+						createdByUserId: String((req as any).user?.id || "auto-escalation-engine"),
+						metadata: {
+							autoRule: {
+								version: DISCIPLINARY_AUTO_RULE_VERSION,
+								dedupKey: p.dedupKey,
+								source: "attendance-auto-escalation",
+								evaluatedAt: new Date().toISOString(),
+								window: { start: dateFrom, end: dateTo },
+								occurrenceWindow: p.occurrenceWindow,
+								absentDays: p.absentDays,
+								baseSeverity: p.baseSeverity,
+								priorAttempts: p.priorAttempts,
+								evidenceClasses: p.evidenceClasses,
+							},
+						},
+					},
+				});
+				created.push({ id: row.id, employeeCode: p.employeeCode, severity: p.severity, status: row.status });
+			}
+
+			disciplinaryActionLogger.info(`Disciplinary auto-evaluate created ${created.length} DRAFT case(s) for window ${dateFrom}..${dateTo}`);
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: "DISCIPLINARYAUTO_AUTO_EVALUATE",
+				description: `Disciplinary auto-evaluation filed ${created.length} DRAFT case(s) (${dateFrom}..${dateTo})`,
+				page: { url: req.originalUrl, title: "Disciplinary Action Auto-Evaluation" },
+			});
+			logAudit(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.AUDIT_LOG.ACTIONS.CREATE,
+				resource: config.AUDIT_LOG.RESOURCES.DISCIPLINARYACTION,
+				severity: config.AUDIT_LOG.SEVERITY.MEDIUM,
+				entityType: config.AUDIT_LOG.ENTITY_TYPES.DISCIPLINARYACTION,
+				entityId: "auto-evaluate",
+				changesBefore: null,
+				changesAfter: { window: { start: dateFrom, end: dateTo }, created: created.length, ruleVersion: DISCIPLINARY_AUTO_RULE_VERSION },
+				description: `Disciplinary auto-evaluation filed ${created.length} DRAFT case(s)`,
+			});
+
+			try {
+				await invalidateCache.byPattern("cache:disciplinaryAction:list:*");
+			} catch (cacheError) {
+				disciplinaryActionLogger.warn("Failed to invalidate cache after auto-evaluate:", cacheError);
+			}
+
+			res.status(200).json(buildSuccessResponse(
+				`Disciplinary auto-evaluation filed ${created.length} DRAFT case(s)`,
+				{
+					execute: true,
+					window: { start: dateFrom, end: dateTo },
+					created,
+					createdCount: created.length,
+					skippedDuplicates,
+					ruleVersion: DISCIPLINARY_AUTO_RULE_VERSION,
+				},
+				200,
+			));
+		} catch (error) {
+			disciplinaryActionLogger.error(`Disciplinary auto-evaluate failed: ${error}`);
+			res.status(500).json(buildErrorResponse("Failed disciplinary auto-evaluation", 500));
+		}
+	};
+
+	return { create, getAll, getById, update, remove, autoEvaluate };
 };

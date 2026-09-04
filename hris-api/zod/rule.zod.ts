@@ -22,6 +22,30 @@ export const SeverityLevel = z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
 
 export type SeverityLevel = z.infer<typeof SeverityLevel>;
 
+/**
+ * Per-severity next-step plan for a rule (progressive discipline).
+ * shape: { [severity]: { action, employeeStep, managerStep, responseWindowDays } }
+ * severity keys: LOW | MEDIUM | HIGH | CRITICAL
+ */
+export const ConsequenceStepSchema = z.object({
+	action: z.string().min(1),
+	employeeStep: z.string().min(1),
+	managerStep: z.string().optional().nullable(),
+	responseWindowDays: z.number().int().min(0).max(90).optional().nullable(),
+});
+
+export const ConsequencePlanSchema = z
+	.object({
+		LOW: ConsequenceStepSchema.optional().nullable(),
+		MEDIUM: ConsequenceStepSchema.optional().nullable(),
+		HIGH: ConsequenceStepSchema.optional().nullable(),
+		CRITICAL: ConsequenceStepSchema.optional().nullable(),
+	})
+	.partial();
+
+export type ConsequencePlan = z.infer<typeof ConsequencePlanSchema>;
+export type ConsequenceStep = z.infer<typeof ConsequenceStepSchema>;
+
 // Rule Schema (full, including ID)
 export const RuleSchema = z.object({
 	id: z.string().refine((val) => isValidObjectId(val)),
@@ -31,6 +55,7 @@ export const RuleSchema = z.object({
 	severity: SeverityLevel,
 	description: z.string(),
 	consequences: z.string().optional().nullable(),
+	consequencePlan: ConsequencePlanSchema.optional().nullable(),
 	isActive: z.boolean(),
 	effectiveDate: z.coerce.date(),
 	expiryDate: z.coerce.date().optional().nullable(),
@@ -51,6 +76,7 @@ export const CreateRuleSchema = RuleSchema.omit({
 }).partial({
 	code: true,
 	consequences: true,
+	consequencePlan: true,
 	expiryDate: true,
 	createdById: true,
 	isDeleted: true,

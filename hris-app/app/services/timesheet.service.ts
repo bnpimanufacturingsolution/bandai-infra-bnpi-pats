@@ -551,6 +551,20 @@ export interface EnsurePeriodDraftsResponse {
 	errors: Array<{ employeeId: string; message: string }>;
 }
 
+export interface EnsureAutoApprovedTimesheetsResponse {
+	payrollPeriodId: string;
+	eligibleEmployees: number;
+	created: number;
+	autoApproved: number;
+	refreshedLines: number;
+	preservedManual: number;
+	skippedLocked: number;
+	skippedPaid: number;
+	remainingToPrepare?: number | null;
+	createLimit?: number;
+	errors: Array<{ employeeId: string; message: string }>;
+}
+
 export interface CurrentPeriodRepairOptions {
 	repairAttendanceObligations: boolean;
 	repairDraftTimesheets: boolean;
@@ -868,10 +882,28 @@ class TimesheetService extends APIService {
 		}
 	}
 
+	async ensureAutoApprovedTimesheets(
+		payrollPeriodId: string,
+		options: { createLimit?: number; employeeIds?: string[] } = {},
+	): Promise<EnsureAutoApprovedTimesheetsResponse> {
+		try {
+			const response = await hrisApiClient.post<EnsureAutoApprovedTimesheetsResponse>(
+				"/api/timesheet/ensure-auto-approved",
+				{ payrollPeriodId, ...options },
+			);
+			if (!response.data) {
+				throw new Error(response.message || "Failed to generate auto-approved timesheets");
+			}
+			return response.data;
+		} catch (error: any) {
+			console.error("Error generating auto-approved timesheets:", error);
+			throw new Error(error.message || "Failed to generate auto-approved timesheets");
+		}
+	}
+
 	async syncObligationLines(
 		timesheetId: string,
-	): Promise<{ timesheetId: string; lineCount: number }> {
-		try {
+	): Promise<{ timesheetId: string; lineCount: number }> {		try {
 			const response = await hrisApiClient.post<{ timesheetId: string; lineCount: number }>(
 				`/api/timesheet/${timesheetId}/sync-obligation-lines`,
 				{},

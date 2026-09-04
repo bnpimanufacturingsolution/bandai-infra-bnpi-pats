@@ -1512,7 +1512,7 @@ CREATE TABLE "termination_audit_logs" (
 CREATE TABLE "timesheet_configs" (
     "id" TEXT NOT NULL,
     "organizationId" TEXT NOT NULL,
-    "enableAutoApprove" BOOLEAN NOT NULL DEFAULT false,
+    "enableAutoApprove" BOOLEAN NOT NULL DEFAULT true,
     "enableEditBeforeSubmission" BOOLEAN NOT NULL DEFAULT true,
     "rejectBehavior" "TimesheetRejectBehavior" NOT NULL DEFAULT 'REVISE',
     "overtimeFlagThresholdMinutes" INTEGER NOT NULL DEFAULT 60,

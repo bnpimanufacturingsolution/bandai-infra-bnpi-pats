@@ -51,6 +51,8 @@
 		"prisma-format": "npx prisma format",
 		"prisma-seed": "npx prisma db seed",
 		"seed:holidays": "ts-node prisma/seeds/holidaySeeder.ts",
+		"seed:disciplinary-rules": "tsx prisma/seeds/disciplinaryRulesSeeder.ts",
+		"seed:disciplinary-rules:execute": "tsx prisma/seeds/disciplinaryRulesSeeder.ts --execute",
 		"seed:calculator": "ts-node prisma/seeds/calculatorSeeder.ts",
 		"seed:defaults": "ts-node prisma/seeds/defaultProjectSeeder.ts",
 		"seed:bulk-backdated-employees": "ts-node prisma/seeds/bulkBackdatedEmployeeSeeder.ts",

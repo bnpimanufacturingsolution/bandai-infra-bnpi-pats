@@ -282,7 +282,7 @@ const sanitizeUsername = (value: string) =>
 		.replace(/^-|-$/g, "");
 
 const getRoleFlags = (roleName?: string | null) => ({
-	isManager: roleName === "hris-employee-manager",
+	isManager: roleName === "hris-employee-manager" || roleName === "hris-line-leader",
 	isHrManager: roleName === "hris-hr-manager",
 });
 

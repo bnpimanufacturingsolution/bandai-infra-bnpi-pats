@@ -9,6 +9,7 @@ import {
 	FileSearch,
 	FileText,
 	Gift,
+	Gavel,
 	PanelBottomDashed,
 	RadioReceiver,
 	Route,
@@ -187,6 +188,12 @@ export const adminRulesPolicyItems: AdminNavItem[] = [
 		label: "Workflow Templates",
 		path: "/admin/rules-policies/workflows",
 		icon: GitBranch,
+	},
+	{
+		id: "disciplinary-rules",
+		label: "Disciplinary Rules",
+		path: "/admin/rules-policies/disciplinary",
+		icon: Gavel,
 	},
 ];
 

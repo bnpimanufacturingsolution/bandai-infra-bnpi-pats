@@ -8,6 +8,7 @@ const environmentPortMap = new Map([
 	[15434, "uat"],
 	[55432, "prod"],
 	[56532, "prod"],
+	[55435, "dev"],
 	[55433, "dev"],
 	[56533, "dev"],
 	[55434, "uat"],

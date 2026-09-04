@@ -14,6 +14,7 @@ import {
 	useOrganizationReportingCounts,
 } from "~/lib/hooks/useEmployees";
 import { useDepartments } from "~/lib/hooks/useDepartments";
+import { usePositions } from "~/lib/hooks/usePositions";
 import { Button } from "~/components/atoms/Button";
 import { DepartmentSectionPicker } from "~/components/molecules/DepartmentSectionPicker";
 import { SearchableSelect, type SearchableSelectOption } from "~/components/ui/searchable-select";
@@ -449,6 +450,7 @@ export default function OrganizationChartTab({
 	} | null>(null);
 	const focusEmployeeId = searchParams.get("focus");
 	const departmentFilter = searchParams.get("departmentId") || undefined;
+	const positionFilter = searchParams.get("positionId") || undefined;
 	const expandedParam = searchParams.get("expanded") || "";
 	const countScopeDepartmentId =
 		mode === "full" && departmentFilter && departmentFilter !== "all"
@@ -510,6 +512,19 @@ export default function OrganizationChartTab({
 		{ enabled: mode === "full" },
 	);
 	const departments = ((departmentsData as any)?.departments || []) as Department[];
+	const { data: positionsData } = usePositions(
+		{
+			page: 1,
+			limit: 1000,
+			sort: "title",
+			order: "asc",
+		},
+		{ enabled: mode === "full" },
+	);
+	const positions = useMemo(() => {
+		const raw = (positionsData as any)?.positions || (positionsData as any)?.data || [];
+		return (Array.isArray(raw) ? raw : raw?.positions || []) as any[];
+	}, [positionsData]);
 	const { data: managersResponse } = useEmployees({
 		page: 1,
 		limit: mode === "full" ? FULL_ORG_CHART_LIMIT : 100,
@@ -590,9 +605,25 @@ export default function OrganizationChartTab({
 
 	const chartEmployees = useMemo(() => {
 		if (mode !== "full") return employees;
-		if (!departmentFilter || departmentFilter === "all") return employees;
 
-		const scopedEmployees = [...departmentEmployees];
+		let scopedEmployees = [...employees];
+
+		if (departmentFilter && departmentFilter !== "all") {
+			scopedEmployees = scopedEmployees.filter(
+				(employee: Employee) =>
+					employee.department?.id === departmentFilter ||
+					employee.departmentId === departmentFilter,
+			);
+		}
+
+		if (positionFilter && positionFilter !== "all") {
+			scopedEmployees = scopedEmployees.filter(
+				(employee: Employee) =>
+					employee.position?.id === positionFilter ||
+					employee.positionId === positionFilter,
+			);
+		}
+
 		if (isHrDepartmentSelected && ceoEmployee) {
 			const alreadyIncluded = scopedEmployees.some(
 				(employee) => employee.id === ceoEmployee.id,
@@ -605,8 +636,8 @@ export default function OrganizationChartTab({
 		return scopedEmployees;
 	}, [
 		ceoEmployee,
-		departmentEmployees,
 		departmentFilter,
+		positionFilter,
 		employees,
 		isHrDepartmentSelected,
 		mode,
@@ -1402,6 +1433,19 @@ export default function OrganizationChartTab({
 		setViewMode("presentation");
 	};
 
+	const handlePositionChange = (value: string) => {
+		const params = new URLSearchParams(searchParams);
+		if (value === "all" || !value) {
+			params.delete("positionId");
+		} else {
+			params.set("positionId", value);
+		}
+		params.delete("focus");
+		params.delete("expanded");
+		setSearchParams(params, { replace: true });
+		setViewMode("presentation");
+	};
+
 	const zoomIn = () => {
 		setViewMode("manual");
 		setZoomLevel((prev) =>
@@ -1660,7 +1704,7 @@ export default function OrganizationChartTab({
 				</div>
 				<div className="flex flex-col md:flex-row md:items-center gap-3 md:ml-auto">
 					{mode === "full" && (
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<DepartmentSectionPicker
 								departments={departments}
 								sections={[]}
@@ -1668,7 +1712,23 @@ export default function OrganizationChartTab({
 								onDepartmentChange={handleDepartmentChange}
 								onSectionChange={handleDepartmentChange}
 							/>
-							<div className="w-full md:w-[360px]">
+							<div className="w-48">
+								<SearchableSelect
+									options={[
+										{ value: "all", label: "All Positions" },
+										...positions.map((p: any) => ({
+											value: String(p.id),
+											label: String(p.title || p.name || "Position"),
+										})),
+									]}
+									value={positionFilter || "all"}
+									onValueChange={handlePositionChange}
+									placeholder="All Positions"
+									searchPlaceholder="Search position..."
+									className="mt-0 h-9 rounded-md border-neutral-200 bg-white text-xs shadow-sm md:text-sm"
+								/>
+							</div>
+							<div className="w-full md:w-[320px]">
 								<SearchableSelect
 									options={branchSearchOptions}
 									value={selectedManagerId}

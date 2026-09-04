@@ -23,7 +23,7 @@ const sanitizeUsername = (value: string) =>
 		.replace(/^-|-$/g, "");
 
 const getRoleFlags = (roleName?: string | null) => ({
-	isManager: roleName === "hris-employee-manager",
+	isManager: roleName === "hris-employee-manager" || roleName === "hris-line-leader",
 	isHrManager: roleName === "hris-hr-manager",
 });
 
@@ -33,6 +33,7 @@ const formatRoleName = (roleName?: string | null) => {
 		roleName === "hris-hr-manager" ||
 		roleName === "hris-hr-user" ||
 		roleName === "hris-employee-manager" ||
+		roleName === "hris-line-leader" ||
 		roleName === "hris-employee"
 	) {
 		return roleLabel(roleName as HrisRole);
