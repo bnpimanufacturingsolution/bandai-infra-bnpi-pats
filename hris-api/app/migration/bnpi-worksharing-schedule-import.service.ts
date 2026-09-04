@@ -237,6 +237,36 @@ async function ensureWorkSharingShiftAndTemplate(
 	};
 }
 
+export async function importBnpiWorkSharingScheduleFile(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	filePath?: string;
+	buffer?: Buffer;
+	sourceFilename?: string;
+	dryRun?: boolean;
+	migrationRunId?: string | null;
+	startedByUserId?: string | null;
+	persistLog?: boolean;
+}): Promise<WorkSharingScheduleImportSummary> {
+	const fs = await import("fs");
+	const buffer =
+		params.buffer || (params.filePath ? fs.readFileSync(params.filePath) : null);
+	if (!buffer) {
+		throw new Error(
+			"No file buffer or file path provided for WorkSharing schedule import",
+		);
+	}
+	return importWorkSharingScheduleUpload({
+		prisma: params.prisma,
+		organizationId: params.organizationId,
+		buffer,
+		sourceFilename: params.sourceFilename,
+		migrationRunId: params.migrationRunId,
+		startedByUserId: params.startedByUserId,
+		persistLog: params.persistLog,
+	});
+}
+
 export async function importWorkSharingScheduleUpload(params: {
 	prisma: PrismaClient;
 	organizationId: string;
@@ -606,18 +636,10 @@ export async function importWorkSharingScheduleUpload(params: {
 		}
 	}
 
-	// Explicit WorkSharing flag=0 → REST/OFF override (prevents empty-bio ABSENT on off days).
-	const dayOffAssignments: WorkSharingDayOffAssignment[] =
-		(parsed as { dayOffAssignments?: WorkSharingDayOffAssignment[] }).dayOffAssignments ||
-		[];
-	summary.dayOffOverridesCreated = 0;
-	summary.dayOffOverridesUpdated = 0;
-	for (const day of dayOffAssignments) {
-		const employee = employeesByExternalId.get(day.employeeExternalId);
-		if (!employee) continue;
-		const dayDate = new Date(day.date);
-		dayDate.setUTCHours(0, 0, 0, 0);
-		const shiftSnapshot = {
+	// Day-level overrides from WorkSharing off date flags (flag=0 -> WS_OFF).
+	const dayOffAssignments = (parsed as any).dayOffAssignments || [];
+	if (dayOffAssignments.length > 0) {
+		const wsOffSnapshot = {
 			code: "WS_OFF",
 			name: "WorkSharing Off",
 			isOff: true,
@@ -625,66 +647,68 @@ export async function importWorkSharingScheduleUpload(params: {
 			shiftHour: 0,
 			timeSlots: [],
 			source: "WORKSHARING_DAY_FLAG_OFF",
-			reason: day.reason,
 		};
-		const existing = await (params.prisma as any).scheduleOverride.findFirst({
-			where: {
-				organizationId: params.organizationId,
-				employeeId: employee.id,
-				date: dayDate,
-				isDeleted: false,
-			},
-			select: { id: true, shiftSnapshot: true },
-		});
-		// Do not clobber an on-day override (flag 1) if somehow both exist — on wins.
-		const existingSource = String(
-			(existing?.shiftSnapshot as { source?: string } | null)?.source || "",
-		);
-		if (existingSource === "WORKSHARING_DAY_FLAG") continue;
+		for (const day of dayOffAssignments) {
+			const employee = employeesByExternalId.get(day.employeeExternalId);
+			if (!employee) continue;
+			const dayDate = new Date(day.date);
+			dayDate.setUTCHours(0, 0, 0, 0);
+			const reason = `WorkSharing day off flag: 0 (row ${day.sourceRow})`;
 
-		if (existing?.id) {
-			await (params.prisma as any).scheduleOverride.update({
-				where: { id: existing.id },
-				data: {
-					shiftTypeId: null,
-					shiftSnapshot,
-					reason: day.reason,
+			const existing = await (params.prisma as any).scheduleOverride.findFirst({
+				where: {
+					organizationId: params.organizationId,
+					employeeId: employee.id,
+					date: dayDate,
 					isDeleted: false,
 				},
+				select: { id: true },
 			});
-			summary.dayOffOverridesUpdated += 1;
-		} else {
-			try {
-				await (params.prisma as any).scheduleOverride.create({
+
+			if (existing?.id) {
+				await (params.prisma as any).scheduleOverride.update({
+					where: { id: existing.id },
 					data: {
-						organizationId: params.organizationId,
-						employeeId: employee.id,
-						date: dayDate,
 						shiftTypeId: null,
-						shiftSnapshot,
-						reason: day.reason,
+						shiftSnapshot: wsOffSnapshot,
+						reason,
 						isDeleted: false,
 					},
 				});
-				summary.dayOffOverridesCreated += 1;
-			} catch {
-				await (params.prisma as any).scheduleOverride.updateMany({
-					where: {
-						organizationId: params.organizationId,
-						employeeId: employee.id,
-						date: dayDate,
-					},
-					data: {
-						shiftTypeId: null,
-						shiftSnapshot,
-						reason: day.reason,
-						isDeleted: false,
-					},
-				});
-				summary.dayOffOverridesUpdated += 1;
+				summary.dayOffOverridesUpdated = (summary.dayOffOverridesUpdated || 0) + 1;
+			} else {
+				try {
+					await (params.prisma as any).scheduleOverride.create({
+						data: {
+							organizationId: params.organizationId,
+							employeeId: employee.id,
+							date: dayDate,
+							shiftTypeId: null,
+							shiftSnapshot: wsOffSnapshot,
+							reason,
+							isDeleted: false,
+						},
+					});
+					summary.dayOffOverridesCreated = (summary.dayOffOverridesCreated || 0) + 1;
+				} catch {
+					await (params.prisma as any).scheduleOverride.updateMany({
+						where: {
+							organizationId: params.organizationId,
+							employeeId: employee.id,
+							date: dayDate,
+						},
+						data: {
+							shiftTypeId: null,
+							shiftSnapshot: wsOffSnapshot,
+							reason,
+							isDeleted: false,
+						},
+					});
+					summary.dayOffOverridesUpdated = (summary.dayOffOverridesUpdated || 0) + 1;
+				}
 			}
+			affectedEmployeeIds.add(employee.id);
 		}
-		affectedEmployeeIds.add(employee.id);
 	}
 
 	if (affectedEmployeeIds.size > 0) {

@@ -40,6 +40,21 @@
 - Gap: older applicants with no stored birthday cannot match until DOB exists on that Person.
 
 
+## Beneficiaries (children/dependents) (2026-08-31)
+
+- Status: `CONFIRMED_CODE`.
+- **User-facing term**: "Beneficiaries" (UI labels, section headers, button text, comments).
+- **Prisma relation**: `person.children` (schema constraint; cannot change without migration).
+- **API payload key**: `person.children` (must match Prisma relation for the API to work).
+- **Backend function/variable names**: `syncPersonBeneficiaries`, `beneficiaries` (not `children`).
+- **Frontend local variable names**: `beneficiaries`, `addBeneficiary`, `removeBeneficiary` (not `children`, `addChild`, `removeChild`).
+- **Exception**: Form field paths like `person.children.${index}.firstName` must use `children` to match the API payload structure.
+- Purpose: Track employee dependents for birthday gift eligibility during payroll generation — ₱300 per birthday per person (employee + each dependent beneficiary with birthday in the payroll month).
+- Backend: `syncPersonBeneficiaries()` in `hris-api/helper/employee.helper.ts` handles upsert/delete. Called in employee create/update flows. GET endpoint includes beneficiaries where `isDeleted=false`.
+- Frontend: `PersonalDetailsForm.tsx` has dynamic add/remove rows (firstName, middleName, lastName, dateOfBirth, gender, isDependent toggle). `personal-info-tab.tsx` has read-only display with `Baby` icon.
+- Terminology: `.wwg/wiki/terminology.md` "Beneficiaries vs children" conflict entry.
+
+
 ## GitOps db-init Job (2026-08-21)
 
 - Status: `CONFIRMED_CODE` (push authorized 2026-08-22).
@@ -272,8 +287,9 @@
   rates; Gross/Net/TotalReceivable residuals are dominated by absent, late,
   OT pay/rate, loans, DMA/MHDMF2 period pin, and tax cascade.
 - Alexa-era path notes: OT bucket hours apply fleet-wide strongly; BNPI 313
-  attendance daily applies when buckets present; WorkSharing day overrides may
-  exist without line schedule rebuild (late residual class `apply_path`).
+  attendance daily applies when buckets present; WorkSharing file upload is retired
+  (REC-20260826-DAY-STATUS-REVIEW-QUEUE) in favor of Monday–Saturday schedule truth
+  and Day-Status Review (`/hr/day-status-review`).
 
 
 ## BNPI Meal Allowance (MLA) coverage expectation (2026-08-07)

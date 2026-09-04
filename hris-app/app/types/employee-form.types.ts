@@ -107,6 +107,16 @@ export interface FormData {
 			issuingCountry: string;
 			expiryDate: string | null;
 		};
+		children?: Array<{
+			id?: string;
+			firstName: string;
+			middleName?: string;
+			lastName?: string;
+			dateOfBirth: string;
+			gender?: "male" | "female" | "other" | "not_applicable";
+			isDependent?: boolean;
+			notes?: string;
+		}>;
 	};
 	employee: {
 		organizationId: string;

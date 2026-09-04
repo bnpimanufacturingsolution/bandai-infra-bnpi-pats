@@ -528,6 +528,7 @@ export class Dm4MigrationAdapter {
 					cwd: process.cwd(),
 					windowsHide: true,
 					stdio: ["ignore", "pipe", "pipe"],
+					env: process.env,
 				},
 			);
 			child.stdout.on("data", (chunk) => {
@@ -632,6 +633,7 @@ export class Dm4MigrationAdapter {
 					cwd: process.cwd(),
 					windowsHide: true,
 					stdio: ["ignore", "pipe", "pipe"],
+					env: process.env,
 				},
 			);
 			child.stdout.on("data", (chunk) => {

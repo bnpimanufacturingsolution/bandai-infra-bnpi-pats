@@ -163,16 +163,10 @@ const steps = [
 	},
 	{
 		id: 2,
-		writes: true,
-		name: "WorkSharing Jul 11-25 (day flags + OFF overrides)",
-		async run(token) {
-			const r = await apiUploadMultipart(
-				token,
-				"/api/migration/dm3/import-worksharing-schedule",
-				WS,
-				{ organizationId: ORG_ID },
-			);
-			return r;
+		writes: false,
+		name: "WorkSharing upload (retired — Mon–Sat schedule truth active)",
+		async run() {
+			return { skipped: true, note: "WorkSharing retired (REC-20260826-DAY-STATUS-REVIEW-QUEUE). Mon–Sat schedule truth active." };
 		},
 	},
 	{

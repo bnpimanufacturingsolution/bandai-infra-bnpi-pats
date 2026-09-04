@@ -223,11 +223,11 @@ describe("calculateYTDWithholdingTax / getContributionBreakdown / calculateProra
 });
 
 describe("determineAttendanceStatus / timeToMinutes / minutesToHours / formatMinutesAsTime", () => {
-	it("determineAttendanceStatus returns INCOMPLETE without timeOut", () =>
-		expect(determineAttendanceStatus({} as any, false)).to.equal("INCOMPLETE"));
+	it("determineAttendanceStatus returns PRESENT when clocked in even without timeOut", () =>
+		expect(determineAttendanceStatus({} as any, false)).to.equal("PRESENT"));
 	it("determineAttendanceStatus returns PRESENT with timeOut", () =>
 		expect(determineAttendanceStatus({} as any, true)).to.equal("PRESENT"));
-	it("determineAttendanceStatus returns INCOMPLETE when clock-out has no clock-in", () =>
+	it("determineAttendanceStatus returns INCOMPLETE when there is no clock-in", () =>
 		expect(determineAttendanceStatus({} as any, true, false)).to.equal("INCOMPLETE"));
 	it("timeToMinutes parses HH:mm", () => expect(timeToMinutes("01:30")).to.equal(90));
 	it("minutesToHours converts and rounds", () => expect(minutesToHours(125)).to.equal(2.08));

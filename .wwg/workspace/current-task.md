@@ -1,33 +1,7 @@
-## Latest Task Addendum - 2026-09-04b Timesheet auto-approve is now the default everywhere
-
-- Operator directive: "we default all timesheet auto approved".
-- Gap found: submit-time gates already auto-approve when `TimesheetConfig.enableAutoApprove === true`, and the local DEV row is `true` — but three surfaces still defaulted to manual: `prisma/schema-postgres/bootstrap.sql` (`DEFAULT false`, CONFLICTING with Prisma `@default(true)`), `zod/migration.zod.ts` (`enableAutoApprove` default `false`), and any pre-existing `timesheet_configs` rows carrying explicit `false` (VM DEV/UAT/PROD rows are NEEDS_CONFIRMATION from this host; `prisma db push` fixes column defaults but never row values).
-- Delivered (branch `feat-attendance`, no push):
-  - `bootstrap.sql`: `enableAutoApprove` `DEFAULT false` → `true` (matches Prisma schema).
-  - `zod/migration.zod.ts`: `TimesheetConfigMigrationSchema.enableAutoApprove` default `false` → `true`; explicit `false` in a payload is still honored (toggle preserved).
-  - New governed migration `prisma/schema-postgres/migrations/20260904_set_timesheet_auto_approve_default_true.sql` (idempotent `SET DEFAULT true` + `UPDATE false → true` only; no drops/truncates). Supersedes and deletes the untracked one-off `scripts/apply-timesheet-auto-approve-default.ts`.
-  - Tests: `timesheet-auto-approve.spec.ts` 8/8 (new: zod default-true, explicit opt-out preserved, migration contract pins SET DEFAULT + scoped UPDATE + no destructive statements).
-- Live proof (local K3s DEV `127.0.0.1:55435`): column default already `true`, org row already `true`; migration applied cleanly with zero row changes (idempotent); `GET /api/timesheet/config` returns `enableAutoApprove: true`. VM DEV/UAT/PROD application of the migration SQL is still open.
-- Explicit-submit live proof (POST action SUBMIT → APPROVED) deferred to avoid writing shared DEV rows; gate code is unchanged and covered by unit contract.
-
-## Latest Task Addendum - 2026-09-04 Timesheet auto-approve + payroll-time generation + attendance reflect fix
-
-- Operator directive: no more employee-submit → manager-approve step. Timesheets are system auto-approved; HR can generate timesheet/attendance any time at payroll run; timesheet must reflect each employee's attendance.
-- Delivered (branch `feat-attendance`, local + live DEV proof, no push):
-  - `ensurePayrollPeriodTimesheetsAutoApproved` (`hris-api/helper/timesheet.helper.ts`): missing → create + full-period materialize + auto-approve; DRAFT/SUBMITTED/REVISED/REJECTED → materialize + auto-approve; APPROVED+auto → force-rebuild lines from current obligations; manual APPROVED preserved; locked/paid never touched. Obligations rebuilt only when missing (full recompute exceeds heavy-request budget); upgrades/refreshes run in a bounded pool (5), creates stay sequential (ms codegen).
-  - `generatePayrollFromTimesheets` calls ensure first (warn-and-continue on failure), so Start Payroll covers employees with no timesheet yet. Preview stays read-only.
-  - `POST /api/timesheet/ensure-auto-approved` (HR policy managers) + `POST /api/timesheet/ensure-period-drafts` now materializes full elapsed-period lines for new drafts (was: empty shells + today-only).
-  - Attendance refresh lane widened: auto-approved sheets stay live until payroll lock (`isTimesheetSystemRefreshAllowed`); `materializeTimesheetLinesFromObligations(forceRefreshLines)` rebuilds auto-approved snapshots; effective-line preload (first-wins, revisionNo/updatedAt desc) removes per-day lookups (~5.4× faster: 39s → 7s/employee on forwarded DEV).
-  - UI: `/hr/timesheets` banner + Generate + Auto-approve button (timeout-safe batches, Start Payroll backstops remainder); manager-approval copy/queues replaced with Pending Auto-Approval; Run Payroll estimate copy updated. HR-only (no emp-app counterpart; employee submit instantly auto-approves server-side).
-- Live DEV proof (OPEN `PP-20260811-20260826`): before 1366 DRAFT (0 lines each) + 1 SUBMITTED + 0 APPROVED → Start Payroll covered nobody. After scoped ensure: 10 employees APPROVED `SYSTEM_AUTO_APPROVE`, 15 lines each (incl. Aug 21–22 HOLIDAY), totals reflect obligations. Timings: 100s → 33s (ensure-if-missing) → 7s/employee (preload + pool).
-- Tests: `timesheet-payroll-auto-approve.spec.ts` 17/17; timesheet+obligation+line-version suites 98–137 green; frontend hook/service/view-modal 9/9. `tsc` shows no new errors in touched files (2 pre-existing failures elsewhere). Full fleet backfill still open → REC-20260904 below.
-- Follow-up: `project-truth.md` / summary still describe the manager-approval model (file has merge markers; update after conflict resolves).
-
 <<<<<<< HEAD
 ## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain â€” absent wall = client file contradiction
 =======
 ## Latest Task Addendum - 2026-08-27 Day-status review UI & workbook refinement endpoints delivered and proven
->>>>>>> de0f765296d2a117773d8d8647a794bc6cc09cdf
 
 - **Delivered**: Read-only day-status resolution pipeline under Mon–Sat schedule truth (Sunday REST).
 - **Precedence**: `OUT_OF_TENURE` > `REST_SUNDAY` > `PRESENT_PUNCH` > `PRESENT_SCHEDULE_POSITIVE` > `ABSENT_AWOL_EVIDENCED` > `LEAVE_PAID` > `LEAVE_UNPAID` > `REVIEW_NO_EVIDENCE`.

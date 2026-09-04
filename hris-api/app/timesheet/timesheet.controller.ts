@@ -151,6 +151,55 @@ export const evaluateTimesheetSubmitEligibility = (
 	};
 };
 
+export const TIMESHEET_AUTO_APPROVE_METADATA_REASON = "ORG_POLICY_ENABLE_AUTO_APPROVE";
+
+export type TimesheetSubmissionOutcome = {
+	status: "SUBMITTED" | "APPROVED";
+	autoApproved: boolean;
+};
+
+/**
+ * Resolves the terminal status of a timesheet submission under the
+ * organization's TimesheetConfig.enableAutoApprove policy.
+ *
+ * - OFF (default/undefined): lands SUBMITTED and an approval request is created
+ *   for supervisor/HR review (historic behavior).
+ * - ON: lands directly APPROVED — no approval request is created and no review
+ *   step is needed (Bandai requirement: automatic approval on submission).
+ *
+ * The flag only affects future submissions; timesheets already sitting in
+ * SUBMITTED keep requiring manual approval.
+ */
+export const resolveTimesheetSubmissionOutcome = (
+	enableAutoApprove: boolean | null | undefined,
+): TimesheetSubmissionOutcome => {
+	return Boolean(enableAutoApprove)
+		? { status: "APPROVED", autoApproved: true }
+		: { status: "SUBMITTED", autoApproved: false };
+};
+
+/**
+ * Builds the metadata patch stamped when a submission is auto-approved by org
+ * policy. Mirrors the APPROVED snapshot shape produced by the manual APPROVE
+ * action (snapshotState/snapshotLockedAt/snapshotLockedBy) plus explicit
+ * autoApproved markers so policy self-approvals stay distinguishable in audit.
+ */
+export const buildAutoApprovedSubmissionMetadata = (
+	existingMetadata: Record<string, unknown>,
+	submittedAt: Date,
+	submittedBy: string | null | undefined,
+): Record<string, unknown> => ({
+	...existingMetadata,
+	snapshotState: "APPROVED",
+	snapshotSubmittedAt: submittedAt.toISOString(),
+	snapshotSubmittedBy: submittedBy ?? null,
+	snapshotType: "TIMESHEET_PERIOD",
+	snapshotLockedAt: submittedAt.toISOString(),
+	snapshotLockedBy: submittedBy ?? null,
+	autoApproved: true,
+	autoApprovedReason: TIMESHEET_AUTO_APPROVE_METADATA_REASON,
+});
+
 export const controller = (prisma: PrismaClient) => {
 	const ENABLE_EDITABLE_TIMESHEET_REFRESH_ON_READ = true;
 	const findTimesheetLock = async (params: {
@@ -3363,6 +3412,9 @@ export const controller = (prisma: PrismaClient) => {
 			const timesheetConfig = await getOrCreateTimesheetConfig(
 				existingTimesheet.organizationId,
 			);
+			const submissionOutcome = resolveTimesheetSubmissionOutcome(
+				timesheetConfig.enableAutoApprove,
+			);
 
 			switch (action) {
 				case "SUBMIT":
@@ -3428,21 +3480,37 @@ export const controller = (prisma: PrismaClient) => {
 							submitBreakdownPersistence.skipObligationMaterialize;
 					}
 
-					updateData.status = "SUBMITTED";
+					updateData.status = submissionOutcome.status;
 					updateData.submittedAt = new Date();
 					updateData.submittedBy = actingEmployeeId;
 					updateData.rejectionReason = null;
 					updateData.editPermissionStatus = "NONE";
 					updateData.editPermissionConsumedAt = null;
 					updateData.editPermissionExpiresAt = null;
-					updateData.metadata = {
-						...existingMetadata,
-						...(updateData.metadata || {}),
-						snapshotState: "SUBMITTED",
-						snapshotSubmittedAt: updateData.submittedAt.toISOString(),
-						snapshotSubmittedBy: actingEmployeeId,
-						snapshotType: "TIMESHEET_PERIOD",
-					};
+					if (submissionOutcome.autoApproved) {
+						// Org policy auto-approval: submission lands APPROVED with no
+						// review step; snapshot mirrors the manual APPROVE action and
+						// stays marked autoApproved for audit.
+						updateData.approvedBy = actingEmployeeId || authReq.userId || null;
+						updateData.approvalDate = updateData.submittedAt;
+						updateData.metadata = {
+							...(updateData.metadata || {}),
+							...buildAutoApprovedSubmissionMetadata(
+								existingMetadata,
+								updateData.submittedAt,
+								updateData.approvedBy,
+							),
+						};
+					} else {
+						updateData.metadata = {
+							...existingMetadata,
+							...(updateData.metadata || {}),
+							snapshotState: "SUBMITTED",
+							snapshotSubmittedAt: updateData.submittedAt.toISOString(),
+							snapshotSubmittedBy: actingEmployeeId,
+							snapshotType: "TIMESHEET_PERIOD",
+						};
+					}
 					if (notes) updateData.notes = notes;
 					if (
 						!Array.isArray(normalizedBreakdownForLineSync) &&
@@ -4710,8 +4778,14 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
+				const existingMetadata =
+					existingTimesheet.metadata &&
+					typeof existingTimesheet.metadata === "object" &&
+					!Array.isArray(existingTimesheet.metadata)
+						? { ...(existingTimesheet.metadata as Record<string, unknown>) }
+						: {};
 				const updateData: any = {
-					status: "SUBMITTED",
+					status: submissionOutcome.status,
 					submittedAt: new Date(),
 					submittedBy: employeeId,
 					editPermissionStatus: "NONE",
@@ -4719,6 +4793,18 @@ export const controller = (prisma: PrismaClient) => {
 					editPermissionExpiresAt: null,
 					...(notes && { notes }),
 				};
+				if (submissionOutcome.autoApproved) {
+					// Org policy auto-approval: submission lands APPROVED with no
+					// review step; snapshot mirrors the manual APPROVE action and
+					// stays marked autoApproved for audit.
+					updateData.approvedBy = employeeId;
+					updateData.approvalDate = updateData.submittedAt;
+					updateData.metadata = buildAutoApprovedSubmissionMetadata(
+						existingMetadata,
+						updateData.submittedAt,
+						updateData.approvedBy,
+					);
+				}
 				let normalizedBreakdownForLineSync: any[] | null = null;
 				let lineVersionMode: "update" | "version" = "update";
 				let versionDayKeys: Set<string> | undefined;
@@ -4901,6 +4987,7 @@ export const controller = (prisma: PrismaClient) => {
 					authReq.organizationId!,
 					currentDate,
 					notes,
+					submissionOutcome.status,
 				);
 
 				let submittedTimesheet: any = newTimesheet;

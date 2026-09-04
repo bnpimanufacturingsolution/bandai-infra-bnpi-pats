@@ -473,8 +473,8 @@ type Dm3UploadActivityKind =
 	| "manpower-databank"
 	| "compensation"
 	| "deduction"
-	| "worksharing-schedule"
 	| "period-leave"
+	| "worksharing-schedule"
 	| "dm1-workbook"
 	| "dm2-workbook"
 	| "dm4-workbook"
@@ -484,8 +484,8 @@ type Dm3MassUploadRole =
 	| "compensation"
 	| "deduction"
 	| "manpower-databank"
-	| "worksharing-schedule"
-	| "period-leave";
+	| "period-leave"
+	| "worksharing-schedule";
 
 /** Compact one-line activity label for the Upload activity feed (details live in the modal). */
 function formatMassUploadUserActivityMessage(params: {
@@ -493,6 +493,7 @@ function formatMassUploadUserActivityMessage(params: {
 	sourceFilename?: string | null;
 	created?: number;
 	updated?: number;
+	skipped?: number;
 	failed?: number;
 	total?: number;
 	status?: string | null;
@@ -507,22 +508,33 @@ function formatMassUploadUserActivityMessage(params: {
 					? "Deduction"
 					: kind === "compensation"
 						? "Compensation"
-						: kind === "worksharing-schedule"
-							? "Work sharing"
-							: kind === "period-leave"
-								? "Leave"
+						: kind === "period-leave"
+							? "Leave"
+							: kind === "worksharing-schedule"
+								? "WorkSharing"
 								: kind === "dm1-workbook"
-								? "DM1 workbook"
-								: kind === "dm2-workbook"
-									? "DM2 workbook"
-									: kind === "dm4-workbook"
-										? "DM4 attendance"
-										: kind === "dm4-overtime"
-											? "DM4 overtime"
-											: "Upload";
-	const ok = Number(params.created || 0) + Number(params.updated || 0);
+									? "DM1 workbook"
+									: kind === "dm2-workbook"
+										? "DM2 workbook"
+										: kind === "dm4-workbook"
+											? "DM4 attendance"
+											: kind === "dm4-overtime"
+												? "DM4 overtime"
+												: "Upload";
+	const created = Number(params.created || 0);
+	const updated = Number(params.updated || 0);
 	const failed = Number(params.failed || 0);
+	const total = Number(params.total || 0);
+	const skipped = Number(params.skipped || 0);
 	const status = String(params.status || "").toLowerCase();
+
+	if (kind === "worksharing-schedule") {
+		const effectiveOk =
+			created + updated > 0 ? created + updated : Math.max(0, total - failed);
+		return `${title} · ${effectiveOk} ok · ${failed} fail`;
+	}
+
+	const ok = created + updated;
 	// Prefer explicit status for durable DM4 runs when counts were historically zeroed.
 	if (
 		(kind === "dm4-workbook" || kind === "dm4-overtime") &&
@@ -550,8 +562,8 @@ function dm3UploadActivityKindLabel(kind?: string | null): string {
 	if (k === "manpower-databank") return "Employee databank";
 	if (k === "deduction") return "Deduction";
 	if (k === "compensation") return "Compensation";
-	if (k === "worksharing-schedule") return "Work sharing schedule";
 	if (k === "period-leave") return "Leave (period)";
+	if (k === "worksharing-schedule") return "WorkSharing schedule";
 	if (k === "dm1-workbook") return "DM1 workbook";
 	if (k === "dm2-workbook") return "DM2 workbook";
 	if (k === "dm4-workbook") return "DM4 attendance";
@@ -594,8 +606,8 @@ function parseUploadActivityKind(raw?: string | null): Dm3UploadActivityKind {
 		value === "manpower-databank" ||
 		value === "deduction" ||
 		value === "compensation" ||
-		value === "worksharing-schedule" ||
 		value === "period-leave" ||
+		value === "worksharing-schedule" ||
 		value === "dm1-workbook" ||
 		value === "dm2-workbook" ||
 		value === "dm4-workbook" ||
@@ -622,8 +634,8 @@ const UPLOAD_ACTIVITY_FILTERS_BY_WORKBOOK: Record<
 		{ value: "all", label: "All" },
 		{ value: "workbook", label: "DM3" },
 		{ value: "manpower-databank", label: "Databank" },
-		{ value: "worksharing-schedule", label: "Schedule" },
 		{ value: "period-leave", label: "Leave" },
+		{ value: "worksharing-schedule", label: "WorkSharing" },
 		{ value: "compensation", label: "Comp" },
 		{ value: "deduction", label: "Ded" },
 	],
@@ -3847,6 +3859,7 @@ export default function AdminMigrationPage() {
 				sourceFilename: item.sourceFilename,
 				created: item.created,
 				updated: item.updated,
+				skipped: item.skipped,
 				failed: item.failed,
 				total: item.total,
 				status: item.status,
@@ -3862,6 +3875,7 @@ export default function AdminMigrationPage() {
 				status: item.status,
 				created: item.created,
 				updated: item.updated,
+				skipped: item.skipped,
 				failed: item.failed,
 				total: item.total,
 			},
@@ -4254,8 +4268,8 @@ export default function AdminMigrationPage() {
 		(workbookUploadKind === "compensation" ||
 			workbookUploadKind === "deduction" ||
 			workbookUploadKind === "manpower-databank" ||
-			workbookUploadKind === "worksharing-schedule" ||
-			workbookUploadKind === "period-leave")
+			workbookUploadKind === "period-leave" ||
+			workbookUploadKind === "worksharing-schedule")
 			? workbookUploadKind
 			: null;
 	const isDm3WorkbookUploadModal =
@@ -7666,10 +7680,10 @@ export default function AdminMigrationPage() {
 					? "manpower-databank"
 					: kind === "deduction"
 						? "deduction"
-						: kind === "worksharing-schedule"
-							? "worksharing-schedule"
-							: kind === "period-leave"
-								? "period-leave"
+						: kind === "period-leave"
+							? "period-leave"
+							: kind === "worksharing-schedule"
+								? "worksharing-schedule"
 								: kind === "compensation"
 									? "compensation"
 									: "compensation";
@@ -7733,10 +7747,10 @@ export default function AdminMigrationPage() {
 				? "Compensation"
 				: role === "deduction"
 					? "Deduction"
-					: role === "worksharing-schedule"
-						? "Work sharing schedule"
-						: role === "period-leave"
-							? "Leave (period)"
+					: role === "period-leave"
+						? "Leave (period)"
+						: role === "worksharing-schedule"
+							? "WorkSharing schedule"
 							: "Employee databank";
 		const formData = new FormData();
 		formData.append("file", file);
@@ -7763,18 +7777,18 @@ export default function AdminMigrationPage() {
 				? "/api/migration/dm3/import-compensation-mass-upload"
 				: role === "deduction"
 					? "/api/migration/dm3/import-deduction-mass-upload"
-					: role === "worksharing-schedule"
-						? "/api/migration/dm3/import-worksharing-schedule"
-						: role === "period-leave"
-							? "/api/migration/dm3/import-period-leave"
+					: role === "period-leave"
+						? "/api/migration/dm3/import-period-leave"
+						: role === "worksharing-schedule"
+							? "/api/migration/dm3/import-worksharing-schedule"
 							: "/api/migration/dm3/import-manpower-databank";
 
 		setIsImportingDm3MassUpload(true);
 		if (
 			role === "compensation" ||
 			role === "deduction" ||
-			role === "worksharing-schedule" ||
-			role === "period-leave"
+			role === "period-leave" ||
+			role === "worksharing-schedule"
 		) {
 			setDm3MassUploadResult(null);
 		}
@@ -7946,10 +7960,10 @@ export default function AdminMigrationPage() {
 							sheetName:
 								role === "compensation"
 									? "Compensation upload"
-									: role === "worksharing-schedule"
-										? "Work sharing schedule"
-										: role === "period-leave"
-											? "Leave upload"
+									: role === "period-leave"
+										? "Leave upload"
+										: role === "worksharing-schedule"
+											? "WorkSharing schedule"
 											: "Deduction upload",
 							status: "Failed",
 							message: userMessage,
@@ -7963,6 +7977,7 @@ export default function AdminMigrationPage() {
 								sourceFilename,
 								created,
 								updated,
+								skipped: Number(summary.skipped || 0),
 								failed,
 								total,
 							},
@@ -7977,6 +7992,7 @@ export default function AdminMigrationPage() {
 						sourceFilename,
 						created,
 						updated,
+						skipped: Number(summary.skipped || 0),
 						failed,
 						total,
 						status: summary.status,
@@ -8008,10 +8024,10 @@ export default function AdminMigrationPage() {
 						sheetName:
 							role === "compensation"
 								? "Compensation upload"
-								: role === "worksharing-schedule"
-									? "Work sharing schedule"
-									: role === "period-leave"
-										? "Leave upload"
+								: role === "period-leave"
+									? "Leave upload"
+									: role === "worksharing-schedule"
+										? "WorkSharing schedule"
 										: "Deduction upload",
 						status: massUploadHistoryStatusToSheetStatus(
 							summary.status || (failed > 0 ? (created + updated > 0 ? "partial" : "failed") : "completed"),
@@ -8048,14 +8064,16 @@ export default function AdminMigrationPage() {
 
 				toast.promise(importPromise, {
 					loading:
-						role === "worksharing-schedule"
-							? "Importing work sharing schedule…"
-							: role === "period-leave"
-								? "Importing period leave…"
-								: `Importing ${label.toLowerCase()} mass upload…`,
+						role === "period-leave"
+							? "Importing period leave…"
+							: `Importing ${label.toLowerCase()} mass upload…`,
 					success: (result) =>
 						result.userMessage ||
-						`Uploaded ${result.label.toLowerCase()} file — ${result.created + result.updated} succeeded, ${result.failed} failed.`,
+						`Uploaded ${result.label.toLowerCase()} file — ${
+							result.created + result.updated > 0
+								? `${result.created + result.updated} updated`
+								: `${result.total ? result.total - result.failed : 0} verified ok`
+						}, ${result.failed} failed.`,
 					error: (error: any) =>
 						error?.data?.errors?.[0]?.message ||
 						error?.message ||
@@ -8095,26 +8113,11 @@ export default function AdminMigrationPage() {
 				toast.error("DM3 databank import failed", {
 					id: toastId,
 					description: message,
-					duration: 10_000,
 				});
-				setDm3DatabankProgress((prev) =>
-					prev
-						? { ...prev, status: "failed", phase: "failed", message }
-						: {
-								status: "failed",
-								phase: "failed",
-								message,
-								percent: 0,
-								processed: 0,
-								total: 0,
-								created: 0,
-								updated: 0,
-								failed: 0,
-							},
-				);
 			} else {
-				// compensation/deduction errors already toast via toast.promise
+				toast.error(message);
 			}
+			setDm3MassUploadResult(null);
 		} finally {
 			setIsImportingDm3MassUpload(false);
 			if (dm3MassUploadInputRef.current) {
@@ -8128,32 +8131,32 @@ export default function AdminMigrationPage() {
 	) => {
 		const isCompensation = role === "compensation";
 		const isDatabank = role === "manpower-databank";
-		const isWorkSharing = role === "worksharing-schedule";
 		const isPeriodLeave = role === "period-leave";
+		const isWorkSharing = role === "worksharing-schedule";
 		const sampleName = isDatabank
 			? "2026_07_July Manpower Databank.xlsx"
-			: isWorkSharing
-				? "WorkSharingSchedule - July 11-25, 2026.xlsx"
-				: isPeriodLeave
-					? "Leave (July 1-31, 2026).xlsx"
+			: isPeriodLeave
+				? "Leave (July 1-31, 2026).xlsx"
+				: isWorkSharing
+					? "WorkSharingSchedule - June 26 to July 10, 2026.xlsx"
 					: isCompensation
 						? "Compensation Mass Upload 07.15.26.xlsx"
 						: "Deduction Mass Upload 07.15.26.xlsx";
 		const expectedHeaders = isDatabank
 			? "ID No., Employee Name, Department, Section, Position, Status (latest day sheet auto-selected)"
-			: isWorkSharing
-				? "Employeeid, EmployeeName, Department, Division, Position, Shift, date columns (0/1)"
-				: isPeriodLeave
-					? "EmployeeNumber, EmployeeName, DateOfLeave, LeaveType, Days, PaidUnpaid"
+			: isPeriodLeave
+				? "EmployeeNumber, EmployeeName, DateOfLeave, LeaveType, Days, PaidUnpaid"
+				: isWorkSharing
+					? "Employeeid, EmployeeName, Department, Division, Position, Shift, [Period Date Columns]"
 					: isCompensation
 						? "COMCODE, Amount, EmployeeID, EmployeeName, StartPayDate"
 						: "DEDCODE, Amount, Payment, EmployeeID, EmployeeName, StartPayment";
 		const dropLabel = isDatabank
 			? "Drop employee manpower databank .xlsx"
-			: isWorkSharing
-				? "Drop WorkSharingSchedule .xlsx"
-				: isPeriodLeave
-					? "Drop period leave .xlsx"
+			: isPeriodLeave
+				? "Drop period leave .xlsx"
+				: isWorkSharing
+					? "Drop WorkSharing schedule .xlsx"
 					: isCompensation
 						? "Drop compensation mass upload .xlsx"
 						: "Drop deduction mass upload .xlsx";
@@ -8171,9 +8174,9 @@ export default function AdminMigrationPage() {
 						dm3MassUploadResult.kind === "dm4-overtime")) ||
 				(role === "manpower-databank" &&
 					dm3MassUploadResult.kind === "manpower-databank") ||
+				(role === "period-leave" && dm3MassUploadResult.kind === "period-leave") ||
 				(role === "worksharing-schedule" &&
 					dm3MassUploadResult.kind === "worksharing-schedule") ||
-				(role === "period-leave" && dm3MassUploadResult.kind === "period-leave") ||
 				(role === "deduction" && dm3MassUploadResult.kind === "deduction"))
 				? dm3MassUploadResult
 				: null;
@@ -8261,6 +8264,11 @@ export default function AdminMigrationPage() {
 							<Badge variant="outline" className="rounded-md px-2.5 py-1 text-[11px] text-sky-700">
 								Updated {Number(resultForRole.summary.updated || 0)}
 							</Badge>
+							{Number(resultForRole.summary.skipped || 0) > 0 ? (
+								<Badge variant="outline" className="rounded-md px-2.5 py-1 text-[11px] text-indigo-700">
+									Unchanged / Current {Number(resultForRole.summary.skipped || 0)}
+								</Badge>
+							) : null}
 							<Badge
 								variant="outline"
 								className={`rounded-md px-2.5 py-1 text-[11px] ${
@@ -9280,8 +9288,8 @@ export default function AdminMigrationPage() {
 										3
 									</span>
 									<span>
-										Upload work sharing schedule (DM3.2 employee schedule assignments
-										for the cutoff)
+										Upload compensation mass upload (allowances / benefits for the
+										cutoff)
 									</span>
 								</li>
 								<li className="flex gap-2">
@@ -9289,21 +9297,12 @@ export default function AdminMigrationPage() {
 										4
 									</span>
 									<span>
-										Upload compensation mass upload (allowances / benefits for the
-										cutoff)
-									</span>
-								</li>
-								<li className="flex gap-2">
-									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
-										5
-									</span>
-									<span>
 										Upload deduction mass upload (loan payments / deductions)
 									</span>
 								</li>
 								<li className="flex gap-2">
 									<span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-orange-700 ring-1 ring-orange-200">
-										6
+										5
 									</span>
 									<span>
 										Upload period leave (paid leave days become Leave Pay for the
@@ -9330,25 +9329,6 @@ export default function AdminMigrationPage() {
 										<Upload className="mr-1.5 h-4 w-4" />
 									)}
 									Upload employee databank
-								</Button>
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									className="h-10 px-3 text-sm"
-									disabled={isImportingDm3MassUpload}
-									onClick={() => {
-										setDm3MassUploadFile(null);
-										setDm3MassUploadResult(null);
-										openWorkbookUploadModal("worksharing-schedule");
-									}}>
-									{isImportingDm3MassUpload &&
-									dm3MassUploadRole === "worksharing-schedule" ? (
-										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-									) : (
-										<Upload className="mr-1.5 h-4 w-4" />
-									)}
-									Upload work sharing schedule
 								</Button>
 								<Button
 									type="button"
@@ -9404,6 +9384,24 @@ export default function AdminMigrationPage() {
 										<Upload className="mr-1.5 h-4 w-4" />
 									)}
 									Upload leave (period)
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={isImportingDm3MassUpload}
+									onClick={() => {
+										setDm3MassUploadFile(null);
+										setDm3MassUploadResult(null);
+										openWorkbookUploadModal("worksharing-schedule");
+									}}>
+									{isImportingDm3MassUpload && dm3MassUploadRole === "worksharing-schedule" ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Upload className="mr-1.5 h-4 w-4" />
+									)}
+									Upload worksharing schedule
 								</Button>
 								<Button
 									type="button"
@@ -9909,12 +9907,12 @@ return (
 									? "Upload compensation mass upload"
 									: dm3MassUploadRole === "deduction"
 										? "Upload deduction mass upload"
-										: dm3MassUploadRole === "worksharing-schedule"
-											? "Upload work sharing schedule"
-											: dm3MassUploadRole === "manpower-databank"
-												? "Upload employee databank"
-												: dm3MassUploadRole === "period-leave"
-													? "Upload leave (period)"
+										: dm3MassUploadRole === "manpower-databank"
+											? "Upload employee databank"
+											: dm3MassUploadRole === "period-leave"
+												? "Upload leave (period)"
+												: dm3MassUploadRole === "worksharing-schedule"
+													? "Upload worksharing schedule"
 													: activeWorkbookGroup
 														? `Upload ${activeWorkbookGroup.id.toUpperCase()} workbook`
 														: "Upload workbook"
@@ -9930,10 +9928,10 @@ return (
 									? "BNPI Compensation Mass Upload (COMCODE / Amount / EmployeeID / StartPayDate)."
 									: dm3MassUploadRole === "deduction"
 										? "BNPI Deduction Mass Upload (DEDCODE / Payment / EmployeeID / StartPayment)."
-										: dm3MassUploadRole === "worksharing-schedule"
-											? "BNPI WorkSharingSchedule workbook (Employeeid + Shift + date columns). Assigns DM3.2 employee schedules for the sheet period (e.g. July 11–25) and refreshes attendance obligations."
-											: dm3MassUploadRole === "period-leave"
-												? "Period leave usage ledger (EmployeeNumber / DateOfLeave / Days / PaidUnpaid). Pick the cutoff, then import — matched employees get period-scoped Leave Pay; missing employees are reported as failures."
+										: dm3MassUploadRole === "period-leave"
+											? "Period leave usage ledger (EmployeeNumber / DateOfLeave / Days / PaidUnpaid). Pick the cutoff, then import — matched employees get period-scoped Leave Pay; missing employees are reported as failures."
+											: dm3MassUploadRole === "worksharing-schedule"
+												? "BNPI WorkSharing Schedule matrix with daily shift rotations (06:00 to 14:00, 06:45 to 15:45, 18:45 to 03:45, 20:00 to 05:00). Assigns exact day-level shifts."
 												: dm3MassUploadRole === "manpower-databank"
 													? "BNPI Manpower Databank roster refresh with live progress (like DM employee import). Creates/updates EMP_IDs; multi-day files use the latest day sheet. Does not wipe salary, email, or statutory IDs."
 													: "Select the .xlsx workbook for this migration stage."
@@ -9946,10 +9944,10 @@ return (
 								? "deduction"
 								: dm3MassUploadResult.kind === "manpower-databank"
 									? "manpower-databank"
-									: dm3MassUploadResult.kind === "worksharing-schedule"
-										? "worksharing-schedule"
-										: dm3MassUploadResult.kind === "period-leave"
-											? "period-leave"
+									: dm3MassUploadResult.kind === "period-leave"
+										? "period-leave"
+										: dm3MassUploadResult.kind === "worksharing-schedule"
+											? "worksharing-schedule"
 											: "compensation",
 						)
 					: dm4UploadRole

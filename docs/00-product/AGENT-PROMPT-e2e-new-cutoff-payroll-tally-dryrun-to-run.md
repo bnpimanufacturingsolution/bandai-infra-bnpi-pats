@@ -182,26 +182,18 @@ npx tsx scripts/fast-import-cutoff-money.ts
 
 ---
 
-### Phase D — WorkSharing schedules (source of truth for schedule deltas)
+### Phase D — Schedule Truth (Mon–Sat Universal Schedule Active; WorkSharing Retired)
 
-```powershell
-# Per pack — print stats JSON (matched / updated / alreadyTally)
-npx tsx scripts/backfill-employee-schedules-from-worksharing.ts `
-  --source="docs/new-cutoff/june-11-25/WorkSharingSchedule - June 11-25, 2026.xlsx" `
-  --org=cmpxw0mfe00007zws3iypuu9d --execute --write-csv
-
-# Repeat june-26-10 and july-11-25 workbooks
-```
+> [!NOTE]
+> WorkSharing schedule upload is **retired** (REC-20260826-DAY-STATUS-REVIEW-QUEUE). Default Monday–Saturday schedule templates apply directly without period-specific WorkSharing `0` flags (which were confirmed ambiguous between Rest, Absent, and Leave). Schedule deltas and ambiguities are reviewed in Day-Status Review (`/hr/day-status-review`).
 
 **Pass table:**
 
 | Pack | matched | updated | alreadyTally | history rows (sample) |
 |---|---:|---:|---:|---|
 
-**UI:** Run Payroll → accordion **Schedule changes** (under Approved OT stack) → chips = API schedule-deltas summary.  
-**API:** `GET .../schedule-deltas?onlyWorkshare=true`
-
-If 0 deltas: either already matched (OK) or apply failed (tunnel) — print backfill stats, not silence.
+**UI:** Run Payroll → accordion **Schedule deltas** (under Approved OT stack).  
+**API:** `GET .../schedule-deltas`
 
 ---
 
@@ -361,10 +353,6 @@ $env:DED_FILE='Deduction Mass Upload 06.30.26.xlsx'
 npx tsx scripts/fast-import-cutoff-money.ts
 
 # Workshare
-npx tsx scripts/backfill-employee-schedules-from-worksharing.ts `
-  --source="docs/new-cutoff/june-11-25/WorkSharingSchedule - June 11-25, 2026.xlsx" `
-  --org=cmpxw0mfe00007zws3iypuu9d --execute --write-csv
-
 # Register comparison
 npx tsx scripts/dry-run-bandai-payroll-comparison.ts `
   --workbook="..\docs\new-cutoff\june-11-25\HRIS Payroll Computation June 11 - 25, 2026.xlsx" `

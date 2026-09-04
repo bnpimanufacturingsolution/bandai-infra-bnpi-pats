@@ -539,7 +539,7 @@ migration. They are not DM4 attendance-history evidence:
 | Source file | DM target | Source-of-truth use | Import method |
 | --- | --- | --- | --- |
 | `docs/Breaktime Schedule.xlsx` | `DM3.2 / Employee Schedule Assignments` | Employee shift/schedule assignment evidence by employee id, section sheet, work schedule, lunch break, and source row. Still valid break-detail evidence for Mon–Sat templates that include lunch windows. Rows missing from schedule sources stay visible schedule gaps instead of being backfilled from older schedule workbooks. | Transform to the `Employee Schedule Assignments` sheet shape: `EMP_ID`, `SCHEDULE_CODE`, `EFFECTIVE_FROM`, `EFFECTIVE_TO`, `NOTES`, with `EFFECTIVE_FROM` sourced from the matched DM3 employee master `HIRE_DATE`, then import through the DM3 workbook modal. Do not assign default schedules to agency employees without schedule source evidence. |
-| `confidential-files/WorkSharingSchedule - July 11-25, 2026.xlsx` (period WorkSharingSchedule workbooks) | `DM3.2 / Employee Schedule Assignments` | BNPI period work-sharing schedule by employee id and shift window (`HH:MM to HH:MM`) with daily date columns. Preferred operator path for period-specific DM3.2 assignments. Does not carry lunch-break segments unless a later break repair is applied. | **Preferred operator path:** DM3 page **Upload work sharing schedule** → `POST /api/migration/dm3/import-worksharing-schedule` (creates/updates WorkSharing shift types + Mon–Sat templates, assigns `Employee.embeddedSchedule` for the sheet date span, refreshes attendance obligations). Offline alternative: `npm run backfill:employee-worksharing-schedules:execute`. |
+| `confidential-files/WorkSharingSchedule - July 11-25, 2026.xlsx` (period WorkSharingSchedule workbooks) | `DM3.2 / Employee Schedule Assignments` | **RETIRED (REC-20260826-DAY-STATUS-REVIEW-QUEUE)**: WorkSharing `0` flags were confirmed ambiguous (Rest \| Absent \| Leave) and cannot drive schedule generation. Schedule truth is universal Monday–Saturday with Sunday REST (biometrically proven with 0 Sunday punches across 19,507 cells). Ambiguities are managed via the Day-Status Review queue (`/hr/day-status-review`). | **Retired**: Upload endpoint disabled (returns `410 Gone`) and removed from DM3 UI. Default Monday–Saturday schedule assignments apply directly. |
 | `docs/FY2025_BNPI Organization Chart - as of March 31, 2026.xlsx` sheet `Updated Org Chart` | `DM3.3 / Reporting Lines` | BNPI visual organization chart source for typed employee-ID reporting relationships. The sheet also contains total manpower and executive/leadership labels. Current evidence found `TOTAL MANPOWER = 1347` but only 823 unique typed numeric employee IDs in cells. A user-reviewed partial apply on June 3, 2026 wrote 789 validated typed reporting-line relationships to `Employee.reportToId`; 10 employee IDs remain missing from the current DM3 employee DB and the non-typed manpower gap remains open source evidence, not applied data. | Transform only source-backed numeric employee IDs into `Reporting Lines`: `EMP_ID`, `REPORT_TO_EMP_ID`, `EFFECTIVE_FROM`, `NOTES`. Run `npm run dry-run:bnpi-dm3-reporting-lines` first. The default `npm run repair:bnpi-dm3-reporting-lines` remains blocked when total-manpower evidence does not reconcile; the explicit reviewed partial command is `npm run repair:bnpi-dm3-reporting-lines:reviewed-partial`. Do not use it unless the partial source gap is accepted and documented. |
 | `docs/rptLeaveBalance as of June 4, 2026.xlsx` sheet `rptLeaveBalance` | `DM3.5 / Opening Leave Balances` | BNPI leave balance source for employee leave assignments by employee id and remaining-balance columns `VL`, `SL`, and `ACL` as of June 4, 2026. | Transform positive employee-master-matched remaining balances into `Opening Leave Balances`: `EMP_ID`, `LEAVE_TYPE_CODE`, `BALANCE`, `AS_OF_DATE=2026-06-04`, `NOTES`, then import through the DM3 workbook modal after employee documents and before benefits/loans. |
 | `docs/BNPI_MASTERLIST.xlsx` sheet `Manpower Databank` (or monthly multi-day workbooks such as `2026_07_July Manpower Databank.xlsx`) | `DM3.1 / Employees` and `DM1.2 / Sections` | BNPI employee master source of truth. The active filtered view contains 857 active employee rows and is the basis for `data/import/employees-import.csv`; the sheet also supplies Manpower Databank section wording for section import parity. Monthly files may use daily sheets (`07-01` … `07-24`) instead of a single `Manpower Databank` tab. | **Preferred operator path:** DM3 page **Upload employee databank** → `POST /api/migration/dm3/import-manpower-databank` (creates missing `EMP_ID`s and updates existing roster fields; multi-day workbooks auto-select the latest day sheet; does **not** wipe `basicSalary`, email, or statutory IDs). Offline alternative: generate the DM3 Employees sheet from active rows only, then import through the full DM3 workbook. Preserve source fields such as `EMAIL`, `PHONE`, statutory IDs, workforce source, resignation date, source status, and source row metadata when present; map `EMAIL` from `Official Email Address` first, falling back to `Email Address`; do not synthesize missing email addresses during mapping/import. Payroll-approved period `BASIC_SALARY` still comes from the payroll computation register path when pay must change. |
@@ -603,15 +603,12 @@ The schedule is available in the migration/template workflow through:
   7-day `BNPI_MON_FRI_DAY_8_5` row using the same weekday work tokens and
   `OFF` on Saturday/Sunday.
 - `DM3.2 / Employee Schedule Assignments`: `data/import/employee-schedules-import.csv`
-  shows the importable sheet shape. For BNPI, prefer the DM3 **Upload work
-  sharing schedule** path with period `WorkSharingSchedule*.xlsx` files (for
-  example July 11–25, 2026). Breaktime Schedule remains a break-detail /
-  legacy transform source. If a row has only shift times such as
-  `08:00 to 16:00`, map it to the matching imported schedule template code
-  before import; use
-  `BNPI_MON_FRI_DAY_8_5` only when the migration has no richer code for that
-  daily attendance evidence. Blank DM3 employee master `SCHEDULE` values must
-  stay unscheduled until DM3.2 supplies an assignment.
+  shows the importable sheet shape. For BNPI, default Monday–Saturday schedule
+  templates apply directly without period-specific WorkSharing uploads (WorkSharing is
+  retired). If a row has only shift times such as `08:00 to 16:00`, map it to the matching
+  imported schedule template code before import; use `BNPI_MON_FRI_DAY_8_5` only when the
+  migration has no richer code for that daily attendance evidence. Blank DM3 employee master
+  `SCHEDULE` values must stay unscheduled until DM3.2 supplies an assignment.
 
 DM4 Attendance History may reference `SHIFT_CODE = BNPI_MON_FRI_DAY_8_5` as
 daily import/reconciliation evidence only. It must not assign
@@ -729,6 +726,15 @@ Do not drop these from planning just because they are currently template-only in
   employee approvals, and request detail pages.
 - For attendance/timesheet/payroll source-of-truth behavior, read
   `docs/attendance-timesheet-payroll-tally-prd.md` before changing DM4 or DM5.
+- For automated cutoff period ingestion from folders, see
+  `docs/02-engineering/PERIOD_FOLDER_INGESTION_RUNBOOK.md` (`npm run import:payroll-files`).
+
+## Automated Period Folder Ingestion Orchestrator
+
+For operational cutoff ingestion, `hris-api/scripts/import-payroll-files-folder.mjs` (`npm run import:payroll-files` / `npm run payroll:import-files`) provides a one-command pipeline:
+- **2-Tier Fingerprint Engine**: Automatically classifies workbooks via filename fuzzy matching and column header fingerprinting.
+- **Dependency Ingestion**: Sequentially uploads WorkSharing, Leave, Compensation, Deduction, Biometrics, and Overtime details.
+- **Post-Import Synchronizations**: Automatically runs Late/UT punch recalculation, Sunday/off-day alignment, loan horizon extensions, and universal MLA guarantees.
 
 ## Maintenance Rules For Future Agents
 

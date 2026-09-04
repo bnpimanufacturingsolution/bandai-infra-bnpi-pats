@@ -412,10 +412,9 @@ function CalendarDayButton({
 	}, [modifiers.focused]);
 
 	return (
-		<Button
+		<button
 			ref={ref}
-			variant="ghost"
-			size="icon"
+			type="button"
 			data-day={day.date.toLocaleDateString()}
 			data-selected-single={
 				modifiers.selected &&
@@ -427,7 +426,15 @@ function CalendarDayButton({
 			data-range-end={modifiers.range_end}
 			data-range-middle={modifiers.range_middle}
 			className={cn(
-				"data-[selected-single=true]:bg-orange-500 data-[selected-single=true]:text-white data-[range-middle=true]:bg-orange-100 data-[range-middle=true]:text-orange-900 data-[range-start=true]:bg-orange-500 data-[range-start=true]:text-white data-[range-end=true]:bg-orange-500 data-[range-end=true]:text-white group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-ring/50 dark:hover:text-accent-foreground flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] data-[range-end=true]:rounded-md data-[range-end=true]:rounded-r-md data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-md data-[range-start=true]:rounded-l-md [&>span]:text-xs [&>span]:opacity-70 hover:bg-orange-100 hover:text-orange-900",
+				"inline-flex items-center justify-center cursor-pointer border-0 bg-transparent text-sm font-normal leading-none rounded-md transition-colors",
+				"aspect-square size-(--cell-size) min-w-(--cell-size)",
+				"hover:bg-orange-100 hover:text-orange-900",
+				"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+				"data-[selected-single=true]:bg-orange-500 data-[selected-single=true]:text-white",
+				"data-[range-middle=true]:bg-orange-100 data-[range-middle=true]:text-orange-900",
+				"data-[range-start=true]:bg-orange-500 data-[range-start=true]:text-white data-[range-start=true]:rounded-l-md",
+				"data-[range-end=true]:bg-orange-500 data-[range-end=true]:text-white data-[range-end=true]:rounded-r-md",
+				"[&>span]:text-xs [&>span]:opacity-70",
 				defaultClassNames.day,
 				className,
 			)}

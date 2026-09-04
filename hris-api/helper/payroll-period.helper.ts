@@ -250,8 +250,8 @@ const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 	["BB", "Adjustment Non-Tax", "adjustmentNonTax"],
 	["BC", "Excess Deduction", "excessDeduction"],
 	["BD", "De Minimis Allowance", "deMinimisAllowance"],
-	["BE", "Christmas Gift (Kid)", "christmasGiftKid"],
-	["BF", "Birthday Gift (Kid)", "birthdayGiftKid"],
+	["BE", "Christmas Gift (Beneficiary)", "christmasGiftKid"],
+	["BF", "Birthday Gift (Beneficiary)", "birthdayGiftKid"],
 	["BG", "Birthday Gift (Employee)", "birthdayGiftEmployee"],
 	["BH", "GrossPay", "grossPay"],
 	["BI", "W/Tax", "taxAmount"],
@@ -297,6 +297,41 @@ const BANDAI_PAYROLL_REGISTER_COLUMNS = [
 	["CX", "Assembly Standing", "assemblyStanding"],
 	["CW", "TotalReceivable", "totalReceivable"],
 ] as const;
+
+/**
+ * Identify if an employee is a direct/daily operator based on position title or explicit dailyRate.
+ */
+export function isDirectOperatorEmployee(employee: any): boolean {
+	const pos = String(
+		employee?.position?.title ||
+		employee?.position?.name ||
+		employee?.position ||
+		"",
+	).trim().toLowerCase();
+	return (
+		pos === "operator" ||
+		pos === "senior operator" ||
+		pos.includes("operator") ||
+		pos.includes("assembler") ||
+		pos.includes("production staff") ||
+		pos.includes("qa inspector")
+	);
+}
+
+/**
+ * Resolve standard daily rate for Bandai Namco Philippines employees.
+ * Operators default to 600.00 if dailyRate is not explicitly set in the database.
+ */
+export function resolveEmployeeDailyRate(employee: any): number {
+	const explicit = Number(
+		(employee as { dailyRate?: number | null })?.dailyRate ?? 0,
+	);
+	if (explicit > 0) return explicit;
+	if (isDirectOperatorEmployee(employee)) {
+		return 600.0;
+	}
+	return 0;
+}
 
 /**
  * Rate basis for Bandai approved-bucket OT / premium pay (FILE_DUAL).
@@ -396,9 +431,11 @@ export function resolveBandaiRegisterBasicPay(params: {
 	if (registerDailyRate > 0) {
 		// Prefer explicit bucket sum (including 0). Only fall back when buckets absent.
 		const hasBucketDays =
-			params.paidRegularDays !== null && params.paidRegularDays !== undefined;
+			params.paidRegularDays !== null &&
+			params.paidRegularDays !== undefined &&
+			Number(params.paidRegularDays) > 0;
 		const paidRegularDays = hasBucketDays
-			? Math.max(0, Number(params.paidRegularDays))
+			? Number(params.paidRegularDays)
 			: Math.max(0, Number(params.presentFallbackDays || 0));
 		return {
 			basicPay: roundToCentavo(paidRegularDays * registerDailyRate),
@@ -409,9 +446,16 @@ export function resolveBandaiRegisterBasicPay(params: {
 			registerDailyRate: roundToCentavo(registerDailyRate),
 		};
 	}
+	const hasBucketDays =
+		params.paidRegularDays !== null &&
+		params.paidRegularDays !== undefined &&
+		Number(params.paidRegularDays) > 0;
+	const paidRegularDays = hasBucketDays
+		? Number(params.paidRegularDays)
+		: Math.max(0, Number(params.presentFallbackDays || 0));
 	return {
 		basicPay: roundToCentavo(periodBasic),
-		paidRegularDays: 0,
+		paidRegularDays: roundToCentavo(paidRegularDays),
 		path: "B",
 		method: "PERIOD_BASIC",
 		suppressFullDayAbsentDeduction: false,
@@ -1980,9 +2024,7 @@ export async function generatePayrollFromTimesheets(
 
 			// Bandai OT buckets first — FILE_DUAL hourly (Path A dailyRate/8, Path B BNPI 313).
 			// Attendance deductions still use resolveBnpiAttendanceDailyRate (not dual in this PR).
-			const registerDailyRate = Number(
-				(employee as { dailyRate?: number | null }).dailyRate ?? 0,
-			);
+			const registerDailyRate = resolveEmployeeDailyRate(employee);
 			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(
 				validatedDays,
 				periodBasic,
@@ -2011,16 +2053,22 @@ export async function generatePayrollFromTimesheets(
 			const paidRegularDaysFromBuckets = bandaiApprovedBucketPay
 				? Number(bandaiApprovedBucketPay.hours?.regularDays || 0)
 				: null;
+			const effectiveWorkedDays =
+				paidRegularDaysFromBuckets !== null && paidRegularDaysFromBuckets > 0
+					? paidRegularDaysFromBuckets
+					: presentFallbackDays;
 			const registerBasic = resolveBandaiRegisterBasicPay({
 				periodBasic,
 				registerDailyRate: registerDailyRate > 0 ? registerDailyRate : null,
-				paidRegularDays: paidRegularDaysFromBuckets,
+				paidRegularDays: effectiveWorkedDays,
 				presentFallbackDays,
 			});
 			// Path A: full-day ABSENT already excluded from paid days — no second full-day deduct.
+			// Path B (Monthly Staff): absent days = base 12 days minus worked days.
+			const pathBDaysAbsent = Math.max(0, 12 - effectiveWorkedDays);
 			const absentDeduction = registerBasic.suppressFullDayAbsentDeduction
 				? 0
-				: roundToCentavo(daysAbsent * dailyRate);
+				: roundToCentavo(pathBDaysAbsent * dailyRate);
 
 			// Base multipliers (ordinary day) from calculator
 			const baseWorkMultiplier =
@@ -3619,6 +3667,14 @@ const payrollPreviewTimesheetSelect = {
 			person: {
 				select: {
 					personalInfo: true,
+					children: {
+						where: { isDeleted: false },
+						select: {
+							dateOfBirth: true,
+							firstName: true,
+							isDependent: true,
+						},
+					},
 				},
 			},
 			department: {
@@ -3693,11 +3749,19 @@ const payrollPreviewExcludedEmployeeSelect = {
 	dailyRate: true,
 	payFrequency: true,
 	embeddedSchedule: true,
-	person: {
-		select: {
-			personalInfo: true,
-		},
-	},
+						person: {
+							select: {
+								personalInfo: true,
+								children: {
+									where: { isDeleted: false },
+									select: {
+										dateOfBirth: true,
+										firstName: true,
+										isDependent: true,
+									},
+								},
+							},
+						},
 	department: {
 		select: {
 			id: true,
@@ -4194,13 +4258,14 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 	const registerDaily = isPathARegister
 		? Number(input.registerDailyRate)
 		: input.dailyRate;
-	// Path A: Sheet2 "No. of Days" = paid regular days (bucket sum), not non-REST count.
-	const registerDays = isPathARegister
-		? Number(input.paidRegularDays || 0)
-		: input.totalWorkDays;
+	// Path A & B: Sheet2 "No. of Days" = paid regular days (worked days count).
+	const registerDays =
+		input.paidRegularDays !== undefined && input.paidRegularDays !== null
+			? Number(input.paidRegularDays)
+			: input.totalWorkDays;
 	const sourceRow = {
-		monthlySalary: roundToCentavo(input.estimatedMonthlyRate),
-		dailySalary: roundToCentavo(registerDaily),
+		monthlySalary: isPathARegister ? 0 : roundToCentavo(input.estimatedMonthlyRate),
+		dailySalary: isPathARegister ? roundToCentavo(registerDaily) : 0,
 		hourlySalary: computeEmployeePayrollHourlySalarySnapshot({
 			dailyRate: input.dailyRate,
 			hourlyRate: input.hourlyRate,
@@ -4321,6 +4386,39 @@ function buildBandaiPayrollRegister(input: BandaiPayrollRegisterInput) {
 		assemblyStanding: (sourceBy as any)(["ASA"], ["Assembly Standing"], ["COMPENSATION"]) ?? 0,
 		totalReceivable,
 	};
+
+	// ── Birthday Gift auto-detection ──────────────────────────────────────────
+	// ₱300 per birthday (employee + each dependent beneficiary) in the payroll period month.
+	const BIRTHDAY_GIFT_AMOUNT = 300;
+	const employeePerson = input.employee?.person;
+	const employeeDob = employeePerson?.personalInfo?.dateOfBirth;
+	const periodStartDate = input.payrollPeriodData?.startDate;
+	if (employeeDob && periodStartDate) {
+		const dob = new Date(employeeDob);
+		const periodMonth = new Date(periodStartDate).getUTCMonth();
+		const periodYear = new Date(periodStartDate).getUTCFullYear();
+		// Employee birthday in payroll period month
+		if (dob.getUTCMonth() === periodMonth) {
+			sourceRow.birthdayGiftEmployee = BIRTHDAY_GIFT_AMOUNT;
+		}
+		// Beneficiary birthdays in payroll period month (isDependent=true or null, age <= 12)
+		const allChildren = employeePerson?.children || [];
+		const birthdayBeneficiaries = allChildren.filter((child: any) => {
+			if (!child.dateOfBirth) return false;
+			if (child.isDependent === false) return false;
+			const childDob = new Date(child.dateOfBirth);
+			if (childDob.getUTCMonth() !== periodMonth) return false;
+			
+			// Enforce age limit (until 12 years old only)
+			const age = periodYear - childDob.getUTCFullYear();
+			return age >= 0 && age <= 12;
+		});
+		if (birthdayBeneficiaries.length > 0) {
+			sourceRow.birthdayGiftKid = birthdayBeneficiaries.length * BIRTHDAY_GIFT_AMOUNT;
+		}
+	}
+	// ── End Birthday Gift ─────────────────────────────────────────────────────
+
 	const columns = BANDAI_PAYROLL_REGISTER_COLUMNS.map(([column, label, field]) => ({
 		column,
 		label,
@@ -5015,9 +5113,7 @@ function calculatePayrollPreviewDataset(params: {
 				}
 			}
 
-			const registerDailyRatePreview = Number(
-				(employee as { dailyRate?: number | null }).dailyRate ?? 0,
-			);
+			const registerDailyRatePreview = resolveEmployeeDailyRate(employee);
 			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(
 				validatedDays,
 				periodBasic,
@@ -5044,16 +5140,24 @@ function calculatePayrollPreviewDataset(params: {
 			const paidRegularDaysPreview = bandaiApprovedBucketPay
 				? Number(bandaiApprovedBucketPay.hours?.regularDays || 0)
 				: null;
+			const effectiveWorkedDaysPreview =
+				paidRegularDaysPreview !== null && paidRegularDaysPreview > 0
+					? paidRegularDaysPreview
+					: presentFallbackDaysPreview;
 			const registerBasicPreview = resolveBandaiRegisterBasicPay({
 				periodBasic,
 				registerDailyRate:
 					registerDailyRatePreview > 0 ? registerDailyRatePreview : null,
-				paidRegularDays: paidRegularDaysPreview,
+				paidRegularDays: effectiveWorkedDaysPreview,
 				presentFallbackDays: presentFallbackDaysPreview,
 			});
+			const pathBDaysAbsentPreview = Math.max(
+				0,
+				12 - effectiveWorkedDaysPreview,
+			);
 			const absentDeduction = registerBasicPreview.suppressFullDayAbsentDeduction
 				? 0
-				: roundToCentavo(daysAbsent * dailyRate);
+				: roundToCentavo(pathBDaysAbsentPreview * dailyRate);
 
 			const baseWorkMultiplier =
 				getRateMultiplier(params.rateMultipliers, "ordinaryDay", "work") ?? 1.0;

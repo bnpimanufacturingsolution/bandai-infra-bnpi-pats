@@ -1,6 +1,8 @@
 const fs = require("fs");
 const net = require("net");
+const os = require("os");
 const path = require("path");
+const readline = require("readline");
 const { spawnSync } = require("child_process");
 const {
 	loadEnvFile,
@@ -16,12 +18,153 @@ const envPath = path.join(apiRoot, ".env");
 const runtimeEnvPath = path.join(apiRoot, ".env.development.local");
 const projectTruthScript = path.join(repoRoot, "scripts", "project-truth.ps1");
 const k8sDevDbScript = path.join(repoRoot, "scripts", "start-k8s-dev-db-access.ps1");
+const devSshSetupScript = path.join(repoRoot, "scripts", "setup-dev-ssh-access.ps1");
 const remoteLanForwardScript = path.join(
 	repoRoot,
 	"scripts",
 	"start-project-truth-remote-lan-forward.ps1",
 );
 const hikvisionTunnelMapKey = "PROJECT_TRUTH_HIKVISION_TUNNEL_MAP";
+
+function resolveDevSshKeyPath() {
+	const base = process.env.PROJECT_TRUTH_SSH_KEY
+		? process.env.PROJECT_TRUTH_SSH_KEY
+		: path.join(process.env.USERPROFILE || os.homedir(), ".ssh", "node-health-appliance_ed25519");
+	return base;
+}
+
+/**
+ * Pure decision helper (unit-tested): should predev offer the interactive
+ * one-time workstation setup when the DEV DB forward cannot come up?
+ * - Never prompts in non-TTY contexts (CI, agents, piped output).
+ * - Never prompts when HRIS_SKIP_DEV_SSH_SETUP=true.
+ */
+function shouldOfferInteractiveSshSetup({ stdinIsTTY, skipEnv } = {}) {
+	if (skipEnv === undefined) skipEnv = process.env.HRIS_SKIP_DEV_SSH_SETUP;
+	if (skipEnv === "true") return false;
+	return Boolean(stdinIsTTY);
+}
+
+/**
+ * User-facing guidance lines for the missing-workstation-access case.
+ * Pure string builder (unit-tested) so the exact onboarding copy stays
+ * consistent between the interactive prompt and the non-interactive error.
+ */
+function buildSshSetupGuidance({ sshKeyPath, setupScriptPath } = {}) {
+	const keyPath = sshKeyPath || resolveDevSshKeyPath();
+	const setupPath = setupScriptPath || devSshSetupScript;
+	return [
+		`[bnpi-db-access] The DEV DB forward needs SSH access to the Project Truth VM and the workstation key is not ready.`,
+		`[bnpi-db-access] Expected key: ${keyPath}`,
+		`[bnpi-db-access] ONE-TIME fix (generates the key, writes the ssh config, installs it on the VM, verifies):`,
+		`[bnpi-db-access]   powershell -NoProfile -ExecutionPolicy Bypass -File "${setupPath}"`,
+		`[bnpi-db-access] During onboarding you may be asked to sign in with the 1bis.solutions.tech Cloudflare Access account in a browser.`,
+		`[bnpi-db-access] Isolated alternative without VM access: npm run dev:local (Docker DB on 5433).`,
+	];
+}
+
+function promptYesNo(question, { timeoutMs = 90000 } = {}) {
+	return new Promise((resolve) => {
+		if (!process.stdin.isTTY) {
+			resolve(null);
+			return;
+		}
+		const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+		let settled = false;
+		const finish = (value) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			try {
+				rl.close();
+			} catch {
+				/* ignore */
+			}
+			resolve(value);
+		};
+		const timer = setTimeout(() => finish(null), timeoutMs);
+		rl.question(question, (answer) => {
+			const trimmed = String(answer || "").trim().toLowerCase();
+			if (!trimmed) {
+				finish(true);
+				return;
+			}
+			finish(trimmed === "y" || trimmed === "yes");
+		});
+	});
+}
+
+/**
+ * When the K3s DEV DB forward cannot come up, diagnose the common
+ * workstation blockers (missing SSH key / ssh.exe) and, on an interactive
+ * terminal, offer to run the one-time onboarding script right now. Returns
+ * true when a retry probe is worth running.
+ */
+async function offerDevSshAccessSetup() {
+	const sshKeyPath = resolveDevSshKeyPath();
+	const blockers = [];
+	if (!fs.existsSync(sshKeyPath)) blockers.push(`SSH key missing: ${sshKeyPath}`);
+	if (process.platform === "win32") {
+		const whereSsh = spawnSync("where", ["ssh.exe"], { windowsHide: true });
+		if (whereSsh.status !== 0) {
+			blockers.push("ssh.exe not found (Windows OpenSSH Client optional feature)");
+		}
+	}
+
+	for (const line of buildSshSetupGuidance()) console.log(line);
+	if (blockers.length > 0) {
+		for (const blocker of blockers) console.log(`[bnpi-db-access] Detected blocker: ${blocker}`);
+	}
+
+	if (!shouldOfferInteractiveSshSetup()) {
+		console.log(
+			"[bnpi-db-access] Non-interactive session: run the setup command above manually, then re-run npm run dev.",
+		);
+		return false;
+	}
+
+	const answer = await promptYesNo(
+		"[bnpi-db-access] Run the one-time workstation SSH setup now? (recommended) [Y/n]: ",
+	);
+	if (!answer) {
+		console.log(
+			"[bnpi-db-access] Skipped setup. Fix SSH access with the command above (or use npm run dev:local), then re-run npm run dev.",
+		);
+		return false;
+	}
+
+	const setupT0 = Date.now();
+	console.log("[bnpi-db-access] STEP ssh-workstation-setup: starting guided onboarding...");
+	const setupResult = runPowerShell([
+		"-NoProfile",
+		"-ExecutionPolicy",
+		"Bypass",
+		"-File",
+		devSshSetupScript,
+	]);
+	const setupSec = ((Date.now() - setupT0) / 1000).toFixed(1);
+	if (setupResult.status !== 0) {
+		console.warn(
+			`[bnpi-db-access] STEP ssh-workstation-setup: did not complete (exit ${setupResult.status}) after ${setupSec}s. Follow the manual steps printed above.`,
+		);
+		return false;
+	}
+	console.log(`[bnpi-db-access] STEP ssh-workstation-setup: OK in ${setupSec}s; retrying DEV DB forward...`);
+	runPowerShell([
+		"-NoProfile",
+		"-ExecutionPolicy",
+		"Bypass",
+		"-File",
+		k8sDevDbScript,
+		"-LocalPort",
+		String(preferredDevK8sPort()),
+	]);
+	return true;
+}
+
+function preferredDevK8sPort() {
+	return Number(process.env.PROJECT_TRUTH_DEV_K8S_DB_LOCAL_PORT || 55435);
+}
 
 function readEnvFileValue(filePath, key) {
 	if (!fs.existsSync(filePath)) return "";
@@ -289,6 +432,17 @@ async function main() {
 			}
 		}
 
+		if (devK8sForwardHost !== "127.0.0.1") {
+			// Guided onboarding: diagnose workstation SSH blockers and, on an
+			// interactive terminal, offer to run the one-time setup right now.
+			const setupRan = await offerDevSshAccessSetup();
+			if (setupRan) {
+				devK8sForwardHost = await findReachableDevK8sForwardHost({
+					port: preferredDevK8sPort,
+				});
+			}
+		}
+
 		if (devK8sForwardHost === "127.0.0.1") {
 			writeDevK8sRuntime();
 			return;
@@ -299,8 +453,11 @@ async function main() {
 		// K3s DEV Postgres forward on 127.0.0.1:55435; compose DEV has drifted
 		// independently before and can show the wrong device set in localhost.
 		if (process.env.PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK !== "true") {
+			const guidance = buildSshSetupGuidance().join("\n");
 			throw new Error(
-				`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} after bootstrap. Refusing automatic compose DEV fallback because 10.184.37.19:15433 is a separate drift-prone database. Set PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK=true only for an intentional stale-compose diagnostic.`,
+				`K3s DEV DB forward is still unreachable on 127.0.0.1:${preferredDevK8sPort} after bootstrap.\n` +
+					guidance +
+					`\n[bnpi-db-access] Refusing automatic compose DEV fallback because 10.184.37.19:15433 is a separate drift-prone database. Set PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK=true only for an intentional stale-compose diagnostic.`,
 			);
 		}
 		const composeDevPort = Number(process.env.PROJECT_TRUTH_DEV_COMPOSE_DB_PORT || 15433);
@@ -426,4 +583,9 @@ if (require.main === module) {
 	});
 }
 
-module.exports = { findReachableDevK8sForwardHost, canUseLocalPostgres };
+module.exports = {
+	findReachableDevK8sForwardHost,
+	canUseLocalPostgres,
+	shouldOfferInteractiveSshSetup,
+	buildSshSetupGuidance,
+};

@@ -139,6 +139,10 @@ export function computeDm4BiometricDayMetrics(input: Dm4DayMetricsInput): Dm4Day
 	let lateMinutes = 0;
 	if (window.start !== null && !window.isOff) {
 		lateMinutes = Math.max(0, startMin - window.start - window.graceLate);
+		// Cap single-day late at regular shift minutes (e.g. 480 min). A shift cannot be 15h late on an 8h shift.
+		if (lateMinutes > (window.regularMinutes || 480)) {
+			lateMinutes = 0;
+		}
 	}
 
 	if (singlePunch || !rawOut || endMin === null) {
@@ -202,6 +206,9 @@ export function computeDm4BiometricDayMetrics(input: Dm4DayMetricsInput): Dm4Day
 	let earlyOutMinutes = 0;
 	if (window.end !== null && !window.isOff) {
 		earlyOutMinutes = Math.max(0, window.end - endMin - window.graceEarlyOut);
+		if (earlyOutMinutes > (window.regularMinutes || 480)) {
+			earlyOutMinutes = 0;
+		}
 	}
 
 	return {

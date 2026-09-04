@@ -61,8 +61,18 @@ const files = [...priorFiles, ...extras];
 const prisma = new PrismaClient();
 
 async function main() {
+	let org = await prisma.organization.findUnique({ where: { id: orgId } });
+	if (!org) {
+		org = await prisma.organization.findFirst({
+			where: { isDeleted: false },
+			orderBy: { createdAt: "asc" },
+		});
+	}
+	if (!org) throw new Error("No organization found in database.");
+	const resolvedOrgId = org.id;
+
 	const report: Record<string, unknown> = {
-		orgId,
+		orgId: resolvedOrgId,
 		db: process.env.PG_DATABASE_URL?.replace(/:[^:@/]+@/, ":***@"),
 		startedAt: new Date().toISOString(),
 		files: [] as unknown[],
@@ -73,7 +83,7 @@ async function main() {
 		console.log(JSON.stringify({ phase: "import_start", file: path.basename(file) }));
 		const summary = await importDeductionMassUpload({
 			prisma,
-			organizationId: orgId,
+			organizationId: resolvedOrgId,
 			buffer: fs.readFileSync(file),
 		});
 		const entry = {

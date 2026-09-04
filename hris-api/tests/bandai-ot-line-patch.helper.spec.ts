@@ -33,13 +33,27 @@ describe("bandai-ot-line-patch.helper", () => {
 	describe("isScheduledRestDay", () => {
 		it("reads scheduleSnapshot.isOff", () => {
 			expect(isScheduledRestDay({ scheduleSnapshot: { isOff: true } })).to.equal(true);
-			expect(isScheduledRestDay({ scheduleSnapshot: { isOff: false } })).to.equal(false);
+			expect(isScheduledRestDay({ scheduleSnapshot: { isOff: false } }, null, "2026-06-29")).to.equal(false);
 		});
 
-		it("does not treat status=REST_DAY alone as schedule off (avoids absense mislabel)", () => {
-			expect(isScheduledRestDay({ status: "REST_DAY" })).to.equal(false);
-			expect(isScheduledRestDay({ status: "PRESENT" })).to.equal(false);
+		it("does not treat status=REST_DAY alone as schedule off on normal weekdays", () => {
+			expect(isScheduledRestDay({ status: "REST_DAY" }, null, "2026-06-29")).to.equal(false);
+			expect(isScheduledRestDay({ status: "PRESENT" }, null, "2026-06-29")).to.equal(false);
 			expect(isScheduledRestDay({ scheduleSnapshot: { code: "OFF" } })).to.equal(true);
+		});
+
+		it("treats Sunday as universal rest day unless explicitly scheduled with active shift", () => {
+			// Sunday 2026-06-28
+			expect(isScheduledRestDay({ status: "REST_DAY" }, null, "2026-06-28")).to.equal(true);
+			expect(isScheduledRestDay({ scheduleSnapshot: { isOff: false } }, null, "2026-06-28")).to.equal(true);
+			// Explicit active Sunday shift overrides
+			expect(
+				isScheduledRestDay(
+					{ scheduleSnapshot: { code: "WS_0815_1615", isOff: false } },
+					null,
+					"2026-06-28",
+				),
+			).to.equal(false);
 		});
 	});
 
@@ -191,6 +205,44 @@ describe("bandai-ot-line-patch.helper", () => {
 			expect(
 				patch!.changes.metadata.bandaiPayrollSourceRepair.approvedBuckets.regOtHrs,
 			).to.equal(3);
+		});
+
+		it("is idempotent: returns null when line already has target status, zero hours, and matching approvedBuckets", () => {
+			const source = zeroSource({ date: "2026-06-27", employeeNo: "01211" });
+			const initialLine = {
+				status: "ABSENT",
+				primaryMarker: "ABSENT",
+				hoursWorked: "0:00",
+				regularHours: "0:00",
+				overtimeHours: "0:00",
+				lateHours: "0:00",
+				earlyOutHours: "0:00",
+				undertimeHours: "0:00",
+				notes: "BNPI OT source: scheduled workday with zero regular/OT/premium buckets; marked absent.",
+				scheduleSnapshot: { isOff: false, code: "WS_0815_1615" },
+				metadata: null,
+			};
+			const firstPatch = buildBandaiOtLinePatch({
+				line: initialLine,
+				source,
+				appliedAt: "2026-08-27T00:00:00.000Z",
+			});
+			expect(firstPatch).to.not.equal(null);
+
+			// Apply the patch to simulate DB state
+			const patchedLine = {
+				...initialLine,
+				...firstPatch!.changes,
+				metadata: firstPatch!.changes.metadata,
+			};
+
+			// Second pass (verification dry-run) must return null
+			const secondPatch = buildBandaiOtLinePatch({
+				line: patchedLine,
+				source,
+				appliedAt: "2026-08-27T00:00:00.000Z",
+			});
+			expect(secondPatch).to.equal(null);
 		});
 	});
 });

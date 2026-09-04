@@ -51,15 +51,19 @@ function parseArgs(argv) {
 }
 
 async function resolvePeriod(periodRef) {
-	process.env.PG_DATABASE_URL =
-		process.env.PG_DATABASE_URL ||
-		process.env.DATABASE_URL ||
-		"postgresql://postgres:postgres@127.0.0.1:5433/hris?schema=public";
-	process.env.DATABASE_URL = process.env.PG_DATABASE_URL;
+	const dbUrl =
+		process.env.PG_DATABASE_URL &&
+		!process.env.PG_DATABASE_URL.includes("10.184.37.19") &&
+		!process.env.PG_DATABASE_URL.includes("15433")
+			? process.env.PG_DATABASE_URL
+			: "postgresql://postgres:postgres@127.0.0.1:5433/hris?schema=public";
+	process.env.PG_DATABASE_URL = dbUrl;
+	process.env.DATABASE_URL = dbUrl;
+	process.env.WRITE_DATABASE_URL = dbUrl;
 	const { PrismaClient } = await import("../generated/prisma/index.js").catch(() =>
 		import("../generated/prisma-postgres/index.js"),
 	);
-	const prisma = new PrismaClient();
+	const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
 	try {
 		return await prisma.payrollPeriod.findFirst({
 			where: {

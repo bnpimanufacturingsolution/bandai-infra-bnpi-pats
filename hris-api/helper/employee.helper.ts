@@ -1322,6 +1322,9 @@ export const createEmployeeHelpers = (prisma: PrismaClient, employeeLogger: Logg
 			const existingPerson = await findExistingPersonMatch(tx, validation.data);
 			let person;
 
+			// Strip children from person data — handled by syncPersonBeneficiaries after create/update
+			const { children: _children, ...personDataForPrisma } = validation.data;
+
 			if (existingPerson) {
 				const organizationId = String(validation.data?.organizationId || "").trim() || null;
 				const activeEmployee = await tx.employee.findFirst({
@@ -1347,13 +1350,13 @@ export const createEmployeeHelpers = (prisma: PrismaClient, employeeLogger: Logg
 
 				person = await tx.person.update({
 					where: { id: existingPerson.id },
-					data: validation.data,
+					data: personDataForPrisma,
 				});
 				employeeLogger.info(
 					`Reusing existing standalone person in employee transaction: ${person.id}`,
 				);
 			} else {
-				person = await tx.person.create({ data: validation.data });
+				person = await tx.person.create({ data: personDataForPrisma });
 				employeeLogger.info(`Person created in employee transaction: ${person.id}`);
 			}
 
@@ -2478,7 +2481,7 @@ export const checkMissingCredentials = (employeeData: any): string[] => {
 
 	REQUIRED_DOCUMENTS.forEach((docType) => {
 		const doc = uploadedDocs.find((d: any) => d.type === docType);
-		// Check if document exists and has a file URL (or some indication of being provided)
+		// Check if document exists with a file URL (or some indication of being provided)
 		if (!doc || !doc.fileUrl) {
 			missingDocs.push(docType);
 		}
@@ -2486,4 +2489,71 @@ export const checkMissingCredentials = (employeeData: any): string[] => {
 
 	return missingDocs;
 };
+
+/**
+ * Sync beneficiaries for a person.
+ * - Upserts provided beneficiaries (by id if present, else creates new)
+ * - Soft-deletes beneficiaries not in the provided list
+ */
+export async function syncPersonBeneficiaries(
+	prisma: PrismaClient,
+	personId: string,
+	beneficiaries: Array<{
+		id?: string;
+		firstName: string;
+		middleName?: string | null;
+		lastName?: string | null;
+		dateOfBirth: Date;
+		gender?: string | null;
+		isDependent?: boolean | null;
+		notes?: string | null;
+	}>,
+) {
+	if (!beneficiaries || !Array.isArray(beneficiaries)) return;
+
+	const providedIds = beneficiaries.filter((b) => b.id).map((b) => b.id!);
+
+	// Soft-delete beneficiaries not in the provided list
+	await prisma.child.updateMany({
+		where: {
+			parentId: personId,
+			isDeleted: false,
+			...(providedIds.length > 0 ? { id: { notIn: providedIds } } : {}),
+		},
+		data: { isDeleted: true },
+	});
+
+	// Upsert each beneficiary
+	for (const beneficiary of beneficiaries) {
+		if (beneficiary.id) {
+			await prisma.child.update({
+				where: { id: beneficiary.id },
+				data: {
+					firstName: beneficiary.firstName,
+					middleName: beneficiary.middleName ?? null,
+					lastName: beneficiary.lastName ?? null,
+					dateOfBirth: beneficiary.dateOfBirth,
+					gender: beneficiary.gender as any ?? null,
+					isDependent: beneficiary.isDependent ?? true,
+					notes: beneficiary.notes ?? null,
+					isDeleted: false,
+				},
+			});
+		} else {
+			await prisma.child.create({
+				data: {
+					parentId: personId,
+					organizationId: (await prisma.person.findUnique({ where: { id: personId }, select: { organizationId: true } }))?.organizationId,
+					firstName: beneficiary.firstName,
+					middleName: beneficiary.middleName ?? null,
+					lastName: beneficiary.lastName ?? null,
+					dateOfBirth: beneficiary.dateOfBirth,
+					gender: beneficiary.gender as any ?? null,
+					isDependent: beneficiary.isDependent ?? true,
+					notes: beneficiary.notes ?? null,
+				},
+			});
+		}
+	}
+}
 

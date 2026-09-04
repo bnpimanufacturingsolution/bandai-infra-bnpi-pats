@@ -132,6 +132,7 @@ export function withoutPremiumMetadata(metadata: Record<string, any>): Record<st
 export function isScheduledRestDay(
 	line: BandaiOtLineLike,
 	effectiveScheduleSnapshot?: Record<string, any> | null,
+	dateInput?: string | Date | null,
 ): boolean {
 	const snap =
 		effectiveScheduleSnapshot ||
@@ -143,11 +144,40 @@ export function isScheduledRestDay(
 	if (snap && typeof snap === "object") {
 		if (snap.isOff === true) return true;
 		const code = String(snap.code || snap.shiftTypeCode || "").toUpperCase();
-		if (code === "OFF" || code === "WS_OFF") return true;
+		if (code === "OFF" || code === "WS_OFF" || code === "REST_DAY") return true;
+	}
+
+	const rawDate =
+		dateInput ||
+		(line as any)?.date ||
+		snap?.date ||
+		(line.metadata && typeof line.metadata === "object" ? (line.metadata as any)?.date : null);
+	if (rawDate) {
+		const d = new Date(rawDate);
+		if (!isNaN(d.getTime())) {
+			const dayOfWeek = d.getUTCDay();
+			// Sunday (0) is a universal rest day in Bandai Namco unless explicitly scheduled with an active work shift
+			if (dayOfWeek === 0) {
+				const shiftCode = String(snap?.code || snap?.shiftTypeCode || "").toUpperCase();
+				const hasExplicitSundayWorkShift =
+					shiftCode.startsWith("WS_") && shiftCode !== "WS_OFF";
+				if (!hasExplicitSundayWorkShift) {
+					return true;
+				}
+			}
+			// If line was already marked REST_DAY on a Saturday or Sunday, preserve it
+			if (
+				(dayOfWeek === 6 || dayOfWeek === 0) &&
+				String(line.status).toUpperCase() === "REST_DAY"
+			) {
+				return true;
+			}
+		}
+	}
+
+	if (snap && typeof snap === "object") {
 		if (snap.isOff === false) return false;
 	}
-	// Without a schedule snapshot, only treat explicit OFF codes as rest.
-	// Do not treat status=REST_DAY alone as authoritative (prior OT bug mislabeled absences).
 	return false;
 }
 
@@ -217,6 +247,11 @@ export type BandaiOtLinePatch = {
 	reasons: string[];
 };
 
+const isTimeZero = (value: unknown): boolean => {
+	const raw = String(value ?? "").trim();
+	return !raw || raw === "0:00" || raw === "0" || raw === "00:00";
+};
+
 /**
  * Decide Timesheetline field updates from one OT source row.
  */
@@ -248,7 +283,7 @@ export function buildBandaiOtLinePatch(params: {
 		appliedAt: params.appliedAt,
 	});
 	const effectiveSnap = params.effectiveScheduleSnapshot ?? null;
-	const scheduledOff = isScheduledRestDay(line, effectiveSnap);
+	const scheduledOff = isScheduledRestDay(line, effectiveSnap, source?.date);
 
 	// Always refresh approved bucket metadata when source differs or is missing.
 	// Payroll pays OT from approvedBuckets, not raw biometric overtimeHours alone.
@@ -272,24 +307,50 @@ export function buildBandaiOtLinePatch(params: {
 			if (status !== "REST_DAY") {
 				changes.status = "REST_DAY";
 				changes.primaryMarker = "REST_DAY";
+				changes.hoursWorked = "0:00";
+				changes.regularHours = "0:00";
+				changes.overtimeHours = "0:00";
+				changes.lateHours = "0:00";
+				changes.earlyOutHours = "0:00";
+				changes.undertimeHours = "0:00";
 				reasons.push(`${line.status} -> REST_DAY (schedule off / rest day, zero pay buckets)`);
+			} else {
+				let hoursCleared = false;
+				if (line.hoursWorked && !isTimeZero(line.hoursWorked)) {
+					changes.hoursWorked = "0:00";
+					hoursCleared = true;
+				}
+				if (line.regularHours && !isTimeZero(line.regularHours)) {
+					changes.regularHours = "0:00";
+					hoursCleared = true;
+				}
+				if (line.overtimeHours && !isTimeZero(line.overtimeHours)) {
+					changes.overtimeHours = "0:00";
+					hoursCleared = true;
+				}
+				if (line.lateHours && !isTimeZero(line.lateHours)) {
+					changes.lateHours = "0:00";
+					hoursCleared = true;
+				}
+				if (line.earlyOutHours && !isTimeZero(line.earlyOutHours)) {
+					changes.earlyOutHours = "0:00";
+					hoursCleared = true;
+				}
+				if (line.undertimeHours && !isTimeZero(line.undertimeHours)) {
+					changes.undertimeHours = "0:00";
+					hoursCleared = true;
+				}
+				if (hoursCleared && !reasons.some((r) => r.includes("REST_DAY"))) {
+					reasons.push("zero pay buckets on rest day: hours cleared");
+				}
 			}
 			// Keep line snapshot aligned with OFF override so rematerialization / UI agree.
-			const lineSnapOff = isScheduledRestDay(line);
+			const lineSnapOff = isScheduledRestDay(line, null, source?.date);
 			if (!lineSnapOff || status !== "REST_DAY") {
 				changes.scheduleSnapshot = buildOffDayScheduleSnapshot(
 					effectiveSnap || (line.scheduleSnapshot as Record<string, any> | null),
 				);
 				reasons.push("scheduleSnapshot stamped isOff=true from effective OFF override/schedule");
-			}
-			changes.hoursWorked = "0:00";
-			changes.regularHours = "0:00";
-			changes.overtimeHours = "0:00";
-			changes.lateHours = "0:00";
-			changes.earlyOutHours = "0:00";
-			changes.undertimeHours = "0:00";
-			if (status === "REST_DAY" && !reasons.some((r) => r.includes("REST_DAY"))) {
-				reasons.push("zero pay buckets on rest day: hours cleared");
 			}
 		} else {
 			// Scheduled workday with no OT pay buckets:
@@ -297,29 +358,50 @@ export function buildBandaiOtLinePatch(params: {
 			// - Has punch evidence but source pays nothing → INCOMPLETE (do not invent a 4th absent day)
 			const hasPunchEvidence = Boolean(line.timeIn || line.timeOut);
 			const targetStatus = hasPunchEvidence ? "INCOMPLETE" : "ABSENT";
+			const targetNotes = hasPunchEvidence
+				? "BNPI OT source: zero regular/OT/premium buckets with punch evidence; marked incomplete (unpaid)."
+				: "BNPI OT source: scheduled workday with zero regular/OT/premium buckets; marked absent.";
+
 			if (status !== targetStatus) {
 				changes.status = targetStatus;
 				changes.primaryMarker = targetStatus;
+				changes.hoursWorked = "0:00";
+				changes.regularHours = "0:00";
+				changes.overtimeHours = "0:00";
+				if (!hasPunchEvidence) {
+					changes.lateHours = "0:00";
+					changes.earlyOutHours = "0:00";
+					changes.undertimeHours = "0:00";
+				}
+				changes.notes = targetNotes;
 				reasons.push(
 					`${line.status || "UNKNOWN"} -> ${targetStatus} because source has zero regular/OT/premium buckets on scheduled workday`,
 				);
 			} else {
-				reasons.push(
-					`${targetStatus} confirmed: source has zero regular/OT/premium buckets`,
-				);
+				if (line.hoursWorked && !isTimeZero(line.hoursWorked)) {
+					changes.hoursWorked = "0:00";
+				}
+				if (line.regularHours && !isTimeZero(line.regularHours)) {
+					changes.regularHours = "0:00";
+				}
+				if (line.overtimeHours && !isTimeZero(line.overtimeHours)) {
+					changes.overtimeHours = "0:00";
+				}
+				if (!hasPunchEvidence) {
+					if (line.lateHours && !isTimeZero(line.lateHours)) {
+						changes.lateHours = "0:00";
+					}
+					if (line.earlyOutHours && !isTimeZero(line.earlyOutHours)) {
+						changes.earlyOutHours = "0:00";
+					}
+					if (line.undertimeHours && !isTimeZero(line.undertimeHours)) {
+						changes.undertimeHours = "0:00";
+					}
+				}
+				if (line.notes && line.notes !== targetNotes) {
+					changes.notes = targetNotes;
+				}
 			}
-			changes.hoursWorked = "0:00";
-			changes.regularHours = "0:00";
-			changes.overtimeHours = "0:00";
-			// Keep late/early evidence on incomplete punch days; clear on pure no-show.
-			if (!hasPunchEvidence) {
-				changes.lateHours = "0:00";
-				changes.earlyOutHours = "0:00";
-				changes.undertimeHours = "0:00";
-			}
-			changes.notes = hasPunchEvidence
-				? "BNPI OT source: zero regular/OT/premium buckets with punch evidence; marked incomplete (unpaid)."
-				: "BNPI OT source: scheduled workday with zero regular/OT/premium buckets; marked absent.";
 		}
 	} else if (
 		source.regularDays > 0 &&
@@ -338,8 +420,6 @@ export function buildBandaiOtLinePatch(params: {
 		);
 	}
 
-	// If we only cleared hours on rest day with no other delta and buckets already matched,
-	// still ensure metadata is stamped when missing.
 	if (!Object.keys(changes).length) {
 		// Force stamp approvedBuckets even when hours already match, so payroll can pay OT.
 		if (!line.metadata?.bandaiPayrollSourceRepair?.approvedBuckets) {

@@ -68,8 +68,8 @@ describe("admin migration route contract", () => {
 			"compensation",
 			"deduction",
 			"manpower-databank",
-			"worksharing-schedule",
 			"period-leave",
+			"worksharing-schedule",
 		];
 		expect(new Set(kinds).size).toBe(kinds.length);
 		expect(kinds).toContain("dm4-overtime");
@@ -98,6 +98,27 @@ describe("admin migration route contract", () => {
 		expect(full.biometricFiles).toEqual(biometrics);
 		expect(full.approvedOvertimeFiles).toEqual(overtime);
 		expect(full.sourceFiles).toEqual([...biometrics, ...overtime]);
+	});
+
+	it("builds correct URL query params for workbook deep links and tabs", () => {
+		const base = new URLSearchParams("tab=migration");
+		const opened = buildOpenWorkbookSearchParams(base, "dm3");
+		expect(opened.get("workbook")).toBe("dm3");
+		expect(opened.get("tab")).toBe("migration");
+		expect(opened.has("upload")).toBe(false);
+
+		const withUpload = buildOpenWorkbookUploadSearchParams(opened);
+		expect(withUpload.get("workbook")).toBe("dm3");
+		expect(withUpload.get("upload")).toBe("1");
+
+		const closedUpload = buildCloseWorkbookUploadSearchParams(withUpload);
+		expect(closedUpload.get("workbook")).toBe("dm3");
+		expect(closedUpload.has("upload")).toBe(false);
+
+		const closedPage = buildCloseWorkbookSearchParams(closedUpload);
+		expect(closedPage.has("workbook")).toBe(false);
+		expect(closedPage.has("upload")).toBe(false);
+		expect(closedPage.get("tab")).toBe("migration");
 	});
 
 	it("scopes biometrics-only Import attendance to selected biometrics without OT", () => {
@@ -190,7 +211,7 @@ describe("admin migration route contract", () => {
 		expect(closedPage.get("tab")).toBe("migration");
 	});
 
-	it("opens DM3 work sharing schedule upload modal via dedicated upload kind", () => {
+	it("opens DM3 worksharing schedule upload modal via dedicated upload kind", () => {
 		const dm3 = buildOpenWorkbookSearchParams(new URLSearchParams("tab=migration"), "dm3");
 		const schedule = buildOpenWorkbookUploadSearchParams(dm3, "worksharing-schedule");
 		expect(schedule.get("workbook")).toBe("dm3");
