@@ -975,6 +975,7 @@ export const config = {
 			DELETED: "Employee deleted successfully",
 			RETRIEVED: "Employee retrieved successfully",
 			RETRIEVED_ALL: "Employees retrieved successfully",
+			EMPLOYEES_SEARCHED: "Employee search completed successfully",
 			GETTING_BY_ID: "Getting employee by ID",
 		},
 		DASHBOARD: {
@@ -2178,6 +2179,7 @@ export const config = {
 			ACTIONS: {
 				CREATE_EMPLOYEE: "CREATE_EMPLOYEE",
 				GET_ALL_EMPLOYEE: "GET_ALL_EMPLOYEE",
+				SEARCH_EMPLOYEES: "SEARCH_EMPLOYEES",
 				GET_EMPLOYEE: "GET_EMPLOYEE",
 				UPDATE_EMPLOYEE: "UPDATE_EMPLOYEE",
 				DELETE_EMPLOYEE: "DELETE_EMPLOYEE",
@@ -2212,6 +2214,7 @@ export const config = {
 				EMPLOYEE_DELETED: "Deleted employee",
 				EMPLOYEE_RETRIEVED: "Retrieved employee details",
 				EMPLOYEES_RETRIEVED: "Retrieved employee list",
+				EMPLOYEES_SEARCHED: "Searched employees via integration API",
 				EMPLOYEE_ID_RESERVED: "Reserved employee ID",
 				EMPLOYEES_IMPORTED: "Started employee import",
 				ATTENDANCE_MARKED: "Marked employee attendance",

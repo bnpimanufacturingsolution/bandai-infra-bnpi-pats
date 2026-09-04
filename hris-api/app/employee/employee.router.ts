@@ -6,6 +6,7 @@ import { config } from "../../config/config";
 
 interface IController {
 	getById(req: Request, res: Response, next: NextFunction): Promise<void>;
+	searchEmployees(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	reserveEmployeeId(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -171,6 +172,167 @@ export const router = (route: Router, controller: IController): Router => {
 	 *       500:
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
+	/**
+	 * @openapi
+	 * /api/employee/search:
+	 *   get:
+	 *     summary: Search employees (integration endpoint)
+	 *     description: >
+	 *       Lightweight, integration-friendly employee search for external applications.
+	 *       Multi-word terms are AND-matched case-insensitively against employeeId,
+	 *       first/middle/last name, and email. Fuzzy ranking (typo-tolerant,
+	 *       bounded edit distance per word) runs after exact matches; relevance
+	 *       order is exact rows first, then fuzzy by score. Returns a flat,
+	 *       reduced payload (no payroll/salary data). Accepts either a standard
+	 *       Bearer token or an integration API key via the X-API-Key header
+	 *       (server env: INTEGRATION_API_KEYS, comma-separated, fail-closed).
+	 *     tags: [Employee]
+	 *     security:
+	 *       - bearerAuth: []
+	 *       - apiKey: []
+	 *     parameters:
+	 *       - in: query
+	 *         name: query
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *         description: Search text (aliases q, search). Multi-word supported.
+	 *         example: "zen andrei"
+	 *       - in: query
+	 *         name: page
+	 *         required: false
+	 *         schema:
+	 *           type: integer
+	 *           minimum: 1
+	 *         description: 1-based page number (default 1)
+	 *         example: 1
+	 *       - in: query
+	 *         name: limit
+	 *         required: false
+	 *         schema:
+	 *           type: integer
+	 *           minimum: 1
+	 *           maximum: 100
+	 *         description: Results per page (default 10, cap 100)
+	 *         example: 10
+	 *       - in: query
+	 *         name: sort
+	 *         required: false
+	 *         schema:
+	 *           type: string
+	 *           enum: [relevance, employeeId, employeeId:desc, fullName, fullName:desc]
+	 *         description: Result order (default relevance = exact first, then fuzzy score)
+	 *         example: relevance
+	 *       - in: query
+	 *         name: employmentStatus
+	 *         required: false
+	 *         schema:
+	 *           type: string
+	 *         description: Optional exact employment status filter (e.g. ACTIVE)
+	 *         example: "ACTIVE"
+	 *       - in: query
+	 *         name: employmentType
+	 *         required: false
+	 *         schema:
+	 *           type: string
+	 *         description: Optional exact employment type filter (e.g. REGULAR)
+	 *         example: "REGULAR"
+	 *       - in: query
+	 *         name: departmentId
+	 *         required: false
+	 *         schema:
+	 *           type: string
+	 *         description: Optional exact department id filter
+	 *       - in: query
+	 *         name: positionId
+	 *         required: false
+	 *         schema:
+	 *           type: string
+	 *         description: Optional exact position id filter
+	 *     responses:
+	 *       200:
+	 *         description: Employee search completed successfully
+	 *         content:
+	 *           application/json:
+	 *             schema:
+	 *               allOf:
+	 *                 - $ref: '#/components/schemas/Success'
+	 *                 - type: object
+	 *                   properties:
+	 *                     data:
+	 *                       type: object
+	 *                       properties:
+	 *                         employees:
+	 *                           type: array
+	 *                           items:
+	 *                             type: object
+	 *                             properties:
+	 *                               id:
+	 *                                 type: string
+	 *                               employeeId:
+	 *                                 type: string
+	 *                               fullName:
+	 *                                 type: string
+	 *                               email:
+	 *                                 type: string
+	 *                                 nullable: true
+	 *                               employmentStatus:
+	 *                                 type: string
+	 *                               employmentType:
+	 *                                 type: string
+	 *                                 nullable: true
+	 *                               department:
+	 *                                 type: object
+	 *                                 nullable: true
+	 *                               position:
+	 *                                 type: object
+	 *                                 nullable: true
+	 *                         count:
+	 *                           type: integer
+	 *                         pagination:
+	 *                           type: object
+	 *                           properties:
+	 *                             total:
+	 *                               type: integer
+	 *                             page:
+	 *                               type: integer
+	 *                             limit:
+	 *                               type: integer
+	 *                             totalPages:
+	 *                               type: integer
+	 *                             hasNext:
+	 *                               type: boolean
+	 *                             hasPrev:
+	 *                               type: boolean
+	 *                         sort:
+	 *                           type: string
+	 *                         fuzzy:
+	 *                           type: integer
+	 *                           description: Number of rows matched only via fuzzy (typo) ranking
+	 *                         query:
+	 *                           type: string
+	 *                         limit:
+	 *                           type: integer
+	 *       400:
+	 *         $ref: '#/components/responses/BadRequest'
+	 *       401:
+	 *         $ref: '#/components/responses/Unauthorized'
+	 *       500:
+	 *         $ref: '#/components/responses/InternalServerError'
+	 */
+	// Registered BEFORE /:id so "search" is not captured as an id
+	routes.get(
+		"/search",
+		cache({
+			ttl: 30,
+			keyGenerator: (req: Request) => {
+				const queryKey = Buffer.from(JSON.stringify(req.query || {})).toString("base64");
+				return `cache:employee:search:${queryKey}`;
+			},
+		}),
+		controller.searchEmployees,
+	);
+
 	// Cache individual employee with predictable key for invalidation
 	routes.get(
 		"/:id",

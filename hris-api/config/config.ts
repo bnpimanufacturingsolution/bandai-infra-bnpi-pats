@@ -134,6 +134,8 @@ export const config = {
 	auditLogging: {
 		enabled: process.env.AUDIT_LOGGING_ENABLED !== "false",
 	},
+	/** Comma-separated integration API keys for machine-to-machine endpoints (e.g. /employee/search). Empty/undefined = API-key auth disabled (fail-closed). */
+	integrationApiKeys: process.env.INTEGRATION_API_KEYS || "",
 	betterStackEnabled:
 		process.env.NODE_ENV === "production"
 			? process.env.BETTER_STACK_ENABLED !== "false"
