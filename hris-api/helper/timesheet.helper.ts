@@ -1550,6 +1550,7 @@ export interface PayrollAutoApproveEnsureResult {
 	preservedManual: number;
 	skippedLocked: number;
 	skippedPaid: number;
+	skippedRefresh: number;
 	remainingToPrepare: number | null;
 	createLimit: number;
 	errors: Array<{ employeeId: string; message: string }>;
@@ -1581,6 +1582,14 @@ export async function ensurePayrollPeriodTimesheetsAutoApproved(
 		departmentId?: string | null;
 		sectionId?: string | null;
 		limit?: number;
+		/**
+		 * Payroll-generate lane: creates/upgrades still run (finite coverage
+		 * work), but pure refresh of already-approved sheets is skipped.
+		 * Refresh is perpetual maintenance owned by live hooks and the
+		 * explicit ensure endpoint — running it inside every generate would
+		 * rebuild the whole fleet's lines before a single peso computes.
+		 */
+		skipRefresh?: boolean;
 	},
 ): Promise<PayrollAutoApproveEnsureResult> {
 	const { organizationId, payrollPeriodId, actorEmployeeId } = params;
@@ -1759,6 +1768,7 @@ export async function ensurePayrollPeriodTimesheetsAutoApproved(
 		preservedManual: 0,
 		skippedLocked: 0,
 		skippedPaid: 0,
+		skippedRefresh: 0,
 		remainingToPrepare: 0,
 		createLimit: limit,
 		errors: [],
@@ -1833,7 +1843,12 @@ export async function ensurePayrollPeriodTimesheetsAutoApproved(
 		else stateChangingItems.push(item);
 	}
 	const budgetedStateChanging = stateChangingItems.slice(0, limit);
-	const budgetedRefresh = refreshItems.slice(0, Math.max(0, limit - budgetedStateChanging.length));
+	const budgetedRefresh = params.skipRefresh
+		? []
+		: refreshItems.slice(0, Math.max(0, limit - budgetedStateChanging.length));
+	if (params.skipRefresh) {
+		result.skippedRefresh = refreshItems.length;
+	}
 	// remainingToPrepare tracks finite create/upgrade work only: refresh is
 	// perpetual maintenance (event hooks keep auto-approved sheets live, and
 	// payroll generate covers the rest), so pending refreshes must not hold
