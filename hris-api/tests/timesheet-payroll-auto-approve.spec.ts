@@ -180,6 +180,14 @@ describe("payroll-time auto-approve wiring contract", () => {
 		expect(candidatesAt).to.be.greaterThan(ensureAt);
 	});
 
+	it("payroll generation skips perpetual refresh inside ensure", () => {
+		expect(helperSource).to.include("skipRefresh");
+		expect(helperSource).to.include("skippedRefresh");
+		const generateAt = payrollSource.indexOf("export async function generatePayrollFromTimesheets");
+		const body = payrollSource.slice(generateAt);
+		expect(body).to.include("skipRefresh: true");
+	});
+
 	it("registers POST /ensure-auto-approved for HR policy managers", () => {
 		expect(routerSource).to.include('"/ensure-auto-approved"');
 		expect(routerSource).to.include("controller.ensureAutoApprovedTimesheets");

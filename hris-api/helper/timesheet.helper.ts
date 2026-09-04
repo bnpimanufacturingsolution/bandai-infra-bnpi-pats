@@ -1550,6 +1550,7 @@ export interface PayrollAutoApproveEnsureResult {
 	preservedManual: number;
 	skippedLocked: number;
 	skippedPaid: number;
+	skippedRefresh: number;
 	remainingToPrepare: number | null;
 	createLimit: number;
 	errors: Array<{ employeeId: string; message: string }>;
@@ -1581,6 +1582,14 @@ export async function ensurePayrollPeriodTimesheetsAutoApproved(
 		departmentId?: string | null;
 		sectionId?: string | null;
 		limit?: number;
+		/**
+		 * Payroll-generate lane: creates/upgrades still run (finite coverage
+		 * work), but pure refresh of already-approved sheets is skipped.
+		 * Refresh is perpetual maintenance owned by live hooks and the
+		 * explicit ensure endpoint — running it inside every generate would
+		 * rebuild the whole fleet's lines before a single peso computes.
+		 */
+		skipRefresh?: boolean;
 	},
 ): Promise<PayrollAutoApproveEnsureResult> {
 	const { organizationId, payrollPeriodId, actorEmployeeId } = params;
@@ -1759,6 +1768,7 @@ export async function ensurePayrollPeriodTimesheetsAutoApproved(
 		preservedManual: 0,
 		skippedLocked: 0,
 		skippedPaid: 0,
+		skippedRefresh: 0,
 		remainingToPrepare: 0,
 		createLimit: limit,
 		errors: [],
@@ -1799,8 +1809,9 @@ export async function ensurePayrollPeriodTimesheetsAutoApproved(
 	};
 
 	// Partition budgeted work first so the pool below runs independent
-	// per-employee tasks. Creates stay sequential (millisecond codegen would
-	// collide under concurrency); upgrades/refreshes run in a bounded pool.
+	// per-employee tasks. Creates, upgrades, and refreshes all run in a
+	// bounded pool (P2002-adopt keeps the rare millisecond-codegen
+	// collision safe); remainingToPrepare tracks unfinished creates/upgrades only.
 	// Refresh work is repeatable maintenance: it is classified separately so
 	// it can never starve finite create/upgrade work behind it, and
 	// remainingToPrepare tracks unfinished creates/upgrades only.
@@ -1833,7 +1844,12 @@ export async function ensurePayrollPeriodTimesheetsAutoApproved(
 		else stateChangingItems.push(item);
 	}
 	const budgetedStateChanging = stateChangingItems.slice(0, limit);
-	const budgetedRefresh = refreshItems.slice(0, Math.max(0, limit - budgetedStateChanging.length));
+	const budgetedRefresh = params.skipRefresh
+		? []
+		: refreshItems.slice(0, Math.max(0, limit - budgetedStateChanging.length));
+	if (params.skipRefresh) {
+		result.skippedRefresh = refreshItems.length;
+	}
 	// remainingToPrepare tracks finite create/upgrade work only: refresh is
 	// perpetual maintenance (event hooks keep auto-approved sheets live, and
 	// payroll generate covers the rest), so pending refreshes must not hold
@@ -1955,13 +1971,16 @@ export async function ensurePayrollPeriodTimesheetsAutoApproved(
 		}
 	};
 
-	for (const item of budgetedStateChanging.filter((candidate) => candidate.action === "create")) {
-		await runWorkItem(item);
+	// Creates run in the same bounded pool as upgrades/refresh. Collision
+	// risk is negligible (codegen spreads across minutes of preceding
+	// obligation/materialize work) and the P2002-adopt branch above makes a
+	// same-millisecond collision safe by adopting the winner's sheet.
+	for (let start = 0; start < budgetedStateChanging.length; start += ENSURE_POOL_SIZE) {
+		await Promise.all(
+			budgetedStateChanging.slice(start, start + ENSURE_POOL_SIZE).map(runWorkItem),
+		);
 	}
-	const pooled = [
-		...budgetedStateChanging.filter((candidate) => candidate.action !== "create"),
-		...budgetedRefresh,
-	];
+	const pooled = [...budgetedRefresh];
 	for (let start = 0; start < pooled.length; start += ENSURE_POOL_SIZE) {
 		await Promise.all(pooled.slice(start, start + ENSURE_POOL_SIZE).map(runWorkItem));
 	}

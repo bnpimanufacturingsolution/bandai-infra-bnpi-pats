@@ -1638,12 +1638,17 @@ export async function generatePayrollFromTimesheets(
 			departmentId: options?.departmentId,
 			sectionId: options?.sectionId,
 			limit: 5000,
+			// Generate covers candidates via creates/upgrades; pure refresh of
+			// already-approved sheets is perpetual maintenance (live hooks +
+			// explicit ensure endpoint own it) and must not gate payroll.
+			skipRefresh: true,
 		});
 		payrollLogger.info(
 			`Payroll auto-approve ensure for period ${payrollPeriodId}: ` +
 				`eligible=${ensured.eligibleEmployees} created=${ensured.created} ` +
 				`autoApproved=${ensured.autoApproved} lines=${ensured.refreshedLines} ` +
 				`preservedManual=${ensured.preservedManual} skippedPaid=${ensured.skippedPaid} ` +
+				`skippedRefresh=${ensured.skippedRefresh} ` +
 				`errors=${ensured.errors.length}`,
 		);
 	} catch (ensureError) {
