@@ -129,6 +129,7 @@ export const controller = (prisma: PrismaClient) => {
 			// Base where clause
 			const whereClause: Prisma.RuleWhereInput = {
 				isDeleted: false,
+				organizationId: String((req as any).organizationId || ""),
 			};
 
 			// search fields sample ("name", "description", "type")

@@ -29,6 +29,7 @@ export default function TeamManagement() {
 		authEmployee?.isManager === true ||
 		authEmployee?.isHrManager === true ||
 		user?.role === "hris-employee-manager" ||
+		user?.role === "hris-line-leader" ||
 		user?.role === "hris-hr-manager" ||
 		user?.role === "admin";
 

@@ -295,7 +295,7 @@ const LeavePolicyMigrationSchema = z.object({
 });
 
 const TimesheetConfigMigrationSchema = z.object({
-	enableAutoApprove: z.boolean().default(false),
+	enableAutoApprove: z.boolean().default(true),
 	enableEditBeforeSubmission: z.boolean().default(true),
 	rejectBehavior: z.enum(["REVISE", "RESET_TO_DRAFT"]).default("REVISE"),
 	overtimeFlagThresholdMinutes: z.number().int().min(0).default(60),

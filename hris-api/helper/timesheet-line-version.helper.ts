@@ -102,18 +102,28 @@ export async function writeEffectiveTimesheetLine(
 		ledgerType?: TimesheetLineLedgerType;
 		editedBy?: string | null;
 		editReason?: string | null;
+		/**
+		 * Lookup-skip lane: when the caller preloaded the sheet's effective
+		 * lines (same predicates + revision ordering as the findFirst below),
+		 * pass the preloaded row (or null when the date is absent) to skip a
+		 * per-day round-trip. Create-collision fallback still guards races.
+		 */
+		preloadedLine?: any;
+		skipExistingLineLookup?: boolean;
 	},
 ) {
-	const current = await (prisma as any).timesheetline.findFirst({
-		where: {
-			organizationId: params.organizationId,
-			timesheetId: params.timesheetId,
-			date: params.date,
-			isDeleted: false,
-			isEffective: true,
-		},
-		orderBy: [{ revisionNo: "desc" }, { updatedAt: "desc" }],
-	});
+	const current = params.skipExistingLineLookup
+		? (params.preloadedLine ?? null)
+		: await (prisma as any).timesheetline.findFirst({
+				where: {
+					organizationId: params.organizationId,
+					timesheetId: params.timesheetId,
+					date: params.date,
+					isDeleted: false,
+					isEffective: true,
+				},
+				orderBy: [{ revisionNo: "desc" }, { updatedAt: "desc" }],
+			});
 
 	if (!current) {
 		const createData = {

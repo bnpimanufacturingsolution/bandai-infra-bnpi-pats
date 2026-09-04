@@ -221,7 +221,7 @@ export const DEFAULT_COMPANY_PROFILE = {
 	timezone: DEFAULT_PROVISIONING_TIMEZONE,
 };
 export const DEFAULT_TIMESHEET_CONFIG_SEED = {
-	enableAutoApprove: false,
+	enableAutoApprove: true,
 	enableEditBeforeSubmission: true,
 	rejectBehavior: "REVISE" as const,
 	overtimeFlagThresholdMinutes: 60,

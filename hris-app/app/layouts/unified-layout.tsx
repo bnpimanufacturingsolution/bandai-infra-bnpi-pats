@@ -42,6 +42,7 @@ export default function UnifiedLayout() {
 		"hris-hr-manager",
 		"hris-hr-user",
 		"hris-employee-manager",
+		"hris-line-leader",
 	];
 	const notificationsPath =
 		user?.role === "admin" ||

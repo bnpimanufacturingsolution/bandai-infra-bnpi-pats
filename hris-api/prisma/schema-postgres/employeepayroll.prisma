@@ -119,6 +119,7 @@ model EmployeePayroll {
   thirteenthMonthPay               Float @default(0)
   aclVlConversion                  Float @default(0)
   otMealAllowance                  Float @default(0)
+  attendanceRecognitionProgram     Float @default(0)
   perfectAttendance                Float @default(0)
   mealAllowance                    Float @default(0)
   lineLeaderAllowance              Float @default(0)

@@ -74,6 +74,7 @@ const adminRoutes = [
 		route("timesheet", "routes/admin/rules-policies/timesheet.tsx"),
 		route("recruitment", "routes/admin/rules-policies/recruitment.tsx"),
 		route("workflows", "routes/admin/rules-policies/workflows.tsx"),
+		route("disciplinary", "routes/admin/rules-policies/disciplinary.tsx"),
 	]),
 	...prefix("devices", [
 		route("manage", "routes/admin/devices/manage.tsx"),
@@ -84,7 +85,6 @@ const adminRoutes = [
 	route("audit-logs", "routes/admin/audit-logs.tsx"),
 	route("activity-logs", "routes/admin/activity-logs.tsx"),
 	route("settings", "routes/admin/settings.tsx"),
-	route("disciplinary-action", "routes/admin/disciplinary-action.tsx"),
 	route("tin-library", "routes/admin/tin-library.tsx"),
 	route("messages", "routes/admin/messages.tsx"),
 	route("notifications", "routes/admin/notifications.tsx"),
@@ -144,9 +144,12 @@ const hrRoutes = [
 	route("employees", "routes/hr/employees.tsx"),
 	route("employees/new", "routes/hr/employees.new.tsx"),
 	route("employees/:id/edit", "routes/hr/employees.$id.edit.tsx"),
+	route("personnel-actions/transfer", "routes/hr/personnel-actions.transfer.tsx"),
+	route("personnel-actions/promotion", "routes/hr/personnel-actions.promotion.tsx"),
 	route("employee-profile", "routes/hr/employee-profile.tsx"),
 	route("employee-documents", "routes/hr/employee-documents.tsx"),
 	route("employee-status-changes", "routes/hr/employee-status-changes.tsx"),
+	route("personnel-actions-history", "routes/hr/personnel-actions-history.tsx"),
 	route("recruitment", "routes/hr/recruitment-page.tsx"),
 	route("jobs", "routes/hr/jobs.tsx"),
 	route("attendance", "routes/hr/attendance.tsx"),
@@ -190,6 +193,7 @@ const hrRoutes = [
 	route("leave-settings", "routes/hr/leave-settings.tsx"),
 	route("audit-logs", "routes/hr/audit-logs.tsx"),
 	route("request-process", "routes/hr/workflows-2.tsx", { id: "hr-workflows-2" }),
+	route("disciplinary-action", "routes/hr/disciplinary-action.tsx"),
 ];
 
 const pdfRoutes = [

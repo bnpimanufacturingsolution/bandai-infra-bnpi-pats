@@ -23,8 +23,7 @@ export function isAdminViewportFillPath(pathname: string): boolean {
 		path.startsWith("/admin/configuration/employees/") || // employee create/edit
 		path.startsWith("/admin/devices/manage/") || // device detail
 		path.startsWith("/admin/devices/enroll") ||
-		path.startsWith("/admin/devices/biometrics") ||
-		path.startsWith("/admin/rules-policies/")
+		path.startsWith("/admin/devices/biometrics")
 	) {
 		// activity-logs under a user is a table — allow fill below
 		if (/^\/admin\/configuration\/users\/[^/]+\/activity-logs$/.test(path)) {
@@ -42,7 +41,7 @@ export function isAdminViewportFillPath(pathname: string): boolean {
 	if (
 		path === "/admin/audit-logs" ||
 		path === "/admin/activity-logs" ||
-		path === "/admin/disciplinary-action" ||
+		path === "/admin/rules-policies/disciplinary" ||
 		path === "/admin/devices" ||
 		path === "/admin/devices/manage" ||
 		path === "/admin/devices/events" ||

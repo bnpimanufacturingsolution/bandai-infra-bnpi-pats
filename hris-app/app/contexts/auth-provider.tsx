@@ -113,6 +113,7 @@ const AuthProvider = ({ children, disableBootstrap = false }: AuthProviderProps)
 				"hris-hr-manager": ["hris-hr-manager"],
 				"hris-hr-user": ["hris-hr-user"],
 				"hris-employee-manager": ["hris-employee-manager"],
+				"hris-line-leader": ["hris-line-leader"],
 				"hris-employee": ["hris-employee"],
 				"hris-timekeeper": ["hris-timekeeper"],
 			};
@@ -137,6 +138,10 @@ const AuthProvider = ({ children, disableBootstrap = false }: AuthProviderProps)
 				case "hris-hr-manager":
 					return scope === "APP";
 				case "hris-hr-user":
+					return scope === "APP";
+				case "hris-employee-manager":
+					return scope === "APP";
+				case "hris-line-leader":
 					return scope === "APP";
 				case "hris-employee":
 					return scope === "APP";

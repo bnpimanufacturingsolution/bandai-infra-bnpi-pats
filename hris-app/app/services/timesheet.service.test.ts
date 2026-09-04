@@ -150,4 +150,33 @@ describe("timesheetService client contract", () => {
 
 		expect(result.timesheet.breakdown).toBe(breakdown);
 	});
+
+	it("posts payroll-period generation to the auto-approve ensure endpoint", async () => {
+		const { default: timesheetService } = await import("./timesheet.service");
+		const payload = {
+			payrollPeriodId: "period-1",
+			eligibleEmployees: 2,
+			created: 1,
+			autoApproved: 2,
+			refreshedLines: 15,
+			preservedManual: 0,
+			skippedLocked: 0,
+			skippedPaid: 0,
+			remainingToPrepare: 0,
+			createLimit: 500,
+			errors: [],
+		};
+
+		hrisGetMock.mockResolvedValueOnce({ data: payload });
+
+		const result = await timesheetService.ensureAutoApprovedTimesheets("period-1", {
+			createLimit: 500,
+		});
+
+		expect(hrisGetMock).toHaveBeenCalledWith("/api/timesheet/ensure-auto-approved", {
+			payrollPeriodId: "period-1",
+			createLimit: 500,
+		});
+		expect(result).toEqual(payload);
+	});
 });

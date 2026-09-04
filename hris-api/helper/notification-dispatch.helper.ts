@@ -33,6 +33,7 @@ type NotificationRouteRole =
 	| "hris-hr-manager"
 	| "hris-hr-user"
 	| "hris-employee-manager"
+	| "hris-line-leader"
 	| "hris-employee"
 	| "hris-timekeeper"
 	| string
@@ -47,7 +48,8 @@ type NotificationCategory =
 	| "SYSTEM"
 	| "ANNOUNCEMENT"
 	| "REMINDER"
-	| "ALERT";
+	| "ALERT"
+	| "DISCIPLINARY";
 
 type NotificationRouteKey =
 	| "REQUEST_APPROVAL_VIEW"
@@ -139,7 +141,8 @@ export const buildRequestTargetUrl = (
 		role === "hris-hr-manager" ||
 		role === "hris-hr-user" ||
 		role === "hris-admin" ||
-		role === "hris-employee-manager"
+		role === "hris-employee-manager" ||
+		role === "hris-line-leader"
 	) {
 		return `${approvalBase}?action=view&id=${requestId}`;
 	}

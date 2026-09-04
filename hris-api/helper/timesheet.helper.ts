@@ -17,16 +17,62 @@ import {
 	writeEffectiveTimesheetLine,
 } from "./timesheet-line-version.helper";
 import {
-	buildTimesheetBreakdownFromObligations,
 	ensureAttendanceObligationsForPayrollPeriod,
 	materializeTimesheetLinesFromObligations,
 } from "./attendance-obligation.helper";
 import { normalizeDayLaborType } from "./day-labor-type.helper";
+import {
+	AUTO_APPROVE_SYSTEM_ACTOR,
+	buildTimesheetAutoApprovalPatch,
+} from "./timesheet-config.helper";
 
 const ATTENDANCE_REFRESHABLE_TIMESHEET_STATUSES = new Set(["DRAFT", "REVISED", "REJECTED"]);
 
 export function isTimesheetAttendanceRefreshAllowed(status: string | null | undefined): boolean {
 	return ATTENDANCE_REFRESHABLE_TIMESHEET_STATUSES.has(String(status || "").toUpperCase());
+}
+
+function readTimesheetMetadata(value: unknown): Record<string, any> {
+	return value && typeof value === "object" && !Array.isArray(value)
+		? (value as Record<string, any>)
+		: {};
+}
+
+export function isTimesheetSystemAutoApproved(timesheet: any): boolean {
+	const metadata = readTimesheetMetadata(timesheet?.metadata);
+	return (
+		metadata.autoApproved === true ||
+		timesheet?.approvedBy === AUTO_APPROVE_SYSTEM_ACTOR
+	);
+}
+
+/**
+ * System auto-approval refresh lane (2026-09-04): auto-approved timesheets
+ * stay live until payroll locks them, so new punches / obligation updates
+ * keep reflecting on the sheet. Manual manager-approved sheets, locked
+ * sheets, and sheets already consumed by a paid payroll row stay frozen.
+ */
+export function isTimesheetSystemRefreshAllowed(timesheet: any): boolean {
+	if (!timesheet || typeof timesheet !== "object") return false;
+	if (timesheet.lockedAt || timesheet.lockedEmployeePayrollId) return false;
+	if (isTimesheetAttendanceRefreshAllowed(timesheet.status)) return true;
+	if (String(timesheet.status || "").toUpperCase() !== "APPROVED") return false;
+	return isTimesheetSystemAutoApproved(timesheet);
+}
+
+export type TimesheetAutoApproveEnsureAction = "create" | "upgrade" | "refresh" | "preserve" | "skip";
+
+export function resolveTimesheetAutoApproveEnsureAction(timesheet: any | null): TimesheetAutoApproveEnsureAction {
+	if (!timesheet) return "create";
+	if (timesheet.lockedAt || timesheet.lockedEmployeePayrollId) return "skip";
+	const status = String(timesheet.status || "").toUpperCase();
+	if (status === "APPROVED") {
+		return isTimesheetSystemAutoApproved(timesheet) ? "refresh" : "preserve";
+	}
+	if (status === "DRAFT" || status === "SUBMITTED" || status === "REVISED" || status === "REJECTED") {
+		return "upgrade";
+	}
+	return "skip";
 }
 
 function resolveEmployeeNameSnapshot(employee: any): string | null {
@@ -719,6 +765,10 @@ export async function refreshTimesheetForPayrollPeriodSnapshot(
 			id: true,
 			status: true,
 			notes: true,
+			metadata: true,
+			approvedBy: true,
+			lockedAt: true,
+			lockedEmployeePayrollId: true,
 			payrollPeriodId: true,
 			payrollPeriod: {
 				select: {
@@ -759,7 +809,9 @@ export async function refreshTimesheetForPayrollPeriodSnapshot(
 
 	if (!existingTimesheet.payrollPeriod) return null;
 
-	if (!isTimesheetAttendanceRefreshAllowed(existingTimesheet.status)) {
+	// Manual manager-approved snapshots stay frozen; auto-approved sheets stay
+	// live until payroll locks them so attendance keeps reflecting per employee.
+	if (!isTimesheetSystemRefreshAllowed(existingTimesheet)) {
 		return {
 			...existingTimesheet,
 			refreshSkipped: true,
@@ -772,59 +824,33 @@ export async function refreshTimesheetForPayrollPeriodSnapshot(
 	});
 	if (!employee) return null;
 
-	const todayKey = getDateKeyInTimeZone(new Date());
-	const periodEndKey = getUtcDateKey(existingTimesheet.payrollPeriod.endDate);
-	const actualEndDate =
-		periodEndKey <= todayKey
-			? existingTimesheet.payrollPeriod.endDate
-			: new Date(Math.min(Date.now(), existingTimesheet.payrollPeriod.endDate.getTime()));
-	const effectiveStartDate = getEffectiveEmploymentStartDate(employee);
 	const periodStartKey = getUtcDateKey(existingTimesheet.payrollPeriod.startDate);
+	const periodEndKey = getUtcDateKey(existingTimesheet.payrollPeriod.endDate);
+	const effectiveStartDate = getEffectiveEmploymentStartDate(employee);
 	const effectiveStartKey = effectiveStartDate
 		? getDateKeyInTimeZone(effectiveStartDate)
 		: periodStartKey;
 	const timesheetStartKey =
 		effectiveStartKey > periodStartKey ? effectiveStartKey : periodStartKey;
-	const timesheetStartDate = new Date(`${timesheetStartKey}T00:00:00.000Z`);
 
-	await ensureAttendanceObligationsForPayrollPeriod(prisma, {
+	// Persist fresh lines across the whole period so Timesheetline rows (the
+	// payroll/day-report source) match current obligations, not a stale
+	// snapshot. Auto-approved sheets rebuild; manual drafts merge.
+	const persistedLines = await materializeTimesheetLinesFromObligations(prisma, {
 		organizationId,
-		payrollPeriodId,
 		employeeId,
+		payrollPeriodId,
+		timesheetId: existingTimesheet.id,
+		fromDate: new Date(`${timesheetStartKey}T00:00:00.000Z`),
+		toDate: new Date(`${periodEndKey}T00:00:00.000Z`),
+		forceRefreshLines: isTimesheetSystemAutoApproved(existingTimesheet),
 	});
-	const obligations = await (prisma as any).attendanceObligation.findMany({
-		where: {
-			organizationId,
-			employeeId,
-			payrollPeriodId,
-			date: { gte: timesheetStartDate, lte: actualEndDate },
-			isDeleted: false,
-		},
-		orderBy: { date: "asc" },
-	});
-	const breakdown = buildTimesheetBreakdownFromObligations(obligations);
-	const summary = generateTimesheetSummary(breakdown as any);
-	const realAttendanceIds = obligations
-		.map((obligation: any) => obligation.attendanceId)
-		.filter(Boolean);
 
-	const updatedTimesheet = await prisma.timesheet.update({
+	const updatedTimesheet = await prisma.timesheet.findFirst({
 		where: { id: existingTimesheet.id },
-		data: {
-			totalDays: breakdown.length,
-			...summary,
-			attendances: {
-				set: realAttendanceIds.map((id: string) => ({ id })),
-			},
-			metadata: {
-				...(summary as any).metadata,
-				sourceType: "ATTENDANCE_OBLIGATION",
-				snapshotState: "DRAFT_PREVIEW",
-			},
-		},
 	});
-
-	(updatedTimesheet as any).breakdown = breakdown;
+	if (!updatedTimesheet) return null;
+	(updatedTimesheet as any).breakdown = buildBreakdownFromTimesheetLines(persistedLines as any);
 	return updatedTimesheet;
 }
 
@@ -837,6 +863,7 @@ async function ensurePeriodDraftsAndTodayLinesWithPrisma(
 		employeeIds?: string[];
 		limit: number;
 		payFrequency?: string | null;
+		payrollPeriodStartDate: Date;
 		payrollPeriodEndDate: Date;
 		todayDate: Date;
 	},
@@ -846,6 +873,7 @@ async function ensurePeriodDraftsAndTodayLinesWithPrisma(
 		payrollPeriodId,
 		actorEmployeeId,
 		payFrequency,
+		payrollPeriodStartDate,
 		payrollPeriodEndDate,
 		todayDate,
 	} = params;
@@ -927,6 +955,42 @@ async function ensurePeriodDraftsAndTodayLinesWithPrisma(
 		payrollPeriodId,
 	});
 
+	const periodStartDate = normalizeToStartOfDay(new Date(payrollPeriodStartDate));
+	const periodEndDate = new Date(payrollPeriodEndDate);
+	const fullRangeToDate = periodEndDate < todayDate ? periodEndDate : todayDate;
+
+	// New drafts start with real attendance lines for the elapsed period so
+	// each employee's timesheet reflects punches immediately — not an empty
+	// shell waiting for a manual submission.
+	let createdRefreshed = 0;
+	if (createBatch.length > 0) {
+		const createdTimesheets = await prisma.timesheet.findMany({
+			where: {
+				organizationId,
+				payrollPeriodId,
+				employeeId: { in: createBatch.map((employee) => employee.id) },
+				isDeleted: false,
+			},
+			select: { id: true, employeeId: true },
+		});
+		for (const timesheet of createdTimesheets) {
+			try {
+				const lines = await materializeTimesheetLinesFromObligations(prisma, {
+					organizationId,
+					employeeId: timesheet.employeeId,
+					payrollPeriodId,
+					timesheetId: timesheet.id,
+					fromDate: periodStartDate,
+					toDate: fullRangeToDate,
+					skipEnsureAttendanceObligations: true,
+				});
+				createdRefreshed += lines.length;
+			} catch {
+				// One employee's line build must not fail the whole batch.
+			}
+		}
+	}
+
 	const tomorrowDate = new Date(todayDate);
 	tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
 	const editableTimesheets = eligibleEmployeeIds.length
@@ -980,7 +1044,7 @@ async function ensurePeriodDraftsAndTodayLinesWithPrisma(
 		eligibleEmployees: eligibleEmployees.length,
 		existing: existingEmployeeIds.size,
 		created: createBatch.length,
-		refreshed,
+		refreshed: refreshed + createdRefreshed,
 		missingEmployees: createBatch.length,
 		remainingDraftsToPrepare: missingEmployees.length > limit ? null : 0,
 		createLimit: limit,
@@ -1009,6 +1073,7 @@ export async function ensurePeriodDraftsAndTodayLinesFromAggregate(
 		select: {
 			id: true,
 			payFrequency: true,
+			startDate: true,
 			endDate: true,
 		},
 	});
@@ -1027,6 +1092,7 @@ export async function ensurePeriodDraftsAndTodayLinesFromAggregate(
 		employeeIds: params.employeeIds,
 		limit,
 		payFrequency,
+		payrollPeriodStartDate: payrollPeriod.startDate,
 		payrollPeriodEndDate: payrollPeriod.endDate,
 		todayDate,
 	});
@@ -1334,7 +1400,7 @@ export async function repairCurrentPeriodAttendanceTimesheetCoverage(
 	};
 }
 
-async function buildTimesheetForPayrollPeriod(
+export async function buildTimesheetForPayrollPeriod(
 	prisma: PrismaClient,
 	employeeId: string,
 	organizationId: string,
@@ -1465,6 +1531,461 @@ async function buildTimesheetForPayrollPeriod(
 	}
 
 	return timesheet;
+}
+
+export interface PayrollAutoApproveEnsureOptions {
+	actorEmployeeId?: string | null;
+	employeeIds?: string[];
+	departmentId?: string | null;
+	sectionId?: string | null;
+	limit?: number;
+}
+
+export interface PayrollAutoApproveEnsureResult {
+	payrollPeriodId: string;
+	eligibleEmployees: number;
+	created: number;
+	autoApproved: number;
+	refreshedLines: number;
+	preservedManual: number;
+	skippedLocked: number;
+	skippedPaid: number;
+	skippedRefresh: number;
+	remainingToPrepare: number | null;
+	createLimit: number;
+	errors: Array<{ employeeId: string; message: string }>;
+}
+
+/**
+ * System auto-approval ensure lane (2026-09-04, operator directive: no more
+ * employee-submit → manager-approve step).
+ *
+ * Guarantees every eligible employee owns an APPROVED timesheet whose lines
+ * reflect current AttendanceObligation truth, so payroll can be generated at
+ * any time without waiting for manual submission or approval:
+ *
+ * - missing → create + full-period materialize + system auto-approve
+ * - DRAFT / SUBMITTED / REVISED / REJECTED → full-period materialize + system
+ *   auto-approve (legacy manual-queue rows convert automatically)
+ * - APPROVED + system auto-approved → rebuild lines from current obligations
+ *   (fresh punches keep reflecting until payroll locks the sheet)
+ * - APPROVED + manual manager approval → preserved untouched
+ * - locked / paid-payroll sheets → never mutated
+ */
+export async function ensurePayrollPeriodTimesheetsAutoApproved(
+	prisma: PrismaClient,
+	params: {
+		organizationId: string;
+		payrollPeriodId: string;
+		actorEmployeeId?: string | null;
+		employeeIds?: string[];
+		departmentId?: string | null;
+		sectionId?: string | null;
+		limit?: number;
+		/**
+		 * Payroll-generate lane: creates/upgrades still run (finite coverage
+		 * work), but pure refresh of already-approved sheets is skipped.
+		 * Refresh is perpetual maintenance owned by live hooks and the
+		 * explicit ensure endpoint — running it inside every generate would
+		 * rebuild the whole fleet's lines before a single peso computes.
+		 */
+		skipRefresh?: boolean;
+	},
+): Promise<PayrollAutoApproveEnsureResult> {
+	const { organizationId, payrollPeriodId, actorEmployeeId } = params;
+	const limit = Math.min(Math.max(Math.floor(params.limit || 250), 1), 5000);
+	const employeeIds = Array.from(new Set((params.employeeIds || []).filter(Boolean)));
+	const departmentId =
+		typeof params.departmentId === "string" && params.departmentId.trim() !== "" &&
+		params.departmentId !== "all"
+			? params.departmentId.trim()
+			: null;
+	const sectionId =
+		typeof params.sectionId === "string" && params.sectionId.trim() !== "" &&
+		params.sectionId !== "all"
+			? params.sectionId.trim()
+			: null;
+
+	const payrollPeriod = await prisma.payrollPeriod.findFirst({
+		where: { id: payrollPeriodId, organizationId, isDeleted: false },
+		select: { id: true, startDate: true, endDate: true, payFrequency: true },
+	});
+	if (!payrollPeriod) {
+		throw new Error("PAYROLL_PERIOD_NOT_FOUND");
+	}
+
+	const eligibilityOr: any[] = [
+		{
+			employmentStatus: { in: ["ACTIVE", "ONBOARDING"] },
+			...(payrollPeriod.payFrequency ? { payFrequency: payrollPeriod.payFrequency } : {}),
+			OR: [
+				{ employmentStartDate: null },
+				{ employmentStartDate: { lte: payrollPeriod.endDate } },
+			],
+		},
+	];
+	if (actorEmployeeId) {
+		eligibilityOr.push({ id: actorEmployeeId });
+	}
+
+	const eligibleEmployees = await prisma.employee.findMany({
+		where: {
+			organizationId,
+			isDeleted: false,
+			...(employeeIds.length ? { id: { in: employeeIds } } : {}),
+			...(departmentId ? { departmentId } : {}),
+			...(sectionId ? { sectionId } : {}),
+			OR: eligibilityOr,
+		},
+		select: {
+			id: true,
+			employmentStartDate: true,
+			employmentHireDate: true,
+			embeddedSchedule: true,
+		},
+		orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+	});
+	const eligibleEmployeeIds = eligibleEmployees.map((employee) => employee.id);
+	const hireStartByEmployeeId = new Map(
+		eligibleEmployees.map((employee) => {
+			try {
+				return [employee.id, getEffectiveEmploymentStartDate(employee as any)] as const;
+			} catch {
+				return [employee.id, null] as const;
+			}
+		}),
+	);
+
+	const [existingTimesheets, paidPayrollRows] = await Promise.all([
+		eligibleEmployeeIds.length
+			? prisma.timesheet.findMany({
+					where: {
+						organizationId,
+						payrollPeriodId,
+						employeeId: { in: eligibleEmployeeIds },
+						isDeleted: false,
+					},
+					select: {
+						id: true,
+						employeeId: true,
+						status: true,
+						metadata: true,
+						approvedBy: true,
+						lockedAt: true,
+						lockedEmployeePayrollId: true,
+					},
+				})
+			: Promise.resolve([]),
+		eligibleEmployeeIds.length
+			? prisma.employeePayroll.findMany({
+					where: {
+						organizationId,
+						payrollPeriodId,
+						employeeId: { in: eligibleEmployeeIds },
+						isPaid: true,
+					},
+					select: { employeeId: true },
+				})
+			: Promise.resolve([]),
+	]);
+	const paidEmployeeIds = new Set(paidPayrollRows.map((row) => row.employeeId));
+	const timesheetByEmployeeId = new Map(
+		existingTimesheets.map((timesheet) => [timesheet.employeeId, timesheet]),
+	);
+
+	// Attendance-signal prefilter (fleet backfill guard): employees with no
+	// schedule, no override, and no punches in the window have nothing to
+	// materialize — they auto-approve empty instead of paying for a full
+	// obligation recompute each. Schedule presence is checked in JS like the
+	// current-period repair flow; overrides/punches are two grouped queries
+	// regardless of fleet size.
+	const [overrideEmployeeRows, punchedEmployeeRows] = await Promise.all([
+		eligibleEmployeeIds.length
+			? (prisma as any).scheduleOverride.findMany({
+					where: {
+						organizationId,
+						employeeId: { in: eligibleEmployeeIds },
+						date: { gte: payrollPeriod.startDate, lte: payrollPeriod.endDate },
+						isDeleted: false,
+					},
+					select: { employeeId: true },
+				})
+			: Promise.resolve([]),
+		eligibleEmployeeIds.length
+			? (prisma as any).attendance.findMany({
+					where: {
+						organizationId,
+						employeeId: { in: eligibleEmployeeIds },
+						date: { gte: payrollPeriod.startDate, lte: payrollPeriod.endDate },
+						isDeleted: false,
+					},
+					select: { employeeId: true },
+				})
+			: Promise.resolve([]),
+	]);
+	const attendanceSignalEmployeeIds = new Set<string>([
+		...eligibleEmployees.filter((employee) => (employee as any).embeddedSchedule).map((employee) => employee.id),
+		...overrideEmployeeRows.map((row: any) => row.employeeId),
+		...punchedEmployeeRows.map((row: any) => row.employeeId),
+	]);
+
+	// Live hooks (clock-in/out, leave approval, schedule/holiday changes) own
+	// AttendanceObligation freshness day-to-day; a full-period recompute across
+	// thousands of employees exceeds the heavy-request budget (proven >300s on
+	// DEV). Rebuild obligations only when the employee has none for the
+	// period. Note: the create path below is already covered — building a new
+	// sheet ensures that employee's obligations internally.
+	const ensureObligationsIfMissing = async (employeeId: string) => {
+		const existingCount = await (prisma as any).attendanceObligation.count({
+			where: {
+				organizationId,
+				employeeId,
+				payrollPeriodId,
+				isDeleted: false,
+			},
+		});
+		if (existingCount) return;
+		try {
+			await ensureAttendanceObligationsForPayrollPeriod(prisma, {
+				organizationId,
+				payrollPeriodId,
+				employeeId,
+			});
+		} catch {
+			// One employee's obligation rebuild must not fail the batch.
+		}
+	};
+
+	const periodStartKey = getUtcDateKey(payrollPeriod.startDate);
+	const periodEndDate = new Date(`${getUtcDateKey(payrollPeriod.endDate)}T00:00:00.000Z`);
+
+	const result: PayrollAutoApproveEnsureResult = {
+		payrollPeriodId,
+		eligibleEmployees: eligibleEmployees.length,
+		created: 0,
+		autoApproved: 0,
+		refreshedLines: 0,
+		preservedManual: 0,
+		skippedLocked: 0,
+		skippedPaid: 0,
+		skippedRefresh: 0,
+		remainingToPrepare: 0,
+		createLimit: limit,
+		errors: [],
+	};
+
+	const applyAutoApproval = async (timesheetId: string) => {
+		const current = await prisma.timesheet.findFirst({
+			where: { id: timesheetId },
+			select: { metadata: true },
+		});
+		const patch = buildTimesheetAutoApprovalPatch(
+			readTimesheetMetadata((current as any)?.metadata),
+			new Date(),
+		);
+		await prisma.timesheet.update({
+			where: { id: timesheetId },
+			data: {
+				...patch,
+				submittedAt: new Date(),
+			},
+		});
+	};
+
+	const materializeFullPeriod = async (employeeId: string, timesheetId: string, force: boolean) => {
+		const hireStart = hireStartByEmployeeId.get(employeeId);
+		const hireKey = hireStart ? getDateKeyInTimeZone(hireStart) : periodStartKey;
+		const fromKey = hireKey > periodStartKey ? hireKey : periodStartKey;
+		return materializeTimesheetLinesFromObligations(prisma, {
+			organizationId,
+			employeeId,
+			payrollPeriodId,
+			timesheetId,
+			fromDate: new Date(`${fromKey}T00:00:00.000Z`),
+			toDate: periodEndDate,
+			forceRefreshLines: force,
+			skipEnsureAttendanceObligations: true,
+		});
+	};
+
+	// Partition budgeted work first so the pool below runs independent
+	// per-employee tasks. Creates, upgrades, and refreshes all run in a
+	// bounded pool (P2002-adopt keeps the rare millisecond-codegen
+	// collision safe); remainingToPrepare tracks unfinished creates/upgrades only.
+	// Refresh work is repeatable maintenance: it is classified separately so
+	// it can never starve finite create/upgrade work behind it, and
+	// remainingToPrepare tracks unfinished creates/upgrades only.
+	const ENSURE_POOL_SIZE = 5;
+	type EnsureWorkItem = { employee: (typeof eligibleEmployees)[number]; action: "create" | "upgrade" | "refresh"; existing?: any };
+	const stateChangingItems: EnsureWorkItem[] = [];
+	const refreshItems: EnsureWorkItem[] = [];
+	for (const employee of eligibleEmployees) {
+		if (paidEmployeeIds.has(employee.id)) {
+			result.skippedPaid += 1;
+			continue;
+		}
+		const existing = timesheetByEmployeeId.get(employee.id);
+		if (existing && (existing.lockedAt || existing.lockedEmployeePayrollId)) {
+			result.skippedLocked += 1;
+			continue;
+		}
+		const action = resolveTimesheetAutoApproveEnsureAction(existing || null);
+		if (action === "preserve" || action === "skip") {
+			if (action === "preserve") result.preservedManual += 1;
+			else result.skippedLocked += 1;
+			continue;
+		}
+		const item: EnsureWorkItem = {
+			employee,
+			action: action as "create" | "upgrade" | "refresh",
+			existing,
+		};
+		if (action === "refresh") refreshItems.push(item);
+		else stateChangingItems.push(item);
+	}
+	const budgetedStateChanging = stateChangingItems.slice(0, limit);
+	const budgetedRefresh = params.skipRefresh
+		? []
+		: refreshItems.slice(0, Math.max(0, limit - budgetedStateChanging.length));
+	if (params.skipRefresh) {
+		result.skippedRefresh = refreshItems.length;
+	}
+	// remainingToPrepare tracks finite create/upgrade work only: refresh is
+	// perpetual maintenance (event hooks keep auto-approved sheets live, and
+	// payroll generate covers the rest), so pending refreshes must not hold
+	// the HR loop open forever.
+	result.remainingToPrepare = stateChangingItems.length > budgetedStateChanging.length ? null : 0;
+
+	const runWorkItem = async (item: EnsureWorkItem) => {
+		const { employee, action, existing } = item;
+		try {
+			// No-signal fast path: no schedule, no override, no punches in the
+			// window means there is nothing to materialize. Missing sheets are
+			// created approved-but-empty in one write; legacy drafts flip to
+			// auto-approved; already-approved sheets need nothing.
+			if (!attendanceSignalEmployeeIds.has(employee.id)) {
+				if (action === "create") {
+					const now = new Date();
+					const patch = buildTimesheetAutoApprovalPatch({}, now);
+					await prisma.timesheet.create({
+						data: {
+							code: await generateUniqueTimesheetCode(prisma, organizationId),
+							organizationId,
+							employeeId: employee.id,
+							payrollPeriodId,
+							totalDays: 0,
+							totalHoursWorked: "0:00",
+							totalRegularHours: "0:00",
+							totalOvertimeHours: "0:00",
+							totalUndertimeHours: "0:00",
+							totalLateHours: "0:00",
+							totalEarlyOutHours: "0:00",
+							notes: "Auto-generated for payroll (system auto-approved)",
+							editPermissionStatus: "NONE",
+							isDeleted: false,
+							submittedAt: now,
+							submittedBy: employee.id,
+							...patch,
+						},
+					});
+					result.created += 1;
+					result.autoApproved += 1;
+				} else if (action === "upgrade") {
+					await applyAutoApproval((existing as any).id);
+					result.autoApproved += 1;
+				}
+				return;
+			}
+			if (action === "create") {
+				let built: any;
+				try {
+					built = await buildTimesheetForPayrollPeriod(
+						prisma,
+						employee.id,
+						organizationId,
+						{
+							id: payrollPeriod.id,
+							startDate: payrollPeriod.startDate,
+							endDate: payrollPeriod.endDate,
+						},
+						"Auto-generated for payroll (system auto-approved)",
+						"DRAFT",
+					);
+				} catch (buildError: any) {
+					// Idempotency for overlapping ensure runs (HR loop + payroll
+					// worker): a unique-constraint collision means a concurrent
+					// run just created the sheet — adopt it and continue as an
+					// upgrade instead of failing.
+					const collision = String(
+						buildError?.code === "P2002" ? "P2002" : (buildError?.message || buildError || ""),
+					);
+					if (!collision.includes("P2002") && !collision.includes("Unique constraint failed")) {
+						throw buildError;
+					}
+					built = await prisma.timesheet.findFirst({
+						where: {
+							organizationId,
+							employeeId: employee.id,
+							payrollPeriodId,
+							isDeleted: false,
+						},
+					});
+					if (!built) throw buildError;
+				}
+				const resolved = resolveTimesheetAutoApproveEnsureAction(built as any);
+				if (resolved === "preserve" || resolved === "skip") {
+					result.preservedManual += resolved === "preserve" ? 1 : 0;
+					result.skippedLocked += resolved === "skip" ? 1 : 0;
+					return;
+				}
+				const lines = await materializeFullPeriod(
+					employee.id,
+					(built as any).id,
+					String((built as any).status || "").toUpperCase() === "APPROVED",
+				);
+				await applyAutoApproval((built as any).id);
+				result.created += 1;
+				result.autoApproved += 1;
+				result.refreshedLines += lines.length;
+			} else if (action === "upgrade") {
+				await ensureObligationsIfMissing(employee.id);
+				const lines = await materializeFullPeriod(employee.id, (existing as any).id, false);
+				await applyAutoApproval((existing as any).id);
+				result.autoApproved += 1;
+				result.refreshedLines += lines.length;
+			} else {
+				// No-signal refresh skips the obligation recompute (nothing can
+				// be built without schedule/override/punches); materialize
+				// still runs so stale lines converge to current obligations.
+				if (attendanceSignalEmployeeIds.has(employee.id)) {
+					await ensureObligationsIfMissing(employee.id);
+				}
+				const lines = await materializeFullPeriod(employee.id, (existing as any).id, true);
+				result.refreshedLines += lines.length;
+			}
+		} catch (error: any) {
+			result.errors.push({
+				employeeId: employee.id,
+				message: String(error?.message || error || "ensure failed"),
+			});
+		}
+	};
+
+	// Creates run in the same bounded pool as upgrades/refresh. Collision
+	// risk is negligible (codegen spreads across minutes of preceding
+	// obligation/materialize work) and the P2002-adopt branch above makes a
+	// same-millisecond collision safe by adopting the winner's sheet.
+	for (let start = 0; start < budgetedStateChanging.length; start += ENSURE_POOL_SIZE) {
+		await Promise.all(
+			budgetedStateChanging.slice(start, start + ENSURE_POOL_SIZE).map(runWorkItem),
+		);
+	}
+	const pooled = [...budgetedRefresh];
+	for (let start = 0; start < pooled.length; start += ENSURE_POOL_SIZE) {
+		await Promise.all(pooled.slice(start, start + ENSURE_POOL_SIZE).map(runWorkItem));
+	}
+
+	return result;
 }
 
 export async function resolvePayrollPeriodIdForAttendanceDate(

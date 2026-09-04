@@ -23,7 +23,10 @@ post_json() {
 report_env() {
   local environment="$1"
   local env_url="$2"
-  local description="$3"
+  # GitHub deployment-status descriptions are capped at 140 chars (over-limit
+  # posts are rejected with 422). Truncate so image-env notes that embed the
+  # full rebuilt/not_rebuilt service list can never be silently skipped.
+  local description="${3:0:140}"
   local state="${4:-success}"
   local ids
   local deploy_id

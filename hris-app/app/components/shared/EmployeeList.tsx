@@ -15,6 +15,8 @@ import {
 	ListCheck,
 	Edit,
 	FileText,
+	Building2,
+	Award,
 } from "lucide-react";
 import { useEmployee, useEmployees } from "~/lib/hooks/useEmployees";
 import { useDepartments } from "~/lib/hooks/useDepartments";
@@ -674,6 +676,14 @@ export default function EmployeeList({
 		);
 	};
 
+	const handleChangeDepartmentPosition = (item: EmployeeDisplay) => {
+		navigate(`/hr/personnel-actions/transfer?employeeId=${item.id}`);
+	};
+
+	const handlePromotionSalary = (item: EmployeeDisplay) => {
+		navigate(`/hr/personnel-actions/promotion?employeeId=${item.id}`);
+	};
+
 	const handleSubmitTermination = async () => {
 		if (
 			!terminationEmployee ||
@@ -1176,7 +1186,17 @@ export default function EmployeeList({
 						</DropdownMenuItem>
 					)}
 					<DropdownMenuItem onClick={() => handleEditEmployee(item)}>
-						<Edit className="h-4 w-4 mr-2" /> Edit
+						<Edit className="h-4 w-4 mr-2" /> Edit Details
+					</DropdownMenuItem>
+					<DropdownMenuSeparator />
+					<DropdownMenuItem onClick={() => handleChangeDepartmentPosition(item)}>
+						<Building2 className="h-4 w-4 mr-2 text-blue-600" /> Change Department / Position
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => handlePromotionSalary(item)}>
+						<Award className="h-4 w-4 mr-2 text-purple-600" /> Promotion / Salary Increase
+					</DropdownMenuItem>
+					<DropdownMenuItem onClick={() => handleCreatePanRequest(item)}>
+						<FileText className="h-4 w-4 mr-2 text-amber-600" /> Other Personnel Actions (PAN)
 					</DropdownMenuItem>
 					{showTerminateAction && (
 						<>
