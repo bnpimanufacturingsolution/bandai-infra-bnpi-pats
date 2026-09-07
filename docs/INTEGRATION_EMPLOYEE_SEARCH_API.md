@@ -145,7 +145,19 @@ plumbing before the API-key mode works there; JWT mode works immediately.
 
 ## 4. Client examples
 
-### cURL
+### cURL — quick start (public)
+
+```bash
+# DEV (swap host for PROD/UAT per the matrix above; ask the admin for your env's key)
+curl --location 'https://dev-api.bnpi-hris.tech/api/employee/search?query=z&page=1&limit=10' \
+  --header 'X-API-Key: <KEY>'
+
+# Fuzzy typo tolerance example (matches "Zen Andrei" from "zan andrei")
+curl --location 'https://dev-api.bnpi-hris.tech/api/employee/search?query=zan%20andrei&limit=10' \
+  --header 'X-API-Key: <KEY>'
+```
+
+### cURL — local dev
 
 ```bash
 curl --location 'http://localhost:3001/api/employee/search?query=z&page=2&limit=10' \
@@ -156,7 +168,7 @@ curl --location 'http://localhost:3001/api/employee/search?query=z&page=2&limit=
 
 ```js
 const res = await fetch(
-  "http://localhost:3001/api/employee/search?query=zan%20andrei&limit=10",
+  "https://dev-api.bnpi-hris.tech/api/employee/search?query=zan%20andrei&limit=10",
   { headers: { "X-API-Key": process.env.HRIS_API_KEY } },
 );
 const { data } = await res.json();
@@ -168,7 +180,7 @@ console.log(data.employees, data.pagination);
 ```python
 import requests
 r = requests.get(
-    "http://localhost:3001/api/employee/search",
+    "https://dev-api.bnpi-hris.tech/api/employee/search",
     params={"query": "zan andrei", "limit": 10},
     headers={"X-API-Key": api_key},
     timeout=15,
