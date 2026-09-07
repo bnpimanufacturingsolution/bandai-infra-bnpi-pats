@@ -1,6 +1,6 @@
 # Requirement: Section Line Leader — Detailed Requirements (operator input)
 
-- Status: `CONFIRMED — BUILD APPROVED (Phase 0 in progress)` (2026-09-07)
+- Status: `IMPLEMENTED AND LIVE-PROVEN (2026-09-08) — on branch feature/section-line-leader-requirements, not yet merged to develop`
 - Owner: Operator (BNPI)
 - Branch: `feature/section-line-leader-requirements` (safety branch — no deploys until merged to `develop`)
 - Base feature: Section line leader assignment shipped 2026-09-07 (`section_line_leaders` M:N join, role derivation, `/admin/configuration/sections` UI, VM-promoted to dev/uat/prod). See `.wwg/reports/section-line-leader-assignment-20260907.md`.
@@ -187,6 +187,46 @@ emp-app filing UI for leaders is out of scope unless requested.)
 - None provided. Agent will propose leader screen list in the build plan.
 
 ---
+
+## IMPLEMENTED (2026-09-07/08) — all phases, live-proven on local DEV
+
+Commits on `feature/section-line-leader-requirements`:
+`5186d8a0` (phase 0), `a1e83f4a` (phases 1-3), `26304de0` (phases 4-5).
+
+| Requirement | Status | Proof |
+|---|---|---|
+| Leader files OT for members | ✅ | E2E: leader POST → 201, `metadata.filedBy` stamped |
+| Early OT (filed in advance) | ✅ | Same OT form works for future dates (no punch needed) |
+| Timesheet adjustments | ✅ via request types `TIMESHEET`/`ATTENDANCE_CORRECTION`; leader direct writes are day-labor-only (403 otherwise) | E2E: leader tag 200 persisted DIRECT; leader non-tag change 403 |
+| Mandatory chain leader→manager→HR | ✅ | E2E: 4-step chain (Leader Submission → Manager Approval via TARGET_DEPARTMENT_MANAGER → HR Approval → Completion); manager approve 200 → HR approve 200 → request COMPLETED |
+| Section scoping (server-enforced) | ✅ | E2E: plain employee on-behalf → 403; leader for member of own section → 201 |
+| D1 chain admin-configurable | ✅ mechanism | `metadata.workflowCode` override honored; per-org workflow-config mechanism (`getRequestWorkflowConfig` + branding provisioning) is the config surface; templates seeded idempotently (`scripts/seed-workflow-templates.ts`) |
+| D2 security fix | ✅ | Timesheet PATCH non-owner writes require HR/admin/timekeeper or responsible leader (previously ANY authenticated user could write non-APPROVED timesheets); E2E: plain employee write 403 |
+| D3 member→leader assignment | ✅ | `POST /api/section/:id/assign-members` (invalid leader → 400, valid → 200); admin UI "Members under each leader" appears when a section has 2+ leaders |
+| Employee-initiated flow unchanged | ✅ | Self-filed requests keep existing templates (guard only fires on-behalf) |
+| Leader visibility | ✅ partial | Approvals + My Team sidebar entries (manager-class); section-roster on team page is an enhancement, noted below |
+
+**Key wiring fixes made during build (all three normalizer seams exempted leader
+chains):** `normalizeWorkflowConfigRecord`, `normalizeDefaultWorkflowTemplate`,
+and `getWorkflowStepsForRequestType` (the step-builder inside
+`createRequestStepExecutions` — root cause of initial 3-step flattening).
+Catalog fallback added in `getDefaultRequestWorkflow` for orgs whose
+WorkflowInstance rows predate the templates.
+
+**Tests:** 166 backend (5 new spec files), Playwright smoke 2/2, tsc 65
+pre-existing only. Live E2E evidence: `hris-api/.runtime/line-leader-e2e-*`,
+`line-leader-daylabor-*`, `assign-members-proof`.
+
+**Boundaries / follow-ups:**
+- On-behalf LEAVE (and other requester-bound types) rejected with a clear
+  message — their validation + side effects are requester-bound; wiring the
+  member's balances is follow-up work.
+- Leader dashboard/section-roster view (My Team currently shows direct
+  reports only) — enhancement candidate.
+- D1 admin Settings surface to toggle "Manager only" vs "Manager → HR" per
+  request type — mechanism exists (per-org workflow config); dedicated UI
+  panel is follow-up.
+- Branch not merged to develop / not deployed to VM until operator approves.
 
 ## Agent-use note (do not delete)
 

@@ -1,4 +1,13 @@
 # WWG Agent Handoff
+
+## 2026-09-08 - Timekeeping deep audit (read-only)
+
+- Report: `.wwg/reports/timekeeping-deep-audit-20260908.md`. Scope: every timekeeping surface feeding payroll (attendance ingest, obligations, schedules, pairing, timesheet lifecycle, OT policy, day-status, metrics, generate/preview).
+- Headline: core money pipeline verified sound (APPROVED+DIRECT gate, paid/locked skips, OT approval gate, snapshot semantics, Manila-day bounds; core helpers 34/34 + source-truth regression 24/24 passing) — **but Start Payroll's 2026-09-04 auto-approval lane upgrades DRAFT/SUBMITTED/REVISED/REJECTED → system-APPROVED unconditionally and never consults `TimesheetConfig.enableAutoApprove`** (`resolveTimesheetAutoApproveEnsureAction` `timesheet.helper.ts:65-76`; sole ensure call site `payroll-period.helper.ts:1634`): manager-rejected sheets get paid. CONFLICTING with the 2026-08-12 "Start Payroll APPROVED-only" product truth; needs operator decision (exclude REJECTED / honor config / relabel toggle).
+- Other findings: D2 day-labor guard diffs 11 fields but the write path persists full metadata (breakMinutes/leaveType smuggle possible, rides on `z.array(z.any())`); 13 `@ts-nocheck` files + `payrollperiod.controller.ts` is committed compiled CommonJS; Hikvision callback `?preview=true` dry-run lane regressed (gone) while endpoint stays public; DM4.3 OT apply remains script-only over untyped JSON buckets; import job progress in-memory (restart loses it); ZKTeco live callbacks never create attendance (`not_applied`, NEEDS_CONFIRMATION intent); dual timekeeping math engines; Mongo schema twin + tracked junk.
+- RECs registered: REC-20260908-PAYROLL-AUTOAPPROVE-REJECTED-UPGRADE, REC-20260908-DAY-LABOR-GUARD-WRITE-SURFACE, REC-20260908-CALLBACK-PREVIEW-LANE-REGRESSED, REC-20260908-IMPORT-JOB-PROGRESS-DURABILITY (all Proposed).
+- No code/config/data changes; audit-only. Next: owner triage of F1 (money-path approval semantics) before any further payroll work touches the lane.
+
 ## 2026-09-03 - Payroll domain audit (read-only)
 
 - Report: `.wwg/reports/payroll-audit-20260903.md`. Domain intact post-restore: register rules (Basic Path A/B, 313 basis, FILE_DUAL) verified live in `generatePayrollFromTimesheets`/`previewPayrollFromTimesheets` (`payroll-period.helper.ts:2002/2029/:5091/:5116`); Run Payroll OT readiness wired (`payrollperiod.controller.ts:1079`); **184/184 tests passing** (22 runnable payroll specs, TESTEXIT=0).
@@ -76,3 +85,12 @@
 - Highs: auditd inactive, reboot required + 54 pkgs pending, Docker no daemon.json/root containers, dnsmasq on LAN IP, packer bakes weak sshd, k3s.yaml 644, unmapped caddy.service (NEEDS_CONFIRMATION), X11Forwarding, GatewayPorts clientspecified.
 - Positives: UFW default-deny + AppArmor enforcing + hardened sysctls + unattended-upgrades + K3s creds locked + no anonymous CRBs + no privileged containers.
 - No changes made. P0 infra fixes (SSH keys-only, host firewall, sudoers scoping, obs binding) are additive and tunnel-safe; awaiting operator authorization.
+
+---
+
+## 2026-09-08 - Line leader full journey implemented (branch feature/section-line-leader-requirements)
+
+- Operator-confirmed model (docs/00-product/REQUIREMENT-SECTION-LINE-LEADER-DETAILS.md): leader files ALL core request types (OT incl. early OT, timesheet/attendance adjustments) for own-section members; mandatory chain Leader->Manager->HR (D1: admin-configurable via metadata.workflowCode + per-org workflow config); employee self-service flow unchanged; leader day-labor tagging; D2 timesheet-write security fix; D3 member->leader assignment (Employee.lineLeaderId).
+- Implementation: on-behalf guard in request create (membership-based, role-independent); three leader-filed workflow templates + seeds + catalog fallback; THREE normalizer seams exempted (config, runtime template, step-builder getWorkflowStepsForRequestType - root cause of initial flattening); timesheet PATCH identity guard (HR/admin/timekeeper/responsible leader) + day-labor-only diff; assign-members endpoint + admin UI block when section has 2+ leaders; sidebar Approvals/My Team for hris-line-leader.
+- Proof: E2E chain to COMPLETED (manager=member's manager Bryan, HR=Maria); plain-employee on-behalf 403; leader tag 200/persisted; non-tag 403; plain timesheet write 403; assignment invalid 400/valid 200. 166 backend tests + 2 smoke. Evidence: hris-api/.runtime/line-leader-e2e-*, -daylabor-*, assign-members-proof.
+- Boundary: on-behalf LEAVE rejected (requester-bound validation/side effects) with clear message; team-page section roster + D1 settings panel are follow-ups; NOT merged to develop / NOT deployed until operator approves.
