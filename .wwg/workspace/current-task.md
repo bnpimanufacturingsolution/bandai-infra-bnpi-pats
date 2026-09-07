@@ -3816,3 +3816,11 @@ Status: IMPLEMENTED + PROVEN +∩┐╜G∩┐╜G╟Ñ Device admin UX clarity 
   and `.runtime/browser-evidence/screenshots/dev-public-after-restore.png`
 
 
+
+## Latest Task Addendum - 2026-09-07: INTEGRATION_API_KEYS provisioned - employee-search fully exposed
+
+- **Closed the 2026-09-04 "Next" item.** `INTEGRATION_API_KEYS` is now provisioned on PROD/DEV/UAT via GitOps: new `hris-api-integration-env` Secret (distinct per-env key, in-git `stringData` following the `hris-postgres-env` appliance-secret precedent) + `secretKeyRef` on `hris-api` in all three overlays. Commits `4592e75a`, `09a12b5a`, `e9bdd119`, `de811bee` all pushed to `develop`.
+- **Live proof (all three envs)**: valid X-API-Key -> 200 (PROD 483 / DEV 486 / UAT 483 employees); invalid key -> 401 (previously 503 fail-closed); JWT path unaffected. Evidence: `.runtime/employee-search-env-probe-20260907-121922/final-key-proof.json`.
+- VM path proven: ansible-pull -> Argo auto-sync (prune:true) -> all three `hris-api` Deployments rolled to 1/1 Running with the secret mounted.
+- Rotation per canonical doc: append new key -> consumers switch -> remove old. Keys also archived locally in `.runtime` (not committed to any non-secret surface beyond the private-repo overlay manifests).
+- Also this session: re-verified 22/22 employee-search tests on HEAD; benefit-schedule spec failure (14/22) confirmed pre-existing/environmental (Redis+DB down), unrelated; baked git conflict markers removed from `project-truth.md` + `project-truth-summary.md` (Day-Status duplicate collapsed, LVP/Day-status heading conflict resolved).
