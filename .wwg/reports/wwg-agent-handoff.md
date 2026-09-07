@@ -32,3 +32,18 @@
   3. Fleet >5000 pool cap → future trigram index.
   4. Key rotation: append → switch → remove (comma-separated = zero downtime).
 - **Next**: Provision `INTEGRATION_API_KEYS` in VM DEV/UAT/PROD runtime envs; push `develop`; verify per-environment.
+
+---
+
+## 2026-09-07 - INTEGRATION_API_KEYS provisioned dev/uat/prod (employee-search exposure complete)
+
+- **Status**: `CONFIRMED_RUNTIME_ALL_ENVS`.
+- Pushed `4592e75a` (WWG truth-sync + baked conflict-marker repair in project-truth wiki files), `09a12b5a`/`e9bdd119` (GitOps provisioning).
+- GitOps: `hris-api-integration-env` Secret (per-env distinct key) + secretKeyRef env on hris-api in all three overlays, following the existing hris-postgres-env in-git appliance-secret precedent (Argo prune:true requires git-tracked secrets).
+- VM flow: ansible-pull picked SHA -> Argo auto-applied Secret + Deployment env -> all three hris-api rolled out 1/1 Running.
+- Final live proof (.runtime/employee-search-env-probe-20260907-121922/final-key-proof.json):
+  - Valid X-API-Key: PROD 200 (483 employees), DEV 200 (486), UAT 200 (483).
+  - Invalid key: 401 on all three (was 503 fail-closed before provisioning).
+  - JWT path: 200 on all three (unaffected).
+- Key custody: keys live in git overlays (private repo) + generated-keys.json (local .runtime evidence only, not committed). Rotation: append new key to comma list -> consumers switch -> remove old (doc: docs/INTEGRATION_EMPLOYEE_SEARCH_API.md).
+- Remaining handoff item closed: "Provision INTEGRATION_API_KEYS in VM DEV/UAT/PROD runtime envs; verify per-environment" - DONE 2026-09-07.
