@@ -145,10 +145,54 @@ curl 'https://uat-api.bnpi-hris.tech/api/employee/search?query=z&limit=1' \
 | `page` | int | 1 | 1-based |
 | `limit` | int | 10 | max 100 |
 | `sort` | enum | `relevance` | `relevance` \| `employeeId` \| `employeeId:desc` \| `fullName` \| `fullName:desc` |
-| `employmentStatus` | string | — | exact filter |
-| `employmentType` | string | — | exact filter |
-| `departmentId` | string | — | exact filter |
-| `positionId` | string | — | exact filter |
+| `employmentStatus` | enum | — | exact filter — see values below |
+| `employmentType` | enum | — | exact filter — see values below |
+| `departmentId` | CUID | — | exact filter — see "Discovering IDs" below |
+| `positionId` | CUID | — | exact filter — see "Discovering IDs" below |
+
+**`employmentStatus` — allowed values (case-sensitive, from schema):**
+
+| Value | Meaning |
+|---|---|
+| `ACTIVE` | Currently working |
+| `RESIGNATION_REQUESTED` | Resignation submitted, pending approval |
+| `SERVING_NOTICE` | Exit clearance done, working final days |
+| `OFFBOARDING` | Approved resignation, offboarding in progress |
+| `ONBOARDING` | New hire, onboarding in progress |
+| `INACTIVE` | Temporarily inactive |
+| `TERMINATED` | Terminated by company |
+| `RESIGNED` | Completed resignation process |
+| `FORMER_EMPLOYEE` | No longer with company (resigned/terminated) |
+| `RETIRED` | Retired |
+| `ON_LEAVE` | On leave |
+
+**`employmentType` — allowed values (case-sensitive, from schema):**
+
+| Value | |
+|---|---|
+| `REGULAR` | |
+| `PROBATIONARY` | |
+| `CONTRACTUAL` | |
+| `PART_TIME` | |
+| `CONSULTANT` | |
+| `INTERN` | |
+
+**Discovering valid `departmentId` / `positionId` values** (they are CUIDs
+like `cmryaf7ml0015nj3o5k6ljg78`, not names):
+
+1. **From search results themselves (no extra access needed):** every row
+   already includes `department.id` / `department.name` and `position.id` /
+   `position.title` — grab the ID from a result row and reuse it to refine.
+2. **Admin/HR JWT list endpoints:** `GET /api/department?document=true&pagination=true`
+   and `GET /api/position?document=true&pagination=true` return the full
+   catalog with `id` + `name`/`title` (requires an HRIS JWT, not the API key).
+
+**Verified filter-chain example** (HTTP 200, live 2026-09-07):
+
+```bash
+curl 'https://dev-api.bnpi-hris.tech/api/employee/search?query=a&employmentStatus=ACTIVE&employmentType=REGULAR&limit=1' \
+  -H 'X-API-Key: <KEY>'
+```
 
 **Examples:**
 
