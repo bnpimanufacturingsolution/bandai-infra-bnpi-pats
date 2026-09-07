@@ -35,9 +35,8 @@ Secondary: support/operations engineer reviewing sync history and evidence.
 
 In scope: device selection, health/capability preflight, user discovery, HRIS
 matching, preview/dry-run, conflict resolution, link/unlink, enrollment to a
-target device, peer convergence, async progress, cancellation, verification,
 audit trail, and accessible responsive UI.
-
+oy
 Out of scope: raw fingerprint-template custody redesign, new vendor SDKs,
 physical device credential recovery, production deployment, destructive
 reset/erase flows, and replacing the existing callback persistence owner.
