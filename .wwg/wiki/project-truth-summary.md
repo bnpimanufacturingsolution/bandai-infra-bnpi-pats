@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-## 2026-08-25 Period leave import (LVP) + Gross includes leavePay
-=======
 ## 2026-08-27 Day-status review UI & workbook refinement endpoints
->>>>>>> de0f765296d2a117773d8d8647a794bc6cc09cdf
 
 - **Read-only resolution pipeline**: Mon–Sat schedule truth with Sunday REST. Bare no-shows surface in a **Review Queue** (`REVIEW_NO_EVIDENCE`) with `ESTIMATE_ONLY` badges; never silently auto-charged as absent into payroll.
 - **Precedence**: `OUT_OF_TENURE` > `REST_SUNDAY` > `PRESENT_PUNCH` > `PRESENT_SCHEDULE_POSITIVE` > `ABSENT_AWOL_EVIDENCED` > `LEAVE_PAID` > `LEAVE_UNPAID` > `REVIEW_NO_EVIDENCE`.

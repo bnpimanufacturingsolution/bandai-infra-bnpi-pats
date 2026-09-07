@@ -1,20 +1,4 @@
-<<<<<<< HEAD
-
 # Project Truth
-=======
-## Day-Status Review & Resolution Pipeline (2026-08-27)
->>>>>>> de0f765296d2a117773d8d8647a794bc6cc09cdf
-
-- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`.
-- Schedule truth: Universal Monday–Saturday schedule with Sunday rest (zero Sunday punches across 19,507 cells proves Sunday REST is safe; future Sunday work auto-classified PRESENT via punch).
-- Precedence pipeline: `OUT_OF_TENURE` > `REST_SUNDAY` > `PRESENT_PUNCH` > `PRESENT_SCHEDULE_POSITIVE` > `ABSENT_AWOL_EVIDENCED` > `LEAVE_PAID` > `LEAVE_UNPAID` > `REVIEW_NO_EVIDENCE`.
-- Review queue: Bare no-show days land in `REVIEW_NO_EVIDENCE` surfaced to HR with `ESTIMATE_ONLY` exposure notes; never silently auto-charged as absent (prevents ₱462.8k–₱573.5k/window of false phantom charges on 405–494 uncharged people, mostly Saturdays).
-- Workbooks: AWOL workbook provides DA/disciplinary absence evidence labels (244/186 days labeled; never prices payroll). Leave workbook provides paid vs unpaid day-level breakdown.
-- API Endpoints:
-  - `GET /api/payrollperiod/:id/day-status-review` — DB-only bucket counts + review queue.
-  - `POST /api/payrollperiod/:id/day-status-review/workbook` — In-memory refinement using multipart `leaveFile` and `awolFile` (persists nothing).
-- Helper: `hris-api/helper/day-status-resolution.helper.ts` (12/12 unit tests).
-- UI: `/hr/day-status-review` (AuthGuard, period selector, bucket chips, weekday histogram, review queue DataTable, CSV export, upload refine).
 
 ## Day-Status Review & Resolution Pipeline (2026-08-27)
 
@@ -65,14 +49,29 @@
 - Operator: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
 
 
+## Section Head & Line Leader Assignment (2026-09-07 audit)
+
+- Status: `CONFIRMED_CODE_AUDIT`.
+- **Section Head** — Fully implemented:
+  - Schema: `Section.headId` (nullable FK to `Employee`) + reverse `Employee.managedSections` (1:N).
+  - Admin UI: `/admin/configuration/sections.tsx` — dropdown to assign/unset head per section.
+  - Backend: `sections.service.ts` CRUD includes `headId`; cleanup script clears `headId` on employee removal.
+- **Line Leader** — Partial implementation (role + payroll only, no positional assignment):
+  - Auth role: `hris-line-leader` exists in role derivation (`role-derivation.ts`). Treated as manager (`isManager: true`).
+  - Payroll: `EmployeePayroll.lineLeaderAllowance` (Float, default 0) — LLA / Line Leader Allowance, post-net receivable.
+  - Workflows: Used in boarding template, request approvals, notifications, PAN post-actions.
+  - **Gap**: No `Employee.lineLeaderFor` relation, no `Position.isLineLeader`, no section/team-level assignment stored.
+  - Timesheet/day-labor (2026-08-20): "Line Leader tags people per day on timesheet" — `Timesheetline.dayLaborType` (DIRECT/INDIRECT) was added but **Line Leader assignment itself is not persisted**.
+- Terminology: "Section Head" (canonical), "Line Leader" (role code `hris-line-leader`).
+
 ## Employee weekly hours vs schedule templates (2026-08-20)
 
 - Status: `CONFIRMED_CODE`.
 - **Schedule templates** (`/admin/configuration/schedule-templates`) are reusable org patterns (7/14-day cycles, shift types per day). Assign them to many people.
-- **One employeeG��s hours** (Zen Monday 06:00G��15:00, Tuesday 07:00G��16:00) live on `Employee.embeddedSchedule.pattern`. HR/admin edit that from:
+- **One employee's hours** (Zen Monday 06:00-15:00, Tuesday 07:00-16:00) live on `Employee.embeddedSchedule.pattern`. HR/admin edit that from:
   1. Dedicated roster: HR Timekeeping **Schedules** (`/hr/employee-schedules`) and admin **Employee Schedules** (`/admin/configuration/employee-schedules`). Filter by department/section, click a person to see current hours, then **Change schedule**.
-  2. Employee edit form G�� Active Schedule weekly pattern (`/hr/employees/:id/edit` or admin twin).
-  3. Employee profile **Work Schedule** tab G�� **Change schedule** G�� **Days** (weekday start/end/off). `POST /api/employee-schedules` with `pattern`. Takes effect next Monday UTC and recomputes attendance obligations.
+  2. Employee edit form Active Schedule weekly pattern (`/hr/employees/:id/edit` or admin twin).
+  3. Employee profile **Work Schedule** tab > **Change schedule** > **Days** (weekday start/end/off). `POST /api/employee-schedules` with `pattern`. Takes effect next Monday UTC and recomputes attendance obligations.
   4. Same modal **Dates** tab: pick a calendar date and set hours for that date only (`POST /api/scheduleOverride`). Not next Monday.
 - A one-off date uses **schedule override**. The Dates tab is that path.
 - Team assign modal can still pick a template or one manual shift for every day; it is not the per-weekday hours editor.

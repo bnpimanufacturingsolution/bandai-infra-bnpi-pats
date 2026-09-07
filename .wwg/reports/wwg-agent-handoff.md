@@ -13,3 +13,22 @@
 - Full evidence + rollback path: .wwg/reports/develop-gutted-restore-20260903.md
 - PR #9 MERGED into develop (2026-09-03T01:07:35Z, merge commit c2a7d873; verified zero deletions vs 85327bd2; auto-approve tests 15 passing).
 - Open next: PR #7 (develop->uat) shows CONFLICTING/DIRTY (develop-vs-uat divergence, separate matter); watch restored-develop CI (pre-existing runner-level 5s-fast failures, unrelated); owner confirmation with malasaernestdodz; project-truth.md conflict-marker housekeeping (pending user decision); backup/develop-gutted-20260903 deletable after team review.
+
+---
+
+## 2026-09-04 - Integration Employee Search API Audit
+
+- **Task**: Audit `GET /api/employee/search` (fuzzy + pagination + X-API-Key auth).
+- **Result**: ✅ `CONFIRMED_CODE_AND_LIVE_LOCAL` — shipped, tested, documented. No code changes required.
+- **Tests**: 22/22 passing (13 search + 8 auth middleware).
+- **Live Proof**: `query=z` chain 486→455→454; `zan andrei` count 1 fuzzy 1; deep pagination honest; `andersen` 0 (distance >2).
+- **Evidence**:
+  - Audit summary: `.runtime/integration-employee-search-audit-20260904/AUDIT-SUMMARY.md`
+  - Live proof: `.runtime/employee-search-proof-20260904-153358/`
+  - Consumer doc: `docs/INTEGRATION_EMPLOYEE_SEARCH_API.md`
+- **Open Items**:
+  1. `hris-api/.env` tracked in git (pre-existing drift) — real keys must use VM/K8s secret plumbing.
+  2. Activity logging DB errors in tests (pre-existing test infra gap).
+  3. Fleet >5000 pool cap → future trigram index.
+  4. Key rotation: append → switch → remove (comma-separated = zero downtime).
+- **Next**: Provision `INTEGRATION_API_KEYS` in VM DEV/UAT/PROD runtime envs; push `develop`; verify per-environment.
