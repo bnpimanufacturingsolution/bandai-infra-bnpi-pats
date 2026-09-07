@@ -1207,8 +1207,15 @@ const normalizeWorkflowSteps = (steps: unknown): WorkflowStepConfig[] => {
 const getWorkflowStepsForRequestType = (
 	requestType: string | null | undefined,
 	steps: unknown,
+	/** When set to a leader-filed workflow code, the catalog steps are kept as-is. */
+	workflowCode?: string | null,
 ): WorkflowStepConfig[] => {
 	const normalizedSteps = normalizeWorkflowSteps(steps);
+	// Leader-filed chains keep their catalog steps (leader -> member's manager
+	// -> HR); the self-service normalizers below must not flatten them.
+	if (workflowCode && isLeaderFiledWorkflowCode(workflowCode)) {
+		return normalizedSteps;
+	}
 	if (isAttendanceCorrectionRequestType(requestType)) {
 		return normalizeAttendanceCorrectionWorkflowSteps(normalizedSteps);
 	}
@@ -2278,6 +2285,7 @@ export async function createRequestStepExecutions(
 	const normalizedSteps = getWorkflowStepsForRequestType(
 		params.requestType || requestRecord.type,
 		params.steps,
+		params.workflowCode,
 	);
 	if (normalizedSteps.length === 0) {
 		return 0;

@@ -9,6 +9,7 @@ interface IController {
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
+	assignMembersToLineLeaders(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importFromXLSX(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
@@ -385,6 +386,47 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.patch("/:id", controller.update);
+
+	/**
+	 * @openapi
+	 * /api/section/{id}/assign-members:
+	 *   post:
+	 *     summary: Assign section members to responsible line leaders
+	 *     description: >
+	 *       Assign members of this section to their responsible line leader
+	 *       (one member has exactly one leader). Used when a section has
+	 *       multiple leaders so each leader has a distinct set of members.
+	 *       All leaders must already be leaders of this section and all
+	 *       members must belong to this section.
+	 *     tags: [Section]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     parameters:
+	 *       - in: path
+	 *         name: id
+	 *         required: true
+	 *         schema:
+	 *           type: string
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             properties:
+	 *               assignments:
+	 *                 type: array
+	 *                 items:
+	 *                   type: object
+	 *                   properties:
+	 *                     employeeId: { type: string }
+	 *                     lineLeaderId: { type: string }
+	 *     responses:
+	 *       200: { description: Members assigned }
+	 *       400: { description: Invalid assignments }
+	 *       404: { description: Section not found }
+	 */
+	routes.post("/:id/assign-members", controller.assignMembersToLineLeaders);
 
 	/**
 	 * @openapi

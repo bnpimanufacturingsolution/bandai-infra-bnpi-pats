@@ -84,6 +84,11 @@ export interface UpdateSectionRequest {
 	isDefault?: boolean;
 }
 
+export interface MemberLeaderAssignment {
+	employeeId: string;
+	lineLeaderId: string;
+}
+
 export interface SectionResponse {
 	success: boolean;
 	message: string;
@@ -145,6 +150,13 @@ class SectionsService extends APIService {
 
 	async deleteSection(id: string): Promise<void> {
 		await hrisApiClient.delete(`/api/section/${id}`);
+	}
+
+	async assignMembersToLineLeaders(id: string, assignments: MemberLeaderAssignment[]): Promise<any> {
+		const response = await hrisApiClient.post<any>(`/api/section/${id}/assign-members`, {
+			assignments,
+		});
+		return response.data;
 	}
 
 	async importSections(file: File): Promise<any> {

@@ -663,6 +663,109 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	/**
+	 * Assign section members to responsible line leaders (D3: 1 member -> 1
+	 * leader; used when a section has 2+ leaders so each leader has a distinct
+	 * set of members under them). All assigned leaders must be leaders of THIS
+	 * section; all members must belong to this section.
+	 */
+	const assignMembersToLineLeaders = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+		const authReq = req as AuthRequest;
+		try {
+			if (!id || !authReq.organizationId) {
+				res.status(400).json(buildErrorResponse("Section ID is required", 400));
+				return;
+			}
+			const section = await prisma.section.findFirst({
+				where: { id, organizationId: authReq.organizationId, isDeleted: false },
+				select: { id: true, organizationId: true },
+			});
+			if (!section) {
+				res.status(404).json(buildErrorResponse("Section not found", 404));
+				return;
+			}
+			const assignments = Array.isArray((req.body as any)?.assignments)
+				? ((req.body as any).assignments as Array<{ employeeId: string; lineLeaderId: string }>)
+				: [];
+			if (assignments.length === 0) {
+				res.status(400).json(buildErrorResponse("assignments[] is required", 400));
+				return;
+			}
+
+			const sectionLeaders = (
+				await prisma.sectionLineLeader.findMany({
+					where: { sectionId: id },
+					select: { employeeId: true },
+				})
+			).map((row) => row.employeeId);
+			const leaderSet = new Set(sectionLeaders);
+			if (leaderSet.size === 0) {
+				res.status(400).json(
+					buildErrorResponse("Assign line leaders to this section before assigning members.", 400),
+				);
+				return;
+			}
+
+			const sectionMembers = new Set(
+				(
+					await prisma.employee.findMany({
+						where: {
+							organizationId: section.organizationId,
+							isDeleted: false,
+							OR: [
+								{ sectionId: id },
+								{ position: { is: { sectionId: id } } },
+							],
+						},
+						select: { id: true },
+					})
+				).map((row) => row.id),
+			);
+
+			const errors: Array<{ field: string; message: string }> = [];
+			for (const [index, assignment] of assignments.entries()) {
+				const employeeId = String(assignment?.employeeId || "").trim();
+				const lineLeaderId = String(assignment?.lineLeaderId || "").trim();
+				if (!sectionMembers.has(employeeId)) {
+					errors.push({
+						field: `assignments[${index}].employeeId`,
+						message: "Employee is not a member of this section.",
+					});
+				}
+				if (!leaderSet.has(lineLeaderId)) {
+					errors.push({
+						field: `assignments[${index}].lineLeaderId`,
+						message: "Line leader is not assigned to this section.",
+					});
+				}
+			}
+			if (errors.length > 0) {
+				res.status(400).json(buildErrorResponse("Invalid assignments", 400, errors as any));
+				return;
+			}
+
+			await prisma.$transaction(async (tx) => {
+				for (const assignment of assignments) {
+					await tx.employee.update({
+						where: { id: assignment.employeeId },
+						data: { lineLeaderId: assignment.lineLeaderId },
+					});
+				}
+			});
+
+			// Members may now have a derived responsible leader; no role change
+			// (assignment does not alter the member's own role).
+			sectionLogger.info(`Section members assigned to line leaders: ${id} (${assignments.length})`);
+			res
+				.status(200)
+				.json(buildSuccessResponse(config.SUCCESS.SECTION.UPDATED, { assigned: assignments.length }, 200));
+		} catch (error) {
+			sectionLogger.error(`Error assigning members to line leaders: ${error}`);
+			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
+		}
+	};
+
 	const importFromXLSX = async (req: AuthRequest, res: Response, _next: NextFunction) => {
 		try {
 			const file = req.file;
@@ -979,5 +1082,14 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { generateCode, create, getAll, getById, update, remove, importFromXLSX };
+	return {
+		generateCode,
+		create,
+		getAll,
+		getById,
+		update,
+		remove,
+		assignMembersToLineLeaders,
+		importFromXLSX,
+	};
 };
