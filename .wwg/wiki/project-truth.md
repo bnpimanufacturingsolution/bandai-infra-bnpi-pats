@@ -84,8 +84,16 @@
 - Tests: `tests/section-line-leaders.spec.ts` 15/15; `role-derivation.spec.ts` 55/55;
   Playwright smoke 2/2. Live proof incl. add→upgrade, remove→demote, delete→demote:
   `hris-api/.runtime/20260907-section-ll-proof/`, `.wwg/reports/section-line-leader-assignment-20260907.md`.
-- Boundary: local DEV proven; VM/GitOps promotion follows develop push. Day-labor
-  tagging scope (leader tags own-section people only) remains a candidate REC.
+- **VM/GitOps promotion (2026-09-07)**: pushed `2f6aed49`; VM ansible-pull synced,
+  rebuilt `hris-api-local:develop`/`hris-app-local:develop`, rolled dev/uat/prod
+  `hris-api`/`hris-app` pods; db-init Jobs re-ran **Complete** in all three envs after
+  releasing the stale/failed jobs (DEV Failed job released; UAT/PROD Completed jobs
+  released to pick up the new schema); `section_line_leaders` table verified in DEV/UAT/PROD
+  Postgres; all six Argo apps **Synced/Healthy** (runtime-dev was Degraded before this
+  work and is now Healthy); DEV API `:3101` serves the `lineLeaders` section enrichment
+  (live `[]` response proof).
+- Boundary remaining: day-labor tagging scope (leader tags own-section people only)
+  recorded as `REC-20260907-DAY-LABOR-LEADER-SECTION-SCOPING` (Proposed), not implemented.
 
 ## Employee weekly hours vs schedule templates (2026-08-20)
 

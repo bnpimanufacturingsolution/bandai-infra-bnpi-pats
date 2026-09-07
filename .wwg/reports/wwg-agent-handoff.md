@@ -66,6 +66,7 @@
 - Employee hard delete now detaches Section.headId (pre-existing gap) and deletes join rows.
 - DEV db-init blocker removed: stale requests_type_backup_20260826 (47 rows) exported to .runtime/dev-dbinit-drift-repair-20260907/ then dropped; local prisma db push now clean. runtime-dev was Synced/Degraded (failed db-init) BEFORE this work; expect green after push + job release.
 - Boundary: local DEV proven; VM/GitOps follows push. Day-labor own-section tagging scoping remains candidate REC.
+- **VM/GitOps promoted same day**: pushed `2f6aed49`; VM rebuilt/rolled dev+uat+prod; db-init Jobs released and re-ran Complete in all three envs; `section_line_leaders` verified in DEV/UAT/PROD Postgres; all six Argo apps Synced/Healthy (runtime-dev Degraded→Healthy); DEV API `:3101` serves `lineLeaders` enrichment. GitHub Actions blocked by account billing failure (pre-existing, jobs never started; not a test failure). Day-labor scoping registered as REC-20260907-DAY-LABOR-LEADER-SECTION-SCOPING.
 
 ## 2026-09-07 - Infrastructure-layer security audit (VM + host, read-only)
 

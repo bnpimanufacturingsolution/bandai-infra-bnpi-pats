@@ -88,12 +88,34 @@ All temp proof sections deleted; TESTBEN004/TESTBEN003 back to `hris-employee`.
   (47 rows, full JSON).
 - Then `DROP TABLE` on DEV. Local `prisma db push` now syncs clean (9.44s).
 
+## VM/GitOps promotion (2026-09-07)
+
+- Pushed `2f6aed49` to `origin/develop` (rebased cleanly onto `e5e51a43`).
+- VM ansible-pull synced the SHA, rebuilt `hris-api-local:develop` /
+  `hris-app-local:develop`, and rolled `hris-api`/`hris-app` Deployments in
+  dev, uat, and prod (pods 1/1 Running on the new images).
+- DEV db-init Job was `Failed` (pre-existing, created 01:26Z). Released it;
+  Argo recreated from git → `SuccessCriteriaMet Complete` (09:35:28Z).
+- UAT/PROD db-init Jobs were old Completed runs (01:03Z, pre-schema); released
+  both → recreated → `Complete` (10:27:36Z) → `section_line_leaders` table
+  verified present in DEV, UAT, and PROD Postgres.
+- All six Argo applications **Synced/Healthy** (`project-truth-runtime-dev`
+  was Degraded before this work and is now Healthy).
+- DEV API `http://localhost:3101` (VM): health 200, admin login OK, and the
+  section list response carries the new `lineLeaders` enrichment (`[]`).
+- GitHub Actions runs for this SHA did not execute: account billing failure
+  ("recent account payments have failed or spending limit needs to be
+  increased") — pre-existing account-level blocker affecting all workflows,
+  including the prior commit's run; not a code/test failure. VM promotion is
+  independent of Actions (ansible-pull pulls git directly) and is proven above.
+  Evidence scripts + outputs: `.runtime/vm-check-20260907.sh`,
+  `.runtime/vm-final-check-20260907.sh`, `.runtime/vm-release-uatprod-jobs-20260907.sh`,
+  `.runtime/vm-dev-serving-check-20260907.sh` (repo root `.runtime/`).
+
 ## Boundary
 
-- Local DEV proven. VM/GitOps promotion follows the develop push + ansible-pull
-  rebuild; DEV db-init should turn green after the failed Job is released by the
-  new schema-only revision.
 - LLA money remains enrollment-driven (`EmployeeBenefit` code `LLA`); no
   auto-award from assignment (Project Truth doctrine unchanged).
 - Day-labor tagging scope (leader tags only own-section people) remains a
-  candidate recommendation, not implemented.
+  candidate recommendation, not implemented — recorded as
+  `REC-20260907-DAY-LABOR-LEADER-SECTION-SCOPING` (Proposed).
