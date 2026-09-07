@@ -1,6 +1,6 @@
 # Requirement: Section Line Leader — Detailed Requirements (operator input)
 
-- Status: `CONFIRMED — READY FOR BUILD PLAN` (2026-09-07; one nuance flagged in Open Item 4)
+- Status: `CONFIRMED — BUILD APPROVED (Phase 0 in progress)` (2026-09-07)
 - Owner: Operator (BNPI)
 - Branch: `feature/section-line-leader-requirements` (safety branch — no deploys until merged to `develop`)
 - Base feature: Section line leader assignment shipped 2026-09-07 (`section_line_leaders` M:N join, role derivation, `/admin/configuration/sections` UI, VM-promoted to dev/uat/prod). See `.wwg/reports/section-line-leader-assignment-20260907.md`.
@@ -21,7 +21,20 @@
 > they suppose to see, 4, yes but 1 person can be only under 1 line leader,
 > 5. yes please"
 
-## CONFIRMED MODEL (agent synthesis of inputs #1 + #2)
+**#4 (2026-09-07, answering the build plan's 3 decisions):**
+> "1, is not sure can that be just config on admin so that it can be adjust.
+> 2, ok do it. 3. 1 leader multiple under, if 2 leader on section each have
+> different under"
+
+## Build decisions locked (from inputs #3 + #4)
+
+| # | Decision | Build consequence |
+|---|---|---|
+| D1 | Approval chain is **admin-configurable**, not hardcoded | Leader-filed chains resolved through the existing per-org workflow-config mechanism (`getRequestWorkflowConfig`), with an admin Configuration surface to adjust the chain per request type. Default (per input #2): leader → manager → HR. |
+| D2 | Timesheet day-save security fix **approved** | Day-save write authorization tightened to: owner-self / HR / admin / responsible line leader (or section-leader fallback). Closes the pre-existing any-user write gap. |
+| D3 | **Leader→member assignment:** one leader has many members under them; when a section has 2+ leaders, **each leader has a different set of members** | New data: `Employee.lineLeaderId` (nullable FK to Employee) = the employee's **responsible line leader**. Resolution: (a) explicit `lineLeaderId` wins; (b) unset + section has exactly 1 leader → that leader; (c) unset + 2+ leaders → any section leader may act until admin assigns members. Admin UI for member→leader assignment included. |
+
+## CONFIRMED MODEL (agent synthesis of inputs #1 + #2 + #3 + #4)
 
 **Hierarchy:**
 ```

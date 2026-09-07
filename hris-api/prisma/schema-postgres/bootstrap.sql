@@ -596,6 +596,9 @@ CREATE TABLE "sections" (
     CONSTRAINT "sections_pkey" PRIMARY KEY ("id")
 );
 
+-- AddColumn (2026-09-07 responsible line leader)
+ALTER TABLE "employees" ADD COLUMN "lineLeaderId" TEXT;
+
 -- CreateTable
 CREATE TABLE "section_line_leaders" (
     "id" TEXT NOT NULL,
@@ -764,6 +767,7 @@ CREATE TABLE "employees" (
     "personId" TEXT NOT NULL,
     "deviceId" TEXT,
     "employmentHistory" JSONB NOT NULL,
+    "lineLeaderId" TEXT,
 
     CONSTRAINT "employees_pkey" PRIMARY KEY ("id")
 );
@@ -2013,6 +2017,9 @@ CREATE INDEX "employees_organizationId_departmentId_idx" ON "employees"("organiz
 -- CreateIndex
 CREATE INDEX "employees_organizationId_sectionId_idx" ON "employees"("organizationId", "sectionId");
 
+-- CreateIndex (2026-09-07 responsible line leader)
+CREATE INDEX "employees_lineLeaderId_idx" ON "employees"("lineLeaderId");
+
 -- CreateIndex
 CREATE INDEX "employees_organizationId_workforceSource_idx" ON "employees"("organizationId", "workforceSource");
 
@@ -2660,6 +2667,9 @@ ALTER TABLE "employees" ADD CONSTRAINT "employees_levelId_fkey" FOREIGN KEY ("le
 
 -- AddForeignKey
 ALTER TABLE "employees" ADD CONSTRAINT "employees_reportToId_fkey" FOREIGN KEY ("reportToId") REFERENCES "employees"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+-- AddForeignKey (2026-09-07 responsible line leader)
+ALTER TABLE "employees" ADD CONSTRAINT "employees_lineLeaderId_fkey" FOREIGN KEY ("lineLeaderId") REFERENCES "employees"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "employees" ADD CONSTRAINT "employees_personId_fkey" FOREIGN KEY ("personId") REFERENCES "Person"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
