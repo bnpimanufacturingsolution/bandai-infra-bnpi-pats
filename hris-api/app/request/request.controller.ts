@@ -50,6 +50,8 @@ import {
 	resolveStepAssignee,
 	updateRequestStepProgress,
 } from "../../helper/request-runtime.helper";
+import { canActAsLineLeaderForEmployee } from "../../helper/section-leader-scope.helper";
+import { getLeaderFiledWorkflowCode } from "../../helper/line-leader-workflow.helper";
 import {
 	getOrCreateWorkforceRecruitmentSetting,
 	countCurrentHeadcount,
@@ -1730,7 +1732,80 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 				};
 			}
 
+			// Line leader filing on behalf of a section member (2026-09-07
+			// requirement). Section-scoped, server-enforced; the leader is the
+			// requester (initiator), the member is the targetEmployee.
+			const requestedTargetEmployeeId = String(validation.data.targetEmployeeId || "").trim();
+			const isOnBehalfOfFile =
+				Boolean(requestedTargetEmployeeId) &&
+				requestedTargetEmployeeId !== validation.data.requesterId;
+			if (isOnBehalfOfFile) {
+				const requesterRoleForOnBehalf = String(requester.role || userRole || "")
+					.trim()
+					.toLowerCase();
+				const isHrOrAdminOnBehalf =
+					["hris-admin", "admin", "super_admin", "superadmin", "hris-hr-manager", "hris-hr-user"].includes(
+						requesterRoleForOnBehalf,
+					);
+				const leaderTargetTypes = new Set([
+					"OVERTIME",
+					"ATTENDANCE_CORRECTION",
+					"TIMESHEET",
+					"PAYROLL_CORRECTION",
+				]);
+				if (!leaderTargetTypes.has(String(validation.data.type || "").toUpperCase())) {
+					const errorResponse = buildErrorResponse(
+						`Filing ${validation.data.type} requests on behalf of another employee is not supported.`,
+						400,
+					);
+					res.status(400).json(errorResponse);
+					return;
+				}
+				if (!isHrOrAdminOnBehalf) {
+					const scopeCheck = await canActAsLineLeaderForEmployee(prisma, {
+						organizationId,
+						leaderEmployeeId: requester.id,
+						targetEmployeeId: requestedTargetEmployeeId,
+					});
+					if (!scopeCheck.ok) {
+						const errorResponse = buildErrorResponse(
+							scopeCheck.reason === "not_a_section_leader"
+								? "Only the employee's responsible line leader can file requests on their behalf."
+								: "You can only file requests for employees in your own sections.",
+							403,
+						);
+						res.status(403).json(errorResponse);
+						return;
+					}
+				}
+				const safeOnBehalfMetadata = getSafePanCreateMetadata(validation.data.metadata);
+				validation.data.metadata = {
+					...safeOnBehalfMetadata,
+					filedBy: {
+						role: requesterRoleForOnBehalf || null,
+						employeeId: requester.id,
+						isLineLeader:
+							requesterRoleForOnBehalf === "hris-line-leader" ? true : undefined,
+					},
+					targetEmployeeId: requestedTargetEmployeeId,
+				};
+			}
+
 			if (validation.data.type === "LEAVE") {
+				// On-behalf leave is not supported yet (validation + side effects are
+				// requester-bound). Leader core types: OVERTIME, ATTENDANCE_CORRECTION,
+				// TIMESHEET, PAYROLL_CORRECTION.
+				if (
+					String(validation.data.targetEmployeeId || "").trim() &&
+					String(validation.data.targetEmployeeId).trim() !== validation.data.requesterId
+				) {
+					const errorResponse = buildErrorResponse(
+						"Filing leave on behalf of another employee is not supported yet.",
+						400,
+					);
+					res.status(400).json(errorResponse);
+					return;
+				}
 				const { leaveType, totalDays, durationUnit, halfDaySession } = getLeaveMetadata(
 					validation.data,
 				);
@@ -2227,13 +2302,18 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 				};
 			}
 
+			const metadataForWorkflow = (validation.data.metadata as Record<string, any> | undefined) ?? {};
+			const onBehalfTargetId = String(validation.data.targetEmployeeId || "").trim();
+			const isOnBehalfCreate =
+				Boolean(onBehalfTargetId) && onBehalfTargetId !== validation.data.requesterId;
+			// Leader-filed on-behalf requests use the dedicated manager→HR
+			// templates; employee self-service keeps today's normal process (per
+			// operator requirement #3.2). Admin can still override via metadata.workflowCode (D1).
 			const preferredWorkflowCode =
-				String(
-					(validation.data.metadata as Record<string, any> | undefined)?.workflowCode ||
-						"",
-				)
+				String(metadataForWorkflow.workflowCode || "")
 					.trim()
 					.toUpperCase() ||
+				(isOnBehalfCreate ? getLeaderFiledWorkflowCode(validation.data.type) : null) ||
 				(validation.data.type === "OVERTIME"
 					? REQUEST_WORKFLOW_CODES.OVERTIME_DEFAULT
 					: undefined);

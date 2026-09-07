@@ -8,6 +8,12 @@ export const SEEDED_LIFECYCLE_STATES = [
 	{ key: "CANCELLED", label: "Cancelled", order: 6, isTerminal: true },
 ] as const;
 
+import {
+	LEADER_FILED_OVERTIME_STEPS,
+	LEADER_FILED_TIMESHEET_STEPS,
+	LEADER_FILED_ATTENDANCE_CORRECTION_STEPS,
+} from "../../helper/line-leader-workflow.helper";
+
 const buildPanSteps = (finalStepName = "Personnel Action Completion") => [
 	{
 		step_number: 1,
@@ -435,6 +441,35 @@ export const DEFAULT_REQUEST_WORKFLOW_TEMPLATES = [
 		description:
 			"Post-payroll timesheet correction: employee submission, manager approval, READY for next payroll apply",
 		steps: buildApprovalSteps("Payroll Correction Completion"),
+		states: SEEDED_LIFECYCLE_STATES,
+	},
+	{
+		// Leader-filed OT (2026-09-07 line-leader requirement): the line leader
+		// files for a section member; chain resolves from the MEMBER's manager.
+		code: "WF-OVERTIME-LEADER-FILED",
+		name: "Overtime Approval Workflow (Line Leader Filed)",
+		requestType: "OVERTIME",
+		description:
+			"Line leader files overtime for a section member: leader submission, member's manager approval, HR approval, then payable OT on the member's timesheet",
+		steps: LEADER_FILED_OVERTIME_STEPS,
+		states: SEEDED_LIFECYCLE_STATES,
+	},
+	{
+		code: "WF-TIMESHEET-LEADER-FILED",
+		name: "Timesheet Adjustment Workflow (Line Leader Filed)",
+		requestType: "TIMESHEET",
+		description:
+			"Line leader files a timesheet adjustment for a section member: leader submission, member's manager approval, HR approval, completion",
+		steps: LEADER_FILED_TIMESHEET_STEPS,
+		states: SEEDED_LIFECYCLE_STATES,
+	},
+	{
+		code: "WF-ATTENDANCE-CORRECTION-LEADER-FILED",
+		name: "Attendance Correction Workflow (Line Leader Filed)",
+		requestType: "ATTENDANCE_CORRECTION",
+		description:
+			"Line leader files an attendance correction for a section member: leader submission, member's manager approval, HR review, completion",
+		steps: LEADER_FILED_ATTENDANCE_CORRECTION_STEPS,
 		states: SEEDED_LIFECYCLE_STATES,
 	},
 ] as const;

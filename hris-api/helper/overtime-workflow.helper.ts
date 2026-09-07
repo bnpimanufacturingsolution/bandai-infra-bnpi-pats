@@ -44,6 +44,16 @@ export const isOvertimeRequestType = (requestType?: string | null) =>
 export const isOvertimeWorkflowCode = (code?: string | null) =>
 	normalizeToken(code) === normalizeToken(OVERTIME_WORKFLOW_CODE);
 
+// Leader-filed overtime keeps its manager→HR chain; the normalizer below must
+// not flatten it back to the employee self-service chain.
+export const isLeaderFiledOvertimeWorkflowCode = (code?: string | null) => {
+	const normalized = normalizeToken(code);
+	return (
+		normalized === normalizeToken("WF-OVERTIME-LEADER-FILED") ||
+		normalized === normalizeToken("WF-OVERTIME-SECTION-LEADER")
+	);
+};
+
 export const normalizeOvertimeWorkflowSteps = <T extends Record<string, any>>(
 	_steps?: unknown,
 ): T[] => OVERTIME_HR_DIRECT_STEPS.map((step) => ({ ...step }) as unknown as T);

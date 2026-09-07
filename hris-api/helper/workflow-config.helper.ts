@@ -31,13 +31,18 @@ import {
 import {
 	isOvertimeRequestType,
 	isOvertimeWorkflowCode,
+	isLeaderFiledOvertimeWorkflowCode,
 	normalizeOvertimeWorkflowSteps,
 } from "./overtime-workflow.helper";
+import { isLeaderFiledAttendanceCorrectionWorkflowCode } from "./attendance-correction-workflow.helper";
 
 export const REQUEST_WORKFLOW_CODES = {
 	TIMESHEET_SUBMISSION: "WF-TIMESHEET-DEFAULT",
 	TIMESHEET_EDIT_PERMISSION: "WF-TIMESHEET-EDIT-PERMISSION",
 	OVERTIME_DEFAULT: "WF-OVERTIME-DEFAULT",
+	OVERTIME_LEADER_FILED: "WF-OVERTIME-LEADER-FILED",
+	TIMESHEET_LEADER_FILED: "WF-TIMESHEET-LEADER-FILED",
+	ATTENDANCE_CORRECTION_LEADER_FILED: "WF-ATTENDANCE-CORRECTION-LEADER-FILED",
 	PAYROLL_CORRECTION_DEFAULT: "WF-PAYROLL-CORRECTION-DEFAULT",
 } as const;
 
@@ -315,12 +320,19 @@ export const normalizeWorkflowConfigRecord = (
 		.toUpperCase();
 	const isRequisitionWorkflow = isRequisitionWorkflowCode(code);
 	const requestType = source.requestType || fallback?.requestType || null;
+	// Leader-filed workflows keep their catalog chain (manager→HR); the
+	// self-service normalizers below must not flatten them.
+	const isLeaderFiledWorkflow =
+		isLeaderFiledOvertimeWorkflowCode(code) || isLeaderFiledAttendanceCorrectionWorkflowCode(code);
 	const shouldNormalizeScheduleChangeWorkflow =
-		isScheduleChangeWorkflowCode(code) || isScheduleChangeRequestType(requestType);
+		!isLeaderFiledWorkflow &&
+		(isScheduleChangeWorkflowCode(code) || isScheduleChangeRequestType(requestType));
 	const shouldNormalizeAttendanceCorrectionWorkflow =
-		isAttendanceCorrectionWorkflowCode(code) || isAttendanceCorrectionRequestType(requestType);
+		!isLeaderFiledWorkflow &&
+		(isAttendanceCorrectionWorkflowCode(code) || isAttendanceCorrectionRequestType(requestType));
 	const shouldNormalizeOvertimeWorkflow =
-		isOvertimeWorkflowCode(code) || isOvertimeRequestType(requestType);
+		!isLeaderFiledWorkflow &&
+		(isOvertimeWorkflowCode(code) || isOvertimeRequestType(requestType));
 	const steps = isRequisitionWorkflow
 		? buildRecruitmentRequisitionSteps()
 		: shouldNormalizeAttendanceCorrectionWorkflow
@@ -338,9 +350,9 @@ export const normalizeWorkflowConfigRecord = (
 		states: isRequisitionWorkflow
 			? cloneStates(REQUISITION_STATES)
 			: normalizeStates(source.states ?? fallback?.states),
-		steps: shouldNormalizeScheduleChangeWorkflow
+		steps: (shouldNormalizeScheduleChangeWorkflow
 			? normalizeScheduleChangeWorkflowStepsForHrApproval(steps)
-			: steps,
+			: steps) as ProvisioningWorkflowStep[],
 		isActive: source.isActive ?? fallback?.isActive ?? true,
 		isDefault: source.isDefault ?? fallback?.isDefault ?? false,
 		createdAt: source.createdAt || fallback?.createdAt,

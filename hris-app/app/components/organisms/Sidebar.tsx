@@ -95,7 +95,10 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const isHRManager = user?.role === "hris-hr-manager";
 	const isHRUser = user?.role === "hris-hr-user";
 	const isHR = isHRManager || isHRUser;
-	const isManager = user?.role === "hris-employee-manager";
+	// Line leaders are manager-class (approvals + team surfaces) per the
+	// 2026-09-07 line-leader requirement; narrower data scope is enforced API-side.
+	const isManager =
+		user?.role === "hris-employee-manager" || user?.role === "hris-line-leader";
 	const isEmployee = user?.role === "hris-employee";
 	const isAdmin = user?.role?.includes("admin");
 
