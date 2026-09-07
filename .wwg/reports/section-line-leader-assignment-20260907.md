@@ -57,8 +57,22 @@ re-derives the role back down.
   dedupe/missing, reconcile diff/idempotent/no-op, role derivation precedence incl.
   manager/HR wins and legacy-path no-grant).
 - `hris-api/tests/role-derivation.spec.ts` — 55/55 still passing (no regression).
+- `hris-api/tests/section.controller.spec.ts` — **66/66 passing** after adding a
+  `sectionLineLeader` stub to the spec's mock prisma (the new `remove()` pre-delete
+  membership read needed it; no assertions changed).
 - `hris-app/tests/smoke/admin-config-sections-line-leaders.spec.ts` — **2/2 passing**
   (column render; edit modal chips load + remove).
+- **Pre-existing drift (NOT from this work)**:
+  `tests/employee-hard-delete.contract.spec.ts` fails 4/4 statically (0 passing)
+  because it asserts source strings (`routes.post("/:id/hard-delete-preview"`,
+  `EMPLOYEE_HARD_DELETE_ADMIN_ROLES`, `attendanceRecords`, `requiresConfirmation`)
+  that do not exist in `employee.controller.ts` even at the pre-work base
+  `e5e51a43` (0 occurrences verified). Related drift from the earlier
+  accidental-save restore (`fb326549`/`5e4c3046`). The hard-delete detach change
+  from this feature is additive (two prisma calls before `employee.delete`) and is
+  covered by live behavior, not by this static spec.
+- Dual-app parity: admin-only configuration surface — HR-only exception, no
+  `hris-emp-app` counterpart (per hris-app AGENTS.md exception list).
 
 ## Live API round-trip proof (K3s DEV forward, admin actor)
 

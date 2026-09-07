@@ -118,6 +118,13 @@ describe("Section Controller", () => {
 				}
 				return await Promise.all(operations);
 			},
+			// Join model used by section remove (captures former line leaders
+			// before cascade) and by list/create/update enrichment.
+			sectionLineLeader: {
+				findMany: async () => [],
+				createMany: async () => ({ count: 0 }),
+				deleteMany: async () => ({ count: 0 }),
+			},
 		};
 
 		sectionController = controller(prisma as PrismaClient);
