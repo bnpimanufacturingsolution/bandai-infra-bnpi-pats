@@ -70,10 +70,9 @@ export default function UnifiedLayout() {
 						*/}
 						<div
 							className={cn(
-								"flex max-w-[100vw] flex-col overflow-x-hidden bg-gray-50 lg:flex-row",
-								isViewportFillPage
-									? "h-screen overflow-hidden"
-									: "min-h-screen",
+								"flex max-w-[100vw] max-h-screen flex-col overflow-hidden bg-gray-50 lg:flex-row",
+								"h-screen",
+								isViewportFillPage ? "overflow-hidden" : "overflow-hidden",
 							)}>
 							{/* Mobile Sidebar Overlay */}
 							{sidebarOpen && (
@@ -104,9 +103,12 @@ export default function UnifiedLayout() {
 									sidebarOpen={sidebarOpen}
 									onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
 									notificationsPath={notificationsPath}
-									showHRDropdown={["admin", "hris-admin", "hris-hr-manager", "hris-hr-user"].includes(
-										user?.role || "",
-									)}
+									showHRDropdown={[
+										"admin",
+										"hris-admin",
+										"hris-hr-manager",
+										"hris-hr-user",
+									].includes(user?.role || "")}
 								/>
 
 								{/*
@@ -115,10 +117,10 @@ export default function UnifiedLayout() {
 								*/}
 								<main
 									className={cn(
-										"min-w-0 flex-1",
+										"min-w-0 flex-1 max-h-[93vh]",
 										isViewportFillPage
 											? "flex h-0 min-h-0 flex-col overflow-hidden"
-											: "overflow-x-hidden overflow-y-auto",
+											: "overflow-x-hidden",
 									)}>
 									<div
 										className={cn(
