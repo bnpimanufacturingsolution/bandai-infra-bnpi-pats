@@ -263,6 +263,9 @@ async function softDeleteCandidate(candidate: Candidate, organizationId: string)
 			where: { organizationId, headId: candidate.id },
 			data: { headId: null },
 		});
+		await tx.sectionLineLeader.deleteMany({
+			where: { organizationId, employeeId: candidate.id },
+		});
 		await tx.employee.updateMany({
 			where: { organizationId, reportToId: candidate.id },
 			data: { reportToId: null },

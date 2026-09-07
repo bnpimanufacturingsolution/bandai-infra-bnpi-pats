@@ -2,6 +2,25 @@ import { hrisApiClient } from "../lib/api-client";
 import { APIService } from "./api-service";
 import type { GeneratedConfigCodeResponse } from "./departments.service";
 
+export interface SectionLineLeaderMembership {
+	id: string;
+	employeeId: string;
+	sectionId?: string;
+	createdAt?: string;
+	employee?: {
+		id: string;
+		employeeId?: string;
+		person?: {
+			firstName?: string;
+			lastName?: string;
+			personalInfo?: {
+				firstName?: string;
+				lastName?: string;
+			};
+		};
+	};
+}
+
 export interface Section {
 	id: string;
 	organizationId: string;
@@ -23,6 +42,8 @@ export interface Section {
 			};
 		};
 	};
+	lineLeaders?: SectionLineLeaderMembership[];
+	lineLeaderIds?: string[];
 	scheduleId?: string | null;
 	scheduleTemplate?: {
 		id: string;
@@ -43,6 +64,7 @@ export interface CreateSectionRequest {
 	departmentId: string;
 	description?: string;
 	headId?: string | null;
+	lineLeaderIds?: string[];
 	scheduleId?: string | null;
 	isHr?: boolean;
 	isActive?: boolean;
@@ -55,6 +77,7 @@ export interface UpdateSectionRequest {
 	departmentId?: string;
 	description?: string;
 	headId?: string | null;
+	lineLeaderIds?: string[];
 	scheduleId?: string | null;
 	isHr?: boolean;
 	isActive?: boolean;

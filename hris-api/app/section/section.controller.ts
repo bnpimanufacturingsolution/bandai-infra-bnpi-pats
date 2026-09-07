@@ -21,12 +21,64 @@ import { invalidateCache } from "../../middleware/cache";
 import * as XLSX from "xlsx";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { suggestUniqueConfigCode } from "../../helper/config-code.helper";
-import { syncEmployeeRolesFromOrgStructure } from "../../helper/employee-role-sync.helper";
+import { syncEmployeeRolesFromOrgStructure, syncLineLeaderRolesForEmployees } from "../../helper/employee-role-sync.helper";
+import {
+	reconcileSectionLineLeaders,
+	resolveLineLeaderIds,
+} from "../../helper/section-line-leaders.helper";
 
 const logger = getLogger();
 const sectionLogger = logger.child({ module: "section" });
 
+/** Relation include for section reads: head + line leaders with employee identity. */
+const sectionLineLeaderInclude = (prisma: PrismaClient) => ({
+	department: { select: { id: true, name: true, code: true } },
+	head: {
+		select: {
+			id: true,
+			employeeId: true,
+			person: { select: { personalInfo: true } },
+		},
+	},
+	lineLeaders: {
+		orderBy: { createdAt: "asc" as const },
+		select: {
+			id: true,
+			employeeId: true,
+			createdAt: true,
+			employee: {
+				select: {
+					id: true,
+					employeeId: true,
+					person: { select: { personalInfo: true } },
+				},
+			},
+		},
+	},
+	scheduleTemplate: { select: { id: true, name: true, code: true } },
+});
+
 export const controller = (prisma: PrismaClient) => {
+	/** Role re-derivation after line-leader membership changes. */
+	const syncRolesAfterLineLeaderChange = async (
+		organizationId: string,
+		employeeIds: string[],
+	): Promise<void> => {
+		if (!employeeIds.length) return;
+		try {
+			const syncResult = await syncLineLeaderRolesForEmployees(prisma, {
+				organizationId,
+				employeeIds,
+				sampleLimit: 10,
+			});
+			sectionLogger.info(
+				`Line leader role sync: scanned=${syncResult.scanned} updated=${syncResult.updated} unchanged=${syncResult.unchanged}`,
+			);
+		} catch (roleSyncError) {
+			sectionLogger.warn(`Line leader role sync failed: ${roleSyncError}`);
+		}
+	};
+
 	const assertScheduleTemplateInOrganization = async (
 		scheduleId: string | null | undefined,
 		organizationId: string | null | undefined,
@@ -126,19 +178,35 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const lineLeaderCheck = await resolveLineLeaderIds(prisma,
+				validation.data.lineLeaderIds,
+				validation.data.organizationId,
+			);
+			if (!lineLeaderCheck.ok) {
+				const errorResponse = buildErrorResponse(
+					"One or more line leaders not found in this organization",
+					400,
+					[{ field: "lineLeaderIds", message: `Missing or invalid: ${lineLeaderCheck.missing.join(", ")}` }],
+				);
+				res.status(400).json(errorResponse);
+				return;
+			}
+
+			const { lineLeaderIds: _omittedLineLeaderIds, ...sectionCreateData } =
+				validation.data;
 			const section = await prisma.section.create({
-				data: validation.data as any,
-				include: {
-					department: { select: { id: true, name: true, code: true } },
-					head: {
-						select: {
-							id: true,
-							employeeId: true,
-							person: { select: { personalInfo: true } },
-						},
-					},
-					scheduleTemplate: { select: { id: true, name: true, code: true } },
-				},
+				data: sectionCreateData as any,
+				include: sectionLineLeaderInclude(prisma),
+			});
+			const changedLeaderIds = await reconcileSectionLineLeaders(prisma,
+				section.id,
+				section.organizationId,
+				lineLeaderCheck.ids,
+			);
+			await syncRolesAfterLineLeaderChange(section.organizationId, changedLeaderIds);
+			const sectionWithLeaders = await prisma.section.findFirst({
+				where: { id: section.id },
+				include: sectionLineLeaderInclude(prisma),
 			});
 			sectionLogger.info(`Section created successfully: ${section.id}`);
 
@@ -186,7 +254,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.SECTION.CREATED,
-				section,
+				sectionWithLeaders ?? section,
 				201,
 			);
 			res.status(201).json(successResponse);
@@ -266,6 +334,41 @@ export const controller = (prisma: PrismaClient) => {
 				document ? prisma.section.findMany(findManyQuery) : [],
 				count ? prisma.section.count({ where: whereClause }) : 0,
 			]);
+
+			// Attach line-leader memberships for the page (single batched query).
+			if (document && sections.length > 0) {
+				try {
+					const sectionIds = sections.map((section) => section.id);
+					const memberships = await prisma.sectionLineLeader.findMany({
+						where: { sectionId: { in: sectionIds } },
+						orderBy: { createdAt: "asc" },
+						select: {
+							id: true,
+							sectionId: true,
+							employeeId: true,
+							createdAt: true,
+							employee: {
+								select: {
+									id: true,
+									employeeId: true,
+									person: { select: { personalInfo: true } },
+								},
+							},
+						},
+					});
+					const bySection = new Map<string, typeof memberships>();
+					for (const membership of memberships) {
+						const list = bySection.get(membership.sectionId) || [];
+						list.push(membership);
+						bySection.set(membership.sectionId, list);
+					}
+					for (const section of sections) {
+						(section as any).lineLeaders = bySection.get(section.id) || [];
+					}
+				} catch (enrichError) {
+					sectionLogger.warn(`Failed to attach line leaders to section list: ${enrichError}`);
+				}
+			}
 
 			sectionLogger.info(`Retrieved ${sections.length} sections`);
 			const processedData =
@@ -419,6 +522,22 @@ export const controller = (prisma: PrismaClient) => {
 
 			const prismaData = { ...validatedData };
 
+			const lineLeaderCheck = await resolveLineLeaderIds(prisma,
+				(prismaData as any).lineLeaderIds,
+				existingSection.organizationId,
+			);
+			if (!lineLeaderCheck.ok) {
+				const errorResponse = buildErrorResponse(
+					"One or more line leaders not found in this organization",
+					400,
+					[{ field: "lineLeaderIds", message: `Missing or invalid: ${lineLeaderCheck.missing.join(", ")}` }],
+				);
+				res.status(400).json(errorResponse);
+				return;
+			}
+			const { lineLeaderIds: _omittedLineLeaderIds, ...sectionUpdateData } =
+				prismaData as any;
+
 			if (
 				!(await assertScheduleTemplateInOrganization(
 					(prismaData as any).scheduleId,
@@ -435,19 +554,20 @@ export const controller = (prisma: PrismaClient) => {
 
 			const updatedSection = await prisma.section.update({
 				where: { id },
-				data: prismaData as any,
-				include: {
-					department: { select: { id: true, name: true, code: true } },
-					head: {
-						select: {
-							id: true,
-							employeeId: true,
-							person: { select: { personalInfo: true } },
-						},
-					},
-					scheduleTemplate: { select: { id: true, name: true, code: true } },
-				},
+				data: sectionUpdateData as any,
+				include: sectionLineLeaderInclude(prisma),
 			});
+			const changedLeaderIds = await reconcileSectionLineLeaders(prisma,
+				id,
+				existingSection.organizationId,
+				lineLeaderCheck.ids,
+			);
+			await syncRolesAfterLineLeaderChange(existingSection.organizationId, changedLeaderIds);
+			const sectionWithLeaders = await prisma.section.findFirst({
+				where: { id },
+				include: sectionLineLeaderInclude(prisma),
+			});
+			sectionLogger.info(`Section line leaders reconciled: ${id}`);
 
 			try {
 				await invalidateCache.byPattern(`cache:section:byId:${id}:*`);
@@ -465,7 +585,7 @@ export const controller = (prisma: PrismaClient) => {
 			sectionLogger.info(`${config.SUCCESS.SECTION.UPDATED}: ${updatedSection.id}`);
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.SECTION.UPDATED,
-				{ section: updatedSection },
+				{ section: sectionWithLeaders ?? updatedSection },
 				200,
 			);
 			res.status(200).json(successResponse);
@@ -504,9 +624,20 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Capture line-leader memberships before the cascade removes them,
+			// so their roles can be re-derived after the delete.
+			const formerLeaderIds = (
+				await prisma.sectionLineLeader.findMany({
+					where: { sectionId: id },
+					select: { employeeId: true },
+				})
+			).map((row) => row.employeeId);
+
 			await prisma.section.delete({
 				where: { id },
 			});
+
+			await syncRolesAfterLineLeaderChange(organizationId, formerLeaderIds);
 
 			try {
 				await invalidateCache.byPattern(`cache:section:byId:${id}:*`);

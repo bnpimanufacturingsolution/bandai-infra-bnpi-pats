@@ -47,3 +47,30 @@
   - JWT path: 200 on all three (unaffected).
 - Key custody: keys live in git overlays (private repo) + generated-keys.json (local .runtime evidence only, not committed). Rotation: append new key to comma list -> consumers switch -> remove old (doc: docs/INTEGRATION_EMPLOYEE_SEARCH_API.md).
 - Remaining handoff item closed: "Provision INTEGRATION_API_KEYS in VM DEV/UAT/PROD runtime envs; verify per-environment" - DONE 2026-09-07.
+
+## 2026-09-07 - FULL security audit (overall system, read-only)
+
+- Report: `.wwg/reports/security-audit-full-20260907.md` (supersedes/extends `.wwg/reports/security-audit-20260907.md` Phase 1).
+- Method: 11 read-only workstreams (secrets, API auth, GitOps/K8s, CI/scripts, device plane, frontend, emp-app, DB/PII/logs, money-path, deps/uploads/socket, public surface) + live VM probes via `ssh project-truth-hris`.
+- Headline: 12 CRITICAL / 22 HIGH / ~35 MEDIUM. Top: secrets-in-git (rotate+purge), unauthenticated /hikvision/callback, socket.io no handshake auth, any-user payroll generation (no RBAC), workflow self-approval, xlsx 0.18.5 CVE-2023-30533, imports write into PAID periods, VM SSH password-auth + passwordless sudo chain, no HRIS DB backups, no security headers.
+- Live VM evidence: `.runtime/security-audit-full-20260907/vm-probe.txt`, `vm-probe-2.txt` (sshd passwordauthentication=yes, SUDO_NOPASS_OK, fail2ban absent, k3s.yaml 644, device specs 600 OK, tunnel cred 600 OK).
+- No changes made. P0 remediation requires operator authorization (secrets rotation + git history rewrite touch PROD runtime).
+
+---
+
+## 2026-09-07 - Section Line Leader assignment implemented (option B)
+
+- `SectionLineLeader` join (`section_line_leaders`, M:N) + role derivation: membership derives `hris-line-leader` (isManager=true), precedence HR > manager level > line leader; add/remove/section-delete re-derive roles (delete-path stale-role gap found by live proof and fixed).
+- Admin UI: Line Leaders chips + add-select beside Section Head on /admin/configuration/sections; table column, view row, CSV.
+- Tests: section-line-leaders 15/15, role-derivation 55/55, smoke 2/2; live API round-trip incl. upgrade/demote/delete-demote; browser proof on real app. Evidence: hris-api/.runtime/20260907-section-ll-proof/, .runtime/browser-evidence/sections-line-leaders-live/, report .wwg/reports/section-line-leader-assignment-20260907.md.
+- Employee hard delete now detaches Section.headId (pre-existing gap) and deletes join rows.
+- DEV db-init blocker removed: stale requests_type_backup_20260826 (47 rows) exported to .runtime/dev-dbinit-drift-repair-20260907/ then dropped; local prisma db push now clean. runtime-dev was Synced/Degraded (failed db-init) BEFORE this work; expect green after push + job release.
+- Boundary: local DEV proven; VM/GitOps follows push. Day-labor own-section tagging scoping remains candidate REC.
+
+## 2026-09-07 - Infrastructure-layer security audit (VM + host, read-only)
+
+- Report: `.wwg/reports/security-audit-infra-20260907.md`. Evidence: `.runtime/security-audit-infra-20260907/vm-probe-3-deep-infra.txt` + `host-probe.txt`.
+- Headline (infra layer): 4 CRITICAL - IC1 VM LAN-to-root chain confirmed at sudoers level (`infra NOPASSWD:ALL` + password sshd + hardcoded pw + no fail2ban), IC2 Windows host firewall DISABLED on all profiles with RDP enabled, IC3 no encryption at rest (no LUKS, K3s without --secrets-encryption), IC4 unauthenticated observability stack exposed LAN-wide (Prometheus/Loki run as root, UFW Anywhere).
+- Highs: auditd inactive, reboot required + 54 pkgs pending, Docker no daemon.json/root containers, dnsmasq on LAN IP, packer bakes weak sshd, k3s.yaml 644, unmapped caddy.service (NEEDS_CONFIRMATION), X11Forwarding, GatewayPorts clientspecified.
+- Positives: UFW default-deny + AppArmor enforcing + hardened sysctls + unattended-upgrades + K3s creds locked + no anonymous CRBs + no privileged containers.
+- No changes made. P0 infra fixes (SSH keys-only, host firewall, sudoers scoping, obs binding) are additive and tunnel-safe; awaiting operator authorization.

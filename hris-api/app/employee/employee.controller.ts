@@ -6260,7 +6260,17 @@ export const controller = (prisma: PrismaClient) => {
 
 			employeeLogger.info(`${config.SUCCESS.EMPLOYEE.DELETED}: ${id}`);
 
-			const existingEmployee = await prisma.employee.findFirst({
+			// Detach org references that would otherwise block a hard delete:
+			// section head assignments and line-leader memberships.
+			await prisma.section.updateMany({
+				where: { headId: id },
+				data: { headId: null },
+			});
+			await prisma.sectionLineLeader.deleteMany({
+				where: { employeeId: id },
+			});
+
+			await prisma.employee.delete({
 				where: { id },
 			});
 

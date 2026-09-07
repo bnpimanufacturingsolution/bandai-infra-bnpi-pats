@@ -152,6 +152,7 @@ model Employee {
   employmentHistory            Json
   managedDepartments           Department[]          @relation("DepartmentManager")
   managedSections              Section[]             @relation("SectionHead")
+  lineLeaderSections           SectionLineLeader[]
   documentFolders              DocumentFolder[]      @relation("EmployeeDocumentFolders")
   convertedApplicants          Applicant[]           @relation("ApplicantConvertedEmployee") // Applicants converted into this employee record
   recruitmentActivities        RecruitmentActivity[] @relation("RecruitmentActivityActor")

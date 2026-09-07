@@ -12,6 +12,9 @@ export const SectionSchema = z.object({
 	headId: z
 		.union([z.string().refine((val) => isValidObjectId(val)), z.null()])
 		.optional(),
+	// Line leader assignment is a many-to-many join (section_line_leaders),
+	// accepted as employee-id list on create/update and reconciled by the controller.
+	lineLeaderIds: z.array(z.string().refine((val) => isValidObjectId(val))).optional(),
 	scheduleId: z
 		.union([z.string().refine((val) => isValidObjectId(val)), z.null()])
 		.optional(),
@@ -39,6 +42,7 @@ export const CreateSectionSchema = SectionSchema.omit({
 	headId: true,
 	isDefault: true,
 	isDeleted: true,
+	lineLeaderIds: true,
 });
 
 export type CreateSection = z.infer<typeof CreateSectionSchema>;

@@ -64,6 +64,29 @@
   - Timesheet/day-labor (2026-08-20): "Line Leader tags people per day on timesheet" — `Timesheetline.dayLaborType` (DIRECT/INDIRECT) was added but **Line Leader assignment itself is not persisted**.
 - Terminology: "Section Head" (canonical), "Line Leader" (role code `hris-line-leader`).
 
+### Section Line Leader assignment — IMPLEMENTED (2026-09-07)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`.
+- Operator chose **multiple line leaders per section** (option B): join model `SectionLineLeader`
+  (table `section_line_leaders`, unique `sectionId+employeeId`); `Section.lineLeaders` /
+  `Employee.lineLeaderSections` reverse relations. An employee may lead many sections.
+- Assignment screen: `/admin/configuration/sections` — "Line Leaders (optional)" multi-add
+  (removable chips) beside Section Head; table column + view row + CSV column.
+- **Role is now live**: membership derives `hris-line-leader` (`isManager=true`) via
+  `deriveRoleAndFlags({ ..., isLineLeader })`; precedence HR > manager level > line leader
+  (no downgrade of stronger org roles). Add/remove/section-delete all re-derive roles
+  through `syncLineLeaderRolesForEmployees`.
+- API: section create/update accept `lineLeaderIds` (same-org validated, deduped);
+  `reconcileSectionLineLeaders` transactionally diffs join rows; list GET batches
+  memberships. Employee hard delete now also detaches `Section.headId` (pre-existing gap)
+  and deletes join rows.
+- LLA money unchanged: still `EmployeeBenefit` `LLA` enrollment-driven; no auto-award.
+- Tests: `tests/section-line-leaders.spec.ts` 15/15; `role-derivation.spec.ts` 55/55;
+  Playwright smoke 2/2. Live proof incl. add→upgrade, remove→demote, delete→demote:
+  `hris-api/.runtime/20260907-section-ll-proof/`, `.wwg/reports/section-line-leader-assignment-20260907.md`.
+- Boundary: local DEV proven; VM/GitOps promotion follows develop push. Day-labor
+  tagging scope (leader tags own-section people only) remains a candidate REC.
+
 ## Employee weekly hours vs schedule templates (2026-08-20)
 
 - Status: `CONFIRMED_CODE`.

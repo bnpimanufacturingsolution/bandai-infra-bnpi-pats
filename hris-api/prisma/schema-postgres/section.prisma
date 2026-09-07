@@ -25,6 +25,7 @@ model Section {
   positions                    Position[]
   jobs                         Job[]
   workforceRecruitmentPolicies WorkforceRecruitmentPolicy[]
+  lineLeaders                  SectionLineLeader[]
 
   @@unique([organizationId, code])
   @@unique([organizationId, departmentId, name])
