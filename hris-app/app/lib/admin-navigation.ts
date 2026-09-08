@@ -133,6 +133,12 @@ export const adminConfigurationItems: AdminNavItem[] = [
 		icon: Users,
 	},
 	{
+		id: "calendar-items",
+		label: "Calendar Items",
+		path: "/admin/configuration/calendar-items",
+		icon: Calendar,
+	},
+	{
 		id: "holidays",
 		label: "Holidays",
 		path: "/admin/configuration/holidays",
