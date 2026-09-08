@@ -3,9 +3,6 @@ name: Validate Project Truth Hyper-V Repo
 on:
   pull_request:
     types:
-      - opened
-      - synchronize
-      - reopened
       - closed
   workflow_dispatch:
 
