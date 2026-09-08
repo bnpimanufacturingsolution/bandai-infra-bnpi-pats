@@ -94,3 +94,45 @@
 - Implementation: on-behalf guard in request create (membership-based, role-independent); three leader-filed workflow templates + seeds + catalog fallback; THREE normalizer seams exempted (config, runtime template, step-builder getWorkflowStepsForRequestType - root cause of initial flattening); timesheet PATCH identity guard (HR/admin/timekeeper/responsible leader) + day-labor-only diff; assign-members endpoint + admin UI block when section has 2+ leaders; sidebar Approvals/My Team for hris-line-leader.
 - Proof: E2E chain to COMPLETED (manager=member's manager Bryan, HR=Maria); plain-employee on-behalf 403; leader tag 200/persisted; non-tag 403; plain timesheet write 403; assignment invalid 400/valid 200. 166 backend tests + 2 smoke. Evidence: hris-api/.runtime/line-leader-e2e-*, -daylabor-*, assign-members-proof.
 - Boundary: on-behalf LEAVE rejected (requester-bound validation/side effects) with clear message; team-page section roster + D1 settings panel are follow-ups; NOT merged to develop / NOT deployed until operator approves.
+
+## 2026-09-08 - CI/Observe triggers moved from push to merge-only (operator request)
+
+- `.github/workflows/ci.yml` + `validate.yml`: `push` triggers removed; now run on `pull_request` (opened/synchronize/reopened = pre-merge gate) and on merged closes via job-level `if: ... merged == true` (all 8 CI jobs + validate job). `workflow_dispatch` kept for manual runs.
+- `.github/workflows/observe-deploy.yml`: switched from `push: develop` to `pull_request: types:[closed] branches:[develop]` with job-level `if: workflow_dispatch || merged == true`. On merged PRs `github.sha` = merge commit on develop = the SHA ansible-pull reports, so VM-report matching stays correct.
+- Pushed to `develop` as `fbc442bf` (cherry-picked via temp worktree to avoid the other session's dirty working tree). Live proof: `gh run list --commit fbc442bf` returns ZERO runs - the push no longer triggers any workflow.
+- Boundary to remember: direct pushes to `develop` (agent flow) now run NO CI and NO Observe. Use PRs (or `workflow_dispatch`) for verified changes. Previous push-triggered runs were already failing (CI/Validate/Observe failure on `aa8d8cab`) - pre-existing, worth investigating separately.
+- Side note from this change: working tree contains another session's uncommitted work (`login.tsx`, `landing.tsx`, `current-task.md`, `recommendation-registry.md`, timekeeping audit report) - left untouched.
+
+## 2026-09-08 - All automatic Actions disabled except merged-PR runs (operator request follow-up)
+
+- `ci.yml` + `validate.yml` triggers narrowed from `pull_request: [opened, synchronize, reopened, closed]` to `pull_request: types:[closed]` only. Combined with the existing job-level `if: ... merged == true`, nothing runs on PR open/update either.
+- Net effect on GitHub Actions: ZERO automatic runs except when a PR is MERGED into develop (CI+Validate+Observe) or a human clicks Run workflow (workflow_dispatch on all four).
+- Pushed `0a037a9d` to develop; live proof: `gh run list --commit 0a037a9d` empty (push fired nothing).
+- promote-gitops.yml unchanged (manual dispatch-only).
+
+## Latest Task Addendum - 2026-09-08: sync-preview slow API root-caused + fixed (TCP preflight + TTL cache)
+
+- **Operator report**: "an API is too slow". Latency sweep evidence: `.runtime/api-latency-sweep-20260818-181032/` (public) + `after-fix-timing.json`.
+- **Sweep findings**: tunnel baseline ~1.2-1.4s for everything (network, not app). Real server-side offenders: `GET /api/device/sync-preview` 5.5-6.3s and `GET /api/device/events` ~2.0s. Single-device preview was 0.24s -> per-device fan-out was the cost.
+- **Root cause**: 11 Hikvision device rows, >=7 stale/unreachable (EHOSTUNREACH 10.184.37.21 in API logs; old IPs 192.168.110.24 / 192.168.1.136 / TEST A/B; even 10.184.37.19-as-device). Each preview paid full live-probe timeouts per dead device (per-probe 2.2s, up to 3 sequential attempts, 3.5s budget) + per-device DB aggregation, every request.
+- **Fix** (commit `3c2202c6` on origin/develop, VM image rebuilt 10:38Z, DEV pod rolled): bounded TCP preflight (900ms default, env `HIKVISION_FAST_USER_COUNT_PREFLIGHT_TIMEOUT_MS`) resolving the SAME endpoint via buildHikvisionDeviceBaseUrl (tunnel-map safe); 60s TTL cache on the fast user-count probe for preview fan-out only (env `HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS`, 0 disables; negative results cached at half TTL); sync-job decision matrix call site stays UNCACHED (write planning exactness preserved).
+- **Proven after deploy (VM loopback)**: 5.5-6.3s -> 1.15-1.56s; warm runs ~1.1s; public path 0.9-2.2s. TTL expiry re-probes by design (bounded).
+- **Test**: hikvision-biometric-sync-contract 34/34 passing. Pre-existing full-tsc errors unchanged (device.controller AuditPayload `page` error exists on clean HEAD too).
+- **Left open (proposed, not implemented)**: (1) device events list ~2.0s server-side - candidates: 30s facet cache or query trim; (2) stale device rows cleanup is operator data decision (7 rows: old Main Entrance Device, Device 5, Import Target A CSV, TEST A/B); (3) timesheet list payload 1.07MB for 10 rows (page hydration bloat, server-fast).
+
+## 2026-09-08 - Per-day default project code on timesheet lines (operator feature)
+
+- Operator rule: DIRECT day -> `bnpi-dl-<year>`; INDIRECT day -> `bnpi-id-<year>`; per-day (one line per date, so an employee can carry different codes on different days).
+- Schema: additive `Timesheetline.projectCode String?` in both `prisma/schema/timesheetline.prisma` and `prisma/schema-postgres/timesheetline.prisma`. Applied to DEV via narrow create-only SQL runner `scripts/migrate-add-timesheet-project-code.ts` (did NOT use `prisma db push --accept-data-loss` - pre-existing `EmployeeApplicationAccess` drop warning avoided).
+- Helper `hris-api/helper/timesheet-project-code.helper.ts`: `resolveTimesheetProjectCode` (dayLaborType tag first, else workforceSource AGENCY->INDIRECT / everything else->DIRECT per canonical terminology; year = Asia/Manila year of the line date), `normalizeProjectCodeOverride` (explicit request value wins, max 64 chars), `resolveManilaYearOfDate`.
+- Wired all three line-write paths: breakdown save (`timesheet.helper.ts` syncTimesheetLinesFromBreakdown data block), obligation materialization (`attendance-obligation.helper.ts:~1272`), controller normalizeBreakdownForPersistence success+fallback branches. Zod: DailyBreakdownSchema + TimesheetlineSchema + create/update partials accept `projectCode`. Breakdown payload/audit/revision-audit surfaces expose it (label "Project code").
+- UI (hris-app): TimesheetDayEditor Project code input (placeholder dl/id per selected labor type; empty = use default), day tooltip shows Project code; timesheet/timesheetline services carry `projectCode`. Dual-app parity: HR-only surface (timesheet day editor has no emp-app counterpart; submodule not checked out).
+- Backfill: `scripts/backfill-timesheet-project-codes.ts` dry-run scanned 177,948 effective lines, 0 unclassifiable (dl-2026 173,517 / dl-2025 4,416 / id-2026 15); execute as ONE grouped SQL UPDATE (P1001/P1017 forward flake fixed by single round-trip): 177,942 rows updated, 6 pre-existing explicit codes preserved, verification shows 0 NULL projectCode and employees carrying dl-2025+dl-2026 across days (per-day proof).
+- Tests: new `tests/timesheet-project-code.helper.spec.ts` 16/16; regression day-labor-guard 7/7, attendance-obligation 17/17; app vitest TimesheetDayCell 6/6. API typecheck: zero errors in touched files (repo-wide 121 pre-existing drift lines unchanged, none reference touched surfaces).
+- Local DEV only (not pushed). Boundary: workers with a dayLaborType tag keep tag-derived code; lines with neither tag nor workforce source classify DIRECT (missing source = DIRECT canonical rule).
+
+### Project code documentation pack (2026-09-08 addendum)
+
+- Canonical spec: `docs/00-product/TIMESHEET_PROJECT_CODE.md` (rule, precedence, data model, all write paths, UI, backfill results + usage, deployment watch-out for the stray `EmployeeApplicationAccess` table, boundaries, and the project-management roadmap: registry -> validation -> hours report -> payroll slice -> leader UX).
+- Terminology entries added: root `.wwg/wiki/terminology.md` Observed Terms ("Timesheet project code", CONFIRMED_CODE_AND_LIVE_LOCAL) and `hris-api/.wwg/wiki/terminology.md` Canonical Term Candidates ("per-day project attribution").
+- Gap noted (not fixed, out of scope): the hris-api package wiki has no `dayLaborType` / Day labor entry from the 2026-08-20 feature - only the root wiki records it. Backfill opportunity if the package wiki is ever reconciled.
