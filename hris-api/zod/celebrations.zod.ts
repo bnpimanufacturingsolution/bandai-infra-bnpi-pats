@@ -5,6 +5,7 @@ export const BirthdayFilterTypeSchema = z.enum(["EMPLOYEES", "KIDS", "ALL"]);
 export const BirthdaysQuerySchema = z.object({
 	month: z.coerce.number().int().min(1).max(12),
 	year: z.coerce.number().int().min(1900).max(3000),
+	day: z.coerce.number().int().min(1).max(31).optional(),
 	type: BirthdayFilterTypeSchema.default("ALL"),
 	search: z.string().max(100).optional().default(""),
 	// Auth route ignores these; public route resolves id or stable seed code (e.g. bnei).
