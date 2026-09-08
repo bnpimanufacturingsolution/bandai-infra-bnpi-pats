@@ -22,6 +22,10 @@ import {
 } from "./attendance-obligation.helper";
 import { normalizeDayLaborType } from "./day-labor-type.helper";
 import {
+	normalizeProjectCodeOverride,
+	resolveTimesheetProjectCode,
+} from "./timesheet-project-code.helper";
+import {
 	AUTO_APPROVE_SYSTEM_ACTOR,
 	buildTimesheetAutoApprovalPatch,
 } from "./timesheet-config.helper";
@@ -178,6 +182,7 @@ export function buildBreakdownFromTimesheetLines(lines: any[] | null | undefined
 				employeeNotes: line.employeeNotes || line.notes || null,
 				approverNotes: line.approverNotes || null,
 				dayLaborType: line.dayLaborType || null,
+				projectCode: line.projectCode || null,
 				metadata: {
 					...metadata,
 					...(scheduleSnapshot ? { scheduleSnapshot } : {}),
@@ -362,6 +367,13 @@ export async function syncTimesheetLinesFromBreakdown(
 				workforceSourceSnapshot: employee?.workforceSource || null,
 				agencyIdSnapshot: employee?.agencyId || null,
 				dayLaborType: normalizeDayLaborType(day?.dayLaborType),
+				projectCode:
+					normalizeProjectCodeOverride(day?.projectCode) ??
+					resolveTimesheetProjectCode({
+						dayLaborType: normalizeDayLaborType(day?.dayLaborType),
+						workforceSource: employee?.workforceSource,
+						date,
+					}),
 				isDeleted: false,
 			},
 		});

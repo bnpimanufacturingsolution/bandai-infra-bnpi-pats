@@ -36,6 +36,10 @@ import {
 } from "../../helper/attendance.helper";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler.helper";
 import { normalizeDayLaborType } from "../../helper/day-labor-type.helper";
+import {
+	normalizeProjectCodeOverride,
+	resolveTimesheetProjectCode,
+} from "../../helper/timesheet-project-code.helper";
 import { groupDataByField } from "../../helper/dataGrouping";
 import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler";
 import {
@@ -395,6 +399,7 @@ export const controller = (prisma: PrismaClient) => {
 		"employeeNotes",
 		"approverNotes",
 		"dayLaborType",
+		"projectCode",
 	]);
 
 	const toAuditEpochMinute = (value: unknown): number | null => {
@@ -428,6 +433,7 @@ export const controller = (prisma: PrismaClient) => {
 			breakMinutes: metadata.breakMinutes ?? null,
 			breakDisplay: metadata.breakDisplay ?? null,
 			dayLaborType: day?.dayLaborType ?? null,
+			projectCode: day?.projectCode ?? null,
 		};
 	};
 
@@ -520,6 +526,7 @@ export const controller = (prisma: PrismaClient) => {
 			breakMinutes: line?.breakMinutes ?? metadata.breakMinutes ?? null,
 			breakDisplay: metadata.breakDisplay ?? null,
 			dayLaborType: line?.dayLaborType ?? null,
+			projectCode: line?.projectCode ?? null,
 		};
 	};
 
@@ -538,6 +545,7 @@ export const controller = (prisma: PrismaClient) => {
 		breakMinutes: "Break",
 		breakDisplay: "Break label",
 		dayLaborType: "Day labor",
+		projectCode: "Project code",
 	};
 
 	const buildRevisionFieldChanges = (
@@ -1325,6 +1333,7 @@ export const controller = (prisma: PrismaClient) => {
 						approverNotes:
 							typeof day?.approverNotes === "string" ? day.approverNotes : null,
 						dayLaborType: normalizeDayLaborType(day?.dayLaborType),
+						projectCode: normalizeProjectCodeOverride(day?.projectCode),
 						metadata: {
 							...incomingMetadata,
 							...mergeOvertimeMetadata(incomingMetadata, overtimeApplication.metadata),
@@ -1379,6 +1388,7 @@ export const controller = (prisma: PrismaClient) => {
 						approverNotes:
 							typeof day?.approverNotes === "string" ? day.approverNotes : null,
 						dayLaborType: normalizeDayLaborType(day?.dayLaborType),
+						projectCode: normalizeProjectCodeOverride(day?.projectCode),
 						metadata:
 							day?.metadata &&
 							typeof day.metadata === "object" &&
