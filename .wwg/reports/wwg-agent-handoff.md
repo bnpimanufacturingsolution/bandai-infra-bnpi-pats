@@ -1,9 +1,17 @@
+﻿## 2026-09-09 - OT batch close-out + eslint.config.js malware removal
+
+- Operator approved close-out with docs+tests. Batch = 2026-09-08 line-leader OT journey + timesheet project code, on eature/section-line-leader-requirements (9 commits) + working-tree changes. origin/develop merged in (4919084); duplicate device perf change discarded (byte-identical to 3c2202c6).
+- **Malware removed:** hris-app/eslint.config.js carried an obfuscated Ethereum-RPC/remote-eval blob since 3e7a303e (re-added by restore 5e4c3046). Parse-broken as committed (never executed); removed, legit config kept, evidence at .runtime/eslint.config.js.malware-evidence-20260909. Repo-wide grep clean.
+- Verification: API specs 37/37, app vitest 15/15, tsc delta 0 (65 pre-existing), targeted ESLint 0 errors (3 label-has-associated-control fixed with htmlFor+id; DatePicker/CalendarDatePicker forward optional id).
+- Delivery: push feature branch -> PR -> merge (per 2026-09-08 operator CI decision: automatic runs on merged PRs only). Post-merge VM rollout watch pending at write time.
+
+---
 # WWG Agent Handoff
 
 ## 2026-09-08 - Timekeeping deep audit (read-only)
 
 - Report: `.wwg/reports/timekeeping-deep-audit-20260908.md`. Scope: every timekeeping surface feeding payroll (attendance ingest, obligations, schedules, pairing, timesheet lifecycle, OT policy, day-status, metrics, generate/preview).
-- Headline: core money pipeline verified sound (APPROVED+DIRECT gate, paid/locked skips, OT approval gate, snapshot semantics, Manila-day bounds; core helpers 34/34 + source-truth regression 24/24 passing) — **but Start Payroll's 2026-09-04 auto-approval lane upgrades DRAFT/SUBMITTED/REVISED/REJECTED → system-APPROVED unconditionally and never consults `TimesheetConfig.enableAutoApprove`** (`resolveTimesheetAutoApproveEnsureAction` `timesheet.helper.ts:65-76`; sole ensure call site `payroll-period.helper.ts:1634`): manager-rejected sheets get paid. CONFLICTING with the 2026-08-12 "Start Payroll APPROVED-only" product truth; needs operator decision (exclude REJECTED / honor config / relabel toggle).
+- Headline: core money pipeline verified sound (APPROVED+DIRECT gate, paid/locked skips, OT approval gate, snapshot semantics, Manila-day bounds; core helpers 34/34 + source-truth regression 24/24 passing) â€” **but Start Payroll's 2026-09-04 auto-approval lane upgrades DRAFT/SUBMITTED/REVISED/REJECTED â†’ system-APPROVED unconditionally and never consults `TimesheetConfig.enableAutoApprove`** (`resolveTimesheetAutoApproveEnsureAction` `timesheet.helper.ts:65-76`; sole ensure call site `payroll-period.helper.ts:1634`): manager-rejected sheets get paid. CONFLICTING with the 2026-08-12 "Start Payroll APPROVED-only" product truth; needs operator decision (exclude REJECTED / honor config / relabel toggle).
 - Other findings: D2 day-labor guard diffs 11 fields but the write path persists full metadata (breakMinutes/leaveType smuggle possible, rides on `z.array(z.any())`); 13 `@ts-nocheck` files + `payrollperiod.controller.ts` is committed compiled CommonJS; Hikvision callback `?preview=true` dry-run lane regressed (gone) while endpoint stays public; DM4.3 OT apply remains script-only over untyped JSON buckets; import job progress in-memory (restart loses it); ZKTeco live callbacks never create attendance (`not_applied`, NEEDS_CONFIRMATION intent); dual timekeeping math engines; Mongo schema twin + tracked junk.
 - RECs registered: REC-20260908-PAYROLL-AUTOAPPROVE-REJECTED-UPGRADE, REC-20260908-DAY-LABOR-GUARD-WRITE-SURFACE, REC-20260908-CALLBACK-PREVIEW-LANE-REGRESSED, REC-20260908-IMPORT-JOB-PROGRESS-DURABILITY (all Proposed).
 - No code/config/data changes; audit-only. Next: owner triage of F1 (money-path approval semantics) before any further payroll work touches the lane.
@@ -11,7 +19,7 @@
 ## 2026-09-03 - Payroll domain audit (read-only)
 
 - Report: `.wwg/reports/payroll-audit-20260903.md`. Domain intact post-restore: register rules (Basic Path A/B, 313 basis, FILE_DUAL) verified live in `generatePayrollFromTimesheets`/`previewPayrollFromTimesheets` (`payroll-period.helper.ts:2002/2029/:5091/:5116`); Run Payroll OT readiness wired (`payrollperiod.controller.ts:1079`); **184/184 tests passing** (22 runnable payroll specs, TESTEXIT=0).
-- 5 findings (F1 org-policy auto-approve mislabeled as "Manager approved" in OT readiness — latent, flag OFF; F2 vitest dead spec for PayrollGenerationJobService; F3 test-only calculator with contradicting rate basis; F4 OT-import auto-approve chain is ops-script-only; F5 hris-api CI scope = source-truth only) → RECs registered: REC-20260903-OT-READINESS-POLICY-AUTOAPPROVE-LABEL, REC-20260903-PAYROLL-GENJOB-VITEST-DEAD-SPEC, REC-20260903-PAYROLL-CALC-HELPER-TEST-ONLY.
+- 5 findings (F1 org-policy auto-approve mislabeled as "Manager approved" in OT readiness â€” latent, flag OFF; F2 vitest dead spec for PayrollGenerationJobService; F3 test-only calculator with contradicting rate basis; F4 OT-import auto-approve chain is ops-script-only; F5 hris-api CI scope = source-truth only) â†’ RECs registered: REC-20260903-OT-READINESS-POLICY-AUTOAPPROVE-LABEL, REC-20260903-PAYROLL-GENJOB-VITEST-DEAD-SPEC, REC-20260903-PAYROLL-CALC-HELPER-TEST-ONLY.
 - No code/config/data changes; audit-only. Next: owner triage of the 3 Proposed RECs.
 
 
@@ -28,18 +36,18 @@
 ## 2026-09-04 - Integration Employee Search API Audit
 
 - **Task**: Audit `GET /api/employee/search` (fuzzy + pagination + X-API-Key auth).
-- **Result**: ✅ `CONFIRMED_CODE_AND_LIVE_LOCAL` — shipped, tested, documented. No code changes required.
+- **Result**: âœ… `CONFIRMED_CODE_AND_LIVE_LOCAL` â€” shipped, tested, documented. No code changes required.
 - **Tests**: 22/22 passing (13 search + 8 auth middleware).
-- **Live Proof**: `query=z` chain 486→455→454; `zan andrei` count 1 fuzzy 1; deep pagination honest; `andersen` 0 (distance >2).
+- **Live Proof**: `query=z` chain 486â†’455â†’454; `zan andrei` count 1 fuzzy 1; deep pagination honest; `andersen` 0 (distance >2).
 - **Evidence**:
   - Audit summary: `.runtime/integration-employee-search-audit-20260904/AUDIT-SUMMARY.md`
   - Live proof: `.runtime/employee-search-proof-20260904-153358/`
   - Consumer doc: `docs/INTEGRATION_EMPLOYEE_SEARCH_API.md`
 - **Open Items**:
-  1. `hris-api/.env` tracked in git (pre-existing drift) — real keys must use VM/K8s secret plumbing.
+  1. `hris-api/.env` tracked in git (pre-existing drift) â€” real keys must use VM/K8s secret plumbing.
   2. Activity logging DB errors in tests (pre-existing test infra gap).
-  3. Fleet >5000 pool cap → future trigram index.
-  4. Key rotation: append → switch → remove (comma-separated = zero downtime).
+  3. Fleet >5000 pool cap â†’ future trigram index.
+  4. Key rotation: append â†’ switch â†’ remove (comma-separated = zero downtime).
 - **Next**: Provision `INTEGRATION_API_KEYS` in VM DEV/UAT/PROD runtime envs; push `develop`; verify per-environment.
 
 ---
@@ -75,8 +83,8 @@
 - Employee hard delete now detaches Section.headId (pre-existing gap) and deletes join rows.
 - DEV db-init blocker removed: stale requests_type_backup_20260826 (47 rows) exported to .runtime/dev-dbinit-drift-repair-20260907/ then dropped; local prisma db push now clean. runtime-dev was Synced/Degraded (failed db-init) BEFORE this work; expect green after push + job release.
 - Boundary: local DEV proven; VM/GitOps follows push. Day-labor own-section tagging scoping remains candidate REC.
-- **VM/GitOps promoted same day**: pushed `2f6aed49`; VM rebuilt/rolled dev+uat+prod; db-init Jobs released and re-ran Complete in all three envs; `section_line_leaders` verified in DEV/UAT/PROD Postgres; all six Argo apps Synced/Healthy (runtime-dev Degraded→Healthy); DEV API `:3101` serves `lineLeaders` enrichment. GitHub Actions blocked by account billing failure (pre-existing, jobs never started; not a test failure). Day-labor scoping registered as REC-20260907-DAY-LABOR-LEADER-SECTION-SCOPING.
-- Follow-up verification pass: `section.controller.spec.ts` needed a `sectionLineLeader` mock stub for the new remove() pre-read — fixed, now **66/66**. `employee-hard-delete.contract.spec.ts` fails 4/4 statically but is **pre-existing drift** (asserts source strings never present in the controller, verified at pre-work base `e5e51a43`); documented in the report, not caused by this feature.
+- **VM/GitOps promoted same day**: pushed `2f6aed49`; VM rebuilt/rolled dev+uat+prod; db-init Jobs released and re-ran Complete in all three envs; `section_line_leaders` verified in DEV/UAT/PROD Postgres; all six Argo apps Synced/Healthy (runtime-dev Degradedâ†’Healthy); DEV API `:3101` serves `lineLeaders` enrichment. GitHub Actions blocked by account billing failure (pre-existing, jobs never started; not a test failure). Day-labor scoping registered as REC-20260907-DAY-LABOR-LEADER-SECTION-SCOPING.
+- Follow-up verification pass: `section.controller.spec.ts` needed a `sectionLineLeader` mock stub for the new remove() pre-read â€” fixed, now **66/66**. `employee-hard-delete.contract.spec.ts` fails 4/4 statically but is **pre-existing drift** (asserts source strings never present in the controller, verified at pre-work base `e5e51a43`); documented in the report, not caused by this feature.
 
 ## 2026-09-07 - Infrastructure-layer security audit (VM + host, read-only)
 
