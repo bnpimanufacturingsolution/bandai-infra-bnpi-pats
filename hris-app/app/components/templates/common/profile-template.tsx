@@ -17,7 +17,6 @@ import {
 	Shield,
 	LogOut,
 	Info,
-	Bell,
 	Camera,
 	Check,
 	Loader2,
@@ -112,12 +111,6 @@ export function MyProfile() {
 	const existingResignation = (requestsData as any)?.requests?.find((r: any) =>
 		["NEW", "PENDING", "PROCESSING", "APPROVED", "COMPLETED"].includes(r.status),
 	);
-	const notificationsPath =
-		user?.role === "hris-hr-manager" || user?.role === "hris-hr-user"
-			? "/hr/notifications"
-			: user?.role === "admin"
-				? "/admin/notifications"
-				: "/employee/notifications";
 
 	useEffect(() => {
 		if (!avatarFile) {
@@ -337,99 +330,71 @@ export function MyProfile() {
 					</CardContent>
 				</Card>
 
-				{/* Security Settings Card */}
+				{/* Account Settings Card */}
 				<Card className="gap-0 pt-0 pb-6 rounded-lg overflow-hidden border border-gray-200 shadow-sm">
 					<CardHeader className="items-center bg-gradient-to-br from-gray-50 to-white border-b border-gray-100 px-6 py-5">
 						<CardTitle className="flex items-center gap-2 text-gray-800">
 							<Shield className="w-5 h-5 text-[#f05a0f]" />
-							Security Settings
+							Account Settings
 						</CardTitle>
 					</CardHeader>
 					<CardContent className="p-6">
-						<div className="space-y-4">
-							<div className="rounded-lg border border-[#f3c6a8] bg-gradient-to-br from-[#fff6ef] to-[#fff1e6] p-5 shadow-[0_8px_24px_rgba(233,90,12,0.08)]">
+						<div className="space-y-5">
+							<div className="flex items-start justify-between gap-4">
 								<div className="flex items-start gap-3">
-									<div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full border border-[#f4c3a1] bg-white">
+									<div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-gray-50 shrink-0">
 										<Lock className="w-4 h-4 text-[#f05a0f]" />
 									</div>
-									<div className="flex-1">
-										<h3 className="font-semibold text-gray-900 mb-1">
-											Password Management
+									<h3 className="font-semibold text-gray-900">Password</h3>
+								</div>
+								<Button
+									onClick={() => {
+										setSearchParams((prev) => {
+											const next = new URLSearchParams(prev);
+											next.set("action", "changePassword");
+											return next;
+										});
+									}}
+									className="w-40 shrink-0 rounded-lg bg-[#f05a0f] text-white shadow-sm hover:bg-[#db520e] border border-[#f05a0f]">
+									<Lock className="w-4 h-4 mr-2" />
+									Change Password
+								</Button>
+							</div>
+
+							<div className="border-t border-gray-100" />
+
+							{/* Account Actions (Danger Zone) */}
+							<div className="flex items-start justify-between gap-4">
+								<div className="flex items-start gap-3">
+									<div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full border border-red-200 bg-red-50 shrink-0">
+										<LogOut className="w-4 h-4 text-red-600" />
+									</div>
+									<div>
+										<h3 className="font-semibold text-gray-900">
+											Resignation & Exit
 										</h3>
-										<p className="text-sm text-gray-600 mb-4">
-											Keep your account secure by regularly updating your
-											password
-										</p>
-										<Button
-											onClick={() => {
-												setSearchParams((prev) => {
-													const next = new URLSearchParams(prev);
-													next.set("action", "changePassword");
-													return next;
-												});
-											}}
-											className="rounded-lg bg-[#f05a0f] text-white shadow-sm hover:bg-[#db520e] border border-[#f05a0f]">
-											<Lock className="w-4 h-4 mr-2" />
-											Change Password
-										</Button>
-										<Button
-											variant="outline"
-											onClick={() => navigate(notificationsPath)}
-											className="ml-2 rounded-lg border-[#f3c6a8] text-[#a34e19] hover:bg-[#fff2e8]">
-											<Bell className="w-4 h-4 mr-2" />
-											View Notifications
-										</Button>
+
+										{existingResignation && (
+											<div className="mt-2 inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-medium border border-amber-200">
+												<Info className="w-3 h-3 mr-1.5" />
+												{existingResignation.status === "COMPLETED"
+													? "Resignation Completed"
+													: "Resignation in Progress"}
+											</div>
+										)}
 									</div>
 								</div>
+
+								<Button
+									onClick={() => setIsResignationModalOpen(true)}
+									disabled={!!existingResignation}
+									className={cn(
+										"w-40 rounded-lg bg-[#f05a0f] text-white shadow-sm hover:bg-[#db520e] border border-[#f05a0f]",
+										existingResignation && "opacity-50 cursor-not-allowed",
+									)}>
+									{existingResignation ? "Request Active" : "Leave Company"}
+								</Button>
 							</div>
-						</div>
-					</CardContent>
-				</Card>
-
-				{/* Account Actions Card (Danger Zone) */}
-				<Card className="gap-0 pt-0 pb-6 rounded-lg overflow-hidden border border-gray-200 shadow-sm lg:col-span-2">
-					<CardHeader className="items-center bg-gradient-to-br from-gray-50 to-white border-b border-gray-100 px-6 py-5">
-						<CardTitle className="flex items-center gap-2 text-gray-800">
-							<Shield className="w-5 h-5 text-red-600" />
-							Account Actions
-						</CardTitle>
-					</CardHeader>
-					<CardContent className="p-6">
-						<div className="flex items-start justify-between gap-4 p-5 bg-red-50 border border-red-100 rounded-xl">
-							<div className="flex items-start gap-3">
-								<div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-									<LogOut className="w-5 h-5 text-red-600 ml-0.5" />
-								</div>
-								<div>
-									<h3 className="font-semibold text-gray-900 mb-1">
-										Resignation & Exit
-									</h3>
-									<p className="text-sm text-gray-600 max-w-xl">
-										Initiate the formal resignation process. This will start an
-										approval workflow with your manager and HR department.
-									</p>
-
-									{existingResignation && (
-										<div className="mt-3 inline-flex items-center px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-medium border border-amber-200">
-											<Info className="w-3 h-3 mr-1.5" />
-											{existingResignation.status === "COMPLETED"
-												? "Resignation Completed"
-												: "Resignation in Progress"}
-										</div>
-									)}
-								</div>
-							</div>
-
-							<Button
-								variant="outline"
-								onClick={() => setIsResignationModalOpen(true)}
-								disabled={!!existingResignation}
-								className={cn(
-									"border-red-200 text-red-700 hover:bg-red-100 hover:text-red-800",
-									existingResignation && "opacity-50 cursor-not-allowed",
-								)}>
-								{existingResignation ? "Request Active" : "Leave Company"}
-							</Button>
 						</div>
 					</CardContent>
 				</Card>

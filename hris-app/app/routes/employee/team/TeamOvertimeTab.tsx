@@ -326,7 +326,7 @@ export default function TeamOvertimeTab() {
 
 			{error ? <p className="text-sm text-red-600">{error}</p> : null}
 
-			<div className="flex items-center justify-between border-t border-gray-100 pt-4">
+			<div className="flex items-center justify-end border-t border-gray-100 pt-4">
 				<p className="text-xs text-gray-500">
 					{checkedIds.length > 0
 						? `${checkedIds.length} member${checkedIds.length === 1 ? "" : "s"} ticked — ${overtimeKind === "EARLY" ? "early OT (before shift)" : "regular OT (after shift)"}, each gets their own overtime request (manager → HR approval).`
