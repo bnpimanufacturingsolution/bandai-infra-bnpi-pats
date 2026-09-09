@@ -157,6 +157,9 @@ Requires the local stack: API on `:3001` and the K3s DEV DB forward on `127.0.0.
 ## 6. References
 
 - Implementation report: `.wwg/reports/section-line-leader-assignment-20260907.md`
+- Timesheet adjustment for members: `docs/LEADER_TIMESHEET_ADJUSTMENT.md`
+  (leader-filed, member's manager approves — manager-final, 2026-09-09)
+- Overtime for members: `docs/LEADER_ASSIGN_OVERTIME.md`
 - Project Truth: `.wwg/wiki/project-truth.md` — "Section Line Leader assignment — IMPLEMENTED (2026-09-07)"
 - Terminology: `.wwg/wiki/terminology.md` — "Line Leader" entry
 - Schema: `hris-api/prisma/schema-postgres/sectionlineleader.prisma`

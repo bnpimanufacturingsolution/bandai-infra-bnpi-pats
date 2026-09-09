@@ -98,7 +98,7 @@ describe("attendance adjustment request payload", () => {
 		expect((payload as { targetEmployeeId?: string }).targetEmployeeId).toBe("emp-member");
 		expect(payload.metadata.employeeId).toBe("emp-member");
 		expect(payload.metadata.requestSource).toBe("LINE_LEADER_FILED");
-		expect(payload.metadata.workflowTarget).toBe("MANAGER_THEN_HR");
+		expect(payload.metadata.workflowTarget).toBe("MANAGER_FINAL");
 		expect((payload.metadata as { filedBy?: { isLineLeader?: boolean } }).filedBy?.isLineLeader).toBe(
 			true,
 		);
@@ -161,5 +161,51 @@ describe("attendance adjustment request payload", () => {
 				notes: "Forgot to clock out",
 			}),
 		).toThrow("Time out (4:10 PM) must be after time in (4:22 PM).");
+	});
+
+	it("builds a leader-filed on-behalf adjustment payload whose correction lands on the member (2026-09-09 requirement)", () => {
+		const payload = buildAttendanceAdjustmentRequestPayload({
+			// The adjustment is FOR the member...
+			employeeId: "emp-member",
+			organizationId: "org-1",
+			date: "2026-08-18",
+			timeIn: "08:00",
+			timeOut: "17:00",
+			reasonCategory: "MISSED_PUNCH",
+			notes: "Member forgot to clock in; leader filed the correction",
+			// ...while the requester is the acting line leader.
+			onBehalf: { requesterEmployeeId: "emp-leader", filedByRole: "hris-line-leader" },
+		});
+
+		expect(payload.type).toBe("ATTENDANCE_CORRECTION");
+		// Leader is the requester; member is the targetEmployee.
+		expect(payload.requesterId).toBe("emp-leader");
+		expect((payload as { targetEmployeeId?: string }).targetEmployeeId).toBe("emp-member");
+		// Side effects read the member's id from metadata.attendanceCorrection.
+		expect(payload.metadata.attendanceCorrection.employeeId).toBe("emp-member");
+		expect(payload.metadata.requestSource).toBe("LINE_LEADER_FILED");
+		expect(payload.metadata.workflowTarget).toBe("MANAGER_FINAL");
+		expect((payload.metadata as { filedBy?: { isLineLeader?: boolean } }).filedBy?.isLineLeader).toBe(
+			true,
+		);
+		expect(payload.description).toContain("section member");
+		expect(payload.description).toContain("manager approval");
+	});
+
+	it("keeps self-filed adjustment untouched when onBehalf points at the same employee", () => {
+		const payload = buildAttendanceAdjustmentRequestPayload({
+			employeeId: "emp-leader",
+			organizationId: "org-1",
+			date: "2026-08-18",
+			timeIn: "08:00",
+			timeOut: "17:00",
+			reasonCategory: "MISSED_PUNCH",
+			notes: "My own correction",
+			onBehalf: { requesterEmployeeId: "emp-leader", filedByRole: "hris-line-leader" },
+		});
+		expect(payload.requesterId).toBe("emp-leader");
+		expect((payload as { targetEmployeeId?: string }).targetEmployeeId).toBeUndefined();
+		expect(payload.metadata.requestSource).toBe("EMPLOYEE_SELF_SERVICE");
+		expect(payload.metadata.workflowTarget).toBe("MANAGER_THEN_HR");
 	});
 });

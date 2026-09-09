@@ -72,23 +72,7 @@ export default function TeamManagement() {
 
 	return (
 		<div className="space-y-6">
-			{/* Tabs */}
-			<div className="flex space-x-1 bg-gray-100 p-1 rounded-lg">
-				{tabs.map((tab) => (
-					<button
-						key={tab.id}
-						onClick={() => setActiveTab(tab.id)}
-						className={`flex-1 py-2 px-4 text-sm font-medium rounded-md transition-colors ${
-							activeTab === tab.id
-								? "bg-white text-[color:var(--gt-700)] shadow-sm"
-								: "text-gray-600 hover:text-gray-900"
-						}`}>
-						{tab.label}
-					</button>
-				))}
-			</div>
-
-			{/* Tab Content */}
+			{/* Tab Content - controlled by sidebar navigation */}
 			{activeTab === "overview" && isOverviewParamsReady && (
 				<EmployeeList
 					role={isManager ? "hr-manager" : "hr-user"}

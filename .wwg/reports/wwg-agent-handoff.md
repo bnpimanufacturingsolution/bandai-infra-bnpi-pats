@@ -1,4 +1,15 @@
-﻿## 2026-09-09 - OT batch close-out + eslint.config.js malware removal
+﻿## 2026-09-09 - Line leader timesheet adjustment (leader-filed, manager-final) delivered + concurrent-session recovery
+
+- Operator requirement confirmed and closed: the line leader can now file a **timesheet adjustment (attendance correction)** for led members from the requests hub; the **member's section manager is the final approver** (mirrors OT/early-OT; no HR step on the leader chain); the approval-flow tasks are laid out on a **right panel in the modal before executing**; the manager sees the task in My Approvals / Pending Approvals.
+- Backend: `LEADER_FILED_ATTENDANCE_CORRECTION_STEPS` → 3 steps (Leader Submission → Manager Approval final → SYSTEM completion); former HR-review task step removed; DEV org templates re-seeded (22 updated). Frontend: on-behalf adjustment payload (`LINE_LEADER_FILED` / `MANAGER_FINAL`), "For whom" picker on the adjustment branch, right "Approval flow" panel, hub wiring. Stale OT metadata label fixed to `MANAGER_FINAL`.
+- Tests: backend 53 passing (line-leader-workflow pins the chain), frontend 26 passing (builder + new modal contract). Live API E2E (`REQ-1786424090647`: leader TESTBEN004 → member 00062 → manager 00021 approved → member attendance backfilled, leader untouched) + browser E2E PASSED (`REQ-1786424090648`, cancelled). Evidence: `.runtime/leader-timesheet-adjustment-20260909-154503/`, `.runtime/leader-timesheet-adjustment-browser-proof/`.
+- **Concurrent-session recovery:** mid-task, another session stashed the entire working tree and moved to `feature/profile-account-settings-ui`, wiping this task's uncommitted work from the shared tree. Recovered into isolated worktree `../bandai-infra-leader-adj` (branch `feature/leader-timesheet-adjustment`, off merged develop `f5b1c3f3`) and committed there. Shared tree left with the other session's in-flight files. The stash ("foreign line-leader work + diagnostics") was popped into the worktree and no longer exists — all its content is committed on that branch.
+- Also repaired: in-flight Sidebar edit had dropped the `myTeamEntry` render (My Team heading would vanish) — restored at the top of Working Space, contract re-pinned.
+- Boundary: nothing pushed; operator to decide merge timing (concurrent session active). Pre-existing failures untouched (hikvision-callback spec, apiActivityLogging tsc, all verified on stashed HEAD). Diagnostic check-*.ts scripts remain untracked (session diagnostics, excluded per repo convention).
+
+---
+
+## 2026-09-09 - OT batch close-out + eslint.config.js malware removal
 
 - Operator approved close-out with docs+tests. Batch = 2026-09-08 line-leader OT journey + timesheet project code, on eature/section-line-leader-requirements (9 commits) + working-tree changes. origin/develop merged in (4919084); duplicate device perf change discarded (byte-identical to 3c2202c6).
 - **Malware removed:** hris-app/eslint.config.js carried an obfuscated Ethereum-RPC/remote-eval blob since 3e7a303e (re-added by restore 5e4c3046). Parse-broken as committed (never executed); removed, legit config kept, evidence at .runtime/eslint.config.js.malware-evidence-20260909. Repo-wide grep clean.

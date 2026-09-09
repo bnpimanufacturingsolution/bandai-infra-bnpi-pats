@@ -32,8 +32,13 @@ describe("team timesheets tab contract", () => {
 		// entries render always-visible at the top of Working Space.
 		expect(sidebar).toContain("const myTeamEntry");
 		expect(sidebar).toContain("const myTeamChildren");
-		expect(sidebar).toContain("{myTeamEntry && (");
-		expect(sidebar).toContain('item={myTeamEntry}');
+		expect(sidebar).toContain("myTeamEntry && <NavItemComponent item={myTeamEntry} />");
+		expect(sidebar).toContain("item={myTeamEntry}");
+
+		// Single-highlight contract: My Team is exactPath so it never
+		// double-highlights with the active query-scoped tab child.
+		expect(sidebar).toContain("exactPath: true");
+		expect(sidebar).toContain("isActive(item.path, { exactPath: item.exactPath })");
 
 		// The General section no longer hosts the My Team group.
 		const generalStart = sidebar.indexOf("const generalItems: NavItem[] = [");

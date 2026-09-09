@@ -37,6 +37,9 @@ export type AttendanceTimeRequestFormValues =
 			timeOut: string;
 			reasonCategory: AttendanceAdjustmentReasonCategory;
 			notes: string;
+			/** Member the adjustment is for when a line leader files on behalf (undefined = self). */
+			memberEmployeeId?: string;
+			memberLabel?: string;
 	  }
 	| {
 			requestKind: "OVERTIME";
@@ -60,9 +63,10 @@ type AttendanceAdjustmentRequestModalProps = {
 	initialRequestKind?: AttendanceRequestKind | null;
 	initialAdjustmentKind?: AttendanceAdjustmentKind | null;
 	/**
-	 * Line-leader on-behalf filing: when provided, the OVERTIME form shows a
-	 * "For whom" picker defaulting to the leader themself so they can file OT
-	 * for a section member. Each option carries the employee id + label.
+	 * Line-leader on-behalf filing: when provided, the form shows a
+	 * "For whom" picker defaulting to the leader themself so they can file
+	 * overtime AND timesheet adjustments for a section member. Each option
+	 * carries the employee id + label.
 	 */
 	onBehalfOptions?: Array<{ id: string; label: string; isSelf: boolean }>;
 };
@@ -139,6 +143,62 @@ export function AttendanceAdjustmentRequestModal({
 
 	const needsTimeIn = adjustmentKind !== "CLOCK_OUT";
 	const needsTimeOut = adjustmentKind !== "CLOCK_IN";
+	// On-behalf is active when the picker is offered and a member is selected.
+	const isOnBehalfActive = Boolean(canFileOnBehalf && selectedForWhom && !selectedForWhom.isSelf);
+
+	// Approval-flow tasks laid out BEFORE the request executes (operator
+	// 2026-09-09: "make sure to have proper task being laid before executing
+	// also make sure the task can be seen on the right panel side"). Chains
+	// mirror the backend workflow templates exactly.
+	const approvalFlowSteps: Array<{ title: string; detail: string }> =
+		requestKind === "OVERTIME"
+			? isOnBehalfActive
+				? [
+						{
+							title: "1. Leader submission",
+							detail: `You file this overtime for ${selectedForWhom?.label || "the member"}.`,
+						},
+						{
+							title: "2. Member's manager approval (final)",
+							detail: "Their section manager approves or rejects — no HR step.",
+						},
+						{
+							title: "3. Applied to their timesheet",
+							detail: "On approval the OT is written as payable hours on the member's timesheet.",
+						},
+					]
+				: [
+						{ title: "1. Your submission", detail: "You file this request." },
+						{ title: "2. HR approval", detail: "HR reviews and approves or rejects." },
+						{
+							title: "3. Applied to your timesheet",
+							detail: "On approval the OT is written as payable hours on your timesheet.",
+						},
+					]
+			: isOnBehalfActive
+				? [
+						{
+							title: "1. Leader submission",
+							detail: `You file this adjustment for ${selectedForWhom?.label || "the member"}.`,
+						},
+						{
+							title: "2. Member's manager approval (final)",
+							detail: "Their section manager approves or rejects — no HR step.",
+						},
+						{
+							title: "3. Applied to their attendance",
+							detail: "On approval the correction is applied to the member's attendance.",
+						},
+					]
+				: [
+						{ title: "1. Your submission", detail: "You file this request." },
+						{ title: "2. Manager approval", detail: "Your supervisor approves or rejects." },
+						{ title: "3. HR review", detail: "HR confirms the correction." },
+						{
+							title: "4. Applied to your attendance",
+							detail: "The correction is applied to your attendance.",
+						},
+					];
 
 	const handleSubmit = async () => {
 		setError("");
@@ -190,6 +250,7 @@ export function AttendanceAdjustmentRequestModal({
 				setError("Time out is required.");
 				return;
 			}
+			const isOnBehalf = canFileOnBehalf && selectedForWhom && !selectedForWhom.isSelf;
 			await onSubmit({
 				requestKind: "ATTENDANCE_ADJUSTMENT",
 				adjustmentKind,
@@ -198,6 +259,12 @@ export function AttendanceAdjustmentRequestModal({
 				timeOut,
 				reasonCategory,
 				notes: notes.trim(),
+				...(isOnBehalf && selectedForWhom
+					? {
+							memberEmployeeId: selectedForWhom.id,
+							memberLabel: selectedForWhom.label,
+						}
+					: {}),
 			});
 		} catch (submitError) {
 			setError(
@@ -215,39 +282,68 @@ export function AttendanceAdjustmentRequestModal({
 				if (!open && !isPending) onClose();
 			}}
 			title="Attendance request"
-			description="Overtime goes to the member's manager then HR. If approved, that duration counts as payable OT.">
-			<div className="space-y-4">
-				<div>
-					<label className="mb-1 block text-sm font-medium text-gray-700">
-						Request type
-					</label>
-					<Select
-						value={requestKind}
-						onValueChange={(value) => setRequestKind(value as AttendanceRequestKind)}
-						disabled={isPending}>
-						<SelectTrigger>
-							<SelectValue placeholder="Select type" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="ATTENDANCE_ADJUSTMENT">
-								Attendance adjustment
-							</SelectItem>
-							<SelectItem value="OVERTIME">Overtime</SelectItem>
-						</SelectContent>
-					</Select>
-				</div>
+			description="Approval flow is shown on the right before you submit."
+			className="sm:max-w-[860px]">
+			<div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,300px)]">
+				<div className="min-w-0 space-y-4">
+					<div>
+						<label className="mb-1 block text-sm font-medium text-gray-700">
+							Request type
+						</label>
+						<Select
+							value={requestKind}
+							onValueChange={(value) => setRequestKind(value as AttendanceRequestKind)}
+							disabled={isPending}>
+							<SelectTrigger>
+								<SelectValue placeholder="Select type" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="ATTENDANCE_ADJUSTMENT">
+									Attendance adjustment
+								</SelectItem>
+								<SelectItem value="OVERTIME">Overtime</SelectItem>
+							</SelectContent>
+						</Select>
+					</div>
 
-				<div>
-					<label className="mb-1 block text-sm font-medium text-gray-700">Date</label>
-					<DatePicker
-						value={date}
-						onChange={setDate}
-						placeholder="Select overtime date"
-						disabled={isPending}
-					/>
-				</div>
+					<div>
+						<label className="mb-1 block text-sm font-medium text-gray-700">Date</label>
+						<DatePicker
+							value={date}
+							onChange={setDate}
+							placeholder="Select overtime date"
+							disabled={isPending}
+						/>
+					</div>
 
-				{requestKind === "ATTENDANCE_ADJUSTMENT" ? (
+					{canFileOnBehalf ? (
+						<div>
+							<label className="mb-1 block text-sm font-medium text-gray-700">
+								For whom
+							</label>
+							<Select
+								value={selectedForWhom?.id || ""}
+								onValueChange={(value) => setForWhomId(value)}
+								disabled={isPending}>
+								<SelectTrigger>
+									<SelectValue placeholder="Select employee" />
+								</SelectTrigger>
+								<SelectContent>
+									{onBehalfOptions?.map((option) => (
+										<SelectItem key={option.id} value={option.id}>
+											{option.isSelf ? `${option.label} (you)` : option.label}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+							<p className="mt-1 text-xs text-gray-500">
+								File for a section member — their manager approves; the correction
+								or OT lands on their record, not yours.
+							</p>
+						</div>
+					) : null}
+
+					{requestKind === "ATTENDANCE_ADJUSTMENT" ? (
 					<>
 						<div>
 							<label className="mb-1 block text-sm font-medium text-gray-700">
@@ -337,32 +433,6 @@ export function AttendanceAdjustmentRequestModal({
 					</>
 				) : (
 					<>
-						{canFileOnBehalf ? (
-							<div>
-								<label className="mb-1 block text-sm font-medium text-gray-700">
-									For whom
-								</label>
-								<Select
-									value={selectedForWhom?.id || ""}
-									onValueChange={(value) => setForWhomId(value)}
-									disabled={isPending}>
-									<SelectTrigger>
-										<SelectValue placeholder="Select employee" />
-									</SelectTrigger>
-									<SelectContent>
-										{onBehalfOptions?.map((option) => (
-											<SelectItem key={option.id} value={option.id}>
-												{option.isSelf ? `${option.label} (you)` : option.label}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-								<p className="mt-1 text-xs text-gray-500">
-									File for a section member — their manager then HR approve; the OT
-									lands on their timesheet, not yours.
-								</p>
-							</div>
-						) : null}
 						<div>
 							<label className="mb-1 block text-sm font-medium text-gray-700">
 								Overtime duration
@@ -394,7 +464,9 @@ export function AttendanceAdjustmentRequestModal({
 								</div>
 							</div>
 							<p className="mt-1 text-xs text-gray-500">
-								Example: 2 hours 50 minutes. HR approval writes this as payable OT.
+								{isOnBehalfActive
+									? "Example: 2 hours 50 minutes. Manager approval writes this as payable OT on the member's timesheet."
+									: "Example: 2 hours 50 minutes. HR approval writes this as payable OT."}
 							</p>
 						</div>
 					</>
@@ -415,6 +487,35 @@ export function AttendanceAdjustmentRequestModal({
 					/>
 				</div>
 				{error ? <p className="text-sm text-red-600">{error}</p> : null}
+				</div>
+
+				{/* Right panel: the approval-chain tasks laid out before executing. */}
+				<aside
+					data-testid="approval-flow-panel"
+					className="h-fit rounded-lg border border-gray-200 bg-gray-50/70 p-4">
+					<p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+						Approval flow
+					</p>
+					<ol className="mt-3 space-y-3">
+						{approvalFlowSteps.map((step) => (
+							<li key={step.title} className="flex gap-2">
+								<span
+									aria-hidden="true"
+									className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400"
+								/>
+								<div className="min-w-0">
+									<p className="text-sm font-medium text-gray-900">{step.title}</p>
+									<p className="mt-0.5 text-xs leading-5 text-gray-500">
+										{step.detail}
+									</p>
+								</div>
+							</li>
+						))}
+					</ol>
+					<p className="mt-3 border-t border-gray-200 pt-3 text-xs leading-5 text-gray-500">
+						Nothing is applied until every approval step above is done.
+					</p>
+				</aside>
 			</div>
 			<div className="mt-5 flex justify-end gap-3 border-t border-gray-100 pt-4">
 				<Button type="button" variant="outline" onClick={onClose} disabled={isPending}>

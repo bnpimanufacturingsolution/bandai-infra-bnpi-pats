@@ -95,6 +95,40 @@
 - Boundary remaining: day-labor tagging scope (leader tags own-section people only)
   recorded as `REC-20260907-DAY-LABOR-LEADER-SECTION-SCOPING` (Proposed), not implemented.
 
+### Leader-filed timesheet adjustment — IMPLEMENTED (2026-09-09)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`.
+- The line leader files a **timesheet adjustment (attendance correction)** for led
+  members from the requests hub **Attendance Request** modal: "For whom" picker is
+  available on BOTH request kinds (Overtime + Attendance adjustment); options come from
+  `GET /api/section/led-members`.
+- Chain (operator 2026-09-09: "the adjusted need to approve by the section manager like
+  how the ot and early ot being filed"): `WF-ATTENDANCE-CORRECTION-LEADER-FILED` is
+  **3 steps, manager-final** — Leader Submission → Manager Approval
+  (`TARGET_DEPARTMENT_MANAGER`, resolves from the MEMBER, `state_on_approve=APPROVED`)
+  → SYSTEM "Attendance Correction Completion". **No HR step.** Former
+  `LEADER_FILED_HR_REVIEW_TASK_STEP` removed. Self-service
+  `WF-ATTENDANCE-CORRECTION-DEFAULT` (supervisor → HR review) unchanged;
+  `WF-TIMESHEET-LEADER-FILED` (submission surface) unchanged.
+- Scope guard is server-enforced: `canActAsLineLeaderForEmployee` (leader must lead the
+  member's section; HR/admin exempt). Apply side effect resolves
+  `targetEmployeeId → requesterId → metadata.attendanceCorrection.employeeId`, so the
+  correction lands on the MEMBER's attendance.
+- Modal shows a **right "Approval flow" panel** (`data-testid="approval-flow-panel"`)
+  laying out the exact chain per kind + on-behalf **before** the request executes.
+- Metadata: `requestSource=LINE_LEADER_FILED`, `workflowTarget=MANAGER_FINAL` (also
+  fixed the stale OT on-behalf label from `MANAGER_THEN_HR`).
+- Tests: backend 53 passing (line-leader-workflow pins the manager-final chain); app
+  vitest 26 passing (builder + modal contract). Live proof: leader TESTBEN004 → member
+  00062 → manager 00021 approved → member attendance backfilled (leader untouched);
+  browser E2E `tests/smoke/line-leader-timesheet-adjustment.spec.ts` PASSED.
+  Evidence: `.runtime/leader-timesheet-adjustment-20260909-154503/`,
+  `.runtime/leader-timesheet-adjustment-browser-proof/`. Operator doc:
+  `docs/LEADER_TIMESHEET_ADJUSTMENT.md`.
+- Delivered on isolated worktree branch `feature/leader-timesheet-adjustment` (off
+  merged develop) after a concurrent session stashed/reset the shared tree; not pushed
+  at write time.
+
 ## Employee weekly hours vs schedule templates (2026-08-20)
 
 - Status: `CONFIRMED_CODE`.

@@ -1544,7 +1544,11 @@ export default function EmployeeRequestsHubPage() {
 							: {}),
 					})
 				: buildAttendanceAdjustmentRequestPayload({
-						employeeId,
+						// The adjustment is FOR the selected member (or the actor when
+						// filing for self); on-behalf keeps the leader as requester and
+						// the backend routes the leader-filed manager-final chain
+						// (2026-09-09 requirement).
+						employeeId: data.memberEmployeeId || employeeId,
 						organizationId,
 						date: data.date,
 						timeIn: data.timeIn,
@@ -1553,6 +1557,14 @@ export default function EmployeeRequestsHubPage() {
 						notes: data.notes,
 						attendanceId: searchParams.get("attendanceId"),
 						adjustmentKind: data.adjustmentKind,
+						...(data.memberEmployeeId && data.memberEmployeeId !== employeeId
+							? {
+									onBehalf: {
+										requesterEmployeeId: employeeId,
+										filedByRole: userRole || "hris-line-leader",
+									},
+								}
+							: {}),
 					});
 		await createRequestMutation.mutateAsync(payload);
 		clearCreateParams();
