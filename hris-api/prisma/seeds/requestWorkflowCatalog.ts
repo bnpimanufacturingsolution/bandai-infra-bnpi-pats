@@ -444,13 +444,14 @@ export const DEFAULT_REQUEST_WORKFLOW_TEMPLATES = [
 		states: SEEDED_LIFECYCLE_STATES,
 	},
 	{
-		// Leader-filed OT (2026-09-07 line-leader requirement): the line leader
+		// Leader-filed OT (2026-09-07 line-leader requirement; 2026-09-08 operator
+		// decision: manager is the FINAL approver — no HR step): the line leader
 		// files for a section member; chain resolves from the MEMBER's manager.
 		code: "WF-OVERTIME-LEADER-FILED",
 		name: "Overtime Approval Workflow (Line Leader Filed)",
 		requestType: "OVERTIME",
 		description:
-			"Line leader files overtime for a section member: leader submission, member's manager approval, HR approval, then payable OT on the member's timesheet",
+			"Line leader files overtime for a section member: leader submission, member's manager approval (final), then payable OT on the member's timesheet",
 		steps: LEADER_FILED_OVERTIME_STEPS,
 		states: SEEDED_LIFECYCLE_STATES,
 	},

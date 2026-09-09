@@ -1,4 +1,4 @@
-import { expect } from "chai";
+﻿import { expect } from "chai";
 import {
 	getLeaderFiledWorkflowCode,
 	isLeaderFiledWorkflowCode,
@@ -31,12 +31,20 @@ describe("leader-filed workflow codes", () => {
 });
 
 describe("leader-filed step chains", () => {
-	it("overtime chain is leader submission -> member's manager -> HR -> completion", () => {
-		expect(LEADER_FILED_OVERTIME_STEPS).to.have.lengthOf(4);
+	it("overtime chain is leader submission -> member's manager (final) -> completion (2026-09-08 operator decision: no HR step)", () => {
+		expect(LEADER_FILED_OVERTIME_STEPS).to.have.lengthOf(3);
 		expect(LEADER_FILED_OVERTIME_STEPS[1].assignee_type).to.equal("TARGET_DEPARTMENT_MANAGER");
 		expect(LEADER_FILED_OVERTIME_STEPS[1].step_type).to.equal("APPROVAL");
-		expect(LEADER_FILED_OVERTIME_STEPS[2].assignee_type).to.equal("HR");
-		expect(LEADER_FILED_OVERTIME_STEPS[2].step_type).to.equal("APPROVAL");
+		// The manager step is the FINAL approval: approve transitions to APPROVED
+		// so the SYSTEM completion task fires the payable-OT side effects.
+		expect((LEADER_FILED_OVERTIME_STEPS[1] as any).state_on_approve).to.equal("APPROVED");
+		// No HR step anywhere in the OT chain.
+		expect(
+			LEADER_FILED_OVERTIME_STEPS.some((step) => String((step as any).assignee_type) === "HR"),
+		).to.equal(false);
+		// Completion is the SYSTEM task that auto-runs after approval.
+		expect(LEADER_FILED_OVERTIME_STEPS[2].assignee_type).to.equal("SYSTEM");
+		expect(LEADER_FILED_OVERTIME_STEPS[2].step_type).to.equal("TASK");
 	});
 
 	it("attendance correction chain ends with an HR review task", () => {
@@ -50,7 +58,7 @@ describe("leader-filed templates resolve from the catalog", () => {
 	it("catalog returns the overtime leader template by code", () => {
 		const template = getRequestWorkflowTemplate({ code: LEADER_FILED_OVERTIME_CODE });
 		expect(template).to.not.equal(null);
-		expect(template && template.steps).to.have.lengthOf(4);
+		expect(template && template.steps).to.have.lengthOf(3);
 	});
 
 	it("catalog returns the attendance correction leader template by code", () => {
@@ -69,8 +77,8 @@ describe("normalizer exemption", () => {
 			requestType: "OVERTIME",
 			steps: LEADER_FILED_OVERTIME_STEPS as any,
 		});
-		// Shape-only normalization keeps all 4 steps with the manager step intact.
-		expect(normalized.steps).to.have.lengthOf(4);
+		// Shape-only normalization keeps all 3 steps with the manager step intact.
+		expect(normalized.steps).to.have.lengthOf(3);
 		const managerStep = normalized.steps.find(
 			(step) => String((step as any).assignee_type) === "TARGET_DEPARTMENT_MANAGER",
 		);

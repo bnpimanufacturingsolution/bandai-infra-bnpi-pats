@@ -1,10 +1,13 @@
 /**
  * Leader-filed request workflows (2026-09-07 line-leader requirement).
  *
- * When a line leader files a request on behalf of a section member, the
- * mandatory approval chain is: manager → HR (the leader is the initiator, not
- * an approver). These templates use TARGET_DEPARTMENT_MANAGER so the manager
- * step resolves from the MEMBER's department/reportTo, not the leader's.
+ * OVERTIME (2026-09-08 operator decision): the leader files OT/early OT for a
+ * section member and the MEMBER's manager is the FINAL approver — no HR step.
+ * The leader is the initiator, never an approver.
+ *
+ * TIMESHEET and ATTENDANCE_CORRECTION keep the manager → HR chain.
+ * These templates use TARGET_DEPARTMENT_MANAGER so the manager step resolves
+ * from the MEMBER's department/reportTo, not the leader's.
  *
  * These codes are exempt from the overtime/attendance-correction step
  * normalizers (which would otherwise flatten them back to the employee
@@ -90,8 +93,8 @@ export const LEADER_FILED_SUBMISSION_STEP = {
 	state_on_complete: "SUBMITTED",
 } as const;
 
-export const buildLeaderFiledCompletionStep = (stepName: string) => ({
-	step_number: 4,
+export const buildLeaderFiledCompletionStep = (stepNumber: number, stepName: string) => ({
+	step_number: stepNumber,
 	step_name: stepName,
 	step_type: "TASK",
 	assignee_type: "SYSTEM",
@@ -101,23 +104,34 @@ export const buildLeaderFiledCompletionStep = (stepName: string) => ({
 	state_on_skip: "COMPLETED",
 });
 
+/** OT chain (2026-09-08 operator decision): Leader files → member's manager approves → done. No HR step. */
 export const LEADER_FILED_OVERTIME_STEPS = [
 	LEADER_FILED_SUBMISSION_STEP,
-	LEADER_FILED_MANAGER_STEP,
-	LEADER_FILED_HR_APPROVAL_STEP,
-	buildLeaderFiledCompletionStep("Overtime Completion"),
+	{
+		// Final manager approval: approve transitions to APPROVED so the SYSTEM
+		// completion task can auto-run the payable-OT side effects.
+		step_number: 2,
+		step_name: "Manager Approval",
+		step_type: "APPROVAL",
+		assignee_type: "TARGET_DEPARTMENT_MANAGER",
+		is_required: true,
+		state_on_enter: "SUBMITTED",
+		state_on_approve: "APPROVED",
+		state_on_reject: "REJECTED",
+	},
+	buildLeaderFiledCompletionStep(3, "Overtime Completion"),
 ] as const;
 
 export const LEADER_FILED_TIMESHEET_STEPS = [
 	LEADER_FILED_SUBMISSION_STEP,
 	LEADER_FILED_MANAGER_STEP,
 	LEADER_FILED_HR_APPROVAL_STEP,
-	buildLeaderFiledCompletionStep("Timesheet Completion"),
+	buildLeaderFiledCompletionStep(4, "Timesheet Completion"),
 ] as const;
 
 export const LEADER_FILED_ATTENDANCE_CORRECTION_STEPS = [
 	LEADER_FILED_SUBMISSION_STEP,
 	LEADER_FILED_MANAGER_STEP,
 	LEADER_FILED_HR_REVIEW_TASK_STEP,
-	buildLeaderFiledCompletionStep("Attendance Correction Completion"),
+	buildLeaderFiledCompletionStep(4, "Attendance Correction Completion"),
 ] as const;

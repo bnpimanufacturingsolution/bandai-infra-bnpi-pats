@@ -102,7 +102,10 @@ import {
 	recomputeAttendanceObligationsForRange,
 } from "../../helper/attendance-obligation.helper";
 import { applyApprovedOvertimeCompensatoryCredit } from "../timesheet/approved-overtime-comp-leave.service";
-import { applyOvertimeRequestApprovalSideEffects } from "../timesheet/overtime-request.service";
+import {
+	applyOvertimeRequestApprovalSideEffects,
+	resolveOvertimeApprovalTargetLine,
+} from "../timesheet/overtime-request.service";
 import { applyPayrollCorrectionApprovalSideEffects } from "../payrollCorrection/payroll-correction.service";
 import { REQUEST_WORKFLOW_CODES } from "../../helper/workflow-config.helper";
 
@@ -2793,6 +2796,40 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 							res.status(403).json(errorResponse);
 							return;
 						}
+
+						// OVERTIME approval pre-check (policy: refuse-with-clear-error, no
+						// silent no-op). An approval that cannot write payable hours to an
+						// effective timesheet line must fail BEFORE any workflow state
+						// changes. Rejections skip this (nothing needs writing for a reject).
+						if (existingRequest.type === "OVERTIME" && isApprove) {
+							const { line: otTargetLine } = await resolveOvertimeApprovalTargetLine({
+								prisma,
+								organizationId: existingRequest.organizationId,
+								requestMetadata:
+									((existingRequest.metadata as Record<string, unknown> | null) ||
+										{}) as Record<string, unknown>,
+								targetEmployeeId: existingRequest.targetEmployeeId || null,
+								requesterEmployeeId: existingRequest.requesterId || null,
+							});
+							if (!otTargetLine) {
+								const targetCode = await prisma.employee.findUnique({
+									where: {
+										id: String(
+											existingRequest.targetEmployeeId ||
+												existingRequest.requesterId ||
+												"",
+										),
+									},
+									select: { employeeId: true },
+								});
+								const errorResponse = buildErrorResponse(
+									`Cannot approve overtime: no effective timesheet line exists for ${targetCode?.employeeId || "this employee"} on the overtime date. Materialize or approve the timesheet covering that date first, then approve this request.`,
+									409,
+								);
+								res.status(409).json(errorResponse);
+								return;
+							}
+						}
 					}
 
 					const stepStatus = isApprove ? "APPROVED" : "REJECTED";
@@ -3227,12 +3264,35 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 							isApprove: shouldRunApprovalSideEffects && isApprove,
 							approverEmployeeId: actingEmployeeIdForSideEffects || null,
 							requesterEmployeeId: existingRequest.requesterId || null,
+							targetEmployeeId: existingRequest.targetEmployeeId || null,
 							rejectionReason: validation.data.comment || null,
 						});
 					} catch (error) {
 						requestLogger.error(
 							`Error processing overtime approval side effects: ${error}`,
 						);
+						// Observability: stamp the failure on the request so approvers and
+						// filers can see WHY payable OT was not written (the approval itself
+						// already completed; the OT apply pre-check should have refused the
+						// known no-line case earlier).
+						try {
+							await prisma.request.update({
+								where: { id },
+								data: {
+									metadata: {
+										...((existingRequest.metadata as Record<string, unknown>) ||
+											{}),
+										overtimeApplyError:
+											error instanceof Error ? error.message : String(error),
+										overtimeApplyErrorAt: now.toISOString(),
+									} as Prisma.InputJsonValue,
+								},
+							});
+						} catch (stampError) {
+							requestLogger.error(
+								`Failed to stamp overtime apply error on request ${id}: ${stampError}`,
+							);
+						}
 					}
 				}
 			}

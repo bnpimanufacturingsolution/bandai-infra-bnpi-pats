@@ -21,6 +21,9 @@ export type OvertimeCandidateMetadata = {
 	overtimeCandidateReason?: OvertimeCandidateReason | null;
 	overtimeRequestId?: string | null;
 	overtimeApprovalStatus?: OvertimeApprovalStatus;
+	/** REGULAR = after shift; EARLY = pre-shift overtime (early OT). */
+	overtimeKind?: "REGULAR" | "EARLY";
+	earlyOvertime?: boolean;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> =>
