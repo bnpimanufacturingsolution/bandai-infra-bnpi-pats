@@ -25,16 +25,20 @@ import {
 	isAttendanceCorrectionHrRole,
 	isAttendanceCorrectionRequestType,
 	isAttendanceCorrectionWorkflowCode,
+	isLeaderFiledAttendanceCorrectionWorkflowCode,
 	isPendingAttendanceCorrectionHrReviewStep,
 	normalizeAttendanceCorrectionWorkflowSteps,
 	shouldAutoCompleteAttendanceCorrectionHrReview,
 } from "./attendance-correction-workflow.helper";
 import { applyAttendanceCorrectionRequest } from "../app/attendance/apply-attendance-correction-request";
 import {
+	isLeaderFiledOvertimeWorkflowCode,
 	isOvertimeRequestType,
 	isOvertimeWorkflowCode,
 	normalizeOvertimeWorkflowSteps,
 } from "./overtime-workflow.helper";
+import { isLeaderFiledWorkflowCode } from "./line-leader-workflow.helper";
+import { getRequestWorkflowTemplate } from "../prisma/seeds/requestWorkflowCatalog";
 
 export const DEFAULT_WORKFLOW_STATE_KEYS = {
 	OPEN: "OPEN",
@@ -1203,8 +1207,15 @@ const normalizeWorkflowSteps = (steps: unknown): WorkflowStepConfig[] => {
 const getWorkflowStepsForRequestType = (
 	requestType: string | null | undefined,
 	steps: unknown,
+	/** When set to a leader-filed workflow code, the catalog steps are kept as-is. */
+	workflowCode?: string | null,
 ): WorkflowStepConfig[] => {
 	const normalizedSteps = normalizeWorkflowSteps(steps);
+	// Leader-filed chains keep their catalog steps (leader -> member's manager
+	// -> HR); the self-service normalizers below must not flatten them.
+	if (workflowCode && isLeaderFiledWorkflowCode(workflowCode)) {
+		return normalizedSteps;
+	}
 	if (isAttendanceCorrectionRequestType(requestType)) {
 		return normalizeAttendanceCorrectionWorkflowSteps(normalizedSteps);
 	}
@@ -1230,6 +1241,11 @@ const shouldNormalizeWorkflowTemplate = (workflow: {
 const normalizeDefaultWorkflowTemplate = <T extends { code?: string | null; requestType?: string | null; steps: unknown }>(
 	workflow: T,
 ): T => {
+	// Leader-filed chains keep their catalog steps (manager→HR); the
+	// self-service normalizers below must not flatten them.
+	if (isLeaderFiledOvertimeWorkflowCode(workflow.code) || isLeaderFiledAttendanceCorrectionWorkflowCode(workflow.code)) {
+		return workflow;
+	}
 	if (isAttendanceCorrectionWorkflowCode(workflow.code) || isAttendanceCorrectionRequestType(workflow.requestType)) {
 		return {
 			...workflow,
@@ -1531,7 +1547,9 @@ export async function repairAttendanceCorrectionSupervisorWorkflowIfNeeded(
 				stepName: "HR Review",
 				stepType: "TASK",
 				assigneeType: "HR",
-				assigneeId: hrResolution.assigneeId,
+				// Pre-existing type drift: resolver returns null when no HR user
+				// exists; schema allows null assigneeId. Narrowed for create input.
+				assigneeId: hrResolution.assigneeId ?? null,
 				status: "PENDING",
 				isRequired: true,
 				metadata: {
@@ -2145,6 +2163,28 @@ export async function getDefaultRequestWorkflow(
 			});
 		}
 
+		// Leader-filed preferred code not materialized as an org WorkflowInstance
+		// yet: fall back to the in-code catalog template instead of silently
+		// using the employee self-service chain (or a wrong single match).
+		if (normalizedPreferredCode && isLeaderFiledWorkflowCode(normalizedPreferredCode)) {
+			const catalogTemplate = getRequestWorkflowTemplate({
+				code: normalizedPreferredCode,
+			});
+			if (catalogTemplate) {
+				return normalizeDefaultWorkflowTemplate({
+					code: catalogTemplate.code,
+					name: catalogTemplate.name,
+					description: catalogTemplate.description,
+					domain: "REQUEST",
+					requestType: catalogTemplate.requestType,
+					steps: catalogTemplate.steps,
+					states: catalogTemplate.states,
+					isActive: true,
+					isDefault: true,
+				});
+			}
+		}
+
 		const requestTypeMatches = workflowTemplates.filter(
 			(template) =>
 				String(template.requestType || "")
@@ -2245,6 +2285,7 @@ export async function createRequestStepExecutions(
 	const normalizedSteps = getWorkflowStepsForRequestType(
 		params.requestType || requestRecord.type,
 		params.steps,
+		params.workflowCode,
 	);
 	if (normalizedSteps.length === 0) {
 		return 0;

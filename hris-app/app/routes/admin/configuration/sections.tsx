@@ -297,6 +297,18 @@ export default function SectionsPage() {
 	const watchedIsHr = watch("isHr") || false;
 	const handleInvalidSubmit = useAdminFormErrorNavigation();
 	const [lineLeaderDraft, setLineLeaderDraft] = useState("");
+	// Member->responsible-leader assignments (D3: 1 member -> 1 leader; used
+	// when a section has 2+ leaders so each has a distinct set of members).
+	const [memberLeaderDraft, setMemberLeaderDraft] = useState("");
+	const [memberLeaderAssignments, setMemberLeaderAssignments] = useState<
+		Array<{ employeeId: string; lineLeaderId: string }>
+	>([]);
+
+	useEffect(() => {
+		if (action === "edit" && activeSectionId && !isLoadingSection) {
+			setMemberLeaderAssignments([]);
+		}
+	}, [action, activeSectionId, isLoadingSection]);
 
 	const availableLineLeaderOptions = useMemo(
 		() =>
@@ -318,6 +330,45 @@ export default function SectionsPage() {
 			"lineLeaderIds",
 			(getValues("lineLeaderIds") || []).filter((leaderId) => leaderId !== employeeId),
 			{ shouldDirty: true },
+		);
+	};
+
+	const memberAssignmentOptions = useMemo(
+		() =>
+			employees
+				.filter((employee: Employee) => {
+					const employeeSectionId = (employee as any).sectionId;
+					const positionSectionId = (employee as any).position?.sectionId;
+					return (
+						employeeSectionId === activeSectionId || positionSectionId === activeSectionId
+					);
+				})
+				.map((employee: Employee) => ({
+					value: employee.id,
+					label: getEmployeeName(employee),
+				})),
+		[employees, activeSectionId],
+	);
+
+	const assignedMemberIds = useMemo(
+		() => new Set(memberLeaderAssignments.map((assignment) => assignment.employeeId)),
+		[memberLeaderAssignments],
+	);
+
+	const addMemberAssignment = (employeeId: string) => {
+		if (!employeeId || memberLeaderDraft === "none" || !memberLeaderDraft) return;
+		setMemberLeaderAssignments((current) => {
+			const withoutExisting = current.filter(
+				(assignment) => assignment.employeeId !== employeeId,
+			);
+			return [...withoutExisting, { employeeId, lineLeaderId: memberLeaderDraft }];
+		});
+		setMemberLeaderDraft("");
+	};
+
+	const removeMemberAssignment = (employeeId: string) => {
+		setMemberLeaderAssignments((current) =>
+			current.filter((assignment) => assignment.employeeId !== employeeId),
 		);
 	};
 
@@ -436,7 +487,21 @@ export default function SectionsPage() {
 		};
 
 		if (action === "edit" && id) {
-			updateSectionMutation.mutate({ id, payload }, { onSuccess: closeModal });
+			updateSectionMutation.mutate(
+				{ id, payload },
+				{
+					onSuccess: async () => {
+						if (memberLeaderAssignments.length > 0) {
+							try {
+								await sectionsService.assignMembersToLineLeaders(id, memberLeaderAssignments);
+							} catch (assignmentError) {
+								console.error("Failed to assign members to line leaders", assignmentError);
+							}
+						}
+						closeModal();
+					},
+				},
+			);
 			return;
 		}
 
@@ -973,6 +1038,80 @@ QA-LINE,Line Quality Assurance,Product Assurance,REGULAR_SCHEDULE,Manpower datab
 								/>
 								<ConstraintTokenRow tokens={[{ label: "0-N", tone: "subtle" }]} />
 							</div>
+
+							{watchedLineLeaderIds.length > 1 && (
+								<div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+									<label className="block text-sm font-medium text-gray-700">
+										Members under each leader
+									</label>
+									<p className="mt-0.5 text-xs text-slate-500">
+										This section has multiple line leaders. Assign each member to one
+										responsible leader. Unassigned members can be served by any leader of
+										this section.
+									</p>
+									{memberLeaderAssignments.length > 0 && (
+										<div className="mt-2 space-y-1.5">
+											{memberLeaderAssignments.map((assignment) => {
+												const memberName =
+													lineLeaderNameById.get(assignment.employeeId) ||
+													assignment.employeeId;
+												const leaderName =
+													lineLeaderNameById.get(assignment.lineLeaderId) ||
+													assignment.lineLeaderId;
+												return (
+													<div
+														key={assignment.employeeId}
+														className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
+														<span className="text-slate-700">
+															<strong className="font-medium">{memberName}</strong>
+															<span className="text-slate-400"> under </span>
+															{leaderName}
+														</span>
+														<button
+															type="button"
+															aria-label={`Remove assignment for ${memberName}`}
+															className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-400"
+															onClick={() => removeMemberAssignment(assignment.employeeId)}>
+															<X className="h-3 w-3" />
+														</button>
+													</div>
+												);
+											})}
+										</div>
+									)}
+									<div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+										<Select
+											options={[
+												{ value: "none", label: "Select member..." },
+												...memberAssignmentOptions.filter(
+													(option) => !assignedMemberIds.has(option.value),
+												),
+											]}
+											value={memberLeaderDraft || "none"}
+											onChange={(value) => setMemberLeaderDraft(value || "none")}
+											placeholder="Select member..."
+										/>
+										<Select
+											options={[
+												{ value: "none", label: "Select leader..." },
+												...lineLeaderOptions.filter((option) =>
+													watchedLineLeaderIds.includes(option.value),
+												),
+											]}
+											value="none"
+											onChange={(leaderId) => {
+												addMemberAssignment(leaderId);
+											}}
+											placeholder={
+												memberLeaderDraft && memberLeaderDraft !== "none"
+													? "Assign under leader..."
+													: "Choose a member first"
+											}
+											disabled={!memberLeaderDraft || memberLeaderDraft === "none"}
+										/>
+									</div>
+								</div>
+							)}
 						</div>
 
 						<div className="rounded-xl border border-slate-200 bg-white p-4">

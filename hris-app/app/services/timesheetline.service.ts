@@ -36,6 +36,7 @@ export interface Timesheetline {
 	departmentNameSnapshot?: string | null;
 	reportToIdSnapshot?: string | null;
 	dayLaborType?: "DIRECT" | "INDIRECT" | null;
+	projectCode?: string | null;
 	timesheet?: {
 		id: string;
 		code?: string;

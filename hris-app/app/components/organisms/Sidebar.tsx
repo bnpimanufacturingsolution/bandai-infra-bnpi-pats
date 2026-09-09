@@ -5,6 +5,7 @@ import {
 	Users,
 	Wallet,
 	Clock,
+	Clock3,
 	Calendar,
 	CalendarRange,
 	CheckSquare,
@@ -95,7 +96,10 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const isHRManager = user?.role === "hris-hr-manager";
 	const isHRUser = user?.role === "hris-hr-user";
 	const isHR = isHRManager || isHRUser;
-	const isManager = user?.role === "hris-employee-manager";
+	// Line leaders are manager-class (approvals + team surfaces) per the
+	// 2026-09-07 line-leader requirement; narrower data scope is enforced API-side.
+	const isManager =
+		user?.role === "hris-employee-manager" || user?.role === "hris-line-leader";
 	const isEmployee = user?.role === "hris-employee";
 	const isAdmin = user?.role?.includes("admin");
 
@@ -376,6 +380,22 @@ export function Sidebar({ onClose }: SidebarProps) {
 								path: "/employee/team?tab=organization",
 								icon: <ChevronRight className="w-4 h-4" />,
 							},
+							...(isManager
+								? [
+										{
+											id: "general-my-team-timesheets",
+											label: "Team Timesheets",
+											path: "/employee/team?tab=timesheets",
+											icon: <Clock3 className="w-4 h-4" />,
+										},
+										{
+											id: "general-my-team-assign-overtime",
+											label: "Assign Overtime",
+											path: "/employee/team?tab=overtime",
+											icon: <Clock className="w-4 h-4" />,
+										},
+									]
+								: []),
 							...(isDepartmentManager
 								? [
 										{

@@ -48,6 +48,7 @@ export const TimesheetlineSchema = z.object({
 	workforceSourceSnapshot: z.string().nullable().optional(),
 	agencyIdSnapshot: z.string().refine((val) => isValidObjectId(val)).nullable().optional(),
 	dayLaborType: z.enum(["DIRECT", "INDIRECT"]).nullable().optional(),
+	projectCode: z.string().max(64).nullable().optional(),
 	isDeleted: z.boolean(),
 	createdAt: z.coerce.date(),
 	updatedAt: z.coerce.date(),
@@ -99,6 +100,7 @@ export const CreateTimesheetlineSchema = TimesheetlineSchema.omit({
 	workforceSourceSnapshot: true,
 	agencyIdSnapshot: true,
 	dayLaborType: true,
+	projectCode: true,
 	isDeleted: true,
 });
 

@@ -77,6 +77,7 @@ import {
 	buildTimesheetDaySnapshotMetadata,
 	writeEffectiveTimesheetLine,
 } from "./timesheet-line-version.helper";
+import { resolveTimesheetProjectCode } from "./timesheet-project-code.helper";
 
 export type AttendanceObligationStoredStatus =
 	| "EXPECTED"
@@ -1270,6 +1271,12 @@ export async function materializeTimesheetLinesFromObligations(
 				workforceSourceSnapshot: obligation.workforceSourceSnapshot || null,
 				agencyIdSnapshot: obligation.agencyIdSnapshot || null,
 				dayLaborType: obligation.dayLaborType || null,
+				projectCode:
+					resolveTimesheetProjectCode({
+						dayLaborType: obligation.dayLaborType || null,
+						workforceSource: obligation.workforceSourceSnapshot || null,
+						date,
+					}) ?? existingLine?.projectCode ?? null,
 				isDeleted: false,
 			},
 		});

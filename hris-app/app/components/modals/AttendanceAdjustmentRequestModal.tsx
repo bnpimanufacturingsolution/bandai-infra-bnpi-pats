@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
 import { DatePicker } from "~/components/atoms/DatePicker";
@@ -44,6 +44,9 @@ export type AttendanceTimeRequestFormValues =
 			overtimeHourPart: number;
 			overtimeMinutePart: number;
 			notes: string;
+			/** Member the OT is for when a line leader files on behalf (undefined = self). */
+			memberEmployeeId?: string;
+			memberLabel?: string;
 	  };
 
 type AttendanceAdjustmentRequestModalProps = {
@@ -56,6 +59,12 @@ type AttendanceAdjustmentRequestModalProps = {
 	initialTimeOut?: string | null;
 	initialRequestKind?: AttendanceRequestKind | null;
 	initialAdjustmentKind?: AttendanceAdjustmentKind | null;
+	/**
+	 * Line-leader on-behalf filing: when provided, the OVERTIME form shows a
+	 * "For whom" picker defaulting to the leader themself so they can file OT
+	 * for a section member. Each option carries the employee id + label.
+	 */
+	onBehalfOptions?: Array<{ id: string; label: string; isSelf: boolean }>;
 };
 
 const parseRequestKind = (value?: string | null): AttendanceRequestKind =>
@@ -78,6 +87,7 @@ export function AttendanceAdjustmentRequestModal({
 	initialTimeOut,
 	initialRequestKind,
 	initialAdjustmentKind,
+	onBehalfOptions,
 }: AttendanceAdjustmentRequestModalProps) {
 	const [requestKind, setRequestKind] = useState<AttendanceRequestKind>("ATTENDANCE_ADJUSTMENT");
 	const [adjustmentKind, setAdjustmentKind] = useState<AttendanceAdjustmentKind>("CLOCK_IN_OUT");
@@ -90,6 +100,19 @@ export function AttendanceAdjustmentRequestModal({
 		useState<AttendanceAdjustmentReasonCategory>("MISSED_PUNCH");
 	const [notes, setNotes] = useState("");
 	const [error, setError] = useState("");
+	const [forWhomId, setForWhomId] = useState("");
+
+	const canFileOnBehalf = Boolean(onBehalfOptions && onBehalfOptions.length > 1);
+
+	const selfOption = useMemo(
+		() => onBehalfOptions?.find((option) => option.isSelf) || null,
+		[onBehalfOptions],
+	);
+
+	const selectedForWhom = useMemo(() => {
+		if (!onBehalfOptions?.length) return null;
+		return onBehalfOptions.find((option) => option.id === forWhomId) || selfOption;
+	}, [forWhomId, onBehalfOptions, selfOption]);
 
 	useEffect(() => {
 		if (!isOpen) return;
@@ -103,6 +126,7 @@ export function AttendanceAdjustmentRequestModal({
 		setReasonCategory("MISSED_PUNCH");
 		setNotes("");
 		setError("");
+		setForWhomId(selfOption?.id || "");
 	}, [
 		initialAdjustmentKind,
 		initialDate,
@@ -110,6 +134,7 @@ export function AttendanceAdjustmentRequestModal({
 		initialTimeIn,
 		initialTimeOut,
 		isOpen,
+		selfOption?.id,
 	]);
 
 	const needsTimeIn = adjustmentKind !== "CLOCK_OUT";
@@ -141,12 +166,19 @@ export function AttendanceAdjustmentRequestModal({
 					setError("Overtime duration must be greater than 0.");
 					return;
 				}
+				const isOnBehalf = canFileOnBehalf && selectedForWhom && !selectedForWhom.isSelf;
 				await onSubmit({
 					requestKind: "OVERTIME",
 					date,
 					overtimeHourPart: hourPart,
 					overtimeMinutePart: minutePart,
 					notes: notes.trim(),
+					...(isOnBehalf && selectedForWhom
+						? {
+								memberEmployeeId: selectedForWhom.id,
+								memberLabel: selectedForWhom.label,
+							}
+						: {}),
 				});
 				return;
 			}
@@ -183,7 +215,7 @@ export function AttendanceAdjustmentRequestModal({
 				if (!open && !isPending) onClose();
 			}}
 			title="Attendance request"
-			description="Overtime goes to HR. If they approve, that duration counts as payable OT.">
+			description="Overtime goes to the member's manager then HR. If approved, that duration counts as payable OT.">
 			<div className="space-y-4">
 				<div>
 					<label className="mb-1 block text-sm font-medium text-gray-700">
@@ -304,40 +336,68 @@ export function AttendanceAdjustmentRequestModal({
 						</div>
 					</>
 				) : (
-					<div>
-						<label className="mb-1 block text-sm font-medium text-gray-700">
-							Overtime duration
-						</label>
-						<div className="grid grid-cols-2 gap-3">
+					<>
+						{canFileOnBehalf ? (
 							<div>
-								<p className="mb-1 text-xs text-gray-500">Hours</p>
-								<Input
-									type="number"
-									min="0"
-									max="23"
-									step="1"
-									value={overtimeHourPart}
-									onChange={(event) => setOvertimeHourPart(event.target.value)}
-									disabled={isPending}
-								/>
+								<label className="mb-1 block text-sm font-medium text-gray-700">
+									For whom
+								</label>
+								<Select
+									value={selectedForWhom?.id || ""}
+									onValueChange={(value) => setForWhomId(value)}
+									disabled={isPending}>
+									<SelectTrigger>
+										<SelectValue placeholder="Select employee" />
+									</SelectTrigger>
+									<SelectContent>
+										{onBehalfOptions?.map((option) => (
+											<SelectItem key={option.id} value={option.id}>
+												{option.isSelf ? `${option.label} (you)` : option.label}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+								<p className="mt-1 text-xs text-gray-500">
+									File for a section member — their manager then HR approve; the OT
+									lands on their timesheet, not yours.
+								</p>
 							</div>
-							<div>
-								<p className="mb-1 text-xs text-gray-500">Minutes</p>
-								<Input
-									type="number"
-									min="0"
-									max="59"
-									step="1"
-									value={overtimeMinutePart}
-									onChange={(event) => setOvertimeMinutePart(event.target.value)}
-									disabled={isPending}
-								/>
+						) : null}
+						<div>
+							<label className="mb-1 block text-sm font-medium text-gray-700">
+								Overtime duration
+							</label>
+							<div className="grid grid-cols-2 gap-3">
+								<div>
+									<p className="mb-1 text-xs text-gray-500">Hours</p>
+									<Input
+										type="number"
+										min="0"
+										max="23"
+										step="1"
+										value={overtimeHourPart}
+										onChange={(event) => setOvertimeHourPart(event.target.value)}
+										disabled={isPending}
+									/>
+								</div>
+								<div>
+									<p className="mb-1 text-xs text-gray-500">Minutes</p>
+									<Input
+										type="number"
+										min="0"
+										max="59"
+										step="1"
+										value={overtimeMinutePart}
+										onChange={(event) => setOvertimeMinutePart(event.target.value)}
+										disabled={isPending}
+									/>
+								</div>
 							</div>
+							<p className="mt-1 text-xs text-gray-500">
+								Example: 2 hours 50 minutes. HR approval writes this as payable OT.
+							</p>
 						</div>
-						<p className="mt-1 text-xs text-gray-500">
-							Example: 2 hours 50 minutes. HR approval writes this as payable OT.
-						</p>
-					</div>
+					</>
 				)}
 
 				<div>

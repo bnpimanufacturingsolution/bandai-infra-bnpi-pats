@@ -138,6 +138,7 @@ Update 2026-07-23: Benefit attendance eligibility mode + disqualify flags (indep
 | continuous payroll benefit | RECURRING schedule mode | open-ended benefit, forever benefit | HIGH | `docs/BENEFIT_SCHEDULE_MODES.md`; lazy ensure helpers. |
 | finite total benefit program | TIME_BOUND / FIXED_INSTALLMENTS | installment plan | HIGH | `docs/BENEFIT_SCHEDULE_MODES.md`. |
 | Perfect Attendance payroll money | Perfect Attendance (payroll) / PFA / `EmployeePayroll.perfectAttendance` | Performance Bonus (seed name), attendance incentive, PFA allowance (informal) | HIGH for money path; MEDIUM for catalog label | payroll helpers + seeder conflict table. |
+| per-day project attribution | Timesheet project code / `Timesheetline.projectCode` | project code, bnpi-dl/bnpi-id | HIGH | repo-root `docs/00-product/TIMESHEET_PROJECT_CODE.md`; `helper/timesheet-project-code.helper.ts`; schema `prisma/schema-postgres/timesheetline.prisma`. DIRECT day → `bnpi-dl-<Manila-year>`, INDIRECT → `bnpi-id-<year>`; day tag first, hire source second (AGENCY=indirect, missing=direct); explicit request override allowed; stored metadata only, not a payroll input. Foundation for project management (per-project time rollups). |
 | Perfect attendance analytics | perfectAttendanceMetrics | Perfect Attendance report tab | HIGH | metrics helper + hris-app reports. |
 
 ## Terminology Conflicts

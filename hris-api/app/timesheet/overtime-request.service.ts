@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "../../generated/prisma";
+﻿import type { Prisma, PrismaClient } from "../../generated/prisma";
 import {
 	applyAttendanceToObligation,
 	materializeTimesheetLinesFromObligations,
@@ -230,60 +230,92 @@ export async function createOvertimeRequestForTimesheetLine(params: {
 	};
 }
 
-export async function applyOvertimeRequestApprovalSideEffects(params: {
+export type OvertimeTargetLine = {
+	id: string;
+	timesheetId: string;
+	employeeId: string;
+	date: Date;
+	attendanceId: string | null;
+	metadata: unknown;
+};
+
+/**
+ * Resolve the effective timesheet line an OVERTIME approval would write to.
+ * Lookup order (shared by the approval pre-check and the side effect so both
+ * always agree):
+ *   1. explicit metadata.timesheetLineId (timesheet-page filed OT)
+ *   2. (employeeId, date) effective line
+ *   3. materialize lines from obligations when a period timesheet exists and
+ *      is not already frozen (APPROVED/SUBMITTED state truth)
+ * Returns line: null when nothing applies â€” the caller decides whether that is
+ * a hard refusal (approve path) or a silent skip (reject path).
+ */
+export async function resolveOvertimeApprovalTargetLine(params: {
 	prisma: PrismaClient;
 	organizationId: string;
-	requestId: string;
 	requestMetadata: Record<string, unknown>;
-	isApprove: boolean;
-	approverEmployeeId?: string | null;
+	targetEmployeeId?: string | null;
 	requesterEmployeeId?: string | null;
-	rejectionReason?: string | null;
-}) {
+}): Promise<{ line: OvertimeTargetLine | null; employeeId: string; dateKey: string }> {
 	const metadata = asRecord(params.requestMetadata);
 	const timesheetLineId = String(metadata.timesheetLineId || "");
 	const timesheetId = String(metadata.timesheetId || "");
-	const attendanceId = metadata.attendanceId
-		? String(metadata.attendanceId)
-		: null;
+	const attendanceId = metadata.attendanceId ? String(metadata.attendanceId) : null;
+	// Target resolution order: explicit metadata.employeeId (set by self-service
+	// and by the leader-filed UI payload), then the request's on-behalf target,
+	// then the requester. For leader-filed requests the requester is the LEADER,
+	// so skipping the target would write OT to the leader's timesheet.
 	const employeeId = String(
-		metadata.employeeId || params.requesterEmployeeId || "",
+		metadata.employeeId || params.targetEmployeeId || params.requesterEmployeeId || "",
 	);
 	const dateKey = String(metadata.date || "").slice(0, 10);
-	const detectedOvertimeMinutes = resolveRequestedOvertimeMinutes(metadata);
 
-	let line = timesheetLineId
-		? await params.prisma.timesheetline.findFirst({
-				where: {
-					id: timesheetLineId,
-					organizationId: params.organizationId,
-					isDeleted: false,
-					isEffective: true,
-				},
-			})
-		: null;
+	if (timesheetLineId) {
+		const line = await params.prisma.timesheetline.findFirst({
+			where: {
+				id: timesheetLineId,
+				organizationId: params.organizationId,
+				isDeleted: false,
+				isEffective: true,
+				// Frozen timesheets are never valid approval targets â€” even when the
+				// line id was passed explicitly (timesheet-page filed OT).
+				timesheet: { isDeleted: false, status: { notIn: ["APPROVED", "SUBMITTED"] } },
+			},
+		});
+		if (line) {
+			return { line: line as unknown as OvertimeTargetLine, employeeId, dateKey };
+		}
+	}
 
-	if (!line && employeeId && dateKey) {
+	if (employeeId && dateKey) {
 		const bounds = getBusinessDayBounds(new Date(`${dateKey}T00:00:00.000Z`));
-		line = await params.prisma.timesheetline.findFirst({
+		// Prefer the exact-date line inside a NON-FROZEN timesheet. The business
+		// window spans two calendar dates (Manila offset), so a desc-only lookup
+		// could pick the neighboring day's line from an APPROVED (frozen)
+		// timesheet and overwrite payroll-ready OT. Frozen timesheets are never
+		// valid approval targets.
+		const line = await params.prisma.timesheetline.findFirst({
 			where: {
 				organizationId: params.organizationId,
 				employeeId,
 				isDeleted: false,
 				isEffective: true,
 				date: { gte: bounds.start, lte: bounds.end },
+				timesheet: { isDeleted: false, status: { notIn: ["APPROVED", "SUBMITTED"] } },
 			},
-			orderBy: { date: "desc" },
+			orderBy: [{ date: "asc" as const }, { createdAt: "asc" as const }],
 		});
-	}
+		if (line) {
+			return { line: line as unknown as OvertimeTargetLine, employeeId, dateKey };
+		}
 
-	if (!line && employeeId && dateKey) {
-		const bounds = getBusinessDayBounds(new Date(`${dateKey}T00:00:00.000Z`));
 		const timesheet = await params.prisma.timesheet.findFirst({
 			where: {
 				organizationId: params.organizationId,
 				employeeId,
 				isDeleted: false,
+				// Only unfrozen timesheets may be materialized into / targeted.
+				status: { notIn: ["APPROVED", "SUBMITTED"] },
 				payrollPeriod: {
 					startDate: { lte: bounds.end },
 					endDate: { gte: bounds.start },
@@ -300,7 +332,7 @@ export async function applyOvertimeRequestApprovalSideEffects(params: {
 				fromDate: bounds.start,
 				toDate: bounds.end,
 			});
-			line = await params.prisma.timesheetline.findFirst({
+			const materialized = await params.prisma.timesheetline.findFirst({
 				where: {
 					organizationId: params.organizationId,
 					timesheetId: timesheet.id,
@@ -310,10 +342,50 @@ export async function applyOvertimeRequestApprovalSideEffects(params: {
 					date: { gte: bounds.start, lte: bounds.end },
 				},
 			});
+			if (materialized) {
+				return { line: materialized as unknown as OvertimeTargetLine, employeeId, dateKey };
+			}
 		}
 	}
 
+	return { line: null, employeeId, dateKey };
+}
+
+export async function applyOvertimeRequestApprovalSideEffects(params: {
+	prisma: PrismaClient;
+	organizationId: string;
+	requestId: string;
+	requestMetadata: Record<string, unknown>;
+	isApprove: boolean;
+	approverEmployeeId?: string | null;
+	requesterEmployeeId?: string | null;
+	/** On-behalf target (e.g. leader-filed OT for a section member). */
+	targetEmployeeId?: string | null;
+	rejectionReason?: string | null;
+}) {
+	const metadata = asRecord(params.requestMetadata);
+	const timesheetId = String(metadata.timesheetId || "");
+	const attendanceId = metadata.attendanceId ? String(metadata.attendanceId) : null;
+	const detectedOvertimeMinutes = resolveRequestedOvertimeMinutes(metadata);
+
+	const resolved = await resolveOvertimeApprovalTargetLine({
+		prisma: params.prisma,
+		organizationId: params.organizationId,
+		requestMetadata: metadata,
+		targetEmployeeId: params.targetEmployeeId,
+		requesterEmployeeId: params.requesterEmployeeId,
+	});
+	const line = resolved.line;
+	const employeeId = resolved.employeeId;
+	const dateKey = resolved.dateKey;
+
 	if (!line) {
+		// Reject path: nothing to stamp on a missing line â€” skip gracefully.
+		if (!params.isApprove) {
+			return { overtimeApprovalStatus: "REJECTED" as const, lineUpdated: false };
+		}
+		// Approve path: refusing here is a policy violation signal â€” the caller
+		// (approval pre-check) must have refused with a clear 409 already.
 		throw new Error("TIMESHEET_LINE_NOT_FOUND");
 	}
 
@@ -330,21 +402,15 @@ export async function applyOvertimeRequestApprovalSideEffects(params: {
 	}
 
 	const approvedHours = formatMinutesAsTime(detectedOvertimeMinutes);
-	const approvedMetadata = mergeOvertimeMetadata(line.metadata, {
-		overtimeApprovalStatus: "APPROVED",
-		overtimeRequestId: params.requestId,
-		pendingOvertimeMinutes: detectedOvertimeMinutes,
-		pendingOvertimeHours: approvedHours,
-		overtimeCandidate: detectedOvertimeMinutes > 0,
-	});
+	// Early OT support: carry the requested kind (REGULAR | EARLY) from the
+	// request metadata onto the effective timesheet line so payroll/register
+	// mapping can bucket pre-shift OT separately from after-shift OT.
+	const requestedOvertimeKind = String(metadata.overtimeKind || "")
+		.toUpperCase()
+		=== "EARLY"
+		? "EARLY"
+		: "REGULAR";
 
-	await params.prisma.timesheetline.update({
-		where: { id: line.id },
-		data: {
-			overtimeHours: approvedHours,
-			metadata: approvedMetadata as Prisma.InputJsonValue,
-		},
-	});
 
 	const resolvedAttendanceId = attendanceId || line.attendanceId || null;
 	if (resolvedAttendanceId) {
@@ -391,7 +457,10 @@ export async function applyOvertimeRequestApprovalSideEffects(params: {
 			});
 		}
 	}
-
+	// NOTE: the payable-OT stamp below must be the LAST write to the target
+	// line. Materialization/refresh recomputes lines from obligations and
+	// replaces metadata, which would erase the approval stamp â€” so refresh
+	// first (when the timesheet is unfrozen), then stamp.
 	const timesheet = await params.prisma.timesheet.findFirst({
 		where: {
 			id: timesheetId || line.timesheetId,
@@ -422,8 +491,40 @@ export async function applyOvertimeRequestApprovalSideEffects(params: {
 		});
 	}
 
+	// Re-read the line: materialization/refresh may have replaced it.
+	const refreshed = await params.prisma.timesheetline.findFirst({
+		where: {
+			organizationId: params.organizationId,
+			timesheetId: line.timesheetId,
+			employeeId: line.employeeId,
+			isDeleted: false,
+			isEffective: true,
+			date: line.date,
+		},
+	});
+	const stampTarget = refreshed || line;
+	const refreshedApprovedMetadata = mergeOvertimeMetadata(stampTarget.metadata, {
+		overtimeApprovalStatus: "APPROVED",
+		overtimeRequestId: params.requestId,
+		pendingOvertimeMinutes: detectedOvertimeMinutes,
+		pendingOvertimeHours: approvedHours,
+		overtimeCandidate: detectedOvertimeMinutes > 0,
+		overtimeKind: requestedOvertimeKind,
+		...(requestedOvertimeKind === "EARLY" ? { earlyOvertime: true } : {}),
+	});
+
+	await params.prisma.timesheetline.update({
+		where: { id: stampTarget.id },
+		data: {
+			overtimeHours: approvedHours,
+			metadata: refreshedApprovedMetadata as Prisma.InputJsonValue,
+		},
+	});
+
 	return {
 		overtimeApprovalStatus: "APPROVED" as const,
 		approvedOvertimeHours: approvedHours,
 	};
+
 }
+

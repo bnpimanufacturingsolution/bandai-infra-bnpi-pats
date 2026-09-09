@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
+import { useQuery } from "@tanstack/react-query";
+import sectionsService from "~/services/sections.service";
 import {
 	AlertCircle,
 	Award,
@@ -1180,6 +1182,30 @@ export default function EmployeeRequestsHubPage() {
 	);
 	const canCreateManagerPan = isHrOrAdmin || hasManagerMarker || directReportCount > 0;
 
+	// Line-leader on-behalf filing: fetch sections this employee leads and their
+	// active members so the overtime form can offer a "For whom" picker.
+	const isLineLeader = userRole === "hris-line-leader";
+	const { data: ledMembersData } = useQuery({
+		queryKey: ["section-led-members", employeeId],
+		queryFn: () => sectionsService.getLedMembers(),
+		enabled: isLineLeader && Boolean(employeeId),
+		staleTime: 60_000,
+	});
+	const onBehalfOptions = useMemo(() => {
+		if (!isLineLeader || !employeeId) return null;
+		const options = [{ id: employeeId, label: "Myself", isSelf: true }];
+		for (const member of ledMembersData?.members || []) {
+			if (member.id === employeeId) continue;
+			const info = member.person?.personalInfo || {};
+			const name = [info.firstName, info.lastName].filter(Boolean).join(" ").trim();
+			const label = name
+				? `${name} (${member.employeeId})`
+				: String(member.employeeId || member.id);
+			options.push({ id: member.id, label, isSelf: false });
+		}
+		return options;
+	}, [employeeId, isLineLeader, ledMembersData?.members]);
+
 	const [cancelTarget, setCancelTarget] = useState<Request | null>(null);
 
 	const { data: requestsData, isLoading } = useRequests({
@@ -1499,12 +1525,23 @@ export default function EmployeeRequestsHubPage() {
 		const payload =
 			data.requestKind === "OVERTIME"
 				? buildOvertimeRequestPayload({
-						employeeId,
+						// The OT is FOR the selected member (or the actor when filing
+						// for self); on-behalf keeps the leader as requester and the
+						// backend routes the leader-filed manager→HR chain.
+						employeeId: data.memberEmployeeId || employeeId,
 						organizationId,
 						date: data.date,
 						overtimeHourPart: data.overtimeHourPart,
 						overtimeMinutePart: data.overtimeMinutePart,
 						notes: data.notes,
+						...(data.memberEmployeeId && data.memberEmployeeId !== employeeId
+							? {
+									onBehalf: {
+										requesterEmployeeId: employeeId,
+										filedByRole: userRole || "hris-line-leader",
+									},
+								}
+							: {}),
 					})
 				: buildAttendanceAdjustmentRequestPayload({
 						employeeId,
@@ -1936,6 +1973,7 @@ export default function EmployeeRequestsHubPage() {
 						| "CLOCK_IN_OUT"
 						| null) || undefined
 				}
+				onBehalfOptions={onBehalfOptions ?? undefined}
 			/>
 		</div>
 	);

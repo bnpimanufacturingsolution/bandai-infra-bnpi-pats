@@ -209,6 +209,11 @@ model Employee {
   managedDepartments           Department[]          @relation("DepartmentManager")
   managedSections              Section[]             @relation("SectionHead")
   lineLeaderSections           SectionLineLeader[]
+  // Responsible line leader for this employee (assignment model: 1 member -> 1
+  // leader; when a section has 2+ leaders, members are partitioned among them).
+  lineLeaderId                 String?               @db.ObjectId
+  lineLeader                   Employee?             @relation("SectionResponsibleLeader", fields: [lineLeaderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  lineLeaderMembers            Employee[]            @relation("SectionResponsibleLeader")
   documentFolders              DocumentFolder[]      @relation("EmployeeDocumentFolders")
   convertedApplicants          Applicant[]           @relation("ApplicantConvertedEmployee") // Applicants converted into this employee record
   recruitmentActivities        RecruitmentActivity[] @relation("RecruitmentActivityActor")

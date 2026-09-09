@@ -36,6 +36,10 @@ import {
 } from "../../helper/attendance.helper";
 import { buildSuccessResponse, buildPagination } from "../../helper/success-handler.helper";
 import { normalizeDayLaborType } from "../../helper/day-labor-type.helper";
+import {
+	normalizeProjectCodeOverride,
+	resolveTimesheetProjectCode,
+} from "../../helper/timesheet-project-code.helper";
 import { groupDataByField } from "../../helper/dataGrouping";
 import { buildErrorResponse, formatZodErrors } from "../../helper/error-handler";
 import {
@@ -61,6 +65,8 @@ import {
 	updateRequestStepProgress,
 } from "../../helper/request-runtime.helper";
 import { REQUEST_WORKFLOW_CODES } from "../../helper/workflow-config.helper";
+import { canActAsLineLeaderForEmployee } from "../../helper/section-leader-scope.helper";
+import { isDayLaborOnlyBreakdownChange } from "../../helper/timesheet-day-labor-guard.helper";
 import { enrichBreakdownWithLeaveHolidayContext } from "../../helper/day-context.helper";
 import {
 	publishRequestCreatedNotification,
@@ -393,6 +399,7 @@ export const controller = (prisma: PrismaClient) => {
 		"employeeNotes",
 		"approverNotes",
 		"dayLaborType",
+		"projectCode",
 	]);
 
 	const toAuditEpochMinute = (value: unknown): number | null => {
@@ -426,6 +433,7 @@ export const controller = (prisma: PrismaClient) => {
 			breakMinutes: metadata.breakMinutes ?? null,
 			breakDisplay: metadata.breakDisplay ?? null,
 			dayLaborType: day?.dayLaborType ?? null,
+			projectCode: day?.projectCode ?? null,
 		};
 	};
 
@@ -518,6 +526,7 @@ export const controller = (prisma: PrismaClient) => {
 			breakMinutes: line?.breakMinutes ?? metadata.breakMinutes ?? null,
 			breakDisplay: metadata.breakDisplay ?? null,
 			dayLaborType: line?.dayLaborType ?? null,
+			projectCode: line?.projectCode ?? null,
 		};
 	};
 
@@ -536,6 +545,7 @@ export const controller = (prisma: PrismaClient) => {
 		breakMinutes: "Break",
 		breakDisplay: "Break label",
 		dayLaborType: "Day labor",
+		projectCode: "Project code",
 	};
 
 	const buildRevisionFieldChanges = (
@@ -1323,6 +1333,7 @@ export const controller = (prisma: PrismaClient) => {
 						approverNotes:
 							typeof day?.approverNotes === "string" ? day.approverNotes : null,
 						dayLaborType: normalizeDayLaborType(day?.dayLaborType),
+						projectCode: normalizeProjectCodeOverride(day?.projectCode),
 						metadata: {
 							...incomingMetadata,
 							...mergeOvertimeMetadata(incomingMetadata, overtimeApplication.metadata),
@@ -1377,6 +1388,7 @@ export const controller = (prisma: PrismaClient) => {
 						approverNotes:
 							typeof day?.approverNotes === "string" ? day.approverNotes : null,
 						dayLaborType: normalizeDayLaborType(day?.dayLaborType),
+						projectCode: normalizeProjectCodeOverride(day?.projectCode),
 						metadata:
 							day?.metadata &&
 							typeof day.metadata === "object" &&
@@ -2840,7 +2852,51 @@ export const controller = (prisma: PrismaClient) => {
 					}
 				}
 			} else {
-				// Non-owners (manager/HR flows): preserve existing guardrails
+				// Non-owners: identity-based authorization (D2 security fix,
+				// 2026-09-07). Previously any authenticated user could write a
+				// non-APPROVED timesheet by id. Now only HR/admin or the member's
+				// responsible line leader may write, and a line leader may only
+				// change dayLaborType (D2 + day-labor tagging requirement).
+				const actingEmployeeId = authReq.metadata?.employee?.id || null;
+				const actingRole = String(authReq.role || "")
+					.trim()
+					.toLowerCase();
+				const isHrOrAdminActor = [
+					"hris-admin",
+					"admin",
+					"super_admin",
+					"superadmin",
+					"hris-hr-manager",
+					"hris-hr-user",
+					"hris-timekeeper",
+				].includes(actingRole);
+				let leaderScope: Awaited<
+					ReturnType<typeof import("../../helper/section-leader-scope.helper").canActAsLineLeaderForEmployee>
+				> | null = null;
+				if (
+					!isHrOrAdminActor &&
+					actingEmployeeId &&
+					authReq.organizationId
+				) {
+					leaderScope = await canActAsLineLeaderForEmployee(prisma, {
+						organizationId: authReq.organizationId,
+						leaderEmployeeId: actingEmployeeId,
+						targetEmployeeId: existingTimesheet.employeeId,
+					});
+				}
+				if (!isHrOrAdminActor && !(leaderScope && leaderScope.ok)) {
+					timesheetLogger.warn(
+						`Timesheet write denied: actor=${actingEmployeeId || "unknown"} role=${actingRole || "unknown"} timesheet=${existingTimesheet.id}`,
+					);
+					const errorResponse = buildErrorResponse(
+						"You are not allowed to update this timesheet.",
+						403,
+					);
+					res.status(403).json(errorResponse);
+					return;
+				}
+
+				// Shared status guardrails (unchanged for authorized actors).
 				if (existingTimesheet.status === "APPROVED") {
 					timesheetLogger.warn(`Cannot update timesheet in APPROVED status`);
 					const errorResponse = buildErrorResponse(
@@ -2861,6 +2917,31 @@ export const controller = (prisma: PrismaClient) => {
 					);
 					res.status(400).json(errorResponse);
 					return;
+				}
+
+				// Leader writes are day-labor-only.
+				if (
+					!isHrOrAdminActor &&
+					leaderScope &&
+					leaderScope.ok &&
+					isBreakdownUpdate
+				) {
+					const guard = await isDayLaborOnlyBreakdownChange(prisma, {
+						organizationId: existingTimesheet.organizationId,
+						timesheetId: existingTimesheet.id,
+						breakdown: (validatedData.breakdown as any[]) || [],
+					});
+					if (!guard.ok) {
+						timesheetLogger.warn(
+							`Leader day-labor guard rejected: day=${guard.dayKey} field=${guard.field} reason=${guard.reason}`,
+						);
+						const errorResponse = buildErrorResponse(
+							"Line leaders can only tag day labor (Direct/Indirect). Timesheet changes must go through an adjustment request.",
+							403,
+						);
+						res.status(403).json(errorResponse);
+						return;
+					}
 				}
 			}
 

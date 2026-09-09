@@ -17,6 +17,8 @@ interface CalendarDatePickerProps {
 	className?: string;
 	disabled?: boolean;
 	defaultMonth?: Date;
+	/** Optional id forwarded to the text input for label association (a11y). */
+	id?: string;
 }
 
 export function CalendarDatePicker({
@@ -29,6 +31,7 @@ export function CalendarDatePicker({
 	className,
 	disabled,
 	defaultMonth,
+	id,
 }: CalendarDatePickerProps) {
 	const [open, setOpen] = React.useState(false);
 	const [inputValue, setInputValue] = React.useState("");
@@ -160,6 +163,7 @@ export function CalendarDatePicker({
 			<Input
 				type="text"
 				inputMode="numeric"
+				id={id}
 				value={inputValue}
 				onChange={(event) => handleInputChange(event.target.value)}
 				onBlur={handleInputBlur}

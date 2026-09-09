@@ -56,6 +56,7 @@ const IndexPage: React.FC = () => {
 		"hris-hr-user",
 		"hris-employee",
 		"hris-employee-manager",
+		"hris-line-leader",
 		"hris-timekeeper",
 		"hris-admin",
 		"admin",
