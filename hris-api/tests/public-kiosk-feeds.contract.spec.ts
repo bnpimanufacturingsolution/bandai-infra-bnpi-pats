@@ -144,9 +144,7 @@ describe("public kiosk feed contracts", () => {
 				},
 			},
 			user: {
-				findMany: async () => [
-					{ id: "user-seed", metadata: { avatar: null } },
-				],
+				findMany: async () => [{ id: "user-seed", metadata: { avatar: null } }],
 			},
 			child: { findMany: async () => [] },
 		});
@@ -161,6 +159,58 @@ describe("public kiosk feed contracts", () => {
 		expect(response.body.data.organizationId).to.equal("fresh-org-after-reset");
 		expect(response.body.data.resolvedBy).to.equal("code");
 		expect(response.body.data.counts.total).to.equal(1);
+	});
+
+	it("filters public birthdays to specific day when day is provided", async () => {
+		const app = buildCelebrationsApp({
+			organization: organizationLookup(),
+			employee: {
+				findMany: async () => [
+					{
+						id: "emp-1",
+						userId: "user-1",
+						person: {
+							id: "person-1",
+							isDeleted: false,
+							personalInfo: {
+								firstName: "Mina",
+								lastName: "Santos",
+								dateOfBirth: "1995-09-07T00:00:00.000Z",
+							},
+							metadata: { isActive: true, isDeleted: false },
+						},
+						department: { name: "HR" },
+					},
+				],
+			},
+			user: { findMany: async () => [{ id: "user-1", metadata: { avatar: null } }] },
+			child: { findMany: async () => [] },
+		});
+
+		const response = await request(app)
+			.get(
+				"/api/celebrations/public/birthdays?organizationId=bandai-org&month=9&year=2026&type=EMPLOYEES&day=7",
+			)
+			.expect(200);
+
+		expect(response.body.data.items).to.have.length(1);
+		expect(response.body.data.items[0].day).to.equal(7);
+		expect(response.body.data.counts.total).to.equal(1);
+	});
+
+	it("ignores invalid day outside 1-31 via zod", async () => {
+		const app = buildCelebrationsApp({
+			organization: organizationLookup(),
+			employee: { findMany: async () => [] },
+			user: { findMany: async () => [] },
+			child: { findMany: async () => [] },
+		});
+
+		await request(app)
+			.get(
+				"/api/celebrations/public/birthdays?organizationId=bandai-org&month=9&year=2026&type=EMPLOYEES&day=32",
+			)
+			.expect(400);
 	});
 
 	it("returns only public-safe birthday fields for child celebrants", async () => {

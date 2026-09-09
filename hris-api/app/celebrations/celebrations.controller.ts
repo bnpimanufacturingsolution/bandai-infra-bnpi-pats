@@ -173,7 +173,12 @@ const getEmployeeBirthdays = async (
 					: {};
 			const dobValue = personalInfo.dateOfBirth;
 			const dob = dobValue ? new Date(String(dobValue)) : null;
-			if (!employee.person || employee.person.isDeleted || !dob || Number.isNaN(dob.getTime())) {
+			if (
+				!employee.person ||
+				employee.person.isDeleted ||
+				!dob ||
+				Number.isNaN(dob.getTime())
+			) {
 				return null;
 			}
 			const metadata =
@@ -328,8 +333,9 @@ export const controller = (prisma: PrismaClient) => {
 		year: number;
 		type: BirthdayFilterType;
 		search: string;
+		day?: number;
 	}) => {
-		const { organizationId, month, year, type, search } = params;
+		const { organizationId, month, year, type, search, day } = params;
 
 		const [employeeRows, childRows] = await Promise.all([
 			getEmployeeBirthdays(prisma, organizationId, month),
@@ -402,7 +408,11 @@ export const controller = (prisma: PrismaClient) => {
 		const typeFilteredItems = filterByType(mergedItems, type);
 		const searchFilteredItems = filterBySearch(typeFilteredItems, search);
 
-		searchFilteredItems.sort((a, b) => {
+		const dayFilteredItems = day
+			? searchFilteredItems.filter((item) => item.day === day)
+			: searchFilteredItems;
+
+		dayFilteredItems.sort((a, b) => {
 			if (a.day !== b.day) {
 				return a.day - b.day;
 			}
@@ -411,12 +421,10 @@ export const controller = (prisma: PrismaClient) => {
 			});
 		});
 
-		const employeesCount = searchFilteredItems.filter(
+		const employeesCount = dayFilteredItems.filter(
 			(item) => item.type === "EMPLOYEE_BIRTHDAY",
 		).length;
-		const kidsCount = searchFilteredItems.filter(
-			(item) => item.type === "CHILD_BIRTHDAY",
-		).length;
+		const kidsCount = dayFilteredItems.filter((item) => item.type === "CHILD_BIRTHDAY").length;
 
 		return {
 			month,
@@ -428,10 +436,10 @@ export const controller = (prisma: PrismaClient) => {
 			counts: {
 				employees: employeesCount,
 				kids: kidsCount,
-				total: searchFilteredItems.length,
+				total: dayFilteredItems.length,
 			},
-			items: searchFilteredItems,
-			groups: groupByDay(searchFilteredItems),
+			items: dayFilteredItems,
+			groups: groupByDay(dayFilteredItems),
 		};
 	};
 
@@ -518,6 +526,7 @@ export const controller = (prisma: PrismaClient) => {
 				year: parsed.data.year,
 				type: parsed.data.type,
 				search: parsed.data.search,
+				day: parsed.data.day,
 			});
 
 			res.status(200).json(
