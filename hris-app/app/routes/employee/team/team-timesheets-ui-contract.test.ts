@@ -25,6 +25,24 @@ describe("team timesheets tab contract", () => {
 		expect(sidebar).toContain('path: "/employee/team?tab=timesheets"');
 	});
 
+	it("pins My Team flat at the top of Working Space, not as a collapsed submenu (operator 2026-09-09)", () => {
+		const sidebar = readAppFile("app/components/organisms/Sidebar.tsx");
+
+		// My Team is a direct link (no collapsible submenu parent), and its
+		// entries render always-visible at the top of Working Space.
+		expect(sidebar).toContain("const myTeamEntry");
+		expect(sidebar).toContain("const myTeamChildren");
+		expect(sidebar).toContain("{myTeamEntry && (");
+		expect(sidebar).toContain('item={myTeamEntry}');
+
+		// The General section no longer hosts the My Team group.
+		const generalStart = sidebar.indexOf("const generalItems: NavItem[] = [");
+		const personalStart = sidebar.indexOf("// Personal items (common to all)");
+		expect(generalStart).toBeGreaterThan(-1);
+		expect(personalStart).toBeGreaterThan(generalStart);
+		expect(sidebar.slice(generalStart, personalStart)).not.toContain("general-my-team");
+	});
+
 	it("uses the leader-scoped led-timesheets endpoint (never the org-wide list)", () => {
 		const tab = readAppFile("app/routes/employee/team/TeamTimesheetsTab.tsx");
 		const service = readAppFile("app/services/sections.service.ts");
