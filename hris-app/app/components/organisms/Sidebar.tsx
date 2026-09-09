@@ -351,6 +351,62 @@ export function Sidebar({ onClose }: SidebarProps) {
 	// Required HR tail order: Reports, with Audit Logs last for HR users.
 	const trailingItems: NavItem[] = isHR ? [reportsItem!, ...hrUserTailItems] : [];
 
+	// My Team group (operator 2026-09-09): flat at the top of the Working
+	// Space section. "My Team" is a direct link and its entries (Overview /
+	// Organization Chart / Team Timesheets / Assign Overtime) render
+	// always-visible below it - NOT a collapsed submenu. Admins never see this
+	// surface (they render neither the General section nor this group).
+	const myTeamChildren: NavItem[] = [
+		{
+			id: "general-my-team-overview",
+			label: "Overview",
+			path: "/employee/team?tab=overview",
+			icon: <Users className="w-4 h-4" />,
+		},
+		{
+			id: "general-my-team-organization",
+			label: "Organization Chart",
+			path: "/employee/team?tab=organization",
+			icon: <ChevronRight className="w-4 h-4" />,
+		},
+		...(isManager
+			? [
+					{
+						id: "general-my-team-timesheets",
+						label: "Team Timesheets",
+						path: "/employee/team?tab=timesheets",
+						icon: <Clock3 className="w-4 h-4" />,
+					},
+					{
+						id: "general-my-team-assign-overtime",
+						label: "Assign Overtime",
+						path: "/employee/team?tab=overtime",
+						icon: <Clock className="w-4 h-4" />,
+					},
+				]
+			: []),
+		...(isDepartmentManager
+			? [
+					{
+						id: "general-my-team-schedule-calendar",
+						label: "Schedule Calendar",
+						path: "/employee/team/schedule-calendar",
+						icon: <Calendar className="w-4 h-4" />,
+					},
+				]
+			: []),
+	];
+
+	const myTeamEntry: NavItem | null =
+		isEmployee || isManager || isHR
+			? {
+					id: "general-my-team",
+					label: "My Team",
+					path: "/employee/team",
+					icon: <Users className="w-5 h-5" />,
+				}
+			: null;
+
 	const workingSpaceItems: NavItem[] = [
 		...baseWorkingSpaceItems,
 		...hrWorkingSpaceItems,
@@ -360,56 +416,6 @@ export function Sidebar({ onClose }: SidebarProps) {
 	// General items (common to all, except admin)
 	const generalItems: NavItem[] = [
 		profileItem,
-		...(isEmployee || isManager || isHR || isAdmin
-			? [
-					{
-						id: "general-my-team",
-						label: "My Team",
-						path: "/employee/team",
-						icon: <Users className="w-5 h-5" />,
-						submenu: [
-							{
-								id: "general-my-team-overview",
-								label: "Overview",
-								path: "/employee/team?tab=overview",
-								icon: <Users className="w-4 h-4" />,
-							},
-							{
-								id: "general-my-team-organization",
-								label: "Organization Chart",
-								path: "/employee/team?tab=organization",
-								icon: <ChevronRight className="w-4 h-4" />,
-							},
-							...(isManager
-								? [
-										{
-											id: "general-my-team-timesheets",
-											label: "Team Timesheets",
-											path: "/employee/team?tab=timesheets",
-											icon: <Clock3 className="w-4 h-4" />,
-										},
-										{
-											id: "general-my-team-assign-overtime",
-											label: "Assign Overtime",
-											path: "/employee/team?tab=overtime",
-											icon: <Clock className="w-4 h-4" />,
-										},
-									]
-								: []),
-							...(isDepartmentManager
-								? [
-										{
-											id: "general-my-team-schedule-calendar",
-											label: "Schedule Calendar",
-											path: "/employee/team/schedule-calendar",
-											icon: <Calendar className="w-4 h-4" />,
-										},
-									]
-								: []),
-						],
-					},
-				]
-			: []),
 		...(approvalsItem
 			? [
 					{
@@ -755,11 +761,26 @@ export function Sidebar({ onClose }: SidebarProps) {
 							className="px-3 text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3">
 							Working Space
 						</h3>
-						<div className="space-y-0.5">
-							{workingSpaceItems.map((item) => (
-								<NavItemComponent key={item.id} item={item} />
-							))}
-						</div>
+					<div className="space-y-0.5">
+						{/* My Team group (operator 2026-09-09): flat at the top.
+						    The My Team entry is a direct link and its items stay
+						    always visible - no collapsed submenu. */}
+						{myTeamEntry && (
+							<>
+								<NavItemComponent item={myTeamEntry} />
+								{myTeamChildren.map((subitem) => (
+									<NavItemComponent
+										key={subitem.id}
+										item={subitem}
+										isSubmenu={true}
+									/>
+								))}
+							</>
+						)}
+						{workingSpaceItems.map((item) => (
+							<NavItemComponent key={item.id} item={item} />
+						))}
+					</div>
 					</div>
 				)}
 
