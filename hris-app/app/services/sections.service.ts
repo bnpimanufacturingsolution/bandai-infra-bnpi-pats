@@ -21,6 +21,59 @@ export interface SectionLineLeaderMembership {
 	};
 }
 
+export type LedMemberTimesheetStatus =
+	| "DRAFT"
+	| "SUBMITTED"
+	| "APPROVED"
+	| "REJECTED"
+	| "REVISED";
+
+export interface LedMemberTimesheet {
+	id: string;
+	code: string;
+	employeeId: string;
+	payrollPeriodId: string;
+	status: LedMemberTimesheetStatus;
+	totalDays?: number | null;
+	totalHoursWorked?: string | null;
+	totalRegularHours?: string | null;
+	totalOvertimeHours?: string | null;
+	totalUndertimeHours?: string | null;
+	totalLateHours?: string | null;
+	totalEarlyOutHours?: string | null;
+	submittedAt?: string | null;
+	approvalDate?: string | null;
+	updatedAt?: string | null;
+}
+
+export interface LedMemberTimesheetRow {
+	member: {
+		id: string;
+		employeeId: string;
+		section?: { id: string; name: string; code: string } | null;
+		position?: { title: string } | null;
+		person?: {
+			personalInfo?: { firstName?: string; middleName?: string; lastName?: string };
+		} | null;
+	};
+	timesheet: LedMemberTimesheet | null;
+}
+
+export interface LedTimesheetsPeriod {
+	id: string;
+	code: string | null;
+	name: string;
+	startDate: string;
+	endDate: string;
+	status: string;
+}
+
+export interface LedTimesheetsResponse {
+	sections: Array<{ id: string; name: string; code: string }>;
+	period: LedTimesheetsPeriod | null;
+	members: LedMemberTimesheetRow[];
+}
+
 export interface Section {
 	id: string;
 	organizationId: string;
@@ -157,6 +210,55 @@ class SectionsService extends APIService {
 			assignments,
 		});
 		return response.data;
+	}
+
+	/**
+	 * Active employees in the sections the signed-in employee leads. Powers the
+	 * leader-filed request UI (e.g. overtime on behalf of a section member).
+	 */
+	async getLedMembers(): Promise<{
+		sections: Array<{ id: string; name: string; code: string }>;
+		members: Array<{
+			id: string;
+			employeeId: string;
+			section?: { id: string; name: string; code: string } | null;
+			position?: { title: string } | null;
+			person?: {
+				personalInfo?: { firstName?: string; middleName?: string; lastName?: string };
+			} | null;
+		}>;
+	}> {
+		const response = await hrisApiClient.get<any>("/api/section/led-members");
+		const payload = response?.data?.data ?? response?.data;
+		return {
+			sections: Array.isArray(payload?.sections) ? payload.sections : [],
+			members: Array.isArray(payload?.members) ? payload.members : [],
+		};
+	}
+
+	/**
+	 * Timesheets of the active members of the sections the signed-in employee
+	 * leads. Powers the My Team "Team Timesheets" tab. Members without a
+	 * timesheet for the resolved period come back with `timesheet: null` so the
+	 * leader sees the full roster honestly.
+	 */
+	async getLedTimesheets(params?: {
+		period?: "current";
+		payrollPeriodId?: string;
+	}): Promise<LedTimesheetsResponse> {
+		const query = new URLSearchParams();
+		if (params?.period) query.set("period", params.period);
+		if (params?.payrollPeriodId) query.set("payrollPeriodId", params.payrollPeriodId);
+		const qs = query.toString();
+		const response = await hrisApiClient.get<any>(
+			`/api/section/led-timesheets${qs ? `?${qs}` : ""}`,
+		);
+		const payload = response?.data?.data ?? response?.data;
+		return {
+			sections: Array.isArray(payload?.sections) ? payload.sections : [],
+			period: payload?.period ?? null,
+			members: Array.isArray(payload?.members) ? payload.members : [],
+		};
 	}
 
 	async importSections(file: File): Promise<any> {

@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { useSearchParams } from "react-router";
 import OrganizationChartTab from "./team/OrganizationChartTab";
+import TeamOvertimeTab from "./team/TeamOvertimeTab";
+import TeamTimesheetsTab from "./team/TeamTimesheetsTab";
 import { useAuth } from "~/lib/hooks/use-auth";
 import EmployeeList from "~/components/shared/EmployeeList";
 
@@ -64,6 +66,8 @@ export default function TeamManagement() {
 	const tabs = [
 		{ id: "overview", label: "Team Overview" },
 		{ id: "organization", label: "Organization Chart" },
+		...(isManager ? [{ id: "timesheets", label: "Team Timesheets" }] : []),
+		...(isManager ? [{ id: "overtime", label: "Assign Overtime" }] : []),
 	];
 
 	return (
@@ -99,6 +103,8 @@ export default function TeamManagement() {
 				/>
 			)}
 			{activeTab === "organization" && <OrganizationChartTab employeeId={employeeId} />}
+			{activeTab === "timesheets" && isManager && <TeamTimesheetsTab />}
+			{activeTab === "overtime" && isManager && <TeamOvertimeTab />}
 		</div>
 	);
 }

@@ -80,6 +80,75 @@ describe("attendance adjustment request payload", () => {
 		expect(payload.description).toContain("2:50");
 	});
 
+	it("builds a leader-filed on-behalf overtime payload whose OT lands on the member", () => {
+		const payload = buildOvertimeRequestPayload({
+			// The OT is FOR the member...
+			employeeId: "emp-member",
+			organizationId: "org-1",
+			date: "2026-08-18",
+			overtimeHourPart: 2,
+			overtimeMinutePart: 50,
+			notes: "Line stayed late for a shipment",
+			// ...while the requester is the acting line leader.
+			onBehalf: { requesterEmployeeId: "emp-leader", filedByRole: "hris-line-leader" },
+		});
+
+		expect(payload.type).toBe("OVERTIME");
+		expect(payload.requesterId).toBe("emp-leader");
+		expect((payload as { targetEmployeeId?: string }).targetEmployeeId).toBe("emp-member");
+		expect(payload.metadata.employeeId).toBe("emp-member");
+		expect(payload.metadata.requestSource).toBe("LINE_LEADER_FILED");
+		expect(payload.metadata.workflowTarget).toBe("MANAGER_THEN_HR");
+		expect((payload.metadata as { filedBy?: { isLineLeader?: boolean } }).filedBy?.isLineLeader).toBe(
+			true,
+		);
+		expect(payload.description).toContain("section member");
+	});
+
+	it("keeps self-filed overtime untouched when onBehalf points at the same employee", () => {
+		const payload = buildOvertimeRequestPayload({
+			employeeId: "emp-leader",
+			organizationId: "org-1",
+			date: "2026-08-18",
+			overtimeHourPart: 1,
+			overtimeMinutePart: 0,
+			notes: "My own OT",
+			onBehalf: { requesterEmployeeId: "emp-leader", filedByRole: "hris-line-leader" },
+		});
+		expect(payload.requesterId).toBe("emp-leader");
+		expect((payload as { targetEmployeeId?: string }).targetEmployeeId).toBeUndefined();
+		expect(payload.metadata.requestSource).toBe("EMPLOYEE_SELF_SERVICE");
+		expect(payload.metadata.workflowTarget).toBe("HR");
+	});
+
+	it("stamps early OT (pre-shift) kind into metadata and description", () => {
+		const payload = buildOvertimeRequestPayload({
+			employeeId: "emp-member",
+			organizationId: "org-1",
+			date: "2026-08-18",
+			overtimeHourPart: 1,
+			overtimeMinutePart: 30,
+			notes: "Started early for setup",
+			overtimeKind: "EARLY",
+		});
+		expect(payload.metadata.overtimeKind).toBe("EARLY");
+		expect(payload.metadata.earlyOvertime).toBe(true);
+		expect(payload.description).toContain("early OT (pre-shift)");
+	});
+
+	it("defaults the overtime kind to REGULAR with no early flags", () => {
+		const payload = buildOvertimeRequestPayload({
+			employeeId: "emp-member",
+			organizationId: "org-1",
+			date: "2026-08-18",
+			overtimeHourPart: 1,
+			overtimeMinutePart: 0,
+			notes: "Stayed late",
+		});
+		expect(payload.metadata.overtimeKind).toBe("REGULAR");
+		expect(payload.metadata.earlyOvertime).toBeUndefined();
+	});
+
 	it("rejects a clock-out that is not after clock-in with both times named", () => {
 		expect(() =>
 			buildAttendanceAdjustmentRequestPayload({

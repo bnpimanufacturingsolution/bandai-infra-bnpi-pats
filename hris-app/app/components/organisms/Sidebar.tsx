@@ -5,6 +5,7 @@ import {
 	Users,
 	Wallet,
 	Clock,
+	Clock3,
 	Calendar,
 	CalendarRange,
 	CheckSquare,
@@ -379,6 +380,22 @@ export function Sidebar({ onClose }: SidebarProps) {
 								path: "/employee/team?tab=organization",
 								icon: <ChevronRight className="w-4 h-4" />,
 							},
+							...(isManager
+								? [
+										{
+											id: "general-my-team-timesheets",
+											label: "Team Timesheets",
+											path: "/employee/team?tab=timesheets",
+											icon: <Clock3 className="w-4 h-4" />,
+										},
+										{
+											id: "general-my-team-assign-overtime",
+											label: "Assign Overtime",
+											path: "/employee/team?tab=overtime",
+											icon: <Clock className="w-4 h-4" />,
+										},
+									]
+								: []),
 							...(isDepartmentManager
 								? [
 										{

@@ -10,6 +10,8 @@ interface IController {
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
 	assignMembersToLineLeaders(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getLedMembers(req: Request, res: Response, next: NextFunction): Promise<void>;
+	getLedTimesheets(req: Request, res: Response, next: NextFunction): Promise<void>;
 	importFromXLSX(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
@@ -18,6 +20,8 @@ export const router = (route: Router, controller: IController): Router => {
 	const path = "/section";
 
 	routes.get("/generate-code", controller.generateCode);
+	routes.get("/led-members", controller.getLedMembers);
+	routes.get("/led-timesheets", controller.getLedTimesheets);
 	routes.post("/import", uploadImportFile, controller.importFromXLSX);
 
 	/**
