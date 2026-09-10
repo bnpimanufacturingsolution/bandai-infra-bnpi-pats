@@ -278,24 +278,30 @@ describe("public kiosk feed contracts", () => {
 		const app = buildCalendarApp({
 			organization: organizationLookup(),
 			calendarItem: {
-				findMany: async (args: any) => {
-					findManyCalls.push(args);
-					return [
-						{
-							id: "event-1",
-							organizationId: "bandai-org",
-							year: 2026,
-							title: "Annual Town Hall",
-							description: "Main lobby",
-							type: "COMPANY_EVENT",
-							startDate: "2026-06-20T01:30:00.000Z",
-							endDate: "2026-06-20T03:00:00.000Z",
-							isAllDay: false,
-							timezone: "Asia/Manila",
-							status: "ACTIVE",
-						},
-					];
-				},
+			                    findMany: async (args: any) => {
+			                        findManyCalls.push(args);
+			                        return [
+			                            {
+			                                id: "event-1",
+			                                organizationId: "bandai-org",
+			                                year: 2026,
+			                                title: "Annual Town Hall",
+			                                description: "Main lobby",
+			                                type: "COMPANY_EVENT",
+			                                startDate: "2026-06-20T01:30:00.000Z",
+			                                endDate: "2026-06-20T03:00:00.000Z",
+			                                isAllDay: false,
+			                                timezone: "Asia/Manila",
+			                                status: "ACTIVE",
+			                            },
+			                        ];
+			                    },
+			                    count: async (args: any) => {
+			                        // Return 1 if there is exactly 1 company event (to trigger HOLIDAY inclusion)
+			                        if (args.where?.type === "COMPANY_EVENT") return 1;
+			                        return 0;
+			                    },
+			                }
 			},
 		});
 
@@ -305,7 +311,7 @@ describe("public kiosk feed contracts", () => {
 
 		expect(findManyCalls).to.have.length(1);
 		expect(findManyCalls[0].where.organizationId).to.equal("bandai-org");
-		expect(findManyCalls[0].where.type).to.equal("COMPANY_EVENT");
+		expect(findManyCalls[0].where.type).to.deep.equal({"in": ["COMPANY_EVENT", "HOLIDAY"]});
 		expect(findManyCalls[0].where.year).to.equal(2026);
 		expect(findManyCalls[0].take).to.equal(4);
 		expect(response.body.status).to.equal("success");
@@ -323,24 +329,29 @@ describe("public kiosk feed contracts", () => {
 				},
 			},
 			calendarItem: {
-				findMany: async (args: any) => {
-					findManyCalls.push(args);
-					return [
-						{
-							id: "event-town-hall",
-							organizationId: "fresh-org-after-reset",
-							year: 2026,
-							title: "Bandai Town Hall",
-							description: "Quarterly leadership updates for all employees.",
-							type: "COMPANY_EVENT",
-							startDate: "2026-07-22T09:00:00.000Z",
-							endDate: "2026-07-22T11:00:00.000Z",
-							isAllDay: false,
-							timezone: "Asia/Manila",
-							status: "ACTIVE",
-						},
-					];
-				},
+			                    findMany: async (args: any) => {
+			                        findManyCalls.push(args);
+			                        return [
+			                            {
+			                                id: "event-town-hall",
+			                                organizationId: "fresh-org-after-reset",
+			                                year: 2026,
+			                                title: "Bandai Town Hall",
+			                                description: "Quarterly leadership updates for all employees.",
+			                                type: "COMPANY_EVENT",
+			                                startDate: "2026-07-22T09:00:00.000Z",
+			                                endDate: "2026-07-22T11:00:00.000Z",
+			                                isAllDay: false,
+			                                timezone: "Asia/Manila",
+			                                status: "ACTIVE",
+			                            },
+			                        ];
+			                    },
+			                    count: async (args: any) => {
+			                        if (args.where?.type === "COMPANY_EVENT") return 1;
+			                        return 0;
+			                    },
+			                }
 			},
 		});
 
@@ -349,7 +360,7 @@ describe("public kiosk feed contracts", () => {
 			.expect(200);
 
 		expect(findManyCalls[0].where.organizationId).to.equal("fresh-org-after-reset");
-		expect(findManyCalls[0].where.type).to.equal("COMPANY_EVENT");
+		expect(findManyCalls[0].where.type).to.deep.equal({"in": ["COMPANY_EVENT", "HOLIDAY"]});
 		expect(response.body.data.resolvedBy).to.equal("code");
 		expect(response.body.data.organizationId).to.equal("fresh-org-after-reset");
 		expect(response.body.data.calendarItems[0].title).to.equal("Bandai Town Hall");
@@ -396,5 +407,105 @@ describe("public kiosk feed contracts", () => {
 		});
 		expect(response.body.data.calendarItems[0]).to.not.have.property("createdAt");
 		expect(response.body.data.calendarItems[0]).to.not.have.property("metadata");
+	});
+
+	it("includes HOLIDAY events when there is exactly 1 company event", async () => {
+		const findManyCalls: any[] = [];
+		const app = buildCalendarApp({
+			organization: organizationLookup(),
+			calendarItem: {
+				findMany: async (args: any) => {
+					findManyCalls.push(args);
+					return [
+						{
+							id: "event-1",
+							organizationId: "bandai-org",
+							year: 2026,
+							title: "Annual Town Hall",
+							description: "Main lobby",
+							type: "COMPANY_EVENT",
+							startDate: "2026-06-20T01:30:00.000Z",
+							endDate: "2026-06-20T03:00:00.000Z",
+							isAllDay: false,
+							timezone: "Asia/Manila",
+							status: "ACTIVE",
+						},
+						{
+							id: "holiday-1",
+							organizationId: "bandai-org",
+							year: 2026,
+							title: "Christmas",
+							description: "Public holiday",
+							type: "HOLIDAY",
+							startDate: "2026-12-25T00:00:00.000Z",
+							endDate: "2026-12-25T00:00:00.000Z",
+							isAllDay: true,
+							timezone: "Asia/Manila",
+							status: "ACTIVE",
+						},
+					];
+				},
+				count: async () => 1,
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/calendar-item/public/kiosk?organizationId=bandai-org&year=2026")
+			.expect(200);
+
+		expect(findManyCalls[0].where.type).to.deep.equal({"in": ["COMPANY_EVENT", "HOLIDAY"]});
+		expect(response.body.data.calendarItems).to.have.length(2);
+		expect(response.body.data.calendarItems[0].type).to.equal("COMPANY_EVENT");
+		expect(response.body.data.calendarItems[1].type).to.equal("HOLIDAY");
+	});
+
+	it("excludes HOLIDAY events when there are 2+ company events", async () => {
+		const findManyCalls: any[] = [];
+		const app = buildCalendarApp({
+			organization: organizationLookup(),
+			calendarItem: {
+				findMany: async (args: any) => {
+					findManyCalls.push(args);
+					return [
+						{
+							id: "event-1",
+							organizationId: "bandai-org",
+							year: 2026,
+							title: "Annual Town Hall",
+							description: "Main lobby",
+							type: "COMPANY_EVENT",
+							startDate: "2026-06-20T01:30:00.000Z",
+							endDate: "2026-06-20T03:00:00.000Z",
+							isAllDay: false,
+							timezone: "Asia/Manila",
+							status: "ACTIVE",
+						},
+						{
+							id: "event-2",
+							organizationId: "bandai-org",
+							year: 2026,
+							title: "Team Offsite",
+							description: "Team building",
+							type: "COMPANY_EVENT",
+							startDate: "2026-07-15T00:00:00.000Z",
+							endDate: "2026-07-15T00:00:00.000Z",
+							isAllDay: true,
+							timezone: "Asia/Manila",
+							status: "ACTIVE",
+						},
+					];
+				},
+				count: async () => 2,
+			},
+		});
+
+		const response = await request(app)
+			.get("/api/calendar-item/public/kiosk?organizationId=bandai-org&year=2026")
+			.expect(200);
+
+		expect(findManyCalls[0].where.type).to.deep.equal({"in": ["COMPANY_EVENT"]});
+		expect(response.body.data.calendarItems).to.have.length(2);
+		expect(response.body.data.calendarItems[0].type).to.equal("COMPANY_EVENT");
+		expect(response.body.data.calendarItems[1].type).to.equal("COMPANY_EVENT");
 	});
 });
