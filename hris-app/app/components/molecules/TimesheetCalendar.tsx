@@ -463,10 +463,10 @@ export function TimesheetCalendar({
 										onClick={
 											selectionMode && onToggleDaySelect
 												? () => onToggleDaySelect(day)
-												: onDayRequestAction
-													? undefined
-													: onDayClick
-														? () => onDayClick(day)
+												: onDayClick && !isPayrollLocked
+													? () => onDayClick(day)
+													: onDayRequestAction
+														? undefined
 														: undefined
 										}
 										className={
@@ -481,8 +481,13 @@ export function TimesheetCalendar({
 										badges={cellBadges}
 									/>
 								);
+								const hasDirectEdit = Boolean(
+									onDayClick && !isPayrollLocked,
+								);
 								const dayTrigger =
 									selectionMode ? (
+										dayCell
+									) : hasDirectEdit ? (
 										dayCell
 									) : onDayRequestAction ? (
 									<DropdownMenu

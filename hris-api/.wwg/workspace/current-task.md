@@ -1,4 +1,13 @@
 
+## Latest Task Addendum - 2026-09-09: HR direct breakdown edit on APPROVED timesheets
+
+- **Operator request:** HR must be able to update employee timesheets directly — including the 2,235 APPROVED ("Payroll Ready") sheets that were previously hard-blocked (`400 Cannot update timesheet in APPROVED status`) for every non-owner actor.
+- **Shipped in `update` controller (`app/timesheet/timesheet.controller.ts`):** role check hoisted above the owner/non-owner branch; HR/admin actors (`hris-admin`, `admin`, `super_admin`, `superadmin`, `hris-hr-manager`, `hris-hr-user`, `hris-timekeeper`) may now apply **breakdown-only** payloads (`breakdown` + `editedDayKeys`) to **APPROVED** sheets — status stays APPROVED. Guardrails retained: payroll-locked 409 first, SUBMITTED breakdown-only rule, leader day-labor-only guard, owner edit-permission flow untouched.
+- **Audit:** `isEditAuditEligible` extended so HR APPROVED breakdown edits version changed days (CORRECTION ledger) instead of overwriting effective lines in place; `manualOnly` stays owner-scoped.
+- **Tests:** new `tests/timesheet-hr-approved-edit.spec.ts` 6/6 (source-contract style, same pattern as revised-submit-persistence). Regression: revised-submit-persistence 7/7, day-labor-guard + line-version + edited-days 20/20. tsc delta 0 (121 pre-existing errors both sides, none in this file).
+- **Docs:** `docs/00-product/HR-TIMESHEET-DIRECT-EDIT-20260909.md` (operator page incl. frontend behavior).
+- Boundary: local workspace only (not pushed / not VM-rolled). Paid/locked sheets still require Payroll Correction by design.
+
 ## Latest Task Addendum - 2026-09-07: Section Line Leader assignment (option B)
 
 - Shipped: SectionLineLeader M:N join + role derivation (hris-line-leader on membership, HR/manager precedence, auto re-derive on add/remove/section-delete), section CRUD lineLeaderIds reconcile, list/get lineLeaders include, employee hard-delete detach (headId + join rows).

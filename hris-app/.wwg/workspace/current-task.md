@@ -1,5 +1,15 @@
 # Current Task
 
+## Latest Task Addendum - 2026-09-09: HR direct timesheet edit on APPROVED sheets (TimesheetViewModal)
+
+- **Operator request:** HR must be able to update employee timesheets directly. All 2,235 sheets on the current period are APPROVED ("Payroll Ready"), and APPROVED sheets were previously read-only for everyone — the HR page's view modal had no save path at all.
+- **Shipped in `app/components/organisms/TimesheetViewModal.tsx`:** (a) `isHrApprovedEdit` (HR role + APPROVED + not payroll-locked) now unlocks day clicking via `canEditDays`; (b) `isHrRole` declaration moved above `canEditDays` (no duplicate); (c) built-in `useUpdateTimesheet` save — `saveHrEditedDays()` PATCHes `PATCH /api/timesheet/:id` with the **full** breakdown + `editedDayKeys` (same contract as employee resubmit; backend recomputes summaries and versions changed days), resets dirty state on success; (d) orange **HR edit mode** banner independent of `showActions` (HR page opens modal with `showActions={false}`); (e) footer **Save changes (N)** CTA shown only when HR-edited days exist.
+- **Employee/manager flows unchanged:** REVISED/permission resubmit, approval mode, payroll-correction path all untouched; non-HR roles see no banner/CTA on APPROVED.
+- **Tests:** `TimesheetViewModal.test.tsx` 16/16 — added HR CTA gating, HR banner, non-HR isolation; also **repaired 8 pre-existing baseline failures** (the `useTimesheets` mock lacked `useCreatePayrollCorrection`/`useTimesheetPayrollCorrections` exports; auth mock made mutable). Page `timesheets.view-modal.test.tsx` + preview-modal 8/8. Targeted ESLint: 0 new errors (1 pre-existing a11y label error at line 2693 unchanged from baseline).
+- **Dual-app:** HR-only exception — `/hr/timesheets` has no emp-app counterpart and the change is HR-role-gated (`HR-only (no emp counterpart)`).
+- **Docs:** `docs/00-product/HR-TIMESHEET-DIRECT-EDIT-20260909.md`. Backend counterpart: hris-api addendum 2026-09-09.
+- Boundary: local workspace only (not pushed / not VM-rolled). Pre-existing a11y error + 121 api tsc errors unchanged.
+
 ## Status
 done
 
