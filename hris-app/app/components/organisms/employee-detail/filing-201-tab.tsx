@@ -1,17 +1,11 @@
 import { useMemo } from "react";
 import { Badge } from "~/components/atoms/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/atoms/Card";
-import {
-	AlertCircle,
-	CheckCircle2,
-	FileText,
-	FolderOpen,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, FileText, FolderOpen } from "lucide-react";
 import { useEmployee } from "~/lib/hooks/useEmployees";
-import {
-	buildFiling201Checklist,
-	summarizeFiling201,
-} from "~/lib/filing-201-documents";
+import { useDocumentTypes } from "~/lib/hooks/useDocumentTypes";
+import { buildFiling201Checklist, summarizeFiling201 } from "~/lib/filing-201-documents";
+import type { Filing201Requirement } from "~/lib/filing-201-documents";
 
 interface Filing201TabProps {
 	employeeId: string;
@@ -32,6 +26,7 @@ export function Filing201Tab({ employeeId }: Filing201TabProps) {
 	const documentFields = [
 		"id",
 		"employeeId",
+		"organizationId",
 		"documents.type",
 		"documents.createdAt",
 	];
@@ -39,12 +34,29 @@ export function Filing201Tab({ employeeId }: Filing201TabProps) {
 		document: true,
 	});
 
+	const { data: documentTypesData } = useDocumentTypes(
+		{ page: 1, limit: 100, filter: "isActive:true" },
+		{ enabled: true },
+	);
+
+	const requirements = useMemo<Filing201Requirement[]>(() => {
+		const types = documentTypesData?.documentTypes || [];
+		return types.map((dt) => ({
+			value: dt.code,
+			label: dt.name,
+			required: dt.isRequired,
+		}));
+	}, [documentTypesData]);
+
 	const documents = useMemo(() => {
 		const source = (employee as any)?.documents || (employee as any)?.data?.documents || [];
 		return Array.isArray(source) ? source : [];
 	}, [employee]);
 
-	const rows = useMemo(() => buildFiling201Checklist(documents), [documents]);
+	const rows = useMemo(
+		() => buildFiling201Checklist(documents, requirements),
+		[documents, requirements],
+	);
 	const summary = useMemo(() => summarizeFiling201(rows), [rows]);
 
 	return (
@@ -58,9 +70,8 @@ export function Filing201Tab({ employeeId }: Filing201TabProps) {
 				</CardHeader>
 				<CardContent className="space-y-4">
 					<p className="text-sm text-muted-foreground">
-						Baseline 201 requirements against the documents already on file.
-						Optional items do not block completion. Upload missing items from the
-						Documents tab.
+						Baseline 201 requirements against the documents already on file. Optional
+						items do not block completion. Upload missing items from the Documents tab.
 					</p>
 					<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
 						<div className="rounded-lg border p-3">
@@ -131,7 +142,9 @@ export function Filing201Tab({ employeeId }: Filing201TabProps) {
 												)}
 											</td>
 											<td className="p-2">{row.count}</td>
-											<td className="p-2">{formatDateTime(row.lastUploadedAt)}</td>
+											<td className="p-2">
+												{formatDateTime(row.lastUploadedAt)}
+											</td>
 										</tr>
 									))}
 								</tbody>
