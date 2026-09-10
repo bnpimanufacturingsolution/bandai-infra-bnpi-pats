@@ -14,18 +14,36 @@ vi.mock("react-router", async () => {
 	};
 });
 
+const authState = vi.hoisted(() => ({
+	role: "hris-hr-manager" as string,
+}));
+
 vi.mock("~/lib/hooks/use-auth", () => ({
 	useAuth: () => ({
 		user: {
-			role: "hris-hr-manager",
+			role: authState.role,
 			metadata: { employee: { id: "hr-1" } },
 		},
 	}),
 }));
 
+const updateTimesheetMutateAsyncMock = vi.hoisted(() => vi.fn());
+
 vi.mock("~/lib/hooks/useTimesheets", () => ({
 	useNormalizeTimesheetBreakdownPreview: () => ({
 		mutateAsync: vi.fn(),
+		isPending: false,
+	}),
+	useCreatePayrollCorrection: () => ({
+		mutateAsync: vi.fn(),
+		isPending: false,
+	}),
+	useTimesheetPayrollCorrections: () => ({
+		data: undefined,
+		isLoading: false,
+	}),
+	useUpdateTimesheet: () => ({
+		mutateAsync: updateTimesheetMutateAsyncMock,
 		isPending: false,
 	}),
 }));
@@ -639,5 +657,68 @@ describe("TimesheetViewModal approved edited days", () => {
 		);
 
 		expect(screen.queryByText("Recent Modified Days")).not.toBeInTheDocument();
+	});
+});
+
+describe("TimesheetViewModal HR direct edit on APPROVED", () => {
+	beforeEach(() => {
+		authState.role = "hris-hr-manager";
+		updateTimesheetMutateAsyncMock.mockReset();
+		updateTimesheetMutateAsyncMock.mockResolvedValue({
+			id: "ts-1",
+			breakdown: [],
+		});
+	});
+
+	const hrEditableTimesheet = {
+		...timesheetWithBreakdown,
+		status: "APPROVED",
+	} as unknown as Timesheet;
+
+	it("does not show the save CTA for HR before any day edit is made", () => {
+		renderWithProviders(
+			<TimesheetViewModal
+				isOpen={true}
+				onClose={() => {}}
+				timesheet={hrEditableTimesheet}
+			/>,
+		);
+
+		expect(
+			screen.queryByRole("button", { name: /Save changes \(\d+\)/ }),
+		).not.toBeInTheDocument();
+	});
+
+	it("shows HR edit instruction when days are editable for HR on APPROVED", () => {
+		renderWithProviders(
+			<TimesheetViewModal
+				isOpen={true}
+				onClose={() => {}}
+				timesheet={hrEditableTimesheet}
+			/>,
+		);
+
+		expect(
+			screen.getByText(/HR edit mode: click any day to correct it/),
+		).toBeInTheDocument();
+	});
+
+	it("hides the HR edit instruction for non-HR actors on APPROVED", () => {
+		authState.role = "hris-employee";
+
+		renderWithProviders(
+			<TimesheetViewModal
+				isOpen={true}
+				onClose={() => {}}
+				timesheet={hrEditableTimesheet}
+			/>,
+		);
+
+		expect(
+			screen.queryByText(/HR edit mode: click any day to correct it/),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByText(/This timesheet is locked after approval\./),
+		).not.toBeInTheDocument();
 	});
 });
