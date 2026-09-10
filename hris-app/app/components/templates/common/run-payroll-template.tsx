@@ -68,6 +68,7 @@ import {
 	shouldCalculatePreviewRows as shouldCalculatePreviewRowsForAction,
 } from "~/lib/utils/payroll-preview-modal";
 import { SpecialPayrollModal } from "~/components/organisms/special-payroll-modal";
+import { QuickPayrollAdjustmentModal } from "~/components/templates/common/quick-payroll-adjustment-modal";
 import {
 	specialPayrollService,
 	type SpecialPayrollRun,
@@ -84,6 +85,7 @@ import {
 	CheckCircle,
 	ArrowRight,
 	RefreshCw,
+	Plus,
 	StickyNote,
 	Pause,
 	X,
@@ -96,7 +98,21 @@ import {
 	ChevronDown,
 	Search,
 	Gift,
+	MoreVertical,
+	HelpCircle,
 } from "lucide-react";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+	DropdownMenuSeparator,
+} from "~/components/ui/dropdown-menu";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 // Philippine Peso Icon Component
 const PesoIcon = ({ className }: { className?: string }) => (
@@ -113,6 +129,35 @@ const PesoIcon = ({ className }: { className?: string }) => (
 		<line x1="4" y1="11" x2="16" y2="11" />
 	</svg>
 );
+
+// "?" hover helper — hides subtitle/description lines behind a HelpCircle
+// tooltip so summary rows stay one line (SHE: Shrink + Hide).
+function HelpTip({
+	tip,
+	lines,
+}: {
+	tip: string;
+	lines: Array<string | null | undefined>;
+}) {
+	const visible = lines.filter(Boolean) as string[];
+	if (visible.length === 0) return null;
+	return (
+		<span className="inline-flex shrink-0 items-center">
+			<Tooltip>
+				<TooltipTrigger>
+					<span className="inline-flex items-center" title={tip}>
+						<HelpCircle className="h-3.5 w-3.5 shrink-0 text-gray-400 transition-colors hover:text-gray-600" />
+					</span>
+				</TooltipTrigger>
+				<TooltipContent className="max-w-[260px] whitespace-normal text-xs leading-5 text-gray-700">
+					{visible.map((line, index) => (
+						<p key={index}>{line}</p>
+					))}
+				</TooltipContent>
+			</Tooltip>
+		</span>
+	);
+}
 
 interface EmployeeChange {
 	id: string;
@@ -179,6 +224,9 @@ export function RunPayrollTemplate() {
 	const [handledPayrollJobId, setHandledPayrollJobId] = useState<string | null>(null);
 	const [selectedPreviewEmployee, setSelectedPreviewEmployee] =
 		useState<PreviewPayrollRow | null>(null);
+	/** Payroll preview quick adjustment (addition/deduction) for one row. */
+	const [previewQuickAdjustEmployee, setPreviewQuickAdjustEmployee] =
+		useState<PreviewPayrollRow | null>(null);
 	const [expandedAdjustmentId, setExpandedAdjustmentId] = useState<string | null>(null);
 	/** Open OT matrix detail (report buckets) for list person — not full timesheet totals. */
 	const [selectedOtPerson, setSelectedOtPerson] =
@@ -186,6 +234,7 @@ export function RunPayrollTemplate() {
 	const [specialPayrollOpen, setSpecialPayrollOpen] = useState(false);
 	const [specialPayrollRuns, setSpecialPayrollRuns] = useState<SpecialPayrollRun[]>([]);
 	const [specialPayrollHistoryLoading, setSpecialPayrollHistoryLoading] = useState(false);
+	const [showBlockerHelp, setShowBlockerHelp] = useState(false);
 	const { data: cycleConfig } = usePayrollCycleConfig();
 	const activeFrequency = cycleConfig?.defaultPayFrequency || "SEMI_MONTHLY";
 	const { data: departmentsData } = useDepartments({ page: 1, limit: 1000, count: true });
@@ -972,6 +1021,9 @@ export function RunPayrollTemplate() {
 		el.scrollBy({ left: direction === "left" ? -amount : amount, behavior: "smooth" });
 	};
 
+	/** Compact period picker search (SHE: Hide full strip behind calendar button). */
+	const [periodPickerQuery, setPeriodPickerQuery] = useState("");
+
 	const employeesWithMissingInfo: MissingInfoEmployee[] = useMemo(
 		() =>
 			(blockers.missingInfo || []).map((e: any) => ({
@@ -1324,43 +1376,6 @@ export function RunPayrollTemplate() {
 		});
 		setExpandedAdjustmentId(null);
 	};
-	const selectedAdjustmentSummary = useMemo(
-		() =>
-			filteredPayrollAdjustmentRows.reduce(
-				(summary, row) => {
-					summary.count += 1;
-					summary.amount += row.amount;
-					if (row.direction === "DEDUCTION") {
-						summary.deductionAmount += row.amount;
-						summary.deductionCount += 1;
-					} else {
-						summary.compensationAmount += row.amount;
-						summary.compensationCount += 1;
-					}
-					if (row.hasGeneratedPayrollRow) {
-						summary.generatedPayrollRows.add(row.employeeId || row.employeeName);
-					}
-					summary.employees.add(row.employeeId || row.employeeName);
-					summary.sources.add(row.source.label);
-					return summary;
-				},
-				{
-					count: 0,
-					amount: 0,
-					compensationAmount: 0,
-					compensationCount: 0,
-					deductionAmount: 0,
-					deductionCount: 0,
-					employees: new Set<string>(),
-					sources: new Set<string>(),
-					generatedPayrollRows: new Set<string>(),
-				},
-			),
-		[filteredPayrollAdjustmentRows],
-	);
-	const selectedAdjustmentNetAmount =
-		selectedAdjustmentSummary.compensationAmount -
-		selectedAdjustmentSummary.deductionAmount;
 	const selectedAdjustmentLabel =
 		(
 			{
@@ -1373,20 +1388,6 @@ export function RunPayrollTemplate() {
 				other: "Other",
 			} satisfies Record<AdjustmentFilter, string>
 		)[adjustmentFilter] || "All";
-	const payrollAdjustmentSourceTotals = useMemo(() => {
-		const bySource = new Map<string, { label: string; count: number; amount: number }>();
-		for (const row of filteredPayrollAdjustmentRows) {
-			const current = bySource.get(row.source.label) || {
-				label: row.source.label,
-				count: 0,
-				amount: 0,
-			};
-			current.count += 1;
-			current.amount += row.amount;
-			bySource.set(row.source.label, current);
-		}
-		return Array.from(bySource.values()).sort((a, b) => b.amount - a.amount || b.count - a.count);
-	}, [filteredPayrollAdjustmentRows]);
 	const adjustmentFilters: Array<{ value: AdjustmentFilter; label: string }> = [
 		{ value: "all", label: "All" },
 		{ value: "attendance", label: "Attendance" },
@@ -1967,13 +1968,20 @@ export function RunPayrollTemplate() {
 		setHandledPayrollJobId(payrollProgress.jobId);
 	}, [handledPayrollJobId, payrollProgress, queryClient]);
 
-	// Update URL function - matches departments.tsx pattern
+	// Update URL function - matches departments.tsx pattern.
+	// preventScrollReset keeps filter/chip clicks (adjustment category, search,
+	// pagination, tabs) updating the list in place instead of jumping the page
+	// to the top like a full refresh. Real loads still skeleton only their own
+	// list container (adj-skel / ot-skel / sch-skel).
 	const updateSearchParams = (mutator: (next: URLSearchParams) => void) => {
-		setSearchParams((prev) => {
-			const next = new URLSearchParams(prev);
-			mutator(next);
-			return next;
-		});
+		setSearchParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				mutator(next);
+				return next;
+			},
+			{ preventScrollReset: true },
+		);
 	};
 
 	const updateURL = (action: string | null, tab?: string) => {
@@ -2438,6 +2446,19 @@ export function RunPayrollTemplate() {
 		});
 	};
 
+	const handleRefreshPreviewAfterAdjustment = () => {
+		// Invalidate preview and payroll rows so the new adjustment reflects.
+		queryClient.removeQueries({ queryKey: ["timesheetPayrollPreview"] });
+		queryClient.removeQueries({ queryKey: ["employeePayroll"] });
+		updateSearchParams((next) => {
+			next.set("action", "preview-payroll");
+			next.set("previewStep", "results");
+			if (!next.get("page")) next.set("page", "1");
+			if (!next.get("limit")) next.set("limit", String(previewLimit));
+			// Keep previewEmployeeId so employee detail stays visible.
+		});
+	};
+
 	const handleStartRealPayrollFromPreview = () => {
 		setSelectedPreviewEmployee(null);
 		updateSearchParams((next) => {
@@ -2504,13 +2525,6 @@ export function RunPayrollTemplate() {
 
 	const handleRetryPayrollJob = () => {
 		if (!payrollPeriodId) return;
-		// Period already finished — never call generate (API 400 "already completed").
-		if (
-			selectedPeriodCard?.status === "COMPLETED" ||
-			selectedPeriodCard?.status === "CLOSED"
-		) {
-			return;
-		}
 		clearPayrollProgressCache(payrollJobId);
 		setPayrollJobId(null);
 		generatePayrollMutation.mutate({
@@ -2611,13 +2625,15 @@ export function RunPayrollTemplate() {
 		employeeCount: notReadyCount,
 	};
 
-	const payrollProgressTotal = visiblePayrollProgress?.total || payableEmployeesCount;
-	const payrollProgressPayableCount = Math.max(
-		0,
-		approvedTimesheetsCount - approvedExcludedCount,
-	);
-	const payrollProgressDisplayTotal =
-		approvedExcludedCount > 0 ? payrollProgressPayableCount : payrollProgressTotal;
+	// Run-progress denominator is job-scoped only. Metrics/metadata row counts
+	// (unscoped, all frequencies) must never become the denominator — mixing
+	// org-wide approved rows with scoped exclusions once showed "Payable 2206"
+	// for an 851-person run. The job total already accounts for exclusions.
+	const payrollProgressTotal =
+		visiblePayrollProgress?.total ||
+		lastPayrollGenerationSnapshot?.total ||
+		payableEmployeesCount;
+	const payrollProgressDisplayTotal = payrollProgressTotal;
 	const payrollProgressDisplayProcessed = Math.min(
 		visiblePayrollProgress?.processed || 0,
 		payrollProgressDisplayTotal,
@@ -2795,13 +2811,9 @@ export function RunPayrollTemplate() {
 								</p>
 							</>
 						) : (
-							<>
-								<h1 className="text-2xl font-bold text-gray-900">Run Payroll</h1>
-								<p className="text-sm text-gray-500">
-									{formatDate(selectedPeriodCard?.startDate, "short")} -{" "}
-									{formatDate(selectedPeriodCard?.endDate, "short")}
-								</p>
-							</>
+						<>
+							<h1 className="text-2xl font-bold text-gray-900">Run Payroll</h1>
+						</>
 						)}
 					</div>
 				</div>
@@ -2837,175 +2849,219 @@ export function RunPayrollTemplate() {
 				</div>
 			</div>
 
-			{/* Pay Period Selector — hidden on preview results (period is fixed in page title) */}
+			{/* Pay Period Selector — compact calendar button (SHE: Hide strip until HR asks) */}
 			{!isPreviewResultsPage && (
-			<div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-gray-200 bg-white p-4">
-				{/* Month/Year Headers */}
-				<div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-					<span className="text-sm font-medium uppercase tracking-wide text-gray-500">
-						{formatMonthYearUpper(
-							selectedEndDate || selectedStartDate || selectedPeriodCard?.endDate,
+			<div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-gray-200 bg-white px-3 py-2.5">
+				<div className="flex min-w-0 flex-wrap items-center gap-2">
+					<div className="flex min-w-0 flex-wrap items-center gap-2">
+						<span className="text-sm font-medium uppercase tracking-wide text-gray-500">
+							{formatMonthYearUpper(
+								selectedEndDate || selectedStartDate || selectedPeriodCard?.endDate,
+							)}
+						</span>
+						{payrollPeriodId && currentPayrollPeriod?.id === payrollPeriodId && (
+							<Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200">
+								Current
+							</Badge>
 						)}
-					</span>
-					{payrollPeriodId && currentPayrollPeriod?.id === payrollPeriodId && (
-						<Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200">
-							Current
-						</Badge>
-					)}
-					{isPeriodCompleted && (
-						<Badge className="bg-orange-100 text-orange-700 border-orange-200">
-							Completed
-						</Badge>
-					)}
-				</div>
-
-				{/* Toggle to show past periods */}
-				<div className="mb-2 flex min-w-0 flex-wrap items-center justify-end gap-2">
-					{hasPayrollStatusResume && (
-						<Button
-							type="button"
-							variant="outline"
-							title={payrollProgressResumeLabel}
-							aria-label={payrollProgressResumeLabel}
-							onClick={handleOpenPayrollRunStatus}
-							className="relative h-9 gap-2 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
-							<RefreshCw className="h-4 w-4" />
-							<span className="text-sm font-medium">{payrollProgressResumeLabel}</span>
-							{payrollStatusBubbleLabel && (
-								<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
-									{payrollStatusBubbleLabel}
-								</span>
-							)}
-						</Button>
-					)}
-					<button
-						type="button"
-						onClick={handlePeriodViewToggle}
-						className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors">
-						<div
-							className={`w-10 h-5 rounded-full transition-colors ${
-								showPastPeriods ? "bg-orange-500" : "bg-gray-300"
-							}`}>
-							<div
-								className={`w-4 h-4 bg-white rounded-full transition-transform transform ${
-									showPastPeriods ? "translate-x-5" : "translate-x-0.5"
-								} mt-0.5`}
-							/>
-						</div>
-						<span className="font-medium">Show Past Periods</span>
-					</button>
-				</div>
-
-				{/* Pay Period Cards — horizontal carousel (scroll contained here only) */}
-				<div
-					className="flex min-w-0 w-full max-w-full items-center gap-2 sm:gap-3"
-					data-testid="payroll-period-carousel">
-					<button
-						type="button"
-						onClick={() => scrollPeriods("left")}
-						className="shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
-						aria-label="Scroll periods left">
-						<ChevronLeft className="h-5 w-5 text-gray-600" />
-					</button>
-
-					<div
-						ref={periodScrollRef}
-						className="hover-show-scroll min-w-0 max-w-full flex-1 overflow-x-auto overscroll-x-contain scroll-smooth pb-1"
-						style={{ scrollBehavior: "smooth" }}>
-						{/* Inner row keeps cards in one line; outer clips so the page never grows sideways */}
-						<div className="flex w-max flex-nowrap gap-3">
-							{payPeriods.length > 0 ? (
-								payPeriods.map((p: any) => {
-									const isSelected =
-										p.code === selectedPeriodCode ||
-										(!selectedPeriodCode && p.id === currentPayrollPeriod?.id);
-									const isCurrent = p.id === currentPayrollPeriod?.id;
-									const isCompleted = p.status === "COMPLETED";
-
-									// Use shared util to avoid timezone-shifted days
-									const endInput = formatDateForInput(p.endDate);
-									const endLabel = endInput
-										? new Date(
-												Number(endInput.slice(0, 4)),
-												Number(endInput.slice(5, 7)) - 1,
-												Number(endInput.slice(8, 10)),
-											)
-										: null;
-
-									// Derive period info from endDate
-									const periodMonth = endLabel
-										? endLabel
-												.toLocaleString("en-US", { month: "short" })
-												.toUpperCase()
-										: "—";
-									const periodDay = endLabel ? endLabel.getDate() : "—";
-									const periodDayOfWeek = endLabel
-										? endLabel.toLocaleString("en-US", { weekday: "short" })
-										: "";
-
-									return (
-										<button
-											key={p.id}
-											type="button"
-											onClick={() => handlePeriodChange(p.code)}
-											style={{ width: 132, minWidth: 132, flexShrink: 0 }}
-											className={`box-border flex flex-col overflow-hidden rounded-xl border-2 p-0 text-left transition-all ${
-												isSelected
-													? "border-orange-500 bg-orange-50"
-													: "border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50/50"
-											}`}>
-											<div
-												className={`w-full px-2 py-1.5 text-center text-[11px] font-semibold ${
-													isSelected
-														? "bg-orange-500 text-white"
-														: isCurrent
-															? "bg-emerald-600 text-white"
-															: isCompleted
-																? "bg-orange-600 text-white"
-																: "bg-gray-100 text-gray-600"
-												}`}>
-												{periodMonth}
-											</div>
-											<div className="bg-inherit py-3 text-center">
-												<div
-													className={`text-2xl font-bold leading-none tabular-nums ${
-														isSelected ? "text-orange-600" : "text-gray-900"
-													}`}>
-													{periodDay}
-												</div>
-												<div className="mt-1 truncate px-2 text-[11px] text-gray-500">
-													{periodDayOfWeek}
-												</div>
-											</div>
-										</button>
-									);
-								})
-							) : showInitialSkeleton ? (
-								Array.from({ length: 5 }).map((_, index) => (
-									<div
-										key={`payroll-period-skeleton-${index}`}
-										style={{ width: 132, minWidth: 132, flexShrink: 0 }}
-										className="box-border overflow-hidden rounded-xl border-2 border-gray-200 bg-white">
-										<div className="h-7 w-full animate-pulse bg-gray-100" />
-										<div className="space-y-2 px-4 py-3">
-											<div className="mx-auto h-7 w-10 animate-pulse rounded bg-gray-100" />
-											<div className="mx-auto h-3 w-14 animate-pulse rounded bg-gray-100" />
-										</div>
-									</div>
-								))
-							) : (
-								<div className="text-sm text-gray-500">No payroll periods found.</div>
-							)}
-						</div>
+						{isPeriodCompleted && (
+							<Badge className="bg-orange-100 text-orange-700 border-orange-200">
+								Completed
+							</Badge>
+						)}
 					</div>
 
-					<button
-						type="button"
-						onClick={() => scrollPeriods("right")}
-						className="shrink-0 rounded-lg p-2 transition-colors hover:bg-gray-100"
-						aria-label="Scroll periods right">
-						<ChevronRight className="h-5 w-5 text-gray-600" />
-					</button>
+					<div className="ml-auto flex shrink-0 flex-wrap items-center gap-2">
+						{hasPayrollStatusResume && (
+							<Button
+								type="button"
+								variant="outline"
+								title={payrollProgressResumeLabel}
+								aria-label={payrollProgressResumeLabel}
+								onClick={handleOpenPayrollRunStatus}
+								className="relative h-9 gap-2 border-orange-200 bg-orange-50 px-3 text-orange-700 hover:bg-orange-100 hover:text-orange-800">
+								<RefreshCw className="h-4 w-4" />
+								<span className="text-sm font-medium">{payrollProgressResumeLabel}</span>
+								{payrollStatusBubbleLabel && (
+									<span className="ml-1 rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+										{payrollStatusBubbleLabel}
+									</span>
+								)}
+							</Button>
+						)}
+						<DropdownMenu
+							onOpenChange={(open) => {
+								if (!open) setPeriodPickerQuery("");
+							}}>
+							<DropdownMenuTrigger asChild>
+								<Button
+									type="button"
+									variant="outline"
+									className="h-9 gap-2"
+									data-testid="payroll-period-picker-trigger"
+									title="Choose pay period">
+									<Calendar className="h-4 w-4 text-gray-500" />
+									<span className="text-sm font-medium tabular-nums">
+										{selectedPeriodCard
+											? `${formatDate(selectedPeriodCard.startDate, "short")} - ${formatDate(selectedPeriodCard.endDate, "short")}`
+											: "Choose period"}
+									</span>
+									<ChevronDown className="h-4 w-4 text-gray-500" />
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent
+								align="end"
+								className="w-[340px] p-0"
+								data-testid="payroll-period-carousel">
+								<div
+									className="flex items-center gap-2 border-b border-gray-100 p-2"
+									onKeyDown={(e) => e.stopPropagation()}>
+									<div className="relative min-w-0 flex-1">
+										<Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+										<Input
+											value={periodPickerQuery}
+											onChange={(e) => setPeriodPickerQuery(e.target.value)}
+											placeholder="Search periods…"
+											className="h-8 pl-8 text-sm"
+										/>
+									</div>
+									<button
+										type="button"
+										onClick={handlePeriodViewToggle}
+										title={showPastPeriods ? "Hide past periods" : "Show past periods"}
+										className="flex shrink-0 items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 transition-colors">
+										<div
+											className={`h-4 w-8 rounded-full transition-colors ${
+												showPastPeriods ? "bg-orange-500" : "bg-gray-300"
+											}`}>
+											<div
+												className={`h-3 w-3 bg-white rounded-full transition-transform transform ${
+													showPastPeriods ? "translate-x-4" : "translate-x-0.5"
+												} mt-0.5`}
+											/>
+										</div>
+										<span className="font-medium">Past</span>
+									</button>
+								</div>
+								<div className="max-h-[320px] overflow-y-auto p-1">
+									{payPeriods.length > 0 ? (
+										payPeriods
+											.filter((p: any) => {
+												const q = periodPickerQuery.trim().toLowerCase();
+												if (!q) return true;
+												const endInput = formatDateForInput(p.endDate) || "";
+												let monthDay = "";
+												if (endInput) {
+													const dt = new Date(
+														Number(endInput.slice(0, 4)),
+														Number(endInput.slice(5, 7)) - 1,
+														Number(endInput.slice(8, 10)),
+													);
+													monthDay = `${dt.toLocaleString("en-US", { month: "short" })} ${dt.getDate()} ${dt.toLocaleString("en-US", { weekday: "short" })}`;
+												}
+												const hay = `${p.code || ""} ${p.name || ""} ${monthDay} ${formatDate(p.startDate, "short")} ${formatDate(p.endDate, "short")}`.toLowerCase();
+												return hay.includes(q);
+											})
+											.map((p: any) => {
+												const isSelected =
+													p.code === selectedPeriodCode ||
+													(!selectedPeriodCode && p.id === currentPayrollPeriod?.id);
+												const isCurrent = p.id === currentPayrollPeriod?.id;
+												const isCompleted = p.status === "COMPLETED";
+												const endInput = formatDateForInput(p.endDate);
+												const endLabel = endInput
+													? new Date(
+															Number(endInput.slice(0, 4)),
+															Number(endInput.slice(5, 7)) - 1,
+															Number(endInput.slice(8, 10)),
+														)
+													: null;
+												const periodMonth = endLabel
+													? endLabel
+															.toLocaleString("en-US", { month: "short" })
+															.toUpperCase()
+													: "—";
+												const periodDay = endLabel ? endLabel.getDate() : "—";
+												const periodDayOfWeek = endLabel
+													? endLabel.toLocaleString("en-US", { weekday: "short" })
+													: "";
+												return (
+													<DropdownMenuItem
+														key={p.id}
+														onSelect={() => {
+															setPeriodPickerQuery("");
+															handlePeriodChange(p.code);
+														}}
+														className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 ${
+															isSelected ? "bg-orange-50" : ""
+														}`}>
+														<span
+															className={`w-14 shrink-0 rounded-md px-1.5 py-1 text-center text-[11px] font-semibold leading-tight ${
+																isSelected
+																	? "bg-orange-500 text-white"
+																	: isCurrent
+																		? "bg-emerald-600 text-white"
+																		: isCompleted
+																			? "bg-orange-600 text-white"
+																			: "bg-gray-100 text-gray-600"
+															}`}>
+															{periodMonth}
+															<span className="block text-sm font-bold leading-tight tabular-nums">
+																{periodDay}
+															</span>
+															<span className="block text-[10px] font-normal">
+																{periodDayOfWeek}
+															</span>
+														</span>
+														<span className="min-w-0 flex-1">
+															<span className="block truncate text-sm font-medium text-gray-900 tabular-nums">
+																{formatDate(p.startDate, "short")} -{" "}
+																{formatDate(p.endDate, "short")}
+															</span>
+															<span className="block truncate text-[11px] text-gray-500">
+																{p.code}
+																{isCurrent ? " · Current" : ""}
+																{isCompleted ? " · Completed" : ""}
+															</span>
+														</span>
+														{isSelected && (
+															<CheckCircle className="h-4 w-4 shrink-0 text-orange-600" />
+														)}
+													</DropdownMenuItem>
+												);
+											})
+									) : showInitialSkeleton ? (
+										<div className="space-y-1 p-1">
+											{Array.from({ length: 5 }).map((_, index) => (
+												<div
+													key={`payroll-period-skeleton-${index}`}
+													className="flex items-center gap-2 rounded-lg px-2 py-1.5">
+													<div className="h-11 w-14 animate-pulse rounded-md bg-gray-100" />
+													<div className="flex-1 space-y-1.5">
+														<div className="h-4 w-32 animate-pulse rounded bg-gray-100" />
+														<div className="h-3 w-24 animate-pulse rounded bg-gray-100" />
+													</div>
+												</div>
+											))}
+										</div>
+									) : periodPickerQuery.trim() ? (
+										<div className="px-3 py-6 text-center text-sm text-gray-500">
+											No periods match “{periodPickerQuery.trim()}”.
+										</div>
+									) : (
+										<div className="px-3 py-6 text-center text-sm text-gray-500">
+											No payroll periods found.
+										</div>
+									)}
+								</div>
+								{payPeriods.length > 0 && <DropdownMenuSeparator />}
+								<div className="px-3 py-1.5 text-[11px] text-gray-400">
+									{payPeriods.length} period{payPeriods.length === 1 ? "" : "s"}
+									{showPastPeriods ? " · including past" : ""}
+								</div>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					</div>
 				</div>
 			</div>
 			)}
@@ -3196,17 +3252,63 @@ export function RunPayrollTemplate() {
 								</div>
 							}
 							renderActions={(employee) => (
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									onClick={() => handleOpenPreviewEmployee(employee)}
-									className="h-8 whitespace-nowrap border-sky-200 px-2.5 text-sky-800 hover:bg-sky-50">
-									<Eye className="mr-1.5 h-3.5 w-3.5" />
-									View Details
-								</Button>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<Button
+											type="button"
+											variant="ghost"
+											size="sm"
+											className="h-8 w-8 p-0"
+										>
+											<MoreVertical className="h-4 w-4" />
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="end" className="w-48">
+										<DropdownMenuItem
+											onClick={() => setPreviewQuickAdjustEmployee(employee)}
+											className="cursor-pointer"
+										>
+											<Plus className="mr-2 h-3.5 w-3.5" />
+											Adjustment
+										</DropdownMenuItem>
+										<DropdownMenuSeparator />
+										<DropdownMenuItem
+											onClick={() => handleOpenPreviewEmployee(employee)}
+											className="cursor-pointer"
+										>
+											<Eye className="mr-2 h-3.5 w-3.5" />
+											View Details
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
 							)}
 						/>
+						{previewQuickAdjustEmployee ? (
+							<QuickPayrollAdjustmentModal
+								open
+								onOpenChange={(open) => {
+									if (!open) setPreviewQuickAdjustEmployee(null);
+								}}
+								initialDirection="ADDITION"
+								initialEmployeeIds={
+									previewQuickAdjustEmployee.employeeId
+										? [previewQuickAdjustEmployee.employeeId]
+										: []
+								}
+								initialEmployeeLabel={
+									[previewQuickAdjustEmployee.name, previewQuickAdjustEmployee.employeeCode]
+										.filter(Boolean)
+										.join(" · ") || undefined
+								}
+								defaultPayrollPeriodId={payrollPeriodId}
+							onAdjusted={(result) => {
+								// Show the actual salary with the new adjustment in preview.
+								if (result.payrollPeriodId && result.payrollPeriodId === payrollPeriodId) {
+									handleRefreshPreviewAfterAdjustment();
+								}
+							}}
+							/>
+						) : null}
 					</div>
 				</div>
 			) : (
@@ -3227,9 +3329,6 @@ export function RunPayrollTemplate() {
 										{period ? getMonthName(period.month) : ""}{" "}
 										{period?.day || ""} Payroll
 									</h2>
-									<p className="text-sm text-gray-500 mt-1">
-										Semi-Monthly Employees
-									</p>
 								</div>
 							</div>
 						</div>
@@ -3243,14 +3342,21 @@ export function RunPayrollTemplate() {
 											<AlertTriangle className="h-4 w-4 text-rose-600" />
 										</div>
 										<div className="min-w-0">
-											<h3 className="text-sm font-semibold text-gray-900">
-												{totalBlockers}{" "}
-												{totalBlockers === 1 ? "blocker" : "blockers"}{" "}
-												preventing payroll completion
+											<h3 className="flex items-center gap-1.5 text-sm font-semibold text-gray-900">
+												<span>
+													{totalBlockers}{" "}
+													{totalBlockers === 1 ? "blocker" : "blockers"}{" "}
+													preventing payroll completion
+												</span>
+												<button
+													type="button"
+													onClick={() => setShowBlockerHelp(true)}
+													title="Why payroll is blocked"
+													aria-label="Why payroll is blocked"
+													className="inline-flex h-5 w-5 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
+													<HelpCircle className="h-3.5 w-3.5" />
+												</button>
 											</h3>
-											<p className="mt-0.5 text-xs text-gray-500">
-												Resolve hard blockers before payroll can be processed.
-											</p>
 										</div>
 									</div>
 									<Button
@@ -3300,15 +3406,26 @@ export function RunPayrollTemplate() {
 											<span className="text-gray-500">Pending approval</span>
 										</button>
 									)}
-								</div>
 							</div>
-						)}
+							<Modal
+								open={showBlockerHelp}
+								onOpenChange={setShowBlockerHelp}
+								title="Why payroll is blocked"
+								description="Resolve hard blockers before payroll can be processed."
+								className="max-w-md">
+								<p className="text-sm text-gray-600">
+									Complete missing payroll data, submit timesheets, and approve
+									pending items. Use the counts above or View all issues to review.
+								</p>
+							</Modal>
+						</div>
+					)}
 
 						{/* Payroll Adjustments + Approved OT (compact accordion stack) */}
 						<div className="rounded-lg border border-gray-200 bg-white p-2">
 							<Accordion
 								type="multiple"
-								defaultValue={["payroll-adjustments", "approved-ot"]}
+								defaultValue={[]}
 								className="w-full">
 							<AccordionItem value="payroll-adjustments" className="border-none">
 								<AccordionTrigger className="rounded-md px-2 py-2.5 hover:no-underline hover:bg-gray-50/80">
@@ -3404,45 +3521,7 @@ export function RunPayrollTemplate() {
 								)}
 							</div>
 
-							{/* One-line stats strip (no tall cards) */}
-							<div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 rounded border border-gray-100 bg-gray-50/80 px-2 py-1 text-[11px] text-gray-600">
-								<span>
-									<span className="font-semibold tabular-nums text-gray-900">
-										{formatCount(selectedAdjustmentSummary.count)}
-									</span>{" "}
-									rows
-								</span>
-								<span className="text-gray-300">·</span>
-								<span>
-									<span className="font-semibold tabular-nums text-gray-900">
-										{formatCount(selectedAdjustmentSummary.employees.size)}
-									</span>{" "}
-									emps
-								</span>
-								<span className="text-gray-300">·</span>
-								<span className="tabular-nums text-emerald-700">
-									+{formatCurrency(selectedAdjustmentSummary.compensationAmount)}
-								</span>
-								<span className="tabular-nums text-red-700">
-									−{formatCurrency(selectedAdjustmentSummary.deductionAmount)}
-								</span>
-								<span className="text-gray-300">·</span>
-								<span className="font-medium tabular-nums text-gray-800">
-									net {formatCurrency(selectedAdjustmentNetAmount)}
-								</span>
-								{payrollAdjustmentSourceTotals.slice(0, 3).map((source) => (
-									<span
-										key={source.label}
-										className="inline-flex max-w-[140px] items-center gap-1 truncate rounded border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] text-gray-600">
-										<span className="truncate">{source.label}</span>
-										<span className="shrink-0 tabular-nums text-gray-400">
-											{formatCount(source.count)}
-										</span>
-									</span>
-								))}
-							</div>
-
-							{/* Dense single-line rows; page size keeps panel short */}
+						{/* Dense single-line rows; page size keeps panel short */}
 							<div className="mt-1.5 max-h-[min(220px,32vh)] overflow-y-auto overscroll-contain rounded border border-gray-200 divide-y divide-gray-100 modern-scroll">
 								{payrollAdjustmentsLoading || generatedPayrollRowsLoading ? (
 									<>
@@ -3633,15 +3712,19 @@ export function RunPayrollTemplate() {
 							<AccordionItem value="approved-ot" className="border-t border-gray-100">
 								<AccordionTrigger className="rounded-md px-2 py-2.5 hover:no-underline hover:bg-gray-50/80">
 									<div className="flex min-w-0 flex-1 items-center justify-between gap-3 pr-2">
-										<div className="flex min-w-0 items-center gap-2">
-											<Clock className="h-4 w-4 shrink-0 text-gray-500" />
-											<span className="truncate text-sm font-semibold text-gray-900">
-												Approved OT
-											</span>
-											<span className="hidden truncate text-[11px] text-gray-400 sm:inline">
-												payable line OT · click row for days
-											</span>
-										</div>
+									<div className="flex min-w-0 items-center gap-2">
+										<Clock className="h-4 w-4 shrink-0 text-gray-500" />
+										<span className="truncate text-sm font-semibold text-gray-900">
+											Approved OT
+										</span>
+										<HelpTip
+											tip="About approved OT"
+											lines={[
+												"Payable line OT · click row for days",
+												"Approved OT = hours from the rptOvertimeDetails workbook applied to timesheet lines (not demo/biometric alone).",
+											]}
+										/>
+									</div>
 										<div className="flex shrink-0 items-center gap-1.5">
 											{payrollOtReadinessLoading || payrollOtReadinessFetching ? (
 												<Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
@@ -3670,15 +3753,8 @@ export function RunPayrollTemplate() {
 										</div>
 									</div>
 								</AccordionTrigger>
-								<AccordionContent className="px-1 pb-2 pt-0">
-									<p className="mb-2 text-[11px] leading-relaxed text-gray-500">
-										<strong className="font-medium text-gray-700">Approved OT</strong> =
-										hours from the{" "}
-										<strong className="font-medium text-gray-700">rptOvertimeDetails</strong>{" "}
-										workbook applied to timesheet lines (not demo/biometric alone). Click a
-										person to open the timesheet calendar (OT days only).
-									</p>
-									<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-4">
+							<AccordionContent className="px-1 pb-2 pt-0">
+								<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-4">
 										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
 											<p className="truncate text-[11px] text-gray-500">Approved people</p>
 											<p className="mt-0.5 text-xs font-semibold tabular-nums text-emerald-800">
@@ -3789,20 +3865,27 @@ export function RunPayrollTemplate() {
 											})
 										) : (
 											<div className="space-y-2 px-3 py-2.5 text-xs leading-relaxed text-gray-600">
-												{Number(payrollOtReadiness?.summary?.timesheetsTotal || 0) === 0 ? (
-													<p>
-														<strong className="text-gray-800">0 timesheets</strong> for
-														this period — Approved OT has nothing to attach to. Seed
-														timesheets (DM4 biometrics) for this cutoff first, then apply
-														rptOvertimeDetails.
-													</p>
-												) : (
-													<>
-														<p>
+										{Number(payrollOtReadiness?.summary?.timesheetsTotal || 0) === 0 ? (
+												<p className="flex items-center gap-1.5">
+													<span>
+														<strong className="text-gray-800">0 timesheets</strong>{" "}
+														for this period
+													</span>
+													<HelpTip
+														tip="Why there is no approved OT"
+														lines={[
+															"Approved OT has nothing to attach to. Seed timesheets (DM4 biometrics) for this cutoff first, then apply rptOvertimeDetails.",
+														]}
+													/>
+												</p>
+											) : (
+												<>
+													<p className="flex items-center gap-1.5">
+														<span>
 															{formatCount(
 																payrollOtReadiness?.summary?.timesheetsTotal || 0,
 															)}{" "}
-															timesheets but{" "}
+															timesheets ·{" "}
 															<strong className="text-gray-800">
 																0 report-backed OT
 															</strong>{" "}
@@ -3810,12 +3893,14 @@ export function RunPayrollTemplate() {
 															<code className="rounded bg-gray-100 px-1 text-[10px]">
 																{selectedPeriodCode || "this period"}
 															</code>
-															. Demo/biometric OT alone does not count — need{" "}
-															<code className="rounded bg-gray-100 px-1 text-[10px]">
-																rptOvertimeDetails
-															</code>{" "}
-															applied to lines for this cutoff.
-														</p>
+														</span>
+														<HelpTip
+															tip="Why there is no report-backed OT"
+															lines={[
+																"Demo/biometric OT alone does not count — need rptOvertimeDetails applied to lines for this cutoff.",
+															]}
+														/>
+													</p>
 														{/* Known BNPI cutoffs with workbooks in docs/new-cutoff */}
 														{(selectedPeriodCode === "PP-20260526-20260611" ||
 															Number(
@@ -3879,9 +3964,13 @@ export function RunPayrollTemplate() {
 											<span className="truncate text-sm font-semibold text-gray-900">
 												Schedule changes
 											</span>
-											<span className="hidden truncate text-[11px] text-gray-400 sm:inline">
-												Assignments · before → after
-											</span>
+											<HelpTip
+												tip="About schedule changes"
+												lines={[
+													"Assignments · before → after",
+													"Source of truth: EmployeeScheduleHistory (template before → after). Already-matching schedules are skipped at apply time (no history row).",
+												]}
+											/>
 										</div>
 										<div className="flex shrink-0 items-center gap-1.5">
 											{payrollScheduleDeltasLoading ||
@@ -3908,19 +3997,8 @@ export function RunPayrollTemplate() {
 										</div>
 									</div>
 								</AccordionTrigger>
-								<AccordionContent className="px-1 pb-2 pt-0">
-									<p className="mb-2 text-[11px] leading-relaxed text-gray-500">
-										<strong className="font-medium text-gray-700">
-											Source of truth
-										</strong>
-										:{" "}
-										<code className="rounded bg-gray-100 px-1 text-[10px]">
-											EmployeeScheduleHistory
-										</code>{" "}
-										(template before → after). Already-matching
-										schedules are skipped at apply time (no history row).
-									</p>
-									<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-4">
+							<AccordionContent className="px-1 pb-2 pt-0">
+								<div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-gray-200 bg-gray-200 sm:grid-cols-4">
 										<div className="min-w-0 bg-gray-50 px-2.5 py-2">
 											<p className="truncate text-[11px] text-gray-500">
 												Schedule deltas
@@ -4026,10 +4104,20 @@ export function RunPayrollTemplate() {
 												</button>
 											))
 										) : (
-											<div className="px-3 py-3 text-xs leading-relaxed text-gray-600">
-												<strong className="text-gray-800">0 schedule deltas</strong>{" "}
-												for this period window. Schedules already matched current templates.
-											</div>
+										<div className="px-3 py-3 text-xs leading-relaxed text-gray-600">
+											<p className="flex items-center gap-1.5">
+												<span>
+													<strong className="text-gray-800">0 schedule deltas</strong>{" "}
+													for this period window
+												</span>
+												<HelpTip
+													tip="Why there are no schedule deltas"
+													lines={[
+														"Schedules already matched current templates.",
+													]}
+												/>
+											</p>
+										</div>
 										)}
 									</div>
 									<p className="mt-1.5 text-[10px] text-gray-400">
@@ -4076,18 +4164,28 @@ export function RunPayrollTemplate() {
 											This payroll period has been successfully processed.
 										</p>
 									</div>
-									<Button
-										type="button"
-										onClick={() =>
-											navigate(
-												getPayrollManagementUrl(selectedPeriodCard?.id),
-											)
-										}
-										data-testid="view-payroll-report"
-										className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-5 text-base gap-2 shadow-sm">
-										<FileText className="w-5 h-5" />
-										View Payroll Report
-									</Button>
+									<div className="flex gap-3">
+										<Button
+											type="button"
+											onClick={() =>
+												navigate(
+													getPayrollManagementUrl(selectedPeriodCard?.id),
+												)
+											}
+											data-testid="view-payroll-report"
+											className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-5 text-base gap-2 shadow-sm">
+											<FileText className="w-5 h-5" />
+											View Payroll Report
+										</Button>
+										<Button
+											type="button"
+											onClick={handleRetryPayrollJob}
+											data-testid="re-run-payroll"
+											className="flex-1 bg-orange-600 hover:bg-orange-500 text-white font-semibold py-5 text-base gap-2 shadow-sm">
+											<RefreshCw className="w-5 h-5" />
+											Re-run Payroll
+										</Button>
+									</div>
 								</div>
 							) : isSelectedPeriodProcessing ? (
 								<Button
@@ -4105,8 +4203,9 @@ export function RunPayrollTemplate() {
 								</Button>
 							)}
 
-							{/* Special Payroll — separate one-time compensation (never regular payroll) */}
-							<div className="mt-3 space-y-2">
+						{/* Special Payroll — separate one-time compensation (never regular payroll) */}
+						<div className="mt-3 space-y-2">
+							<div className="flex items-center gap-1.5">
 								<Button
 									type="button"
 									variant="outline"
@@ -4116,11 +4215,14 @@ export function RunPayrollTemplate() {
 									<Gift className="w-5 h-5" />
 									Special Payroll
 								</Button>
-								<p className="text-xs text-gray-500 px-1">
-									One-time compensation with separate payslips. Uses this period
-									only as a date label — does not wait for or enter regular payroll.
-								</p>
-								{(specialPayrollHistoryLoading || specialPayrollRuns.length > 0) && (
+								<HelpTip
+									tip="About special payroll"
+									lines={[
+										"One-time compensation with separate payslips. Uses this period only as a date label — does not wait for or enter regular payroll.",
+									]}
+								/>
+							</div>
+							{(specialPayrollHistoryLoading || specialPayrollRuns.length > 0) && (
 									<div className="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
 										<p className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
 											Special Payroll history
@@ -4208,73 +4310,75 @@ export function RunPayrollTemplate() {
 									</div>
 								</div>
 
-								{/* Pay Schedule */}
-								<div className="flex items-start gap-3">
-									<FileText className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-									<div>
+							{/* Pay Schedule */}
+							<div className="flex items-start gap-3">
+								<FileText className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+								<div>
+									<div className="flex items-center gap-1.5">
 										<p className="text-sm font-medium text-gray-900">
 											Semi-Monthly Employees
 										</p>
-										<p className="text-xs text-gray-500">Pay Schedule</p>
+										<HelpTip tip="Pay schedule" lines={["Pay Schedule"]} />
 									</div>
 								</div>
+							</div>
 
 								{/* Payroll-ready employees */}
 								<button
 									type="button"
 									onClick={handlePreviewPayroll}
 									className="flex w-full items-start gap-3 rounded-lg p-1.5 text-left transition-colors hover:bg-orange-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
-									<Users className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-									<div>
+								<Users className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
+								<div>
+									<div className="flex items-center gap-1.5">
 										<p className="text-sm font-medium text-gray-900">
 											{payableEmployeesValue}
 										</p>
-										<p className="text-xs text-gray-500">Payable Now / Scope</p>
-										<p className="text-xs text-gray-400">{approvedTimesheetsNote}</p>
+										<HelpTip
+											tip="About payable now"
+											lines={["Payable Now / Scope", approvedTimesheetsNote]}
+										/>
 									</div>
+								</div>
 								</button>
 
 								<button
 									type="button"
 									onClick={() => updateURL("issues", "all")}
 									className="flex w-full items-start gap-3 rounded-lg p-1.5 text-left transition-colors hover:bg-orange-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
-									<AlertTriangle className="w-4 h-4 text-orange-400 mt-0.5 flex-shrink-0" />
-									<div>
+								<AlertTriangle className="w-4 h-4 text-orange-400 mt-0.5 flex-shrink-0" />
+								<div>
+									<div className="flex items-center gap-1.5">
 										<p className="text-sm font-medium text-gray-900">
 											{notReadyValue}
 										</p>
-										<p className="text-xs text-gray-500">Not Payroll-Ready / Scope</p>
-										<p className="text-xs text-gray-400">{notReadyNote}</p>
+										<HelpTip
+											tip="About not payroll-ready"
+											lines={["Not Payroll-Ready / Scope", notReadyNote]}
+										/>
 									</div>
+								</div>
 								</button>
 
 								<button
 									type="button"
 									onClick={() => updateURL("issues", "missing_info")}
 									className="flex w-full items-start gap-3 rounded-lg p-1.5 text-left transition-colors hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300">
-									<AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-									<div>
+								<AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+								<div>
+									<div className="flex items-center gap-1.5">
 										<p className="text-sm font-medium text-gray-900">
 											{formatCount(missingInfoCount)}
 										</p>
-										<p className="text-xs text-gray-500">Missing Payroll Data</p>
-										<p className="text-xs text-gray-400">{missingInfoNote}</p>
-									</div>
-								</button>
-
-								{/* Pay Period */}
-								<div className="flex items-start gap-3">
-									<Calendar className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
-									<div>
-										<p className="text-sm font-medium text-gray-900">
-											{formatDate(selectedPeriodCard?.startDate, "short")} -{" "}
-											{formatDate(selectedPeriodCard?.endDate, "short")}
-										</p>
-										<p className="text-xs text-gray-500">Pay Period</p>
+										<HelpTip
+											tip="About missing payroll data"
+											lines={["Missing Payroll Data", missingInfoNote]}
+										/>
 									</div>
 								</div>
+								</button>
 
-								{/* Pay Date */}
+							{/* Pay Date — period range itself lives on the picker button above */}
 								<div className="flex items-start gap-3">
 									<Wallet className="w-4 h-4 text-gray-400 mt-0.5 flex-shrink-0" />
 									<div>
@@ -4704,7 +4808,7 @@ export function RunPayrollTemplate() {
 								{/* Accordion sections mirror /hr/hr-payroll view modal */}
 								<Accordion
 									type="multiple"
-									defaultValue={["earnings-deductions"]}
+									defaultValue={[]}
 									className="rounded-lg border border-gray-200 bg-white">
 									<AccordionItem
 										value="earnings-deductions"

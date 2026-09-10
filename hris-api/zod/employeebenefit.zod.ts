@@ -327,6 +327,26 @@ export const BulkCreateEmployeeBenefitSchema = createEmployeeBenefitScheduleSche
 
 export type BulkCreateEmployeeBenefit = z.infer<typeof BulkCreateEmployeeBenefitSchema>;
 
+/**
+ * Payroll register quick adjustment: HR names a one-cutoff addition or
+ * deduction per employee (e.g. "Good performance" +1000, "Equipment destroy"
+ * -500). The server pins it to one OPEN payroll period on the standard
+ * carrier type (OAD for additions, NEGADJ for deductions) with the custom
+ * name stored on the enrollment.
+ */
+export const QuickAdjustEmployeeBenefitSchema = z.object({
+	employeeIds: z
+		.array(z.string().refine((val) => isValidObjectId(val), "Invalid employee id"))
+		.min(1, "At least one employee is required")
+		.max(200, "At most 200 employees per quick adjustment"),
+	direction: z.enum(["ADDITION", "DEDUCTION"]),
+	name: z.string().trim().min(1, "Adjustment name is required").max(120),
+	amount: z.number({ invalid_type_error: "Amount must be a number" }).positive("Amount must be greater than zero"),
+	payrollPeriodId: z.string().refine((val) => isValidObjectId(val), "Invalid payroll period id"),
+});
+
+export type QuickAdjustEmployeeBenefit = z.infer<typeof QuickAdjustEmployeeBenefitSchema>;
+
 // Update EmployeeBenefit Schema (partial, excluding immutable fields and relations)
 export const UpdateEmployeeBenefitSchema = EmployeeBenefitSchema.omit({
 	id: true,

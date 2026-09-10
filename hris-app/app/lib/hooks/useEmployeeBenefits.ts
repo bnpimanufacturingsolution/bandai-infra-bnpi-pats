@@ -12,9 +12,12 @@ import employeeBenefitService, {
 	type CreateEmployeeBenefitRequest,
 	type BulkCreateEmployeeBenefitRequest,
 	type BulkCreateEmployeeBenefitResult,
+	type QuickAdjustEmployeeBenefitRequest,
+	type QuickAdjustEmployeeBenefitResult,
 	type ImportEmployeeBenefitsResult,
 	type UpdateEmployeeBenefitRequest,
 } from "~/services/employee-benefit.service";
+import { employeePayrollQueryKeys } from "~/lib/hooks/useEmployeePayroll";
 import { toast as sonnerToast } from "sonner";
 import type { ApiQueryParams } from "~/services/api-service";
 
@@ -192,6 +195,46 @@ export const useBulkCreateEmployeeBenefits = () => {
 				});
 			} else {
 				sonnerToast.error(error?.message || "Failed to bulk create employee benefits");
+			}
+		},
+	});
+};
+
+export const useQuickAdjustEmployeeBenefits = () => {
+	const queryClient = useQueryClient();
+
+	return useMutation({
+		mutationFn: (data: QuickAdjustEmployeeBenefitRequest) =>
+			employeeBenefitService.quickAdjustEmployeeBenefits(data),
+		onSuccess: (result: QuickAdjustEmployeeBenefitResult) => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.employeeBenefits.all });
+			queryClient.invalidateQueries({ queryKey: employeePayrollQueryKeys.employeePayroll.all });
+			const createdCount = result.created?.length || 0;
+			const failedCount = result.failed?.length || 0;
+			if (createdCount > 0 && failedCount === 0) {
+				sonnerToast.success(
+					createdCount === 1
+						? "Adjustment added — it will apply on the next payroll run"
+						: `Adjustment added for ${createdCount} employees — applies on the next payroll run`,
+				);
+			} else if (createdCount > 0 && failedCount > 0) {
+				sonnerToast.warning(
+					`Added for ${createdCount} employee(s); ${failedCount} failed`,
+				);
+				result.failed.slice(0, 3).forEach((row) => {
+					sonnerToast.error(row.message || `Failed for employee ${row.employeeId}`);
+				});
+			} else {
+				sonnerToast.error("Failed to add adjustment");
+			}
+		},
+		onError: (error: any) => {
+			if (error.errors && Array.isArray(error.errors)) {
+				error.errors.forEach((err: any) => {
+					sonnerToast.error(err.message || "Validation error");
+				});
+			} else {
+				sonnerToast.error(error?.message || "Failed to add adjustment");
 			}
 		},
 	});

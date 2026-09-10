@@ -1,4 +1,49 @@
-<<<<<<< HEAD
+## Latest Task Addendum - 2026-09-09 Modal count fix (2206) + run converged COMPLETED 851/851
+
+- **Operator report:** progress modal showed "Processed 693 of 2206 payable" for an 851-person run; headcount flips 800+ vs 2000+.
+- **Root cause (proven live):** period has 2,234 APPROVED timesheet rows (bulk-materialized Sep 2 for all 2,235 employees, every frequency/agency) but the run universe is DIRECT + semi-monthly = 880 scope / 851 payable. Backend `payrollRunTotals` stored the unscoped row counts; the modal computed approved(2234) − scoped-excluded(28) = **2206**.
+- **Fixes:** (1) backend completion totals scoped with `buildPayrollPreviewBaseWhere` (hris-api `payroll-period.helper.ts`); (2) modal denominator is now job-scoped only (hris-app `run-payroll-template.tsx`, `approved − excluded` reconstruction removed); (3) all-skipped resume falls through to shared completion (was stuck PROCESSING); (4) candidate fetch chunked 100/batch (giant findMany died on the flaky forward; Postgres stable since Jul 29 — flap is transport-only).
+- **Final proof (direct DB):** PP-20260826-20260911 COMPLETED, 851/851 failed 0; stored totals tsTotal 880 / approved 880 / ready 851 / ep 851; money rows 851 alive / 851 unique, all unpaid. The "46 dup rows" scare was a false alarm: the list endpoint returned cross-period rows; per-period truth is clean.
+- **Also today:** two API restarts (poisoned Prisma pool), one forward rebuild, ~7 resumes across flap waves + self-pauses (auto-pause-on-unmount suspected — REC-20260909 filed; user advised to leave the tab open mid-run). `PayrollPeriod.updatedAt` frozen at 00:22:31Z despite later writes (suspected stale generated client — NEEDS_CONFIRMATION, use `generationMetadata` timestamps). Server DB conns climbed 33→61 (dead-tunnel orphans; watch cap).
+- **Evidence:** `.runtime/payroll-db-flap-20260909-144803/`. Package workspaces synced (hris-api + hris-app current-task.md). Vitest 7/7.
+- **Do not Reopen** this period. Corrections go retro/payroll-correction or quick-adjust on the OPEN period.
+- <<<<<<< HEAD
+
+- **What the error is (infra, not payroll data):** every pasted row error is Prisma losing the database mid-run — `Can't reach database server at 127.0.0.1:55435` (per-row `employeePayroll.findUnique` at `payroll-period.helper.ts:1949`) plus two `Server has closed the connection` rows (stale pooled conns on `upsert`/`timesheet.updateMany`). Same signature as the 2026-09-07 stuck run and the 2026-09-08 half-dead forward. No row needed a data fix.
+- **DB state found:** forward PID 47900 alive via Cloudflare alias, TCP 55435 OK, API healthy, admin login OK (~9.5s, degraded but working). No forward rebuild or API restart needed this time — the flap window had already passed.
+- **Live worker caught up:** job `567dd915` was still progressing (631 -> 693/851, failures frozen at 47), then went `paused` with no active worker. Resume 1 (`713af925`, POST `/:id/generate-timesheet` on the PROCESSING period, `resumeFromExistingPayrolls` skips paid/locked, upserts rest) reached 850/851 failed 0, paused again; resume 2 (`3f51788b`) finished **COMPLETED 851/851, failed 0** at 07:02:59Z.
+- **Convergence proof (not just the badge):** `EmployeePayroll` count for the period = 897 rows / **851 unique employees** (= `includedEmployeesCount` 851), all `isPaid=false`; all 46 double-row groups are legacy distinct-timesheet rows (created Aug 4 / Sep 3-4, zero created today, zero same-timesheet dupes). Today's runs upserted idempotently.
+- **New observation:** the run paused itself twice with no known operator pause (active-job poll `null` both times). Filed REC-20260909-PAYROLL-RUN-PAUSE-SOURCE (Proposed). Re-proves REC-20260907-PAYROLL-WORKER-TRANSIENT-DB-RETRY (still Proposed): the 47 failures were all transient and needed manual resumes.
+- **Evidence:** `.runtime/payroll-db-flap-20260909-144803/` (period-processing.json, progress-poll.log, resume-response.json, period-after-run1.json, period-final.json).
+- **Do not Reopen** this period (would clear the good state). If HR needs corrections now, use payroll corrections (retro next cutoff) or quick adjustments on the OPEN period.
+- <<<<<<< HEAD
+## Latest Task Addendum - 2026-09-08 Payroll register quick adjustments (operator-ordered)
+
+- **What:** per-employee **Add addition** / **Add deduction** in the payroll register Actions menu + header **Quick adjustment** button for bulk. Modal takes custom name (e.g. "Good performance", "Equipment destroy") + amount + OPEN period; one-cutoff, custom label rides the enrollment name.
+- **Mechanics:** `POST /api/employeeBenefit/quick-adjust` pins enrollments to the OPEN period on standard carriers — **OAD** (Other Compensation, gross) for additions, **NEGADJ** (Negative Adjustment) for deductions. Non-OPEN periods get 409 (completed periods pay corrections retro instead). Next Run Payroll applies automatically; rows surface in the Adjustments accordion (same enrollment source).
+- **Files:** API `employeeBenefit.controller/quickAdjust` + route + `QuickAdjustEmployeeBenefitSchema`; app `quick-payroll-adjustment-modal.tsx`, service `quickAdjustEmployeeBenefits` + `validateQuickAdjustInput`, hook `useQuickAdjustEmployeeBenefits`, register template menu/button wiring.
+- **Proof:** mocha 5/5; vitest 5/5 (+13 with neighbors); live DEV create OAD "Good performance test" ₱1000 ACTIVE pinned to PP-20260811-20260826, read-back + adjustments-list visible, test row deleted after. Live run also caught+fixed a missing `organizationId` bug before delivery. Frontend typecheck: touched files clean (only pre-existing smoke-spec errors remain; one pre-existing `run-payroll-template` name-type error at ~L2228, not this change).
+- **Preview page (follow-up same day):** the same modal is now on HR Run Payroll preview results (`Adjust` per row + auto **Re-run preview** when the adjustment lands in the previewed period, so HR sees the actual salary before Start Payroll). Modal gained an `onAdjusted` bubble; mutate-level onSuccess intentionally avoided (would replace the hook's toast/invalidation).
+- **Parity:** HR-only surface (payroll register/management) — single-app exception, no emp-app counterpart.
+- **Fixes 2026-09-08:** (1) DB forward half-dead (TCP ok, queries hung) — killed PID 31036, rebuilt (PID 30060), login OK; filed REC-20260908-K8S-DB-WATCH-QUERY-PROOF. (2) Modal period dropdown empty — my `sort:"-startDate"` shape 500s server-side; corrected to `sort:"startDate", order:"desc"` (proven: old shape 500, new shape 25 periods / 13 OPEN). Dropdown panel itself is portal z-1000, no layering issue.
+## Latest Task Addendum - 2026-09-08 Strict missing-punch no-pay + end-of-shift reminder (operator-ordered)
+
+- **Rule:** only a complete punch pair (clock-in AND clock-out) on a scheduled workday earns pay. One-sided days earn zero (regular/OT/ND/holiday), stay flagged `missingPunchNoPay` on the payroll daily breakdown, and the employee is reminded to file an attendance correction. Rest days and leave keep existing rules.
+- **Root causes fixed:** (1) `determineAttendanceStatus` marks in-only days PRESENT (timeOut ignored); (2) the missing-punch zeroing was bypassed whenever `approvedBucketDayPay.regularPay > 0`; (3) OT/ND loops never skipped INCOMPLETE days. New `isMissingPunchWorkDay` gate applied in bucket totals, bucket day pay (now null), OT/ND/holiday loops (generate + preview twins), and per-day earnings.
+- **Notify:** `publishMissingPunchReminderNotification` (REMINDER, eventKey `attendance:<id>:missing-punch`, honest already_notified dedupe) + `sweepMissingPunchNotifications`; `POST /api/attendance/missing-punch/notify` (dry-run default, `execute=true` to send); auto-hooks in attendance clock-in/update and Hikvision callback, all gated on shift-end-passed (punch-anchored Manila workday, boundary-aware) so mid-shift taps never spam.
+- **Live DEV proof:** sweep dry-run found 50 capped real candidates; execute(limit=3) sent 3, re-run sent 0 with no dup rows; one-sided PRESENT lines proven (00985 Sep 7, 00212 Sep 3); 00212 preview unchanged (no-bucket Path B already excluded the day).
+- **Tests:** 20/20 (`missing-punch-no-pay`, `missing-punch-reminder`); 94 passing across 17 payroll/attendance/notify specs; 2 `hikvision-callback.controller` failures proven pre-existing on pristine HEAD.
+- **CONFLICTING (accepted by operator order):** Sheet2/register parity will now diverge on one-sided bucket days (file says worked, company pays zero until correction). Tally bands for such days move to underpay-by-design.
+- **Follow-ups:** REC-20260908-MISSING-PUNCH-SCHEDULED-SWEEP (Proposed). Branch note: `feat-attendance` also carries unrelated in-flight `hris-app` NO-PAY-chip work (`payroll-no-pay-days.ts`, untouched) that consumes the same flags — converges with this change.
+## Latest Task Addendum - 2026-09-07 Stuck payroll run recovered: PP-20260826-20260911 PROCESSING 322/851 -> COMPLETED 851/851
+
+- **Root cause (infra, not payroll data):** all 15 saved errors (rows 239-253, employees 00904-00935) are identical `Can't reach database server at 127.0.0.1:55435` at `payroll-period.helper.ts:1892`. The K3s DEV forward (`ssh -L 127.0.0.1:55435:10.43.130.9:5432 project-truth-hris`) flapped mid-run; no row needed fixing.
+- **Orphaned job:** `5eb47312-7cdc-4b5f-8d19-68829c339ec5` stayed `processing` with no live worker after API restart (active-job poll `null`). Resume path verified safe: `resumeFromExistingPayrolls` skips only `isPaid`/timesheet-locked rows, reprocesses the rest via upsert (`payroll-period.helper.ts:1752-1794`).
+- **Recovery:** watcher-confirmed forward + API restart (fresh Prisma pool; pool held dead conns: `Server has closed the connection` even with TCP handshake OK 6/6). Resume 1 (`7c35bcc7`) died in a second flap at 13:01 UTC; Resume 2 (`a588560d`) **completed 851/851, failed 0** at 13:15 UTC. Period now **COMPLETED**, `EmployeePayroll` count for period **851** (= `includedEmployeesCount`; preview scope 880 / approved 879 / ready 851).
+- **Do not Reopen** this period (would clear the good state). Evidence: `.runtime/payroll-stuck-20260907-205217/` (+ `211827/`).
+- **Follow-ups:** REC-20260907-PAYROLL-WORKER-TRANSIENT-DB-RETRY (Proposed).
+- **Recovery 2026-09-08 (Whilma 01076):** her 5-line snapshot missed Sep 3-7 punches (line materialization last ran Sep 3). `POST /api/timesheet/cmtl72mqx001z8h007osj28dz/sync-obligation-lines` succeeded despite the payroll lock (fills missing dates only): +5 lines — Sep 3/4/5/7 PRESENT complete pairs, Sep 8 in-only (shift still open). Locked Sep-3 payroll row unchanged (basic 6000/days 2/gross -6000); recovered days pay retro next cutoff; her 3 one-sided days still need attendance corrections. Evidence: `.runtime/whilma-sync-20260908-103933/`.
+- **Fleet rollout 2026-09-08 (all employees):** missing-punch standard applied backlog-wide Jul 1 → Sep 8. Sweep dry-run sized 2,092 actionable days; paced execute batches (limit 60 + 45-90s sleeps after early 1000-batch timeouts and DB flaps) delivered **2,092 reminders, 0 errors at close**; read-only diff proves **RESIDUAL=0** across all employees. Notable: added `skipNotified` + DB-level notified exclusion so capped batches advance past the reminded head (per-item dedupe stays final guard); fixed honest `already_notified` counting. Evidence: `.runtime/fleet-missing-punch-20260908-105535/`.
 ## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain â€” absent wall = client file contradiction
 =======
 ## Latest Task Addendum - 2026-08-27 Day-status review UI & workbook refinement endpoints delivered and proven
@@ -3807,5 +3852,44 @@ Status: IMPLEMENTED + PROVEN +�G�Gǥ Device admin UX clarity (friendly statu
 - Browser evidence screenshots:
   `.runtime/browser-evidence/screenshots/bnpi-public-after-restore.png`
   and `.runtime/browser-evidence/screenshots/dev-public-after-restore.png`
+
+## Latest Task Addendum - 2026-09-04 Missing-punch no-pay day rule + HR indicators
+
+- **Policy**: a day with no usable punch pair (missing time-in, missing
+  time-out, or zero worked minutes such as a single duplicated punch) is a
+  company no-pay day. Previously a PRESENT day with 0:00 worked still earned
+  the full daily rate (`dayRegularPay = PRESENT ? dailyRate : 0`).
+- **Engine** (`hris-api/helper/payroll-period.helper.ts`): new exported
+  `isMissingPunchDay()` + `MISSING_PUNCH_NO_PAY_REASON`; dailyBreakdown zeroes
+  fallback-leg regular pay for INCOMPLETE / PRESENT-missing-punch days and
+  stamps `missingPunchNoPay` + `noPayReason` (approved-bucket basis still wins
+  when it explicitly pays the day); fallback paid-day counters count only
+  valid PRESENT days (generate + preview).
+- **UI** (HR-only, no emp counterpart): `NO PAY` chips on both Daily
+  Attendance Logs and Daily Pay Computation rows, unpaid-day count in the
+  section header, period-gross tooltip; derivation in
+  `hris-app/app/lib/utils/payroll-no-pay-days.ts`.
+- **Tests**: `hris-api/tests/missing-punch-no-pay.spec.ts` 6/6;
+  `payroll-no-pay-days.test.ts` 3/3; neighbors 82 + source-truth 34 passing.
+- **Follow-ups**: `WAIT_SEC`/submodule-404 notes from the 2026-09-04 Observe
+  diagnosis remain open; bucket-paid missing-punch days keep approved pay.
+
+## Latest Task Addendum - 2026-09-07 Period 2 Aug 2026 full-coverage payroll run (846/851, tail blocked on DB forward auth)
+
+- Operator requirement: admin Timesheet Rules has Auto Approve ON — unsubmitted timesheets must still generate payroll.
+- Root cause of 164 vs 1687 (proven live): Sep-3 bio-run deliberately scoped to evidence-backed employees only; Sep-4 bulk auto-approve then created 1500+ more APPROVED sheets that were never generated. Timesheet "Payroll Ready" bucket is status-only (includes AGENCY); payable = APPROVED + DIRECT + freq + salary + schedule.
+- Engine fixes (branch `feat-attendance`, partly committed as `521f23bd` by parallel session, no push):
+  - Auto-approve defaults: `bootstrap.sql` DEFAULT true, `zod/migration.zod.ts` default true, governed migration `20260904_set_timesheet_auto_approve_default_true.sql` (one-off script deleted). Spec 8/8.
+  - Generate lane passes `skipRefresh: true` to ensure (pure refresh of ~1700 approved sheets was a ~12h lane gating every generate; live hooks + explicit ensure endpoint still own refresh).
+  - Ensure creates now run in the bounded pool (5), not strictly sequential (P2002-adopt backstop; measured ~1.4 → 11-18 sheets/min). Suites 29 passing, no new tsc errors in touched files.
+- Coverage runs on OPEN `PP-20260826-20260911` (reopened from COMPLETED via audited PATCH; all rows unpaid/unlocked):
+  - Job 1 (319): killed inside the 12h refresh lane → stopped, code fixed, API reloaded.
+  - Job 3 (440→771 candidates): 620 success, then API process died ~09:00 UTC Sep-4 mid payslip-upload (620 rows persisted).
+  - Job 5 (851): terminal `completed` — **846 success, 5 failed**, all 5 = SSH-forward flap (`Can't reach 127.0.0.1:55435`) on 01770–01774, no data errors. Period auto-returned to COMPLETED.
+  - Job 6 (cleanup recompute): ~300 done, then K3s forward dropped hard; tail state unreadable without DB.
+- Money-rule consistency note: parallel session's missing-punch no-pay change is uncommitted in the working tree; running API has 3-day uptime (booted Sep-4 ~09:05 UTC, no reload since), so all generated rows used one engine version. Which version ran is NEEDS_CONFIRMATION (affects Sheet2 reconciliation, not convergence).
+- BLOCKED (real stop, 2026-09-07): `127.0.0.1:55435` forward down; Cloudflare Access needs interactive browser re-auth; direct LAN `10.184.37.19:22` unroutable from this host (documented). API process healthy.
+- Resume path (mechanical, ~10 min once forward is back): re-run `scripts/start-k8s-dev-db-access.ps1` → confirm `GET /api/timesheet/config` → POST generate (PROCESSING+no-job resumes; recomputes unpaid, skips paid/locked) → poll to terminal → expect 851/851 → reread counts into `.runtime/payroll-coverage-20260904-20260904-144611/`.
+- Evidence: `.runtime/payroll-coverage-20260904-20260904-144611/` (before-snapshot, preview 319, job ids 1-6). Still open: VM DEV/UAT/PROD application of the auto-approve migration SQL.
 
 

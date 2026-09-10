@@ -7,6 +7,7 @@ interface IController {
 	getAll(req: Request, res: Response, next: NextFunction): Promise<void>;
 	create(req: Request, res: Response, next: NextFunction): Promise<void>;
 	bulkCreate(req: Request, res: Response, next: NextFunction): Promise<void>;
+	quickAdjust(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	update(req: Request, res: Response, next: NextFunction): Promise<void>;
 	remove(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -356,6 +357,64 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.post("/bulk", controller.bulkCreate);
+
+	/**
+	 * @openapi
+	 * /api/employeeBenefit/quick-adjust:
+	 *   post:
+	 *     summary: Payroll register quick adjustment (addition/deduction)
+	 *     description: >
+	 *       Create a one-cutoff named addition (OAD carrier) or deduction
+	 *       (NEGADJ carrier) for one or many employees, pinned to an OPEN
+	 *       payroll period. The custom name rides on the enrollment so the
+	 *       register shows e.g. "Good performance" or "Equipment destroy".
+	 *     tags: [EmployeeBenefit]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     requestBody:
+	 *       required: true
+	 *       content:
+	 *         application/json:
+	 *           schema:
+	 *             type: object
+	 *             required:
+	 *               - employeeIds
+	 *               - direction
+	 *               - name
+	 *               - amount
+	 *               - payrollPeriodId
+	 *             properties:
+	 *               employeeIds:
+	 *                 type: array
+	 *                 items:
+	 *                   type: string
+	 *                 minItems: 1
+	 *               direction:
+	 *                 type: string
+	 *                 enum: [ADDITION, DEDUCTION]
+	 *               name:
+	 *                 type: string
+	 *                 example: "Good performance"
+	 *               amount:
+	 *                 type: number
+	 *                 example: 1000
+	 *               payrollPeriodId:
+	 *                 type: string
+	 *     responses:
+	 *       201:
+	 *         description: Quick adjustment created
+	 *       400:
+	 *         $ref: '#/components/responses/BadRequest'
+	 *       401:
+	 *         $ref: '#/components/responses/Unauthorized'
+	 *       404:
+	 *         $ref: '#/components/responses/NotFound'
+	 *       409:
+	 *         description: Payroll period is not open
+	 *       500:
+	 *         $ref: '#/components/responses/InternalServerError'
+	 */
+	routes.post("/quick-adjust", controller.quickAdjust);
 
 	/**
 	 * @openapi

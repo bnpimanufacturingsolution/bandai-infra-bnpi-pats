@@ -46,6 +46,7 @@ import {
 } from "../../../helper/hikvision-device-event-serial-dedupe.helper";
 import { emitDeviceEventSaved } from "../../../helper/device-event-realtime.helper";
 import { emitAttendanceRealtimeEvent } from "../../../helper/attendance-realtime.helper";
+import { publishMissingPunchReminderNotification } from "../../../helper/missing-punch-reminder.helper";
 import { refreshTimesheetForAttendanceDate } from "../../../helper/timesheet.helper";
 
 export const controller = (prisma: PrismaClient) => {
@@ -703,15 +704,30 @@ export const controller = (prisma: PrismaClient) => {
 								: "clock_in_created",
 						source,
 					});
-					const refreshedTimesheet = await refreshTimesheetForAttendanceDate(prisma, {
-						organizationId: employee.organizationId,
-						employeeId: employee.id,
-						date: punchTimeIn || eventTime,
-					});
-					if (refreshedTimesheet) {
-						await invalidateCache.byPattern("cache:timesheet:*");
-					}
+				const refreshedTimesheet = await refreshTimesheetForAttendanceDate(prisma, {
+					organizationId: employee.organizationId,
+					employeeId: employee.id,
+					date: punchTimeIn || eventTime,
+				});
+				if (refreshedTimesheet) {
+					await invalidateCache.byPattern("cache:timesheet:*");
 				}
+				// Missing-punch nudge: fire-and-forget. Only notifies when the
+				// saved day is one-sided AND its shift already ended (deduped
+				// per day), so live mid-shift taps never spam.
+				if (attendanceId) {
+					void publishMissingPunchReminderNotification(
+						prisma,
+						(req as any).io,
+						attendanceId,
+					).catch((notifyError) =>
+						console.warn(
+							`[HIKVISION_CALLBACK][CTRL] missing-punch notify failed for ${attendanceId}:`,
+							notifyError,
+						),
+					);
+				}
+			}
 
 				if (attendanceAction === "clock_in_created") {
 					await updateDeviceEventStatus(req, eventRecord.id, {

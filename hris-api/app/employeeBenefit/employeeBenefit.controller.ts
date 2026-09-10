@@ -22,7 +22,7 @@ import { invalidateCache } from "../../middleware/cache";
 import {
 	BulkCreateEmployeeBenefitSchema,
 	CreateEmployeeBenefitSchema,
-	UpdateEmployeeBenefitSchema,
+	QuickAdjustEmployeeBenefitSchema,
 } from "../../zod/employeebenefit.zod";
 import {
 	normalizeEmployeeBenefitPayload,
@@ -1055,5 +1055,121 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { create, bulkCreate, getAll, getById, update, remove, importBenefits };
+	const quickAdjust = async (req: Request, res: Response, _next: NextFunction) => {
+		const organizationId = (req as any).organizationId;
+		if (!organizationId) {
+			res.status(401).json(buildErrorResponse("Unauthorized access", 401));
+			return;
+		}
+		const validation = QuickAdjustEmployeeBenefitSchema.safeParse(req.body || {});
+		if (!validation.success) {
+			const formattedErrors = formatZodErrors(validation.error.format());
+			const errorResponse = buildErrorResponse("Validation failed", 400, formattedErrors);
+			res.status(400).json(errorResponse);
+			return;
+		}
+		const { employeeIds, direction, name, amount, payrollPeriodId } = validation.data;
+		// Standard carriers: OAD (Other Compensation) for additions, NEGADJ
+		// (Negative Adjustment) for deductions. The custom label rides on the
+		// enrollment name so the register/accordion shows "Good performance".
+		const benefitCode = direction === "ADDITION" ? "OAD" : "NEGADJ";
+		try {
+			const period = await prisma.payrollPeriod.findFirst({
+				where: { id: payrollPeriodId, organizationId, isDeleted: false },
+				select: { id: true, code: true, status: true, startDate: true, endDate: true },
+			});
+			if (!period) {
+				res.status(404).json(buildErrorResponse("Payroll period not found", 404));
+				return;
+			}
+			const carrier = await prisma.benefitType.findFirst({
+				where: { organizationId, code: benefitCode, isActive: true, isDeleted: false },
+			});
+			if (!carrier) {
+				res.status(400).json(
+					buildErrorResponse(`Standard benefit type ${benefitCode} is not available`, 400),
+				);
+				return;
+			}
+			const employees = await prisma.employee.findMany({
+				where: { id: { in: employeeIds }, organizationId, isDeleted: false },
+				select: { id: true, employeeId: true },
+			});
+			const foundIds = new Set(employees.map((employee: any) => String(employee.id)));
+			const created: any[] = [];
+			const failed: { employeeId: string; message: string }[] = [];
+			for (const employeeId of Array.from(new Set(employeeIds.map((id) => String(id))))) {
+				if (!foundIds.has(employeeId)) {
+					failed.push({ employeeId, message: "Employee not found in this organization" });
+					continue;
+				}
+				try {
+					const record = await createEmployeeBenefitRecord(prisma, {
+						organizationId,
+						employeeId,
+						benefitTypeId: carrier.id,
+						name,
+						description: `Quick ${direction.toLowerCase()} for ${period.code}`,
+						amount,
+						totalAmount: amount,
+						installmentAmount: amount,
+						currency: "PHP",
+						scheduleMode: "RECURRING",
+						recurrenceFrequency: "EVERY_CUTOFF",
+						payrollPeriodId,
+						startDate: period.startDate,
+						endDate: period.endDate,
+						status: "ACTIVE",
+						isActive: true,
+						attendanceBased: false,
+						eligibilityMode: "ENROLLED_ALWAYS",
+						eligibilityDisqualifyOnAbsent: false,
+						eligibilityDisqualifyOnLate: false,
+						eligibilityDisqualifyOnUndertime: false,
+						eligibilityDisqualifyOnLeave: false,
+						agreedToTerms: false,
+					});
+					created.push(record);
+				} catch (error: any) {
+					failed.push({ employeeId, message: error?.message || "Failed to create adjustment" });
+				}
+			}
+			if (created.length === 0) {
+				const errorResponse = buildErrorResponse(
+					"Failed to create quick adjustments",
+					400,
+					failed.map((row) => ({ field: row.employeeId, message: row.message })),
+				);
+				res.status(400).json(errorResponse);
+				return;
+			}
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEEBENEFIT.ACTIONS.CREATE_EMPLOYEEBENEFIT,
+				description: `Quick ${direction.toLowerCase()} "${name}" ${amount} for ${created.length} employee(s) in ${period.code}`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEEBENEFIT.PAGES.EMPLOYEEBENEFIT_CREATION,
+				},
+			});
+			try {
+				await invalidateCache.byPattern("cache:employeeBenefit:list:*");
+			} catch (cacheError) {
+				employeeBenefitLogger.warn("Failed to invalidate cache after quick adjust:", cacheError);
+			}
+			res.status(201).json(
+				buildSuccessResponse("Quick adjustment created", {
+					benefitCode,
+					payrollPeriodId,
+					created,
+					failed,
+				}, 201),
+			);
+		} catch (error) {
+			employeeBenefitLogger.error(`Quick adjust failed: ${error}`);
+			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
+		}
+	};
+
+	return { create, bulkCreate, getAll, getById, update, remove, importBenefits, quickAdjust };
 };
