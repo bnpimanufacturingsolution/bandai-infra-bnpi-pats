@@ -415,7 +415,7 @@ export function resolveBandaiRegisterBasicPay(params: {
 	registerDailyRate?: number | null;
 	/** Sum of approvedBuckets.regularDays for the period (preferred). */
 	paidRegularDays?: number | null;
-	/** Fallback when no buckets: count of PRESENT/INCOMPLETE (not ABSENT). */
+	/** Fallback when no buckets: count of PRESENT days with a usable punch pair (not ABSENT/INCOMPLETE/missing-punch). */
 	presentFallbackDays?: number | null;
 }): {
 	basicPay: number;
@@ -667,7 +667,7 @@ function getBandaiApprovedBuckets(day: any): Record<string, any> | null {
 	return Object.keys(approvedBuckets).length ? approvedBuckets : null;
 }
 
-function calculateBandaiApprovedBucketPay(
+export function calculateBandaiApprovedBucketPay(
 	days: any[],
 	periodBasic: number,
 	/** Register Daily Salary; > 0 → Path A hourly = dailyRate/8 */
@@ -692,6 +692,10 @@ function calculateBandaiApprovedBucketPay(
 	for (const day of days) {
 		const bucket = getBandaiApprovedBuckets(day);
 		if (!bucket) continue;
+		// Strict no-pay rule (operator 2026-09-08): a missing punch pair on a
+		// scheduled workday earns nothing, so bucket/file hours for that date
+		// must not enter payroll totals either.
+		if (isMissingPunchWorkDay(day)) continue;
 		sourceDayCount += 1;
 		totals.regularDays += numberFromApprovedBucket(bucket.regularDays);
 		totals.regOtHrs += numberFromApprovedBucket(bucket.regOtHrs);
@@ -783,13 +787,16 @@ function calculateBandaiApprovedBucketPay(
 	};
 }
 
-function calculateBandaiApprovedBucketDayPay(
+export function calculateBandaiApprovedBucketDayPay(
 	day: any,
 	approvedBucketPay: ReturnType<typeof calculateBandaiApprovedBucketPay>,
 	periodBasic: number,
 ) {
 	const bucket = getBandaiApprovedBuckets(day);
 	if (!bucket || !approvedBucketPay) return null;
+	// Strict no-pay rule (operator 2026-09-08): a missing punch pair on a
+	// scheduled workday earns nothing from buckets — correction flow instead.
+	if (isMissingPunchWorkDay(day)) return null;
 
 	const hourlyRate = Number(approvedBucketPay.hourlyRate || 0);
 	const sourceRegularDays = Number(approvedBucketPay.sourceRegularDays || 0);
@@ -869,6 +876,69 @@ export function convertTimeToDecimal(timeString: string | null | undefined): num
 	if (isNaN(hours) || isNaN(minutes)) return 0;
 
 	return hours + minutes / 60;
+}
+
+/**
+ * Company no-pay day rule: when a day has no usable punch pair (missing
+ * time-in, missing time-out, or zero worked minutes such as a single
+ * duplicated punch), the company does not pay that day.
+ */
+export const MISSING_PUNCH_NO_PAY_REASON = "Missing time-in/out — company no-pay day";
+
+export function isMissingPunchDay(day: any): boolean {
+	if (!day || typeof day !== "object") return false;
+	if (!day.timeIn || !day.timeOut) return true;
+	return convertTimeToDecimal(day.hoursWorked || "0:00") <= 0;
+}
+
+/**
+ * Strict company pay rule (operator-ordered 2026-09-08): only a complete
+ * punch pair on a scheduled workday earns pay. A missing time-in or time-out
+ * on a workday is a no-pay day even when approved bucket/file data exists
+ * for that date — the employee must file an attendance correction instead.
+ * Rest days and leave keep their existing file/schedule rules.
+ */
+export function isMissingPunchWorkDay(day: any): boolean {
+	if (!day || typeof day !== "object") return false;
+	if (day.isRestDay === true) return false;
+	const status = String(day?.status || "").toUpperCase();
+	if (status === "LEAVE") return false;
+	if (status !== "PRESENT" && status !== "INCOMPLETE") return false;
+	return isMissingPunchDay(day);
+}
+
+export type ZeroPayReason = "NO_DEVICE_DATA" | "NO_SCHEDULE" | null;
+
+/** HR-facing status marks for zero-pay rows (operator-ordered). */
+export const ZERO_PAY_REASON_LABELS: Record<string, string> = {
+	NO_DEVICE_DATA: "Employee has no biometric device data (no punches)",
+	NO_SCHEDULE: "Employee has no schedule",
+};
+
+/**
+ * Whole-record zero-pay gate (operator-ordered): a payroll row with no
+ * timesheet reporting lines AND no validated days earns zero money. Reason
+ * codes are pipeline-emptiness marks only (no device-registration lookup):
+ * empty breakdown = no biometric device data; lines present but none
+ * validated = no schedule.
+ */
+export function resolveZeroPayReason(
+	reportingBreakdown: any[] | null | undefined,
+	validatedDays: any[] | null | undefined,
+): { hasAttendance: boolean; zeroPayReason: ZeroPayReason; zeroPayLabel: string | null } {
+	const hasBreakdown = Array.isArray(reportingBreakdown) && reportingBreakdown.length > 0;
+	const hasValidated = Array.isArray(validatedDays) && validatedDays.length > 0;
+	const hasAttendance = hasBreakdown && hasValidated;
+	const zeroPayReason: ZeroPayReason = hasAttendance
+		? null
+		: !hasBreakdown
+			? "NO_DEVICE_DATA"
+			: "NO_SCHEDULE";
+	return {
+		hasAttendance,
+		zeroPayReason,
+		zeroPayLabel: zeroPayReason ? ZERO_PAY_REASON_LABELS[zeroPayReason] : null,
+	};
 }
 
 export function applyZeroSalaryGuardrail(
@@ -1666,12 +1736,19 @@ export async function generatePayrollFromTimesheets(
 			sectionId: options?.sectionId,
 		},
 	});
-	let timesheets = scopedTimesheetIds.length
-		? await prisma.timesheet.findMany({
-				where: {
-					id: { in: scopedTimesheetIds },
-				},
-				include: {
+	// Chunked candidate fetch: one giant findMany (851 sheets x effective lines
+	// x schedules/history) routinely dies mid-stream on the flaky Cloudflare-SSH
+	// DEV forward ("Server has closed the connection") while small queries pass.
+	// scopedTimesheetIds arrive globally ordered (employeeId, id), so chunk
+	// slices concatenate in order; re-sort defensively. Same rows, small queries.
+	const CANDIDATE_FETCH_CHUNK = 100;
+	let timesheets: any[] = [];
+	for (let i = 0; i < scopedTimesheetIds.length; i += CANDIDATE_FETCH_CHUNK) {
+		const chunk = await prisma.timesheet.findMany({
+			where: {
+				id: { in: scopedTimesheetIds.slice(i, i + CANDIDATE_FETCH_CHUNK) },
+			},
+			include: {
 					timesheetlines: {
 						where: {
 							isDeleted: false,
@@ -1715,8 +1792,14 @@ export async function generatePayrollFromTimesheets(
 					},
 				},
 				orderBy: [{ employeeId: "asc" }, { id: "asc" }],
-			})
-		: [];
+			});
+			timesheets.push(...chunk);
+		}
+		timesheets.sort(
+			(a: any, b: any) =>
+				String(a.employeeId).localeCompare(String(b.employeeId)) ||
+				String(a.id).localeCompare(String(b.id)),
+		);
 
 	payrollLogger.info(
 		`Scoped payroll generation candidate timesheets for period ${payrollPeriodId}: ${timesheets.length}`,
@@ -1782,29 +1865,26 @@ export async function generatePayrollFromTimesheets(
 
 	if (timesheets.length === 0) {
 		options?.onStart?.({ total: resumeProcessedCount });
-		if (resumeProcessedCount > 0) {
+		if (resumeProcessedCount === 0) {
+			payrollLogger.warn(`No approved timesheets found for period: ${payrollPeriodId}`);
 			return {
-				success: true,
-				message: `Payroll resume completed; ${resumeProcessedCount} employee payroll record(s) were already generated`,
-				generated: resumeProcessedCount,
+				success: false,
+				message: payrollPeriodData.payFrequency
+					? `No approved timesheets found for employees with ${payrollPeriodData.payFrequency} pay frequency`
+					: "No approved timesheets found for this period",
+				generated: 0,
 				errors: 0,
-				payslipsGenerated: 0,
-				payslipErrors: 0,
-				total: resumeProcessedCount,
+				total: 0,
 				payrolls: [],
 			};
 		}
-		payrollLogger.warn(`No approved timesheets found for period: ${payrollPeriodId}`);
-		return {
-			success: false,
-			message: payrollPeriodData.payFrequency
-				? `No approved timesheets found for employees with ${payrollPeriodData.payFrequency} pay frequency`
-				: "No approved timesheets found for this period",
-			generated: 0,
-			errors: 0,
-			total: 0,
-			payrolls: [],
-		};
+		// All-skipped resume (every row already has a completed payroll/lock):
+		// fall through so the shared completion path below finalizes period
+		// status COMPLETED and refreshes scoped run totals. Returning early here
+		// used to leave the period stuck at PROCESSING with stale totals.
+		payrollLogger.info(
+			`Payroll resume for period ${payrollPeriodId}: all ${resumeProcessedCount} employee payroll record(s) already generated; finalizing completion`,
+		);
 	}
 
 	const timesheetLockEmployeeId = await resolvePayrollTimesheetLockEmployeeId(prisma, {
@@ -2049,12 +2129,14 @@ export async function generatePayrollFromTimesheets(
 
 			// Path A Basic = paid regular days × dailyRate (file Basic Salary).
 			// paid days = sum approvedBuckets.regularDays (matches Sheet2 No. of Days).
-			let presentFallbackDays = 0;
-			for (const day of validatedDays) {
-				if (day.status === "PRESENT" || day.status === "INCOMPLETE") {
-					presentFallbackDays += 1;
-				}
+		let presentFallbackDays = 0;
+		for (const day of validatedDays) {
+			// Missing-punch days are company no-pay days: they must not inflate
+			// the paid-day fallback count (INCOMPLETE or PRESENT with no usable pair).
+			if (day.status === "PRESENT" && !isMissingPunchDay(day)) {
+				presentFallbackDays += 1;
 			}
+		}
 			const paidRegularDaysFromBuckets = bandaiApprovedBucketPay
 				? Number(bandaiApprovedBucketPay.hours?.regularDays || 0)
 				: null;
@@ -2103,6 +2185,9 @@ export async function generatePayrollFromTimesheets(
 			for (const validatedDay of validatedDays) {
 				// Skip if not present or no work done
 				if (validatedDay.status === "ABSENT" || validatedDay.status === "LEAVE") continue;
+				// Strict no-pay rule (operator 2026-09-08): a missing punch pair
+				// on a scheduled workday accrues no OT/ND/holiday premium.
+				if (isMissingPunchWorkDay(validatedDay)) continue;
 
 				// Merge day metadata with holiday info
 				const dayMetadata = validatedDay.holidayInfo
@@ -2169,7 +2254,8 @@ export async function generatePayrollFromTimesheets(
 				if (
 					dayType !== "ordinaryDay" &&
 					workMultiplier !== null &&
-					validatedDay.status === "PRESENT"
+					validatedDay.status === "PRESENT" &&
+					!isMissingPunchWorkDay(validatedDay)
 				) {
 					// For holiday/rest day premium, use scheduled work hours or regular hours
 					// NOT total hours (which includes OT) - OT gets its own multiplier
@@ -2291,6 +2377,7 @@ export async function generatePayrollFromTimesheets(
 				const holidayPremiumMultiplier = Math.max(0, workMultiplier - 1.0);
 				const dayHolidayPay =
 					day.status === "PRESENT" &&
+					!isMissingPunchWorkDay(day) &&
 					dayPremiumBaseHours > 0 &&
 					holidayPremiumMultiplier > 0 &&
 					dayType !== "ordinaryDay"
@@ -2313,17 +2400,40 @@ export async function generatePayrollFromTimesheets(
 				const resolvedDayNightDiffPay = approvedBucketDayPay
 					? approvedBucketDayPay.nightDiffPay
 					: dayNightDiffPay;
-				const resolvedDayHolidayPay = approvedBucketDayPay
-					? approvedBucketDayPay.holidayPay
-					: dayHolidayPay;
+			const resolvedDayHolidayPay = approvedBucketDayPay
+				? approvedBucketDayPay.holidayPay
+				: dayHolidayPay;
 
-				const dayTotalDeductions = roundToCentavo(dayAbsentDeduction + dayShortfallPenalty);
-				const dayTotalEarnings = roundToCentavo(
-					resolvedDayRegularPay +
-						resolvedDayOvertimePay +
-						resolvedDayNightDiffPay +
-						resolvedDayHolidayPay,
-				);
+			// Strict company no-pay rule (operator 2026-09-08): a missing punch
+			// pair on a scheduled workday earns nothing — regular, OT,
+			// night-diff, or holiday — even when bucket/file data exists for
+			// that date. The day stays flagged so HR sees why, and the
+			// employee files an attendance correction. Rest days and leave
+			// keep their existing rules.
+			const missingWorkdayNoPay = isMissingPunchWorkDay(day);
+			let finalDayRegularPay = resolvedDayRegularPay;
+			let missingPunchNoPay = false;
+			if (day.status === "INCOMPLETE" || (day.status === "PRESENT" && isMissingPunchDay(day))) {
+				if (
+					missingWorkdayNoPay ||
+					!approvedBucketDayPay ||
+					Number(approvedBucketDayPay.regularPay || 0) <= 0
+				) {
+					finalDayRegularPay = 0;
+				}
+				missingPunchNoPay = finalDayRegularPay <= 0;
+			}
+			const finalDayOvertimePay = missingWorkdayNoPay ? 0 : resolvedDayOvertimePay;
+			const finalDayNightDiffPay = missingWorkdayNoPay ? 0 : resolvedDayNightDiffPay;
+			const finalDayHolidayPay = missingWorkdayNoPay ? 0 : resolvedDayHolidayPay;
+
+			const dayTotalDeductions = roundToCentavo(dayAbsentDeduction + dayShortfallPenalty);
+			const dayTotalEarnings = roundToCentavo(
+				finalDayRegularPay +
+					finalDayOvertimePay +
+					finalDayNightDiffPay +
+					finalDayHolidayPay,
+			);
 				const dayNetPay = roundToCentavo(dayTotalEarnings - dayTotalDeductions);
 
 				return {
@@ -2341,13 +2451,13 @@ export async function generatePayrollFromTimesheets(
 							? { bandaiApprovedBucketDayPay: approvedBucketDayPay }
 							: {}),
 					},
-					earnings: {
-						regularPay: resolvedDayRegularPay,
-						overtimePay: resolvedDayOvertimePay,
-						nightDiffPay: resolvedDayNightDiffPay,
-						holidayPay: resolvedDayHolidayPay,
-						totalDayPay: dayTotalEarnings,
-					},
+				earnings: {
+					regularPay: finalDayRegularPay,
+					overtimePay: finalDayOvertimePay,
+					nightDiffPay: finalDayNightDiffPay,
+					holidayPay: finalDayHolidayPay,
+					totalDayPay: dayTotalEarnings,
+				},
 					deductions: {
 						absentDeduction: dayAbsentDeduction,
 						latePenalty: dayLatePenalty,
@@ -2355,10 +2465,12 @@ export async function generatePayrollFromTimesheets(
 						shortfallPenalty: dayShortfallPenalty,
 						totalDayDeductions: dayTotalDeductions,
 					},
-					netDayPay: dayNetPay,
-					remarks: day.remarks || "",
-				};
-			});
+				netDayPay: dayNetPay,
+				remarks: day.remarks || "",
+				missingPunchNoPay,
+				noPayReason: missingPunchNoPay ? MISSING_PUNCH_NO_PAY_REASON : null,
+			};
+		});
 
 			// Path A: paidDays×dailyRate; Path B: period basic (Employee.basicSalary).
 			const basicPay = registerBasic.basicPay;
@@ -2504,6 +2616,11 @@ export async function generatePayrollFromTimesheets(
 				roundToCentavo(grossPayWithSources - totalDeductions + payrollSourceAmounts.netAdjustments),
 			);
 
+			const { hasAttendance, zeroPayReason, zeroPayLabel } = resolveZeroPayReason(
+				reportingBreakdown,
+				validatedDays,
+			);
+
 			const payrollAttendanceSnapshot = validatedDays.map((day: any) => ({
 				approvalStatus: day.approvalStatus || "APPROVED",
 				date: day.date,
@@ -2552,6 +2669,9 @@ export async function generatePayrollFromTimesheets(
 				},
 			}));
 
+			const registerSourceAmounts = hasAttendance
+				? payrollSourceAmounts
+				: emptyPayrollSourceAmounts();
 			const payrollRegister = buildBandaiPayrollRegister({
 				employee,
 				payrollPeriodData,
@@ -2563,21 +2683,21 @@ export async function generatePayrollFromTimesheets(
 				totalWorkDays,
 				paidRegularDays: registerBasic.paidRegularDays,
 				registerDailyRate: registerBasic.registerDailyRate,
-				basicPay,
-				absentDeduction,
+				basicPay: hasAttendance ? basicPay : 0,
+				absentDeduction: hasAttendance ? absentDeduction : 0,
 				lateDeduction,
 				earlyOutDeduction,
 				shortfallDeduction,
 				overtimePay,
 				nightDiffPay,
 				holidayPay,
-				grossPayWithSources,
+				grossPayWithSources: hasAttendance ? grossPayWithSources : 0,
 				withholdingTax,
 				periodContributions,
-				payrollSourceAmounts,
-				payrollSourceDetails: payrollSource.details,
-				totalDeductions,
-				netPay,
+				payrollSourceAmounts: registerSourceAmounts,
+				payrollSourceDetails: hasAttendance ? payrollSource.details : [],
+				totalDeductions: hasAttendance ? totalDeductions : 0,
+				netPay: hasAttendance ? netPay : 0,
 				bandaiApprovedBucketPay,
 			});
 
@@ -2595,11 +2715,11 @@ export async function generatePayrollFromTimesheets(
 					organizationId,
 
 					// Earnings
-					basicPay,
+					basicPay: hasAttendance ? basicPay : 0,
 					overtimePay,
 					nightDiffPay,
 					holidayPay,
-					allowances: payrollSourceAmounts.totalCompensationBenefits,
+					allowances: hasAttendance ? payrollSourceAmounts.totalCompensationBenefits : 0,
 					bonuses: 0,
 
 					// Deductions
@@ -2607,17 +2727,18 @@ export async function generatePayrollFromTimesheets(
 					philHealthContribution: periodContributions.philHealth,
 					pagibigContribution: periodContributions.pagIbig,
 					taxAmount: withholdingTax,
-					loanDeductions: zeroSalaryGuardrail.guardedLoanDeductions,
+					loanDeductions: hasAttendance ? zeroSalaryGuardrail.guardedLoanDeductions : 0,
 					lateDeduction,
 					earlyOutDeduction,
-					otherDeductions: zeroSalaryGuardrail.guardedDeductionBenefits,
+					otherDeductions: hasAttendance ? zeroSalaryGuardrail.guardedDeductionBenefits : 0,
 
 					// Totals
-					grossPay: grossPayWithSources,
-					taxableIncome,
-					totalDeductions,
-					netPay,
-					absentDeduction,
+					grossPay: hasAttendance ? grossPayWithSources : 0,
+					taxableIncome: hasAttendance ? taxableIncome : 0,
+					totalDeductions: hasAttendance ? totalDeductions : 0,
+					netPay: hasAttendance ? netPay : 0,
+					absentDeduction: hasAttendance ? absentDeduction : 0,
+					notes: zeroPayLabel ?? undefined,
 					...payrollRegister.persistFields,
 
 					// Timesheet snapshot - complete data for audit trail
@@ -2637,6 +2758,8 @@ export async function generatePayrollFromTimesheets(
 							totalOvertimeMinutes: totalValidOvertimeMinutes,
 							totalLateMinutes: totalValidLateMinutes,
 							totalEarlyOutMinutes: totalValidEarlyOutMinutes,
+							zeroPayReason,
+							zeroPayLabel,
 						},
 						daysPresent:
 							reportingBreakdown?.filter((d: any) => d.status === "PRESENT")
@@ -2700,6 +2823,8 @@ export async function generatePayrollFromTimesheets(
 							method: contributionSchedule.method,
 						},
 						zeroSalaryGuardrailApplied: zeroSalaryGuardrail.applied,
+						zeroPayReason,
+						zeroPayLabel,
 					},
 
 					// Rate calculation breakdown - detailed formulas
@@ -2762,28 +2887,29 @@ export async function generatePayrollFromTimesheets(
 				},
 				update: {
 					// Earnings
-					basicPay,
+					basicPay: hasAttendance ? basicPay : 0,
 					overtimePay,
 					nightDiffPay,
 					holidayPay,
-					allowances: payrollSourceAmounts.totalCompensationBenefits,
+					allowances: hasAttendance ? payrollSourceAmounts.totalCompensationBenefits : 0,
 
 					// Deductions
 					sssContribution: periodContributions.sss,
 					philHealthContribution: periodContributions.philHealth,
 					pagibigContribution: periodContributions.pagIbig,
 					taxAmount: withholdingTax,
-					loanDeductions: zeroSalaryGuardrail.guardedLoanDeductions,
+					loanDeductions: hasAttendance ? zeroSalaryGuardrail.guardedLoanDeductions : 0,
 					lateDeduction,
 					earlyOutDeduction,
-					otherDeductions: zeroSalaryGuardrail.guardedDeductionBenefits,
+					otherDeductions: hasAttendance ? zeroSalaryGuardrail.guardedDeductionBenefits : 0,
 
 					// Totals
-					grossPay: grossPayWithSources,
-					taxableIncome,
-					totalDeductions,
-					netPay,
-					absentDeduction,
+					grossPay: hasAttendance ? grossPayWithSources : 0,
+					taxableIncome: hasAttendance ? taxableIncome : 0,
+					totalDeductions: hasAttendance ? totalDeductions : 0,
+					netPay: hasAttendance ? netPay : 0,
+					absentDeduction: hasAttendance ? absentDeduction : 0,
+					notes: zeroPayLabel ?? undefined,
 					...payrollRegister.persistFields,
 
 					// Timesheet snapshot - complete data for audit trail
@@ -2802,6 +2928,8 @@ export async function generatePayrollFromTimesheets(
 							totalOvertimeMinutes: totalValidOvertimeMinutes,
 							totalLateMinutes: totalValidLateMinutes,
 							totalEarlyOutMinutes: totalValidEarlyOutMinutes,
+							zeroPayReason,
+							zeroPayLabel,
 						},
 						daysPresent:
 							reportingBreakdown?.filter((d: any) => d.status === "PRESENT")
@@ -2864,6 +2992,8 @@ export async function generatePayrollFromTimesheets(
 							periodNumber,
 						},
 						zeroSalaryGuardrailApplied: zeroSalaryGuardrail.applied,
+						zeroPayReason,
+						zeroPayLabel,
 					},
 
 					// Rate calculation breakdown - detailed formulas
@@ -2920,7 +3050,9 @@ export async function generatePayrollFromTimesheets(
 					generationKey,
 
 					updatedAt: new Date(),
-					notes: `Regenerated from approved timesheet: ${timesheet.code}`,
+					notes: zeroPayLabel
+						? `${zeroPayLabel} — regenerated from approved timesheet: ${timesheet.code}`
+						: `Regenerated from approved timesheet: ${timesheet.code}`,
 				},
 			});
 
@@ -3233,6 +3365,32 @@ export async function generatePayrollFromTimesheets(
 		}
 	}
 
+	// Stored run totals must cover the same employee universe the job ran
+	// (DIRECT + period pay frequency + dept/section scope). Unscoped row counts
+	// mixed org-wide timesheets into UI math — e.g. approved(2234) minus
+	// scoped-excluded(28) displayed "Payable 2206" for an 851-person run.
+	// employeePayroll stays unscoped: the job only ever upserts its own rows.
+	const runPayFrequency = (payrollPeriodData?.payFrequency as PayFrequency | null) || null;
+	const scopedRunApprovedWhere = buildPayrollPreviewBaseWhere({
+		payrollPeriodId,
+		organizationId,
+		payFrequency: runPayFrequency,
+		departmentId: options?.departmentId ?? null,
+		sectionId: options?.sectionId ?? null,
+		statuses: [PAYROLL_READY_TIMESHEET_STATUS],
+	});
+	const scopedRunReadyWhere = buildPayrollPreviewIncludedWhere({
+		baseWhere: scopedRunApprovedWhere,
+		query: "",
+	});
+	const scopedRunListWhere = buildPayrollPreviewBaseWhere({
+		payrollPeriodId,
+		organizationId,
+		payFrequency: runPayFrequency,
+		departmentId: options?.departmentId ?? null,
+		sectionId: options?.sectionId ?? null,
+		statuses: [...PAYROLL_PREVIEW_TIMESHEET_STATUSES],
+	});
 	const [
 		employeePayrollTotalCount,
 		timesheetsTotalCount,
@@ -3248,31 +3406,13 @@ export async function generatePayrollFromTimesheets(
 			},
 		}),
 		prisma.timesheet.count({
-			where: {
-				organizationId,
-				payrollPeriodId,
-				isDeleted: false,
-			},
+			where: scopedRunListWhere,
 		}),
 		prisma.timesheet.count({
-			where: {
-				organizationId,
-				payrollPeriodId,
-				isDeleted: false,
-				status: "APPROVED",
-			},
+			where: scopedRunApprovedWhere,
 		}),
 		prisma.timesheet.count({
-			where: {
-				organizationId,
-				payrollPeriodId,
-				isDeleted: false,
-				status: "APPROVED",
-				employee: {
-					basicSalary: { gt: 0 },
-					NOT: [{ embeddedSchedule: { equals: Prisma.DbNull } }],
-				},
-			},
+			where: scopedRunReadyWhere,
 		}),
 		prisma.timesheetline.count({
 			where: {
@@ -3280,6 +3420,7 @@ export async function generatePayrollFromTimesheets(
 				payrollPeriodId,
 				isDeleted: false,
 				isEffective: true,
+				timesheet: scopedRunApprovedWhere,
 			},
 		}),
 	]);
@@ -4540,7 +4681,6 @@ export async function buildPayrollSourceAmountsByEmployeeId(
 				status: { in: ["ACTIVE", "APPROVED"] },
 				...periodSourceWhere,
 				benefitType: {
-					payrollDirection: { in: ["COMPENSATION", "DEDUCTION"] },
 					isDeleted: false,
 				},
 			},
@@ -5136,12 +5276,13 @@ function calculatePayrollPreviewDataset(params: {
 			const minuteRate = attendanceRate.minuteRate;
 			workingHoursPerDay = attendanceRate.workingHoursPerDay;
 
-			let presentFallbackDaysPreview = 0;
-			for (const day of validatedDays) {
-				if (day.status === "PRESENT" || day.status === "INCOMPLETE") {
-					presentFallbackDaysPreview += 1;
-				}
+		let presentFallbackDaysPreview = 0;
+		for (const day of validatedDays) {
+			// Same no-pay rule as generate: missing-punch days are not paid days.
+			if (day.status === "PRESENT" && !isMissingPunchDay(day)) {
+				presentFallbackDaysPreview += 1;
 			}
+		}
 			const paidRegularDaysPreview = bandaiApprovedBucketPay
 				? Number(bandaiApprovedBucketPay.hours?.regularDays || 0)
 				: null;
@@ -5189,6 +5330,9 @@ function calculatePayrollPreviewDataset(params: {
 
 			for (const validatedDay of validatedDays) {
 				if (validatedDay.status === "ABSENT" || validatedDay.status === "LEAVE") continue;
+				// Strict no-pay rule (operator 2026-09-08): a missing punch pair
+				// on a scheduled workday accrues no OT/ND/holiday premium.
+				if (isMissingPunchWorkDay(validatedDay)) continue;
 
 				const dayMetadata = validatedDay.holidayInfo
 					? {
@@ -5235,7 +5379,8 @@ function calculatePayrollPreviewDataset(params: {
 				if (
 					dayType !== "ordinaryDay" &&
 					workMultiplier !== null &&
-					validatedDay.status === "PRESENT"
+					validatedDay.status === "PRESENT" &&
+					!isMissingPunchWorkDay(validatedDay)
 				) {
 					const dayDate = new Date(validatedDay.date);
 					const dayOfWeek = dayDate.getDay();
@@ -5366,6 +5511,26 @@ function calculatePayrollPreviewDataset(params: {
 				0,
 				roundToCentavo(grossPayWithSources - totalDeductions + payrollSourceAmounts.netAdjustments),
 			);
+			const {
+				hasAttendance: previewHasAttendance,
+				zeroPayReason: previewZeroPayReason,
+				zeroPayLabel: previewZeroPayLabel,
+			} = resolveZeroPayReason(reportingBreakdown, validatedDays);
+			const previewBasicPay = previewHasAttendance ? basicPay : 0;
+			const previewSourceAmounts = previewHasAttendance
+				? payrollSourceAmounts
+				: emptyPayrollSourceAmounts();
+			const previewGrossPay = previewHasAttendance ? grossPayWithSources : 0;
+			const previewTaxableIncome = previewHasAttendance ? taxableIncome : 0;
+			const previewTotalDeductions = previewHasAttendance ? totalDeductions : 0;
+			const previewNetPay = previewHasAttendance ? netPay : 0;
+			const previewLoanDeductions = previewHasAttendance
+				? zeroSalaryGuardrail.guardedLoanDeductions
+				: 0;
+			const previewOtherDeductions = previewHasAttendance
+				? zeroSalaryGuardrail.guardedDeductionBenefits
+				: 0;
+			const previewAbsentDeduction = previewHasAttendance ? absentDeduction : 0;
 			const payrollRegister = buildBandaiPayrollRegister({
 				employee,
 				payrollPeriodData: params.payrollPeriodData,
@@ -5377,27 +5542,27 @@ function calculatePayrollPreviewDataset(params: {
 				totalWorkDays,
 				paidRegularDays: registerBasicPreview.paidRegularDays,
 				registerDailyRate: registerBasicPreview.registerDailyRate,
-				basicPay,
-				absentDeduction,
+				basicPay: previewBasicPay,
+				absentDeduction: previewAbsentDeduction,
 				lateDeduction,
 				earlyOutDeduction,
 				shortfallDeduction,
 				overtimePay,
 				nightDiffPay,
 				holidayPay,
-				grossPayWithSources,
+				grossPayWithSources: previewGrossPay,
 				withholdingTax,
 				periodContributions,
-				payrollSourceAmounts,
+				payrollSourceAmounts: previewSourceAmounts,
 				payrollSourceDetails: payrollSource.details,
-				totalDeductions,
-				netPay,
+				totalDeductions: previewTotalDeductions,
+				netPay: previewNetPay,
 				bandaiApprovedBucketPay,
 			});
 
-			estimatedGrossPay += grossPayWithSources;
-			estimatedTotalDeductions += totalDeductions;
-			estimatedNetPay += netPay;
+			estimatedGrossPay += previewGrossPay;
+			estimatedTotalDeductions += previewTotalDeductions;
+			estimatedNetPay += previewNetPay;
 			includedEmployeesCount += 1;
 
 			if (!params.includeRows) continue;
@@ -5418,20 +5583,22 @@ function calculatePayrollPreviewDataset(params: {
 				isPayrollReady: readiness.isPayrollReady,
 				readinessKey: readiness.readinessKey,
 				readinessLabel: readiness.readinessLabel,
-				basicPay,
+				basicPay: previewBasicPay,
 				overtimePay,
 				nightDiffPay,
 				holidayPay,
-				allowances: payrollSourceAmounts.totalCompensationBenefits,
-				loanDeductions: zeroSalaryGuardrail.guardedLoanDeductions,
-				otherDeductions: zeroSalaryGuardrail.guardedDeductionBenefits,
+				allowances: previewSourceAmounts.totalCompensationBenefits,
+				loanDeductions: previewLoanDeductions,
+				otherDeductions: previewOtherDeductions,
 				totalReceivable: roundToCentavo(
-					netPay + payrollSourceAmounts.receivableOnlyBenefits,
+					previewNetPay + previewSourceAmounts.receivableOnlyBenefits,
 				),
-				grossPay: grossPayWithSources,
-				taxableIncome,
-				totalDeductions,
-				netPay,
+				grossPay: previewGrossPay,
+				taxableIncome: previewTaxableIncome,
+				totalDeductions: previewTotalDeductions,
+				netPay: previewNetPay,
+				zeroPayReason: previewZeroPayReason,
+				zeroPayLabel: previewZeroPayLabel,
 				payrollRegister: payrollRegister.fields,
 				payrollRegisterColumns: payrollRegister.columns,
 				deductions: {
@@ -5439,18 +5606,18 @@ function calculatePayrollPreviewDataset(params: {
 					philHealthContribution: periodContributions.philHealth,
 					pagibigContribution: periodContributions.pagIbig,
 					taxAmount: roundToCentavo(withholdingTax),
-					absentDeduction,
+					absentDeduction: previewAbsentDeduction,
 					lateDeduction,
 					earlyOutDeduction,
-					loanDeductions: zeroSalaryGuardrail.guardedLoanDeductions,
-					otherDeductions: zeroSalaryGuardrail.guardedDeductionBenefits,
+					loanDeductions: previewLoanDeductions,
+					otherDeductions: previewOtherDeductions,
 				},
 				metadata: {
 					estimatedMonthlyRate: roundToCentavo(estimatedMonthlyRate),
 					periodNumber: params.periodNumber,
 					actualMonthlyGross: roundToCentavo(actualMonthlyGross),
 					previousPeriodsGross: roundToCentavo(previousPeriodsGross),
-					payrollSourceAmounts,
+					payrollSourceAmounts: previewSourceAmounts,
 					payrollSourceDetails: payrollSource.details,
 					payrollRegisterColumns: payrollRegister.columns,
 					contributionSchedule: {
@@ -5469,6 +5636,8 @@ function calculatePayrollPreviewDataset(params: {
 					overtimeRate: roundToCentavo(hourlyRate * baseOtMultiplier),
 					nightDiffRate: roundToCentavo(hourlyRate * baseNightDiffPremiumMultiplier),
 					zeroSalaryGuardrailApplied: zeroSalaryGuardrail.applied,
+					zeroPayReason: previewZeroPayReason,
+				zeroPayLabel: previewZeroPayLabel,
 					timesheetStatus,
 					isPayrollReady: readiness.isPayrollReady,
 					readinessKey: readiness.readinessKey,

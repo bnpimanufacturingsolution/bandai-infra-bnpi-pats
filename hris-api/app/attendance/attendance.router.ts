@@ -16,6 +16,7 @@ interface IController {
 	importFromUzaroXLSX(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getTimekeepingSummary(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getImportProgress(req: Request, res: Response, next: NextFunction): Promise<void>;
+	notifyMissingPunch(req: Request, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IController): Router => {
@@ -717,6 +718,36 @@ export const router = (route: Router, controller: IController): Router => {
 	 *         $ref: '#/components/responses/InternalServerError'
 	 */
 	routes.get("/import/progress/:jobId", controller.getImportProgress);
+
+	/**
+	 * @openapi
+	 * /api/attendance/missing-punch/notify:
+	 *   post:
+	 *     summary: Preview or send missing-punch reminders
+	 *     description: >
+	 *       Finds one-sided punches (clock-in without clock-out or vice versa)
+	 *       on scheduled workdays whose shift already ended. Dry run by default
+	 *       (execute=false); pass execute=true to send each employee a reminder
+	 *       to file an attendance correction. Sends are deduped per day.
+	 *     tags: [Attendance]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     responses:
+	 *       200:
+	 *         description: Missing-punch sweep result
+	 *       401:
+	 *         $ref: '#/components/responses/Unauthorized'
+	 *       500:
+	 *         $ref: '#/components/responses/InternalServerError'
+	 */
+	routes.post(
+		"/missing-punch/notify",
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "attendance:missing-punch-notify",
+		}),
+		controller.notifyMissingPunch,
+	);
 
 
 	route.use(path, routes);

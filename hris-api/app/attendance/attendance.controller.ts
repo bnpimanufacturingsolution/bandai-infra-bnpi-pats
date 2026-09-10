@@ -53,6 +53,10 @@ import { resolveEffectiveShift } from "../../helper/employee-schedule.helper";
 import { refreshTimesheetForAttendanceDate } from "../../helper/timesheet.helper";
 import { applyAttendanceToObligation } from "../../helper/attendance-obligation.helper";
 import { emitAttendanceRealtimeEvent } from "../../helper/attendance-realtime.helper";
+import {
+	publishMissingPunchReminderNotification,
+	sweepMissingPunchNotifications,
+} from "../../helper/missing-punch-reminder.helper";
 
 const logger = getLogger();
 const attendanceLogger = logger.child({ module: "attendance" });
@@ -616,12 +620,22 @@ export const controller = (prisma: PrismaClient) => {
 				employeeId,
 				attendanceId: attendance.id,
 			});
-			emitAttendanceRealtimeEvent((req as any).io, {
-				attendance,
-				obligation,
-				action: "clock_in_created",
-				source: "ATTENDANCE_API",
-			});
+		emitAttendanceRealtimeEvent((req as any).io, {
+			attendance,
+			obligation,
+			action: "clock_in_created",
+			source: "ATTENDANCE_API",
+		});
+		// Missing-punch nudge: fire-and-forget. Only notifies when the saved
+		// day is one-sided AND its shift already ended (deduped by eventKey),
+		// so mid-shift clock-ins never spam.
+		void publishMissingPunchReminderNotification(
+			prisma,
+			(req as any).io,
+			attendance.id,
+		).catch((notifyError) =>
+			attendanceLogger.warn(`Missing-punch notify failed for ${attendance.id}: ${notifyError}`),
+		);
 
 			// Log schedule information with attendance
 			if (scheduleInfo) {
@@ -1144,12 +1158,20 @@ export const controller = (prisma: PrismaClient) => {
 				employeeId: updatedAttendance.employeeId,
 				attendanceId: updatedAttendance.id,
 			});
-			emitAttendanceRealtimeEvent((req as any).io, {
-				attendance: updatedAttendance,
-				obligation,
-				action: "attendance_updated",
-				source: "ATTENDANCE_API",
-			});
+		emitAttendanceRealtimeEvent((req as any).io, {
+			attendance: updatedAttendance,
+			obligation,
+			action: "attendance_updated",
+			source: "ATTENDANCE_API",
+		});
+		// Missing-punch nudge (same shift-ended + dedupe gate as clock-in).
+		void publishMissingPunchReminderNotification(
+			prisma,
+			(req as any).io,
+			updatedAttendance.id,
+		).catch((notifyError) =>
+			attendanceLogger.warn(`Missing-punch notify failed for ${updatedAttendance.id}: ${notifyError}`),
+		);
 
 			try {
 				await invalidateCache.byPattern(`cache:attendance:byId:${id}:*`);
@@ -2074,6 +2096,55 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const notifyMissingPunch = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = (req as any).organizationId;
+			if (!organizationId) {
+				const errorResponse = buildErrorResponse("Organization ID is required", 401);
+				res.status(401).json(errorResponse);
+				return;
+			}
+			const body = (req.body || {}) as Record<string, any>;
+			const query = (req.query || {}) as Record<string, any>;
+			const rawExecute = body.execute ?? query.execute ?? body.dryRun === false;
+			const execute = rawExecute === true || rawExecute === "true" || rawExecute === "1";
+			const result = await sweepMissingPunchNotifications({
+				prisma,
+				io: (req as any).io,
+				organizationId,
+				from: body.from ?? query.from ?? null,
+				to: body.to ?? query.to ?? null,
+				employeeId: body.employeeId ?? query.employeeId ?? null,
+				limit: Number(body.limit ?? query.limit ?? 200),
+				execute,
+			});
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.ATTENDANCE.ACTIONS.GET_ALL_ATTENDANCE,
+				description: `Missing-punch notify sweep (execute=${execute}): ${result.candidates.length} candidate(s), ${result.notified} notified`,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.ATTENDANCE.PAGES.ATTENDANCE_LIST,
+				},
+			});
+			const successResponse = buildSuccessResponse(
+				execute
+					? "Missing-punch notifications sent"
+					: "Missing-punch preview (dry run — nothing sent)",
+				result,
+				200,
+			);
+			res.status(200).json(successResponse);
+		} catch (error) {
+			attendanceLogger.error(`Missing-punch notify sweep failed: ${error}`);
+			const errorResponse = buildErrorResponse(
+				config.ERROR.COMMON.INTERNAL_SERVER_ERROR,
+				500,
+			);
+			res.status(500).json(errorResponse);
+		}
+	};
+
 	return {
 		create,
 		createCorrection,
@@ -2086,6 +2157,7 @@ export const controller = (prisma: PrismaClient) => {
 		importFromUzaroXLSX,
 		getTimekeepingSummary,
 		getImportProgress,
+		notifyMissingPunch,
 	};
 };
 
