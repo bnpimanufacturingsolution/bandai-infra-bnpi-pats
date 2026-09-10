@@ -362,38 +362,22 @@ export function Sidebar({ onClose }: SidebarProps) {
 	// Required HR tail order: Reports, with Audit Logs last for HR users.
 	const trailingItems: NavItem[] = isHR ? [reportsItem!, ...hrUserTailItems] : [];
 
-	// My Team group (operator 2026-09-09): flat at the top of the Working
-	// Space section. "My Team" is a direct main-level link to the Overview
-	// tab, and its entries render as main-level items beneath it - no submenu
-	// nesting, no collapsed menu. `exactPath` keeps My Team from
-	// double-highlighting alongside whichever tab link is active. Admins never
-	// see this surface (they render neither the General section nor this group).
-	const myTeamEntry: NavItem | null =
-		isEmployee || isManager || isHR
-			? {
-					id: "general-my-team",
-					label: "My Team",
-					path: "/employee/team",
-					icon: <Users className="w-5 h-5" />,
-					exactPath: true,
-					neutral: true,
-				}
-			: null;
-
+	// My Team group — sub parent (collapsible) at top of Working Space
+	// (operator 2026-09-09 flat → 2026-09-10 back to parent per request).
+	// Renders as a single expandable parent with submenu; much cleaner
+	// hierarchy than flat always-visible entries. Admins never see it.
 	const myTeamChildren: NavItem[] = [
 		{
 			id: "general-my-team-overview",
 			label: "Overview",
 			path: "/employee/team?tab=overview",
 			icon: <Users className="w-4 h-4" />,
-			neutral: true,
 		},
 		{
 			id: "general-my-team-organization",
 			label: "Organization Chart",
 			path: "/employee/team?tab=organization",
 			icon: <ChevronRight className="w-4 h-4" />,
-			neutral: true,
 		},
 		...(isManager
 			? [
@@ -402,14 +386,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 						label: "Team Timesheets",
 						path: "/employee/team?tab=timesheets",
 						icon: <Clock3 className="w-4 h-4" />,
-						neutral: true,
 					},
 					{
 						id: "general-my-team-assign-overtime",
 						label: "Assign Overtime",
 						path: "/employee/team?tab=overtime",
 						icon: <Clock className="w-4 h-4" />,
-						neutral: true,
 					},
 				]
 			: []),
@@ -420,15 +402,24 @@ export function Sidebar({ onClose }: SidebarProps) {
 						label: "Schedule Calendar",
 						path: "/employee/team/schedule-calendar",
 						icon: <Calendar className="w-4 h-4" />,
-						neutral: true,
 					},
 				]
 			: []),
 	];
 
+	const myTeamParent: NavItem | null =
+		isEmployee || isManager || isHR
+			? {
+					id: "general-my-team",
+					label: "My Team",
+					path: "/employee/team",
+					icon: <Users className="w-5 h-5" />,
+					submenu: myTeamChildren,
+				}
+			: null;
+
 	const workingSpaceItems: NavItem[] = [
 		...baseWorkingSpaceItems,
-		...myTeamChildren,
 		...hrWorkingSpaceItems,
 		...trailingItems,
 	];
@@ -822,7 +813,7 @@ ${
 							Working Space
 						</h3>
 					<div className="space-y-0.5">
-						{myTeamEntry && <NavItemComponent item={myTeamEntry} />}
+						{myTeamParent && <NavItemComponent item={myTeamParent} />}
 						{workingSpaceItems.map((item) => (
 							<NavItemComponent key={item.id} item={item} />
 						))}
