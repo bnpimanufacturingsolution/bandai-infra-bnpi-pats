@@ -442,10 +442,56 @@ export function TimesheetViewModal({
 				if (getTimesheetDayBusinessKey(day) !== targetDayKey) return day;
 				return normalizedEditedDay ? mergeNormalizedDay(day, normalizedEditedDay) : day;
 			});
+			// HR direct edit on APPROVED: single-save, persist immediately to BE (no outer Save changes)
+			if (isHrApprovedEdit && timesheet?.id && targetDayKey) {
+				setIsHrSaving(true);
+				try {
+					const saved = await updateTimesheetMutation.mutateAsync({
+						id: timesheet.id,
+						payload: { breakdown: nextBreakdown, editedDayKeys: [targetDayKey] },
+					});
+					const savedBreakdown = (saved?.breakdown as TimesheetBreakdownDay[] | undefined) ?? nextBreakdown;
+					setUpdatedBreakdown(savedBreakdown as TimesheetBreakdownDay[]);
+					hrSavedBreakdownRef.current = savedBreakdown as TimesheetBreakdownDay[];
+					setExplicitEditedDayKeys(new Set());
+					toast.success("Timesheet day saved. Timesheet stays APPROVED.");
+				} catch (saveError: any) {
+					setUpdatedBreakdown(nextBreakdown);
+					setExplicitEditedDayKeys((prev) => new Set(prev).add(targetDayKey));
+					toast.error(saveError?.message || "Failed to save timesheet day.");
+				} finally {
+					setIsHrSaving(false);
+				}
+				handleDayEditorClose();
+				return;
+			}
 			setUpdatedBreakdown(nextBreakdown);
 			handleDayEditorClose();
 			toast.success("Timesheet day normalized from server preview");
 		} catch (error: any) {
+			// HR direct path: even if preview fails, try to save the local merged day directly
+			if (isHrApprovedEdit && timesheet?.id && targetDayKey) {
+				setIsHrSaving(true);
+				try {
+					const saved = await updateTimesheetMutation.mutateAsync({
+						id: timesheet.id,
+						payload: { breakdown: mergedBreakdown, editedDayKeys: [targetDayKey] },
+					});
+					const savedBreakdown = (saved?.breakdown as TimesheetBreakdownDay[] | undefined) ?? mergedBreakdown;
+					setUpdatedBreakdown(savedBreakdown as TimesheetBreakdownDay[]);
+					hrSavedBreakdownRef.current = savedBreakdown as TimesheetBreakdownDay[];
+					setExplicitEditedDayKeys(new Set());
+					toast.success("Timesheet day saved. Timesheet stays APPROVED.");
+				} catch (saveError: any) {
+					setUpdatedBreakdown(mergedBreakdown);
+					setExplicitEditedDayKeys((prev) => new Set(prev).add(targetDayKey));
+					toast.error(saveError?.message || "Failed to save timesheet day.");
+				} finally {
+					setIsHrSaving(false);
+				}
+				handleDayEditorClose();
+				return;
+			}
 			setUpdatedBreakdown(mergedBreakdown);
 			handleDayEditorClose();
 			toast.error(error?.message || "Failed to normalize preview, using local values.");
