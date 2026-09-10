@@ -1,3 +1,11 @@
+## Latest Task Addendum - 2026-09-10 Payroll Preview renamed to Payroll Management (operator-ordered, copy-only)
+
+- **What:** user-facing **Preview Payroll** / **Payroll Preview** on `/hr/run-payroll` is now **Payroll Management** (Quick Actions button, results H1, modal titles `Start Payroll Management` / `running` / `failed`, `Managed rows`, `Run Management`). Rationale: the surface previews dry-run amounts but also manages manual add/deduct via the 2026-09-08 quick-adjust (per-row `Adjust` + auto re-run, OAD/NEGADJ pinned to OPEN period).
+- **Unchanged by design:** URL `action=preview-payroll`, `preview-payroll-*` testIDs, helper/function names, payroll engine, Start Payroll semantics, dry-run explanatory copy + `Preview only` badge. Distinct surfaces untouched (`special-payroll-modal` Preview failed, device-events Retry preview).
+- **Files:** hris-app `run-payroll-template.tsx` (labels/comments), `payroll-preview-modal.ts` + `.test.ts`, smoke `hr-payroll-management-audit.spec.ts`, `CHANGELOG.md` (Unreleased), root terminology `Payroll Preview` row renamed with former-name note. HR-only surface (no emp-app counterpart).
+- **Proof:** vitest `payroll-preview-modal.test.ts` 7/7; filtered `tsc` shows only the known pre-existing `run-payroll-template(2231,5)` error. Browser proof NEEDS_CONFIRMATION.
+- **Do not Reopen** completed periods for this rename (labels only, no money effect).
+
 ## Latest Task Addendum - 2026-09-09 Modal count fix (2206) + run converged COMPLETED 851/851
 
 - **Operator report:** progress modal showed "Processed 693 of 2206 payable" for an 851-person run; headcount flips 800+ vs 2000+.

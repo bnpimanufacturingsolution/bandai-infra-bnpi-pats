@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Run Payroll: the Quick Actions entry, results page title, and dialog titles formerly labeled **Preview Payroll** / **Payroll Preview** are now **Payroll Management** (it previews dry-run amounts and manages manual additions/deductions via quick-adjust). URL action (`preview-payroll`), payroll engine, and Start Payroll behavior unchanged.
+
 - HR **Benefits Management** bulk upload enrollments: toolbar **Bulk upload** opens a 3-step modal (Upload → Map columns → Verify) for Excel/CSV; maps sample headers (`COMCODE`, `Amount`, `EmployeeID`, `EmployeeName`, `StartPayDate`) to canonical import fields; posts mapped CSV to `POST /api/employeeBenefit/import`. Components: `BenefitEnrollmentImportModal`, `app/lib/utils/benefit-enrollment-import.ts`.
 - Benefits enrollment **Attendance rules**: eligibility mode (`ENROLLED_ALWAYS` / `ATTENDANCE_QUALIFIED`) + disqualify flags beside Compute from attendance. Benefit type admin can set eligibility policy defaults; PFA create prefills classic perfect attendance. Contract: `docs/BENEFIT_SCHEDULE_MODES.md`.
 - Payroll benefits on HR detail + HTML payslip: group applied benefits under **Benefits applied → Non-taxable / Taxable** using source `isTaxable` (API freeze/enrich). Helper: `app/lib/utils/payroll-benefit-display.ts`.

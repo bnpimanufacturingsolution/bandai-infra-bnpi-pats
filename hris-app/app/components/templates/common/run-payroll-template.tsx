@@ -252,7 +252,7 @@ export function RunPayrollTemplate() {
 	const previewLimitParam = Number(searchParams.get("limit"));
 	const previewQueryParam = searchParams.get("query")?.trim() || "";
 	const isPreviewPayrollAction = action === "preview-payroll";
-	/** Full dry-run calc only after operator confirms Run Preview (or opens employee detail). */
+	/** Full dry-run calc only after operator confirms Run Management (or opens employee detail). */
 	const shouldCalculatePreviewRows = shouldCalculatePreviewRowsForAction({
 		action,
 		previewStep,
@@ -1833,7 +1833,7 @@ export function RunPayrollTemplate() {
 		}
 	}, [expandedAdjustmentId, filteredPayrollAdjustmentRows]);
 
-	// After Run Preview completes (data ready), advance progress → results.
+	// After Run Management completes (data ready), advance progress → results.
 	useEffect(() => {
 		if (!isPreviewPayrollAction || previewStep !== "progress") return;
 		if (isTimesheetPayrollPreviewLoading || isTimesheetPayrollPreviewFetching) return;
@@ -2801,7 +2801,7 @@ export function RunPayrollTemplate() {
 						{isPreviewResultsPage ? (
 							<>
 								<h1 className="text-2xl font-bold text-gray-900">
-									Preview Payroll
+									Payroll Management
 								</h1>
 								<p className="text-sm text-gray-500">
 									{previewResultsPeriodRange || "Selected period"}
@@ -3116,8 +3116,8 @@ export function RunPayrollTemplate() {
 					</div>
 				</div>
 			) : isPreviewResultsPage ? (
-				/* Preview results live on the page after modal progress completes.
-				   Page h1 carries Preview Payroll + period date range; carousel is hidden. */
+				/* Payroll Management results live on the page after modal progress completes.
+				   Page h1 carries Payroll Management + period date range; carousel is hidden. */
 				<div
 					className="space-y-4"
 					data-testid="preview-payroll-results-page">
@@ -3135,7 +3135,7 @@ export function RunPayrollTemplate() {
 
 						<div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
 							<div className="rounded-lg border border-neutral-200 bg-neutral-50/80 px-3 py-2.5">
-								<p className="text-[11px] text-neutral-400">Preview rows</p>
+								<p className="text-[11px] text-neutral-400">Managed rows</p>
 								<p className="mt-0.5 text-sm font-semibold tabular-nums text-neutral-900">
 									{formatCount(
 										previewPagination?.totalItems ??
@@ -3209,7 +3209,7 @@ export function RunPayrollTemplate() {
 							columns={previewColumns}
 							isLoading={previewTableLoading}
 							loadingRows={8}
-							title="Payroll preview employees"
+							title="Payroll management employees"
 							description="Computed dry-run amounts for this period scope. Not-submitted rows are labeled estimates."
 							showFilters={false}
 							showExport={false}
@@ -4406,7 +4406,7 @@ export function RunPayrollTemplate() {
 									onClick={handlePreviewPayroll}
 									className="w-full justify-start text-gray-700 hover:text-orange-600 hover:bg-orange-50">
 									<Eye className="w-4 h-4 mr-3" />
-									Preview Payroll
+									Payroll Management
 								</Button>
 								<Button
 									variant="ghost"
@@ -4430,7 +4430,7 @@ export function RunPayrollTemplate() {
 				</div>
 			)}
 
-			{/* Preview Payroll modal: confirm + progress only. Results render on the page. */}
+			{/* Payroll Management modal: confirm + progress only. Results render on the page. */}
 			<Modal
 				open={isPreviewPayrollModalOpen}
 				onOpenChange={(open) => {
@@ -4457,15 +4457,16 @@ export function RunPayrollTemplate() {
 							<Badge className="border border-sky-200 bg-sky-50 text-[10px] font-semibold uppercase tracking-wide text-sky-800">
 								Preview only
 							</Badge>
+							{previewStep === "confirm" && (
+								<HelpTip
+									tip="About this management run"
+									lines={[
+										"Dry-run using timesheet lines and current adjustments (including not submitted, clearly labeled). No payroll records will be created.",
+										"Start Payroll auto-generates any missing timesheets from current attendance and auto-approves them.",
+									]}
+								/>
+							)}
 						</div>
-						{previewStep === "confirm" && (
-							<p className="mt-1 text-xs text-neutral-500">
-								Dry-run using timesheet lines and current adjustments (including not
-								submitted, clearly labeled). No payroll records will be created.
-								Start Payroll auto-generates any missing timesheets from current
-								attendance and auto-approves them.
-							</p>
-						)}
 					</div>
 
 					{previewStep === "confirm" ? (
@@ -4496,7 +4497,7 @@ export function RunPayrollTemplate() {
 											</p>
 										</div>
 										<div className="rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
-											<p className="text-[11px] text-neutral-400">Preview rows</p>
+											<p className="text-[11px] text-neutral-400">Managed rows</p>
 											<p className="mt-0.5 text-sm font-medium text-emerald-700">
 												{formatCount(previewComputableEmployeesCount)} employees
 											</p>
@@ -4602,7 +4603,7 @@ export function RunPayrollTemplate() {
 									data-testid="preview-payroll-run"
 									className="h-9 gap-2 rounded-lg bg-orange-500 px-4 text-sm font-medium text-white shadow-none hover:bg-orange-600 disabled:opacity-60">
 									<Eye className="h-3.5 w-3.5" />
-									Run Preview
+									Run Management
 								</Button>
 							</div>
 						</div>
@@ -4616,7 +4617,7 @@ export function RunPayrollTemplate() {
 										</div>
 										<div className="min-w-0">
 											<p className="text-sm font-medium text-red-900">
-												Could not compute payroll preview
+												Could not compute payroll management
 											</p>
 											<p className="mt-1 text-xs leading-relaxed text-red-800/80">
 												{timesheetPayrollPreviewError instanceof Error
@@ -4634,7 +4635,7 @@ export function RunPayrollTemplate() {
 											onClick={handleConfirmRunPreview}
 											data-testid="preview-payroll-retry"
 											className="bg-orange-500 text-white hover:bg-orange-600">
-											Retry preview
+											Retry management
 										</Button>
 									</div>
 								</div>
@@ -4642,7 +4643,7 @@ export function RunPayrollTemplate() {
 								<div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-xl border border-sky-100 bg-sky-50/40">
 									<Loader2 className="h-7 w-7 animate-spin text-sky-700" />
 									<p className="text-sm font-medium text-neutral-800">
-										Computing payroll preview…
+										Computing payroll management…
 									</p>
 									<p className="max-w-sm text-center text-xs text-neutral-500">
 										Estimating gross, deductions, and net from timesheet lines
