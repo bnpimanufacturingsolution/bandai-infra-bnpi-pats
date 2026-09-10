@@ -119,6 +119,48 @@ export interface BulkCreateEmployeeBenefitResult {
 	failed: { employeeId: string; message: string }[];
 }
 
+/**
+ * Payroll register quick adjustment: one named one-cutoff addition
+ * (OAD carrier) or deduction (NEGADJ carrier) for one or many employees.
+ */
+export type QuickAdjustDirection = "ADDITION" | "DEDUCTION";
+
+export interface QuickAdjustEmployeeBenefitRequest {
+	employeeIds: string[];
+	direction: QuickAdjustDirection;
+	name: string;
+	amount: number;
+	payrollPeriodId: string;
+}
+
+export interface QuickAdjustEmployeeBenefitResult {
+	benefitCode: string;
+	payrollPeriodId: string;
+	created: EmployeeBenefit[];
+	failed: { employeeId: string; message: string }[];
+}
+
+export function validateQuickAdjustInput(input: {
+	employeeIds: unknown;
+	name: unknown;
+	amount: unknown;
+	payrollPeriodId: unknown;
+}): string | null {
+	if (!Array.isArray(input.employeeIds) || input.employeeIds.filter(Boolean).length === 0) {
+		return "Select at least one employee";
+	}
+	if (typeof input.name !== "string" || input.name.trim().length === 0) {
+		return "Enter an adjustment name (e.g. Good performance)";
+	}
+	if (typeof input.amount !== "number" || !Number.isFinite(input.amount) || input.amount <= 0) {
+		return "Enter an amount greater than zero";
+	}
+	if (typeof input.payrollPeriodId !== "string" || input.payrollPeriodId.trim().length === 0) {
+		return "Choose an open payroll period";
+	}
+	return null;
+}
+
 export interface ImportEmployeeBenefitsResult {
 	success: number;
 	failed: number;
@@ -373,6 +415,48 @@ class EmployeeBenefitService extends APIService {
 				error.data?.errors?.[0]?.message ||
 					error.message ||
 					"Error bulk creating employee benefits",
+			);
+		}
+	}
+
+	/**
+	 * Payroll register quick adjustment: named one-cutoff addition/deduction.
+	 */
+	async quickAdjustEmployeeBenefits(
+		data: QuickAdjustEmployeeBenefitRequest,
+	): Promise<QuickAdjustEmployeeBenefitResult> {
+		try {
+			const response = await hrisApiClient.post<any>("/api/employeeBenefit/quick-adjust", data);
+
+			if (!response.data) {
+				throw new Error("Failed to create quick adjustment");
+			}
+
+			let responseData = response.data;
+			if (responseData && typeof responseData === "object" && "data" in responseData) {
+				responseData = responseData.data;
+			}
+
+			return {
+				benefitCode: String(responseData?.benefitCode || ""),
+				payrollPeriodId: String(responseData?.payrollPeriodId || ""),
+				created: Array.isArray(responseData?.created)
+					? (responseData.created as EmployeeBenefit[])
+					: [],
+				failed: Array.isArray(responseData?.failed)
+					? (responseData.failed as { employeeId: string; message: string }[])
+					: [],
+			};
+		} catch (error: any) {
+			console.error("Error creating quick adjustment:", error);
+			if (error.status === 400 && error.errors) {
+				throw error;
+			}
+			throw new Error(
+				error.data?.errors?.[0]?.message ||
+					error.data?.message ||
+					error.message ||
+					"Error creating quick adjustment",
 			);
 		}
 	}

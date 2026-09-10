@@ -47,6 +47,7 @@ const adminRoutes = [
 		}),
 		route("users", "routes/admin/configuration/users.tsx"),
 		route("users/:id/activity-logs", "routes/admin/configuration/users.$id.activity-logs.tsx"),
+		route("applications", "routes/admin/configuration/applications.tsx"),
 		route("shift-types", "routes/admin/configuration/shift-types.tsx"),
 		route("schedule-templates", "routes/admin/configuration/schedule-templates.tsx"),
 		route("employee-schedules", "routes/admin/configuration/employee-schedules.tsx"),
@@ -219,6 +220,7 @@ export default [
 	route("setup", "routes/setup.tsx"),
 	route("setup/bootstrap", "routes/setup.bootstrap.tsx"),
 	route("callback", "routes/callback.tsx"),
+	route("application-launch", "routes/application-launch.tsx"),
 	route("status", "routes/status.tsx"),
 	route("403", "routes/403.tsx"),
 	// Dev preview — branded LoadingScreen only (no auth / no redirect)
@@ -235,6 +237,7 @@ export default [
 	// Unified layout for employee, hr-manager, hr-user, and manager
 	layout("./layouts/unified-layout.tsx", [
 		route("dashboard", "routes/dashboard.tsx"),
+		route("application-launcher", "routes/application-launcher.tsx"),
 		route("settings", "routes/settings.tsx"),
 		route("calendar", "routes/calendar.tsx"),
 		route("celebrations/birthdays", "routes/celebrations/birthdays.tsx"),

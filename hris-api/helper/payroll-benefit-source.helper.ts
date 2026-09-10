@@ -61,6 +61,22 @@ export type PayrollBenefitSource = {
 
 const ACTIVE_STATUSES = new Set(["ACTIVE", "APPROVED"]);
 
+const BENEFIT_CODE_PAYROLL_ROLES: Record<string, "COMPENSATION" | "DEDUCTION"> = {
+	OAD: "COMPENSATION",
+	MTX: "COMPENSATION",
+	AON: "COMPENSATION",
+	ABS: "COMPENSATION",
+	DMA: "COMPENSATION",
+	HYS: "COMPENSATION",
+	OBA: "COMPENSATION",
+	OTM: "COMPENSATION",
+	TSA: "COMPENSATION",
+	NEGADJ: "DEDUCTION",
+	UFD: "DEDUCTION",
+	MHDMF2: "DEDUCTION",
+	UNIDED: "DEDUCTION",
+};
+
 const finitePositive = (value: unknown): number | null => {
 	const numeric = Number(value);
 	return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
@@ -86,7 +102,12 @@ export function resolvePayrollBenefitSource(
 	}
 
 	const direction = benefit.benefitType?.payrollDirection;
-	if (direction !== "COMPENSATION" && direction !== "DEDUCTION") return null;
+	const fallbackDirection =
+		!direction && benefit.benefitType?.code
+			? BENEFIT_CODE_PAYROLL_ROLES[benefit.benefitType.code]
+			: null;
+	const resolvedDirection = direction || fallbackDirection;
+	if (resolvedDirection !== "COMPENSATION" && resolvedDirection !== "DEDUCTION") return null;
 	if (benefit.benefitType?.isDeleted === true) return null;
 	if (benefit.payrollPeriodId && benefit.payrollPeriodId !== period.id) return null;
 
@@ -144,7 +165,7 @@ export function resolvePayrollBenefitSource(
 		code: benefit.benefitType?.code || null,
 		name: displayName,
 		benefitTypeName: benefitTypeName || null,
-		direction,
+		direction: resolvedDirection,
 		reconciliationAction: benefit.benefitType?.reconciliationAction || null,
 		isTaxable: benefit.benefitType?.isTaxable === true,
 		amount: Math.round((amount + Number.EPSILON) * 100) / 100,

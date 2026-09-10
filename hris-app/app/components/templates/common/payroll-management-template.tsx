@@ -15,7 +15,9 @@ import {
 	Download,
 	Eye,
 	FileText,
+	MinusCircle,
 	MoreVertical,
+	PlusCircle,
 	X,
 	Calendar,
 	Clock,
@@ -26,6 +28,7 @@ import {
 } from "lucide-react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import type { EmployeePayroll } from "~/types/employee-payroll";
+import { resolvePayrollRowStatus } from "~/lib/utils/payroll-row-status";
 import {
 	useEmployeePayrolls,
 	useEmployeePayroll,
@@ -46,6 +49,10 @@ import {
 	type ReportExportFormat,
 } from "~/lib/utils/report-export";
 import { useAuth } from "~/lib/hooks/use-auth";
+import {
+	QuickPayrollAdjustmentModal,
+	type QuickAdjustDirection,
+} from "~/components/templates/common/quick-payroll-adjustment-modal";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import {
@@ -66,6 +73,10 @@ import {
 	AccordionTrigger,
 } from "~/components/ui/accordion";
 import { themeColors } from "~/lib/config/theme";
+import {
+	countMissingPunchNoPayDays,
+	missingPunchNoPayDateKeys,
+} from "~/lib/utils/payroll-no-pay-days";
 
 interface PayrollManagementProps {
 	title?: string;
@@ -1010,6 +1021,14 @@ export function PayrollManagement({
 		payrollData?.timesheetSnapshot?.breakdown ||
 		payrollData?.timesheet?.breakdown ||
 		((payrollData as any)?.dailyBreakdown ?? []);
+	// Dates the engine marked unpaid under the company missing-punch no-pay
+	// rule (no usable time-in/out pair). Used for NO PAY chips in both tables.
+	const payrollNoPayDateKeys = missingPunchNoPayDateKeys(
+		(payrollData as any)?.dailyBreakdown,
+	);
+	const payrollNoPayDayCount = countMissingPunchNoPayDays(
+		(payrollData as any)?.dailyBreakdown,
+	);
 	const payrollPeriodScheduleWeeks =
 		((payrollData as any)?.metadata?.periodScheduleWeeks as any[]) || [];
 	const payrollGracePeriodMinutes =
@@ -1662,14 +1681,15 @@ export function PayrollManagement({
 		return "Work Day";
 	};
 
-	// Percentage widths leave room for sticky Actions (~132px) so table-fixed
-	// stays inside the content shell without horizontal scroll.
+	// Percentage widths total ~95%: the Actions column holds a single 32px
+	// icon button (actionColumnWidth="64px" below), so the data columns take
+	// the rest and no dead gap sits between Status and Actions.
 	const columns: Column<EmployeePayroll>[] = [
 		{
 			key: "employee",
 			label: "Employee",
-			width: "20%",
-			className: "max-w-0 overflow-hidden px-2 py-2",
+			width: "18%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
 			render: (_, item) => (
 				<EmployeeTableCell
 					profileId={item.employee?.id}
@@ -1683,8 +1703,8 @@ export function PayrollManagement({
 		{
 			key: "payrollPeriod.name",
 			label: "Period",
-			width: "14%",
-			className: "max-w-0 overflow-hidden px-2 py-2",
+			width: "13%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
 			render: (_, item) => (
 				<div className="min-w-0 leading-tight">
 					<div className="truncate text-xs font-medium text-gray-900">
@@ -1705,19 +1725,30 @@ export function PayrollManagement({
 		{
 			key: "employee.payFrequency",
 			label: "Freq.",
-			width: "9%",
-			className: "max-w-0 overflow-hidden px-2 py-2",
+			width: "7%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
 			render: (_, item) => {
-				const val = ((item.employee as any).payFrequency || "MONTHLY") as string;
-				const formatted = val
-					?.toLowerCase()
-					.replace(/_/g, " ")
-					.replace(/\b\w/g, (c) => c.toUpperCase());
+				const raw = String(
+					(item.employee as any).payFrequency || "MONTHLY",
+				);
+				const shortLabels: Record<string, string> = {
+					SEMI_MONTHLY: "Semi-Mo",
+					MONTHLY: "Monthly",
+					WEEKLY: "Weekly",
+					DAILY: "Daily",
+					HOURLY: "Hourly",
+				};
+				const full =
+					raw
+						?.toLowerCase()
+						.replace(/_/g, " ")
+						.replace(/\b\w/g, (c) => c.toUpperCase()) || raw;
 				return (
 					<Badge
 						variant="outline"
-						className="max-w-full truncate px-1.5 py-0 text-[10px] font-normal leading-4">
-						{formatted || val}
+						title={full}
+						className="max-w-full truncate px-1 py-0 text-[10px] font-normal leading-4">
+						{shortLabels[raw] || full}
 					</Badge>
 				);
 			},
@@ -1725,8 +1756,8 @@ export function PayrollManagement({
 		{
 			key: "basicPay",
 			label: "Basic",
-			width: "11%",
-			className: "max-w-0 overflow-hidden px-2 py-2",
+			width: "8%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
 			headerClassName: "text-right",
 			render: (_, item) => (
 				<span className="block truncate text-right font-mono text-xs tabular-nums">
@@ -1735,10 +1766,36 @@ export function PayrollManagement({
 			),
 		},
 		{
+			key: "absentDeduction",
+			label: "Absent",
+			width: "8%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
+			headerClassName: "text-right",
+			render: (_, item) => {
+				const amount = Number(item.absentDeduction || 0);
+				const daysAbsent = Number(item.timesheetSnapshot?.daysAbsent || 0);
+				return (
+					<div className="min-w-0 text-right leading-tight">
+						<span
+							className={`block truncate font-mono text-xs tabular-nums ${
+								amount > 0 ? "text-red-600" : "text-gray-400"
+							}`}>
+							-{formatCurrency(amount)}
+						</span>
+						{daysAbsent > 0 && (
+							<span className="block truncate text-[10px] text-gray-500">
+								{daysAbsent}d absent
+							</span>
+						)}
+					</div>
+				);
+			},
+		},
+		{
 			key: "grossPay",
 			label: "Gross",
-			width: "11%",
-			className: "max-w-0 overflow-hidden px-2 py-2",
+			width: "8%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
 			headerClassName: "text-right",
 			render: (value) => (
 				<span className="block truncate text-right font-mono text-xs tabular-nums">
@@ -1749,8 +1806,8 @@ export function PayrollManagement({
 		{
 			key: "totalDeductions",
 			label: "Deduct.",
-			width: "11%",
-			className: "max-w-0 overflow-hidden px-2 py-2",
+			width: "8%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
 			headerClassName: "text-right",
 			render: (value) => (
 				<span className="block truncate text-right font-mono text-xs tabular-nums text-red-600">
@@ -1761,14 +1818,40 @@ export function PayrollManagement({
 		{
 			key: "netPay",
 			label: "Net",
-			width: "12%",
-			className: "max-w-0 overflow-hidden px-2 py-2",
+			width: "11%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
 			headerClassName: "text-right",
 			render: (value) => (
 				<span className="block truncate text-right font-mono text-xs font-semibold tabular-nums text-green-700">
 					{formatCurrency(value)}
 				</span>
 			),
+		},
+		{
+			key: "status",
+			label: "Status",
+			width: "14%",
+			className: "max-w-0 overflow-hidden px-1.5 py-1.5",
+			render: (_, item) => {
+				const status = resolvePayrollRowStatus(item as any);
+				const badgeClass =
+					status.key === "paid"
+						? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+						: status.key === "unpaid"
+							? "bg-amber-50 text-amber-700 border border-amber-200"
+							: "bg-rose-50 text-rose-700 border border-rose-200";
+				return (
+					<div className="min-w-0 leading-tight">
+						<ValueHover lines={status.reason ? [status.reason] : []}>
+							<Badge
+								variant="outline"
+								className={`max-w-full truncate px-1.5 py-0 text-[10px] font-medium leading-4 ${badgeClass}`}>
+								{status.label}
+							</Badge>
+						</ValueHover>
+					</div>
+				);
+			},
 		},
 	];
 
@@ -1782,6 +1865,35 @@ export function PayrollManagement({
 	const handleOpenEmployeeProfile = (employeeId?: string | null) => {
 		if (!employeeId) return;
 		navigate(`/employee/${employeeId}`);
+	};
+
+	const [quickAdjustState, setQuickAdjustState] = useState<null | {
+		direction: QuickAdjustDirection;
+		employeeIds: string[];
+		employeeLabel?: string;
+		periodId?: string;
+	}>(null);
+
+	const getPayrollEmployeeLabel = (payroll: EmployeePayroll) => {
+		const info = (payroll as any)?.employee?.person?.personalInfo || {};
+		const name = [info.firstName, info.middleName, info.lastName]
+			.map((part) => String(part || "").trim())
+			.filter(Boolean)
+			.join(" ");
+		const code = (payroll as any)?.employee?.employeeId;
+		return [name, code].filter(Boolean).join(" · ") || "Employee";
+	};
+
+	const openQuickAdjust = (
+		direction: QuickAdjustDirection,
+		payroll?: EmployeePayroll | null,
+	) => {
+		setQuickAdjustState({
+			direction,
+			employeeIds: (payroll as any)?.employee?.id ? [String((payroll as any).employee.id)] : [],
+			employeeLabel: payroll ? getPayrollEmployeeLabel(payroll) : undefined,
+			periodId: (payroll as any)?.payrollPeriod?.id,
+		});
 	};
 
 	const renderActions = (item: EmployeePayroll) => (
@@ -1805,6 +1917,12 @@ export function PayrollManagement({
 					onClick={() => handleDownloadPayslipForRow(item)}
 					disabled={downloadPayslipMutation.isPending}>
 					<Download className="h-4 w-4 mr-2" /> Download PDF
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => openQuickAdjust("ADDITION", item)}>
+					<PlusCircle className="h-4 w-4 mr-2" /> Add addition
+				</DropdownMenuItem>
+				<DropdownMenuItem onClick={() => openQuickAdjust("DEDUCTION", item)}>
+					<MinusCircle className="h-4 w-4 mr-2" /> Add deduction
 				</DropdownMenuItem>
 			</DropdownMenuContent>
 		</DropdownMenu>
@@ -1837,6 +1955,13 @@ export function PayrollManagement({
 						<TabsTrigger value="active">Active Payroll Period</TabsTrigger>
 						<TabsTrigger value="past">Past Periods</TabsTrigger>
 					</TabsList>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						onClick={() => openQuickAdjust("ADDITION", null)}>
+						<PlusCircle className="h-4 w-4 mr-2" /> Quick adjustment
+					</Button>
 				</div>
 
 				<TabsContent value="active" className="space-y-4">
@@ -1847,6 +1972,7 @@ export function PayrollManagement({
 							data={filteredItems}
 							columns={columns}
 							renderActions={renderActions}
+						actionColumnWidth="64px"
 							isLoading={isLoading}
 							emptyMessage="No payroll records found"
 							emptyDescription="Payroll records will appear here once generated."
@@ -1891,6 +2017,7 @@ export function PayrollManagement({
 						data={filteredItems}
 						columns={columns}
 						renderActions={renderActions}
+						actionColumnWidth="64px"
 						isLoading={isLoading}
 						emptyMessage="No payroll records found"
 						emptyDescription="Select a period to view payroll records."
@@ -2847,30 +2974,42 @@ export function PayrollManagement({
 																		},
 																	)}
 																</td>
-																<td className="py-2 px-3 whitespace-nowrap border-r">
-																	<Badge
-																		variant={
-																			day.status === "PRESENT"
-																				? "success"
-																				: day.status ===
+															<td className="py-2 px-3 whitespace-nowrap border-r">
+																<Badge
+																	variant={
+																		day.status === "PRESENT"
+																			? "success"
+																			: day.status ===
 																					  "ABSENT"
-																					? "destructive"
-																					: day.status ===
-																						  "REST_DAY"
-																						? "secondary"
-																						: "outline"
-																		}
-																		className={`text-[10px] px-1.5 py-0.5 h-auto ${
-																			day.status === "ABSENT"
-																				? "text-white"
+																				? "destructive"
 																				: day.status ===
+																						  "REST_DAY"
+																					? "secondary"
+																					: "outline"
+																	}
+																	className={`text-[10px] px-1.5 py-0.5 h-auto ${
+																		day.status === "ABSENT"
+																			? "text-white"
+																			: day.status ===
 																					  "REST_DAY"
-																					? "bg-orange-500 text-white border-orange-500 hover:bg-orange-500"
-																					: ""
-																		}`}>
-																		{day.status}
-																	</Badge>
-																</td>
+																				? "bg-orange-500 text-white border-orange-500 hover:bg-orange-500"
+																				: ""
+																	}`}>
+																	{day.status}
+																</Badge>
+																{day?.date &&
+																payrollNoPayDateKeys.has(
+																	new Date(
+																		day.date,
+																	).toDateString(),
+																) ? (
+																	<span
+																		className="ml-1 rounded bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800"
+																		title="Missing time-in/out — company no-pay day">
+																		NO PAY
+																	</span>
+																) : null}
+															</td>
 																<td className="py-2 px-3 whitespace-nowrap border-r">
 																	<Badge
 																		variant="outline"
@@ -3033,9 +3172,20 @@ export function PayrollManagement({
 											<Banknote className="w-4 h-4 text-gray-500" />
 											Daily Pay Computation
 										</h4>
-										<span className="text-xs text-gray-500">
-											Earnings and deductions breakdown
-										</span>
+										<div className="flex items-center gap-2">
+											{payrollNoPayDayCount > 0 ? (
+												<span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+													{payrollNoPayDayCount} day
+													{payrollNoPayDayCount === 1
+														? ""
+														: "s"}{" "}
+													unpaid (missing punch)
+												</span>
+											) : null}
+											<span className="text-xs text-gray-500">
+												Earnings and deductions breakdown
+											</span>
+										</div>
 									</div>
 									<div className="border rounded-lg overflow-hidden shadow-sm">
 										<div className="max-h-[400px] overflow-y-auto">
@@ -3139,20 +3289,30 @@ export function PayrollManagement({
 																		? "bg-red-50 hover:bg-red-100 border-l-4 border-l-red-500"
 																		: "hover:bg-gray-50"
 																}`}>
-																<td className="py-2 px-3 text-gray-600 whitespace-nowrap border-r font-medium">
-																	{new Date(
-																		day.date,
-																	).toLocaleDateString(
-																		undefined,
-																		{
-																			month: "short",
-																			day: "numeric",
-																			weekday: "short",
-																		},
-																	)}
-																</td>
+															<td className="py-2 px-3 text-gray-600 whitespace-nowrap border-r font-medium">
+																{new Date(
+																	day.date,
+																).toLocaleDateString(
+																	undefined,
+																	{
+																		month: "short",
+																		day: "numeric",
+																		weekday: "short",
+																	},
+																)}
+																{dailyBreakdownItem?.missingPunchNoPay ? (
+																	<div
+																		className="mt-0.5 inline-block rounded bg-amber-100 px-1.5 py-px text-[10px] font-bold text-amber-800"
+																		title={
+																			dailyBreakdownItem?.noPayReason ||
+																			"Missing time-in/out — company no-pay day"
+																		}>
+																		NO PAY
+																	</div>
+																) : null}
+															</td>
 
-																{/* Earnings */}
+															{/* Earnings */}
 																<td className="py-2 px-3 text-right font-mono text-blue-900 bg-blue-50/25 whitespace-nowrap text-xs">
 																	<span className="inline-flex items-center justify-end gap-1">
 																		<ValueHover
@@ -3406,12 +3566,24 @@ export function PayrollManagement({
 															)}
 														</td>
 
-														{/* Net Totals */}
-														<td className="py-3 px-3 text-right font-mono text-lg text-emerald-900 border-l border-emerald-200 font-bold">
+													{/* Net Totals */}
+													<td className="py-3 px-3 text-right font-mono text-lg text-emerald-900 border-l border-emerald-200 font-bold">
+														<ValueHover
+															lines={[
+																"Period-level gross pay for this payslip.",
+																"Not the sum of the visible daily rows above.",
+																...(payrollNoPayDayCount >
+																0
+																	? [
+																			`${payrollNoPayDayCount} missing-punch day${payrollNoPayDayCount === 1 ? " is" : "s are"} unpaid at ₱0 in the rows above.`,
+																		]
+																	: []),
+															]}>
 															{formatCurrency(
 																payrollData.grossPay || 0,
 															)}
-														</td>
+														</ValueHover>
+													</td>
 													</tr>
 												</tbody>
 											</table>
@@ -3563,6 +3735,18 @@ export function PayrollManagement({
 					<div className="text-center py-8 text-gray-500">No payroll data available</div>
 				)}
 			</Modal>
+			{quickAdjustState ? (
+				<QuickPayrollAdjustmentModal
+					open
+					onOpenChange={(open) => {
+						if (!open) setQuickAdjustState(null);
+					}}
+					initialDirection={quickAdjustState.direction}
+					initialEmployeeIds={quickAdjustState.employeeIds}
+					initialEmployeeLabel={quickAdjustState.employeeLabel}
+					defaultPayrollPeriodId={quickAdjustState.periodId}
+				/>
+			) : null}
 		</div>
 	);
 }

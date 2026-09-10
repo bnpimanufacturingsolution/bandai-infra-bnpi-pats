@@ -10,6 +10,7 @@ import {
 	FileText,
 	Gift,
 	Gavel,
+	GraduationCap,
 	PanelBottomDashed,
 	RadioReceiver,
 	Route,
@@ -149,6 +150,12 @@ export const adminConfigurationItems: AdminNavItem[] = [
 		label: "Payroll Period Setup",
 		path: "/admin/configuration/payroll-periods",
 		icon: Calendar,
+	},
+	{
+		id: "applications",
+		label: "Training & Performance",
+		path: "/admin/configuration/applications",
+		icon: GraduationCap,
 	},
 	{
 		id: "devices",

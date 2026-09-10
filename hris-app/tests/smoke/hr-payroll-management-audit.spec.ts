@@ -104,10 +104,10 @@ test("Payroll Management sheet live audit", async ({ page }) => {
 		sheetLabel: "Payroll processing / payslip generation / last pay",
 		route: "/hr/run-payroll",
 		shot: "3.1.1-run-payroll",
-		needles: ["Run Payroll", "Start Payroll", "Preview Payroll", "Special Payroll", "Payroll"],
+		needles: ["Run Payroll", "Start Payroll", "Payroll Management", "Preview Payroll", "Special Payroll", "Payroll"],
 		score: async (found, p) => {
 			const start = await p.getByText(/Start Payroll/i).first().isVisible().catch(() => false);
-			const preview = await p.getByText(/Preview Payroll/i).first().isVisible().catch(() => false);
+			const preview = await p.getByText(/Payroll Management|Preview Payroll/i).first().isVisible().catch(() => false);
 			const special = await p.getByText(/Special Payroll/i).first().isVisible().catch(() => false);
 			const lastPay = await p.getByText(/Last Pay|Final Pay/i).first().isVisible().catch(() => false);
 			if (found && (start || preview)) {

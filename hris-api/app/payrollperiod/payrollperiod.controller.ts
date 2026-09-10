@@ -798,10 +798,7 @@ const controller = (prisma) => {
                 return;
             }
             if (payrollPeriod.status === "COMPLETED" || payrollPeriod.status === "CLOSED") {
-                payrollPeriodLogger.error(`Cannot generate payroll for ${payrollPeriod.status} period`);
-                const errorResponse = (0, error_handler_1.buildErrorResponse)(`Payroll period is already ${payrollPeriod.status.toLowerCase()}`, 400);
-                res.status(400).json(errorResponse);
-                return;
+                payrollPeriodLogger.warn(`Re-running payroll for ${payrollPeriod.status} period: ${payrollPeriodId}`);
             }
             const activeJob = payroll_generation_job_service_1.PayrollGenerationJobService.getActiveJobForPeriod(payrollPeriodId);
             if (payrollPeriod.status === "PROCESSING" && activeJob) {
