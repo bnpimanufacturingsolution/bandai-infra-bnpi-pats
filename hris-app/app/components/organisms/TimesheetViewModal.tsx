@@ -429,6 +429,33 @@ export function TimesheetViewModal({
 			return;
 		}
 
+		// HR APPROVED fast path: single PATCH, no preview ( DayEditor already computed local hours )
+		// Saves ~1.5s (removes normalizeBreakdownPreview round-trip) and keeps single Save UX
+		if (isHrApprovedEdit && timesheet?.id && targetDayKey) {
+			setIsHrSaving(true);
+			// Close editor immediately for snappier feel; isHrSaving shows outer spinner if needed
+			handleDayEditorClose();
+			try {
+				const saved = await updateTimesheetMutation.mutateAsync({
+					id: timesheet.id,
+					payload: { breakdown: mergedBreakdown, editedDayKeys: [targetDayKey] },
+				});
+				const savedBreakdown = (saved?.breakdown as TimesheetBreakdownDay[] | undefined) ?? mergedBreakdown;
+				setUpdatedBreakdown(savedBreakdown as TimesheetBreakdownDay[]);
+				hrSavedBreakdownRef.current = savedBreakdown as TimesheetBreakdownDay[];
+				setExplicitEditedDayKeys(new Set());
+				toast.success("Timesheet day saved. Timesheet stays APPROVED.");
+			} catch (saveError: any) {
+				// Fall back to staged for retry via outer Save changes
+				setUpdatedBreakdown(mergedBreakdown);
+				setExplicitEditedDayKeys((prev) => new Set(prev).add(targetDayKey));
+				toast.error(saveError?.message || "Failed to save timesheet day.");
+			} finally {
+				setIsHrSaving(false);
+			}
+			return;
+		}
+
 		try {
 			const normalized = await normalizeBreakdownPreviewMutation.mutateAsync({
 				timesheetId: timesheet.id,
