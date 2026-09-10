@@ -17,7 +17,7 @@ describe("payroll preview modal journey", () => {
 		expect(resolvePreviewPayrollStep("progress")).toBe("progress");
 	});
 
-	it("only calculates dry-run rows after Run Preview", () => {
+	it("only calculates dry-run rows after Run Management", () => {
 		expect(
 			shouldCalculatePreviewRows({ action: "preview-payroll", previewStep: "confirm" }),
 		).toBe(false);
@@ -56,11 +56,11 @@ describe("payroll preview modal journey", () => {
 		).toBe(false);
 	});
 
-	it("uses preview-only titles distinct from Start Payroll", () => {
-		expect(previewPayrollModalTitle("confirm")).toBe("Start Payroll Preview");
-		expect(previewPayrollModalTitle("progress")).toBe("Preview running");
-		expect(previewPayrollModalTitle("progress", true)).toBe("Preview failed");
-		expect(previewPayrollModalTitle("results")).toBe("Payroll Preview");
+	it("uses payroll-management titles distinct from Start Payroll", () => {
+		expect(previewPayrollModalTitle("confirm")).toBe("Start Payroll Management");
+		expect(previewPayrollModalTitle("progress")).toBe("Payroll Management running");
+		expect(previewPayrollModalTitle("progress", true)).toBe("Payroll Management failed");
+		expect(previewPayrollModalTitle("results")).toBe("Payroll Management");
 	});
 
 	it("marks preview-payroll action as preview-only", () => {
@@ -92,7 +92,7 @@ describe("payroll preview modal journey", () => {
 		).toBe("ready");
 	});
 
-	it("allows Run Preview when only non-approved timesheets are computable", () => {
+	it("allows Run Management when only non-approved timesheets are computable", () => {
 		expect(
 			canRunPayrollPreview({
 				payrollPeriodId: "pp-1",

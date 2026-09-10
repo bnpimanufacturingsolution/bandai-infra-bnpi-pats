@@ -1,9 +1,13 @@
 /**
- * Preview Payroll journey helpers (URL step + dry-run mode labels).
+ * Payroll Management journey helpers (URL step + dry-run mode labels).
  *
  * Contract:
  * - confirm + progress → modal (loading / confirm chrome)
  * - results → full page on /hr/run-payroll (not modal)
+ *
+ * User-facing name is "Payroll Management" (manage additions/deductions +
+ * dry-run amounts). Technical URL action stays "preview-payroll" and all
+ * testIDs / function names are unchanged.
  */
 
 export type PreviewPayrollStep = "confirm" | "progress" | "results";
@@ -49,9 +53,9 @@ export function previewPayrollModalTitle(
 	step: PreviewPayrollStep,
 	failed?: boolean,
 ): string {
-	if (step === "confirm") return "Start Payroll Preview";
-	if (step === "progress") return failed ? "Preview failed" : "Preview running";
-	return "Payroll Preview";
+	if (step === "confirm") return "Start Payroll Management";
+	if (step === "progress") return failed ? "Payroll Management failed" : "Payroll Management running";
+	return "Payroll Management";
 }
 
 export function isPreviewOnlyMode(action: string | null | undefined): boolean {
@@ -118,7 +122,7 @@ export function resolvePreviewReadinessPresentation(args: {
 	};
 }
 
-/** Allow Run Preview when any computable timesheet exists (not only approved). */
+/** Allow Run Management when any computable timesheet exists (not only approved). */
 export function canRunPayrollPreview(args: {
 	payrollPeriodId?: string | null;
 	payableEmployeesCount?: number | null;
