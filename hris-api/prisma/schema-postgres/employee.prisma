@@ -180,6 +180,8 @@ model Employee {
 
   soaLineItems SOALineItem[]
 
+  applicationAccesses EmployeeApplicationAccess[]
+
   soasReconciled StatementOfAccount[] @relation("SOAReconciledBy")
 
   @@unique([organizationId, employeeId])

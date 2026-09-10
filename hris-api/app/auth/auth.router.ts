@@ -20,6 +20,7 @@ interface IAuthController {
 	createUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	updateUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 	deleteUser(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
+	externalLaunch(req: AuthRequest, res: Response, next: NextFunction): Promise<void>;
 }
 
 export const router = (route: Router, controller: IAuthController): Router => {
@@ -51,6 +52,7 @@ export const router = (route: Router, controller: IAuthController): Router => {
 	routes.patch("/users/:id", verifyToken, controller.updateUser);
 	routes.patch("/users/:id/reset-password", verifyToken, controller.resetUserPassword);
 	routes.delete("/users/:id", verifyToken, controller.deleteUser);
+	routes.post("/external-launch", verifyToken, controller.externalLaunch);
 
 	route.use(path, routes);
 	return route;
