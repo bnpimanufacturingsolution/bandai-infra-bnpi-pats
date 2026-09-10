@@ -23,7 +23,11 @@ export type AttendanceAdjustmentDraft = {
 	adjustmentKind?: AttendanceAdjustmentKind;
 };
 
+/** Overtime kind: REGULAR = after shift; EARLY = pre-shift (rendered early OT). */
+export type OvertimeRequestKind = "REGULAR" | "EARLY";
+
 export type OvertimeRequestDraft = {
+	/** Employee the OT is FOR: the signed-in employee, or the member when a line leader files on behalf. */
 	employeeId: string;
 	organizationId: string;
 	date: string;
@@ -31,6 +35,18 @@ export type OvertimeRequestDraft = {
 	overtimeHourPart?: number;
 	overtimeMinutePart?: number;
 	notes: string;
+	/** REGULAR (default) = after shift; EARLY = worked before the shift started. */
+	overtimeKind?: OvertimeRequestKind;
+	/**
+	 * On-behalf filing context (line leader files for a section member).
+	 * When set, requesterId stays the LEADER and targetEmployeeId carries the
+	 * member so the backend routes the leader-filed workflow and approval
+	 * side effects write OT to the member's timesheet.
+	 */
+	onBehalf?: {
+		requesterEmployeeId: string;
+		filedByRole: string;
+	};
 };
 
 export const overtimeDurationToMinutes = (
@@ -190,24 +206,54 @@ export const buildOvertimeRequestPayload = (draft: OvertimeRequestDraft) => {
 	}
 	if (!notes) throw new Error("Explain why overtime is needed.");
 
+	// Leader-filed on-behalf: the OT is FOR the member (draft.employeeId),
+	// while the requester is the acting leader.
+	const onBehalf =
+		draft.onBehalf?.requesterEmployeeId &&
+		draft.onBehalf.requesterEmployeeId !== draft.employeeId
+			? draft.onBehalf
+			: null;
+	const overtimeKind: OvertimeRequestKind =
+		draft.overtimeKind === "EARLY" ? "EARLY" : "REGULAR";
+	const kindLabel = overtimeKind === "EARLY" ? "early OT (pre-shift)" : "OT (after shift)";
+
 	return {
-		requesterId: draft.employeeId,
+		requesterId: onBehalf ? onBehalf.requesterEmployeeId : draft.employeeId,
 		organizationId: draft.organizationId,
 		type: "OVERTIME" as const,
-		description: `Overtime request on ${date} for ${overtimeHoursLabel} (HR approval).`,
+		...(onBehalf ? { targetEmployeeId: draft.employeeId } : {}),
+		description: onBehalf
+			? `Overtime for section member on ${date} for ${overtimeHoursLabel} (${kindLabel}; leader-filed, manager then HR approval).`
+			: `Overtime request on ${date} for ${overtimeHoursLabel} (${kindLabel}; HR approval).`,
 		startDate: `${date}T00:00:00.000Z`,
 		endDate: `${date}T00:00:00.000Z`,
 		notes,
 		metadata: {
 			date,
+			// Approval side effects write OT to metadata.employeeId's timesheet —
+			// always the member, never the filing leader.
 			employeeId: draft.employeeId,
 			overtimeHours: overtimeHoursLabel,
 			requestedOvertimeHours: overtimeHoursLabel,
 			requestedOvertimeMinutes: overtimeMinutes,
 			hours: Math.round((overtimeMinutes / 60) * 100) / 100,
 			reason: notes,
-			requestSource: "EMPLOYEE_SELF_SERVICE",
-			workflowTarget: "HR",
+			// Early OT flag: pre-shift overtime. Payroll register mapping reads
+			// this to bucket the hours separately from after-shift OT.
+			overtimeKind,
+			...(overtimeKind === "EARLY" ? { earlyOvertime: true } : {}),
+			requestSource: onBehalf ? "LINE_LEADER_FILED" : "EMPLOYEE_SELF_SERVICE",
+			workflowTarget: onBehalf ? "MANAGER_THEN_HR" : "HR",
+			...(onBehalf
+				? {
+						filedBy: {
+							role: onBehalf.filedByRole,
+							employeeId: onBehalf.requesterEmployeeId,
+							isLineLeader: onBehalf.filedByRole === "hris-line-leader" || undefined,
+						},
+						targetEmployeeId: draft.employeeId,
+					}
+				: {}),
 		},
 	};
 };

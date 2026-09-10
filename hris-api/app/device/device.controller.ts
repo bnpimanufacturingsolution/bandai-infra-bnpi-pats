@@ -5719,8 +5719,130 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	const getHikvisionFastDeviceUserSourceCount = async (req: Request, deviceId: string) => {
+	/**
+	 * Short-lived cache for the fast Hikvision device user-count probe.
+	 *
+	 * Why: GET /api/device/sync-preview fans out one probe per Hikvision device.
+	 * Stale/unreachable device rows (old IPs, TEST panels, powered-off terminals)
+	 * burn their full HTTP timeout on every preview request, which made the
+	 * all-devices preview pay seconds of dead-device wait per page load.
+	 * Caching success AND transport-failure results for a short TTL keeps
+	 * repeat previews fast while still refreshing within a minute.
+	 * Set HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS=0 to disable.
+	 */
+	const hikvisionFastUserCountCache = new Map<
+		string,
+		{ expiresAt: number; value: any }
+	>();
+	const HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS = Math.max(
+		0,
+		Math.min(
+			Number(process.env.HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS || 60000),
+			300000,
+		),
+	);
+	const HIKVISION_FAST_USER_COUNT_PREFLIGHT_TIMEOUT_MS = Math.max(
+		300,
+		Math.min(
+			Number(process.env.HIKVISION_FAST_USER_COUNT_PREFLIGHT_TIMEOUT_MS || 900),
+			2500,
+		),
+	);
+
+	const getHikvisionFastDeviceUserSourceCount = async (
+		req: Request,
+		deviceId: string,
+		options?: {
+			device?: {
+				address?: string | null;
+				port?: number | null;
+				protocol?: string | null;
+				config?: unknown;
+			} | null;
+			useCache?: boolean;
+		},
+	) => {
+		const cacheKey = `fast-user-count:${deviceId}`;
+		if (
+			options?.useCache &&
+			HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS > 0 &&
+			hikvisionFastUserCountCache.has(cacheKey)
+		) {
+			const cached = hikvisionFastUserCountCache.get(cacheKey)!;
+			if (cached.expiresAt > Date.now()) {
+				return cached.value;
+			}
+			hikvisionFastUserCountCache.delete(cacheKey);
+		}
+
 		const startedAt = Date.now();
+
+		// TCP preflight: fail fast on unreachable devices instead of paying the
+		// full HTTP probe timeouts. Resolves the same endpoint hikvisionFetch
+		// will use (tunnel map / runtime overrides included) so local dev and
+		// container runtimes keep working unchanged. Reachable devices proceed
+		// exactly as before.
+		if (options?.device?.address) {
+			try {
+				const resolvedBase = buildHikvisionDeviceBaseUrl({
+					address: String(options.device.address || ""),
+					port: Number(options.device.port || 0),
+					protocol: String(options.device.protocol || "http"),
+					config: options.device.config,
+				});
+				const parsedBase = new URL(resolvedBase);
+				const preflightPort =
+					Number(parsedBase.port) ||
+					(parsedBase.protocol === "https:" ? 443 : 80);
+				const reach = await checkTcpReachability(
+					parsedBase.hostname,
+					preflightPort,
+					HIKVISION_FAST_USER_COUNT_PREFLIGHT_TIMEOUT_MS,
+				);
+				if (!reach.ok) {
+					const preflightError = `Device endpoint not reachable (TCP preflight to ${parsedBase.hostname}:${preflightPort}): ${reach.error || "unreachable"}`;
+					const preflightResult = {
+						ok: false,
+						totalEvents: null,
+						operationLogTotal: null,
+						operationDeviceByAction: null,
+						operationDeviceLabelsByAction: null,
+						operationSampleSize: 0,
+						userCount: null,
+						fingerprintUserCount: null,
+						faceUserCount: null,
+						cardUserCount: null,
+						inventoryEvidenceSource: null,
+						latencyMs: Date.now() - startedAt,
+						userProbe: { ok: false, count: null, error: preflightError },
+						eventProbe: {
+							ok: false,
+							count: null,
+							error: "Device logs not requested for device-user summary",
+						},
+						operationLogProbe: {
+							ok: false,
+							count: null,
+							error: "Operation logs not requested for device-user summary",
+						},
+						raw: { userSearch: null, eventSearch: null, logSearch: null },
+						error: preflightError,
+					};
+					if (HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS > 0) {
+						// Negative results use half TTL so recovery is noticed quickly.
+						hikvisionFastUserCountCache.set(cacheKey, {
+							expiresAt:
+								Date.now() + Math.floor(HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS / 2),
+							value: preflightResult,
+						});
+					}
+					return preflightResult;
+				}
+			} catch {
+				// Resolution/preflight problems must not change the probe outcome;
+				// fall through to the normal HTTP probe path.
+			}
+		}
 		const readUserCount = (maxResults: number) =>
 			getHikvisionCountFromSearch(
 				req,
@@ -5815,7 +5937,7 @@ export const controller = (prisma: PrismaClient) => {
 				? userSearch.error || "Device returned no user total in UserInfo/Search response"
 				: null;
 
-		return {
+		const result = {
 			ok: userCount !== null,
 			totalEvents: null,
 			operationLogTotal: null,
@@ -5850,6 +5972,13 @@ export const controller = (prisma: PrismaClient) => {
 			},
 			error,
 		};
+		if (HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS > 0) {
+			hikvisionFastUserCountCache.set(cacheKey, {
+				expiresAt: Date.now() + HIKVISION_FAST_USER_COUNT_CACHE_TTL_MS,
+				value: result,
+			});
+		}
+		return result;
 	};
 
 	const getBridgeDeviceStatus = (bridgeStatus: any, address: string) => {
@@ -21830,6 +21959,12 @@ export const controller = (prisma: PrismaClient) => {
 					const sourceCount = await getHikvisionFastDeviceUserSourceCount(
 						params.req,
 						device.id,
+						{
+							// Preflight only — no cache here: the sync-job decision matrix
+							// must always decide source reads from current counts.
+							device: device,
+							useCache: false,
+						},
 					);
 					if (
 						sourceCount.userCount !== null &&
@@ -25157,6 +25292,10 @@ export const controller = (prisma: PrismaClient) => {
 										: await getHikvisionFastDeviceUserSourceCount(
 												req,
 												device.id,
+												{
+													device: device,
+													useCache: true,
+												},
 											);
 									hikvisionTotals.set(device.id, total);
 								}),

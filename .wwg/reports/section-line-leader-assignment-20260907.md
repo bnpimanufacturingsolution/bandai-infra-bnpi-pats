@@ -1,0 +1,135 @@
+# Section Line Leader Assignment — Implementation (2026-09-07)
+
+Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`
+
+## What was built
+
+Operator chose **option B**: a section can have **multiple line leaders**; an employee can
+lead many sections. Many-to-many join model `SectionLineLeader` (table
+`section_line_leaders`). This activates the previously dormant `hris-line-leader` role:
+assignment now derives the role automatically, and removal deletes membership and
+re-derives the role back down.
+
+## Schema
+
+- `hris-api/prisma/schema/sectionlineleader.prisma` (Mongo variant, ObjectId)
+- `hris-api/prisma/schema-postgres/sectionlineleader.prisma` (Postgres variant)
+- Reverse relations: `Section.lineLeaders`, `Employee.lineLeaderSections`
+- Migration: `hris-api/prisma/schema-postgres/migrations/20260907 applied to local DEV (K3s forward 55435).
+- `bootstrap.sql` mirror updated (table + FKs + indexes).
+
+## Backend
+
+- `hris-api/helper/section-line-leaders.helper.ts` — `resolveLineLeaderIds`
+  (same-org validation, dedupe) + `reconcileSectionLineLeaders` (transactional diff:
+  delete removed / create added with `skipDuplicates`), returns changed employee ids.
+- `app/section/section.controller.ts`:
+  - create/update accept `lineLeaderIds` (zod-validated); reconcile after write;
+    response re-reads with `lineLeaders` include (employee + person identity).
+  - list GET batches memberships for the page.
+  - **delete** captures former leader ids before cascade and re-derives their roles
+    after delete (gap found by live proof and fixed).
+- `helper/employee-role-sync.helper.ts`:
+  - `deriveEmployeeRoleFromOrgLinks(employee, { isLineLeader })`.
+  - `syncEmployeeRolesFromOrgStructure` counts `lineLeaderSections` membership.
+  - New `syncLineLeaderRolesForEmployees` wrapper.
+- `utils/role-derivation.ts`: new `isLineLeader` input; precedence
+  HR > manager level > line leader > plain employee; `withFlags` unchanged
+  (`hris-line-leader` was already treated as manager class).
+- Employee hard delete (`app/employee/employee.controller.ts`): now detaches
+  `Section.headId` (pre-existing gap fixed) and deletes `sectionLineLeader` rows
+  before delete.
+
+## Frontend
+
+- `hris-app/app/routes/admin/configuration/sections.tsx`:
+  - Line Leaders **column** in the sections table (first 2 names + "+N").
+  - Edit form: removable chips + "Add line leader..." single-select that clears
+    after each add; honest "Loading employees..." placeholder while roster loads.
+  - View modal: Line leaders row.
+  - CSV export includes Line Leaders column.
+- `hris-app/app/services/sections.service.ts`: `SectionLineLeaderMembership`,
+  `lineLeaders`, `lineLeaderIds` on create/update requests.
+
+## Tests
+
+- `hris-api/tests/section-line-leaders.spec.ts` — **15/15 passing** (resolve
+  dedupe/missing, reconcile diff/idempotent/no-op, role derivation precedence incl.
+  manager/HR wins and legacy-path no-grant).
+- `hris-api/tests/role-derivation.spec.ts` — 55/55 still passing (no regression).
+- `hris-api/tests/section.controller.spec.ts` — **66/66 passing** after adding a
+  `sectionLineLeader` stub to the spec's mock prisma (the new `remove()` pre-delete
+  membership read needed it; no assertions changed).
+- `hris-app/tests/smoke/admin-config-sections-line-leaders.spec.ts` — **2/2 passing**
+  (column render; edit modal chips load + remove).
+- **Pre-existing drift (NOT from this work)**:
+  `tests/employee-hard-delete.contract.spec.ts` fails 4/4 statically (0 passing)
+  because it asserts source strings (`routes.post("/:id/hard-delete-preview"`,
+  `EMPLOYEE_HARD_DELETE_ADMIN_ROLES`, `attendanceRecords`, `requiresConfirmation`)
+  that do not exist in `employee.controller.ts` even at the pre-work base
+  `e5e51a43` (0 occurrences verified). Related drift from the earlier
+  accidental-save restore (`fb326549`/`5e4c3046`). The hard-delete detach change
+  from this feature is additive (two prisma calls before `employee.delete`) and is
+  covered by live behavior, not by this static spec.
+- Dual-app parity: admin-only configuration surface — HR-only exception, no
+  `hris-emp-app` counterpart (per hris-app AGENTS.md exception list).
+
+## Live API round-trip proof (K3s DEV forward, admin actor)
+
+Evidence: `hris-api/.runtime/20260907-section-ll-proof/` +
+`.runtime/browser-evidence/sections-line-leaders-live/proof.json` + screenshot.
+
+1. CREATE section with 1 leader → 201, membership row + `lineLeaders` include.
+2. Role auto-upgrade: TESTBEN004 → `hris-line-leader`, `isManager=true`.
+3. UPDATE adds second leader → both leaders upgraded.
+4. UPDATE removing one leader → removed employee auto-demoted
+   (`hris-employee`/`isManager=false`); kept leader unchanged.
+5. DELETE section → join rows cascade; **initially ex-leader role stayed stale**
+   → controller fixed → re-proved: ex-leader auto-demoted after section delete.
+6. Browser proof on real app (5175→3001→DEV DB): LINE LEADERS column renders;
+   edit modal shows "Line Leaders (optional)" + chip/remove UI + add select.
+
+All temp proof sections deleted; TESTBEN004/TESTBEN003 back to `hris-employee`.
+
+## DEV db-init drift repair (push blocker removed)
+
+- K3s DEV held stale `requests_type_backup_20260826` (47 rows, backup of
+  requests_type from the 2026-08-26 day-status repair) which would make the
+  schema-only GitOps `prisma-postgres:push` demand `--accept-data-loss` and fail
+  `hris-api-db-init` (runtime-dev was already `Synced/Degraded` before this work).
+- Read-only export first: `hris-api/scripts/export-dev-requests-type-backup.ts` →
+  `.runtime/dev-dbinit-drift-repair-20260907/requests_type_backup_20260826.export.json`
+  (47 rows, full JSON).
+- Then `DROP TABLE` on DEV. Local `prisma db push` now syncs clean (9.44s).
+
+## VM/GitOps promotion (2026-09-07)
+
+- Pushed `2f6aed49` to `origin/develop` (rebased cleanly onto `e5e51a43`).
+- VM ansible-pull synced the SHA, rebuilt `hris-api-local:develop` /
+  `hris-app-local:develop`, and rolled `hris-api`/`hris-app` Deployments in
+  dev, uat, and prod (pods 1/1 Running on the new images).
+- DEV db-init Job was `Failed` (pre-existing, created 01:26Z). Released it;
+  Argo recreated from git → `SuccessCriteriaMet Complete` (09:35:28Z).
+- UAT/PROD db-init Jobs were old Completed runs (01:03Z, pre-schema); released
+  both → recreated → `Complete` (10:27:36Z) → `section_line_leaders` table
+  verified present in DEV, UAT, and PROD Postgres.
+- All six Argo applications **Synced/Healthy** (`project-truth-runtime-dev`
+  was Degraded before this work and is now Healthy).
+- DEV API `http://localhost:3101` (VM): health 200, admin login OK, and the
+  section list response carries the new `lineLeaders` enrichment (`[]`).
+- GitHub Actions runs for this SHA did not execute: account billing failure
+  ("recent account payments have failed or spending limit needs to be
+  increased") — pre-existing account-level blocker affecting all workflows,
+  including the prior commit's run; not a code/test failure. VM promotion is
+  independent of Actions (ansible-pull pulls git directly) and is proven above.
+  Evidence scripts + outputs: `.runtime/vm-check-20260907.sh`,
+  `.runtime/vm-final-check-20260907.sh`, `.runtime/vm-release-uatprod-jobs-20260907.sh`,
+  `.runtime/vm-dev-serving-check-20260907.sh` (repo root `.runtime/`).
+
+## Boundary
+
+- LLA money remains enrollment-driven (`EmployeeBenefit` code `LLA`); no
+  auto-award from assignment (Project Truth doctrine unchanged).
+- Day-labor tagging scope (leader tags only own-section people) remains a
+  candidate recommendation, not implemented — recorded as
+  `REC-20260907-DAY-LABOR-LEADER-SECTION-SCOPING` (Proposed).

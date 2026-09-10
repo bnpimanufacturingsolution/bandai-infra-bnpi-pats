@@ -8,6 +8,8 @@ interface DatePickerProps {
 	disabled?: boolean;
 	minDate?: string | Date;
 	maxDate?: string | Date;
+	/** Optional id forwarded to the text input for label association (a11y). */
+	id?: string;
 }
 
 export function DatePicker({
@@ -18,6 +20,7 @@ export function DatePicker({
 	disabled,
 	minDate,
 	maxDate,
+	id,
 }: DatePickerProps) {
 	const minDateObj = minDate
 		? typeof minDate === "string"
@@ -39,6 +42,7 @@ export function DatePicker({
 			disabled={disabled}
 			minDate={minDateObj}
 			maxDate={maxDateObj}
+			id={id}
 		/>
 	);
 }

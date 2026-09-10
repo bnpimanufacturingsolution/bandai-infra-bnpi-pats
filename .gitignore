@@ -59,3 +59,11 @@ config.bat
 july11-july25/
 june26-july10/
 test-results/
+
+# Local open-code config (opencode agent config)
+.opencode/
+opencode.json
+
+# Local CLI scripts (keep personal workflow scripts local)
+scripts/project-truth.ps1
+scripts/project-truth-*.ps1

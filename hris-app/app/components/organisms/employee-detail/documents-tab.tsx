@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { createPortal } from "react-dom";
 import type { Employee, EmployeeDocumentPriorityItem } from "~/services/employees.service";
 import {
 	FileText,
@@ -118,14 +119,10 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 
 	// Find the document being edited or viewed
 	const editingDocument =
-		action === "edit-doc" && urlDocumentNumber
-			? findDocumentByUrlKey(urlDocumentNumber)
-			: null;
+		action === "edit-doc" && urlDocumentNumber ? findDocumentByUrlKey(urlDocumentNumber) : null;
 
 	const viewingDocument =
-		action === "view-doc" && urlDocumentNumber
-			? findDocumentByUrlKey(urlDocumentNumber)
-			: null;
+		action === "view-doc" && urlDocumentNumber ? findDocumentByUrlKey(urlDocumentNumber) : null;
 
 	const deleteMutation = useDeleteEmployeeDocument(employee.id);
 	const updateEmployeeMutation = useUpdateEmployee();
@@ -1081,7 +1078,8 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 														<button
 															onClick={(e) => {
 																e.stopPropagation();
-																const documentKey = getDocumentMutationKey(doc);
+																const documentKey =
+																	getDocumentMutationKey(doc);
 																if (documentKey)
 																	handleDeleteDocument(
 																		documentKey,
@@ -1101,7 +1099,8 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 
 											{/* Icon */}
 											<div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center mb-3 shadow-sm border border-gray-100 group-hover:bg-gray-100 transition-colors text-3xl">
-												{getDocumentIcon(doc.type) !== DEFAULT_DOCUMENT_ICON ? (
+												{getDocumentIcon(doc.type) !==
+												DEFAULT_DOCUMENT_ICON ? (
 													getDocumentIcon(doc.type)
 												) : (
 													<FileText className="w-8 h-8 text-gray-400" />
@@ -1145,8 +1144,9 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 										<div
 											key={index}
 											className="flex items-center gap-4 p-3 hover:bg-gray-50 transition-colors">
-											<div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0 text-xl border border-gray-100">
-												{getDocumentIcon(doc.type) !== DEFAULT_DOCUMENT_ICON ? (
+											<div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 text-xl border border-gray-100">
+												{getDocumentIcon(doc.type) !==
+												DEFAULT_DOCUMENT_ICON ? (
 													getDocumentIcon(doc.type)
 												) : (
 													<FileText className="w-5 h-5 text-gray-400" />
@@ -1190,7 +1190,7 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 													</div>
 												)}
 											</div>
-											<div className="flex items-center gap-1 flex-shrink-0">
+											<div className="flex items-center gap-1 shrink-0">
 												<Button
 													variant="ghost"
 													size="sm"
@@ -1207,7 +1207,9 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 																size="sm"
 																className="h-8 w-8 p-0 text-gray-400 hover:text-orange-600 hover:bg-orange-50"
 																title="Update"
-																onClick={() => handleEditClick(doc)}>
+																onClick={() =>
+																	handleEditClick(doc)
+																}>
 																<Edit className="w-4 h-4" />
 															</Button>
 														) : null}
@@ -1217,7 +1219,8 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 															className="h-8 w-8 p-0 text-gray-400 hover:text-red-600 hover:bg-red-50"
 															title="Delete"
 															onClick={() => {
-																const documentKey = getDocumentMutationKey(doc);
+																const documentKey =
+																	getDocumentMutationKey(doc);
 																if (documentKey)
 																	handleDeleteDocument(
 																		documentKey,
@@ -1308,7 +1311,7 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 									key={folder.id}
 									onClick={() => setCurrentFolder(folder.id)}
 									className="w-full flex items-center gap-4 p-3 hover:bg-gray-50 transition-colors text-left">
-									<div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0 border border-gray-100">
+									<div className="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
 										<Folder className="w-5 h-5 text-gray-400 fill-gray-200" />
 									</div>
 									<div className="flex-1 min-w-0 flex flex-col justify-center">
@@ -1452,34 +1455,39 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 				/>
 			)}
 
-			{/* Document Viewer - Clean Floating */}
-			{viewerOpen && selectedDocUrl && (
-				<div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-					{/* Backdrop */}
-					<div
-						className="fixed inset-0 bg-black/50"
-						onClick={() => setViewerOpen(false)}
-					/>
-					{/* Viewer Container */}
-					<div className="relative z-[61] w-full h-full max-w-5xl max-h-[90vh] rounded-lg overflow-hidden shadow-2xl bg-white flex flex-col">
-						<div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
-							<h3 className="text-lg font-semibold text-gray-900">Document Viewer</h3>
-							<button
+			{/* Document Viewer - Clean Floating (portaled to escape overflow/transform clipping) */}
+			{viewerOpen && selectedDocUrl && typeof document !== "undefined"
+				? createPortal(
+						<div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+							{/* Backdrop */}
+							<div
+								className="fixed inset-0 bg-black/50"
 								onClick={() => setViewerOpen(false)}
-								className="p-2 hover:bg-gray-100 text-gray-900 rounded-lg transition-all">
-								<X className="w-6 h-6" />
-							</button>
-						</div>
-						<div className="flex-1 overflow-hidden">
-							<DocumentFileViewer
-								url={selectedDocUrl}
-								fileName={selectedDocName || undefined}
-								ext={selectedDocExt || undefined}
 							/>
-						</div>
-					</div>
-				</div>
-			)}
+							{/* Viewer Container */}
+							<div className="relative z-101 w-full max-w-5xl h-full max-h-[90vh] rounded-lg overflow-hidden shadow-2xl bg-white flex flex-col">
+								<div className="flex items-center justify-between p-4 border-b border-gray-200 shrink-0">
+									<h3 className="text-lg font-semibold text-gray-900">
+										Document Viewer
+									</h3>
+									<button
+										onClick={() => setViewerOpen(false)}
+										className="p-2 hover:bg-gray-100 text-gray-900 rounded-lg transition-all">
+										<X className="w-6 h-6" />
+									</button>
+								</div>
+								<div className="flex-1 overflow-hidden">
+									<DocumentFileViewer
+										url={selectedDocUrl}
+										fileName={selectedDocName || undefined}
+										ext={selectedDocExt || undefined}
+									/>
+								</div>
+							</div>
+						</div>,
+						document.body,
+					)
+				: null}
 
 			{/* Delete Confirmation Modal */}
 			<Modal
@@ -1643,10 +1651,7 @@ function DocumentViewModal({
 		.filter((item) => item.value);
 
 	return (
-		<Modal
-			open={open}
-			onOpenChange={onClose}
-			title="My Document">
+		<Modal open={open} onOpenChange={onClose} title="My Document">
 			<div className="space-y-4">
 				<div className="rounded-[18px] border border-[#eadfda] bg-[#fffdfb] p-4">
 					<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1679,7 +1684,7 @@ function DocumentViewModal({
 							key={item.label}
 							className="grid gap-1 px-4 py-3 sm:grid-cols-[180px_1fr] sm:gap-4">
 							<div className="text-xs font-medium text-gray-500">{item.label}</div>
-							<div className="break-words text-sm font-medium text-gray-900">
+							<div className="wrap-break-words text-sm font-medium text-gray-900">
 								{item.value}
 							</div>
 						</div>
@@ -1695,7 +1700,7 @@ function DocumentViewModal({
 								<div className="text-xs font-medium text-gray-500">
 									{item.label}
 								</div>
-								<div className="break-words text-sm text-gray-900">
+								<div className="wrap-break-words text-sm text-gray-900">
 									{item.value}
 								</div>
 							</div>

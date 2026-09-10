@@ -122,10 +122,7 @@ export default function BirthdayCelebrationsPage() {
 		enabled: !error && data?.state !== "NO_ORG",
 	});
 
-	const rosterEmployees = useMemo(
-		() => extractRosterEmployees(rosterData),
-		[rosterData],
-	);
+	const rosterEmployees = useMemo(() => extractRosterEmployees(rosterData), [rosterData]);
 
 	const employeeRosterById = useMemo(() => {
 		const map = new Map<string, { employeeCode: string; avatar: string | null }>();
@@ -159,6 +156,8 @@ export default function BirthdayCelebrationsPage() {
 
 		return allItems;
 	}, [allItems, activeType]);
+
+	const todayLabel = toMonthDayLabel(year, new Date().getMonth() + 1, new Date().getDate());
 
 	const tableRows = useMemo<BirthdayTableRow[]>(() => {
 		return filteredItems
@@ -239,11 +238,6 @@ export default function BirthdayCelebrationsPage() {
 							avatar={null}
 						/>
 					)}
-					{item.today && (
-						<Badge variant="success-soft" className="shrink-0 px-2 py-0.5 text-[10px]">
-							Today
-						</Badge>
-					)}
 				</div>
 			),
 		},
@@ -271,6 +265,24 @@ export default function BirthdayCelebrationsPage() {
 			sortable: false,
 			width: "18%",
 			render: (value) => <span className="font-medium text-gray-800">{value}</span>,
+		},
+		{
+			key: "actions",
+			label: "Actions",
+			sortable: false,
+			width: "12%", // adjust width as needed
+			render: (_value, row) => (
+				<div className="flex justify-center">
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => setSelectedItem(row.source)}
+						className="h-8 mr-5">
+						<Eye className="h-4 w-4 mr-1" />
+						Details
+					</Button>
+				</div>
+			),
 		},
 	];
 
@@ -318,6 +330,13 @@ export default function BirthdayCelebrationsPage() {
 							<div className="flex items-center gap-2">
 								<Gift className="h-4 w-4" />
 								<span className="font-semibold">{groupLabel}</span>
+								{groupLabel === todayLabel && (
+									<Badge
+										variant="success-soft"
+										className="px-2 py-0.5 text-[10px]">
+										Today
+									</Badge>
+								)}
 							</div>
 						),
 					}}
@@ -364,16 +383,6 @@ export default function BirthdayCelebrationsPage() {
 						</div>
 					}
 					rowClassName={(row) => (row.today ? "bg-green-50/50" : "")}
-					renderActions={(row) => (
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => setSelectedItem(row.source)}
-							className="h-8">
-							<Eye className="h-4 w-4 mr-1" />
-							Details
-						</Button>
-					)}
 				/>
 			)}
 

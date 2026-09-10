@@ -596,6 +596,21 @@ CREATE TABLE "sections" (
     CONSTRAINT "sections_pkey" PRIMARY KEY ("id")
 );
 
+-- AddColumn (2026-09-07 responsible line leader)
+ALTER TABLE "employees" ADD COLUMN "lineLeaderId" TEXT;
+
+-- CreateTable
+CREATE TABLE "section_line_leaders" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "sectionId" TEXT NOT NULL,
+    "employeeId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "section_line_leaders_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateTable
 CREATE TABLE "department_schedule_templates" (
     "id" TEXT NOT NULL,
@@ -752,6 +767,7 @@ CREATE TABLE "employees" (
     "personId" TEXT NOT NULL,
     "deviceId" TEXT,
     "employmentHistory" JSONB NOT NULL,
+    "lineLeaderId" TEXT,
 
     CONSTRAINT "employees_pkey" PRIMARY KEY ("id")
 );
@@ -1915,6 +1931,15 @@ CREATE UNIQUE INDEX "sections_organizationId_code_key" ON "sections"("organizati
 CREATE UNIQUE INDEX "sections_organizationId_departmentId_name_key" ON "sections"("organizationId", "departmentId", "name");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "section_line_leaders_sectionId_employeeId_key" ON "section_line_leaders"("sectionId", "employeeId");
+
+-- CreateIndex
+CREATE INDEX "section_line_leaders_organizationId_idx" ON "section_line_leaders"("organizationId");
+
+-- CreateIndex
+CREATE INDEX "section_line_leaders_employeeId_idx" ON "section_line_leaders"("employeeId");
+
+-- CreateIndex
 CREATE INDEX "department_schedule_templates_organizationId_departmentId_i_idx" ON "department_schedule_templates"("organizationId", "departmentId", "isDeleted");
 
 -- CreateIndex
@@ -1991,6 +2016,9 @@ CREATE INDEX "employees_organizationId_departmentId_idx" ON "employees"("organiz
 
 -- CreateIndex
 CREATE INDEX "employees_organizationId_sectionId_idx" ON "employees"("organizationId", "sectionId");
+
+-- CreateIndex (2026-09-07 responsible line leader)
+CREATE INDEX "employees_lineLeaderId_idx" ON "employees"("lineLeaderId");
 
 -- CreateIndex
 CREATE INDEX "employees_organizationId_workforceSource_idx" ON "employees"("organizationId", "workforceSource");
@@ -2596,6 +2624,12 @@ ALTER TABLE "sections" ADD CONSTRAINT "sections_headId_fkey" FOREIGN KEY ("headI
 ALTER TABLE "sections" ADD CONSTRAINT "sections_scheduleId_fkey" FOREIGN KEY ("scheduleId") REFERENCES "schedule_templates"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "section_line_leaders" ADD CONSTRAINT "section_line_leaders_sectionId_fkey" FOREIGN KEY ("sectionId") REFERENCES "sections"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "section_line_leaders" ADD CONSTRAINT "section_line_leaders_employeeId_fkey" FOREIGN KEY ("employeeId") REFERENCES "employees"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "department_schedule_templates" ADD CONSTRAINT "department_schedule_templates_departmentId_fkey" FOREIGN KEY ("departmentId") REFERENCES "departments"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
@@ -2633,6 +2667,9 @@ ALTER TABLE "employees" ADD CONSTRAINT "employees_levelId_fkey" FOREIGN KEY ("le
 
 -- AddForeignKey
 ALTER TABLE "employees" ADD CONSTRAINT "employees_reportToId_fkey" FOREIGN KEY ("reportToId") REFERENCES "employees"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+-- AddForeignKey (2026-09-07 responsible line leader)
+ALTER TABLE "employees" ADD CONSTRAINT "employees_lineLeaderId_fkey" FOREIGN KEY ("lineLeaderId") REFERENCES "employees"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "employees" ADD CONSTRAINT "employees_personId_fkey" FOREIGN KEY ("personId") REFERENCES "Person"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;

@@ -9,6 +9,17 @@ stringData:
   POSTGRES_DB: hris
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: hris-api-integration-env
+type: Opaque
+stringData:
+  # GET /api/employee/search X-API-Key allowlist (one key per consuming team).
+  # Rotation: append new key, give consumers time to switch, then remove old key.
+  # See docs/INTEGRATION_EMPLOYEE_SEARCH_API.md. Fail-closed 503 when empty.
+  INTEGRATION_API_KEYS: hris_dev_db8c2a2d810b0757b991b1a5a741ef2f86633f319ceabdc9
+---
+apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: hris-postgres-dev
@@ -286,6 +297,11 @@ spec:
               value: vm-container
             - name: PROJECT_TRUTH_HIKVISION_VM_API_BASE
               value: http://127.0.0.1:3101
+            - name: INTEGRATION_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: hris-api-integration-env
+                  key: INTEGRATION_API_KEYS
           ports:
             - name: http
               containerPort: 3001

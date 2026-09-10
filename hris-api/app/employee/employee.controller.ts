@@ -4444,6 +4444,277 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	/**
+	 * Damerau-Levenshtein edit distance (optimal string alignment) for fuzzy
+	 * ranking. Case-sensitive; callers lowercase inputs first.
+	 */
+	const editDistance = (a: string, b: string): number => {
+		const m = a.length;
+		const n = b.length;
+		if (m === 0) return n;
+		if (n === 0) return m;
+		let prev2: number[] = [];
+		let prev: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+		for (let i = 1; i <= m; i++) {
+			const current = [i];
+			for (let j = 1; j <= n; j++) {
+				const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+				let value = Math.min(current[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+				if (
+					i > 1 &&
+					j > 1 &&
+					a[i - 1] === b[j - 2] &&
+					a[i - 2] === b[j - 1]
+				) {
+					value = Math.min(value, prev2[j - 2] + 1);
+				}
+				current[j] = value;
+			}
+			prev2 = prev;
+			prev = current;
+		}
+		return prev[n];
+	};
+
+	/** Fuzzy score: 0 = exact, higher = worse. Returns null when the term is not a match. */
+	const fuzzyTermScore = (term: string, haystack: string): number | null => {
+		const t = term.toLowerCase();
+		const h = haystack.toLowerCase();
+		if (!h) return null;
+		if (h.includes(t)) return 0;
+		const maxDistance = t.length <= 2 ? 0 : t.length <= 6 ? 1 : 2;
+		if (maxDistance === 0) return null;
+		const words = h.split(/\s+/);
+		let best: number | null = null;
+		for (const word of words) {
+			const distance = editDistance(t, word);
+			if (distance <= maxDistance && (best === null || distance < best)) {
+				best = distance;
+			}
+		}
+		return best;
+	};
+
+	/**
+	 * Fuzzy-ranked multi-word match. A row matches when EVERY query term matches
+	 * at least one haystack value (substring first, then bounded edit distance
+	 * on individual words). Score = sum of per-term best scores; lower is better.
+	 */
+	const fuzzyMatchScore = (
+		terms: string[],
+		haystacks: string[],
+	): number | null => {
+		let total = 0;
+		for (const term of terms) {
+			let termBest: number | null = null;
+			for (const haystack of haystacks) {
+				const score = fuzzyTermScore(term, haystack);
+				if (score !== null && (termBest === null || score < termBest)) {
+					termBest = score;
+				}
+			}
+			if (termBest === null) return null;
+			total += termBest;
+		}
+		return total;
+	};
+
+	/** Row-level sort comparators for the integration search. */
+	const searchComparator = (sortKey: string) => {
+		switch (sortKey) {
+			case "fullName":
+				return (a: any, b: any) =>
+					String(a.fullName || "").localeCompare(String(b.fullName || ""));
+			case "fullName:desc":
+				return (a: any, b: any) =>
+					String(b.fullName || "").localeCompare(String(a.fullName || ""));
+			case "employeeId:desc":
+				return (a: any, b: any) =>
+					String(b.employeeId || "").localeCompare(String(a.employeeId || ""));
+			case "employeeId":
+			default:
+				return (a: any, b: any) =>
+					String(a.employeeId || "").localeCompare(String(b.employeeId || ""));
+		}
+	};
+
+	const searchEmployees = async (req: Request, res: Response, _next: NextFunction) => {
+		const rawQuery = String(req.query.query || req.query.q || req.query.search || "").trim();
+		const rawLimit = Number(req.query.limit);
+		const limit =
+			Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 100) : 10;
+		const rawPage = Number(req.query.page);
+		const page = Number.isFinite(rawPage) && rawPage > 0 ? Math.floor(rawPage) : 1;
+		const sortKey = typeof req.query.sort === "string" ? req.query.sort.trim() : "";
+		const employmentStatusRaw =
+			typeof req.query.employmentStatus === "string" ? req.query.employmentStatus.trim() : "";
+		const employmentTypeRaw =
+			typeof req.query.employmentType === "string" ? req.query.employmentType.trim() : "";
+		const departmentIdRaw =
+			typeof req.query.departmentId === "string" ? req.query.departmentId.trim() : "";
+		const positionIdRaw =
+			typeof req.query.positionId === "string" ? req.query.positionId.trim() : "";
+
+		if (!rawQuery) {
+			res.status(400).json(
+				buildErrorResponse(
+					"Missing required search text. Pass ?query=<text> (aliases: q, search).",
+					400,
+				),
+			);
+			return;
+		}
+
+		employeeLogger.info(
+			`Searching employees for integration, query: ${rawQuery}, page: ${page}, limit: ${limit}, sort: ${sortKey || "relevance"}`,
+		);
+
+		try {
+			const terms = rawQuery.split(/\s+/).filter((t) => t.length > 0);
+
+			// Phase 1 (DB): fetch the filter-scoped employee pool WITHOUT text
+			// matching so typo-only candidates still reach the fuzzy scorer in
+			// phase 2. Substring AND-of-terms is evaluated in app below.
+			const whereClause: Prisma.EmployeeWhereInput = {
+				isDeleted: false,
+			};
+
+			if (employmentStatusRaw) {
+				whereClause.employmentStatus = employmentStatusRaw;
+			}
+			if (employmentTypeRaw) {
+				whereClause.employmentType = employmentTypeRaw;
+			}
+			if (departmentIdRaw) {
+				whereClause.departmentId = departmentIdRaw;
+			}
+			if (positionIdRaw) {
+				whereClause.positionId = positionIdRaw;
+			}
+
+			const candidateRows = await prisma.employee.findMany({
+				where: whereClause,
+				select: {
+					id: true,
+					employeeId: true,
+					employmentStatus: true,
+					employmentType: true,
+					person: {
+						select: {
+							personalInfo: true,
+							contactInfo: true,
+						},
+					},
+					department: {
+						select: { id: true, name: true },
+					},
+					position: {
+						select: { id: true, title: true },
+					},
+				},
+				orderBy: [{ employeeId: "asc" }],
+				take: 5000,
+			});
+
+			const mapped = (candidateRows as any[]).map((row) => {
+				const personalInfo = (row.person?.personalInfo || {}) as Record<string, any>;
+				const contactInfo = (row.person?.contactInfo || {}) as Record<string, any>;
+				const firstName = personalInfo.firstName || "";
+				const lastName = personalInfo.lastName || "";
+				const middleName = personalInfo.middleName || "";
+				return {
+					id: row.id,
+					employeeId: row.employeeId,
+					firstName,
+					middleName,
+					lastName,
+					fullName: [firstName, middleName, lastName].filter(Boolean).join(" "),
+					email: contactInfo.email || null,
+					employmentStatus: row.employmentStatus,
+					employmentType: row.employmentType,
+					department: row.department || null,
+					position: row.position || null,
+				};
+			});
+
+			// Phase 2 (app): AND-of-terms match — every query term must hit at
+			// least one haystack via substring. Exact rows keep DB order and are
+			// never pushed below fuzzy rows; fuzzy rows rank by edit score.
+			const exactRows: typeof mapped = [];
+			const fuzzyRows: Array<{ row: (typeof mapped)[number]; score: number }> = [];
+			for (const row of mapped) {
+				const haystacks = [
+					row.employeeId,
+					row.fullName,
+					row.firstName,
+					row.middleName,
+					row.lastName,
+					row.email || "",
+				];
+				if (
+					terms.every((term) =>
+						haystacks.some((h) => h.toLowerCase().includes(term.toLowerCase())),
+					)
+				) {
+					exactRows.push(row);
+					continue;
+				}
+				const score = fuzzyMatchScore(terms, haystacks);
+				if (score !== null) {
+					fuzzyRows.push({ row, score });
+				}
+			}
+
+			fuzzyRows.sort(
+				(a, b) =>
+					a.score - b.score || String(a.row.employeeId).localeCompare(String(b.row.employeeId)),
+			);
+
+			const isRelevanceSort = !sortKey || sortKey === "relevance";
+			// Matched rows only — never leak non-matching pool rows into pages.
+			const matched = [...exactRows, ...fuzzyRows.map((f) => f.row)];
+			let ranked = matched;
+			if (!isRelevanceSort) {
+				ranked = [...matched].sort(searchComparator(sortKey));
+			}
+
+			const total = exactRows.length + fuzzyRows.length;
+			const start = (page - 1) * limit;
+			const employees = ranked.slice(start, start + limit);
+
+			logActivity(req, {
+				userId: (req as any).user?.id || "unknown",
+				action: config.ACTIVITY_LOG.EMPLOYEE.ACTIONS.SEARCH_EMPLOYEES,
+				description: config.ACTIVITY_LOG.EMPLOYEE.DESCRIPTIONS.EMPLOYEES_SEARCHED,
+				page: {
+					url: req.originalUrl,
+					title: config.ACTIVITY_LOG.EMPLOYEE.PAGES.EMPLOYEE_LIST,
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					config.SUCCESS.EMPLOYEE.EMPLOYEES_SEARCHED,
+					{
+						employees,
+						count: employees.length,
+						pagination: buildPagination(total, page, limit),
+						query: rawQuery,
+						sort: isRelevanceSort ? "relevance" : sortKey,
+						fuzzy: fuzzyRows.length,
+						limit,
+					},
+					200,
+				),
+			);
+		} catch (error) {
+			employeeLogger.error(`Error searching employees: ${error}`);
+			res.status(500).json(
+				buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500),
+			);
+		}
+	};
+
 	const getAll = async (req: Request, res: Response, _next: NextFunction) => {
 		const validationResult = validateQueryParams(req, employeeLogger);
 
@@ -5989,7 +6260,17 @@ export const controller = (prisma: PrismaClient) => {
 
 			employeeLogger.info(`${config.SUCCESS.EMPLOYEE.DELETED}: ${id}`);
 
-			const existingEmployee = await prisma.employee.findFirst({
+			// Detach org references that would otherwise block a hard delete:
+			// section head assignments and line-leader memberships.
+			await prisma.section.updateMany({
+				where: { headId: id },
+				data: { headId: null },
+			});
+			await prisma.sectionLineLeader.deleteMany({
+				where: { employeeId: id },
+			});
+
+			await prisma.employee.delete({
 				where: { id },
 			});
 
@@ -9425,6 +9706,7 @@ export const controller = (prisma: PrismaClient) => {
 	return {
 		reserveEmployeeId,
 		create,
+		searchEmployees,
 		getAll,
 		getById,
 		update,

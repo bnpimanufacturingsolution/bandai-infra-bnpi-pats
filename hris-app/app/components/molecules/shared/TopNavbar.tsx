@@ -135,14 +135,13 @@ export function TopNavbar({
 	}, [activeDropdown]);
 
 	return (
-		<header
-			className={`sticky top-0 z-40 hidden border-b border-gray-100 bg-white lg:block ${className}`}>
+		<header className={`sticky top-0 z-40 border-b border-gray-100 bg-white ${className}`}>
 			<div className="flex items-center justify-between h-16 px-6">
 				{/* Left side - Mobile menu button */}
 				<div className="flex items-center gap-2">
 					<button
 						onClick={onToggleSidebar}
-						className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+						className="xl:hidden p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100">
 						<Menu className="w-5 h-5" />
 					</button>
 				</div>

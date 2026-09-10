@@ -50,6 +50,8 @@ import {
 	resolveStepAssignee,
 	updateRequestStepProgress,
 } from "../../helper/request-runtime.helper";
+import { canActAsLineLeaderForEmployee } from "../../helper/section-leader-scope.helper";
+import { getLeaderFiledWorkflowCode } from "../../helper/line-leader-workflow.helper";
 import {
 	getOrCreateWorkforceRecruitmentSetting,
 	countCurrentHeadcount,
@@ -100,7 +102,10 @@ import {
 	recomputeAttendanceObligationsForRange,
 } from "../../helper/attendance-obligation.helper";
 import { applyApprovedOvertimeCompensatoryCredit } from "../timesheet/approved-overtime-comp-leave.service";
-import { applyOvertimeRequestApprovalSideEffects } from "../timesheet/overtime-request.service";
+import {
+	applyOvertimeRequestApprovalSideEffects,
+	resolveOvertimeApprovalTargetLine,
+} from "../timesheet/overtime-request.service";
 import { applyPayrollCorrectionApprovalSideEffects } from "../payrollCorrection/payroll-correction.service";
 import { REQUEST_WORKFLOW_CODES } from "../../helper/workflow-config.helper";
 
@@ -1730,7 +1735,80 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 				};
 			}
 
+			// Line leader filing on behalf of a section member (2026-09-07
+			// requirement). Section-scoped, server-enforced; the leader is the
+			// requester (initiator), the member is the targetEmployee.
+			const requestedTargetEmployeeId = String(validation.data.targetEmployeeId || "").trim();
+			const isOnBehalfOfFile =
+				Boolean(requestedTargetEmployeeId) &&
+				requestedTargetEmployeeId !== validation.data.requesterId;
+			if (isOnBehalfOfFile) {
+				const requesterRoleForOnBehalf = String(requester.role || userRole || "")
+					.trim()
+					.toLowerCase();
+				const isHrOrAdminOnBehalf =
+					["hris-admin", "admin", "super_admin", "superadmin", "hris-hr-manager", "hris-hr-user"].includes(
+						requesterRoleForOnBehalf,
+					);
+				const leaderTargetTypes = new Set([
+					"OVERTIME",
+					"ATTENDANCE_CORRECTION",
+					"TIMESHEET",
+					"PAYROLL_CORRECTION",
+				]);
+				if (!leaderTargetTypes.has(String(validation.data.type || "").toUpperCase())) {
+					const errorResponse = buildErrorResponse(
+						`Filing ${validation.data.type} requests on behalf of another employee is not supported.`,
+						400,
+					);
+					res.status(400).json(errorResponse);
+					return;
+				}
+				if (!isHrOrAdminOnBehalf) {
+					const scopeCheck = await canActAsLineLeaderForEmployee(prisma, {
+						organizationId,
+						leaderEmployeeId: requester.id,
+						targetEmployeeId: requestedTargetEmployeeId,
+					});
+					if (!scopeCheck.ok) {
+						const errorResponse = buildErrorResponse(
+							scopeCheck.reason === "not_a_section_leader"
+								? "Only the employee's responsible line leader can file requests on their behalf."
+								: "You can only file requests for employees in your own sections.",
+							403,
+						);
+						res.status(403).json(errorResponse);
+						return;
+					}
+				}
+				const safeOnBehalfMetadata = getSafePanCreateMetadata(validation.data.metadata);
+				validation.data.metadata = {
+					...safeOnBehalfMetadata,
+					filedBy: {
+						role: requesterRoleForOnBehalf || null,
+						employeeId: requester.id,
+						isLineLeader:
+							requesterRoleForOnBehalf === "hris-line-leader" ? true : undefined,
+					},
+					targetEmployeeId: requestedTargetEmployeeId,
+				};
+			}
+
 			if (validation.data.type === "LEAVE") {
+				// On-behalf leave is not supported yet (validation + side effects are
+				// requester-bound). Leader core types: OVERTIME, ATTENDANCE_CORRECTION,
+				// TIMESHEET, PAYROLL_CORRECTION.
+				if (
+					String(validation.data.targetEmployeeId || "").trim() &&
+					String(validation.data.targetEmployeeId).trim() !== validation.data.requesterId
+				) {
+					const errorResponse = buildErrorResponse(
+						"Filing leave on behalf of another employee is not supported yet.",
+						400,
+					);
+					res.status(400).json(errorResponse);
+					return;
+				}
 				const { leaveType, totalDays, durationUnit, halfDaySession } = getLeaveMetadata(
 					validation.data,
 				);
@@ -2227,13 +2305,18 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 				};
 			}
 
+			const metadataForWorkflow = (validation.data.metadata as Record<string, any> | undefined) ?? {};
+			const onBehalfTargetId = String(validation.data.targetEmployeeId || "").trim();
+			const isOnBehalfCreate =
+				Boolean(onBehalfTargetId) && onBehalfTargetId !== validation.data.requesterId;
+			// Leader-filed on-behalf requests use the dedicated manager→HR
+			// templates; employee self-service keeps today's normal process (per
+			// operator requirement #3.2). Admin can still override via metadata.workflowCode (D1).
 			const preferredWorkflowCode =
-				String(
-					(validation.data.metadata as Record<string, any> | undefined)?.workflowCode ||
-						"",
-				)
+				String(metadataForWorkflow.workflowCode || "")
 					.trim()
 					.toUpperCase() ||
+				(isOnBehalfCreate ? getLeaderFiledWorkflowCode(validation.data.type) : null) ||
 				(validation.data.type === "OVERTIME"
 					? REQUEST_WORKFLOW_CODES.OVERTIME_DEFAULT
 					: undefined);
@@ -2713,6 +2796,40 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 							res.status(403).json(errorResponse);
 							return;
 						}
+
+						// OVERTIME approval pre-check (policy: refuse-with-clear-error, no
+						// silent no-op). An approval that cannot write payable hours to an
+						// effective timesheet line must fail BEFORE any workflow state
+						// changes. Rejections skip this (nothing needs writing for a reject).
+						if (existingRequest.type === "OVERTIME" && isApprove) {
+							const { line: otTargetLine } = await resolveOvertimeApprovalTargetLine({
+								prisma,
+								organizationId: existingRequest.organizationId,
+								requestMetadata:
+									((existingRequest.metadata as Record<string, unknown> | null) ||
+										{}) as Record<string, unknown>,
+								targetEmployeeId: existingRequest.targetEmployeeId || null,
+								requesterEmployeeId: existingRequest.requesterId || null,
+							});
+							if (!otTargetLine) {
+								const targetCode = await prisma.employee.findUnique({
+									where: {
+										id: String(
+											existingRequest.targetEmployeeId ||
+												existingRequest.requesterId ||
+												"",
+										),
+									},
+									select: { employeeId: true },
+								});
+								const errorResponse = buildErrorResponse(
+									`Cannot approve overtime: no effective timesheet line exists for ${targetCode?.employeeId || "this employee"} on the overtime date. Materialize or approve the timesheet covering that date first, then approve this request.`,
+									409,
+								);
+								res.status(409).json(errorResponse);
+								return;
+							}
+						}
 					}
 
 					const stepStatus = isApprove ? "APPROVED" : "REJECTED";
@@ -3147,12 +3264,35 @@ const bulkUploadLeaveCredits = async (req: AuthRequest, res: Response, _next: Ne
 							isApprove: shouldRunApprovalSideEffects && isApprove,
 							approverEmployeeId: actingEmployeeIdForSideEffects || null,
 							requesterEmployeeId: existingRequest.requesterId || null,
+							targetEmployeeId: existingRequest.targetEmployeeId || null,
 							rejectionReason: validation.data.comment || null,
 						});
 					} catch (error) {
 						requestLogger.error(
 							`Error processing overtime approval side effects: ${error}`,
 						);
+						// Observability: stamp the failure on the request so approvers and
+						// filers can see WHY payable OT was not written (the approval itself
+						// already completed; the OT apply pre-check should have refused the
+						// known no-line case earlier).
+						try {
+							await prisma.request.update({
+								where: { id },
+								data: {
+									metadata: {
+										...((existingRequest.metadata as Record<string, unknown>) ||
+											{}),
+										overtimeApplyError:
+											error instanceof Error ? error.message : String(error),
+										overtimeApplyErrorAt: now.toISOString(),
+									} as Prisma.InputJsonValue,
+								},
+							});
+						} catch (stampError) {
+							requestLogger.error(
+								`Failed to stamp overtime apply error on request ${id}: ${stampError}`,
+							);
+						}
 					}
 				}
 			}

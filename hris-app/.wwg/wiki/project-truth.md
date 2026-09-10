@@ -255,3 +255,10 @@ Update this file when:
 - high-risk behavior, production claims, approval requirements, or verification expectations change
 
 For adopted projects, do not treat inferred truth as final confirmed truth until reviewed.
+
+---
+
+## Section Line Leaders admin UI (2026-09-07)
+
+- /admin/configuration/sections: "Line Leaders (optional)" multi-add (removable chips + add select) beside Section Head; sections table Line Leaders column (first 2 + "+N"); view modal row; CSV export column. Backed by SectionLineLeader M:N join; membership auto-derives hris-line-leader (HR > manager > line leader precedence). Dual-app parity: HR-only exception (admin-only configuration surface, no emp-app counterpart).
+- Tests: tests/smoke/admin-config-sections-line-leaders.spec.ts 2/2; live browser proof .runtime/browser-evidence/sections-line-leaders-live/ (repo root).

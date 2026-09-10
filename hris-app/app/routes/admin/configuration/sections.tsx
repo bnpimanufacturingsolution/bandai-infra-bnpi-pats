@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { useNavigate, useSearchParams } from "react-router";
-import { Edit, Eye, Loader2, MoreVertical, Trash2 } from "lucide-react";
+import { Edit, Eye, Loader2, MoreVertical, Trash2, X } from "lucide-react";
 import { Button } from "~/components/atoms/Button";
 import { Input } from "~/components/atoms/Input";
 import { Modal } from "~/components/atoms/Modal";
@@ -69,6 +69,7 @@ interface SectionFormData {
 	description: string;
 	departmentId: string;
 	headId: string;
+	lineLeaderIds: string[];
 	scheduleId: string;
 	isHr: boolean;
 	isActive: boolean;
@@ -80,6 +81,7 @@ const SectionFormSchema = z.object({
 	description: z.string(),
 	departmentId: z.string().trim().min(1),
 	headId: z.string(),
+	lineLeaderIds: z.array(z.string()),
 	scheduleId: z.string(),
 	isHr: z.boolean(),
 	isActive: z.boolean(),
@@ -192,6 +194,22 @@ export default function SectionsPage() {
 		[employees],
 	);
 
+	// Line leaders: multi-select without the "none" sentinel; empty array = no leaders.
+	const lineLeaderOptions = useMemo(
+		() =>
+			employees.map((employee: Employee) => ({
+				value: employee.id,
+				label: getEmployeeName(employee),
+			})),
+		[employees],
+	);
+
+	const lineLeaderNameById = useMemo(() => {
+		const map = new Map<string, string>();
+		employees.forEach((employee: Employee) => map.set(employee.id, getEmployeeName(employee)));
+		return map;
+	}, [employees]);
+
 	const scheduleOptions = useMemo(
 		() => [
 			{ value: "none", label: "No default schedule" },
@@ -252,6 +270,7 @@ export default function SectionsPage() {
 			description: "",
 			departmentId: "",
 			headId: "none",
+			lineLeaderIds: [],
 			scheduleId: "none",
 			isHr: false,
 			isActive: true,
@@ -274,8 +293,84 @@ export default function SectionsPage() {
 	const watchedDescription = watch("description") || "";
 	const watchedDepartmentId = watch("departmentId") || "";
 	const watchedHeadId = watch("headId") || "none";
+	const watchedLineLeaderIds = watch("lineLeaderIds") || [];
 	const watchedIsHr = watch("isHr") || false;
 	const handleInvalidSubmit = useAdminFormErrorNavigation();
+	const [lineLeaderDraft, setLineLeaderDraft] = useState("");
+	// Member->responsible-leader assignments (D3: 1 member -> 1 leader; used
+	// when a section has 2+ leaders so each has a distinct set of members).
+	const [memberLeaderDraft, setMemberLeaderDraft] = useState("");
+	const [memberLeaderAssignments, setMemberLeaderAssignments] = useState<
+		Array<{ employeeId: string; lineLeaderId: string }>
+	>([]);
+
+	useEffect(() => {
+		if (action === "edit" && activeSectionId && !isLoadingSection) {
+			setMemberLeaderAssignments([]);
+		}
+	}, [action, activeSectionId, isLoadingSection]);
+
+	const availableLineLeaderOptions = useMemo(
+		() =>
+			lineLeaderOptions.filter(
+				(option) => !watchedLineLeaderIds.includes(option.value),
+			),
+		[lineLeaderOptions, watchedLineLeaderIds],
+	);
+
+	const addLineLeader = (employeeId: string) => {
+		if (!employeeId || employeeId === "none") return;
+		const current = getValues("lineLeaderIds") || [];
+		if (current.includes(employeeId)) return;
+		setValue("lineLeaderIds", [...current, employeeId], { shouldDirty: true });
+	};
+
+	const removeLineLeader = (employeeId: string) => {
+		setValue(
+			"lineLeaderIds",
+			(getValues("lineLeaderIds") || []).filter((leaderId) => leaderId !== employeeId),
+			{ shouldDirty: true },
+		);
+	};
+
+	const memberAssignmentOptions = useMemo(
+		() =>
+			employees
+				.filter((employee: Employee) => {
+					const employeeSectionId = (employee as any).sectionId;
+					const positionSectionId = (employee as any).position?.sectionId;
+					return (
+						employeeSectionId === activeSectionId || positionSectionId === activeSectionId
+					);
+				})
+				.map((employee: Employee) => ({
+					value: employee.id,
+					label: getEmployeeName(employee),
+				})),
+		[employees, activeSectionId],
+	);
+
+	const assignedMemberIds = useMemo(
+		() => new Set(memberLeaderAssignments.map((assignment) => assignment.employeeId)),
+		[memberLeaderAssignments],
+	);
+
+	const addMemberAssignment = (employeeId: string) => {
+		if (!employeeId || memberLeaderDraft === "none" || !memberLeaderDraft) return;
+		setMemberLeaderAssignments((current) => {
+			const withoutExisting = current.filter(
+				(assignment) => assignment.employeeId !== employeeId,
+			);
+			return [...withoutExisting, { employeeId, lineLeaderId: memberLeaderDraft }];
+		});
+		setMemberLeaderDraft("");
+	};
+
+	const removeMemberAssignment = (employeeId: string) => {
+		setMemberLeaderAssignments((current) =>
+			current.filter((assignment) => assignment.employeeId !== employeeId),
+		);
+	};
 
 	useDebouncedGeneratedCodeField({
 		enabled: action === "create" && !prefillCode,
@@ -288,12 +383,16 @@ export default function SectionsPage() {
 
 	useEffect(() => {
 		if (action === "edit" && !isLoadingSection && activeSection) {
+			const membershipIds = (activeSection.lineLeaders || [])
+				.map((membership) => membership?.employee?.id || membership?.employeeId)
+				.filter((value): value is string => Boolean(value));
 			reset({
 				name: activeSection.name,
 				code: activeSection.code,
 				description: activeSection.description || "",
 				departmentId: activeSection.departmentId,
 				headId: activeSection.headId || "none",
+				lineLeaderIds: Array.from(new Set(membershipIds)),
 				scheduleId: activeSection.scheduleId || "none",
 				isHr: !!activeSection.isHr,
 				isActive: activeSection.isActive,
@@ -381,13 +480,28 @@ export default function SectionsPage() {
 			description: data.description.trim() || undefined,
 			departmentId: data.departmentId,
 			headId: data.headId === "none" ? null : data.headId,
+			lineLeaderIds: data.lineLeaderIds || [],
 			scheduleId: data.scheduleId === "none" ? null : data.scheduleId,
 			isHr: data.isHr,
 			isActive: data.isActive,
 		};
 
 		if (action === "edit" && id) {
-			updateSectionMutation.mutate({ id, payload }, { onSuccess: closeModal });
+			updateSectionMutation.mutate(
+				{ id, payload },
+				{
+					onSuccess: async () => {
+						if (memberLeaderAssignments.length > 0) {
+							try {
+								await sectionsService.assignMembersToLineLeaders(id, memberLeaderAssignments);
+							} catch (assignmentError) {
+								console.error("Failed to assign members to line leaders", assignmentError);
+							}
+						}
+						closeModal();
+					},
+				},
+			);
 			return;
 		}
 
@@ -495,6 +609,27 @@ export default function SectionsPage() {
 					{getEmployeeName(section.head as any)}
 				</AdminConfigRelationLink>
 			),
+		},
+		{
+			key: "lineLeaders",
+			label: "Line Leaders",
+			width: "150px",
+			priority: "medium",
+			hideBelow: "md",
+			render: (_, section) => {
+				const leaders = section.lineLeaders || [];
+				if (leaders.length === 0) return <AdminConfigMutedDash />;
+				const names = leaders.map((membership) =>
+					getEmployeeName(membership?.employee as any),
+				);
+				const shown = names.slice(0, 2).join(", ");
+				const extra = names.length - 2;
+				return (
+					<span title={names.join(", ")}>
+						{extra > 0 ? `${shown} +${extra}` : shown}
+					</span>
+				);
+			},
 		},
 		{
 			key: "scheduleTemplate",
@@ -625,6 +760,7 @@ QA-LINE,Line Quality Assurance,Product Assurance,REGULAR_SCHEDULE,Manpower datab
 				"Code",
 				"Department",
 				"Section Head",
+				"Line Leaders",
 				"Default Schedule",
 				"Description",
 				"HR Section",
@@ -635,6 +771,9 @@ QA-LINE,Line Quality Assurance,Product Assurance,REGULAR_SCHEDULE,Manpower datab
 				section.code || "",
 				section.department?.name || departmentMap.get(section.departmentId) || "",
 				getEmployeeName(section.head as any),
+				(section.lineLeaders || [])
+					.map((membership) => getEmployeeName(membership?.employee as any))
+					.join("; "),
 				section.scheduleTemplate?.name ||
 					(section.scheduleId ? scheduleMap.get(section.scheduleId) : "") ||
 					"",
@@ -848,6 +987,131 @@ QA-LINE,Line Quality Assurance,Product Assurance,REGULAR_SCHEDULE,Manpower datab
 									/>
 								</div>
 							</div>
+
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-1">
+									Line Leaders (optional)
+								</label>
+								{watchedLineLeaderIds.length > 0 && (
+									<div className="mb-2 flex flex-wrap gap-2">
+										{watchedLineLeaderIds.map((leaderId) => {
+											const name =
+												lineLeaderNameById.get(leaderId) ||
+												getEmployeeName(
+													(activeSection?.lineLeaders || []).find(
+														(membership) =>
+															(membership?.employee?.id ||
+																membership?.employeeId) === leaderId,
+													)?.employee as any,
+												);
+											return (
+												<span
+													key={leaderId}
+													className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+													{name}
+													<button
+														type="button"
+														aria-label={`Remove line leader ${name}`}
+														className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-400"
+														onClick={() => removeLineLeader(leaderId)}>
+														<X className="h-3 w-3" />
+													</button>
+												</span>
+											);
+										})}
+									</div>
+								)}
+								<Select
+									options={availableLineLeaderOptions}
+									value={lineLeaderDraft}
+									onChange={(value) => {
+										addLineLeader(value);
+										setLineLeaderDraft("");
+									}}
+									placeholder={
+										employees.length === 0
+											? "Loading employees..."
+											: availableLineLeaderOptions.length === 0
+												? "All employees already added"
+												: "Add line leader..."
+									}
+								/>
+								<ConstraintTokenRow tokens={[{ label: "0-N", tone: "subtle" }]} />
+							</div>
+
+							{watchedLineLeaderIds.length > 1 && (
+								<div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+									<label className="block text-sm font-medium text-gray-700">
+										Members under each leader
+									</label>
+									<p className="mt-0.5 text-xs text-slate-500">
+										This section has multiple line leaders. Assign each member to one
+										responsible leader. Unassigned members can be served by any leader of
+										this section.
+									</p>
+									{memberLeaderAssignments.length > 0 && (
+										<div className="mt-2 space-y-1.5">
+											{memberLeaderAssignments.map((assignment) => {
+												const memberName =
+													lineLeaderNameById.get(assignment.employeeId) ||
+													assignment.employeeId;
+												const leaderName =
+													lineLeaderNameById.get(assignment.lineLeaderId) ||
+													assignment.lineLeaderId;
+												return (
+													<div
+														key={assignment.employeeId}
+														className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs">
+														<span className="text-slate-700">
+															<strong className="font-medium">{memberName}</strong>
+															<span className="text-slate-400"> under </span>
+															{leaderName}
+														</span>
+														<button
+															type="button"
+															aria-label={`Remove assignment for ${memberName}`}
+															className="rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-600 focus:outline-none focus:ring-1 focus:ring-slate-400"
+															onClick={() => removeMemberAssignment(assignment.employeeId)}>
+															<X className="h-3 w-3" />
+														</button>
+													</div>
+												);
+											})}
+										</div>
+									)}
+									<div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+										<Select
+											options={[
+												{ value: "none", label: "Select member..." },
+												...memberAssignmentOptions.filter(
+													(option) => !assignedMemberIds.has(option.value),
+												),
+											]}
+											value={memberLeaderDraft || "none"}
+											onChange={(value) => setMemberLeaderDraft(value || "none")}
+											placeholder="Select member..."
+										/>
+										<Select
+											options={[
+												{ value: "none", label: "Select leader..." },
+												...lineLeaderOptions.filter((option) =>
+													watchedLineLeaderIds.includes(option.value),
+												),
+											]}
+											value="none"
+											onChange={(leaderId) => {
+												addMemberAssignment(leaderId);
+											}}
+											placeholder={
+												memberLeaderDraft && memberLeaderDraft !== "none"
+													? "Assign under leader..."
+													: "Choose a member first"
+											}
+											disabled={!memberLeaderDraft || memberLeaderDraft === "none"}
+										/>
+									</div>
+								</div>
+							)}
 						</div>
 
 						<div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -936,6 +1200,20 @@ QA-LINE,Line Quality Assurance,Product Assurance,REGULAR_SCHEDULE,Manpower datab
 									</div>
 									<div className="mt-1 truncate font-medium text-slate-900">
 										{getEmployeeName(activeSection.head as any)}
+									</div>
+								</div>
+								<div className="min-w-0">
+									<div className="text-xs font-medium uppercase tracking-wider text-gray-500">
+										Line leaders
+									</div>
+									<div className="mt-1 font-medium text-slate-900">
+										{(activeSection.lineLeaders || []).length > 0
+											? (activeSection.lineLeaders || [])
+													.map((membership) =>
+														getEmployeeName(membership?.employee as any),
+													)
+													.join(", ")
+											: "-"}
 									</div>
 								</div>
 								<div className="min-w-0">

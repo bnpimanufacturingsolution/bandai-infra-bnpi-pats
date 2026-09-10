@@ -50,6 +50,12 @@ export interface RoleDerivationInput {
 	department?: DeptForDerivation | null;
 	level?: LevelForDerivation | null;
 	position?: LevelForDerivation | null;
+	/**
+	 * True when the employee is an assigned line leader of at least one section
+	 * (section_line_leaders membership). Yields hris-line-leader unless a
+	 * higher role (HR manager / employee manager) already applies.
+	 */
+	isLineLeader?: boolean | string | null;
 }
 
 const toStrictBoolean = (value: unknown): boolean => {
@@ -62,12 +68,17 @@ const toStrictBoolean = (value: unknown): boolean => {
 	return false;
 };
 
-const roleFromFlags = (isHrDept: boolean, isMgrLvl: boolean): HrisRole => {
+const roleFromFlags = (
+	isHrDept: boolean,
+	isMgrLvl: boolean,
+	isLineLeader = false,
+): HrisRole => {
 	if (isHrDept) {
 		if (isMgrLvl) return "hris-hr-manager";
 		return "hris-hr-user";
 	}
 	if (isMgrLvl) return "hris-employee-manager";
+	if (isLineLeader) return "hris-line-leader";
 	return "hris-employee";
 };
 
@@ -103,6 +114,7 @@ export function deriveRoleAndFlags(
 		const isHrFlag = toStrictBoolean(department?.isHr);
 		const isMgrFlag =
 			toStrictBoolean(level?.isManager) || toStrictBoolean(inputOrDepartmentName.position?.isManager);
+		const isLineLeaderFlag = toStrictBoolean(inputOrDepartmentName.isLineLeader);
 
 		const isHrByNameOrCode = isHrDepartment(
 			String(department?.name ?? ""),
@@ -113,7 +125,7 @@ export function deriveRoleAndFlags(
 		const isHrDept = isHrFlag || isHrByNameOrCode;
 		const isMgrLvl = isMgrFlag || isMgrByLevelName;
 
-		const role = roleFromFlags(isHrDept, isMgrLvl);
+		const role = roleFromFlags(isHrDept, isMgrLvl, isLineLeaderFlag);
 		return withFlags(role);
 	}
 

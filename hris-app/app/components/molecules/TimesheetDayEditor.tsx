@@ -110,6 +110,7 @@ export function TimesheetDayEditor({
 	const [shiftPreset, setShiftPreset] = useState<ShiftPreset>("scheduled");
 	const [timeOutDayOffset, setTimeOutDayOffset] = useState<TimeOutDayOffset>("0");
 	const [dayLaborType, setDayLaborType] = useState<DayLaborSelect>("unset");
+	const [projectCode, setProjectCode] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
 
 	useEffect(() => {
@@ -140,6 +141,7 @@ export function TimesheetDayEditor({
 					? day.dayLaborType
 					: "unset",
 			);
+			setProjectCode(typeof day.projectCode === "string" ? day.projectCode : "");
 		}
 	}, [
 		day,
@@ -226,6 +228,7 @@ export function TimesheetDayEditor({
 			timeIn: constructISO(timeIn),
 			timeOut: constructISO(timeOut, shouldRollTimeOutToNextDay),
 			dayLaborType: dayLaborType === "unset" ? null : dayLaborType,
+			projectCode: projectCode.trim() === "" ? null : projectCode.trim(),
 		};
 		const breakMinutes = Math.max(0, defaultTimes?.breakMinutes || 0);
 		const breakDisplay = defaultTimes?.breakDisplay || "No break";
@@ -437,6 +440,24 @@ export function TimesheetDayEditor({
 					</Select>
 					<p className="text-[11px] text-gray-500">
 						Today&apos;s work type. Can change tomorrow. Not the employee Agency/BNPI tag.
+					</p>
+				</div>
+				<div className="grid gap-1.5">
+					<Label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+						Project code
+					</Label>
+					<input
+						type="text"
+						value={projectCode}
+						onChange={(event) => setProjectCode(event.target.value)}
+						placeholder={dayLaborType === "INDIRECT" ? "bnpi-id-YYYY" : "bnpi-dl-YYYY"}
+						maxLength={64}
+						disabled={isSaving}
+						className="h-10 rounded-sm border border-gray-200 bg-white px-3 text-xs"
+					/>
+					<p className="text-[11px] text-gray-500">
+						Default from labor type (bnpi-dlYear / bnpi-idYear). Leave empty to use the
+						default for this day.
 					</p>
 				</div>
 				<div className="grid gap-3 sm:grid-cols-2">

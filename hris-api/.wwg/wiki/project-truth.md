@@ -307,3 +307,15 @@ Update this file when:
 - cross-repo app/API responsibilities change
 
 For adopted projects, do not treat inferred truth as final confirmed truth until reviewed.
+
+---
+
+## Section Line Leader assignment (2026-09-07)
+
+- Status: CONFIRMED_CODE_AND_LIVE_LOCAL (VM/GitOps promoted same day).
+- Model: \SectionLineLeader\ join (table \section_line_leaders\, unique sectionId+employeeId, M:N) in both schema variants; migration \20260907_add_section_line_leaders.sql\; bootstrap.sql mirrored. Helper: \helper/section-line-leaders.helper.ts\ (\esolveLineLeaderIds\, \econcileSectionLineLeaders\).
+- API: section create/update accept optional \lineLeaderIds\ (same-org validated, deduped); list/get responses include \lineLeaders\ with employee identity; section delete captures former leader ids before cascade and re-derives their roles after delete.
+- Role truth: \hris-line-leader\ (isManager=true) is now DERIVED from membership via \deriveRoleAndFlags({ isLineLeader })\ with precedence HR > manager level > line leader; \syncLineLeaderRolesForEmployees\ re-derives on add/remove/section-delete. LLA money stays EmployeeBenefit enrollment-driven (no auto-award).
+- Employee hard delete detaches \Section.headId\ (pre-existing gap) and deletes leader join rows before \employee.delete\.
+- Tests: section-line-leaders 15/15; role-derivation 55/55; section.controller 66/66 (mock stub added for new remove() pre-read); Playwright smoke 2/2; live API round-trip + browser proof in repo-root .runtime/.
+- Note: repo-root drift table \equests_type_backup_20260826\ was exported then dropped on DEV to unblock schema-only push; the Risk note above is now resolved on DEV (UAT/PROD never had the table; db-init Complete in all three envs).

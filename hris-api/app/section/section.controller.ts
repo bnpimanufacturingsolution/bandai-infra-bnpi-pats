@@ -21,12 +21,68 @@ import { invalidateCache } from "../../middleware/cache";
 import * as XLSX from "xlsx";
 import { AuthRequest } from "../../middleware/verifyToken";
 import { suggestUniqueConfigCode } from "../../helper/config-code.helper";
-import { syncEmployeeRolesFromOrgStructure } from "../../helper/employee-role-sync.helper";
+import { syncEmployeeRolesFromOrgStructure, syncLineLeaderRolesForEmployees } from "../../helper/employee-role-sync.helper";
+import {
+	reconcileSectionLineLeaders,
+	resolveLineLeaderIds,
+} from "../../helper/section-line-leaders.helper";
+import {
+	getSectionEmployeeIds,
+	getSectionIdsLedByEmployee,
+} from "../../helper/section-leader-scope.helper";
 
 const logger = getLogger();
 const sectionLogger = logger.child({ module: "section" });
 
+/** Relation include for section reads: head + line leaders with employee identity. */
+const sectionLineLeaderInclude = (prisma: PrismaClient) => ({
+	department: { select: { id: true, name: true, code: true } },
+	head: {
+		select: {
+			id: true,
+			employeeId: true,
+			person: { select: { personalInfo: true } },
+		},
+	},
+	lineLeaders: {
+		orderBy: { createdAt: "asc" as const },
+		select: {
+			id: true,
+			employeeId: true,
+			createdAt: true,
+			employee: {
+				select: {
+					id: true,
+					employeeId: true,
+					person: { select: { personalInfo: true } },
+				},
+			},
+		},
+	},
+	scheduleTemplate: { select: { id: true, name: true, code: true } },
+});
+
 export const controller = (prisma: PrismaClient) => {
+	/** Role re-derivation after line-leader membership changes. */
+	const syncRolesAfterLineLeaderChange = async (
+		organizationId: string,
+		employeeIds: string[],
+	): Promise<void> => {
+		if (!employeeIds.length) return;
+		try {
+			const syncResult = await syncLineLeaderRolesForEmployees(prisma, {
+				organizationId,
+				employeeIds,
+				sampleLimit: 10,
+			});
+			sectionLogger.info(
+				`Line leader role sync: scanned=${syncResult.scanned} updated=${syncResult.updated} unchanged=${syncResult.unchanged}`,
+			);
+		} catch (roleSyncError) {
+			sectionLogger.warn(`Line leader role sync failed: ${roleSyncError}`);
+		}
+	};
+
 	const assertScheduleTemplateInOrganization = async (
 		scheduleId: string | null | undefined,
 		organizationId: string | null | undefined,
@@ -126,19 +182,35 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			const lineLeaderCheck = await resolveLineLeaderIds(prisma,
+				validation.data.lineLeaderIds,
+				validation.data.organizationId,
+			);
+			if (!lineLeaderCheck.ok) {
+				const errorResponse = buildErrorResponse(
+					"One or more line leaders not found in this organization",
+					400,
+					[{ field: "lineLeaderIds", message: `Missing or invalid: ${lineLeaderCheck.missing.join(", ")}` }],
+				);
+				res.status(400).json(errorResponse);
+				return;
+			}
+
+			const { lineLeaderIds: _omittedLineLeaderIds, ...sectionCreateData } =
+				validation.data;
 			const section = await prisma.section.create({
-				data: validation.data as any,
-				include: {
-					department: { select: { id: true, name: true, code: true } },
-					head: {
-						select: {
-							id: true,
-							employeeId: true,
-							person: { select: { personalInfo: true } },
-						},
-					},
-					scheduleTemplate: { select: { id: true, name: true, code: true } },
-				},
+				data: sectionCreateData as any,
+				include: sectionLineLeaderInclude(prisma),
+			});
+			const changedLeaderIds = await reconcileSectionLineLeaders(prisma,
+				section.id,
+				section.organizationId,
+				lineLeaderCheck.ids,
+			);
+			await syncRolesAfterLineLeaderChange(section.organizationId, changedLeaderIds);
+			const sectionWithLeaders = await prisma.section.findFirst({
+				where: { id: section.id },
+				include: sectionLineLeaderInclude(prisma),
 			});
 			sectionLogger.info(`Section created successfully: ${section.id}`);
 
@@ -186,7 +258,7 @@ export const controller = (prisma: PrismaClient) => {
 
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.SECTION.CREATED,
-				section,
+				sectionWithLeaders ?? section,
 				201,
 			);
 			res.status(201).json(successResponse);
@@ -266,6 +338,41 @@ export const controller = (prisma: PrismaClient) => {
 				document ? prisma.section.findMany(findManyQuery) : [],
 				count ? prisma.section.count({ where: whereClause }) : 0,
 			]);
+
+			// Attach line-leader memberships for the page (single batched query).
+			if (document && sections.length > 0) {
+				try {
+					const sectionIds = sections.map((section) => section.id);
+					const memberships = await prisma.sectionLineLeader.findMany({
+						where: { sectionId: { in: sectionIds } },
+						orderBy: { createdAt: "asc" },
+						select: {
+							id: true,
+							sectionId: true,
+							employeeId: true,
+							createdAt: true,
+							employee: {
+								select: {
+									id: true,
+									employeeId: true,
+									person: { select: { personalInfo: true } },
+								},
+							},
+						},
+					});
+					const bySection = new Map<string, typeof memberships>();
+					for (const membership of memberships) {
+						const list = bySection.get(membership.sectionId) || [];
+						list.push(membership);
+						bySection.set(membership.sectionId, list);
+					}
+					for (const section of sections) {
+						(section as any).lineLeaders = bySection.get(section.id) || [];
+					}
+				} catch (enrichError) {
+					sectionLogger.warn(`Failed to attach line leaders to section list: ${enrichError}`);
+				}
+			}
 
 			sectionLogger.info(`Retrieved ${sections.length} sections`);
 			const processedData =
@@ -419,6 +526,22 @@ export const controller = (prisma: PrismaClient) => {
 
 			const prismaData = { ...validatedData };
 
+			const lineLeaderCheck = await resolveLineLeaderIds(prisma,
+				(prismaData as any).lineLeaderIds,
+				existingSection.organizationId,
+			);
+			if (!lineLeaderCheck.ok) {
+				const errorResponse = buildErrorResponse(
+					"One or more line leaders not found in this organization",
+					400,
+					[{ field: "lineLeaderIds", message: `Missing or invalid: ${lineLeaderCheck.missing.join(", ")}` }],
+				);
+				res.status(400).json(errorResponse);
+				return;
+			}
+			const { lineLeaderIds: _omittedLineLeaderIds, ...sectionUpdateData } =
+				prismaData as any;
+
 			if (
 				!(await assertScheduleTemplateInOrganization(
 					(prismaData as any).scheduleId,
@@ -435,19 +558,20 @@ export const controller = (prisma: PrismaClient) => {
 
 			const updatedSection = await prisma.section.update({
 				where: { id },
-				data: prismaData as any,
-				include: {
-					department: { select: { id: true, name: true, code: true } },
-					head: {
-						select: {
-							id: true,
-							employeeId: true,
-							person: { select: { personalInfo: true } },
-						},
-					},
-					scheduleTemplate: { select: { id: true, name: true, code: true } },
-				},
+				data: sectionUpdateData as any,
+				include: sectionLineLeaderInclude(prisma),
 			});
+			const changedLeaderIds = await reconcileSectionLineLeaders(prisma,
+				id,
+				existingSection.organizationId,
+				lineLeaderCheck.ids,
+			);
+			await syncRolesAfterLineLeaderChange(existingSection.organizationId, changedLeaderIds);
+			const sectionWithLeaders = await prisma.section.findFirst({
+				where: { id },
+				include: sectionLineLeaderInclude(prisma),
+			});
+			sectionLogger.info(`Section line leaders reconciled: ${id}`);
 
 			try {
 				await invalidateCache.byPattern(`cache:section:byId:${id}:*`);
@@ -465,7 +589,7 @@ export const controller = (prisma: PrismaClient) => {
 			sectionLogger.info(`${config.SUCCESS.SECTION.UPDATED}: ${updatedSection.id}`);
 			const successResponse = buildSuccessResponse(
 				config.SUCCESS.SECTION.UPDATED,
-				{ section: updatedSection },
+				{ section: sectionWithLeaders ?? updatedSection },
 				200,
 			);
 			res.status(200).json(successResponse);
@@ -504,9 +628,20 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Capture line-leader memberships before the cascade removes them,
+			// so their roles can be re-derived after the delete.
+			const formerLeaderIds = (
+				await prisma.sectionLineLeader.findMany({
+					where: { sectionId: id },
+					select: { employeeId: true },
+				})
+			).map((row) => row.employeeId);
+
 			await prisma.section.delete({
 				where: { id },
 			});
+
+			await syncRolesAfterLineLeaderChange(organizationId, formerLeaderIds);
 
 			try {
 				await invalidateCache.byPattern(`cache:section:byId:${id}:*`);
@@ -529,6 +664,109 @@ export const controller = (prisma: PrismaClient) => {
 				500,
 			);
 			res.status(500).json(errorResponse);
+		}
+	};
+
+	/**
+	 * Assign section members to responsible line leaders (D3: 1 member -> 1
+	 * leader; used when a section has 2+ leaders so each leader has a distinct
+	 * set of members under them). All assigned leaders must be leaders of THIS
+	 * section; all members must belong to this section.
+	 */
+	const assignMembersToLineLeaders = async (req: Request, res: Response, _next: NextFunction) => {
+		const { id } = req.params;
+		const authReq = req as AuthRequest;
+		try {
+			if (!id || !authReq.organizationId) {
+				res.status(400).json(buildErrorResponse("Section ID is required", 400));
+				return;
+			}
+			const section = await prisma.section.findFirst({
+				where: { id, organizationId: authReq.organizationId, isDeleted: false },
+				select: { id: true, organizationId: true },
+			});
+			if (!section) {
+				res.status(404).json(buildErrorResponse("Section not found", 404));
+				return;
+			}
+			const assignments = Array.isArray((req.body as any)?.assignments)
+				? ((req.body as any).assignments as Array<{ employeeId: string; lineLeaderId: string }>)
+				: [];
+			if (assignments.length === 0) {
+				res.status(400).json(buildErrorResponse("assignments[] is required", 400));
+				return;
+			}
+
+			const sectionLeaders = (
+				await prisma.sectionLineLeader.findMany({
+					where: { sectionId: id },
+					select: { employeeId: true },
+				})
+			).map((row) => row.employeeId);
+			const leaderSet = new Set(sectionLeaders);
+			if (leaderSet.size === 0) {
+				res.status(400).json(
+					buildErrorResponse("Assign line leaders to this section before assigning members.", 400),
+				);
+				return;
+			}
+
+			const sectionMembers = new Set(
+				(
+					await prisma.employee.findMany({
+						where: {
+							organizationId: section.organizationId,
+							isDeleted: false,
+							OR: [
+								{ sectionId: id },
+								{ position: { is: { sectionId: id } } },
+							],
+						},
+						select: { id: true },
+					})
+				).map((row) => row.id),
+			);
+
+			const errors: Array<{ field: string; message: string }> = [];
+			for (const [index, assignment] of assignments.entries()) {
+				const employeeId = String(assignment?.employeeId || "").trim();
+				const lineLeaderId = String(assignment?.lineLeaderId || "").trim();
+				if (!sectionMembers.has(employeeId)) {
+					errors.push({
+						field: `assignments[${index}].employeeId`,
+						message: "Employee is not a member of this section.",
+					});
+				}
+				if (!leaderSet.has(lineLeaderId)) {
+					errors.push({
+						field: `assignments[${index}].lineLeaderId`,
+						message: "Line leader is not assigned to this section.",
+					});
+				}
+			}
+			if (errors.length > 0) {
+				res.status(400).json(buildErrorResponse("Invalid assignments", 400, errors as any));
+				return;
+			}
+
+			await prisma.$transaction(async (tx) => {
+				for (const assignment of assignments) {
+					await tx.employee.update({
+						where: { id: assignment.employeeId },
+						data: { lineLeaderId: assignment.lineLeaderId },
+					});
+				}
+			});
+
+			// Members may now have a derived responsible leader; no role change
+			// (assignment does not alter the member's own role).
+			sectionLogger.info(`Section members assigned to line leaders: ${id} (${assignments.length})`);
+			res
+				.status(200)
+				.json(buildSuccessResponse(config.SUCCESS.SECTION.UPDATED, { assigned: assignments.length }, 200));
+		} catch (error) {
+			sectionLogger.error(`Error assigning members to line leaders: ${error}`);
+			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
 		}
 	};
 
@@ -848,5 +1086,344 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
-	return { generateCode, create, getAll, getById, update, remove, importFromXLSX };
+	/**
+	 * GET /api/section/led-members
+	 * Active employees in the sections the signed-in employee leads. Used by the
+	 * leader-filed request UI (e.g. "file overtime for a section member") so the
+	 * "For whom" picker lists exactly the people under the leader.
+	 */
+	const getLedMembers = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = (req as any).organizationId;
+			const actingEmployeeId = (req as any).metadata?.employee?.id;
+			if (!organizationId || !actingEmployeeId) {
+				res
+					.status(401)
+					.json(buildErrorResponse("Employee context is required.", 401));
+				return;
+			}
+
+			const ledSectionIds = await getSectionIdsLedByEmployee(prisma, actingEmployeeId);
+			if (!ledSectionIds.length) {
+				res.status(200).json(
+					buildSuccessResponse("Led section members retrieved", { sections: [], members: [] }, 200),
+				);
+				return;
+			}
+
+			const ledSections = await prisma.section.findMany({
+				where: { id: { in: ledSectionIds }, organizationId, isDeleted: false },
+				select: { id: true, name: true, code: true },
+				orderBy: { name: "asc" },
+			});
+
+			const memberEmployeeIds = await getSectionEmployeeIds(prisma, {
+				organizationId,
+				sectionIds: ledSectionIds,
+			});
+			const members = memberEmployeeIds.length
+				? await prisma.employee.findMany({
+						where: { id: { in: memberEmployeeIds }, organizationId, isDeleted: false },
+						select: {
+							id: true,
+							employeeId: true,
+							section: { select: { id: true, name: true, code: true } },
+							position: { select: { title: true } },
+							person: { select: { personalInfo: true } },
+						},
+						orderBy: { employeeId: "asc" },
+					})
+				: [];
+
+			res
+				.status(200)
+				.json(buildSuccessResponse("Led section members retrieved", { sections: ledSections, members }, 200));
+		} catch (error) {
+			sectionLogger.error(`Error getting led section members: ${error}`);
+			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
+		}
+	};
+
+	/**
+	 * GET /api/section/led-timesheets
+	 * Timesheets of the active members of the sections the signed-in employee
+	 * leads. Powers the My Team "Team Timesheets" tab for line leaders.
+	 *
+	 * Read-only, leader-scoped (SectionLineLeader + section/position membership).
+	 * Supports an optional payroll period selector:
+	 *   - `payrollPeriodId` (id or code) for an exact period, or
+	 *   - `period=current` for the OPEN/PROCESSING period overlapping today
+	 *     (falls back to the latest period that has any led-member timesheet).
+	 * Members without a timesheet for the period are returned with
+	 * `timesheet: null` so the leader sees the full roster honestly.
+	 */
+	const getLedTimesheets = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const organizationId = (req as any).organizationId;
+			const actingEmployeeId = (req as any).metadata?.employee?.id;
+			if (!organizationId || !actingEmployeeId) {
+				res
+					.status(401)
+					.json(buildErrorResponse("Employee context is required.", 401));
+				return;
+			}
+
+			const ledSectionIds = await getSectionIdsLedByEmployee(prisma, actingEmployeeId);
+			if (!ledSectionIds.length) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"Led section timesheets retrieved",
+						{ sections: [], period: null, members: [] },
+						200,
+					),
+				);
+				return;
+			}
+
+			const ledSections = await prisma.section.findMany({
+				where: { id: { in: ledSectionIds }, organizationId, isDeleted: false },
+				select: { id: true, name: true, code: true },
+				orderBy: { name: "asc" },
+			});
+
+			const memberEmployeeIds = await getSectionEmployeeIds(prisma, {
+				organizationId,
+				sectionIds: ledSectionIds,
+			});
+			if (!memberEmployeeIds.length) {
+				res.status(200).json(
+					buildSuccessResponse(
+						"Led section timesheets retrieved",
+						{ sections: ledSections, period: null, members: [] },
+						200,
+					),
+				);
+				return;
+			}
+
+			// ----- Period resolution -----
+			const periodParam = String((req.query as any)?.period || "").trim();
+			const periodIdParam = String((req.query as any)?.payrollPeriodId || "").trim();
+
+			let period: {
+				id: string;
+				code: string | null;
+				name: string;
+				startDate: Date;
+				endDate: Date;
+				status: string;
+			} | null = null;
+
+			if (periodIdParam) {
+				// Exact period by id or code, scoped to this org.
+				const isObjectId = /^[0-9a-fA-F]{24}$/.test(periodIdParam);
+				period = await prisma.payrollPeriod.findFirst({
+					where: {
+						organizationId,
+						isDeleted: false,
+						...(isObjectId ? { id: periodIdParam } : { code: periodIdParam }),
+					},
+					select: {
+						id: true,
+						code: true,
+						name: true,
+						startDate: true,
+						endDate: true,
+						status: true,
+					},
+				});
+				if (!period) {
+					res.status(404).json(buildErrorResponse("Payroll period not found.", 404));
+					return;
+				}
+			} else if (periodParam === "current") {
+				// OPEN/PROCESSING period overlapping today; fallback to the latest
+				// period containing any led-member timesheet.
+				const now = new Date();
+				period = await prisma.payrollPeriod.findFirst({
+					where: {
+						organizationId,
+						isDeleted: false,
+						status: { in: ["OPEN", "PROCESSING"] },
+						startDate: { lte: now },
+						endDate: { gte: now },
+					},
+					orderBy: { startDate: "desc" },
+					select: {
+						id: true,
+						code: true,
+						name: true,
+						startDate: true,
+						endDate: true,
+						status: true,
+					},
+				});
+				if (!period) {
+					// Latest period with a timesheet for any led member.
+					const latestWithSheet = await prisma.timesheet.findFirst({
+						where: {
+							organizationId,
+							isDeleted: false,
+							employeeId: { in: memberEmployeeIds },
+						},
+						orderBy: { createdAt: "desc" },
+						select: {
+							payrollPeriod: {
+								select: {
+									id: true,
+									code: true,
+									name: true,
+									startDate: true,
+									endDate: true,
+									status: true,
+								},
+							},
+						},
+					});
+					period = latestWithSheet?.payrollPeriod ?? null;
+				}
+			} else {
+				// Default: latest period with a timesheet for any led member; if the
+				// roster has none yet, fall back to the org's current OPEN period.
+				const latestWithSheet = await prisma.timesheet.findFirst({
+					where: {
+						organizationId,
+						isDeleted: false,
+						employeeId: { in: memberEmployeeIds },
+					},
+					orderBy: { createdAt: "desc" },
+					select: {
+						payrollPeriod: {
+							select: {
+								id: true,
+								code: true,
+								name: true,
+								startDate: true,
+								endDate: true,
+								status: true,
+							},
+						},
+					},
+				});
+				if (latestWithSheet?.payrollPeriod) {
+					period = latestWithSheet.payrollPeriod;
+				} else {
+					const now = new Date();
+					period = await prisma.payrollPeriod.findFirst({
+						where: {
+							organizationId,
+							isDeleted: false,
+							status: { in: ["OPEN", "PROCESSING"] },
+							startDate: { lte: now },
+							endDate: { gte: now },
+						},
+						orderBy: { startDate: "desc" },
+						select: {
+							id: true,
+							code: true,
+							name: true,
+							startDate: true,
+							endDate: true,
+							status: true,
+						},
+					});
+				}
+			}
+
+			// ----- Member roster (same contract as led-members) -----
+			const members = await prisma.employee.findMany({
+				where: { id: { in: memberEmployeeIds }, organizationId, isDeleted: false },
+				select: {
+					id: true,
+					employeeId: true,
+					section: { select: { id: true, name: true, code: true } },
+					position: { select: { title: true } },
+					person: { select: { personalInfo: true } },
+				},
+				orderBy: { employeeId: "asc" },
+			});
+
+			// ----- Timesheets for the resolved period -----
+			const timesheets = period
+				? await prisma.timesheet.findMany({
+						where: {
+							organizationId,
+							isDeleted: false,
+							employeeId: { in: memberEmployeeIds },
+							payrollPeriodId: period.id,
+						},
+						select: {
+							id: true,
+							code: true,
+							employeeId: true,
+							payrollPeriodId: true,
+							status: true,
+							totalDays: true,
+							totalHoursWorked: true,
+							totalRegularHours: true,
+							totalOvertimeHours: true,
+							totalUndertimeHours: true,
+							totalLateHours: true,
+							totalEarlyOutHours: true,
+							submittedAt: true,
+							approvalDate: true,
+							updatedAt: true,
+						},
+						orderBy: { employeeId: "asc" },
+					})
+				: [];
+			const timesheetByEmployee = new Map(timesheets.map((ts) => [ts.employeeId, ts]));
+
+			const rows = members.map((member) => {
+				const ts = timesheetByEmployee.get(member.id) || null;
+				return {
+					member: {
+						id: member.id,
+						employeeId: member.employeeId,
+						section: member.section,
+						position: member.position,
+						person: member.person,
+					},
+					timesheet: ts,
+				};
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					"Led section timesheets retrieved",
+					{
+						sections: ledSections,
+						period: period
+							? {
+									id: period.id,
+									code: period.code ?? null,
+									name: period.name,
+									startDate: period.startDate,
+									endDate: period.endDate,
+									status: period.status,
+								}
+							: null,
+						members: rows,
+					},
+					200,
+				),
+			);
+		} catch (error) {
+			sectionLogger.error(`Error getting led section timesheets: ${error}`);
+			res.status(500).json(buildErrorResponse(config.ERROR.COMMON.INTERNAL_SERVER_ERROR, 500));
+		}
+	};
+
+	return {
+		generateCode,
+		create,
+		getAll,
+		getById,
+		update,
+		remove,
+		assignMembersToLineLeaders,
+		getLedMembers,
+		getLedTimesheets,
+		importFromXLSX,
+	};
 };

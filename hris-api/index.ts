@@ -18,6 +18,10 @@ import { httpMetricsMiddleware, metricsHandler } from "./middleware/observabilit
 import { apiActivityLoggingMiddleware } from "./middleware/apiActivityLogging";
 import { apiDebugLoggingMiddleware } from "./middleware/apiDebugLogging";
 import { isPublicUnauthenticatedApiPath } from "./middleware/isPublicApiRoute";
+import {
+	requireIntegrationApiKey,
+	INTEGRATION_SEARCH_PATH,
+} from "./middleware/integrationApiKey";
 import { hikvisionFdlibFaceDeliveryRegistry } from "./helper/hikvision-fdlib-face.helper";
 import { shutdownTelemetry } from "./helper/telemetry";
 import { recordHttpOutcome, startStatusSampler } from "./app/status/status.service";
@@ -669,6 +673,11 @@ app.use(config.baseApiPath, (req: Request, res: Response, next: NextFunction) =>
 	) {
 		// Skip middleware for the docs, auth, and hikvision routes
 		return next();
+	}
+	// Integration API-key lane: /employee/search accepts X-API-Key instead of a
+	// user JWT. The guard is fail-closed when no keys are configured.
+	if (req.path === INTEGRATION_SEARCH_PATH && req.get("X-API-Key")) {
+		return requireIntegrationApiKey(req, res, next);
 	}
 	verifyToken(req, res, () => {
 		next();

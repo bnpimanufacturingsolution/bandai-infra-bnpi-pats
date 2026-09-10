@@ -23,6 +23,11 @@ export const isAttendanceCorrectionRequestType = (requestType?: string | null) =
 export const isAttendanceCorrectionWorkflowCode = (code?: string | null) =>
 	normalizeToken(code) === ATTENDANCE_CORRECTION_WORKFLOW_CODE;
 
+// Leader-filed correction keeps its manager→HR(TASK) chain from the catalog;
+// the normalizer below must not rewrite it to the self-service chain.
+export const isLeaderFiledAttendanceCorrectionWorkflowCode = (code?: string | null) =>
+	normalizeToken(code) === normalizeToken("WF-ATTENDANCE-CORRECTION-LEADER-FILED");
+
 export const isAttendanceCorrectionHrRole = (role?: string | null) => {
 	const normalized = String(role || "")
 		.trim()

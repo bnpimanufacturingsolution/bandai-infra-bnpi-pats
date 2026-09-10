@@ -14,15 +14,7 @@ import { useAuth } from "~/lib/hooks/use-auth";
 import { useEmployee } from "~/lib/hooks/useEmployees";
 import { useDocumentActionMetrics } from "~/lib/hooks/useMetrics";
 import { cn } from "~/lib/utils";
-import {
-	ArrowLeft,
-	Briefcase,
-	Calendar,
-	Clock,
-	FileText,
-	FolderOpen,
-	User,
-} from "lucide-react";
+import { ArrowLeft, Briefcase, Calendar, Clock, FileText, FolderOpen, User } from "lucide-react";
 
 const tabs = [
 	{ id: "personal", label: "Personal", icon: User },
@@ -62,8 +54,7 @@ export default function EmployeeDetailPage() {
 				item.priorityState !== "optional" &&
 				(item.isActionable || item.priorityState === "pending_approval"),
 		).length || 0;
-	const shouldShowBackButton =
-		Boolean(fromParam) || !isOwnProfile || isAdminConfigurationProfile;
+	const shouldShowBackButton = Boolean(fromParam) || !isOwnProfile || isAdminConfigurationProfile;
 
 	const handleTabChange = (tabId: string) => {
 		setSearchParams((previousParams) => {
@@ -156,7 +147,7 @@ export default function EmployeeDetailPage() {
 
 			<section className="employee-detail-tabs flex min-h-0 flex-1 flex-col overflow-hidden">
 				<div
-					className="employee-detail-tab-rail sticky top-0 z-10 shrink-0 bg-background/95 backdrop-blur"
+					className="employee-detail-tab-rail relative z-10 shrink-0 bg-background/95 backdrop-blur"
 					data-testid="employee-detail-tab-bar"
 					role="tablist"
 					aria-label="Employee profile sections">
@@ -199,33 +190,27 @@ export default function EmployeeDetailPage() {
 					)}
 					data-testid="employee-detail-tab-panel"
 					role="tabpanel">
-						{activeTab === "personal" ? (
-							<PersonalInfoTab
-								employee={employee}
-								isOwnProfile={isOwnProfile}
-								avatarUrl={profileAvatarUrl}
-								onUpdateProfile={openProfileSettings}
-								onChangePassword={openChangePassword}
-								onResignationFlow={openResignationFlow}
-							/>
-						) : null}
-						{activeTab === "employment" ? (
-							<EmploymentDetailsTab employee={employee} />
-						) : null}
-						{activeTab === "schedule" ? <ScheduleTab employee={employee} /> : null}
-						{activeTab === "compensation" ? (
-							<CompensationTab employee={employee} />
-						) : null}
-						{activeTab === "leave-balance" ? (
-							<LeaveBalanceTab employee={employee} />
-						) : null}
-						{activeTab === "documents" ? (
-							<DocumentsTab employee={employee} canEdit={isOwnProfile} />
-						) : null}
-						{activeTab === "filing-201" ? (
-							<Filing201Tab employeeId={employee.id} />
-						) : null}
-						{activeTab === "boarding" ? <OnboardingTab employee={employee} /> : null}
+					{activeTab === "personal" ? (
+						<PersonalInfoTab
+							employee={employee}
+							isOwnProfile={isOwnProfile}
+							avatarUrl={profileAvatarUrl}
+							onUpdateProfile={openProfileSettings}
+							onChangePassword={openChangePassword}
+							onResignationFlow={openResignationFlow}
+						/>
+					) : null}
+					{activeTab === "employment" ? (
+						<EmploymentDetailsTab employee={employee} />
+					) : null}
+					{activeTab === "schedule" ? <ScheduleTab employee={employee} /> : null}
+					{activeTab === "compensation" ? <CompensationTab employee={employee} /> : null}
+					{activeTab === "leave-balance" ? <LeaveBalanceTab employee={employee} /> : null}
+					{activeTab === "documents" ? (
+						<DocumentsTab employee={employee} canEdit={isOwnProfile} />
+					) : null}
+					{activeTab === "filing-201" ? <Filing201Tab employeeId={employee.id} /> : null}
+					{activeTab === "boarding" ? <OnboardingTab employee={employee} /> : null}
 				</div>
 			</section>
 		</div>

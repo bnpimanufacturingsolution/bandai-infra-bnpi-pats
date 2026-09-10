@@ -2,16 +2,13 @@ name: Validate Project Truth Hyper-V Repo
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
-      - develop
-      - uat
-      - production
+    types:
+      - closed
   workflow_dispatch:
 
 jobs:
   validate:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4

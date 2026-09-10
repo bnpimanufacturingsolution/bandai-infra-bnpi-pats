@@ -1,3 +1,10 @@
+
+## Latest Task Addendum - 2026-09-07: Section Line Leader assignment (option B)
+
+- Shipped: SectionLineLeader M:N join + role derivation (hris-line-leader on membership, HR/manager precedence, auto re-derive on add/remove/section-delete), section CRUD lineLeaderIds reconcile, list/get lineLeaders include, employee hard-delete detach (headId + join rows).
+- UI: /admin/configuration/sections Line Leaders chips + add select; table column; view row; CSV.
+- Tests: section-line-leaders 15/15, role-derivation 55/55, section.controller 66/66, smoke 2/2; live round-trip incl. delete-demote re-proof; VM promoted (db-init Complete x3, table in DEV/UAT/PROD, Argo six apps Healthy, DEV :3101 serving lineLeaders).
+- Known drift (pre-existing, not this work): employee-hard-delete.contract.spec.ts 4/4 static-source-string failures (strings never existed at base e5e51a43).
 # Current Task
 
 ## Status

@@ -1,20 +1,4 @@
-<<<<<<< HEAD
-
 # Project Truth
-=======
-## Day-Status Review & Resolution Pipeline (2026-08-27)
->>>>>>> de0f765296d2a117773d8d8647a794bc6cc09cdf
-
-- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`.
-- Schedule truth: Universal Monday–Saturday schedule with Sunday rest (zero Sunday punches across 19,507 cells proves Sunday REST is safe; future Sunday work auto-classified PRESENT via punch).
-- Precedence pipeline: `OUT_OF_TENURE` > `REST_SUNDAY` > `PRESENT_PUNCH` > `PRESENT_SCHEDULE_POSITIVE` > `ABSENT_AWOL_EVIDENCED` > `LEAVE_PAID` > `LEAVE_UNPAID` > `REVIEW_NO_EVIDENCE`.
-- Review queue: Bare no-show days land in `REVIEW_NO_EVIDENCE` surfaced to HR with `ESTIMATE_ONLY` exposure notes; never silently auto-charged as absent (prevents ₱462.8k–₱573.5k/window of false phantom charges on 405–494 uncharged people, mostly Saturdays).
-- Workbooks: AWOL workbook provides DA/disciplinary absence evidence labels (244/186 days labeled; never prices payroll). Leave workbook provides paid vs unpaid day-level breakdown.
-- API Endpoints:
-  - `GET /api/payrollperiod/:id/day-status-review` — DB-only bucket counts + review queue.
-  - `POST /api/payrollperiod/:id/day-status-review/workbook` — In-memory refinement using multipart `leaveFile` and `awolFile` (persists nothing).
-- Helper: `hris-api/helper/day-status-resolution.helper.ts` (12/12 unit tests).
-- UI: `/hr/day-status-review` (AuthGuard, period selector, bucket chips, weekday histogram, review queue DataTable, CSV export, upload refine).
 
 ## Day-Status Review & Resolution Pipeline (2026-08-27)
 
@@ -65,14 +49,60 @@
 - Operator: `docs/DB_INIT_JOB.md`. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
 
 
+## Section Head & Line Leader Assignment (2026-09-07 audit)
+
+- Status: `CONFIRMED_CODE_AUDIT`.
+- **Section Head** — Fully implemented:
+  - Schema: `Section.headId` (nullable FK to `Employee`) + reverse `Employee.managedSections` (1:N).
+  - Admin UI: `/admin/configuration/sections.tsx` — dropdown to assign/unset head per section.
+  - Backend: `sections.service.ts` CRUD includes `headId`; cleanup script clears `headId` on employee removal.
+- **Line Leader** — Partial implementation (role + payroll only, no positional assignment):
+  - Auth role: `hris-line-leader` exists in role derivation (`role-derivation.ts`). Treated as manager (`isManager: true`).
+  - Payroll: `EmployeePayroll.lineLeaderAllowance` (Float, default 0) — LLA / Line Leader Allowance, post-net receivable.
+  - Workflows: Used in boarding template, request approvals, notifications, PAN post-actions.
+  - **Gap**: No `Employee.lineLeaderFor` relation, no `Position.isLineLeader`, no section/team-level assignment stored.
+  - Timesheet/day-labor (2026-08-20): "Line Leader tags people per day on timesheet" — `Timesheetline.dayLaborType` (DIRECT/INDIRECT) was added but **Line Leader assignment itself is not persisted**.
+- Terminology: "Section Head" (canonical), "Line Leader" (role code `hris-line-leader`).
+
+### Section Line Leader assignment — IMPLEMENTED (2026-09-07)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`.
+- Operator chose **multiple line leaders per section** (option B): join model `SectionLineLeader`
+  (table `section_line_leaders`, unique `sectionId+employeeId`); `Section.lineLeaders` /
+  `Employee.lineLeaderSections` reverse relations. An employee may lead many sections.
+- Assignment screen: `/admin/configuration/sections` — "Line Leaders (optional)" multi-add
+  (removable chips) beside Section Head; table column + view row + CSV column.
+- **Role is now live**: membership derives `hris-line-leader` (`isManager=true`) via
+  `deriveRoleAndFlags({ ..., isLineLeader })`; precedence HR > manager level > line leader
+  (no downgrade of stronger org roles). Add/remove/section-delete all re-derive roles
+  through `syncLineLeaderRolesForEmployees`.
+- API: section create/update accept `lineLeaderIds` (same-org validated, deduped);
+  `reconcileSectionLineLeaders` transactionally diffs join rows; list GET batches
+  memberships. Employee hard delete now also detaches `Section.headId` (pre-existing gap)
+  and deletes join rows.
+- LLA money unchanged: still `EmployeeBenefit` `LLA` enrollment-driven; no auto-award.
+- Tests: `tests/section-line-leaders.spec.ts` 15/15; `role-derivation.spec.ts` 55/55;
+  Playwright smoke 2/2. Live proof incl. add→upgrade, remove→demote, delete→demote:
+  `hris-api/.runtime/20260907-section-ll-proof/`, `.wwg/reports/section-line-leader-assignment-20260907.md`.
+- **VM/GitOps promotion (2026-09-07)**: pushed `2f6aed49`; VM ansible-pull synced,
+  rebuilt `hris-api-local:develop`/`hris-app-local:develop`, rolled dev/uat/prod
+  `hris-api`/`hris-app` pods; db-init Jobs re-ran **Complete** in all three envs after
+  releasing the stale/failed jobs (DEV Failed job released; UAT/PROD Completed jobs
+  released to pick up the new schema); `section_line_leaders` table verified in DEV/UAT/PROD
+  Postgres; all six Argo apps **Synced/Healthy** (runtime-dev was Degraded before this
+  work and is now Healthy); DEV API `:3101` serves the `lineLeaders` section enrichment
+  (live `[]` response proof).
+- Boundary remaining: day-labor tagging scope (leader tags own-section people only)
+  recorded as `REC-20260907-DAY-LABOR-LEADER-SECTION-SCOPING` (Proposed), not implemented.
+
 ## Employee weekly hours vs schedule templates (2026-08-20)
 
 - Status: `CONFIRMED_CODE`.
 - **Schedule templates** (`/admin/configuration/schedule-templates`) are reusable org patterns (7/14-day cycles, shift types per day). Assign them to many people.
-- **One employeeG��s hours** (Zen Monday 06:00G��15:00, Tuesday 07:00G��16:00) live on `Employee.embeddedSchedule.pattern`. HR/admin edit that from:
+- **One employee's hours** (Zen Monday 06:00-15:00, Tuesday 07:00-16:00) live on `Employee.embeddedSchedule.pattern`. HR/admin edit that from:
   1. Dedicated roster: HR Timekeeping **Schedules** (`/hr/employee-schedules`) and admin **Employee Schedules** (`/admin/configuration/employee-schedules`). Filter by department/section, click a person to see current hours, then **Change schedule**.
-  2. Employee edit form G�� Active Schedule weekly pattern (`/hr/employees/:id/edit` or admin twin).
-  3. Employee profile **Work Schedule** tab G�� **Change schedule** G�� **Days** (weekday start/end/off). `POST /api/employee-schedules` with `pattern`. Takes effect next Monday UTC and recomputes attendance obligations.
+  2. Employee edit form Active Schedule weekly pattern (`/hr/employees/:id/edit` or admin twin).
+  3. Employee profile **Work Schedule** tab > **Change schedule** > **Days** (weekday start/end/off). `POST /api/employee-schedules` with `pattern`. Takes effect next Monday UTC and recomputes attendance obligations.
   4. Same modal **Dates** tab: pick a calendar date and set hours for that date only (`POST /api/scheduleOverride`). Not next Monday.
 - A one-off date uses **schedule override**. The Dates tab is that path.
 - Team assign modal can still pick a template or one manual shift for every day; it is not the per-weekday hours editor.
@@ -795,3 +825,11 @@ For adopted projects, do not treat inferred truth as final confirmed truth until
 - Hikvision device-user merge preview must show one selectable merge row per unique device/vendor person ID read from the selected physical devices. Saved HRIS `DeviceUser` rows may attach link/status/manual-link context, but they must not drive the unique-ID count or collapse two different vendor IDs into one selectable unique ID. Duplicate source rows for the same device/user ID are truth/evidence to collapse and report; they must not create duplicate "unique ID" choices. Evidence: `.runtime/merge-strict-device-id-truth-20260721-113511/api-merge-plan-strict-device-id-summary.json`.
 - Evidence: `.runtime/device-preflight-latency-20260715-151721/` and `.runtime/biometric-portability-proof-20260715-114841/playwright-main-c-background/`.
 
+
+
+## Integration employee-search API (2026-09-04)
+
+- Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`.
+- `GET /api/employee/search` is the canonical integration employee lookup for external apps: JWT or `X-API-Key` (env `INTEGRATION_API_KEYS`, comma-separated, fail-closed 503 when unset). Handler `searchEmployees` in `hris-api/app/employee/employee.controller.ts`; route registered before `/:id` in `employee.router.ts`; guard `middleware/integrationApiKey.ts` wired in `index.ts` for `X-API-Key`-bearing `/employee/search` requests only.
+- Contract: `query` (aliases `q`/`search`, required) with AND-of-terms matching over employeeId/fullName/name parts/email; fuzzy typo tolerance (Damerau-Levenshtein per word, distance cap 1 for 3-6 char terms, 2 for 7+, 1-2 char terms exact-only); `page`/`limit` (cap 100) with honest `pagination`; `sort=relevance|employeeId|employeeId:desc|fullName|fullName:desc`; exact filters `employmentStatus`/`employmentType`/`departmentId`/`positionId`. Pool query applies structural filters only (take 5000) so typo-only candidates reach the scorer; named sorts page matched rows only. Row shape excludes salary/payroll data. 30s per-query-string cache. Activity-logged (`SEARCH_EMPLOYEES`).
+- Canonical doc for consumers and operators: `docs/INTEGRATION_EMPLOYEE_SEARCH_API.md`. Tests: `tests/employee-integration-search.spec.ts` + `tests/integration-api-key.spec.ts` (22 passing). Runtime envs need `INTEGRATION_API_KEYS` set or API-key mode answers 503 by design. Live local proof 2026-09-04: `query=z` total 486; filters chain 486 -> 455 -> 454; `zan andrei` fuzzy-matches Zen Andrei; deep pages honest (`page=455` empty, `hasNext=false`). Evidence: `.runtime/employee-search-proof-20260904-153358/`.

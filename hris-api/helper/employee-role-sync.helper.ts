@@ -33,6 +33,8 @@ export async function syncEmployeeRolesFromOrgStructure(
 		organizationId: string;
 		/** When set, only employees in these section ids are scanned. */
 		sectionIds?: string[];
+		/** When set, only these employee ids are scanned (e.g. line-leader members). */
+		employeeIds?: string[];
 		/** Limit sample rows returned for reports/logs. */
 		sampleLimit?: number;
 	},
@@ -44,6 +46,9 @@ export async function syncEmployeeRolesFromOrgStructure(
 	};
 	if (params.sectionIds?.length) {
 		where.sectionId = { in: params.sectionIds };
+	}
+	if (params.employeeIds?.length) {
+		where.id = { in: params.employeeIds };
 	}
 
 	const employees = await (prisma as any).employee.findMany({
@@ -66,6 +71,9 @@ export async function syncEmployeeRolesFromOrgStructure(
 			position: {
 				select: { id: true, title: true },
 			},
+			lineLeaderSections: {
+				select: { sectionId: true },
+			},
 		},
 	});
 
@@ -77,7 +85,9 @@ export async function syncEmployeeRolesFromOrgStructure(
 	};
 
 	for (const employee of employees) {
-		const derived = deriveEmployeeRoleFromOrgLinks(employee);
+		const derived = deriveEmployeeRoleFromOrgLinks(employee, {
+			isLineLeader: (employee.lineLeaderSections || []).length > 0,
+		});
 		const beforeRole = employee.role || null;
 		const needsUpdate =
 			beforeRole !== derived.role ||
@@ -128,25 +138,31 @@ export async function syncEmployeeRolesFromOrgStructure(
 	return summary;
 }
 
-export function deriveEmployeeRoleFromOrgLinks(employee: {
-	department?: {
-		name?: string | null;
-		code?: string | null;
-		isHr?: boolean | null;
-	} | null;
-	section?: {
-		name?: string | null;
-		code?: string | null;
-		isHr?: boolean | null;
-	} | null;
-	level?: {
-		name?: string | null;
-		isManager?: boolean | null;
-	} | null;
-	position?: {
-		title?: string | null;
-	} | null;
-}): DerivedRoleFlags {
+export function deriveEmployeeRoleFromOrgLinks(
+	employee: {
+		department?: {
+			name?: string | null;
+			code?: string | null;
+			isHr?: boolean | null;
+		} | null;
+		section?: {
+			name?: string | null;
+			code?: string | null;
+			isHr?: boolean | null;
+		} | null;
+		level?: {
+			name?: string | null;
+			isManager?: boolean | null;
+		} | null;
+		position?: {
+			title?: string | null;
+		} | null;
+	},
+	options?: {
+		/** Active section_line_leaders membership for this employee. */
+		isLineLeader?: boolean;
+	},
+): DerivedRoleFlags {
 	const sectionIsHr = Boolean(employee.section?.isHr);
 	return deriveRoleAndFlags({
 		department: {
@@ -165,6 +181,32 @@ export function deriveEmployeeRoleFromOrgLinks(employee: {
 			isManager: false,
 			name: employee.position?.title || null,
 		},
+		isLineLeader: Boolean(options?.isLineLeader),
+	});
+}
+
+/**
+ * Re-derive roles for the employees whose line-leader membership just changed
+ * (added or removed on a section). Upgrades plain employees to
+ * hris-line-leader and demotes former leaders whose membership dropped to zero,
+ * while never stripping an HR/manager role earned from org structure.
+ */
+export async function syncLineLeaderRolesForEmployees(
+	prisma: PrismaClient,
+	params: {
+		organizationId: string;
+		employeeIds: string[];
+		sampleLimit?: number;
+	},
+): Promise<EmployeeRoleSyncSummary> {
+	const employeeIds = Array.from(new Set(params.employeeIds.filter(Boolean)));
+	if (employeeIds.length === 0) {
+		return { scanned: 0, updated: 0, unchanged: 0, samples: [] };
+	}
+	return syncEmployeeRolesFromOrgStructure(prisma, {
+		organizationId: params.organizationId,
+		employeeIds,
+		sampleLimit: params.sampleLimit,
 	});
 }
 

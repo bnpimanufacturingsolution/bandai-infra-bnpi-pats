@@ -2,12 +2,8 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
-      - develop
-      - uat
-      - production
+    types:
+      - closed
   workflow_dispatch:
 
 permissions:
@@ -15,6 +11,7 @@ permissions:
 
 jobs:
   hris-api:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: hris-api
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -34,6 +31,7 @@ jobs:
         run: npm run test:regression:payroll-source-truth
 
   hris-app:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: hris-app
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -53,6 +51,7 @@ jobs:
         run: npm run test:payroll-correction
 
   hris-emp-app:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: hris-emp-app
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -90,6 +89,7 @@ jobs:
           fi
 
   hikvision:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: hikvision
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -104,6 +104,7 @@ jobs:
           python -m unittest discover -s vendor/hikvision-linux/tests -v
 
   zkteco:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: zkteco
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -118,6 +119,7 @@ jobs:
           python -m unittest discover -s vendor/zkteco-linux/tests -v
 
   ansible:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: ansible
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -132,6 +134,7 @@ jobs:
           ansible-playbook --syntax-check -i localhost, ansible/project-truth-pull.yml
 
   callback-outbox:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: callback-outbox
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -144,6 +147,7 @@ jobs:
         run: python -m py_compile services/callback-outbox/outbox_server.py
 
   gitops:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: gitops
     runs-on: ubuntu-latest
     timeout-minutes: 10
