@@ -1,5 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { uploadImportFile, uploadImportFiles } from "../../middleware/upload";
+import { requestTimeout } from "../../middleware/requestTimeout";
+import { config } from "../../config/config";
 
 interface IMigrationController {
 	execute(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -380,8 +382,24 @@ export const router = (route: Router, controller: IMigrationController): Router 
 		"/dm3/employee-post-actions/jobs/:jobId",
 		controller.getDm3EmployeePostActionsJob,
 	);
-	routes.post("/runs/dry-run", uploadImportFiles, controller.dryRunMigrationRun);
-	routes.post("/runs", uploadImportFiles, controller.startMigrationRun);
+	routes.post(
+		"/runs/dry-run",
+		uploadImportFiles,
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "migration:runs-dry-run",
+		}),
+		controller.dryRunMigrationRun,
+	);
+	routes.post(
+		"/runs",
+		uploadImportFiles,
+		requestTimeout({
+			timeoutMs: config.heavyRequestTimeoutMs,
+			label: "migration:runs-start",
+		}),
+		controller.startMigrationRun,
+	);
 	routes.get("/runs/active", controller.getActiveMigrationRun);
 	routes.get("/runs/latest", controller.getLatestMigrationRun);
 	routes.get("/runs/:runId/progress", controller.getMigrationRunProgress);
