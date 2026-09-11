@@ -82,6 +82,35 @@ The only odd surface is **PP-20260526-20260611** (1,805 APPROVED + 412 DRAFT,
 
 Payroll **generation** for the ready periods is a separate authorized money action.
 
+## Reusable upload script (no agent needed)
+
+The whole journey is scripted: `scripts/run-dm4-timesheet-upload.mjs` — run it any time
+new workbook folders arrive. It auto-logs-in, **dry-run gates every file** (a file whose
+plan is dirty is skipped, never written), executes with fresh idempotency keys, refires
+STALE runs automatically, and writes per-run evidence under `.runtime/dm4-upload-<stamp>/`.
+
+```powershell
+# 1. PLAN ONLY — see what every workbook would do (no writes):
+node scripts\run-dm4-timesheet-upload.mjs --files "<folder-with-biometrics-xlsx>" --ot "<folder-with-ot-xlsx>"
+
+# 2. EXECUTE the same pass (still plan-gated per file):
+node scripts\run-dm4-timesheet-upload.mjs --files <biometrics-dir> --ot <ot-dir> --execute
+
+# 3. Leave files need their payroll period explicitly:
+node scripts\run-dm4-timesheet-upload.mjs --execute --leave "leave-january.xlsx=PP-20260111-20260126"
+
+# Useful flags: --only "<substring>"  --max-refires 3  --api http://localhost:3001  --skip-dry-run (not recommended)
+```
+
+Prerequisites: local API healthy (if down: `scripts\restart-local-hris-api-dev.ps1`;
+during bulk windows prefer the supervised no-watch API pattern from the infra notes),
+curl.exe on PATH. OT workbooks must be per-cutoff files — split a yearly report first
+(the splitter used for the backfill is preserved in the session evidence; reruns of the
+same data are safe: the pipeline is idempotent upsert).
+
+Verified 2026-09-11 in plan-only mode against a biometrics workbook and an OT split
+(evidence: `.runtime/dm4-upload-2026-09-11T23-52-52/`, `.runtime/dm4-upload-2026-09-11T23-54-10/`).
+
 ## Infra notes (recurring truths re-proven)
 
 - The local API died mid-DM4-run 4× this day. Mitigation for the backfill window:
