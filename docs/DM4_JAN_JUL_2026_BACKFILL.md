@@ -84,10 +84,8 @@ Payroll **generation** for the ready periods is a separate authorized money acti
 
 ## Reusable upload script (no agent needed)
 
-The whole journey is scripted: `scripts/run-dm4-timesheet-upload.mjs` — run it any time
-new workbook folders arrive. It auto-logs-in, **dry-run gates every file** (a file whose
-plan is dirty is skipped, never written), executes with fresh idempotency keys, refires
-STALE runs automatically, and writes per-run evidence under `.runtime/dm4-upload-<stamp>/`.
+The whole journey is scripted: `scripts/run-dm4-timesheet-upload.mjs` — full operator
+guide with all flags, scenarios, and troubleshooting: `docs/DM4_TIMESHEET_UPLOAD_GUIDE.md`.
 
 ```powershell
 # 1. PLAN ONLY — see what every workbook would do (no writes):
