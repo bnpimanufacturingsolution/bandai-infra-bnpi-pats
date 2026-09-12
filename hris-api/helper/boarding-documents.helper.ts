@@ -9,6 +9,7 @@ import {
 } from "../generated/prisma";
 import { getLogger } from "./logger.helper";
 import { createBoardingProcess } from "./boarding.helper";
+import { ensureOnboardingChecklistForEmployee } from "../app/onboarding/onboardingLifecycle.helper";
 import {
 	evaluateEmployeeDocumentCompleteness,
 	getDocumentReviewSnapshot,
@@ -994,6 +995,22 @@ export const reconcileEmployeeOnboardingState = async ({
 		prisma,
 		processId: process.id,
 	});
+
+	// Dedicated onboarding checklist module: best-effort create-on-hire provisioning.
+	// Idempotent (skips when the employee already has one); never fails the reconciliation.
+	if (employee.employmentStatus === EmploymentStatus.ONBOARDING) {
+		try {
+			await ensureOnboardingChecklistForEmployee(prisma, {
+				employeeId,
+				organizationId: resolvedOrganizationId,
+				requireTemplate: true,
+			});
+		} catch (dedicatedError) {
+			docLogger.warn(
+				`Dedicated onboarding checklist provisioning skipped for ${employeeId}: ${dedicatedError}`,
+			);
+		}
+	}
 
 	return {
 		processId: process.id,

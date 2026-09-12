@@ -16,6 +16,7 @@ import {
 	type OnboardingActor,
 	type AuthedRequest,
 } from "./onboardingAccess.helper";
+import { ensureOnboardingChecklistForEmployee } from "./onboardingLifecycle.helper";
 import {
 	CreateOnboardingTemplateSchema,
 	UpdateOnboardingTemplateSchema,
@@ -27,6 +28,7 @@ import {
 	ReplaceOnboardingTemplateTreeSchema,
 	CreateOnboardingChecklistSchema,
 	UpdateOnboardingChecklistSchema,
+	ProvisionOnboardingChecklistsSchema,
 	SignOnboardingItemSchema,
 } from "../../zod/onboarding";
 
@@ -1175,105 +1177,157 @@ export const controller = (prisma: PrismaClient) => {
 			}
 			const { employeeId, templateId, title, targetDate } = validation.data;
 
-			const employee = await prisma.employee.findFirst({
-				where: { id: employeeId, organizationId: actor.organizationId, isDeleted: false },
-				include: { person: { select: { personalInfo: true } } },
-			});
-			if (!employee) {
+			let result;
+			try {
+				result = await ensureOnboardingChecklistForEmployee(prisma, {
+					employeeId,
+					organizationId: actor.organizationId,
+					templateId,
+					title,
+					targetDate,
+				});
+			} catch (ensureError: any) {
+				if (ensureError?.code === "TEMPLATE_NOT_FOUND") {
+					fail(res, 404, "Onboarding template not found");
+					return;
+				}
+				throw ensureError;
+			}
+
+			if (result.status === "exists") {
+				fail(res, 409, "This employee already has an onboarding checklist");
+				return;
+			}
+			if (result.status === "skipped") {
 				fail(res, 404, "Employee not found");
 				return;
 			}
 
-			const existing = await prisma.onboardingChecklist.findFirst({
-				where: { employeeId, organizationId: actor.organizationId, isDeleted: false },
-			});
-			if (existing) {
-				fail(res, 409, "This employee already has an onboarding checklist");
-				return;
-			}
-
-			let template = null;
-			if (templateId) {
-				template = await prisma.onboardingTemplate.findFirst({
-					where: { id: templateId, organizationId: actor.organizationId, isDeleted: false },
-					include: treeInclude,
-				});
-				if (!template) {
-					fail(res, 404, "Onboarding template not found");
-					return;
-				}
-			}
-
-			const checklist = await prisma.$transaction(async (tx) => {
-				const created = await tx.onboardingChecklist.create({
-					data: {
-						organizationId: actor.organizationId,
-						employeeId,
-						templateId: templateId || null,
-						title: title || `Onboarding Checklist - ${formatPersonName(employee.person)}`,
-						targetDate: targetDate || employee.employmentStartDate,
-						status: "ACTIVE",
-					},
-				});
-
-				if (template) {
-					for (const section of template.sections) {
-						const newSection = await tx.onboardingSection.create({
-							data: {
-								organizationId: actor.organizationId,
-								checklistId: created.id,
-								title: section.title,
-								order: section.order,
-							},
-						});
-						const idMap = new Map<string, string>();
-						const depthOf = (itemId: string, seen = 0): number => {
-							const candidate = section.items.find((i) => i.id === itemId);
-							if (!candidate || !candidate.parentId) return seen;
-							return depthOf(candidate.parentId, seen + 1);
-						};
-						const ordered = [...section.items].sort(
-							(a, b) => depthOf(a.id) - depthOf(b.id),
-						);
-						for (const item of ordered) {
-							const newItem = await tx.onboardingItem.create({
-								data: {
-									organizationId: actor.organizationId,
-									sectionId: newSection.id,
-									parentId: item.parentId ? idMap.get(item.parentId) || null : null,
-									number: item.number,
-									title: item.title,
-									description: item.description,
-									responsibleDepartmentId: item.responsibleDepartmentId,
-									responsibleDepartmentName: item.responsibleDepartmentName,
-									order: item.order,
-								},
-							});
-							idMap.set(item.id, newItem.id);
-						}
+			const checklist = await loadChecklistById(actor.organizationId, String(result.checklistId));
+			const built = checklist
+				? {
+						...checklist,
+						employeeName: formatPersonName(checklist.employee?.person),
+						sections: checklist.sections.map((section) => ({
+							...section,
+							items: attachChildren(section.items),
+						})),
 					}
-					await recomputeChecklistProgress(tx, created.id);
-				}
+				: null;
 
-				return tx.onboardingChecklist.findUnique({
-					where: { id: created.id },
-					include: { ...treeInclude, ...checklistMetaSelect },
-				});
-			});
-
-			const built = {
-				...checklist,
-				sections: checklist?.sections.map((section) => ({
-					...section,
-					items: attachChildren(section.items),
-				})),
-			};
-			track(req, actor, "CREATE_ONBOARDING_CHECKLIST", `Created checklist ${checklist?.id} for employee ${employeeId}`);
-			audit(req, actor, "CREATE", "ONBOARDING_CHECKLIST", String(checklist?.id), { employeeId, templateId: templateId || null }, "Onboarding checklist created");
+			track(req, actor, "CREATE_ONBOARDING_CHECKLIST", `Created checklist ${result.checklistId} for employee ${employeeId}`);
+			audit(req, actor, "CREATE", "ONBOARDING_CHECKLIST", String(result.checklistId), { employeeId, templateId: templateId || null }, "Onboarding checklist created");
 			res.status(201).json(buildSuccessResponse("Checklist created", { checklist: built }, 201));
 		} catch (error) {
 			onboardingLogger.error(`onboarding.createChecklist failed: ${error}`);
 			fail(res, 500, "Error creating onboarding checklist");
+		}
+	};
+
+	/**
+	 * Bulk provisioning for existing ONBOARDING employees lacking a checklist
+	 * (single active template auto-resolved). Idempotent + safe to re-run.
+	 */
+	const provisionAllChecklists = async (req: Request, res: Response, _next: NextFunction) => {
+		try {
+			const actor = await requireActor(req as AuthedRequest, res);
+			if (!actor) return;
+			if (!canManageOnboardingChecklists(actor)) {
+				fail(res, 403, "Only admin or HR can provision onboarding checklists");
+				return;
+			}
+			const validation = ProvisionOnboardingChecklistsSchema.safeParse(req.body || {});
+			if (!validation.success) {
+				fail(res, 400, "Validation failed", formatZodErrors(validation.error.format()));
+				return;
+			}
+			const { dryRun, employeeIds } = validation.data;
+
+			const employees = await prisma.employee.findMany({
+				where: {
+					organizationId: actor.organizationId,
+					isDeleted: false,
+					employmentStatus: "ONBOARDING",
+					...(employeeIds && employeeIds.length > 0 ? { id: { in: employeeIds } } : {}),
+				},
+				select: { id: true, employeeId: true },
+			});
+
+			const withChecklist = await prisma.onboardingChecklist.findMany({
+				where: {
+					organizationId: actor.organizationId,
+					isDeleted: false,
+					employeeId: { in: employees.map((e) => e.id) },
+				},
+				select: { employeeId: true },
+			});
+			const hasChecklist = new Set(withChecklist.map((c) => c.employeeId));
+			const missing = employees.filter((e) => !hasChecklist.has(e.id));
+
+			const activeTemplate = await prisma.onboardingTemplate.findFirst({
+				where: { organizationId: actor.organizationId, isDeleted: false, isActive: true },
+				orderBy: { createdAt: "asc" },
+				select: { id: true, name: true },
+			});
+
+			if (dryRun) {
+				track(req, actor, "PROVISION_ONBOARDING_CHECKLISTS_DRYRUN", `Dry run: ${missing.length} to provision`);
+				res.status(200).json(
+					buildSuccessResponse(
+						"Provision plan",
+						{
+							dryRun: true,
+							requested: employees.length,
+							wouldCreate: missing.length,
+							alreadyHasChecklist: hasChecklist.size,
+							template: activeTemplate,
+							employees: missing.map((e) => ({ id: e.id, employeeNumber: e.employeeId })),
+						},
+						200,
+					),
+				);
+				return;
+			}
+
+			let created = 0;
+			let skipped = hasChecklist.size;
+			let failed = 0;
+			for (const employee of missing) {
+				try {
+					const outcome = await ensureOnboardingChecklistForEmployee(prisma, {
+						employeeId: employee.id,
+						organizationId: actor.organizationId,
+						requireTemplate: true,
+					});
+					if (outcome.status === "created") created += 1;
+					else skipped += 1;
+				} catch (provisionError) {
+					failed += 1;
+					onboardingLogger.warn(
+						`provision-all failed for employee ${employee.id}: ${provisionError}`,
+					);
+				}
+			}
+
+			track(req, actor, "PROVISION_ONBOARDING_CHECKLISTS", `Provisioned ${created} checklists (skipped ${skipped}, failed ${failed})`);
+			audit(req, actor, "CREATE", "ONBOARDING_CHECKLIST", actor.organizationId, { created, skipped, failed }, "Onboarding checklists bulk provisioned");
+			res.status(200).json(
+				buildSuccessResponse(
+					"Provisioning complete",
+					{
+						dryRun: false,
+						requested: employees.length,
+						created,
+						skipped,
+						failed,
+						template: activeTemplate,
+					},
+					200,
+				),
+			);
+		} catch (error) {
+			onboardingLogger.error(`onboarding.provisionAllChecklists failed: ${error}`);
+			fail(res, 500, "Error provisioning onboarding checklists");
 		}
 	};
 
@@ -1863,6 +1917,7 @@ export const controller = (prisma: PrismaClient) => {
 		deleteItem,
 		listChecklists,
 		createChecklist,
+		provisionAllChecklists,
 		getChecklist,
 		getVisibleChecklist,
 		updateChecklist,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
@@ -9,15 +9,37 @@ interface AddItemProps {
 	level: 1 | 2 | 3;
 	sectionName?: string;
 	parentItemName?: string;
+	mode?: "create" | "edit";
+	initialName?: string;
+	initialPersonInChargeId?: string;
+	initialPersonInChargeName?: string;
 	onCreate: (name: string, personInChargeId: string, personInChargeName: string) => void;
 }
 
-export default function AddItem({ level, sectionName, parentItemName, onCreate }: AddItemProps) {
+export default function AddItem({
+	level,
+	sectionName,
+	parentItemName,
+	mode = "create",
+	initialName = "",
+	initialPersonInChargeId = "",
+	initialPersonInChargeName = "",
+	onCreate,
+}: AddItemProps) {
 	const { data, isLoading } = useDepartments({ limit: 50 });
 
 	const [open, setOpen] = useState(false);
-	const [name, setName] = useState("");
-	const [personInChargeId, setPersonInChargeId] = useState("");
+	const [name, setName] = useState(initialName);
+	const [personInChargeId, setPersonInChargeId] = useState(initialPersonInChargeId);
+
+	// Re-seed fields each time the dialog opens (edit mode reuses one component instance).
+	useEffect(() => {
+		if (open) {
+			setName(initialName);
+			setPersonInChargeId(initialPersonInChargeId);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [open]);
 
 	const departments = data?.departments ?? [];
 
@@ -27,12 +49,13 @@ export default function AddItem({ level, sectionName, parentItemName, onCreate }
 	}));
 
 	const isParent = level === 1;
+	const isEdit = mode === "edit";
 
-	const title = isParent ? "Add Item" : level === 2 ? "Add Subitem" : "Add Subitem";
+	const title = isEdit ? "Edit Item" : isParent ? "Add Item" : "Add Subitem";
 
-	const triggerLabel = isParent ? "Add Item" : "Add Subitem";
+	const triggerLabel = isEdit ? "Edit" : isParent ? "Add Item" : "Add Subitem";
 
-	const handleCreate = () => {
+	const handleSubmit = () => {
 		const trimmedName = name.trim();
 
 		if (!trimmedName) return;
@@ -41,17 +64,23 @@ export default function AddItem({ level, sectionName, parentItemName, onCreate }
 			(option) => option.value === personInChargeId,
 		);
 
-		onCreate(trimmedName, personInChargeId, selectedOption?.label ?? "");
+		onCreate(trimmedName, personInChargeId, selectedOption?.label ?? initialPersonInChargeName ?? "");
 
-		setName("");
-		setPersonInChargeId("");
+		if (!isEdit) {
+			setName("");
+			setPersonInChargeId("");
+		}
 		setOpen(false);
 	};
 
 	return (
 		<Dialog open={open} onOpenChange={setOpen}>
 			<DialogTrigger asChild>
-				<Button variant="secondary">{triggerLabel}</Button>
+				<Button
+					variant={isEdit ? "ghost" : "secondary"}
+					size={isEdit ? "sm" : undefined}>
+					{triggerLabel}
+				</Button>
 			</DialogTrigger>
 
 			<DialogContent className="max-h-[90vh] overflow-y-auto">
@@ -73,12 +102,13 @@ export default function AddItem({ level, sectionName, parentItemName, onCreate }
 
 				<section className="space-y-4">
 					<Input
+						aria-label="Item name"
 						value={name}
 						onChange={(event) => setName(event.target.value)}
 						placeholder="Enter Item Name"
 						onKeyDown={(event) => {
 							if (event.key === "Enter") {
-								handleCreate();
+								handleSubmit();
 							}
 						}}
 					/>
@@ -98,8 +128,8 @@ export default function AddItem({ level, sectionName, parentItemName, onCreate }
 					</div>
 
 					<div className="flex justify-end">
-						<Button onClick={handleCreate} disabled={!name.trim() || isLoading}>
-							Create
+						<Button onClick={handleSubmit} disabled={!name.trim()}>
+							{isEdit ? "Save" : "Create"}
 						</Button>
 					</div>
 				</section>

@@ -1,6 +1,7 @@
 import { Badge } from "~/components/atoms";
 import AddItem from "./add-item";
-import { MAX_ITEM_DEPTH, type ChecklistItem } from "./builder";
+import DeleteConfirm from "./delete-confirm";
+import { MAX_ITEM_DEPTH, type ChecklistItem, type ItemPatch } from "./builder";
 
 interface ItemNodeProps {
 	item: ChecklistItem;
@@ -12,10 +13,20 @@ interface ItemNodeProps {
 		personInChargeId: string,
 		personInChargeName: string,
 	) => void;
+	onEdit: (itemId: string, patch: ItemPatch) => void;
+	onDelete: (itemId: string) => void;
 }
 
-export default function ItemNode({ item, level, sectionName, onAddChild }: ItemNodeProps) {
+export default function ItemNode({
+	item,
+	level,
+	sectionName,
+	onAddChild,
+	onEdit,
+	onDelete,
+}: ItemNodeProps) {
 	const canAddChild = level < MAX_ITEM_DEPTH;
+	const hasChildren = item.children.length > 0;
 
 	return (
 		<div className={level === 1 ? "space-y-2" : "ml-5 space-y-2 border-l pl-4"}>
@@ -30,7 +41,32 @@ export default function ItemNode({ item, level, sectionName, onAddChild }: ItemN
 					)}
 				</div>
 
-				<Badge>Responsible</Badge>
+				<div className="flex shrink-0 items-center gap-1">
+					<Badge>Responsible</Badge>
+
+					<AddItem
+						level={level}
+						mode="edit"
+						sectionName={sectionName}
+						initialName={item.name}
+						initialPersonInChargeId={item.personInChargeId}
+						initialPersonInChargeName={item.personInChargeName}
+						onCreate={(name, personInChargeId, personInChargeName) =>
+							onEdit(item.id, { name, personInChargeId, personInChargeName })
+						}
+					/>
+
+					<DeleteConfirm
+						label="item"
+						name={item.name}
+						warning={
+							hasChildren
+								? "Its sub-items will be removed too."
+								: "This item will be removed when you save."
+						}
+						onConfirm={() => onDelete(item.id)}
+					/>
+				</div>
 			</div>
 
 			{canAddChild && (
@@ -46,7 +82,7 @@ export default function ItemNode({ item, level, sectionName, onAddChild }: ItemN
 				</div>
 			)}
 
-			{item.children.length > 0 && (
+			{hasChildren && (
 				<div className="space-y-2">
 					{item.children.map((child) => (
 						<ItemNode
@@ -55,6 +91,8 @@ export default function ItemNode({ item, level, sectionName, onAddChild }: ItemN
 							level={(level + 1) as 1 | 2 | 3}
 							sectionName={sectionName}
 							onAddChild={onAddChild}
+							onEdit={onEdit}
+							onDelete={onDelete}
 						/>
 					))}
 				</div>

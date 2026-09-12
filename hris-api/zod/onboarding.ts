@@ -133,6 +133,12 @@ export const UpdateOnboardingChecklistSchema = z
 	.refine((val) => Object.keys(val).length > 0, { message: "No update fields provided" });
 export type UpdateOnboardingChecklist = z.infer<typeof UpdateOnboardingChecklistSchema>;
 
+export const ProvisionOnboardingChecklistsSchema = z.object({
+	dryRun: z.boolean().optional(),
+	employeeIds: z.array(idSchema).optional(),
+});
+export type ProvisionOnboardingChecklists = z.infer<typeof ProvisionOnboardingChecklistsSchema>;
+
 // ---------------------------------------------------------------------------
 // Sign / unsign
 // ---------------------------------------------------------------------------

@@ -173,6 +173,154 @@ describe("checklist instance rules", () => {
 	});
 });
 
+describe("POST /api/onboarding/checklists auto-resolve + duplicates", () => {
+	it("auto-resolves the single active template when templateId is omitted", async () => {
+		let checklistFirstCalls = 0;
+		const createdChecklists: any[] = [];
+		const prismaMock: any = {
+			employee: {
+				findFirst: async () => actorEmployee({ id: "emp-newhire" }),
+			},
+			onboardingChecklist: {
+				findFirst: async (args: any) => {
+					checklistFirstCalls += 1;
+					// ensure(): existing lookup -> none; controller load -> full record
+					if (checklistFirstCalls === 1) return null;
+					return { id: "chk-new-1", sections: [], employee: { person: null } };
+				},
+			},
+			onboardingTemplate: {
+				findFirst: async (args: any) =>
+					args?.include ? { id: "ctpl0000000001", sections: [] } : { id: "ctpl0000000001" },
+			},
+			$transaction: async (fn: any) =>
+				fn({
+					onboardingChecklist: {
+						create: async (args: any) => {
+							createdChecklists.push(args.data);
+							return { id: "chk-new-1", ...args.data };
+						},
+					},
+					onboardingSection: { create: async () => ({ id: "s1" }) },
+					onboardingItem: { create: async () => ({ id: "i1" }) },
+				}),
+		};
+		const app = buildApp(prismaMock, { role: "hris-hr-manager" });
+		const response = await request(app)
+			.post("/api/onboarding/checklists")
+			.send({ employeeId: "ctpl0000000009" });
+		expect(response.status).to.equal(201);
+		expect(createdChecklists[0].templateId).to.equal("ctpl0000000001");
+	});
+
+	it("returns 409 when the employee already has a checklist", async () => {
+		const prismaMock: any = {
+			employee: { findFirst: async () => actorEmployee({ id: "emp-newhire" }) },
+			onboardingChecklist: {
+				findFirst: async () => ({ id: "chk-existing" }),
+			},
+		};
+		const app = buildApp(prismaMock, { role: "hris-hr-manager" });
+		const response = await request(app)
+			.post("/api/onboarding/checklists")
+			.send({ employeeId: "ctpl0000000009" });
+		expect(response.status).to.equal(409);
+	});
+});
+
+describe("POST /api/onboarding/checklists/provision-all", () => {
+	it("blocks department employees (admin/HR only)", async () => {
+		const prismaMock: any = {
+			employee: { findFirst: async () => actorEmployee() },
+		};
+		const app = buildApp(prismaMock, { role: "hris-employee" });
+		const response = await request(app)
+			.post("/api/onboarding/checklists/provision-all")
+			.send({ dryRun: true });
+		expect(response.status).to.equal(403);
+	});
+
+	it("dry-run returns the plan without writing", async () => {
+		let transactionCalled = false;
+		const prismaMock: any = {
+			employee: {
+				findFirst: async () => actorEmployee(),
+				findMany: async (args: any) => {
+					expect(args.where.employmentStatus).to.equal("ONBOARDING");
+					return [
+						{ id: "emp-a", employeeId: "E-A" },
+						{ id: "emp-b", employeeId: "E-B" },
+					];
+				},
+			},
+			onboardingChecklist: {
+				findMany: async () => [{ employeeId: "emp-a" }],
+			},
+			onboardingTemplate: {
+				findFirst: async () => ({ id: "ctpl0000000001", name: "Standard" }),
+			},
+			$transaction: async () => {
+				transactionCalled = true;
+			},
+		};
+		const app = buildApp(prismaMock, { role: "hris-admin" });
+		const response = await request(app)
+			.post("/api/onboarding/checklists/provision-all")
+			.send({ dryRun: true });
+		expect(response.status).to.equal(200);
+		expect(response.body.data.dryRun).to.be.true;
+		expect(response.body.data.wouldCreate).to.equal(1);
+		expect(response.body.data.employees.map((e: any) => e.id)).to.deep.equal(["emp-b"]);
+		expect(transactionCalled).to.be.false;
+	});
+
+	it("executes provisioning idempotently for employees missing a checklist", async () => {
+		const checklistFindFirstPerEmployee: Record<string, any> = { emp_b: null };
+		const created: any[] = [];
+		const prismaMock: any = {
+			employee: {
+				findFirst: async (args: any) => {
+					if (args?.where?.userId || args?.where?.id === "emp-actor") return actorEmployee();
+					return {
+						id: "emp-b",
+						employmentStartDate: new Date(),
+						person: { personalInfo: { firstName: "Bea", lastName: "Bee" } },
+					};
+				},
+				findMany: async () => [{ id: "emp-b", employeeId: "E-B" }],
+			},
+			onboardingChecklist: {
+				findMany: async () => [],
+				findFirst: async () => checklistFindFirstPerEmployee.emp_b,
+			},
+			onboardingTemplate: {
+				findFirst: async (args: any) =>
+					args?.include ? { id: "ctpl0000000001", sections: [] } : { id: "ctpl0000000001", name: "Standard" },
+			},
+			$transaction: async (fn: any) =>
+				fn({
+					onboardingChecklist: {
+						create: async (args: any) => {
+							created.push(args.data);
+							return { id: "chk-new-b", ...args.data };
+						},
+					},
+					onboardingSection: { create: async () => ({ id: "s1" }) },
+					onboardingItem: { create: async () => ({ id: "i1" }) },
+				}),
+		};
+		const app = buildApp(prismaMock, { role: "hris-hr-manager" });
+		const response = await request(app)
+			.post("/api/onboarding/checklists/provision-all")
+			.send({});
+		expect(response.status).to.equal(200);
+		expect(response.body.data.created).to.equal(1);
+		expect(response.body.data.skipped).to.equal(0);
+		expect(response.body.data.failed).to.equal(0);
+		expect(created[0].employeeId).to.equal("emp-b");
+	});
+});
+
 describe("PATCH /api/onboarding/items/:id structure-only", () => {
 	it("rejects signature/status fields through the structure endpoint", async () => {
 		const prismaMock: any = {

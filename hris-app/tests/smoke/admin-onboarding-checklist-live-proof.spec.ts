@@ -8,14 +8,12 @@ async function login(page: Page) {
 	await page.waitForURL((url) => !url.pathname.includes("/auth/login"), { timeout: 30_000 });
 }
 
-test("admin onboarding checklist page loads live roster data and signs are wired", async ({
+test("checklist page shows the created checklist as a full-page preview with nothing employee-related", async ({
 	page,
 }) => {
 	const onboardingConsoleErrors: string[] = [];
 	const failedRequests: { url: string; status: number }[] = [];
 
-	// Only onboarding-scoped console failures are relevant; pre-login /auth/me 401
-	// bootstrapping noise (asserted by the auth suite) is intentionally ignored.
 	page.on("console", (msg) => {
 		if (msg.type() === "error" && /onboarding/i.test(msg.text())) {
 			onboardingConsoleErrors.push(msg.text());
@@ -29,19 +27,29 @@ test("admin onboarding checklist page loads live roster data and signs are wired
 
 	await login(page);
 
-	const rosterResponsePromise = page.waitForResponse(
-		(response) => response.url().includes("/api/onboarding/employees") && response.status() === 200,
+	const templatesResponsePromise = page.waitForResponse(
+		(response) => response.url().includes("/api/onboarding/templates") && response.status() === 200,
 		{ timeout: 30_000 },
 	);
 	await page.goto("/admin/configuration/onboarding/checklist");
-	const rosterResponse = await rosterResponsePromise;
-	const rosterBody = await rosterResponse.json();
+	const templatesBody = await (await templatesResponsePromise).json();
+	const firstTemplate =
+		(templatesBody?.data?.templates ?? []).find((t: any) => t.isActive) ??
+		(templatesBody?.data?.templates ?? [])[0];
 
-	expect(Array.isArray(rosterBody?.data?.employees)).toBeTruthy();
+	const main = page.getByRole("main");
 
-	await expect(page.getByRole("main").getByText("Onboarding Checklist")).toBeVisible();
-	await expect(page.getByLabel("Onboarding employee")).toBeVisible();
-	await expect(page.getByRole("combobox", { name: "Onboarding employee" })).toBeVisible();
+	if (firstTemplate) {
+		await expect(main.getByText(firstTemplate.name)).toBeVisible();
+	} else {
+		await expect(main.getByText("No checklist has been built yet.")).toBeVisible();
+	}
+
+	// Nothing employee-related on this page.
+	await expect(page.getByLabel("Onboarding employee")).toHaveCount(0);
+	await expect(main.getByText(/has no checklist yet/i)).toHaveCount(0);
+	await expect(page.locator("select")).toHaveCount(0);
+	await expect(page.getByRole("button", { name: "Go to Builder" })).toBeVisible();
 
 	await page.screenshot({
 		path: ".runtime/browser-evidence/onboarding-checklist-live.png",
@@ -52,7 +60,9 @@ test("admin onboarding checklist page loads live roster data and signs are wired
 	expect(failedRequests).toEqual([]);
 });
 
-test("admin onboarding builder page loads with template controls", async ({ page }) => {
+test("builder auto-opens the first checklist and hides create-another-template affordances", async ({
+	page,
+}) => {
 	await login(page);
 
 	const templatesResponsePromise = page.waitForResponse(
@@ -60,14 +70,23 @@ test("admin onboarding builder page loads with template controls", async ({ page
 		{ timeout: 30_000 },
 	);
 	await page.goto("/admin/configuration/onboarding/builder");
-	const templatesResponse = await templatesResponsePromise;
-	expect(templatesResponse.ok()).toBeTruthy();
+	const templatesBody = await (await templatesResponsePromise).json();
+	const firstTemplate = (templatesBody?.data?.templates ?? [])[0];
 
-	await expect(
-		page.getByRole("button", { name: "Save Template" }),
-	).toBeVisible();
-	await expect(page.getByLabel("Template name")).toBeVisible();
-	await expect(page.getByLabel("Existing template")).toBeVisible();
+	await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Preview" })).toBeVisible();
+
+	// No multi-template affordances.
+	await expect(page.getByLabel("Existing template")).toHaveCount(0);
+	await expect(page.getByText("New template…")).toHaveCount(0);
+	await expect(page.getByRole("combobox", { name: "Existing template" })).toHaveCount(0);
+
+	// Auto-loaded first template's name in the input (when at least one exists).
+	if (firstTemplate) {
+		await expect(page.getByLabel("Template name")).toHaveValue(firstTemplate.name, {
+			timeout: 15_000,
+		});
+	}
 
 	await page.screenshot({
 		path: ".runtime/browser-evidence/onboarding-builder-live.png",

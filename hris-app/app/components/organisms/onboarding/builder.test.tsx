@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import {
 	AdminOnboardingBuilder,
 	mapTemplateToSections,
 	sectionsToTreePayload,
+	updateItemInItems,
+	removeItemFromItems,
+	updateSectionName,
+	removeSectionById,
+	type ChecklistItem,
 	type ChecklistSection,
 } from "./builder";
 
@@ -18,6 +23,14 @@ vi.mock("~/lib/hooks/useOnboarding", () => ({
 	useOnboardingTemplate: () => ({ data: undefined, isLoading: false }),
 	useSaveOnboardingTemplateTree: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+
+const makeItem = (id: string, children: ChecklistItem[] = []): ChecklistItem => ({
+	id,
+	name: `Item ${id}`,
+	personInChargeId: "",
+	personInChargeName: "",
+	children,
+});
 
 describe("AdminOnboardingBuilder header actions", () => {
 	it("opens a preview dialog of the built checklist and keeps a separate checklist link", () => {
@@ -46,6 +59,118 @@ describe("AdminOnboardingBuilder header actions", () => {
 		expect(
 			screen.getByText("No sections yet. Add a section to see it here."),
 		).toBeInTheDocument();
+	});
+
+	it("hides every create-another-template affordance (no selector, single Save)", () => {
+		render(
+			<MemoryRouter>
+				<AdminOnboardingBuilder />
+			</MemoryRouter>,
+		);
+
+		expect(screen.queryByLabelText("Existing template")).not.toBeInTheDocument();
+		expect(screen.queryByText("New template…")).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "Save Template" })).not.toBeInTheDocument();
+	});
+});
+
+describe("builder section/item edit + delete", () => {
+	const renderBuilder = () =>
+		render(
+			<MemoryRouter>
+				<AdminOnboardingBuilder />
+			</MemoryRouter>,
+		);
+
+	const createSection = (name: string) => {
+		fireEvent.click(screen.getByRole("button", { name: "Add Section" }));
+		const dialog = screen.getByRole("dialog");
+		const input = within(dialog).getByPlaceholderText("Enter Section Name");
+		fireEvent.change(input, { target: { value: name } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+	};
+
+	it("renames a section inline", () => {
+		renderBuilder();
+		createSection("Old Section");
+		expect(screen.getByText("Old Section")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+		const nameInput = screen.getByLabelText("Section name");
+		fireEvent.change(nameInput, { target: { value: "Renamed Section" } });
+		fireEvent.blur(nameInput);
+
+		expect(screen.getByText("Renamed Section")).toBeInTheDocument();
+		expect(screen.queryByText("Old Section")).not.toBeInTheDocument();
+	});
+
+	it("deletes a section through the confirm dialog", () => {
+		renderBuilder();
+		createSection("Doomed Section");
+		expect(screen.getByText("Doomed Section")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: /delete section doomed section/i }));
+		const dialog = screen.getByRole("dialog");
+		fireEvent.click(within(dialog).getByRole("button", { name: "Delete section" }));
+
+		expect(screen.queryByText("Doomed Section")).not.toBeInTheDocument();
+	});
+
+	it("deletes an item and its whole subtree after confirm", () => {
+		renderBuilder();
+		createSection("Items");
+
+		// add a parent item
+		fireEvent.click(screen.getByRole("button", { name: "Add Item" }));
+		let dialog = screen.getByRole("dialog");
+		fireEvent.change(within(dialog).getByLabelText("Item name"), {
+			target: { value: "Parent X" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+
+		// add a child under it
+		fireEvent.click(screen.getByRole("button", { name: "Add Subitem" }));
+		dialog = screen.getByRole("dialog");
+		fireEvent.change(within(dialog).getByLabelText("Item name"), {
+			target: { value: "Child Y" },
+		});
+		fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+
+		expect(screen.getByText("Parent X")).toBeInTheDocument();
+		expect(screen.getByText("Child Y")).toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole("button", { name: /delete item parent x/i }));
+		dialog = screen.getByRole("dialog");
+		expect(within(dialog).getByText(/sub-items will be removed too/i)).toBeInTheDocument();
+		fireEvent.click(within(dialog).getByRole("button", { name: "Delete item" }));
+
+		expect(screen.queryByText("Parent X")).not.toBeInTheDocument();
+		expect(screen.queryByText("Child Y")).not.toBeInTheDocument();
+	});
+});
+
+describe("builder pure helpers", () => {
+	it("updateItemInItems patches nested items by id", () => {
+		const tree = [makeItem("a", [makeItem("b")])];
+		const updated = updateItemInItems(tree, "b", { name: "B2", personInChargeId: "dept-it" });
+		expect(updated[0].children[0].name).to.equal("B2");
+		expect(updated[0].children[0].personInChargeId).to.equal("dept-it");
+	});
+
+	it("removeItemFromItems removes the node and its subtree", () => {
+		const tree = [makeItem("a", [makeItem("b", [makeItem("c")]), makeItem("d")])];
+		const pruned = removeItemFromItems(tree, "b");
+		expect(pruned[0].children.map((c) => c.id)).to.deep.equal(["d"]);
+	});
+
+	it("rename/remove section helpers are id-targeted", () => {
+		const sections: ChecklistSection[] = [
+			{ id: "s1", name: "One", items: [] },
+			{ id: "s2", name: "Two", items: [] },
+		];
+		expect(updateSectionName(sections, "s1", "Uno")[0].name).to.equal("Uno");
+		expect(removeSectionById(sections, "s1").map((s) => s.id)).to.deep.equal(["s2"]);
 	});
 });
 

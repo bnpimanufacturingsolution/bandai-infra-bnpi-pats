@@ -17,6 +17,7 @@ interface IController {
 	deleteItem(req: Request, res: Response, next: NextFunction): Promise<void>;
 	listChecklists(req: Request, res: Response, next: NextFunction): Promise<void>;
 	createChecklist(req: Request, res: Response, next: NextFunction): Promise<void>;
+	provisionAllChecklists(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getChecklist(req: Request, res: Response, next: NextFunction): Promise<void>;
 	getVisibleChecklist(req: Request, res: Response, next: NextFunction): Promise<void>;
 	updateChecklist(req: Request, res: Response, next: NextFunction): Promise<void>;
@@ -146,6 +147,20 @@ export const router = (route: Router, controller: IController): Router => {
 	 */
 	routes.get("/checklists", controller.listChecklists);
 	routes.post("/checklists", controller.createChecklist);
+
+	/**
+	 * @openapi
+	 * /api/onboarding/checklists/provision-all:
+	 *   post:
+	 *     summary: "Provision checklists for ONBOARDING employees missing one (admin/HR). Body: { dryRun?, employeeIds? }"
+	 *     tags: [Onboarding]
+	 *     security:
+	 *       - bearerAuth: []
+	 *     responses:
+	 *       200:
+	 *         description: Provisioning plan or result
+	 */
+	routes.post("/checklists/provision-all", controller.provisionAllChecklists);
 
 	/**
 	 * @openapi

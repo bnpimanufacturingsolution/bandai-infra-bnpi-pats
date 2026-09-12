@@ -55,10 +55,26 @@ Checklist instances (admin/HR)
 
 - `GET/POST /checklists` · `GET/PATCH/DELETE /checklists/:id`
 - `POST /checklists/:id/sections` · `POST /checklists/:id/items` · `POST /checklists/:id/items/bulk`
+- `POST /checklists/provision-all` — `{ dryRun?, employeeIds? }` (admin/HR): for every
+  ONBOARDING employee lacking a checklist, deep-copies the single active template.
+  Idempotent + re-runnable; `dryRun` returns the plan (`wouldCreate`, `alreadyHasChecklist`).
+- `POST /checklists` may omit `templateId` → the single active template auto-resolves.
 
 Shared structure edits (template=admin, checklist=admin/HR)
 
 - `PATCH/DELETE /sections/:id` · `PATCH/DELETE /items/:id` (structure only, never status/sign)
+
+### Create-on-hire provisioning (backend hooks)
+
+`ensureOnboardingChecklistForEmployee()` (`app/onboarding/onboardingLifecycle.helper.ts`) is
+idempotent and called best-effort (own try/catch, after commit, never fails the hire) from:
+
+- `employee.controller.ts` create flow (Step 8.9, when `employmentStatus=ONBOARDING`)
+- `reconcileEmployeeOnboardingState()` in `boarding-documents.helper.ts` — covers employee
+  updates that hit the onboarding reconcile path and the CSV-import post-actions stage
+
+Existing ONBOARDING employees are provisioned via `provision-all` (no bulk UI by design —
+the admin checklist page shows nothing employee-related).
 
 Sign
 
@@ -71,22 +87,37 @@ Sign
 
 ## Frontend (`hris-app`)
 
-- `app/components/organisms/onboarding/checklist.tsx` — live roster picker + filtered
-  tree + password sign modal; falls back to the original mock demo table (labelled
-  "Demo data") only when `/api/onboarding/employees` errors.
-- `app/components/organisms/onboarding/builder.tsx` — template name + load existing +
-  **Save Template** (`POST` + `PUT /tree`), sections/nested items with optional
-  responsible-department picker (departments API).
+- `app/components/organisms/onboarding/checklist.tsx` — **page preview only**: renders THE
+  created checklist (single active template) full-page in the builder-preview layout via
+  the shared `ChecklistPreviewTable`. Nothing employee-related (no roster/sign/provision
+  widgets); honest "No checklist has been built yet" empty state + Build CTA.
+- `app/components/organisms/onboarding/builder.tsx` — **single-template editor**:
+  auto-opens the FIRST template created (no template selector, no "New template…"
+  affordance); Save always updates that one template (`POST` + `PUT /tree`). Sections and
+  items support inline rename + delete (subtree removal with confirm); helpers
+  `updateSectionName`, `removeSectionById`, `updateItemInItems`, `removeItemFromItems`
+  are exported + tested. `add-item.tsx` doubles as the item edit dialog (department stays
+  optional → no-dept context item).
 - Service `app/services/onboarding.service.ts`, hooks `app/lib/hooks/useOnboarding.ts`,
-  types `app/zod/onboarding.ts`.
+  types `app/zod/onboarding.ts` (roster/visible/sign hooks remain for the future
+  employee-facing surface).
 
 ## Tests / evidence
 
 - `hris-api/tests/onboarding-access.contract.spec.ts` — sign matrix + visible-view (pure)
 - `hris-api/tests/onboarding-sign.controller.spec.ts` — sign 200/401/403/409 via supertest+mock prisma
-- `hris-api/tests/onboarding-crud.controller.spec.ts` — guards, org forcing, 409 dup, structure-only PATCH
+- `hris-api/tests/onboarding-crud.controller.spec.ts` — guards, org forcing, 409 dup,
+  templateId auto-resolve, structure-only PATCH, provision-all (403 + dry-run + idempotent execute)
+- `hris-api/tests/onboarding-lifecycle.spec.ts` — `ensureOnboardingChecklistForEmployee`
+  (exists-noop, deep copy parents-before-children, active-template auto-resolve,
+  requireTemplate skip, TEMPLATE_NOT_FOUND, employee-not-found)
+- `hris-app` vitest: `builder.test.tsx` (single-template UI contract, section/item edit+delete,
+  tree payload, pure helpers), `checklist.test.tsx` (page preview contract),
+  `onboarding.service.test.ts`
 - `hris-app/tests/smoke/admin-onboarding-checklist-live-proof.spec.ts` — live browser proof
-- Live DEV proof: `.runtime/onboarding-module-proof-<stamp>/` (create→tree→checklist→sign→unsign→cleanup)
+- Live DEV proofs: `.runtime/onboarding-module-proof-<stamp>/` (v1 E2E) and
+  `.runtime/onboarding-provision-proof-<stamp>/` (scoped provision-all create → idempotent
+  skip → visible deep-copy intact → rollback cleanup)
 
 ## Boundaries
 

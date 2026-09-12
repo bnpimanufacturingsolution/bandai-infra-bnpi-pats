@@ -55,6 +55,53 @@ export function addChildToItems(
 	});
 }
 
+export interface ItemPatch {
+	name?: string;
+	personInChargeId?: string;
+	personInChargeName?: string;
+}
+
+export function updateItemInItems(
+	items: ChecklistItem[],
+	itemId: string,
+	patch: ItemPatch,
+): ChecklistItem[] {
+	return items.map((item) => {
+		if (item.id === itemId) {
+			return { ...item, ...patch };
+		}
+		if (item.children.length > 0) {
+			return { ...item, children: updateItemInItems(item.children, itemId, patch) };
+		}
+		return item;
+	});
+}
+
+export function removeItemFromItems(items: ChecklistItem[], itemId: string): ChecklistItem[] {
+	return items
+		.filter((item) => item.id !== itemId)
+		.map((item) =>
+			item.children.length > 0
+				? { ...item, children: removeItemFromItems(item.children, itemId) }
+				: item,
+		);
+}
+
+export function updateSectionName(
+	sections: ChecklistSection[],
+	sectionId: string,
+	name: string,
+): ChecklistSection[] {
+	return sections.map((section) => (section.id === sectionId ? { ...section, name } : section));
+}
+
+export function removeSectionById(
+	sections: ChecklistSection[],
+	sectionId: string,
+): ChecklistSection[] {
+	return sections.filter((section) => section.id !== sectionId);
+}
+
 export function mapTemplateToSections(template: OnboardingTemplateTree): ChecklistSection[] {
 	const mapItem = (item: OnboardingTemplateTree["sections"][number]["items"][number]): ChecklistItem => ({
 		id: item.id,
@@ -116,6 +163,15 @@ export function AdminOnboardingBuilder() {
 	const templateQuery = useOnboardingTemplate(templateId);
 	const saveTemplateMutation = useSaveOnboardingTemplateTree();
 
+	// Auto-open the FIRST created template (single-template product; no create-another affordance).
+	useEffect(() => {
+		if (templateId) return;
+		const list = templatesQuery.data?.templates ?? [];
+		if (list.length > 0) {
+			setTemplateId(list[0].id);
+		}
+	}, [templatesQuery.data, templateId]);
+
 	useEffect(() => {
 		if (templateQuery.data?.template) {
 			setSections(mapTemplateToSections(templateQuery.data.template));
@@ -134,7 +190,7 @@ export function AdminOnboardingBuilder() {
 			},
 			{
 				onSuccess: (result) => {
-					const savedId = (result as any)?.template?.id;
+					const savedId = result?.template?.id;
 					if (savedId) setTemplateId(savedId);
 				},
 			},
@@ -214,6 +270,38 @@ export function AdminOnboardingBuilder() {
 		);
 	};
 
+	// ---------------------------------------------
+	// Section / item edit + delete
+	// ---------------------------------------------
+
+	const renameSection = (sectionId: string, name: string) => {
+		setSections((current) => updateSectionName(current, sectionId, name));
+	};
+
+	const deleteSection = (sectionId: string) => {
+		setSections((current) => removeSectionById(current, sectionId));
+	};
+
+	const editItem = (sectionId: string, itemId: string, patch: ItemPatch) => {
+		setSections((current) =>
+			current.map((section) =>
+				section.id === sectionId
+					? { ...section, items: updateItemInItems(section.items, itemId, patch) }
+					: section,
+			),
+		);
+	};
+
+	const deleteItem = (sectionId: string, itemId: string) => {
+		setSections((current) =>
+			current.map((section) =>
+				section.id === sectionId
+					? { ...section, items: removeItemFromItems(section.items, itemId) }
+					: section,
+			),
+		);
+	};
+
 	return (
 		<Card className="space-y-3">
 			{/* Header */}
@@ -230,7 +318,7 @@ export function AdminOnboardingBuilder() {
 						<Button
 							onClick={handleSave}
 							disabled={saveTemplateMutation.isPending || !templateName.trim()}>
-							{saveTemplateMutation.isPending ? "Saving..." : "Save Template"}
+							{saveTemplateMutation.isPending ? "Saving..." : "Save"}
 						</Button>
 
 						<Button asChild>
@@ -240,39 +328,38 @@ export function AdminOnboardingBuilder() {
 				</div>
 
 				<div className="flex flex-wrap items-center gap-2">
+					<label className="text-sm font-medium text-gray-600" htmlFor="template-name">
+						Checklist name
+					</label>
 					<Input
+						id="template-name"
 						aria-label="Template name"
 						className="max-w-xs"
 						value={templateName}
 						onChange={(event) => setTemplateName(event.target.value)}
-						placeholder="Template name"
+						placeholder="Checklist name"
 					/>
-
-					<select
-						aria-label="Existing template"
-						className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-						value={templateId ?? ""}
-						onChange={(event) => setTemplateId(event.target.value || null)}>
-						<option value="">New template…</option>
-						{(templatesQuery.data?.templates ?? []).map((template) => (
-							<option key={template.id} value={template.id}>
-								{template.name}
-							</option>
-						))}
-					</select>
 				</div>
 			</CardHeader>
 
 			{/* Sections */}
 			<CardContent className="max-h-[75vh] space-y-5 overflow-auto pb-10">
-				{sections.map((section) => (
-					<SectionCard
-						key={section.id}
-						section={section}
-						onAddItem={addItemToSection}
-						onAddChildItem={addChildItem}
-					/>
-				))}
+				{templatesQuery.isLoading || templateQuery.isLoading ? (
+					<p className="text-sm text-muted-foreground">Loading your checklist…</p>
+				) : (
+					sections.map((section) => (
+						<SectionCard
+							key={section.id}
+							section={section}
+							onAddItem={addItemToSection}
+							onAddChildItem={addChildItem}
+							onRenameSection={renameSection}
+							onDeleteSection={deleteSection}
+							onEditItem={editItem}
+							onDeleteItem={deleteItem}
+						/>
+					))
+				)}
 
 				{/* Add Section */}
 
