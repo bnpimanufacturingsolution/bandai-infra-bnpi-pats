@@ -1,3 +1,7 @@
+## Latest Task Addendum - 2026-09-12: Live onboarding checklist + template builder against /api/onboarding
+
+`app/components/organisms/onboarding/checklist.tsx` rewritten to LIVE data: onboarding-employee roster picker (`GET /api/onboarding/employees`), department-filtered tree (`GET /checklists/:id/visible` with per-item `canSign`/`isContextOnly`), password sign modal (no relogin) → `POST /items/:id/sign`, admin/HR unsign, and an admin/HR empty-state "Create Checklist from template" panel. The original mock table remains as a labelled demo fallback ONLY when the roster endpoint errors (coexist per operator). `builder.tsx` now loads existing templates, edits the template name, and Save-all via `POST /api/onboarding/templates` + `PUT /templates/:id/tree` (sections, nested items ≤3 deep, optional responsible-department picker). New `onboarding.service.ts`, `useOnboarding.ts` hooks, `app/zod/onboarding.ts` types. Fixed pre-existing red `builder.test.tsx` href pin (actual route `/admin/configuration/onboarding/checklist`) and a TS5097 `.tsx` import extension in `routes/admin/onboarding/builder.tsx`. Vitest onboarding suite 9 passing (incl. new tree-payload round-trip + service contract); Playwright `tests/smoke/admin-onboarding-checklist-live-proof.spec.ts` 2/2 PASSED live (screenshots in root `.runtime/onboarding-module-proof-20260912-*/`). Single-app exception: admin/HR configuration surface, no hris-emp-app counterpart. Not pushed.
+
 # Current Task
 
 ## Latest Task Addendum - 2026-09-09: HR direct timesheet edit on APPROVED sheets (TimesheetViewModal)

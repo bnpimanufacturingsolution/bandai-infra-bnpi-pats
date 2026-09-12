@@ -98,6 +98,12 @@ export const adminConfigurationItems: AdminNavItem[] = [
 		icon: TrendingUp,
 	},
 	{
+		id: "onboarding",
+		label: "Onboarding Checklist",
+		path: "/admin/configuration/onboarding/checklist",
+		icon: Calendar,
+	},
+	{
 		id: "schedule-templates",
 		label: "Schedule Templates",
 		path: "/admin/configuration/schedule-templates",

@@ -166,6 +166,7 @@ model Employee {
   calendarItem CalendarItem[]
 
   boardingProcesses             BoardingProcess[]         @relation("EmployeeBoardingProcesses")
+  onboardingChecklists          OnboardingChecklist[]     @relation("EmployeeOnboardingChecklists")
   notificationsCreated          Notification[]            @relation("NotificationSource") // Notifications sourced/created by this employee
   activityLogs                  ActivityLogging[]
   auditLogs                     AuditLogging[]

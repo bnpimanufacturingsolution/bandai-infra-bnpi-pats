@@ -33,6 +33,8 @@ const adminRoutes = [
 		route("agencies", "routes/admin/configuration/agencies.tsx"),
 		route("positions", "routes/admin/configuration/positions.tsx"),
 		route("levels", "routes/admin/configuration/levels.tsx"),
+		route("onboarding/checklist", "routes/admin/onboarding/checklist.tsx"),
+		route("onboarding/builder", "routes/admin/onboarding/builder.tsx"),
 		route("sections", "routes/admin/configuration/sections.tsx"),
 		route("employees", "routes/admin/configuration/employees.tsx"),
 		route("employees/new", "routes/hr/employees.new.tsx", {
@@ -125,10 +127,7 @@ const employeeRoutes = [
 	route(":id/attendance", "routes/employee/$id.attendance.tsx"),
 	route(":id/payroll", "routes/employee/$id.payroll.tsx"),
 	route(":id/payroll/:payslipId", "routes/employee/$id.payroll.$payslipId.tsx"),
-	route(
-		":id/special-payslip/:payslipId",
-		"routes/employee/$id.special-payslip.$payslipId.tsx",
-	),
+	route(":id/special-payslip/:payslipId", "routes/employee/$id.special-payslip.$payslipId.tsx"),
 ];
 
 // HR-specific routes (HR Manager + HR User - role-gated in components)

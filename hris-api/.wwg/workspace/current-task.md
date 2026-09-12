@@ -1,4 +1,8 @@
 
+## Latest Task Addendum - 2026-09-12: Dedicated /api/onboarding module (builder + department password sign-off)
+
+New dedicated backend module `app/onboarding/` (26 routes) + `prisma/schema-postgres/onboarding.prisma` (`OnboardingTemplate/Section/Item`, `OnboardingChecklist/Section/Item`, `OnboardingSignature`). Additive `db push` to DEV 55435; generic `boardingProcess`/`checklistItem` stack untouched (offboarding unaffected). Password-as-signature `POST /items/:id/sign` bcrypt-rechecks the caller's own password (no relogin), enforces the role matrix (admin/HR sign any; dept employees sign only own-dept items; no-dept items are context/read-only for them; ONBOARDING employee never signs own checklist), stamps signee server-side, writes an audit row, and auto-advances completion %. Permission matrix + visible-tree builder live in `onboardingAccess.helper.ts`. 37 new mocha specs green (access matrix + supertest/mock-prisma sign 200/401/403/409 + CRUD guards) + existing boarding-title contracts; app-module-contract 688 green; tsc clean for touched files. Live DEV E2E create→tree→deep-copy→sign→unsign→cleanup proven in `.runtime/onboarding-module-proof-20260912-*/`. Docs: `docs/ONBOARDING_CHECKLIST.md`. Not pushed (no operator push request).
+
 ## Latest Task Addendum - 2026-09-09: HR direct breakdown edit on APPROVED timesheets
 
 - **Operator request:** HR must be able to update employee timesheets directly — including the 2,235 APPROVED ("Payroll Ready") sheets that were previously hard-blocked (`400 Cannot update timesheet in APPROVED status`) for every non-owner actor.
