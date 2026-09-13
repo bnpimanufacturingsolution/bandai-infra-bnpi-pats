@@ -27,7 +27,8 @@ export type HrisRole =
 	| "hris-hr-user"
 	| "hris-employee-manager"
 	| "hris-line-leader"
-	| "hris-employee";
+	| "hris-employee"
+	| "hris-agency";
 
 export interface DerivedRoleFlags {
 	role: HrisRole;

@@ -34,6 +34,7 @@ export default function LoginPage() {
 				"hris-employee-manager",
 				"hris-line-leader",
 				"hris-timekeeper",
+				"hris-agency",
 				"hris-admin",
 				"admin",
 				"super_admin",

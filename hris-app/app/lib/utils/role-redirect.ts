@@ -10,6 +10,7 @@ export type UserRole =
 	| "hris-employee-manager"
 	| "hris-line-leader"
 	| "hris-timekeeper"
+	| "hris-agency"
 	| "hris-admin"
 	| "admin"
 	| "super_admin";
@@ -60,6 +61,11 @@ export const ROLE_REDIRECT_MAP: Record<UserRole, RoleRedirectConfig> = {
 		role: "hris-timekeeper",
 		redirectPath: "/time-logging",
 		description: "Time Keeper Dashboard",
+	},
+	"hris-agency": {
+		role: "hris-agency",
+		redirectPath: "/agency",
+		description: "Agency Workspace",
 	},
 	super_admin: {
 		role: "super_admin",
@@ -136,6 +142,7 @@ export const getRoleDisplayName = (role: UserRole): string => {
 		"hris-employee-manager": "Employee Manager",
 		"hris-line-leader": "Line Leader",
 		"hris-timekeeper": "Time Keeper",
+		"hris-agency": "Agency",
 		super_admin: "Super Administrator",
 	};
 

@@ -237,6 +237,7 @@ export default [
 	// Unified layout for employee, hr-manager, hr-user, and manager
 	layout("./layouts/unified-layout.tsx", [
 		route("dashboard", "routes/dashboard.tsx"),
+		route("agency", "routes/agency.tsx"),
 		route("application-launcher", "routes/application-launcher.tsx"),
 		route("settings", "routes/settings.tsx"),
 		route("calendar", "routes/calendar.tsx"),

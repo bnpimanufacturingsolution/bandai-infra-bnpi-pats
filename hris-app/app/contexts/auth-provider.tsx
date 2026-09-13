@@ -116,6 +116,7 @@ const AuthProvider = ({ children, disableBootstrap = false }: AuthProviderProps)
 				"hris-line-leader": ["hris-line-leader"],
 				"hris-employee": ["hris-employee"],
 				"hris-timekeeper": ["hris-timekeeper"],
+				"hris-agency": ["hris-agency"],
 			};
 
 			const allowedRoles = roleHierarchy[role] || [role];
@@ -144,6 +145,8 @@ const AuthProvider = ({ children, disableBootstrap = false }: AuthProviderProps)
 				case "hris-line-leader":
 					return scope === "APP";
 				case "hris-employee":
+					return scope === "APP";
+				case "hris-agency":
 					return scope === "APP";
 				default:
 					return false;

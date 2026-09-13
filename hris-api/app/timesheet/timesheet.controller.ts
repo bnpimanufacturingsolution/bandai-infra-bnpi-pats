@@ -66,6 +66,7 @@ import {
 } from "../../helper/request-runtime.helper";
 import { REQUEST_WORKFLOW_CODES } from "../../helper/workflow-config.helper";
 import { canActAsLineLeaderForEmployee } from "../../helper/section-leader-scope.helper";
+import { resolveCallerAgencyId, agencyScopeWhere } from "../../helper/agency-scope.helper";
 import { isDayLaborOnlyBreakdownChange } from "../../helper/timesheet-day-labor-guard.helper";
 import { enrichBreakdownWithLeaveHolidayContext } from "../../helper/day-context.helper";
 import {
@@ -2356,9 +2357,13 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			timesheetLogger.info("Fetching all timesheets");
 
-			const whereClause: Prisma.TimesheetWhereInput = {
-				isDeleted: false,
-			};
+		const whereClause: Prisma.TimesheetWhereInput = {
+			isDeleted: false,
+		};
+
+		// Agency scope: restrict to own agency employees' timesheets
+		const agencyScope = await resolveCallerAgencyId(prisma, req.userId);
+		Object.assign(whereClause, agencyScopeWhere(agencyScope));
 
 			const searchFields = [
 				"code",
@@ -2834,15 +2839,16 @@ export const controller = (prisma: PrismaClient) => {
 			const actingRole = String(authReq.role || "")
 				.trim()
 				.toLowerCase();
-			const isHrOrAdminActor = [
-				"hris-admin",
-				"admin",
-				"super_admin",
-				"superadmin",
-				"hris-hr-manager",
-				"hris-hr-user",
-				"hris-timekeeper",
-			].includes(actingRole);
+const isHrOrAdminActor = [
+			"hris-admin",
+			"admin",
+			"super_admin",
+			"superadmin",
+			"hris-hr-manager",
+			"hris-hr-user",
+			"hris-timekeeper",
+			"hris-agency",
+		].includes(actingRole);
 
 			if (isEmployeeOwner && authReq.organizationId) {
 				await assertEditingPolicyEnabled(authReq.organizationId);
