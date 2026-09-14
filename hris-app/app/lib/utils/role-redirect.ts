@@ -64,7 +64,7 @@ export const ROLE_REDIRECT_MAP: Record<UserRole, RoleRedirectConfig> = {
 	},
 	"hris-agency": {
 		role: "hris-agency",
-		redirectPath: "/agency",
+		redirectPath: "/agency/dashboard",
 		description: "Agency Workspace",
 	},
 	super_admin: {

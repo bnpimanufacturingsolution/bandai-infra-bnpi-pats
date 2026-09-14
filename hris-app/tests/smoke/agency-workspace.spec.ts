@@ -3,122 +3,89 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 /**
- * Live UI proof for the agency workspace (hris-agency).
- * Uses headless Playwright per the browser verification rule; evidence saved
- * under .runtime/agency-workspace-20260914/.
- *
- * Actor: agency-test@test.com / password123 (appCode=hris by default for
- * admin/config surfaces per AGENTS.md; the smoke spec targets the agency-portal
- * role explicitly).
+ * Live UI proof for the agency workspace pages (hris-agency).
+ * Dedicated /agency/* routes with sidebar navigation + chart dashboard.
+ * Actor: agency-test@test.com / password123.
  */
+
 const EVIDENCE_DIR = path.resolve(
 	process.cwd(),
 	".runtime/agency-workspace-20260914",
 );
 
-test("agency workspace renders all tabs and graceful endpoint-not-ready states", async ({
-	page,
-}) => {
-	test.setTimeout(240_000);
-	mkdirSync(EVIDENCE_DIR, { recursive: true });
-
-	const results: Record<string, unknown> = {
-		account: "agency-test@test.com",
-		startedAt: new Date().toISOString(),
-	};
-
-	// 1. Login as agency-test (agency portal role).
+async function loginAsAgency(page: any, results: Record<string, unknown>) {
 	await page.goto("/auth/login", { waitUntil: "domcontentloaded" });
 	await expect(page.getByLabel(/employee id or email/i)).toBeVisible({ timeout: 120_000 });
 	await page.getByLabel(/employee id or email/i).fill("agency-test@test.com");
 	await page.getByLabel(/^password$/i).fill("password123");
 	await page.getByRole("button", { name: /sign in/i }).click();
-	await page.waitForURL((url) => !url.pathname.includes("/auth/login"), {
+	await page.waitForURL((url: any) => !url.pathname.includes("/auth/login"), {
 		timeout: 120_000,
 	});
 	results.postLoginUrl = page.url();
-	expect(page.url()).toContain("/agency");
+	expect(page.url()).toContain("/agency/dashboard");
 	expect(page.url()).not.toContain("/403");
-
-	// 2. Workspace shell + identity header visible (no invented identity).
 	await page.waitForLoadState("networkidle").catch(() => undefined);
-	await expect(page.getByTestId("agency-workspace")).toBeVisible({ timeout: 60_000 });
+}
 
-	await expect(page.getByTestId("agency-identity-header")).toBeVisible();
-	await expect(page.getByRole("tab", { name: "Dashboard", exact: true })).toBeVisible();
-	await expect(page.getByRole("tab", { name: "Roster", exact: true })).toBeVisible();
-	await expect(page.getByRole("tab", { name: "Attendance", exact: true })).toBeVisible();
-	await expect(page.getByRole("tab", { name: "Timesheets", exact: true })).toBeVisible();
-	await expect(page.getByRole("tab", { name: "Biometrics", exact: true })).toBeVisible();
+test("agency sidebar navigates dedicated pages and dashboard charts render", async ({
+	page,
+}) => {
+	test.setTimeout(240_000);
+	mkdirSync(EVIDENCE_DIR, { recursive: true });
+	const results: Record<string, unknown> = {
+		account: "agency-test@test.com",
+		startedAt: new Date().toISOString(),
+	};
 
-	results.workspaceShellVisible = true;
+	await loginAsAgency(page, results);
 
-	// 3. Dashboard overview shows real (not invented) cards.
-	await page.getByRole("tab", { name: "Dashboard", exact: true }).click();
-	await expect(page.getByTestId("agency-tab-dashboard")).toBeVisible({ timeout: 30_000 });
-
-	// Verify real card labels exist (never fabricated counts).
-	await expect(page.getByText("Agency members")).toBeVisible();
-	await expect(page.getByText("Today active")).toBeVisible();
-	await expect(page.getByText("Pending approvals")).toBeVisible();
-	await expect(page.getByText("Attendance import")).toBeVisible();
-
-	results.dashboardCardsVisible = true;
-
-	// 4. Graceful endpoint-not-ready state is visible (not hidden / not fake-filled).
-	const gracefulReadyNotice = page.getByText("Endpoint not ready");
-	// We only assert the message exists somewhere in the document; it may appear
-	// once or multiple times (Dashboard + Roster + Timesheets + Biometrics);
-	// we collect the first occurrence as evidence.
-	await gracefulReadyNotice.first().waitFor({ state: "visible", timeout: 15_000 }).catch(() => {
-		results.gracefulNotReadyFound = false;
-	});
-	if (await gracefulReadyNotice.first().isVisible().catch(() => false)) {
-		results.gracefulNotReadyFound = true;
-	} else {
-		results.gracefulNotReadyFound = false;
+	// Sidebar agency section with five page links.
+	for (const label of ["Overview", "Employees", "Attendance", "Timesheets", "Biometrics"]) {
+		await expect(page.getByRole("link", { name: label, exact: true }).first()).toBeVisible({
+			timeout: 30_000,
+		});
 	}
+	results.sidebarVisible = true;
 
-	// 5. Click Roster tab: no fake employee rows shown (table either has real data or shows empty-message).
-	await page.getByRole("tab", { name: "Roster", exact: true }).click();
-	await expect(page.getByTestId("agency-tab-roster")).toBeVisible({ timeout: 30_000 });
+	// Dashboard charts render from live rows.
+	await expect(page.getByTestId("agency-page-dashboard")).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByTestId("agency-chart-attendance-trend")).toBeVisible();
+	await expect(page.getByTestId("agency-chart-timesheet-mix")).toBeVisible();
+	await expect(page.getByTestId("agency-chart-departments")).toBeVisible();
+	await expect(page.getByText("Agency members", { exact: true }).first()).toBeVisible();
+	results.dashboardChartsVisible = true;
+	await page.screenshot({ path: path.join(EVIDENCE_DIR, "agency-dashboard.png") });
 
-	// Confirm no fabricated employee rows: look for the real table header row; if no rows, the empty message should be present.
-	const rosterTable = page.locator('table');
-	await rosterTable.first().waitFor({ state: "visible", timeout: 15_000 }).catch(() => {
-		// If no table rendered yet (endpoint missing), that is graceful, not an error.
-	});
+	// Employees page shows real members.
+	await page.getByRole("link", { name: "Employees", exact: true }).first().click();
+	await expect(page.getByTestId("agency-page-roster")).toBeVisible({ timeout: 30_000 });
+	results.rosterVisited = true;
+	await page.screenshot({ path: path.join(EVIDENCE_DIR, "agency-roster.png") });
 
-	results.rosterTabVisited = true;
+	// Timesheets + biometrics pages render.
+	await page.getByRole("link", { name: "Timesheets", exact: true }).first().click();
+	await expect(page.getByTestId("agency-page-timesheets")).toBeVisible({ timeout: 30_000 });
+	await page.getByRole("link", { name: "Biometrics", exact: true }).first().click();
+	await expect(page.getByTestId("agency-page-biometrics")).toBeVisible({ timeout: 30_000 });
+	results.timesheetsBiometricsVisited = true;
 
-	// 6. Click Biometrics tab: import section visible; import button disabled when no file selected (no fake upload result).
-	await page.getByRole("tab", { name: "Biometrics", exact: true }).click();
-	await expect(page.getByTestId("agency-tab-biometrics")).toBeVisible({ timeout: 15_000 });
-	await expect(page.getByText("Import attendance/biometrics")).toBeVisible();
-
-	results.biometricsTabVisited = true;
-
-	// 7. Screenshot evidence.
-	await page.screenshot({ path: path.join(EVIDENCE_DIR, "agency-workspace.png") });
-
-	results.screenshotSaved = true;
-
-	// 8. Network evidence: at least one successful /api/employee response or the graceful error response. Capture last request/response summary.
-	const networkSummary = await page.evaluate(() => {
-		const perf = (window as any).performance?.getEntriesByType?.("resource") || [];
-		const lastApiEmployee = perf.filter(
-			(r: any) => typeof r.name === "string" && r.name.includes("/api/employee"),
-		);
-		const lastApiTimesheet = perf.filter(
-			(r: any) => typeof r.name === "string" && r.name.includes("/api/timesheet"),
-		);
-		return {
-			lastApiEmployeeUrl: lastApiEmployee[lastApiEmployee.length - 1]?.name || null,
-			lastApiTimesheetUrl: lastApiTimesheet[lastApiTimesheet.length - 1]?.name || null,
-			totalApiCalls: lastApiEmployee.length + lastApiTimesheet.length,
-		};
-	});
-	results.networkEvidence = networkSummary;
+	// Reports page deep-dives the overview charts and keeps the Excel export.
+	await page.getByRole("link", { name: "Reports", exact: true }).first().click();
+	await expect(page.getByTestId("agency-page-reports")).toBeVisible({ timeout: 30_000 });
+	await expect(page.getByTestId("agency-report-attendance-trend")).toBeVisible();
+	await expect(page.getByTestId("agency-report-timesheet-mix")).toBeVisible();
+	await expect(page.getByTestId("agency-report-departments")).toBeVisible();
+	await expect(page.getByTestId("agency-report-daily-table")).toBeVisible();
+	await expect(page.getByTestId("agency-report-status-table")).toBeVisible();
+	await expect(page.getByTestId("agency-report-dept-table")).toBeVisible();
+	await expect(page.getByTestId("agency-report-time-entries")).toBeVisible();
+	await expect(page.getByTestId("agency-report-absentee")).toBeVisible();
+	await expect(page.getByTestId("agency-report-manpower")).toBeVisible();
+	await expect(page.getByTestId("agency-report-inactive")).toBeVisible();
+	await expect(page.getByRole("button", { name: /export excel/i })).toBeVisible();
+	results.reportsDeepDiveVisible = true;
+	await page.screenshot({ path: path.join(EVIDENCE_DIR, "agency-reports.png") });
 
 	writeFileSync(
 		path.join(EVIDENCE_DIR, "agency-workspace-proof.json"),

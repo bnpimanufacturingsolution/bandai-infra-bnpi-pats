@@ -4778,8 +4778,13 @@ export const controller = (prisma: PrismaClient) => {
 			isDeleted: false,
 		};
 
-		// Agency scope: restrict to own agency employees
+		// Agency scope: restrict to own agency employees. An agency actor
+		// without a resolvable agency gets 403 (never an unscoped list).
 		const agencyScope = await resolveCallerAgencyId(prisma, req.userId);
+		if (agencyScope.isAgencyActor && !agencyScope.callerAgencyId) {
+			res.status(403).json(buildErrorResponse("Agency ID not found in your account", 403));
+			return;
+		}
 		Object.assign(whereClause, agencyScopeWhere(agencyScope));
 
 			// Handle search query - simple contains search across fields

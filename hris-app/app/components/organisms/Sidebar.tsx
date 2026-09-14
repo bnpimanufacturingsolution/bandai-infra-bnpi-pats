@@ -22,6 +22,7 @@ import {
 	Award,
 	Gift,
 	Play,
+	Fingerprint,
 	TrendingDown,
 	TrendingUp,
 	BarChart3,
@@ -132,13 +133,51 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const isDepartmentManager = !!user?.metadata?.employee?.isDepartmentManager;
 	const hrDocumentReviewCount = actionMetrics?.counts.documents.hrPendingApproval || 0;
 
-  // Agency workspace entry — visible only to agency-level roles.
-  const agencyWorkspaceItem: NavItem | null = isAgencyRole
+  // Agency section — dedicated pages (not tabs) for agency-level roles.
+  const agencySection: NavItem | null = isAgencyRole
     ? {
-        id: "agency-workspace",
-        label: "Agency Workspace",
-        path: "/agency",
+        id: "agency",
+        label: "Agency",
+        path: "/agency/dashboard",
         icon: <Briefcase className="w-5 h-5" />,
+        submenu: [
+          {
+            id: "agency-dashboard",
+            label: "Overview",
+            path: "/agency/dashboard",
+            icon: <LayoutDashboard className="w-4 h-4" />,
+          },
+          {
+            id: "agency-roster",
+            label: "Employees",
+            path: "/agency/roster",
+            icon: <Users className="w-4 h-4" />,
+          },
+          {
+            id: "agency-attendance",
+            label: "Attendance",
+            path: "/agency/attendance",
+            icon: <Clock className="w-4 h-4" />,
+          },
+          {
+            id: "agency-timesheets",
+            label: "Timesheets",
+            path: "/agency/timesheets",
+            icon: <FileText className="w-4 h-4" />,
+          },
+          {
+            id: "agency-biometrics",
+            label: "Biometrics",
+            path: "/agency/biometrics",
+            icon: <Fingerprint className="w-4 h-4" />,
+          },
+          {
+            id: "agency-reports",
+            label: "Reports",
+            path: "/agency/reports",
+            icon: <BarChart3 className="w-4 h-4" />,
+          },
+        ],
       }
     : null;
 
@@ -437,7 +476,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 
   const workingSpaceItems: NavItem[] = [
     ...baseWorkingSpaceItems,
-    ...(agencyWorkspaceItem ? [agencyWorkspaceItem] : []),
+    ...(agencySection ? [agencySection] : []),
     ...hrWorkingSpaceItems,
     ...trailingItems,
   ];

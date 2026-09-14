@@ -83,7 +83,8 @@ export function BiometricsImport({ agencyId }: BiometricsImportProps) {
 					<div className="flex-1">
 						<p className="text-sm font-semibold text-slate-900 dark:text-slate-50">Import attendance/biometrics</p>
 						<p className="text-xs text-slate-500">
-							CSV columns: employeeCode, date (YYYY-MM-DD), timeIn (HH:mm), timeOut (HH:mm), notes.
+							CSV columns: EMPLOYEE_ID, DATE (YYYY-MM-DD), TIME_IN (HH:mm), TIME_OUT (HH:mm), NOTES. Only your
+							agency&apos;s members are accepted; other rows are rejected.
 						</p>
 					</div>
 				</div>

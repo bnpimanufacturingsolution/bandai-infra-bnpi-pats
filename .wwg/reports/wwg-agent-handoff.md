@@ -1,4 +1,15 @@
-﻿## 2026-09-09 - Line leader timesheet adjustment (leader-filed, manager-final) delivered + concurrent-session recovery
+﻿## 2026-09-14 - Agency workspace delivered (operator-ordered, local DEV, no push)
+
+- Agency coordinator login (`hris-agency`, `User.metadata.agencyId`) + `/agency` workspace (Dashboard/Roster/Attendance/Timesheets/Biometrics) + server-enforced own-agency scope + CSV import `POST /api/agency/:id/attendance-import` (dryRun + execute). Backend: `helper/agency-scope.helper.ts`, getAll enforcement, PATCH same-agency gate, import with per-row agency match. Frontend: `AgencyWorkspace`/`BiometricsImport`, Sidebar entry, guards. Single-app exception (no emp-app counterpart).
+- **Revision (operator: dedicated pages + chart dashboard, no tabs):** `/agency` → `/agency/dashboard`; 5 real routes + Sidebar Agency section; recharts dashboard (14-day bars, status donut, dept bars) from live rows; real Attendance table; timesheets View/adjust modal. Fixed: modal named import, enabled-in-params, ONBOARDING roster statuses, duplicate testids, client-side day bucketing (DSL ORs same-key date filters), attendance getAll scoped. Proof (3 subjects, reverted): dashboard 3/9/10 consistent, Playwright PASSED. Evidence `hris-app/.runtime/agency-workspace-20260914/`.
+
+- Agency coordinator login (`hris-agency`, `User.metadata.agencyId`) + `/agency` workspace (Dashboard/Roster/Attendance/Timesheets/Biometrics) + server-enforced own-agency scope + CSV import `POST /api/agency/:id/attendance-import` (dryRun + execute). Backend: `helper/agency-scope.helper.ts`, getAll enforcement, PATCH same-agency gate, import with per-row agency match. Frontend: `AgencyWorkspace`/`BiometricsImport`, Sidebar entry, guards. Single-app exception (no emp-app counterpart).
+- Live proof as agency-test@test.com: own-only roster, own day-adjust 200 + revert, foreign PATCH 403, dryRun matched 1/rejected 1 zero-write, execute 1 PRESENT row then deleted, both Playwright specs PASSED. Proof subjects reverted; TEST roster 0. Evidence: `.runtime/agency-workspace-proof-20260914-031238/`, `hris-app/.runtime/agency-workspace-20260914/`.
+- Tests: api 9/9, app 3/3 + 11/11; tsc/eslint clean on touched scope. 2 RECs Proposed (approve-action + timesheetline PATCH have no role guards). Terminology `Agency (hris-agency)` added. Not pushed.
+
+---
+
+## 2026-09-09 - Line leader timesheet adjustment (leader-filed, manager-final) delivered + concurrent-session recovery
 
 - Operator requirement confirmed and closed: the line leader can now file a **timesheet adjustment (attendance correction)** for led members from the requests hub; the **member's section manager is the final approver** (mirrors OT/early-OT; no HR step on the leader chain); the approval-flow tasks are laid out on a **right panel in the modal before executing**; the manager sees the task in My Approvals / Pending Approvals.
 - Backend: `LEADER_FILED_ATTENDANCE_CORRECTION_STEPS` → 3 steps (Leader Submission → Manager Approval final → SYSTEM completion); former HR-review task step removed; DEV org templates re-seeded (22 updated). Frontend: on-behalf adjustment payload (`LINE_LEADER_FILED` / `MANAGER_FINAL`), "For whom" picker on the adjustment branch, right "Approval flow" panel, hub wiring. Stale OT metadata label fixed to `MANAGER_FINAL`.

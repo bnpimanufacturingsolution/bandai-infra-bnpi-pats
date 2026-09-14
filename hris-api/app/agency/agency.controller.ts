@@ -18,7 +18,7 @@ import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
 import * as XLSX from "xlsx";
-import { resolveCallerAgencyId, isSameAgencyEmployee } from "../../helper/agency-scope.helper";
+import { resolveCallerAgencyId } from "../../helper/agency-scope.helper";
 import { AttendanceImportService } from "../attendance/attendance-import.service";
 
 const logger = getLogger();
@@ -541,9 +541,29 @@ export const controller = (prisma: PrismaClient) => {
 			return;
 		}
 
-		const callerAgencyId = await resolveCallerAgencyId(prisma, (req as any).userId);
-		if (!callerAgencyId && isAgencyActor) {
+		const agencyScope = await resolveCallerAgencyId(prisma, (req as any).userId);
+		if (!agencyScope.callerAgencyId && isAgencyActor) {
 			res.status(403).json(buildErrorResponse("Agency ID not found in your account", 403));
+			return;
+		}
+
+		// The :id in the path selects the target agency. Agency actors may
+		// only import into their own agency; admin roles may target any.
+		const targetAgencyId = String(req.params?.id || "").trim();
+		if (!targetAgencyId) {
+			res.status(400).json(buildErrorResponse("Agency id is required", 400));
+			return;
+		}
+		if (isAgencyActor && targetAgencyId !== agencyScope.callerAgencyId) {
+			res.status(403).json(buildErrorResponse("You can only import attendance for your own agency", 403));
+			return;
+		}
+		const targetAgency = await prisma.agency.findFirst({
+			where: { id: targetAgencyId, organizationId, isDeleted: false },
+			select: { id: true },
+		});
+		if (!targetAgency) {
+			res.status(404).json(buildErrorResponse("Agency not found", 404));
 			return;
 		}
 
@@ -602,14 +622,20 @@ export const controller = (prisma: PrismaClient) => {
 					continue;
 				}
 
-				// agency scope guard: skip employees not belonging to caller's agency
-				if (isAgencyActor && callerAgencyId) {
+				// Agency scope guard: rows may only affect employees of the
+				// target agency (caller's own agency for agency actors).
+				const effectiveAgencyId = isAgencyActor ? agencyScope.callerAgencyId : targetAgencyId;
+				if (effectiveAgencyId) {
 					const employee = await prisma.employee.findFirst({
-						where: { employeeId: String(employeeId), organizationId, isDeleted: false },
+						where: {
+							organizationId,
+							isDeleted: false,
+							OR: [{ employeeId: String(employeeId) }, { deviceEmpId: String(employeeId) }],
+						},
 						select: { agencyId: true },
 					});
-					if (!employee || !isSameAgencyEmployee(prisma, callerAgencyId, employee)) {
-						errors.push({ row: rowNumber, message: `Employee ${employeeId} is not in your agency` });
+					if (!employee || employee.agencyId !== effectiveAgencyId) {
+						errors.push({ row: rowNumber, message: `Employee ${employeeId} is not in this agency` });
 						continue;
 					}
 				}
@@ -674,7 +700,29 @@ export const controller = (prisma: PrismaClient) => {
 		}
 
 		if (attendanceRows.length === 0) {
-			res.status(400).json(buildErrorResponse("No valid attendance rows found", 400, { errors }));
+			res.status(400).json(buildErrorResponse("No valid attendance rows found", 400, errors));
+			return;
+		}
+
+		// Preview mode: report what WOULD be imported with zero writes.
+		const dryRun = String(req.body?.dryRun || "").toLowerCase() === "true";
+		if (dryRun) {
+			res.status(200).json(
+				buildSuccessResponse(
+					"Agency attendance import preview",
+					{
+						mode: "dry_run",
+						willWrite: false,
+						agencyId: targetAgencyId,
+						rows: attendanceRows.length,
+						matched: attendanceRows.length,
+						unmatched: errors.length,
+						preview: attendanceRows.slice(0, 100),
+						errors,
+					},
+					200,
+				),
+			);
 			return;
 		}
 
@@ -727,5 +775,6 @@ export const controller = (prisma: PrismaClient) => {
 		update,
 		remove,
 		importFromXLSX,
+		importAgencyAttendance,
 	};
 };

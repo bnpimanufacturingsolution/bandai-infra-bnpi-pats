@@ -60,10 +60,15 @@ export function isSameAgencyEmployee(
  * Returns a Prisma `where` fragment that scopes a query to employees
  * belonging to the caller's agency. Returns an empty object when the
  * caller is not an agency actor (no scoping needed).
+ *
+ * Pass `relation` when the scoped model does not carry `agencyId` itself
+ * (e.g. Timesheet -> `employee: { agencyId }`).
  */
 export function agencyScopeWhere(
 	scope: AgencyScopeResult,
+	relation?: string,
 ): Record<string, unknown> {
 	if (!scope.isAgencyActor || !scope.callerAgencyId) return {};
+	if (relation) return { [relation]: { agencyId: scope.callerAgencyId } };
 	return { agencyId: scope.callerAgencyId };
 }

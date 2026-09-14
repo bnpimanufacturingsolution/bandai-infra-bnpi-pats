@@ -40,6 +40,7 @@ import {
 import { resolveOvertimePolicyApplication } from "../../helper/overtime-approval.helper";
 import * as XLSX from "xlsx";
 import { AuthRequest } from "../../middleware/verifyToken";
+import { resolveCallerAgencyId, agencyScopeWhere } from "../../helper/agency-scope.helper";
 import { AttendanceImportService } from "./attendance-import.service";
 import {
 	buildAttendanceLedgerSummary,
@@ -773,6 +774,15 @@ export const controller = (prisma: PrismaClient) => {
 			const whereClause: Prisma.AttendanceWhereInput = {
 				isDeleted: false,
 			};
+
+			// Agency scope: agency actors see only their own members' rows.
+			// Attendance carries no agencyId scalar, so scope via employee.
+			const agencyScope = await resolveCallerAgencyId(prisma, (req as any).userId);
+			if (agencyScope.isAgencyActor && !agencyScope.callerAgencyId) {
+				res.status(403).json(buildErrorResponse("Agency ID not found in your account", 403));
+				return;
+			}
+			Object.assign(whereClause, agencyScopeWhere(agencyScope, "employee"));
 
 			// Search fields for Attendance model - use actual fields that exist
 			// Search in: notes (String), employee.employeeId (String)

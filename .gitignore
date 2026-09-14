@@ -64,6 +64,9 @@ july11-july25/
 june26-july10/
 test-results/
 
+# Agency client pack (source reference only)
+Agency Daily Report/
+
 # Local open-code config (opencode agent config)
 .opencode/
 opencode.json

@@ -1,5 +1,14 @@
 # Current Task
 
+## Latest Task Addendum - 2026-09-14: Agency workspace mirrors the Agency Daily Report pack (overview summary + report detail)
+
+- **Source:** operator folder `Agency Daily Report/` (7 agencies × 6-file pack: Manpower Databank, Time Entries, Daily Absentee Report, Attendance Summary, Daily Inactive Agency Operators, Disciplinary Action Databank). Audited CGSI set for columns (`dump` evidence via local xlsx read, not committed).
+- **Overview (`routes/agency/dashboard.tsx`) = summary:** new `Absent (14d)` card (ABSENT rows in window) + `Inactive operators` card (all-status roster minus `ACTIVE/ONBOARDING/ON_LEAVE` via new `isActiveAgencyMember` in `agency-shared.tsx`). Agency scope (`agencyId` match, no status restriction — proven in `hris-api/helper/agency-scope.helper.ts`) returns inactive members too.
+- **Reports (`routes/agency/reports.tsx`) = detail:** new Time Entries table (date/code/name/time in-out/status), Daily Absentee table (absent rows), Manpower databank table (code/name/dept/section/status, section falls back to —), Inactive operators table; each capped at first 100 rows with honest totals. Export workbook gains Time entries, Absentee, Inactive sheets (Roster sheet gains Section column).
+- **Boundary:** DA databank omitted — `GET /api/disciplinaryAction` has no agency filter (single-`employeeId` only); filed REC-20260914-AGENCY-DA-DATABANK-NO-SCOPE (Proposed). Absence reasons/DA status from the xlsx have no HRIS field and are not invented.
+- **Proof:** contract spec 7/7, eslint 0 errors, live browser probe (agency-test) PASSED — overview cards + all 4 report tables visible, screenshots `.runtime/agency-pack-proof/`. TEST-agency data is thin (zeros are honest, not stubs). Not pushed.
+- **Dual-app:** single-app exception (no emp-app agency counterpart).
+
 ## Latest Task Addendum - 2026-09-09: HR direct timesheet edit on APPROVED sheets (TimesheetViewModal)
 
 - **Operator request:** HR must be able to update employee timesheets directly. All 2,235 sheets on the current period are APPROVED ("Payroll Ready"), and APPROVED sheets were previously read-only for everyone — the HR page's view modal had no save path at all.
