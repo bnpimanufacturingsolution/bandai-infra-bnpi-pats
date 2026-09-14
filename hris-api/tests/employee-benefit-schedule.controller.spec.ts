@@ -65,10 +65,14 @@ describe("employee benefit schedule controller", () => {
 				},
 			},
 			payrollPeriod: {
+				findFirst: async () => null,
 				findMany: async ({ where }: { where: Record<string, unknown> }) => {
 					payrollPeriodQueries.push(where);
 					return payrollPeriods;
 				},
+			},
+			benefitType: {
+				findFirst: async () => null,
 			},
 		};
 		request = {
