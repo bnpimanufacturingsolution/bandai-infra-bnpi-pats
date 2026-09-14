@@ -278,30 +278,29 @@ describe("public kiosk feed contracts", () => {
 		const app = buildCalendarApp({
 			organization: organizationLookup(),
 			calendarItem: {
-			                    findMany: async (args: any) => {
-			                        findManyCalls.push(args);
-			                        return [
-			                            {
-			                                id: "event-1",
-			                                organizationId: "bandai-org",
-			                                year: 2026,
-			                                title: "Annual Town Hall",
-			                                description: "Main lobby",
-			                                type: "COMPANY_EVENT",
-			                                startDate: "2026-06-20T01:30:00.000Z",
-			                                endDate: "2026-06-20T03:00:00.000Z",
-			                                isAllDay: false,
-			                                timezone: "Asia/Manila",
-			                                status: "ACTIVE",
-			                            },
-			                        ];
-			                    },
-			                    count: async (args: any) => {
-			                        // Return 1 if there is exactly 1 company event (to trigger HOLIDAY inclusion)
-			                        if (args.where?.type === "COMPANY_EVENT") return 1;
-			                        return 0;
-			                    },
-			                }
+				findMany: async (args: any) => {
+					findManyCalls.push(args);
+					return [
+						{
+							id: "event-1",
+							organizationId: "bandai-org",
+							year: 2026,
+							title: "Annual Town Hall",
+							description: "Main lobby",
+							type: "COMPANY_EVENT",
+							startDate: "2026-06-20T01:30:00.000Z",
+							endDate: "2026-06-20T03:00:00.000Z",
+							isAllDay: false,
+							timezone: "Asia/Manila",
+							status: "ACTIVE",
+						},
+					];
+				},
+				count: async (args: any) => {
+					// Return 1 if there is exactly 1 company event (to trigger HOLIDAY inclusion)
+					if (args.where?.type === "COMPANY_EVENT") return 1;
+					return 0;
+				},
 			},
 		});
 
@@ -329,29 +328,28 @@ describe("public kiosk feed contracts", () => {
 				},
 			},
 			calendarItem: {
-			                    findMany: async (args: any) => {
-			                        findManyCalls.push(args);
-			                        return [
-			                            {
-			                                id: "event-town-hall",
-			                                organizationId: "fresh-org-after-reset",
-			                                year: 2026,
-			                                title: "Bandai Town Hall",
-			                                description: "Quarterly leadership updates for all employees.",
-			                                type: "COMPANY_EVENT",
-			                                startDate: "2026-07-22T09:00:00.000Z",
-			                                endDate: "2026-07-22T11:00:00.000Z",
-			                                isAllDay: false,
-			                                timezone: "Asia/Manila",
-			                                status: "ACTIVE",
-			                            },
-			                        ];
-			                    },
-			                    count: async (args: any) => {
-			                        if (args.where?.type === "COMPANY_EVENT") return 1;
-			                        return 0;
-			                    },
-			                }
+				findMany: async (args: any) => {
+					findManyCalls.push(args);
+					return [
+						{
+							id: "event-town-hall",
+							organizationId: "fresh-org-after-reset",
+							year: 2026,
+							title: "Bandai Town Hall",
+							description: "Quarterly leadership updates for all employees.",
+							type: "COMPANY_EVENT",
+							startDate: "2026-07-22T09:00:00.000Z",
+							endDate: "2026-07-22T11:00:00.000Z",
+							isAllDay: false,
+							timezone: "Asia/Manila",
+							status: "ACTIVE",
+						},
+					];
+				},
+				count: async (args: any) => {
+					if (args.where?.type === "COMPANY_EVENT") return 1;
+					return 0;
+				},
 			},
 		});
 
@@ -385,6 +383,7 @@ describe("public kiosk feed contracts", () => {
 						status: "ACTIVE",
 					},
 				],
+				count: async () => 0,
 			},
 		});
 
