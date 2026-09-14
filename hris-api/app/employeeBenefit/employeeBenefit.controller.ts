@@ -23,6 +23,7 @@ import {
 	BulkCreateEmployeeBenefitSchema,
 	CreateEmployeeBenefitSchema,
 	QuickAdjustEmployeeBenefitSchema,
+	UpdateEmployeeBenefitSchema,
 } from "../../zod/employeebenefit.zod";
 import {
 	normalizeEmployeeBenefitPayload,
