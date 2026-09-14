@@ -42,6 +42,10 @@ terraform.tfstate.backup
 # These are copied from HRIS-PROJECT for local/VM operations and may contain
 # client payroll, attendance, biometric, agency, or employee data.
 confidential-files/
+# Client attendance/time-tracking archive exports (Google Drive download naming
+# varies by timestamp; the pattern covers any export of this folder).
+ATTENDANCE & TIME TRACKING*/
+**/ATTENDANCE & TIME TRACKING*/
 data/import/
 hris-api/data/
 docs/2026-20260527T124252Z-3-001/
@@ -59,6 +63,9 @@ config.bat
 july11-july25/
 june26-july10/
 test-results/
+
+# Agency client pack (source reference only)
+Agency Daily Report/
 
 # Local open-code config (opencode agent config)
 .opencode/

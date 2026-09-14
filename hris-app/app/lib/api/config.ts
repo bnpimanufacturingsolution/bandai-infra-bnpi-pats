@@ -136,6 +136,7 @@ export interface LoginResponse {
 		| "hris-employee"
 		| "hris-employee-manager"
 		| "hris-timekeeper"
+		| "hris-agency"
 		| "hris-admin"
 		| "admin"
 		| "super_admin";
@@ -213,6 +214,7 @@ export interface Employee {
 		| "hris-employee"
 		| "hris-employee-manager"
 		| "hris-timekeeper"
+		| "hris-agency"
 		| "hris-admin"
 		| "admin"
 		| "super_admin";

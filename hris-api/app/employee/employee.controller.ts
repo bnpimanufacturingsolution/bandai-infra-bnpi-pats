@@ -37,6 +37,7 @@ import {
 	type ErrorDetail,
 } from "../../helper/error-handler";
 import { syncDepartmentDefaultScheduleLink } from "../../helper/department-schedule.helper";
+import { resolveCallerAgencyId, agencyScopeWhere } from "../../helper/agency-scope.helper";
 
 import {
 	UpdateEmployeeSchema,
@@ -4792,10 +4793,19 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Base where clause
-			const whereClause: Prisma.EmployeeWhereInput = {
-				isDeleted: false,
-			};
+		// Base where clause
+		const whereClause: Prisma.EmployeeWhereInput = {
+			isDeleted: false,
+		};
+
+		// Agency scope: restrict to own agency employees. An agency actor
+		// without a resolvable agency gets 403 (never an unscoped list).
+		const agencyScope = await resolveCallerAgencyId(prisma, req.userId);
+		if (agencyScope.isAgencyActor && !agencyScope.callerAgencyId) {
+			res.status(403).json(buildErrorResponse("Agency ID not found in your account", 403));
+			return;
+		}
+		Object.assign(whereClause, agencyScopeWhere(agencyScope));
 
 			// Handle search query - simple contains search across fields
 			// Handle search query - split into terms for multi-word support across fields

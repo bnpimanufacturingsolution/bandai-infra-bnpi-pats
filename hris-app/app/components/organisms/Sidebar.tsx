@@ -22,6 +22,7 @@ import {
 	Award,
 	Gift,
 	Play,
+	Fingerprint,
 	TrendingDown,
 	TrendingUp,
 	BarChart3,
@@ -112,7 +113,14 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const isManager =
 		user?.role === "hris-employee-manager" || user?.role === "hris-line-leader";
 	const isEmployee = user?.role === "hris-employee";
-	const isAdmin = user?.role?.includes("admin");
+  const isAdmin = user?.role?.includes("admin");
+  // Agency portal roles (including admin/agency/admin-level access).
+  const isAgencyRole = !!user?.role && [
+    "hris-agency",
+    "hris-admin",
+    "admin",
+    "super_admin",
+  ].includes(user.role);
 
 	const firstName = user?.metadata?.employee?.personalInfo?.firstName || "";
 	const lastName = user?.metadata?.employee?.personalInfo?.lastName || "";
@@ -125,8 +133,56 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const isDepartmentManager = !!user?.metadata?.employee?.isDepartmentManager;
 	const hrDocumentReviewCount = actionMetrics?.counts.documents.hrPendingApproval || 0;
 
-	// Common to all roles
-	const dashboardItem: NavItem = {
+  // Agency section — dedicated pages (not tabs) for agency-level roles.
+  const agencySection: NavItem | null = isAgencyRole
+    ? {
+        id: "agency",
+        label: "Agency",
+        path: "/agency/dashboard",
+        icon: <Briefcase className="w-5 h-5" />,
+        submenu: [
+          {
+            id: "agency-dashboard",
+            label: "Overview",
+            path: "/agency/dashboard",
+            icon: <LayoutDashboard className="w-4 h-4" />,
+          },
+          {
+            id: "agency-roster",
+            label: "Employees",
+            path: "/agency/roster",
+            icon: <Users className="w-4 h-4" />,
+          },
+          {
+            id: "agency-attendance",
+            label: "Attendance",
+            path: "/agency/attendance",
+            icon: <Clock className="w-4 h-4" />,
+          },
+          {
+            id: "agency-timesheets",
+            label: "Timesheets",
+            path: "/agency/timesheets",
+            icon: <FileText className="w-4 h-4" />,
+          },
+          {
+            id: "agency-biometrics",
+            label: "Biometrics",
+            path: "/agency/biometrics",
+            icon: <Fingerprint className="w-4 h-4" />,
+          },
+          {
+            id: "agency-reports",
+            label: "Reports",
+            path: "/agency/reports",
+            icon: <BarChart3 className="w-4 h-4" />,
+          },
+        ],
+      }
+    : null;
+
+  // Common to all roles
+  const dashboardItem: NavItem = {
 		id: "dashboard",
 		label: "Dashboard",
 		path: "/dashboard",
@@ -424,11 +480,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 				}
 			: null;
 
-	const workingSpaceItems: NavItem[] = [
-		...baseWorkingSpaceItems,
-		...hrWorkingSpaceItems,
-		...trailingItems,
-	];
+  const workingSpaceItems: NavItem[] = [
+    ...baseWorkingSpaceItems,
+    ...(agencySection ? [agencySection] : []),
+    ...hrWorkingSpaceItems,
+    ...trailingItems,
+  ];
 
 	// General items (common to all, except admin)
 	const generalItems: NavItem[] = [

@@ -48,9 +48,11 @@ RUN ./node_modules/.bin/prisma generate --schema prisma/schema-postgres
 FROM builder AS db-init
 
 # Production build stage: compile app and prune dev dependencies.
+# Keep tsx/esbuild for the .ts repair script that the DM4 adapter spawns via tsx.
 FROM builder AS production-build
 RUN npm run build \
-    && npm prune --omit=dev --legacy-peer-deps --ignore-scripts
+    && npm prune --omit=dev --legacy-peer-deps --ignore-scripts \
+    && npm install --no-save --no-audit --no-fund tsx@4 esbuild@0.25
 
 # Production image, copy all the files and run the app
 FROM base AS runner
@@ -75,6 +77,11 @@ COPY --chown=nodeuser:nodejs --from=production-build /app/generated ./generated
 COPY --chown=nodeuser:nodejs --from=production-build /app/assets ./assets
 COPY --chown=nodeuser:nodejs --from=production-build /app/app ./app
 COPY --chown=nodeuser:nodejs --from=production-build /app/lib ./lib
+COPY --chown=nodeuser:nodejs --from=production-build /app/config ./config
+COPY --chown=nodeuser:nodejs --from=production-build /app/helper ./helper
+COPY --chown=nodeuser:nodejs --from=production-build /app/middleware ./middleware
+COPY --chown=nodeuser:nodejs --from=production-build /app/utils ./utils
+COPY --chown=nodeuser:nodejs --from=production-build /app/zod ./zod
 COPY --chown=nodeuser:nodejs --from=production-build /app/docs ./docs
 COPY --chown=nodeuser:nodejs --from=production-build /app/scripts ./scripts
 

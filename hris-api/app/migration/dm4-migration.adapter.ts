@@ -620,11 +620,9 @@ export class Dm4MigrationAdapter {
 		const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
 			let stdout = "";
 			let stderr = "";
-			const tsxCliPath = path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
 			const child = spawn(
 				process.execPath,
 				[
-					tsxCliPath,
 					input.scriptPath,
 					`--periodCode=${input.periodCode}`,
 					`--overtime-workbook=${input.workbookPath}`,

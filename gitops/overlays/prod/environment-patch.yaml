@@ -4,7 +4,7 @@ metadata:
   name: project-truth-environment
 data:
   environment: prod
-  release_tag: "prod"
+  release_tag: "f05da87e"
   runtime_image_tag: "develop"
   app_port: "3000"
   api_port: "3001"
