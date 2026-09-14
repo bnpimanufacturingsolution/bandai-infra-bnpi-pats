@@ -1,3 +1,9 @@
+## Latest Task Addendum - 2026-09-14 Features audit + 4-way develop-based PR split + branch sync (see handoff for full detail)
+
+- Audit finished (`.runtime/features-audit-20260914-102005/REPORT.md`): 0 new regressions vs 09-13 baseline; real defects = benefits-update 500 (missing import), kiosk-claim endpoint lost in the 09-03 restore, hikvision `?preview` lane absent/fail-open, REJECTED-sheet auto-approve lane still config-blind, hard-delete API never shipped, `npm test` dead from a committed unparseable spec.
+- Split executed off `origin/develop` via isolated worktrees: PR #21 applicant grouped-fields fix, PR #22 recruitment job-code badges, PR #23 benefits import fix, PR #24 public-kiosk spec parse fix (all pushed; #22 needs #21 for live data).
+- `feature/onboarding-checklist-signature`: committed the outstanding onboarding batch (Design C gate, roster DataTable, nav/tab, docs) then merged develop (union-resolved WWG logs); verified 56 mocha + 50 vitest + Playwright smokes; PUSHED. Recruitment files intentionally left dirty in the main tree until their PRs merge; `onboarding-checklist-workflow.md` excluded per operator.
+
 ## Latest Task Addendum - 2026-09-14 Job display-code badges on Recruitment board + Manage Jobs (frontend, operator design, live-proven, uncommitted)
 
 - Operator Q&A answered with live data first: the Candidates board loads ALL non-deleted applicants (14 today; `useApplicantsGrouped` hardcodes `limit 1000`, no pager - the table view deviates from the shared-DataTable convention; an unpaged kanban is normal), each section is one Job record (repeat postings for the same position are intentional independent pipelines), and `model Job` has NO user-facing id (cuid only). Operator then specified a frontend-only identifier: position initials ("Software Engineer"->SE; single word "Operator"->OP) + createdAt MMDDYYYY, e.g. `SE-01182026`, rendered as a Badge.
