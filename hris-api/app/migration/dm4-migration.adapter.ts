@@ -620,9 +620,13 @@ export class Dm4MigrationAdapter {
 		const result = await new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
 			let stdout = "";
 			let stderr = "";
+			// Must load through tsx (Node cannot import .ts directly); mirror the
+			// apply spawn above so this verification child runs the repair script.
+			const tsxCliPath = path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs");
 			const child = spawn(
 				process.execPath,
 				[
+					tsxCliPath,
 					input.scriptPath,
 					`--periodCode=${input.periodCode}`,
 					`--overtime-workbook=${input.workbookPath}`,

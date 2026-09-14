@@ -1,19 +1,27 @@
+﻿## Latest Task Addendum - 2026-09-14/15 PROD Jul 11-25 audit + DEV payroll generated + generate-crash stability fix (operator: "check prod", "run on develop, I want to test it")
+
+- PROD check (live API): Period 1 - Jul 2026 (cmpxw13as001b7zws2xg6rzuf) has only 7 seed timesheets, 281 punch-days, 0 in-period benefit enrollments, 0 EmployeePayroll. Root: PROD is the 2026-07-24 DEV clone; the Sep-11 Jan-Jul backfill landed only on the K3s DEV DB (dev-api). Verdict: PROD Jul 11-25 needs the documented DEV->PROD replay before any payroll comparison. Evidence `.runtime/prod-jul1125-check-20260914-185837/`.
+- Generic `?filter=date:RANGE` silently returns 0 fleet-wide (REC-20260914-GENERIC-DATE-RANGE-FILTER-SILENT-ZERO, Proposed). day-status-review raw SQL used as trustworthy source.
+- DEV test run: DM4 (Biometrics + rptOvertimeDetails Jul 11-25 from root `july11-july25/`) executed idempotently -> DM4.1 10,714 attendance, DM4.2 1,990 timesheets, DM4.3 OT verified (0 pending updates; already bucketed). Comp mass upload: 1,017 updated/28 failed (nonexistent 01831-01842, client gap); Deduction: 38 updated/1 failed. Then generate-timesheet: first job reached 690/846 (9 transient 55435-flap rows) before an unrelated silent exit; resumes raced forward flaps; final job e956f043 **COMPLETED 846/846, 0 failed**; EmployeePayroll count=846; period COMPLETED. Watcher used verified-stable windows before resume POST.
+- Stability fixes (this commit): (1) `index.ts` unhandledRejection no longer `process.exit(1)` - a P1001 flap from floating promises was crash-looping the API and orphaning every migration/payroll worker (error-handling.ts already documented the don't-exit contract); (2) `migration-event.service.ts` append/appendMany try/catch (observability must not kill imports); (3) `dm4-migration.adapter.ts` verification spawn was missing the tsx CLI -> DM4.3 always died ERR_UNKNOWN_FILE_EXTENSION on Windows; both spawns now route through tsx. Pinned by `tests/migration-generate-crash-stability.contract.spec.ts` 4/4.
+- Boundary: DEV test lane only; PROD/UAT untouched; May-Jul leave files still absent everywhere. Local DEV API left on supervised no-watch loop (HEAVY_REQUEST_TIMEOUT_MS=900000) - restore via scripts/restart-local-hris-api-dev.ps1 when done testing.
+
 ## Latest Task Addendum - 2026-09-14 Dedicated-checklist "section rows": no-responsible items stop counting toward completion/ACTIVE (operator decision, live-proven)
 
-- Discovery first: the new-employee welcome page renders ONLY the legacy stack (REC-20260914-ONBOARDING-WELCOME-FLOW-LEGACY-ONLY) and the legacy half of the gate is docs-only in current DEV data (no active ONBOARDING BoardingTemplate items); the dedicated half had a real defect — a PENDING no-dept parent blocked ACTIVE even at "100%" (progress counted leaves, gate counted ALL items).
-- Operator decisions (2 questions + Q2 batch): no-responsible items act like SECTIONS — excluded from the gate AND progress; parents WITH a responsible dept stay actionable; zero-actionable checklist = 100%/COMPLETED; sign endpoint stays PERMISSIVE (admin/HR direct API sign is possible but never counted); UI hides the checkbox.
+- Discovery first: the new-employee welcome page renders ONLY the legacy stack (REC-20260914-ONBOARDING-WELCOME-FLOW-LEGACY-ONLY) and the legacy half of the gate is docs-only in current DEV data (no active ONBOARDING BoardingTemplate items); the dedicated half had a real defect â€” a PENDING no-dept parent blocked ACTIVE even at "100%" (progress counted leaves, gate counted ALL items).
+- Operator decisions (2 questions + Q2 batch): no-responsible items act like SECTIONS â€” excluded from the gate AND progress; parents WITH a responsible dept stay actionable; zero-actionable checklist = 100%/COMPLETED; sign endpoint stays PERMISSIVE (admin/HR direct API sign is possible but never counted); UI hides the checkbox.
 - hris-api: canonical `isActionableOnboardingItem` + `ACTIONABLE_ONBOARDING_ITEM_FILTER` in `app/onboarding/onboardingAccess.helper.ts` (single source); `syncEmployeeEmploymentStatus` gate probe now filters PENDING+actionable (boarding-documents.helper.ts); progress centralized as exported `recomputeOnboardingChecklistProgress` in `onboardingLifecycle.helper.ts` (controller closure delegates; script reuses; denominator = actionable items at ANY depth, 100/COMPLETED when zero actionable); `canSignFor` false for section rows for every role.
-- hris-app: `onboarding-checklist-panel.tsx` renders PENDING no-dept rows as plain section rows (blank Responsible/Completed cells - operator follow-up: no "unassigned" label and no "—" placeholder anywhere; never a checkbox; historically-signed section rows keep indicator + manager unsign); footer copy "unassigned rows are sections — not counted". Single-app exception (no emp-app counterpart).
-- Ops: new `hris-api/scripts/resync-onboarding-employment-status.ts` (dry-run default / --execute / --orgCode) — ran both on DEV: 73 ONBOARDING scanned, **EMP3335 (Gabriel Berja) promoted ACTIVE** (legacy clean + no dedicated checklist + trigger never fired — promotion owed under the PRE-EXISTING gate, not caused by the rule change), 72 stay ONBOARDING (all have legacy pendings), 0 errors. Char/TESTBEN003/EMP003 each show exactly 1 pending section row — previously unblockable by dedicated sign-off alone.
-- Fixture drift recovered mid-task: signer2/KCSSI-BANDAI1129 had reverted to role bare `employee` (login allow-list → /403) + dept Production; restored hris-employee + SW-Dev per 2026-09-12 docs (repair JSON in proof dir); filed REC-20260914-LOGIN-ALLOWLIST-BARE-EMPLOYEE-ROLE.
+- hris-app: `onboarding-checklist-panel.tsx` renders PENDING no-dept rows as plain section rows (blank Responsible/Completed cells - operator follow-up: no "unassigned" label and no "â€”" placeholder anywhere; never a checkbox; historically-signed section rows keep indicator + manager unsign); footer copy "unassigned rows are sections â€” not counted". Single-app exception (no emp-app counterpart).
+- Ops: new `hris-api/scripts/resync-onboarding-employment-status.ts` (dry-run default / --execute / --orgCode) â€” ran both on DEV: 73 ONBOARDING scanned, **EMP3335 (Gabriel Berja) promoted ACTIVE** (legacy clean + no dedicated checklist + trigger never fired â€” promotion owed under the PRE-EXISTING gate, not caused by the rule change), 72 stay ONBOARDING (all have legacy pendings), 0 errors. Char/TESTBEN003/EMP003 each show exactly 1 pending section row â€” previously unblockable by dedicated sign-off alone.
+- Fixture drift recovered mid-task: signer2/KCSSI-BANDAI1129 had reverted to role bare `employee` (login allow-list â†’ /403) + dept Production; restored hris-employee + SW-Dev per 2026-09-12 docs (repair JSON in proof dir); filed REC-20260914-LOGIN-ALLOWLIST-BARE-EMPLOYEE-ROLE.
 - Proof: onboarding mocha **62** green (status-gate spec rewritten to a filter-aware prisma mock pinning the AND fragment + section no-block/no-reopen cases; sign spec +2; access-contract HR matrix + predicate unit), app-module-contract **688**, hris-app onboarding vitest **31**, onboarding Playwright smokes **3/3** live (list-tab re-run after fixture repair), live API: section row `canSign:false` + SW-Dev `canSign:true` for signer2, EMP3335 ACTIVE by direct read. tsc delta 0 (68/173 pre-existing), eslint delta 0 (2 pre-existing warnings). Evidence `.runtime/onboarding-section-gate-proof-20260914-213905/`.
 - Truth: `docs/ONBOARDING_CHECKLIST.md` (role matrix actionable rule + panel bullet + gate section + fixture drift note), two new registry RECs (above). Boundary: committed via PR off develop.
-﻿## Latest Task Addendum - 2026-09-14 Agency databank import: 1,355 workers into 5 agencies + 1 coordinator each (local DEV)
+ï»¿## Latest Task Addendum - 2026-09-14 Agency databank import: 1,355 workers into 5 agencies + 1 coordinator each (local DEV)
 
 - **Source:** client pack `AGENCY-20260914T052438Z-1-001/AGENCY/*.xlsx` (Avance, Cepol, CGSI, Kohsai, Natcorp; gitignored). Operator asked to import each databank to its agency with exactly one agency coordinator per agency.
-- **Tooling:** `hris-api/scripts/import-agency-databank.ts` (idempotent, resumable: ensure agency → ensure/repair coordinator → upsert employees by `organizationId_employeeId`, cached dept/section/position ensures, repeated-header/company-name junk rows skipped, `isDeleted:false`) + `scripts/fix-agency-person-links.ts` (person-name integrity pass, 0 mismatches). Operator doc: `docs/AGENCY_DATABANK_IMPORT.md`.
+- **Tooling:** `hris-api/scripts/import-agency-databank.ts` (idempotent, resumable: ensure agency â†’ ensure/repair coordinator â†’ upsert employees by `organizationId_employeeId`, cached dept/section/position ensures, repeated-header/company-name junk rows skipped, `isDeleted:false`) + `scripts/fix-agency-person-links.ts` (person-name integrity pass, 0 mismatches). Operator doc: `docs/AGENCY_DATABANK_IMPORT.md`.
 - **Result (verified vs files, 0 missing / 0 extra):** AVANCE 433, CEPOL 130, CGSI 496, KOHSAI 120, NATCORP 176; sample names cross-checked against the workbooks. Coordinators `coordinator-<code>@bandai.local` / `password123`, role `hris-agency`, `metadata.agencyId` set; all five login-verified via live `POST /api/auth/login` (200 + token).
-- **Defects caught+fixed in pass:** early draft stored a placeholder password hash (coordinator login 401) → finalizer set real bcrypt + re-verified by login; one junk `ID No.` employee from a repeated header row → deleted; repeated-header rows now skipped.
+- **Defects caught+fixed in pass:** early draft stored a placeholder password hash (coordinator login 401) â†’ finalizer set real bcrypt + re-verified by login; one junk `ID No.` employee from a repeated header row â†’ deleted; repeated-header rows now skipped.
 - **Infra truth re-proven:** K3s DEV forward (55435 via Cloudflare SSH) drops every few minutes; long imports must be resumable and rerun after `start-k8s-dev-db-access.ps1` (in-script self-rebuild attempted; the browser Access prompt still gates recovery).
 - **Boundary:** local DEV clone only (no VM/UAT/PROD writes). DA databank sheet remains blocked by `REC-20260914-AGENCY-DA-DATABANK-NO-SCOPE`.
 
@@ -42,85 +50,85 @@
 
 ## Latest Task Addendum - 2026-09-13 Onboarding list now uses shared DataTable pager + skeletons (operator ask, uncommitted)
 
-- Operator: "pagination like other pages (1 2 3 … 10, don't show all)" + "decent loading with skeleton". Implemented by swapping the hand-rolled list markup for the shared `DataTable` atom (same numbered ellipsis pager + `renderLoadingSkeleton` every other admin/HR list uses); `searchValue`/`onSearch`/`currentPage`/`totalPages`/`onPageChange` wire the existing server-side `?page/?limit` contract; department `SearchableSelect` moved into its `customFilters` slot; row-click/Open Profile/inline panel preserved. Panel loading ("Loading…" texts) replaced with `Skeleton` blocks (header + progress bar + two section cards with row placeholders).
-- Debug finding worth remembering: DataTable rows carry `role="button"` and actions render in desktop+mobile duplicates — Playwright/vitest must target `{ name: "Open Profile", exact: true }` + `visible=true` (non-exact matched the whole row and silently "clicked" selection instead of navigating). Also `searchable-select.tsx` gained optional `triggerAriaLabel`.
-- Tests: vitest 40/40 (page tests 10 incl. ellipsis `1…17` windowing, page forwarding, skeleton-on-load; panel +skeleton case); Playwright 3/3 live green after selector fix (login wait raised 30s→90s for recurring DEV-forward spikes); tsc/eslint delta 0. Evidence screenshots refreshed in `.runtime/onboarding-list-tab-proof-20260912-214829/`. Uncommitted, unpushed.
+- Operator: "pagination like other pages (1 2 3 â€¦ 10, don't show all)" + "decent loading with skeleton". Implemented by swapping the hand-rolled list markup for the shared `DataTable` atom (same numbered ellipsis pager + `renderLoadingSkeleton` every other admin/HR list uses); `searchValue`/`onSearch`/`currentPage`/`totalPages`/`onPageChange` wire the existing server-side `?page/?limit` contract; department `SearchableSelect` moved into its `customFilters` slot; row-click/Open Profile/inline panel preserved. Panel loading ("Loadingâ€¦" texts) replaced with `Skeleton` blocks (header + progress bar + two section cards with row placeholders).
+- Debug finding worth remembering: DataTable rows carry `role="button"` and actions render in desktop+mobile duplicates â€” Playwright/vitest must target `{ name: "Open Profile", exact: true }` + `visible=true` (non-exact matched the whole row and silently "clicked" selection instead of navigating). Also `searchable-select.tsx` gained optional `triggerAriaLabel`.
+- Tests: vitest 40/40 (page tests 10 incl. ellipsis `1â€¦17` windowing, page forwarding, skeleton-on-load; panel +skeleton case); Playwright 3/3 live green after selector fix (login wait raised 30sâ†’90s for recurring DEV-forward spikes); tsc/eslint delta 0. Evidence screenshots refreshed in `.runtime/onboarding-list-tab-proof-20260912-214829/`. Uncommitted, unpushed.
 
-## Latest Task Addendum - 2026-09-12 Design C: dedicated checklist joins the ONBOARDING→ACTIVE promotion gate (operator decision, uncommitted)
+## Latest Task Addendum - 2026-09-12 Design C: dedicated checklist joins the ONBOARDINGâ†’ACTIVE promotion gate (operator decision, uncommitted)
 
-- **Operator decision:** completing/signing the new checklist must NOT graduate an employee by itself, and documents alone must not either — the legacy AND dedicated-checklist completion are both required (mirrors the legacy reopen behavior on the other side).
-- **hris-api (only files touched):** `boarding-documents.helper.ts` — `syncEmployeeEmploymentStatus` now exported and extended: `hasPendingOnboarding = legacy pending OR dedicated OnboardingItem PENDING (non-deleted, active checklist)`; employees with no dedicated checklist keep pure legacy semantics; an empty dedicated checklist is non-blocking. `app/onboarding/onboarding.controller.ts` — new `syncEmploymentForChecklist()` fired best-effort (own try/catch, never fails the request; throws log a warn and the response reports `employmentStatus: null`) after every completion-changing path: sign, unsign, deleteItem/deleteSection (checklist kinds), createChecklist, and provision-all per created employee; sign/unsign responses echo `employmentStatus`. No legacy trigger sites changed; no auto-sign/bulk-sign (declined).
+- **Operator decision:** completing/signing the new checklist must NOT graduate an employee by itself, and documents alone must not either â€” the legacy AND dedicated-checklist completion are both required (mirrors the legacy reopen behavior on the other side).
+- **hris-api (only files touched):** `boarding-documents.helper.ts` â€” `syncEmployeeEmploymentStatus` now exported and extended: `hasPendingOnboarding = legacy pending OR dedicated OnboardingItem PENDING (non-deleted, active checklist)`; employees with no dedicated checklist keep pure legacy semantics; an empty dedicated checklist is non-blocking. `app/onboarding/onboarding.controller.ts` â€” new `syncEmploymentForChecklist()` fired best-effort (own try/catch, never fails the request; throws log a warn and the response reports `employmentStatus: null`) after every completion-changing path: sign, unsign, deleteItem/deleteSection (checklist kinds), createChecklist, and provision-all per created employee; sign/unsign responses echo `employmentStatus`. No legacy trigger sites changed; no auto-sign/bulk-sign (declined).
 - **Tests:** mocha 56 (new `onboarding-status-gate.spec.ts` 5-case truth table: legacy-pending blocks, dedicated-pending blocks, both clear promotes, ACTIVE reopens on dedicated PENDING, no-dedicated = legacy-only; sign spec +2: promotion asserts `employmentStatus=ACTIVE` + `employee.update`, and throw-safe sync still signs 200) + 685 app-module-contract green; eslint/tsc clean; API restarted and 3/3 onboarding Playwright smokes still green.
-- **Live DEV proof (`.runtime/onboarding-gate-proof-20260913-115*/`):** EMP003 baseline ONBOARDING → provisioned (dedicated PENDING + legacy clean) stays ONBOARDING → signer2 signs the only item → **ACTIVE** (resolver value in response + direct employee read) → admin unsign → **ONBOARDING** (reopen) → checklist deleted → ACTIVE again by design → status explicitly restored to ONBOARDING. Bonus negative case: Hirotaka Tanaka reached 100% dedicated sign-off but stayed ONBOARDING because one legacy 201 item is pending — the AND gate exactly as specified. All GATE TEST artifacts deleted (templates=1 "Standard", only real checklists remain); note Hirotaka's and EMP003's statuses were verified back to ONBOARDING.
+- **Live DEV proof (`.runtime/onboarding-gate-proof-20260913-115*/`):** EMP003 baseline ONBOARDING â†’ provisioned (dedicated PENDING + legacy clean) stays ONBOARDING â†’ signer2 signs the only item â†’ **ACTIVE** (resolver value in response + direct employee read) â†’ admin unsign â†’ **ONBOARDING** (reopen) â†’ checklist deleted â†’ ACTIVE again by design â†’ status explicitly restored to ONBOARDING. Bonus negative case: Hirotaka Tanaka reached 100% dedicated sign-off but stayed ONBOARDING because one legacy 201 item is pending â€” the AND gate exactly as specified. All GATE TEST artifacts deleted (templates=1 "Standard", only real checklists remain); note Hirotaka's and EMP003's statuses were verified back to ONBOARDING.
 - Uncommitted, unpushed (branch `feature/onboarding-checklist-signature` HEAD still `d0d1a7f5`).
 
 ### Same-day follow-up: roster pagination + SearchableSelect dept filter (operator-ordered, uncommitted)
 
 - `GET /api/onboarding/employees` gained server-side `?page`/`?limit` (default **10/page**, max 100, bad values clamped) + `pagination {total,page,limit,totalPages}` (response keeps `employees` shape; the panel's by-number roster fallback is unaffected). +1 mocha pagination spec (onboarding suite 49 passing).
-- List page: 10-row pages with "Showing X–Y of Z onboarding employees" + "Page n / m" + Prev/Next (disabled at bounds/fetch), page resets on search/department change; department `<select>` replaced with the shared **`SearchableSelect`** (prepended "All departments" = `""` clearing option; the component gained an optional `triggerAriaLabel` — additive, existing callers unchanged). Test caught a real `rangeStart` precedence bug ("Showing 11–2") — fixed.
-- vitest 41 (page tests 5→8); Playwright list spec asserts 10-row page + pagination body + pager footer and got `test.slow()` (DEV forward slow-spikes once blew the 60s budget); all 3 onboarding smokes green live. tsc/eslint delta 0. Uncommitted per operator.
+- List page: 10-row pages with "Showing Xâ€“Y of Z onboarding employees" + "Page n / m" + Prev/Next (disabled at bounds/fetch), page resets on search/department change; department `<select>` replaced with the shared **`SearchableSelect`** (prepended "All departments" = `""` clearing option; the component gained an optional `triggerAriaLabel` â€” additive, existing callers unchanged). Test caught a real `rangeStart` precedence bug ("Showing 11â€“2") â€” fixed.
+- vitest 41 (page tests 5â†’8); Playwright list spec asserts 10-row page + pagination body + pager footer and got `test.slow()` (DEV forward slow-spikes once blew the 60s budget); all 3 onboarding smokes green live. tsc/eslint delta 0. Uncommitted per operator.
 
 ## Latest Task Addendum - 2026-09-12 Onboarding list page + profile Onboarding tab (operator flow, live-proven, NOT committed)
 
-- **Operator flow:** (1) new page = LIST of onboarding employees with search/filters; (2) employee profile gets an **Onboarding tab only when employmentStatus=ONBOARDING**; (3) list row → `/employee/<id>?tab=onboarding&from=hr-onboarding`; (4) tab shows the checklist; (5) signing = modal with short instruction + password. Decisions: compose from existing endpoints (no new route); sign available on BOTH list and tab; HR + all employees get the nav entry.
+- **Operator flow:** (1) new page = LIST of onboarding employees with search/filters; (2) employee profile gets an **Onboarding tab only when employmentStatus=ONBOARDING**; (3) list row â†’ `/employee/<id>?tab=onboarding&from=hr-onboarding`; (4) tab shows the checklist; (5) signing = modal with short instruction + password. Decisions: compose from existing endpoints (no new route); sign available on BOTH list and tab; HR + all employees get the nav entry.
 - **Backend (hris-api, additive to onboarding module only):** `GET /api/onboarding/employees?search&departmentId` (multi-term AND across employee number + person first/last name via the existing JSON-path pattern; malformed departmentId ignored). 2 new mocha cases; onboarding suite 48 passing; tsc/eslint clean.
-- **Frontend (hris-app):** `hr-onboarding-page.tsx` at `/hr/onboarding` (route `routes/hr/onboarding.tsx` + routes.ts; debounced search + department select; table w/ status/progress; row-click mounts panel; Open Profile). Shared `onboarding-checklist-panel.tsx` (instance resolve: admin/HR `GET /checklists?employeeId=` fallback roster-by-number; `.../visible` tree with disabled context/non-dept rows + tooltips; progress; admin/HR provision CTA; **sign modal** = instruction + password + remarks, inline 401 error, admin/HR unsign; `retry:false` added to all onboarding mutations after TanStack's default retries made wrong-password errors appear ~3s late). Profile `employee.$id.tsx`: conditional Onboarding tab (`employmentStatus === "ONBOARDING"`, deep-linkable; legacy boarding tab untouched). Nav: "Onboarding" in HR Recruitment submenu + General for non-HR employees + "Onboarding Employees" admin nav → `/hr/onboarding`.
-- **Tests:** vitest 38 across 8 files (new panel/page/tab/sidebar contracts). Playwright `onboarding-list-tab-live-proof.spec.ts` — self-healing unsign prelude, passed 2 consecutive live runs (search → dept-filtered panel → context parent disabled → wrong password inline error → sign → "Mae Banaga" stamped + remarks → 14% progress → Open Profile tab same state). Batch-1/2 smokes re-passed. Evidence `.runtime/onboarding-list-tab-proof-20260912-214829/` (screenshots + final-visible-admin.json + signer-employee-data-changes.txt).
-- **DEV test fixtures kept deliberately (documented in docs/ONBOARDING_CHECKLIST.md):** signer user `e2e-onb-signer2@bandai.local`/`password123` ↔ synthetic `KCSSI-BANDAI1129` (dept moved to Software Development; original id recorded) and Char Aznable's checklist left with item 6.1 signed as the demo. **Observation filed as REC-20260912-SIGNER-ROLE-DRIFT:** a user created with role hris-hr-manager still gets a non-HR effective role at login (login derives from the employee record), so "HR can sign any item" is not reachable for freshly-created users without employee role derivation — department-match path exercised instead.
-- **Boundary:** working tree ONLY — no commit, no push (operator has not asked). Concurrent session's cosmetic builder-component edits coexist (all onboarding tests green with them). API restarted twice this batch for module loads; roster search verified live.
+- **Frontend (hris-app):** `hr-onboarding-page.tsx` at `/hr/onboarding` (route `routes/hr/onboarding.tsx` + routes.ts; debounced search + department select; table w/ status/progress; row-click mounts panel; Open Profile). Shared `onboarding-checklist-panel.tsx` (instance resolve: admin/HR `GET /checklists?employeeId=` fallback roster-by-number; `.../visible` tree with disabled context/non-dept rows + tooltips; progress; admin/HR provision CTA; **sign modal** = instruction + password + remarks, inline 401 error, admin/HR unsign; `retry:false` added to all onboarding mutations after TanStack's default retries made wrong-password errors appear ~3s late). Profile `employee.$id.tsx`: conditional Onboarding tab (`employmentStatus === "ONBOARDING"`, deep-linkable; legacy boarding tab untouched). Nav: "Onboarding" in HR Recruitment submenu + General for non-HR employees + "Onboarding Employees" admin nav â†’ `/hr/onboarding`.
+- **Tests:** vitest 38 across 8 files (new panel/page/tab/sidebar contracts). Playwright `onboarding-list-tab-live-proof.spec.ts` â€” self-healing unsign prelude, passed 2 consecutive live runs (search â†’ dept-filtered panel â†’ context parent disabled â†’ wrong password inline error â†’ sign â†’ "Mae Banaga" stamped + remarks â†’ 14% progress â†’ Open Profile tab same state). Batch-1/2 smokes re-passed. Evidence `.runtime/onboarding-list-tab-proof-20260912-214829/` (screenshots + final-visible-admin.json + signer-employee-data-changes.txt).
+- **DEV test fixtures kept deliberately (documented in docs/ONBOARDING_CHECKLIST.md):** signer user `e2e-onb-signer2@bandai.local`/`password123` â†” synthetic `KCSSI-BANDAI1129` (dept moved to Software Development; original id recorded) and Char Aznable's checklist left with item 6.1 signed as the demo. **Observation filed as REC-20260912-SIGNER-ROLE-DRIFT:** a user created with role hris-hr-manager still gets a non-HR effective role at login (login derives from the employee record), so "HR can sign any item" is not reachable for freshly-created users without employee role derivation â€” department-match path exercised instead.
+- **Boundary:** working tree ONLY â€” no commit, no push (operator has not asked). Concurrent session's cosmetic builder-component edits coexist (all onboarding tests green with them). API restarted twice this batch for module loads; roster search verified live.
 
 ## Latest Task Addendum - 2026-09-12 Onboarding follow-up batch: builder edit/delete, create-on-hire + provision-all, checklist page = full-page preview (operator-ordered)
 
-- **Operator asks:** (1) builder was missing edit/delete while building sections/items; (2) "FOR NOW, only one checklist will be created. BUT dont change the endpoints" → plus create-on-hire and an option to provision all existing ONBOARDING employees; (3) `/admin/configuration/onboarding/checklist` must show **the created checklist** exactly like the builder Preview but full-page — **nothing employee-related**; builder must open on the **first template created** with every create-another-template affordance hidden.
-- **Backend (hris-api):** new `app/onboarding/onboardingLifecycle.helper.ts` — `ensureOnboardingChecklistForEmployee()` (idempotent exists-noop, single-active-template auto-resolve, deep copy parents-before-children, `requireTemplate` skip). Create endpoint now runs through it (`templateId` optional). New `POST /api/onboarding/checklists/provision-all` `{dryRun?, employeeIds?}` (admin/HR; dry-run plan per the repo's non-mutating-first rule; idempotent). Create-on-hire hooks wired best-effort (own try/catch, after commit, never fails the hire): employee.controller create Step 8.9 (ONBOARDING-gated) + `reconcileEmployeeOnboardingState` boarding-documents helper (covers update transitions + import post-actions). Existing 25 endpoints + offboarding stack untouched.
-- **Frontend (hris-app):** checklist.tsx rewritten from the v1 roster/sign UI to a **pure page preview** — resolves the single active template and renders it via new shared `checklist-preview-table.tsx` (extracted verbatim from BuilderPreview so modal and page are one source); honest empty state + Build CTA; zero employee widgets. builder.tsx = **single-template editor**: auto-loads first template via effect, `<select>`/"New template…" removed, Save button label "Save", always PUTs the same id. Section rename (inline input, Enter/Escape/blur) + delete; item edit (add-item.tsx now create+edit mode) + subtree delete with `DeleteConfirm` dialog; pure helpers `updateSectionName/removeSectionById/updateItemInItems/removeItemFromItems` exported + tested. Mock demo table removed from the page (`mock-checklist-data.ts` left unused; roster/sign hooks/services remain exported for the future employee surface).
-- **Tests:** hris-api mocha onboarding suite now **46** (new `onboarding-lifecycle.spec.ts` 7; provision-all 403/dry-run/idempotent-execute; create auto-resolve/409) — 731 passing with app-module-contract; eslint clean incl. employee.controller + boarding-documents helper. hris-app vitest **19** (new `checklist.test.tsx` page-preview contract incl. no-combobox assertion; builder edit/delete + hidden-affordance + helper tests; service 4). Playwright rewritten to the new model, **2/2 PASSED live** (page shows the operator's real "Standard Onboarding Checklist" template preview with nothing employee-related; builder auto-loads it, no selector). tsc delta 0 (173 pre-existing elsewhere, 0 in onboarding files).
-- **Live DEV proof:** `.runtime/onboarding-provision-proof-20260912-173212/` — scoped provision-all on one ONBOARDING employee: dryRun wouldCreate=1 (no writes) → execute created=1 (deep-copied the operator's real 2-section UI template) → re-run skipped=1 (idempotent) → visible tree intact → checklist soft-deleted, count back to 0. Full 170-employee run intentionally NOT executed on shared DEV (operator triggers via provision-all when ready; endpoint is re-runnable). Restarted the local dev API once (tsx watch not reloading; 2:14pm process predated new routes).
+- **Operator asks:** (1) builder was missing edit/delete while building sections/items; (2) "FOR NOW, only one checklist will be created. BUT dont change the endpoints" â†’ plus create-on-hire and an option to provision all existing ONBOARDING employees; (3) `/admin/configuration/onboarding/checklist` must show **the created checklist** exactly like the builder Preview but full-page â€” **nothing employee-related**; builder must open on the **first template created** with every create-another-template affordance hidden.
+- **Backend (hris-api):** new `app/onboarding/onboardingLifecycle.helper.ts` â€” `ensureOnboardingChecklistForEmployee()` (idempotent exists-noop, single-active-template auto-resolve, deep copy parents-before-children, `requireTemplate` skip). Create endpoint now runs through it (`templateId` optional). New `POST /api/onboarding/checklists/provision-all` `{dryRun?, employeeIds?}` (admin/HR; dry-run plan per the repo's non-mutating-first rule; idempotent). Create-on-hire hooks wired best-effort (own try/catch, after commit, never fails the hire): employee.controller create Step 8.9 (ONBOARDING-gated) + `reconcileEmployeeOnboardingState` boarding-documents helper (covers update transitions + import post-actions). Existing 25 endpoints + offboarding stack untouched.
+- **Frontend (hris-app):** checklist.tsx rewritten from the v1 roster/sign UI to a **pure page preview** â€” resolves the single active template and renders it via new shared `checklist-preview-table.tsx` (extracted verbatim from BuilderPreview so modal and page are one source); honest empty state + Build CTA; zero employee widgets. builder.tsx = **single-template editor**: auto-loads first template via effect, `<select>`/"New templateâ€¦" removed, Save button label "Save", always PUTs the same id. Section rename (inline input, Enter/Escape/blur) + delete; item edit (add-item.tsx now create+edit mode) + subtree delete with `DeleteConfirm` dialog; pure helpers `updateSectionName/removeSectionById/updateItemInItems/removeItemFromItems` exported + tested. Mock demo table removed from the page (`mock-checklist-data.ts` left unused; roster/sign hooks/services remain exported for the future employee surface).
+- **Tests:** hris-api mocha onboarding suite now **46** (new `onboarding-lifecycle.spec.ts` 7; provision-all 403/dry-run/idempotent-execute; create auto-resolve/409) â€” 731 passing with app-module-contract; eslint clean incl. employee.controller + boarding-documents helper. hris-app vitest **19** (new `checklist.test.tsx` page-preview contract incl. no-combobox assertion; builder edit/delete + hidden-affordance + helper tests; service 4). Playwright rewritten to the new model, **2/2 PASSED live** (page shows the operator's real "Standard Onboarding Checklist" template preview with nothing employee-related; builder auto-loads it, no selector). tsc delta 0 (173 pre-existing elsewhere, 0 in onboarding files).
+- **Live DEV proof:** `.runtime/onboarding-provision-proof-20260912-173212/` â€” scoped provision-all on one ONBOARDING employee: dryRun wouldCreate=1 (no writes) â†’ execute created=1 (deep-copied the operator's real 2-section UI template) â†’ re-run skipped=1 (idempotent) â†’ visible tree intact â†’ checklist soft-deleted, count back to 0. Full 170-employee run intentionally NOT executed on shared DEV (operator triggers via provision-all when ready; endpoint is re-runnable). Restarted the local dev API once (tsx watch not reloading; 2:14pm process predated new routes).
 - **Boundary:** committed to `feature/onboarding-checklist-signature` (branch now has v1 + this batch), **not pushed**; single-app exception unchanged (employee-facing view stays REC-20260912-ONBOARDING-EMPAPP-READ-VIEW). Docs `docs/ONBOARDING_CHECKLIST.md` updated.
 
 ## Latest Task Addendum - 2026-09-12 Dedicated /api/onboarding module: checklist builder + password-as-signature (operator-ordered)
 
 - **Operator ask:** check whether existing onboarding endpoints support the mock checklist/builder (CRUD + department sign-off with password, name-of-signee, per-department visibility). Answer: CRUD existed (generic boarding stack), but password signing, signee stamping, and department scoping did NOT. Operator then approved a **full dedicated onboarding module** and the role matrix (admin=template CRUD+sign all; HR=view+sign all; ONBOARDING employee=see own full, NEVER sign own; other employees=see own-dept items + no-dept context read-only, sign own-dept).
-- **Backend (hris-api):** new Prisma models in `prisma/schema-postgres/onboarding.prisma` — `OnboardingTemplate/Section/Item` (builder, self-relation `parentId`, depth≤3, OPTIONAL `responsibleDepartmentId/Name`) + `OnboardingChecklist/Section/Item` (per-employee deep copy, server-stamped `signedByName/completedByEmployeeId/completedDate/remarks`) + append-only `OnboardingSignature` audit rows. Additive `db push` to canonical DEV 55435 only; existing tables untouched. New module `app/onboarding/` (26 routes incl. `PUT /templates/:id/tree`, `POST /items/:id/sign|unsign`, `GET /items/:id/signatures`, `GET /employees` roster, `GET /checklists/:id/visible`), `zod/onboarding.ts`, and `onboardingAccess.helper.ts` as single source for the permission matrix + visible-tree builder (`canSign`/`isContextOnly`). Sign = bcrypt re-check of the caller's own password (no relogin): 401 wrong password · 403 dept mismatch/own checklist/no-dept item · 409 already signed or passwordless account; signee name resolved server-side from the actor's employee person. Completion auto-advances `completionPercentage`/status; `unsign` (admin/HR) keeps audit rows. Generic `boardingProcess`/`checklistItem` stack **not modified** (offboarding unaffected).
-- **Frontend (hris-app):** live `onboarding.service.ts` + `useOnboarding.ts` hooks; `organisms/onboarding/checklist.tsx` rewritten to roster picker → filtered tree → password sign modal, with the ORIGINAL mock table kept as a labelled demo fallback when `/api/onboarding/employees` errors (coexist per operator); `builder.tsx` gains template name/load-existing/Save-all (`POST` + `PUT /tree`) while keeping local add flows and the department picker (`add-item.tsx`, department optional for parent rows). Fixed pre-existing red `builder.test.tsx` href pin (route is `/admin/configuration/onboarding/checklist`) and a TS5097 `.tsx` import in the untracked `routes/admin/onboarding/builder.tsx`.
+- **Backend (hris-api):** new Prisma models in `prisma/schema-postgres/onboarding.prisma` â€” `OnboardingTemplate/Section/Item` (builder, self-relation `parentId`, depthâ‰¤3, OPTIONAL `responsibleDepartmentId/Name`) + `OnboardingChecklist/Section/Item` (per-employee deep copy, server-stamped `signedByName/completedByEmployeeId/completedDate/remarks`) + append-only `OnboardingSignature` audit rows. Additive `db push` to canonical DEV 55435 only; existing tables untouched. New module `app/onboarding/` (26 routes incl. `PUT /templates/:id/tree`, `POST /items/:id/sign|unsign`, `GET /items/:id/signatures`, `GET /employees` roster, `GET /checklists/:id/visible`), `zod/onboarding.ts`, and `onboardingAccess.helper.ts` as single source for the permission matrix + visible-tree builder (`canSign`/`isContextOnly`). Sign = bcrypt re-check of the caller's own password (no relogin): 401 wrong password Â· 403 dept mismatch/own checklist/no-dept item Â· 409 already signed or passwordless account; signee name resolved server-side from the actor's employee person. Completion auto-advances `completionPercentage`/status; `unsign` (admin/HR) keeps audit rows. Generic `boardingProcess`/`checklistItem` stack **not modified** (offboarding unaffected).
+- **Frontend (hris-app):** live `onboarding.service.ts` + `useOnboarding.ts` hooks; `organisms/onboarding/checklist.tsx` rewritten to roster picker â†’ filtered tree â†’ password sign modal, with the ORIGINAL mock table kept as a labelled demo fallback when `/api/onboarding/employees` errors (coexist per operator); `builder.tsx` gains template name/load-existing/Save-all (`POST` + `PUT /tree`) while keeping local add flows and the department picker (`add-item.tsx`, department optional for parent rows). Fixed pre-existing red `builder.test.tsx` href pin (route is `/admin/configuration/onboarding/checklist`) and a TS5097 `.tsx` import in the untracked `routes/admin/onboarding/builder.tsx`.
 - **Tests:** backend mocha 37 passing (`onboarding-access.contract` sign matrix + `onboarding-sign.controller` supertest/mock-prisma 200/401/403/409 + `onboarding-crud.controller` guards; existing boarding-title contracts still green); app-module-contract 688 green; hris-api + hris-app tsc show no errors in any touched file (only pre-existing unrelated ones). Frontend vitest onboarding 9 passing. New playwright smoke `tests/smoke/admin-onboarding-checklist-live-proof.spec.ts` 2/2 PASSED (screenshots in `.runtime/onboarding-module-proof-20260912-*`).
-- **Live DEV E2E PASSED (API):** template create → tree save (no-dept parent "1 Device" + dept child "1.1 Laptop") → checklist deep copy for ONBOARDING employee → department signer (TESTBEN003/Assembly) sees context parent `canSign:false` + own-dept child `canSign:true`, wrong dept child hidden → wrong password 401 → sign 200 stamps `signedByName="Beneficiary Employee"` server-side, remarks kept, progress 100% checklist auto-COMPLETED → signature audit row `method=PASSWORD` → no-dept parent sign 403, dept-user unsign 403, admin unsign restores PENDING. Full cleanup proven (0 templates/checklists, e2e user deleted+login 401, TESTBEN003 `userId` restored to null). Evidence: `.runtime/onboarding-module-proof-20260912-*/`.
+- **Live DEV E2E PASSED (API):** template create â†’ tree save (no-dept parent "1 Device" + dept child "1.1 Laptop") â†’ checklist deep copy for ONBOARDING employee â†’ department signer (TESTBEN003/Assembly) sees context parent `canSign:false` + own-dept child `canSign:true`, wrong dept child hidden â†’ wrong password 401 â†’ sign 200 stamps `signedByName="Beneficiary Employee"` server-side, remarks kept, progress 100% checklist auto-COMPLETED â†’ signature audit row `method=PASSWORD` â†’ no-dept parent sign 403, dept-user unsign 403, admin unsign restores PENDING. Full cleanup proven (0 templates/checklists, e2e user deleted+login 401, TESTBEN003 `userId` restored to null). Evidence: `.runtime/onboarding-module-proof-20260912-*/`.
 - **Restart note:** had to stop the other session's `npm run dev` API tree (PID 6280) to unlock the Prisma engine DLL for client regeneration; it then died on the 240s health timeout due to one YAML compact-mapping bug in a new `@openapi` comment (fixed, quoted). API restarted and healthy on 3001; DB forward self-healed its usual 55435 flap mid-run.
 - **Boundary:** single-app exception (admin/HR configuration surface; `hris-emp-app` untracked, no counterpart). Not pushed (no operator push request; working tree also carries another session's in-flight mock-builder files). Docs: `docs/ONBOARDING_CHECKLIST.md`. Recommendations filed (see registry).
-## Latest Task Addendum - 2026-09-11 Jan–Jul 2026 payroll data backfill (operator-ordered "do the january to july")
+## Latest Task Addendum - 2026-09-11 Janâ€“Jul 2026 payroll data backfill (operator-ordered "do the january to july")
 
-- **Executed:** full DM4 backfill Dec 26 → Jun 10 + OT + leave review, dry-run-gated, oldest→newest, on canonical local DEV (K3s DB via 55435). **Biometrics: 10 windows COMPLETED, 0 failed** (Dec26-Jan10 4,153 | Jan11-25 8,019 | Jan26-Feb10 10,630 | Feb11-25 9,074 | Feb26-Mar10 8,858 | Mar11-25 10,216 | Mar26-Apr10 8,792 | Apr11-25 10,226 | Apr26-May10 10,043 | May11-25 5,198), 2,237 employees matched every run — punch source discovered inside the client archive `ATTENDANCE & TIME TRACKING.../zip-rar/Biometrics Data.rar → 2026/`. **OT:** yearly `2026 rptOvertimeDetails.xlsx` (1/1–5/31, 121,422 rows) split into 11 per-cutoff workbooks (0 unassigned), all executed — mostly idempotent no-ops (OT already on lines; buckets survived the biometrics refresh); fleet proof 850–6,565 real-OT lines per period. **Leave Jan–Apr: honest zeros** — the 2026 monthly `Final Leave & Awol` bundles contain no PAID rows in any cutoff window (UNPAID/AWOL = day-status evidence only); May–Jul leave still missing everywhere. With the earlier Jun–Jul pass, **punch coverage is continuous Dec 26 → Jul 25 except May 26–Jun 10 (no punch workbook exists anywhere; that period keeps its odd 1,805 APPROVED + 412 DRAFT / 29,268 lines schedule-derived state)**.
-- **Gaps needing client data:** May 26–Jun 10 punches; Jan–May comp/ded mass uploads (none provided; only PP-20260426-20260511 has prior-era 2,249 benefits + 1,182 loans); May–Jul leave files. Payroll generation deliberately NOT run (separate money order).
-- **Infra:** API died mid-import 4× → ran the backfill under a supervised no-watch API (auto-respawn, log in `.runtime/jan-jul-backfill-20260911/api-supervised.log`); STALE runs recovered via fresh idempotent runs (new `idempotencyKey`); restore normal watch flow via `scripts/restart-local-hris-api-dev.ps1`. `HEAVY_REQUEST_TIMEOUT_MS=900000` set for the window.
-- **Docs/git:** operator page `docs/DM4_JAN_JUL_2026_BACKFILL.md`; WWG report `.wwg/reports/jan-jul-2026-backfill-20260911.md`; evidence `.runtime/jan-jul-backfill-20260911/BACKFILL-SUMMARY.md` + archive review `.runtime/attendance-archive-review-20260911/REVIEW.md`. `.gitignore` now excludes the client archive (`ATTENDANCE & TIME TRACKING*/` + `**/...`), verified via `git check-ignore` and clean `git status`. Uncommitted: `.gitignore`, `migration.router.ts` heavy-timeout fix, this addendum — awaiting operator commit/push order.
+- **Executed:** full DM4 backfill Dec 26 â†’ Jun 10 + OT + leave review, dry-run-gated, oldestâ†’newest, on canonical local DEV (K3s DB via 55435). **Biometrics: 10 windows COMPLETED, 0 failed** (Dec26-Jan10 4,153 | Jan11-25 8,019 | Jan26-Feb10 10,630 | Feb11-25 9,074 | Feb26-Mar10 8,858 | Mar11-25 10,216 | Mar26-Apr10 8,792 | Apr11-25 10,226 | Apr26-May10 10,043 | May11-25 5,198), 2,237 employees matched every run â€” punch source discovered inside the client archive `ATTENDANCE & TIME TRACKING.../zip-rar/Biometrics Data.rar â†’ 2026/`. **OT:** yearly `2026 rptOvertimeDetails.xlsx` (1/1â€“5/31, 121,422 rows) split into 11 per-cutoff workbooks (0 unassigned), all executed â€” mostly idempotent no-ops (OT already on lines; buckets survived the biometrics refresh); fleet proof 850â€“6,565 real-OT lines per period. **Leave Janâ€“Apr: honest zeros** â€” the 2026 monthly `Final Leave & Awol` bundles contain no PAID rows in any cutoff window (UNPAID/AWOL = day-status evidence only); Mayâ€“Jul leave still missing everywhere. With the earlier Junâ€“Jul pass, **punch coverage is continuous Dec 26 â†’ Jul 25 except May 26â€“Jun 10 (no punch workbook exists anywhere; that period keeps its odd 1,805 APPROVED + 412 DRAFT / 29,268 lines schedule-derived state)**.
+- **Gaps needing client data:** May 26â€“Jun 10 punches; Janâ€“May comp/ded mass uploads (none provided; only PP-20260426-20260511 has prior-era 2,249 benefits + 1,182 loans); Mayâ€“Jul leave files. Payroll generation deliberately NOT run (separate money order).
+- **Infra:** API died mid-import 4Ã— â†’ ran the backfill under a supervised no-watch API (auto-respawn, log in `.runtime/jan-jul-backfill-20260911/api-supervised.log`); STALE runs recovered via fresh idempotent runs (new `idempotencyKey`); restore normal watch flow via `scripts/restart-local-hris-api-dev.ps1`. `HEAVY_REQUEST_TIMEOUT_MS=900000` set for the window.
+- **Docs/git:** operator page `docs/DM4_JAN_JUL_2026_BACKFILL.md`; WWG report `.wwg/reports/jan-jul-2026-backfill-20260911.md`; evidence `.runtime/jan-jul-backfill-20260911/BACKFILL-SUMMARY.md` + archive review `.runtime/attendance-archive-review-20260911/REVIEW.md`. `.gitignore` now excludes the client archive (`ATTENDANCE & TIME TRACKING*/` + `**/...`), verified via `git check-ignore` and clean `git status`. Uncommitted: `.gitignore`, `migration.router.ts` heavy-timeout fix, this addendum â€” awaiting operator commit/push order.
 
-## Latest Task Addendum - 2026-09-11 DM4 biometrics import for Jun 11–Jul 25 executed (operator-ordered)
+## Latest Task Addendum - 2026-09-11 DM4 biometrics import for Jun 11â€“Jul 25 executed (operator-ordered)
 
-- **Operator order:** import the biometrics timesheet data from `confidential-files`. Executed DM4 runs for all three windows, dry-run-reviewed then executed, oldest→newest. **All COMPLETED, 0 failed, 2,237 employees matched each run**: Jun 11–25 (11,745 rows / 37,864 upserts / 3,479 timesheets recalculated), Jun 26–Jul 10 (11,258 / 13,770 / 2,512), Jul 11–25 (10,714 / 12,399 / 1,685). Biometrics-only (no rptOvertimeDetails → 0 OT line updates by design). `created=0` everywhere — idempotent re-import refreshed/patched effective attendance+timesheet lines over prior import eras; post-write rereads attendanceRowsFound=110,579 / timesheetlineRowsFound≈107,670. Period statuses preserved (OPEN/DRAFT/COMPLETED — Jul 11–25 paid snapshot untouched by design). Evidence: `.runtime/dm4-biometrics-import-20260911-162642/IMPORT-SUMMARY.md`.
-- **Defect fixed (code):** `/api/migration/runs/dry-run` + `/runs` had no heavy request-timeout tier — the 120s server default made a multi-minute DM4 dry-run impossible over HTTP. Wrapped both routes with `requestTimeout(heavyRequestTimeoutMs)` in `hris-api/app/migration/migration.router.ts`, matching the payroll/timesheet/attendance router pattern (uncommitted).
-- **Recurring infra truth re-proven:** the K3s DEV DB forward (127.0.0.1:55435 via Cloudflare SSH) flapped repeatedly (half-dead TCP-open states, stale ssh PID squatting the port); k8s-db-access watcher rebuilt it. API process died mid-import twice → runs honestly STALE (REC-20260908-IMPORT-JOB-PROGRESS-DURABILITY still open). **New finding:** `/runs/:id/recover` flips status without actually relaunching the worker (needs repair); the working recovery is a fresh idempotent run with a new `idempotencyKey`. Also: one apparent API death was a transient connection gap with the app PID unchanged — pollers must tolerate gaps before declaring STALE.
+- **Operator order:** import the biometrics timesheet data from `confidential-files`. Executed DM4 runs for all three windows, dry-run-reviewed then executed, oldestâ†’newest. **All COMPLETED, 0 failed, 2,237 employees matched each run**: Jun 11â€“25 (11,745 rows / 37,864 upserts / 3,479 timesheets recalculated), Jun 26â€“Jul 10 (11,258 / 13,770 / 2,512), Jul 11â€“25 (10,714 / 12,399 / 1,685). Biometrics-only (no rptOvertimeDetails â†’ 0 OT line updates by design). `created=0` everywhere â€” idempotent re-import refreshed/patched effective attendance+timesheet lines over prior import eras; post-write rereads attendanceRowsFound=110,579 / timesheetlineRowsFoundâ‰ˆ107,670. Period statuses preserved (OPEN/DRAFT/COMPLETED â€” Jul 11â€“25 paid snapshot untouched by design). Evidence: `.runtime/dm4-biometrics-import-20260911-162642/IMPORT-SUMMARY.md`.
+- **Defect fixed (code):** `/api/migration/runs/dry-run` + `/runs` had no heavy request-timeout tier â€” the 120s server default made a multi-minute DM4 dry-run impossible over HTTP. Wrapped both routes with `requestTimeout(heavyRequestTimeoutMs)` in `hris-api/app/migration/migration.router.ts`, matching the payroll/timesheet/attendance router pattern (uncommitted).
+- **Recurring infra truth re-proven:** the K3s DEV DB forward (127.0.0.1:55435 via Cloudflare SSH) flapped repeatedly (half-dead TCP-open states, stale ssh PID squatting the port); k8s-db-access watcher rebuilt it. API process died mid-import twice â†’ runs honestly STALE (REC-20260908-IMPORT-JOB-PROGRESS-DURABILITY still open). **New finding:** `/runs/:id/recover` flips status without actually relaunching the worker (needs repair); the working recovery is a fresh idempotent run with a new `idempotencyKey`. Also: one apparent API death was a transient connection gap with the app PID unchanged â€” pollers must tolerate gaps before declaring STALE.
 - **Follow-ups captured:** recover-endpoint no-op defect; heavy-timeout change needs commit+push decision; DM4.3 approved-OT workbooks NOT imported this pass (user asked biometrics only).
 
 ## Latest Task Addendum - 2026-09-10 Payroll Preview renamed to Payroll Management (operator-ordered, copy-only)
 ## Latest Task Addendum - 2026-09-09: Line leader can file TIMESHEET adjustments for members (manager-final chain) + right-panel approval flow
 
 - **Operator ask:** confirm the line leader can do the timesheet adjustment of the people under him (a stated requirement), workflow = adjustment approved by the **section manager** "like how the ot and early ot being filed", tasks laid out before executing, and the task visible on the right panel side.
-- **Discovery answer:** backend already had `WF-ATTENDANCE-CORRECTION-LEADER-FILED`, the on-behalf scope guard, and targetEmployeeId-first side effects â€” but the UI could NOT file it: the "For whom" picker existed only on the Overtime branch and `buildAttendanceAdjustmentRequestPayload` had no on-behalf support.
-- **Chain change (mirrors OT, operator direction):** `LEADER_FILED_ATTENDANCE_CORRECTION_STEPS` is now 3 steps â€” Leader Submission â†’ **Manager Approval (`TARGET_DEPARTMENT_MANAGER`, `state_on_approve=APPROVED`, final)** â†’ SYSTEM "Attendance Correction Completion". No HR step. Self-service `WF-ATTENDANCE-CORRECTION-DEFAULT` (supervisor â†’ HR review) and `WF-TIMESHEET-LEADER-FILED` (submission surface, manager â†’ HR) unchanged. Former `LEADER_FILED_HR_REVIEW_TASK_STEP` removed. DEV org workflow templates re-seeded via `npx tsx scripts/seed-workflow-templates.ts cmpxw0mfe00007zws3iypuu9d` (22 updated, idempotent).
-- **Frontend:** `attendance-adjustment-request.ts` â€” `AttendanceAdjustmentDraft.onBehalf` + on-behalf payload (requesterId=leader, `targetEmployeeId`=member, `requestSource=LINE_LEADER_FILED`, `workflowTarget=MANAGER_FINAL`, filedBy block). Stale OT label fixed: on-behalf `workflowTarget` now `MANAGER_FINAL` (chain changed 2026-09-08), description no longer says "manager then HR". `AttendanceAdjustmentRequestModal` â€” "For whom" picker now renders for BOTH request kinds; adjustment submit emits member context; **two-column modal with a right "Approval flow" panel** (`data-testid="approval-flow-panel"`) laying out the exact chain per kind + on-behalf before executing ("Nothing is applied until every approval step above is done."). Hub `handleCreateAttendanceAdjustment` passes onBehalf.
+- **Discovery answer:** backend already had `WF-ATTENDANCE-CORRECTION-LEADER-FILED`, the on-behalf scope guard, and targetEmployeeId-first side effects Ã¢â‚¬â€ but the UI could NOT file it: the "For whom" picker existed only on the Overtime branch and `buildAttendanceAdjustmentRequestPayload` had no on-behalf support.
+- **Chain change (mirrors OT, operator direction):** `LEADER_FILED_ATTENDANCE_CORRECTION_STEPS` is now 3 steps Ã¢â‚¬â€ Leader Submission Ã¢â€ â€™ **Manager Approval (`TARGET_DEPARTMENT_MANAGER`, `state_on_approve=APPROVED`, final)** Ã¢â€ â€™ SYSTEM "Attendance Correction Completion". No HR step. Self-service `WF-ATTENDANCE-CORRECTION-DEFAULT` (supervisor Ã¢â€ â€™ HR review) and `WF-TIMESHEET-LEADER-FILED` (submission surface, manager Ã¢â€ â€™ HR) unchanged. Former `LEADER_FILED_HR_REVIEW_TASK_STEP` removed. DEV org workflow templates re-seeded via `npx tsx scripts/seed-workflow-templates.ts cmpxw0mfe00007zws3iypuu9d` (22 updated, idempotent).
+- **Frontend:** `attendance-adjustment-request.ts` Ã¢â‚¬â€ `AttendanceAdjustmentDraft.onBehalf` + on-behalf payload (requesterId=leader, `targetEmployeeId`=member, `requestSource=LINE_LEADER_FILED`, `workflowTarget=MANAGER_FINAL`, filedBy block). Stale OT label fixed: on-behalf `workflowTarget` now `MANAGER_FINAL` (chain changed 2026-09-08), description no longer says "manager then HR". `AttendanceAdjustmentRequestModal` Ã¢â‚¬â€ "For whom" picker now renders for BOTH request kinds; adjustment submit emits member context; **two-column modal with a right "Approval flow" panel** (`data-testid="approval-flow-panel"`) laying out the exact chain per kind + on-behalf before executing ("Nothing is applied until every approval step above is done."). Hub `handleCreateAttendanceAdjustment` passes onBehalf.
 - **Tests:** backend `line-leader-workflow` (pins manager-final 3-step, no HR) + `section-leader-scope` + `overtime-approval-target-line` + `overtime-workflow` + `workflow-config.helper` = **53 passing**; frontend builder + new modal contract + team/sidebar contracts = **26 passing**. Pre-existing failures untouched (hikvision-callback spec 500-vs-200 and `middleware/apiActivityLogging.ts` tsc errors verified on stashed HEAD).
-- **Live API E2E:** leader TESTBEN004 filed for member 00062 â†’ `REQ-1786424090647` on `WF-ATTENDANCE-CORRECTION-LEADER-FILED` (3 steps; manager step assigned to 00021) â†’ manager (`arvin@bandai.com.ph`) approved â†’ SYSTEM completion â†’ member attendance backfilled PRESENT 08:00â€“17:00 Manila on 2026-08-14 â†’ **side effect wrote to the member, leader untouched**. Manager visibility proven via `GET /api/request?approvalActorId=<manager>` (request listed before approval). Cleanup: backfilled attendance row deleted; completed request kept as marked evidence.
-- **Browser E2E PASSED:** `hris-app/tests/smoke/line-leader-timesheet-adjustment.spec.ts` â€” For-whom on the adjustment branch, right panel switches to the member chain, POST 201 with `requesterId=leader`/`targetEmployeeId=member`/`LINE_LEADER_FILED`/`MANAGER_FINAL` (`REQ-1786424090648`, cancelled after proof). Evidence: `.runtime/leader-timesheet-adjustment-20260909-154503/`, `.runtime/leader-timesheet-adjustment-browser-proof/`.
-- **Concurrent-session incident (recovered):** mid-task, another agent session stashed the whole working tree ("foreign line-leader work + diagnostics, kept while UI push proceeds"), reset to develop, merged PR #16/#17, and moved to `feature/profile-account-settings-ui` â€” which wiped this task's uncommitted work from the shared tree. **Recovered into isolated worktree `../bandai-infra-leader-adj` on branch `feature/leader-timesheet-adjustment` (off merged origin/develop `f5b1c3f3`)** and committed there; the shared tree keeps the other session's in-flight files. Nothing lost on either side; nothing pushed.
-- **Incidental repairs this pass:** the in-flight uncommitted Sidebar edit had dropped the `myTeamEntry` render (My Team heading would vanish; contract test red) â€” restored `myTeamEntry && <NavItemComponent item={myTeamEntry} />` at the top of Working Space and re-pinned the contract to the working-tree render syntax.
-- **Boundary:** not pushed (no operator push request; also awaiting operator guidance given the concurrent session). Dual-app = HR-only exception (no emp-app requests-hub counterpart). Bulk checkbox screen for adjustments intentionally not built (per-person/per-day times don't fit the OT bulk pattern) â€” can be a follow-up if wanted. Docs: `docs/LEADER_TIMESHEET_ADJUSTMENT.md`.
+- **Live API E2E:** leader TESTBEN004 filed for member 00062 Ã¢â€ â€™ `REQ-1786424090647` on `WF-ATTENDANCE-CORRECTION-LEADER-FILED` (3 steps; manager step assigned to 00021) Ã¢â€ â€™ manager (`arvin@bandai.com.ph`) approved Ã¢â€ â€™ SYSTEM completion Ã¢â€ â€™ member attendance backfilled PRESENT 08:00Ã¢â‚¬â€œ17:00 Manila on 2026-08-14 Ã¢â€ â€™ **side effect wrote to the member, leader untouched**. Manager visibility proven via `GET /api/request?approvalActorId=<manager>` (request listed before approval). Cleanup: backfilled attendance row deleted; completed request kept as marked evidence.
+- **Browser E2E PASSED:** `hris-app/tests/smoke/line-leader-timesheet-adjustment.spec.ts` Ã¢â‚¬â€ For-whom on the adjustment branch, right panel switches to the member chain, POST 201 with `requesterId=leader`/`targetEmployeeId=member`/`LINE_LEADER_FILED`/`MANAGER_FINAL` (`REQ-1786424090648`, cancelled after proof). Evidence: `.runtime/leader-timesheet-adjustment-20260909-154503/`, `.runtime/leader-timesheet-adjustment-browser-proof/`.
+- **Concurrent-session incident (recovered):** mid-task, another agent session stashed the whole working tree ("foreign line-leader work + diagnostics, kept while UI push proceeds"), reset to develop, merged PR #16/#17, and moved to `feature/profile-account-settings-ui` Ã¢â‚¬â€ which wiped this task's uncommitted work from the shared tree. **Recovered into isolated worktree `../bandai-infra-leader-adj` on branch `feature/leader-timesheet-adjustment` (off merged origin/develop `f5b1c3f3`)** and committed there; the shared tree keeps the other session's in-flight files. Nothing lost on either side; nothing pushed.
+- **Incidental repairs this pass:** the in-flight uncommitted Sidebar edit had dropped the `myTeamEntry` render (My Team heading would vanish; contract test red) Ã¢â‚¬â€ restored `myTeamEntry && <NavItemComponent item={myTeamEntry} />` at the top of Working Space and re-pinned the contract to the working-tree render syntax.
+- **Boundary:** not pushed (no operator push request; also awaiting operator guidance given the concurrent session). Dual-app = HR-only exception (no emp-app requests-hub counterpart). Bulk checkbox screen for adjustments intentionally not built (per-person/per-day times don't fit the OT bulk pattern) Ã¢â‚¬â€ can be a follow-up if wanted. Docs: `docs/LEADER_TIMESHEET_ADJUSTMENT.md`.
 
 ## Latest Task Addendum - 2026-09-09: Sidebar My Team flat at top of Working Space (no collapsed submenu)
 
 - **Operator ask:** line-leader sidebar had My Team (Overview / Organization Chart / Team Timesheets / Assign Overtime) as a collapsible submenu in General; operator wanted it moved to the top under Working Space AND **not** a collapsed submenu ("dont make the content submodule of my team").
-- **Shipped (`4e777d4f`, local, not pushed):** `hris-app/app/components/organisms/Sidebar.tsx` â€” My Team group extracted from `generalItems` and rendered flat at the **top of the Working Space section**: `myTeamEntry` is a direct NavLink to `/employee/team` (highlights on any team tab), and `myTeamChildren` (Overview, Organization Chart, Team Timesheets, Assign Overtime; Schedule Calendar for department managers) render as always-visible links beneath it â€” no chevron, no expand/collapse. Admins keep not seeing My Team (they render neither General nor this group). Nav item ids unchanged (`general-my-team*`), so DOM ids and the existing contract pins stay stable.
-- **Tests:** `team-timesheets-ui-contract.test.ts` 5/5 (new pin: flat-at-top-of-Working-Space + General no longer hosts the group); `Sidebar.test.tsx` 4/4. Live browser proof `tests/smoke/line-leader-my-team-flat-sidebar.spec.ts` PASSED against local dev (leader@bandai.local): My Team is a **link** (not a toggle button), all four entries visible without interaction, doc order Working Space â†’ My Team â†’ Dashboard â†’ General. Evidence: `.runtime/my-team-flat-sidebar-20260909/`. Regression: `line-leader-ot-checkbox-screen.spec.ts` PASSED. Targeted ESLint 0 errors (2 pre-existing unused-import warnings); tsc shows no errors in changed files.
-- **Dual-app parity:** single-app exception â€” hris-emp-app submodule is not checked out locally and this sidebar surface has no emp-app counterpart (consistent with the 2026-09-08 line-leader HR-only exception).
+- **Shipped (`4e777d4f`, local, not pushed):** `hris-app/app/components/organisms/Sidebar.tsx` Ã¢â‚¬â€ My Team group extracted from `generalItems` and rendered flat at the **top of the Working Space section**: `myTeamEntry` is a direct NavLink to `/employee/team` (highlights on any team tab), and `myTeamChildren` (Overview, Organization Chart, Team Timesheets, Assign Overtime; Schedule Calendar for department managers) render as always-visible links beneath it Ã¢â‚¬â€ no chevron, no expand/collapse. Admins keep not seeing My Team (they render neither General nor this group). Nav item ids unchanged (`general-my-team*`), so DOM ids and the existing contract pins stay stable.
+- **Tests:** `team-timesheets-ui-contract.test.ts` 5/5 (new pin: flat-at-top-of-Working-Space + General no longer hosts the group); `Sidebar.test.tsx` 4/4. Live browser proof `tests/smoke/line-leader-my-team-flat-sidebar.spec.ts` PASSED against local dev (leader@bandai.local): My Team is a **link** (not a toggle button), all four entries visible without interaction, doc order Working Space Ã¢â€ â€™ My Team Ã¢â€ â€™ Dashboard Ã¢â€ â€™ General. Evidence: `.runtime/my-team-flat-sidebar-20260909/`. Regression: `line-leader-ot-checkbox-screen.spec.ts` PASSED. Targeted ESLint 0 errors (2 pre-existing unused-import warnings); tsc shows no errors in changed files.
+- **Dual-app parity:** single-app exception Ã¢â‚¬â€ hris-emp-app submodule is not checked out locally and this sidebar surface has no emp-app counterpart (consistent with the 2026-09-08 line-leader HR-only exception).
 - Boundary: local DEV only, **not pushed** (no operator push request for this change); same VM auto-roll path as prior sidebar work applies on next develop push.
 
 ## Latest Task Addendum - 2026-09-09: OT batch close-out - verified, malware blob removed, merged to origin/develop, PR-ready
@@ -134,16 +142,16 @@
 ## Latest Task Addendum - 2026-09-09 Modal count fix (2206) + run converged COMPLETED 851/851
 
 - **Operator report:** progress modal showed "Processed 693 of 2206 payable" for an 851-person run; headcount flips 800+ vs 2000+.
-- **Root cause (proven live):** period has 2,234 APPROVED timesheet rows (bulk-materialized Sep 2 for all 2,235 employees, every frequency/agency) but the run universe is DIRECT + semi-monthly = 880 scope / 851 payable. Backend `payrollRunTotals` stored the unscoped row counts; the modal computed approved(2234) âˆ’ scoped-excluded(28) = **2206**.
-- **Fixes:** (1) backend completion totals scoped with `buildPayrollPreviewBaseWhere` (hris-api `payroll-period.helper.ts`); (2) modal denominator is now job-scoped only (hris-app `run-payroll-template.tsx`, `approved âˆ’ excluded` reconstruction removed); (3) all-skipped resume falls through to shared completion (was stuck PROCESSING); (4) candidate fetch chunked 100/batch (giant findMany died on the flaky forward; Postgres stable since Jul 29 â€” flap is transport-only).
+- **Root cause (proven live):** period has 2,234 APPROVED timesheet rows (bulk-materialized Sep 2 for all 2,235 employees, every frequency/agency) but the run universe is DIRECT + semi-monthly = 880 scope / 851 payable. Backend `payrollRunTotals` stored the unscoped row counts; the modal computed approved(2234) Ã¢Ë†â€™ scoped-excluded(28) = **2206**.
+- **Fixes:** (1) backend completion totals scoped with `buildPayrollPreviewBaseWhere` (hris-api `payroll-period.helper.ts`); (2) modal denominator is now job-scoped only (hris-app `run-payroll-template.tsx`, `approved Ã¢Ë†â€™ excluded` reconstruction removed); (3) all-skipped resume falls through to shared completion (was stuck PROCESSING); (4) candidate fetch chunked 100/batch (giant findMany died on the flaky forward; Postgres stable since Jul 29 Ã¢â‚¬â€ flap is transport-only).
 - **Final proof (direct DB):** PP-20260826-20260911 COMPLETED, 851/851 failed 0; stored totals tsTotal 880 / approved 880 / ready 851 / ep 851; money rows 851 alive / 851 unique, all unpaid. The "46 dup rows" scare was a false alarm: the list endpoint returned cross-period rows; per-period truth is clean.
-- **Also today:** two API restarts (poisoned Prisma pool), one forward rebuild, ~7 resumes across flap waves + self-pauses (auto-pause-on-unmount suspected â€” REC-20260909 filed; user advised to leave the tab open mid-run). `PayrollPeriod.updatedAt` frozen at 00:22:31Z despite later writes (suspected stale generated client â€” NEEDS_CONFIRMATION, use `generationMetadata` timestamps). Server DB conns climbed 33â†’61 (dead-tunnel orphans; watch cap).
+- **Also today:** two API restarts (poisoned Prisma pool), one forward rebuild, ~7 resumes across flap waves + self-pauses (auto-pause-on-unmount suspected Ã¢â‚¬â€ REC-20260909 filed; user advised to leave the tab open mid-run). `PayrollPeriod.updatedAt` frozen at 00:22:31Z despite later writes (suspected stale generated client Ã¢â‚¬â€ NEEDS_CONFIRMATION, use `generationMetadata` timestamps). Server DB conns climbed 33Ã¢â€ â€™61 (dead-tunnel orphans; watch cap).
 - **Evidence:** `.runtime/payroll-db-flap-20260909-144803/`. Package workspaces synced (hris-api + hris-app current-task.md). Vitest 7/7.
 - **Do not Reopen** this period. Corrections go retro/payroll-correction or quick-adjust on the OPEN period.
 - <<<<<<< HEAD
 
-- **What the error is (infra, not payroll data):** every pasted row error is Prisma losing the database mid-run â€” `Can't reach database server at 127.0.0.1:55435` (per-row `employeePayroll.findUnique` at `payroll-period.helper.ts:1949`) plus two `Server has closed the connection` rows (stale pooled conns on `upsert`/`timesheet.updateMany`). Same signature as the 2026-09-07 stuck run and the 2026-09-08 half-dead forward. No row needed a data fix.
-- **DB state found:** forward PID 47900 alive via Cloudflare alias, TCP 55435 OK, API healthy, admin login OK (~9.5s, degraded but working). No forward rebuild or API restart needed this time â€” the flap window had already passed.
+- **What the error is (infra, not payroll data):** every pasted row error is Prisma losing the database mid-run Ã¢â‚¬â€ `Can't reach database server at 127.0.0.1:55435` (per-row `employeePayroll.findUnique` at `payroll-period.helper.ts:1949`) plus two `Server has closed the connection` rows (stale pooled conns on `upsert`/`timesheet.updateMany`). Same signature as the 2026-09-07 stuck run and the 2026-09-08 half-dead forward. No row needed a data fix.
+- **DB state found:** forward PID 47900 alive via Cloudflare alias, TCP 55435 OK, API healthy, admin login OK (~9.5s, degraded but working). No forward rebuild or API restart needed this time Ã¢â‚¬â€ the flap window had already passed.
 - **Live worker caught up:** job `567dd915` was still progressing (631 -> 693/851, failures frozen at 47), then went `paused` with no active worker. Resume 1 (`713af925`, POST `/:id/generate-timesheet` on the PROCESSING period, `resumeFromExistingPayrolls` skips paid/locked, upserts rest) reached 850/851 failed 0, paused again; resume 2 (`3f51788b`) finished **COMPLETED 851/851, failed 0** at 07:02:59Z.
 - **Convergence proof (not just the badge):** `EmployeePayroll` count for the period = 897 rows / **851 unique employees** (= `includedEmployeesCount` 851), all `isPaid=false`; all 46 double-row groups are legacy distinct-timesheet rows (created Aug 4 / Sep 3-4, zero created today, zero same-timesheet dupes). Today's runs upserted idempotently.
 - **New observation:** the run paused itself twice with no known operator pause (active-job poll `null` both times). Filed REC-20260909-PAYROLL-RUN-PAUSE-SOURCE (Proposed). Re-proves REC-20260907-PAYROLL-WORKER-TRANSIENT-DB-RETRY (still Proposed): the 47 failures were all transient and needed manual resumes.
@@ -153,12 +161,12 @@
 ## Latest Task Addendum - 2026-09-08 Payroll register quick adjustments (operator-ordered)
 
 - **What:** per-employee **Add addition** / **Add deduction** in the payroll register Actions menu + header **Quick adjustment** button for bulk. Modal takes custom name (e.g. "Good performance", "Equipment destroy") + amount + OPEN period; one-cutoff, custom label rides the enrollment name.
-- **Mechanics:** `POST /api/employeeBenefit/quick-adjust` pins enrollments to the OPEN period on standard carriers â€” **OAD** (Other Compensation, gross) for additions, **NEGADJ** (Negative Adjustment) for deductions. Non-OPEN periods get 409 (completed periods pay corrections retro instead). Next Run Payroll applies automatically; rows surface in the Adjustments accordion (same enrollment source).
+- **Mechanics:** `POST /api/employeeBenefit/quick-adjust` pins enrollments to the OPEN period on standard carriers Ã¢â‚¬â€ **OAD** (Other Compensation, gross) for additions, **NEGADJ** (Negative Adjustment) for deductions. Non-OPEN periods get 409 (completed periods pay corrections retro instead). Next Run Payroll applies automatically; rows surface in the Adjustments accordion (same enrollment source).
 - **Files:** API `employeeBenefit.controller/quickAdjust` + route + `QuickAdjustEmployeeBenefitSchema`; app `quick-payroll-adjustment-modal.tsx`, service `quickAdjustEmployeeBenefits` + `validateQuickAdjustInput`, hook `useQuickAdjustEmployeeBenefits`, register template menu/button wiring.
-- **Proof:** mocha 5/5; vitest 5/5 (+13 with neighbors); live DEV create OAD "Good performance test" â‚±1000 ACTIVE pinned to PP-20260811-20260826, read-back + adjustments-list visible, test row deleted after. Live run also caught+fixed a missing `organizationId` bug before delivery. Frontend typecheck: touched files clean (only pre-existing smoke-spec errors remain; one pre-existing `run-payroll-template` name-type error at ~L2228, not this change).
+- **Proof:** mocha 5/5; vitest 5/5 (+13 with neighbors); live DEV create OAD "Good performance test" Ã¢â€šÂ±1000 ACTIVE pinned to PP-20260811-20260826, read-back + adjustments-list visible, test row deleted after. Live run also caught+fixed a missing `organizationId` bug before delivery. Frontend typecheck: touched files clean (only pre-existing smoke-spec errors remain; one pre-existing `run-payroll-template` name-type error at ~L2228, not this change).
 - **Preview page (follow-up same day):** the same modal is now on HR Run Payroll preview results (`Adjust` per row + auto **Re-run preview** when the adjustment lands in the previewed period, so HR sees the actual salary before Start Payroll). Modal gained an `onAdjusted` bubble; mutate-level onSuccess intentionally avoided (would replace the hook's toast/invalidation).
-- **Parity:** HR-only surface (payroll register/management) â€” single-app exception, no emp-app counterpart.
-- **Fixes 2026-09-08:** (1) DB forward half-dead (TCP ok, queries hung) â€” killed PID 31036, rebuilt (PID 30060), login OK; filed REC-20260908-K8S-DB-WATCH-QUERY-PROOF. (2) Modal period dropdown empty â€” my `sort:"-startDate"` shape 500s server-side; corrected to `sort:"startDate", order:"desc"` (proven: old shape 500, new shape 25 periods / 13 OPEN). Dropdown panel itself is portal z-1000, no layering issue.
+- **Parity:** HR-only surface (payroll register/management) Ã¢â‚¬â€ single-app exception, no emp-app counterpart.
+- **Fixes 2026-09-08:** (1) DB forward half-dead (TCP ok, queries hung) Ã¢â‚¬â€ killed PID 31036, rebuilt (PID 30060), login OK; filed REC-20260908-K8S-DB-WATCH-QUERY-PROOF. (2) Modal period dropdown empty Ã¢â‚¬â€ my `sort:"-startDate"` shape 500s server-side; corrected to `sort:"startDate", order:"desc"` (proven: old shape 500, new shape 25 periods / 13 OPEN). Dropdown panel itself is portal z-1000, no layering issue.
 ## Latest Task Addendum - 2026-09-08 Strict missing-punch no-pay + end-of-shift reminder (operator-ordered)
 
 - **Rule:** only a complete punch pair (clock-in AND clock-out) on a scheduled workday earns pay. One-sided days earn zero (regular/OT/ND/holiday), stay flagged `missingPunchNoPay` on the payroll daily breakdown, and the employee is reminded to file an attendance correction. Rest days and leave keep existing rules.
@@ -167,7 +175,7 @@
 - **Live DEV proof:** sweep dry-run found 50 capped real candidates; execute(limit=3) sent 3, re-run sent 0 with no dup rows; one-sided PRESENT lines proven (00985 Sep 7, 00212 Sep 3); 00212 preview unchanged (no-bucket Path B already excluded the day).
 - **Tests:** 20/20 (`missing-punch-no-pay`, `missing-punch-reminder`); 94 passing across 17 payroll/attendance/notify specs; 2 `hikvision-callback.controller` failures proven pre-existing on pristine HEAD.
 - **CONFLICTING (accepted by operator order):** Sheet2/register parity will now diverge on one-sided bucket days (file says worked, company pays zero until correction). Tally bands for such days move to underpay-by-design.
-- **Follow-ups:** REC-20260908-MISSING-PUNCH-SCHEDULED-SWEEP (Proposed). Branch note: `feat-attendance` also carries unrelated in-flight `hris-app` NO-PAY-chip work (`payroll-no-pay-days.ts`, untouched) that consumes the same flags â€” converges with this change.
+- **Follow-ups:** REC-20260908-MISSING-PUNCH-SCHEDULED-SWEEP (Proposed). Branch note: `feat-attendance` also carries unrelated in-flight `hris-app` NO-PAY-chip work (`payroll-no-pay-days.ts`, untouched) that consumes the same flags Ã¢â‚¬â€ converges with this change.
 ## Latest Task Addendum - 2026-09-07 Stuck payroll run recovered: PP-20260826-20260911 PROCESSING 322/851 -> COMPLETED 851/851
 
 - **Root cause (infra, not payroll data):** all 15 saved errors (rows 239-253, employees 00904-00935) are identical `Can't reach database server at 127.0.0.1:55435` at `payroll-period.helper.ts:1892`. The K3s DEV forward (`ssh -L 127.0.0.1:55435:10.43.130.9:5432 project-truth-hris`) flapped mid-run; no row needed fixing.
@@ -175,153 +183,153 @@
 - **Recovery:** watcher-confirmed forward + API restart (fresh Prisma pool; pool held dead conns: `Server has closed the connection` even with TCP handshake OK 6/6). Resume 1 (`7c35bcc7`) died in a second flap at 13:01 UTC; Resume 2 (`a588560d`) **completed 851/851, failed 0** at 13:15 UTC. Period now **COMPLETED**, `EmployeePayroll` count for period **851** (= `includedEmployeesCount`; preview scope 880 / approved 879 / ready 851).
 - **Do not Reopen** this period (would clear the good state). Evidence: `.runtime/payroll-stuck-20260907-205217/` (+ `211827/`).
 - **Follow-ups:** REC-20260907-PAYROLL-WORKER-TRANSIENT-DB-RETRY (Proposed).
-- **Recovery 2026-09-08 (Whilma 01076):** her 5-line snapshot missed Sep 3-7 punches (line materialization last ran Sep 3). `POST /api/timesheet/cmtl72mqx001z8h007osj28dz/sync-obligation-lines` succeeded despite the payroll lock (fills missing dates only): +5 lines â€” Sep 3/4/5/7 PRESENT complete pairs, Sep 8 in-only (shift still open). Locked Sep-3 payroll row unchanged (basic 6000/days 2/gross -6000); recovered days pay retro next cutoff; her 3 one-sided days still need attendance corrections. Evidence: `.runtime/whilma-sync-20260908-103933/`.
-- **Fleet rollout 2026-09-08 (all employees):** missing-punch standard applied backlog-wide Jul 1 â†’ Sep 8. Sweep dry-run sized 2,092 actionable days; paced execute batches (limit 60 + 45-90s sleeps after early 1000-batch timeouts and DB flaps) delivered **2,092 reminders, 0 errors at close**; read-only diff proves **RESIDUAL=0** across all employees. Notable: added `skipNotified` + DB-level notified exclusion so capped batches advance past the reminded head (per-item dedupe stays final guard); fixed honest `already_notified` counting. Evidence: `.runtime/fleet-missing-punch-20260908-105535/`.
-## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain Ã¢â‚¬â€ absent wall = client file contradiction
+- **Recovery 2026-09-08 (Whilma 01076):** her 5-line snapshot missed Sep 3-7 punches (line materialization last ran Sep 3). `POST /api/timesheet/cmtl72mqx001z8h007osj28dz/sync-obligation-lines` succeeded despite the payroll lock (fills missing dates only): +5 lines Ã¢â‚¬â€ Sep 3/4/5/7 PRESENT complete pairs, Sep 8 in-only (shift still open). Locked Sep-3 payroll row unchanged (basic 6000/days 2/gross -6000); recovered days pay retro next cutoff; her 3 one-sided days still need attendance corrections. Evidence: `.runtime/whilma-sync-20260908-103933/`.
+- **Fleet rollout 2026-09-08 (all employees):** missing-punch standard applied backlog-wide Jul 1 Ã¢â€ â€™ Sep 8. Sweep dry-run sized 2,092 actionable days; paced execute batches (limit 60 + 45-90s sleeps after early 1000-batch timeouts and DB flaps) delivered **2,092 reminders, 0 errors at close**; read-only diff proves **RESIDUAL=0** across all employees. Notable: added `skipNotified` + DB-level notified exclusion so capped batches advance past the reminded head (per-item dedupe stays final guard); fixed honest `already_notified` counting. Evidence: `.runtime/fleet-missing-punch-20260908-105535/`.
+## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â absent wall = client file contradiction
 ## Latest Task Addendum - 2026-08-27 Day-status review UI & workbook refinement endpoints delivered and proven
 
-- **Delivered**: Read-only day-status resolution pipeline under MonÃŽâ€œÃƒâ€¡ÃƒÂ´Sat schedule truth (Sunday REST).
+- **Delivered**: Read-only day-status resolution pipeline under MonÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Sat schedule truth (Sunday REST).
 - **Precedence**: `OUT_OF_TENURE` > `REST_SUNDAY` > `PRESENT_PUNCH` > `PRESENT_SCHEDULE_POSITIVE` > `ABSENT_AWOL_EVIDENCED` > `LEAVE_PAID` > `LEAVE_UNPAID` > `REVIEW_NO_EVIDENCE`.
 - **API**:
-  - `GET /api/payrollperiod/:id/day-status-review` ÃŽâ€œÃƒâ€¡ÃƒÂ¶ DB-only buckets + review queue.
-  - `POST /api/payrollperiod/:id/day-status-review/workbook` ÃŽâ€œÃƒâ€¡ÃƒÂ¶ multipart in-memory refinement with `leaveFile` and `awolFile`.
+  - `GET /api/payrollperiod/:id/day-status-review` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ DB-only buckets + review queue.
+  - `POST /api/payrollperiod/:id/day-status-review/workbook` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ multipart in-memory refinement with `leaveFile` and `awolFile`.
 - **Helper**: `hris-api/helper/day-status-resolution.helper.ts` (12/12 unit tests passing).
 - **Frontend**: `/hr/day-status-review` (service, spec, route, sidebar entry, period selector, bucket chips, weekday histogram, DataTable with pagination, CSV export, in-memory workbook refinement).
 - **Live Endpoint Proof**:
-  - Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10: DB-only review queue 18,889; Refined with combined June+July leave workbook + AWOL workbook: LEAVE_PAID 657 (+115 days recovered), LEAVE_UNPAID 208, AWOL_EVIDENCED 244, REVIEW_NO_EVIDENCE 18,322.
-  - Jul11ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul25: DB-only review queue 19,093; Refined: LEAVE_PAID 607, LEAVE_UNPAID 209, AWOL_EVIDENCED 186, REVIEW_NO_EVIDENCE 18,698.
+  - Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10: DB-only review queue 18,889; Refined with combined June+July leave workbook + AWOL workbook: LEAVE_PAID 657 (+115 days recovered), LEAVE_UNPAID 208, AWOL_EVIDENCED 244, REVIEW_NO_EVIDENCE 18,322.
+  - Jul11ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul25: DB-only review queue 19,093; Refined: LEAVE_PAID 607, LEAVE_UNPAID 209, AWOL_EVIDENCED 186, REVIEW_NO_EVIDENCE 18,698.
 - **Playwright Proof**: Headless browser test verified login as `admin@bandai.local`, navigation to `/hr/day-status-review`, period selection, bucket chips rendering, workbook refinement, and DataTable pagination. Screenshots and JSONs in `.runtime/browser-evidence/day-status-review/` and `.runtime/day-status-live/`.
 - **Governance**: `REC-20260826-DAY-STATUS-REVIEW-QUEUE` flipped to Implemented in `.wwg/governance/recommendation-registry.md`.
 
-## Latest Task Addendum - 2026-08-26i MonÃŽâ€œÃƒâ€¡ÃƒÂ´Sat + Leave/AWOL tally simulation: charged cohort improves, fleet net worse; AWOL adds zero matches
+## Latest Task Addendum - 2026-08-26i MonÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Sat + Leave/AWOL tally simulation: charged cohort improves, fleet net worse; AWOL adds zero matches
 
-- Operator asked whether dropping WS entirely (universal MonÃŽâ€œÃƒâ€¡ÃƒÂ´Sat schedule, Sunday rest) + Leave + Awol files tallies better. READ-ONLY simulation over registerÃŽâ€œÃƒÂªÃ¢Å’ÂDB scope for both July cutoffs (`monsat-tally-sim.ts`, evidence `.runtime/monsat-tally-sim-2026-08-26T11-16/REPORT-MONSAT-TALLY.md`).
-- **Sunday REST proven safe**: 0 Sunday punches in 19,507 punch cells across both windows; client WS marks Sundays worked 1,453Ã¢â€Å“ÃƒÂ¹ with zero biometric support. Future real Sunday work auto-classifies PRESENT via punch.
-- **MonÃŽâ€œÃƒâ€¡ÃƒÂ´Sat helps the charged cohort**: exact-day match vs register Absent-Amt jumps from ~0 today to **56/172** (Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10) and **50/174** (Jul11ÃŽâ€œÃƒâ€¡ÃƒÂ´25); best config V2 (+unpaid-ledger-as-absent) cuts charged-cohort money error ÃŽâ€œÃƒÂ©Ã¢â€“â€™298.7kÃŽâ€œÃƒÂ¥Ãƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™165.7k and ÃŽâ€œÃƒÂ©Ã¢â€“â€™270.1kÃŽâ€œÃƒÂ¥Ãƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™139.0k.
-- **But fleet-net WORSE**: bare no-evidence days auto-charged as absent create **ÃŽâ€œÃƒÂ©Ã¢â€“â€™462.8kÃŽâ€œÃƒâ€¡ÃƒÂ´573.5k/window of new false charges on 405ÃŽâ€œÃƒâ€¡ÃƒÂ´494 uncharged people, 72ÃŽâ€œÃƒâ€¡ÃƒÂ´84% Saturdays**. Weekday no-evidence days collapse to 83/13 fleet-wide ÃŽâ€œÃƒâ€¡ÃƒÂ¶ everyone punches or has evidence MonÃŽâ€œÃƒâ€¡ÃƒÂ´Fri; ambiguity lives almost entirely on person-specific Saturdays (the signal the WS file carried).
-- **AWOL file ablation-proved zero tally contribution**: V1ÃŽâ€œÃƒÂ«ÃƒÂ­V6 identical matches; as sole source 0/172 & 0/174. Stays DA/disciplinary evidence labels only (244/186 days relabeled inside the absence pool).
-- **Leave ledger structurally essential under MonÃŽâ€œÃƒâ€¡ÃƒÂ´Sat**: resolves 859/1,629 (53%) and 816/1,888 (43%) of missed scheduled days into leave classes instead of absences.
-- Ceiling violations persist (18/5 people charged more absences than they have missed days) ÃŽâ€œÃƒÂ¥Ãƒâ€  client charging remains partially manual regardless of schedule model.
-- Recommendation (Proposed, REC-20260826-DAY-STATUS-REVIEW-QUEUE): adopt MonÃŽâ€œÃƒâ€¡ÃƒÂ´Sat+Sun-rest schedule truth + day-status pipeline (punch>WS1>ledger/AWOL), bare no-evidence days ÃŽâ€œÃƒÂ¥Ãƒâ€  REVIEW QUEUE not silent ABSENT; client questions sharpened (Saturday policy, precedence, roster hygiene). No engine/DB writes this pass.
+- Operator asked whether dropping WS entirely (universal MonÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Sat schedule, Sunday rest) + Leave + Awol files tallies better. READ-ONLY simulation over registerÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÂ¢Ã…â€™Ã‚ÂDB scope for both July cutoffs (`monsat-tally-sim.ts`, evidence `.runtime/monsat-tally-sim-2026-08-26T11-16/REPORT-MONSAT-TALLY.md`).
+- **Sunday REST proven safe**: 0 Sunday punches in 19,507 punch cells across both windows; client WS marks Sundays worked 1,453ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹ with zero biometric support. Future real Sunday work auto-classifies PRESENT via punch.
+- **MonÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Sat helps the charged cohort**: exact-day match vs register Absent-Amt jumps from ~0 today to **56/172** (Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10) and **50/174** (Jul11ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´25); best config V2 (+unpaid-ledger-as-absent) cuts charged-cohort money error ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢298.7kÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢165.7k and ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢270.1kÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢139.0k.
+- **But fleet-net WORSE**: bare no-evidence days auto-charged as absent create **ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢462.8kÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´573.5k/window of new false charges on 405ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´494 uncharged people, 72ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´84% Saturdays**. Weekday no-evidence days collapse to 83/13 fleet-wide ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ everyone punches or has evidence MonÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Fri; ambiguity lives almost entirely on person-specific Saturdays (the signal the WS file carried).
+- **AWOL file ablation-proved zero tally contribution**: V1ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â«ÃƒÆ’Ã‚Â­V6 identical matches; as sole source 0/172 & 0/174. Stays DA/disciplinary evidence labels only (244/186 days relabeled inside the absence pool).
+- **Leave ledger structurally essential under MonÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Sat**: resolves 859/1,629 (53%) and 816/1,888 (43%) of missed scheduled days into leave classes instead of absences.
+- Ceiling violations persist (18/5 people charged more absences than they have missed days) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  client charging remains partially manual regardless of schedule model.
+- Recommendation (Proposed, REC-20260826-DAY-STATUS-REVIEW-QUEUE): adopt MonÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Sat+Sun-rest schedule truth + day-status pipeline (punch>WS1>ledger/AWOL), bare no-evidence days ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  REVIEW QUEUE not silent ABSENT; client questions sharpened (Saturday policy, precedence, roster hygiene). No engine/DB writes this pass.
 
 ## Latest Task Addendum - 2026-08-26h Universal MLA shipped: all Bandai (DIRECT) employees, every cutoff, forever
 
 - Operator directive: MLA = all Bandai employees FOREVER; docs + engine + script.
-- Engine: `applyUniversalBandaiMlaSources` (payroll-benefit-source.helper.ts) wired into `buildPayrollSourceAmountsByEmployeeId` ÃŽâ€œÃƒÂ¥Ãƒâ€  injects ÃŽâ€œÃƒÂ©Ã¢â€“â€™500 RECEIVABLE_ONLY non-taxable MLA for DIRECT employees lacking a resolving source; agency excluded. Covers preview + generate via single seam.
-- Backfill executed locally: `repair-bnpi-mla-universal.ts --execute` ÃŽâ€œÃƒÂ¥Ãƒâ€  846 DIRECT actives / 824 covered / **+23 created** (open-horizon RECURRING EVERY_CUTOFF).
-- Proof: Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10 tally register MLA fails **818 ÃŽâ€œÃƒÂ¥Ãƒâ€  0**; Alexa appMLA=500/dMLA=0 (her residual Ã¢â€¢Â¬ÃƒÂ¶+1,434.98 = absent policy ÃŽâ€œÃƒÂ©Ã¢â€“â€™1,834.50 ÃŽâ€œÃƒÂªÃƒâ€  PH basis +ÃŽâ€œÃƒÂ©Ã¢â€“â€™398.75 walls). Tests 37 passing (`bnpi-universal-mla.spec.ts` new). Docs: project-truth-summary, findings Ã¢â€Â¬Ã‚Âº14g MLA row, runbook app-native bullet.
-- Ops note: `tsx watch` reload proved unreliable during verification ÃŽâ€œÃƒâ€¡ÃƒÂ¶ after engine edits restart API and confirm via live response before measuring (cost: two false-negative tally runs).
+- Engine: `applyUniversalBandaiMlaSources` (payroll-benefit-source.helper.ts) wired into `buildPayrollSourceAmountsByEmployeeId` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  injects ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢500 RECEIVABLE_ONLY non-taxable MLA for DIRECT employees lacking a resolving source; agency excluded. Covers preview + generate via single seam.
+- Backfill executed locally: `repair-bnpi-mla-universal.ts --execute` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  846 DIRECT actives / 824 covered / **+23 created** (open-horizon RECURRING EVERY_CUTOFF).
+- Proof: Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10 tally register MLA fails **818 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  0**; Alexa appMLA=500/dMLA=0 (her residual ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â¬ÃƒÆ’Ã‚Â¶+1,434.98 = absent policy ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢1,834.50 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â  PH basis +ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢398.75 walls). Tests 37 passing (`bnpi-universal-mla.spec.ts` new). Docs: project-truth-summary, findings ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¬Ãƒâ€šÃ‚Âº14g MLA row, runbook app-native bullet.
+- Ops note: `tsx watch` reload proved unreliable during verification ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ after engine edits restart API and confirm via live response before measuring (cost: two false-negative tally runs).
 
 ## Latest Task Addendum - 2026-08-26g AWOL workbook evaluated: DA-tracker, partial silent-zero resolver, NOT the payroll-absence source
 
-- New file `confidential-files/Awol (July 1-31, 2026).xlsx`: 157 ppl / 726 day-rows Jul 1ÃŽâ€œÃƒâ€¡ÃƒÂ´31, LeaveType=AWOL, all Unpaid, "For DA Issuance", same ledger schema (existing helper parses it). Remarks provenance: blank 433 / RD 152 / "no file" 115 / AWOL 24 / Resigned 2.
-- Coverage: Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10 ÃŽâ€œÃƒÂ¥Ãƒâ€  **347 day-rows / 114 people**; Jul11ÃŽâ€œÃƒâ€¡ÃƒÂ´25 ÃŽâ€œÃƒÂ¥Ãƒâ€  257 / 92. Resolves **101 of 799** silent zeros (Jun window) as ABSENT.
+- New file `confidential-files/Awol (July 1-31, 2026).xlsx`: 157 ppl / 726 day-rows Jul 1ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´31, LeaveType=AWOL, all Unpaid, "For DA Issuance", same ledger schema (existing helper parses it). Remarks provenance: blank 433 / RD 152 / "no file" 115 / AWOL 24 / Resigned 2.
+- Coverage: Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  **347 day-rows / 114 people**; Jul11ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´25 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  257 / 92. Resolves **101 of 799** silent zeros (Jun window) as ABSENT.
 - **NOT** the Sheet2 Absent-Amt source: 0/177 register-charged people match (top absent cohort has zero AWOL rows). Conflicts needing precedence ruling: 172 punched-on-AWOL days, 92 on WS=1, 152 marked RD. Alexa not in file despite 3 register-charged absences.
 - Value: day-status evidence feed for part of WS-zero ambiguity + proof client tracks daily absences; future ingest needs order + precedence rules; never LVP pay (Unpaid). Evidence: `.runtime/verify-period-leave-20260826/awol-*-proof.txt`, REPORT-WS-ZERO-FINDING.md addendum.
 
-## Latest Task Addendum - 2026-08-26f WS `0` is ambiguous per client (Rest|Absent|Leave) ÃŽâ€œÃƒâ€¡ÃƒÂ¶ investigation only, no writes
+## Latest Task Addendum - 2026-08-26f WS `0` is ambiguous per client (Rest|Absent|Leave) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ investigation only, no writes
 
 - Client: WS `1`=worked; `0` = Rest OR Absent OR Leave, no discriminator; client has no basis either.
 - **Resolves prior "client contradiction" classification** (Absent-173/Alexa): Sheet2 absence charges are compatible with WS=0; discriminator data was never in the file.
-- Triangulated all 3,437 register-scoped zero-days (Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul09; file lacks Jul 10 col + has duplicate employee rows, merged): punched-anyway **2,151 (63%)** (corroborated by RD Hrs Pay>0 on 224 people), leave-ledger **487**, silent zeros **799**. App currently marks 432 of them REST_DAY with only 11 ABSENT lines vs register charging 175 people / ÃŽâ€œÃƒÂ©Ã¢â€“â€™628,413.64.
+- Triangulated all 3,437 register-scoped zero-days (Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul09; file lacks Jul 10 col + has duplicate employee rows, merged): punched-anyway **2,151 (63%)** (corroborated by RD Hrs Pay>0 on 224 people), leave-ledger **487**, silent zeros **799**. App currently marks 432 of them REST_DAY with only 11 ABSENT lines vs register charging 175 people / ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢628,413.64.
 - No mechanical rule reproduces client absent charges: silent-zeros==implied matches only **53/175** (+WS1-no-shows variant 30/175). Alexa day-grid shows her own 4 sources disagreeing per-day (punches ON unpaid-'A' ledger days).
 - Lacking (ranked): day-level absence ground truth from client, conflict-priority ruling, UNPAID type-A taxonomy, holiday calendar, half-day convention, manual-exclusion list.
 - Report (read-only): `.runtime/verify-period-leave-20260826/REPORT-WS-ZERO-FINDING.md` + triangulation proofs.
 
-## Latest Task Addendum - 2026-08-26e All-period tally script shipped: import ÃŽâ€œÃƒÂ¥Ãƒâ€  `npm run tally:period` ÃŽâ€œÃƒÂ¥Ãƒâ€  REPORT
+## Latest Task Addendum - 2026-08-26e All-period tally script shipped: import ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  `npm run tally:period` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  REPORT
 
 - Operator asked for one tally script usable for ALL periods after imports.
 - Shipped: `scripts/run-period-tally-compare.mjs` (`npm run tally:period -- --period=<CODE|id>`), helper `helper/tally-compare.helper.ts` (money/normCode/classifyTally, 22 fields incl. Leave/leavePay non-core), spec `tests/tally-compare.helper.spec.ts` **8/8**.
-- Auto-resolves period from DB; built-in register map (Apr/Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10/Jul11ÃŽâ€œÃƒâ€¡ÃƒÂ´25) + `--target-xlsx`; **auto-unlocks password 9090 registers via Excel COM** (`ensureUnlockedWorkbook`); read-only vs HRIS; evidence to `.runtime/tally-<PERIODCODE>-<stamp>/`.
-- Proof run 1 (parity): PP-20260626-20260711 ÃŽâ€œÃƒÂ¥Ãƒâ€  818 compared, TALLIED 0 / MATCH_ONLY 813 / NEAR_50 4 / UNMATCH 1; Alexa dTotal +934.98 ÃŽâ€œÃƒâ€¡ÃƒÂ¶ identical to morning `_tmp` baseline. Proof run 2 (multi-period): PP-20260711-20260726 ÃŽâ€œÃƒÂ¥Ãƒâ€  828 compared, TALLIED 22 / ALEXA_NEAR 10 / NEAR_50 49 / MATCH_ONLY 388 / UNMATCH 359.
+- Auto-resolves period from DB; built-in register map (Apr/Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10/Jul11ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´25) + `--target-xlsx`; **auto-unlocks password 9090 registers via Excel COM** (`ensureUnlockedWorkbook`); read-only vs HRIS; evidence to `.runtime/tally-<PERIODCODE>-<stamp>/`.
+- Proof run 1 (parity): PP-20260626-20260711 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  818 compared, TALLIED 0 / MATCH_ONLY 813 / NEAR_50 4 / UNMATCH 1; Alexa dTotal +934.98 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ identical to morning `_tmp` baseline. Proof run 2 (multi-period): PP-20260711-20260726 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  828 compared, TALLIED 22 / ALEXA_NEAR 10 / NEAR_50 49 / MATCH_ONLY 388 / UNMATCH 359.
 - Runbook Phase 4 updated. Delivery+proof: `.runtime/verify-period-leave-20260826/TALLY-SCRIPT-DELIVERY.md`.
 
-## Latest Task Addendum - 2026-08-26d Folder-imports alone ÃŽâ€œÃƒÂ«ÃƒÂ¡ tally (proven): fleet 0/818 TALLIED after Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10 uploads
+## Latest Task Addendum - 2026-08-26d Folder-imports alone ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â«ÃƒÆ’Ã‚Â¡ tally (proven): fleet 0/818 TALLIED after Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10 uploads
 
 - Operator asked whether reset + importing all `confidential-files/june26-july10/` files yields a tally / Alexa tally / which scripts first.
-- Empirical: TODAY'S post-upload harness run IS that state ÃŽâ€œÃƒÂ¥Ãƒâ€  bands OT_MATCH_ONLY 813 / OT_OK_NEAR_50 4 / UNMATCH 1 / **TALLIED 0**. Field fails: totalDedn 818/818, mla 818/818 (MLA seam covers nobody in window), gross 676, monthlySalary 556, late 388, tax 331, absent 167, days 100. TR app-under 758 / over 60 / exact 0.
-- Alexa verdict: NO until (a) absent policy ruling (ÃŽâ€œÃƒÂªÃƒâ€ 1834.50 REST-vs-absent), (b) MLA source covering ÃŽâ€œÃƒÂ«ÃƒÂ±2026-07-10, (c) PH-vs-register decision (+398.75). OT/days/basic/late(Ã¢â€Â¬Ã¢â€“â€™0.77) match.
-- Script path exists but NO jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´jul10 orchestrator yet; steps are env-parameterized: late-UT recompute, dailyRate backfill, comp-from-Sheet2 (PERIOD_* env ÃŽâ€œÃƒÂ¥Ãƒâ€  seeds DMA/period codes + MLA for THIS window), prior-DED history oldestÃŽâ€œÃƒÂ¥Ãƒâ€ newest, LEAVE merged workbook BEFORE generate; then `_tmp-full-period-tally-compare.mjs`. Even full pipeline ÃŽâ€œÃƒÂ§Ãƒâ€  Jul-class outcome (~TALLIED 67/828 + NEAR bands; rest = client contradictions).
+- Empirical: TODAY'S post-upload harness run IS that state ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  bands OT_MATCH_ONLY 813 / OT_OK_NEAR_50 4 / UNMATCH 1 / **TALLIED 0**. Field fails: totalDedn 818/818, mla 818/818 (MLA seam covers nobody in window), gross 676, monthlySalary 556, late 388, tax 331, absent 167, days 100. TR app-under 758 / over 60 / exact 0.
+- Alexa verdict: NO until (a) absent policy ruling (ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â 1834.50 REST-vs-absent), (b) MLA source covering ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â«ÃƒÆ’Ã‚Â±2026-07-10, (c) PH-vs-register decision (+398.75). OT/days/basic/late(ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¬ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢0.77) match.
+- Script path exists but NO jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´jul10 orchestrator yet; steps are env-parameterized: late-UT recompute, dailyRate backfill, comp-from-Sheet2 (PERIOD_* env ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  seeds DMA/period codes + MLA for THIS window), prior-DED history oldestÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â newest, LEAVE merged workbook BEFORE generate; then `_tmp-full-period-tally-compare.mjs`. Even full pipeline ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â§ÃƒÆ’Ã¢â‚¬Â  Jul-class outcome (~TALLIED 67/828 + NEAR bands; rest = client contradictions).
 - Evidence: `.runtime/verify-period-leave-20260826/fleet-field-fails-proof.txt` + `tally-rerun-stdout.txt`.
 
-## Latest Task Addendum - 2026-08-26c Reset replay order proven: oldestÃŽâ€œÃƒÂ¥Ãƒâ€ newest for recurring continuity; payroll-run is NOT an import guard
+## Latest Task Addendum - 2026-08-26c Reset replay order proven: oldestÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â newest for recurring continuity; payroll-run is NOT an import guard
 
-- Operator asked whether reset requires import-old ÃŽâ€œÃƒÂ¥Ãƒâ€  run payroll (lock) ÃŽâ€œÃƒÂ¥Ãƒâ€  import-new to avoid mixing.
-- **Mixing impossible**: all mass/leave writes keyed `payrollPeriodId` or explicit open-horizon; today's imports touched only PP-20260626-20260711 (Apr=1261 / Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10=1694 / Jul11ÃŽâ€œÃƒâ€¡ÃƒÂ´25=1473 rows intact).
-- **Lock ÃŽâ€œÃƒÂ«ÃƒÂ¡ guard**: migration services never check isPaid ÃŽâ€œÃƒâ€¡ÃƒÂ¶ imports write into generated/paid periods freely; only the stored EmployeePayroll snapshot is locked (PATCH 409 spec; generate skips paid, controller:1865). Late imports after generate = stale register until regenerate.
-- **OldestÃŽâ€œÃƒÂ¥Ãƒâ€ newest matters for recurring seeding**: live seam proof ÃŽâ€œÃƒâ€¡ÃƒÂ¶ 824 active MLA ALL start >Jul10; ZERO cover Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10; 831 legacy ended exactly 07-10 (Alexa-class fleet gap). Precedent script `import-prior-deduction-mass-history.mjs` line 2 "oldest ÃŽâ€œÃƒÂ¥Ãƒâ€  newest". Loans order-safe via never-shrink endDate (1,356 overlap both future cutoffs). Supersede auto-ran 1,094Ã¢â€Å“ÃƒÂ¹.
-- Canonical sequence written in `.runtime/verify-period-leave-20260826/RESET-ORDER-PROOF.md` (DM4ÃŽâ€œÃƒÂ¥Ãƒâ€ WSÃŽâ€œÃƒÂ¥Ãƒâ€ COMP+recurringÃŽâ€œÃƒÂ¥Ãƒâ€ DED cumulativeÃŽâ€œÃƒÂ¥Ãƒâ€ LEAVE combined-fileÃŽâ€œÃƒÂ¥Ãƒâ€ THEN generate, per cutoff oldest-first).
+- Operator asked whether reset requires import-old ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  run payroll (lock) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  import-new to avoid mixing.
+- **Mixing impossible**: all mass/leave writes keyed `payrollPeriodId` or explicit open-horizon; today's imports touched only PP-20260626-20260711 (Apr=1261 / Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10=1694 / Jul11ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´25=1473 rows intact).
+- **Lock ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â«ÃƒÆ’Ã‚Â¡ guard**: migration services never check isPaid ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ imports write into generated/paid periods freely; only the stored EmployeePayroll snapshot is locked (PATCH 409 spec; generate skips paid, controller:1865). Late imports after generate = stale register until regenerate.
+- **OldestÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â newest matters for recurring seeding**: live seam proof ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ 824 active MLA ALL start >Jul10; ZERO cover Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10; 831 legacy ended exactly 07-10 (Alexa-class fleet gap). Precedent script `import-prior-deduction-mass-history.mjs` line 2 "oldest ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  newest". Loans order-safe via never-shrink endDate (1,356 overlap both future cutoffs). Supersede auto-ran 1,094ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹.
+- Canonical sequence written in `.runtime/verify-period-leave-20260826/RESET-ORDER-PROOF.md` (DM4ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â WSÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â COMP+recurringÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â DED cumulativeÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â LEAVE combined-fileÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â THEN generate, per cutoff oldest-first).
 
 ## Latest Task Addendum - 2026-08-26b Alexa 01792 tally break root-caused: NOT the leave import
 
-- Operator: Alexa tallied before on Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10; after today's leave imports she doesn't.
-- **Leave import innocent**: all her ledger rows UNPAID type A ÃŽâ€œÃƒÂ¥Ãƒâ€  zero LVP rows (incl deleted), leavePay=0 both eras; Sheet2 Leave col `-`. Band ALEXA_NEAR Ã¢â€Â¬Ã¢â€“â€™0.77 ÃŽâ€œÃƒÂ¥Ãƒâ€  OT_MATCH_ONLY +934.98 via three other deltas:
-- (1) **Absent ÃŽâ€œÃƒÂªÃƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™1,834.50**: today's DM4 re-upload rebuilt her timesheet to 9 PRESENT + 6 REST_DAY / ZERO ABSENT; Sheet2 charges 3 Ã¢â€Å“ÃƒÂ¹ 611.50 absent ÃŽâ€œÃƒâ€¡ÃƒÂ¶ same WS-vs-Sheet2 class as Absent-173. numberOfDays side-win 13ÃŽâ€œÃƒÂ¥Ãƒâ€ 9 (matches).
-- (2) **MLA ÃŽâ€œÃƒÂªÃƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™500**: legacy MLA (ÃŽâ€œÃƒÂ¥Ãƒâ€ 2026-07-10) superseded COMPLETED by Aug-25 comp replay; open-horizon replacement starts 2026-07-11 ÃŽâ€œÃƒÂ¥Ãƒâ€  Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10 seam has no active MLA. Fleet seam audit recommended around 2026-07-10/11.
-- (3) **Dedn +ÃŽâ€œÃƒÂ©Ã¢â€“â€™398.75** = 15,950Ã¢â€Å“ÃƒÂ¹2.5% exact ÃŽâ€œÃƒâ€¡ÃƒÂ¶ new salary-based PH cutoff schedule charges per law; client file shows 0 for her (policy/contradiction class).
-- Reconcile: +1833.73 ÃŽâ€œÃƒÂªÃƒâ€  500 ÃŽâ€œÃƒÂªÃƒâ€  398.75 = +934.98 TR ÃŽâ€œÃ‚Â£ÃƒÂ´. No money mutations executed (need operator order). Evidence: `.runtime/verify-period-leave-20260826/ALEXA-FORENSICS.md`; prior harness evidence backed up to `.runtime/full-tally-20260811-before-recheck-20260826/`.
+- Operator: Alexa tallied before on Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10; after today's leave imports she doesn't.
+- **Leave import innocent**: all her ledger rows UNPAID type A ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  zero LVP rows (incl deleted), leavePay=0 both eras; Sheet2 Leave col `-`. Band ALEXA_NEAR ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¬ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢0.77 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  OT_MATCH_ONLY +934.98 via three other deltas:
+- (1) **Absent ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢1,834.50**: today's DM4 re-upload rebuilt her timesheet to 9 PRESENT + 6 REST_DAY / ZERO ABSENT; Sheet2 charges 3 ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹ 611.50 absent ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ same WS-vs-Sheet2 class as Absent-173. numberOfDays side-win 13ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â 9 (matches).
+- (2) **MLA ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢500**: legacy MLA (ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â 2026-07-10) superseded COMPLETED by Aug-25 comp replay; open-horizon replacement starts 2026-07-11 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10 seam has no active MLA. Fleet seam audit recommended around 2026-07-10/11.
+- (3) **Dedn +ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢398.75** = 15,950ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹2.5% exact ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ new salary-based PH cutoff schedule charges per law; client file shows 0 for her (policy/contradiction class).
+- Reconcile: +1833.73 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â  500 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â  398.75 = +934.98 TR ÃƒÅ½Ã¢â‚¬Å“Ãƒâ€šÃ‚Â£ÃƒÆ’Ã‚Â´. No money mutations executed (need operator order). Evidence: `.runtime/verify-period-leave-20260826/ALEXA-FORENSICS.md`; prior harness evidence backed up to `.runtime/full-tally-20260811-before-recheck-20260826/`.
 
-## Latest Task Addendum - 2026-08-26 Period leave import verification: DB persistence proven; sequential month-file imports OVERWRITE (Jun26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul10 damaged)
+## Latest Task Addendum - 2026-08-26 Period leave import verification: DB persistence proven; sequential month-file imports OVERWRITE (Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10 damaged)
 
-- Operator asked: does DM3 leave import save to DB, and do June+July month files cover a Jun 26ÃŽâ€œÃƒâ€¡ÃƒÂ´Jul 10 cutoff?
-- **Persistence YES**: LVP `EmployeeBenefit` rows period-pinned + durable `period-leave` log (live fetch `cmt86rh9b00s8vgewuoj41i4j`); engine consumes via resolvePayrollBenefitSources ÃŽâ€œÃƒÂ¥Ãƒâ€  leavePay ÃŽâ€œÃƒÂ¥Ãƒâ€  GrossPay.
-- **Coverage PARTIAL**: window filter proven (dry-runs vs real workbooks: Jun file 287.5 in-window days / 1161 skipped; Jul file 453 / 1022), but upsert overwrites per employee ÃŽâ€œÃƒâ€¡ÃƒÂ¶ no merge. Live damage: PP-20260626-20260711 has **101/387 rows underpaid, 136 lost days ÃŽâ€œÃƒÂ«ÃƒÂª ÃŽâ€œÃƒÂ©Ã¢â€“â€™90,377.61** (00922 stored 0.5d vs correct 4.5d). Last-imported file wins per employee.
+- Operator asked: does DM3 leave import save to DB, and do June+July month files cover a Jun 26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul 10 cutoff?
+- **Persistence YES**: LVP `EmployeeBenefit` rows period-pinned + durable `period-leave` log (live fetch `cmt86rh9b00s8vgewuoj41i4j`); engine consumes via resolvePayrollBenefitSources ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  leavePay ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  GrossPay.
+- **Coverage PARTIAL**: window filter proven (dry-runs vs real workbooks: Jun file 287.5 in-window days / 1161 skipped; Jul file 453 / 1022), but upsert overwrites per employee ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ no merge. Live damage: PP-20260626-20260711 has **101/387 rows underpaid, 136 lost days ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â«ÃƒÆ’Ã‚Âª ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢90,377.61** (00922 stored 0.5d vs correct 4.5d). Last-imported file wins per employee.
 - Operator workaround until merge ships: combine both months' sheets into ONE workbook for a two-month-spanning cutoff. REC-20260826-PERIOD-LEAVE-MULTI-FILE-MERGE (Proposed).
 - Evidence: `.runtime/verify-period-leave-20260826/REPORT.md`; handoff 2026-08-26.
 
-## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain ÃŽâ€œÃƒâ€¡ÃƒÂ¶ absent wall = client file contradiction
+## Latest Task Addendum - 2026-08-25 Final tally classification: no engine faults remain ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ absent wall = client file contradiction
 
-- **Absent-173 root cause PROVEN as client data contradiction**: 00573's own WorkSharing row flags 7/11, 7/18, 7/25 (Sats) = 0/OFF with shift 07:15-15:15; app correctly built 10 PRESENT + 5 REST (zero ABSENT lines); client Sheet2 still charges 1 absent day Ã¢â€Å“ÃƒÂ¹ monthlyÃ¢â€Å“ÃƒÂ¹12/313 (=611.5 exact). Their WS file and their Sheet2 disagree ÃŽâ€œÃƒâ€¡ÃƒÂ¶ app followed the operational file.
-- **Post-PH-fix deductions decomposed**: contributions now near-match (SSS ÃŽâ€œÃƒÂ©Ã¢â€“â€™4.0k, PH ÃŽâ€œÃƒÂ©Ã¢â€“â€™7.1k, PagIBIG ÃŽâ€œÃƒÂ©Ã¢â€“â€™5.8k ÃŽâ€œÃƒâ€¡ÃƒÂ¶ engine bracket/rounding class); WTax app over ÃŽâ€œÃƒÂ©Ã¢â€“â€™13.6k (cascade of absent/loan bases); **loans ÃŽâ€œÃƒÂ©Ã¢â€“â€™41.4k = client data** (Payment amounts differ 00374 510 vs 645.69; paid-off loans still active 01202 s2=0 vs app 695.36; TALLIED people show s2=0 loans with dedn matching ÃŽâ€œÃƒÂ¥Ãƒâ€  client internal regrouping).
-- **Classification: zero remaining engine faults.** All open gaps = client data contradictions (absent ÃŽâ€œÃƒÂ©Ã¢â€“â€™263k), client loan data (ÃŽâ€œÃƒÂ©Ã¢â€“â€™41.4k), client manual leave adjustments (5 rows/ÃŽâ€œÃƒÂ©Ã¢â€“â€™3.6k), statutory bracket config (ÃŽâ€œÃƒÂ©Ã¢â€“â€™16.9k), rounding (2 UNMATCH, days ÃŽâ€œÃƒÂ©Ã¢â€“â€™235, OT ÃŽâ€œÃƒÂ©Ã¢â€“â€™1).
+- **Absent-173 root cause PROVEN as client data contradiction**: 00573's own WorkSharing row flags 7/11, 7/18, 7/25 (Sats) = 0/OFF with shift 07:15-15:15; app correctly built 10 PRESENT + 5 REST (zero ABSENT lines); client Sheet2 still charges 1 absent day ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹ monthlyÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹12/313 (=611.5 exact). Their WS file and their Sheet2 disagree ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ app followed the operational file.
+- **Post-PH-fix deductions decomposed**: contributions now near-match (SSS ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢4.0k, PH ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢7.1k, PagIBIG ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢5.8k ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ engine bracket/rounding class); WTax app over ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢13.6k (cascade of absent/loan bases); **loans ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢41.4k = client data** (Payment amounts differ 00374 510 vs 645.69; paid-off loans still active 01202 s2=0 vs app 695.36; TALLIED people show s2=0 loans with dedn matching ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  client internal regrouping).
+- **Classification: zero remaining engine faults.** All open gaps = client data contradictions (absent ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢263k), client loan data (ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢41.4k), client manual leave adjustments (5 rows/ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢3.6k), statutory bracket config (ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢16.9k), rounding (2 UNMATCH, days ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢235, OT ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢1).
 - Final: TALLIED 67, UNMATCH 2, OT_OK_NEAR_50 187, ALEXA 12 (828 compared). Evidence: `.runtime/tally-jul1125-after-repairs-2026082517362/` + GAP-ELABORATION files.
 
-## Latest Task Addendum - 2026-08-25 PhilHealth schedule fix ÃŽâ€œÃƒâ€¡ÃƒÂ¶ TALLIED 10 ÃŽâ€œÃƒÂ¥Ãƒâ€  67 + reset runbook
+## Latest Task Addendum - 2026-08-25 PhilHealth schedule fix ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ TALLIED 10 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  67 + reset runbook
 
-- **PH schedule proven & implemented**: Sheet2 PH = monthly Ã¢â€Å“ÃƒÂ¹ 2.5% per cutoff (277/277 exact, no cap ÃŽâ€œÃƒÂ«ÃƒÂ±85k); daily-rated ÃŽâ€œÃƒÂ©Ã¢â€“â€™600 cohort = flat ÃŽâ€œÃƒÂ©Ã¢â€“â€™390/cutoff (573/573). New `resolveBandaiPhilHealthCutoffContribution` overrides the gross-based PH in generate+preview (`bandai-philhealth-schedule.spec.ts`). Deductions gap ÃŽâ€œÃƒÂªÃƒâ€ 188k ÃŽâ€œÃƒÂ¥Ãƒâ€  ÃŽâ€œÃƒÂªÃƒâ€ 98,790.
-- **TALLIED 10 ÃŽâ€œÃƒÂ¥Ãƒâ€  67** (828 compared), OT_OK_NEAR_50 187, ALEXA 12. Remaining: absent/Saturday policy ÃŽâ€œÃƒÂ©Ã¢â€“â€™263k, deductions ÃŽâ€œÃƒÂ©Ã¢â€“â€™99k, leave ÃŽâ€œÃƒÂ©Ã¢â€“â€™64k, ND ÃŽâ€œÃƒÂ©Ã¢â€“â€™49.5k, gross ÃŽâ€œÃƒÂ©Ã¢â€“â€™227k (absent-driven).
-- **TZ bug fixed**: SheetJS local-midnight dates on UTC+8 shifted leave dates ÃŽâ€œÃƒÂªÃƒâ€ 1 day ÃŽâ€œÃƒâ€¡ÃƒÂ¶ re-import recovered 50 people / ÃŽâ€œÃƒÂ©Ã¢â€“â€™375kÃŽâ€œÃƒÂ¥Ãƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™444k; leavePay fails ÃŽâ€œÃƒÂ¥Ãƒâ€  5. TZ regression test added.
-- **E2E matrix runner**: `run-payroll-tally-matrix.mjs` ÃŽâ€œÃƒâ€¡ÃƒÂ¶ 26 PASS / 0 FAIL (DB, API pins, unit specs, tally, recurrence, pending decisions).
-- **Runbook**: `docs/LOCAL_DB_RESET_PERIOD_RUNBOOK.md` ÃŽâ€œÃƒâ€¡ÃƒÂ¶ fresh DB ÃŽâ€œÃƒÂ¥Ãƒâ€  tallied period (pack + leave + proof), app-native mode for future periods without Sheet2.
+- **PH schedule proven & implemented**: Sheet2 PH = monthly ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹ 2.5% per cutoff (277/277 exact, no cap ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â«ÃƒÆ’Ã‚Â±85k); daily-rated ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢600 cohort = flat ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢390/cutoff (573/573). New `resolveBandaiPhilHealthCutoffContribution` overrides the gross-based PH in generate+preview (`bandai-philhealth-schedule.spec.ts`). Deductions gap ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â 188k ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â 98,790.
+- **TALLIED 10 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  67** (828 compared), OT_OK_NEAR_50 187, ALEXA 12. Remaining: absent/Saturday policy ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢263k, deductions ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢99k, leave ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢64k, ND ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢49.5k, gross ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢227k (absent-driven).
+- **TZ bug fixed**: SheetJS local-midnight dates on UTC+8 shifted leave dates ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â 1 day ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ re-import recovered 50 people / ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢375kÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢444k; leavePay fails ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  5. TZ regression test added.
+- **E2E matrix runner**: `run-payroll-tally-matrix.mjs` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ 26 PASS / 0 FAIL (DB, API pins, unit specs, tally, recurrence, pending decisions).
+- **Runbook**: `docs/LOCAL_DB_RESET_PERIOD_RUNBOOK.md` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ fresh DB ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  tallied period (pack + leave + proof), app-native mode for future periods without Sheet2.
 - Pushed: 5a5dd05c (pack), dd16ebfd (TZ + matrix), PH fix + runbook this push.
 
 ## Latest Task Addendum - 2026-08-25 Careful remaining-gap investigation (post-pack)
 
-- **Stale-import found & fixed**: the operator's earlier UI leave execute ran while the watcher served old parser code ÃŽâ€œÃƒâ€¡ÃƒÂ¶ LVP rows had shifted dates/wrong days (00032 1.5 days vs file 2.5; 00342 dates ÃŽâ€œÃƒÂªÃƒâ€ 1 day). Re-ran import with current code: 321 updated, ÃŽâ€œÃƒÂ©Ã¢â€“â€™375,187.78 (was ÃŽâ€œÃƒÂ©Ã¢â€“â€™327,991.84). **leavePay fails 254 ÃŽâ€œÃƒÂ¥Ãƒâ€  111, gap ÃŽâ€œÃƒÂ©Ã¢â€“â€™106,320 ÃŽâ€œÃƒÂ¥Ãƒâ€  ÃŽâ€œÃƒÂ©Ã¢â€“â€™63,924; net gap +ÃŽâ€œÃƒÂ©Ã¢â€“â€™51,767 ÃŽâ€œÃƒÂ¥Ãƒâ€  +ÃŽâ€œÃƒÂ©Ã¢â€“â€™15,811** (from ÃŽâ€œÃƒÂªÃƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™423k session start). ALEXA_NEAR 6, NEAR_10 10, OT_OK_NEAR_50 80.
-- **Leave rule proven**: Sheet2 pays ALL paid types in-window incl. rest days (BEL/BIL/VL/ACL/CL/SL all confirmed; 00032 Sat 7/11 paid). Only ~4-5 people have manual client exclusions (00342 excl BEL etc.) ÃŽâ€œÃƒâ€¡ÃƒÂ¶ not mechanically fixable. Rest of the 111 fails: ~51 sheet-leave people whose employee codes don't exist in DB + 01624 (app-only).
-- **Absent-173 mechanics proven**: 00573-class = 10 PRESENT + 5 REST (Sats/Sun), zero ABSENT lines; Sheet2 charges 1 absent day Ã¢â€Å“ÃƒÂ¹ **monthlyÃ¢â€Å“ÃƒÂ¹12/313** (611.5 exact) ÃŽâ€œÃƒâ€¡ÃƒÂ¶ client expects MonÃŽâ€œÃƒâ€¡ÃƒÂ´Sat work at BNPI daily regardless of app REST schedule. Policy decision needed (Saturday expectation) before charging.
-- **Deductions ÃŽâ€œÃƒÂªÃƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™176,651 decomposed**: **PhilHealth app over ÃŽâ€œÃƒÂ©Ã¢â€“â€™86,821** (engine bases PH on gross; Sheet2 = salary-based ÃŽâ€œÃƒâ€¡ÃƒÂ¶ PH law basis), loans ÃŽâ€œÃƒÂ©Ã¢â€“â€™41.4k (RCBC 29/HDMF 11/SSS 31 amount residuals), SSS under ÃŽâ€œÃƒÂ©Ã¢â€“â€™10.3k, PagIBIG under ÃŽâ€œÃƒÂ©Ã¢â€“â€™5.8k, tax ÃŽâ€œÃƒÂ©Ã¢â€“â€™9.2k, rest ÃŽâ€œÃƒÂ«ÃƒÂª ÃŽâ€œÃƒÂ©Ã¢â€“â€™55k other/rounding.
-- Remaining walls ranked: PH basis (policy), absent/Saturday (policy), leave residual ÃŽâ€œÃƒÂ©Ã¢â€“â€™64k (mostly unfixable data), ND ÃŽâ€œÃƒÂ©Ã¢â€“â€™49.5k (line-level buckets), RD 13 (ÃŽâ€œÃƒÂ©Ã¢â€“â€™13k).
-- Final: `.runtime/tally-jul1125-after-repairs-2026082513565/REPORT.md` ÃŽâ€œÃƒâ€¡ÃƒÂ¶ TALLIED 10, UNMATCH 2, ALEXA 6, NEAR_10 10, OT_OK_NEAR_50 80.
+- **Stale-import found & fixed**: the operator's earlier UI leave execute ran while the watcher served old parser code ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ LVP rows had shifted dates/wrong days (00032 1.5 days vs file 2.5; 00342 dates ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â 1 day). Re-ran import with current code: 321 updated, ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢375,187.78 (was ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢327,991.84). **leavePay fails 254 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  111, gap ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢106,320 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢63,924; net gap +ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢51,767 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  +ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢15,811** (from ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢423k session start). ALEXA_NEAR 6, NEAR_10 10, OT_OK_NEAR_50 80.
+- **Leave rule proven**: Sheet2 pays ALL paid types in-window incl. rest days (BEL/BIL/VL/ACL/CL/SL all confirmed; 00032 Sat 7/11 paid). Only ~4-5 people have manual client exclusions (00342 excl BEL etc.) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ not mechanically fixable. Rest of the 111 fails: ~51 sheet-leave people whose employee codes don't exist in DB + 01624 (app-only).
+- **Absent-173 mechanics proven**: 00573-class = 10 PRESENT + 5 REST (Sats/Sun), zero ABSENT lines; Sheet2 charges 1 absent day ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹ **monthlyÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹12/313** (611.5 exact) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ client expects MonÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Sat work at BNPI daily regardless of app REST schedule. Policy decision needed (Saturday expectation) before charging.
+- **Deductions ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢176,651 decomposed**: **PhilHealth app over ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢86,821** (engine bases PH on gross; Sheet2 = salary-based ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ PH law basis), loans ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢41.4k (RCBC 29/HDMF 11/SSS 31 amount residuals), SSS under ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢10.3k, PagIBIG under ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢5.8k, tax ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢9.2k, rest ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â«ÃƒÆ’Ã‚Âª ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢55k other/rounding.
+- Remaining walls ranked: PH basis (policy), absent/Saturday (policy), leave residual ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢64k (mostly unfixable data), ND ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢49.5k (line-level buckets), RD 13 (ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢13k).
+- Final: `.runtime/tally-jul1125-after-repairs-2026082513565/REPORT.md` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ TALLIED 10, UNMATCH 2, ALEXA 6, NEAR_10 10, OT_OK_NEAR_50 80.
 
 ## Latest Task Addendum - 2026-08-25 Recurring comp/ded proven for NEXT period (no Sheet2) + MLA flipped recurring
 
-- Operator directives: recurring comp/ded must keep recurring (no re-fix next period); Sheet2 won't always exist ÃŽâ€œÃƒâ€¡ÃƒÂ¶ future periods compute in-app.
-- **MLA flipped to open-horizon EVERY_CUTOFF** (824 rows; old 831 superseded set stays ended; a future period-scoped COMP mass supersedes automatically). Repair script MLA mode ÃŽâ€œÃƒÂ¥Ãƒâ€  "open" for idempotent reruns.
-- **Recurrence proof for PP-20260726-20260811 (Sheet2 NOT used)**: DMA 335/ÃŽâ€œÃƒÂ©Ã¢â€“â€™110,300 + MLA 824/ÃŽâ€œÃƒÂ©Ã¢â€“â€™412,000 via the engine's own `resolvePayrollBenefitSources`; loans 1,356/ÃŽâ€œÃƒÂ©Ã¢â€“â€™831,766 overlapping via EmployeeLoan window SQL. Evidence: `.runtime/recurring-next-period-proof-20260825/proof.json`.
-- Doctrine written: findings **Ã¢â€Â¬Ã‚Âº14g** ÃŽâ€œÃƒâ€¡ÃƒÂ¶ Sheet2 = parity harness only; app-native map (attendance/late/absent/leave/statutory/recurring comp+loans native; OT still needs the cut's rptOvertimeDetails until in-app approved-OT covers it).
+- Operator directives: recurring comp/ded must keep recurring (no re-fix next period); Sheet2 won't always exist ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ future periods compute in-app.
+- **MLA flipped to open-horizon EVERY_CUTOFF** (824 rows; old 831 superseded set stays ended; a future period-scoped COMP mass supersedes automatically). Repair script MLA mode ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  "open" for idempotent reruns.
+- **Recurrence proof for PP-20260726-20260811 (Sheet2 NOT used)**: DMA 335/ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢110,300 + MLA 824/ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢412,000 via the engine's own `resolvePayrollBenefitSources`; loans 1,356/ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢831,766 overlapping via EmployeeLoan window SQL. Evidence: `.runtime/recurring-next-period-proof-20260825/proof.json`.
+- Doctrine written: findings **ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¬Ãƒâ€šÃ‚Âº14g** ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ Sheet2 = parity harness only; app-native map (attendance/late/absent/leave/statutory/recurring comp+loans native; OT still needs the cut's rptOvertimeDetails until in-app approved-OT covers it).
 
-## Latest Task Addendum - 2026-08-25 Jul 11-25 tally fix pack (comp from Sheet2 + full replay) ÃŽâ€œÃƒâ€¡ÃƒÂ¶ 802/828 improved
+## Latest Task Addendum - 2026-08-25 Jul 11-25 tally fix pack (comp from Sheet2 + full replay) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ 802/828 improved
 
-- Operator directive: recurring comp/ded cannot rely on the single cut file ÃŽâ€œÃƒâ€¡ÃƒÂ¶ fix compensation FROM Sheet2, always with proof.
-- Discovery: local clone had LOST all earlier brute repairs (DB refresh) ÃŽâ€œÃƒâ€¡ÃƒÂ¶ Jul COMP/DED mass, WS, OT buckets, prior-DED loans, DMA, dailyRate all absent (import history proved it).
+- Operator directive: recurring comp/ded cannot rely on the single cut file ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ fix compensation FROM Sheet2, always with proof.
+- Discovery: local clone had LOST all earlier brute repairs (DB refresh) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ Jul COMP/DED mass, WS, OT buckets, prior-DED loans, DMA, dailyRate all absent (import history proved it).
 - New scripts: `repair-bnpi-comp-from-sheet2.mjs` (12 codes; DMA open-horizon; others period-pinned + supersede; canonical register labels) and orchestrator `run-jul1125-tally-fix-pack.mjs` (9 steps, dry-run default, `--execute`, `--step=N`, proof JSON per step).
 - Replayed: DM4 Jul bio+OT (OT landed; strict verify gate non-convergent flap = known, documented), WS Jul (841 upd), late recompute re-run AFTER final materialization (sequencing matters), dailyRate 569 Path A, comp-from-Sheet2 (DMA 329+6, MLA 824+831 superseded, ARP 673, AON 33, LLA 65, TSA 10, OBA 33, OAD 5, HYS 66, ABS 48, MTX 153, PFA 1), Jul DED mass, prior DED Jan-Jun, loan horizon 24mo.
-- Engine fixes: (1) register **arp** column was missing ÃŽâ€œÃƒâ€¡ÃƒÂ¶ added; (2) **special-holiday premium split proven from Sheet2** ÃŽâ€œÃƒâ€¡ÃƒÂ¶ Path A work premium = **1.3 full** (was wrongly 0.3 via stale always-false `useSourceDailyRate`), Path B = 0.3; excess spclOtHrs Ã¢â€Å“ÃƒÂ¹ 1.69 moved to its own register column **Sun/Spc Hol OT Exc** (new `resolveBandaiSpecialHolidayWorkMultiplier` exported + pinned by `bandai-special-holiday-split.spec.ts`).
-- **Final proof (828 compared, true July Sheet2)**: UNMATCH **694 ÃŽâ€œÃƒÂ¥Ãƒâ€  2**; TALLIED **0 ÃŽâ€œÃƒÂ¥Ãƒâ€  10**; NEAR_10 9; OT_OK_NEAR_50 **76**; **802/828 improved** (top: 00835 +ÃŽâ€œÃƒÂ©Ã¢â€“â€™39,392, 01049 +ÃŽâ€œÃƒÂ©Ã¢â€“â€™34,096, 00021 +ÃŽâ€œÃƒÂ©Ã¢â€“â€™26,795); gross fails 826ÃŽâ€œÃƒÂ¥Ãƒâ€ **554**, gross gap ÃŽâ€œÃƒÂªÃƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™324kÃŽâ€œÃƒÂ¥Ãƒâ€ ÃŽâ€œÃƒÂªÃƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™117k; **net gap ÃŽâ€œÃƒÂªÃƒâ€ ÃŽâ€œÃƒÂ©Ã¢â€“â€™423kÃŽâ€œÃƒÂ¥Ãƒâ€ +ÃŽâ€œÃƒÂ©Ã¢â€“â€™52k**; late fails 322ÃŽâ€œÃƒÂ¥Ãƒâ€ **55** (ÃŽâ€œÃƒÂ©Ã¢â€“â€™109k recovered). MATCH: OT ÃŽâ€œÃƒÂ©Ã¢â€“â€™1.33M, DMA, MLA, ARP ÃŽâ€œÃƒÂ©Ã¢â€“â€™335.5k, PFA, AON, LLA, TSA, OBA, OAD, HYS, ABS, MTX, basicPay, numberOfDays. Loans: RCBC 29 / HDMF 11 / SSS 31.
-- Still open: absent policy 173 (Sheet2 ÃŽâ€œÃƒÂ©Ã¢â€“â€™269k vs app ÃŽâ€œÃƒÂ©Ã¢â€“â€™6k), deductions over ÃŽâ€œÃƒÂ©Ã¢â€“â€™170k (contrib/loan/tax cascade), leave day-count 201 (ÃŽâ€œÃƒÂ©Ã¢â€“â€™106k), ND ÃŽâ€œÃƒÂ©Ã¢â€“â€™49.5k (needs line-level bucket analysis), RD Hrs Pay 13 (ÃŽâ€œÃƒÂ©Ã¢â€“â€™13k).
-- Evidence: `.runtime/jul1125-tally-fix-*/` + `.runtime/tally-jul1125-after-repairs-2026082512195/REPORT.md`. Local clone only ÃŽâ€œÃƒâ€¡ÃƒÂ¶ VM replay still required.
+- Engine fixes: (1) register **arp** column was missing ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ added; (2) **special-holiday premium split proven from Sheet2** ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ Path A work premium = **1.3 full** (was wrongly 0.3 via stale always-false `useSourceDailyRate`), Path B = 0.3; excess spclOtHrs ÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹ 1.69 moved to its own register column **Sun/Spc Hol OT Exc** (new `resolveBandaiSpecialHolidayWorkMultiplier` exported + pinned by `bandai-special-holiday-split.spec.ts`).
+- **Final proof (828 compared, true July Sheet2)**: UNMATCH **694 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  2**; TALLIED **0 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  10**; NEAR_10 9; OT_OK_NEAR_50 **76**; **802/828 improved** (top: 00835 +ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢39,392, 01049 +ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢34,096, 00021 +ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢26,795); gross fails 826ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â **554**, gross gap ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢324kÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢117k; **net gap ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢423kÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â +ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢52k**; late fails 322ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â **55** (ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢109k recovered). MATCH: OT ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢1.33M, DMA, MLA, ARP ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢335.5k, PFA, AON, LLA, TSA, OBA, OAD, HYS, ABS, MTX, basicPay, numberOfDays. Loans: RCBC 29 / HDMF 11 / SSS 31.
+- Still open: absent policy 173 (Sheet2 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢269k vs app ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢6k), deductions over ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢170k (contrib/loan/tax cascade), leave day-count 201 (ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢106k), ND ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢49.5k (needs line-level bucket analysis), RD Hrs Pay 13 (ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢13k).
+- Evidence: `.runtime/jul1125-tally-fix-*/` + `.runtime/tally-jul1125-after-repairs-2026082512195/REPORT.md`. Local clone only ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ VM replay still required.
 
 ## Latest Task Addendum - 2026-08-25 BNPI period leave import (LVP) closes Sheet2 Leave gap
 
-- Feed proven: `Leave (July 1-31, 2026).xlsx` sheet **Leave (2)** covers **376/376** Sheet2 Jul 11ÃŽâ€œÃƒâ€¡ÃƒÂ´25 leave people; money reproduces **99.2%** via dual basis (Path A `daysÃ¢â€Å“ÃƒÂ¹dailySalary` 217; Path B `daysÃ¢â€Å“ÃƒÂ¹monthlyÃ¢â€Å“ÃƒÂ¹12/313` 156).
+- Feed proven: `Leave (July 1-31, 2026).xlsx` sheet **Leave (2)** covers **376/376** Sheet2 Jul 11ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´25 leave people; money reproduces **99.2%** via dual basis (Path A `daysÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹dailySalary` 217; Path B `daysÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹monthlyÃƒÂ¢Ã¢â‚¬ÂÃ…â€œÃƒÆ’Ã‚Â¹12/313` 156).
 - Shipped: helper+service (`bnpi-period-leave-import.*`), `POST /api/migration/dm3/import-period-leave`, DM3 card **Upload leave (period)**, durable log kind `period-leave`.
 - Engine truth change: **GrossPay now includes `leavePay`** at both generate+preview sites. Net/TR/tax follow.
 - Operator feedback applied (same day): upload now **imports immediately** like other DM3 uploads (default execute; preview only via `dryRun=true`); amber preview/Confirm step removed; **payroll-period selector** added to the modal (default OPEN period, sends `payrollPeriodId`) so month-wide files cannot silently land in the prior cutoff (REC-20260825-PERIOD-LEAVE-EXPLICIT-PERIOD **Implemented**).
 - Tests: backend spec **9/9** (incl. default-executes contract); app migration route tests 20/20. Pre-existing fails documented separately (6 app-lib vitest; 2 migration.tsx tsc).
-- Live local DB (5433) execute proof: window `2026-07-11..25`, **321 created / 0 updated / 6 failed** (missing emps 01827/01834/01835/01836/01838/01841), **ÃŽâ€œÃƒÂ©Ã¢â€“â€™327,991.84**, log `cmt86rh9b00s8vgewuoj41i4j` retrievable via `GET /dm3/mass-upload-imports/:id` (summary+importLog ÃŽâ€œÃƒÂ¥Ãƒâ€  activity click-through works). Opt-in preview: 0 writes.
-- Infra fix: `hris-app/app/services/payroll-periods.service.ts` was **UTF-16 LE** (broke vitest oxc transform when the leave modal's period hook pulled it in) ÃŽâ€œÃƒÂ¥Ãƒâ€  converted to UTF-8, no content change.
-- Baseline (pre-leave, true July Sheet2): `.runtime/tally-jul1125-before-leave-julysheet2/` ÃŽâ€œÃƒâ€¡ÃƒÂ¶ 828 compared, TALLIED 0, OT_MATCH_ONLY 134, UNMATCH 694, leavePay fails 366. **After-leave tally done**: `.runtime/tally-jul1125-after-leave-julysheet2/REPORT.md` ÃŽâ€œÃƒâ€¡ÃƒÂ¶ 283 improved / 23 worsened; leave exact 113/366, 201 underpaid (rest-day/day-count residual), app-only 1; Ã¢â€¢Â¬ÃƒÂº Sheet2 ÃŽâ€œÃƒÂ©Ã¢â€“â€™434,311.72 vs app ÃŽâ€œÃƒÂ©Ã¢â€“â€™327,991.84 (gap ÃŽâ€œÃƒÂ©Ã¢â€“â€™106,319.88); bands still TALLIED 0 ÃŽâ€œÃƒâ€¡ÃƒÂ¶ deductions/tax wall dominates (worst-now Ã¢â€¢Â¬ÃƒÂ¶Gross ÃŽâ€œÃƒÂªÃƒâ€ 36k class). First tally attempts had compared JUNE Sheet2 by mistake (hardcoded target) ÃŽâ€œÃƒÂ¥Ãƒâ€  superseded notes in old dirs; jul script now honors `TARGET_XLSX`. Canonical: findings Ã¢â€Â¬Ã‚Âº14e.
+- Live local DB (5433) execute proof: window `2026-07-11..25`, **321 created / 0 updated / 6 failed** (missing emps 01827/01834/01835/01836/01838/01841), **ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢327,991.84**, log `cmt86rh9b00s8vgewuoj41i4j` retrievable via `GET /dm3/mass-upload-imports/:id` (summary+importLog ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  activity click-through works). Opt-in preview: 0 writes.
+- Infra fix: `hris-app/app/services/payroll-periods.service.ts` was **UTF-16 LE** (broke vitest oxc transform when the leave modal's period hook pulled it in) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  converted to UTF-8, no content change.
+- Baseline (pre-leave, true July Sheet2): `.runtime/tally-jul1125-before-leave-julysheet2/` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ 828 compared, TALLIED 0, OT_MATCH_ONLY 134, UNMATCH 694, leavePay fails 366. **After-leave tally done**: `.runtime/tally-jul1125-after-leave-julysheet2/REPORT.md` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ 283 improved / 23 worsened; leave exact 113/366, 201 underpaid (rest-day/day-count residual), app-only 1; ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â¬ÃƒÆ’Ã‚Âº Sheet2 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢434,311.72 vs app ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢327,991.84 (gap ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢106,319.88); bands still TALLIED 0 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ deductions/tax wall dominates (worst-now ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â¬ÃƒÆ’Ã‚Â¶Gross ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â 36k class). First tally attempts had compared JUNE Sheet2 by mistake (hardcoded target) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  superseded notes in old dirs; jul script now honors `TARGET_XLSX`. Canonical: findings ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¬Ãƒâ€šÃ‚Âº14e.
 
 ## Latest Task Addendum - 2026-08-24 Fleet Hikvision time sync button + live clock snap
 
@@ -370,7 +378,7 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-21 Dedicated employee schedule page
 
 - Operator: dedicated page to change employee time schedules without opening each profile.
-- HR `/hr/employee-schedules` (Timekeeping GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Schedules) and admin `/admin/configuration/employee-schedules`.
+- HR `/hr/employee-schedules` (Timekeeping GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Schedules) and admin `/admin/configuration/employee-schedules`.
 - Table of active employees, current week hours, department/section filter, click row to preview then Change schedule (same Days/Dates modal).
 
 
@@ -418,13 +426,13 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator: document DevOps CI well; **do not deploy**; **do not push** until ordered.
 - Canonical: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
-- Live tip at proof: `efc86c56` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ CI + Observe + Validate success; VM pull match; images `services=none`; runtime Argo **Degraded** (`hris-api-db-init` Failed).
-- Observe success GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ live pod SHA. `/health` has no `buildSha`. Nested Cloud Run/Firebase workflows do not run on this repo.
+- Live tip at proof: `efc86c56` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ CI + Observe + Validate success; VM pull match; images `services=none`; runtime Argo **Degraded** (`hris-api-db-init` Failed).
+- Observe success GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ live pod SHA. `/health` has no `buildSha`. Nested Cloud Run/Firebase workflows do not run on this repo.
 
 
 ## Latest Task Addendum - 2026-08-20 Attendance list filters return to overview
 
-- Operator: `/hr/attendance` overview; click Clocked In (or any metric) GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ URL becomes `?status=CLOCKED_IN&view=list`. No way back to the clean attendance route.
+- Operator: `/hr/attendance` overview; click Clocked In (or any metric) GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ URL becomes `?status=CLOCKED_IN&view=list`. No way back to the clean attendance route.
 - Fix: Back link is a real `/hr/attendance` Link (keeps date/period). Clicking the same metric again returns to overview. Sidebar Attendance resets list query params on the same path.
 - Tests: attendance-management 19; Sidebar 4. Browser: `.runtime/attendance-overview-return-20260820/`.
 
@@ -456,8 +464,8 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-20 Dates calendar multi-select + break
 
 - Dates tab is a clickable calendar (multiple days). Hours + break apply to every selected date.
-- Changing the date no longer resets start/end back to 08:00GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“17:00.
-- Break start/end optional (default 12:00GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“13:00). Days tab unchanged.
+- Changing the date no longer resets start/end back to 08:00GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ17:00.
+- Break start/end optional (default 12:00GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ13:00). Days tab unchanged.
 
 
 ## Latest Task Addendum - 2026-08-20 durable WS-off vs OT ABSENT revive
@@ -466,14 +474,14 @@ unHikvisionTimeSyncCore with the per-device route.
 - Operator proof: 01116 Jul 21 showed ABSENT despite WS flag=0 after rebuild.
 - Fix: OT patch honors effective OFF override; stamps scheduleSnapshot; re-repair 1715.
 - Proof: 01116 REST_DAY; OT dry-run does not force ABSENT; absent app-over 505?0.
-- Local test DB only Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ VM replay later.
+- Local test DB only ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ VM replay later.
 - Evidence: `.runtime/reverse-reinvestigate-20260820/PROOF-01116.md`
 
 
-## Latest Task Addendum - 2026-08-20 Timesheet GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ schedule connection audit
+## Latest Task Addendum - 2026-08-20 Timesheet GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ schedule connection audit
 
 - Operator: audit timesheet vs schedule because schedule can change (that is the process).
-- Three layers: live schedule GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ obligation expected windows GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ punches/timesheet snapshots.
+- Three layers: live schedule GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ obligation expected windows GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ punches/timesheet snapshots.
 - Schedule change **does** recompute obligations. **Does not** rewrite punches or timesheet lines or stored late/OT.
 - **Days** tab = weekly pattern (next Monday). **Dates** tab = that calendar day (`ScheduleOverride`).
 - Canonical: `.wwg/reports/timesheet-schedule-connection-20260820.md`.
@@ -487,10 +495,10 @@ unHikvisionTimeSyncCore with the per-device route.
 - Canonical: `.wwg/reports/devops-audit-20260820.md`.
 
 
-## Latest Task Addendum - 2026-08-20 Employee weekly hours (Mon 6GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“3, Tue 7GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“4)
+## Latest Task Addendum - 2026-08-20 Employee weekly hours (Mon 6GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ3, Tue 7GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ4)
 
-- Operator asked where to change one employeeGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“s shift (Zen Monday 6GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“3, Tuesday 7GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“4). Admin Schedule Templates already exist as reusable patterns.
-- Per-person weekly hours already lived on HR/Admin employee edit GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Active Schedule. Work Schedule tab was view-only.
+- Operator asked where to change one employeeGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œs shift (Zen Monday 6GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ3, Tuesday 7GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ4). Admin Schedule Templates already exist as reusable patterns.
+- Per-person weekly hours already lived on HR/Admin employee edit GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Active Schedule. Work Schedule tab was view-only.
 - Added **Change schedule** on the employee Work Schedule tab: 7 weekday start/end/off editor. Saves `POST /api/employee-schedules` with a `pattern`. Takes effect next Monday.
 - Tests: mocha helper 6; vitest 6 (helper + modal + tab).
 - 2026-08-20: landed on `origin/develop` so VM ansible-pull / Docker can deploy DEV.
@@ -536,15 +544,15 @@ unHikvisionTimeSyncCore with the per-device route.
 - Check + update now go through **HCNetSDK STDXML** first: C++ `--get-time` / `--set-time` via `NET_DVR_STDXMLConfig` GET/PUT `/ISAPI/System/time` (same SDK session as FP/face).
 - HRIS: `runHikvisionDeviceTimeOnVm` then ISAPI HTTP fallback if VM SDK command cannot arm.
 - API: `POST /api/device/:id/time-sync` (`execute=false` default). Response `transport=sdk_stdxml|isapi_http`.
-- UI: Preview time GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ confirm Update time. Modal shows check path.
+- UI: Preview time GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ confirm Update time. Modal shows check path.
 - Does not enable NTP. Listener binary on the VM must rebuild from this C++ before SDK path is live.
 
 
 ## Latest Task Addendum - 2026-08-19 Absent-day correction must create a punch
 
-- Operator: `REQ-1786424090600` completed for Zen Aug 14 (8:00GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“16:00 Manila) but My Attendance still showed **Absent / no record**.
+- Operator: `REQ-1786424090600` completed for Zen Aug 14 (8:00GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ16:00 Manila) but My Attendance still showed **Absent / no record**.
 - Cause: that day is a virtual `absent-2026-08-14` row. Apply required a real Attendance and failed. Completing a missed whole day must **backfill**.
-- Fix: completed `ATTENDANCE_CORRECTION` now backfills when attendanceId is virtual/missing. Live apply created PRESENT `cmszhlo6a00018h4sy78fjinn` 08:00GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“16:00 Manila.
+- Fix: completed `ATTENDANCE_CORRECTION` now backfills when attendanceId is virtual/missing. Live apply created PRESENT `cmszhlo6a00018h4sy78fjinn` 08:00GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ16:00 Manila.
 - Tests: apply-request + backfill 5 passing; payload + modal 19 passing.
 
 
@@ -552,7 +560,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator: Maria Santos (`hr-manager@seed.local`) approved Zen's Aug 18 missed clock-out, but Zen's request stayed **Approved / HR Review pending**.
 - Cause: manager approval flipped the request to APPROVED while HR Review is a TASK. My Approvals hid Complete Task (`stepType !== TASK`). Apply also 500'd (`deriveBehaviorFlags` missing) and missed Manila-day rows (`2026-08-17T16:00Z`).
-- Fix: HR actors can complete HR Review; if the manager who approved is HR, HR Review + SYSTEM auto-complete. Apply uses Manila day bounds. Live `REQ-1786424090599` is **COMPLETED**; Zen Aug 18 effective row is PRESENT 08:00GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“17:00 Manila.
+- Fix: HR actors can complete HR Review; if the manager who approved is HR, HR Review + SYSTEM auto-complete. Apply uses Manila day bounds. Live `REQ-1786424090599` is **COMPLETED**; Zen Aug 18 effective row is PRESENT 08:00GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ17:00 Manila.
 - Tests: workflow helper 2 passing; request-approval-action + RequestReviewModal 15 passing.
 
 
@@ -568,9 +576,9 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-19 Hikvision bio time / Manila sync research
 
 - Operator: can Hikvision biometric terminals set time manually, and can we sync all devices together to Manila time?
-- Verdict: **Yes** on the device (panel / web / Hik-Connect / iVMS Batch Time Sync / ISAPI PUT / NTP). **HRIS does not SET** today GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ GET `/ISAPI/System/time` only.
+- Verdict: **Yes** on the device (panel / web / Hik-Connect / iVMS Batch Time Sync / ISAPI PUT / NTP). **HRIS does not SET** today GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ GET `/ISAPI/System/time` only.
 - Manila mapping: device `timeZone=CST-8:00:00`, DST off, `localTime` `+08:00`. Same offset as `Asia/Manila`. Do not send IANA names to the panel.
-- Live BNPI XML (stale 2026-08-17 and earlier): always `timeMode=manual`. Clocks already +08 but **not** fleet-NTP; B/D/E differed by ~40s. TodayGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“s clocks `NEEDS_CONFIRMATION` (localhost:3001 down; VM ping false).
+- Live BNPI XML (stale 2026-08-17 and earlier): always `timeMode=manual`. Clocks already +08 but **not** fleet-NTP; B/D/E differed by ~40s. TodayGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œs clocks `NEEDS_CONFIRMATION` (localhost:3001 down; VM ping false).
 - Attendance uses **device punch time**, not `receivedAt`. Aligning clocks is required for Time In/Out.
 - Report: `.wwg/reports/hikvision-biometric-time-manila-20260819.md`.
 - Boundary: research only. No PUT. No NTP write. No clock-writer feature this pass.
@@ -580,8 +588,8 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator: backfill current EmployeePayroll rows for the new `hourlySalary` snapshot. Dry-run default. Does **not** change payroll computation.
 - Commands (`hris-api`):
-  - `npm run backfill:employee-payroll-hourly-salary` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ dry-run (default; no writes)
-  - `npm run backfill:employee-payroll-hourly-salary:execute` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ write `hourlySalary` only
+  - `npm run backfill:employee-payroll-hourly-salary` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ dry-run (default; no writes)
+  - `npm run backfill:employee-payroll-hourly-salary:execute` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ write `hourlySalary` only
 - Derive: prefer metadata `hourlyRate`, else `dailySalary` (or metadata daily) ++ `workingHoursPerDay` (BNPI 313 uses 8). Same helper as generate: `computeEmployeePayrollHourlySalarySnapshot`.
 - Does **not** rewrite money (OT/late/UT/absent/gross/net), Employee input, Sheet2 columns, or paid/published/lock flags.
 - WWG: project-truth + summary + this addendum + handoff + snapshot report Backfill section.
@@ -600,7 +608,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator: git was not interactively logged in for `infra` (no `gh`, no `~/.git-credentials`; ansible-pull still used Argo secret).
 - Fix: `infra` git `credential.helper=store` from `argocd/project-truth-repo-creds` (`x-access-token` / GitHub `g-zenr`). Mode 0600.
-- Proof: `git ls-remote` as `infra` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ `6f973877ca13` `refs/heads/develop`.
+- Proof: `git ls-remote` as `infra` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `6f973877ca13` `refs/heads/develop`.
 - LAN `ssh infra@10.184.37.19` still times out from this PC (Wi-Fi `192.168.1.26`, no `10.184.37.x`). Use `ssh project-truth-hris`.
 - Evidence: `.runtime/vm-git-login-20260819/infra-git-login-proof.txt`.
 
@@ -637,7 +645,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-08-19 Period overview totals, not duplicate days
 
-- Operator: Active Timesheet 8/11GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“8/25 repeated Zen five times (PRES 1/1/1). Clocked In list said no records.
+- Operator: Active Timesheet 8/11GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ8/25 repeated Zen five times (PRES 1/1/1). Clocked In list said no records.
 - Cause: department expand previewed 5 **days**. Clocked In scanned 5000 obligation rows (~67s) so the page timed out empty.
 - Fix: multi-day expand is **one row per employee** with SCHED/PRES/LATE/UT/ABS day totals. View days opens that person's daily list. Clocked In pages from scheduled punches (live 122 rows in 1.3s).
 - Live GA/HR Zen: 14 scheduled, 6 present, 4 late, 4 undertime, 8 absent.
@@ -647,7 +655,7 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-19 Overtime request date + 2h 50m + HR payable OT
 
 - Operator: OT form used a number spinner; 2 hours 50 minutes could not be entered. Workflow was manager-first. Approved employee OT did not write payable hours.
-- Fix: DatePicker; Hours + Minutes (example 2:50). Workflow is employee GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ HR GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ system. HR approve writes `timesheetline.overtimeHours` (`2:50` / 170 min).
+- Fix: DatePicker; Hours + Minutes (example 2:50). Workflow is employee GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ HR GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ system. HR approve writes `timesheetline.overtimeHours` (`2:50` / 170 min).
 - Tests: payload vitest 7; overtime workflow/apply mocha 3.
 
 
@@ -665,13 +673,13 @@ unHikvisionTimeSyncCore with the per-device route.
 - Live TimesheetConfig: `requireManagerApprovedOvertime=true`, `enableAutoApprove=false`, OT flag threshold 60 minutes.
 - Extra punch hours become OT candidates. They do **not** write payable `overtimeHours` until a manager OT request is approved, or the approved OT workbook (DM4.3) is applied to timesheet lines.
 - Run Payroll only uses **APPROVED** timesheets. Payable OT is `timesheet_lines.overtimeHours` / Bandai `approvedBuckets`, not raw attendance.
-- Live: Jun 26GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Jul 10 has 725 people / 15,239 hrs payable line OT (workbook path). Current Aug 11GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“26 has 0 line OT. OVERTIME request type is unused in this clone.
+- Live: Jun 26GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œJul 10 has 725 people / 15,239 hrs payable line OT (workbook path). Current Aug 11GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ26 has 0 line OT. OVERTIME request type is unused in this clone.
 - Evidence: `.runtime/ot-audit/`.
 
 
 ## Latest Task Addendum - 2026-08-18 DMA open-horizon recurring
 
-- Task mode: data + import fix (DMA recurring) for Jul 11Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“25 tally.
+- Task mode: data + import fix (DMA recurring) for Jul 11ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ25 tally.
 - Request: fix DMA for recurring; amounts = latest Sheet2 Jul per employee.
 - Finding: expired period-scoped workbook DMA + no Jul COMP DMA rows ? app 0.
 - Done:
@@ -679,7 +687,7 @@ unHikvisionTimeSyncCore with the per-device route.
   2. Local repair from Jul Sheet2 (335 apply Jul; 2 missing emps).
   3. Re-tally: DMA fails **332?0**.
 - Evidence: `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`
-- Docs: canonical Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“14d + handoff.
+- Docs: canonical ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ14d + handoff.
 - **Local DB = testing only.** Brute/data fixes proved locally must be replayed on
   **VM DB later** (DMA, loans, WS-off, late/EO, prior DED, dailyRate, etc.).
 - Still open: Gross/absent reverse/late/TR; VM data replay.
@@ -688,11 +696,11 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-18 document recurring DED / Amount vs Payment
 
 - Task mode: docs / truth-sync.
-- Documented in canonical Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“14c + WWG report:
+- Documented in canonical ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ14c + WWG report:
   past deduction mass uploads as primary recurring source;
   Payment (this cutoff) vs Amount (still owed);
   multi-cutoff horizon; Jul re-tally after loan fix; operator FAQ.
-- Paths: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“14c,
+- Paths: `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md` ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ14c,
   `.wwg/reports/bnpi-recurring-deduction-mass-loans-20260818.md`.
 
 
@@ -706,7 +714,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-08-17 multi-cutoff loans + prior DED mass
 
-- Task mode: data + engine fix (loan horizon) for Jul 11Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“25 deduction tally.
+- Task mode: data + engine fix (loan horizon) for Jul 11ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ25 deduction tally.
 - Request: use prior deduction mass (recurring) to improve Jul tally.
 - Finding: Jul cut mass incomplete; main blocker was short `endDate` on loans.
 - Done:
@@ -718,24 +726,24 @@ unHikvisionTimeSyncCore with the per-device route.
 - Evidence: `.runtime/prior-deduction-recur-20260817/`,
   `.runtime/tally-after-loan-20260818/`.
 - Still open: Gross/absent/late/DMA; TOTAL DEDN package beyond loans.
-- Docs: canonical Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“14c (2026-08-18).
+- Docs: canonical ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ14c (2026-08-18).
 
 
 ## Latest Task Addendum - 2026-08-17 FILE_DUAL Basic Path A
 
 - Task mode: engine fix (FILE_DUAL Basic) + local proof.
 - Request: proceed with Path A Basic recommendation
-  (`basicPay = paidDays Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ dailyRate`, no Absent double-count on Path A).
+  (`basicPay = paidDays ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ dailyRate`, no Absent double-count on Path A).
 - Implementation:
-  1. `resolveBandaiRegisterBasicPay` Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Path A paidDaysÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“dailyRate; Path B periodBasic.
+  1. `resolveBandaiRegisterBasicPay` ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Path A paidDaysÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œdailyRate; Path B periodBasic.
   2. Full-day Absent-Amt suppressed when Path A (`suppressFullDayAbsentDeduction`).
   3. Register uses computed `basicPay` + Path A paid regular days (not non-REST line count).
   4. Wired in generate + preview paths in `payroll-period.helper.ts`.
-- Proof (local clone `5433`, period Jun 26Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Jul 10): basicPay **481?1**, absent **603?222**,
+- Proof (local clone `5433`, period Jun 26ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œJul 10): basicPay **481?1**, absent **603?222**,
   numberOfDays **818?263**; OT still 1; Gross/TR still fleet-unmatched.
 - Evidence: `.runtime/full-tally-jul11-25-after-basic-path-a-20260817/`
 - Tests: 11 green (basic 5 + OT dual 6).
-- Next residual: absent residual, DMA, late, loans Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ not Basic formula.
+- Next residual: absent residual, DMA, late, loans ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ not Basic formula.
 
 
 ## Latest Task Addendum - 2026-08-17 Same table + Late/UT/Hours columns
@@ -760,7 +768,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Zen Andrei `00010` / device 10 is a real DIRECT employee with `REGULAR_14DAY_ROTATION`.
 - Was excluded by (1) `employmentTerminationDate=1970-01-01` treated as terminated, (2) missing `cycleAnchorDate` so Mon 8/17 mapped to rotation day 6 OFF.
 - Fix: ignore non-final + year<=1971 termination; week-align 14-day templates when anchor is missing (same as assign path).
-- Live after fix: Zen `inScheduledToday=true`; scheduled count 853GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“866.
+- Live after fix: Zen `inScheduledToday=true`; scheduled count 853GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ866.
 - Tests: schedule + employee-schedule + obligation 27 passing.
 
 
@@ -768,10 +776,10 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator: 0 clock-ins but UI showed **76 / 1706** not clocked in. 1700+ employees are scheduled.
 - Cause: utilization denominator is `Employee.embeddedSchedule` (1706); not-clocked-in still counted leftover AttendanceObligation rows (76).
-- Fix: `notClockedIn = scheduled GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ clockedIn GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ absent` on the same 1706. Zero punches GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ 1706 / 1706.
+- Fix: `notClockedIn = scheduled GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ clockedIn GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ absent` on the same 1706. Zero punches GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ 1706 / 1706.
 - API overwrites `totalNotClockedIn` from `attendance-schedule-utilization`. UI derives the same if API is stale.
 - Table: `MISSING_CLOCK_IN` / `NOT_CLOCKED_IN` merges virtual scheduled rows so the list matches the card, not 76 leftover obligation rows.
-- Also: 1706 was Mon+Tue (UTC 23:59 spilling into Manila 8/18). Today is one calendar day (~853 scheduled, 0 punches GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ 853 not clocked in).
+- Also: 1706 was Mon+Tue (UTC 23:59 spilling into Manila 8/18). Today is one calendar day (~853 scheduled, 0 punches GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ 853 not clocked in).
 - Tests: schedule helper + attendance-utilization display.
 
 
@@ -780,7 +788,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Operator: after LATE appeared, also want ON TIME/LATE, undertime on clock-out, and total hours that day.
 - Indicators: LATE / ON TIME / GRACE on clock-in; UT on early clock-out. New Hours column = worked time.
 - API arrival now fills earlyOutHours / undertimeHours / hoursWorked when timeOut exists.
-- Example: Zen 1:40 PMGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“2:55 PM vs 08:00GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“17:00 GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ LATE + UT + Hours 1h 15m.
+- Example: Zen 1:40 PMGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ2:55 PM vs 08:00GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ17:00 GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ LATE + UT + Hours 1h 15m.
 
 
 ## Latest Task Addendum - 2026-08-17 Clock-in Indicators LATE / ON TIME
@@ -793,8 +801,8 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-08-17 Zen Monday is a work day
 
-- Operator: Rest Day should not sit in GÃ¢â€¢Å¸ÃƒÂºscheduled to workGÃ¢â€¢Å¸Ãƒâ€˜; update Zen today; clock showed 5:40 AM.
-- DB: Regular Day override 2026-08-17 + cycleAnchorDate this Monday; obligation REST_DAY GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ INCOMPLETE with punch.
+- Operator: Rest Day should not sit in GÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã‚Âºscheduled to workGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ; update Zen today; clock showed 5:40 AM.
+- DB: Regular Day override 2026-08-17 + cycleAnchorDate this Monday; obligation REST_DAY GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ INCOMPLETE with punch.
 - Clock: table used browser TZ; 05:40Z is 1:40 PM Manila. `renderClockValue` / `format12HourTime` now use Asia/Manila.
 - Rest days stay out of the 866; Zen is a work-day clock-in.
 
@@ -817,7 +825,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator: when making UI, full use of icons and button labels.
 - Details modal: outline buttons with UserRound + full labels; fact rows icon+label; Raw payload Braces + label.
-- Doctrine: Shrink GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ strip icons. SHE + DESIGN.md + grok rule 06.
+- Doctrine: Shrink GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ strip icons. SHE + DESIGN.md + grok rule 06.
 
 
 ## Latest Task Addendum - 2026-08-17 Device Event other-info TAP display
@@ -834,9 +842,9 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-17 Dup updates documented + live skip proof
 
 - Operator: confirm we are on the updates; document them.
-- Local `:3001` **is** on `935963a` skip: smoke `GROK-DOC-M2-38-20260817` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ `acs_exception_not_punch`, DB 0 rows.
+- Local `:3001` **is** on `935963a` skip: smoke `GROK-DOC-M2-38-20260817` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `acs_exception_not_punch`, DB 0 rows.
 - Git: `a801c4b` + `935963a` (+ later `a6dce32` TAP display).
-- CONFLICTING: live B `2/38` serial 8564 still saved `02:51:12Z` after this API start GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ possible second writer. Not pushed this pass.
+- CONFLICTING: live B `2/38` serial 8564 still saved `02:51:12Z` after this API start GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ possible second writer. Not pushed this pass.
 - Canonical report: `.wwg/reports/device-events-dup-20260817.md`.
 
 
@@ -849,7 +857,7 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-17 Document all code changes
 
 - Operator: make sure all code changes are well documented.
-- Canonical: `.wwg/reports/zen-payroll-timesheet-code-20260817.md` (this threadGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“s code + live DEV).
+- Canonical: `.wwg/reports/zen-payroll-timesheet-code-20260817.md` (this threadGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œs code + live DEV).
 - Math (Manila): `.wwg/reports/zen-00010-payroll-preview-math-20260817.md`.
 - Encoding pack already documented + pushed `7b5030b`.
 - Operator then asked to push every leftover change. Pack: timesheet `sync-obligation-lines` + `ensure-period-drafts` `employeeIds` + WWG reports.
@@ -901,7 +909,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: bug fix + document (no push).
 - Operator deep link `page=116&action=view-event&id=cmsr688py002xvxwwttxhdsal`
-  opened **Device event details** empty (first GÃ¢â€¢Å¸ÃƒÂºnot on this pageGÃ¢â€¢Å¸Ãƒâ€˜, then GÃ¢â€¢Å¸ÃƒÂºnot foundGÃ¢â€¢Å¸Ãƒâ€˜).
+  opened **Device event details** empty (first GÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã‚Âºnot on this pageGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ, then GÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã‚Âºnot foundGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ).
 - Cause: modal used current table page only; `page` goes stale; then local API `:3001` was down while Vite `:5175` still showed cached rows.
 - Fix: `GET /api/device/events/item/:eventId` + `useDeviceEvent`; modal no longer requires the row on the page.
 - Spec: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
@@ -979,7 +987,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Next only if operator asks: wire C++ `byAttendanceStatus` and/or honor panel status in pairing. Do not commit this pack unless asked.
 
 
-## Latest Task Addendum - 2026-08-13 Device 5 reverse on host WiGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Fi
+## Latest Task Addendum - 2026-08-13 Device 5 reverse on host WiGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œFi
 
 - Task mode: live runtime + truth sync (no code feature).
 - Operator: Windows PC `192.168.1.116`, biometric `192.168.1.136` (Device 5).
@@ -994,7 +1002,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: investigation. No C++. Not pushed.
 - Listener setup **does** use vendor HCNetSDK 6.1.9.48 on the VM.
-- That header **has** `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` (0GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“6 = panel six).
+- That header **has** `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` (0GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ6 = panel six).
 - C++ already opens that struct for `byEmployeeNo` and does not copy the status byte.
 - HRIS setup does not configure panel T&A mode.
 - Evidence: `.runtime/hikvision-status-audit-20260813/16-vendor-sdk-setup-investigation.md`.
@@ -1028,7 +1036,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: product UX (Run Payroll Preview).
 - Request: loading/confirm may stay in modal; after processing, results must
   render on the page (not in the modal), e.g.
-  `/hr/run-payroll?Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“&action=preview-payroll&previewStep=results&page=1&limit=10`.
+  `/hr/run-payroll?ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ&action=preview-payroll&previewStep=results&page=1&limit=10`.
 - Implementation:
   1. Modal open only for `previewStep` confirm | progress.
   2. `previewStep=results` replaces Run Payroll main body with page table
@@ -1038,7 +1046,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts`.
 
 
-## Latest Task Addendum - 2026-08-11 BNPI Jun 26Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Jul 10 full payroll tally log
+## Latest Task Addendum - 2026-08-11 BNPI Jun 26ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œJul 10 full payroll tally log
 
 - Task mode: investigation / evidence log (no fleet money repair claimed).
 - Compared live preview vs target Sheet2 for period `PP-20260626-20260711`.
@@ -1051,11 +1059,11 @@ unHikvisionTimeSyncCore with the per-device route.
 - Next if requested: implement day-count mapping and/or WS line rebuild + re-run bulk compare.
 
 
-## Latest Task Addendum - 2026-08-11 BNPI Jun 26GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Jul 10 full payroll tally log
+## Latest Task Addendum - 2026-08-11 BNPI Jun 26GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œJul 10 full payroll tally log
 
 - Task mode: investigation / evidence log (no fleet money repair claimed).
 - Compared live preview vs target Sheet2 for period `PP-20260626-20260711`.
-- **Result:** 4 exact tallied; Alexa near (GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“0.77); Rio and most employees not tallied.
+- **Result:** 4 exact tallied; Alexa near (GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ0.77); Rio and most employees not tallied.
 - **Day-count 818/818 fail:** code definition (non-rest lines vs paid regularDays buckets),
   not universal biometrics failure. Fixing day-count alone will not tally payroll.
 - Master log: `.runtime/full-tally-20260811/FINDINGS.md`
@@ -1075,7 +1083,7 @@ unHikvisionTimeSyncCore with the per-device route.
   2. `EmployeeBenefitForm` keeps local picker open state (URL is mirror, not sole gate).
   3. `Modal` portals to `document.body` at `z-[100]` so layout overflow cannot clip it.
   4. Employee picker uses **server-side search** + structural filters; shows
-     GÃ¢â€¢Å¸ÃƒÂºShowing N of M GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ search to find othersGÃ¢â€¢Å¸Ãƒâ€˜ (was silent first-1000 client-only).
+     GÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã‚ÂºShowing N of M GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ search to find othersGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ (was silent first-1000 client-only).
 - Proof: `.runtime/benefits-enroll-fix-20260807-121034/report.json` pass.
 - Tests: `EmployeeMultiSelectModal.test.tsx` green.
 
@@ -1087,16 +1095,16 @@ unHikvisionTimeSyncCore with the per-device route.
   with clear preview-only differentiation, then show computed list + details.
 - Implementation:
   1. **Preview Payroll** opens a modal (no full-page swap of Run Payroll body).
-  2. Steps: **Start Payroll Preview** (confirm) GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ **Preview running** GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ **Payroll Preview** results.
-  3. Dry-run only via `GET GÃ¢â€¢Å¸Ã‚Â¬/generate-timesheet/preview?calculateRows=true` (API param added).
+  2. Steps: **Start Payroll Preview** (confirm) GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ **Preview running** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ **Payroll Preview** results.
+  3. Dry-run only via `GET GÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸Ãƒâ€šÃ‚Â¬/generate-timesheet/preview?calculateRows=true` (API param added).
   4. Results table: Basic / Gross / Deduct. / Net + **View Details**.
   5. Detail modal: **Payroll summary (Preview)** + PREVIEW banner; no payslips.
-  6. Footer: Close | optional **Start real payrollGÃ¢â€¢Å¸Ã‚Â¬**
+  6. Footer: Close | optional **Start real payrollGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸Ãƒâ€šÃ‚Â¬**
 - Code: `run-payroll-template.tsx`, `payroll-preview-modal.ts`, payrollperiod controller
   `calculateRows`, service/hook param pass-through.
 - Tests: `payroll-preview-modal.test.ts` (4) green.
 - Live API: period `PP-20260726-20260811` reachable; local DB had 0 approved TS in
-  sample so amounts empty GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ endpoint accepts `calculateRows` without period mutation.
+  sample so amounts empty GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ endpoint accepts `calculateRows` without period mutation.
 - Evidence: `.runtime/preview-payroll-modal-20260807-140641/`.
 
 
@@ -1109,7 +1117,7 @@ unHikvisionTimeSyncCore with the per-device route.
   that sample window (live API proof).
 - Fix: per-type API count via `countByBenefitTypeId` +
   `useEmployeeBenefitCountsByTypeIds`; drawer uses accurate total and shows
-  GÃ¢â€¢Å¸ÃƒÂºShowing N of MGÃ¢â€¢Å¸Ãƒâ€˜ when list is capped.
+  GÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã‚ÂºShowing N of MGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ when list is capped.
 - Tests: `employee-benefit-count.test.ts` green.
 - Live: MLA `pagination.total=831`.
 
@@ -1124,8 +1132,8 @@ unHikvisionTimeSyncCore with the per-device route.
   2. `AdminTablePageShell` (or equivalent flex height chain)
   3. `DataTable` `containedScroll`
 - Code:
-  - `benefits-management-template.tsx` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ shell + `containedScroll`
-  - `unified-layout.tsx` + `unified-viewport-fill.ts` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ HR viewport-fill mode
+  - `benefits-management-template.tsx` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ shell + `containedScroll`
+  - `unified-layout.tsx` + `unified-viewport-fill.ts` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ HR viewport-fill mode
   - `DESIGN.md`, `.grok/rules/05-datatable-full-height.md`, terminology
 - Tests: `unified-viewport-fill.test.ts`
 
@@ -1134,7 +1142,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: performance + standard.
 - Enrolled column must not hydrate documents: `document=false&pagination=false&count=true`
-  GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ payload `{ count }` only.
+  GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ payload `{ count }` only.
 - Encoded in DESIGN.md, `.grok/rules/05-datatable-full-height.md` (section B),
   terminology, DataTable/AdminTablePageShell docs.
 - Service: `countByBenefitTypeId` / `countByBenefitTypeIds`.
@@ -1158,19 +1166,19 @@ unHikvisionTimeSyncCore with the per-device route.
 - Symptom: on `/hr/run-payroll?periodView=past` for a COMPLETED period, the
   **View Payroll Report** control above Special Payroll looked missing.
 - Root cause: button used `bg-emerald-700` / `hover:bg-emerald-800`, which are
-  not present in the compiled Tailwind CSS for this app GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ transparent
+  not present in the compiled Tailwind CSS for this app GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ transparent
   background + white text = invisible. DOM still had the button.
-- Fix: `hris-app/.../run-payroll-template.tsx` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ use `bg-emerald-600
+- Fix: `hris-app/.../run-payroll-template.tsx` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ use `bg-emerald-600
   hover:bg-emerald-500` (proven to resolve) for View Payroll Report and current
   period month chip.
-- Proof: Playwright `.runtime/view-payroll-btn-*/after-fix.{png,json}` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“
+- Proof: Playwright `.runtime/view-payroll-btn-*/after-fix.{png,json}` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
   computed bg `oklch(...)` non-transparent; green button visible above Special
   Payroll.
 
 
-## Latest Task Addendum - 2026-08-05 Payroll tally: mass upload GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ sole money source
+## Latest Task Addendum - 2026-08-05 Payroll tally: mass upload GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ sole money source
 
-- Operator clarification GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Project Truth **CONFIRMED**.
+- Operator clarification GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Project Truth **CONFIRMED**.
 - Not all compensation/deduction comes from cutoff mass-upload files; recurring
   / standing enrollments apply when they resolve for the period.
 - Agents must classify each line: `mass_upload` | `recurring_enrollment` |
@@ -1185,9 +1193,9 @@ unHikvisionTimeSyncCore with the per-device route.
 - Finish line: Run Payroll cannot stack open-horizon + period-scoped same COMCODE;
   re-import of period-scoped mass upload supersedes open-horizon peers.
 - Code:
-  - `hris-api/helper/payroll-benefit-source.helper.ts` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“
+  - `hris-api/helper/payroll-benefit-source.helper.ts` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
     `preferPeriodScopedPayrollBenefitSources` in `resolvePayrollBenefitSources`
-  - `hris-api/app/migration/bnpi-mass-upload-import.service.ts` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“
+  - `hris-api/app/migration/bnpi-mass-upload-import.service.ts` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
     `supersedeOpenHorizonBenefitsForPeriodScoped` after compensation/deduction benefit write
 - Tests: payroll-benefit-source + mass-upload summary specs green (stack + supersede cases).
 - Operator note: existing dirty open-horizon rows still need one regenerate (resolve now
@@ -1204,7 +1212,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Persist `mass_upload_import_logs` (local clone applied on `127.0.0.1:5433`)
   - `GET /api/migration/dm3/mass-upload-imports` list/detail/CSV
   - UI: keep modal open with result tables; history table on DM3 page
-- Local runtime: `npm run dev:local` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ `.env.local-clone` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ container
+- Local runtime: `npm run dev:local` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `.env.local-clone` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ container
   `hris-local-dev-clone` port `5433` (not shared VM `15433`/`55435`).
 - Proof: import of 2 failing rows returned per-row messages + `importLogId`;
   history listed log linked to run `cmryj0vpm00huvgaks2t2js57`.
@@ -1216,8 +1224,8 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: product feature (dedicated Special Payroll, separate from regular).
 - Plan: `docs/00-product/AGENT-PROMPT-special-payroll-one-time.md` (`PLAN_ACCEPTED`).
-- Finish line: dedicated `SpecialPayrollRun` / `Line` / `Payslip` records; preview GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“
-  create GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ release/cancel; manual + `.xlsx` mass upload; separate employee payslips
+- Finish line: dedicated `SpecialPayrollRun` / `Line` / `Payslip` records; preview GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
+  create GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ release/cancel; manual + `.xlsx` mass upload; separate employee payslips
   with Special Payroll badge; regular payroll generation unchanged.
 - Code surfaces:
   - API: `hris-api/app/specialPayroll/*`, helper/zod, additive SQL migration
@@ -1240,7 +1248,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - The existing import path now surfaces conflicts first, rejects conflict execution, and cannot hide a requested face failure behind fingerprint success.
 - Evidence: `.runtime/sdk-export-import-20260728-152250/`; report: `.wwg/reports/sdk-device-user-export-import-20260728.md`.
 
-# 2026-07-28 GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Hikvision UserInfo pagination concurrency proof
+# 2026-07-28 GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Hikvision UserInfo pagination concurrency proof
 
 - Read-only Main B benchmark proved one stable `searchID` can serve bounded
   concurrent `UserInfo/Search` positions without losing snapshot consistency.
@@ -1271,7 +1279,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 
 
-# 2026-07-28 GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Five-device raw SDK package completion
+# 2026-07-28 GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Five-device raw SDK package completion
 
 - Status: `PACKAGES_AND_PREVIEWS_FULFILLED_PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARGET_DEVICE`.
 - B/A/F/D/E each have two agreeing final 874-user inventories with 825
@@ -1286,7 +1294,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Full evidence/report:
   `.wwg/reports/sdk-device-user-export-import-20260728.md`.
 
-# 2026-07-28 Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Five-device raw SDK package completion
+# 2026-07-28 ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Five-device raw SDK package completion
 
 - Status: `PACKAGES_AND_PREVIEWS_FULFILLED_PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARGET_DEVICE`.
 - B/A/F/D/E each have two agreeing final 874-user inventories with 825
@@ -1301,7 +1309,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Full evidence/report:
   `.wwg/reports/sdk-device-user-export-import-20260728.md`.
 
-# 2026-07-28 Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Hikvision UserInfo pagination concurrency proof
+# 2026-07-28 ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Hikvision UserInfo pagination concurrency proof
 
 - Read-only Main B benchmark proved one stable `searchID` can serve bounded
   concurrent `UserInfo/Search` positions without losing snapshot consistency.
@@ -1356,13 +1364,13 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator hypothesis: overtime upload can be removed because OT is already in
   biometrics raw data.
-- **Verdict: FALSE GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ do not remove DM4 overtime upload.**
+- **Verdict: FALSE GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ do not remove DM4 overtime upload.**
 - Evidence:
   - Biometrics `Biometrics Data_Jun 26 - Jul 10.xlsx` = punch ledger only
     (`No.`, `Date/Time`; 23,255 rows, 877 device nos).
   - Approved OT `2rptOvertimeDetails - June 26 - July 10, 2026.xlsx` =
     OVERTIME/ND/HOLIDAY WORK DETAIL REPORT with Reg OTHrs / ND / Spcl / RHol /
-    RD buckets (DM4.3 GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ effective Timesheetline).
+    RD buckets (DM4.3 GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ effective Timesheetline).
   - Source-trace guardrail: raw biometrics = attendance evidence, not payroll
     OT truth (`validate-bandai-payroll-source-trace.ts`).
 - Docs/UI truth sync (kept OT upload): `docs/dm-migration-workflow.md`,
@@ -1377,7 +1385,7 @@ unHikvisionTimeSyncCore with the per-device route.
   **Upload employee databank** that create/updates employees from BNPI
   Manpower Databank `.xlsx` without requiring a full DM3 re-upload.
 - Behavior: auto-pick latest day sheet (or sheet named Manpower Databank);
-  match `ID No.` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ `EMP_ID`; create missing + update existing; preserve
+  match `ID No.` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `EMP_ID`; create missing + update existing; preserve
   `basicSalary` / email / statutory IDs; no delete of missing IDs.
 - Code: helper/service/API + DM3 UI button/modal; docs in
   `docs/dm-migration-workflow.md`.
@@ -1402,9 +1410,9 @@ unHikvisionTimeSyncCore with the per-device route.
 - Companions:
   - `docs/00-product/AGENT-PROMPT-overnight-multiagent-gap-loop-with-execution-preview.md`
   - `docs/00-product/AGENT-PROMPT-overnight-five-device-gap-convergence-stable-job.md`
-- Treat UI GÃ¢â€¢Å¸ÃƒÂºExporting source credentialGÃ¢â€¢Å¸Ãƒâ€˜ / owner scan incomplete as **agent-owned
-  export/gate code work**, not physical enroll. PreviewGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“dryRunGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“execute match.
-- Live progress: residual 2813GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“~19xxGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“22xx; unique face 690GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“~48xGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“51x; faceReady
+- Treat UI GÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã‚ÂºExporting source credentialGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ / owner scan incomplete as **agent-owned
+  export/gate code work**, not physical enroll. PreviewGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œdryRunGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œexecute match.
+- Live progress: residual 2813GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ~19xxGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ22xx; unique face 690GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ~48xGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ51x; faceReady
   burning on A/D/E/F; fpReady still 0 until unlock. Fix budget burn + unique-person
   selection (`39d5a7d`).
 - Evidence: `.runtime/overnight-gap-loop-20260725-075850/`.
@@ -1437,7 +1445,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: authorized durable credential recovery writes on five Main
   Entrance devices (A/B/D/E/F). Exclude Main C and TEST A/B.
-- Proven session: ~429 face + ~12 FP verified mostly **GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ B**; residual non-B
+- Proven session: ~429 face + ~12 FP verified mostly **GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ B**; residual non-B
   blocked by face attestation + FP owner scan. Grafana/Loki used.
 - Evidence:
   `.runtime/overnight-biometric-convergence-20260724-230000/STATUS.md`.
@@ -1486,7 +1494,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Accepted live scope: Main Entrance B/A/D/E/F. Main Entrance C and TEST A/B are excluded from completion claims.
 - Fresh physical records increased from 3,583 to 4,044 while the unique union stayed 865. Final peer gaps are 281, all on 205 unresolved-conflict IDs; zero conflict-free rows remain.
 - No readable raw fingerprint or face custody existed. Count-only enrollment remains explicitly unresolved and was not fabricated or called synced.
-- Code repairs through `fb8750e` are pushed to `develop` and deployed to the DEV VM runtime. Runtime DB/API/app/AGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“F tunnels and focused API/UI/browser validation are green at close.
+- Code repairs through `fb8750e` are pushed to `develop` and deployed to the DEV VM runtime. Runtime DB/API/app/AGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œF tunnels and focused API/UI/browser validation are green at close.
 - Remaining boundary requires new physical connectivity evidence for excluded devices or human conflict adjudication; automatic source guessing is prohibited.
 
 
@@ -1665,19 +1673,19 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: recoverable overnight loop for host-local `npm run dev` stack.
 - Job card: `docs/00-product/AGENT-PROMPT-overnight-local-dev-stack-recovery.md`
 - **Live snapshot at task open (re-probe; do not treat as done):**
-  - `3001` API **CLOSED** GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ cannot login (no API process).
-  - `5175` app **LISTEN** GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ frontend up alone does not equal working login.
-  - `55435` DEV DB forward **CLOSED** GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Prisma cannot reach K3s DEV Postgres.
-  - Hikvision tunnel ports `10080/10081/18000` **CLOSED** GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ local device health via tunnel map cannot be green.
-  - Host Wi-Fi `192.168.1.110`; `ping 10.184.37.19` **False** GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ use `ssh project-truth-hris` for DB/device tunnels, not direct LAN.
+  - `3001` API **CLOSED** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ cannot login (no API process).
+  - `5175` app **LISTEN** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ frontend up alone does not equal working login.
+  - `55435` DEV DB forward **CLOSED** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Prisma cannot reach K3s DEV Postgres.
+  - Hikvision tunnel ports `10080/10081/18000` **CLOSED** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ local device health via tunnel map cannot be green.
+  - Host Wi-Fi `192.168.1.110`; `ping 10.184.37.19` **False** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ use `ssh project-truth-hris` for DB/device tunnels, not direct LAN.
 - **Why login fails (causal chain, evidence-backed):**
-  1. Login requires API on `:3001` + Prisma GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ `DATABASE_URL` `@127.0.0.1:55435`.
+  1. Login requires API on `:3001` + Prisma GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `DATABASE_URL` `@127.0.0.1:55435`.
   2. When `55435` is down, login returns 500 with `Can't reach database server at 127.0.0.1:55435` (seen in `.runtime/local-api-watch/latest.log`).
-  3. `/health` can still say healthy while DB is down GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ health alone is not acceptance.
+  3. `/health` can still say healthy while DB is down GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ health alone is not acceptance.
 - **Device health (from WWG handoff, mark STALE until re-proven):**
-  - Earlier same-day: Main Entrance AGÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“F online after six-device tunnel (`.runtime/device-a-f-reach-20260722-143906/`).
+  - Earlier same-day: Main Entrance AGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œF online after six-device tunnel (`.runtime/device-a-f-reach-20260722-143906/`).
   - TEST A/B separate boundary; not part of `.20-.25` tunnel map.
-  - Current host probe: tunnels down GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ local device health **NEEDS_CONFIRMATION** / expected offline until tunnels restored.
+  - Current host probe: tunnels down GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ local device health **NEEDS_CONFIRMATION** / expected offline until tunnels restored.
 - Finish line: EXIT GATE in overnight job card (DB + API health + login token + me + app + tunnel proof + device JSON + WWG stamp).
 - Evidence root: `.runtime/overnight-dev-stack-recovery-20260722-200655/`
 - Boundary: no merge completion claims; no inventing device online counts.
@@ -1925,9 +1933,9 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: Regression repair + workstation bootstrap (docs + scripts).
 - Problem: Remote Windows host could not complete `hris-api` `npm run dev` / login because LAN SSH to `10.184.37.19` is closed, K3s DEV ClusterIP `10.43.130.9:5432` refused Postgres, local `55435` tunnel half-died, and Hikvision reverse port `59443` was held by stale VM `sshd`.
 - Repo changes:
-  - `scripts/start-k8s-dev-db-access.ps1` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Postgres wire check + compose DEV `127.0.0.1:15433` fallback for SSH `-L` to local `55435`.
-  - `scripts/start-host-hikvision-vm-ssh-bridge.ps1` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ clear reverse ports with `fuser -k`.
-  - `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ operator log.
+  - `scripts/start-k8s-dev-db-access.ps1` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Postgres wire check + compose DEV `127.0.0.1:15433` fallback for SSH `-L` to local `55435`.
+  - `scripts/start-host-hikvision-vm-ssh-bridge.ps1` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ clear reverse ports with `fuser -k`.
+  - `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ operator log.
 - Workstation-only (not git): `node-health-appliance_ed25519`, SSH config `project-truth-hris`, cloudflared install, VM `authorized_keys` public key append.
 - Operator recipe for API-only local dev: `HIKVISION_VM_BRIDGE_ENABLED=false`, `HRIS_SKIP_DEVICE_LIVE_PATH=true`, `npm.cmd run dev`; success = `Server running at http://localhost:3001`.
 - Evidence: `.runtime/local-dev-cf-ssh-db-tunnel-20260720/`.
@@ -2010,9 +2018,9 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-07-20 `npm run dev:local` one-shot local clone
 
-- Task mode: Dev ergonomics GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ one command for isolated local API.
-- `npm run dev` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ unchanged shared DEV tunnel path.
-- `npm run dev:local` GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ single script `scripts/run-dev-local.cjs`: ensure env file, start Docker clone container, predev skips, API watch on `5433`.
+- Task mode: Dev ergonomics GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ one command for isolated local API.
+- `npm run dev` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ unchanged shared DEV tunnel path.
+- `npm run dev:local` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ single script `scripts/run-dev-local.cjs`: ensure env file, start Docker clone container, predev skips, API watch on `5433`.
 - Boundary: empty new container still needs prior dump/restore for real data.
 
 
@@ -2027,7 +2035,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Local recovery setting `HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY=2` removed transient `Unauthorized` failures; job `834d6273-74d8-416f-aecf-8fd92430a062` captured `29` more and reduced fingerprint missing to `91`.
   - Final preview: source users `314`, HRIS DeviceUsers `394`, fingerprint slots `718`, fingerprint raw `627`, fingerprint missing `91`; face reported `356`, face raw `311`, face missing `45`.
 - Remaining boundary: per-row sample repair for users `1008`, `1076`, and `1143` returned HTTP `422` with exact bodies `no_fingerprint_data_from_device` and `no_face_on_device`. These rows remain `missing_raw_blob`; no raw blobs were fabricated.
-- UI proof: Sync review modal shows raw custody counts (`718 enrolled +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-+ 627 raw +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-+ 91 missing_raw_blob`, `356 enrolled +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-+ 311 raw +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-+ 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
+- UI proof: Sync review modal shows raw custody counts (`718 enrolled +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-+ 627 raw +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-+ 91 missing_raw_blob`, `356 enrolled +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-+ 311 raw +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-+ 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
 - Evidence: `.runtime/test-a-raw-repair-loop-20260720-103434/`.
 
 
@@ -2065,7 +2073,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: Biometric persistence regression repair plus operator-journey hardening.
 - Root cause: the C++ listener successfully read and posted the raw template, and the enrollment DeviceEvent retained it, but a slower UserInfo enrichment could overwrite DeviceUser with metadata read before the callback completed.
 - Repair: DeviceUser UserInfo enrichment now uses an `updatedAt` optimistic merge/retry and preserves current raw fingerprint/face custody across a concurrent callback write.
-- User journey: the Device Users details modal refetches the saved HRIS row and shows `Checking saved templates+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“` during that read; it does not show `Not captured yet` until absence is confirmed.
+- User journey: the Device Users details modal refetches the saved HRIS row and shows `Checking saved templates+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ` during that read; it does not show `Not captured yet` until absence is confirmed.
 - Live TEST A proof: exact event `cmrrwqkpc009l7zaogna1hbkd` for person `18` replayed successfully; after 20 seconds DeviceUser retained one 684-character raw template from `cpp_sdk_callback_raw`. Users `15` and `18` both rendered `1 stored` in headless browser proof.
 - Verification: 22 focused backend tests, 14 C++ source-contract tests, and 1 modal Playwright regression passed. The current C++ source also built/linked against the VM HCNetSDK in an isolated output path.
 - Evidence: `.runtime/fingerprint-enroll-raw-race-20260719/summary.md` and screenshots in the same directory.
@@ -2160,7 +2168,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Evidence: `.runtime/create-enroll-flow-proof-20260719-181730/summary.json`
 - C++: full inventory (319 users), delayed identity re-POST, ISAPI FP fallback, arm baseline seed.
 - Live G6 quote: `callback_identity_inventory_delta employeeNo=99182448` then `post_result employeeNo=99182448` with `identitySource=inventory_delta`.
-- G3+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸ÃƒÂºG5: create/enroll plain DeviceUser+events + raw 684-char template (API). Device synthetic FP re-read may still show numOfFP=0 (labeled donor blob path).
+- G3+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã‚ÂºG5: create/enroll plain DeviceUser+events + raw 684-char template (API). Device synthetic FP re-read may still show numOfFP=0 (labeled donor blob path).
 - Recommendation capture: Device FP write stickiness after FingerPrintDownload.
 
 
@@ -2219,9 +2227,9 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-07-19 Raw fingerprint template on DeviceUser (not AES)
 
 - Task mode: Bug fix / product expectation correction + live proof.
-- Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ do **not** default to encrypted-only custody.
+- Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ do **not** default to encrypted-only custody.
 - Implemented:
-  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
+  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
   - `enrichEnrollmentLifecycleEvent` schedules raw capture after FINGERPRINT_ENROLLED / USER_CREATED / USER_UPDATED when plain person id is known.
   - DeviceEvent gets pointer/status only (`rawFingerprintCustody`, `raw_on_device_user`); full blobs stay on DeviceUser.
   - Device user details UI shows raw present + first 120 chars preview.
@@ -2236,7 +2244,7 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-07-19 C++ plain-id enrich + raw templates + anti-assumption WWG
 
 - Task mode: Regression repair + governance + C++ wire-path harden.
-- Operator pushback: stop assuming first socket always has plain id; **trace** C++ ACS +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ POST +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ socket. Proven: major=3 often empty `dwEmployeeNo`; major=5 taps often plain; logSearch often opaque.
+- Operator pushback: stop assuming first socket always has plain id; **trace** C++ ACS +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ POST +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ socket. Proven: major=3 often empty `dwEmployeeNo`; major=5 taps often plain; logSearch often opaque.
 - Governance:
   - `.grok/rules/02-sdk-callback-wire-truth.md` (always-on)
   - `AGENTS.md` hard ban on inventing callback person id
@@ -2245,8 +2253,8 @@ unHikvisionTimeSyncCore with the per-device route.
   - `enrich_hris_job_before_post` before POST: inventory delta multipass when ACS person empty; attach raw FP templates (+ face when card known)
   - Callback JSON: `identitySource`, `fingerprints[]` raw base64, `faceTemplate`/`facePicture`, `fingerprintCount`
 - HRIS:
-  - Accept callback fingerprints/face +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ DeviceUser raw store immediately
-  - Socket: plain-only `employeeNo`; include deviceUser; UI +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Resolving person id+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ when empty/resolving
+  - Accept callback fingerprints/face +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ DeviceUser raw store immediately
+  - Socket: plain-only `employeeNo`; include deviceUser; UI +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œResolving person id+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ when empty/resolving
 - Rebuild/redeploy listener binary on VM still required for C++ path to run live.
 - Recommendation capture: No new recommendations were identified.
 
@@ -2258,7 +2266,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Proven green: host TCP/API, reverse :59000/:59443/:53001, rebuilt binary with enrich, listener armed/receiving, synthetic create `99180240` on device, DeviceUser raw template 684 chars (not AES), plain employeeNo on USER_CREATED/FINGERPRINT_ENROLLED ledger rows, API users returns raw.
 - ACS live truth: major=3 still often `employeeNo=""`; enrich ran; inventory delta did not always attach plain in-window (`no_new_plain` / baseline). Do not claim ACS first packet always plain.
 - Device FP write returned OK but `numOfFP` stayed 0 on re-read (3 retries); raw custody used donor-15 template path with explicit source label.
-- Recommendation capture: Investigate C++ inventory pagination / delta when pageEmployees stuck at 30; improve FingerPrintDownload+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Upload re-read for synthetic write.
+- Recommendation capture: Investigate C++ inventory pagination / delta when pageEmployees stuck at 30; improve FingerPrintDownload+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œUpload re-read for synthetic write.
 
 
 ## Latest Task Addendum - 2026-07-19 Create+Enroll raw blob ledger journey
@@ -2273,26 +2281,26 @@ unHikvisionTimeSyncCore with the per-device route.
   - Capture API works with `req.organizationId`
   - UI: always refetch DeviceUser on details open; raw FP + face sections
 - Auto path: schedule raw FP (+ face when present) after plain identity; enrich preserves raw
-- Recommendation: Physical panel unique FP enroll for new person sticky (Proposed +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ prior REC).
+- Recommendation: Physical panel unique FP enroll for new person sticky (Proposed +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ prior REC).
 
 
 ## Latest Task Addendum - 2026-07-19 SDK enrollment plain person id on callback
 
 - Task mode: Bug fix / runtime identity path + unit proof.
-- Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ without treating multipass logSearch as the only path.
+- Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ without treating multipass logSearch as the only path.
 - Clarified architecture (not a secret second poller inventing people):
-  - Live path is still the HCNetSDK ACS alarm callback +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ `/api/hikvision/callback`.
+  - Live path is still the HCNetSDK ACS alarm callback +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `/api/hikvision/callback`.
   - When `dwEmployeeNo` / plain `employeeNo` is present on that callback, HRIS now runs the fast identity path.
-  - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
+  - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
 - Implemented:
   - `applyFastEnrollmentIdentityOnSdkCallback` / `isHikvisionEnrollmentLifecycleCallback` in `hris-api/helper/device-person-token.helper.ts`.
   - Immediate `DeviceUser` upsert (stub + HRIS link via `deviceEmpId` / `employeeId` code match), `DeviceEvent` MATCHED/UNMATCHED with plain `employeeNo`, first `device-event:saved` socket.
   - Background `enrichEnrollmentLifecycleEvent` still pulls full UserInfo into `DeviceUser.rawPayload` / `vendorMetadata` and re-sockets.
   - `callback.controller.ts` non-attendance enrollment path uses the fast path and no longer forces `IGNORED` over identity when plain id is applied.
 - Proof:
-  - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ 17/17 pass.
+  - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ 17/17 pass.
 - Boundary:
-  - Plain device person id +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ã‚Âª-Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
+  - Plain device person id +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸Ãƒâ€šÃ‚Âª-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
   - Empty-person major=3 signals still need logSearch / inventory delta for plain id; we do not invent person numbers.
 - Recommendation capture: No new recommendations were identified.
 
@@ -2381,7 +2389,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Legacy fallback still preferred historical `192.168.254.189`.
   - Resolver ranked DB reverse rows but did not probe which candidate the **host** can reach right now.
 - Implemented:
-  - `resolve-hikvision-vm-bridge-targets.cjs` now probes host TCP (sdk/http/443/80, ~300+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸ÃƒÂº400ms) and ranks `reverseBridge + hostReachable` first. Source becomes `db-reverse-bridge-host-reachable` when LIVE.
+  - `resolve-hikvision-vm-bridge-targets.cjs` now probes host TCP (sdk/http/443/80, ~300+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã‚Âº400ms) and ranks `reverseBridge + hostReachable` first. Source becomes `db-reverse-bridge-host-reachable` when LIVE.
   - Fallback order when DB is down: `192.168.254.102` then `192.168.254.189`.
   - `ensure-hikvision-vm-bridge.cjs` fast-paths only when **local bridge matches resolved IPs AND VM :59000 is open**; otherwise stop + rebind.
   - `ensure-device-live-path.ps1` prefers host-reachable targets from the same resolver.
@@ -2398,8 +2406,8 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: Docs / architecture sync.
 - Goal: Capture operator vision for panel/SDK user create + enroll identity, verify architecture correctness, document exact flows, and provide diagrams so agents stay synced to the spec.
 - Written:
-  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ full spec, identity planes, Flow A/B/C/D, mermaid sequence, acceptance, gaps.
-  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ WWG architecture twin.
+  - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ full spec, identity planes, Flow A/B/C/D, mermaid sequence, acceptance, gaps.
+  - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ WWG architecture twin.
   - Pointer in `docs/HIKVISION_RUNTIME_TRUTH.md`.
 - Architecture verdict: Operator vision is correct; implementation is aligned with the happy path and panel-opaque path, with explicit boundary that plain person id may trail the first socket by a few seconds when major=3 has empty `dwEmployeeNo`.
 - Recommendation capture: No new recommendations were identified.
@@ -2435,7 +2443,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Truth sync: Project Truth and Project Truth summary now state that processing device-user sync snapshots older than 30 minutes without progress evidence are stale and require a fresh admin-triggered run.
 - Recommendation capture: No new recommendations were identified.
 
-Status: IMPLEMENTED + PROVEN +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
+Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ Device admin UX clarity (friendly status, slim Sync logs, no VM primary jargon)
 
 
 ## Latest Task Addendum - 2026-07-16 Device admin UX clarity pass
@@ -2443,8 +2451,8 @@ Status: IMPLEMENTED + PROVEN +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢�
 - Task mode: Meaningful UX feature + contract tests + Playwright journey proof.
 - Goal: Device management / Device events / Sync logs / Sync users journey is admin-friendly, not engineer-verbose; loading is honest; Sync logs not repeated/noisy; no redundant filter columns; no primary VM jargon.
 - Implemented:
-  - `hris-app/app/routes/admin/devices/events.tsx` +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
-  - `hris-app/app/routes/admin/devices/manage.tsx` +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Checking device connection+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ / +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Reading users from device+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“+Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“-Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“.
+  - `hris-app/app/routes/admin/devices/events.tsx` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
+  - `hris-app/app/routes/admin/devices/manage.tsx` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œChecking device connection+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ / +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œReading users from device+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ.
   - Contract + Playwright smoke (3 tests) updated and green.
   - Non-stop agent loop prompt: `docs/00-product/AGENT-PROMPT-device-admin-ux-clarity-loop.md`
 - Evidence: `.runtime/device-ux-clarity-20260716-221328/`, screenshots under `.runtime/device-ux-clarity-proof/screenshots/`
@@ -2475,10 +2483,10 @@ Status: IMPLEMENTED + PROVEN +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢�
   - Argo apps at revision `7309928` (includes event-first `ee42f4a`); PROD/DEV/UAT `hris-api`/`hris-app` Running on `hris-api-local:develop` / app images; tunnel active.
   - `GET https://api.bnpi-hris.tech/api/device/sync-preview` returns per-device `eventRows[]` + `sources[]` with live ZKTeco Ready rows (e.g. `.235` willAdd `2035` / already `20267`).
   - `GET https://dev-api.bnpi-hris.tech/api/device/sync-preview` returns Hikvision 16-row event catalogs with already-in-HRIS by action even when sources unavailable.
-  - Public browser: admin login +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Device events +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“ Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
+  - Public browser: admin login +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Device events +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
 - Residual still open:
   - Hikvision TCP from VM fail for configured addresses; PROD Main Entrance Device missing access credentials in preview error.
-  - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ investigate bridge/read path, not modal contract.
+  - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ investigate bridge/read path, not modal contract.
   - `project-truth-runtime-dev` Argo app Synced/Degraded.
   - Per-type operation **willAdd** precision still needs per-action logSearch classification when Hikvision sources are reachable.
   - ansible-pull commit `e156c70` lags Argo serving revision `7309928`.
@@ -2489,7 +2497,7 @@ Status: IMPLEMENTED + PROVEN +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢�
 - Task mode: Meaningful feature + API contract + UI + tests + Playwright proof.
 - Commit: `ee42f4a` on `develop`.
 - Evidence: `.runtime/sync-logs-event-first-20260716-215712/`
-- Goal: Sync logs modal is event-first +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢â€¢Å¸Ãƒâ€˜ per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
+- Goal: Sync logs modal is event-first +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
 - Implemented:
   - `hris-api/helper/sync-logs-event-rows.helper.ts` catalog + dual-source builders.
   - `GET /api/device/sync-preview` now returns `eventRows[]`, `sources[]`, operation log total probe (`ContentMgmt/logSearch`), attendance total (`AccessControl/AcsEvent`), and already-in-HRIS by `eventAction`.
@@ -4008,32 +4016,32 @@ Status: IMPLEMENTED + PROVEN +Ã¢Ë†Â©Ã¢â€ÂÃ¢â€¢Å“GÃ¢�
 
 ## Latest Task Addendum - 2026-09-07 Period 2 Aug 2026 full-coverage payroll run (846/851, tail blocked on DB forward auth)
 
-- Operator requirement: admin Timesheet Rules has Auto Approve ON â€” unsubmitted timesheets must still generate payroll.
+- Operator requirement: admin Timesheet Rules has Auto Approve ON Ã¢â‚¬â€ unsubmitted timesheets must still generate payroll.
 - Root cause of 164 vs 1687 (proven live): Sep-3 bio-run deliberately scoped to evidence-backed employees only; Sep-4 bulk auto-approve then created 1500+ more APPROVED sheets that were never generated. Timesheet "Payroll Ready" bucket is status-only (includes AGENCY); payable = APPROVED + DIRECT + freq + salary + schedule.
 - Engine fixes (branch `feat-attendance`, partly committed as `521f23bd` by parallel session, no push):
   - Auto-approve defaults: `bootstrap.sql` DEFAULT true, `zod/migration.zod.ts` default true, governed migration `20260904_set_timesheet_auto_approve_default_true.sql` (one-off script deleted). Spec 8/8.
   - Generate lane passes `skipRefresh: true` to ensure (pure refresh of ~1700 approved sheets was a ~12h lane gating every generate; live hooks + explicit ensure endpoint still own refresh).
-  - Ensure creates now run in the bounded pool (5), not strictly sequential (P2002-adopt backstop; measured ~1.4 â†’ 11-18 sheets/min). Suites 29 passing, no new tsc errors in touched files.
+  - Ensure creates now run in the bounded pool (5), not strictly sequential (P2002-adopt backstop; measured ~1.4 Ã¢â€ â€™ 11-18 sheets/min). Suites 29 passing, no new tsc errors in touched files.
 - Coverage runs on OPEN `PP-20260826-20260911` (reopened from COMPLETED via audited PATCH; all rows unpaid/unlocked):
-  - Job 1 (319): killed inside the 12h refresh lane â†’ stopped, code fixed, API reloaded.
-  - Job 3 (440â†’771 candidates): 620 success, then API process died ~09:00 UTC Sep-4 mid payslip-upload (620 rows persisted).
-  - Job 5 (851): terminal `completed` â€” **846 success, 5 failed**, all 5 = SSH-forward flap (`Can't reach 127.0.0.1:55435`) on 01770â€“01774, no data errors. Period auto-returned to COMPLETED.
+  - Job 1 (319): killed inside the 12h refresh lane Ã¢â€ â€™ stopped, code fixed, API reloaded.
+  - Job 3 (440Ã¢â€ â€™771 candidates): 620 success, then API process died ~09:00 UTC Sep-4 mid payslip-upload (620 rows persisted).
+  - Job 5 (851): terminal `completed` Ã¢â‚¬â€ **846 success, 5 failed**, all 5 = SSH-forward flap (`Can't reach 127.0.0.1:55435`) on 01770Ã¢â‚¬â€œ01774, no data errors. Period auto-returned to COMPLETED.
   - Job 6 (cleanup recompute): ~300 done, then K3s forward dropped hard; tail state unreadable without DB.
 - Money-rule consistency note: parallel session's missing-punch no-pay change is uncommitted in the working tree; running API has 3-day uptime (booted Sep-4 ~09:05 UTC, no reload since), so all generated rows used one engine version. Which version ran is NEEDS_CONFIRMATION (affects Sheet2 reconciliation, not convergence).
 - BLOCKED (real stop, 2026-09-07): `127.0.0.1:55435` forward down; Cloudflare Access needs interactive browser re-auth; direct LAN `10.184.37.19:22` unroutable from this host (documented). API process healthy.
-- Resume path (mechanical, ~10 min once forward is back): re-run `scripts/start-k8s-dev-db-access.ps1` â†’ confirm `GET /api/timesheet/config` â†’ POST generate (PROCESSING+no-job resumes; recomputes unpaid, skips paid/locked) â†’ poll to terminal â†’ expect 851/851 â†’ reread counts into `.runtime/payroll-coverage-20260904-20260904-144611/`.
+- Resume path (mechanical, ~10 min once forward is back): re-run `scripts/start-k8s-dev-db-access.ps1` Ã¢â€ â€™ confirm `GET /api/timesheet/config` Ã¢â€ â€™ POST generate (PROCESSING+no-job resumes; recomputes unpaid, skips paid/locked) Ã¢â€ â€™ poll to terminal Ã¢â€ â€™ expect 851/851 Ã¢â€ â€™ reread counts into `.runtime/payroll-coverage-20260904-20260904-144611/`.
 - Evidence: `.runtime/payroll-coverage-20260904-20260904-144611/` (before-snapshot, preview 319, job ids 1-6). Still open: VM DEV/UAT/PROD application of the auto-approve migration SQL.
 
 ## Latest Task Addendum - 2026-09-14 Agency workspace (operator-ordered feature, no push)
 
-- **Delivered local DEV, unpushed:** agency coordinator login (`hris-agency`, link in `User.metadata.agencyId` — no `User.agencyId` column) + `/agency` workspace (Dashboard/Roster/Attendance/Timesheets/Biometrics) + server-enforced own-agency scope + CSV attendance import (`POST /api/agency/:id/attendance-import`, dryRun preview zero-write + execute).
+- **Delivered local DEV, unpushed:** agency coordinator login (`hris-agency`, link in `User.metadata.agencyId` â€” no `User.agencyId` column) + `/agency` workspace (Dashboard/Roster/Attendance/Timesheets/Biometrics) + server-enforced own-agency scope + CSV attendance import (`POST /api/agency/:id/attendance-import`, dryRun preview zero-write + execute).
 - **Backend** (`hris-api`): `helper/agency-scope.helper.ts` (resolve/same-agency/where-fragment); employee + timesheet `getAll` force own-agency `AND` (403 when agency unresolvable, never unscoped); timesheet PATCH allow-list + same-agency gate (cross-agency 403; APPROVED breakdown-only semantics unchanged); import parses EMPLOYEE_ID/DATE/TIME_IN/TIME_OUT/NOTES (xlsx lib reads CSV), matches employeeId/deviceEmpId within target agency, 202 async job + activity/audit logs. Repaired in-review: nested `employee.agencyId` scope on timesheet list (was invalid top-level key), `:id` route shape, dryRun mode, deviceEmpId fallback.
 - **Frontend** (`hris-app`): `AgencyWorkspace` + `BiometricsImport` on existing hooks/components (`useEmployees`/`useTimesheets`/`TimesheetViewModal`/`GenericImportModal` pattern/`SummaryCard`), Sidebar `Agency Workspace` entry for AGENCY_ROLES, role-redirect `/agency`, login/landing/layout guards. Single-app exception (no emp-app counterpart).
 - **Live proof** (canonical local DEV, agency-test@test.com): roster unfiltered = own 2 only, foreign filter = 0 rows (no leak); own APPROVED day-adjust PATCH 200 (tweak + cleanup, notes null, stays APPROVED); foreign PATCH 403; CSV dryRun matched 1 / rejected foreign 1 zero-write; execute created 1 PRESENT 2020-01-05 row then deleted; Playwright login-workspace + workspace specs PASSED (`/agency`, cards, tabs, roster/timesheet API calls with agency filter). Proof subjects (KCSSI-BANDAI1129/1128) moved to TEST and reverted; TEST roster back to 0. Evidence: `.runtime/agency-workspace-proof-20260914-031238/`, `hris-app/.runtime/agency-workspace-20260914/`.
 - **Tests:** api `agency-scope.helper.spec.ts` 9/9; app agency-workspace 3/3 + role-redirect 11/11; tsc clean on touched backend scope; eslint 0 errors (warnings only). Pre-existing drift untouched (unified-layout overlay a11y, TimesheetsTab mock).
 - **Boundaries:** `User.metadata.agencyId` provisioning is manual seed (no admin UI yet); approve-action + `PATCH /api/timesheetline/:id` have no role guards (filed REC-20260914-TIMESHEET-APPROVE-NO-ROLE-CHECK, REC-20260914-TIMESHEETLINE-PATCH-NO-GUARD); TEST agency holds no standing members (roster empty until real assignment).
 - **Truth-sync:** terminology `Agency (hris-agency)` row added; 2 RECs Proposed; this addendum. Not pushed (no operator push order).
-- **Revision 2026-09-14 (operator: dedicated pages + chart dashboard, no tabs):** `/agency` now redirects to `/agency/dashboard`; five real routes (`dashboard/roster/attendance/timesheets/biometrics`) under unified-layout + Sidebar `Agency` section (5 sub-links) for AGENCY_ROLES. Dashboard has recharts graphs from live rows: 14-day attendance stacked bars, timesheet-status donut, members-by-department bars. Attendance is a real day-level table; timesheets gained View/adjust modal. Fixed in-review: `TimesheetViewModal` named import (was white-screening Timesheets), `enabled` inside `useTimesheets` params, roster ACTIVE-only filter widened to ACTIVE/ONBOARDING/ON_LEAVE, duplicate testids removed, date-range filter dropped (DSL ORs same-key items — bucket client-side instead), attendance `getAll` agency-scoped on backend. Proof with 3 TEST subjects (1129/1128/NC-BNP1425, all reverted): dashboard 3 members / 9 punches / 10 sheets consistent; Playwright PASSED; evidence `hris-app/.runtime/agency-workspace-20260914/agency-dashboard.png` + `agency-roster.png`. Old tab specs removed.
+- **Revision 2026-09-14 (operator: dedicated pages + chart dashboard, no tabs):** `/agency` now redirects to `/agency/dashboard`; five real routes (`dashboard/roster/attendance/timesheets/biometrics`) under unified-layout + Sidebar `Agency` section (5 sub-links) for AGENCY_ROLES. Dashboard has recharts graphs from live rows: 14-day attendance stacked bars, timesheet-status donut, members-by-department bars. Attendance is a real day-level table; timesheets gained View/adjust modal. Fixed in-review: `TimesheetViewModal` named import (was white-screening Timesheets), `enabled` inside `useTimesheets` params, roster ACTIVE-only filter widened to ACTIVE/ONBOARDING/ON_LEAVE, duplicate testids removed, date-range filter dropped (DSL ORs same-key items â€” bucket client-side instead), attendance `getAll` agency-scoped on backend. Proof with 3 TEST subjects (1129/1128/NC-BNP1425, all reverted): dashboard 3 members / 9 punches / 10 sheets consistent; Playwright PASSED; evidence `hris-app/.runtime/agency-workspace-20260914/agency-dashboard.png` + `agency-roster.png`. Old tab specs removed.
 
 
 

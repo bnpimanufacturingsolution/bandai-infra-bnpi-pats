@@ -72,7 +72,12 @@ if (!global.__errorHandlersRegistered) {
 					: reason,
 			promise: String(promise),
 		});
-		process.exit(1);
+		// Do NOT exit. A transient recoverable failure (e.g. Prisma P1001 while the
+		// K3s DEV DB forward flaps) surfacing from a floating promise must not kill
+		// the API and abort in-flight jobs. setupGlobalErrorHandlers() in
+		// helper/error-handling.ts already documents this contract ("Don't exit for
+		// unhandled rejection, but log it"); this handler contradicted it and caused
+		// a restart→STALE crash loop during DM4 imports (2026-09-14).
 	});
 }
 

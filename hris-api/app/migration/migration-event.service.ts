@@ -5,15 +5,54 @@ export class MigrationEventService {
 	constructor(private readonly prisma: PrismaClient) {}
 
 	async append(input: MigrationEventInput) {
-		const aggregate = await (this.prisma as any).migrationRunEvent.aggregate({
-			where: { runId: input.runId },
-			_max: { sequence: true },
-		});
-		const sequence = Number(aggregate?._max?.sequence || 0) + 1;
-		const event = await (this.prisma as any).migrationRunEvent.create({
-			data: {
+		try {
+			const aggregate = await (this.prisma as any).migrationRunEvent.aggregate({
+				where: { runId: input.runId },
+				_max: { sequence: true },
+			});
+			const sequence = Number(aggregate?._max?.sequence || 0) + 1;
+			const event = await (this.prisma as any).migrationRunEvent.create({
+				data: {
+					runId: input.runId,
+					sequence,
+					stage: input.stage,
+					stepCode: input.stepCode || null,
+					phase: input.phase || null,
+					eventType: input.eventType,
+					status: input.status,
+					message: input.message,
+					sourceWorkbook: input.sourceWorkbook || null,
+					sourceFile: input.sourceFile || null,
+					sourceSheet: input.sourceSheet || null,
+					sourceRow: input.sourceRow || null,
+					employeeId: input.employeeId || null,
+					employeeName: input.employeeName || null,
+					counts: input.counts || undefined,
+					metadata: input.metadata || undefined,
+				},
+			});
+			await this.applyEventToRunState(input);
+			return event;
+		} catch (error) {
+			console.warn(
+				`[migration-events] append failed for run ${input.runId}: ${(error as Error)?.message || error}`,
+			);
+			return null;
+		}
+	}
+
+	async appendMany(inputs: MigrationEventInput[]) {
+		if (inputs.length === 0) return [];
+		try {
+			const runId = inputs[0].runId;
+			const aggregate = await (this.prisma as any).migrationRunEvent.aggregate({
+				where: { runId },
+				_max: { sequence: true },
+			});
+			const startSequence = Number(aggregate?._max?.sequence || 0) + 1;
+			const data = inputs.map((input, index) => ({
 				runId: input.runId,
-				sequence,
+				sequence: startSequence + index,
 				stage: input.stage,
 				stepCode: input.stepCode || null,
 				phase: input.phase || null,
@@ -28,41 +67,16 @@ export class MigrationEventService {
 				employeeName: input.employeeName || null,
 				counts: input.counts || undefined,
 				metadata: input.metadata || undefined,
-			},
-		});
-		await this.applyEventToRunState(input);
-		return event;
-	}
-
-	async appendMany(inputs: MigrationEventInput[]) {
-		if (inputs.length === 0) return [];
-		const runId = inputs[0].runId;
-		const aggregate = await (this.prisma as any).migrationRunEvent.aggregate({
-			where: { runId },
-			_max: { sequence: true },
-		});
-		const startSequence = Number(aggregate?._max?.sequence || 0) + 1;
-		const data = inputs.map((input, index) => ({
-			runId: input.runId,
-			sequence: startSequence + index,
-			stage: input.stage,
-			stepCode: input.stepCode || null,
-			phase: input.phase || null,
-			eventType: input.eventType,
-			status: input.status,
-			message: input.message,
-			sourceWorkbook: input.sourceWorkbook || null,
-			sourceFile: input.sourceFile || null,
-			sourceSheet: input.sourceSheet || null,
-			sourceRow: input.sourceRow || null,
-			employeeId: input.employeeId || null,
-			employeeName: input.employeeName || null,
-			counts: input.counts || undefined,
-			metadata: input.metadata || undefined,
-		}));
-		await (this.prisma as any).migrationRunEvent.createMany({ data });
-		await this.applyEventToRunState(inputs[inputs.length - 1]);
-		return data;
+			}));
+			await (this.prisma as any).migrationRunEvent.createMany({ data });
+			await this.applyEventToRunState(inputs[inputs.length - 1]);
+			return data;
+		} catch (error) {
+			console.warn(
+				`[migration-events] appendMany failed for run ${inputs[0]?.runId}: ${(error as Error)?.message || error}`,
+			);
+			return [];
+		}
 	}
 
 	private getStepStatus(input: MigrationEventInput) {
