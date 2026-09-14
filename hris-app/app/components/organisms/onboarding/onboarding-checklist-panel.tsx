@@ -45,6 +45,45 @@ function LiveRow({
 	const children = item.children ?? [];
 	const isParent = children.length > 0;
 	const completed = item.status === "COMPLETED";
+	// No responsible department = section row: never counted, no sign-off required.
+	// (Historically signed section rows keep the completed indicator + manager unsign.)
+	const isSectionRow = !completed && !String(item.responsibleDepartmentId || "").trim();
+
+	if (isSectionRow) {
+		return (
+			<>
+				<tr className={`border-b hover:bg-gray-50 ${isParent ? "bg-gray-50/50" : ""}`}>
+					<td className={`px-4 py-2 text-sm text-gray-900 ${depth > 0 ? "pl-8" : ""}`}>
+						{item.number}
+					</td>
+					<td className={`px-4 py-2 text-sm text-gray-900 ${isParent ? "font-medium" : ""}`}>
+						{item.title}
+					</td>
+					<td className="px-4 py-2 text-sm text-gray-600">
+						<span className="italic text-gray-400">unassigned</span>
+					</td>
+					<td className="px-4 py-2 text-center">
+						<span
+							className="text-xs text-gray-400 italic"
+							title="Section row — no sign-off required and not counted toward completion">
+							—
+						</span>
+					</td>
+					<td className="px-4 py-2 text-sm text-gray-600" />
+					<td className="px-4 py-2 text-sm text-gray-600" />
+				</tr>
+				{children.map((child) => (
+					<LiveRow
+						key={child.id}
+						item={child}
+						depth={depth + 1}
+						onSign={onSign}
+						onUnsign={onUnsign}
+					/>
+				))}
+			</>
+		);
+	}
 
 	return (
 		<>
@@ -71,9 +110,7 @@ function LiveRow({
 									: "Completed"
 								: item.canSign
 									? "Sign with your password"
-									: item.isContextOnly
-										? "Context item — HR/Admin signs this"
-										: "Not your department"
+									: "Not your department"
 						}
 						disabled={!completed && !item.canSign}
 						onClick={() => {
@@ -285,7 +322,8 @@ export default function OnboardingChecklistPanel({
 							{checklist.view === "department" && (
 								<p className="mt-2 text-xs text-gray-500">
 									Showing items for your department ({checklist.viewer.department}
-									); unassigned rows are context only and are signed by HR/Admin.
+									); unassigned rows are sections — no sign-off required and not
+									counted toward completion.
 								</p>
 							)}
 							{checklist.view === "self" && (

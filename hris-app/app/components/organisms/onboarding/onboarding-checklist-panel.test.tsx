@@ -172,11 +172,13 @@ describe("OnboardingChecklistPanel", () => {
 		expect(screen.getByRole("dialog")).toBeInTheDocument();
 	});
 
-	it("disables no-department context items with a hint tooltip", () => {
+	it("renders no-department items as section rows: no sign checkbox, dash cell with hint", () => {
 		render(<OnboardingChecklistPanel employee={employee} />);
-		const parent = screen.getByRole("button", { name: /sign item 1 device/i });
-		expect(parent).toBeDisabled();
-		expect(parent.getAttribute("title")).to.match(/Context item|Not your department/);
+		expect(
+			screen.queryByRole("button", { name: /sign item 1 device/i }),
+		).not.toBeInTheDocument();
+		const sectionHint = screen.getByTitle(/Section row — no sign-off required/i);
+		expect(sectionHint).toHaveTextContent("—");
 	});
 
 	it("hides the provision action for non-managers (never shown when checklist exists either way)", () => {

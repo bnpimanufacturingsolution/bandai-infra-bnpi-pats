@@ -10,6 +10,7 @@ import {
 import { getLogger } from "./logger.helper";
 import { createBoardingProcess } from "./boarding.helper";
 import { ensureOnboardingChecklistForEmployee } from "../app/onboarding/onboardingLifecycle.helper";
+import { ACTIONABLE_ONBOARDING_ITEM_FILTER } from "../app/onboarding/onboardingAccess.helper";
 import {
 	evaluateEmployeeDocumentCompleteness,
 	getDocumentReviewSnapshot,
@@ -267,11 +268,14 @@ export const syncEmployeeEmploymentStatus = async (params: {
 
 	// Design C gate: a provisioned dedicated OnboardingChecklist must ALSO be fully
 	// signed before ONBOARDING -> ACTIVE. Employees with no dedicated checklist keep
-	// pure legacy behavior (no dedicated rows = nothing pending here).
+	// pure legacy behavior (no dedicated rows = nothing pending here). Only ACTIONABLE
+	// items count (responsible department set, single predicate in onboardingAccess.helper):
+	// no-department rows act like sections and never block promotion.
 	const pendingDedicatedItem = await params.prisma.onboardingItem.findFirst({
 		where: {
 			status: "PENDING",
 			isDeleted: false,
+			...ACTIONABLE_ONBOARDING_ITEM_FILTER,
 			section: {
 				isDeleted: false,
 				checklist: { employeeId: params.employeeId, isDeleted: false },

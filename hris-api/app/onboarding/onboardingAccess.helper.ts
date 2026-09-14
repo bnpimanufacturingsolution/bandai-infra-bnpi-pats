@@ -112,6 +112,23 @@ export interface AttachableItem {
 }
 
 /**
+ * Canonical "actionable item" predicate (single source for gate, progress, and visibility):
+ * a dedicated checklist row counts toward completion and blocks ONBOARDING -> ACTIVE
+ * promotion ONLY when a responsible department is set. No-responsible rows act like
+ * section/grouping headers: never counted, never signable through the UI affordance.
+ * The sign endpoint itself stays permissive (admin/HR may still sign one via direct API;
+ * the result simply stays excluded from gate/progress math).
+ */
+export const isActionableOnboardingItem = (item: {
+	responsibleDepartmentId?: string | null;
+}): boolean => String(item?.responsibleDepartmentId || "").trim().length > 0;
+
+/** Prisma where fragment implementing isActionableOnboardingItem. */
+export const ACTIONABLE_ONBOARDING_ITEM_FILTER = {
+	AND: [{ responsibleDepartmentId: { not: null } }, { responsibleDepartmentId: { not: "" } }],
+};
+
+/**
  * Builds a nested forest from a flat item list. Orphan children (parent not in
  * the visible set) are promoted to roots so numbering context is never lost.
  */
@@ -161,6 +178,9 @@ export const buildOnboardingVisibleView = (
 
 	const canSignFor = (item: any) => {
 		if (item.status !== "PENDING") return false;
+		// Section rows (no responsible department) never offer the sign affordance,
+		// including to admin/HR; the sign endpoint stays permissive by design.
+		if (!isActionableOnboardingItem(item)) return false;
 		return evaluateOnboardingSignPermission(
 			actor,
 			{ responsibleDepartmentId: item.responsibleDepartmentId || null },

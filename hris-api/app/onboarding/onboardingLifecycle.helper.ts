@@ -1,5 +1,6 @@
 import { Prisma } from "../../generated/prisma";
 import { getLogger } from "../../helper/logger.helper";
+import { isActionableOnboardingItem } from "./onboardingAccess.helper";
 
 const logger = getLogger();
 const lifecycleLogger = logger.child({ module: "onboardingLifecycle" });
@@ -167,4 +168,32 @@ export const ensureOnboardingChecklistForEmployee = async (
 		`Onboarding checklist ${created.id} provisioned for employee ${employeeId} (template=${templateId || "none"})`,
 	);
 	return { status: "created", checklistId: created.id };
+};
+
+/**
+ * Single source for dedicated-checklist progress math (controller sign/unsign/edit paths
+ * + the ONBOARDING resync script). Only ACTIONABLE items (responsible department set)
+ * count; no-department rows act like sections and are excluded. A checklist with zero
+ * actionable items is honestly 100% / COMPLETED — there is nothing left to sign.
+ */
+export const recomputeOnboardingChecklistProgress = async (
+	tx: TransactionCapableClient,
+	checklistId: string,
+): Promise<{ completionPercentage: number; status: string }> => {
+	const items = await tx.onboardingItem.findMany({
+		where: { section: { checklistId }, isDeleted: false },
+		select: { id: true, status: true, responsibleDepartmentId: true },
+	});
+	const actionable = items.filter((i: any) => isActionableOnboardingItem(i));
+	const completedActionable = actionable.filter((i: any) => i.status === "COMPLETED");
+	const completionPercentage = actionable.length
+		? Math.round((completedActionable.length / actionable.length) * 100)
+		: 100;
+	const status =
+		completedActionable.length === actionable.length ? "COMPLETED" : "ACTIVE";
+	await tx.onboardingChecklist.update({
+		where: { id: checklistId },
+		data: { completionPercentage, status: status as "ACTIVE" | "COMPLETED" },
+	});
+	return { completionPercentage, status };
 };

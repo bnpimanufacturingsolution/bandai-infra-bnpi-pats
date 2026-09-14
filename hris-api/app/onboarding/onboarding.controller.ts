@@ -17,7 +17,10 @@ import {
 	type OnboardingActor,
 	type AuthedRequest,
 } from "./onboardingAccess.helper";
-import { ensureOnboardingChecklistForEmployee } from "./onboardingLifecycle.helper";
+import {
+	ensureOnboardingChecklistForEmployee,
+	recomputeOnboardingChecklistProgress,
+} from "./onboardingLifecycle.helper";
 import {
 	CreateOnboardingTemplateSchema,
 	UpdateOnboardingTemplateSchema,
@@ -164,25 +167,8 @@ export const controller = (prisma: PrismaClient) => {
 	const recomputeChecklistProgress = async (
 		tx: Prisma.TransactionClient,
 		checklistId: string,
-	): Promise<{ completionPercentage: number; status: string }> => {
-		const items = await tx.onboardingItem.findMany({
-			where: { section: { checklistId }, isDeleted: false },
-			select: { id: true, parentId: true, status: true },
-		});
-		const parentIds = new Set(items.map((i) => i.parentId).filter(Boolean) as string[]);
-		const leaves = items.filter((i) => !parentIds.has(i.id));
-		const completedLeaves = leaves.filter((i) => i.status === "COMPLETED");
-		const completionPercentage = leaves.length
-			? Math.round((completedLeaves.length / leaves.length) * 100)
-			: 0;
-		const status =
-			leaves.length > 0 && completedLeaves.length === leaves.length ? "COMPLETED" : "ACTIVE";
-		await tx.onboardingChecklist.update({
-			where: { id: checklistId },
-			data: { completionPercentage, status: status as "ACTIVE" | "COMPLETED" },
-		});
-		return { completionPercentage, status };
-	};
+	): Promise<{ completionPercentage: number; status: string }> =>
+		recomputeOnboardingChecklistProgress(tx, checklistId);
 
 	/**
 	 * Design C: after any dedicated-checklist completion change, re-evaluate the shared

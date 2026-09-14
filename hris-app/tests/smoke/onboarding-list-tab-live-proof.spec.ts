@@ -101,9 +101,8 @@ test("onboarding list -> search Char -> sign 6.1 with password -> profile tab sh
 	await expect(page.getByText("Before Day 1")).toBeVisible();
 	await expect(page.getByText("Email and Office365 account creation, if applicable")).toBeVisible();
 
-	// 4. no-dept context parent is disabled; the SW-Dev child is signable
-	const parent = page.getByRole("button", { name: /sign item 6 email/i });
-	await expect(parent).toBeDisabled();
+	// 4. no-dept parent is a section row (no checkbox at all); the SW-Dev child is signable
+	await expect(page.getByRole("button", { name: /sign item 6 email/i })).toHaveCount(0);
 	const child = page.getByRole("button", { name: /sign item 6\.1 office 365/i });
 	await expect(child).toBeEnabled();
 

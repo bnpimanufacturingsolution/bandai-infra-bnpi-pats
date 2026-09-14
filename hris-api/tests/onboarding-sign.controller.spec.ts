@@ -21,6 +21,8 @@ interface MockConfig {
 	newHireStatus?: string;
 	itemStatus?: string;
 	responsibleDepartmentId?: string | null;
+	// Adds a second PENDING no-department (section) row to the checklist items.
+	extraSectionPending?: boolean;
 }
 
 function buildMockPrisma(config: MockConfig) {
@@ -116,7 +118,18 @@ function buildMockPrisma(config: MockConfig) {
 							status: itemUpdates.length
 								? itemUpdates[itemUpdates.length - 1].status
 								: item.status,
+							responsibleDepartmentId: item.responsibleDepartmentId,
 						},
+						...(config.extraSectionPending
+							? [
+									{
+										id: "citem0000000002",
+										parentId: null,
+										status: "PENDING",
+										responsibleDepartmentId: null,
+									},
+								]
+							: []),
 					],
 				},
 				onboardingSignature: {
@@ -296,6 +309,40 @@ describe("POST /api/onboarding/items/:id/sign", () => {
 			{ password: PASSWORD },
 		);
 		expect(response.status).to.equal(200);
+	});
+
+	it("excludes PENDING section rows from progress and the ACTIVE gate", async () => {
+		const { response, checklistUpdates, statusUpdates } = await signAs(
+			{
+				role: "hris-employee",
+				employeeId: "emp-it-guy",
+				departmentId: "dept-it",
+				extraSectionPending: true,
+			},
+			{ password: PASSWORD },
+		);
+		expect(response.status).to.equal(200);
+		// only actionable items count: the signed item is the sole actionable one.
+		expect(checklistUpdates[0].completionPercentage).to.equal(100);
+		expect(checklistUpdates[0].status).to.equal("COMPLETED");
+		expect(response.body.data.checklist.employmentStatus).to.equal("ACTIVE");
+		expect(statusUpdates[0].employmentStatus).to.equal("ACTIVE");
+	});
+
+	it("stays permissive: HR signing a no-department section row succeeds but is not counted", async () => {
+		const { response, checklistUpdates } = await signAs(
+			{
+				role: "hris-hr-manager",
+				employeeId: "emp-hr",
+				departmentId: "dept-hr",
+				responsibleDepartmentId: null,
+			},
+			{ password: PASSWORD },
+		);
+		expect(response.status).to.equal(200);
+		// zero actionable items -> honestly 100%/COMPLETED (nothing left to sign).
+		expect(checklistUpdates[0].completionPercentage).to.equal(100);
+		expect(checklistUpdates[0].status).to.equal("COMPLETED");
 	});
 
 	it("returns 409 when the item is already signed", async () => {

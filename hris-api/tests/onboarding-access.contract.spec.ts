@@ -3,6 +3,7 @@ import {
 	evaluateOnboardingSignPermission,
 	buildOnboardingVisibleView,
 	attachOnboardingChildren,
+	isActionableOnboardingItem,
 	type OnboardingActor,
 } from "../app/onboarding/onboardingAccess.helper";
 
@@ -181,7 +182,7 @@ describe("onboarding visible-checklist view builder", () => {
 		expect(section1.items.find((i: any) => i.title === "Uniform").canSign).to.be.true;
 	});
 
-	it("HR sees everything and can sign every pending item", () => {
+	it("HR sees everything and can sign actionable pending items, but section rows offer no sign", () => {
 		const hrActor = baseActor({ role: "hris-hr-user", isHr: true, departmentId: "dept-hr" });
 		const { view, sections } = buildOnboardingVisibleView(checklist, hrActor);
 		expect(view).to.equal("full");
@@ -192,8 +193,10 @@ describe("onboarding visible-checklist view builder", () => {
 		expect(titles).to.include("Device");
 		expect(titles).to.include("Uniform");
 		expect(titles).to.include("Laptop");
-		const pending = allItems.find((i: any) => i.title === "Device");
-		expect(pending.canSign).to.be.true;
+		const device = allItems.find((i: any) => i.title === "Device");
+		expect(device.canSign).to.be.false; // no responsible dept = section row
+		const laptop = allItems.find((i: any) => i.title === "Laptop");
+		expect(laptop.canSign).to.be.true;
 	});
 
 	it("onboarded employee sees full own checklist but canSign is always false", () => {
@@ -217,6 +220,15 @@ describe("onboarding visible-checklist view builder", () => {
 			.flatMap((s: any) => s.items)
 			.find((i: any) => i.status === "COMPLETED");
 		expect(done.canSign).to.be.false;
+	});
+});
+
+describe("isActionableOnboardingItem (canonical gate/progress/visibility predicate)", () => {
+	it("counts only items with a responsible department", () => {
+		expect(isActionableOnboardingItem({ responsibleDepartmentId: "dept-it" })).to.be.true;
+		expect(isActionableOnboardingItem({ responsibleDepartmentId: null })).to.be.false;
+		expect(isActionableOnboardingItem({ responsibleDepartmentId: "" })).to.be.false;
+		expect(isActionableOnboardingItem({})).to.be.false;
 	});
 });
 
