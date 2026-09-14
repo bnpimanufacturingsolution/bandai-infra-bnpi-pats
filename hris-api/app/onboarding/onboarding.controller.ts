@@ -4,6 +4,7 @@ import { getLogger } from "../../helper/logger.helper";
 import { buildSuccessResponse } from "../../helper/success-handler.helper";
 import { buildErrorResponse, formatZodErrors, type ErrorDetail } from "../../helper/error-handler";
 import { isValidEntityId } from "../../helper/id-validation.helper";
+import { syncEmployeeEmploymentStatus } from "../../helper/boarding-documents.helper";
 import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import {
@@ -183,6 +184,33 @@ export const controller = (prisma: PrismaClient) => {
 		return { completionPercentage, status };
 	};
 
+	/**
+	 * Design C: after any dedicated-checklist completion change, re-evaluate the shared
+	 * ONBOARDING/ACTIVE gate (legacy items AND dedicated items both complete -> ACTIVE).
+	 * Best-effort; never fails the originating request. Returns the new status if known.
+	 */
+	const syncEmploymentForChecklist = async (
+		checklistId: string,
+	): Promise<string | null> => {
+		try {
+			const checklist = await prisma.onboardingChecklist.findFirst({
+				where: { id: checklistId, isDeleted: false },
+				select: { employeeId: true },
+			});
+			if (!checklist) return null;
+			const result = await syncEmployeeEmploymentStatus({
+				prisma,
+				employeeId: checklist.employeeId,
+			});
+			return result?.employmentStatus || null;
+		} catch (syncError) {
+			onboardingLogger.warn(
+				`employment status sync skipped for checklist ${checklistId}: ${syncError}`,
+			);
+			return null;
+		}
+	};
+
 	const collectDescendantIds = async (
 		tx: Prisma.TransactionClient,
 		kind: "checklist" | "template",
@@ -250,33 +278,82 @@ export const controller = (prisma: PrismaClient) => {
 			const actor = await requireActor(req as AuthedRequest, res);
 			if (!actor) return;
 
-			const employees = await prisma.employee.findMany({
-				where: {
-					organizationId: actor.organizationId,
-					isDeleted: false,
-					employmentStatus: "ONBOARDING",
-				},
-				orderBy: { employmentStartDate: "asc" },
-				select: {
-					id: true,
-					employeeId: true,
-					employmentStatus: true,
-					employmentStartDate: true,
-					department: { select: { id: true, name: true } },
-					person: { select: { personalInfo: true } },
-					onboardingChecklists: {
-						where: { isDeleted: false },
-						orderBy: { createdAt: "desc" },
-						take: 1,
-						select: {
-							id: true,
-							title: true,
-							status: true,
-							completionPercentage: true,
+			const search = String(req.query.search || "").trim();
+			const departmentId = String(req.query.departmentId || "").trim();
+			const terms = search.split(/\s+/).filter((term) => term.length > 0);
+
+			const pageParam = Number.parseInt(String(req.query.page || ""), 10);
+			const limitParam = Number.parseInt(String(req.query.limit || ""), 10);
+			const page = Number.isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
+			const limit =
+				Number.isNaN(limitParam) || limitParam < 1 ? 10 : Math.min(limitParam, 100);
+
+			const whereClause: any = {
+				organizationId: actor.organizationId,
+				isDeleted: false,
+				employmentStatus: "ONBOARDING",
+				...(departmentId && !isInvalidId(departmentId) ? { departmentId } : {}),
+				...(terms.length > 0
+					? {
+							AND: terms.map((term) => ({
+								OR: [
+									{ employeeId: { contains: term, mode: "insensitive" as const } },
+									{
+										person: {
+											is: {
+												personalInfo: {
+													path: ["firstName"],
+													string_contains: term,
+													mode: "insensitive" as const,
+												},
+											},
+										},
+									},
+									{
+										person: {
+											is: {
+												personalInfo: {
+													path: ["lastName"],
+													string_contains: term,
+													mode: "insensitive" as const,
+												},
+											},
+										},
+									},
+								],
+							})),
+						}
+					: {}),
+			};
+
+			const [employees, total] = await Promise.all([
+				prisma.employee.findMany({
+					where: whereClause,
+					orderBy: { employmentStartDate: "asc" },
+					skip: (page - 1) * limit,
+					take: limit,
+					select: {
+						id: true,
+						employeeId: true,
+						employmentStatus: true,
+						employmentStartDate: true,
+						department: { select: { id: true, name: true } },
+						person: { select: { personalInfo: true } },
+						onboardingChecklists: {
+							where: { isDeleted: false },
+							orderBy: { createdAt: "desc" },
+							take: 1,
+							select: {
+								id: true,
+								title: true,
+								status: true,
+								completionPercentage: true,
+							},
 						},
 					},
-				},
-			});
+				}),
+				prisma.employee.count({ where: whereClause }),
+			]);
 
 			const data = employees.map((employee) => ({
 				employeeId: employee.id,
@@ -288,8 +365,17 @@ export const controller = (prisma: PrismaClient) => {
 				checklist: employee.onboardingChecklists[0] || null,
 			}));
 
-			track(req, actor, "GET_ONBOARDING_ROSTER", `Listed ${data.length} onboarding employees`);
-			res.status(200).json(buildSuccessResponse("Onboarding employees retrieved", { employees: data }, 200));
+			const pagination = {
+				total,
+				page,
+				limit,
+				totalPages: Math.max(1, Math.ceil(total / limit)),
+			};
+
+			track(req, actor, "GET_ONBOARDING_ROSTER", `Listed ${data.length}/${total} onboarding employees (page ${page})`);
+			res.status(200).json(
+				buildSuccessResponse("Onboarding employees retrieved", { employees: data, pagination }, 200),
+			);
 		} catch (error) {
 			onboardingLogger.error(`onboarding.getRoster failed: ${error}`);
 			fail(res, 500, "Error getting onboarding employees");
@@ -932,6 +1018,7 @@ export const controller = (prisma: PrismaClient) => {
 					await tx.onboardingSection.update({ where: { id }, data: { isDeleted: true } });
 					await recomputeChecklistProgress(tx, checklistSection.checklistId);
 				});
+				await syncEmploymentForChecklist(checklistSection.checklistId);
 				track(req, actor, "DELETE_ONBOARDING_SECTION", `Deleted section ${id}`);
 				audit(req, actor, "DELETE", "ONBOARDING_SECTION", id, null, "Checklist section deleted");
 				res.status(200).json(buildSuccessResponse("Section deleted", {}, 200));
@@ -1110,6 +1197,9 @@ export const controller = (prisma: PrismaClient) => {
 					});
 				}
 			});
+			if (ref.kind === "checklist") {
+				await syncEmploymentForChecklist(ref.record.section.checklistId);
+			}
 
 			track(req, actor, "DELETE_ONBOARDING_ITEM", `Deleted item ${id}`);
 			audit(req, actor, "DELETE", ref.kind === "checklist" ? "ONBOARDING_ITEM" : "ONBOARDING_TEMPLATE_ITEM", id, null, "Checklist item deleted");
@@ -1203,10 +1293,14 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
+			// Design C: provisioning can itself gate promotion (new PENDING items) or,
+			// for an empty template, leave everything complete.
+			const employmentStatus = await syncEmploymentForChecklist(String(result.checklistId));
 			const checklist = await loadChecklistById(actor.organizationId, String(result.checklistId));
 			const built = checklist
 				? {
 						...checklist,
+						employmentStatus,
 						employeeName: formatPersonName(checklist.employee?.person),
 						sections: checklist.sections.map((section) => ({
 							...section,
@@ -1299,8 +1393,10 @@ export const controller = (prisma: PrismaClient) => {
 						organizationId: actor.organizationId,
 						requireTemplate: true,
 					});
-					if (outcome.status === "created") created += 1;
-					else skipped += 1;
+					if (outcome.status === "created") {
+						created += 1;
+						await syncEmploymentForChecklist(String(outcome.checklistId));
+					} else skipped += 1;
 				} catch (provisionError) {
 					failed += 1;
 					onboardingLogger.warn(
@@ -1488,6 +1584,14 @@ export const controller = (prisma: PrismaClient) => {
 				await tx.onboardingSection.updateMany({ where: { checklistId: id }, data: { isDeleted: true } });
 				await tx.onboardingChecklist.update({ where: { id }, data: { isDeleted: true } });
 			});
+			// Design C: removing the checklist's pending items can free the gate again.
+			try {
+				await syncEmployeeEmploymentStatus({ prisma, employeeId: existing.employeeId });
+			} catch (syncError) {
+				onboardingLogger.warn(
+					`employment status sync skipped after checklist delete ${id}: ${syncError}`,
+				);
+			}
 
 			track(req, actor, "DELETE_ONBOARDING_CHECKLIST", `Deleted checklist ${id}`);
 			audit(req, actor, "DELETE", "ONBOARDING_CHECKLIST", id, null, "Onboarding checklist deleted");
@@ -1716,6 +1820,8 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			track(req, actor, "SIGN_ONBOARDING_ITEM", `Signed item ${id} for checklist employee ${checklistEmployeeId}`);
+			// Design C: completion change -> re-evaluate the shared ONBOARDING/ACTIVE gate.
+			const employmentStatus = await syncEmploymentForChecklist(item.section.checklistId);
 			audit(
 				req,
 				actor,
@@ -1729,7 +1835,11 @@ export const controller = (prisma: PrismaClient) => {
 			res.status(200).json(
 				buildSuccessResponse(
 					"Item signed",
-					{ item: result.updated, signature: result.signature, checklist: result.progress },
+					{
+						item: result.updated,
+						signature: result.signature,
+						checklist: { ...result.progress, employmentStatus },
+					},
 					200,
 				),
 			);
@@ -1779,6 +1889,8 @@ export const controller = (prisma: PrismaClient) => {
 			});
 
 			track(req, actor, "UNSIGN_ONBOARDING_ITEM", `Unsigned item ${id}`);
+			// Design C: reopen -> the gate may pull the employee back to ONBOARDING.
+			const employmentStatus = await syncEmploymentForChecklist(ref.record.section.checklistId);
 			audit(
 				req,
 				actor,
@@ -1789,7 +1901,13 @@ export const controller = (prisma: PrismaClient) => {
 				"Onboarding checklist item unsigned",
 				"MEDIUM",
 			);
-			res.status(200).json(buildSuccessResponse("Item unsigned", { item: result.updated }, 200));
+			res.status(200).json(
+				buildSuccessResponse(
+					"Item unsigned",
+					{ item: result.updated, employmentStatus },
+					200,
+				),
+			);
 		} catch (error) {
 			onboardingLogger.error(`onboarding.unsignItem failed: ${error}`);
 			fail(res, 500, "Error unsigned checklist item");

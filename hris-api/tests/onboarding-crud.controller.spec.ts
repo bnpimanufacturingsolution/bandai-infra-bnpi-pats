@@ -59,6 +59,8 @@ describe("GET /api/onboarding/employees (roster)", () => {
 				findMany: async (args: any) => {
 					expect(args.where.employmentStatus).to.equal("ONBOARDING");
 					expect(args.where.organizationId).to.equal("org-1");
+					expect(args.skip).to.equal(0);
+					expect(args.take).to.equal(10);
 					return [
 						{
 							id: "emp-newhire",
@@ -78,6 +80,7 @@ describe("GET /api/onboarding/employees (roster)", () => {
 						},
 					];
 				},
+				count: async () => 170,
 			},
 		};
 		const app = buildApp(prismaMock, { role: "hris-employee" });
@@ -86,6 +89,83 @@ describe("GET /api/onboarding/employees (roster)", () => {
 		const [employee] = response.body.data.employees;
 		expect(employee.name).to.equal("Nina New");
 		expect(employee.checklist.completionPercentage).to.equal(40);
+		expect(response.body.data.pagination).to.deep.include({
+			total: 170,
+			page: 1,
+			limit: 10,
+			totalPages: 17,
+		});
+	});
+
+	it("paginates: page 2 skips 10; limit clamps to 100; bad values fall back to defaults", async () => {
+		const seen: any[] = [];
+		const prismaMock: any = {
+			employee: {
+				findFirst: async () => actorEmployee(),
+				findMany: async (args: any) => {
+					seen.push({ skip: args.skip, take: args.take });
+					return [];
+				},
+				count: async () => 0,
+			},
+		};
+		const app = buildApp(prismaMock, { role: "hris-employee" });
+
+		await request(app).get("/api/onboarding/employees?page=2").expect(200);
+		expect(seen[0]).to.deep.equal({ skip: 10, take: 10 });
+
+		await request(app).get("/api/onboarding/employees?limit=500").expect(200);
+		expect(seen[1]).to.deep.equal({ skip: 0, take: 100 });
+
+		await request(app).get("/api/onboarding/employees?page=abc&limit=-3").expect(200);
+		expect(seen[2]).to.deep.equal({ skip: 0, take: 10 });
+	});
+
+	it("applies search (multi-term OR) and departmentId filters server-side", async () => {
+		let capturedArgs: any;
+		const prismaMock: any = {
+			employee: {
+				findFirst: async () => actorEmployee(),
+				findMany: async (args: any) => {
+					capturedArgs = args;
+					return [];
+				},
+				count: async () => 0,
+			},
+		};
+		const app = buildApp(prismaMock, { role: "hris-hr-user" });
+		const response = await request(
+			app,
+		).get(
+			"/api/onboarding/employees?search=char%20aznable&departmentId=cmryaf7ms0016nj3o68cn814g",
+		);
+		expect(response.status).to.equal(200);
+		expect(capturedArgs.where.departmentId).to.equal("cmryaf7ms0016nj3o68cn814g");
+		expect(capturedArgs.where.AND).to.have.lengthOf(2);
+		expect(capturedArgs.where.AND[0].OR.map((clause: any) => Object.keys(clause)[0])).to.deep.equal([
+			"employeeId",
+			"person",
+			"person",
+		]);
+		expect(capturedArgs.where.AND[1].OR[0].employeeId.contains).to.equal("aznable");
+	});
+
+	it("ignores malformed departmentId instead of failing", async () => {
+		let capturedArgs: any;
+		const prismaMock: any = {
+			employee: {
+				findFirst: async () => actorEmployee(),
+				findMany: async (args: any) => {
+					capturedArgs = args;
+					return [];
+				},
+				count: async () => 0,
+			},
+		};
+		const app = buildApp(prismaMock, { role: "hris-hr-user" });
+		const response = await request(app).get("/api/onboarding/employees?departmentId=garbage!!");
+		expect(response.status).to.equal(200);
+		expect(capturedArgs.where.departmentId).to.be.undefined;
 	});
 });
 

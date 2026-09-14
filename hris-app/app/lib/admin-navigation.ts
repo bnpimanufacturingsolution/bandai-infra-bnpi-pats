@@ -104,6 +104,12 @@ export const adminConfigurationItems: AdminNavItem[] = [
 		icon: Calendar,
 	},
 	{
+		id: "onboarding-employees",
+		label: "Onboarding Employees",
+		path: "/hr/onboarding",
+		icon: Calendar,
+	},
+	{
 		id: "schedule-templates",
 		label: "Schedule Templates",
 		path: "/admin/configuration/schedule-templates",

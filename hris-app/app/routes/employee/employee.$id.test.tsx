@@ -124,7 +124,7 @@ vi.mock("~/lib/hooks/use-auth", () => ({
 
 vi.mock("~/lib/hooks/useEmployees", () => ({
 	useEmployee: vi.fn(() => ({
-		data: mockEmployee,
+		data: { ...mockEmployee, employmentStatus: employeeStatusHolder.value },
 		isLoading: false,
 		error: null,
 	})),
@@ -162,6 +162,12 @@ vi.mock("~/components/organisms/employee-detail/documents-tab", () => ({
 vi.mock("~/components/organisms/employee-detail/onboarding-tab", () => ({
 	OnboardingTab: () => <div>Onboarding mock</div>,
 }));
+
+vi.mock("~/components/organisms/onboarding/onboarding-checklist-panel", () => ({
+	default: () => <div data-testid="onboarding-checklist-panel">Checklist panel mock</div>,
+}));
+
+const employeeStatusHolder = vi.hoisted(() => ({ value: "ACTIVE" }));
 
 const LocationProbe = () => {
 	const location = useLocation();
@@ -212,5 +218,26 @@ describe("Employee detail shell", () => {
 		expect(screen.getByRole("button", { name: /update profile/i })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: /change password/i })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: /resignation requests/i })).toBeInTheDocument();
+	});
+
+	it("does not expose the Onboarding tab for non-ONBOARDING employees", () => {
+		employeeStatusHolder.value = "ACTIVE";
+		renderRoute("/employee/employee-self");
+		expect(screen.queryByRole("tab", { name: /^onboarding$/i })).not.toBeInTheDocument();
+	});
+
+	it("shows the Onboarding tab and renders the checklist panel for ONBOARDING employees", async () => {
+		employeeStatusHolder.value = "ONBOARDING";
+		const user = userEvent.setup();
+		renderRoute("/employee/employee-self?from=hr-onboarding");
+
+		const tab = screen.getByRole("tab", { name: /^onboarding$/i });
+		await user.click(tab);
+
+		expect(screen.getByTestId("onboarding-checklist-panel")).toBeInTheDocument();
+		await waitFor(() => {
+			expect(screen.getByLabelText("location-search")).toHaveTextContent("tab=onboarding");
+		});
+		employeeStatusHolder.value = "ACTIVE";
 	});
 });

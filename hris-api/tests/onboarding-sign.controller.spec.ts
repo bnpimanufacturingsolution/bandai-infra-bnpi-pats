@@ -18,6 +18,7 @@ interface MockConfig {
 	departmentId: string | null;
 	employmentStatus?: string;
 	userPassword?: string | null;
+	newHireStatus?: string;
 	itemStatus?: string;
 	responsibleDepartmentId?: string | null;
 }
@@ -51,6 +52,8 @@ function buildMockPrisma(config: MockConfig) {
 	const signatureCreated: any[] = [];
 	const itemUpdates: any[] = [];
 	const checklistUpdates: any[] = [];
+	const statusUpdates: any[] = [];
+	let statusSyncShouldThrow = false;
 
 	const prismaMock: any = {
 		employee: {
@@ -62,6 +65,23 @@ function buildMockPrisma(config: MockConfig) {
 				department: config.departmentId ? { id: config.departmentId, name: "IT" } : null,
 				person: { personalInfo: { firstName: "Ivan", lastName: "Tester" } },
 			}),
+			// gate resolver lookups (syncEmployeeEmploymentStatus)
+			findUnique: async () => ({
+				id: "emp-newhire",
+				employmentStatus: config.newHireStatus || "ONBOARDING",
+			}),
+			update: async (args: any) => {
+				if (statusSyncShouldThrow) throw new Error("status sync db down");
+				statusUpdates.push(args.data);
+				return { id: "emp-newhire", ...args.data };
+			},
+		},
+		boardingProcess: {
+			findMany: async () => [], // legacy side clean for these tests
+		},
+		onboardingChecklist: {
+			// syncEmploymentForChecklist resolves checklist -> employee
+			findFirst: async () => ({ employeeId: "emp-newhire" }),
 		},
 		onboardingItem: {
 			findFirst: async (args: any) => {
@@ -114,7 +134,18 @@ function buildMockPrisma(config: MockConfig) {
 			}),
 	};
 
-	return { prismaMock, calls, item, signatureCreated, itemUpdates, checklistUpdates };
+	return {
+		prismaMock,
+		calls,
+		item,
+		signatureCreated,
+		itemUpdates,
+		checklistUpdates,
+		statusUpdates,
+		setStatusSyncThrows: (value: boolean) => {
+			statusSyncShouldThrow = value;
+		},
+	};
 }
 
 let PASSWORD_HASH = "";
@@ -140,13 +171,40 @@ describe("POST /api/onboarding/items/:id/sign", () => {
 		PASSWORD_HASH = await bcrypt.hash(PASSWORD, 10);
 	});
 
-	const signAs = async (config: MockConfig, body: any) => {
+	const signAs = async (config: MockConfig, body: any, before?: (m: any) => void) => {
 		const { prismaMock, ...rest } = buildMockPrisma(config);
 		prismaMock.__role = config.role;
+		before?.(prismaMock);
 		const app = buildApp(prismaMock);
 		const response = await request(app).post("/api/onboarding/items/citem0000000001/sign").send(body);
 		return { response, ...rest };
 	};
+
+	it("promotes the employee to ACTIVE when signing completes the dedicated checklist", async () => {
+		const { response, statusUpdates } = await signAs(
+			{ role: "hris-employee", employeeId: "emp-it-guy", departmentId: "dept-it" },
+			{ password: PASSWORD },
+		);
+		expect(response.status).to.equal(200);
+		// legacy clean + no remaining PENDING dedicated items -> gate promotes
+		expect(response.body.data.checklist.employmentStatus).to.equal("ACTIVE");
+		expect(statusUpdates[0].employmentStatus).to.equal("ACTIVE");
+	});
+
+	it("still signs (200) when the employment-status sync fails internally", async () => {
+		const { response } = await signAs(
+			{ role: "hris-employee", employeeId: "emp-it-guy", departmentId: "dept-it" },
+			{ password: PASSWORD },
+			(m: any) => {
+				m.employee.update = async () => {
+					throw new Error("sync db down");
+				};
+			},
+		);
+		expect(response.status).to.equal(200);
+		expect(response.body.data.item.status).to.equal("COMPLETED");
+		expect(response.body.data.checklist.employmentStatus).to.equal(null);
+	});
 
 	it("signs a dept-matched item and stamps the signee server-side", async () => {
 		const { response, itemUpdates, signatureCreated, checklistUpdates } = await signAs(

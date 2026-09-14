@@ -5,6 +5,13 @@ export interface OnboardingChecklistSummary {
 	completionPercentage: number;
 }
 
+export interface OnboardingRosterPagination {
+	total: number;
+	page: number;
+	limit: number;
+	totalPages: number;
+}
+
 export interface OnboardingRosterEmployee {
 	employeeId: string;
 	employeeNumber: string;

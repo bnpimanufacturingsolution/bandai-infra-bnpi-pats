@@ -234,7 +234,7 @@ const buildChecklistMetadata = (
 	isSystemGenerated: true,
 	}) as Prisma.InputJsonObject;
 
-const syncEmployeeEmploymentStatus = async (params: {
+export const syncEmployeeEmploymentStatus = async (params: {
 	prisma: PrismaClient;
 	employeeId: string;
 }) => {
@@ -261,9 +261,26 @@ const syncEmployeeEmploymentStatus = async (params: {
 		},
 	});
 
-	const hasPendingOnboarding = activeOnboardingProcesses.some((process) =>
+	const hasPendingLegacyOnboarding = activeOnboardingProcesses.some((process) =>
 		process.checklistItems.some((item) => item.status !== ChecklistStatus.COMPLETED),
 	);
+
+	// Design C gate: a provisioned dedicated OnboardingChecklist must ALSO be fully
+	// signed before ONBOARDING -> ACTIVE. Employees with no dedicated checklist keep
+	// pure legacy behavior (no dedicated rows = nothing pending here).
+	const pendingDedicatedItem = await params.prisma.onboardingItem.findFirst({
+		where: {
+			status: "PENDING",
+			isDeleted: false,
+			section: {
+				isDeleted: false,
+				checklist: { employeeId: params.employeeId, isDeleted: false },
+			},
+		},
+		select: { id: true },
+	});
+
+	const hasPendingOnboarding = hasPendingLegacyOnboarding || !!pendingDedicatedItem;
 
 	let nextStatus: EmploymentStatus | null = null;
 	if (hasPendingOnboarding) {

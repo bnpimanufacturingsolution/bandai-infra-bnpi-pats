@@ -31,6 +31,7 @@ interface SearchableSelectProps {
 	emptyActionLabel?: string;
 	onEmptyActionSelect?: () => void;
 	onOpenChange?: (open: boolean) => void;
+	triggerAriaLabel?: string;
 	className?: string;
 	disabled?: boolean;
 }
@@ -45,6 +46,7 @@ export function SearchableSelect({
 	emptyActionLabel,
 	onEmptyActionSelect,
 	onOpenChange,
+	triggerAriaLabel,
 	className,
 	disabled = false,
 }: SearchableSelectProps) {
@@ -70,6 +72,7 @@ export function SearchableSelect({
 					role="combobox"
 					aria-controls={listId}
 					aria-expanded={open}
+					aria-label={triggerAriaLabel}
 					disabled={disabled}
 					className={cn(
 						"mt-1 w-full flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-foreground hover:bg-background focus:outline-none focus:ring-2 focus:ring-primary font-normal text-sm leading-normal min-h-[42px]",

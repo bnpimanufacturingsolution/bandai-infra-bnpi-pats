@@ -41,7 +41,10 @@ passwordless account gets `409 Set a password first`.
 
 Roster / visibility
 
-- `GET  /employees` — onboarding employees + checklist summary (any authenticated user)
+- `GET  /employees` — onboarding employees + checklist summary (any authenticated user).
+  Optional `?search` (multi-term AND over employee number + first/last name, server-side),
+  `?departmentId` (exact; malformed values ignored), and `?page`/`?limit`
+  (default 10/page, max 100). Response includes `pagination {total, page, limit, totalPages}`.
 - `GET  /checklists/:id/visible` — role-filtered tree with per-item `canSign` + `isContextOnly`
 - `GET  /checklists/:id` — full tree (admin/HR)
 
@@ -91,13 +94,32 @@ Sign
   created checklist (single active template) full-page in the builder-preview layout via
   the shared `ChecklistPreviewTable`. Nothing employee-related (no roster/sign/provision
   widgets); honest "No checklist has been built yet" empty state + Build CTA.
-- `app/components/organisms/onboarding/builder.tsx` — **single-template editor**:
-  auto-opens the FIRST template created (no template selector, no "New template…"
-  affordance); Save always updates that one template (`POST` + `PUT /tree`). Sections and
-  items support inline rename + delete (subtree removal with confirm); helpers
-  `updateSectionName`, `removeSectionById`, `updateItemInItems`, `removeItemFromItems`
-  are exported + tested. `add-item.tsx` doubles as the item edit dialog (department stays
-  optional → no-dept context item).
+- `app/components/organisms/onboarding/hr-onboarding-page.tsx` at **`/hr/onboarding`** —
+  the per-employee experience rendered through the **shared `DataTable`** atom (same
+  numbered pager with ellipsis — `1 2 3 … 17`, "Showing X to Y of Z results" range, and
+  skeleton loading as every other admin/HR list) over the server-side
+  GET /api/onboarding/employees list (search + department + `?page`/`?limit=10`), with
+  "Open Profile" actions column. Search is `DataTable`'s integrated box (debounced);
+  the department filter is the shared `SearchableSelect` (with an "All departments"
+  clearing option) in the `customFilters` slot; filters reset to page 1. Selecting a row
+  mounts the shared `onboarding-checklist-panel.tsx` inline; "Open Profile" navigates to
+  `/employee/<id>?tab=onboarding&from=hr-onboarding` (Back returns to the list).
+  NOTE: DataTable rows carry `role="button"` and a mobile-card duplicate exists — browser
+  tests must match the real button via `{ name, exact: true }` + `visible=true`.
+- `app/routes/employee/employee.$id.tsx` — an **Onboarding tab appears only while
+  `employmentStatus === "ONBOARDING"`** and renders the same panel (deep-linkable via
+  `?tab=onboarding`). The legacy boarding `OnboardingTab` is untouched/hidden.
+- `onboarding-checklist-panel.tsx` — role-scoped tree from `.../visible` (context rows and
+  non-dept rows disabled with tooltips), progress bar, **`Skeleton` loading blocks**
+  (header/progress/two section cards with row placeholders) while the instance resolves,
+  provision CTA for admin/HR when the employee has no checklist, and the sign modal: short
+  instruction + **password** + optional remarks, inline error on wrong password
+  (`retry: false` on all onboarding mutations so errors surface immediately), admin/HR unsign.
+- Instance resolution composes existing endpoints: admin/HR `GET /checklists?employeeId=`,
+  everyone else roster lookup; no dedicated by-employee route (operator choice).
+- Sidebar/nav: "Onboarding" under HR Recruitment submenu; "Onboarding" in General for
+  non-HR non-admin roles; "Onboarding Employees" in the admin configuration nav — all →
+  `/hr/onboarding`.
 - Service `app/services/onboarding.service.ts`, hooks `app/lib/hooks/useOnboarding.ts`,
   types `app/zod/onboarding.ts` (roster/visible/sign hooks remain for the future
   employee-facing surface).
@@ -111,19 +133,68 @@ Sign
 - `hris-api/tests/onboarding-lifecycle.spec.ts` — `ensureOnboardingChecklistForEmployee`
   (exists-noop, deep copy parents-before-children, active-template auto-resolve,
   requireTemplate skip, TEMPLATE_NOT_FOUND, employee-not-found)
+- `hris-api/tests/onboarding-status-gate.spec.ts` — design C truth table (legacy AND
+  dedicated both required; reopen symmetry; no-dedicated = pure legacy)
 - `hris-app` vitest: `builder.test.tsx` (single-template UI contract, section/item edit+delete,
   tree payload, pure helpers), `checklist.test.tsx` (page preview contract),
-  `onboarding.service.test.ts`
+  `onboarding-checklist-panel.test.tsx` (sign modal, dept gating, inline errors, skeleton),
+  `hr-onboarding-page.test.tsx` (DataTable numbered pager + ellipsis, page forwarding,
+  skeletons, search/filter wiring, row→panel, Open Profile nav),
+  `employee.$id.test.tsx` (Onboarding tab only for ONBOARDING status),
+  `Sidebar.test.tsx` (Recruitment + general entries), `onboarding.service.test.ts`
 - `hris-app/tests/smoke/admin-onboarding-checklist-live-proof.spec.ts` — live browser proof
-- Live DEV proofs: `.runtime/onboarding-module-proof-<stamp>/` (v1 E2E) and
+- `hris-app/tests/smoke/onboarding-list-tab-live-proof.spec.ts` — live list→search→sign 6.1
+  (wrong-password inline error → correct password → profile tab) with a self-healing
+  unsign prelude so it is re-runnable
+- Live DEV proofs: `.runtime/onboarding-module-proof-<stamp>/` (v1 E2E),
   `.runtime/onboarding-provision-proof-<stamp>/` (scoped provision-all create → idempotent
-  skip → visible deep-copy intact → rollback cleanup)
+  skip → visible deep-copy intact → rollback cleanup),
+  `.runtime/onboarding-list-tab-proof-<stamp>/` (list/tab journey screenshots + final visible)
+
+## DEV test fixtures (created for browser proofs — documented on purpose)
+
+- User `e2e-onb-signer2@bandai.local` / `password123` (role hris-hr-manager; note:
+  login tokens carry the employee-derived role, so it signs via DEPARTMENT match, not HR
+  bypass) linked to synthetic employee `KCSSI-BANDAI1129`
+  (`cmq21pu5e04e87ztg4jeqn2cm`), whose `departmentId` was set to
+  Software Development `cmry9tw4i000unr3o3eay9i80` (original `cmpxw1je6002r7zwsqa632swx`,
+  saved in the proof dir) to match the template's IT items.
+- Char Aznable's checklist (`cmty9opte00l77ktghwrtnnmx`, employee `cmtu4w68e06b27kkw7ovruznu`)
+  intentionally keeps item 6.1 signed by "Mae Banaga" as the demo record; admin can
+  `POST /api/onboarding/items/:id/unsign` to reset (the Playwright spec does this automatically).
+- v1 test user `e2e-onb-signer@bandai.local` was deleted but its email stays reserved by the
+  unique index.
+
+## Promotion gate (design C — operator-confirmed 2026-09-12)
+
+ONBOARDING → ACTIVE is a SINGLE shared rule evaluated by
+`syncEmployeeEmploymentStatus` (`helper/boarding-documents.helper.ts`):
+an employee stays/reopens to ONBOARDING while **either** side has unmet items:
+
+- legacy `BoardingProcess`(ONBOARDING, NOT_STARTED/IN_PROGRESS) checklist items not COMPLETED, **or**
+- a provisioned dedicated `OnboardingChecklist` with any non-deleted item still PENDING.
+
+Triggers: all existing legacy doc-event call sites (reconcile from document
+upload/update/review/delete, employee update, import post-actions) PLUS the dedicated
+module's `sign`, `unsign`, `deleteItem`/`deleteSection` (checklist kind),
+`createChecklist`, and `provision-all` — one resolver, both worlds.
+
+- Employee with NO dedicated checklist → pure legacy behavior (existing hires never blocked).
+- Empty dedicated checklist (0 items) → non-blocking (nothing pending).
+- No auto-sign/bulk-sign endpoints (declined): a signature always names a password-verified human.
+- Sign/unsign responses echo the resolved `employmentStatus` for observability.
+
+Live proof (2026-09-12, `.runtime/onboarding-gate-proof-<stamp>/`): EMP003
+baseline ONBOARDING → provisioned (dedicated PENDING, legacy clean) → stays ONBOARDING →
+signed only item → **ACTIVE** (direct read) → admin unsign → **ONBOARDING** (reopen) →
+checklist deleted → ACTIVE again (legacy-only) → status restored. Hirotaka Tanaka:
+dedicated 100% signed but one legacy 201 item PENDING → stayed ONBOARDING (AND-gate).
 
 ## Boundaries
 
-- **Single-app exception:** the surfaces are admin/HR configuration (`/admin/configuration/onboarding/*`);
-  `hris-emp-app` has no counterpart and is not a checked-in path on this branch. A general-employee
-  self-service view of the dept-filtered checklist is a candidate follow-up (see recommendation registry).
+- The per-employee list/signing surface lives in **hris-app** (`/hr/onboarding` + the profile
+  Onboarding tab). `hris-emp-app` has no counterpart and is not a checked-in path on this
+  branch; emp-app parity remains a candidate follow-up (recommendation registry).
 - No change to the generic `BoardingProcess` / `ChecklistItem` / `BoardingTemplate` / `TemplateItem`
   controllers or offboarding flows.
 - No automatic notification on checklist completion (the legacy boarding stack keeps its own).

@@ -32,17 +32,13 @@ export default function ItemNode({
 		<div className={level === 1 ? "space-y-2" : "ml-5 space-y-2 border-l pl-4"}>
 			<div className="flex items-center justify-between gap-5 rounded-sm border p-3">
 				<div className="min-w-0">
-					<p className="font-medium">{item.name}</p>
-
-					{(item.personInChargeName || item.personInChargeId) && (
-						<p className="text-xs text-muted-foreground">
-							Person in charge: {item.personInChargeName || item.personInChargeId}
-						</p>
-					)}
+					<p className="font-medium text-sm">{item.name}</p>
 				</div>
 
 				<div className="flex shrink-0 items-center gap-1">
-					<Badge>Responsible</Badge>
+					{(item.personInChargeName || item.personInChargeId) && (
+						<Badge>{item.personInChargeName || item.personInChargeId}</Badge>
+					)}
 
 					<AddItem
 						level={level}

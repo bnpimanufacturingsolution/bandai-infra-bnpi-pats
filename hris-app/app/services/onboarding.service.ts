@@ -1,6 +1,7 @@
 import { hrisApiClient } from "../lib/api-client";
 import type {
 	OnboardingRosterEmployee,
+	OnboardingRosterPagination,
 	OnboardingVisibleChecklist,
 	OnboardingTemplateSummary,
 	OnboardingTemplateTree,
@@ -16,10 +17,33 @@ const unwrap = <T>(payload: any): T => {
 	return payload as T;
 };
 
+export interface OnboardingRosterParams {
+	search?: string;
+	departmentId?: string;
+	page?: number;
+	limit?: number;
+}
+
 class OnboardingService {
-	async getRoster(): Promise<{ employees: OnboardingRosterEmployee[] }> {
-		const response = await hrisApiClient.get("/api/onboarding/employees");
-		return unwrap<{ employees: OnboardingRosterEmployee[] }>(response.data);
+	async getRoster(
+		params?: OnboardingRosterParams,
+	): Promise<{ employees: OnboardingRosterEmployee[]; pagination?: OnboardingRosterPagination }> {
+		const query = new URLSearchParams();
+		if (params?.search?.trim()) query.set("search", params.search.trim());
+		if (params?.departmentId) query.set("departmentId", params.departmentId);
+		if (params?.page && params.page > 1) query.set("page", String(params.page));
+		if (params?.limit) query.set("limit", String(params.limit));
+		const suffix = query.toString() ? `?${query.toString()}` : "";
+		const response = await hrisApiClient.get(`/api/onboarding/employees${suffix}`);
+		return unwrap<{ employees: OnboardingRosterEmployee[]; pagination?: OnboardingRosterPagination }>(
+			response.data,
+		);
+	}
+
+	async listChecklists(employeeId?: string): Promise<{ checklists: any[] }> {
+		const suffix = employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : "";
+		const response = await hrisApiClient.get(`/api/onboarding/checklists${suffix}`);
+		return unwrap<{ checklists: any[] }>(response.data);
 	}
 
 	async getVisibleChecklist(checklistId: string): Promise<{ checklist: OnboardingVisibleChecklist }> {

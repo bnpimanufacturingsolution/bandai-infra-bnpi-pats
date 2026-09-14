@@ -15,12 +15,48 @@ export const onboardingQueryKeys = {
 	template: (id: string) => [...onboardingQueryKeys.all, "template", id] as const,
 };
 
-export const useOnboardingRoster = (options?: { enabled?: boolean }) =>
+export const useOnboardingRoster = (options?: {
+	enabled?: boolean;
+	search?: string;
+	departmentId?: string;
+	page?: number;
+}) =>
 	useQuery({
-		queryKey: onboardingQueryKeys.roster(),
-		queryFn: () => onboardingService.getRoster(),
+		queryKey: [
+			...onboardingQueryKeys.roster(),
+			{
+				search: options?.search ?? "",
+				departmentId: options?.departmentId ?? "",
+				page: options?.page ?? 1,
+			},
+		],
+		queryFn: () =>
+			onboardingService.getRoster({
+				search: options?.search,
+				departmentId: options?.departmentId,
+				page: options?.page,
+			}),
 		enabled: options?.enabled ?? true,
 		staleTime: 30 * 1000,
+	});
+
+/** Roster lookup for one employee (works for every authenticated role). */
+export const useOnboardingRosterForEmployee = (employeeNumber: string | null) =>
+	useQuery({
+		queryKey: [...onboardingQueryKeys.roster(), "employee", employeeNumber],
+		queryFn: () => onboardingService.getRoster({ search: employeeNumber ?? "" }),
+		enabled: !!employeeNumber,
+		staleTime: 15 * 1000,
+	});
+
+/** Checklist-instance list (admin/HR only endpoint; callers must gate). */
+export const useOnboardingChecklistsForEmployee = (employeeId: string | null, enabled: boolean) =>
+	useQuery({
+		queryKey: [...onboardingQueryKeys.all, "checklists-for", employeeId],
+		queryFn: () => onboardingService.listChecklists(employeeId ?? undefined),
+		enabled: !!employeeId && enabled,
+		staleTime: 15 * 1000,
+		retry: false,
 	});
 
 export const useOnboardingVisibleChecklist = (checklistId: string | null) =>
@@ -36,6 +72,7 @@ export const useSignOnboardingItem = (checklistId: string | null) => {
 	return useMutation({
 		mutationFn: ({ itemId, payload }: { itemId: string; payload: SignOnboardingItemPayload }) =>
 			onboardingService.signItem(itemId, payload),
+		retry: false,
 		onSuccess: () => {
 			if (checklistId) {
 				queryClient.invalidateQueries({
@@ -56,6 +93,7 @@ export const useUnsignOnboardingItem = (checklistId: string | null) => {
 	return useMutation({
 		mutationFn: ({ itemId, reason }: { itemId: string; reason?: string }) =>
 			onboardingService.unsignItem(itemId, reason),
+		retry: false,
 		onSuccess: () => {
 			if (checklistId) {
 				queryClient.invalidateQueries({
@@ -90,6 +128,7 @@ export const useOnboardingTemplate = (templateId: string | null) =>
 export const useSaveOnboardingTemplateTree = () => {
 	const queryClient = useQueryClient();
 	return useMutation({
+		retry: false,
 		mutationFn: async ({
 			templateId,
 			payload,
@@ -116,6 +155,7 @@ export const useCreateOnboardingChecklist = () => {
 	return useMutation({
 		mutationFn: (payload: CreateOnboardingChecklistPayload) =>
 			onboardingService.createChecklist(payload),
+		retry: false,
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: onboardingQueryKeys.roster() });
 			queryClient.invalidateQueries({ queryKey: onboardingQueryKeys.all });

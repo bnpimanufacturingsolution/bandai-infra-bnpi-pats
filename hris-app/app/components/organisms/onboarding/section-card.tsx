@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { useState } from "react";
 import AddItem from "./add-item";
@@ -69,14 +69,6 @@ export default function SectionCard({
 				)}
 
 				<div className="flex shrink-0 items-center gap-2">
-					<AddItem
-						level={1}
-						sectionName={section.name}
-						onCreate={(name, personInChargeId, personInChargeName) =>
-							onAddItem(section.id, name, personInChargeId, personInChargeName)
-						}
-					/>
-
 					{!editing && (
 						<Button
 							variant="ghost"
@@ -122,6 +114,16 @@ export default function SectionCard({
 					))
 				)}
 			</CardContent>
+
+			<CardFooter>
+				<AddItem
+					level={1}
+					sectionName={section.name}
+					onCreate={(name, personInChargeId, personInChargeName) =>
+						onAddItem(section.id, name, personInChargeId, personInChargeName)
+					}
+				/>
+			</CardFooter>
 		</Card>
 	);
 }

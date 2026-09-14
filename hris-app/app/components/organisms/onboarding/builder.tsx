@@ -103,7 +103,9 @@ export function removeSectionById(
 }
 
 export function mapTemplateToSections(template: OnboardingTemplateTree): ChecklistSection[] {
-	const mapItem = (item: OnboardingTemplateTree["sections"][number]["items"][number]): ChecklistItem => ({
+	const mapItem = (
+		item: OnboardingTemplateTree["sections"][number]["items"][number],
+	): ChecklistItem => ({
 		id: item.id,
 		serverId: item.id,
 		name: item.title,
@@ -122,11 +124,7 @@ export function mapTemplateToSections(template: OnboardingTemplateTree): Checkli
 export function sectionsToTreePayload(sections: ChecklistSection[]): TemplateTreeSectionPayload[] {
 	return sections.map((section, sectionIndex) => {
 		const items: TemplateTreeItemPayload[] = [];
-		const walk = (
-			list: ChecklistItem[],
-			parentTempId: string | null,
-			prefix: string,
-		) => {
+		const walk = (list: ChecklistItem[], parentTempId: string | null, prefix: string) => {
 			list.forEach((item, index) => {
 				const number = prefix ? `${prefix}.${index + 1}` : String(index + 1);
 				items.push({
@@ -307,8 +305,8 @@ export function AdminOnboardingBuilder() {
 			{/* Header */}
 
 			<CardHeader className="flex flex-col gap-3">
-				<div className="flex items-center justify-between gap-5">
-					<h2>Onboarding Checklist Builder</h2>
+				<div className="w-full flex items-center justify-between gap-5">
+					<h2 className="font-medium">Onboarding Checklist Builder</h2>
 
 					<div className="flex items-center gap-2">
 						<Button variant="outline" onClick={() => setPreviewOpen(true)}>
@@ -322,7 +320,9 @@ export function AdminOnboardingBuilder() {
 						</Button>
 
 						<Button asChild>
-							<Link to="/admin/configuration/onboarding/checklist">Go to Checklist</Link>
+							<Link to="/admin/configuration/onboarding/checklist">
+								Go to Checklist
+							</Link>
 						</Button>
 					</div>
 				</div>
@@ -343,7 +343,7 @@ export function AdminOnboardingBuilder() {
 			</CardHeader>
 
 			{/* Sections */}
-			<CardContent className="max-h-[75vh] space-y-5 overflow-auto pb-10">
+			<CardContent className="max-h-[65vh] space-y-5 overflow-auto pb-10">
 				{templatesQuery.isLoading || templateQuery.isLoading ? (
 					<p className="text-sm text-muted-foreground">Loading your checklist…</p>
 				) : (

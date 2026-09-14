@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "~/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "~/components/ui/dialog";
@@ -64,7 +65,11 @@ export default function AddItem({
 			(option) => option.value === personInChargeId,
 		);
 
-		onCreate(trimmedName, personInChargeId, selectedOption?.label ?? initialPersonInChargeName ?? "");
+		onCreate(
+			trimmedName,
+			personInChargeId,
+			selectedOption?.label ?? initialPersonInChargeName ?? "",
+		);
 
 		if (!isEdit) {
 			setName("");
@@ -78,8 +83,10 @@ export default function AddItem({
 			<DialogTrigger asChild>
 				<Button
 					variant={isEdit ? "ghost" : "secondary"}
-					size={isEdit ? "sm" : undefined}>
-					{triggerLabel}
+					size={isEdit ? "sm" : undefined}
+					className="text-xs"
+					title={triggerLabel}>
+					<Plus />
 				</Button>
 			</DialogTrigger>
 
