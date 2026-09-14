@@ -24,6 +24,10 @@ import {
 	useUpdateJob,
 } from "~/lib/hooks/use-job";
 import { useWorkforceRecruitmentRequestContext } from "~/lib/hooks/useWorkforceRecruitmentSettings";
+import {
+	buildJobDisplayCode,
+	buildJobDisplayCodes,
+} from "~/lib/utils/recruitment-job-code";
 import { useLevels } from "~/lib/hooks/useLevels";
 import { usePositions } from "~/lib/hooks/usePositions";
 import { formatDateTime } from "~/lib/utils/text-utils";
@@ -84,9 +88,17 @@ export function RecruitmentJobsManager() {
 		query: jobSearch,
 		filter: filters,
 		count: true,
-		fields: "id,departmentId,sectionId,positionId,levelId,department.id,department.name,section.id,section.name,section.code,position.id,position.title,position.sectionId,position.section.departmentId,level.id,level.name,headcountRequested,type,location,description,isDeleted,createdAt,updatedAt",
+		fields: "id,departmentId,sectionId,positionId,levelId,department.id,department.name,section.id,section.name,section.code,position.id,position.code,position.title,position.sectionId,position.section.departmentId,level.id,level.name,headcountRequested,type,location,description,isDeleted,createdAt,updatedAt",
 	});
 	const items = (jobsData as any)?.jobs || [];
+	const jobDisplayCodes = buildJobDisplayCodes(
+		items.map((job: any) => ({
+			id: job?.id,
+			positionTitle: job?.position?.title,
+			positionCode: job?.position?.code,
+			createdAt: job?.createdAt,
+		})),
+	);
 	const totalItems = (jobsData as any)?.pagination?.total || 0;
 
 	const activeJobId = isEditing || isViewing || isDeleting ? jobId : null;
@@ -400,10 +412,21 @@ export function RecruitmentJobsManager() {
 					positions.find((position: any) => position.id === item.positionId)?.section
 						?.name ||
 					"";
+				const displayCode = jobDisplayCodes[item.id] || "";
 				return (
 					<div className="min-w-0">
-						<div className="truncate font-medium text-gray-900">
-							{formatLevelPositionLabel(levelName, positionTitle)}
+						<div className="flex min-w-0 items-center gap-2">
+							<span className="truncate font-medium text-gray-900">
+								{formatLevelPositionLabel(levelName, positionTitle)}
+							</span>
+							{displayCode ? (
+								<Badge
+									variant="outline"
+									data-testid="job-display-code"
+									className="shrink-0 border-neutral-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-neutral-500 shadow-none">
+									{displayCode}
+								</Badge>
+							) : null}
 						</div>
 						{sectionName ? (
 							<div className="truncate text-xs text-gray-500">{sectionName}</div>
@@ -823,9 +846,28 @@ export function RecruitmentJobsManager() {
 											?.name ||
 										"";
 									return (
-										<h3 className="text-lg font-bold text-gray-900">
-											{formatLevelPositionLabel(levelName, positionTitle)}
-										</h3>
+										<div className="flex min-w-0 items-center gap-2">
+											<h3 className="text-lg font-bold text-gray-900">
+												{formatLevelPositionLabel(levelName, positionTitle)}
+											</h3>
+											{(() => {
+												const code =
+													jobDisplayCodes[activeJob.id] ||
+													buildJobDisplayCode(
+														positionTitle,
+														activeJob.createdAt,
+														activeJob.position?.code,
+													);
+												return code ? (
+													<Badge
+														variant="outline"
+														data-testid="job-display-code"
+														className="shrink-0 border-neutral-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-neutral-500 shadow-none">
+														{code}
+													</Badge>
+												) : null;
+											})()}
+										</div>
 									);
 								})()}
 								<p className="text-sm text-gray-500 capitalize">

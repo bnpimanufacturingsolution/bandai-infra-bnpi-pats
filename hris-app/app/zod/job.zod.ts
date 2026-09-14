@@ -41,6 +41,7 @@ const SectionSchema = z.object({
 const PositionSchema = z.object({
 	id: z.string(),
 	title: z.string(),
+	code: z.string().nullable().optional(),
 	sectionId: z.string().nullable().optional(),
 	section: SectionSchema.nullable().optional(),
 	description: z.string().nullable().optional(),

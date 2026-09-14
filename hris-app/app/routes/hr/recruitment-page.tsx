@@ -82,6 +82,7 @@ import { Progress } from "~/components/ui/progress";
 import type { ApplicantActionRequest } from "~/services/applicant.service";
 import workforceRecruitmentSettingsService from "~/services/workforce-recruitment-settings.service";
 import { cn } from "~/lib/utils";
+import { buildJobDisplayCodes } from "~/lib/utils/recruitment-job-code";
 import { deriveRoleAndFlags } from "~/lib/utils/role-derivation";
 import type { WorkflowRuntimeState, WorkflowRuntimeStep } from "~/services/workflow-engine.service";
 import { z } from "zod";
@@ -1349,7 +1350,7 @@ export default function RecruitmentPage() {
 		document: true as any,
 		sort: "createdAt",
 		order: "desc",
-		fields: "id,position.id,position.title,level.id,level.name,headcountRequested,isDeleted",
+		fields: "id,position.id,position.code,position.title,level.id,level.name,headcountRequested,isDeleted,createdAt",
 		filter: { isDeleted: false },
 	});
 	const { data: workflowTemplatesData } = useWorkflowInstances(
@@ -1421,12 +1422,25 @@ export default function RecruitmentPage() {
 			) as Record<string, string>,
 		[workflowColumns],
 	);
+	const jobDisplayCodes = useMemo(
+		() =>
+			buildJobDisplayCodes(
+				jobs.map((job: any) => ({
+					id: job?.id,
+					positionTitle: job?.position?.title,
+					positionCode: job?.position?.code,
+					createdAt: job?.createdAt,
+				})),
+			),
+		[jobs],
+	);
 	const groupedSections = useMemo(() => {
 		const sections: Array<{
 			key: string;
 			label: string;
 			applicants: any[];
 			targetCount: number;
+			displayCode: string;
 		}> = [];
 		const seenKeys = new Set<string>();
 
@@ -1439,6 +1453,7 @@ export default function RecruitmentPage() {
 				label: getJobGroupLabel(job, key),
 				applicants: rawGroupedApplicants[key] || [],
 				targetCount: getJobTargetCount(job),
+				displayCode: jobDisplayCodes[key] || "",
 			});
 		}
 
@@ -1449,6 +1464,7 @@ export default function RecruitmentPage() {
 				label: getGroupLabel(applicants, groupKey),
 				applicants,
 				targetCount: Math.max(getHiredApplicantCount(applicants), 1),
+				displayCode: "",
 			});
 		}
 
@@ -1458,7 +1474,7 @@ export default function RecruitmentPage() {
 			if (leftReached === rightReached) return 0;
 			return leftReached ? 1 : -1;
 		});
-	}, [jobs, rawGroupedApplicants]);
+	}, [jobs, rawGroupedApplicants, jobDisplayCodes]);
 	const lockedRecruitmentGroupKeys = useMemo(() => {
 		const locked = new Set<string>();
 		groupedSections.forEach((section) => {
@@ -1749,7 +1765,7 @@ export default function RecruitmentPage() {
 							</div>
 						) : null}
 						{groupedSections.map(
-							({ key: groupKey, label, applicants, targetCount }) => {
+							({ key: groupKey, label, applicants, targetCount, displayCode }) => {
 								const filteredApplicants = applicants.filter((applicant) => {
 									if (!searchTerm) return true;
 									const haystack =
@@ -1803,10 +1819,18 @@ export default function RecruitmentPage() {
 															)}>
 															<Briefcase className="h-4 w-4" />
 														</div>
-														<div className="min-w-0">
+														<div className="flex min-w-0 items-center gap-2">
 															<h2 className="truncate text-sm font-semibold text-neutral-900">
 																{label}
 															</h2>
+															{displayCode ? (
+																<Badge
+																	variant="outline"
+																	data-testid="job-display-code"
+																	className="shrink-0 border-neutral-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-neutral-500 shadow-none">
+																	{displayCode}
+																</Badge>
+															) : null}
 														</div>
 													</div>
 													<div className="flex items-center gap-2">
