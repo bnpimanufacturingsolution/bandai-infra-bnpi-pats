@@ -1,3 +1,21 @@
+## Latest Task Addendum - 2026-09-10 Quick-adjust period fixed to entry (operator-ordered)
+
+- **What:** empty `Select period` was a prefill race (reset gated on the periods list). Period now renders locked (`Fixed to this payroll period`) on row-level entry (preview Adjust, register Actions) via entry id + caller label/list lookup; dropdown stays only for header bulk or unresolvable ids.
+- **Files (hris-app only):** modal (`defaultPayrollPeriodLabel`, lock display, race-free seed + bulk fallback), additive `isQuickAdjustPeriodLocked`, both callers pass labels, CHANGELOG. Backend untouched.
+- **Proof:** vitest 22/22 (5 new lock cases); filtered `tsc` zero diagnostics; byte-level encoding/tab checks. Browser proof NEEDS_CONFIRMATION. HR-only surface.
+
+## Latest Task Addendum - 2026-09-10 Quick-adjust multi-row submit (operator-ordered)
+
+- **What:** `QuickPayrollAdjustmentModal` now takes several name + amount rows per submit (`Add another adjustment`, × removes, min 1) sharing the modal direction/employees/period. Rows submit sequentially through the existing single-adjust POST; merged result refreshes preview/register via the unchanged `onAdjusted` contract. Failed rows stay open with per-row errors + anti-duplicate retry note.
+- **Files (hris-app only):** modal rework, additive `validateQuickAdjustRows` in `employee-benefit.service`, 5 new unit cases, CHANGELOG entry. Backend untouched (no schema/route/result change); both callers compatible.
+- **Proof:** vitest 17/17 (quick-adjust + preview-modal suites); filtered `tsc` zero diagnostics; diff mojibake-free. Browser proof NEEDS_CONFIRMATION. HR-only surface (no emp counterpart).
+
+## Latest Task Addendum - 2026-09-10 Modal sub-header into hover icon (SHE Hide, follow-up)
+
+- **What:** `Start Payroll Management` confirm-modal description paragraph now lives behind the file's own `HelpTip` hover icon (`About this management run`); header shrunk to one row (title + `Preview only` badge + `?`). Blue preview-only body callout kept. No logic/testID/URL change.
+- **Recovery:** a shell `Set-Content` whitespace fix corrupted unicode file-wide — reverted and re-applied cleanly; HEAD verified mojibake-free, tabs correct.
+- **Delivery:** committed `d4c5ca94`, merged `8163a609`, tree clean at `origin/develop`; vitest 7/7 on pushed tree. Browser proof NEEDS_CONFIRMATION.
+
 ## Latest Task Addendum - 2026-09-10 Payroll Preview renamed to Payroll Management (operator-ordered, copy-only)
 
 - **What:** user-facing **Preview Payroll** / **Payroll Preview** on `/hr/run-payroll` is now **Payroll Management** (Quick Actions button, results H1, modal titles `Start Payroll Management` / `running` / `failed`, `Managed rows`, `Run Management`). Rationale: the surface previews dry-run amounts but also manages manual add/deduct via the 2026-09-08 quick-adjust (per-row `Adjust` + auto re-run, OAD/NEGADJ pinned to OPEN period).

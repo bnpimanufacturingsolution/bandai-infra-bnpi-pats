@@ -4,33 +4,32 @@
 done
 
 ## Summary
-Operator request 2026-09-10: rename user-facing **Preview Payroll** to **Payroll Management** on `/hr/run-payroll` — the surface previews dry-run amounts but also manages manual additions/deductions (2026-09-08 quick-adjust: per-row `Adjust` + auto re-run, OAD/NEGADJ enrollments pinned to the OPEN period).
+Operator request 2026-09-10: the quick-adjust **Payroll period must be fixed to the period HR entered from** — the dropdown sat on an empty `Select period` even though the entry period was known.
 
 ## Category
-copy-only + docs-only (AI-agent delivery). No money logic, API, auth, or persistence change.
+bug fix (prefill race) + small UX (period lock) / AI-agent delivery.
 
 ## Packages
 - bandai-infra/hris-app
-- Dual-app: **HR-only (no emp counterpart)** — Run Payroll has no employee-app surface.
+- Dual-app: **HR-only (no emp counterpart)**.
 
 ## Changes
-- `app/components/templates/common/run-payroll-template.tsx` — Quick Actions button + results H1 now `Payroll Management`; `Managed rows` count labels; `Run Management` / `Retry management` buttons; `Computing payroll management…` / `Could not compute payroll management` states; `Payroll management employees` tooltip; journey comments updated. `Preview only` badge and dry-run explanatory copy kept (still truthful: the run itself creates no payslips/period-status writes).
-- `app/lib/utils/payroll-preview-modal.ts` — `previewPayrollModalTitle` now returns `Start Payroll Management` / `Payroll Management running` / `Payroll Management failed` / `Payroll Management`. Technical URL action (`preview-payroll`), testIDs, and helper/function names unchanged by design (deep-link stability).
-- `app/lib/utils/payroll-preview-modal.test.ts` — title expectations + test names updated.
-- `tests/smoke/hr-payroll-management-audit.spec.ts` — needles/matcher accept `Payroll Management` (keeps `Preview Payroll` as fallback).
-- `CHANGELOG.md` — Unreleased entry for the rename.
-- Root `.wwg/wiki/terminology.md` — `Payroll Preview` term row renamed to `Payroll Management` with former-name note; technical contract documented as unchanged.
+- `quick-payroll-adjustment-modal.tsx` — new `defaultPayrollPeriodLabel` prop; period renders as locked text (`Fixed to this payroll period`) whenever the entry id is provided and resolvable (caller label, periods-list match, or list still loading); dropdown stays only for context-free entry (header bulk) or unresolvable ids. Reset effect seeds the id directly from the prop (fixes the old list-gated prefill race); a second effect keeps the latest-period fallback for the no-id flow. Footnote now says `for this period` when locked.
+- `employee-benefit.service.ts` — additive `isQuickAdjustPeriodLocked` helper (unit-tested); validation/submit/result contract untouched.
+- Callers pass labels: run-payroll (preview Adjust → `selectedPeriodCard` name/range) and register (`quickAdjustState.periodLabel` from the row's `payrollPeriod`).
+- Backend untouched.
 
 ## Truth delta
-YES — user-facing name of the Run Payroll dry-run + adjustment journey is now **Payroll Management** (root terminology synced). Engine semantics (dry-run, estimate-only non-APPROVED rows, APPROVED-only Start Payroll) unchanged.
+YES — quick-adjust period is entry-fixed, not chosen, on row-level entry. One-cutoff/carrier semantics unchanged.
 
 ## Drift
-LOW — labels/comments/tests/docs only. Untouched: payroll engine, API routes, URL `action` values, `data-testid`s, function/variable names, `special-payroll-modal.tsx` ("Preview failed" there is a different surface), device-events `Retry preview` (different surface), emp-app (no counterpart).
+LOW — modal + 2 call-site props + additive helper + tests + docs.
 
 ## Verification
-- vitest `app/lib/utils/payroll-preview-modal.test.ts`: 7/7 passing.
-- `tsc --noEmit` filtered to touched files: only pre-existing `run-payroll-template.tsx(2231,5)` name-type error (matches prior handoff note) + stock vitest-global `describe/it/expect` noise on `.test.ts` under plain `tsc` (repo uses `tsconfig.test.json` for those); zero diagnostics from this change.
-- Browser proof NEEDS_CONFIRMATION (no live dev server run this pass).
+- vitest: 22/22 (10 quick-adjust incl. 5 new lock cases + 5 row cases, 7 preview-modal, 5 single-row legacy).
+- `tsc --noEmit` filtered to all touched files (modal, both templates, service, tests): zero diagnostics.
+- Byte-level checks: no BOM, LF intact, no mojibake markers, exact tab structure on edited regions (console decoding artifacts disregarded after byte proof).
+- Browser proof NEEDS_CONFIRMATION.
 
 ## Risks
-- None known. If HR bookmarks/search reference the old `Preview Payroll` wording, the URL contract is unchanged so links keep working; only visible copy changed.
+- A stale entry id that matches neither caller label nor the fetched list falls back to the editable dropdown (honest, unchanged behavior).

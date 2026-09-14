@@ -161,6 +161,61 @@ export function validateQuickAdjustInput(input: {
 	return null;
 }
 
+export interface QuickAdjustRowInput {
+	name: unknown;
+	amount: unknown;
+}
+
+/**
+ * Multi-row quick adjustment validation: one modal submit may carry several
+ * named one-cutoff additions/deductions (each row becomes its own enrollment
+ * via the single-adjust endpoint). Returns the first failing row so the UI
+ * can point at it; `rowIndex: -1` means a modal-level field failed.
+ */
+export function validateQuickAdjustRows(input: {
+	employeeIds: unknown;
+	payrollPeriodId: unknown;
+	rows: QuickAdjustRowInput[];
+}): { rowIndex: number; message: string } | null {
+	if (!Array.isArray(input.employeeIds) || input.employeeIds.filter(Boolean).length === 0) {
+		return { rowIndex: -1, message: "Select at least one employee" };
+	}
+	if (typeof input.payrollPeriodId !== "string" || input.payrollPeriodId.trim().length === 0) {
+		return { rowIndex: -1, message: "Choose an open payroll period" };
+	}
+	if (!Array.isArray(input.rows) || input.rows.length === 0) {
+		return { rowIndex: -1, message: "Add at least one adjustment" };
+	}
+	for (let index = 0; index < input.rows.length; index += 1) {
+		const row = input.rows[index] || { name: "", amount: NaN };
+		if (typeof row.name !== "string" || row.name.trim().length === 0) {
+			return { rowIndex: index, message: `Row ${index + 1}: enter an adjustment name (e.g. Good performance)` };
+		}
+		if (typeof row.amount !== "number" || !Number.isFinite(row.amount) || row.amount <= 0) {
+			return { rowIndex: index, message: `Row ${index + 1}: enter an amount greater than zero` };
+		}
+	}
+	return null;
+}
+
+/**
+ * Quick-adjust period lock: when the modal is opened from a payroll context
+ * (preview Adjust, register row Actions), the payroll period is fixed to that
+ * entry period — HR must not move adjustments to another cutoff. The dropdown
+ * stays only for context-free entry (header bulk Quick adjustment).
+ */
+export function isQuickAdjustPeriodLocked(input: {
+	defaultPayrollPeriodId?: string | null;
+	hasLabel: boolean;
+	hasListMatch: boolean;
+	periodsFetched: boolean;
+}): boolean {
+	const entryId =
+		typeof input.defaultPayrollPeriodId === "string" ? input.defaultPayrollPeriodId.trim() : "";
+	if (!entryId) return false;
+	return input.hasLabel || input.hasListMatch || !input.periodsFetched;
+}
+
 export interface ImportEmployeeBenefitsResult {
 	success: number;
 	failed: number;

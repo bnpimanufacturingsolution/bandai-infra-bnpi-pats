@@ -25,6 +25,8 @@ import {
 	ChevronLeft,
 	ChevronRight,
 	HelpCircle,
+	AlertTriangle,
+	AlertCircle,
 } from "lucide-react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import type { EmployeePayroll } from "~/types/employee-payroll";
@@ -1872,6 +1874,7 @@ export function PayrollManagement({
 		employeeIds: string[];
 		employeeLabel?: string;
 		periodId?: string;
+		periodLabel?: string;
 	}>(null);
 
 	const getPayrollEmployeeLabel = (payroll: EmployeePayroll) => {
@@ -1888,11 +1891,17 @@ export function PayrollManagement({
 		direction: QuickAdjustDirection,
 		payroll?: EmployeePayroll | null,
 	) => {
+		const period = (payroll as any)?.payrollPeriod;
 		setQuickAdjustState({
 			direction,
 			employeeIds: (payroll as any)?.employee?.id ? [String((payroll as any).employee.id)] : [],
 			employeeLabel: payroll ? getPayrollEmployeeLabel(payroll) : undefined,
-			periodId: (payroll as any)?.payrollPeriod?.id,
+			periodId: period?.id,
+			periodLabel:
+				period?.name ||
+				(period?.startDate && period?.endDate
+					? `${formatDate(period.startDate, "short")} - ${formatDate(period.endDate, "short")}`
+					: undefined),
 		});
 	};
 
@@ -2123,7 +2132,47 @@ export function PayrollManagement({
 									</div>
 								</div>
 							</button>
-							{/* Notes hidden */}
+							{/* Zero Pay / Schedule Status Banners */}
+							{(() => {
+								const meta = (payrollData as any)?.metadata;
+								const zeroPayReason = meta?.zeroPayReason;
+								const hasSchedule = Boolean(
+									(payrollData as any)?.employee?.embeddedSchedule &&
+										(payrollData as any).employee.embeddedSchedule?.pattern &&
+										Array.isArray((payrollData as any).employee.embeddedSchedule.pattern) &&
+										(payrollData as any).employee.embeddedSchedule.pattern.length > 0,
+								);
+
+								if (zeroPayReason === "NO_SCHEDULE" || (!hasSchedule && Number(payrollData?.grossPay || 0) === 0)) {
+									return (
+										<div className="mt-3 flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+											<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+											<div className="space-y-0.5">
+												<p className="font-semibold text-amber-950">No Schedule Assigned (Zero Pay Safeguard)</p>
+												<p className="text-amber-800">
+													This employee does not have an active work schedule assigned by HR. The payroll engine generated ₱0.00 basic pay to prevent unearned salary disbursement. To enable timesheet generation and attendance-based pay, please assign a work schedule to this employee.
+												</p>
+											</div>
+										</div>
+									);
+								}
+
+								if (zeroPayReason === "NO_DEVICE_DATA") {
+									return (
+										<div className="mt-3 flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+											<AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+											<div className="space-y-0.5">
+												<p className="font-semibold text-slate-900">Zero Attendance (No Device Punches)</p>
+												<p className="text-slate-600">
+													This employee had 0 biometric punch pairs and 0 approved paid leaves during this cutoff period, resulting in ₱0.00 gross pay.
+												</p>
+											</div>
+										</div>
+									);
+								}
+
+								return null;
+							})()}
 						</div>
 
 						<div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -3745,6 +3794,7 @@ export function PayrollManagement({
 					initialEmployeeIds={quickAdjustState.employeeIds}
 					initialEmployeeLabel={quickAdjustState.employeeLabel}
 					defaultPayrollPeriodId={quickAdjustState.periodId}
+					defaultPayrollPeriodLabel={quickAdjustState.periodLabel}
 				/>
 			) : null}
 		</div>

@@ -9235,6 +9235,20 @@ export default function AdminMigrationPage() {
 									)}
 									Upload overtime
 								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									className="h-10 px-3 text-sm"
+									disabled={downloadingTemplateWorkbookId === group.id}
+									onClick={() => downloadWorkbookTemplate(group)}>
+									{downloadingTemplateWorkbookId === group.id ? (
+										<Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+									) : (
+										<Download className="mr-1.5 h-4 w-4" />
+									)}
+									Download template
+								</Button>
 							</div>
 							{renderUploadActivityPanel("dm4")}
 						</div>

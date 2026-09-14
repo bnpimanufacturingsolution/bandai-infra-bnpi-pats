@@ -30,6 +30,7 @@ import {
 	buildBreakdownFromTimesheetLines,
 	ensurePayrollPeriodTimesheetsAutoApproved,
 } from "./timesheet.helper";
+import { getDateKeyInBusinessTimeZone } from "./attendance.helper";
 import {
 	applyUniversalBandaiMlaSources,
 	BANDAI_UNIVERSAL_MLA_ORG_IDS,
@@ -526,6 +527,86 @@ export function resolveBnpiAttendanceDailyRate(params: {
 	};
 }
 
+/** Legacy semi-monthly cutoff workday base for Path-B (Monthly Staff) absent. */
+export const PAYROLL_PATH_B_CUTOFF_BASE_DAYS = 12;
+
+/** Breakdown statuses excused from Path-B absent charge (paid via leave/holiday legs). */
+const PATH_B_EXCUSED_DAY_STATUSES = new Set(["LEAVE", "HOLIDAY"]);
+
+/**
+ * Unresolved breakdown statuses: chargeable as absent only for past Manila
+ * days. Today-or-later lines stay open — the shift may still be worked and
+ * the next run/correction owns them.
+ */
+const PATH_B_UNRESOLVED_DAY_STATUSES = new Set(["NOT_CLOCKED_IN", "SCHEDULED", "INCOMPLETE"]);
+
+function getPathBDayKey(value: unknown): string {
+	try {
+		const raw = (value as any)?.date;
+		if (typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+		const parsed = raw instanceof Date ? raw : new Date(raw);
+		if (Number.isNaN(parsed.getTime())) return "";
+		return parsed.toISOString().slice(0, 10);
+	} catch {
+		return "";
+	}
+}
+
+/**
+ * Path-B (Monthly Staff) absent-day count (operator-ordered 2026-09-10).
+ *
+ * Charges evidenced absence: explicit ABSENT lines, past unresolved lines
+ * (no-clock-in / stale scheduled / incomplete), and past PRESENT lines with no
+ * usable punch pair (missing-punch no-pay standard).
+ */
+export function resolvePathBAbsentDays(params: {
+	days: ArrayLike<unknown> | Iterable<unknown> | null | undefined;
+	totalWorkDays: number;
+	effectiveWorkedDays: number;
+	cutoffBaseDays?: number;
+	todayKey?: string;
+}): number {
+	const total = Math.max(0, Math.floor(Number(params.totalWorkDays) || 0));
+	const worked = Math.max(0, Math.floor(Number(params.effectiveWorkedDays) || 0));
+	const cutoffRaw = Number(params.cutoffBaseDays);
+	const cutoff =
+		Number.isFinite(cutoffRaw) && cutoffRaw > 0
+			? Math.floor(cutoffRaw)
+			: PAYROLL_PATH_B_CUTOFF_BASE_DAYS;
+	const scheduledBase = Math.min(cutoff, total);
+	const todayKey =
+		typeof params.todayKey === "string" && params.todayKey
+			? params.todayKey
+			: getDateKeyInBusinessTimeZone(new Date());
+	let pool = 0;
+	let open = 0;
+	const list: unknown[] = Array.isArray(params.days)
+		? params.days
+		: params.days
+			? Array.from(params.days as Iterable<unknown>)
+			: [];
+	for (const day of list) {
+		const status = String((day as any)?.status || "").toUpperCase();
+		if (!status || status === "REST_DAY") continue;
+		if (PATH_B_EXCUSED_DAY_STATUSES.has(status)) continue;
+		if (status === "ABSENT") {
+			pool += 1;
+			continue;
+		}
+		if (status === "PRESENT") {
+			const key = getPathBDayKey(day);
+			if ((!key || key < todayKey) && isMissingPunchDay(day)) pool += 1;
+			else if (key && key >= todayKey) open += 1;
+			continue;
+		}
+		if (!PATH_B_UNRESOLVED_DAY_STATUSES.has(status)) continue;
+		const key = getPathBDayKey(day);
+		if (!key || key < todayKey) pool += 1;
+		else open += 1;
+	}
+	return Math.min(pool, Math.max(0, scheduledBase - worked - open));
+}
+
 /**
  * WRITE-ONLY snapshot for EmployeePayroll.hourlySalary.
  * Prefer the in-memory attendance hourlyRate; else daily / hours.
@@ -925,17 +1006,33 @@ export const ZERO_PAY_REASON_LABELS: Record<string, string> = {
 export function resolveZeroPayReason(
 	reportingBreakdown: any[] | null | undefined,
 	validatedDays: any[] | null | undefined,
+	options?: {
+		effectiveWorkedDays?: number;
+		paidLeaveDays?: number;
+		hasApprovedBucketPay?: boolean;
+		hasSchedule?: boolean;
+	},
 ): { hasAttendance: boolean; zeroPayReason: ZeroPayReason; zeroPayLabel: string | null } {
+	const hasSchedule = options?.hasSchedule !== false;
 	const hasBreakdown = Array.isArray(reportingBreakdown) && reportingBreakdown.length > 0;
 	const hasValidated = Array.isArray(validatedDays) && validatedDays.length > 0;
-	const hasAttendance = hasBreakdown && hasValidated;
-	const zeroPayReason: ZeroPayReason = hasAttendance
-		? null
-		: !hasBreakdown
-			? "NO_DEVICE_DATA"
-			: "NO_SCHEDULE";
+	let hasWorkedAttendance = hasBreakdown && hasValidated;
+	if (options) {
+		const workedDays = Number(options.effectiveWorkedDays || 0);
+		const leaveDays = Number(options.paidLeaveDays || 0);
+		const hasBuckets = Boolean(options.hasApprovedBucketPay);
+		hasWorkedAttendance = hasBreakdown && hasValidated && (workedDays > 0 || leaveDays > 0 || hasBuckets);
+	}
+	let zeroPayReason: ZeroPayReason = null;
+	if (!hasWorkedAttendance) {
+		if (!hasSchedule || (!hasValidated && hasBreakdown)) {
+			zeroPayReason = "NO_SCHEDULE";
+		} else {
+			zeroPayReason = "NO_DEVICE_DATA";
+		}
+	}
 	return {
-		hasAttendance,
+		hasAttendance: hasWorkedAttendance,
 		zeroPayReason,
 		zeroPayLabel: zeroPayReason ? ZERO_PAY_REASON_LABELS[zeroPayReason] : null,
 	};
@@ -2616,9 +2713,26 @@ export async function generatePayrollFromTimesheets(
 				roundToCentavo(grossPayWithSources - totalDeductions + payrollSourceAmounts.netAdjustments),
 			);
 
+			const hasSchedule = Boolean(
+				employee.embeddedSchedule &&
+					(employee.embeddedSchedule as any)?.pattern &&
+					Array.isArray((employee.embeddedSchedule as any)?.pattern) &&
+					(employee.embeddedSchedule as any).pattern.length > 0,
+			);
 			const { hasAttendance, zeroPayReason, zeroPayLabel } = resolveZeroPayReason(
 				reportingBreakdown,
 				validatedDays,
+				{
+					effectiveWorkedDays,
+					paidLeaveDays: payrollSourceAmounts.leavePay > 0 ? 1 : 0,
+					hasApprovedBucketPay: Boolean(
+						bandaiApprovedBucketPay &&
+							(bandaiApprovedBucketPay.overtimePay > 0 ||
+								bandaiApprovedBucketPay.holidayPay > 0 ||
+								bandaiApprovedBucketPay.nightDiffPay > 0),
+					),
+					hasSchedule,
+				},
 			);
 
 			const payrollAttendanceSnapshot = validatedDays.map((day: any) => ({
@@ -2738,7 +2852,6 @@ export async function generatePayrollFromTimesheets(
 					totalDeductions: hasAttendance ? totalDeductions : 0,
 					netPay: hasAttendance ? netPay : 0,
 					absentDeduction: hasAttendance ? absentDeduction : 0,
-					notes: zeroPayLabel ?? undefined,
 					...payrollRegister.persistFields,
 
 					// Timesheet snapshot - complete data for audit trail
@@ -2883,7 +2996,9 @@ export async function generatePayrollFromTimesheets(
 					generationRunId: options?.generationRunId || null,
 					generationKey,
 
-					notes: `Generated from approved timesheet: ${timesheet.code}`,
+					notes: zeroPayLabel
+						? `${zeroPayLabel} — generated from approved timesheet: ${timesheet.code}`
+						: `Generated from approved timesheet: ${timesheet.code}`,
 				},
 				update: {
 					// Earnings
@@ -2909,7 +3024,6 @@ export async function generatePayrollFromTimesheets(
 					totalDeductions: hasAttendance ? totalDeductions : 0,
 					netPay: hasAttendance ? netPay : 0,
 					absentDeduction: hasAttendance ? absentDeduction : 0,
-					notes: zeroPayLabel ?? undefined,
 					...payrollRegister.persistFields,
 
 					// Timesheet snapshot - complete data for audit trail
@@ -5231,19 +5345,6 @@ function calculatePayrollPreviewDataset(params: {
 					break;
 			}
 
-			let daysAbsent = 0;
-			let totalWorkDays = 0;
-			if (reportingBreakdown.length) {
-				for (const day of reportingBreakdown) {
-					if (day.status !== "REST_DAY") {
-						totalWorkDays++;
-						if (day.status === "ABSENT") {
-							daysAbsent++;
-						}
-					}
-				}
-			}
-
 			let workingHoursPerDay = 8;
 			const periodScheduleWeeks = buildPeriodScheduleWeeks({
 				periodStart: params.payrollPeriodData.startDate,
@@ -5251,12 +5352,20 @@ function calculatePayrollPreviewDataset(params: {
 				validatedDays,
 				employee,
 			});
-			const weeklyTotalHours = periodScheduleWeeks[0]?.totalHours || 0;
+			let scheduledWorkDays = 0;
 			for (const day of periodScheduleWeeks[0]?.days || []) {
+				if (!day.isRestDay) {
+					scheduledWorkDays++;
+				}
 				if (!day.isRestDay && workingHoursPerDay === 8 && day.hours > 0) {
 					workingHoursPerDay = day.hours;
 				}
 			}
+			const totalWorkDays =
+				scheduledWorkDays > 0
+					? scheduledWorkDays
+					: reportingBreakdown.filter((d: any) => d.status !== "REST_DAY").length;
+			const weeklyTotalHours = periodScheduleWeeks[0]?.totalHours || 0;
 
 			const registerDailyRatePreview = resolveEmployeeDailyRate(employee);
 			const bandaiApprovedBucketPay = calculateBandaiApprovedBucketPay(
@@ -5297,10 +5406,34 @@ function calculatePayrollPreviewDataset(params: {
 				paidRegularDays: effectiveWorkedDaysPreview,
 				presentFallbackDays: presentFallbackDaysPreview,
 			});
-			const pathBDaysAbsentPreview = Math.max(
-				0,
-				12 - effectiveWorkedDaysPreview,
-			);
+		const daysByDateKeyPreview = new Map<string, any>();
+		for (const day of reportingBreakdown) {
+			daysByDateKeyPreview.set(getDateKey(new Date(day.date)), day);
+		}
+		const completeDaysListPreview: any[] = [];
+		for (const week of periodScheduleWeeks) {
+			for (const day of week.days) {
+				if (day.isRestDay) continue;
+				const existing = daysByDateKeyPreview.get(day.date);
+				if (existing) {
+					completeDaysListPreview.push(existing);
+				} else {
+					const dayDate = new Date(`${day.date}T00:00:00.000Z`);
+					const todayKey = getDateKeyInBusinessTimeZone(new Date());
+					completeDaysListPreview.push({
+						date: dayDate,
+						status: day.date < todayKey ? "ABSENT" : "NOT_CLOCKED_IN",
+						isRestDay: false,
+						scheduleSnapshot: { isOff: false, hours: day.hours },
+					});
+				}
+			}
+		}
+		const pathBDaysAbsentPreview = resolvePathBAbsentDays({
+			days: completeDaysListPreview.length ? completeDaysListPreview : reportingBreakdown,
+			totalWorkDays,
+			effectiveWorkedDays: effectiveWorkedDaysPreview,
+		});
 			const absentDeduction = registerBasicPreview.suppressFullDayAbsentDeduction
 				? 0
 				: roundToCentavo(pathBDaysAbsentPreview * dailyRate);
@@ -5511,11 +5644,27 @@ function calculatePayrollPreviewDataset(params: {
 				0,
 				roundToCentavo(grossPayWithSources - totalDeductions + payrollSourceAmounts.netAdjustments),
 			);
+			const previewHasSchedule = Boolean(
+				employee?.embeddedSchedule &&
+					(employee.embeddedSchedule as any)?.pattern &&
+					Array.isArray((employee.embeddedSchedule as any)?.pattern) &&
+					(employee.embeddedSchedule as any).pattern.length > 0,
+			);
 			const {
 				hasAttendance: previewHasAttendance,
 				zeroPayReason: previewZeroPayReason,
 				zeroPayLabel: previewZeroPayLabel,
-			} = resolveZeroPayReason(reportingBreakdown, validatedDays);
+			} = resolveZeroPayReason(reportingBreakdown, validatedDays, {
+				effectiveWorkedDays: effectiveWorkedDaysPreview,
+				paidLeaveDays: payrollSourceAmounts.leavePay > 0 ? 1 : 0,
+				hasApprovedBucketPay: Boolean(
+					bandaiApprovedBucketPay &&
+						(bandaiApprovedBucketPay.overtimePay > 0 ||
+							bandaiApprovedBucketPay.holidayPay > 0 ||
+							bandaiApprovedBucketPay.nightDiffPay > 0),
+				),
+				hasSchedule: previewHasSchedule,
+			});
 			const previewBasicPay = previewHasAttendance ? basicPay : 0;
 			const previewSourceAmounts = previewHasAttendance
 				? payrollSourceAmounts
@@ -5628,7 +5777,7 @@ function calculatePayrollPreviewDataset(params: {
 					bandaiPayrollBuckets: bandaiApprovedBucketPay,
 					weeklyTotalHours: roundToCentavo(weeklyTotalHours),
 					periodScheduleWeeks,
-					daysAbsent,
+					daysAbsent: pathBDaysAbsentPreview,
 					totalWorkDays,
 					totalLateHours: roundToCentavo(lateHours),
 					totalEarlyOutHours: roundToCentavo(earlyOutHours),

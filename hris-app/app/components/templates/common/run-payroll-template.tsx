@@ -3301,6 +3301,12 @@ export function RunPayrollTemplate() {
 										.join(" · ") || undefined
 								}
 								defaultPayrollPeriodId={payrollPeriodId}
+								defaultPayrollPeriodLabel={
+									selectedPeriodCard?.name ||
+									(selectedPeriodCard?.startDate && selectedPeriodCard?.endDate
+										? `${formatDate(selectedPeriodCard.startDate, "short")} - ${formatDate(selectedPeriodCard.endDate, "short")}`
+										: undefined)
+								}
 							onAdjusted={(result) => {
 								// Show the actual salary with the new adjustment in preview.
 								if (result.payrollPeriodId && result.payrollPeriodId === payrollPeriodId) {
@@ -4791,6 +4797,43 @@ export function RunPayrollTemplate() {
 								</Button>
 							)}
 						</div>
+
+						{/* Zero Pay / Schedule Status Banners */}
+						{(() => {
+							const meta = activePreviewEmployeeComputation?.metadata || (activePreviewEmployee as any)?.metadata;
+							const zeroPayReason = meta?.zeroPayReason;
+							const hasSchedule = activePreviewEmployee.hasSchedule !== false && meta?.hasSchedule !== false;
+
+							if (zeroPayReason === "NO_SCHEDULE" || (!hasSchedule && Number(activePreviewEmployeeComputation?.grossPay || 0) === 0)) {
+								return (
+									<div className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+										<AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+										<div className="space-y-0.5">
+											<p className="font-semibold text-amber-950">No Schedule Assigned (Zero Pay Safeguard)</p>
+											<p className="text-amber-800">
+												This employee does not have an active work schedule assigned by HR. The preview engine generated ₱0.00 basic pay to prevent unearned salary disbursement. To enable timesheet generation and attendance-based pay, please assign a work schedule to this employee.
+											</p>
+										</div>
+									</div>
+								);
+							}
+
+							if (zeroPayReason === "NO_DEVICE_DATA") {
+								return (
+									<div className="flex items-start gap-2.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-800">
+										<AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+										<div className="space-y-0.5">
+											<p className="font-semibold text-slate-900">Zero Attendance (No Device Punches)</p>
+											<p className="text-slate-600">
+												This employee had 0 biometric punch pairs and 0 approved paid leaves during this cutoff period, resulting in ₱0.00 gross pay.
+											</p>
+										</div>
+									</div>
+								);
+							}
+
+							return null;
+						})()}
 
 						{isPreviewEmployeeComputationLoading && !hasActivePreviewComputation ? (
 							<div className="space-y-3 rounded-lg border border-gray-200 bg-white p-4">
