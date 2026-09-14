@@ -9,6 +9,7 @@ import {
 } from "../generated/prisma";
 import { getLogger } from "./logger.helper";
 import { createBoardingProcess } from "./boarding.helper";
+import { ensureOnboardingChecklistForEmployee } from "../app/onboarding/onboardingLifecycle.helper";
 import {
 	evaluateEmployeeDocumentCompleteness,
 	getDocumentReviewSnapshot,
@@ -233,7 +234,7 @@ const buildChecklistMetadata = (
 	isSystemGenerated: true,
 	}) as Prisma.InputJsonObject;
 
-const syncEmployeeEmploymentStatus = async (params: {
+export const syncEmployeeEmploymentStatus = async (params: {
 	prisma: PrismaClient;
 	employeeId: string;
 }) => {
@@ -260,9 +261,26 @@ const syncEmployeeEmploymentStatus = async (params: {
 		},
 	});
 
-	const hasPendingOnboarding = activeOnboardingProcesses.some((process) =>
+	const hasPendingLegacyOnboarding = activeOnboardingProcesses.some((process) =>
 		process.checklistItems.some((item) => item.status !== ChecklistStatus.COMPLETED),
 	);
+
+	// Design C gate: a provisioned dedicated OnboardingChecklist must ALSO be fully
+	// signed before ONBOARDING -> ACTIVE. Employees with no dedicated checklist keep
+	// pure legacy behavior (no dedicated rows = nothing pending here).
+	const pendingDedicatedItem = await params.prisma.onboardingItem.findFirst({
+		where: {
+			status: "PENDING",
+			isDeleted: false,
+			section: {
+				isDeleted: false,
+				checklist: { employeeId: params.employeeId, isDeleted: false },
+			},
+		},
+		select: { id: true },
+	});
+
+	const hasPendingOnboarding = hasPendingLegacyOnboarding || !!pendingDedicatedItem;
 
 	let nextStatus: EmploymentStatus | null = null;
 	if (hasPendingOnboarding) {
@@ -994,6 +1012,22 @@ export const reconcileEmployeeOnboardingState = async ({
 		prisma,
 		processId: process.id,
 	});
+
+	// Dedicated onboarding checklist module: best-effort create-on-hire provisioning.
+	// Idempotent (skips when the employee already has one); never fails the reconciliation.
+	if (employee.employmentStatus === EmploymentStatus.ONBOARDING) {
+		try {
+			await ensureOnboardingChecklistForEmployee(prisma, {
+				employeeId,
+				organizationId: resolvedOrganizationId,
+				requireTemplate: true,
+			});
+		} catch (dedicatedError) {
+			docLogger.warn(
+				`Dedicated onboarding checklist provisioning skipped for ${employeeId}: ${dedicatedError}`,
+			);
+		}
+	}
 
 	return {
 		processId: process.id,

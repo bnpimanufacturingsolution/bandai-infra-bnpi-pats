@@ -399,6 +399,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 							path: "/hr/recruitment",
 							icon: <Users className="w-4 h-4" />,
 						},
+						{
+							id: "hr-recruitment-onboarding",
+							label: "Onboarding",
+							path: "/hr/onboarding",
+							icon: <ListCheck className="w-4 h-4" />,
+						},
 					],
 				},
 			]
@@ -527,6 +533,18 @@ export function Sidebar({ onClose }: SidebarProps) {
 				},
 			],
 		},
+		// Onboarding checklist browsing/signing for everyone else; HR already has
+		// the entry under Recruitment, admins use the admin-nav entry.
+		...(isHR
+			? []
+			: [
+					{
+						id: "general-onboarding",
+						label: "Onboarding",
+						path: "/hr/onboarding",
+						icon: <ListCheck className="w-5 h-5" />,
+					},
+				]),
 	];
 
 	// Personal items (common to all) - use only routes that exist in routes.ts

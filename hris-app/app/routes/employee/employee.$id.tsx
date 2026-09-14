@@ -8,13 +8,23 @@ import { Filing201Tab } from "~/components/organisms/employee-detail/filing-201-
 import { EmploymentDetailsTab } from "~/components/organisms/employee-detail/employment-details-tab";
 import { LeaveBalanceTab } from "~/components/organisms/employee-detail/leave-balance-tab";
 import { OnboardingTab } from "~/components/organisms/employee-detail/onboarding-tab";
+import OnboardingChecklistPanel from "~/components/organisms/onboarding/onboarding-checklist-panel";
 import { PersonalInfoTab } from "~/components/organisms/employee-detail/personal-info-tab";
 import { ScheduleTab } from "~/components/organisms/employee-detail/schedule-tab";
 import { useAuth } from "~/lib/hooks/use-auth";
 import { useEmployee } from "~/lib/hooks/useEmployees";
 import { useDocumentActionMetrics } from "~/lib/hooks/useMetrics";
 import { cn } from "~/lib/utils";
-import { ArrowLeft, Briefcase, Calendar, Clock, FileText, FolderOpen, User } from "lucide-react";
+import {
+	ArrowLeft,
+	Briefcase,
+	Calendar,
+	Clock,
+	FileText,
+	FolderOpen,
+	ListChecks,
+	User,
+} from "lucide-react";
 
 const tabs = [
 	{ id: "personal", label: "Personal", icon: User },
@@ -26,7 +36,9 @@ const tabs = [
 	{ id: "filing-201", label: "201 File", icon: FolderOpen },
 ] as const;
 
-const knownTabIds = new Set<string>([...tabs.map((tab) => tab.id), "boarding"]);
+const onboardingTab = { id: "onboarding", label: "Onboarding", icon: ListChecks } as const;
+
+const knownTabIds = new Set<string>([...tabs.map((tab) => tab.id), "onboarding", "boarding"]);
 
 const pageFrameClassName = "h-[calc(100dvh-7rem)]";
 
@@ -130,6 +142,17 @@ export default function EmployeeDetailPage() {
 		employee.user?.avatar || (isOwnProfile ? user?.avatar : "") || "",
 	).trim();
 
+	// The Onboarding tab exists only while the employee is in ONBOARDING status.
+	const visibleTabs =
+		employee.employmentStatus === "ONBOARDING" ? [...tabs, onboardingTab] : tabs;
+	const employeeDisplayName =
+		[
+			(employee as any)?.person?.personalInfo?.firstName ?? "",
+			(employee as any)?.person?.personalInfo?.lastName ?? "",
+		]
+			.join(" ")
+			.trim() || (employee as any).employeeId || "";
+
 	return (
 		<div
 			className={cn("flex flex-col gap-4 overflow-hidden lg:gap-6", pageFrameClassName)}
@@ -151,7 +174,7 @@ export default function EmployeeDetailPage() {
 					data-testid="employee-detail-tab-bar"
 					role="tablist"
 					aria-label="Employee profile sections">
-					{tabs.map((tab) => {
+					{visibleTabs.map((tab) => {
 						const Icon = tab.icon;
 						const isActive = activeTab === tab.id;
 
@@ -184,8 +207,8 @@ export default function EmployeeDetailPage() {
 				<div
 					className={cn(
 						"employee-detail-tab-panel--roundout modern-scroll min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6",
-						activeTab === tabs[0].id && "employee-detail-tab-panel--first-active",
-						activeTab === tabs[tabs.length - 1].id &&
+						activeTab === visibleTabs[0].id && "employee-detail-tab-panel--first-active",
+						activeTab === visibleTabs[visibleTabs.length - 1].id &&
 							"employee-detail-tab-panel--last-active",
 					)}
 					data-testid="employee-detail-tab-panel"
@@ -210,6 +233,15 @@ export default function EmployeeDetailPage() {
 						<DocumentsTab employee={employee} canEdit={isOwnProfile} />
 					) : null}
 					{activeTab === "filing-201" ? <Filing201Tab employeeId={employee.id} /> : null}
+					{activeTab === "onboarding" ? (
+						<OnboardingChecklistPanel
+							employee={{
+								id: employee.id,
+								employeeNumber: String((employee as any).employeeId ?? ""),
+								name: employeeDisplayName,
+							}}
+						/>
+					) : null}
 					{activeTab === "boarding" ? <OnboardingTab employee={employee} /> : null}
 				</div>
 			</section>

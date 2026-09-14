@@ -179,4 +179,49 @@ describe("Sidebar", () => {
 
 		expect(screen.getByRole("link", { name: "Audit Logs" })).toBeInTheDocument();
 	});
+
+	it("exposes the Onboarding entry under the HR Recruitment submenu", () => {
+		render(
+			<MemoryRouter initialEntries={["/hr/onboarding"]}>
+				<Sidebar />
+			</MemoryRouter>,
+		);
+
+		expect(screen.getByRole("button", { name: "Recruitment" })).toHaveAttribute(
+			"aria-expanded",
+			"true",
+		);
+		const onboardingLink = screen.getByRole("link", { name: "Onboarding" });
+		expect(onboardingLink).toHaveAttribute("href", "/hr/onboarding");
+	});
+
+	it("shows the Onboarding entry in General for non-HR employees", () => {
+		mockUseAuth.mockReturnValue({
+			user: {
+				role: "hris-employee",
+				avatar: "",
+				metadata: {
+					employee: {
+						id: "emp-002",
+						personalInfo: { firstName: "Nina", lastName: "New" },
+						level: { name: "Junior" },
+						position: { title: "Assembler" },
+						department: { name: "Assembly" },
+						isDepartmentManager: false,
+					},
+				},
+			},
+		});
+
+		render(
+			<MemoryRouter initialEntries={["/dashboard"]}>
+				<Sidebar />
+			</MemoryRouter>,
+		);
+
+		expect(screen.getByRole("link", { name: "Onboarding" })).toHaveAttribute(
+			"href",
+			"/hr/onboarding",
+		);
+	});
 });

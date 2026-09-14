@@ -87,6 +87,7 @@ import {
 	getPendingActiveDocumentChecklistCandidates,
 	reconcileEmployeeOnboardingState,
 } from "../../helper/boarding-documents.helper";
+import { ensureOnboardingChecklistForEmployee } from "../onboarding/onboardingLifecycle.helper";
 import { validateEmployeeMutationDatePayload } from "../../helper/employee-date-validation.helper";
 import { getEmployeeDocumentPriorityData } from "../../helper/employee-document-priority.helper";
 import {
@@ -4404,6 +4405,25 @@ export const controller = (prisma: PrismaClient) => {
 
 					employeeLogger.info(
 						`Created boarding process ${boardingProcess.id} with skipped active document items via helper`,
+					);
+				}
+			}
+
+			// Step 8.9: Dedicated onboarding checklist provisioning (create-on-hire).
+			// Best-effort and idempotent; must never fail the hire itself.
+			if ((updatedEmployee as any)?.employmentStatus === "ONBOARDING") {
+				try {
+					const provisioned = await ensureOnboardingChecklistForEmployee(prisma, {
+						employeeId: updatedEmployee.id,
+						organizationId,
+						requireTemplate: true,
+					});
+					employeeLogger.info(
+						`Dedicated onboarding checklist provisioning: ${provisioned.status} ${provisioned.checklistId || provisioned.reason || ""}`,
+					);
+				} catch (provisionError) {
+					employeeLogger.warn(
+						`Dedicated onboarding checklist provisioning skipped (non-critical): ${provisionError}`,
 					);
 				}
 			}
