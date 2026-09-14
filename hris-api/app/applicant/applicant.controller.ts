@@ -570,6 +570,8 @@ export const controller = (prisma: PrismaClient) => {
 				undefined,
 				undefined,
 				effectiveGroupBy || undefined,
+				undefined,
+				"Applicant",
 			);
 
 			const [applicants, total] = await Promise.all([
@@ -638,7 +640,11 @@ export const controller = (prisma: PrismaClient) => {
 				const query: Prisma.ApplicantFindFirstArgs = {
 					where: { id, organizationId: requestOrganizationId, isDeleted: false },
 				};
-				query.select = getNestedFields(typeof fields === "string" ? fields : undefined);
+				query.select = getNestedFields(
+					typeof fields === "string" ? fields : undefined,
+					{},
+					"Applicant",
+				);
 				applicant = await prisma.applicant.findFirst(query);
 
 				if (applicant && redisClient.isClientConnected()) {
