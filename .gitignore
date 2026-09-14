@@ -66,10 +66,14 @@ test-results/
 
 # Agency client pack (source reference only)
 Agency Daily Report/
+AGENCY-*/
 
 # Local open-code config (opencode agent config)
 .opencode/
 opencode.json
+
+# AtlasMemory local codebase index/DB (machine-local, never commit)
+.atlas/
 
 # Local CLI scripts (keep personal workflow scripts local)
 scripts/project-truth.ps1
