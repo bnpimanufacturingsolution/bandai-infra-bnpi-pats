@@ -1301,6 +1301,23 @@ export const config = {
 	},
 
 	ACTIVITY_LOG: {
+		APPLICATION_ACCESS: {
+			ACTIONS: {
+				ACCESS_LISTED: "ACCESS_LISTED",
+				ACCESS_RETRIEVED: "ACCESS_RETRIEVED",
+				ACCESS_UPDATED: "ACCESS_UPDATED",
+			},
+			DESCRIPTIONS: {
+				ACCESS_LISTED: "Retrieved Training & Performance access list",
+				ACCESS_RETRIEVED: "Retrieved Training & Performance access details",
+				ACCESS_UPDATED: "Updated Training & Performance access",
+			},
+			PAGES: {
+				ACCESS_LIST: "Application Access List",
+				ACCESS_DETAILS: "Application Access Details",
+				ACCESS_UPDATE: "Application Access Update",
+			},
+		},
 		DISCIPLINARYACTION: {
 			ACTIONS: {
 				CREATE_DISCIPLINARYACTION: "CREATE_DISCIPLINARYACTION",
@@ -3094,6 +3111,7 @@ export const config = {
 			WORKFORCE_RECRUITMENT_SETTING: "workforcerecruitmentsetting",
 			TERMINATION: "termination",
 			DISCIPLINARYACTION: "disciplinaryaction",
+			APPLICATION_ACCESS: "applicationaccess",
 		},
 		SEVERITY: {
 			LOW: "LOW" as const,

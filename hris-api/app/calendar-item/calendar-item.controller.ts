@@ -137,9 +137,27 @@ export const controller = (prisma: PrismaClient) => {
 
 			const now = new Date();
 			// Login kiosk should show company events only (not the full holiday calendar).
+			// If exactly 1 company event, also include HOLIDAY.
+			const companyEventCount = await prisma.calendarItem.count({
+				where: {
+					organizationId: orgResolution.organizationId,
+					type: "COMPANY_EVENT",
+					status: {
+						notIn: ["CANCELLED", "DRAFT"],
+					},
+					endDate: {
+						gte: now,
+					},
+				},
+			});
+
+			const types =
+				companyEventCount === 1 ? ["COMPANY_EVENT", "HOLIDAY"] : ["COMPANY_EVENT"];
+
+			// Login kiosk should show company events only (not the full holiday calendar).
 			const where: Prisma.CalendarItemWhereInput = {
 				organizationId: orgResolution.organizationId,
-				type: "COMPANY_EVENT",
+				type: { in: types },
 				status: {
 					notIn: ["CANCELLED", "DRAFT"],
 				},
@@ -786,7 +804,10 @@ export const controller = (prisma: PrismaClient) => {
 
 					if (existing) {
 						const existingMetadata = (existing.metadata || {}) as Record<string, any>;
-						const nextMetadata = (validation.data.metadata || {}) as Record<string, any>;
+						const nextMetadata = (validation.data.metadata || {}) as Record<
+							string,
+							any
+						>;
 						const hasChanged =
 							existing.description !== validation.data.description ||
 							existing.endDate.getTime() !== validation.data.endDate.getTime() ||
@@ -794,7 +815,8 @@ export const controller = (prisma: PrismaClient) => {
 							existing.status !== validation.data.status ||
 							String(existingMetadata.holidayType || "") !==
 								String(nextMetadata.holidayType || "") ||
-							String(existingMetadata.category || "") !== String(nextMetadata.category || "");
+							String(existingMetadata.category || "") !==
+								String(nextMetadata.category || "");
 
 						if (hasChanged) {
 							await prisma.calendarItem.update({

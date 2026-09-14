@@ -465,11 +465,17 @@ export const DEFAULT_REQUEST_WORKFLOW_TEMPLATES = [
 		states: SEEDED_LIFECYCLE_STATES,
 	},
 	{
+		// Leader-filed attendance/timesheet adjustment (2026-09-09 operator
+		// direction: "the adjusted need to approve by the section manager like
+		// how the ot and early ot being filed") — mirrors OT: the line leader
+		// files for a section member; the member's manager is the FINAL
+		// approver; the SYSTEM task applies the correction to the member's
+		// attendance. No HR step.
 		code: "WF-ATTENDANCE-CORRECTION-LEADER-FILED",
 		name: "Attendance Correction Workflow (Line Leader Filed)",
 		requestType: "ATTENDANCE_CORRECTION",
 		description:
-			"Line leader files an attendance correction for a section member: leader submission, member's manager approval, HR review, completion",
+			"Line leader files a timesheet adjustment for a section member: leader submission, member's manager approval (final, applies to the member's attendance), completion",
 		steps: LEADER_FILED_ATTENDANCE_CORRECTION_STEPS,
 		states: SEEDED_LIFECYCLE_STATES,
 	},

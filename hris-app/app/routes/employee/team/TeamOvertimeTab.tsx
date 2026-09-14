@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "~/components/atoms/Button";
@@ -181,7 +181,7 @@ export default function TeamOvertimeTab() {
 			}
 			if (failed.length > 0) {
 				setError(
-					`Filed ${okCount}, failed ${failed.length}. First failure: ${failed[0].label} — ${failed[0].detail ?? "unknown error"}`,
+					`Filed ${okCount}, failed ${failed.length}. First failure: ${failed[0].label} â€” ${failed[0].detail ?? "unknown error"}`,
 				);
 			}
 		} finally {
@@ -219,11 +219,54 @@ export default function TeamOvertimeTab() {
 
 	return (
 		<div className="space-y-4">
-			{sectionNames ? (
-				<p className="text-sm text-gray-500">
-					Your sections: <span className="font-medium text-gray-700">{sectionNames}</span>
-				</p>
-			) : null}
+
+			{/* Form controls at top */}
+			<div className="grid gap-4 sm:grid-cols-[240px_240px_1fr]">
+				<div>
+					<label htmlFor="ot-date" className="mb-1 block text-sm font-medium text-gray-700">Overtime date</label>
+					<DatePicker value={date} onChange={setDate} disabled={submitting} placeholder="Pick date" id="ot-date" />
+				</div>
+				<div>
+					<label htmlFor="ot-kind" className="mb-1 block text-sm font-medium text-gray-700">Overtime type</label>
+					<Select
+						value={overtimeKind}
+						onValueChange={(value) => setOvertimeKind(value as OvertimeRequestKind)}
+						disabled={submitting}>
+						<SelectTrigger id="ot-kind">
+							<SelectValue placeholder="Select type" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="REGULAR">Regular OT (after shift)</SelectItem>
+							<SelectItem value="EARLY">Early OT (before shift)</SelectItem>
+						</SelectContent>
+					</Select>
+				</div>
+				<div>
+					<label htmlFor="ot-reason" className="mb-1 block text-sm font-medium text-gray-700">Reason (applies to all)</label>
+					<Textarea
+						id="ot-reason"
+						value={notes}
+						onChange={(event) => setNotes(event.target.value)}
+						placeholder={
+							overtimeKind === "EARLY"
+								? "Example: Line started early to set up for a shipment."
+								: "Example: Line stayed late to finish a shipment."
+						}
+						disabled={submitting}
+						rows={2}
+					/>
+				</div>
+			</div>
+
+			{error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+			<div className="flex items-center justify-end border-t border-gray-100 pt-4">
+				<Button type="button" onClick={handleSubmit} disabled={submitting || checkedIds.length === 0}>
+					{submitting
+						? "Submitting..."
+						: `Assign ${overtimeKind === "EARLY" ? "Early OT" : "OT"}${checkedIds.length > 0 ? ` (${checkedIds.length})` : ""}`}
+				</Button>
+			</div>
 
 			<div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
 				<div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2.5 text-xs font-semibold text-gray-600">
@@ -252,7 +295,7 @@ export default function TeamOvertimeTab() {
 									<div className="truncate text-sm font-medium text-gray-900">{label}</div>
 									<div className="truncate text-xs text-gray-500">
 										{member.employeeId}
-										{member.position?.title ? ` · ${member.position.title}` : ""}
+										{member.position?.title ? ` Â· ${member.position.title}` : ""}
 									</div>
 								</div>
 								<Input
@@ -329,7 +372,7 @@ export default function TeamOvertimeTab() {
 			<div className="flex items-center justify-end border-t border-gray-100 pt-4">
 				<p className="text-xs text-gray-500">
 					{checkedIds.length > 0
-						? `${checkedIds.length} member${checkedIds.length === 1 ? "" : "s"} ticked — ${overtimeKind === "EARLY" ? "early OT (before shift)" : "regular OT (after shift)"}, each gets their own overtime request (manager → HR approval).`
+						? `${checkedIds.length} member${checkedIds.length === 1 ? "" : "s"} ticked â€” ${overtimeKind === "EARLY" ? "early OT (before shift)" : "regular OT (after shift)"}, each gets their own overtime request (manager â†’ HR approval).`
 						: "Tick the members who worked overtime."}
 				</p>
 				<Button type="button" onClick={handleSubmit} disabled={submitting || checkedIds.length === 0}>
@@ -341,3 +384,4 @@ export default function TeamOvertimeTab() {
 		</div>
 	);
 }
+

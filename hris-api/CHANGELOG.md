@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- **Dedicated onboarding checklist "section rows" (2026-09-14):** `OnboardingItem`s WITHOUT a
+  responsible department are excluded from the ONBOARDING -> ACTIVE promotion gate and from
+  `completionPercentage` (single predicate `isActionableOnboardingItem` +
+  `ACTIONABLE_ONBOARDING_ITEM_FILTER` in `app/onboarding/onboardingAccess.helper.ts`; progress
+  centralized in exported `recomputeOnboardingChecklistProgress`). Zero-actionable checklists
+  report 100%/COMPLETED; `canSign` is false for section rows in `.../visible` (sign endpoint
+  stays permissive). Ops repair: `scripts/resync-onboarding-employment-status.ts`
+  (dry-run default, `--execute`) re-evaluates ONBOARDING employees after gate changes; ran on
+  DEV (promoted EMP3335, 0 errors). Truth: `../docs/ONBOARDING_CHECKLIST.md`.
+
 - **WorkSharing flag=0 → REST_DAY (2026-08-18):** Explicit WorkSharing date
   flag `0` now emits `dayOffAssignments` and writes `isOff` schedule overrides
   (reason `WorkSharing day flag OFF`). Prevents empty-bio ABSENT on off/holiday

@@ -22,6 +22,7 @@ import {
 	Award,
 	Gift,
 	Play,
+	Fingerprint,
 	TrendingDown,
 	TrendingUp,
 	BarChart3,
@@ -42,6 +43,17 @@ interface NavItem {
 	requiredRoles?: string[];
 	submenu?: NavItem[];
 	badge?: number;
+	/**
+	 * Highlight only on the exact pathname with no query params. Used by
+	 * group-entry links (e.g. My Team) whose children own the query-scoped
+	 * highlights, so the group never double-highlights with the active child.
+	 */
+	exactPath?: boolean;
+	/**
+	 * Disable orange accent (left bar, active bg, badge, chevron) for this item.
+	 * Used for My Team group to keep it neutral.
+	 */
+	neutral?: boolean;
 }
 
 interface SidebarProps {
@@ -101,7 +113,14 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const isManager =
 		user?.role === "hris-employee-manager" || user?.role === "hris-line-leader";
 	const isEmployee = user?.role === "hris-employee";
-	const isAdmin = user?.role?.includes("admin");
+  const isAdmin = user?.role?.includes("admin");
+  // Agency portal roles (including admin/agency/admin-level access).
+  const isAgencyRole = !!user?.role && [
+    "hris-agency",
+    "hris-admin",
+    "admin",
+    "super_admin",
+  ].includes(user.role);
 
 	const firstName = user?.metadata?.employee?.personalInfo?.firstName || "";
 	const lastName = user?.metadata?.employee?.personalInfo?.lastName || "";
@@ -114,8 +133,56 @@ export function Sidebar({ onClose }: SidebarProps) {
 	const isDepartmentManager = !!user?.metadata?.employee?.isDepartmentManager;
 	const hrDocumentReviewCount = actionMetrics?.counts.documents.hrPendingApproval || 0;
 
-	// Common to all roles
-	const dashboardItem: NavItem = {
+  // Agency section — dedicated pages (not tabs) for agency-level roles.
+  const agencySection: NavItem | null = isAgencyRole
+    ? {
+        id: "agency",
+        label: "Agency",
+        path: "/agency/dashboard",
+        icon: <Briefcase className="w-5 h-5" />,
+        submenu: [
+          {
+            id: "agency-dashboard",
+            label: "Overview",
+            path: "/agency/dashboard",
+            icon: <LayoutDashboard className="w-4 h-4" />,
+          },
+          {
+            id: "agency-roster",
+            label: "Employees",
+            path: "/agency/roster",
+            icon: <Users className="w-4 h-4" />,
+          },
+          {
+            id: "agency-attendance",
+            label: "Attendance",
+            path: "/agency/attendance",
+            icon: <Clock className="w-4 h-4" />,
+          },
+          {
+            id: "agency-timesheets",
+            label: "Timesheets",
+            path: "/agency/timesheets",
+            icon: <FileText className="w-4 h-4" />,
+          },
+          {
+            id: "agency-biometrics",
+            label: "Biometrics",
+            path: "/agency/biometrics",
+            icon: <Fingerprint className="w-4 h-4" />,
+          },
+          {
+            id: "agency-reports",
+            label: "Reports",
+            path: "/agency/reports",
+            icon: <BarChart3 className="w-4 h-4" />,
+          },
+        ],
+      }
+    : null;
+
+  // Common to all roles
+  const dashboardItem: NavItem = {
 		id: "dashboard",
 		label: "Dashboard",
 		path: "/dashboard",
@@ -332,6 +399,12 @@ export function Sidebar({ onClose }: SidebarProps) {
 							path: "/hr/recruitment",
 							icon: <Users className="w-4 h-4" />,
 						},
+						{
+							id: "hr-recruitment-onboarding",
+							label: "Onboarding",
+							path: "/hr/onboarding",
+							icon: <ListCheck className="w-4 h-4" />,
+						},
 					],
 				},
 			]
@@ -351,11 +424,10 @@ export function Sidebar({ onClose }: SidebarProps) {
 	// Required HR tail order: Reports, with Audit Logs last for HR users.
 	const trailingItems: NavItem[] = isHR ? [reportsItem!, ...hrUserTailItems] : [];
 
-	// My Team group (operator 2026-09-09): flat at the top of the Working
-	// Space section. "My Team" is a direct link and its entries (Overview /
-	// Organization Chart / Team Timesheets / Assign Overtime) render
-	// always-visible below it - NOT a collapsed submenu. Admins never see this
-	// surface (they render neither the General section nor this group).
+	// My Team group — sub parent (collapsible) at top of Working Space
+	// (operator 2026-09-09 flat → 2026-09-10 back to parent per request).
+	// Renders as a single expandable parent with submenu; much cleaner
+	// hierarchy than flat always-visible entries. Admins never see it.
 	const myTeamChildren: NavItem[] = [
 		{
 			id: "general-my-team-overview",
@@ -397,21 +469,23 @@ export function Sidebar({ onClose }: SidebarProps) {
 			: []),
 	];
 
-	const myTeamEntry: NavItem | null =
+	const myTeamParent: NavItem | null =
 		isEmployee || isManager || isHR
 			? {
 					id: "general-my-team",
 					label: "My Team",
 					path: "/employee/team",
 					icon: <Users className="w-5 h-5" />,
+					submenu: myTeamChildren,
 				}
 			: null;
 
-	const workingSpaceItems: NavItem[] = [
-		...baseWorkingSpaceItems,
-		...hrWorkingSpaceItems,
-		...trailingItems,
-	];
+  const workingSpaceItems: NavItem[] = [
+    ...baseWorkingSpaceItems,
+    ...(agencySection ? [agencySection] : []),
+    ...hrWorkingSpaceItems,
+    ...trailingItems,
+  ];
 
 	// General items (common to all, except admin)
 	const generalItems: NavItem[] = [
@@ -459,6 +533,18 @@ export function Sidebar({ onClose }: SidebarProps) {
 				},
 			],
 		},
+		// Onboarding checklist browsing/signing for everyone else; HR already has
+		// the entry under Recruitment, admins use the admin-nav entry.
+		...(isHR
+			? []
+			: [
+					{
+						id: "general-onboarding",
+						label: "Onboarding",
+						path: "/hr/onboarding",
+						icon: <ListCheck className="w-5 h-5" />,
+					},
+				]),
 	];
 
 	// Personal items (common to all) - use only routes that exist in routes.ts
@@ -479,13 +565,41 @@ export function Sidebar({ onClose }: SidebarProps) {
 		}));
 	};
 
-	const isActive = (path: string) => {
+	const isActive = (path: string, options?: { exactPath?: boolean }) => {
 		const currentPathname = location.pathname;
 		const currentSearch = new URLSearchParams(location.search);
 		const targetUrl = new URL(path, SIDEBAR_URL_PARSE_BASE);
 		const targetPathname = targetUrl.pathname;
 		const targetSearch = targetUrl.searchParams;
 		const hasTargetQuery = Array.from(targetSearch.keys()).length > 0;
+
+		// Explicit handling for My Team group paths - prevent cross-matching
+		const isMyTeamBase = targetPathname === "/employee/team" && !hasTargetQuery;
+		const isMyTeamTab = targetPathname === "/employee/team" && hasTargetQuery;
+
+		if (isMyTeamBase) {
+			// My Team base: ONLY match exact /employee/team with NO query params
+			return currentPathname === "/employee/team" && Array.from(currentSearch.keys()).length === 0;
+		}
+
+		if (isMyTeamTab) {
+			// My Team tabs (overview, organization, timesheets, overtime): match exact pathname + exact tab
+			if (currentPathname !== "/employee/team") return false;
+			for (const [key, value] of targetSearch.entries()) {
+				if (currentSearch.get(key) !== value) return false;
+			}
+			return true;
+		}
+
+		// Group-entry links (exactPath) only highlight on their bare pathname
+		// with no query params, so they never double-highlight with the
+		// query-scoped child tab that owns the active highlight.
+		if (options?.exactPath) {
+			return (
+				currentPathname === targetPathname &&
+				Array.from(currentSearch.keys()).length === 0
+			);
+		}
 
 		// Handle profile path specifically - don't match if on a sub-route
 		if (
@@ -533,7 +647,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 		item: NavItem;
 		isSubmenu?: boolean;
 	}) => {
-		const active = isActive(item.path);
+		const active = isActive(item.path, { exactPath: item.exactPath });
 		const hasSubmenu = item.submenu && item.submenu.length > 0;
 		const childActive = hasSubmenu ? isChildActive(item) : false;
 		const parentActive = active || childActive;
@@ -541,6 +655,16 @@ export function Sidebar({ onClose }: SidebarProps) {
 		// Otherwise (undefined), auto-open it when a child route is active.
 		const isExpanded =
 			expandedMenus[item.id] !== undefined ? expandedMenus[item.id] : childActive;
+
+		const isNeutral = item.neutral === true;
+		const accentBg = isNeutral ? "" : "bg-orange-50";
+		const accentBgHover = isNeutral ? "" : "bg-orange-50/50";
+		const accentText = isNeutral ? "text-gray-900" : "text-orange-600";
+		const accentBorder = isNeutral ? "bg-gray-500" : "bg-orange-600";
+		const accentBadge = isNeutral ? "bg-gray-500" : "bg-orange-500";
+		const accentChevron = isNeutral ? "text-gray-500" : "text-orange-600";
+		// Neutral items (My Team tabs) don't show the left indicator bar
+		const showLeftBar = !isNeutral;
 
 		if (item.path === "#") {
 			return (
@@ -556,7 +680,9 @@ export function Sidebar({ onClose }: SidebarProps) {
 		}
 
 		// Determine effective active state per context
-		const effectiveActive = isSubmenu ? active : parentActive;
+		// Items with submenus highlight when they or their children are active
+		// Flat items (no submenu) only highlight on their own exact match
+		const effectiveActive = hasSubmenu ? parentActive : active;
 		const submenuId = hasSubmenu ? `sidebar-submenu-${item.id}` : undefined;
 
 		if (hasSubmenu) {
@@ -571,18 +697,18 @@ export function Sidebar({ onClose }: SidebarProps) {
 						className={`
 							px-3 py-2 flex items-center gap-3 rounded-md transition-all duration-200 w-full group relative mb-0.5 text-left
 							${isSubmenu ? "pl-9 text-[13px]" : "text-[14px] font-medium"}
-							${
-								effectiveActive
-									? isSubmenu
-										? "bg-orange-50/50 text-orange-600 font-semibold"
-										: "bg-orange-50 text-orange-600"
-									: isSubmenu
-										? "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
-										: "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
-							}
+${
+							effectiveActive
+								? isSubmenu
+									? `${accentBgHover} ${accentText} font-semibold`.trim()
+									: accentBg
+								: isSubmenu
+									? "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
+									: "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+						}
 						`}>
-						{effectiveActive && !isSubmenu && (
-							<div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-orange-600 rounded-r-md" />
+						{effectiveActive && !isSubmenu && showLeftBar && (
+							<div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 ${accentBorder} rounded-r-md`} />
 						)}
 						<div
 							className={`shrink-0 text-current flex items-center justify-center [&>svg]:w-[18px] [&>svg]:h-[18px] ${isSubmenu ? "[&>svg]:!w-[16px] [&>svg]:!h-[16px]" : ""}`}>
@@ -590,14 +716,14 @@ export function Sidebar({ onClose }: SidebarProps) {
 						</div>
 						<span className="flex-1 truncate text-gray-500">{item.label}</span>
 						{(item.badge || 0) > 0 && (
-							<span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+							<span className={`ml-auto inline-flex min-w-5 items-center justify-center rounded-full ${accentBadge} px-1.5 py-0.5 text-[10px] font-bold text-white`}>
 								{item.badge}
 							</span>
 						)}
 						<div
 							className={`transition-transform duration-200 ${
 								isExpanded ? "rotate-180" : ""
-							} ${effectiveActive ? "text-orange-600" : "text-gray-400 group-hover:text-gray-500"}`}>
+							} ${effectiveActive ? accentChevron : "text-gray-400 group-hover:text-gray-500"}`}>
 							<ChevronDown className="w-4 h-4" />
 						</div>
 					</button>
@@ -641,15 +767,15 @@ export function Sidebar({ onClose }: SidebarProps) {
 						${
 							effectiveActive
 								? isSubmenu
-									? "bg-orange-50/50 text-orange-600 font-semibold"
-									: "bg-orange-50 text-orange-600"
+									? `${accentBgHover} ${accentText} font-semibold`.trim()
+									: accentBg
 								: isSubmenu
 									? "text-gray-500 hover:bg-gray-50 hover:text-gray-900"
 									: "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
 						}
 					`}>
-					{effectiveActive && !isSubmenu && (
-						<div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-orange-600 rounded-r-md" />
+					{effectiveActive && !isSubmenu && showLeftBar && (
+						<div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 ${accentBorder} rounded-r-md`} />
 					)}
 					<div
 						className={`shrink-0 text-current flex items-center justify-center [&>svg]:w-[18px] [&>svg]:h-[18px] ${isSubmenu ? "[&>svg]:!w-[16px] [&>svg]:!h-[16px]" : ""}`}>
@@ -657,7 +783,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 					</div>
 					<span className="flex-1 truncate text-gray-500">{item.label}</span>
 					{!hasSubmenu && (item.badge || 0) > 0 && (
-						<span className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+						<span className={`ml-auto inline-flex min-w-5 items-center justify-center rounded-full ${accentBadge} px-1.5 py-0.5 text-[10px] font-bold text-white`}>
 							{item.badge}
 						</span>
 					)}
@@ -762,21 +888,7 @@ export function Sidebar({ onClose }: SidebarProps) {
 							Working Space
 						</h3>
 					<div className="space-y-0.5">
-						{/* My Team group (operator 2026-09-09): flat at the top.
-						    The My Team entry is a direct link and its items stay
-						    always visible - no collapsed submenu. */}
-						{myTeamEntry && (
-							<>
-								<NavItemComponent item={myTeamEntry} />
-								{myTeamChildren.map((subitem) => (
-									<NavItemComponent
-										key={subitem.id}
-										item={subitem}
-										isSubmenu={true}
-									/>
-								))}
-							</>
-						)}
+						{myTeamParent && <NavItemComponent item={myTeamParent} />}
 						{workingSpaceItems.map((item) => (
 							<NavItemComponent key={item.id} item={item} />
 						))}

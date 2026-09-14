@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "~/components/atoms/Button";
 import { Modal } from "~/components/atoms/Modal";
@@ -32,6 +32,7 @@ import {
 	useCreatePayrollCorrection,
 	useNormalizeTimesheetBreakdownPreview,
 	useTimesheetPayrollCorrections,
+	useUpdateTimesheet,
 } from "~/lib/hooks/useTimesheets";
 import { useEmployeeScheduleCalendar } from "~/lib/hooks/useSchedules";
 import { useAuth } from "~/lib/hooks/use-auth";
@@ -342,7 +343,9 @@ export function TimesheetViewModal({
 
 	const handleDayClick = (day: TimesheetBreakdownDay) => {
 		const canEdit =
-			timesheet?.status === "REVISED" || timesheet?.editPermissionStatus === "APPROVED";
+			timesheet?.status === "REVISED" ||
+			timesheet?.editPermissionStatus === "APPROVED" ||
+			isHrApprovedEdit;
 		if (!approvalMode && canEdit) {
 			setEditingDay(day);
 			onDeepLinkDayChange?.(getTimesheetDayBusinessKey(day));
@@ -426,6 +429,33 @@ export function TimesheetViewModal({
 			return;
 		}
 
+		// HR APPROVED fast path: single PATCH, no preview ( DayEditor already computed local hours )
+		// Saves ~1.5s (removes normalizeBreakdownPreview round-trip) and keeps single Save UX
+		if (isHrApprovedEdit && timesheet?.id && targetDayKey) {
+			setIsHrSaving(true);
+			// Close editor immediately for snappier feel; isHrSaving shows outer spinner if needed
+			handleDayEditorClose();
+			try {
+				const saved = await updateTimesheetMutation.mutateAsync({
+					id: timesheet.id,
+					payload: { breakdown: mergedBreakdown, editedDayKeys: [targetDayKey] },
+				});
+				const savedBreakdown = (saved?.breakdown as TimesheetBreakdownDay[] | undefined) ?? mergedBreakdown;
+				setUpdatedBreakdown(savedBreakdown as TimesheetBreakdownDay[]);
+				hrSavedBreakdownRef.current = savedBreakdown as TimesheetBreakdownDay[];
+				setExplicitEditedDayKeys(new Set());
+				toast.success("Timesheet day saved. Timesheet stays APPROVED.");
+			} catch (saveError: any) {
+				// Fall back to staged for retry via outer Save changes
+				setUpdatedBreakdown(mergedBreakdown);
+				setExplicitEditedDayKeys((prev) => new Set(prev).add(targetDayKey));
+				toast.error(saveError?.message || "Failed to save timesheet day.");
+			} finally {
+				setIsHrSaving(false);
+			}
+			return;
+		}
+
 		try {
 			const normalized = await normalizeBreakdownPreviewMutation.mutateAsync({
 				timesheetId: timesheet.id,
@@ -439,10 +469,56 @@ export function TimesheetViewModal({
 				if (getTimesheetDayBusinessKey(day) !== targetDayKey) return day;
 				return normalizedEditedDay ? mergeNormalizedDay(day, normalizedEditedDay) : day;
 			});
+			// HR direct edit on APPROVED: single-save, persist immediately to BE (no outer Save changes)
+			if (isHrApprovedEdit && timesheet?.id && targetDayKey) {
+				setIsHrSaving(true);
+				try {
+					const saved = await updateTimesheetMutation.mutateAsync({
+						id: timesheet.id,
+						payload: { breakdown: nextBreakdown, editedDayKeys: [targetDayKey] },
+					});
+					const savedBreakdown = (saved?.breakdown as TimesheetBreakdownDay[] | undefined) ?? nextBreakdown;
+					setUpdatedBreakdown(savedBreakdown as TimesheetBreakdownDay[]);
+					hrSavedBreakdownRef.current = savedBreakdown as TimesheetBreakdownDay[];
+					setExplicitEditedDayKeys(new Set());
+					toast.success("Timesheet day saved. Timesheet stays APPROVED.");
+				} catch (saveError: any) {
+					setUpdatedBreakdown(nextBreakdown);
+					setExplicitEditedDayKeys((prev) => new Set(prev).add(targetDayKey));
+					toast.error(saveError?.message || "Failed to save timesheet day.");
+				} finally {
+					setIsHrSaving(false);
+				}
+				handleDayEditorClose();
+				return;
+			}
 			setUpdatedBreakdown(nextBreakdown);
 			handleDayEditorClose();
 			toast.success("Timesheet day normalized from server preview");
 		} catch (error: any) {
+			// HR direct path: even if preview fails, try to save the local merged day directly
+			if (isHrApprovedEdit && timesheet?.id && targetDayKey) {
+				setIsHrSaving(true);
+				try {
+					const saved = await updateTimesheetMutation.mutateAsync({
+						id: timesheet.id,
+						payload: { breakdown: mergedBreakdown, editedDayKeys: [targetDayKey] },
+					});
+					const savedBreakdown = (saved?.breakdown as TimesheetBreakdownDay[] | undefined) ?? mergedBreakdown;
+					setUpdatedBreakdown(savedBreakdown as TimesheetBreakdownDay[]);
+					hrSavedBreakdownRef.current = savedBreakdown as TimesheetBreakdownDay[];
+					setExplicitEditedDayKeys(new Set());
+					toast.success("Timesheet day saved. Timesheet stays APPROVED.");
+				} catch (saveError: any) {
+					setUpdatedBreakdown(mergedBreakdown);
+					setExplicitEditedDayKeys((prev) => new Set(prev).add(targetDayKey));
+					toast.error(saveError?.message || "Failed to save timesheet day.");
+				} finally {
+					setIsHrSaving(false);
+				}
+				handleDayEditorClose();
+				return;
+			}
 			setUpdatedBreakdown(mergedBreakdown);
 			handleDayEditorClose();
 			toast.error(error?.message || "Failed to normalize preview, using local values.");
@@ -467,14 +543,28 @@ export function TimesheetViewModal({
 	const isPayrollLocked = Boolean(
 		timesheet?.lockedAt || timesheet?.lockedEmployeePayrollId || timesheet?.lockReason,
 	);
+	const isHrRole = HR_ROLE_KEYS.has(
+		String(user?.role || user?.metadata?.employee?.role || "").trim(),
+	);
 	const hasEditPermissionForResubmit =
 		timesheet?.editPermissionStatus === "APPROVED" ||
 		timesheet?.editPermissionStatus === "CONSUMED";
+	// HR/admin can edit days directly on APPROVED (not payroll-locked) timesheets
+	// (2026-09-09): payroll auto-approves sheets, so HR needs a direct correction
+	// path that keeps the sheet APPROVED. Payroll-locked sheets stay protected.
+	const isHrApprovedEdit =
+		isHrRole &&
+		timesheet?.status === "APPROVED" &&
+		!isPayrollLocked;
 	const canEditDays =
 		!isPayrollLocked &&
-		(timesheet?.status === "REVISED" || hasEditPermissionForResubmit);
+		(timesheet?.status === "REVISED" || hasEditPermissionForResubmit || isHrApprovedEdit);
 	// Built-in mutation so CTA works even when a parent forgets to wire onRequestPayrollCorrection.
 	const createPayrollCorrectionMutation = useCreatePayrollCorrection();
+	// Built-in HR direct save (2026-09-09): persists day edits via PATCH
+	// /api/timesheet/:id with breakdown + editedDayKeys. The backend keeps the
+	// timesheet APPROVED and versions the changed days for audit.
+	const updateTimesheetMutation = useUpdateTimesheet();
 	const canRequestPayrollCorrection = Boolean(
 		!approvalMode &&
 			isPayrollLocked &&
@@ -503,6 +593,43 @@ export function TimesheetViewModal({
 		const items = extractPayrollCorrectionItems(payrollCorrectionsQuery.data);
 		return buildPayrollCorrectionMarkersByDate(items);
 	}, [payrollCorrectionsQuery.data]);
+	// HR direct-save state (2026-09-09): tracks the persisted breakdown after an
+	// HR save so the dirty-day detection and the "Save changes" CTA reset cleanly.
+	const hrSavedBreakdownRef = useRef<TimesheetBreakdownDay[] | null>(null);
+	const [isHrSaving, setIsHrSaving] = useState(false);
+	const saveHrEditedDays = async () => {
+		if (!timesheet?.id || !isHrApprovedEdit || isHrSaving) return;
+		if (submitEditedDayKeys.length === 0) {
+			toast.info("No day changes to save.");
+			return;
+		}
+		setIsHrSaving(true);
+		try {
+			// Full-breakdown contract (same as employee resubmit): the backend
+			// recomputes summaries and syncs lines from the whole breakdown, and
+			// versions only the editedDayKeys days.
+			const saved = await updateTimesheetMutation.mutateAsync({
+				id: timesheet.id,
+				payload: {
+					breakdown: submitBreakdown,
+					editedDayKeys: submitEditedDayKeys,
+				},
+			});
+			const savedBreakdown =
+				(saved?.breakdown as TimesheetBreakdownDay[] | undefined) ??
+				(submitBreakdown as TimesheetBreakdownDay[]);
+			hrSavedBreakdownRef.current = savedBreakdown;
+			// Keep the saved breakdown visible immediately so totals/weeks update
+			// before the parent query refetches (avoids flash of old data).
+			setUpdatedBreakdown(savedBreakdown);
+			setExplicitEditedDayKeys(new Set());
+			toast.success("Timesheet days saved. The timesheet stays approved for payroll.");
+		} catch (error: any) {
+			toast.error(error?.message || "Failed to save timesheet days.");
+		} finally {
+			setIsHrSaving(false);
+		}
+	};
 	const payrollCorrectionSummary = useMemo(() => {
 		const items = extractPayrollCorrectionItems(payrollCorrectionsQuery.data);
 		const requested = items.filter((i) => String(i.status).toUpperCase() === "REQUESTED").length;
@@ -613,9 +740,6 @@ export function TimesheetViewModal({
 	const attendanceDepartmentId = useMemo(
 		() => timesheet?.employee?.department?.id || "",
 		[timesheet?.employee?.department?.id],
-	);
-	const isHrRole = HR_ROLE_KEYS.has(
-		String(user?.role || user?.metadata?.employee?.role || "").trim(),
 	);
 	const canNavigateToAttendance = Boolean(isHrRole && attendancePeriodId);
 	const timesheetProfileId = useMemo(
@@ -2483,6 +2607,19 @@ export function TimesheetViewModal({
 							</>
 						)}
 
+						{/* HR direct-edit banner (2026-09-09): independent of showActions
+							because the HR timesheets page opens this modal with
+							showActions={false}. */}
+						{!approvalMode && isHrApprovedEdit && (
+							<div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+								<p className="text-sm font-medium text-orange-900">
+									HR edit mode: click any day to correct it, then use Save
+									changes. The timesheet stays APPROVED and edits are versioned
+									for audit.
+								</p>
+							</div>
+						)}
+
 						{/* Buttons */}
 						<div className="flex items-center justify-end gap-2 pt-1">
 							<Button variant="outline" onClick={onClose} className="text-sm">
@@ -2519,6 +2656,29 @@ export function TimesheetViewModal({
 										Request payroll correction
 									</Button>
 								))}
+
+							{/* HR direct-save on APPROVED (2026-09-09): persists edited
+								days while the timesheet stays APPROVED. */}
+							{!approvalMode &&
+								!shouldShowSubmitButton &&
+								isHrApprovedEdit &&
+								submitEditedDayKeys.length > 0 && (
+									<Button
+										type="button"
+										className="text-white font-semibold text-sm"
+										style={{ backgroundColor: themeColors.orange }}
+										onClick={saveHrEditedDays}
+										disabled={isHrSaving}>
+										{isHrSaving ? (
+											<div className="flex items-center gap-2">
+												<div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+												Saving...
+											</div>
+										) : (
+											`Save changes (${submitEditedDayKeys.length})`
+										)}
+									</Button>
+								)}
 
 							{/* Submit Mode Buttons */}
 							{shouldShowSubmitButton && (

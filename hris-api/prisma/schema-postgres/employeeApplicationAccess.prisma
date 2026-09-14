@@ -1,0 +1,25 @@
+model EmployeeApplicationAccess {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  employeeId          String?
+  employee            Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  // Explicit configuration ONLY (deltas over policy defaults — Phase 2 frozen model).
+  lmsRoleOverride     String?
+  epmrGrants          String[]
+  epmrRemovals        String[]
+
+  // Provisioning telemetry (best-effort; never a source of truth).
+  provisioningStatus  String    @default("PENDING")
+  lastProvisionedAt   DateTime?
+  lastBridgeSnapshot  Json?
+  lastSyncError       String?
+
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  isDeleted           Boolean   @default(false)
+
+  @@unique([organizationId, employeeId])
+  @@index([organizationId, provisioningStatus])
+  @@index([organizationId, employeeId, isDeleted])
+}

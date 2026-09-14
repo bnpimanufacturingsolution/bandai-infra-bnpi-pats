@@ -10,6 +10,7 @@ import {
 	FileText,
 	Gift,
 	Gavel,
+	GraduationCap,
 	PanelBottomDashed,
 	RadioReceiver,
 	Route,
@@ -97,6 +98,18 @@ export const adminConfigurationItems: AdminNavItem[] = [
 		icon: TrendingUp,
 	},
 	{
+		id: "onboarding",
+		label: "Onboarding Checklist",
+		path: "/admin/configuration/onboarding/checklist",
+		icon: Calendar,
+	},
+	{
+		id: "onboarding-employees",
+		label: "Onboarding Employees",
+		path: "/hr/onboarding",
+		icon: Calendar,
+	},
+	{
 		id: "schedule-templates",
 		label: "Schedule Templates",
 		path: "/admin/configuration/schedule-templates",
@@ -149,6 +162,12 @@ export const adminConfigurationItems: AdminNavItem[] = [
 		label: "Payroll Period Setup",
 		path: "/admin/configuration/payroll-periods",
 		icon: Calendar,
+	},
+	{
+		id: "applications",
+		label: "Training & Performance",
+		path: "/admin/configuration/applications",
+		icon: GraduationCap,
 	},
 	{
 		id: "devices",

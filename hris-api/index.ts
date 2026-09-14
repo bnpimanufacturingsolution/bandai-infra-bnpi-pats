@@ -72,7 +72,12 @@ if (!global.__errorHandlersRegistered) {
 					: reason,
 			promise: String(promise),
 		});
-		process.exit(1);
+		// Do NOT exit. A transient recoverable failure (e.g. Prisma P1001 while the
+		// K3s DEV DB forward flaps) surfacing from a floating promise must not kill
+		// the API and abort in-flight jobs. setupGlobalErrorHandlers() in
+		// helper/error-handling.ts already documents this contract ("Don't exit for
+		// unhandled rejection, but log it"); this handler contradicted it and caused
+		// a restart→STALE crash loop during DM4 imports (2026-09-14).
 	});
 }
 
@@ -362,6 +367,7 @@ const applicant = require("./app/applicant")(prisma);
 const job = require("./app/job")(prisma);
 const guide = require("./app/guide")(prisma);
 const checklistItem = require("./app/checklistItem")(prisma);
+const onboarding = require("./app/onboarding")(prisma);
 const boardingprocess = require("./app/boardingProcess")(prisma);
 const note = require("./app/note")(prisma);
 const boardingtemplate = require("./app/boardingTemplate")(prisma);
@@ -395,6 +401,7 @@ const timesheetline = require("./app/timesheetline")(prisma);
 const section = require("./app/section")(prisma);
 const leaveType = require("./app/leaveType")(prisma);
 const disciplinaryActionModule = require("./app/disciplinaryAction")(prisma);
+const applicationAccess = require("./app/applicationAccess")(prisma);
 
 const apiBodyLimit = process.env.HRIS_API_BODY_LIMIT || "75mb";
 app.use(express.json({ limit: apiBodyLimit }));
@@ -724,6 +731,7 @@ app.use(config.baseApiPath, applicant);
 app.use(config.baseApiPath, job);
 app.use(config.baseApiPath, guide);
 app.use(config.baseApiPath, checklistItem);
+app.use(config.baseApiPath, onboarding);
 app.use(config.baseApiPath, boardingprocess);
 app.use(config.baseApiPath, note);
 app.use(config.baseApiPath, boardingtemplate);
@@ -755,6 +763,7 @@ app.use(config.baseApiPath, timesheetline);
 app.use(config.baseApiPath, section);
 app.use(config.baseApiPath, leaveType);
 app.use(config.baseApiPath, disciplinaryActionModule);
+app.use(config.baseApiPath, applicationAccess);
 
 // Store app instance globally for docs generation after all routes are registered
 global.app = app;

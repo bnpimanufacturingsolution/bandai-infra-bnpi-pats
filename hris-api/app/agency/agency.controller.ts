@@ -18,6 +18,8 @@ import { logActivity } from "../../utils/activityLogger";
 import { logAudit } from "../../utils/auditLogger";
 import { config } from "../../config/constant";
 import * as XLSX from "xlsx";
+import { resolveCallerAgencyId } from "../../helper/agency-scope.helper";
+import { AttendanceImportService } from "../attendance/attendance-import.service";
 
 const logger = getLogger();
 const agencyLogger = logger.child({ module: "agency" });
@@ -518,6 +520,253 @@ export const controller = (prisma: PrismaClient) => {
 		res.status(200).json(buildSuccessResponse("Agency import completed", { summary }, 200));
 	};
 
+	const importAgencyAttendance = async (req: Request, res: Response, _next: NextFunction) => {
+		const role = (req as any).role as string | undefined;
+		const isAdmin = hasAgencyWriteAccess(role);
+		const isAgencyActor = role === "hris-agency";
+
+		if (!isAdmin && !isAgencyActor) {
+			res.status(403).json(buildErrorResponse("You are not authorized to import agency attendance", 403));
+			return;
+		}
+
+		const file = (req as any).file;
+		if (!file) {
+			res.status(400).json(buildErrorResponse("No file uploaded", 400));
+			return;
+		}
+		const organizationId = (req as any).organizationId;
+		if (!organizationId) {
+			res.status(401).json(buildErrorResponse("Organization ID is required", 401));
+			return;
+		}
+
+		const agencyScope = await resolveCallerAgencyId(prisma, (req as any).userId);
+		if (!agencyScope.callerAgencyId && isAgencyActor) {
+			res.status(403).json(buildErrorResponse("Agency ID not found in your account", 403));
+			return;
+		}
+
+		// The :id in the path selects the target agency. Agency actors may
+		// only import into their own agency; admin roles may target any.
+		const targetAgencyId = String(req.params?.id || "").trim();
+		if (!targetAgencyId) {
+			res.status(400).json(buildErrorResponse("Agency id is required", 400));
+			return;
+		}
+		if (isAgencyActor && targetAgencyId !== agencyScope.callerAgencyId) {
+			res.status(403).json(buildErrorResponse("You can only import attendance for your own agency", 403));
+			return;
+		}
+		const targetAgency = await prisma.agency.findFirst({
+			where: { id: targetAgencyId, organizationId, isDeleted: false },
+			select: { id: true },
+		});
+		if (!targetAgency) {
+			res.status(404).json(buildErrorResponse("Agency not found", 404));
+			return;
+		}
+
+		const workbook = XLSX.read(file.buffer, { type: "buffer" });
+		const sheetName = workbook.SheetNames[0];
+		const worksheet = workbook.Sheets[sheetName];
+		const rawData = XLSX.utils.sheet_to_json(worksheet, { raw: true, defval: null });
+
+		if (!rawData || rawData.length === 0) {
+			res.status(400).json(buildErrorResponse("File is empty or invalid", 400));
+			return;
+		}
+
+		const createTimesheets = String(req.body?.createTimesheets || "").toLowerCase() === "true";
+
+		agencyLogger.info(`Starting agency attendance import for org ${organizationId}, rows: ${rawData.length}`);
+
+		// time parsing helper (mirrors attendance controller)
+		const parseTimeWithDate = (timeValue: any, baseDate: Date): Date | null => {
+			if (typeof timeValue === "number") {
+				const excelEpoch = new Date(1899, 11, 30);
+				return new Date(excelEpoch.getTime() + timeValue * 24 * 60 * 60 * 1000);
+			} else if (timeValue instanceof Date) {
+				return timeValue;
+			} else if (typeof timeValue === "string") {
+				const timeStr = timeValue.trim();
+				let parsed = new Date(timeStr);
+				if (!isNaN(parsed.getTime())) return parsed;
+				const year = baseDate.getUTCFullYear();
+				const month = String(baseDate.getUTCMonth() + 1).padStart(2, "0");
+				const day = String(baseDate.getUTCDate()).padStart(2, "0");
+				parsed = new Date(`${year}-${month}-${day} ${timeStr}`);
+				if (!isNaN(parsed.getTime())) return parsed;
+			}
+			return null;
+		};
+
+		const attendanceRows: Array<{
+			employeeId: string;
+			date: Date;
+			timeIn: Date | null;
+			timeOut: Date | null;
+			status?: string;
+			notes?: string;
+		}> = [];
+		const errors: Array<{ row: number; message: string }> = [];
+
+		for (const [index, row] of rawData.entries()) {
+			const rowNumber = index + 2;
+			try {
+				const rowData = row as any;
+				const employeeId =
+					rowData.EMPLOYEE_ID || rowData["Employee ID"] || rowData.employee_id || rowData.EMP_ID || rowData["Emp ID"];
+				if (!employeeId) {
+					errors.push({ row: rowNumber, message: "Missing EMPLOYEE_ID" });
+					continue;
+				}
+
+				// Agency scope guard: rows may only affect employees of the
+				// target agency (caller's own agency for agency actors).
+				const effectiveAgencyId = isAgencyActor ? agencyScope.callerAgencyId : targetAgencyId;
+				if (effectiveAgencyId) {
+					const employee = await prisma.employee.findFirst({
+						where: {
+							organizationId,
+							isDeleted: false,
+							OR: [{ employeeId: String(employeeId) }, { deviceEmpId: String(employeeId) }],
+						},
+						select: { agencyId: true },
+					});
+					if (!employee || employee.agencyId !== effectiveAgencyId) {
+						errors.push({ row: rowNumber, message: `Employee ${employeeId} is not in this agency` });
+						continue;
+					}
+				}
+
+				const dateValue = rowData.DATE || rowData.Date || rowData.date;
+				if (!dateValue) {
+					errors.push({ row: rowNumber, message: "Missing DATE" });
+					continue;
+				}
+
+				let attendanceDate: Date;
+				try {
+					if (typeof dateValue === "number") {
+						const utcMs = (dateValue - 25569) * 86400 * 1000;
+						const utcDate = new Date(utcMs);
+						attendanceDate = new Date(Date.UTC(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate(), 0, 0, 0, 0));
+					} else if (dateValue instanceof Date) {
+						attendanceDate = new Date(Date.UTC(dateValue.getFullYear(), dateValue.getMonth(), dateValue.getDate(), 0, 0, 0, 0));
+					} else {
+						const parsed = new Date(String(dateValue));
+						attendanceDate = new Date(Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate(), 0, 0, 0, 0));
+					}
+					if (isNaN(attendanceDate.getTime())) throw new Error("Invalid date");
+				} catch {
+					errors.push({ row: rowNumber, message: "Invalid DATE value" });
+					continue;
+				}
+
+				const timeInValue = rowData.TIME_IN || rowData["Time In"] || rowData.time_in;
+				const timeOutValue = rowData.TIME_OUT || rowData["Time Out"] || rowData.time_out;
+				let timeIn: Date | null = null;
+				let timeOut: Date | null = null;
+
+				if (timeInValue) {
+					try { timeIn = parseTimeWithDate(timeInValue, attendanceDate); } catch {}
+				}
+				if (timeOutValue) {
+					try { timeOut = parseTimeWithDate(timeOutValue, attendanceDate); } catch {}
+				}
+
+				const statusValue = rowData.STATUS || rowData.Status || rowData.status;
+				const status = statusValue ? String(statusValue).trim().toUpperCase() : undefined;
+				const validStatuses = new Set(["PRESENT", "LEAVE", "INCOMPLETE"]);
+				if (status && !validStatuses.has(status)) {
+					errors.push({ row: rowNumber, message: `Invalid STATUS "${status}"` });
+					continue;
+				}
+
+				const notes = rowData.NOTES || rowData.Notes || rowData.notes || null;
+
+				attendanceRows.push({
+					employeeId: String(employeeId),
+					date: attendanceDate,
+					timeIn,
+					timeOut,
+					status,
+					notes,
+				});
+			} catch (error) {
+				errors.push({ row: rowNumber, message: error instanceof Error ? error.message : "Parse error" });
+			}
+		}
+
+		if (attendanceRows.length === 0) {
+			res.status(400).json(buildErrorResponse("No valid attendance rows found", 400, errors));
+			return;
+		}
+
+		// Preview mode: report what WOULD be imported with zero writes.
+		const dryRun = String(req.body?.dryRun || "").toLowerCase() === "true";
+		if (dryRun) {
+			res.status(200).json(
+				buildSuccessResponse(
+					"Agency attendance import preview",
+					{
+						mode: "dry_run",
+						willWrite: false,
+						agencyId: targetAgencyId,
+						rows: attendanceRows.length,
+						matched: attendanceRows.length,
+						unmatched: errors.length,
+						preview: attendanceRows.slice(0, 100),
+						errors,
+					},
+					200,
+				),
+			);
+			return;
+		}
+
+		const importService = new AttendanceImportService(prisma, organizationId, { createTimesheets });
+		const result = await importService.importAttendance(attendanceRows);
+		const jobId = result.jobId;
+
+		agencyLogger.info(`Agency attendance import job ${jobId} started for ${attendanceRows.length} rows`);
+
+		logActivity(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: "IMPORT_AGENCY_ATTENDANCE",
+			description: `Agency attendance import started: ${attendanceRows.length} rows, job ${jobId}`,
+			page: { url: req.originalUrl, title: "Agency Attendance Import" },
+			organizationId,
+		});
+
+		logAudit(req, {
+			userId: (req as any).user?.id || "unknown",
+			action: "CREATE",
+			resource: "AGENCY_ATTENDANCE",
+			severity: "MEDIUM",
+			entityType: "ATTENDANCE_IMPORT",
+			entityId: jobId,
+			changesBefore: null,
+			changesAfter: { jobId, total: attendanceRows.length, errors: errors.length },
+			description: `Agency attendance import job ${jobId} started`,
+			organizationId,
+		});
+
+		// invalidate cache in background
+		invalidateCache.byPattern("cache:attendance:*").catch((e) => {
+			agencyLogger.warn("Cache invalidation failed after agency attendance import:", e);
+		});
+
+		res.status(202).json(
+			buildSuccessResponse(
+				"Agency attendance import started",
+				{ jobId, total: attendanceRows.length, errors: errors.length, validationErrors: errors },
+				202,
+			),
+		);
+	};
+
 	return {
 		generateCode,
 		create,
@@ -526,5 +775,6 @@ export const controller = (prisma: PrismaClient) => {
 		update,
 		remove,
 		importFromXLSX,
+		importAgencyAttendance,
 	};
 };

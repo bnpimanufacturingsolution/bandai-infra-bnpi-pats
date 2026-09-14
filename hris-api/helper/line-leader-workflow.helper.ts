@@ -1,11 +1,14 @@
 /**
  * Leader-filed request workflows (2026-09-07 line-leader requirement).
  *
- * OVERTIME (2026-09-08 operator decision): the leader files OT/early OT for a
- * section member and the MEMBER's manager is the FINAL approver — no HR step.
- * The leader is the initiator, never an approver.
+ * OVERTIME (2026-09-08 operator decision) and TIMESHEET-ADJUSTMENT-style
+ * leader-filed chains (2026-09-09 operator direction: "the adjusted need to
+ * approve by the section manager like how the ot and early ot being filed"):
+ * the leader files for a section member and the MEMBER's manager is the FINAL
+ * approver — no HR step. The leader is the initiator, never an approver.
  *
- * TIMESHEET and ATTENDANCE_CORRECTION keep the manager → HR chain.
+ * TIMESHEET (submission/edit-permission requests, a different surface) keeps
+ * the manager → HR chain.
  * These templates use TARGET_DEPARTMENT_MANAGER so the manager step resolves
  * from the MEMBER's department/reportTo, not the leader's.
  *
@@ -71,17 +74,9 @@ export const LEADER_FILED_HR_APPROVAL_STEP = {
 	state_on_reject: "REJECTED",
 } as const;
 
-/** HR review step (TASK variant, mirrors the attendance-correction chain). */
-export const LEADER_FILED_HR_REVIEW_TASK_STEP = {
-	step_number: 3,
-	step_name: "HR Review",
-	step_type: "TASK",
-	assignee_type: "HR",
-	is_required: true,
-	state_on_enter: "FOR_APPROVAL",
-	state_on_complete: "APPROVED",
-	state_on_skip: "APPROVED",
-} as const;
+// Note: the former LEADER_FILED_HR_REVIEW_TASK_STEP (HR review TASK) was
+// removed when the leader-filed attendance-correction chain became
+// manager-final (2026-09-09 operator direction, mirroring the OT chain).
 
 export const LEADER_FILED_SUBMISSION_STEP = {
 	step_number: 1,
@@ -129,9 +124,25 @@ export const LEADER_FILED_TIMESHEET_STEPS = [
 	buildLeaderFiledCompletionStep(4, "Timesheet Completion"),
 ] as const;
 
+/**
+ * Leader-filed attendance correction (timesheet adjustment) chain
+ * (2026-09-09 operator direction): mirrors OT — leader files for the member,
+ * the member's section manager is the FINAL approver, then the SYSTEM task
+ * applies the correction to the member's attendance. No HR step.
+ */
 export const LEADER_FILED_ATTENDANCE_CORRECTION_STEPS = [
 	LEADER_FILED_SUBMISSION_STEP,
-	LEADER_FILED_MANAGER_STEP,
-	LEADER_FILED_HR_REVIEW_TASK_STEP,
-	buildLeaderFiledCompletionStep(4, "Attendance Correction Completion"),
+	{
+		// Final manager approval: approve transitions to APPROVED so the SYSTEM
+		// completion task auto-runs the member-attendance correction side effect.
+		step_number: 2,
+		step_name: "Manager Approval",
+		step_type: "APPROVAL",
+		assignee_type: "TARGET_DEPARTMENT_MANAGER",
+		is_required: true,
+		state_on_enter: "SUBMITTED",
+		state_on_approve: "APPROVED",
+		state_on_reject: "REJECTED",
+	},
+	buildLeaderFiledCompletionStep(3, "Attendance Correction Completion"),
 ] as const;

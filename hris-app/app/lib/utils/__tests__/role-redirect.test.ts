@@ -30,6 +30,14 @@ describe("role redirect utilities", () => {
 		expect(getRedirectPathByRole("hris-timekeeper")).toBe("/time-logging");
 	});
 
+	it("maps agency users to the agency workspace", () => {
+		expect(getRedirectPathByRole("hris-agency")).toBe("/agency/dashboard");
+		expect(getRoleDisplayName("hris-agency")).toBe("Agency");
+		expect(hasRoleAccess("hris-agency", "/agency")).toBe(true);
+		expect(hasRoleAccess("hris-agency", "/agency/roster")).toBe(true);
+		expect(hasRoleAccess("hris-employee", "/agency")).toBe(false);
+	});
+
 	it("falls back to the shared dashboard for unknown roles", () => {
 		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 

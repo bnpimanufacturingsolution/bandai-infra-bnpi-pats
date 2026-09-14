@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from "react-router";
 import { useState, useRef, useEffect, useContext } from "react";
 import { Menu, Bell, CalendarDays, Check, CheckCheck, User2 } from "lucide-react";
 import { HRDropdown } from "./HRDropdown";
+import { ApplicationLauncherButton } from "./ApplicationLauncherButton";
 import { Badge } from "~/components/atoms/Badge";
 import {
 	useNotifications,
@@ -264,6 +265,9 @@ export function TopNavbar({
 							</div>
 						)}
 					</div>
+
+					{/* Application Launcher */}
+					<ApplicationLauncherButton />
 
 					{/* Settings Dropdown */}
 					<div className="relative" ref={settingsRef}>

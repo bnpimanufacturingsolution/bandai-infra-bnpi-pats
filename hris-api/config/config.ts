@@ -161,6 +161,11 @@ export const config = {
 		db: parseInteger(process.env.REDIS_DB, 0),
 		enabled: process.env.REDIS_ENABLED !== "false", // Default to enabled
 	},
+	/** LMS / EPMR external handoff integration */
+	lmsApiUrl: (process.env.LMS_API_URL || "").trim(),
+	lmsHandoffSecret: (process.env.LMS_EXTERNAL_HANDOFF_SECRET || "").trim(),
+	epmrAppUrl: (process.env.EPMR_APP_URL || "").trim(),
+	lmsAppUrl: (process.env.LMS_APP_URL || "").trim(),
 };
 
 export const defaultOrg = "69884da971e2dc9d6ac67b59";

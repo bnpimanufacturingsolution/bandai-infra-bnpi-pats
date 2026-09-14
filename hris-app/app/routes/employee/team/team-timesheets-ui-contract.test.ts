@@ -25,17 +25,17 @@ describe("team timesheets tab contract", () => {
 		expect(sidebar).toContain('path: "/employee/team?tab=timesheets"');
 	});
 
-	it("pins My Team flat at the top of Working Space, not as a collapsed submenu (operator 2026-09-09)", () => {
+	it("pins My Team as collapsible parent at the top of Working Space (operator 2026-09-10 back to sub-parent)", () => {
 		const sidebar = readAppFile("app/components/organisms/Sidebar.tsx");
 
-		// My Team is a direct link (no collapsible submenu parent), and its
-		// entries render always-visible at the top of Working Space.
-		expect(sidebar).toContain("const myTeamEntry");
+		// My Team is a single expandable parent with submenu, rendered at the
+		// top of Working Space (not flat always-visible entries).
+		expect(sidebar).toContain("const myTeamParent");
 		expect(sidebar).toContain("const myTeamChildren");
-		expect(sidebar).toContain("{myTeamEntry && (");
-		expect(sidebar).toContain('item={myTeamEntry}');
+		expect(sidebar).toContain("submenu: myTeamChildren");
+		expect(sidebar).toContain("myTeamParent && <NavItemComponent item={myTeamParent} />");
 
-		// The General section no longer hosts the My Team group.
+		// The General section no longer hosts the My Team group (still).
 		const generalStart = sidebar.indexOf("const generalItems: NavItem[] = [");
 		const personalStart = sidebar.indexOf("// Personal items (common to all)");
 		expect(generalStart).toBeGreaterThan(-1);

@@ -37,6 +37,7 @@ import {
 	type ErrorDetail,
 } from "../../helper/error-handler";
 import { syncDepartmentDefaultScheduleLink } from "../../helper/department-schedule.helper";
+import { resolveCallerAgencyId, agencyScopeWhere } from "../../helper/agency-scope.helper";
 
 import {
 	UpdateEmployeeSchema,
@@ -86,6 +87,7 @@ import {
 	getPendingActiveDocumentChecklistCandidates,
 	reconcileEmployeeOnboardingState,
 } from "../../helper/boarding-documents.helper";
+import { ensureOnboardingChecklistForEmployee } from "../onboarding/onboardingLifecycle.helper";
 import { validateEmployeeMutationDatePayload } from "../../helper/employee-date-validation.helper";
 import { getEmployeeDocumentPriorityData } from "../../helper/employee-document-priority.helper";
 import {
@@ -4407,6 +4409,25 @@ export const controller = (prisma: PrismaClient) => {
 				}
 			}
 
+			// Step 8.9: Dedicated onboarding checklist provisioning (create-on-hire).
+			// Best-effort and idempotent; must never fail the hire itself.
+			if ((updatedEmployee as any)?.employmentStatus === "ONBOARDING") {
+				try {
+					const provisioned = await ensureOnboardingChecklistForEmployee(prisma, {
+						employeeId: updatedEmployee.id,
+						organizationId,
+						requireTemplate: true,
+					});
+					employeeLogger.info(
+						`Dedicated onboarding checklist provisioning: ${provisioned.status} ${provisioned.checklistId || provisioned.reason || ""}`,
+					);
+				} catch (provisionError) {
+					employeeLogger.warn(
+						`Dedicated onboarding checklist provisioning skipped (non-critical): ${provisionError}`,
+					);
+				}
+			}
+
 			// Step 9: EmployeeCreated attendance post-action.
 			// Employee/person/account creation is the blocking source-of-truth write. Attendance
 			// obligations can be projected immediately after the response; they are idempotent and
@@ -4772,10 +4793,19 @@ export const controller = (prisma: PrismaClient) => {
 				return;
 			}
 
-			// Base where clause
-			const whereClause: Prisma.EmployeeWhereInput = {
-				isDeleted: false,
-			};
+		// Base where clause
+		const whereClause: Prisma.EmployeeWhereInput = {
+			isDeleted: false,
+		};
+
+		// Agency scope: restrict to own agency employees. An agency actor
+		// without a resolvable agency gets 403 (never an unscoped list).
+		const agencyScope = await resolveCallerAgencyId(prisma, req.userId);
+		if (agencyScope.isAgencyActor && !agencyScope.callerAgencyId) {
+			res.status(403).json(buildErrorResponse("Agency ID not found in your account", 403));
+			return;
+		}
+		Object.assign(whereClause, agencyScopeWhere(agencyScope));
 
 			// Handle search query - simple contains search across fields
 			// Handle search query - split into terms for multi-word support across fields

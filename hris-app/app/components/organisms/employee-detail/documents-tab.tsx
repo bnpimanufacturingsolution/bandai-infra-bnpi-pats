@@ -226,17 +226,7 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 			}
 			setSelectedDocumentCategory(null);
 		} else if (action === "add-doc") {
-			if (!canEdit) {
-				// If not allowed to add, clear action
-				updateSearchParams(
-					(next) => {
-						next.delete("action");
-						next.delete("documentType");
-					},
-					{ replace: true },
-				);
-				return;
-			}
+			// Allow adding new docs regardless of canEdit (HR/admin can submit for others)
 			setSelectedDocumentCategory(null);
 		} else if (action === "delete-doc" && urlDocumentNumber) {
 			if (!canEdit) {
@@ -993,11 +983,7 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 											key={item.key}
 											variant="outline"
 											className="h-8 border-red-200 bg-white text-red-700 hover:bg-red-100"
-											onClick={() =>
-												openAddDocumentForType(
-													normalizeDocumentType(item.type) || item.type,
-												)
-											}>
+											onClick={() => openAddDocumentForType(item.type)}>
 											{item.displayName}
 										</Button>
 									))}
@@ -1114,7 +1100,7 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 											<p className="text-[11px] text-gray-500 font-mono mb-2 w-full truncate px-2">
 												{doc.number || "No document number"}
 											</p>
-											{priorityBadge && (
+											{!isExpired(doc.expiryDate) && priorityBadge && (
 												<span
 													className={`mb-2 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${priorityBadge.className}`}>
 													{priorityBadge.label}
@@ -1157,12 +1143,13 @@ export function DocumentsTab({ employee, canEdit }: DocumentsTabProps) {
 													<h4 className="text-sm font-medium text-gray-900 capitalize truncate">
 														{formatDocumentTypeLabel(doc.type)}
 													</h4>
-													{priorityBadge && (
-														<span
-															className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${priorityBadge.className}`}>
-															{priorityBadge.label}
-														</span>
-													)}
+													{!isExpired(doc.expiryDate) &&
+														priorityBadge && (
+															<span
+																className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${priorityBadge.className}`}>
+																{priorityBadge.label}
+															</span>
+														)}
 													{isExpired(doc.expiryDate) && (
 														<span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-600 border border-red-100">
 															Expired

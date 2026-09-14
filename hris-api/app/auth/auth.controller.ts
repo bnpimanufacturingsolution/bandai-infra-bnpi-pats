@@ -17,6 +17,8 @@ import { logAudit } from "../../utils/auditLogger";
 import { buildUserActivityFeed } from "../../helper/user-activity-logs.helper";
 import { buildHrAuditFeed } from "../../helper/hr-audit-logs.helper";
 import jwt from "jsonwebtoken";
+import { createExternalLaunch, ExternalApp } from "../../lib/external-handoff.service";
+import { resolveTrainingPerformanceAccess } from "../../lib/application-access/resolver";
 
 const DEFAULT_ME_MESSAGE = "User profile retrieved successfully";
 const DEFAULT_LOGIN_MESSAGE = "Login successful";
@@ -2305,6 +2307,200 @@ export const controller = (prisma: PrismaClient) => {
 		}
 	};
 
+	const externalLaunch = async (req: AuthRequest, res: Response, _next: NextFunction) => {
+		// Provisioning-telemetry anchors, resolvable from the failure path too.
+		let telemetryOrganizationId: string | undefined;
+		let telemetryEmployeeId: string | undefined;
+		try {
+			const userId = String(req.userId || "").trim();
+			if (!userId) {
+				res.status(401).json(buildErrorResponse("Unauthorized", 401));
+				return;
+			}
+
+			const appParam = String((req.body?.app || req.query?.app || "")).trim().toLowerCase();
+			if (appParam !== "lms" && appParam !== "epmr") {
+				res.status(400).json(
+					buildErrorResponse("Invalid app parameter. Must be 'lms' or 'epmr'.", 400),
+				);
+				return;
+			}
+
+			// Load employee with the same select shape as loadLocalUserProfile
+			const localUser = await prisma.user.findUnique({
+				where: { id: userId },
+				select: {
+					id: true,
+					email: true,
+					organizationId: true,
+					role: true,
+					metadata: true,
+				},
+			});
+			if (!localUser) {
+				res.status(401).json(buildErrorResponse("User not found", 401));
+				return;
+			}
+
+			const organizationId = localUser.organizationId || req.organizationId || undefined;
+			const employee = await prisma.employee.findFirst({
+				where: {
+					userId,
+					isDeleted: false,
+					...(organizationId ? { organizationId } : {}),
+				},
+				select: {
+					id: true,
+					employeeId: true,
+					userId: true,
+					role: true,
+					isManager: true,
+					isHrManager: true,
+					employmentStatus: true,
+					organizationId: true,
+					department: { select: { name: true } },
+					position: { select: { title: true } },
+					person: {
+						select: {
+							personalInfo: true,
+							contactInfo: true,
+						},
+					},
+				},
+			});
+
+			if (!employee) {
+				res.status(404).json(
+					buildErrorResponse("Employee record not found for current user", 404),
+				);
+				return;
+			}
+
+			const organization = organizationId
+				? await prisma.organization.findUnique({
+						where: { id: organizationId },
+						select: { id: true, name: true, code: true },
+					})
+				: null;
+
+			const enrichedEmployee = {
+				...employee,
+				user: {
+					email: localUser.email,
+					metadata: localUser.metadata,
+				},
+				organization,
+			};
+
+			// Phase 3: resolve effective Training & Performance access from the
+			// employee's explicit configuration (lazy; defaults when absent).
+			telemetryOrganizationId = organizationId;
+			telemetryEmployeeId = employee.id;
+			const accessConfig = organizationId
+				? await prisma.employeeApplicationAccess.findFirst({
+						where: { organizationId, employeeId: employee.id, isDeleted: false },
+					})
+				: null;
+			const effectiveAccess = resolveTrainingPerformanceAccess(employee, accessConfig);
+
+			const result = await createExternalLaunch(
+				enrichedEmployee,
+				appParam as ExternalApp,
+				{ effectiveAccess },
+			);
+
+			// Provisioning telemetry (best-effort; never blocks the launch).
+			if (organizationId) {
+				try {
+					const telemetry = await prisma.employeeApplicationAccess.upsert({
+						where: {
+							organizationId_employeeId: { organizationId, employeeId: employee.id },
+						},
+						create: {
+							organizationId,
+							employeeId: employee.id,
+							provisioningStatus: "SYNCED",
+							lastProvisionedAt: new Date(),
+							lastBridgeSnapshot: {
+								lmsRole: effectiveAccess.effectiveLmsRole,
+								epmrSubroles: effectiveAccess.effectiveEpmrSubroles,
+								inherited: effectiveAccess.inherited,
+							},
+						},
+						update: {
+							provisioningStatus: "SYNCED",
+							lastProvisionedAt: new Date(),
+							lastBridgeSnapshot: {
+								lmsRole: effectiveAccess.effectiveLmsRole,
+								epmrSubroles: effectiveAccess.effectiveEpmrSubroles,
+								inherited: effectiveAccess.inherited,
+							},
+							lastSyncError: null,
+						},
+					});
+					void telemetry;
+				} catch (telemetryError) {
+					console.error("Failed to record external-launch provisioning telemetry:", telemetryError);
+				}
+			}
+
+			logActivity(req, {
+				userId,
+				action: "EXTERNAL_APP_LAUNCH",
+				description: `External ${appParam.toUpperCase()} launch initiated`,
+				organizationId: organizationId || undefined,
+				page: {
+					url: req.originalUrl,
+					title: "External App Launch",
+				},
+			});
+
+			res.status(200).json(
+				buildSuccessResponse(
+					`External ${appParam.toUpperCase()} launch URL generated successfully`,
+					{ launchUrl: result.launchUrl, app: result.app },
+					200,
+				),
+			);
+		} catch (error: any) {
+			// Provisioning telemetry on failure (best-effort).
+			if (telemetryOrganizationId && telemetryEmployeeId) {
+				try {
+					await prisma.employeeApplicationAccess.upsert({
+						where: {
+							organizationId_employeeId: {
+								organizationId: telemetryOrganizationId,
+								employeeId: telemetryEmployeeId,
+							},
+						},
+						create: {
+							organizationId: telemetryOrganizationId,
+							employeeId: telemetryEmployeeId,
+							provisioningStatus: "FAILED",
+							lastSyncError: String(error?.message || "External launch failed"),
+						},
+						update: {
+							provisioningStatus: "FAILED",
+							lastSyncError: String(error?.message || "External launch failed"),
+						},
+					});
+				} catch (telemetryError) {
+					console.error("Failed to record external-launch failure telemetry:", telemetryError);
+				}
+			}
+			const statusCode =
+				typeof error?.statusCode === "number" && error.statusCode >= 400
+					? error.statusCode
+					: 500;
+			res.status(statusCode).json(
+				buildErrorResponse(
+					error?.message || "Failed to generate external launch URL",
+					statusCode,
+				),
+			);
+		}
+	};
+
 	return {
 		login,
 		logout,
@@ -2321,5 +2517,6 @@ export const controller = (prisma: PrismaClient) => {
 		createUser,
 		updateUser,
 		deleteUser,
+		externalLaunch,
 	};
 };

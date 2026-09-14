@@ -166,6 +166,7 @@ model Employee {
   calendarItem CalendarItem[]
 
   boardingProcesses             BoardingProcess[]         @relation("EmployeeBoardingProcesses")
+  onboardingChecklists          OnboardingChecklist[]     @relation("EmployeeOnboardingChecklists")
   notificationsCreated          Notification[]            @relation("NotificationSource") // Notifications sourced/created by this employee
   activityLogs                  ActivityLogging[]
   auditLogs                     AuditLogging[]
@@ -179,6 +180,8 @@ model Employee {
   terminationsAsLegal      Termination[] @relation("LegalApprovals") // Terminations this employee approved as Legal
 
   soaLineItems SOALineItem[]
+
+  applicationAccesses EmployeeApplicationAccess[]
 
   soasReconciled StatementOfAccount[] @relation("SOAReconciledBy")
 

@@ -33,6 +33,8 @@ const adminRoutes = [
 		route("agencies", "routes/admin/configuration/agencies.tsx"),
 		route("positions", "routes/admin/configuration/positions.tsx"),
 		route("levels", "routes/admin/configuration/levels.tsx"),
+		route("onboarding/checklist", "routes/admin/onboarding/checklist.tsx"),
+		route("onboarding/builder", "routes/admin/onboarding/builder.tsx"),
 		route("sections", "routes/admin/configuration/sections.tsx"),
 		route("employees", "routes/admin/configuration/employees.tsx"),
 		route("employees/new", "routes/hr/employees.new.tsx", {
@@ -47,6 +49,7 @@ const adminRoutes = [
 		}),
 		route("users", "routes/admin/configuration/users.tsx"),
 		route("users/:id/activity-logs", "routes/admin/configuration/users.$id.activity-logs.tsx"),
+		route("applications", "routes/admin/configuration/applications.tsx"),
 		route("shift-types", "routes/admin/configuration/shift-types.tsx"),
 		route("schedule-templates", "routes/admin/configuration/schedule-templates.tsx"),
 		route("employee-schedules", "routes/admin/configuration/employee-schedules.tsx"),
@@ -124,10 +127,7 @@ const employeeRoutes = [
 	route(":id/attendance", "routes/employee/$id.attendance.tsx"),
 	route(":id/payroll", "routes/employee/$id.payroll.tsx"),
 	route(":id/payroll/:payslipId", "routes/employee/$id.payroll.$payslipId.tsx"),
-	route(
-		":id/special-payslip/:payslipId",
-		"routes/employee/$id.special-payslip.$payslipId.tsx",
-	),
+	route(":id/special-payslip/:payslipId", "routes/employee/$id.special-payslip.$payslipId.tsx"),
 ];
 
 // HR-specific routes (HR Manager + HR User - role-gated in components)
@@ -151,6 +151,7 @@ const hrRoutes = [
 	route("employee-status-changes", "routes/hr/employee-status-changes.tsx"),
 	route("personnel-actions-history", "routes/hr/personnel-actions-history.tsx"),
 	route("recruitment", "routes/hr/recruitment-page.tsx"),
+	route("onboarding", "routes/hr/onboarding.tsx"),
 	route("jobs", "routes/hr/jobs.tsx"),
 	route("attendance", "routes/hr/attendance.tsx"),
 	route("time-corrections", "routes/hr/time-corrections.tsx"),
@@ -219,6 +220,7 @@ export default [
 	route("setup", "routes/setup.tsx"),
 	route("setup/bootstrap", "routes/setup.bootstrap.tsx"),
 	route("callback", "routes/callback.tsx"),
+	route("application-launch", "routes/application-launch.tsx"),
 	route("status", "routes/status.tsx"),
 	route("403", "routes/403.tsx"),
 	// Dev preview — branded LoadingScreen only (no auth / no redirect)
@@ -235,6 +237,16 @@ export default [
 	// Unified layout for employee, hr-manager, hr-user, and manager
 	layout("./layouts/unified-layout.tsx", [
 		route("dashboard", "routes/dashboard.tsx"),
+		route("agency", "routes/agency.tsx"),
+		...prefix("agency", [
+			route("dashboard", "routes/agency/dashboard.tsx"),
+			route("roster", "routes/agency/roster.tsx"),
+			route("attendance", "routes/agency/attendance.tsx"),
+			route("timesheets", "routes/agency/timesheets.tsx"),
+			route("biometrics", "routes/agency/biometrics.tsx"),
+			route("reports", "routes/agency/reports.tsx"),
+		]),
+		route("application-launcher", "routes/application-launcher.tsx"),
 		route("settings", "routes/settings.tsx"),
 		route("calendar", "routes/calendar.tsx"),
 		route("celebrations/birthdays", "routes/celebrations/birthdays.tsx"),

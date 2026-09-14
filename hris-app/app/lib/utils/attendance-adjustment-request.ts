@@ -12,6 +12,10 @@ export type AttendanceRequestKind = "ATTENDANCE_ADJUSTMENT" | "OVERTIME";
 export type AttendanceAdjustmentKind = "CLOCK_IN" | "CLOCK_OUT" | "CLOCK_IN_OUT";
 
 export type AttendanceAdjustmentDraft = {
+	/**
+	 * Employee the adjustment is FOR: the signed-in employee, or the member
+	 * when a line leader files on behalf (2026-09-09 requirement).
+	 */
 	employeeId: string;
 	organizationId: string;
 	date: string;
@@ -21,6 +25,17 @@ export type AttendanceAdjustmentDraft = {
 	notes: string;
 	attendanceId?: string | null;
 	adjustmentKind?: AttendanceAdjustmentKind;
+	/**
+	 * On-behalf filing context (line leader files a timesheet adjustment for a
+	 * section member). When set, requesterId stays the LEADER and
+	 * targetEmployeeId carries the member so the backend routes the
+	 * leader-filed workflow and the approval side effect writes to the
+	 * member's attendance.
+	 */
+	onBehalf?: {
+		requesterEmployeeId: string;
+		filedByRole: string;
+	};
 };
 
 /** Overtime kind: REGULAR = after shift; EARLY = pre-shift (rendered early OT). */
@@ -150,21 +165,48 @@ export const buildAttendanceAdjustmentRequestPayload = (draft: AttendanceAdjustm
 		kind === "CLOCK_IN" ? "clock-in" : kind === "CLOCK_OUT" ? "clock-out" : "clock-in and clock-out";
 	const windowLabel = [timeIn, timeOut].filter(Boolean).join("–") || "no times";
 
+	// Leader-filed on-behalf: the adjustment is FOR the member
+	// (draft.employeeId), while the requester is the acting leader.
+	const onBehalf =
+		draft.onBehalf?.requesterEmployeeId &&
+		draft.onBehalf.requesterEmployeeId !== draft.employeeId
+			? draft.onBehalf
+			: null;
+
 	return {
-		requesterId: draft.employeeId,
+		requesterId: onBehalf ? onBehalf.requesterEmployeeId : draft.employeeId,
 		organizationId: draft.organizationId,
 		type: "ATTENDANCE_CORRECTION" as const,
-		description: `Attendance adjustment (${kindLabel}) on ${date}. Requested ${windowLabel} Manila.`,
+		...(onBehalf ? { targetEmployeeId: draft.employeeId } : {}),
+		description: onBehalf
+			? `Timesheet adjustment for section member on ${date} (${kindLabel}: ${windowLabel} Manila; leader-filed, manager approval).`
+			: `Attendance adjustment (${kindLabel}) on ${date}. Requested ${windowLabel} Manila.`,
 		startDate: `${date}T00:00:00.000Z`,
 		endDate: `${date}T00:00:00.000Z`,
 		notes,
 		metadata: {
 			date,
+			// Approval side effects write to metadata.attendanceCorrection.employeeId
+			// — always the member, never the filing leader.
 			adjustmentType: reasonCategory,
 			adjustmentKind: kind,
 			reason: notes,
 			timeIn: timeInIso,
 			timeOut: timeOutIso,
+			requestSource: onBehalf ? "LINE_LEADER_FILED" : "EMPLOYEE_SELF_SERVICE",
+			// Manager-final chain (2026-09-09): member's manager approval applies
+			// the correction; no HR step for leader-filed adjustments.
+			workflowTarget: onBehalf ? "MANAGER_FINAL" : "MANAGER_THEN_HR",
+			...(onBehalf
+				? {
+						filedBy: {
+							role: onBehalf.filedByRole,
+							employeeId: onBehalf.requesterEmployeeId,
+							isLineLeader: onBehalf.filedByRole === "hris-line-leader" || undefined,
+						},
+						targetEmployeeId: draft.employeeId,
+					}
+				: {}),
 			attendanceCorrection: {
 				attendanceId:
 					draft.attendanceId &&
@@ -223,7 +265,7 @@ export const buildOvertimeRequestPayload = (draft: OvertimeRequestDraft) => {
 		type: "OVERTIME" as const,
 		...(onBehalf ? { targetEmployeeId: draft.employeeId } : {}),
 		description: onBehalf
-			? `Overtime for section member on ${date} for ${overtimeHoursLabel} (${kindLabel}; leader-filed, manager then HR approval).`
+			? `Overtime for section member on ${date} for ${overtimeHoursLabel} (${kindLabel}; leader-filed, manager approval).`
 			: `Overtime request on ${date} for ${overtimeHoursLabel} (${kindLabel}; HR approval).`,
 		startDate: `${date}T00:00:00.000Z`,
 		endDate: `${date}T00:00:00.000Z`,
@@ -243,7 +285,9 @@ export const buildOvertimeRequestPayload = (draft: OvertimeRequestDraft) => {
 			overtimeKind,
 			...(overtimeKind === "EARLY" ? { earlyOvertime: true } : {}),
 			requestSource: onBehalf ? "LINE_LEADER_FILED" : "EMPLOYEE_SELF_SERVICE",
-			workflowTarget: onBehalf ? "MANAGER_THEN_HR" : "HR",
+			// Manager-final chain (2026-09-08 operator decision): the member's
+			// manager is the final approver for leader-filed OT.
+			workflowTarget: onBehalf ? "MANAGER_FINAL" : "HR",
 			...(onBehalf
 				? {
 						filedBy: {

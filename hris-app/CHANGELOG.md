@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Onboarding checklist (dedicated): items WITHOUT a responsible department are now plain section rows. They are no longer counted toward completion or the ONBOARDING -> ACTIVE promotion (an employee can finalize even while section rows are unsigned), the checklist panel shows them with blank Responsible/Completed cells (no checkbox, no "unassigned" label), and a checklist made only of section rows honestly reads 100% complete. Backend authority + resync script live in `../hris-api` (see `docs/ONBOARDING_CHECKLIST.md`).
+
 - Quick payroll adjustment modal locks **Payroll period** to the entry context: opening Adjust from payroll management preview or a register row shows the period as fixed text (no dropdown, no empty `Select period` race); the selector remains only for the context-free header bulk flow.
 - Quick payroll adjustment modal takes **multiple adjustments per submit**: `Add another adjustment` appends name + amount rows (× removes, minimum one) sharing the modal's Addition/Deduction toggle, employees, and period. Rows submit sequentially through the existing single-adjust endpoint; the merged result refreshes preview/register as before. Failed rows stay open with per-row errors and an anti-duplicate retry note; submit button counts rows (`Add 3 additions`).
 - Run Payroll: the Quick Actions entry, results page title, and dialog titles formerly labeled **Preview Payroll** / **Payroll Preview** are now **Payroll Management** (it previews dry-run amounts and manages manual additions/deductions via quick-adjust). URL action (`preview-payroll`), payroll engine, and Start Payroll behavior unchanged.

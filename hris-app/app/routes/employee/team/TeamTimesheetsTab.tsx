@@ -90,9 +90,8 @@ function TimesheetRow({ row }: { row: RowGroup }) {
 			<button
 				type="button"
 				onClick={() => ts && setOpen((prev) => !prev)}
-				className={`grid w-full grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-left ${
-					ts ? "hover:bg-gray-50" : "cursor-default"
-				}`}
+				className={`grid w-full grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-4 py-2.5 text-left ${ts ? "hover:bg-gray-50" : "cursor-default"
+					}`}
 				aria-expanded={ts ? open : undefined}>
 				<div className="min-w-0">
 					<div className="truncate text-sm font-medium text-gray-900">
@@ -221,16 +220,7 @@ export default function TeamTimesheetsTab() {
 		<div className="space-y-4">
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<div>
-					<p className="text-sm text-gray-500">
-						{data?.sections && data.sections.length > 0 ? (
-							<>
-								Your sections:{" "}
-								<span className="font-medium text-gray-700">
-									{data.sections.map((section) => section.name).join(", ")}
-								</span>
-							</>
-						) : null}
-					</p>
+
 					{data?.period ? (
 						<p className="text-sm text-gray-500">
 							Period:{" "}

@@ -218,11 +218,15 @@ export const Select: React.FC<SelectProps> = ({
 		${disabled ? "bg-gray-50 text-gray-400 cursor-not-allowed" : "hover:border-gray-400"}
 	`;
 
+	// Body-portaled popups must re-enable pointer events: Radix modal dialogs
+	// (e.g. the vaul drawer) set body pointer-events:none, which this portal
+	// inherits — visible but unclickable.
 	const dropdownClasses = `
 		fixed z-[1000]
 		bg-white border border-gray-300 rounded-md
 		shadow-lg
 		overflow-auto
+		pointer-events-auto
 		${isOpen ? "opacity-100 visible" : "opacity-0 invisible"}
 		transition-all duration-200
 		${dropdownClassName}

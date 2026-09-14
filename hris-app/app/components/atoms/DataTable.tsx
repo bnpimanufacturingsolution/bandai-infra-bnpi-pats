@@ -72,7 +72,7 @@ export interface GroupConfig {
 }
 
 export interface DataTableProps<T> {
-	title: string;
+	title?: string;
 	description?: string;
 	data: T[];
 	columns: Column<T>[];
@@ -1166,11 +1166,13 @@ const DataTable = <T extends Record<string, any>>({
 						? "overflow-visible"
 						: "overflow-x-auto",
 				)}>
-				<div className="min-w-0 shrink-0">
-					<CardTitle className="truncate text-lg font-semibold whitespace-nowrap">
-						{title}
-					</CardTitle>
-				</div>
+				{title ? (
+					<div className="min-w-0 shrink-0">
+						<CardTitle className="truncate text-lg font-semibold whitespace-nowrap">
+							{title}
+						</CardTitle>
+					</div>
+				) : null}
 				{renderSearchInput({
 					// Compact width so title + actions keep the single header line balanced
 					className: "w-56 min-w-[12rem] max-w-[14rem] shrink-0",
@@ -1209,7 +1211,7 @@ const DataTable = <T extends Record<string, any>>({
 					onOpenChange={setIsExportScopeModalOpen}
 					onConfirm={handleCsvExport}
 					isLoading={isExportingCSV}
-					entityLabel={title.toLowerCase()}
+					entityLabel={(title || "records").toLowerCase()}
 					currentCount={paginatedItems.length}
 				/>
 			)}

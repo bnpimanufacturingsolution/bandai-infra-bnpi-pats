@@ -47,10 +47,20 @@ describe("leader-filed step chains", () => {
 		expect(LEADER_FILED_OVERTIME_STEPS[2].step_type).to.equal("TASK");
 	});
 
-	it("attendance correction chain ends with an HR review task", () => {
-		expect(LEADER_FILED_ATTENDANCE_CORRECTION_STEPS).to.have.lengthOf(4);
-		expect(LEADER_FILED_ATTENDANCE_CORRECTION_STEPS[2].assignee_type).to.equal("HR");
-		expect(LEADER_FILED_ATTENDANCE_CORRECTION_STEPS[2].step_type).to.equal("TASK");
+	it("attendance correction chain mirrors OT: leader submission -> member's manager (final, approve=APPROVED) -> SYSTEM completion (2026-09-09 operator direction; no HR step)", () => {
+		expect(LEADER_FILED_ATTENDANCE_CORRECTION_STEPS).to.have.lengthOf(3);
+		const managerStep = LEADER_FILED_ATTENDANCE_CORRECTION_STEPS[1] as any;
+		expect(managerStep.assignee_type).to.equal("TARGET_DEPARTMENT_MANAGER");
+		expect(managerStep.step_type).to.equal("APPROVAL");
+		expect(managerStep.state_on_approve).to.equal("APPROVED");
+		expect(
+			LEADER_FILED_ATTENDANCE_CORRECTION_STEPS.some(
+				(step) => String((step as any).assignee_type) === "HR",
+			),
+		).to.equal(false);
+		const completionStep = LEADER_FILED_ATTENDANCE_CORRECTION_STEPS[2] as any;
+		expect(completionStep.assignee_type).to.equal("SYSTEM");
+		expect(completionStep.step_type).to.equal("TASK");
 	});
 });
 

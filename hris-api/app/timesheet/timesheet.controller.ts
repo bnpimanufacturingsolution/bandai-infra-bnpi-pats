@@ -66,6 +66,7 @@ import {
 } from "../../helper/request-runtime.helper";
 import { REQUEST_WORKFLOW_CODES } from "../../helper/workflow-config.helper";
 import { canActAsLineLeaderForEmployee } from "../../helper/section-leader-scope.helper";
+import { resolveCallerAgencyId, agencyScopeWhere, isSameAgencyEmployee } from "../../helper/agency-scope.helper";
 import { isDayLaborOnlyBreakdownChange } from "../../helper/timesheet-day-labor-guard.helper";
 import { enrichBreakdownWithLeaveHolidayContext } from "../../helper/day-context.helper";
 import {
@@ -2356,9 +2357,20 @@ export const controller = (prisma: PrismaClient) => {
 		try {
 			timesheetLogger.info("Fetching all timesheets");
 
-			const whereClause: Prisma.TimesheetWhereInput = {
-				isDeleted: false,
-			};
+		const whereClause: Prisma.TimesheetWhereInput = {
+			isDeleted: false,
+		};
+
+		// Agency scope: restrict to own agency employees' timesheets.
+		// Timesheet carries no agencyId scalar, so scope via the employee
+		// relation. An agency actor without a resolvable agency gets 403
+		// (never an unscoped list).
+		const agencyScope = await resolveCallerAgencyId(prisma, req.userId);
+		if (agencyScope.isAgencyActor && !agencyScope.callerAgencyId) {
+			res.status(403).json(buildErrorResponse("Agency ID not found in your account", 403));
+			return;
+		}
+		Object.assign(whereClause, agencyScopeWhere(agencyScope, "employee"));
 
 			const searchFields = [
 				"code",
@@ -2830,6 +2842,38 @@ export const controller = (prisma: PrismaClient) => {
 				Object.keys(validatedData).every(
 					(key) => key === "breakdown" || key === "editedDayKeys",
 				) && validatedData.breakdown !== undefined;
+		// Hoisted so the audit-eligibility check below can reuse it.
+		const actingRole = String(authReq.role || "")
+			.trim()
+			.toLowerCase();
+		// Agency actors may only touch their own agency's timesheets, even
+		// though hris-agency sits in the non-owner allow-list below.
+		if (actingRole === "hris-agency") {
+			const agencyScope = await resolveCallerAgencyId(prisma, (authReq as any).userId);
+			const targetEmployee = agencyScope.callerAgencyId
+				? await prisma.employee.findFirst({
+						where: { id: existingTimesheet.employeeId, isDeleted: false },
+						select: { agencyId: true },
+					})
+				: null;
+			if (!targetEmployee || !isSameAgencyEmployee(agencyScope, targetEmployee.agencyId)) {
+				timesheetLogger.warn(
+					`Timesheet write denied: cross-agency actor=${(authReq as any).userId || "unknown"} timesheet=${existingTimesheet.id}`,
+				);
+				res.status(403).json(buildErrorResponse("You are not allowed to update this timesheet.", 403));
+				return;
+			}
+		}
+const isHrOrAdminActor = [
+			"hris-admin",
+			"admin",
+			"super_admin",
+			"superadmin",
+			"hris-hr-manager",
+			"hris-hr-user",
+			"hris-timekeeper",
+			"hris-agency",
+		].includes(actingRole);
 
 			if (isEmployeeOwner && authReq.organizationId) {
 				await assertEditingPolicyEnabled(authReq.organizationId);
@@ -2858,18 +2902,6 @@ export const controller = (prisma: PrismaClient) => {
 				// responsible line leader may write, and a line leader may only
 				// change dayLaborType (D2 + day-labor tagging requirement).
 				const actingEmployeeId = authReq.metadata?.employee?.id || null;
-				const actingRole = String(authReq.role || "")
-					.trim()
-					.toLowerCase();
-				const isHrOrAdminActor = [
-					"hris-admin",
-					"admin",
-					"super_admin",
-					"superadmin",
-					"hris-hr-manager",
-					"hris-hr-user",
-					"hris-timekeeper",
-				].includes(actingRole);
 				let leaderScope: Awaited<
 					ReturnType<typeof import("../../helper/section-leader-scope.helper").canActAsLineLeaderForEmployee>
 				> | null = null;
@@ -2896,8 +2928,21 @@ export const controller = (prisma: PrismaClient) => {
 					return;
 				}
 
-				// Shared status guardrails (unchanged for authorized actors).
-				if (existingTimesheet.status === "APPROVED") {
+				// HR/admin APPROVED-timesheet breakdown edit (2026-09-09 operator
+				// request): payroll often auto-approves sheets before the operator
+				// can correct days, so HR/admin may now edit the day breakdown
+				// directly while the timesheet stays APPROVED. Guardrails:
+				//  - breakdown-only payload (no status/money fields on the side)
+				//  - payroll-locked sheets stay 409-blocked above
+				//  - non-HR actors keep the original hard block
+				const isHrApprovedBreakdownEdit =
+					isHrOrAdminActor &&
+					existingTimesheet.status === "APPROVED" &&
+					isBreakdownOnlyUpdate;
+				if (
+					existingTimesheet.status === "APPROVED" &&
+					!isHrApprovedBreakdownEdit
+				) {
 					timesheetLogger.warn(`Cannot update timesheet in APPROVED status`);
 					const errorResponse = buildErrorResponse(
 						`Cannot update timesheet in APPROVED status`,
@@ -2966,11 +3011,16 @@ export const controller = (prisma: PrismaClient) => {
 				Object.assign(updatePayload, calculateSummaryFromBreakdown(normalizedBreakdown));
 
 				const isEditAuditEligible =
-					isEmployeeOwner &&
-					(existingTimesheet.editPermissionStatus === "APPROVED" ||
-						existingTimesheet.editPermissionStatus === "CONSUMED" ||
-						existingTimesheet.status === "REVISED" ||
-						existingTimesheet.status === "DRAFT");
+					(isEmployeeOwner &&
+						(existingTimesheet.editPermissionStatus === "APPROVED" ||
+							existingTimesheet.editPermissionStatus === "CONSUMED" ||
+							existingTimesheet.status === "REVISED" ||
+							existingTimesheet.status === "DRAFT")) ||
+					// HR APPROVED breakdown edits (2026-09-09) must version changed
+					// days for audit instead of overwriting effective lines in place.
+					(isHrOrAdminActor &&
+						existingTimesheet.status === "APPROVED" &&
+						isBreakdownOnlyUpdate);
 				if (isEditAuditEligible) {
 					const existingLines = await (prisma as any).timesheetline.findMany({
 						where: {
