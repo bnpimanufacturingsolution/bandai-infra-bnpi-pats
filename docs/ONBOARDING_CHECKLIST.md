@@ -38,7 +38,8 @@ department (`isActionableOnboardingItem` in `onboardingAccess.helper.ts`, with
 `ACTIONABLE_ONBOARDING_ITEM_FILTER` as the matching Prisma fragment). Items WITHOUT a
 responsible department are **section rows**: never counted in `completionPercentage`,
 never block ONBOARDING→ACTIVE, and `canSign:false` for every role (the panel renders them
-as a plain "—" row). The sign endpoint stays permissive — admin/HR may still directly
+as a plain row with blank Responsible/Completed cells — no checkbox, no "unassigned"
+label, per operator). The sign endpoint stays permissive — admin/HR may still directly
 `POST /items/:id/sign` a section row, but the result is excluded from gate/progress math.
 Signing requires the caller to be linked to an employee profile (a real human name lands
 on the signature) — a passwordless account gets `409 Set a password first`.
@@ -117,8 +118,8 @@ Sign
   `employmentStatus === "ONBOARDING"`** and renders the same panel (deep-linkable via
   `?tab=onboarding`). The legacy boarding `OnboardingTab` is untouched/hidden.
 - `onboarding-checklist-panel.tsx` — role-scoped tree from `.../visible` (actionable rows
-  render a sign checkbox; **no-dept section rows render a plain "—" with a
-  "Section row — no sign-off required" hint and never a checkbox** — since 2026-09-14),
+  render a sign checkbox; **no-dept section rows render with blank Responsible/Completed
+  cells — no checkbox, no "unassigned" label, no placeholder** — since 2026-09-14),
   progress bar, **`Skeleton` loading blocks**
   (header/progress/two section cards with row placeholders) while the instance resolves,
   provision CTA for admin/HR when the employee has no checklist, and the sign modal: short

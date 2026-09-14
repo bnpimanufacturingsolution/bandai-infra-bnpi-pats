@@ -126,7 +126,7 @@ describe("OnboardingChecklistPanel", () => {
 		expect(screen.getByText("Laptop/PC provisioned")).toBeInTheDocument();
 		expect(screen.getByText(/GA Agent — issued/)).toBeInTheDocument();
 		expect(screen.getByText("25%")).toBeInTheDocument();
-		expect(screen.getAllByText("unassigned").length).to.be.greaterThan(0);
+		expect(screen.queryByText("unassigned")).not.toBeInTheDocument();
 	});
 
 	it("sign dialog shows instructions + password, sends credentials, closes on success", async () => {
@@ -172,13 +172,15 @@ describe("OnboardingChecklistPanel", () => {
 		expect(screen.getByRole("dialog")).toBeInTheDocument();
 	});
 
-	it("renders no-department items as section rows: no sign checkbox, dash cell with hint", () => {
-		render(<OnboardingChecklistPanel employee={employee} />);
+	it("renders no-department items as blank section rows: no checkbox, no labels", () => {
+		const { container } = render(<OnboardingChecklistPanel employee={employee} />);
 		expect(
 			screen.queryByRole("button", { name: /sign item 1 device/i }),
 		).not.toBeInTheDocument();
-		const sectionHint = screen.getByTitle(/Section row — no sign-off required/i);
-		expect(sectionHint).toHaveTextContent("—");
+		expect(screen.queryByText("—")).not.toBeInTheDocument();
+		expect(screen.queryByText("unassigned")).not.toBeInTheDocument();
+		const sectionRow = container.querySelector("tbody tr");
+		expect(sectionRow?.textContent).toBe("1Device");
 	});
 
 	it("hides the provision action for non-managers (never shown when checklist exists either way)", () => {

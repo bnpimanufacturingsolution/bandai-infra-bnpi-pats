@@ -59,16 +59,8 @@ function LiveRow({
 					<td className={`px-4 py-2 text-sm text-gray-900 ${isParent ? "font-medium" : ""}`}>
 						{item.title}
 					</td>
-					<td className="px-4 py-2 text-sm text-gray-600">
-						<span className="italic text-gray-400">unassigned</span>
-					</td>
-					<td className="px-4 py-2 text-center">
-						<span
-							className="text-xs text-gray-400 italic"
-							title="Section row — no sign-off required and not counted toward completion">
-							—
-						</span>
-					</td>
+					<td className="px-4 py-2 text-sm text-gray-600" />
+					<td className="px-4 py-2 text-center" />
 					<td className="px-4 py-2 text-sm text-gray-600" />
 					<td className="px-4 py-2 text-sm text-gray-600" />
 				</tr>
@@ -95,9 +87,7 @@ function LiveRow({
 					{item.title}
 				</td>
 				<td className="px-4 py-2 text-sm text-gray-600">
-					{item.responsibleDepartmentName || (
-						<span className="italic text-gray-400">unassigned</span>
-					)}
+					{item.responsibleDepartmentName ?? ""}
 				</td>
 				<td className="px-4 py-2 text-center">
 					<button

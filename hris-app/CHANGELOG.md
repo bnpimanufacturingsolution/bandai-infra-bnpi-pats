@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+- Onboarding checklist (dedicated): items WITHOUT a responsible department are now plain section rows. They are no longer counted toward completion or the ONBOARDING -> ACTIVE promotion (an employee can finalize even while section rows are unsigned), the checklist panel shows them with blank Responsible/Completed cells (no checkbox, no "unassigned" label), and a checklist made only of section rows honestly reads 100% complete. Backend authority + resync script live in `../hris-api` (see `docs/ONBOARDING_CHECKLIST.md`).
+
 - Run Payroll: the Quick Actions entry, results page title, and dialog titles formerly labeled **Preview Payroll** / **Payroll Preview** are now **Payroll Management** (it previews dry-run amounts and manages manual additions/deductions via quick-adjust). URL action (`preview-payroll`), payroll engine, and Start Payroll behavior unchanged.
 
 - HR **Benefits Management** bulk upload enrollments: toolbar **Bulk upload** opens a 3-step modal (Upload → Map columns → Verify) for Excel/CSV; maps sample headers (`COMCODE`, `Amount`, `EmployeeID`, `EmployeeName`, `StartPayDate`) to canonical import fields; posts mapped CSV to `POST /api/employeeBenefit/import`. Components: `BenefitEnrollmentImportModal`, `app/lib/utils/benefit-enrollment-import.ts`.
