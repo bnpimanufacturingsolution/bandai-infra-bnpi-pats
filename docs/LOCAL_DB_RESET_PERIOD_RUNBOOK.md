@@ -11,7 +11,7 @@ current `develop` has them automatically.
 
 1. Local clone DB up: docker container `bnpi-pats-local-dev-clone` (Postgres on `127.0.0.1:5433`, db `bnpi-pats`).
 2. `bnpi-pats-api/.env.development.local` → `DATABASE_URL/PG_DATABASE_URL/WRITE_DATABASE_URL` = `127.0.0.1:5433/bnpi-pats` plus:
-   `BNPI_PATS_SKIP_PREDEV=true`, `BNPI_PATS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL=true`, `BNPI_PATS_SKIP_DEVICE_LIVE_PATH=true`
+   `BNPI_PATS_SKIP_PREDEV=true`
    (no K3s forward / Cloudflare prompts needed for local-DB mode).
 3. Start API: `cd bnpi-pats-api && npm run dev` → `http://localhost:3001/health`.
 4. Reset DB (when needed): recreate container/volume → `npx prisma db push --force-reset` + seed (`npm run seed:bandai`).

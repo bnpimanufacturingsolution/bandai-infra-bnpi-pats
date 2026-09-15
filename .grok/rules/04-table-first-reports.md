@@ -1,6 +1,6 @@
 # Table-first reports and recommendations (always on)
 
-Auto-loaded from `.grok/rules/`. Complements residual detail (`03-residual-count-detail.md`).
+Auto-loaded from `.grok/rules/`.
 
 ## Hard rule
 
@@ -40,4 +40,4 @@ When the operator asks for a **report**, **status**, **recommendation**, **what 
 
 ## Residual counts
 
-Still obey `.grok/rules/03-residual-count-detail.md` (buckets + rows). Present that as tables first.
+Break any residual count into buckets + rows (what N is, per-row why, blocker class if any, next step). Present that as tables first.

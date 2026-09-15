@@ -1,3 +1,10 @@
+## Device lane + HRIS emp-app retired (2026-09-15)
+
+- Hikvision/ZKTeco device lane (watcher, callback-outbox, Device Events, Sync
+  logs, merge/enroll UI, `vendor/`) and `bnpi-pats-emp-app` (HRIS portal) are
+  removed from infra, GitOps, CI, scripts, and docs. Current product: BNPI PATS
+  timekeeping/payroll only. Older device/emp entries below are dated history.
+
 ## 2026-08-27 Day-status review UI & workbook refinement endpoints
 
 - **Read-only resolution pipeline**: Mon–Sat schedule truth with Sunday REST. Bare no-shows surface in a **Review Queue** (`REVIEW_NO_EVIDENCE`) with `ESTIMATE_ONLY` badges; never silently auto-charged as absent into payroll.

@@ -30,24 +30,15 @@ Use `grok inspect` in this repo to verify which instruction files are loaded.
 Bootstrap: open WWG handoff + current-task + project-truth-summary, Current-State Report, then continue the task. No assumptions.
 ```
 
-- For Sync logs redesign non-stop work, also paste or reference:
-  `docs/00-product/TASK-sync-logs-event-first-modal-GROK-PROMPT.md`
-- For **any multi-step truth task** (Sync logs, listener, device reachability)
-  when Grok stops after ~1 minute of partial work, paste:
+- For **any multi-step truth task** when Grok stops after ~1 minute of partial
+  work, paste:
   `docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md`
-  — use **section 1** (full template) or **section 3b** (medium Sync logs).
-- For **true 3-hour Sync logs + Playwright marathon** (recommended when agents
-  die at ~34s–1m), paste PASTE BLOCK or short launcher from:
-  `docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`
-  Operator must pair that with **always-approve tools** and
-  **`--max-turns 250`** headless (or leave interactive session open for hours).
+  — use **section 1** (full template).
   Agents must never end with “you should hard-refresh / click Sync”; they do
   those steps themselves and keep going past ~10 minutes until acceptance green.
-- For **Sync logs → Device events journey honesty** (employee tokens, progress
-  estimate vs saved, non-confusing modal):  
-  `docs/00-product/AGENT-PROMPT-sync-logs-user-journey-truth.md`
-- For **device truth matrix** (users on device now + this week events + willAdd):  
-  `docs/00-product/AGENT-PROMPT-device-truth-matrix-week.md`
+- Note (2026-09-15): the device / Sync-logs prompt pack
+  (`TASK-sync-logs-*`, `AGENT-PROMPT-sync-logs-*`, `AGENT-PROMPT-device-*`) was
+  retired with the device lane; do not paste those references.
 
 ## Limits (honest)
 
@@ -81,25 +72,9 @@ This runs `grok inspect` + independent headless probes. Evidence lands in `.runt
 |---|---|---|
 | Permission prompt waiting for you | Yes (config) | Use auto-approve / always-approve / `bypassPermissions` for trusted local work |
 | Headless `--max-turns` too low | Yes | Raise `--max-turns` (e.g. 40–100 for big tasks) |
-| Vague prompt, no checklist | Yes | Paste Sync logs non-stop prompt with acceptance checklist |
+| Vague prompt, no checklist | Yes | Paste non-stop prompt with acceptance checklist |
 | Model ends after partial success | Partial | Rules + checklist + “do not end until green”; re-run same session with “continue until checklist green” |
 | Real Stop Condition (3 failed recoveries, data risk, missing secrets) | No | Agent must report the blocker with evidence; you supply access/decision |
-
-### Sync logs implementation proof commands
-
-```powershell
-# Unit
-cd bnpi-pats-api; npx tsx node_modules/mocha/bin/mocha --no-config tests/sync-logs-event-rows.helper.spec.ts; cd ..
-cd bnpi-pats-app; npx vitest run app/lib/device-events-page-contract.test.ts; cd ..
-
-# Headless Playwright (starts its own Vite via smoke config)
-cd bnpi-pats-app
-npx playwright test tests/smoke/admin-device-events-sync-modal.spec.ts --config=playwright.smoke.config.ts
-cd ..
-
-# Live API (needs DB: LAN SSH to VM or working 55435 forward)
-# If login fails with 127.0.0.1:55435, recover VM/SSH first — do not claim live preview green.
-```
 
 ### Operator checklist for next prompt
 
@@ -107,7 +82,7 @@ cd ..
 2. Prefer this starter if you want extra force:
 
 ```text
-Bootstrap WWG first (handoff, current-task, project-truth-summary). Current-State Report. Then execute docs/00-product/TASK-sync-logs-event-first-modal-GROK-PROMPT.md without stopping until the acceptance checklist is green or a real AGENTS.md stop condition is proven with 3 recovery attempts. Recover yourself on ports/Docker/VM/PATH/tests. Do not idle.
+Bootstrap WWG first (handoff, current-task, project-truth-summary). Current-State Report. Then execute the task's acceptance checklist without stopping until it is green or a real AGENTS.md stop condition is proven with 3 recovery attempts. Recover yourself on ports/Docker/VM/PATH/tests. Do not idle.
 ```
 
 3. If interactive tools ask permission every step, enable always-approve for this trusted project so the run does not fake-stop.

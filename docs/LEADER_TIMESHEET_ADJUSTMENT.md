@@ -109,8 +109,6 @@ surface) is unchanged (manager → HR).
   adjustments are per-person/per-day with times, so the requests-hub modal is
   the filing surface. If the operator wants a My Team "Adjust Timesheet" tab
   later, it would be a new task.
-- Dual-app parity: **HR-only exception** — no `bnpi-pats-emp-app` counterpart for
-  the requests hub modal (consistent with the 2026-09-08 line-leader exception).
 
 ## 6. Evidence
 

@@ -171,8 +171,7 @@ leader step). Leader removal mid-request does not disturb in-flight requests.
 
 ## 8. Employee self-service / employee app
 
-**Confirmed:** employee-initiated requests keep the normal process. (Any
-emp-app filing UI for leaders is out of scope unless requested.)
+**Confirmed:** employee-initiated requests keep the normal process.
 
 ## 9. Edge cases & boundaries
 

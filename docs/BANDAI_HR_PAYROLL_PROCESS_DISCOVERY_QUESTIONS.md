@@ -62,7 +62,7 @@
 
 | # | Question | Answer / notes | Owner | Evidence / file |
 |---|---|---|---|---|
-| 14 | Where does raw time data come from (Hikvision/ZKTeco export, manual DTR, supervisor sheet)? | | | |
+| 14 | Where does raw time data come from (attendance software export, manual DTR, supervisor sheet)? | | | |
 | 15 | Who pulls biometrics each cutoff, and in what format (Excel export, system report)? | | | |
 | 16 | How are **absent, late, undertime, incomplete logs** decided and approved? | | | |
 | 17 | Who reviews and **approves timesheets** before payroll? Is approval formal or informal? | | | |

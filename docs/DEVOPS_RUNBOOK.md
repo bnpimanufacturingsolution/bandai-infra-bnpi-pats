@@ -4,7 +4,7 @@
 
 | Workflow | Purpose | Runner |
 |---|---|---|
-| `ci.yml` | Per-type product checks: bnpi-pats-api, bnpi-pats-app, bnpi-pats-emp-app, hikvision, zkteco, ansible syntax-check, callback-outbox, gitops kustomize. **Not** deploy proof. | GitHub-hosted Ubuntu |
+| `ci.yml` | Per-type product checks: bnpi-pats-api, bnpi-pats-app, ansible syntax-check, gitops kustomize. **Not** deploy proof. | GitHub-hosted Ubuntu |
 | `observe-deploy.yml` | Per-type GitHub Deployments wait for VM `project-truth-report-github-deploy`. Image envs: `success` can mean **not rebuilt**. On-prem jobs: VM curl of DEV/UAT/PROD `:3000/:3001/:3100/:3101/:3200/:3201`. | GitHub-hosted Ubuntu |
 | `validate.yml` | Static validation for Node, PowerShell, Terraform, Packer, installer, self-heal, observability contract, GitOps overlays. **Not** deploy proof. | GitHub-hosted Windows |
 | `promote-gitops.yml` | Manual GitOps release tag and runtime image tag promotion for DEV/UAT/PROD. | GitHub-hosted Ubuntu |
@@ -38,7 +38,7 @@ On this single-VM appliance, ansible-pull still tracks Git branch **`develop`**.
 
 That is **not** “GitHub branch `uat`/`prod` auto-deploys.” Creating those branches does not change the puller or Argo `targetRevision` (still `develop`).
 
-Docs-only pushes still do not rebuild or restart. Callback-outbox exists only in **dev** and is skipped in uat/prod.
+Docs-only pushes still do not rebuild or restart. The emp-app / hikvision-watcher / callback-outbox lanes were retired 2026-09-15.
 
 Revert to old DEV-only app/API restarts:
 

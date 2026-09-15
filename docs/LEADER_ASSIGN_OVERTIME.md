@@ -147,8 +147,6 @@ materialize/prepare the timesheet, then re-approve.
   metadata for reporting/mapping. A separate multiplier needs an operator rule.
 - **PROD/UAT:** schema + code are local-DEV until pushed; VM promotion rides
   the next `develop` push.
-- **Dual-app:** HR-only exception — the leader filing surface exists in
-  `bnpi-pats-app` only; `bnpi-pats-emp-app` has no line-leader login/filing surface.
 
 ## 7. Evidence
 

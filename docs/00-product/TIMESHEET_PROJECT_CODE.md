@@ -50,7 +50,6 @@ Precedence, evaluated per line at write time:
 
 - **Timesheet day editor** (`bnpi-pats-app/.../molecules/TimesheetDayEditor.tsx`): new **Project code** text input below **Day labor**. Placeholder previews the default (`bnpi-dl-YYYY` / `bnpi-id-YYYY` depending on the selected labor type). Empty = use the derived default. Max 64 chars.
 - **Day tooltip** (`TimesheetDayTooltipContent.tsx`): shows `Project code: <code>` when present.
-- Dual-app note: **HR-only** — the timesheet day editor has no `bnpi-pats-emp-app` counterpart.
 
 ## 5. Backfill (one-time, already executed on local DEV)
 

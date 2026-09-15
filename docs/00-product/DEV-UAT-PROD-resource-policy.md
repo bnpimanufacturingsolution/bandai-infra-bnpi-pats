@@ -2,10 +2,15 @@
 
 Last updated: 2026-07-29
 
+> **2026-09-15 retirement note:** the HRIS employee-portal (`bnpi-pats-emp-app`) and
+> device lanes (`bnpi-pats-hikvision-watcher`, `bnpi-pats-callback-outbox`) are
+> retired. The measured tables below are kept as the 2026-07-29 historical snapshot
+> (they include those workloads). Live K3s workloads are now postgres / api / app only.
+
 **Policy:** **DEV < UAT < PROD** for CPU and RAM **limits** on the shared K3s node  
 (`project-truth-node`). Business data should stay **DEV = UAT = PROD** after clone.
 
-Watcher + callback-outbox remain **DEV-only** (device lane).
+Watcher + callback-outbox were **DEV-only** (device lane — retired 2026-09-15).
 
 ---
 
@@ -60,9 +65,6 @@ Order: **DEV < UAT < PROD**.
 | postgres | `gitops/runtime-k8s/overlays/{env}/runtime.yaml` | StatefulSet `bnpi-pats-postgres` |
 | api | same | Deployment `bnpi-pats-api` (+ `NODE_OPTIONS` heap) |
 | app | same | Deployment `bnpi-pats-app` |
-| emp-app | same | Deployment `bnpi-pats-emp-app` |
-| watcher | `overlays/dev/runtime.yaml` only | Deployment `bnpi-pats-hikvision-watcher` |
-| outbox | `overlays/dev/runtime.yaml` only | Deployment `bnpi-pats-callback-outbox` |
 
 ---
 

@@ -77,7 +77,7 @@ Stamp: `.runtime/promote-dev-uat-prod-YYYYMMDD-HHMMSS/`
 |---|---|---|
 | E1 | `STATUS.md` + `HEARTBEATS.md` (≥15 lines) | stamp |
 | E2 | WWG handoff + current-task addendum updated | `.wwg/...` |
-| E3 | No invented device online counts | screenshots/API only |
+| E3 | No invented online/pod counts | screenshots/API only |
 
 **Hard bans**
 
@@ -103,7 +103,7 @@ Argo CD (all envs targetRevision: develop)
         │
         ▼
 K3s namespaces dev / uat / prod
-  images: bnpi-pats-*-local:develop  (and outbox on DEV only today)
+  images: bnpi-pats-*-local:develop
         │
         ▼
 LAN proof
@@ -125,9 +125,10 @@ LAN proof
 
 | Workload | DEV | UAT | PROD | Note |
 |---|---|---|---|---|
-| bnpi-pats-api / bnpi-pats-app / bnpi-pats-emp-app | yes | yes | yes | must match image promote |
-| bnpi-pats-callback-outbox | yes (today) | no unless overlay added | no unless overlay added | classify as `optional_product` / env asymmetry |
-| bnpi-pats-hikvision-watcher | yes | usually no | usually no | DEV device path; do not invent UAT/PROD watcher green |
+| bnpi-pats-api / bnpi-pats-app | yes | yes | yes | must match image promote |
+
+Post-2026-09-15: the `bnpi-pats-emp-app`, `bnpi-pats-callback-outbox`, and
+`bnpi-pats-hikvision-watcher` workloads are retired; do not roll or re-add them.
 
 ---
 
@@ -203,7 +204,7 @@ DRIFT_ALERT | severity=red|yellow | item=<code> | next=<spawn role>
 | **A-ARGO** | exec | Argo apps SYNC/HEALTH/REV; classify runtime Degraded Jobs | `01-argo.json` |
 | **A-OBS** | exec | LAN health 3101/3201/3001; pod Ready; tunnel active; disk | `02-obs.md` |
 | **A-BUILD-IMPORT** | exec | Rebuild images at develop source; `k3s ctr` import; record digests | `06-images.json` |
-| **A-PROMOTE-UAT** | exec | Roll UAT api/app/emp (and only workloads in UAT overlay) | `03-uat-promote.txt` |
+| **A-PROMOTE-UAT** | exec | Roll UAT api/app (and only workloads in UAT overlay) | `03-uat-promote.txt` |
 | **A-VERIFY-UAT** | exec | Health + login + dashboard proof UAT | `03-uat-app.json` |
 | **A-PROMOTE-PROD** | exec | Roll PROD after UAT green | `04-prod-promote.txt` |
 | **A-VERIFY-PROD** | exec | Health + login + dashboard proof PROD | `04-prod-app.json` |
@@ -300,12 +301,12 @@ Do **not** block UAT/PROD app promote on main merge; Argo uses `develop`.
 ### Phase B — UAT app promote
 
 1. On VM: ensure source at develop SHA (`ansible-pull` / `/var/lib/project-truth/ansible-pull` or documented build path).
-2. Rebuild and import the same tags DEV uses (`bnpi-pats-api-local:develop`, `bnpi-pats-app-local:develop`, `bnpi-pats-emp-app-local:develop`, `bnpi-pats-api-db-init:develop` as needed).
+2. Rebuild and import the same tags DEV uses (`bnpi-pats-api-local:develop`, `bnpi-pats-app-local:develop`, `bnpi-pats-api-db-init:develop` as needed).
 3. Record digests before/after.
 4. Roll UAT:
 
 ```bash
-kubectl -n uat rollout restart deploy/bnpi-pats-api deploy/bnpi-pats-app deploy/bnpi-pats-emp-app
+kubectl -n uat rollout restart deploy/bnpi-pats-api deploy/bnpi-pats-app
 kubectl -n uat rollout status deploy/bnpi-pats-api --timeout=300s
 curl -sS http://127.0.0.1:3201/health
 ```

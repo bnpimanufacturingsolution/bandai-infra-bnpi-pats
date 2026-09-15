@@ -49,7 +49,7 @@ Before any plan or edit, Read (in order):
 3. .wwg/wiki/project-truth-summary.md
 4. Task-relevant sections of .wwg/wiki/project-truth.md and terminology
 5. .wwg/governance/drift-guard.md if behavior changes
-6. Agent-Meta-Prompt-Template.md for multi-step / drift / device / VM work
+6. Agent-Meta-Prompt-Template.md for multi-step / drift / VM work
 7. Relevant source + latest .runtime/* evidence for this task
 
 Then post a short Current-State Report:
@@ -58,8 +58,8 @@ Then post a short Current-State Report:
 - finish line for this run
 - what you will touch / will not touch
 
-Hard ban: do not invent DeviceEvent counts, Sync logs willAdd, filter labels,
-IPs, device reachability, or API shapes. Missing fact → Read or mark
+Hard ban: do not invent runtime counts, filter labels, IPs, reachability, or
+API shapes. Missing fact → Read or mark
 NEEDS_CONFIRMATION.
 
 ### 1. GOAL (fill in)
@@ -102,7 +102,7 @@ FORBIDDEN reasons to end the turn:
 - “background job still starting” (wait for health OR continue other paths)
 - “UI screenshot looks better” without API JSON proof
 - “user can restart later” for recoverable restarts you can do yourself
-- “What you should do: hard-refresh / open Sync logs / click Sync” — YOU do those steps
+- “What you should do: hard-refresh / open the page / click the button” — YOU do those steps
 
 OPERATOR STEPS ARE AGENT STEPS (hard ban on homework endings):
 - Restart API/app yourself (Windows: npm.cmd, poll /health up to 3 min).
@@ -120,7 +120,7 @@ REQUIRED loop until checklist green:
 Minimum effort for multi-surface truth tasks:
 - At least 3 full prove/fix cycles if first proof fails
 - Wall-clock expectation: keep going ~30–180 minutes of agent work for
-  Sync logs / listener / device truth — do not self-stop at 1–10 minutes
+  multi-surface runtime truth work — do not self-stop at 1–10 minutes
 - Headless: --max-turns 250+ and always-approve; 50–80 turns is too low
 
 After every major tool batch, post a heartbeat the user can see:
@@ -130,7 +130,7 @@ Do not go silent while long commands run without a heartbeat.
 ### 4. RECOVERIES (agent-owned)
 Recover yourself (examples): API/DB port down, Docker/VM off, reverse tunnel
 down, PATH missing, npm install, flaky test, rebuild, warm-up, kill stale
-node on 3001, start-k8s-dev-db-access, restart listener, re-run Playwright.
+node on 3001, start-k8s-dev-db-access, re-run Playwright.
 
 Before “blocked” on a sub-path: document 3 different plausible recoveries.
 If one path blocks, immediately continue all other open checklist paths.
@@ -139,7 +139,7 @@ If one path blocks, immediately continue all other open checklist paths.
 Stop only if:
 - same failure after 3 distinct recoveries with evidence
 - irreversible data risk without backup
-- missing irrecoverable credentials/device/network
+- missing irrecoverable credentials/network
 - would require inventing secrets or fabricating evidence
 
 ### 6. EVIDENCE SHAPE (required)
@@ -179,68 +179,12 @@ Commit/push develop when green. Real stop only per AGENTS.md Real Stop Condition
 
 ---
 
-## 3) Ready-made: Sync logs truth task
+## 3) Ready-made task packs
 
-### 3a) Full 3-hour marathon (recommended when agent dies at ~1m)
-
-**Use this for Sync logs + Playwright end-to-end.** Paste the PASTE BLOCK from:
-
-`docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`
-
-Or short launcher:
-
-```text
-TASK WRITER MARATHON v3 — Sync logs truth (3 hours).
-Open and OBEY docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md PASTE BLOCK.
-EXIT GATE active: no summary-only end while ACCEPTANCE open.
-Never end with "you should hard-refresh / click Sync" — YOU do operator steps.
-Min 20 HEARTBEATs or full green. Live dual-source sync job + Playwright GREEN.
-Restart API with npm.cmd on Windows. Evidence under .runtime/.
-Commit/push develop when green. Real stop only per AGENTS.md.
-START: PHASE 0 Read WWG + HEARTBEAT cycle=1.
-```
-
-Operator: auto-approve tools + `--max-turns 250` if headless. See marathon file for CONTINUE line.
-
-### 3b) Medium non-stop Sync logs (shorter; still checklist-bound)
-
-```text
-NON-STOP LOOP — Sync logs truth (TEST A)
-
-Bootstrap WWG (handoff, current-task, project-truth-summary) + Current-State Report.
-
-GOAL: Sync device logs modal shows truthful willAdd for TEST A matching device
-maintain Log (Information): Fingerprint enrolled + User created, not a single
-huge Unknown operation residual. Category filter must constrain Action options.
-Preview should be fast for one Online device.
-
-ROOT TRUTH ALREADY PROVEN IN REPO (re-verify, do not invent):
-- Device maintain UI ~19–20k Information logs: Add Fingerprint / Add Person Info
-- ISAPI metaId log.hikvision.com/Information classifies:
-  addFpByEmployeeNo → FINGERPRINT_ENROLLED
-  addUserInfo → USER_CREATED
-- log.std-cgi.com mixes UI noise and is the WRONG default for enroll/user truth
-- Devices Online (host ISAPI) ≠ Listener green (SDK reverse tunnel 127.0.0.1:59000)
-
-ACCEPTANCE (all required):
-[ ] Live GET /api/device/sync-preview?deviceId=<TEST A id> returns eventRows with
-    Fingerprint enrolled AND User created willAdd > 0 (or honest zeros with already)
-[ ] Unknown/Unclassified is residual only — not the only big operation line
-[ ] opTotal ≈ Information logSearch total (~20k), not misleading std-cgi-only story
-[ ] Single-device preview elapsed ≤ ~3s when device Online from this host
-[ ] UI Category=Attendance → Action options exclude User created / Fingerprint enrolled
-[ ] mocha: sync-logs-event-rows + Information logSearch contracts green
-[ ] vitest: device-events-page-contract green
-[ ] Playwright: tests/smoke/admin-device-sync-logs-truth.spec.ts green
-[ ] LIVE bnpi-pats-api process restarted so UI hard-refresh shows new labels/counts
-[ ] Evidence in .runtime/sync-logs-truth-<stamp>/ (preview JSON + playwright)
-[ ] Commit + push develop when green
-
-EXIT GATE: if any box open, next output = HEARTBEAT + tool call (no summary-only end).
-NON-STOP rules: no exit after code-only; restart API with npm.cmd and re-hit
-sync-preview; if DB 55435 down, start-k8s-dev-db-access then retry; if Playwright
-fails, fix and re-run. Min 10 heartbeats or full green. Real Stop only per AGENTS.md.
-```
+The former Sync-logs/device marathons (`AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`,
+`AGENT-PROMPT-sync-logs-user-journey-truth.md`, `TASK-sync-logs-event-first-modal-GROK-PROMPT.md`)
+were retired 2026-09-15 with the device lane. For current BNPI PATS tasks use the
+section 1 template plus the section 2 suffix.
 
 ---
 
@@ -262,10 +206,10 @@ This is **prompt + operator config**, not only model IQ. Checklist + non-stop + 
 
 1. **Code edit ≠ done** — must re-prove with live process.  
 2. **Unit test ≠ user journey** — Playwright required for modal/filter claims.  
-3. **Devices Online ≠ Sync logs classified** — different proof.  
-4. **Listener green ≠ Sync logs willAdd** — SDK vs ISAPI logSearch.  
+3. **Transport green ≠ product truth** — different proof.  
+4. **Cached probe ≠ live state** — re-read after the change.  
 5. **Background start without wait** — poll `/health` then continue.  
-6. **Claiming Unknown residual is “enroll truth”** — banned.  
+6. **Bare residual numbers** — banned without a row/bucket breakdown.  
 7. **Stopping because time elapsed** — banned; stop only on checklist or Real Stop.
 
 ---
@@ -274,11 +218,10 @@ This is **prompt + operator config**, not only model IQ. Checklist + non-stop + 
 
 1. Open this repo root in Grok.  
 2. Auto-approve tools (`/always-approve` or headless `--permission-mode bypassPermissions` / `--yolo`).  
-3. For Sync logs multi-hour work: paste **section 3a** (marathon v3) or full PASTE BLOCK from `AGENT-PROMPT-sync-logs-truth-3hr-marathon.md`.  
-4. For other tasks: paste **section 1** with your checklist, or **section 3b** medium Sync logs.  
-5. If it stops early:  
-   `CONTINUE MARATHON v3. Open docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md. Resume incomplete PHASE/ACCEPTANCE. Next = HEARTBEAT + tool call. Do operator steps yourself — no hard-refresh homework.`  
-6. Headless: `--max-turns 250` for 3hr class (50–80 is too low; ~10m stops are often turn budget).
+3. For tasks: paste **section 1** with your checklist, or the **section 2** short suffix.  
+4. If it stops early:  
+   `CONTINUE. Resume incomplete ACCEPTANCE. Next = HEARTBEAT + tool call. Do operator steps yourself — no hard-refresh homework.`  
+5. Headless: `--max-turns 250` for long jobs (50–80 is too low; ~10m stops are often turn budget).
 
 ---
 

@@ -224,8 +224,7 @@ signer sees 6.1/6.2 `canSign:true` while the no-dept row 6 is `canSign:false`
 ## Boundaries
 
 - The per-employee list/signing surface lives in **bnpi-pats-app** (`/hr/onboarding` + the profile
-  Onboarding tab). `bnpi-pats-emp-app` has no counterpart and is not a checked-in path on this
-  branch; emp-app parity remains a candidate follow-up (recommendation registry).
+  Onboarding tab). The former `bnpi-pats-emp-app` lane was retired 2026-09-15; parity is moot.
 - No change to the generic `BoardingProcess` / `ChecklistItem` / `BoardingTemplate` / `TemplateItem`
   controllers or offboarding flows.
 - No automatic notification on checklist completion (the legacy boarding stack keeps its own).

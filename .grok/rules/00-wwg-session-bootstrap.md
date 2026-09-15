@@ -13,17 +13,13 @@ This file is auto-loaded from `.grok/rules/`. It reinforces root `AGENTS.md`.
    - task-relevant sections of `.wwg/wiki/project-truth.md` and `.wwg/wiki/terminology.md`
    - `.wwg/governance/drift-guard.md` when changing product behavior
 4. Emit a short Current-State Report from those files before edits.
-5. For multi-step / drift / device / VM work: use `Agent-Meta-Prompt-Template.md`.
+5. For multi-step / drift / VM work: use `Agent-Meta-Prompt-Template.md`.
 
 ## Anti-hallucination
 
-- No inventing DeviceEvent truth, Sync logs counts, filter labels, IPs, or endpoint shapes.
+- No inventing product truth, workload counts, filter labels, IPs, or endpoint shapes.
 - No claiming done without evidence (API/runtime/browser as required by `AGENTS.md`).
 - Missing fact -> read file or mark `NEEDS_CONFIRMATION`. Never fill gaps with guesses.
-- DeviceEvent is saved event truth. DeviceUser is inventory only. Do not invent lifecycle events from inventory.
-- **Residual counts:** never report bare `decision=16` / gap chips without row/bucket
-  breakdown. Always-on rule: `.grok/rules/03-residual-count-detail.md`
-  (what N is, per-row why, blocker class, next step, UI source).
 - **Reports / recommendations:** table-first, scannable. Always-on:
   `.grok/rules/04-table-first-reports.md`. Never “completed” without a done/open table.
 
@@ -43,10 +39,10 @@ Also see always-on: `.grok/rules/01-agent-owned-execution.md`.
 Never end with homework for the human when you can run it. The human should
 **not** have to say “continue” or “do it yourself.”
 
-- FORBIDDEN exit lines: "you should hard-refresh", "restart the API", "open Sync logs and click Sync", "run Playwright yourself", "try again after rebuild", "I will continue later".
+- FORBIDDEN exit lines: "you should hard-refresh", "restart the API", "open the page and click the button", "run Playwright yourself", "try again after rebuild", "I will continue later".
 - REQUIRED: you restart API/app (`npm.cmd` on Windows), poll `/health`, login, hit the real endpoints, run Playwright, capture `.runtime/` evidence, commit/push when green.
-- Wall time is not a stop: 10 minutes of work is not done. Multi-surface Sync logs / device truth jobs expect **tens of minutes to hours** with heartbeats until acceptance is green.
-- For long Sync logs work, **internally** open and obey `docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md` even if the user only said “fix it” or “continue” (EXIT GATE + min heartbeats + dual-source live proof + Playwright).
+- Wall time is not a stop: 10 minutes of work is not done. Multi-surface runtime-truth jobs expect **tens of minutes to hours** with heartbeats until acceptance is green.
+- For long work, **internally** open and obey `docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md` even if the user only said “fix it” or “continue” (EXIT GATE + min heartbeats + live proof + Playwright).
 
 ## Verify this machine still loads rules
 

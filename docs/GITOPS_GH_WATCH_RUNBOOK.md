@@ -92,17 +92,11 @@ signal for whether the VM has already pulled the SHA.
 |---|---|
 | **CI / bnpi-pats-api** | API source-truth mocha (`npm run test:regression:payroll-source-truth`) |
 | **CI / bnpi-pats-app** | App vitest payroll-correction (`npm run test:payroll-correction`). Full `npm test` still has Router/typecheck failures. |
-| **CI / bnpi-pats-emp-app** | Employee app tests, or skip if submodule missing |
-| **CI / hikvision** | Linux probe unit tests |
-| **CI / zkteco** | Linux probe unit tests (`vendor/zkteco-linux/tests`) |
 | **CI / ansible** | `ansible-playbook --syntax-check` of `ansible/project-truth-pull.yml` |
-| **CI / callback-outbox** | Python syntax |
 | **CI / gitops** | `kubectl kustomize` overlays |
 | **Observe / ansible-pull** | VM wrote `ansible-pull-state` for this SHA |
 | **Observe / bnpi-pats-api** | DEV API image rebuilt **or** `services=none` this SHA |
 | **Observe / bnpi-pats-app** | DEV app image rebuilt **or** not rebuilt this SHA |
-| **Observe / bnpi-pats-emp-app** | Employee app image rebuilt **or** not rebuilt |
-| **Observe / callback-outbox** | Outbox image rebuilt **or** not rebuilt |
 | **Observe / onprem-prod-api** | VM `127.0.0.1:3001/health` HTTP 2xx |
 | **Observe / onprem-prod-app** | VM `127.0.0.1:3000/auth/login` HTTP 2xx |
 | **Observe / onprem-dev-api** | VM `127.0.0.1:3101/health` HTTP 2xx |
@@ -126,7 +120,7 @@ Hard honesty:
 
 Full map: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
 
-Deployments page environments: `vm-gitops`, `bnpi-pats-api`, `bnpi-pats-app`, `bnpi-pats-emp-app`, `callback-outbox`, plus `onprem-{prod,dev,uat}-{api,app}`.
+Deployments page environments: `vm-gitops`, `bnpi-pats-api`, `bnpi-pats-app`, plus `onprem-{prod,dev,uat}-{api,app}`. Retired lanes (`bnpi-pats-emp-app`, `callback-outbox`) may linger as stale GitHub environment records until the first post-retirement observe run.
 
 On-prem URL cheat sheet: `docs/ONPREM_PORT_ACCESS.md`.
 

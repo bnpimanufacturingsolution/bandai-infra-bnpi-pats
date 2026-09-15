@@ -58,14 +58,14 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 
 ## Role Drift Guard
 
-- Admin device/configuration surfaces, including `/admin/configuration/devices`, ZKTeco device events, runtime health checks, VM/GitOps runtime drift, and repair operations, are admin / `bnpi-pats-admin` work.
-- Do not infer `bnpi-pats-hr-manager` for admin device/configuration tasks just because BNPI PATS contains HR manager routes, tests, or seed credentials.
+- Admin configuration surfaces, runtime health checks, VM/GitOps runtime drift, and repair operations are admin / `bnpi-pats-admin` work. (The old `/admin/configuration/devices` + ZKTeco device-event surfaces were retired 2026-09-15.)
+- Do not infer `bnpi-pats-hr-manager` for admin configuration tasks just because BNPI PATS contains HR manager routes, tests, or seed credentials.
 - `bnpi-pats-hr-manager` remains valid only where the task explicitly targets HR workflows or existing code/docs require that role.
 - If a role is unclear, prefer the route/workflow owner in Project Truth and mark the uncertainty instead of substituting a convenient seeded login.
 
 ## Host-Local VM First Guard
 
-- For host-local VM, LAN, device, DB, GitOps, and runtime drift work from the
+- For host-local VM, LAN, DB, GitOps, and runtime drift work from the
   Windows host, collect direct LAN evidence first through
   `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`.
 - Use `ssh project-truth-bnpi-pats` as fallback evidence when the direct LAN path is
@@ -103,7 +103,7 @@ Before UI/browser diagnosis or code guessing, agents must find the exact
 endpoint used by the page, hook, or service and run that endpoint directly with
 the same expected actor.
 
-- For local BNPI PATS admin/device/configuration checks, default to admin /
+- For local BNPI PATS admin/configuration checks, default to admin /
   `bnpi-pats-admin`: `admin@bandai.local`, `password123`, `appCode='bnpi-pats'`.
 - Prefer non-mutating endpoint modes first: `execute=false`, `dryRun=true`,
   preview endpoints, `?preview=true`, or the documented equivalent.
@@ -122,36 +122,37 @@ Canonical local PowerShell pattern:
 $loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
 $login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $loginBody
 $headers = @{ Authorization = "Bearer $($login.data.token)" }
-$body = @{ execute=$false; deviceId='all'; source='all'; status='all'; dateField='eventTime'; includeLinkedAttendance=$true } | ConvertTo-Json
+$body = @{ execute=$false } | ConvertTo-Json
 Measure-Command {
-  $result = Invoke-RestMethod -Method Post 'http://localhost:3001/api/device/events/reset' -Headers $headers -ContentType 'application/json' -Body $body
+  # Replace with the exact preview/dry-run endpoint the page uses (verify it exists in bnpi-pats-api first)
+  $result = Invoke-RestMethod -Method Post 'http://localhost:3001/api/<admin-preview-endpoint>' -Headers $headers -ContentType 'application/json' -Body $body
   $result | ConvertTo-Json -Depth 6
 } | Select-Object TotalSeconds
 ```
 
-## Device Evidence Conflict Guard
+## Evidence Conflict Guard
 
-- Record device counts by evidence class: physical/operator, TCP transport,
-  authenticated API, full inventory read, listener arm, and callback receipt.
+- Record status counts by evidence class: reachable, transport-online,
+  authenticated, data-readable.
 - If any two classes disagree, status is `CONFLICTING`; do not publish one
   ambiguous “online” total.
-- Correlate browser, API, tunnel, listener, and device logs by device and time.
+- Correlate browser, API, tunnel, and service logs by request and time.
 - A symptom without a named root cause remains an open defect.
-- If logs are insufficient to determine cause, add request/device/stage/error
+- If logs are insufficient to determine cause, add request/stage/error
   observability and reproduce before closeout.
 - Re-run the original failing journey after repair; weaker substitute probes do
   not close the conflict.
 
-## Authorized Device Write Guard
+## Authorized Write-Job Guard
 
-- When a user explicitly authorizes the actual merge/sync write, require a
+- When a user explicitly authorizes an actual sync/write, require a
   reviewed dry-run first, then execute the frozen safe scope.
 - Assert that execution scope equals reviewed scope before starting.
 - Monitor real writes and errors to terminal state; repair and retry safe failed
   scope where possible.
 - Reread every target after completion and compare with the plan.
 - Do not count a plan, queued job, progress badge, or API 200 as completed
-  physical writes.
+  writes.
 
 ## Browser Verification Guard
 
@@ -185,10 +186,20 @@ Measure-Command {
 
 ## Drift Result
 
-- Drift status: NONE / LOW / MEDIUM / HIGH
+- Drift status: LOW
 - Drift found:
-  - NEEDS_CONFIRMATION
+  - RESOLVED-IN-PASS (2026-09-15): rules/docs/wiki described a live device lane
+    and `bnpi-pats-emp-app` after the runtime retirement; this governance pass
+    retired the rules, banners/compacted the wiki, and corrected live-state rows.
+  - REMAINING (accepted): prisma `Device*` models + one legacy migration in
+    `bnpi-pats-api`; historical device rows in
+    `appliance/seeds/dev-current/dev-current.dump`; dated reports/audits left
+    read-only by policy.
 - Files synchronized:
-  - NEEDS_CONFIRMATION
+  - `AGENTS.md`, `CLAUDE.md`, `.grok/rules/*`, root `README.md`, `docs/**`,
+    `.wwg/wiki/*`, `.wwg/wiki/principles/*`, `.wwg/workspace/current-task.md`,
+    `.wwg/governance/recommendation-registry.md`, this file.
 - Remaining follow-ups:
-  - NEEDS_CONFIRMATION
+  - Pass 4 submodule decision on legacy prisma `Device*` models (see
+    `.wwg/workspace/current-task.md`); contract count 226 → 217 recorded in
+    `.wwg/reports/wwg-agent-handoff.md`.

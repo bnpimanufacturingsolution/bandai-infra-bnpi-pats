@@ -3,6 +3,12 @@
 Recommendations are candidate work only. They are not accepted project truth,
 active Workspace tasks, or commitments until reviewed and promoted.
 
+> **2026-09-15:** the Hikvision/ZKTeco device lane and `bnpi-pats-emp-app` are
+> retired. Any recommendation whose target surface was a device/Sync-logs/merge
+> screen or the emp-app portal is **VOID** — keep it as history, do not promote.
+> Employee-facing recommendations that assumed `bnpi-pats-emp-app` must be
+> re-scoped to `bnpi-pats-app` before consideration.
+
 | ID | Status | Recommendation | Evidence | Date |
 | REC-20260915-LOAN-MONTHLY-VS-CUTOFF-AMORTIZATION | Proposed | EmployeeLoan.monthlyPayment basis ambiguity: loan cmpxwc0zc1h2m7zwspr9g9tvh (00138 RCBC) charges the full monthlyPayment (Php6,854.26) every semi-monthly cutoff while the client register charges half per cutoff (Php3,427.13). Fleet audit proved NO duplicate schedules (1,182 window loans, 1,182 unique emp+type groups, .runtime/dev-payroll-test-20260914/loan-dup-audit.json). Decide with client whether monthlyPayment is monthly (divide by cutoffs-per-month for ACTIVE loans in payroll) or per-cutoff (fix loan import data). Engine change deliberately NOT made without the ruling. | .wwg/reports/apr26-may10-payroll-parity-20260915.md | 2026-09-15 |
 | REC-20260914-ONBOARDING-WELCOME-FLOW-LEGACY-ONLY | Proposed | The new-employee welcome flow (`/onboarding` route → `onboarding-template.tsx` → `important-actions.tsx`) still reads ONLY the legacy `BoardingProcess`/`ChecklistItem` checklist (`useBoardingProcessByEmployee(employeeId,"ONBOARDING")`); the dedicated `OnboardingChecklist` provisioned at hire (create-on-hire hook) is never shown there, so employees see only the 201-doc tasks while the dedicated stack lives in HR list/profile-tab/admin surfaces. Decide whether to render dedicated actionable items in Important Actions (or fold the welcome step into the self view) — two parallel checklists per hire is drift-prone. | `bnpi-pats-app/app/routes/onboarding.tsx:142-156`; `bnpi-pats-api/app/employee/employee.controller.ts` create Step 8.9; discovery 2026-09-14. | 2026-09-14 |

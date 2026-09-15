@@ -3,7 +3,7 @@ type: principle-brief
 status: active
 mutability: high-friction
 scope: agent-reasoning
-last_reviewed: 2026-08-19
+last_reviewed: 2026-09-15
 ---
 
 # Evidence Over Assumption
@@ -34,28 +34,28 @@ When sources disagree, agents must not select the source that makes the system
 look green. Record the disagreement as `CONFLICTING`, identify each evidence
 class, and investigate the boundary.
 
-Example: an operator sees five powered panels and states Main C is down while a
-quick-health endpoint reports six `online`. The correct statement is not “six
-devices are online.” It is:
+Example: a quick-health endpoint reports six services `online` while an
+authenticated full-read probe fails or returns stale data for two of them. The
+correct statement is not “six are online.” It is:
 
-- operator/physical evidence: five active, Main C down;
-- quick transport evidence: six positive responses;
-- full inventory evidence: separately measured;
+- transport evidence: six positive probes;
+- authenticated / data-readable evidence: separately measured;
+- operator-reported reality: first-class until traced;
 - root cause of the disagreement: `NEEDS_CONFIRMATION` until traced.
 
-The endpoint may be cached, mapped to the wrong tunnel, accepting a proxy
-response, or proving only TCP/ISAPI transport. The agent owns proving which.
+The endpoint may be cached, mapped to the wrong target, accepting a proxy
+response, or proving only TCP transport. The agent owns proving which.
 
 ## Root cause is required, not optional
 
 An error label is not a diagnosis. `fetch failed`, `Unauthorized`, `timeout`,
-`sign-in failed`, and `listener unavailable` must be correlated across:
+and `sign-in failed` must be correlated across:
 
 1. browser request and response;
-2. API request id, route, duration, and selected device;
+2. API request id, route, duration, and selected scope;
 3. tunnel target and traffic proof;
-4. listener/service logs for the same time;
-5. device response/error code when available.
+4. service logs for the same time;
+5. upstream response/error code when available.
 
 If the existing logs cannot explain the failure, add safe structured
 observability and reproduce it. “We do not know why” means the defect remains
@@ -67,48 +67,27 @@ For an explicitly authorized merge/sync/write task, dry-run and preview are
 mandatory safety gates. They are not the finish line. The agent must freeze the
 reviewed scope, execute the authorized write, monitor real success/failure
 counts, repair recoverable failures, and reread targets to prove convergence.
-Unknown identity choices or missing biometric custody remain excluded rather
+Unreviewed identity choices or absent source records remain excluded rather
 than fabricated.
 
 ## Product anchors that must not be assumed away
 
-- DeviceEvent is saved source-of-truth for device event history rows.
-- DeviceUser is current inventory only.
-- Lifecycle rows such as Fingerprint enrolled come from Operation logs (`ContentMgmt/logSearch`), not from inventory.
-- Attendance taps come from Attendance/access events (`AccessControl/AcsEvent`).
 - Host-local Windows Docker is diagnostic; the Project Truth finish line is VM/GitOps/LAN (+ named tunnel when public).
-- Long-running admin/device jobs must be explainable while they run. If an API cannot expose locked scope, source, target, current stage, backend heartbeat, real successes/failures, and latest recoverable errors, the backend contract is not sufficient and the UI must not invent progress. Counts must distinguish selected unique IDs, source records, peer copy attempts, successful writes, failed writes, and biometric evidence/gaps.
+- Long-running admin jobs must be explainable while they run. If an API cannot expose locked scope, source, target, current stage, backend heartbeat, real successes/failures, and latest recoverable errors, the backend contract is not sufficient and the UI must not invent progress. Counts must distinguish selected unique IDs, source records, write attempts, successful writes, and failed writes.
 
-## Hikvision callback / socket wire truth (do not invent)
+## Payload shape is proven, not assumed (retired device-lane lesson)
 
-Agents repeatedly fail by **assuming** the first `device-event:saved` always has plain person id (`15`) after panel create/enroll.
+The retired Hikvision/ZKTeco lane repeatedly produced agent claims like “the
+callback always carries the plain employee number.” The truth lived only in the
+SDK source, the POST builder, and real saved payloads — and it varied per event
+type. The durable lesson survives the lane:
 
-**Find truth this way (mandatory before claims):**
+1. Read the implementation that builds the payload.
+2. Read a real saved payload or `.runtime` log for the same path.
+3. State what the wire actually had (plain / empty / opaque) before claiming.
 
-1. Read `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` (callback/JSON) and `src/hikvision_bio/spool.cpp` (POST/enrich):
-   - `alarm_callback` (`acs.cpp`) — person id **only** from `dwEmployeeNo` (empty when 0).
-   - `build_hikvision_callback_json` (`acs.cpp`) — `employeeNo` / `employeeNoString` are that same string.
-   - `bnpi_pats_post_loop` / enrich path (`spool.cpp`) — what is filled **before** POST.
-2. Read a real saved payload or `.runtime` SDK log (major/minor + `employeeNo`).
-3. State what the wire actually had: **plain** / **empty** / **opaque**.
-
-**Proven patterns (re-verify if firmware changes):**
-
-| Packet | Typical person field |
-|---|---|
-| ACS major=3 panel create/enroll | often **empty** `dwEmployeeNo` |
-| ACS major=5 fingerprint tap | often **plain** id |
-| ISAPI logSearch addUser/addFp | often **opaque** token, not plain |
-
-Socket shows saved row truth. It does not invent plain id missing from the POST body.
-
-**Correct fix direction when user wants plain on live UI:**
-
-- Prefer C++ inventory delta + template read **before** POST when ACS person is empty.
-- BNPI PATS multipass is fallback, not a license to claim “callback always had 15.”
-- Store raw FP/face templates on DeviceUser when read. For USER_CREATED / FINGERPRINT_ENROLLED, also attach the same evidenced usable blobs to the DeviceEvent payload so the ledger journey is complete; never fabricate bytes or identity when capture is empty.
-
-Also see: `.grok/rules/02-sdk-callback-wire-truth.md`.
+Never fabricate bytes, identity, or shape to make a counter zero. Historical
+device evidence is dated and read-only in `.wwg/reports/` and git history.
 
 ## Non-goals
 

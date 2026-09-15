@@ -127,7 +127,6 @@ terraform-hyperv/
 image-factory/
 bnpi-pats-api/
 bnpi-pats-app/
-bnpi-pats-emp-app/
 scripts/
 docs/
 .github/workflows/

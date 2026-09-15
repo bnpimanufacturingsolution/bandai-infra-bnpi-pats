@@ -5,7 +5,7 @@ Auto-loaded from `.grok/rules/`. Complements root `AGENTS.md` and `DESIGN.md`.
 ## A) Full-height list layout
 
 When **creating or adjusting** any dense list/table page (admin configuration
-lists, HR list screens, device ledgers, audit/activity logs):
+lists, HR list screens, audit/activity logs):
 
 1. **Layout viewport-fill** — add/keep the route in
    `bnpi-pats-app/app/lib/admin-viewport-fill.ts` (admin layout) or

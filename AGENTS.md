@@ -2,6 +2,12 @@
 
 This repo is Project Truth. Treat work here as owner-operator engineering, not a passive checklist.
 
+> **Retired 2026-09-15:** the Hikvision/ZKTeco device lane (`vendor/`, watcher,
+> callback-outbox, Device Events, Sync logs, merge/enroll UI) and the HRIS
+> `bnpi-pats-emp-app` portal no longer exist in this repo or its runtime. Do not
+> resurrect device or emp-app rules, endpoints, workloads, or counts from memory
+> or old evidence. Current product is BNPI PATS timekeeping/payroll only.
+
 ## Session Bootstrap Rule (mandatory every session / every meaningful turn)
 
 Grok auto-loads this `AGENTS.md` file and `.grok/rules/*.md`. It does **not** auto-load WWG wiki content.
@@ -9,12 +15,10 @@ You must **open the files with tools** before planning, coding, diagnosing, or c
 
 ### Hard ban on assumption / hallucination
 
-- Do **not** invent product truth, device counts, filter names, runtime IPs, API shapes, or "done" status from memory.
-- Do **not** answer architecture or Device Events / Sync logs questions from training data alone.
+- Do **not** invent product truth, workload counts, filter names, runtime IPs, API shapes, or "done" status from memory.
+- Do **not** answer architecture or historical-device-question from training data alone — the device lane is retired; say so with this file as evidence.
 - If a fact is not in opened WWG, code, config, or `.runtime` evidence, label it `NEEDS_CONFIRMATION` or go read the file.
 - Prefer: **read → quote path → act → prove**. Never: **assume → invent → declare done**.
-- **Hikvision callback / socket person id:** do **not** claim panel create/enroll always delivers plain `employeeNo` on the first ACS callback or first socket. Trace `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` (`alarm_callback` → `dwEmployeeNo` → `build_hikvision_callback_json` → POST) and live `.runtime` / DeviceEvent payloads. Major=3 often has **empty** person; major=5 taps often have plain; logSearch often has **opaque** tokens. Time GET/SET is `src/hikvision_bio/time.cpp`. See `.grok/rules/02-sdk-callback-wire-truth.md` and principle `evidence-over-assumption.md`.
-- **Residual counts (decision / gap / ready chips):** never answer with a bare integer (`decision=16`, `unique_fp=9`, burn deltas) without: bucket table, per-row or samples (vendor id, fields, A vs B), UI/API source of the label, blocker class (`code_defect` | `export_gap` | `apply_path` | `physical_boundary` | `optional_product`), and next agent step. Prefer “planner/UI/code gate inflated residual” when true. Always-on: `.grok/rules/03-residual-count-detail.md`.
 
 ### Required open order before first substantive action
 
@@ -35,7 +39,7 @@ Also open compact active surfaces when present (do not reorder the contract list
 - `.wwg/wiki/project-truth-summary.md`
 - `.wwg/wiki/terminology-summary.md` (if present)
 - `.wwg/reports/wwg-agent-handoff.md`
-- `Agent-Meta-Prompt-Template.md` for multi-step, drift, device, VM/GitOps, or repair work
+- `Agent-Meta-Prompt-Template.md` for multi-step, drift, VM/GitOps, or repair work
 
 After opening, write a short **Current-State Report** (chat or `.runtime` stamp) with:
 
@@ -62,12 +66,12 @@ WWG is Project Truth's governed memory pack. Opening it is not optional for mean
 
 ## Non-Stop Execution Rule (no early idle end)
 
-For any task that includes an acceptance checklist, finish line, verification, repair, Sync logs redesign, device truth, VM/GitOps, or “keep going until done”:
+For any task that includes an acceptance checklist, finish line, verification, repair, runtime-truth redesign, VM/GitOps, or “keep going until done”:
 
 1. **Do not end the turn** because a partial step worked, one file was edited, one test passed, or a minute of work elapsed.
 2. Keep looping: discover → plan → implement → prove (API then browser when needed) → fix → re-prove → truth-sync → commit/push when green.
 3. **Recoverable issues are agent-owned.** Examples: Docker/VM off, port down, warm-up, missing PATH tool, failed install, dirty git you can isolate, flaky test, workflow not started, need regenerate/build. Research, fix, retry. At least **3 different plausible recoveries** before labeling that sub-path blocked.
-4. **Only report a real blocker** when Real Stop Conditions below apply (3 failed distinct recoveries with evidence, irreversible data risk without backup, missing irrecoverable credentials/device/network, or would require inventing secrets/evidence).
+4. **Only report a real blocker** when Real Stop Conditions below apply (3 failed distinct recoveries with evidence, irreversible data risk without backup, missing irrecoverable credentials/network, or would require inventing secrets/evidence).
 5. When blocked on one path, **immediately continue every other unblocked path**. Never sit idle waiting for the user on recoverable work.
 6. Before ending, re-check the acceptance checklist. If any required box is open and not a real blocker, continue.
 7. Headless/long jobs: use enough turns and auto-approve tool execution so permission prompts do not fake-stop the run.
@@ -95,8 +99,8 @@ meaningful task you already own:
 - Hitting real admin endpoints, starting Sync jobs, polling import progress
 - Running Playwright/contract tests and writing `.runtime/` evidence
 - Committing and pushing `develop` when green
-- Opening marathon/nonstop job cards **internally** for multi-surface Sync logs /
-  device truth work without waiting for the user to paste them
+- Opening nonstop job cards **internally** for multi-surface runtime-truth
+  work without waiting for the user to paste them
 
 Do not end with a “What you should do next” list for recoverable work. Execute it.
 
@@ -118,7 +122,7 @@ the default for the already-running server.
 
 ## Host-Local VM First Rule
 
-When the user is on the Windows host or asks about host-local VM, LAN, device,
+When the user is on the Windows host or asks about host-local VM, LAN,
 DB, GitOps, or runtime drift, check the canonical direct LAN path before using a
 public/Cloudflare SSH alias:
 
@@ -151,17 +155,12 @@ Hyper-V VM: project-truth-local-vhdx-proof
   - Owns Project Truth runtime
   - Has one stable VM IP
   - Runs Docker Engine inside Linux
-  - Runs BNPI PATS app/API/Postgres/device services
-  - Reaches Hikvision/ZKTeco devices from inside VM
+  - Runs BNPI PATS app/API/Postgres services
 
 Docker Inside VM
   - Uses Linux Docker bridge networks
   - Containers talk to each other internally
   - Publishes required ports on VM IP
-
-Devices
-  - Hikvision/ZKTeco reachable from VM
-  - Device SDK/listeners run in VM or VM Docker containers
 
 Host Access
   - Host pings VM IP
@@ -188,8 +187,6 @@ Docker inside VM
   bnpi-pats-app
   bnpi-pats-api
   postgres
-  hikvision service
-  zkteco service
 ```
 
 The Windows host should only need:
@@ -211,8 +208,7 @@ For Windows-host localhost hot reload, the canonical DEV database is the K3s DEV
 Postgres forward on `127.0.0.1:55435` (`dev/bnpi-pats-postgres`, service
 `10.43.130.9:5432`). Do not silently switch localhost dev to compose DEV
 `10.184.37.19:15433`: that is a duplicate drift-prone diagnostic database and
-has previously shown only the stale `192.168.18.39` device while the real DEV
-runtime had 7 devices including TEST A at `192.168.254.102`. If `55435` is down,
+has historically shown stale rows the real DEV runtime did not have. If `55435` is down,
 recover K3s/disk pressure/forwarding first, or require an explicit
 `PROJECT_TRUTH_ALLOW_COMPOSE_DEV_DB_FALLBACK=true` diagnostic override.
 
@@ -230,8 +226,8 @@ Do not stop just because:
 - Code needs to be committed or pushed to `develop`.
 - Dependencies or generated files need a normal repo-documented install/build/regenerate step.
 - “About 10 minutes elapsed” or any wall-clock alone — time is not a finish line.
-- Wanting the human to hard-refresh, restart the API, open Sync logs, or click Sync
-  when you can do those steps yourself.
+- Wanting the human to hard-refresh, restart the API, open the admin page, or
+  click the button when you can do those steps yourself.
 
 Research, recover, retry, and capture evidence before calling anything blocked.
 
@@ -241,9 +237,9 @@ Never close a multi-step truth/repair task with homework for the operator when t
 work is recoverable. You restart API/app (`npm.cmd` on Windows), poll health, login,
 hit endpoints, run Playwright, write `.runtime/` evidence, and commit/push `develop`
 when green. Forbidden exit pattern: “What you should do next: hard-refresh / restart
-API / click Sync.” For long Sync logs jobs, use
-`docs/00-product/AGENT-PROMPT-sync-logs-truth-3hr-marathon.md` (EXIT GATE, min
-heartbeats, dual-source live proof, high max-turns).
+API / click Sync.” For long jobs, use
+`docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md` (EXIT GATE, min
+heartbeats, live proof, high max-turns).
 
 ## Real Endpoint Dry-Run Rule
 
@@ -251,7 +247,7 @@ Before diagnosing from UI screenshots or guessing from code, identify the exact
 endpoint used by the page, hook, or service and run that endpoint directly with
 the same role the page should use.
 
-For local BNPI PATS admin/device/configuration checks, the default actor is
+For local BNPI PATS admin/configuration checks, the default actor is
 `admin@bandai.local` / `password123` with `appCode='bnpi-pats'`, unless the task
 explicitly targets another role. Use a non-mutating mode first: `execute=false`,
 `dryRun=true`, a preview endpoint, `?preview=true`, or the endpoint's documented
@@ -266,9 +262,10 @@ endpoint/body to the page being investigated:
 $loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
 $login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $loginBody
 $headers = @{ Authorization = "Bearer $($login.data.token)" }
-$body = @{ execute=$false; deviceId='all'; source='all'; status='all'; dateField='eventTime'; includeLinkedAttendance=$true } | ConvertTo-Json
+$body = @{ execute=$false } | ConvertTo-Json
 Measure-Command {
-  $result = Invoke-RestMethod -Method Post 'http://localhost:3001/api/device/events/reset' -Headers $headers -ContentType 'application/json' -Body $body
+  # Replace with the exact preview/dry-run endpoint the page uses (verify it exists in bnpi-pats-api first)
+  $result = Invoke-RestMethod -Method Post 'http://localhost:3001/api/<admin-preview-endpoint>' -Headers $headers -ContentType 'application/json' -Body $body
   $result | ConvertTo-Json -Depth 6
 } | Select-Object TotalSeconds
 ```
@@ -289,7 +286,7 @@ after API/network proof.
 
 ## Long-Running Job Observability Rule
 
-Any admin/device job that can take more than a few seconds must expose an honest
+Any admin job that can take more than a few seconds must expose an honest
 watchable contract before the UI presents it as running. The API must let an
 operator answer: what scope is locked, what source is being used, what target is
 being attempted, what stage is active, when the backend last advanced, how many
@@ -300,28 +297,28 @@ or a dry-run/plan that matches execution, the implementation is wrong and should
 be refactored. The UI must not guess, inflate progress, or show editable preview
 controls after a job scope is frozen. Use explicit labels such as stale,
 estimated, queued, applying, rereading, completed, failed, or needs attention.
-Counts must distinguish selected unique IDs, source records, peer copy attempts,
-successful writes, failed writes, and biometric evidence/gaps.
+Counts must distinguish selected unique IDs, source records, write attempts,
+successful writes, and failed writes.
 
 ## Evidence Conflict and Root-Cause Closure Rule
 
 Never collapse conflicting evidence into the most convenient status. If the
-operator, physical room, device screen, quick-health endpoint, full-read
-endpoint, saved database state, browser, or logs disagree, mark the claim
+operator, quick-health endpoint, full-read endpoint, saved database state,
+browser, or logs disagree, mark the claim
 `CONFLICTING` and investigate the disagreement itself.
 
 - Ping, TCP, SSH, a listening tunnel, cached success, and lightweight quick
   health are transport evidence only. They do not prove authentication, full
-  inventory readability, listener arm state, or callback delivery.
-- A device count must name the evidence class: physically powered/reachable,
-  transport-online, authenticated, inventory-readable, listener-armed, or
-  callback-proven. Never shorten one class to the ambiguous word `online`.
+  data readability, or delivery to downstream systems.
+- A status count must name the evidence class: reachable, transport-online,
+  authenticated, or data-readable. Never shorten one class to the ambiguous
+  word `online`.
 - Operator physical evidence is a first-class source. It does not get silently
   overwritten by a cached or weaker endpoint response.
 - Every observed error must be traced to a named cause or remain an explicit
   unresolved defect. “Unknown,” “intermittent,” “fetch failed,” and “probably
   network” are symptoms, not root causes.
-- Read the exact API/server/tunnel/listener/device logs for the same request and
+- Read the exact API/server/tunnel logs for the same request and
   timestamp. If logs lack enough identifiers or stages to explain the failure,
   insufficient observability is itself a bug to repair.
 - After a repair, reproduce the original conflict and prove the sources now
@@ -332,7 +329,7 @@ endpoint, saved database state, browser, or logs disagree, mark the claim
 When the user explicitly requests an actual sync/merge/write job, a read-only
 plan is a safety gate, not the finish line.
 
-1. Discover and freeze the exact verified device and record scope.
+1. Discover and freeze the exact verified record scope.
 2. Run the non-mutating plan and validate its logic, exclusions, conflicts,
    source selections, and expected write matrix.
 3. Preserve a rollback/evidence snapshot and refuse scope expansion.
@@ -343,32 +340,7 @@ plan is a safety gate, not the finish line.
    is not write proof.
 
 Do not stop at preview merely because preview passed. Do not start writes for
-unreviewed identities, unresolved conflicts, unavailable devices, or invented
-biometric bytes.
-
-## Recoverable Credential Blocker Rule
-
-Device merge labels such as `missing_raw_blob`, `source_conflict`,
-`credential_only_card_not_supported`, and `target_write_unsupported` are
-diagnosis categories, not automatic stop conditions.
-
-- Recover missing custody from current physical source reads and classify the
-  exact bytes/capability before replanning.
-- Resolve equal raw-template sources by checksum and strict supersets by
-  evidenced custody; do not leave them as ambiguous "No source" rows.
-- Implement missing card/face writers when the current device exposes a safe
-  SDK/ISAPI capability, then prove retention by physical reread.
-- Convert only genuinely different same-slot biometrics, duplicate owners,
-  absent source bytes, or unsupported firmware into explicit physical/firmware
-  boundaries. Never guess or fabricate biometric truth to make a counter zero.
-- A software-recoverable blocker remains agent-owned work under the Non-Stop
-  Execution Rule.
-- A completed writer must not remain permanently hidden behind a manual
-  operator toggle. Keep it fail-closed while its build, capability probe, and
-  serial physical canary are unproven; after those gates pass, make supported
-  targets automatically actionable from current per-target capability
-  evidence. Retain target/user-scoped canary gates, duplicate-owner refusal,
-  shared device locks, reviewed-byte hashes, and physical reread proof.
+unreviewed identities, unresolved conflicts, or absent source records.
 
 ## Browser Verification Tool
 
@@ -435,7 +407,7 @@ Stop only when continuing is technically impossible or risks irreversible loss w
 
 - The same failure remains after at least 3 documented recovery attempts using different plausible fixes.
 - The next action could destroy, overwrite, or leak client/user data and there is no verified backup or rollback path.
-- Required credentials, physical device access, or network access are absent and cannot be recovered from documented local/VM/GitOps procedures.
+- Required credentials or network access are absent and cannot be recovered from documented local/VM/GitOps procedures.
 - A command would require guessing unknown production secrets or inventing evidence.
 
 Everything else is agent-owned work.
@@ -446,7 +418,7 @@ Use `Agent-Meta-Prompt-Template.md` for substantial or drift-sensitive work. Sta
 
 Do not call a task done because one local command passed. Keep going until the requested finish line is met, a real stop condition above is reached, or the user explicitly changes scope.
 
-For prompts that mention drift, device truth, VM/GitOps state, LAN state, production evidence, or multi-step repair, agents must use the template's phase loop:
+For prompts that mention drift, VM/GitOps state, LAN state, production evidence, or multi-step repair, agents must use the template's phase loop:
 
 - Discovery/current-state report first.
 - Plan and plan review before edits.
@@ -475,7 +447,7 @@ Do not declare the architecture complete from host-local Docker alone unless the
 
 ## Canonical Role Guard
 
-Admin device/configuration work is admin-role work. For `/admin/configuration/devices`, ZKTeco device events, runtime health, VM/GitOps drift, and repair operations, use admin / `bnpi-pats-admin` as the actor and mental model. Do not default to `bnpi-pats-hr-manager` for these surfaces unless the task explicitly targets an HR workflow or the relevant code/docs require the HR manager role.
+Admin configuration and runtime work is admin-role work. For runtime health, VM/GitOps drift, and repair operations, use admin / `bnpi-pats-admin` as the actor and mental model. Do not default to `bnpi-pats-hr-manager` for these surfaces unless the task explicitly targets an HR workflow or the relevant code/docs require the HR manager role.
 
 <!-- WWG_GENERATED:EXISTING_PROJECT_ADOPTION_RULE:START -->
 ## Existing Project Adoption Rule

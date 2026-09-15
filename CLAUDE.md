@@ -18,7 +18,7 @@ Grok, Claude Code, and similar agents should treat `AGENTS.md` as mandatory beha
 
 ## Anti-hallucination
 
-Do not invent Project Truth, device counts, Sync logs rows, filters, IPs, or API contracts. Read WWG + code + evidence. Label unknowns as `NEEDS_CONFIRMATION`.
+Do not invent Project Truth, workload counts, row counts, filters, IPs, or API contracts. Read WWG + code + evidence. Label unknowns as `NEEDS_CONFIRMATION`.
 
 Also load `.grok/rules/00-wwg-session-bootstrap.md` and
 `.grok/rules/01-agent-owned-execution.md` intent when present.
