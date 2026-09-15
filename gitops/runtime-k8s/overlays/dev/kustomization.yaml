@@ -4,17 +4,10 @@ resources:
   - priority-classes.yaml
   - runtime.yaml
 
-patches:
-  - path: bnpi-pats-api-credential-recovery-env.patch.yaml
-
 images:
   - name: bnpi-pats-api-db-init
     newTag: develop
   - name: bnpi-pats-api-local
     newTag: develop
   - name: bnpi-pats-app-local
-    newTag: develop
-  - name: bnpi-pats-emp-app-local
-    newTag: develop
-  - name: bnpi-pats-callback-outbox
     newTag: develop

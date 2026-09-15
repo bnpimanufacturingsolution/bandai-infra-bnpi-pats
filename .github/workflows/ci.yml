@@ -50,74 +50,6 @@ jobs:
       - name: Unit tests
         run: npm run test:payroll-correction
 
-  bnpi-pats-emp-app:
-    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
-    name: bnpi-pats-emp-app
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-      - name: Check out employee app if present
-        run: |
-          set -euo pipefail
-          if [ ! -f bnpi-pats-emp-app/package.json ]; then
-            echo "::notice title=bnpi-pats-emp-app skipped::Submodule not present in this checkout. Job succeeds without tests."
-            echo "## bnpi-pats-emp-app" >> "$GITHUB_STEP_SUMMARY"
-            echo "Skipped: submodule not present. This is **not** emp-app test proof." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          echo "EMP_PRESENT=1" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v4
-        if: env.EMP_PRESENT == '1'
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: bnpi-pats-emp-app/package-lock.json
-      - name: Install and test
-        if: env.EMP_PRESENT == '1'
-        working-directory: bnpi-pats-emp-app
-        run: |
-          npm ci
-          if npm run | grep -q 'test:ci'; then
-            npm run test:ci
-          elif npm run | grep -qE '^  test$'; then
-            npm test
-          else
-            echo "No test script; skip"
-          fi
-
-  hikvision:
-    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
-    name: hikvision
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Probe unit tests
-        run: |
-          python -m pip install -r vendor/hikvision-linux/requirements.txt
-          python -m unittest discover -s vendor/hikvision-linux/tests -v
-
-  zkteco:
-    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
-    name: zkteco
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Probe unit tests
-        run: |
-          python -m pip install -r vendor/zkteco-linux/requirements.txt
-          python -m unittest discover -s vendor/zkteco-linux/tests -v
-
   ansible:
     if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: ansible
@@ -132,19 +64,6 @@ jobs:
         run: |
           python -m pip install "ansible-core>=2.16,<2.19"
           ansible-playbook --syntax-check -i localhost, ansible/project-truth-pull.yml
-
-  callback-outbox:
-    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
-    name: callback-outbox
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Syntax check
-        run: python -m py_compile services/callback-outbox/outbox_server.py
 
   gitops:
     if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true

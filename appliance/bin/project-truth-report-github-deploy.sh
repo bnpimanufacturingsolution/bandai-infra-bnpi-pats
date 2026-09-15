@@ -123,8 +123,6 @@ ok=0
 report_env "vm-gitops" "https://dev.bnpi-pats.tech/auth/login" "ansible-pull ${commit} outcome=pulled synced_at=${synced_at:-unknown}"
 report_env "bnpi-pats-api" "https://dev-api.bnpi-pats.tech/health" "bnpi-pats-api ${commit} $(service_note 'bnpi-pats-api-local:develop')"
 report_env "bnpi-pats-app" "https://dev.bnpi-pats.tech/auth/login" "bnpi-pats-app ${commit} $(service_note 'bnpi-pats-app-local:develop')"
-report_env "bnpi-pats-emp-app" "https://dev-emp.bnpi-pats.tech/auth/login" "bnpi-pats-emp-app ${commit} $(service_note 'bnpi-pats-emp-app-local:develop')"
-report_env "callback-outbox" "https://dev-api.bnpi-pats.tech/health" "callback-outbox ${commit} $(service_note 'bnpi-pats-callback-outbox:develop')"
 
 probe_http() {
   local url="$1"

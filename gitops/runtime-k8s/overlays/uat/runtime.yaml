@@ -254,27 +254,17 @@ spec:
             - name: CORS_CREDENTIALS
               value: "true"
             - name: CORS_ORIGINS
-              value: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3100,http://127.0.0.1:3100,http://localhost:3200,http://127.0.0.1:3200,http://localhost:5175,http://127.0.0.1:5175,https://bnpi-pats.tech,https://www.bnpi-pats.tech,https://app.bnpi-pats.tech,https://dev.bnpi-pats.tech,https://uat.bnpi-pats.tech,https://emp.bnpi-pats.tech,https://dev-emp.bnpi-pats.tech,https://uat-emp.bnpi-pats.tech,http://bnpi-pats.lan,https://bnpi-pats.lan,http://www.bnpi-pats.lan,https://www.bnpi-pats.lan,http://app.bnpi-pats.lan,https://app.bnpi-pats.lan,http://api.bnpi-pats.lan,https://api.bnpi-pats.lan,http://dev.bnpi-pats.lan,https://dev.bnpi-pats.lan,http://dev-api.bnpi-pats.lan,https://dev-api.bnpi-pats.lan,http://uat.bnpi-pats.lan,https://uat.bnpi-pats.lan,http://uat-api.bnpi-pats.lan,https://uat-api.bnpi-pats.lan,http://emp.bnpi-pats.lan,https://emp.bnpi-pats.lan,http://dev-emp.bnpi-pats.lan,https://dev-emp.bnpi-pats.lan,http://uat-emp.bnpi-pats.lan,https://uat-emp.bnpi-pats.lan,http://grafana.bnpi-pats.lan,https://grafana.bnpi-pats.lan
+              value: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3100,http://127.0.0.1:3100,http://localhost:3200,http://127.0.0.1:3200,http://localhost:5175,http://127.0.0.1:5175,https://bnpi-pats.tech,https://www.bnpi-pats.tech,https://app.bnpi-pats.tech,https://dev.bnpi-pats.tech,https://uat.bnpi-pats.tech,http://bnpi-pats.lan,https://bnpi-pats.lan,http://www.bnpi-pats.lan,https://www.bnpi-pats.lan,http://app.bnpi-pats.lan,https://app.bnpi-pats.lan,http://api.bnpi-pats.lan,https://api.bnpi-pats.lan,http://dev.bnpi-pats.lan,https://dev.bnpi-pats.lan,http://dev-api.bnpi-pats.lan,https://dev-api.bnpi-pats.lan,http://uat.bnpi-pats.lan,https://uat.bnpi-pats.lan,http://uat-api.bnpi-pats.lan,https://uat-api.bnpi-pats.lan,http://grafana.bnpi-pats.lan,https://grafana.bnpi-pats.lan
             - name: NODE_HOST_IP
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-            - name: ZKTECO_BRIDGE_STATUS_URL
-              value: http://$(NODE_HOST_IP):4371/status
-            - name: ZKTECO_BRIDGE_PREVIEW_TIMEOUT_MS
-              value: "180000"
-            - name: ZKTECO_BRIDGE_SYNC_TIMEOUT_MS
-              value: "90000"
             - name: PROJECT_TRUTH_VM_HOST
               value: 10.184.37.19
             - name: PROJECT_TRUTH_VM_USER
               value: infra
             - name: PROJECT_TRUTH_VM_SSH_KEY
               value: /var/run/project-truth/ssh/node-health-appliance_ed25519
-            - name: PROJECT_TRUTH_HIKVISION_RUNTIME_LOCATION
-              value: vm-container
-            - name: PROJECT_TRUTH_HIKVISION_VM_API_BASE
-              value: http://127.0.0.1:3201
             - name: INTEGRATION_API_KEYS
               valueFrom:
                 secretKeyRef:
@@ -413,78 +403,6 @@ metadata:
 spec:
   selector:
     app.kubernetes.io/name: bnpi-pats-app
-  ports:
-    - name: http
-      port: 3000
-      targetPort: 3000
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: bnpi-pats-emp-app
-  labels:
-    app.kubernetes.io/name: bnpi-pats-emp-app
-    app.kubernetes.io/part-of: project-truth
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: bnpi-pats-emp-app
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: bnpi-pats-emp-app
-        app.kubernetes.io/part-of: project-truth
-    spec:
-      priorityClassName: project-truth-uat
-      containers:
-        - name: app
-          image: bnpi-pats-emp-app-local:develop
-          imagePullPolicy: Never
-          resources:
-            requests:
-              cpu: "50m"
-              memory: 64Mi
-            limits:
-              cpu: "250m"
-              memory: 256Mi
-          env:
-            - name: NODE_HOST_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.hostIP
-            - name: PORT
-              value: "3000"
-            - name: BNPI_PATS_API_ORIGIN
-              value: http://$(NODE_HOST_IP):3201
-          ports:
-            - name: http
-              containerPort: 3000
-              hostPort: 3320
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 3000
-            periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 12
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 3000
-            periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 6
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: bnpi-pats-emp-app
-spec:
-  selector:
-    app.kubernetes.io/name: bnpi-pats-emp-app
   ports:
     - name: http
       port: 3000

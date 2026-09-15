@@ -37,14 +37,6 @@ jobs:
             environment: bnpi-pats-app
             url: https://dev.bnpi-pats.tech/auth/login
             wait_sec: 1200
-          - id: bnpi-pats-emp-app
-            environment: bnpi-pats-emp-app
-            url: https://dev-emp.bnpi-pats.tech/auth/login
-            wait_sec: 1200
-          - id: callback-outbox
-            environment: callback-outbox
-            url: https://dev-api.bnpi-pats.tech/health
-            wait_sec: 1200
           - id: onprem-prod-api
             environment: onprem-prod-api
             url: http://10.184.37.19:3001/health

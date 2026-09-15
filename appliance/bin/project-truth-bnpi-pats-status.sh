@@ -66,10 +66,6 @@ if [ -n "$lan_ip" ]; then
   echo "PROD DB:    postgresql://postgres:postgres@${lan_ip}:15432/bnpi_pats"
   echo "DEV DB:     postgresql://postgres:postgres@${lan_ip}:15433/bnpi_pats"
   echo "UAT DB:     postgresql://postgres:postgres@${lan_ip}:15434/bnpi_pats"
-  echo "ZKTeco PROD webhook: http://${lan_ip}:3001/api/zkteco/events"
-  echo "ZKTeco DEV webhook:  http://${lan_ip}:3101/api/zkteco/events"
-  echo "ZKTeco UAT webhook:  http://${lan_ip}:3201/api/zkteco/events"
-  echo "ZKTeco saved events: http://${lan_ip}:3000/admin/devices/events?view=saved&source=ZKTECO_EVENT"
   echo "Grafana:    http://${lan_ip}:53000"
   echo "Prometheus: http://${lan_ip}:9091"
   echo "Loki:       http://${lan_ip}:3110"
@@ -116,27 +112,6 @@ check_url "local prod api" "http://127.0.0.1:3001/health"
 if [ -n "$lan_ip" ]; then
   check_url "lan prod api" "http://${lan_ip}:3001/health"
 fi
-echo "ZKTeco:"
-echo "VM webhook contract: BNPI PATS API accepts POST /api/zkteco/events and stores ZKTECO_EVENT device_events."
-if [ -n "$lan_ip" ]; then
-  if curl -fsS "http://${lan_ip}:3001/health" >/dev/null 2>&1; then
-    echo "VM ZKTeco contract status: READY (API is reachable at ${lan_ip}:3001)"
-  else
-    echo "VM ZKTeco contract status: DOWN (API health did not respond at ${lan_ip}:3001)"
-  fi
-fi
-echo "Bridge runtime: ZKTeco Linux PyZK bridge at vendor/zkteco-linux."
-if [ -n "${ZKTECO_BRIDGE_STATUS_URL:-}" ]; then
-  echo "Bridge status: ${ZKTECO_BRIDGE_STATUS_URL}"
-  if curl -fsS "$ZKTECO_BRIDGE_STATUS_URL" >/tmp/project-truth-zkteco-status.json 2>/dev/null; then
-    node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('/tmp/project-truth-zkteco-status.json','utf8')); console.log(JSON.stringify({status:s.status,configuredDevices:s.configuredDevices,connectedDevices:s.connectedDevices,lastEventAt:s.lastEventAt,webhookUrl:s.webhookUrl}, null, 2));" 2>/dev/null || cat /tmp/project-truth-zkteco-status.json
-  else
-    echo "Bridge status endpoint: DOWN"
-  fi
-else
-  echo "Bridge status endpoint: not configured. Set ZKTECO_BRIDGE_STATUS_URL to the Windows SDK sidecar /status URL."
-fi
-
 echo "APP:"
 check_head "local prod app" "http://127.0.0.1:3000/"
 if [ -n "$lan_ip" ]; then

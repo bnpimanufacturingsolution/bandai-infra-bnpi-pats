@@ -274,13 +274,6 @@ for url in \
     failed=1
   fi
 done
-echo "===== bridge target ====="
-if [ -n "$lan_ip" ]; then
-  echo "ZKTECO_WEBHOOK_URL=http://${lan_ip}:3001/api/zkteco/events"
-else
-  echo "ZKTECO_WEBHOOK_URL unavailable: no LAN IP detected"
-  failed=1
-fi
 exit "$failed"
 '@
 

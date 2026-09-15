@@ -217,25 +217,6 @@ emit_cloudflare_ssh_rows() {
   echo "  LAN fallback: ssh infra@${ip_addr}"
 }
 
-emit_zkteco_runtime_rows() {
-  local ip_addr="$1"
-  echo "ZKTeco runtime"
-  printf '  %-18s %s\n' "VM webhook" "http://${ip_addr}:3001/api/zkteco/events"
-  printf '  %-18s %s\n' "Linux bridge" "vendor/zkteco-linux"
-  if curl -fsS "http://${ip_addr}:3001/health" >/dev/null 2>&1; then
-    printf '  %-18s %s\n' "VM contract" "ready: BNPI PATS API is reachable"
-  else
-    printf '  %-18s %s\n' "VM contract" "not ready: BNPI PATS API health is down"
-  fi
-  if [ -n "${ZKTECO_BRIDGE_STATUS_URL:-}" ] && curl -fsS "$ZKTECO_BRIDGE_STATUS_URL" >/tmp/project-truth-zkteco-status.json 2>/dev/null; then
-    printf '  %-18s %s\n' "bridge status" "$ZKTECO_BRIDGE_STATUS_URL"
-    node -e "const fs=require('fs'); const s=JSON.parse(fs.readFileSync('/tmp/project-truth-zkteco-status.json','utf8')); console.log('  bridge devices    '+(s.connectedDevices||0)+'/'+(s.configuredDevices||0)+' connected'); console.log('  bridge latest     '+(s.lastEventAt||'no events yet'));" 2>/dev/null || true
-  else
-    printf '  %-18s %s\n' "bridge status" "not set in VM; use Windows SDK sidecar"
-  fi
-  printf '  %-18s %s\n' "device check" "Admin > Devices shows SDK truth"
-}
-
 emit_cloudflare_tcp_db_instructions() {
   echo "Cloudflare DB TCP"
   echo "  Use named Cloudflare Tunnel + Access, not trycloudflare HTTP quick tunnels."
@@ -295,16 +276,6 @@ write_summary() {
       echo
       echo "Postgres LAN URLs"
       emit_database_lan_rows "$ip_addr"
-      echo
-      echo "ZKTeco SDK sidecar targets"
-      printf '  %-5s webhook http://%s:%s/api/zkteco/events\n' "PROD" "$ip_addr" "3001"
-      printf '  %-5s webhook http://%s:%s/api/zkteco/events\n' "DEV" "$ip_addr" "3101"
-      printf '  %-5s webhook http://%s:%s/api/zkteco/events\n' "UAT" "$ip_addr" "3201"
-      echo "  Saved events:"
-      echo "    http://${ip_addr}:3000/admin/devices/events"
-      echo "    ?view=saved&source=ZKTECO_EVENT"
-      echo
-      emit_zkteco_runtime_rows "$ip_addr"
       echo
       echo "Observability"
       emit_observability_rows "$ip_addr"
@@ -518,8 +489,6 @@ emit_screen_summary() {
   echo "  ssh: ssh project-truth-bnpi-pats"
   echo "Postgres"
   emit_database_lan_rows "$ip_addr"
-  echo "ZKTeco"
-  emit_zkteco_runtime_rows "$ip_addr"
   echo "Observability"
   emit_observability_rows "$ip_addr"
   emit_screen_os_sync_line

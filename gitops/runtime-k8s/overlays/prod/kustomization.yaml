@@ -11,5 +11,3 @@ images:
     newTag: develop
   - name: bnpi-pats-app-local
     newTag: develop
-  - name: bnpi-pats-emp-app-local
-    newTag: develop

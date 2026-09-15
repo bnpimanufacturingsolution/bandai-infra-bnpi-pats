@@ -14,11 +14,6 @@ appliance/backups/
 *.iso
 *.sha256
 *.log
-EN-HCNetSDKV6.1.9.4_build20220412_win64/
-vendor/hikvision-sdk/
-vendor/hikvision-sdk-local/
-vendor/hikvision-linux/sdk-local/
-vendor/hikvision-linux/downloads/
 packer/packer.auto.pkrvars.hcl
 image-factory/packer/packer.auto.pkrvars.hcl
 image-factory/packer/staging/
@@ -31,10 +26,6 @@ terraform.tfstate.backup
 # Anchor to repo root so bnpi-pats-app/app/components/templates is not ignored.
 /templates/sync-center-device-users/
 /templates/
-# Allow committed ops env-compare template under docs/templates/
-!docs/templates/
-!docs/templates/DEV-UAT-PROD-env-compare.xlsx
-!docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md
 # BNPI PATS React page templates must stay in git.
 !bnpi-pats-app/app/components/templates/
 

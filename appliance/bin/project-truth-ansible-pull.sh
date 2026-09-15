@@ -198,8 +198,8 @@ run_ansible_pull() {
     "$playbook"
 }
 
-# ansible-pull recurses submodules. bnpi-pats-emp-app is a private sibling repo the
-# appliance token often cannot read. If the main checkout is already on
+# ansible-pull recurses submodules. A private submodule the appliance token
+# often cannot read can still abort the pull. If the main checkout is already on
 # develop, still apply the playbook so /opt and units stay in sync.
 apply_from_checkout() {
   if ! git -C "$checkout_root" rev-parse HEAD >/dev/null 2>&1; then

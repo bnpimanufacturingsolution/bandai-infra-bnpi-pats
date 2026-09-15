@@ -44,7 +44,6 @@
       - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
-      - project-truth-hikvision-hot-reload-listener.service
       - project-truth-trycloudflare.service
       - project-truth-ansible-pull.service
       - project-truth-ansible-pull.timer
@@ -57,7 +56,6 @@
       - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
-      - project-truth-hikvision-hot-reload-listener.service
 
   tasks:
     - name: Ensure Project Truth state directory exists
@@ -118,25 +116,9 @@
           )"
         fi
 
-        runtime_job_root="/var/lib/project-truth/k8s/dev/uploads/project-truth-runtime"
-        for job_kind in device-user-merge-jobs device-user-sync-jobs; do
-          job_dir="$runtime_job_root/$job_kind"
-          [ -d "$job_dir" ] || continue
-          for snapshot in "$job_dir"/*.json; do
-            [ -f "$snapshot" ] || continue
-            if [ -n "$(find "$snapshot" -mmin -5 -print -quit)" ] &&
-               jq -e '.status == "processing"' "$snapshot" >/dev/null 2>&1; then
-              echo "Deferring runtime image rollout: active DEV device job snapshot $snapshot"
-              exit 0
-            fi
-          done
-        done
-
         build_api=1
         build_db_init=1
         build_app=1
-        build_emp_app=1
-        build_callback_outbox=1
         if [ -n "$previous_commit" ] &&
            git -C "{{ project_truth_repo_root }}" cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
           changed_files="$(
@@ -145,9 +127,7 @@
           build_api=0
           build_db_init=0
           build_app=0
-          build_emp_app=0
-          build_callback_outbox=0
-          if grep -Eq '^(bnpi-pats-api/|vendor/hikvision-linux/|scripts/project-truth-hikvision-)' <<<"$changed_files"; then
+          if grep -Eq '^bnpi-pats-api/' <<<"$changed_files"; then
             build_api=1
           fi
           if grep -Eq '^(bnpi-pats-api/prisma/|bnpi-pats-api/scripts/.*seed|bnpi-pats-api/Dockerfile)' <<<"$changed_files"; then
@@ -156,40 +136,10 @@
           if grep -Eq '^bnpi-pats-app/' <<<"$changed_files"; then
             build_app=1
           fi
-          if grep -Eq '^(bnpi-pats-emp-app/|appliance/dockerfiles/bnpi-pats-emp-app\.)' <<<"$changed_files"; then
-            build_emp_app=1
-          fi
-          if grep -Eq '^services/callback-outbox/' <<<"$changed_files"; then
-            build_callback_outbox=1
-          fi
-          if grep -Eq '^appliance/docker-compose' <<<"$changed_files"; then
+          if grep -Eq '^(appliance/docker-compose|gitops/runtime-k8s/)' <<<"$changed_files"; then
             build_api=1
             build_db_init=1
             build_app=1
-            build_emp_app=1
-            build_callback_outbox=1
-          fi
-          runtime_changes="$(
-            grep -E '^gitops/runtime-k8s/' <<<"$changed_files" || true
-          )"
-          if [ -n "$runtime_changes" ]; then
-            runtime_non_api_changes="$(
-              grep -Ev '^gitops/runtime-k8s/overlays/dev/(bnpi-pats-api-credential-recovery-env\.patch\.yaml|kustomization\.yaml)$' \
-                <<<"$runtime_changes" || true
-            )"
-            if [ -n "$runtime_non_api_changes" ]; then
-              build_api=1
-              build_db_init=1
-              build_app=1
-              build_emp_app=1
-              build_callback_outbox=1
-            elif grep -q 'bnpi-pats-api-credential-recovery-env.patch.yaml' \
-              "{{ project_truth_repo_root }}/gitops/runtime-k8s/overlays/dev/kustomization.yaml"; then
-              build_api=1
-            else
-              echo "Refusing to treat an unrecognized DEV kustomization-only change as API-only" >&2
-              exit 1
-            fi
           fi
         fi
 
@@ -210,14 +160,6 @@
           images+=(bnpi-pats-app-local:develop)
           deployments+=(bnpi-pats-app)
         fi
-        if [ "$build_emp_app" = "1" ]; then
-          services+=(bnpi-pats-emp-app)
-          images+=(bnpi-pats-emp-app-local:develop)
-        fi
-        if [ "${build_callback_outbox:-0}" = "1" ]; then
-          images+=(bnpi-pats-callback-outbox:develop)
-          deployments+=(bnpi-pats-callback-outbox)
-        fi
         if [ -z "${images[*]:-}" ]; then
           printf 'commit=%s\nsynced_at=%s\nservices=none\n' \
             "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$state_file"
@@ -234,17 +176,11 @@
             docker-compose build "${services[@]}"
           fi
         fi
-        if [ "${build_callback_outbox:-0}" = "1" ]; then
-          docker build -t bnpi-pats-callback-outbox:develop \
-            "{{ project_truth_repo_root }}/services/callback-outbox"
-        fi
-
         for image in "${images[@]}"; do
           docker image inspect "$image" >/dev/null
         done
 
         mkdir -p /var/lib/rancher/k3s/agent/images
-        mkdir -p /var/lib/project-truth/callback-outbox
         archive="/tmp/project-truth-k8s-runtime-selected-images.tar"
         docker save -o "$archive" "${images[@]}"
         cp "$archive" /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-zz-selected-images.tar
@@ -265,12 +201,6 @@
             kubectl -n "$env_name" rollout status "deployment/$deployment" --timeout=180s
           done
         done
-        if [ "$build_emp_app" = "1" ]; then
-          for employee_env_name in prod dev uat; do
-            kubectl -n "$employee_env_name" rollout restart deployment/bnpi-pats-emp-app >/dev/null
-            kubectl -n "$employee_env_name" rollout status deployment/bnpi-pats-emp-app --timeout=180s
-          done
-        fi
         printf 'commit=%s\nsynced_at=%s\nservices=%s\n' \
           "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${images[*]}" > "$state_file"
       args:
@@ -304,18 +234,6 @@
         dest: /usr/local/bin/project-truth-tunnel-gateway
         remote_src: true
         mode: "0755"
-
-    - name: Install managed Hikvision listener scripts
-      ansible.builtin.copy:
-        src: "{{ project_truth_install_root }}/scripts/{{ item.src }}"
-        dest: "/usr/local/bin/{{ item.dest }}"
-        remote_src: true
-        mode: "0755"
-      loop:
-        - src: project-truth-hikvision-hot-reload-listener.sh
-          dest: project-truth-hikvision-hot-reload-listener
-        - src: project-truth-hikvision-hot-reload-daemon.sh
-          dest: project-truth-hikvision-hot-reload-daemon
 
     - name: Install Project Truth systemd units
       ansible.builtin.copy:

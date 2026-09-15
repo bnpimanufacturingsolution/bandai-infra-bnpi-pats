@@ -59,18 +59,18 @@ fi
 $imageImportScript = @'
 set -e
 image_tag='__IMAGE_TAG__'
-for image_name in bnpi-pats-api-local bnpi-pats-api-db-init bnpi-pats-app-local bnpi-pats-emp-app-local; do
+for image_name in bnpi-pats-api-local bnpi-pats-api-db-init bnpi-pats-app-local; do
   if ! docker image inspect "${image_name}:${image_tag}" >/dev/null 2>&1; then
     if [ "${image_tag}" != "develop" ] && docker image inspect "${image_name}:develop" >/dev/null 2>&1; then
       docker tag "${image_name}:develop" "${image_name}:${image_tag}"
     fi
   fi
 done
-for image in postgres:16-alpine "bnpi-pats-api-local:${image_tag}" "bnpi-pats-api-db-init:${image_tag}" "bnpi-pats-app-local:${image_tag}" "bnpi-pats-emp-app-local:${image_tag}"; do
+for image in postgres:16-alpine "bnpi-pats-api-local:${image_tag}" "bnpi-pats-api-db-init:${image_tag}" "bnpi-pats-app-local:${image_tag}"; do
   docker image inspect "$image" >/dev/null
 done
 sudo mkdir -p /var/lib/rancher/k3s/agent/images
-docker save -o /tmp/project-truth-k8s-runtime-images.tar postgres:16-alpine "bnpi-pats-api-local:${image_tag}" "bnpi-pats-api-db-init:${image_tag}" "bnpi-pats-app-local:${image_tag}" "bnpi-pats-emp-app-local:${image_tag}"
+docker save -o /tmp/project-truth-k8s-runtime-images.tar postgres:16-alpine "bnpi-pats-api-local:${image_tag}" "bnpi-pats-api-db-init:${image_tag}" "bnpi-pats-app-local:${image_tag}"
 sudo cp /tmp/project-truth-k8s-runtime-images.tar /var/lib/rancher/k3s/agent/images/project-truth-k8s-runtime-images.tar
 sudo k3s ctr -n k8s.io images import /tmp/project-truth-k8s-runtime-images.tar
 sudo mkdir -p \

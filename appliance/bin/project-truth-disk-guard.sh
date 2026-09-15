@@ -247,8 +247,6 @@ prune_tmp_artifacts() {
     "project-truth-staging*"
     "project-truth-k8s-runtime-*.tar"
     "project-truth-os-sync*"
-    "project-truth-hikvision*"
-    "project-truth-zkteco*"
   )
   local p
   for p in "${patterns[@]}"; do

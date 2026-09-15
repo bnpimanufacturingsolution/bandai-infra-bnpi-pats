@@ -326,7 +326,7 @@ function New-PackerStagingArchive {
   $archivePath = Join-Path $StagingRoot 'project-truth-staging.tar'
   $manifestPath = Join-Path $StagingRoot 'project-truth-staging.manifest.json'
 
-  $requiredEntries = @('gitops', 'appliance', 'bnpi-pats-api', 'bnpi-pats-app', 'bnpi-pats-emp-app', 'vendor')
+  $requiredEntries = @('gitops', 'appliance', 'bnpi-pats-api', 'bnpi-pats-app')
   foreach ($entry in $requiredEntries) {
     $entryPath = Join-Path $StagingRoot $entry
     if (-not (Test-Path -LiteralPath $entryPath)) {
@@ -480,8 +480,6 @@ if (-not $SkipStage) {
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'appliance') -Destination (Join-Path $stagingRoot 'appliance')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-api') -Destination (Join-Path $stagingRoot 'bnpi-pats-api')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-app') -Destination (Join-Path $stagingRoot 'bnpi-pats-app')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-emp-app') -Destination (Join-Path $stagingRoot 'bnpi-pats-emp-app')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'vendor\zkteco-linux') -Destination (Join-Path $stagingRoot 'vendor\zkteco-linux')
 
   if ($IncludeSourceInputs) {
     $sourceInputsDestination = Join-Path $stagingRoot 'appliance\source-inputs-organized'
