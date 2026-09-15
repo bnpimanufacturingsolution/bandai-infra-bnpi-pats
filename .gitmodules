@@ -1,4 +1,6 @@
-[submodule "bnpi-pats-emp-app"]
-	path = bnpi-pats-emp-app
-	url = https://github.com/bnpimanufacturingsolution/bnpi-pats-emp-app.git
-	branch = develop
+[submodule "bnpi-pats-api"]
+	path = bnpi-pats-api
+	url = https://github.com/bnpimanufacturingsolution/bnpi-pats-api.git
+[submodule "bnpi-pats-app"]
+	path = bnpi-pats-app
+	url = https://github.com/bnpimanufacturingsolution/bnpi-pats-app.git
