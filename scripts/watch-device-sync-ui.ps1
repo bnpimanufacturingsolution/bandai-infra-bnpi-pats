@@ -19,7 +19,7 @@ $scriptPath = Join-Path $outDir "watch-device-sync-ui.cjs"
 @'
 const fs = require('fs');
 const path = require('path');
-const { chromium } = require(path.join(process.env.PT_ROOT, 'hris-app', 'node_modules', 'playwright'));
+const { chromium } = require(path.join(process.env.PT_ROOT, 'bnpi-pats-app', 'node_modules', 'playwright'));
 
 const baseUrl = process.env.PT_BASE_URL;
 const token = process.env.PT_AUTH_TOKEN;
@@ -63,8 +63,8 @@ const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
   });
   await page.addInitScript((jwt) => {
     window.localStorage.setItem('authToken', jwt);
-    window.localStorage.setItem('userRole', 'hris-admin');
-    window.localStorage.setItem('userSubRole', 'hris-admin');
+    window.localStorage.setItem('userRole', 'bnpi-pats-admin');
+    window.localStorage.setItem('userSubRole', 'bnpi-pats-admin');
   }, token);
   await page.route('**/api/**', async (route) => {
     const headers = {

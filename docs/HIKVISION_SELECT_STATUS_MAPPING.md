@@ -1,4 +1,4 @@
-# Hikvision Select Status mapping (HRIS)
+# Hikvision Select Status mapping (BNPI PATS)
 
 **Status:** `WIRE_DISPLAY_AND_PANEL_PAIRING`  
 **Last updated:** 2026-08-13  
@@ -8,7 +8,7 @@
 
 ## One-line truth
 
-Panel **Select Status** (Check In / Out, Break In / Out, Overtime In / Out) is Hikvision T&A. The live SDK listener **now copies** `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` onto the callback JSON. ISAPI `AcsEventInfo.attendanceStatus` + `label` is extracted and shown on Device Events as **Device status**. HRIS **Time In / Time Out** is still first punch / later punch, not the panel choice.
+Panel **Select Status** (Check In / Out, Break In / Out, Overtime In / Out) is Hikvision T&A. The live SDK listener **now copies** `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` onto the callback JSON. ISAPI `AcsEventInfo.attendanceStatus` + `label` is extracted and shown on Device Events as **Device status**. BNPI PATS **Time In / Time Out** is still first punch / later punch, not the panel choice.
 
 ## What the panel is
 
@@ -27,9 +27,9 @@ Companion fields: `label` (e.g. `Check In`), `statusValue`.
 **Prerequisite:** device **T&A / Attendance mode ≠ Disable**.
 
 This is **not** door in/out (`dwDoorNo`). This is **not** `currentVerifyMode` (face/fp/card).  
-HRIS callback-controller `attendanceStatus` (PRESENT / INCOMPLETE) is a **different** concept.
+BNPI PATS callback-controller `attendanceStatus` (PRESENT / INCOMPLETE) is a **different** concept.
 
-## What HRIS does today
+## What BNPI PATS does today
 
 | Path | Device sends Select Status? | Copied / stored? | Used for Time In/Out? |
 |---|---|---|---|
@@ -54,13 +54,13 @@ Operator picked **Check In** on the panel.
 |---|---|---|
 | C++ callback | `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` `alarm_callback` | `ext->byAttendanceStatus` → job |
 | C++ POST | same, `build_hikvision_callback_json` | `attendanceStatus`, `label`, `statusValue`, `attendanceStatusPresent` |
-| Extract | `hris-api/helper/hikvision-event-contract.helper.ts` `extractHikvisionEventData` | `deviceAttendanceStatus`, `deviceAttendanceLabel`, `panelSelectStatus` |
-| Normalize | `hris-api/helper/hikvision-panel-select-status.helper.ts` | Nested `AcsEventInfo` / `rawEvidence` / top-level |
+| Extract | `bnpi-pats-api/helper/hikvision-event-contract.helper.ts` `extractHikvisionEventData` | `deviceAttendanceStatus`, `deviceAttendanceLabel`, `panelSelectStatus` |
+| Normalize | `bnpi-pats-api/helper/hikvision-panel-select-status.helper.ts` | Nested `AcsEventInfo` / `rawEvidence` / top-level |
 | Persist | `callback.controller.ts` `withHikvisionPanelSelectStatus` | Stamps `payload.panelSelectStatus` |
 | List API | `device.controller.ts` `getEvents` | `panelSelectStatus` on each row |
-| ACS list | `access.control.controller.ts` | `hrisPanelSelectStatus` on InfoList |
+| ACS list | `access.control.controller.ts` | `bnpiPatsPanelSelectStatus` on InfoList |
 | Socket | `device-event-realtime.helper.ts` | Slim event includes `panelSelectStatus` |
-| UI | `hris-app/app/lib/hikvision-panel-select-status.ts` + `events.tsx` | **Device status** column + drawer |
+| UI | `bnpi-pats-app/app/lib/hikvision-panel-select-status.ts` + `events.tsx` | **Device status** column + drawer |
 
 ## Three vocabularies (do not mix)
 
@@ -81,7 +81,7 @@ Operator picked **Check In** on the panel.
 
 Break / OT panel labels do not set `timeIn`/`timeOut`. Timesheet refresh still runs after attendance create/update.
 
-`REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP` is Implemented for Check In/Out pairing.
+`REC-20260813-HIKVISION-SELECT-STATUS-BNPI-PATS-MAP` is Implemented for Check In/Out pairing.
 
 ## Vendor SDK at setup
 
@@ -89,13 +89,13 @@ Managed listener uses HCNetSDK **6.1.9.48**:
 
 `SDK_ROOT=/home/infra/project-truth-hcnetsdk/EN-HCNetSDKV6.1.9.48_build20230410_linux64`
 
-That header defines `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` (0–6). Setup is `NET_DVR_Init` + `Login_V40` + `SetDVRMessageCallBack_V51` + `SetupAlarmChan_V50`. HRIS add-device does **not** set panel `attendanceMode`.
+That header defines `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` (0–6). Setup is `NET_DVR_Init` + `Login_V40` + `SetDVRMessageCallBack_V51` + `SetupAlarmChan_V50`. BNPI PATS add-device does **not** set panel `attendanceMode`.
 
 ## Runtime notes (not in this commit)
 
-- Listener wrapper must not treat outbox `:30108/health` as the HRIS API (`HIKVISION_PREFER_CALLBACK_OUTBOX=0` + `53001`).
+- Listener wrapper must not treat outbox `:30108/health` as the BNPI PATS API (`HIKVISION_PREFER_CALLBACK_OUTBOX=0` + `53001`).
 - Device A `10.184.37.21` SDK login **7** = no route from VM. Not a Select Status bug.
-- DEV `hris-hikvision-watcher --apply --watch` can flood old Fingerprint Enrolled rows.
+- DEV `bnpi-pats-hikvision-watcher --apply --watch` can flood old Fingerprint Enrolled rows.
 
 ## Related
 

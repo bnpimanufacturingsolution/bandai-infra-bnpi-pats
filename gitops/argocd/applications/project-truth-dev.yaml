@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/hrisworkforcesystem-coder/bandai-infra.git
+    repoURL: https://github.com/bnpimanufacturingsolution/bandai-infra.git
     targetRevision: develop
     path: gitops/overlays/dev
   destination:

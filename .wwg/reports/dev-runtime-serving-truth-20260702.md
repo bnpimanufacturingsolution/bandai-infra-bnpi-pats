@@ -6,7 +6,7 @@ Docs-only runtime truth capture after SSH/LAN serving-path check.
 
 ## Goal
 
-Document what currently serves the DEV HRIS URL:
+Document what currently serves the DEV BNPI PATS URL:
 
 ```text
 http://10.184.38.138:3100/admin/configuration/devices/events?view=saved
@@ -33,7 +33,7 @@ state before further sync or merge work.
 ### Existing State
 
 - Windows repo branch at inspection time:
-  `sync/upstream-hris-dryrun-20260702`.
+  `sync/upstream-bnpi-pats-dryrun-20260702`.
 - Local feature branch head:
   `0b88e12bcd53869a1f6072911c876654658c0692`.
 - Local `develop` and `origin/develop`:
@@ -49,7 +49,7 @@ state before further sync or merge work.
 
 - The DEV LAN route `10.184.38.138:3100` is K3s-backed.
 - The DEV LAN API route `10.184.38.138:3101` is K3s-backed.
-- Docker Compose is not serving the HRIS app/API on `3100` or `3101`.
+- Docker Compose is not serving the BNPI PATS app/API on `3100` or `3101`.
 - Local feature-branch UI/API changes do not appear on `10.184.38.138:3100`
   unless the VM source/image path is updated and the K3s image is rebuilt or
   imported.
@@ -61,31 +61,31 @@ state before further sync or merge work.
 Observed DEV pods:
 
 ```text
-hris-api-c8d85d58c-smm8d        READY 1/1  Running
-hris-app-7fdc4d448f-nlzp9       READY 1/1  Running
-hris-hikvision-watcher-...      READY 1/1  Running
-hris-postgres-0                 READY 1/1  Running
+bnpi-pats-api-c8d85d58c-smm8d        READY 1/1  Running
+bnpi-pats-app-7fdc4d448f-nlzp9       READY 1/1  Running
+bnpi-pats-hikvision-watcher-...      READY 1/1  Running
+bnpi-pats-postgres-0                 READY 1/1  Running
 ```
 
 Observed DEV deployments:
 
 ```text
-hris-api  image hris-api-local:develop
-hris-app  image hris-app-local:develop
+bnpi-pats-api  image bnpi-pats-api-local:develop
+bnpi-pats-app  image bnpi-pats-app-local:develop
 ```
 
 Observed image IDs:
 
 ```text
-hris-app-local:develop -> docker.io/library/hris-app-local@sha256:fe173af302361462277f589b110a07e19fd52b400d05e3c24a8610fa604ad3a9
-hris-api-local:develop -> docker.io/library/hris-api-local@sha256:58ea075e8a30ad68309301894e4a122d82218cc8bf6fa80e3563f70bea6aab9c
+bnpi-pats-app-local:develop -> docker.io/library/bnpi-pats-app-local@sha256:fe173af302361462277f589b110a07e19fd52b400d05e3c24a8610fa604ad3a9
+bnpi-pats-api-local:develop -> docker.io/library/bnpi-pats-api-local@sha256:58ea075e8a30ad68309301894e4a122d82218cc8bf6fa80e3563f70bea6aab9c
 ```
 
 Observed DEV services:
 
 ```text
-hris-app  ClusterIP  10.43.150.6  3000/TCP
-hris-api  ClusterIP  10.43.36.35   3001/TCP
+bnpi-pats-app  ClusterIP  10.43.150.6  3000/TCP
+bnpi-pats-api  ClusterIP  10.43.36.35   3001/TCP
 ```
 
 The app and API are exposed to the LAN through host ports declared in the DEV
@@ -98,16 +98,16 @@ api containerPort 3001 -> hostPort 3101
 
 ### Docker Compose
 
-Docker containers did not show HRIS app/API serving `3100` or `3101`.
+Docker containers did not show BNPI PATS app/API serving `3100` or `3101`.
 
 Observed matching Docker ports were only observability-related:
 
 ```text
-hris-grafana 0.0.0.0:53000->3000/tcp
-hris-loki    0.0.0.0:3110->3100/tcp
+bnpi-pats-grafana 0.0.0.0:53000->3000/tcp
+bnpi-pats-loki    0.0.0.0:3110->3100/tcp
 ```
 
-This means the HRIS DEV app/API URL in question is not Docker Compose app/API
+This means the BNPI PATS DEV app/API URL in question is not Docker Compose app/API
 traffic.
 
 ### HTTP Probes From VM
@@ -133,7 +133,7 @@ API health body:
 
 - The VM source checkout is `develop@b1a8678`.
 - The Windows local feature branch is
-  `sync/upstream-hris-dryrun-20260702@0b88e12`.
+  `sync/upstream-bnpi-pats-dryrun-20260702@0b88e12`.
 - Therefore the DEV runtime URL does not automatically preview the feature sync
   branch.
 - To make the DEV URL show the feature branch, Project Truth needs a deliberate
@@ -147,15 +147,15 @@ Observed serving path:
 ```text
 Windows host browser
 -> 10.184.38.138:3100
--> K3s dev/hris-app pod
--> hris-app-local:develop image
--> K3s dev/hris-api via service/hostPort 3101 when API is needed
+-> K3s dev/bnpi-pats-app pod
+-> bnpi-pats-app-local:develop image
+-> K3s dev/bnpi-pats-api via service/hostPort 3101 when API is needed
 ```
 
 Not the serving path:
 
 ```text
-Docker Compose hris-app-dev/hris-api-dev
+Docker Compose bnpi-pats-app-dev/bnpi-pats-api-dev
 Local Windows npm dev server
 Local feature branch without VM image rebuild/import
 ```
@@ -171,7 +171,7 @@ Local feature branch without VM image rebuild/import
 
 ## Warnings / Risks
 
-- Public `https://dev.bnpi-hris.tech` may still need separate Cloudflare/browser
+- Public `https://dev.bnpi-pats.tech` may still need separate Cloudflare/browser
   validation. This report only proves the LAN/VM serving path for
   `10.184.38.138:3100` and `10.184.38.138:3101`.
 - The runtime image tag is generic (`develop`), so image digest evidence matters
@@ -193,7 +193,7 @@ Local feature branch without VM image rebuild/import
   - `.wwg/reports/dev-runtime-serving-truth-20260702.md`
 - Implementation discoveries synced:
   - DEV LAN serving path is K3s-backed.
-  - Docker Compose is not serving HRIS app/API on `3100`/`3101`.
+  - Docker Compose is not serving BNPI PATS app/API on `3100`/`3101`.
   - VM source is `develop@b1a8678`, while the local feature sync branch is
     `0b88e12`.
 - Remaining stale context:

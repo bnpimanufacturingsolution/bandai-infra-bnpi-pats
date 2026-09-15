@@ -2,25 +2,25 @@
 
 ## Scope
 
-DEV physical Hikvision ACS-pull watcher proof for Project Truth HRIS.
+DEV physical Hikvision ACS-pull watcher proof for Project Truth BNPI PATS.
 
 ## Runtime Evidence
 
 - VM: `project-truth-node`
 - VM LAN IP: `192.168.254.148`
 - Namespace: `dev`
-- Deployment: `hris-hikvision-watcher`
-- Pod observed: `hris-hikvision-watcher-86d6549-nmm8m`
+- Deployment: `bnpi-pats-hikvision-watcher`
+- Pod observed: `bnpi-pats-hikvision-watcher-86d6549-nmm8m`
 - Pod status: `READY 1/1`, `Running`, `RESTARTS 0`
 - Device: `Main Entrance Device`
-- HRIS device ID: `cmqquro2g002em73cdp74rx0q`
+- BNPI PATS device ID: `cmqquro2g002em73cdp74rx0q`
 - Device address: `192.168.254.181:80`
 - Source: `HIKVISION_CALLBACK`
 
 ## Watcher Report
 
 The watcher ran `audit-hikvision-device-events.ts --apply` from the
-`hris-api-db-init:develop` image and reported:
+`bnpi-pats-api-db-init:develop` image and reported:
 
 - `live.total=10`
 - `live.withEmployeeNo=5`
@@ -48,7 +48,7 @@ All were `HIKVISION_CALLBACK` and `UNMATCHED`.
 Headless browser verification opened:
 
 ```text
-https://dev.bnpi-hris.tech/admin/configuration/devices/events?view=saved&deviceId=cmqquro2g002em73cdp74rx0q&source=HIKVISION_CALLBACK&sort=receivedAt&order=desc
+https://dev.bnpi-pats.tech/admin/configuration/devices/events?view=saved&deviceId=cmqquro2g002em73cdp74rx0q&source=HIKVISION_CALLBACK&sort=receivedAt&order=desc
 ```
 
 The page rendered fresh saved punches for `Main Entrance Device` with address

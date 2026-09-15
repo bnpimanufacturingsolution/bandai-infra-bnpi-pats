@@ -1,4 +1,4 @@
-employeeCode,employeeName,rowNumber,overallCategory,field,fieldCategory,workbookValue,hrisValue,difference,source,sourceBreakdown,hrisSource,reason,recommendation
+employeeCode,employeeName,rowNumber,overallCategory,field,fieldCategory,workbookValue,bnpiPatsValue,difference,source,sourceBreakdown,bnpiPatsSource,reason,recommendation
 00021,"Salud, Arvin M.",5,TIMESHEET_NOT_FOUND,,TIMESHEET_NOT_FOUND,,,,,,,Import/materialize and approve the employee timesheet for this cutoff before payroll comparison.,Import/materialize and approve the employee timesheet for this cutoff before payroll comparison.
 00024,"Libuit, Augusto L.",6,TIMESHEET_NOT_FOUND,,TIMESHEET_NOT_FOUND,,,,,,,Import/materialize and approve the employee timesheet for this cutoff before payroll comparison.,Import/materialize and approve the employee timesheet for this cutoff before payroll comparison.
 00032,"Llarena, Ivy Sheena T.",7,TIMESHEET_NOT_FOUND,,TIMESHEET_NOT_FOUND,,,,,,,Import/materialize and approve the employee timesheet for this cutoff before payroll comparison.,Import/materialize and approve the employee timesheet for this cutoff before payroll comparison.

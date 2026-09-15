@@ -59,7 +59,7 @@ gh workflow run promote-gitops.yml -f environment=dev -f image_tag=<tag>
 .\scripts\project-truth.ps1 enable-k8s-runtime -GuestIp <vm-lan-ip> -ImageTag develop
 ```
 
-This moves HRIS app/API/Postgres from Compose into K3s Deployments/StatefulSets
+This moves BNPI PATS app/API/Postgres from Compose into K3s Deployments/StatefulSets
 managed by Argo CD. Use this when the VM should self-heal runtime drift through
 Kubernetes instead of systemd/Compose.
 
@@ -73,7 +73,7 @@ ladder and the remaining data-backup gaps.
 
 The image should contain the base platform: Ubuntu, Docker, K3s, Argo CD, local
 appliance helper commands, firewall rules, and first-boot identity cleanup. It
-should not be the normal delivery mechanism for every HRIS code change.
+should not be the normal delivery mechanism for every BNPI PATS code change.
 
 Argo CD automated sync lets a pipeline deploy by committing desired state to Git
 instead of calling the cluster API directly. K3s can also auto-apply manifests
@@ -93,7 +93,7 @@ The VM still does not need an exposed inbound port for normal GitOps. Optional
 webhooks use `/api/webhook` only when Argo CD is deliberately exposed through an
 approved public URL or tunnel.
 
-The default HRIS app/API runtime still runs through the appliance Docker stack.
+The default BNPI PATS app/API runtime still runs through the appliance Docker stack.
 The opt-in `enable-k8s-runtime` command promotes the runtime into Kubernetes
 Deployments/StatefulSets so Argo CD and K3s can own drift repair for the
 workload layer too. GitOps controls the desired runtime tag; the VM must still

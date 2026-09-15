@@ -271,9 +271,9 @@ foreach ($target in $targets) {
 }
 
 $dbFacts = @(
-  [pscustomobject]@{ Name = 'prod-postgres'; InternalService = 'postgres:5432'; HostPort = '15432'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15432/hris"; PublicTunnel = 'Cloudflare Access TCP only' },
-  [pscustomobject]@{ Name = 'dev-postgres'; InternalService = 'hris-postgres-dev:5432'; HostPort = '15433'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15433/hris"; PublicTunnel = 'Cloudflare Access TCP only' },
-  [pscustomobject]@{ Name = 'uat-postgres'; InternalService = 'hris-postgres-uat:5432'; HostPort = '15434'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15434/hris"; PublicTunnel = 'Cloudflare Access TCP only' }
+  [pscustomobject]@{ Name = 'prod-postgres'; InternalService = 'postgres:5432'; HostPort = '15432'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15432/bnpi_pats"; PublicTunnel = 'Cloudflare Access TCP only' },
+  [pscustomobject]@{ Name = 'dev-postgres'; InternalService = 'bnpi-pats-postgres-dev:5432'; HostPort = '15433'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15433/bnpi-pats"; PublicTunnel = 'Cloudflare Access TCP only' },
+  [pscustomobject]@{ Name = 'uat-postgres'; InternalService = 'bnpi-pats-postgres-uat:5432'; HostPort = '15434'; DatabaseUrlShape = "postgresql://postgres:<redacted>@${hostName}:15434/bnpi-pats"; PublicTunnel = 'Cloudflare Access TCP only' }
 )
 
 $summary = [pscustomobject]@{
@@ -318,9 +318,9 @@ $md += ''
 $md += 'Client-side TCP examples after named Cloudflare hostnames and Access policies exist:'
 $md += ''
 $md += '```powershell'
-$md += 'cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:5432'
-$md += 'cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433'
-$md += 'cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434'
+$md += 'cloudflared access tcp --hostname db.bnpi-pats.tech --url localhost:5432'
+$md += 'cloudflared access tcp --hostname dev-db.bnpi-pats.tech --url localhost:5433'
+$md += 'cloudflared access tcp --hostname uat-db.bnpi-pats.tech --url localhost:5434'
 $md += '```'
 $md | Set-Content -LiteralPath $mdPath -Encoding utf8
 

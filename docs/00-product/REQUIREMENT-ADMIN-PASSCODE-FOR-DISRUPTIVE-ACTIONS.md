@@ -2,7 +2,7 @@
 
 - Status: `CONFIRMED_OPERATOR_REQUIREMENT` (2026-08-25) — **documented only, NOT implemented**
 - Owner: Operator (BNPI)
-- Applies to: HRIS admin surfaces (`hris-api` + `hris-app` `/admin/**`, plus any other role surface that performs destructive/validation-worthy actions)
+- Applies to: BNPI PATS admin surfaces (`bnpi-pats-api` + `bnpi-pats-app` `/admin/**`, plus any other role surface that performs destructive/validation-worthy actions)
 
 ## Requirement statement
 

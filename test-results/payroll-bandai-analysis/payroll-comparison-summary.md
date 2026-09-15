@@ -1,8 +1,8 @@
 # Bandai Payroll Dry-Run Comparison
 
-- Workbook: C:\Users\User\Desktop\AZURO\BANDAI\bandai-infra\.runtime\payroll-comparison-apr26-may10\HRIS Payroll Computation April 26 - May 10, 2026.unlocked.xlsx
-- DB: hris
-- PG_DATABASE_URL used: postgresql://postgres:postgres@127.0.0.1:5433/hris?schema=public
+- Workbook: C:\Users\User\Desktop\AZURO\BANDAI\bandai-infra\.runtime\payroll-comparison-apr26-may10\BNPI PATS Payroll Computation April 26 - May 10, 2026.unlocked.xlsx
+- DB: bnpi-pats
+- PG_DATABASE_URL used: postgresql://postgres:postgres@127.0.0.1:5433/bnpi_pats?schema=public
 - Detected cutoff: 2026-04-26 to 2026-05-10
 - Payroll period: PP-20260426-20260511 (OPEN)
 - Dry-run only: yes
@@ -39,7 +39,7 @@
 
 - Guardrail: payroll preview must keep reading approved `Timesheet` plus effective `Timesheetline` snapshots for this cutoff. Do not change payroll math just to match workbook totals while OT, allowances, statutory config, loans, or missing approved timesheets are still classified as source gaps.
 - First repair/import source gaps: approved OT/OTR, allowance/benefit earnings, payroll-only loans/deductions, statutory configuration/source splits, then missing approved timesheets.
-- Only after those sources exist should `HRIS_LOGIC_MISMATCH_REPAIRABLE` rows be treated as calculation or timesheet-line defects.
+- Only after those sources exist should `BNPI_PATS_LOGIC_MISMATCH_REPAIRABLE` rows be treated as calculation or timesheet-line defects.
 - Do not repair `grossPay`, `totalDeductions`, or `netPay` directly. They are downstream rollups; fix the classified component that feeds them.
 
 ### Top Partial Matches
@@ -66,9 +66,9 @@
 
 ## Statutory Config Check
 
-- SSS: official SSS contribution guidance states the 15% contribution rate effective January 1, 2025, with MSC up to PHP 35,000; HRIS calculator config should be checked against the active table before treating SSS mismatches as code bugs. Source: https://www.sss.gov.ph/pay-contribution/
+- SSS: official SSS contribution guidance states the 15% contribution rate effective January 1, 2025, with MSC up to PHP 35,000; BNPI PATS calculator config should be checked against the active table before treating SSS mismatches as code bugs. Source: https://www.sss.gov.ph/pay-contribution/
 - PhilHealth: PhilHealth Advisory 2025-0002 keeps the 5.0% premium rate with PHP 10,000 floor and PHP 100,000 ceiling; employee/employer split should be verified against the calculator config. Source: https://www.philhealth.gov.ph/advisories/2025/PA2025-0002.pdf
-- Pag-IBIG: Pag-IBIG Fund Circular No. 460 sets the maximum fund salary increase effective February 2024; HRIS currently needs config/source verification before parity claims. Source: https://naro.law.upd.edu.ph/documents/3217
+- Pag-IBIG: Pag-IBIG Fund Circular No. 460 sets the maximum fund salary increase effective February 2024; BNPI PATS currently needs config/source verification before parity claims. Source: https://naro.law.upd.edu.ph/documents/3217
 - BIR: RR 11-2018 Annex E is the current withholding table effective January 1, 2023 onward, including semi-monthly brackets. Source: https://bir-cdn.bir.gov.ph/local/pdf/Annex%20E%20RR%2011-2018.pdf
 
 ## Sample Mismatches

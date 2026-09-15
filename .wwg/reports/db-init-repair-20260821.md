@@ -5,10 +5,10 @@ Operator page: `docs/DB_INIT_JOB.md`.
 | Field | Value |
 |---|---|
 | Status | `PUSH_AUTHORIZED_2026-08-22` |
-| Ask | Repair Failed `hris-api-db-init` **without deleting UAT/PROD data**; **do not commit until operator says** |
+| Ask | Repair Failed `bnpi-pats-api-db-init` **without deleting UAT/PROD data**; **do not commit until operator says** |
 | Live DBs | Unchanged this turn (counts below) |
 | Cluster Job recreate | **Not done** on purpose |
-| Tunnel | `cloudflared-bnpi-hris.service` **active** (not touched) |
+| Tunnel | `cloudflared-bnpi-pats.service` **active** (not touched) |
 | Contract | self-heal **226/226 PASS** |
 
 ---
@@ -30,7 +30,7 @@ Operator page: `docs/DB_INIT_JOB.md`.
 | Layer | Path | Risk |
 |---|---|---|
 | Job command (origin) | `npm run prisma-postgres:push && npm run prisma-seed` | Seed runs after push |
-| Seed entry | `hris-api/package.json` `prisma-seed` → `prisma/seed.ts` | Always writes; no `APP_ENV` guard |
+| Seed entry | `bnpi-pats-api/package.json` `prisma-seed` → `prisma/seed.ts` | Always writes; no `APP_ENV` guard |
 | Employee seeder | `prisma/seeds/generalEmployeeSeeder.shared.ts` | `deleteMany` timesheets, timesheet_lines, attendances |
 | Reset script | `prisma-reset` = `db push --force-reset` | **Drops the database** — never on appliance |
 
@@ -69,8 +69,8 @@ Postgres StatefulSets Ready 1/1. Public `/health` was 200 in the prior audit. Ta
 
 | Env | Path | Size | Mode | Restore run? |
 |---|---|---|---|---|
-| UAT | `/home/infra/db-init-repair-dumps/hris-uat.dump` | 156M | 600 | **No** |
-| PROD | `/home/infra/db-init-repair-dumps/hris-prod.dump` | 156M | 600 | **No** |
+| UAT | `/home/infra/db-init-repair-dumps/bnpi-pats-uat.dump` | 156M | 600 | **No** |
+| PROD | `/home/infra/db-init-repair-dumps/bnpi-pats-prod.dump` | 156M | 600 | **No** |
 
 Format: `pg_dump -Fc`. First dump to `/var/lib/project-truth/backups/` failed (`permission denied` on `kubectl cp`). Files live under `/home/infra/`.
 
@@ -102,7 +102,7 @@ Format: `pg_dump -Fc`. First dump to `/var/lib/project-truth/backups/` failed (`
 2. Prove origin YAML has **no** `prisma-seed` on the Job.
 3. Wait Argo REV = that SHA. **Do not delete Jobs yet if origin still seeds.**
 4. Re-count UAT/PROD vs table above.
-5. `kubectl -n uat,prod,dev delete job hris-api-db-init` (Job object only — not Postgres).
+5. `kubectl -n uat,prod,dev delete job bnpi-pats-api-db-init` (Job object only — not Postgres).
 6. Wait Complete; Argo Healthy.
 7. Re-count; totals must not drop.
 

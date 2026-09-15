@@ -100,7 +100,7 @@ def mem_to_mi(s: str | None) -> str | None:
 def find_postgres_pod(ns: str) -> str:
     pod = sh(
         f"kubectl -n {ns} get pods -o jsonpath='{{.items[0].metadata.name}}' "
-        f"-l app.kubernetes.io/name=hris-postgres 2>/dev/null"
+        f"-l app.kubernetes.io/name=bnpi-pats-postgres 2>/dev/null"
     ).strip().strip("'")
     if pod and not pod.startswith("ERR") and pod != "":
         return pod
@@ -121,8 +121,8 @@ def db_counts_for(ns: str, pod: str) -> dict:
         for shell in (
             f'echo {b64} | base64 -d | PGPASSWORD="$POSTGRES_PASSWORD" psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -t -A -F"|"',
             f'echo {b64} | base64 -d | PGPASSWORD="$POSTGRES_PASSWORD" psql -U postgres -d "$POSTGRES_DB" -t -A -F"|"',
-            f'echo {b64} | base64 -d | psql -U postgres -d hris -t -A -F"|"',
-            f'echo {b64} | base64 -d | psql -U hris -d hris -t -A -F"|"',
+            f'echo {b64} | base64 -d | psql -U postgres -d bnpi-pats -t -A -F"|"',
+            f'echo {b64} | base64 -d | psql -U bnpi-pats -d bnpi-pats -t -A -F"|"',
         ):
             raw = sh(
                 f"kubectl -n {ns} exec {pod} -- sh -c {json.dumps(shell)}",
@@ -237,14 +237,14 @@ def main():
             report["db_counts"][ns] = db_counts_for(ns, pod)
 
         report["health"][ns] = {
-            "hris-api": sh(
-                f"kubectl -n {ns} get deploy hris-api -o jsonpath='{{.status.readyReplicas}}/{{.spec.replicas}}' 2>/dev/null"
+            "bnpi-pats-api": sh(
+                f"kubectl -n {ns} get deploy bnpi-pats-api -o jsonpath='{{.status.readyReplicas}}/{{.spec.replicas}}' 2>/dev/null"
             ).strip(),
-            "hris-app": sh(
-                f"kubectl -n {ns} get deploy hris-app -o jsonpath='{{.status.readyReplicas}}/{{.spec.replicas}}' 2>/dev/null"
+            "bnpi-pats-app": sh(
+                f"kubectl -n {ns} get deploy bnpi-pats-app -o jsonpath='{{.status.readyReplicas}}/{{.spec.replicas}}' 2>/dev/null"
             ).strip(),
-            "hris-postgres": sh(
-                f"kubectl -n {ns} get sts hris-postgres -o jsonpath='{{.status.readyReplicas}}/{{.spec.replicas}}' 2>/dev/null"
+            "bnpi-pats-postgres": sh(
+                f"kubectl -n {ns} get sts bnpi-pats-postgres -o jsonpath='{{.status.readyReplicas}}/{{.spec.replicas}}' 2>/dev/null"
             ).strip()
             or sh(
                 f"kubectl -n {ns} get pods --no-headers 2>/dev/null | awk '/postgres/ {{print $2; exit}}'"
@@ -262,7 +262,7 @@ def main():
                 body={
                     "email": "admin@bandai.local",
                     "password": "password123",
-                    "appCode": "hris",
+                    "appCode": "bnpi-pats",
                 },
             )
             tok = (login.get("data") or {}).get("token") if isinstance(login, dict) else None

@@ -232,7 +232,7 @@ ACCEPTANCE (all required):
 [ ] mocha: sync-logs-event-rows + Information logSearch contracts green
 [ ] vitest: device-events-page-contract green
 [ ] Playwright: tests/smoke/admin-device-sync-logs-truth.spec.ts green
-[ ] LIVE hris-api process restarted so UI hard-refresh shows new labels/counts
+[ ] LIVE bnpi-pats-api process restarted so UI hard-refresh shows new labels/counts
 [ ] Evidence in .runtime/sync-logs-truth-<stamp>/ (preview JSON + playwright)
 [ ] Commit + push develop when green
 

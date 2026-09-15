@@ -5,7 +5,7 @@
 ## Product goal
 
 ```text
-https://dev.bnpi-hris.tech/admin/configuration/devices/events?view=saved
+https://dev.bnpi-pats.tech/admin/configuration/devices/events?view=saved
 ```
 
 On **startup and continuously**:
@@ -28,10 +28,10 @@ A. Bootstrap truth
    →
 B. Public + in-VM health matrix
    dev-api/health, api/health, uat-api/health
-   ssh project-truth-hris: kubectl -n dev get pods; postgres SELECT 1; listener is-active
+   ssh project-truth-bnpi-pats: kubectl -n dev get pods; postgres SELECT 1; listener is-active
    →
-C. Auth + live-readiness (same role as UI: hris-admin)
-   POST /api/auth/login (admin@bandai.local / password123 / appCode=hris)
+C. Auth + live-readiness (same role as UI: bnpi-pats-admin)
+   POST /api/auth/login (admin@bandai.local / password123 / appCode=bnpi-pats)
    GET  /api/device/events/live-readiness
    Capture: overall, pathReady, database.ok, listener.*, callbackPost.pathOk,
             safeToTap, safeToEnroll, headline
@@ -49,7 +49,7 @@ E. Repair recoverables (loop)
    postgres down → recover STS (3 distinct tries)
    listener inactive → systemctl start/status (no Cloudflare kill)
    ghost active → soft-delete empty access Main Entrance Device
-   image missing pathReady → rebuild/import hris-api-local:develop at ansible-pull HEAD
+   image missing pathReady → rebuild/import bnpi-pats-api-local:develop at ansible-pull HEAD
    →
 F. Prove
    POST /api/device/events/live-readiness/prove
@@ -87,7 +87,7 @@ Playwright when UI claimed → observe logs → only then green/red
 
 ## Acceptance checklist (DEV Device Events)
 
-- [ ] `GET https://dev-api.bnpi-hris.tech/health` → 200
+- [ ] `GET https://dev-api.bnpi-pats.tech/health` → 200
 - [ ] Login admin works
 - [ ] `live-readiness.database.ok === true`
 - [ ] `live-readiness.pathReady === true` (after deploy of pathReady code)
@@ -106,18 +106,18 @@ Playwright when UI claimed → observe logs → only then green/red
 ## Canonical probes (PowerShell)
 
 ```powershell
-$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
-$login = Invoke-RestMethod -Method Post 'https://dev-api.bnpi-hris.tech/api/auth/login' -ContentType 'application/json' -Body $loginBody
+$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
+$login = Invoke-RestMethod -Method Post 'https://dev-api.bnpi-pats.tech/api/auth/login' -ContentType 'application/json' -Body $loginBody
 $h = @{ Authorization = "Bearer $($login.data.token)" }
-Invoke-RestMethod -Method Get 'https://dev-api.bnpi-hris.tech/api/device/events/live-readiness' -Headers $h |
+Invoke-RestMethod -Method Get 'https://dev-api.bnpi-pats.tech/api/device/events/live-readiness' -Headers $h |
   ConvertTo-Json -Depth 8
 ```
 
 ```powershell
-ssh -o BatchMode=yes -o ConnectTimeout=30 project-truth-hris @"
+ssh -o BatchMode=yes -o ConnectTimeout=30 project-truth-bnpi-pats @"
 kubectl -n dev get pods
 systemctl is-active project-truth-hikvision-hot-reload-listener.service
-kubectl -n dev logs deploy/hris-hikvision-watcher --since=15m | grep -c 'missing access credentials' || true
+kubectl -n dev logs deploy/bnpi-pats-hikvision-watcher --since=15m | grep -c 'missing access credentials' || true
 "@
 ```
 
@@ -130,15 +130,15 @@ powershell -File scripts/monitor-hikvision-device-events-health.ps1 -IntervalSec
 ## Graph of runtime dependencies
 
 ```text
-Browser https://dev.bnpi-hris.tech
+Browser https://dev.bnpi-pats.tech
   → Cloudflare Tunnel (must stay ON)
-  → K3s DEV hris-app :3100
-  → K3s DEV hris-api :3101  ← Socket.IO + /api/device/events/*
-       ← postgres hris-postgres:5432
+  → K3s DEV bnpi-pats-app :3100
+  → K3s DEV bnpi-pats-api :3101  ← Socket.IO + /api/device/events/*
+       ← postgres bnpi-pats-postgres:5432
        ← systemd hikvision-biometric-service
             → POST http://localhost:3101/api/hikvision/callback
-       ← hris-hikvision-watcher (ACS pull gap-fill only)
-            → POST http://hris-api:3001/api/hikvision/callback
+       ← bnpi-pats-hikvision-watcher (ACS pull gap-fill only)
+            → POST http://bnpi-pats-api:3001/api/hikvision/callback
 ```
 
 **G1 green** = app/api/postgres/listener armed + callback probe OK.  
@@ -150,9 +150,9 @@ Browser https://dev.bnpi-hris.tech
 ## Related contracts / code
 
 - `docs/00-product/HIKVISION-DEVICE-EVENTS-REALTIME-CONTRACT.md`
-- `hris-api/helper/device-live-readiness.helper.ts` (`pathReady`, `liveReceiving`)
-- `hris-api/helper/device-event-realtime.helper.ts` (socket UNION emit)
-- `hris-api/scripts/audit-hikvision-device-events.ts` (skip no-creds)
+- `bnpi-pats-api/helper/device-live-readiness.helper.ts` (`pathReady`, `liveReceiving`)
+- `bnpi-pats-api/helper/device-event-realtime.helper.ts` (socket UNION emit)
+- `bnpi-pats-api/scripts/audit-hikvision-device-events.ts` (skip no-creds)
 - `scripts/monitor-hikvision-device-events-health.ps1`
 
 ---

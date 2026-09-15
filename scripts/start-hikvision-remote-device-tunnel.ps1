@@ -1,6 +1,6 @@
 param(
   [string[]]$DeviceIps = @('10.184.37.20', '10.184.37.21', '10.184.37.22', '10.184.37.23', '10.184.37.24', '10.184.37.25'),
-  [string]$SshTarget = 'project-truth-hris',
+  [string]$SshTarget = 'project-truth-bnpi-pats',
   [string]$FallbackSshTarget = 'infra@10.184.37.19',
   [string]$SshKeyPath = (Join-Path $env:USERPROFILE '.ssh\node-health-appliance_ed25519'),
   [int]$LocalHttpPortBase = 10080,
@@ -15,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runtimeRoot = Join-Path $repoRoot '.runtime\hikvision-remote-device-tunnel'
 $pidFile = Join-Path $runtimeRoot 'active.json'
-$apiRuntimeEnvPath = Join-Path $repoRoot 'hris-api\.env.development.local'
+$apiRuntimeEnvPath = Join-Path $repoRoot 'bnpi-pats-api\.env.development.local'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $runRoot = Join-Path $runtimeRoot "run-$stamp"
 $sshExe = (Get-Command ssh.exe -ErrorAction Stop).Source

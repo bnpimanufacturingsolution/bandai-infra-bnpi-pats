@@ -6,7 +6,7 @@ param(
   [string]$SshKeyPath = '',
   [string]$CredentialPath = 'C:\ProgramData\ProjectTruth\secrets\cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json',
   [string]$TunnelId = 'e3486f00-f974-46d3-9e11-911266749d00',
-  [string]$TunnelName = 'bnpi-hris',
+  [string]$TunnelName = 'bnpi-pats',
   [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json",
   [switch]$SkipRuntimeRepair
 )
@@ -282,9 +282,9 @@ function Test-LanCors {
 
 function Test-PublicCors {
   $targets = @(
-    @{ Name = 'public-prod-cors'; Origin = 'https://bnpi-hris.tech'; Api = 'https://bnpi-hris.tech/api/system-provisioning/status' },
-    @{ Name = 'public-dev-cors'; Origin = 'https://dev.bnpi-hris.tech'; Api = 'https://dev-api.bnpi-hris.tech/api/system-provisioning/status' },
-    @{ Name = 'public-uat-cors'; Origin = 'https://uat.bnpi-hris.tech'; Api = 'https://uat-api.bnpi-hris.tech/api/system-provisioning/status' }
+    @{ Name = 'public-prod-cors'; Origin = 'https://bnpi-pats.tech'; Api = 'https://bnpi-pats.tech/api/system-provisioning/status' },
+    @{ Name = 'public-dev-cors'; Origin = 'https://dev.bnpi-pats.tech'; Api = 'https://dev-api.bnpi-pats.tech/api/system-provisioning/status' },
+    @{ Name = 'public-uat-cors'; Origin = 'https://uat.bnpi-pats.tech'; Api = 'https://uat-api.bnpi-pats.tech/api/system-provisioning/status' }
   )
   foreach ($target in $targets) {
     Invoke-HttpCheck -Name $target.Name -Url $target.Api -Method OPTIONS -Headers @{
@@ -297,13 +297,13 @@ function Test-PublicCors {
 
 function Test-PublicHealth {
   $checks = @(
-    @{ Name = 'public-prod-app'; Url = 'https://bnpi-hris.tech/auth/login' },
-    @{ Name = 'public-prod-api'; Url = 'https://api.bnpi-hris.tech/health' },
-    @{ Name = 'public-dev-app'; Url = 'https://dev.bnpi-hris.tech/auth/login' },
-    @{ Name = 'public-dev-api'; Url = 'https://dev-api.bnpi-hris.tech/health' },
-    @{ Name = 'public-uat-app'; Url = 'https://uat.bnpi-hris.tech/auth/login' },
-    @{ Name = 'public-uat-api'; Url = 'https://uat-api.bnpi-hris.tech/health' },
-    @{ Name = 'public-grafana'; Url = 'https://grafana.bnpi-hris.tech/api/health' }
+    @{ Name = 'public-prod-app'; Url = 'https://bnpi-pats.tech/auth/login' },
+    @{ Name = 'public-prod-api'; Url = 'https://api.bnpi-pats.tech/health' },
+    @{ Name = 'public-dev-app'; Url = 'https://dev.bnpi-pats.tech/auth/login' },
+    @{ Name = 'public-dev-api'; Url = 'https://dev-api.bnpi-pats.tech/health' },
+    @{ Name = 'public-uat-app'; Url = 'https://uat.bnpi-pats.tech/auth/login' },
+    @{ Name = 'public-uat-api'; Url = 'https://uat-api.bnpi-pats.tech/health' },
+    @{ Name = 'public-grafana'; Url = 'https://grafana.bnpi-pats.tech/api/health' }
   )
   foreach ($check in $checks) {
     Invoke-HttpCheck -Name $check.Name -Url $check.Url
@@ -353,10 +353,10 @@ sudo install -d -m 0755 /etc/cloudflared
 sudo PROJECT_TRUTH_CLOUDFLARE_TUNNEL_NAME='$TunnelName' PROJECT_TRUTH_CLOUDFLARE_TUNNEL_ID='$TunnelId' project-truth-cloudflare-vm-tunnel '$remoteCredentialTemp'
 sudo rm -f '$remoteCredentialTemp'
 sudo cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate
-sudo systemctl enable --now cloudflared-bnpi-hris.service
-sudo systemctl restart cloudflared-bnpi-hris.service
-sudo systemctl is-enabled cloudflared-bnpi-hris.service
-sudo systemctl is-active cloudflared-bnpi-hris.service
+sudo systemctl enable --now cloudflared-bnpi-pats.service
+sudo systemctl restart cloudflared-bnpi-pats.service
+sudo systemctl is-enabled cloudflared-bnpi-pats.service
+sudo systemctl is-active cloudflared-bnpi-pats.service
 sudo sed -n '1,80p' /etc/cloudflared/config.yml
 "@
 $cloudflareResult = Invoke-RemoteBash -TargetIp $targetIp -Script $cloudflareScript -EvidenceName '04-cloudflare-vm-tunnel.txt'
@@ -372,13 +372,13 @@ if (-not $SkipRuntimeRepair) {
     Write-Step 'LAN health failed; attempting runtime repair/recreate.'
     $repairScript = @'
 set -euo pipefail
-if ! sudo docker image inspect hris-api-local:develop >/dev/null 2>&1; then
-  cd /opt/project-truth/hris-api
-  sudo docker build -t hris-api-local:develop .
+if ! sudo docker image inspect bnpi-pats-api-local:develop >/dev/null 2>&1; then
+  cd /opt/project-truth/bnpi-pats-api
+  sudo docker build -t bnpi-pats-api-local:develop .
 fi
-if ! sudo docker image inspect hris-app-local:develop >/dev/null 2>&1; then
-  cd /opt/project-truth/hris-app
-  sudo docker build --build-arg VITE_ASSET_NAMESPACE=v6-one-shot -t hris-app-local:develop .
+if ! sudo docker image inspect bnpi-pats-app-local:develop >/dev/null 2>&1; then
+  cd /opt/project-truth/bnpi-pats-app
+  sudo docker build --build-arg VITE_ASSET_NAMESPACE=v6-one-shot -t bnpi-pats-app-local:develop .
 fi
 cd /opt/project-truth/appliance
 if sudo docker compose version >/dev/null 2>&1; then
@@ -386,11 +386,11 @@ if sudo docker compose version >/dev/null 2>&1; then
 else
   compose_cmd="sudo docker-compose"
 fi
-$compose_cmd -f docker-compose.yml up -d --no-build --force-recreate hris-api hris-app || true
-$compose_cmd -f docker-compose.environments.yml up -d --no-build --force-recreate hris-api-dev hris-api-uat hris-app-dev hris-app-uat || true
+$compose_cmd -f docker-compose.yml up -d --no-build --force-recreate bnpi-pats-api bnpi-pats-app || true
+$compose_cmd -f docker-compose.environments.yml up -d --no-build --force-recreate bnpi-pats-api-dev bnpi-pats-api-uat bnpi-pats-app-dev bnpi-pats-app-uat || true
 if command -v kubectl >/dev/null 2>&1; then
   for env_name in prod dev uat; do
-    sudo kubectl -n "$env_name" rollout restart deployment/hris-api deployment/hris-app >/dev/null 2>&1 || true
+    sudo kubectl -n "$env_name" rollout restart deployment/bnpi-pats-api deployment/bnpi-pats-app >/dev/null 2>&1 || true
   done
 fi
 '@
@@ -411,7 +411,7 @@ echo "== docker ps =="
 sudo docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
 echo
 echo "== cloudflared service =="
-sudo systemctl --no-pager --full status cloudflared-bnpi-hris.service
+sudo systemctl --no-pager --full status cloudflared-bnpi-pats.service
 echo
 echo "== kubectl nodes =="
 sudo kubectl get nodes

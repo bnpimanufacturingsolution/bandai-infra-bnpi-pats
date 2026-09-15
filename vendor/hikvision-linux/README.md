@@ -11,7 +11,7 @@ reconciliation before any device mutation.
 
 ## Device Targets
 
-Default trial targets follow the current HRIS Device row truth. Do not use old
+Default trial targets follow the current BNPI PATS Device row truth. Do not use old
 SADP/dev watcher addresses as defaults.
 
 | Name | Address | Port | Protocol |
@@ -21,7 +21,7 @@ SADP/dev watcher addresses as defaults.
 
 Current UI truth: `Main Entrance Device`, vendor `Hikvision`, model
 `DS-K1T341CMFW`, address `10.184.37.139`, HTTP port `80`. SDK port is `8000`
-when present in device config. The HRIS `Device` row is the source of truth.
+when present in device config. The BNPI PATS `Device` row is the source of truth.
 
 ## Local Python Trial
 
@@ -42,9 +42,9 @@ python -m hikvision_linux_probe --mode isapi-time
 ```
 
 The probe calls `GET /ISAPI/System/time`. It does not write users, change
-device configuration, clear logs, restart the device, or post HRIS events.
+device configuration, clear logs, restart the device, or post BNPI PATS events.
 
-HRIS device-console **Preview time / Update time** uses this binary over
+BNPI PATS device-console **Preview time / Update time** uses this binary over
 HCNetSDK `NET_DVR_STDXMLConfig`: `--get-time` (read) and `--set-time --local-time
 <ISO+08:00> --execute` (write). That is SDK login on port 8000, not a host HTTP
 PUT from Windows. Rebuild/restart the hot-reload listener after this source
@@ -63,7 +63,7 @@ vendor/hikvision-linux/
     fingerprint.cpp          fingerprint templates
     face.cpp                 face templates + stored-face writer
     copy.cpp                 peer copy
-    spool.cpp                HRIS post + replay
+    spool.cpp                BNPI PATS post + replay
     runtime.cpp              queues, login/arm
     main.cpp                 CLI entry
 ```
@@ -102,8 +102,8 @@ python -m hikvision_linux_probe --mode watch \
   --interval 5
 ```
 
-These modes read from the biometric device only. They do not inspect HRIS DB,
-HRIS API, attendance tables, or saved device events.
+These modes read from the biometric device only. They do not inspect BNPI PATS DB,
+BNPI PATS API, attendance tables, or saved device events.
 
 From the Windows repo root, the VM wrapper is:
 
@@ -127,7 +127,7 @@ Run the live listener against the current Device row target:
 ```bash
 ./build/hikvision-biometric-service \
   --device "main-entrance|<org-id>|Main Entrance Device|10.184.37.139|8000|$HIKVISION_USERNAME|$HIKVISION_PASSWORD|true" \
-  --hris-api-base "http://localhost:3001" \
+  --bnpi-pats-api-base "http://localhost:3001" \
   --evidence-jsonl ".runtime/hikvision-biometric-service.jsonl" \
   --seconds 60
 ```
@@ -138,15 +138,15 @@ password does not appear in process arguments:
 ```bash
 ./build/hikvision-biometric-service \
   --device-file /run/project-truth/hikvision-device.spec \
-  --hris-api-base "http://localhost:3001" \
+  --bnpi-pats-api-base "http://localhost:3001" \
   --evidence-jsonl ".runtime/hikvision-biometric-service.jsonl"
 ```
 
 The default mode is execute for live tap debugging, so SDK alarm events are
-posted to `/api/hikvision/callback` and saved in HRIS. Pass `--dry-run` only
+posted to `/api/hikvision/callback` and saved in BNPI PATS. Pass `--dry-run` only
 when you intentionally want preview-only evidence that does not persist saved
 `DeviceEvent` rows. Raw fingerprint template bytes are never written to normal
-HRIS `User` records or JSONL evidence.
+BNPI PATS `User` records or JSONL evidence.
 
 When the reviewed Device Users merge job must exclusively own SDK writes, set
 `HIKVISION_AUTOMATIC_PEER_RECONCILE=false` on the managed listener. The listener
@@ -174,7 +174,7 @@ via `NET_DVR_STDXMLConfig`, tries `NET_DVR_FindDVRLog_V50`, and compares opaque
 
 ```powershell
 # From Windows repo root (agent-owned: export credentials, stage SDK, build, run, evidence)
-$env:FORCE_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public'
+$env:FORCE_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public'
 powershell -File vendor/hikvision-linux/scripts/run-opaque-id-sdk-probe.ps1
 ```
 
@@ -217,5 +217,5 @@ expected local SDK inputs are present without committing them.
 The CLI writes one JSON object per stage. A successful TCP probe proves only
 that a port is reachable. A successful `isapi-time` probe proves read-only ISAPI
 device handshake. A future HCNetSDK listener must still prove login, alarm
-receipt, HRIS callback ingestion, saved device-event rows, browser rendering,
+receipt, BNPI PATS callback ingestion, saved device-event rows, browser rendering,
 and LAN/public runtime evidence.

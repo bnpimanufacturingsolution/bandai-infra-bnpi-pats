@@ -1,6 +1,6 @@
 # AGENT PROMPT — Spec Gap Remediation Chain: Modules 1–5
 
-> Source checklist: `docs/00-product/HRIS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md`
+> Source checklist: `docs/00-product/BNPI_PATS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md`
 > (audit 2026-08-24: 12 PRESENT / 17 PARTIAL / 7 MISSING, ~57% weighted).
 > Mission: close the PARTIAL/MISSING gaps for **Modules 1–5 only**, in staged chains,
 > with tests + evidence per stage. Modules 6–8 and Technical Requirements are OUT OF SCOPE.
@@ -9,7 +9,7 @@
 
 1. **NO PUSH.** Commit locally per stage on `feature/spec-gap-remediation`. Push only when the operator explicitly says so.
 2. Read before coding: `.wwg/wiki/project-truth-summary.md`, `.wwg/wiki/terminology.md`, this file, the checklist row you are closing, and the target source files.
-3. Follow repo standards: `DESIGN.md` (full-height tables + `containedScroll`, count-only column fetches, SHE modals, toasts have NO close button), `docs/LOGGING_STANDARDS.md` (`logActivity` on success, `logAudit` on CUD), admin surfaces = `hris-admin` actor.
+3. Follow repo standards: `DESIGN.md` (full-height tables + `containedScroll`, count-only column fetches, SHE modals, toasts have NO close button), `docs/LOGGING_STANDARDS.md` (`logActivity` on success, `logAudit` on CUD), admin surfaces = `bnpi-pats-admin` actor.
 4. New Prisma models: use the generator workflow (`npx msa-generate --<model>`, `npx zod-generate --<model>`, `npm run prisma-generate`) before hand-editing scaffolding. Schema SQL apply on shared DB is a separate explicit step — do not run destructive DB ops.
 5. Meaningful tests per stage (mocha/tsx for API, vitest for app). No stage closes with failing or skipped tests without a documented reason.
 6. Evidence per stage: `.runtime/spec-gap-m1-5/stage-<N>-<name>/` with API proof JSON (Real Endpoint Dry-Run rule: `execute=false`/preview first) and test output.
@@ -90,7 +90,7 @@ Target: `NoWorkReportTab.tsx` and `DailyManpowerTab.tsx` are fully built (hooks 
 - Add `pregnant` (or `expectedDueDate`, operator's choice — DECISION GATE if unclear; default: boolean `pregnant` + optional due date) to Employee with a small admin edit affordance, plus list UI (filter chip on the existing no-work/daily-manpower surface or a dedicated tab under workforce reports).
 - No-work list UI: covered by Stage 1 tab; cross-link it here (checklist note only if already satisfied).
 - Tests: schema/migration contract, list filter test.
-- Exit gate: pregnant list renders from real data; privacy note: restrict visibility to `hris-admin`/HR roles.
+- Exit gate: pregnant list renders from real data; privacy note: restrict visibility to `bnpi-pats-admin`/HR roles.
 
 ## STAGE 9 — Org chart builder (M4.2)
 
@@ -118,6 +118,6 @@ Target: `NoWorkReportTab.tsx` and `DailyManpowerTab.tsx` are fully built (hooks 
 ## CHAIN CLOSE-OUT (after final stage)
 
 1. Run full focused suites: API mocha specs touched + app vitest suites touched; fix or document any red.
-2. Update `HRIS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md`: flip closed rows to PRESENT (keep evidence paths, add stage references); recompute the completion-rate table.
+2. Update `BNPI_PATS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md`: flip closed rows to PRESENT (keep evidence paths, add stage references); recompute the completion-rate table.
 3. WWG close gate: workspace addendum + handoff entry (+ terminology rows only if new canonical terms emerged, e.g., manhour reference definition).
 4. Recommit checklist + truth surfaces. **NO PUSH** — present the operator a stage-by-stage summary with evidence paths and wait for the push order.

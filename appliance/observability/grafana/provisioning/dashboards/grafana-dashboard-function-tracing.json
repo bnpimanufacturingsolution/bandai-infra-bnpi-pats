@@ -746,7 +746,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "HRIS Function Tracing & Debug",
-  "uid": "hris-function-trace",
+  "title": "BNPI PATS Function Tracing & Debug",
+  "uid": "bnpi-pats-function-trace",
   "version": 1
 }

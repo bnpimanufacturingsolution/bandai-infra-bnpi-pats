@@ -14,7 +14,7 @@
 | Ledger loads | **Yes** — ~37k saved rows | GET `/api/device/events` 200 |
 | Always full green TAP+ENROLL | **No** until G2 fresh proof | `proof.fresh` / last ACS age < 10m |
 | Empty log = broken listener | **False** when armed-quiet | listener systemd active + last ACS time |
-| Stack | Grafana `:53000` Loki `:3110` Prom `:9091` Tempo `:3202` on VM | `ssh project-truth-hris` → curl localhost |
+| Stack | Grafana `:53000` Loki `:3110` Prom `:9091` Tempo `:3202` on VM | `ssh project-truth-bnpi-pats` → curl localhost |
 
 **Root cause that caused “not always green”:**
 
@@ -94,12 +94,12 @@ AGENT_DONE | id=A-BUG | evidence=...
 ## Ordered non-assuming steps (every cycle)
 
 1. **Bootstrap** — open WWG handoff + this prompt + last `.runtime/device-events-*` stamp. Write Current-State Report.
-2. **Live API** — login `admin@bandai.local` / `password123` / `appCode=hris` →  
+2. **Live API** — login `admin@bandai.local` / `password123` / `appCode=bnpi-pats` →  
    - GET `/health`  
    - GET `/api/device/events/live-readiness`  
    - GET `/api/device/events?summaryScope=page&limit=5` (time ms)  
    Save JSON under `.runtime/device-events-hold-YYYYMMDD-HHMMSS/`.
-3. **SSH K3s** (`ssh project-truth-hris`):  
+3. **SSH K3s** (`ssh project-truth-bnpi-pats`):  
    - image-state, ansible-pull-state, pod Ready  
    - `PROJECT_TRUTH_BUILD_SHA`, `DATABASE_URL` has `connection_limit=30`  
    - grep pool timeouts last 15m  

@@ -11,12 +11,12 @@
 
 ## Evidence Reviewed
 
-- README/docs: README.md, client-handover/node-health-appliance/README.md, data/import/README.md, docs/ARCHITECTURE.md, docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md, docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md, docs/DEVOPS_RUNBOOK.md, docs/DEV_CURRENT_GCP_VDI_PROOF_RESULT.md, docs/GAPS_AND_NEXT_GOALS.md, docs/GITOPS_CLIENT_ENV_SCALING.md, docs/GITOPS_GH_WATCH_RUNBOOK.md, docs/HEALTHCHECKS.md, docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md, docs/HYPERV_LAN_PROOF_20260622.md, docs/IMAGE_FORMATS.md, docs/INSTALLER_TEST_REPORT.md, docs/LOGIN_VISUAL_PROOF_SELF_LOOP_PROMPT.md, docs/OBSERVABILITY_PROOF_20260622.md, docs/OPERATIONS.md, docs/OVERNIGHT_DEVICE_EVENT_BRIDGE_DRY_RUN_PROMPT.md, docs/OVERNIGHT_DEV_CURRENT_GCP_VDI_PROOF_PROMPT.md, docs/OVERNIGHT_HARDCUTOVER_MINIO_DRIFT_REPAIR_PROMPT.md, docs/OVERNIGHT_HYPERV_HEALTH_PROOF_PROMPT.md, docs/OVERNIGHT_SOURCE_INPUTS_GCP_IMAGE_DRY_RUN_PROMPT.md, docs/OVERNIGHT_TERRAFORM_HYPERV_FRESH_REPO_PROMPT.md, docs/OVERNIGHT_VIRTUALBOX_GCP_APPLIANCE_PROOF_PROMPT.md, docs/OVERNIGHT_ZKTECO_PROJECT_TRUTH_BRIDGE_PROMPT.md, docs/OVERNIGHT_ZKTECO_RUNTIME_TRUTH_PROMPT.md, docs/SELF_HEALING_AND_DRIFT_RECOVERY.md, docs/SHORTCUTS.md, docs/TERRAFORM_HYPERV_ARCHITECTURE.md, docs/USER_JOURNEY_PROOF.md, docs/UZARO_CLOUDFLARE_CUTOVER_20260629.md, docs/V3_GCP_HYPERV_STORAGE_PROOF_20260625.md, docs/ZKTECO_RUNTIME_TRUTH.md, docs/architecture/onprem-vm-automation-and-observability.md, docs/dm-migration-workflow.md, hris-api/.wwg/governance/README.md, hris-api/.wwg/reports/README.md, hris-api/.wwg/wiki/principles/README.md
-- Package/config files: app/package.json, appliance/zkteco-bridge/package.json, hris-api/generated/prisma-postgres/package.json, hris-api/generated/prisma/package.json, hris-api/package.json, hris-app/package.json, package.json
+- README/docs: README.md, client-handover/node-health-appliance/README.md, data/import/README.md, docs/ARCHITECTURE.md, docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md, docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md, docs/DEVOPS_RUNBOOK.md, docs/DEV_CURRENT_GCP_VDI_PROOF_RESULT.md, docs/GAPS_AND_NEXT_GOALS.md, docs/GITOPS_CLIENT_ENV_SCALING.md, docs/GITOPS_GH_WATCH_RUNBOOK.md, docs/HEALTHCHECKS.md, docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md, docs/HYPERV_LAN_PROOF_20260622.md, docs/IMAGE_FORMATS.md, docs/INSTALLER_TEST_REPORT.md, docs/LOGIN_VISUAL_PROOF_SELF_LOOP_PROMPT.md, docs/OBSERVABILITY_PROOF_20260622.md, docs/OPERATIONS.md, docs/OVERNIGHT_DEVICE_EVENT_BRIDGE_DRY_RUN_PROMPT.md, docs/OVERNIGHT_DEV_CURRENT_GCP_VDI_PROOF_PROMPT.md, docs/OVERNIGHT_HARDCUTOVER_MINIO_DRIFT_REPAIR_PROMPT.md, docs/OVERNIGHT_HYPERV_HEALTH_PROOF_PROMPT.md, docs/OVERNIGHT_SOURCE_INPUTS_GCP_IMAGE_DRY_RUN_PROMPT.md, docs/OVERNIGHT_TERRAFORM_HYPERV_FRESH_REPO_PROMPT.md, docs/OVERNIGHT_VIRTUALBOX_GCP_APPLIANCE_PROOF_PROMPT.md, docs/OVERNIGHT_ZKTECO_PROJECT_TRUTH_BRIDGE_PROMPT.md, docs/OVERNIGHT_ZKTECO_RUNTIME_TRUTH_PROMPT.md, docs/SELF_HEALING_AND_DRIFT_RECOVERY.md, docs/SHORTCUTS.md, docs/TERRAFORM_HYPERV_ARCHITECTURE.md, docs/USER_JOURNEY_PROOF.md, docs/UZARO_CLOUDFLARE_CUTOVER_20260629.md, docs/V3_GCP_HYPERV_STORAGE_PROOF_20260625.md, docs/ZKTECO_RUNTIME_TRUTH.md, docs/architecture/onprem-vm-automation-and-observability.md, docs/dm-migration-workflow.md, bnpi-pats-api/.wwg/governance/README.md, bnpi-pats-api/.wwg/reports/README.md, bnpi-pats-api/.wwg/wiki/principles/README.md
+- Package/config files: app/package.json, appliance/zkteco-bridge/package.json, bnpi-pats-api/generated/prisma-postgres/package.json, bnpi-pats-api/generated/prisma/package.json, bnpi-pats-api/package.json, bnpi-pats-app/package.json, package.json
 - Source folders: app
-- Tests: hris-api/tests/attendance-action.helper.spec.ts, hris-api/tests/attendance-obligation.helper.spec.ts, hris-api/tests/attendance-realtime.helper.spec.ts, hris-api/tests/attendance-status-migration.spec.ts, hris-api/tests/auditLogger.spec.ts, hris-api/tests/auth-login-identifier.spec.ts, hris-api/tests/bulk-password.helper.spec.ts, hris-api/tests/database-backup.helper.spec.ts, hris-api/tests/db/isolated-db-fault.guard.spec.ts, hris-api/tests/db/isolated-db-faults.spec.ts, hris-api/tests/db/isolated-db.smoke.ts, hris-api/tests/db/isolated-prisma.integration.spec.ts, hris-api/tests/db/prepare-isolated-db.ts, hris-api/tests/db/schema-source-truth.contract.spec.ts, hris-api/tests/device-event-realtime.helper.spec.ts, hris-api/tests/device-health-zkteco.spec.ts, hris-api/tests/dm3-attendance-obligation-repair.helper.spec.ts, hris-api/tests/dm4-biometric-proof.spec.ts, hris-api/tests/document-field-validation.helper.spec.ts, hris-api/tests/employee-action-block.helper.spec.ts, hris-api/tests/employee-helper-credentials.spec.ts, hris-api/tests/employee-import.helper.spec.ts, hris-api/tests/employee-organization-reporting-query.contract.spec.ts, hris-api/tests/employee-schedule.helper.spec.ts, hris-api/tests/employeepayroll.snapshot-lock.contract.spec.ts, hris-api/tests/enterprise-csv-loader.spec.ts, hris-api/tests/enterprise-csv-sample-pack.spec.ts, hris-api/tests/enterprise-migration-dm-masterlist.spec.ts, hris-api/tests/enterprise-migration-dm-report.spec.ts, hris-api/tests/enterprise-migration-runner-env.spec.ts
-- Deployment/config: .github/workflows/promote-gitops.yml, .github/workflows/validate.yml, app/Dockerfile, appliance/docker-compose.yml, appliance/zkteco-bridge/Dockerfile, hris-api/Dockerfile, hris-api/docker-compose.yml, hris-api/infrastructure/onprem/observability/docker-compose.yml, hris-app/Dockerfile, hris-app/firebase.json
-- Existing agent/context files: .wwg/changelog/config.yml, .wwg/changelog/state.json, .wwg/readme/config.yml, .wwg/readme/state.json, AGENTS.md, hris-api/.wwg/workspace/AGENTS.md, hris-api/AGENTS.md, hris-app/.wwg/workspace/AGENTS.md, hris-app/AGENTS.md
+- Tests: bnpi-pats-api/tests/attendance-action.helper.spec.ts, bnpi-pats-api/tests/attendance-obligation.helper.spec.ts, bnpi-pats-api/tests/attendance-realtime.helper.spec.ts, bnpi-pats-api/tests/attendance-status-migration.spec.ts, bnpi-pats-api/tests/auditLogger.spec.ts, bnpi-pats-api/tests/auth-login-identifier.spec.ts, bnpi-pats-api/tests/bulk-password.helper.spec.ts, bnpi-pats-api/tests/database-backup.helper.spec.ts, bnpi-pats-api/tests/db/isolated-db-fault.guard.spec.ts, bnpi-pats-api/tests/db/isolated-db-faults.spec.ts, bnpi-pats-api/tests/db/isolated-db.smoke.ts, bnpi-pats-api/tests/db/isolated-prisma.integration.spec.ts, bnpi-pats-api/tests/db/prepare-isolated-db.ts, bnpi-pats-api/tests/db/schema-source-truth.contract.spec.ts, bnpi-pats-api/tests/device-event-realtime.helper.spec.ts, bnpi-pats-api/tests/device-health-zkteco.spec.ts, bnpi-pats-api/tests/dm3-attendance-obligation-repair.helper.spec.ts, bnpi-pats-api/tests/dm4-biometric-proof.spec.ts, bnpi-pats-api/tests/document-field-validation.helper.spec.ts, bnpi-pats-api/tests/employee-action-block.helper.spec.ts, bnpi-pats-api/tests/employee-helper-credentials.spec.ts, bnpi-pats-api/tests/employee-import.helper.spec.ts, bnpi-pats-api/tests/employee-organization-reporting-query.contract.spec.ts, bnpi-pats-api/tests/employee-schedule.helper.spec.ts, bnpi-pats-api/tests/employeepayroll.snapshot-lock.contract.spec.ts, bnpi-pats-api/tests/enterprise-csv-loader.spec.ts, bnpi-pats-api/tests/enterprise-csv-sample-pack.spec.ts, bnpi-pats-api/tests/enterprise-migration-dm-masterlist.spec.ts, bnpi-pats-api/tests/enterprise-migration-dm-report.spec.ts, bnpi-pats-api/tests/enterprise-migration-runner-env.spec.ts
+- Deployment/config: .github/workflows/promote-gitops.yml, .github/workflows/validate.yml, app/Dockerfile, appliance/docker-compose.yml, appliance/zkteco-bridge/Dockerfile, bnpi-pats-api/Dockerfile, bnpi-pats-api/docker-compose.yml, bnpi-pats-api/infrastructure/onprem/observability/docker-compose.yml, bnpi-pats-app/Dockerfile, bnpi-pats-app/firebase.json
+- Existing agent/context files: .wwg/changelog/config.yml, .wwg/changelog/state.json, .wwg/readme/config.yml, .wwg/readme/state.json, AGENTS.md, bnpi-pats-api/.wwg/workspace/AGENTS.md, bnpi-pats-api/AGENTS.md, bnpi-pats-app/.wwg/workspace/AGENTS.md, bnpi-pats-app/AGENTS.md
 
 ## Observed Reality
 
@@ -24,13 +24,13 @@
 - Product category: INFERRED - Web application Evidence: package/source (frontend framework or route folders detected)
 - Tech stack: NEEDS_CONFIRMATION - NEEDS_CONFIRMATION Evidence: package/config (no known stack metadata detected)
 - Runtime/build tools: CONFIRMED - test Evidence: package.json (scripts)
-- Main entry points: CONFIRMED - index.js, app/server.js, appliance/zkteco-bridge/src/index.js, hris-api/app/Rule/index.ts, hris-api/app/activityLogging/index.ts, hris-api/app/agency/index.ts, hris-api/app/applicant/index.ts, hris-api/app/attendance/index.ts, hris-api/app/auditLogging/index.ts, hris-api/app/auth/index.ts, hris-api/app/benefitType/index.ts, hris-api/app/boardingProcess/index.ts, hris-api/app/boardingTemplate/index.ts Evidence: index.js (entry point candidate); app/server.js (entry point candidate); appliance/zkteco-bridge/src/index.js (entry point candidate); hris-api/app/Rule/index.ts (entry point candidate); hris-api/app/activityLogging/index.ts (entry point candidate); hris-api/app/agency/index.ts (entry point candidate); hris-api/app/applicant/index.ts (entry point candidate); hris-api/app/attendance/index.ts (entry point candidate); hris-api/app/auditLogging/index.ts (entry point candidate); hris-api/app/auth/index.ts (entry point candidate); hris-api/app/benefitType/index.ts (entry point candidate); hris-api/app/boardingProcess/index.ts (entry point candidate); hris-api/app/boardingTemplate/index.ts (entry point candidate)
+- Main entry points: CONFIRMED - index.js, app/server.js, appliance/zkteco-bridge/src/index.js, bnpi-pats-api/app/Rule/index.ts, bnpi-pats-api/app/activityLogging/index.ts, bnpi-pats-api/app/agency/index.ts, bnpi-pats-api/app/applicant/index.ts, bnpi-pats-api/app/attendance/index.ts, bnpi-pats-api/app/auditLogging/index.ts, bnpi-pats-api/app/auth/index.ts, bnpi-pats-api/app/benefitType/index.ts, bnpi-pats-api/app/boardingProcess/index.ts, bnpi-pats-api/app/boardingTemplate/index.ts Evidence: index.js (entry point candidate); app/server.js (entry point candidate); appliance/zkteco-bridge/src/index.js (entry point candidate); bnpi-pats-api/app/Rule/index.ts (entry point candidate); bnpi-pats-api/app/activityLogging/index.ts (entry point candidate); bnpi-pats-api/app/agency/index.ts (entry point candidate); bnpi-pats-api/app/applicant/index.ts (entry point candidate); bnpi-pats-api/app/attendance/index.ts (entry point candidate); bnpi-pats-api/app/auditLogging/index.ts (entry point candidate); bnpi-pats-api/app/auth/index.ts (entry point candidate); bnpi-pats-api/app/benefitType/index.ts (entry point candidate); bnpi-pats-api/app/boardingProcess/index.ts (entry point candidate); bnpi-pats-api/app/boardingTemplate/index.ts (entry point candidate)
 - Main implemented features: INFERRED - Current Working Branch, Main Documents, Normal CLI Flow, VHDX Autopilot, Target Architecture, Target Repo Shape, Image Format Targets, Ownership Rules, app/server Evidence: README.md (README headings or route files)
 - User roles/surfaces: INFERRED - user, owner, guest Evidence: README/source (role-like terms detected)
-- Data persistence: CONFIRMED - hris-api/app/migration/dm3-migration.adapter.ts, hris-api/app/migration/dm3-workbook-import.service.ts, hris-api/app/migration/dm4-migration.adapter.ts, hris-api/app/migration/enterprise-migration.service.ts, hris-api/app/migration/index.ts, hris-api/app/migration/migration-dry-run.service.ts, hris-api/app/migration/migration-event.service.ts, hris-api/app/migration/migration-orchestrator.service.ts Evidence: hris-api/app/migration/dm3-migration.adapter.ts (persistence indicator)
-- Auth/security: CONFIRMED - appliance/bin/project-truth-console-session-hook.sh, hris-api/.wwg/governance/security-review.md, hris-api/app/auth/auth.controller.ts, hris-api/app/auth/auth.router.ts, hris-api/app/auth/index.ts, hris-api/config/security.ts, hris-api/docs/MD Files/auth-api.md, hris-api/docs/SECURITY.md Evidence: appliance/bin/project-truth-console-session-hook.sh (auth/security indicator)
-- Payments/billing: CONFIRMED - hris-app/.react-router/types/app/routes/hr/+types/billings.$id.ts, hris-app/.react-router/types/app/routes/hr/+types/billings.ts, hris-app/app/components/templates/common/billings-template.tsx, hris-app/app/lib/mock-soa-billings.ts, hris-app/app/routes/hr/billings.$id.tsx, hris-app/app/routes/hr/billings.tsx, hris-app/build/client/assets/billings-aJ54d_bS.js, hris-app/build/client/assets/billings._id-sRB6gk7r.js Evidence: hris-app/.react-router/types/app/routes/hr/+types/billings.$id.ts (payments/billing indicator)
-- Deployment/runtime: CONFIRMED - .github/workflows/promote-gitops.yml, .github/workflows/validate.yml, app/Dockerfile, appliance/docker-compose.yml, appliance/zkteco-bridge/Dockerfile, hris-api/Dockerfile, hris-api/docker-compose.yml, hris-api/infrastructure/onprem/observability/docker-compose.yml, hris-app/Dockerfile, hris-app/firebase.json Evidence: .github/workflows/promote-gitops.yml (deployment config); .github/workflows/validate.yml (deployment config); app/Dockerfile (deployment config); appliance/docker-compose.yml (deployment config); appliance/zkteco-bridge/Dockerfile (deployment config); hris-api/Dockerfile (deployment config); hris-api/docker-compose.yml (deployment config); hris-api/infrastructure/onprem/observability/docker-compose.yml (deployment config); hris-app/Dockerfile (deployment config); hris-app/firebase.json (deployment config)
+- Data persistence: CONFIRMED - bnpi-pats-api/app/migration/dm3-migration.adapter.ts, bnpi-pats-api/app/migration/dm3-workbook-import.service.ts, bnpi-pats-api/app/migration/dm4-migration.adapter.ts, bnpi-pats-api/app/migration/enterprise-migration.service.ts, bnpi-pats-api/app/migration/index.ts, bnpi-pats-api/app/migration/migration-dry-run.service.ts, bnpi-pats-api/app/migration/migration-event.service.ts, bnpi-pats-api/app/migration/migration-orchestrator.service.ts Evidence: bnpi-pats-api/app/migration/dm3-migration.adapter.ts (persistence indicator)
+- Auth/security: CONFIRMED - appliance/bin/project-truth-console-session-hook.sh, bnpi-pats-api/.wwg/governance/security-review.md, bnpi-pats-api/app/auth/auth.controller.ts, bnpi-pats-api/app/auth/auth.router.ts, bnpi-pats-api/app/auth/index.ts, bnpi-pats-api/config/security.ts, bnpi-pats-api/docs/MD Files/auth-api.md, bnpi-pats-api/docs/SECURITY.md Evidence: appliance/bin/project-truth-console-session-hook.sh (auth/security indicator)
+- Payments/billing: CONFIRMED - bnpi-pats-app/.react-router/types/app/routes/hr/+types/billings.$id.ts, bnpi-pats-app/.react-router/types/app/routes/hr/+types/billings.ts, bnpi-pats-app/app/components/templates/common/billings-template.tsx, bnpi-pats-app/app/lib/mock-soa-billings.ts, bnpi-pats-app/app/routes/hr/billings.$id.tsx, bnpi-pats-app/app/routes/hr/billings.tsx, bnpi-pats-app/build/client/assets/billings-aJ54d_bS.js, bnpi-pats-app/build/client/assets/billings._id-sRB6gk7r.js Evidence: bnpi-pats-app/.react-router/types/app/routes/hr/+types/billings.$id.ts (payments/billing indicator)
+- Deployment/runtime: CONFIRMED - .github/workflows/promote-gitops.yml, .github/workflows/validate.yml, app/Dockerfile, appliance/docker-compose.yml, appliance/zkteco-bridge/Dockerfile, bnpi-pats-api/Dockerfile, bnpi-pats-api/docker-compose.yml, bnpi-pats-api/infrastructure/onprem/observability/docker-compose.yml, bnpi-pats-app/Dockerfile, bnpi-pats-app/firebase.json Evidence: .github/workflows/promote-gitops.yml (deployment config); .github/workflows/validate.yml (deployment config); app/Dockerfile (deployment config); appliance/docker-compose.yml (deployment config); appliance/zkteco-bridge/Dockerfile (deployment config); bnpi-pats-api/Dockerfile (deployment config); bnpi-pats-api/docker-compose.yml (deployment config); bnpi-pats-api/infrastructure/onprem/observability/docker-compose.yml (deployment config); bnpi-pats-app/Dockerfile (deployment config); bnpi-pats-app/firebase.json (deployment config)
 
 ## Inferred Truth
 
@@ -160,156 +160,156 @@ wwg-native-project
 | governance/regression-gaps.md | governance artifact | regression_guardrails | medium |
 | governance/regression-manifest.json | governance artifact | regression_guardrails | medium |
 | governance/regression-manifest.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/changelog/config.yml | public surface | public_surface_updates | medium |
-| hris-api/.wwg/changelog/state.json | public surface | public_surface_updates | medium |
-| hris-api/.wwg/governance/audit-log.md | governance artifact | audit_log | medium |
-| hris-api/.wwg/governance/context-drift-detection.md | canonical context | project_master_context | medium |
-| hris-api/.wwg/governance/quality-gates.md | governance artifact | quality_gates | medium |
-| hris-api/.wwg/governance/regression-gaps.json | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/governance/regression-gaps.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/governance/regression-guardrail-catalog.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/governance/regression-manifest.json | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/governance/regression-manifest.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/governance/release-checklist.md | governance artifact | release_checklist | medium |
-| hris-api/.wwg/governance/security-review.md | governance artifact | quality_gates | medium |
-| hris-api/.wwg/governance/test-plan.md | governance artifact | test_plan | medium |
-| hris-api/.wwg/reports/adoption-regression-report.json | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/reports/adoption-regression-report.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/reports/api-testing-implementation.md | governance artifact | test_plan | medium |
-| hris-api/.wwg/reports/changelog-bump-recommendation.md | public surface | public_surface_updates | medium |
-| hris-api/.wwg/reports/changelog-preview.md | public surface | public_surface_updates | medium |
-| hris-api/.wwg/reports/context-skill-quality.md | canonical context | project_master_context | medium |
-| hris-api/.wwg/reports/cross-repo-context-reconciliation.md | canonical context | project_master_context | medium |
-| hris-api/.wwg/reports/regression-quality-report.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/reports/wwg-changelog-handoff.md | public surface | public_surface_updates | medium |
-| hris-api/.wwg/reports/wwg-refresh-context-report.md | canonical context | project_master_context | medium |
-| hris-api/.wwg/reports/wwg-regression-handoff.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/workspace/AGENTS.md | unknown scoped agent policy | specialized_agent_workflows | high |
-| hris-api/.wwg/workspace/context/architecture-context.md | architecture source | architecture_context | medium |
-| hris-api/.wwg/workspace/context/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
-| hris-api/.wwg/workspace/context/domain-context.md | canonical context | domain_context | medium |
-| hris-api/.wwg/workspace/context/governance-context.md | canonical context | project_master_context | medium |
-| hris-api/.wwg/workspace/context/project-context.md | canonical context | project_master_context | medium |
-| hris-api/.wwg/workspace/context/ux-context.md | canonical context | project_master_context | medium |
-| hris-api/.wwg/workspace/prompts/bug-fix.md | prompt | workspace_prompts | medium |
-| hris-api/.wwg/workspace/prompts/feature-implementation.md | prompt | workspace_prompts | medium |
-| hris-api/.wwg/workspace/prompts/production-monitoring.md | prompt | workspace_prompts | medium |
-| hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md | prompt | workspace_prompts | medium |
-| hris-api/.wwg/workspace/prompts/public-surface-update.md | prompt | workspace_prompts | medium |
-| hris-api/.wwg/workspace/prompts/runtime-infrastructure.md | prompt | workspace_prompts | medium |
-| hris-api/.wwg/workspace/prompts/task-router.md | prompt | workspace_prompts | medium |
-| hris-api/.wwg/workspace/skills/change-classifier.skill.md | skill | specialized_agent_workflows | high |
-| hris-api/.wwg/workspace/skills/context-skill-maintenance.skill.md | skill | specialized_agent_workflows | high |
-| hris-api/.wwg/workspace/skills/drift-detector.skill.md | skill | specialized_agent_workflows | high |
-| hris-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md | skill | specialized_agent_workflows | high |
-| hris-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/workspace/skills/task-router.skill.md | skill | specialized_agent_workflows | high |
-| hris-api/.wwg/workspace/testing/manual-verification-checklist.md | governance artifact | test_plan | medium |
-| hris-api/.wwg/workspace/testing/manual-verification-evidence.json | governance artifact | test_plan | medium |
-| hris-api/.wwg/workspace/testing/non-technical-regression-checklist.md | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/workspace/testing/proposed-executable-tests.json | governance artifact | test_plan | medium |
-| hris-api/.wwg/workspace/testing/proposed-executable-tests.md | governance artifact | test_plan | medium |
-| hris-api/.wwg/workspace/testing/regression-candidate-review.json | governance artifact | regression_guardrails | medium |
-| hris-api/.wwg/workspace/testing/regression-candidate-review.md | governance artifact | regression_guardrails | medium |
-| hris-api/AGENTS.md | unknown scoped agent policy | specialized_agent_workflows | high |
-| hris-api/CHANGELOG.md | public surface | public_surface_updates | medium |
-| hris-api/docker-compose.yml | runtime structure | runtime_context | medium |
-| hris-api/Dockerfile | runtime structure | runtime_context | medium |
-| hris-api/docs/MIGRATION_CSV_UPLOAD_TESTING.md | governance artifact | test_plan | medium |
-| hris-api/docs/testing-maturity-audit.md | governance artifact | test_plan | medium |
-| hris-api/docs/testing-strategy.md | governance artifact | test_plan | medium |
-| hris-api/infrastructure/onprem/observability/docker-compose.yml | runtime structure | runtime_context | medium |
-| hris-api/prisma/schema-postgres/statusIncident.prisma | governance artifact | reference_history | medium |
-| hris-api/prisma/schema/statusIncident.prisma | governance artifact | reference_history | medium |
-| hris-api/scripts/generate-bnpi-dm3-supporting-imports.cjs | public surface | approval_gated_public_messaging | medium |
-| hris-api/scripts/update-hikvision-metadata.ts | public surface | public_discovery_context | medium |
-| hris-api/tests/support/db-fault-invariants.ts | public surface | approval_gated_public_messaging | medium |
-| hris-api/tests/support/isolated-db-fault.guard.ts | public surface | approval_gated_public_messaging | medium |
-| hris-api/tests/support/isolated-prisma-client.ts | public surface | approval_gated_public_messaging | medium |
-| hris-api/tests/wwg-regression-coverage.spec.ts | governance artifact | regression_guardrails | medium |
-| hris-api/wiki-template/base/08-operations/monitoring.md | governance artifact | operational_readiness | medium |
-| hris-api/wiki-template/base/09-agent-context/canonical-context-policy.md | canonical context | project_master_context | medium |
-| hris-api/wiki-template/base/12-maintenance/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
-| hris-api/workspace-template/base/context/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
-| hris-app/.react-router/types/app/routes/admin/+types/audit-logs.ts | governance artifact | audit_log | medium |
-| hris-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts | public surface | approval_gated_public_messaging | medium |
-| hris-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts | public surface | approval_gated_public_messaging | medium |
-| hris-app/.react-router/types/app/routes/support/+types/faq.ts | public surface | approval_gated_public_messaging | medium |
-| hris-app/.react-router/types/app/routes/support/+types/help-desk.ts | public surface | approval_gated_public_messaging | medium |
-| hris-app/.wwg/changelog/config.yml | public surface | public_surface_updates | medium |
-| hris-app/.wwg/changelog/state.json | public surface | public_surface_updates | medium |
-| hris-app/.wwg/governance/audit-log.md | governance artifact | audit_log | medium |
-| hris-app/.wwg/governance/context-drift-detection.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/governance/quality-gates.md | governance artifact | quality_gates | medium |
-| hris-app/.wwg/governance/regression-gaps.json | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/governance/regression-gaps.md | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/governance/regression-guardrail-catalog.md | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/governance/regression-manifest.json | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/governance/regression-manifest.md | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/governance/release-checklist.md | governance artifact | release_checklist | medium |
-| hris-app/.wwg/governance/security-review.md | governance artifact | quality_gates | medium |
-| hris-app/.wwg/governance/test-plan.md | governance artifact | test_plan | medium |
-| hris-app/.wwg/reports/adoption-regression-report.json | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/reports/adoption-regression-report.md | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/reports/changelog-bump-recommendation.md | public surface | public_surface_updates | medium |
-| hris-app/.wwg/reports/changelog-preview.md | public surface | public_surface_updates | medium |
-| hris-app/.wwg/reports/context-skill-quality.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/reports/cross-repo-context-reconciliation.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/reports/regression-priority-review.md | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/reports/testing-program-implementation.md | governance artifact | test_plan | medium |
-| hris-app/.wwg/reports/wwg-changelog-handoff.md | public surface | public_surface_updates | medium |
-| hris-app/.wwg/reports/wwg-refresh-context-report.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/reports/wwg-regression-handoff.md | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/wiki/11-synthesis/context-completeness-review.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/wiki/12-maintenance/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
-| hris-app/.wwg/workspace/AGENTS.md | unknown scoped agent policy | specialized_agent_workflows | high |
-| hris-app/.wwg/workspace/context/architecture-context.md | architecture source | architecture_context | medium |
-| hris-app/.wwg/workspace/context/chain-state-template.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/workspace/context/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
-| hris-app/.wwg/workspace/context/domain-context.md | canonical context | domain_context | medium |
-| hris-app/.wwg/workspace/context/governance-context.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/workspace/context/project-context.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/workspace/context/task-context-index.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/workspace/context/ux-context.md | canonical context | project_master_context | medium |
-| hris-app/.wwg/workspace/prompts/bug-fix.md | prompt | workspace_prompts | medium |
-| hris-app/.wwg/workspace/prompts/chain-pass-template.md | prompt | workspace_prompts | medium |
-| hris-app/.wwg/workspace/prompts/feature-implementation.md | prompt | workspace_prompts | medium |
-| hris-app/.wwg/workspace/prompts/production-monitoring.md | prompt | workspace_prompts | medium |
-| hris-app/.wwg/workspace/prompts/public-discovery-maintenance.md | prompt | workspace_prompts | medium |
-| hris-app/.wwg/workspace/prompts/public-surface-update.md | prompt | workspace_prompts | medium |
-| hris-app/.wwg/workspace/prompts/runtime-infrastructure.md | prompt | workspace_prompts | medium |
-| hris-app/.wwg/workspace/prompts/task-router.md | prompt | workspace_prompts | medium |
-| hris-app/.wwg/workspace/skills/change-classifier.skill.md | skill | specialized_agent_workflows | high |
-| hris-app/.wwg/workspace/skills/context-skill-maintenance.skill.md | skill | specialized_agent_workflows | high |
-| hris-app/.wwg/workspace/skills/drift-detector.skill.md | skill | specialized_agent_workflows | high |
-| hris-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md | skill | specialized_agent_workflows | high |
-| hris-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/workspace/skills/task-router.skill.md | skill | specialized_agent_workflows | high |
-| hris-app/.wwg/workspace/testing/manual-verification-checklist.md | governance artifact | test_plan | medium |
-| hris-app/.wwg/workspace/testing/manual-verification-evidence.json | governance artifact | test_plan | medium |
-| hris-app/.wwg/workspace/testing/non-technical-regression-checklist.md | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/workspace/testing/proposed-executable-tests.json | governance artifact | test_plan | medium |
-| hris-app/.wwg/workspace/testing/proposed-executable-tests.md | governance artifact | test_plan | medium |
-| hris-app/.wwg/workspace/testing/regression-candidate-review.json | governance artifact | regression_guardrails | medium |
-| hris-app/.wwg/workspace/testing/regression-candidate-review.md | governance artifact | regression_guardrails | medium |
-| hris-app/AGENTS.md | unknown scoped agent policy | specialized_agent_workflows | high |
-| hris-app/app/lib/ci-cd-quality-gates.test.ts | governance artifact | test_plan | medium |
-| hris-app/app/routes/admin/audit-logs.tsx | governance artifact | audit_log | medium |
-| hris-app/app/routes/legal/privacy-policy.tsx | public surface | approval_gated_public_messaging | medium |
-| hris-app/app/routes/legal/terms-of-use.tsx | public surface | approval_gated_public_messaging | medium |
-| hris-app/app/routes/support/faq.tsx | public surface | approval_gated_public_messaging | medium |
-| hris-app/app/routes/support/help-desk.tsx | public surface | approval_gated_public_messaging | medium |
-| hris-app/app/services/audit-logs.service.ts | governance artifact | audit_log | medium |
-| hris-app/build/client/assets/audit-logs-BXkiI1U5.js | governance artifact | audit_log | medium |
-| hris-app/build/client/assets/privacy-policy-DKziWBt5.js | public surface | approval_gated_public_messaging | medium |
-| hris-app/build/client/assets/terms-of-use-BXeUTGd2.js | public surface | approval_gated_public_messaging | medium |
-| hris-app/Dockerfile | runtime structure | runtime_context | medium |
-| hris-app/docs/testing-coverage-matrix.md | governance artifact | test_plan | medium |
-| hris-app/docs/testing-maturity-audit.md | governance artifact | test_plan | medium |
-| hris-app/docs/testing-strategy.md | governance artifact | test_plan | medium |
-| hris-app/test-results/smoke-project-truth-devcur-30dbc-s-on-imported-VirtualBox-VM/error-context.md | canonical context | project_master_context | medium |
-| hris-app/test-results/smoke-project-truth-devcur-479f7-s-on-imported-VirtualBox-VM/error-context.md | canonical context | project_master_context | medium |
-| hris-app/test-results/smoke-project-truth-devcur-d5969-s-on-imported-VirtualBox-VM/error-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/.wwg/changelog/config.yml | public surface | public_surface_updates | medium |
+| bnpi-pats-api/.wwg/changelog/state.json | public surface | public_surface_updates | medium |
+| bnpi-pats-api/.wwg/governance/audit-log.md | governance artifact | audit_log | medium |
+| bnpi-pats-api/.wwg/governance/context-drift-detection.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/.wwg/governance/quality-gates.md | governance artifact | quality_gates | medium |
+| bnpi-pats-api/.wwg/governance/regression-gaps.json | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/governance/regression-gaps.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/governance/regression-guardrail-catalog.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/governance/regression-manifest.json | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/governance/regression-manifest.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/governance/release-checklist.md | governance artifact | release_checklist | medium |
+| bnpi-pats-api/.wwg/governance/security-review.md | governance artifact | quality_gates | medium |
+| bnpi-pats-api/.wwg/governance/test-plan.md | governance artifact | test_plan | medium |
+| bnpi-pats-api/.wwg/reports/adoption-regression-report.json | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/reports/adoption-regression-report.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/reports/api-testing-implementation.md | governance artifact | test_plan | medium |
+| bnpi-pats-api/.wwg/reports/changelog-bump-recommendation.md | public surface | public_surface_updates | medium |
+| bnpi-pats-api/.wwg/reports/changelog-preview.md | public surface | public_surface_updates | medium |
+| bnpi-pats-api/.wwg/reports/context-skill-quality.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/.wwg/reports/cross-repo-context-reconciliation.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/.wwg/reports/regression-quality-report.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/reports/wwg-changelog-handoff.md | public surface | public_surface_updates | medium |
+| bnpi-pats-api/.wwg/reports/wwg-refresh-context-report.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/.wwg/reports/wwg-regression-handoff.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/workspace/AGENTS.md | unknown scoped agent policy | specialized_agent_workflows | high |
+| bnpi-pats-api/.wwg/workspace/context/architecture-context.md | architecture source | architecture_context | medium |
+| bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
+| bnpi-pats-api/.wwg/workspace/context/domain-context.md | canonical context | domain_context | medium |
+| bnpi-pats-api/.wwg/workspace/context/governance-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/.wwg/workspace/context/project-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/.wwg/workspace/context/ux-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/.wwg/workspace/prompts/bug-fix.md | prompt | workspace_prompts | medium |
+| bnpi-pats-api/.wwg/workspace/prompts/feature-implementation.md | prompt | workspace_prompts | medium |
+| bnpi-pats-api/.wwg/workspace/prompts/production-monitoring.md | prompt | workspace_prompts | medium |
+| bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md | prompt | workspace_prompts | medium |
+| bnpi-pats-api/.wwg/workspace/prompts/public-surface-update.md | prompt | workspace_prompts | medium |
+| bnpi-pats-api/.wwg/workspace/prompts/runtime-infrastructure.md | prompt | workspace_prompts | medium |
+| bnpi-pats-api/.wwg/workspace/prompts/task-router.md | prompt | workspace_prompts | medium |
+| bnpi-pats-api/.wwg/workspace/skills/change-classifier.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-api/.wwg/workspace/skills/context-skill-maintenance.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-api/.wwg/workspace/skills/drift-detector.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/workspace/skills/task-router.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-api/.wwg/workspace/testing/manual-verification-checklist.md | governance artifact | test_plan | medium |
+| bnpi-pats-api/.wwg/workspace/testing/manual-verification-evidence.json | governance artifact | test_plan | medium |
+| bnpi-pats-api/.wwg/workspace/testing/non-technical-regression-checklist.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/workspace/testing/proposed-executable-tests.json | governance artifact | test_plan | medium |
+| bnpi-pats-api/.wwg/workspace/testing/proposed-executable-tests.md | governance artifact | test_plan | medium |
+| bnpi-pats-api/.wwg/workspace/testing/regression-candidate-review.json | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/.wwg/workspace/testing/regression-candidate-review.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/AGENTS.md | unknown scoped agent policy | specialized_agent_workflows | high |
+| bnpi-pats-api/CHANGELOG.md | public surface | public_surface_updates | medium |
+| bnpi-pats-api/docker-compose.yml | runtime structure | runtime_context | medium |
+| bnpi-pats-api/Dockerfile | runtime structure | runtime_context | medium |
+| bnpi-pats-api/docs/MIGRATION_CSV_UPLOAD_TESTING.md | governance artifact | test_plan | medium |
+| bnpi-pats-api/docs/testing-maturity-audit.md | governance artifact | test_plan | medium |
+| bnpi-pats-api/docs/testing-strategy.md | governance artifact | test_plan | medium |
+| bnpi-pats-api/infrastructure/onprem/observability/docker-compose.yml | runtime structure | runtime_context | medium |
+| bnpi-pats-api/prisma/schema-postgres/statusIncident.prisma | governance artifact | reference_history | medium |
+| bnpi-pats-api/prisma/schema/statusIncident.prisma | governance artifact | reference_history | medium |
+| bnpi-pats-api/scripts/generate-bnpi-dm3-supporting-imports.cjs | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-api/scripts/update-hikvision-metadata.ts | public surface | public_discovery_context | medium |
+| bnpi-pats-api/tests/support/db-fault-invariants.ts | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-api/tests/support/isolated-db-fault.guard.ts | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-api/tests/support/isolated-prisma-client.ts | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-api/tests/wwg-regression-coverage.spec.ts | governance artifact | regression_guardrails | medium |
+| bnpi-pats-api/wiki-template/base/08-operations/monitoring.md | governance artifact | operational_readiness | medium |
+| bnpi-pats-api/wiki-template/base/09-agent-context/canonical-context-policy.md | canonical context | project_master_context | medium |
+| bnpi-pats-api/wiki-template/base/12-maintenance/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
+| bnpi-pats-api/workspace-template/base/context/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
+| bnpi-pats-app/.react-router/types/app/routes/admin/+types/audit-logs.ts | governance artifact | audit_log | medium |
+| bnpi-pats-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/.react-router/types/app/routes/support/+types/faq.ts | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/.react-router/types/app/routes/support/+types/help-desk.ts | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/.wwg/changelog/config.yml | public surface | public_surface_updates | medium |
+| bnpi-pats-app/.wwg/changelog/state.json | public surface | public_surface_updates | medium |
+| bnpi-pats-app/.wwg/governance/audit-log.md | governance artifact | audit_log | medium |
+| bnpi-pats-app/.wwg/governance/context-drift-detection.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/governance/quality-gates.md | governance artifact | quality_gates | medium |
+| bnpi-pats-app/.wwg/governance/regression-gaps.json | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/governance/regression-gaps.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/governance/regression-guardrail-catalog.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/governance/regression-manifest.json | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/governance/regression-manifest.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/governance/release-checklist.md | governance artifact | release_checklist | medium |
+| bnpi-pats-app/.wwg/governance/security-review.md | governance artifact | quality_gates | medium |
+| bnpi-pats-app/.wwg/governance/test-plan.md | governance artifact | test_plan | medium |
+| bnpi-pats-app/.wwg/reports/adoption-regression-report.json | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/reports/adoption-regression-report.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/reports/changelog-bump-recommendation.md | public surface | public_surface_updates | medium |
+| bnpi-pats-app/.wwg/reports/changelog-preview.md | public surface | public_surface_updates | medium |
+| bnpi-pats-app/.wwg/reports/context-skill-quality.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/reports/cross-repo-context-reconciliation.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/reports/regression-priority-review.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/reports/testing-program-implementation.md | governance artifact | test_plan | medium |
+| bnpi-pats-app/.wwg/reports/wwg-changelog-handoff.md | public surface | public_surface_updates | medium |
+| bnpi-pats-app/.wwg/reports/wwg-refresh-context-report.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/reports/wwg-regression-handoff.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/wiki/11-synthesis/context-completeness-review.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/wiki/12-maintenance/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
+| bnpi-pats-app/.wwg/workspace/AGENTS.md | unknown scoped agent policy | specialized_agent_workflows | high |
+| bnpi-pats-app/.wwg/workspace/context/architecture-context.md | architecture source | architecture_context | medium |
+| bnpi-pats-app/.wwg/workspace/context/chain-state-template.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/workspace/context/context-maintenance-matrix.md | maintenance matrix | maintenance_matrix | high |
+| bnpi-pats-app/.wwg/workspace/context/domain-context.md | canonical context | domain_context | medium |
+| bnpi-pats-app/.wwg/workspace/context/governance-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/workspace/context/project-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/workspace/context/task-context-index.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/workspace/context/ux-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/.wwg/workspace/prompts/bug-fix.md | prompt | workspace_prompts | medium |
+| bnpi-pats-app/.wwg/workspace/prompts/chain-pass-template.md | prompt | workspace_prompts | medium |
+| bnpi-pats-app/.wwg/workspace/prompts/feature-implementation.md | prompt | workspace_prompts | medium |
+| bnpi-pats-app/.wwg/workspace/prompts/production-monitoring.md | prompt | workspace_prompts | medium |
+| bnpi-pats-app/.wwg/workspace/prompts/public-discovery-maintenance.md | prompt | workspace_prompts | medium |
+| bnpi-pats-app/.wwg/workspace/prompts/public-surface-update.md | prompt | workspace_prompts | medium |
+| bnpi-pats-app/.wwg/workspace/prompts/runtime-infrastructure.md | prompt | workspace_prompts | medium |
+| bnpi-pats-app/.wwg/workspace/prompts/task-router.md | prompt | workspace_prompts | medium |
+| bnpi-pats-app/.wwg/workspace/skills/change-classifier.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-app/.wwg/workspace/skills/context-skill-maintenance.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-app/.wwg/workspace/skills/drift-detector.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/workspace/skills/task-router.skill.md | skill | specialized_agent_workflows | high |
+| bnpi-pats-app/.wwg/workspace/testing/manual-verification-checklist.md | governance artifact | test_plan | medium |
+| bnpi-pats-app/.wwg/workspace/testing/manual-verification-evidence.json | governance artifact | test_plan | medium |
+| bnpi-pats-app/.wwg/workspace/testing/non-technical-regression-checklist.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/workspace/testing/proposed-executable-tests.json | governance artifact | test_plan | medium |
+| bnpi-pats-app/.wwg/workspace/testing/proposed-executable-tests.md | governance artifact | test_plan | medium |
+| bnpi-pats-app/.wwg/workspace/testing/regression-candidate-review.json | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/.wwg/workspace/testing/regression-candidate-review.md | governance artifact | regression_guardrails | medium |
+| bnpi-pats-app/AGENTS.md | unknown scoped agent policy | specialized_agent_workflows | high |
+| bnpi-pats-app/app/lib/ci-cd-quality-gates.test.ts | governance artifact | test_plan | medium |
+| bnpi-pats-app/app/routes/admin/audit-logs.tsx | governance artifact | audit_log | medium |
+| bnpi-pats-app/app/routes/legal/privacy-policy.tsx | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/app/routes/legal/terms-of-use.tsx | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/app/routes/support/faq.tsx | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/app/routes/support/help-desk.tsx | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/app/services/audit-logs.service.ts | governance artifact | audit_log | medium |
+| bnpi-pats-app/build/client/assets/audit-logs-BXkiI1U5.js | governance artifact | audit_log | medium |
+| bnpi-pats-app/build/client/assets/privacy-policy-DKziWBt5.js | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/build/client/assets/terms-of-use-BXeUTGd2.js | public surface | approval_gated_public_messaging | medium |
+| bnpi-pats-app/Dockerfile | runtime structure | runtime_context | medium |
+| bnpi-pats-app/docs/testing-coverage-matrix.md | governance artifact | test_plan | medium |
+| bnpi-pats-app/docs/testing-maturity-audit.md | governance artifact | test_plan | medium |
+| bnpi-pats-app/docs/testing-strategy.md | governance artifact | test_plan | medium |
+| bnpi-pats-app/test-results/smoke-project-truth-devcur-30dbc-s-on-imported-VirtualBox-VM/error-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/test-results/smoke-project-truth-devcur-479f7-s-on-imported-VirtualBox-VM/error-context.md | canonical context | project_master_context | medium |
+| bnpi-pats-app/test-results/smoke-project-truth-devcur-d5969-s-on-imported-VirtualBox-VM/error-context.md | canonical context | project_master_context | medium |
 | reports | governance root | reference_history | medium |
 | reports/adoption-regression-report.json | governance artifact | regression_guardrails | medium |
 | reports/adoption-regression-report.md | governance artifact | regression_guardrails | medium |
@@ -325,40 +325,40 @@ wwg-native-project
 
 - INFO governance-detected: evidence=confirmed risk=low Detected 73 governance artifact(s). Recommendation: Reuse and register existing governance artifacts.
 - INFO mapping-architecture_context (docs/ARCHITECTURE.md): evidence=confirmed risk=low Detected candidate for architecture_context. Recommendation: Register docs/ARCHITECTURE.md as architecture_context; do not duplicate it.
-- INFO mapping-domain_context (hris-api/.wwg/workspace/context/domain-context.md): evidence=confirmed risk=low Detected candidate for domain_context. Recommendation: Register hris-api/.wwg/workspace/context/domain-context.md as domain_context; do not duplicate it.
-- INFO mapping-maintenance_matrix (hris-api/.wwg/workspace/context/context-maintenance-matrix.md): evidence=confirmed risk=low Detected candidate for maintenance_matrix. Recommendation: Register hris-api/.wwg/workspace/context/context-maintenance-matrix.md as maintenance_matrix; do not duplicate it.
-- INFO mapping-project_master_context (hris-api/.wwg/workspace/context/project-context.md): evidence=confirmed risk=low Detected candidate for project_master_context. Recommendation: Register hris-api/.wwg/workspace/context/project-context.md as project_master_context; do not duplicate it.
-- INFO mapping-public_discovery_context (hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md): evidence=confirmed risk=low Detected candidate for public_discovery_context. Recommendation: Register hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md as public_discovery_context; do not duplicate it.
+- INFO mapping-domain_context (bnpi-pats-api/.wwg/workspace/context/domain-context.md): evidence=confirmed risk=low Detected candidate for domain_context. Recommendation: Register bnpi-pats-api/.wwg/workspace/context/domain-context.md as domain_context; do not duplicate it.
+- INFO mapping-maintenance_matrix (bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md): evidence=confirmed risk=low Detected candidate for maintenance_matrix. Recommendation: Register bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md as maintenance_matrix; do not duplicate it.
+- INFO mapping-project_master_context (bnpi-pats-api/.wwg/workspace/context/project-context.md): evidence=confirmed risk=low Detected candidate for project_master_context. Recommendation: Register bnpi-pats-api/.wwg/workspace/context/project-context.md as project_master_context; do not duplicate it.
+- INFO mapping-public_discovery_context (bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md): evidence=confirmed risk=low Detected candidate for public_discovery_context. Recommendation: Register bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md as public_discovery_context; do not duplicate it.
 - INFO mapping-root_agents (AGENTS.md): evidence=confirmed risk=low Detected candidate for root_agents. Recommendation: Register AGENTS.md as root_agents; do not duplicate it.
 - INFO mapping-runtime_context (docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md): evidence=confirmed risk=low Detected candidate for runtime_context. Recommendation: Register docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md as runtime_context; do not duplicate it.
 - INFO public-surface-artifact (.wwg/changelog/config.yml): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
 - INFO public-surface-artifact (.wwg/changelog/state.json): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/.wwg/changelog/config.yml): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/.wwg/changelog/state.json): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/.wwg/reports/changelog-bump-recommendation.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/.wwg/reports/changelog-preview.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/.wwg/reports/wwg-changelog-handoff.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/CHANGELOG.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/scripts/generate-bnpi-dm3-supporting-imports.cjs): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/scripts/update-hikvision-metadata.ts): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/tests/support/db-fault-invariants.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/tests/support/isolated-db-fault.guard.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-api/tests/support/isolated-prisma-client.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.react-router/types/app/routes/support/+types/faq.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.react-router/types/app/routes/support/+types/help-desk.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.wwg/changelog/config.yml): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.wwg/changelog/state.json): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.wwg/reports/changelog-bump-recommendation.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.wwg/reports/changelog-preview.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/.wwg/reports/wwg-changelog-handoff.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/app/routes/legal/privacy-policy.tsx): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/app/routes/legal/terms-of-use.tsx): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/app/routes/support/faq.tsx): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/app/routes/support/help-desk.tsx): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/build/client/assets/privacy-policy-DKziWBt5.js): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
-- INFO public-surface-artifact (hris-app/build/client/assets/terms-of-use-BXeUTGd2.js): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/.wwg/changelog/config.yml): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/.wwg/changelog/state.json): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/.wwg/reports/changelog-bump-recommendation.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/.wwg/reports/changelog-preview.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/.wwg/reports/wwg-changelog-handoff.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/CHANGELOG.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/scripts/generate-bnpi-dm3-supporting-imports.cjs): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/scripts/update-hikvision-metadata.ts): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/tests/support/db-fault-invariants.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/tests/support/isolated-db-fault.guard.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-api/tests/support/isolated-prisma-client.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.react-router/types/app/routes/support/+types/faq.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.react-router/types/app/routes/support/+types/help-desk.ts): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.wwg/changelog/config.yml): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.wwg/changelog/state.json): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.wwg/reports/changelog-bump-recommendation.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.wwg/reports/changelog-preview.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/.wwg/reports/wwg-changelog-handoff.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/app/routes/legal/privacy-policy.tsx): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/app/routes/legal/terms-of-use.tsx): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/app/routes/support/faq.tsx): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/app/routes/support/help-desk.tsx): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/build/client/assets/privacy-policy-DKziWBt5.js): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
+- INFO public-surface-artifact (bnpi-pats-app/build/client/assets/terms-of-use-BXeUTGd2.js): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
 - INFO public-surface-artifact (terraform-hyperv/.terraform/providers/registry.terraform.io/taliesins/hyperv/1.2.1/windows_amd64/CHANGELOG.md): evidence=confirmed risk=low Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
 - INFO public-surface-artifact (vendor/zkteco-sdk/obj/Debug/net48/ZKTecoStandalone.exe.withSupportedRuntime.config): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
 - INFO public-surface-artifact (vendor/zkteco-sdk/obj/x86/Debug/net48/ZKTecoStandalone.exe.withSupportedRuntime.config): evidence=confirmed risk=approval-gated Public surface or discovery artifact detected. Recommendation: Treat public/trust messaging changes as approval-gated when content is customer-facing.
@@ -381,12 +381,12 @@ wwg-native-project
 ## Suggested WWG Mappings
 
 - root_agents: AGENTS.md
-- project_master_context: hris-api/.wwg/workspace/context/project-context.md
-- maintenance_matrix: hris-api/.wwg/workspace/context/context-maintenance-matrix.md
+- project_master_context: bnpi-pats-api/.wwg/workspace/context/project-context.md
+- maintenance_matrix: bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md
 - architecture_context: docs/ARCHITECTURE.md
 - runtime_context: docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md
-- public_discovery_context: hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md
-- domain_context: hris-api/.wwg/workspace/context/domain-context.md
+- public_discovery_context: bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md
+- domain_context: bnpi-pats-api/.wwg/workspace/context/domain-context.md
 
 ## Recommended Artifacts
 

@@ -41,9 +41,9 @@ Seed truth (re-measure first cycle):
   face unique residual ≈ 459 (must fall every cycle or blocker fixed)
 
 Scope: Main A/B/D/E/F only. Exclude Main C + TEST unless live From becomes readable.
-API on-node: http://127.0.0.1:3101 via ssh project-truth-hris
-Public fallback: https://dev-api.bnpi-hris.tech
-Admin: admin@bandai.local / password123 / appCode=hris
+API on-node: http://127.0.0.1:3101 via ssh project-truth-bnpi-pats
+Public fallback: https://dev-api.bnpi-pats.tech
+Admin: admin@bandai.local / password123 / appCode=bnpi-pats
 
 Every cycle:
   1) freeze live deviceIds from sync-preview
@@ -207,7 +207,7 @@ UNTIL three distinct recoveries fail with byte-level proof
 
 ```http
 POST /api/auth/login
-{"email":"admin@bandai.local","password":"password123","appCode":"hris"}
+{"email":"admin@bandai.local","password":"password123","appCode":"bnpi-pats"}
 ```
 
 ### Scope / matrix
@@ -296,7 +296,7 @@ Logs: `/var/log/project-truth/af-cred-burn/`
 Either way: **prove with SSH** after host disconnect simulation:
 
 ```bash
-ssh project-truth-hris 'cat /var/log/project-truth/af-cred-burn/STATUS.md; tail -n 20 /var/log/project-truth/af-cred-burn/HEARTBEATS.log; pgrep -af af-cred || pgrep -af af-burn'
+ssh project-truth-bnpi-pats 'cat /var/log/project-truth/af-cred-burn/STATUS.md; tail -n 20 /var/log/project-truth/af-cred-burn/HEARTBEATS.log; pgrep -af af-cred || pgrep -af af-burn'
 ```
 
 ---
@@ -309,7 +309,7 @@ ssh project-truth-hris 'cat /var/log/project-truth/af-cred-burn/STATUS.md; tail 
 | Job counters | recovery job JSON | verified, blocked, ready |
 | Plan residual | plan JSON | decision / modality ops |
 | Pod OOM / restart | `kubectl -n dev` | failed_stale → replan not panic |
-| SSH tunnel | `cloudflared-bnpi-hris.service` | must stay active |
+| SSH tunnel | `cloudflared-bnpi-pats.service` | must stay active |
 | Grafana | optional `:53000` | only after API proof |
 
 On bare “Bad Request” / unknown: **insufficient observability is a defect** — add stage ids, then retry.
@@ -370,14 +370,14 @@ Min **25** heartbeats or full EXIT GATE.
 
 | Area | Paths (start here) |
 |---|---|
-| Merge plan / conflicts | `hris-api/app/device/*merge*` / sdk users merge planner |
+| Merge plan / conflicts | `bnpi-pats-api/app/device/*merge*` / sdk users merge planner |
 | Recovery job | recovery job service in device controller/service |
 | Export / backfill | biometric-metadata backfill routes |
 | Face writer / attestation | face canary env, FDLib import path |
 | FP owner scan gate | fingerprint target owner scan completeness |
 | Success false-fail | `isHikvisionManualCopyAttemptSuccess` |
 | Job stale resume | `selectedUserKeys` / `remainingUserKeys` |
-| UI chips | `hris-app/.../enroll.tsx` residual chips (honesty only) |
+| UI chips | `bnpi-pats-app/.../enroll.tsx` residual chips (honesty only) |
 | VM supervisor | `appliance/bin/project-truth-af-burn-loop.sh` |
 
 Fix → unit/contract test → commit → push `develop` → wait DEV image → re-prove live.

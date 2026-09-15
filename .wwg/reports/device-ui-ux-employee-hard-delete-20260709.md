@@ -40,12 +40,12 @@ Status: COMPLETE
 
 ## Validation
 
-- `hris-app` focused tests passed:
+- `bnpi-pats-app` focused tests passed:
   `npm test -- app/lib/device-events-page-contract.test.ts app/lib/employee-hard-delete-ui-contract.test.ts app/services/employees.service.test.ts`.
-- `hris-api` focused direct Mocha tests passed:
+- `bnpi-pats-api` focused direct Mocha tests passed:
   `npx tsx node_modules/mocha/bin/mocha --no-config tests/employee-hard-delete.contract.spec.ts tests/device-events-api-contract.spec.ts tests/device-event-taxonomy.helper.spec.ts`.
-- `hris-api npm run typecheck` passed.
-- `hris-app npm run typecheck:test` still has the known unrelated
+- `bnpi-pats-api npm run typecheck` passed.
+- `bnpi-pats-app npm run typecheck:test` still has the known unrelated
   `TimesheetsTab.test.tsx` React Query mock typing failure already tracked in
   the recommendation registry.
 - Real local API dry-run as `admin@bandai.local` returned HTTP 200 with
@@ -66,7 +66,7 @@ No new recommendations were identified.
 - Wiki updated: NO at report close (behavior remains under admin device/employee surfaces; promote if product copy becomes canonical)
 - Workspace updated: NO for this historical report
 - Governance review completed: YES
-- Drift status: LOW for this task; residual `hris-app` `typecheck:test` TimesheetsTab mock failure is unrelated and already in the recommendation registry
+- Drift status: LOW for this task; residual `bnpi-pats-app` `typecheck:test` TimesheetsTab mock failure is unrelated and already in the recommendation registry
 - Canonical files changed (historical pass):
   - Admin device Add/Edit and Device events UX
   - Employee hard-delete preview/execute API and admin UI

@@ -12,25 +12,25 @@ Short answer: **Yes.** The devices already expose Manual + NTP Time Settings. IS
 |---|---|---|
 | Set time on the panel itself? | **Yes** — admin Time Settings | DS-K1T344 / DS-K1T670 manuals |
 | Web / Hik-Connect / iVMS set? | **Yes** — Manual or NTP; iVMS Batch Time Sync | Vendor help + USA FAQ |
-| ISAPI GET clock? | **Yes** | BNPI GET 200; HRIS health |
+| ISAPI GET clock? | **Yes** | BNPI GET 200; BNPI PATS health |
 | ISAPI PUT clock? | **Yes** (vendor Face Recognition Terminals ISAPI) | Not exercised on BNPI this pass |
 | NTP on biometric firmware? | **Yes** | Same manuals + `/ISAPI/System/time/ntpServers` |
-| HRIS can SET time today? | **Yes, preview-first** | `POST /api/device/:id/time-sync` |
+| BNPI PATS can SET time today? | **Yes, preview-first** | `POST /api/device/:id/time-sync` |
 | Manila mapping | Device string **`CST-8:00:00`**, DST **off**, localTime `+08:00` | Live GET + POSIX TZ |
 | Sync all devices together? | **Yes** — NTP (durable) or one-shot PUT/iVMS (drift) | See patterns below |
 
 ## Why it matters
 
-HRIS Time In/Out uses the **device punch time**, not server `receivedAt`. Naive SDK stamps get `+08:00`. Pairing is per employee across **all** devices on a Manila day. Clocks that drift from each other break in/out, late/UT, and day buckets.
+BNPI PATS Time In/Out uses the **device punch time**, not server `receivedAt`. Naive SDK stamps get `+08:00`. Pairing is per employee across **all** devices on a Manila day. Clocks that drift from each other break in/out, late/UT, and day buckets.
 
 | Drift | Attendance effect |
 |---|---|
 | Device ahead | Punch looks late or **next day** |
 | Device behind | Punch looks early or **previous day** |
 | Two devices differ | In on A / out on B can invert or split days |
-| HRIS software skew | Future-only, ≤30 min, import opt-in — **not** a substitute |
+| BNPI PATS software skew | Future-only, ≤30 min, import opt-in — **not** a substitute |
 
-## How to set time (device, not HRIS)
+## How to set time (device, not BNPI PATS)
 
 | Method | Fleet? | Durable? | How |
 |---|---|---|---|
@@ -47,7 +47,7 @@ Philippine Standard Time is UTC+8 with **no DST** (since 1978). Hikvision does *
 
 | Field | Use | Do not use |
 |---|---|---|
-| IANA (HRIS) | `Asia/Manila` | On the panel |
+| IANA (BNPI PATS) | `Asia/Manila` | On the panel |
 | ISAPI `timeZone` | **`CST-8:00:00`** | `CST-8:00:00DST…`, US Central, `GMT+8` POSIX |
 | ISAPI `localTime` | ISO with **`+08:00`** | `Z` unless TZ also changes |
 | DST | **Off** | Any DST bias |
@@ -92,12 +92,12 @@ Auth: HTTP Digest, typically **admin**. Operator users `NEEDS_CONFIRMATION` (lik
 
 | Path | What it does |
 |---|---|
-| `hris-api/config/hikvision.endpoint.ts` | GET `/ISAPI/System/time?format=json` only |
+| `bnpi-pats-api/config/hikvision.endpoint.ts` | GET `/ISAPI/System/time?format=json` only |
 | Device health | GET clock → `provenBy: systemTime`. UI badge **Readable**, not the clock value |
 | `scripts/check-hikvision-device-clock.ts` | GET + skew vs server |
 | Python probe | GET XML `localTime` / `timeMode` / `timeZone`. **No writes** |
 | C++ listener | Copies ACS `struTime` onto the event. **Does not set** panel clock |
-| HRIS | Stores `hikvisionClockSkewSeconds` on Device config. Does **not** PUT the panel |
+| BNPI PATS | Stores `hikvisionClockSkewSeconds` on Device config. Does **not** PUT the panel |
 
 `hikvisionFetch` can send PUT if called that way. **No caller does.**
 
@@ -124,7 +124,7 @@ Trial 2026-07-01 (older IP): `localTime=...+08:00`, `timeMode=manual`, `timeZone
 | 1 | GET time + ntpServers + capabilities on each DS-K1T | Firmware proof before write |
 | 2 | Same TZ `CST-8:00:00`, DST off, **NTP** to one LAN NTP | Durable fleet lock |
 | 3 | If a panel cannot NTP: one-shot PUT of the same Manila `localTime` | Recovery only |
-| 4 | Re-GET skew vs server; keep HRIS `Asia/Manila` | Prove wall clock |
+| 4 | Re-GET skew vs server; keep BNPI PATS `Asia/Manila` | Prove wall clock |
 | 5 | Do clock jumps **off shift**; never set backward during live T&A | ACS/search/duplicate punches |
 
 Do not mix some NTP, some manual, some DST-on. Do not treat iVMS batch as durable NTP (it is a PC-time push).
@@ -144,7 +144,7 @@ Do not mix some NTP, some manual, some DST-on. Do not treat iVMS batch as durabl
 
 - No PUT/POST to any panel
 - No NTP enable
-- No HRIS clock-writer feature
+- No BNPI PATS clock-writer feature
 - No live 2026-08-19 GET (API/VM unreachable from this host)
 
 ## Sources

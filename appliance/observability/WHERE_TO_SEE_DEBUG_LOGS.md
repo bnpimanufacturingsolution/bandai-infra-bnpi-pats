@@ -12,7 +12,7 @@ or
 http://localhost:53002  (UAT)
 
 → Dashboards
-→ HRIS Observability folder
+→ BNPI PATS Observability folder
 → Function Tracing & Debug
 ```
 
@@ -127,7 +127,7 @@ If you want to see error-level logs specifically:
 ```
 http://localhost:53001
 → Dashboards
-→ HRIS Observability
+→ BNPI PATS Observability
 → Errors Dashboard
 ```
 
@@ -148,7 +148,7 @@ For tracing function flow through services:
 ```
 http://localhost:53001
 → Dashboards
-→ HRIS Observability
+→ BNPI PATS Observability
 → Traces Dashboard
 ```
 
@@ -200,7 +200,7 @@ OTEL_ENABLED=true
 ### **Step 2: Restart API**
 
 ```bash
-docker-compose restart hris-api-dev
+docker-compose restart bnpi-pats-api-dev
 ```
 
 ### **Step 3: Make a Request**
@@ -212,7 +212,7 @@ curl -X GET http://localhost:3101/api/health
 ### **Step 4: View in Grafana**
 
 ```
-http://localhost:53001/d/hris-function-trace
+http://localhost:53001/d/bnpi-pats-function-trace
 ```
 
 **Wait 10 seconds** for logs to appear (auto-refresh), then you should see:
@@ -270,7 +270,7 @@ echo $ENABLE_FUNCTION_TRACE  # Should be "true"
 
 ```bash
 docker-compose down
-docker-compose up -d hris-api-dev
+docker-compose up -d bnpi-pats-api-dev
 ```
 
 ### **Check 3: Make a request**

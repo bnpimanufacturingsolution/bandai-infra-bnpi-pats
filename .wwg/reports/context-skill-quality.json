@@ -12,7 +12,7 @@
     ".wwg/reports/adoption-audit.md",
     ".wwg/reports/adoption-regression-report.md",
     ".wwg/reports/agent-implementation-log.md",
-    ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+    ".wwg/reports/bnpi-pats-tech-cloudflare-repair-20260629.md",
     ".wwg/reports/cloudflare-public-e2e-20260630.md",
     ".wwg/reports/cors-k3s-runtime-repair-20260701.md",
     ".wwg/reports/dev-k3s-data-promotion-20260701.md",
@@ -28,13 +28,13 @@
     ".wwg/reports/hyperv-host-vm-bridge-state-20260709.md",
     ".wwg/reports/readme-validation.md",
     ".wwg/reports/regression-quality-report.md",
-    ".wwg/reports/remote-hris-sync-drift-20260702.md",
+    ".wwg/reports/remote-bnpi-pats-sync-drift-20260702.md",
     ".wwg/reports/sdk-device-user-export-import-20260728.md",
     ".wwg/reports/skill-cleanup-review.md",
     ".wwg/reports/test-alignment-report.md",
-    ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
-    ".wwg/reports/upstream-hris-preview-merge-20260702.md",
-    ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
+    ".wwg/reports/upstream-bnpi-pats-develop-dry-run-20260702.md",
+    ".wwg/reports/upstream-bnpi-pats-preview-merge-20260702.md",
+    ".wwg/reports/upstream-bnpi-pats-sync-implementation-20260702.md",
     ".wwg/reports/v6-cloudflare-credential-preflight-20260630.md",
     ".wwg/reports/v6-one-shot-fresh-vm-cloudflare-proof-20260630.md",
     ".wwg/reports/vm-static-ip-241-host-route-20260710.md",
@@ -128,7 +128,7 @@
     "docs/ARCHITECTURE.md",
     "docs/BANDAI_HR_PAYROLL_PROCESS_DISCOVERY_QUESTIONS.md",
     "docs/BNPI_DESEC_CLOUDFLARE_TUNNEL_STATUS_20260629.md",
-    "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+    "docs/BNPI_PATS_TECH_CLOUDFLARE_STATUS_20260629.md",
     "docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md",
     "docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md",
     "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
@@ -143,13 +143,13 @@
     "docs/HIKVISION_LINUX_TRIAL_20260701.md",
     "docs/HIKVISION_QUICK_GAP_TESTING.md",
     "docs/HIKVISION_RUNTIME_TRUTH.md",
-    "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
-    "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+    "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
+    "docs/BNPI_PATS_UNION_MERGE_CONFLICTS.md",
     "docs/HYPERV_FINAL_ARTIFACT_AND_DAY2_REPAIR.md",
     "docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md",
     "docs/OPERATIONS.md",
     "docs/PROJECT_TRUTH_AI_AGENT_CONTEXT_20260714.md",
-    "docs/REMOTE_HRIS_SYNC_RECOVERY_PROMPT_20260702.md",
+    "docs/REMOTE_BNPI_PATS_SYNC_RECOVERY_PROMPT_20260702.md",
     "docs/SELF_HEALING_AND_DRIFT_RECOVERY.md",
     "docs/SHORTCUTS.md",
     "docs/TERRAFORM_HYPERV_ARCHITECTURE.md",
@@ -226,7 +226,7 @@
       "reason": "Report directory path."
     },
     {
-      "path": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "path": ".wwg/reports/bnpi-pats-tech-cloudflare-repair-20260629.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -306,7 +306,7 @@
       "reason": "Report directory path."
     },
     {
-      "path": ".wwg/reports/remote-hris-sync-drift-20260702.md",
+      "path": ".wwg/reports/remote-bnpi-pats-sync-drift-20260702.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -326,17 +326,17 @@
       "reason": "Report directory path."
     },
     {
-      "path": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "path": ".wwg/reports/upstream-bnpi-pats-develop-dry-run-20260702.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
     {
-      "path": ".wwg/reports/upstream-hris-preview-merge-20260702.md",
+      "path": ".wwg/reports/upstream-bnpi-pats-preview-merge-20260702.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
     {
-      "path": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
+      "path": ".wwg/reports/upstream-bnpi-pats-sync-implementation-20260702.md",
       "fileType": "report",
       "reason": "Report directory path."
     },
@@ -806,7 +806,7 @@
       "reason": "Public documentation path."
     },
     {
-      "path": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "path": "docs/BNPI_PATS_TECH_CLOUDFLARE_STATUS_20260629.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -881,12 +881,12 @@
       "reason": "Public documentation path."
     },
     {
-      "path": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "path": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
     {
-      "path": "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+      "path": "docs/BNPI_PATS_UNION_MERGE_CONFLICTS.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -911,7 +911,7 @@
       "reason": "Public documentation path."
     },
     {
-      "path": "docs/REMOTE_HRIS_SYNC_RECOVERY_PROMPT_20260702.md",
+      "path": "docs/REMOTE_BNPI_PATS_SYNC_RECOVERY_PROMPT_20260702.md",
       "fileType": "public_doc",
       "reason": "Public documentation path."
     },
@@ -1164,7 +1164,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "affectedFile": ".wwg/reports/bnpi-pats-tech-cloudflare-repair-20260629.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -1308,7 +1308,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Validation, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/remote-hris-sync-drift-20260702.md",
+      "affectedFile": ".wwg/reports/remote-bnpi-pats-sync-drift-20260702.md",
       "fileType": "report",
       "affectedSection": "Validation, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -1344,7 +1344,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-develop-dry-run-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -1353,7 +1353,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-preview-merge-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-preview-merge-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -1362,7 +1362,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-sync-implementation-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -2118,7 +2118,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "affectedFile": "docs/BNPI_PATS_TECH_CLOUDFLARE_STATUS_20260629.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -2253,7 +2253,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -2262,7 +2262,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+      "affectedFile": "docs/BNPI_PATS_UNION_MERGE_CONFLICTS.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -3709,7 +3709,7 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "line": 7,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
@@ -3718,7 +3718,7 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "line": 21,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
@@ -4033,7 +4033,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "affectedFile": ".wwg/reports/bnpi-pats-tech-cloudflare-repair-20260629.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -4177,7 +4177,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Validation, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/remote-hris-sync-drift-20260702.md",
+      "affectedFile": ".wwg/reports/remote-bnpi-pats-sync-drift-20260702.md",
       "fileType": "report",
       "affectedSection": "Validation, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -4213,7 +4213,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-develop-dry-run-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -4222,7 +4222,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-preview-merge-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-preview-merge-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -4231,7 +4231,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-sync-implementation-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -4987,7 +4987,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "affectedFile": "docs/BNPI_PATS_TECH_CLOUDFLARE_STATUS_20260629.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -5122,7 +5122,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -5131,7 +5131,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+      "affectedFile": "docs/BNPI_PATS_UNION_MERGE_CONFLICTS.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -5819,7 +5819,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/bnpi-hris-tech-cloudflare-repair-20260629.md",
+      "affectedFile": ".wwg/reports/bnpi-pats-tech-cloudflare-repair-20260629.md",
       "fileType": "report",
       "affectedSection": "Outcome, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -5991,7 +5991,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Validation, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/remote-hris-sync-drift-20260702.md",
+      "affectedFile": ".wwg/reports/remote-bnpi-pats-sync-drift-20260702.md",
       "fileType": "report",
       "affectedSection": "Validation, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -6047,7 +6047,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-develop-dry-run-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-develop-dry-run-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -6056,7 +6056,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-preview-merge-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-preview-merge-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -6065,7 +6065,7 @@
       "severity": "warning",
       "code": "report-contract-missing-sections",
       "message": "Report is missing contract section(s): Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed.",
-      "affectedFile": ".wwg/reports/upstream-hris-sync-implementation-20260702.md",
+      "affectedFile": ".wwg/reports/upstream-bnpi-pats-sync-implementation-20260702.md",
       "fileType": "report",
       "affectedSection": "Outcome, Evidence, Validation, Risks, Next Action, Detailed Notes, Files Changed or Files Reviewed",
       "recommendedFix": "Add missing report sections in future reports or mark sections explicitly not applicable."
@@ -7249,7 +7249,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/BNPI_HRIS_TECH_CLOUDFLARE_STATUS_20260629.md",
+      "affectedFile": "docs/BNPI_PATS_TECH_CLOUDFLARE_STATUS_20260629.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -7686,7 +7686,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -7695,7 +7695,7 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "line": 7,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
@@ -7704,7 +7704,7 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "line": 21,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
@@ -7713,7 +7713,7 @@
       "severity": "warning",
       "code": "public-doc-contract-missing-sections",
       "message": "Public Doc is missing contract section(s): Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References.",
-      "affectedFile": "docs/HRIS_UNION_MERGE_CONFLICTS.md",
+      "affectedFile": "docs/BNPI_PATS_UNION_MERGE_CONFLICTS.md",
       "fileType": "public_doc",
       "affectedSection": "Purpose, Audience, Summary, How It Works, Examples, Related Commands or Files, References",
       "recommendedFix": "Add the missing public documentation section when the file is a stable public guide."
@@ -9331,7 +9331,7 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "line": 7,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."
@@ -9340,7 +9340,7 @@
       "severity": "suggestion",
       "code": "markdown-possible-stale-current-language",
       "message": "Stable or active file contains phase/pass/temporary language.",
-      "affectedFile": "docs/HRIS_STANDALONE_DEVELOP_SNAPSHOT.md",
+      "affectedFile": "docs/BNPI_PATS_STANDALONE_DEVELOP_SNAPSHOT.md",
       "fileType": "public_doc",
       "line": 21,
       "recommendedFix": "Route history to reports, changelog, roadmap, or dated history docs unless the file is intentionally historical."

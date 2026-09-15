@@ -1,9 +1,9 @@
 # Agent job card — Device Events multi-agent all-green (non-assuming)
 
 **Mode:** execution · owner-operator · **100% agent-owned** · non-stop until EXIT GATE  
-**Primary UI:** `https://dev.bnpi-hris.tech/admin/configuration/devices/events?view=saved`  
-**Primary API:** `https://dev-api.bnpi-hris.tech`  
-**Actor:** `admin@bandai.local` / `password123` / `appCode='hris'` (hris-admin)
+**Primary UI:** `https://dev.bnpi-pats.tech/admin/configuration/devices/events?view=saved`  
+**Primary API:** `https://dev-api.bnpi-pats.tech`  
+**Actor:** `admin@bandai.local` / `password123` / `appCode='bnpi-pats'` (bnpi-pats-admin)
 
 Paste into a high-budget agent (`--max-turns` high enough for multi-hour work).  
 **Do not invent.** Every claim needs opened WWG/code/runtime/API/SSH/log evidence or label `NEEDS_CONFIRMATION` / `CONFLICTING` / `STALE`.
@@ -42,10 +42,10 @@ Root and all children **own every recoverable step**. Forbidden exit patterns:
 2. **Health 200 ≠ Device Events green.** Always call live-readiness + events list + listener/watcher logs.
 3. **Armed quiet ≠ broken.** G1 path green does **not** require a tap. G2 live green **does**.
 4. **Empty person on major=3** is wire truth until multipass proven — not automatic “listener dead”.
-5. **Never disable** `cloudflared-bnpi-hris.service`.
+5. **Never disable** `cloudflared-bnpi-pats.service`.
 6. **Never soft-delete** devices that still have credentials without evidence they are ghosts.
 7. Prefer **direct API evidence first**, then browser/Playwright.
-8. Prefer **LAN/VM SSH** when routable; `ssh project-truth-hris` is OK when LAN times out (documented host drift).
+8. Prefer **LAN/VM SSH** when routable; `ssh project-truth-bnpi-pats` is OK when LAN times out (documented host drift).
 
 ---
 
@@ -299,8 +299,8 @@ Minimum **20** heartbeats for multi-surface work or full EXIT GATE — do not se
                                    │
          ┌─────────────────────────┼─────────────────────────┐
          ▼                         ▼                         ▼
-  dev.bnpi-hris.tech         dev-api.bnpi-hris.tech     grafana / logs (if used)
-  hris-app (K3s DEV)         hris-api (K3s DEV :3101)
+  dev.bnpi-pats.tech         dev-api.bnpi-pats.tech     grafana / logs (if used)
+  bnpi-pats-app (K3s DEV)         bnpi-pats-api (K3s DEV :3101)
          │                         │
          │                    ┌────┴────┐
          │                    ▼         ▼
@@ -312,9 +312,9 @@ Minimum **20** heartbeats for multi-surface work or full EXIT GATE — do not se
          │                    │
          │         ┌──────────┴──────────┐
          │         ▼                     ▼
-         │   systemd listener      hris-hikvision-watcher
+         │   systemd listener      bnpi-pats-hikvision-watcher
          │   hikvision-biometric   (DEV only ACS pull)
-         │   → POST localhost:3101 → POST hris-api:3001
+         │   → POST localhost:3101 → POST bnpi-pats-api:3001
          │         │                     │
          │         └──────────┬──────────┘
          │                    ▼
@@ -350,29 +350,29 @@ Run and save under `.runtime/device-events-allgreen-<stamp>/`:
 
 ```powershell
 # Public health
-@('https://dev-api.bnpi-hris.tech/health','https://api.bnpi-hris.tech/health','https://uat-api.bnpi-hris.tech/health') |
+@('https://dev-api.bnpi-pats.tech/health','https://api.bnpi-pats.tech/health','https://uat-api.bnpi-pats.tech/health') |
   ForEach-Object { try { "$_ -> $((Invoke-WebRequest $_ -UseBasicParsing -TimeoutSec 15).StatusCode)" } catch { "$_ -> FAIL" } }
 
 # Auth + live-readiness + events
-$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
-$login = Invoke-RestMethod -Method Post 'https://dev-api.bnpi-hris.tech/api/auth/login' -ContentType 'application/json' -Body $loginBody
+$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
+$login = Invoke-RestMethod -Method Post 'https://dev-api.bnpi-pats.tech/api/auth/login' -ContentType 'application/json' -Body $loginBody
 $h = @{ Authorization = "Bearer $($login.data.token)" }
-Invoke-RestMethod -Method Get 'https://dev-api.bnpi-hris.tech/api/device/events/live-readiness' -Headers $h |
+Invoke-RestMethod -Method Get 'https://dev-api.bnpi-pats.tech/api/device/events/live-readiness' -Headers $h |
   ConvertTo-Json -Depth 10 | Set-Content live-readiness.json
 # Events list (do not assume Saved N from UI alone)
-Invoke-RestMethod -Method Get 'https://dev-api.bnpi-hris.tech/api/device/events?limit=10&sort=receivedAt&order=desc' -Headers $h |
+Invoke-RestMethod -Method Get 'https://dev-api.bnpi-pats.tech/api/device/events?limit=10&sort=receivedAt&order=desc' -Headers $h |
   ConvertTo-Json -Depth 6 | Set-Content events.json
 ```
 
 ```bash
-# Via: ssh project-truth-hris
+# Via: ssh project-truth-bnpi-pats
 kubectl -n dev get pods,deploy,sts -o wide
-kubectl -n dev logs deploy/hris-api --tail=80
-kubectl -n dev logs deploy/hris-hikvision-watcher --since=30m | tail -100
+kubectl -n dev logs deploy/bnpi-pats-api --tail=80
+kubectl -n dev logs deploy/bnpi-pats-hikvision-watcher --since=30m | tail -100
 systemctl status project-truth-hikvision-hot-reload-listener.service --no-pager -l | head -40
 journalctl -u project-truth-hikvision-hot-reload-listener.service --no-pager -n 50
 # Ghost / creds
-kubectl -n dev exec sts/hris-postgres -- psql -U postgres -d hris -c \
+kubectl -n dev exec sts/bnpi-pats-postgres -- psql -U postgres -d bnpi-pats -c \
   "SELECT id,name,address, CASE WHEN access::text IN ('null','{}') THEN 'NO_ACCESS' ELSE 'HAS_ACCESS' END, \"isDeleted\" FROM \"Device\" WHERE name ILIKE '%entrance%' OR address LIKE '10.184.37.%' ORDER BY name;"
 # Observability in-VM
 curl -sS -m 5 http://127.0.0.1:3110/ready; curl -sS -m 5 http://127.0.0.1:9091/-/ready; curl -sS -m 5 http://127.0.0.1:53000/api/health
@@ -414,7 +414,7 @@ Every distinct failure:
 
 ### Priority order (root/A-FIX execute; never hand off)
 
-1. **DB / API Ready** — no green without postgres + hris-api Ready (agent restarts pods)  
+1. **DB / API Ready** — no green without postgres + bnpi-pats-api Ready (agent restarts pods)  
 2. **Ghost / watcher spam** — soft-delete NO_ACCESS ghost; ensure skip-guard in image; bounce watcher  
 3. **Listener armed** — systemd active; login_failed → credentials/network (3 tries, agent-owned)  
 4. **pathOk probe + pathReady** — code + live image SHA; rebuild/import if lag  
@@ -452,10 +452,10 @@ Every distinct failure:
 
 ```text
 1. Record G1 baseline green
-2. kubectl -n dev rollout restart deploy/hris-hikvision-watcher
+2. kubectl -n dev rollout restart deploy/bnpi-pats-hikvision-watcher
 3. Wait Ready
 4. Re-check watcher_miss_15m == 0 and G1 still green
-5. Optional: rollout restart deploy/hris-api → wait Ready 60–120s → re-check G1
+5. Optional: rollout restart deploy/bnpi-pats-api → wait Ready 60–120s → re-check G1
    (Expect brief red during restart; permanent red after Ready = fail)
 ```
 
@@ -463,15 +463,15 @@ Every distinct failure:
 
 | Concern | Path |
 |---|---|
-| pathReady / G1 overall | `hris-api/helper/device-live-readiness.helper.ts` |
-| pathOk probe | `hris-api/app/device/device.controller.ts` (`probeHikvisionCallbackPostPath`) |
-| Socket UNION | `hris-api/helper/device-event-realtime.helper.ts` |
-| Watcher skip no-creds | `hris-api/scripts/audit-hikvision-device-events.ts` |
-| FE join All devices | `hris-app/app/routes/admin/devices/events.tsx` |
+| pathReady / G1 overall | `bnpi-pats-api/helper/device-live-readiness.helper.ts` |
+| pathOk probe | `bnpi-pats-api/app/device/device.controller.ts` (`probeHikvisionCallbackPostPath`) |
+| Socket UNION | `bnpi-pats-api/helper/device-event-realtime.helper.ts` |
+| Watcher skip no-creds | `bnpi-pats-api/scripts/audit-hikvision-device-events.ts` |
+| FE join All devices | `bnpi-pats-app/app/routes/admin/devices/events.tsx` |
 | Monitor | `scripts/monitor-hikvision-device-events-health.ps1` |
 | Contract | `docs/00-product/HIKVISION-DEVICE-EVENTS-REALTIME-CONTRACT.md` |
 
-If live API lacks `pathReady` field → **image lag**: rebuild/import `hris-api-local:develop` from ansible-pull HEAD and roll DEV deploy (document SHA).
+If live API lacks `pathReady` field → **image lag**: rebuild/import `bnpi-pats-api-local:develop` from ansible-pull HEAD and roll DEV deploy (document SHA).
 
 ---
 
@@ -493,7 +493,7 @@ Login → /admin/configuration/devices/events?view=saved
 5. Unit tests if code changed:
 
 ```powershell
-cd hris-api
+cd bnpi-pats-api
 npm.cmd test -- --grep "device-live-readiness helper"
 npm.cmd test -- --grep "device event realtime helper"
 ```

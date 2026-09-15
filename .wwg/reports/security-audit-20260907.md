@@ -2,7 +2,7 @@
 
 Status: `AUDIT_COMPLETE_READ_ONLY` — no files, config, or runtime state were modified.
 Method: 5 parallel read-only audit workstreams (secrets-in-repo, API auth/AuthZ, GitOps/K8s/Compose/Ansible, CI/scripts/tunnel, device/biometric plane) + direct verification of top claims by the orchestrator.
-Repo: `bandai-infra` (origin: `github.com/hrisworkforcesystem-coder/bandai-infra`, pushes to `develop`).
+Repo: `bandai-infra` (origin: `github.com/bnpimanufacturingsolution/bandai-infra`, pushes to `develop`).
 
 ---
 
@@ -24,20 +24,20 @@ The audit found **7 CRITICAL**, **~10 HIGH**, and ~20 MEDIUM/LOW findings. The s
 ## CRITICAL findings (verified)
 
 ### C1. Production secrets committed to git since 2023
-- **Evidence:** `hris-api/.env.cloud.{dev,uat,prod}`, `hris-api/.env.{dev,uat,prod}`, `hris-api/.env`, `appliance/.env` are **tracked in git** (`git ls-files` verified). Files added ~2023 (`272dc5de` monorepo import, `4ce3712d`) and present in history today.
+- **Evidence:** `bnpi-pats-api/.env.cloud.{dev,uat,prod}`, `bnpi-pats-api/.env.{dev,uat,prod}`, `bnpi-pats-api/.env`, `appliance/.env` are **tracked in git** (`git ls-files` verified). Files added ~2023 (`272dc5de` monorepo import, `4ce3712d`) and present in history today.
 - Real values present (redacted here):
   - Cloud SQL passwords: dev `CJwV…(40c)`, UAT/prod `FLso…(40c)` — **UAT and PROD share the same password**.
   - Cloudinary API secret `3VlK…(27c)` + API key `9314…` — **identical across dev/uat/prod**.
   - Better Stack ingestion token `2FCW…(24c)` — identical across all envs.
   - Neon.tech dev DB password `npg_…(14c)`; MongoDB Atlas UAT password `28eH…(16c)`.
-  - `INTEGRATION_API_KEYS` real key `hris_…` (50+ chars) in `hris-api/.env` (flagged pre-existing 2026-09-04).
-- Root `.gitignore` has **no `.env` rules**; `hris-api/.gitignore` ignores only `.env.*.local` variants, allowing the main envs to be tracked.
+  - `INTEGRATION_API_KEYS` real key `bnpi_pats_…` (50+ chars) in `bnpi-pats-api/.env` (flagged pre-existing 2026-09-04).
+- Root `.gitignore` has **no `.env` rules**; `bnpi-pats-api/.gitignore` ignores only `.env.*.local` variants, allowing the main envs to be tracked.
 - **Impact:** anyone with repo read access (or access to any clone/backup/fork) holds prod DB and third-party credentials. One compromised shared secret compromises all environments.
-- **Remediation:** rotate ALL listed secrets immediately; purge `.env*` from git history (`git filter-repo`/BFG); add `.env*` to root `.gitignore` (keep `!.env.example`); move secrets to GitHub Actions secrets / GCP Secret Manager / K8s sealed-secrets (the repo already has `hris-api/gcp/sync-github-deploy-secrets.ps1` plumbing).
+- **Remediation:** rotate ALL listed secrets immediately; purge `.env*` from git history (`git filter-repo`/BFG); add `.env*` to root `.gitignore` (keep `!.env.example`); move secrets to GitHub Actions secrets / GCP Secret Manager / K8s sealed-secrets (the repo already has `bnpi-pats-api/gcp/sync-github-deploy-secrets.ps1` plumbing).
 
 ### C2. Unauthenticated device callback endpoint (punch injection)
-- **Evidence:** `hris-api/index.ts:666` excludes all `/hikvision` paths from `verifyToken`; `hris-api/app/hikvision/routes/callback.router.ts:12` states "intentionally PUBLIC (no authentication required)"; `callback.controller.ts` has no HMAC, shared secret, or IP allowlist. The ZKTeco bridge also posts unauthenticated (`vendor/zkteco-linux/.../__main__.py` `post_json`).
-- **Impact:** any LAN actor, or anyone on the internet via the public tunnel (`api.bnpi-hris.tech`), can POST fake `major=5` punches for a known `employeeNo`/`deviceIP` → attendance and payroll fraud. Device `deviceIP` in the payload is trusted for device resolution.
+- **Evidence:** `bnpi-pats-api/index.ts:666` excludes all `/hikvision` paths from `verifyToken`; `bnpi-pats-api/app/hikvision/routes/callback.router.ts:12` states "intentionally PUBLIC (no authentication required)"; `callback.controller.ts` has no HMAC, shared secret, or IP allowlist. The ZKTeco bridge also posts unauthenticated (`vendor/zkteco-linux/.../__main__.py` `post_json`).
+- **Impact:** any LAN actor, or anyone on the internet via the public tunnel (`api.bnpi-pats.tech`), can POST fake `major=5` punches for a known `employeeNo`/`deviceIP` → attendance and payroll fraud. Device `deviceIP` in the payload is trusted for device resolution.
 - **Remediation (P0):** shared-secret header on all device callbacks (validated against `Device.config`), Cloudflare/WAF source restriction, and/or restrict callback ingress to the VM listener path only.
 
 ### C3. Real Hikvision device password hardcoded in a tracked script
@@ -46,7 +46,7 @@ The audit found **7 CRITICAL**, **~10 HIGH**, and ~20 MEDIUM/LOW findings. The s
 - **Remediation:** rotate device password(s); strip from script; parameterize like `run-remote-hikvision-sdk-matrix.ps1` already does correctly (`HIKVISION_PASSWORD` env, throws when empty).
 
 ### C4. Plaintext superuser DB credentials in GitOps manifests
-- **Evidence:** `gitops/runtime-k8s/overlays/{dev,uat,prod}/runtime.yaml` — `POSTGRES_PASSWORD: postgres` inside `stringData` secrets (line 8, verified); `appliance/docker-compose*.yml` and `appliance/env/hris-api.env` use `postgresql://postgres:postgres@…` URLs.
+- **Evidence:** `gitops/runtime-k8s/overlays/{dev,uat,prod}/runtime.yaml` — `POSTGRES_PASSWORD: postgres` inside `stringData` secrets (line 8, verified); `appliance/docker-compose*.yml` and `appliance/env/bnpi-pats-api.env` use `postgresql://postgres:postgres@…` URLs.
 - **Impact:** DB superuser access for anyone with repo read.
 - **Remediation:** sealed-secrets / external secret operator; unique per-env strong passwords.
 
@@ -56,12 +56,12 @@ The audit found **7 CRITICAL**, **~10 HIGH**, and ~20 MEDIUM/LOW findings. The s
 - **Remediation:** per-env cryptographically random secrets at deploy time; fail startup when unset (currently only fails at first request — `middleware/verifyToken.ts:213-221`).
 
 ### C6. SSH private key mounted into K3s pods via hostPath
-- **Evidence:** `gitops/runtime-k8s/overlays/*/runtime.yaml` mount `/var/lib/project-truth/ssh` (hostPath `DirectoryOrCreate`) into `hris-api` containers for VM SSH control.
+- **Evidence:** `gitops/runtime-k8s/overlays/*/runtime.yaml` mount `/var/lib/project-truth/ssh` (hostPath `DirectoryOrCreate`) into `bnpi-pats-api` containers for VM SSH control.
 - **Impact:** container compromise → SSH key for `infra@10.184.37.19` (the management path to the whole VM).
 - **Remediation:** dedicated low-privilege key scoped to the listener control role, delivered as K8s Secret; or a VM-side SDK control sidecar (already a documented target architecture) to remove the SSH dependency entirely.
 
 ### C7. Installer ships sensitive trees (corrected scope after verification)
-- **Evidence:** `installer/build-installer.ps1:28` copies `README.md, app, docs, gitops, terraform-hyperv, scripts, installer, image-factory` recursively; `installer/project-truth.iss:20-25` packages the same. **Correction:** `hris-api/` is NOT packaged (so `.env.cloud.*` are NOT in the installer), but the package does include `scripts/` (→ C3 Hikvision password), `gitops/` (→ C4/C5 manifest secrets), and docs.
+- **Evidence:** `installer/build-installer.ps1:28` copies `README.md, app, docs, gitops, terraform-hyperv, scripts, installer, image-factory` recursively; `installer/project-truth.iss:20-25` packages the same. **Correction:** `bnpi-pats-api/` is NOT packaged (so `.env.cloud.*` are NOT in the installer), but the package does include `scripts/` (→ C3 Hikvision password), `gitops/` (→ C4/C5 manifest secrets), and docs.
 - **Remediation:** add `-Exclude *.env*`-style filters AND strip known secret-bearing literals from `scripts/`; treat `gitops/` secrets as blocked until C4/C5 are fixed. (Note: V6/V7 one-click zips download-only — that path is clean.)
 
 ---
@@ -70,14 +70,14 @@ The audit found **7 CRITICAL**, **~10 HIGH**, and ~20 MEDIUM/LOW findings. The s
 
 | # | Finding | Evidence |
 |---|---|---|
-| H1 | Rate limiting **disabled by default** (`ENABLE_RATE_LIMIT` not `true`), no lockout on `/api/auth/login` | `hris-api/config/config.ts:88`; `index.ts:552-639` |
-| H2 | TLS verification disabled for Hikvision ISAPI: `rejectUnauthorized:false` + global `NODE_TLS_REJECT_UNAUTHORIZED=0` bypass | `hris-api/lib/hikvision-client.ts:520-526, 696-701` |
-| H3 | Device credentials (`Device.access.password`) stored **plaintext in DB** | `hris-api/prisma/schema/device.prisma:82-98` |
+| H1 | Rate limiting **disabled by default** (`ENABLE_RATE_LIMIT` not `true`), no lockout on `/api/auth/login` | `bnpi-pats-api/config/config.ts:88`; `index.ts:552-639` |
+| H2 | TLS verification disabled for Hikvision ISAPI: `rejectUnauthorized:false` + global `NODE_TLS_REJECT_UNAUTHORIZED=0` bypass | `bnpi-pats-api/lib/hikvision-client.ts:520-526, 696-701` |
+| H3 | Device credentials (`Device.access.password`) stored **plaintext in DB** | `bnpi-pats-api/prisma/schema/device.prisma:82-98` |
 | H4 | Admin-ish routes (employee create/delete/import, device ops, payroll) mostly guarded by `verifyToken` only; `verifyRole` middleware exists but nearly unused | `employee.router.ts`, `middleware/verifyRole.ts`; role sets defined in `device.controller.ts:257-262` |
-| H5 | Padding-based employee matching creates punch-fraud collision risk (`10` ↔ `00010`) | `hris-api/helper/device-person-token.helper.ts:773-803` |
+| H5 | Padding-based employee matching creates punch-fraud collision risk (`10` ↔ `00010`) | `bnpi-pats-api/helper/device-person-token.helper.ts:773-803` |
 | H6 | `password123` hardcoded as default credential in 15+ scripts; `plink -pw` patterns in `configure-vm-git-creds.ps1:100`, `vm-pull.ps1:79,99`; VM password `infra` in visual-proof scripts | multiple `scripts/*.ps1` |
-| H7 | `.env.cloud.prod` DATABASE_URL points at the **UAT** Cloud SQL instance (`hris-api-uat-pg`) — config bug | `hris-api/.env.cloud.prod:6` (verified) |
-| H8 | systemd listener runs as root with HRIS admin creds embedded; K8s callback-outbox exposed on NodePort 30108 unauthenticated; ansible `become: true` playbook-wide | `appliance/systemd/project-truth-hikvision-hot-reload-listener.service:8-21`; `gitops/.../dev/runtime.yaml:430-446`; `ansible/project-truth-pull.yml:6` |
+| H7 | `.env.cloud.prod` DATABASE_URL points at the **UAT** Cloud SQL instance (`bnpi-pats-api-uat-pg`) — config bug | `bnpi-pats-api/.env.cloud.prod:6` (verified) |
+| H8 | systemd listener runs as root with BNPI PATS admin creds embedded; K8s callback-outbox exposed on NodePort 30108 unauthenticated; ansible `become: true` playbook-wide | `appliance/systemd/project-truth-hikvision-hot-reload-listener.service:8-21`; `gitops/.../dev/runtime.yaml:430-446`; `ansible/project-truth-pull.yml:6` |
 | H9 | Default Grafana `admin/admin123` (compose DEV/UAT + observability `.env`) | `appliance/docker-compose.environments.yml:477-510` |
 | H10 | Default/weak passwords committed: `postgres`, `password123`, `Password123!`, `admin123`, `template` (REDaaS/Redis) | tracked env files |
 
@@ -90,7 +90,7 @@ The audit found **7 CRITICAL**, **~10 HIGH**, and ~20 MEDIUM/LOW findings. The s
 - K8s: `hostPort` everywhere; `imagePullPolicy: Never` (intentional air-gap but no image scanning); high PriorityClasses risk starving system pods; C++ HCNetSDK build not supply-chain-verified.
 - GitHub Actions: actions pinned by mutable tags (pin to SHAs); `validate.yml` missing explicit `permissions:`; `promote-gitops.yml` manual-only (OK).
 - Terraform: local unencrypted state; installer lacks VHDX SHA-256 verification step (V6/V7 one-click path DOES verify — the fallback installer doesn't).
-- `cloudflared-bnpi-hris.yml` committed with operator-username path (`C:\Users\anoni\…`) — info leak, low.
+- `cloudflared-bnpi-pats.yml` committed with operator-username path (`C:\Users\anoni\…`) — info leak, low.
 
 ## Confirmed-secure (positive findings)
 
@@ -129,7 +129,7 @@ The audit found **7 CRITICAL**, **~10 HIGH**, and ~20 MEDIUM/LOW findings. The s
 
 - Workstream outputs (full unredacted detail retained in session): audit dirs created by orchestrator under `.runtime/security-audit-20260907/` (see handoff entry).
 - Direct verification performed by orchestrator: `git ls-files`, `index.ts:666`, `callback.router.ts:12`, `build-installer.ps1:28`, `project-truth.iss:20-25`, `.env.cloud.prod:6`, K8s overlays lines 8/218-234, `verify-hikvision-isapi-postman.ps1:4`.
-- Pre-existing flags honored: `hris-api/.env` git-tracking (handoff 2026-09-04); Cloudflare runtime-only credential rule (Project Truth) — still honored.
+- Pre-existing flags honored: `bnpi-pats-api/.env` git-tracking (handoff 2026-09-04); Cloudflare runtime-only credential rule (Project Truth) — still honored.
 
 ## Audit boundary
 

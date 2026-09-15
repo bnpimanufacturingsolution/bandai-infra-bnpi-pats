@@ -5,8 +5,8 @@ export DEBIAN_FRONTEND=noninteractive
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 install_root="${PROJECT_TRUTH_ROOT:-/opt/project-truth}"
-data_root="${OBSERVABILITY_DATA_ROOT:-/srv/hris/observability}"
-backup_root="${BACKUP_DIR:-/srv/hris/backups}"
+data_root="${OBSERVABILITY_DATA_ROOT:-/srv/bnpi-pats/observability}"
+backup_root="${BACKUP_DIR:-/srv/bnpi-pats/backups}"
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -99,12 +99,12 @@ sync_repo_to_install_root() {
 }
 
 install_commands_and_services() {
-  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-start.sh" /usr/local/bin/project-truth-hris-start
-  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-env-start.sh" /usr/local/bin/project-truth-hris-env-start
-  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-seed.sh" /usr/local/bin/project-truth-hris-seed
-  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-env-seed.sh" /usr/local/bin/project-truth-hris-env-seed
-  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-status.sh" /usr/local/bin/project-truth-hris-status
-  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-hris-observability-start.sh" /usr/local/bin/project-truth-hris-observability-start
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-bnpi-pats-start.sh" /usr/local/bin/project-truth-bnpi-pats-start
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-bnpi-pats-env-start.sh" /usr/local/bin/project-truth-bnpi-pats-env-start
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-bnpi-pats-seed.sh" /usr/local/bin/project-truth-bnpi-pats-seed
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-bnpi-pats-env-seed.sh" /usr/local/bin/project-truth-bnpi-pats-env-seed
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-bnpi-pats-status.sh" /usr/local/bin/project-truth-bnpi-pats-status
+  as_root install -m 0755 "${install_root}/appliance/bin/project-truth-bnpi-pats-observability-start.sh" /usr/local/bin/project-truth-bnpi-pats-observability-start
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-db-access.sh" /usr/local/bin/project-truth-db-access
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-config.sh" /usr/local/bin/project-truth-lan-config
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-lan-summary.sh" /usr/local/bin/project-truth-lan-summary
@@ -115,7 +115,7 @@ install_commands_and_services() {
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-ansible-pull.sh" /usr/local/bin/project-truth-ansible-pull
   as_root install -m 0755 "${install_root}/appliance/bin/project-truth-os-sync.sh" /usr/local/bin/project-truth-os-sync
 
-  as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-hris.service" /etc/systemd/system/project-truth-hris.service
+  as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-bnpi-pats.service" /etc/systemd/system/project-truth-bnpi-pats.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-lan-summary.service" /etc/systemd/system/project-truth-lan-summary.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-clean-console.service" /etc/systemd/system/project-truth-clean-console.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-trycloudflare.service" /etc/systemd/system/project-truth-trycloudflare.service
@@ -123,11 +123,11 @@ install_commands_and_services() {
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-ansible-pull.timer" /etc/systemd/system/project-truth-ansible-pull.timer
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-os-sync.service" /etc/systemd/system/project-truth-os-sync.service
   as_root install -m 0644 "${install_root}/appliance/systemd/project-truth-os-sync.timer" /etc/systemd/system/project-truth-os-sync.timer
-  as_root install -m 0644 "${install_root}/appliance/profile.d/project-truth-hris-help.sh" /etc/profile.d/project-truth-hris-help.sh
-  as_root chmod 0644 /etc/profile.d/project-truth-hris-help.sh
+  as_root install -m 0644 "${install_root}/appliance/profile.d/project-truth-bnpi-pats-help.sh" /etc/profile.d/project-truth-bnpi-pats-help.sh
+  as_root chmod 0644 /etc/profile.d/project-truth-bnpi-pats-help.sh
   configure_console_session_hook
   as_root systemctl daemon-reload
-  as_root systemctl enable project-truth-hris.service
+  as_root systemctl enable project-truth-bnpi-pats.service
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
   as_root systemctl disable --now project-truth-trycloudflare.service >/dev/null 2>&1 || true
@@ -147,16 +147,16 @@ configure_console_session_hook() {
 }
 
 prepare_env_files() {
-  if [ ! -f "${install_root}/hris-api/infrastructure/onprem/observability/.env" ]; then
+  if [ ! -f "${install_root}/bnpi-pats-api/infrastructure/onprem/observability/.env" ]; then
     as_root cp \
-      "${install_root}/hris-api/infrastructure/onprem/observability/.env.example" \
-      "${install_root}/hris-api/infrastructure/onprem/observability/.env"
+      "${install_root}/bnpi-pats-api/infrastructure/onprem/observability/.env.example" \
+      "${install_root}/bnpi-pats-api/infrastructure/onprem/observability/.env"
   fi
 
-  if [ ! -f "${install_root}/hris-api/infrastructure/onprem/observability/backup/.env" ]; then
+  if [ ! -f "${install_root}/bnpi-pats-api/infrastructure/onprem/observability/backup/.env" ]; then
     as_root cp \
-      "${install_root}/hris-api/infrastructure/onprem/observability/backup/.env.example" \
-      "${install_root}/hris-api/infrastructure/onprem/observability/backup/.env"
+      "${install_root}/bnpi-pats-api/infrastructure/onprem/observability/backup/.env.example" \
+      "${install_root}/bnpi-pats-api/infrastructure/onprem/observability/backup/.env"
   fi
 }
 
@@ -173,14 +173,14 @@ prepare_persistent_dirs() {
 }
 
 start_stacks() {
-  cd "${install_root}/hris-api/infrastructure/onprem/observability"
+  cd "${install_root}/bnpi-pats-api/infrastructure/onprem/observability"
   compose up -d
 
   cd "${install_root}/appliance"
   compose build
   compose up -d postgres
-  compose up -d --no-deps hris-api
-  compose up -d --no-deps hris-app
+  compose up -d --no-deps bnpi-pats-api
+  compose up -d --no-deps bnpi-pats-app
 }
 
 verify_local_endpoints() {

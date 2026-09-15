@@ -25,7 +25,7 @@ The 2026-08-18 screenshot line “direct vs indirect labor is not shown in the U
 | Playwright 2.1.7 smoke | **1 passed** (54s) | this session |
 | API `directIndirectLaborSummary` | 200, **872 / 1355**, 15 depts, 3.59s | `.runtime/direct-indirect-readiness-20260820/api.json` |
 | UI tab + department table | Shown | `.runtime/direct-indirect-2.1.7-browser/workforce-direct-indirect.png` |
-| Public DEV serving this SHA | `NEEDS_CONFIRMATION` | `https://dev.bnpi-hris.tech/...` only returned login chrome |
+| Public DEV serving this SHA | `NEEDS_CONFIRMATION` | `https://dev.bnpi-pats.tech/...` only returned login chrome |
 
 **Verdict:** `READY_WITH_RESIDUAL` — 2.1.7 assigned gap (tab missing) is closed locally. Roster tables still 0. Public GitOps SHA unproven.
 
@@ -59,7 +59,7 @@ The 2026-08-18 screenshot line “direct vs indirect labor is not shown in the U
 | Default tab | **Manpower Distribution** (`tab=labor`) |
 | This report | **Direct vs Indirect** (`tab=direct-indirect`) |
 | Title | Direct vs Indirect Labor Report |
-| Actor | HR (`hris-hr-manager`) |
+| Actor | HR (`bnpi-pats-hr-manager`) |
 
 ## DIRECT vs INDIRECT
 
@@ -97,10 +97,10 @@ Live probe 2026-08-20 (admin, local `:3001`, month-to-date):
 
 | Layer | Path |
 |---|---|
-| Page tabs | `hris-app/app/routes/hr/reports/workforce.tsx` |
-| Report body | `hris-app/app/routes/hr/reports/tabs/DirectIndirectLaborTab.tsx` |
+| Page tabs | `bnpi-pats-app/app/routes/hr/reports/workforce.tsx` |
+| Report body | `bnpi-pats-app/app/routes/hr/reports/tabs/DirectIndirectLaborTab.tsx` |
 | Hook | `useDirectIndirectLaborSummary` |
-| Helper | `hris-api/helper/workforce-metrics.helper.ts` `calculateDirectIndirectLaborSummary` / `getLaborBucket` |
+| Helper | `bnpi-pats-api/helper/workforce-metrics.helper.ts` `calculateDirectIndirectLaborSummary` / `getLaborBucket` |
 
 `visibleTabs` = `agency` \| `labor` \| `direct-indirect`. Unknown `tab` remaps to `labor`.
 
@@ -108,7 +108,7 @@ Live probe 2026-08-20 (admin, local `:3001`, month-to-date):
 
 | Suite | Result |
 |---|---|
-| `hris-app` vitest `workforce.test.tsx` | 3 passed |
+| `bnpi-pats-app` vitest `workforce.test.tsx` | 3 passed |
 | `ManpowerDistributionTab.test.tsx` | 3 passed (regression) |
 | Playwright `tests/smoke/hr-workforce-direct-indirect.spec.ts` | 1 passed (1.1m) |
 | Audit smoke 2.1.7b | Route now `?tab=direct-indirect`; requires report title + Labor Type + tab `active` |
@@ -119,7 +119,7 @@ Browser shots: `.runtime/direct-indirect-2.1.7-browser/` (`workforce-direct-indi
 
 ```powershell
 # API
-$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
+$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
 $login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $loginBody
 $headers = @{ Authorization = "Bearer $($login.data.token)" }
 $body = @{
@@ -133,7 +133,7 @@ $body = @{
 Invoke-RestMethod -Method Post 'http://localhost:3001/api/metrics' -Headers $headers -ContentType 'application/json' -Body $body |
   ConvertTo-Json -Depth 8
 
-# UI tests (hris-app)
+# UI tests (bnpi-pats-app)
 npm.cmd exec -- vitest run app/routes/hr/reports/workforce.test.tsx
 $env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:5175'
 npx.cmd playwright test tests/smoke/hr-workforce-direct-indirect.spec.ts --config=playwright.config.ts --reporter=list

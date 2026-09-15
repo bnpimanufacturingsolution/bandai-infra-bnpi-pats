@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Best-effort restart of the VM Hikvision hot-reload listener via local HRIS API.
+  Best-effort restart of the VM Hikvision hot-reload listener via local BNPI PATS API.
 #>
 param(
   [string]$ApiBase = "http://localhost:3001",
@@ -38,7 +38,7 @@ try {
 }
 
 try {
-  $loginBody = @{ email = $Email; password = $Password; appCode = "hris" } | ConvertTo-Json -Compress
+  $loginBody = @{ email = $Email; password = $Password; appCode = "bnpi-pats" } | ConvertTo-Json -Compress
   $login = Invoke-RestMethod -Method Post "$ApiBase/api/auth/login" -ContentType "application/json" -Body $loginBody -TimeoutSec 20
   $token = $login.data.token
   if (-not $token) { throw "login failed" }

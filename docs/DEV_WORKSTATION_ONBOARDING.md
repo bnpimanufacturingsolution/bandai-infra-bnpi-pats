@@ -1,6 +1,6 @@
 # Dev Workstation Onboarding (SSH + DEV DB access)
 
-Goal: `npm run dev` inside `hris-api` works on a brand-new Windows machine
+Goal: `npm run dev` inside `bnpi-pats-api` works on a brand-new Windows machine
 without manual SSH ceremony. When the DEV DB tunnel cannot come up because the
 workstation lacks the VM SSH key, predev now diagnoses the blocker and offers a
 one-time guided setup.
@@ -8,7 +8,7 @@ one-time guided setup.
 ## Fast path (recommended)
 
 ```powershell
-cd <repo>\hris-api
+cd <repo>\bnpi-pats-api
 npm run setup:ssh     # or: powershell -NoProfile -ExecutionPolicy Bypass -File ..\scripts\setup-dev-ssh-access.ps1
 npm run dev
 ```
@@ -18,7 +18,7 @@ npm run dev
 1. Generates `%USERPROFILE%\.ssh\node-health-appliance_ed25519` **only if missing**
    (never overwrites an existing key; recovers a lost `.pub` from the private key).
 2. Appends `Host project-truth-lan` (direct `infra@10.184.37.19`) and
-   `Host project-truth-hris` (Cloudflare Access SSH via cloudflared ProxyCommand)
+   `Host project-truth-bnpi-pats` (Cloudflare Access SSH via cloudflared ProxyCommand)
    to `%USERPROFILE%\.ssh\config` (backs up the file first).
 3. Installs the new public key into the VM `infra` user's `authorized_keys`:
    direct LAN first; if the LAN is unreachable it uses the Cloudflare SSH alias —
@@ -34,7 +34,7 @@ Evidence per run: `.runtime/dev-ssh-setup-<stamp>/` in the repo.
 
 ## What `npm run dev` does when the key is missing
 
-`hris-api/scripts/ensure-bnpi-db-access.cjs` now:
+`bnpi-pats-api/scripts/ensure-bnpi-db-access.cjs` now:
 
 - prints the exact blocker (`SSH key missing: <path>`, `ssh.exe not found`),
 - prints the one-time fix command and the `npm run dev:local` alternative,
@@ -44,8 +44,8 @@ Evidence per run: `.runtime/dev-ssh-setup-<stamp>/` in the repo.
 - non-interactive sessions (CI/agents/piped output) never hang: the prompt is
   skipped, guidance is printed, and the run fails with the same actionable text.
 
-Prompt suppression flags: `HRIS_SKIP_DEV_SSH_SETUP=true` (skip the offer),
-`HRIS_PREDEV_NONINTERACTIVE=true` (force non-interactive inside the setup
+Prompt suppression flags: `BNPI_PATS_SKIP_DEV_SSH_SETUP=true` (skip the offer),
+`BNPI_PATS_PREDEV_NONINTERACTIVE=true` (force non-interactive inside the setup
 script). Key path override: `PROJECT_TRUTH_SSH_KEY`.
 
 The compose DEV fallback refusal (AGENTS.md DB rule) is unchanged and explicit

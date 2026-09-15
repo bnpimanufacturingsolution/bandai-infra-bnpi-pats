@@ -10,7 +10,7 @@ Operator asked not to push after the first two commits; later local commits may 
 |---|---|---|
 | Git `develop` | Yes | `a801c4b` serial collapse; `935963a` skip ACS exception; `a6dce32` TAP/evidence display |
 | Local API `http://localhost:3001` | **Yes** | `GET /health` healthy. Smoke `POST /api/hikvision/callback` major=2/minor=38 empty → `persisted=false` `reason=acs_exception_not_punch`. DB `serialNo=GROK-DOC-M2-38-20260817` count **0**. |
-| Local app `http://localhost:5175` | Yes | Vite serving current `hris-app` |
+| Local app `http://localhost:5175` | Yes | Vite serving current `bnpi-pats-app` |
 | DEV DB `127.0.0.1:55435` | Shared ledger | Same K3s DEV database the UI reads |
 | VM listener → this API only | **CONFLICTING** | Reverse `53001→3001` is the intended path. A live B row `major=2/38` serial `8564` still saved at `2026-08-17 02:51:12Z` after this API process started (`~02:42Z`). Smoke after that was not saved. Possible second writer or reload lag. |
 | VM listener C++ rebuild | No | Source classify requires major=5; running ELF **NEEDS_CONFIRMATION** |
@@ -57,7 +57,7 @@ A/C/F: **0** of these today (not armed).
 | `935963a` | Do **not** persist `major=2` + `minor=38` + empty person. Taxonomy = device health, not TAP. C++ `classify_event` requires major=5 for fingerprint pass/fail. |
 | `a6dce32` | Display real TAP / evidence for stored major=5 punches; pad employee match. |
 
-Gate: `isHikvisionArmedListenerAcsException` in `hris-api/helper/hikvision-event-contract.helper.ts`. Callback returns 200 `acs_exception_not_punch` and does not `create`.
+Gate: `isHikvisionArmedListenerAcsException` in `bnpi-pats-api/helper/hikvision-event-contract.helper.ts`. Callback returns 200 `acs_exception_not_punch` and does not `create`.
 
 ## Open
 

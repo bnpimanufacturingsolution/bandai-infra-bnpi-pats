@@ -13,7 +13,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $runId = "$(Get-Date -Format 'yyyyMMdd-HHmmss')-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
 $remoteStage = "/home/infra/project-truth-hotloop/runs/$runId"
 $directKey = Join-Path $env:USERPROFILE '.ssh/node-health-appliance_ed25519'
-$sshTarget = 'project-truth-hris'
+$sshTarget = 'project-truth-bnpi-pats'
 $sshPrefix = @()
 
 $directAvailable = $false
@@ -63,24 +63,24 @@ try {
 set -euo pipefail
 stage='$remoteStage'
 case "`$stage" in /home/infra/project-truth-hotloop/*) ;; *) exit 2 ;; esac
-mkdir -p "`$stage/hris-api" "`$stage/scripts" "`$stage/vendor"
+mkdir -p "`$stage/bnpi-pats-api" "`$stage/scripts" "`$stage/vendor"
 "@
 
   $transferPaths = @(
-    'hris-api/app',
-    'hris-api/config',
-    'hris-api/helper',
-    'hris-api/lib',
-    'hris-api/middleware',
-    'hris-api/scripts',
-    'hris-api/tests',
-    'hris-api/utils',
-    'hris-api/zod',
-    'hris-api/package.json',
-    'hris-api/package-lock.json',
-    'hris-api/tsconfig.json',
-    'hris-api/webpack.config.js',
-    'hris-api/index.ts',
+    'bnpi-pats-api/app',
+    'bnpi-pats-api/config',
+    'bnpi-pats-api/helper',
+    'bnpi-pats-api/lib',
+    'bnpi-pats-api/middleware',
+    'bnpi-pats-api/scripts',
+    'bnpi-pats-api/tests',
+    'bnpi-pats-api/utils',
+    'bnpi-pats-api/zod',
+    'bnpi-pats-api/package.json',
+    'bnpi-pats-api/package-lock.json',
+    'bnpi-pats-api/tsconfig.json',
+    'bnpi-pats-api/webpack.config.js',
+    'bnpi-pats-api/index.ts',
     'scripts/project-truth-hikvision-hot-reload-listener.sh',
     'scripts/project-truth-credential-recovery-hotloop.sh',
     'vendor/hikvision-linux'

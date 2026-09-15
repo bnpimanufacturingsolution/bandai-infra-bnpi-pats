@@ -10,49 +10,49 @@ permissions:
   contents: read
 
 jobs:
-  hris-api:
+  bnpi-pats-api:
     if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
-    name: hris-api
+    name: bnpi-pats-api
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: hris-api
+        working-directory: bnpi-pats-api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: hris-api/package-lock.json
+          cache-dependency-path: bnpi-pats-api/package-lock.json
       - name: Install
         run: npm ci
       - name: Source-truth tests
         run: npm run test:regression:payroll-source-truth
 
-  hris-app:
+  bnpi-pats-app:
     if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
-    name: hris-app
+    name: bnpi-pats-app
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
       run:
-        working-directory: hris-app
+        working-directory: bnpi-pats-app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: hris-app/package-lock.json
+          cache-dependency-path: bnpi-pats-app/package-lock.json
       - name: Install
         run: npm ci
       - name: Unit tests
         run: npm run test:payroll-correction
 
-  hris-emp-app:
+  bnpi-pats-emp-app:
     if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
-    name: hris-emp-app
+    name: bnpi-pats-emp-app
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -62,9 +62,9 @@ jobs:
       - name: Check out employee app if present
         run: |
           set -euo pipefail
-          if [ ! -f hris-emp-app/package.json ]; then
-            echo "::notice title=hris-emp-app skipped::Submodule not present in this checkout. Job succeeds without tests."
-            echo "## hris-emp-app" >> "$GITHUB_STEP_SUMMARY"
+          if [ ! -f bnpi-pats-emp-app/package.json ]; then
+            echo "::notice title=bnpi-pats-emp-app skipped::Submodule not present in this checkout. Job succeeds without tests."
+            echo "## bnpi-pats-emp-app" >> "$GITHUB_STEP_SUMMARY"
             echo "Skipped: submodule not present. This is **not** emp-app test proof." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
@@ -74,10 +74,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: hris-emp-app/package-lock.json
+          cache-dependency-path: bnpi-pats-emp-app/package-lock.json
       - name: Install and test
         if: env.EMP_PRESENT == '1'
-        working-directory: hris-emp-app
+        working-directory: bnpi-pats-emp-app
         run: |
           npm ci
           if npm run | grep -q 'test:ci'; then

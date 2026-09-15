@@ -18,7 +18,7 @@ In scope:
 - Install and run gozk from the remote Project Truth VM path, not from
   host-local assumptions.
 - Point the probe at the four existing ZKTeco device addresses already used by
-  HRIS:
+  BNPI PATS:
   - `10.184.38.9:4370`
   - `10.184.38.235:4370`
   - `10.184.38.234:4370`
@@ -31,7 +31,7 @@ Out of scope:
 
 - Writing to devices.
 - Clearing attendance.
-- Changing HRIS sync defaults.
+- Changing BNPI PATS sync defaults.
 - Replacing PyZK in application code.
 - Stopping or changing the VM-managed Cloudflare Tunnel.
 

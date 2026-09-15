@@ -20,7 +20,7 @@
 | Failure | Root cause | What this card forces |
 |---|---|---|
 | “Job is processing” = success | Circuit skip after 1 timeout | Count **real peer writes**, not processed counter |
-| Host health online = copy works | Copy runs on **VM**, not host | SSH `project-truth-hris` TCP probe before every wave |
+| Host health online = copy works | Copy runs on **VM**, not host | SSH `project-truth-bnpi-pats` TCP probe before every wave |
 | 6 devices in one job | TEST A/B `192.168.254.x` **FAIL from VM** | Wave 1 = Main A–D only |
 | Sequential 1:1 copy | N×T VM sessions | Batch multi-target per unique ID (one VM session) |
 | Stops after one fix | No EXIT GATE | Heartbeats + acceptance checklist |
@@ -37,8 +37,8 @@
 | Permissions | Always-approve / bypassPermissions |
 | Max turns | **`--max-turns 300`** (or higher) |
 | Wall clock | **Overnight / multi-hour OK** — do not kill at 10–15 min |
-| SSH | `ssh project-truth-hris` must work (fallback LAN `infra@10.184.37.19`) |
-| Local API | `http://localhost:3001` admin `admin@bandai.local` / `password123` / `appCode=hris` |
+| SSH | `ssh project-truth-bnpi-pats` must work (fallback LAN `infra@10.184.37.19`) |
+| Local API | `http://localhost:3001` admin `admin@bandai.local` / `password123` / `appCode=bnpi-pats` |
 | App | `http://localhost:5175` optional for FE proof |
 
 ### Headless example
@@ -81,7 +81,7 @@ DURATION CONTRACT:
 - Recoverable failures: retry infinitely with different approaches until Real Stop
   Conditions in AGENTS.md (only after 3+ distinct failed recoveries with evidence).
 - Spawn subagents freely (explore / general-purpose) for parallel research + implement.
-- SSH: `ssh project-truth-hris` first; LAN `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19` if needed.
+- SSH: `ssh project-truth-bnpi-pats` first; LAN `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19` if needed.
 - Windows: `npm.cmd` not bare npm. Restart local API yourself; poll /health.
 - Commit + push develop when green slices land.
 
@@ -176,7 +176,7 @@ C) SPEED MATRIX (ordered work — do in this order)
 SPEED LEVERS (highest first):
 
 S1. SCOPE WAVE = VM-reachable devices only
-    - Prove with: ssh project-truth-hris + TCP 80/443/8000
+    - Prove with: ssh project-truth-bnpi-pats + TCP 80/443/8000
     - Wave1 = Main A–D only (same 10.184.37.x)
     - Do NOT include TEST A/B until VM TCP OK or explicit tunnel repair
 
@@ -231,7 +231,7 @@ PHASE 0 — Bootstrap + Current-State Report
   (document jobId + last counters).
 
 PHASE 1 — Truth matrix re-proof (SSH + API)
-- ssh project-truth-hris: hostname, listener service active?, TCP probe all 6.
+- ssh project-truth-bnpi-pats: hostname, listener service active?, TCP probe all 6.
 - Admin login localhost:3001; device list + /health per device; capture user counts.
 - Write TRUTH-MATRIX.md under evidence dir (devices, users, VM TCP, host health).
 - GATE: Wave1 device set locked = only devices with VM TCP OK.
@@ -282,14 +282,14 @@ PHASE 7 — Close-out
 E) ACCEPTANCE CHECKLIST (all required unless real blocker)
 ================================================================
 
-[ ] SSH project-truth-hris works; TCP probe saved
+[ ] SSH project-truth-bnpi-pats works; TCP probe saved
 [ ] TRUTH-MATRIX.md + SPEED work written under .runtime/merge-overnight-<stamp>/
 [ ] Wave1 excludes VM-unreachable devices (unless repaired)
 [ ] Live merge apply uses batch multi-target (code + runtime log/event batch_copy_*)
 [ ] Circuit limit not 1-by-default (or justified + proven)
 [ ] Durable success.jsonl + failure.jsonl for a real run
 [ ] Retry-failed-only path exists and is proven on ≥1 failure row
-[ ] Canary 5–10 IDs: real peer write success (not only HRIS db_merge)
+[ ] Canary 5–10 IDs: real peer write success (not only BNPI PATS db_merge)
 [ ] Wave1 reread: user tallies moved toward union; FP/face gaps reduced with numbers
 [ ] Focused tests green (merge helper + biometric sync contract at minimum)
 [ ] API restarted and /health healthy after code change
@@ -354,7 +354,7 @@ START NOW
 ```text
 Overnight merge speed marathon: open and obey
 docs/00-product/AGENT-PROMPT-merge-device-users-speed-overnight-marathon.md
-Agent-owned, nonstop, SSH project-truth-hris, Wave1 = VM-reachable Main A–D only,
+Agent-owned, nonstop, SSH project-truth-bnpi-pats, Wave1 = VM-reachable Main A–D only,
 batch multi-target peer copy, durable failure ledger + retry-failed, prove user/FP/face
 tallies with reread evidence under .runtime/merge-overnight-<stamp>/. EXIT GATE applies.
 --max-turns 300, always-approve.
@@ -370,7 +370,7 @@ tallies with reread evidence under .runtime/merge-overnight-<stamp>/. EXIT GATE 
 | Batch multi-target already exists for copy-to-all | `copyHikvisionUserToPeersBatch` + PRD |
 | C++ one employee → all sessions in one run | `src/hikvision_bio/copy.cpp` + `acs.cpp` |
 | No multi-user bulk ISAPI write in repo | Explore agent ISAPI research |
-| TEST A/B FAIL TCP from VM; Main A–D OK | `ssh project-truth-hris` probe |
+| TEST A/B FAIL TCP from VM; Main A–D OK | `ssh project-truth-bnpi-pats` probe |
 | Prior job ~14% success, mostly circuit-skip | Live merge job API |
 | Partial code: merge → batch + circuit default 3 | Local controller (restart API to load) |
 
@@ -380,5 +380,5 @@ tallies with reread evidence under .runtime/merge-overnight-<stamp>/. EXIT GATE 
 
 - `docs/00-product/PRD-hikvision-copy-to-all-performance.md`
 - `.runtime/merge-speed-truth-20260722-073117/SPEED-TRUTH-MATRIX.md`
-- `hris-api/app/device/device.controller.ts` (`applyHikvisionSdkUserMerge`, `copyHikvisionUserToPeersBatch`)
+- `bnpi-pats-api/app/device/device.controller.ts` (`applyHikvisionSdkUserMerge`, `copyHikvisionUserToPeersBatch`)
 - `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` + `spool.cpp` + `identity.cpp` + `fingerprint.cpp` + `face.cpp` + `copy.cpp`

@@ -1,17 +1,17 @@
 [CmdletBinding()]
 param(
   [string]$VmName = 'project-truth-local-vhdx-proof',
-  [string]$TaskName = 'ProjectTruth-BNPI-HRIS-Cloudflared',
-  [string]$TunnelName = 'bnpi-hris',
+  [string]$TaskName = 'ProjectTruth-BNPI-PATS-Cloudflared',
+  [string]$TunnelName = 'bnpi-pats',
   [string]$TunnelId = 'e3486f00-f974-46d3-9e11-911266749d00',
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
   [string]$PreferredGuestIp = $(if ($env:PROJECT_TRUTH_PREFERRED_GUEST_IP) { $env:PROJECT_TRUTH_PREFERRED_GUEST_IP } else { '10.184.37.19' }),
-  [string]$SshHostname = 'ssh.bnpi-hris.tech',
-  [string]$ProdDbHostname = 'db.bnpi-hris.tech',
-  [string]$DevDbHostname = 'dev-db.bnpi-hris.tech',
-  [string]$UatDbHostname = 'uat-db.bnpi-hris.tech',
-  [string[]]$Hostnames = @('bnpi-hris.tech', 'www.bnpi-hris.tech', 'app.bnpi-hris.tech'),
+  [string]$SshHostname = 'ssh.bnpi-pats.tech',
+  [string]$ProdDbHostname = 'db.bnpi-pats.tech',
+  [string]$DevDbHostname = 'dev-db.bnpi-pats.tech',
+  [string]$UatDbHostname = 'uat-db.bnpi-pats.tech',
+  [string[]]$Hostnames = @('bnpi-pats.tech', 'www.bnpi-pats.tech', 'app.bnpi-pats.tech'),
   [int]$OriginPort = 3000,
   [int]$OriginWarmupSeconds = 180,
   [int]$ConnectorWarmupSeconds = 60,
@@ -26,7 +26,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 if (-not $ConfigPath) {
-  $ConfigPath = Join-Path $repoRoot 'cloudflared-bnpi-hris.yml'
+  $ConfigPath = Join-Path $repoRoot 'cloudflared-bnpi-pats.yml'
 }
 if (-not $CredentialsFile) {
   $CredentialsFile = Join-Path $env:USERPROFILE ".cloudflared\$TunnelId.json"
@@ -62,7 +62,7 @@ function Assert-TunnelCredentials {
 Named tunnel credentials were not found:
   $CredentialsFile
 
-This host must be provisioned before it can run the bnpi-hris tunnel.
+This host must be provisioned before it can run the bnpi-pats tunnel.
 Run:
   .\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -Login
 
@@ -135,15 +135,15 @@ function Write-TunnelConfig {
   foreach ($hostname in $Hostnames) {
     $targets += [pscustomobject]@{ Hostname = $hostname; Service = $origin }
   }
-  $targets += [pscustomobject]@{ Hostname = 'api.bnpi-hris.tech'; Service = "http://${GuestIp}:3001" }
-  $targets += [pscustomobject]@{ Hostname = 'dev.bnpi-hris.tech'; Service = "http://${GuestIp}:3100" }
-  $targets += [pscustomobject]@{ Hostname = 'dev-api.bnpi-hris.tech'; Service = "http://${GuestIp}:3101" }
-  $targets += [pscustomobject]@{ Hostname = 'uat.bnpi-hris.tech'; Service = "http://${GuestIp}:3200" }
-  $targets += [pscustomobject]@{ Hostname = 'uat-api.bnpi-hris.tech'; Service = "http://${GuestIp}:3201" }
-  $targets += [pscustomobject]@{ Hostname = 'emp.bnpi-hris.tech'; Service = "http://${GuestIp}:3300" }
-  $targets += [pscustomobject]@{ Hostname = 'dev-emp.bnpi-hris.tech'; Service = "http://${GuestIp}:3310" }
-  $targets += [pscustomobject]@{ Hostname = 'uat-emp.bnpi-hris.tech'; Service = "http://${GuestIp}:3320" }
-  $targets += [pscustomobject]@{ Hostname = 'grafana.bnpi-hris.tech'; Service = "http://${GuestIp}:53000" }
+  $targets += [pscustomobject]@{ Hostname = 'api.bnpi-pats.tech'; Service = "http://${GuestIp}:3001" }
+  $targets += [pscustomobject]@{ Hostname = 'dev.bnpi-pats.tech'; Service = "http://${GuestIp}:3100" }
+  $targets += [pscustomobject]@{ Hostname = 'dev-api.bnpi-pats.tech'; Service = "http://${GuestIp}:3101" }
+  $targets += [pscustomobject]@{ Hostname = 'uat.bnpi-pats.tech'; Service = "http://${GuestIp}:3200" }
+  $targets += [pscustomobject]@{ Hostname = 'uat-api.bnpi-pats.tech'; Service = "http://${GuestIp}:3201" }
+  $targets += [pscustomobject]@{ Hostname = 'emp.bnpi-pats.tech'; Service = "http://${GuestIp}:3300" }
+  $targets += [pscustomobject]@{ Hostname = 'dev-emp.bnpi-pats.tech'; Service = "http://${GuestIp}:3310" }
+  $targets += [pscustomobject]@{ Hostname = 'uat-emp.bnpi-pats.tech'; Service = "http://${GuestIp}:3320" }
+  $targets += [pscustomobject]@{ Hostname = 'grafana.bnpi-pats.tech'; Service = "http://${GuestIp}:53000" }
   $targets += [pscustomobject]@{ Hostname = $SshHostname; Service = "ssh://${GuestIp}:22" }
   $targets += [pscustomobject]@{ Hostname = $ProdDbHostname; Service = "tcp://${GuestIp}:15432" }
   $targets += [pscustomobject]@{ Hostname = $DevDbHostname; Service = "tcp://${GuestIp}:15433" }
@@ -165,34 +165,34 @@ function Write-TunnelConfig {
     $lines += "    service: http://${GuestIp}:3001"
   }
 
-  $lines += '  - hostname: dev.bnpi-hris.tech'
+  $lines += '  - hostname: dev.bnpi-pats.tech'
   $lines += '    path: /api/.*'
   $lines += "    service: http://${GuestIp}:3101"
-  $lines += '  - hostname: dev.bnpi-hris.tech'
+  $lines += '  - hostname: dev.bnpi-pats.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3101"
-  $lines += '  - hostname: uat.bnpi-hris.tech'
+  $lines += '  - hostname: uat.bnpi-pats.tech'
   $lines += '    path: /api/.*'
   $lines += "    service: http://${GuestIp}:3201"
-  $lines += '  - hostname: uat.bnpi-hris.tech'
+  $lines += '  - hostname: uat.bnpi-pats.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3201"
-  $lines += '  - hostname: emp.bnpi-hris.tech'
+  $lines += '  - hostname: emp.bnpi-pats.tech'
   $lines += '    path: /api/.*'
   $lines += "    service: http://${GuestIp}:3001"
-  $lines += '  - hostname: emp.bnpi-hris.tech'
+  $lines += '  - hostname: emp.bnpi-pats.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3001"
-  $lines += '  - hostname: dev-emp.bnpi-hris.tech'
+  $lines += '  - hostname: dev-emp.bnpi-pats.tech'
   $lines += '    path: /api/.*'
   $lines += "    service: http://${GuestIp}:3101"
-  $lines += '  - hostname: dev-emp.bnpi-hris.tech'
+  $lines += '  - hostname: dev-emp.bnpi-pats.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3101"
-  $lines += '  - hostname: uat-emp.bnpi-hris.tech'
+  $lines += '  - hostname: uat-emp.bnpi-pats.tech'
   $lines += '    path: /api/.*'
   $lines += "    service: http://${GuestIp}:3201"
-  $lines += '  - hostname: uat-emp.bnpi-hris.tech'
+  $lines += '  - hostname: uat-emp.bnpi-pats.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3201"
 
@@ -271,18 +271,18 @@ function Register-HostManagedTask {
 
 function Invoke-DnsProvisioning {
   $dnsNames = @(
-    'bnpi-hris.tech',
-    'www.bnpi-hris.tech',
-    'app.bnpi-hris.tech',
-    'api.bnpi-hris.tech',
-    'dev.bnpi-hris.tech',
-    'dev-api.bnpi-hris.tech',
-    'uat.bnpi-hris.tech',
-    'uat-api.bnpi-hris.tech',
-    'emp.bnpi-hris.tech',
-    'dev-emp.bnpi-hris.tech',
-    'uat-emp.bnpi-hris.tech',
-    'grafana.bnpi-hris.tech',
+    'bnpi-pats.tech',
+    'www.bnpi-pats.tech',
+    'app.bnpi-pats.tech',
+    'api.bnpi-pats.tech',
+    'dev.bnpi-pats.tech',
+    'dev-api.bnpi-pats.tech',
+    'uat.bnpi-pats.tech',
+    'uat-api.bnpi-pats.tech',
+    'emp.bnpi-pats.tech',
+    'dev-emp.bnpi-pats.tech',
+    'uat-emp.bnpi-pats.tech',
+    'grafana.bnpi-pats.tech',
     $SshHostname,
     $ProdDbHostname,
     $DevDbHostname,
@@ -310,18 +310,18 @@ function Invoke-DnsProvisioning {
 function Invoke-PublicChecks {
   $results = @()
   $checks = @(
-    @{ Name = 'prod-app'; Url = 'https://bnpi-hris.tech/auth/login' },
-    @{ Name = 'www-app'; Url = 'https://www.bnpi-hris.tech/auth/login' },
-    @{ Name = 'app-app'; Url = 'https://app.bnpi-hris.tech/auth/login' },
-    @{ Name = 'prod-api'; Url = 'https://api.bnpi-hris.tech/health' },
-    @{ Name = 'dev-app'; Url = 'https://dev.bnpi-hris.tech/auth/login' },
-    @{ Name = 'dev-api'; Url = 'https://dev-api.bnpi-hris.tech/health' },
-    @{ Name = 'uat-app'; Url = 'https://uat.bnpi-hris.tech/auth/login' },
-    @{ Name = 'uat-api'; Url = 'https://uat-api.bnpi-hris.tech/health' },
-    @{ Name = 'prod-emp-app'; Url = 'https://emp.bnpi-hris.tech/auth/login' },
-    @{ Name = 'dev-emp-app'; Url = 'https://dev-emp.bnpi-hris.tech/auth/login' },
-    @{ Name = 'uat-emp-app'; Url = 'https://uat-emp.bnpi-hris.tech/auth/login' },
-    @{ Name = 'grafana'; Url = 'https://grafana.bnpi-hris.tech/api/health' }
+    @{ Name = 'prod-app'; Url = 'https://bnpi-pats.tech/auth/login' },
+    @{ Name = 'www-app'; Url = 'https://www.bnpi-pats.tech/auth/login' },
+    @{ Name = 'app-app'; Url = 'https://app.bnpi-pats.tech/auth/login' },
+    @{ Name = 'prod-api'; Url = 'https://api.bnpi-pats.tech/health' },
+    @{ Name = 'dev-app'; Url = 'https://dev.bnpi-pats.tech/auth/login' },
+    @{ Name = 'dev-api'; Url = 'https://dev-api.bnpi-pats.tech/health' },
+    @{ Name = 'uat-app'; Url = 'https://uat.bnpi-pats.tech/auth/login' },
+    @{ Name = 'uat-api'; Url = 'https://uat-api.bnpi-pats.tech/health' },
+    @{ Name = 'prod-emp-app'; Url = 'https://emp.bnpi-pats.tech/auth/login' },
+    @{ Name = 'dev-emp-app'; Url = 'https://dev-emp.bnpi-pats.tech/auth/login' },
+    @{ Name = 'uat-emp-app'; Url = 'https://uat-emp.bnpi-pats.tech/auth/login' },
+    @{ Name = 'grafana'; Url = 'https://grafana.bnpi-pats.tech/api/health' }
   )
 
   foreach ($check in $checks) {

@@ -1,6 +1,6 @@
 # Bandai Payroll Workbook Preview
 
-- Workbook: C:\Users\User\Desktop\AZURO\BANDAI\bandai-infra\.runtime\payroll-comparison-apr26-may10\HRIS Payroll Computation April 26 - May 10, 2026.unlocked.xlsx
+- Workbook: C:\Users\User\Desktop\AZURO\BANDAI\bandai-infra\.runtime\payroll-comparison-apr26-may10\BNPI PATS Payroll Computation April 26 - May 10, 2026.unlocked.xlsx
 - Unlock: succeeded (xlsx-direct)
 - Detected cutoff: 2026-04-26 to 2026-05-10
 - Pay date: 2026-05-15

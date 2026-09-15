@@ -2,11 +2,11 @@ param(
   [string]$PackerDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'image-factory\packer'),
   [string]$RuntimeDir = (Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime\gcp-image-build'),
   [string]$TemplateName = 'ubuntu-googlecompute.pkr.hcl',
-  [string]$ProjectId = 'hris-492904',
+  [string]$ProjectId = 'bnpi-pats-492904',
   [string]$Zone = 'asia-southeast1-a',
-  [string]$StagingBucket = 'project-truth-image-export-hris-492904-161377059311',
+  [string]$StagingBucket = 'project-truth-image-export-bnpi-pats-492904-161377059311',
   [string]$StagingObjectPrefix = 'public/project-truth/gcp-image-build/staging',
-  [string]$SourceInputsDir = 'C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\source-inputs-organized',
+  [string]$SourceInputsDir = 'C:\Users\anoni\OneDrive\Desktop\BNPI-PATS-PROJECT\source-inputs-organized',
   [string]$LocalStagingRoot = '',
   [string]$MachineType = 'e2-standard-4',
   [int]$DiskSizeGb = 60,
@@ -326,7 +326,7 @@ function New-PackerStagingArchive {
   $archivePath = Join-Path $StagingRoot 'project-truth-staging.tar'
   $manifestPath = Join-Path $StagingRoot 'project-truth-staging.manifest.json'
 
-  $requiredEntries = @('gitops', 'appliance', 'hris-api', 'hris-app', 'hris-emp-app', 'vendor')
+  $requiredEntries = @('gitops', 'appliance', 'bnpi-pats-api', 'bnpi-pats-app', 'bnpi-pats-emp-app', 'vendor')
   foreach ($entry in $requiredEntries) {
     $entryPath = Join-Path $StagingRoot $entry
     if (-not (Test-Path -LiteralPath $entryPath)) {
@@ -478,14 +478,14 @@ if (-not $SkipStage) {
   New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'gitops') -Destination (Join-Path $stagingRoot 'gitops')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'appliance') -Destination (Join-Path $stagingRoot 'appliance')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-api') -Destination (Join-Path $stagingRoot 'hris-api')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-app') -Destination (Join-Path $stagingRoot 'hris-app')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-emp-app') -Destination (Join-Path $stagingRoot 'hris-emp-app')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-api') -Destination (Join-Path $stagingRoot 'bnpi-pats-api')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-app') -Destination (Join-Path $stagingRoot 'bnpi-pats-app')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-emp-app') -Destination (Join-Path $stagingRoot 'bnpi-pats-emp-app')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'vendor\zkteco-linux') -Destination (Join-Path $stagingRoot 'vendor\zkteco-linux')
 
   if ($IncludeSourceInputs) {
     $sourceInputsDestination = Join-Path $stagingRoot 'appliance\source-inputs-organized'
-    Write-Checkpoint -Name 'stage-source-inputs' -IntendedAction 'Stage organized HRIS source input workbooks for baking into the GCP image.' -Command "robocopy `"$SourceInputsDir`" `"$sourceInputsDestination`" /MIR"
+    Write-Checkpoint -Name 'stage-source-inputs' -IntendedAction 'Stage organized BNPI PATS source input workbooks for baking into the GCP image.' -Command "robocopy `"$SourceInputsDir`" `"$sourceInputsDestination`" /MIR"
     Sync-PackerStagingDirectory -Source $SourceInputsDir -Destination $sourceInputsDestination
   }
 }

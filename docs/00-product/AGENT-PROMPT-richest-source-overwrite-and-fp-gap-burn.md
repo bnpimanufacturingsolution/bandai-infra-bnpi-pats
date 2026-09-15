@@ -6,7 +6,7 @@ after the operator-authorized **richest-source default overwrite** product rule.
 | | |
 |---|---|
 | **Repo** | `C:\Users\stari\bandai-infra` on `develop` |
-| **Runtime** | K3s **DEV only** — VM `project-truth-hris` / `10.184.37.19` |
+| **Runtime** | K3s **DEV only** — VM `project-truth-bnpi-pats` / `10.184.37.19` |
 | **Mode** | Multi-subagent, root-coordinated, continuous loop |
 | **Forbidden** | Windows npm / Docker Desktop / WSL as Project Truth runtime |
 | **Policy SHA** | `c5d43a0` (or later) must be **live** on DEV API before claiming rule active |
@@ -51,17 +51,17 @@ DEFAULT for recovery / AI-run jobs:
 
 STILL BLOCKED (not richest-pick):
   physical_identity_adjudication_required  (other vendor user owns slot)
-  canonical_identity_unproven              (no proven HRIS employee match)
+  canonical_identity_unproven              (no proven BNPI PATS employee match)
   missing_raw_blob                         (export first)
   card source_conflict                     (exact card value not proven)
 ```
 
 Code anchors (must re-open, not invent):
 
-- `hris-api/helper/device-user-merge.helper.ts`
+- `bnpi-pats-api/helper/device-user-merge.helper.ts`
   - `resolveFingerprintCredentialSource` → `richest_count_default_overwrite`
   - same-person target overwrite no longer `source_conflict` solely from different checksums
-- `hris-app/app/routes/admin/devices/enroll.tsx`
+- `bnpi-pats-app/app/routes/admin/devices/enroll.tsx`
   - gap rows: `RICHEST SOURCE (default): … overwrite …`
 - Commit: `c5d43a0 feat(recovery): default richest fingerprint/face source with overwrite`
 
@@ -105,12 +105,12 @@ Stamp: `.runtime/richest-source-fp-burn-YYYYMMDD-HHMMSS/`
 | F | `cmrim1zop05ik7zp4zgm2sm4k` | 10.184.37.25 |
 
 **Exclude:** Main C, TEST A/B.  
-Admin: `admin@bandai.local` / repo password / `appCode=hris`. Never print tokens.
+Admin: `admin@bandai.local` / repo password / `appCode=bnpi-pats`. Never print tokens.
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\node-health-appliance_ed25519" infra@10.184.37.19
 # fallback
-ssh project-truth-hris
+ssh project-truth-bnpi-pats
 ```
 
 API: `http://127.0.0.1:3101` on VM.
@@ -149,10 +149,10 @@ Needs review IDs ≠ fpReady
 
 ### Phase A — Deploy certainty (blocker until green)
 
-1. `printenv PROJECT_TRUTH_BUILD_SHA` on `deploy/hris-api`
+1. `printenv PROJECT_TRUTH_BUILD_SHA` on `deploy/bnpi-pats-api`
 2. If not ancestor of / equal to `c5d43a0`:
    - `sudo systemctl start project-truth-ansible-pull.service`
-   - watch until services include `hris-api` or SHA updates
+   - watch until services include `bnpi-pats-api` or SHA updates
    - at least 3 recovery paths if stuck (timer, manual pull, rebuild status file)
 3. Record `01-config.json`: health, SHA, multi-canary env, active jobs
 
@@ -273,7 +273,7 @@ CPU is not the limit. Explores parallel; **writes serial**.
 ## 8. Observability
 
 ```bash
-kubectl -n dev logs deploy/hris-api -c api --since=30m | grep credential_recovery
+kubectl -n dev logs deploy/bnpi-pats-api -c api --since=30m | grep credential_recovery
 # expect: modality fingerprint, stage copy_success, device A/D/E names
 ```
 

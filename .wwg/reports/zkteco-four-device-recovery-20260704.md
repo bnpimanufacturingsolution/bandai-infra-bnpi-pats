@@ -8,7 +8,7 @@ and implementation.
 Recover/query all four configured ZKTeco devices without breaking the
 VM-managed Cloudflare SSH/public tunnel.
 
-Configured DEV devices from `hris-postgres-dev` / database `hris`:
+Configured DEV devices from `bnpi-pats-postgres-dev` / database `bnpi-pats`:
 
 | Device | Address | Port |
 | --- | --- | ---: |
@@ -27,7 +27,7 @@ configuration on the terminals:
 | `docs/zkteco-ips/735475916_4555414284776659_7980313276103266968_n.jpg` | `10.184.38.234` | `255.255.255.0` | `10.184.38.254` | 4370 | Off |
 | `docs/zkteco-ips/735504354_787372137733346_3163726000928591569_n.jpg` | `10.184.38.235` | `255.255.255.0` | `10.184.38.254` | 4370 | Off |
 
-Interpretation: the four configured HRIS IPs match the device screens. The
+Interpretation: the four configured BNPI PATS IPs match the device screens. The
 current failure is not explained by a typo in the configured ZKTeco IPs or TCP
 port. It is current reachability/path/device state for `.9` and `.10`.
 
@@ -35,9 +35,9 @@ port. It is current reachability/path/device state for `.9` and `.10`.
 
 Before network recovery attempts:
 
-- Remote path: `ssh project-truth-hris`
+- Remote path: `ssh project-truth-bnpi-pats`
 - Host: `project-truth-node`
-- `cloudflared-bnpi-hris.service`: `active`
+- `cloudflared-bnpi-pats.service`: `active`
 - `eth0`: `10.184.37.19/24`, `10.184.37.78/24`
 - Default route: `default via 10.184.38.254 dev eth0 proto static onlink`
 - ZKTeco bridge containers: running and healthy
@@ -61,7 +61,7 @@ A temporary, non-persistent secondary address was added:
 Effect:
 
 - Routes to `10.184.38.x` changed to source from `10.184.38.144`.
-- `cloudflared-bnpi-hris.service` remained active.
+- `cloudflared-bnpi-pats.service` remained active.
 - `.234` and `.235` still worked.
 - `.9` and `.10` changed from long TCP timeout to `No route to host` on TCP,
   which indicates failed neighbor/L2 resolution from the VM.
@@ -100,7 +100,7 @@ Interpretation:
 - All temporary host routes and temporary `/32` addresses were removed after
   the test.
 - Final VM state returned to canonical `10.184.37.19/24` and
-  `10.184.37.78/24`; `cloudflared-bnpi-hris.service` remained active.
+  `10.184.37.78/24`; `cloudflared-bnpi-pats.service` remained active.
 
 Post-cleanup validation:
 
@@ -161,7 +161,7 @@ Added read-only recovery modes to `vendor/zkteco-linux`:
 - `--mode discover`
   - Runs bounded directed UDP/ZK sweeps over explicit `--discover-cidr` ranges.
   - Reports only devices that answer `read_sizes()`.
-  - Does not write to devices, clear logs, post HRIS events, or change runtime
+  - Does not write to devices, clear logs, post BNPI PATS events, or change runtime
     configuration.
 
 Validation:

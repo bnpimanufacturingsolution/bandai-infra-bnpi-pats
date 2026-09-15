@@ -14,7 +14,7 @@ When services are up, a physical ACS event (and any successful callback save) mu
 | **Listener armed** | HCNetSDK login + alarm channel | systemd active + arm logs |
 | **Callback save** | POST `/api/hikvision/callback` → `DeviceEvent` | API 200 + DB row |
 | **Socket realtime** | `device-event:saved` to correct rooms | FE row or refetch |
-| **Person match** | plain `employeeNo` + HRIS link | Not always available on major=3 |
+| **Person match** | plain `employeeNo` + BNPI PATS link | Not always available on major=3 |
 
 Saved Events ledger is **independent** of listener readiness. Historical rows stay visible while armed/quiet.
 
@@ -43,7 +43,7 @@ open that id. Contract: `docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`.
 | Path | Role | Realtime? |
 |---|---|---|
 | systemd `project-truth-hikvision-hot-reload-listener` | Primary ACS alarms | Yes (callback → socket) |
-| DEV `hris-hikvision-watcher` ACS pull | Gap fill only | Yes if POST hits API with `io` |
+| DEV `bnpi-pats-hikvision-watcher` ACS pull | Gap fill only | Yes if POST hits API with `io` |
 | Admin Sync / import | Operator | Yes on save |
 
 PROD/UAT intentionally have **no** K3s watcher. Realtime there depends on the HCNetSDK listener + callback.
@@ -69,8 +69,8 @@ Major=3 panel ops often arrive with empty `employeeNo`. UI shows **Unknown perso
 
 ## Code owners
 
-- Emit: `hris-api/helper/device-event-realtime.helper.ts`
-- Join: `hris-api/index.ts` (`join:device-events`)
-- FE: `hris-app/app/routes/admin/devices/events.tsx`
-- Watcher audit: `hris-api/scripts/audit-hikvision-device-events.ts`
+- Emit: `bnpi-pats-api/helper/device-event-realtime.helper.ts`
+- Join: `bnpi-pats-api/index.ts` (`join:device-events`)
+- FE: `bnpi-pats-app/app/routes/admin/devices/events.tsx`
+- Watcher audit: `bnpi-pats-api/scripts/audit-hikvision-device-events.ts`
 - Listener: `project-truth-hikvision-hot-reload-listener.service`

@@ -14,7 +14,7 @@ This work followed the `Agent-Meta-Prompt-Template.md` loop: discover current st
 
 Before promotion, DEV had a data split:
 
-- `hris-postgres-dev` in Docker held `employees=2217`.
+- `bnpi-pats-postgres-dev` in Docker held `employees=2217`.
 - K3s DEV Postgres held the small seed dataset with `employees=7`.
 - No employee deletion was found in the CORS repair. The visible DEV app was simply backed by the K3s database, not the Docker DEV database that held the imported data.
 
@@ -33,16 +33,16 @@ Backups were created before restore:
 
 | Backup | Path | Size | SHA256 |
 | --- | --- | ---: | --- |
-| Docker DEV source dump | `/var/lib/project-truth/backups/dev-k3s-promote-20260701-054647/docker-dev-hris.dump` | 112M | `5a4aef7f9cbb3a37342e5379b67a2b4706d06e3f67d524abb4f7d8d8562a01ce` |
-| K3s DEV pre-restore dump | `/var/lib/project-truth/backups/dev-k3s-promote-20260701-054647/k3s-dev-before-hris.dump` | 45M | `44a2708c6e1d53743cc2200f6e139df716ec3d042e915f450befc2d08baac15b` |
+| Docker DEV source dump | `/var/lib/project-truth/backups/dev-k3s-promote-20260701-054647/docker-dev-bnpi-pats.dump` | 112M | `5a4aef7f9cbb3a37342e5379b67a2b4706d06e3f67d524abb4f7d8d8562a01ce` |
+| K3s DEV pre-restore dump | `/var/lib/project-truth/backups/dev-k3s-promote-20260701-054647/k3s-dev-before-bnpi-pats.dump` | 45M | `44a2708c6e1d53743cc2200f6e139df716ec3d042e915f450befc2d08baac15b` |
 
 ## Execution Summary
 
 DEV writers were scaled down before the database replacement:
 
-- `hris-api`
-- `hris-app`
-- `hris-hikvision-watcher`
+- `bnpi-pats-api`
+- `bnpi-pats-app`
+- `bnpi-pats-hikvision-watcher`
 
 K3s DEV Postgres was restored from the Docker DEV custom dump by dropping and recreating the `public` schema, then running `pg_restore` and `analyze`. DEV workloads were scaled back up afterward.
 
@@ -61,10 +61,10 @@ MigrationRunStep
 Live DEV pods:
 
 ```text
-hris-api-cd487cc48-72gkg                 1/1 Running
-hris-app-85c49866dd-hsbv8                1/1 Running
-hris-hikvision-watcher-d6c8d9bb4-jw5v5   1/1 Running
-hris-postgres-0                          1/1 Running
+bnpi-pats-api-cd487cc48-72gkg                 1/1 Running
+bnpi-pats-app-85c49866dd-hsbv8                1/1 Running
+bnpi-pats-hikvision-watcher-d6c8d9bb4-jw5v5   1/1 Running
+bnpi-pats-postgres-0                          1/1 Running
 ```
 
 K3s node:
@@ -98,7 +98,7 @@ The unauthenticated workbook-template probe returning `401` means the route is p
 
 ## DM Workbook Runtime Evidence
 
-Inside live DEV API pod `hris-api-cd487cc48-72gkg`:
+Inside live DEV API pod `bnpi-pats-api-cd487cc48-72gkg`:
 
 ```text
 /data/import/DM3-employee-data-migration.xlsx        813.1K

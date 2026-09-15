@@ -38,7 +38,7 @@ Hourly is **derived**, then snapshotted. It is not typed on Employee.
 
 Helpers (existing, not a new rate family):
 
-- `hris-api/helper/payroll-period.helper.ts` — `resolveBnpiAttendanceDailyRate`, `resolveBandaiApprovedBucketRateBasis`
+- `bnpi-pats-api/helper/payroll-period.helper.ts` — `resolveBnpiAttendanceDailyRate`, `resolveBandaiApprovedBucketRateBasis`
 - Schedule hours may be 7.5 on some days; **BNPI 313 peso rates ignore schedule hours and use 8**
 
 ## What we did not add
@@ -57,7 +57,7 @@ Helpers (existing, not a new rate family):
 
 Optional script. Fills stored `EmployeePayroll.hourlySalary` from **current** `dailySalary` / payroll `metadata`. It does **not** change payroll computation. Dry-run is the default.
 
-Commands (`cd hris-api`):
+Commands (`cd bnpi-pats-api`):
 
 ```text
 npm run backfill:employee-payroll-hourly-salary
@@ -83,14 +83,14 @@ Boundary: paid money history stays immutable. A filled snapshot is audit/display
 
 | Layer | Path | Role |
 |---|---|---|
-| Employee SoT | `hris-api/prisma/schema/employee.prisma` | `basicSalary`, `currency`, `payFrequency` only |
-| Snapshot field | `hris-api/prisma/schema/employeepayroll.prisma` | `hourlySalary Float @default(0)` + comment |
-| Postgres twin | `hris-api/prisma/schema-postgres/employeepayroll.prisma` | Same field |
-| Additive migration | `hris-api/prisma/schema-postgres/migrations/20260819_add_employee_payroll_hourly_salary.sql` | `ADD COLUMN IF NOT EXISTS` default 0 |
-| Zod allow-list | `hris-api/zod/employeepayroll.zod.ts` | `hourlySalary` in register number field names |
-| Derive hourly | `hris-api/helper/payroll-period.helper.ts` | Daily / 8; OT and late already use this hourly. Backfill reuses `computeEmployeePayrollHourlySalarySnapshot` |
-| Sheet2 columns | `BANDAI_PAYROLL_REGISTER_COLUMNS` in that helper; `hris-app/app/routes/hr/reports/payroll.tsx` | No hourly column |
-| Backfill (optional) | `hris-api` npm `backfill:employee-payroll-hourly-salary` (+ `:execute`) | Dry-run default. Fills existing `0` from daily/metadata. Not compute |
+| Employee SoT | `bnpi-pats-api/prisma/schema/employee.prisma` | `basicSalary`, `currency`, `payFrequency` only |
+| Snapshot field | `bnpi-pats-api/prisma/schema/employeepayroll.prisma` | `hourlySalary Float @default(0)` + comment |
+| Postgres twin | `bnpi-pats-api/prisma/schema-postgres/employeepayroll.prisma` | Same field |
+| Additive migration | `bnpi-pats-api/prisma/schema-postgres/migrations/20260819_add_employee_payroll_hourly_salary.sql` | `ADD COLUMN IF NOT EXISTS` default 0 |
+| Zod allow-list | `bnpi-pats-api/zod/employeepayroll.zod.ts` | `hourlySalary` in register number field names |
+| Derive hourly | `bnpi-pats-api/helper/payroll-period.helper.ts` | Daily / 8; OT and late already use this hourly. Backfill reuses `computeEmployeePayrollHourlySalarySnapshot` |
+| Sheet2 columns | `BANDAI_PAYROLL_REGISTER_COLUMNS` in that helper; `bnpi-pats-app/app/routes/hr/reports/payroll.tsx` | No hourly column |
+| Backfill (optional) | `bnpi-pats-api` npm `backfill:employee-payroll-hourly-salary` (+ `:execute`) | Dry-run default. Fills existing `0` from daily/metadata. Not compute |
 
 ## WWG updated this pass
 

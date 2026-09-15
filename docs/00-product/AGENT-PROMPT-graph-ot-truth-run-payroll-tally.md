@@ -2,7 +2,7 @@
 
 **Status:** `EXECUTE_NOW`  
 **Created:** 2026-08-04  
-**Fast probe script:** `hris-api/scripts/probe-ot-truth-fast.ts`  
+**Fast probe script:** `bnpi-pats-api/scripts/probe-ot-truth-fast.ts`  
 **Latest evidence pattern:** `.runtime/ot-fast-probe-*/`
 
 ---
@@ -24,7 +24,7 @@ Periods:
   PP-20260626-20260711
 
 Every cycle:
-  1) Run: cd hris-api; npx tsx scripts/probe-ot-truth-fast.ts
+  1) Run: cd bnpi-pats-api; npx tsx scripts/probe-ot-truth-fast.ts
   2) Read INDEX.json — people/hours File vs DB vs readiness must table-first
   3) Residual only if file people ≠ readiness people OR dayMismatch > 0
   4) For residual: per-employee table (code, name, fileOt, dbOt, reason)
@@ -100,9 +100,9 @@ Evidence under .runtime/ot-fast-probe-<stamp>/
 **Host command (~5–8s both packs):**
 
 ```powershell
-cd hris-api
+cd bnpi-pats-api
 $env:FORCE_ENV_DB='1'
-$env:PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public'
+$env:PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public'
 $env:DATABASE_URL=$env:PG_DATABASE_URL
 npx tsx scripts/probe-ot-truth-fast.ts
 ```

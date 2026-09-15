@@ -103,15 +103,15 @@ Do not end with a “What you should do next” list for recoverable work. Execu
 ## Running Cloudflare Tunnel Safety Rule
 
 The running Project Truth server depends on the VM-managed named Cloudflare
-Tunnel for public HRIS and for `ssh project-truth-hris`.
+Tunnel for public BNPI PATS and for `ssh project-truth-bnpi-pats`.
 
 Agents are banned from disabling, stopping, masking, removing, toggling off, or
 adding a default-local/cloud-mode guard around the running
-`cloudflared-bnpi-hris.service` unless the user explicitly requests a
+`cloudflared-bnpi-pats.service` unless the user explicitly requests a
 time-bounded tunnel outage and a verified recovery path is already documented.
 
 For normal runtime, image, cleanup, pruning, VHDX, GitOps, or observability
-work, keep the VM-managed `bnpi-hris` tunnel active. If tunnel behavior must be
+work, keep the VM-managed `bnpi-pats` tunnel active. If tunnel behavior must be
 changed, first preserve working SSH/public access, record the current connector
 state, and prefer additive repair over mode toggles. Never make "cloud mode off"
 the default for the already-running server.
@@ -126,7 +126,7 @@ public/Cloudflare SSH alias:
 ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19
 ```
 
-Use `ssh project-truth-hris` only as a fallback when direct LAN SSH is not
+Use `ssh project-truth-bnpi-pats` only as a fallback when direct LAN SSH is not
 routable from the current workstation, or when the task specifically needs to
 prove public Cloudflare SSH/browser access. Keeping the VM-managed tunnel active
 is still required; local-first means direct evidence first, not disabling
@@ -151,7 +151,7 @@ Hyper-V VM: project-truth-local-vhdx-proof
   - Owns Project Truth runtime
   - Has one stable VM IP
   - Runs Docker Engine inside Linux
-  - Runs HRIS app/API/Postgres/device services
+  - Runs BNPI PATS app/API/Postgres/device services
   - Reaches Hikvision/ZKTeco devices from inside VM
 
 Docker Inside VM
@@ -166,7 +166,7 @@ Devices
 Host Access
   - Host pings VM IP
   - Host SSHs into VM
-  - Host opens HRIS URLs using VM IP
+  - Host opens BNPI PATS URLs using VM IP
 ```
 
 Do not run Project Truth through Windows Docker Desktop. Do not depend on WSL
@@ -185,8 +185,8 @@ Linux VM IP, for example:
   10.184.37.241 or DHCP-assigned LAN IP
         |
 Docker inside VM
-  hris-app
-  hris-api
+  bnpi-pats-app
+  bnpi-pats-api
   postgres
   hikvision service
   zkteco service
@@ -208,7 +208,7 @@ WSL/Docker Desktop host path, while preserving Hyper-V and the VM switch needed
 for `project-truth-local-vhdx-proof`.
 
 For Windows-host localhost hot reload, the canonical DEV database is the K3s DEV
-Postgres forward on `127.0.0.1:55435` (`dev/hris-postgres`, service
+Postgres forward on `127.0.0.1:55435` (`dev/bnpi-pats-postgres`, service
 `10.43.130.9:5432`). Do not silently switch localhost dev to compose DEV
 `10.184.37.19:15433`: that is a duplicate drift-prone diagnostic database and
 has previously shown only the stale `192.168.18.39` device while the real DEV
@@ -251,8 +251,8 @@ Before diagnosing from UI screenshots or guessing from code, identify the exact
 endpoint used by the page, hook, or service and run that endpoint directly with
 the same role the page should use.
 
-For local HRIS admin/device/configuration checks, the default actor is
-`admin@bandai.local` / `password123` with `appCode='hris'`, unless the task
+For local BNPI PATS admin/device/configuration checks, the default actor is
+`admin@bandai.local` / `password123` with `appCode='bnpi-pats'`, unless the task
 explicitly targets another role. Use a non-mutating mode first: `execute=false`,
 `dryRun=true`, a preview endpoint, `?preview=true`, or the endpoint's documented
 equivalent. Wrap the call in `Measure-Command`, capture full JSON
@@ -263,7 +263,7 @@ Use this PowerShell shape as the canonical local pattern and adapt only the
 endpoint/body to the page being investigated:
 
 ```powershell
-$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
+$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
 $login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $loginBody
 $headers = @{ Authorization = "Bearer $($login.data.token)" }
 $body = @{ execute=$false; deviceId='all'; source='all'; status='all'; dateField='eventTime'; includeLinkedAttendance=$true } | ConvertTo-Json
@@ -426,7 +426,7 @@ For login, CORS, Cloudflare, and gateway checks, collect evidence in this order:
    and public host checks.
 
 Screenshots alone are not enough for CORS/proxy claims. Network evidence must
-show whether the app used same-host `/api`, a paired `*-api.bnpi-hris.tech`
+show whether the app used same-host `/api`, a paired `*-api.bnpi-pats.tech`
 host, or direct LAN app-to-API port mapping.
 
 ## Real Stop Conditions
@@ -467,15 +467,15 @@ Windows host repo
 -> GitOps manifests
 -> Argo CD inside the bridged Hyper-V VM
 -> K3s/appliance runtime inside the VM
--> LAN-reachable HRIS app/API
--> named Cloudflare Tunnel for verified public `bnpi-hris.tech` targets
+-> LAN-reachable BNPI PATS app/API
+-> named Cloudflare Tunnel for verified public `bnpi-pats.tech` targets
 ```
 
 Do not declare the architecture complete from host-local Docker alone unless the VM path is proven impossible with evidence.
 
 ## Canonical Role Guard
 
-Admin device/configuration work is admin-role work. For `/admin/configuration/devices`, ZKTeco device events, runtime health, VM/GitOps drift, and repair operations, use admin / `hris-admin` as the actor and mental model. Do not default to `hris-hr-manager` for these surfaces unless the task explicitly targets an HR workflow or the relevant code/docs require the HR manager role.
+Admin device/configuration work is admin-role work. For `/admin/configuration/devices`, ZKTeco device events, runtime health, VM/GitOps drift, and repair operations, use admin / `bnpi-pats-admin` as the actor and mental model. Do not default to `bnpi-pats-hr-manager` for these surfaces unless the task explicitly targets an HR workflow or the relevant code/docs require the HR manager role.
 
 <!-- WWG_GENERATED:EXISTING_PROJECT_ADOPTION_RULE:START -->
 ## Existing Project Adoption Rule

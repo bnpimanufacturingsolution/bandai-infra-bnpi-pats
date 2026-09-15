@@ -4,7 +4,7 @@ Last updated: 2026-07-29
 
 ## Why
 
-ACS must not require `hris-api` to be healthy at the exact millisecond of the
+ACS must not require `bnpi-pats-api` to be healthy at the exact millisecond of the
 device callback. Product truth still lives only in Postgres `device_events`
 via `/api/hikvision/callback`.
 
@@ -13,17 +13,17 @@ via `/api/hikvision/callback`.
 ```text
 Host SDK listener (systemd, HCNetSDK)
   → prefers http://127.0.0.1:30108  (NodePort)
-K3s watcher (hris-hikvision-watcher)
-  → http://hris-callback-outbox:8080
+K3s watcher (bnpi-pats-hikvision-watcher)
+  → http://bnpi-pats-callback-outbox:8080
         │
         ▼
-hris-callback-outbox (Deployment, 1 replica)
+bnpi-pats-callback-outbox (Deployment, 1 replica)
   SQLite: hostPath /var/lib/project-truth/callback-outbox/outbox.db
   indexes: status+time, device_id, serial_no
         │
         │ drain loop (and optional immediate drain)
         ▼
-hris-api:3001/api/hikvision/callback
+bnpi-pats-api:3001/api/hikvision/callback
         │
         ▼
 Postgres device_events + socket emit

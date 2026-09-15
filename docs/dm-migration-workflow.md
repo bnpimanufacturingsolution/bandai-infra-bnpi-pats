@@ -1,4 +1,4 @@
-# HRIS DM Migration Workflow Source Of Truth
+# BNPI PATS DM Migration Workflow Source Of Truth
 
 This document is the canonical planning map for setup and data migration workbooks.
 Use it before changing `/setup`, `/admin/configuration/migration`, migration import
@@ -39,7 +39,7 @@ facts first, then let helpers/controllers change or disappear around that truth.
 - `DM5 + DM6 -> FINAL reconciliation/sign-off`
 
 The dependency graph is represented in
-`hris-api/app/migration/migration-step-registry.ts`; controllers should not own
+`bnpi-pats-api/app/migration/migration-step-registry.ts`; controllers should not own
 DM3/DM4 sequence branching.
 
 ### Required Run State
@@ -116,7 +116,7 @@ and durable events describe that run only (`created` / `updated` / `skipped` /
 | --- | --- | --- |
 | DM1 masters (departments, sections, positions, levels, shift types / schedule templates, agencies) | Stable codes / names within the org | Upsert: create if missing, update if present |
 | DM2 catalogs (holidays, leave types, benefit types, …) | Stable codes / names within the org | Upsert: create if missing, update if present |
-| DM3.1 Employees | `organizationId` + `EMP_ID` | Existing employee is **updated** from the row; new `EMP_ID` is **created**. Implementation: `EmployeeImportService` (`hris-api/app/employee/employee-import.service.ts`) via DM3 workbook import |
+| DM3.1 Employees | `organizationId` + `EMP_ID` | Existing employee is **updated** from the row; new `EMP_ID` is **created**. Implementation: `EmployeeImportService` (`bnpi-pats-api/app/employee/employee-import.service.ts`) via DM3 workbook import |
 | DM3.2 Employee Schedule Assignments | Employee by `EMP_ID` + schedule template by `SCHEDULE_CODE` | Same assignment → skip; same timeslots with different notes/source → light refresh + history; different template/effective dates → reassign `Employee.embeddedSchedule` + `EmployeeScheduleHistory`. Employees omitted from the sheet keep their prior schedule |
 | DM3.3 Reporting Lines | Employee `EMP_ID` → `REPORT_TO_EMP_ID` | Valid pairs update `Employee.reportToId`; invalid / cycle / missing IDs are skipped for that row |
 | DM3.4 Employee Documents / 201 Files | Employee + document type | Existing document **updated**; else **created** |
@@ -145,7 +145,7 @@ smaller re-upload.
 - Re-uploading a corrected DM3 with fixed salaries / phones for a subset of
   `EMP_ID`s updates those people and leaves everyone else alone.
 - Adding new `EMP_ID`s creates them; dropping IDs from the file does not remove
-  them from HRIS.
+  them from BNPI PATS.
 - Changing one `SCHEDULE_CODE` reassigns that employee only when that row is
   present and different; other employees are unchanged.
 - Re-uploading an identical file should be safe (mostly updates/skips) and must
@@ -153,10 +153,10 @@ smaller re-upload.
 
 ### Implementation anchors
 
-- DM3 workbook orchestration: `hris-api/app/migration/dm3-workbook-import.service.ts`
-- Employee create/update: `hris-api/app/employee/employee-import.service.ts`
+- DM3 workbook orchestration: `bnpi-pats-api/app/migration/dm3-workbook-import.service.ts`
+- Employee create/update: `bnpi-pats-api/app/employee/employee-import.service.ts`
   (`findUnique` on `organizationId_employeeId`, then `update` or `create`)
-- Admin UI entry: `/admin/configuration/migration` (`hris-app` migration route)
+- Admin UI entry: `/admin/configuration/migration` (`bnpi-pats-app` migration route)
 - Durable run/event models: `MigrationRun`, `MigrationRunStep`, `MigrationRunEvent`
 
 Keep this section aligned when changing import code. If re-import semantics ever
@@ -175,16 +175,16 @@ user logs in.
 | --- | --- | --- |
 | `Section.isHr` | DM1 Sections sheet | **No** — not read by auth/sidebar |
 | `Department.isHr` | DM1 Departments sheet | Indirectly when role was derived from it |
-| `Employee.role` | DM3 import / role sync | **Yes** — HRIS source of truth for app role |
+| `Employee.role` | DM3 import / role sync | **Yes** — BNPI PATS source of truth for app role |
 | `User.role` | Account row; must match `Employee.role` | **Yes historically** — login profile used this first; now prefers `Employee.role` and heals `User.role` |
 | `Employee.isHrManager` / `isManager` | Derived with role | Flags only |
 
 Sidebar “Working Space” HR items (`Employees`, `Timekeeping`, `Run Payroll`, …)
-require `user.role === "hris-hr-user"` or `"hris-hr-manager"`
+require `user.role === "bnpi-pats-hr-user"` or `"bnpi-pats-hr-manager"`
 (`Sidebar.tsx` `isHR`). The category heading is always labeled **Working Space**
 (not a separate “HR Working Space” string); HR vs employee is which items appear.
 
-If `Employee.role` is upgraded but `User.role` is left as `hris-employee`,
+If `Employee.role` is upgraded but `User.role` is left as `bnpi-pats-employee`,
 logout/login previously still showed the employee sidebar. Login profile now
 prefers linked `Employee.role` and best-effort updates `User.role` to match.
 Role sync/repair also writes both tables.
@@ -193,8 +193,8 @@ Role sync/repair also writes both tables.
 
 When DM3 Employees are imported, role is derived as:
 
-- HR section **or** HR department → `hris-hr-user` (or `hris-hr-manager` if level/manager)
-- Otherwise → `hris-employee` / `hris-employee-manager`
+- HR section **or** HR department → `bnpi-pats-hr-user` (or `bnpi-pats-hr-manager` if level/manager)
+- Otherwise → `bnpi-pats-employee` / `bnpi-pats-employee-manager`
 
 Implementation: `EmployeeImportHelper.resolveDerivedRoleFlags` uses department
 `isHr` **and** section `isHr` (by section name/code and resolved section id).
@@ -209,11 +209,11 @@ Typical failure pattern (proven locally for `EMP_ID=01360`):
 
 1. Employee is linked to section `GA/HR 1` (`code=52`, `isHr=true`).
 2. Department is `Administration` (`isHr=false`).
-3. Stored `Employee.role` remains `hris-employee` because:
+3. Stored `Employee.role` remains `bnpi-pats-employee` because:
    - DM3 was imported before section `IS_HR` was true, or
    - role was never re-derived after DM1 section import, or
    - only section master was updated later without role sync.
-4. Login returns `role: hris-employee` → app treats the account as a normal
+4. Login returns `role: bnpi-pats-employee` → app treats the account as a normal
    employee, not HR.
 
 DM1 `IS_HR=true` on GA/HR is therefore **necessary but not sufficient**. The
@@ -224,8 +224,8 @@ employee row must also store an HR role.
 1. **Section import role sync** — after a successful DM1 Sections import that
    creates/updates rows, the API re-derives roles for employees linked to those
    sections (`syncEmployeeRolesFromOrgStructure` in
-   `hris-api/helper/employee-role-sync.helper.ts`, called from section import).
-2. **Repair script** — `hris-api/scripts/repair-employee-roles-from-section-hr.cjs`
+   `bnpi-pats-api/helper/employee-role-sync.helper.ts`, called from section import).
+2. **Repair script** — `bnpi-pats-api/scripts/repair-employee-roles-from-section-hr.cjs`
    re-derives roles for the org (optionally scoped with
    `--section-codes=GAHR,52,53`).
 3. **Re-import DM3 Employees** after DM1 sections have correct `IS_HR` also
@@ -468,7 +468,7 @@ The HR-facing journey for the wired DM3 workbook is:
    - `GET /api/migration/dm3/mass-upload-imports/:id` and `.../report.csv`
    Optional multipart `migrationRunId` / `runId` links mass/databank logs to the
    open DM3 run. SQL:
-   `hris-api/prisma/schema-postgres/migrations/20260804_add_mass_upload_import_logs.sql`.
+   `bnpi-pats-api/prisma/schema-postgres/migrations/20260804_add_mass_upload_import_logs.sql`.
 7. HR verifies a sampled employee in the employee profile/compliance surfaces:
    `Person.identification.statutoryIds.pagibig`, `Employee.basicSalary`,
    `Employee.embeddedSchedule`, `EmployeeScheduleHistory`, `Employee.reportToId`,
@@ -544,7 +544,7 @@ migration. They are not DM4 attendance-history evidence:
 | `docs/rptLeaveBalance as of June 4, 2026.xlsx` sheet `rptLeaveBalance` | `DM3.5 / Opening Leave Balances` | BNPI leave balance source for employee leave assignments by employee id and remaining-balance columns `VL`, `SL`, and `ACL` as of June 4, 2026. | Transform positive employee-master-matched remaining balances into `Opening Leave Balances`: `EMP_ID`, `LEAVE_TYPE_CODE`, `BALANCE`, `AS_OF_DATE=2026-06-04`, `NOTES`, then import through the DM3 workbook modal after employee documents and before benefits/loans. |
 | `docs/BNPI_MASTERLIST.xlsx` sheet `Manpower Databank` (or monthly multi-day workbooks such as `2026_07_July Manpower Databank.xlsx`) | `DM3.1 / Employees` and `DM1.2 / Sections` | BNPI employee master source of truth. The active filtered view contains 857 active employee rows and is the basis for `data/import/employees-import.csv`; the sheet also supplies Manpower Databank section wording for section import parity. Monthly files may use daily sheets (`07-01` … `07-24`) instead of a single `Manpower Databank` tab. | **Preferred operator path:** DM3 page **Upload employee databank** → `POST /api/migration/dm3/import-manpower-databank` (creates missing `EMP_ID`s and updates existing roster fields; multi-day workbooks auto-select the latest day sheet; does **not** wipe `basicSalary`, email, or statutory IDs). Offline alternative: generate the DM3 Employees sheet from active rows only, then import through the full DM3 workbook. Preserve source fields such as `EMAIL`, `PHONE`, statutory IDs, workforce source, resignation date, source status, and source row metadata when present; map `EMAIL` from `Official Email Address` first, falling back to `Email Address`; do not synthesize missing email addresses during mapping/import. Payroll-approved period `BASIC_SALARY` still comes from the payroll computation register path when pay must change. |
 | `docs/AGENCY/Avance.xlsx`, `docs/AGENCY/Cepol.xlsx`, `docs/AGENCY/CGSI.xlsx`, `docs/AGENCY/Kohsai.xlsx`, `docs/AGENCY/Natcorp.xlsx` | `DM1.6 / Agencies` and `DM3.1 / Employees` | Agency workforce master sources. The DM1 agency master list is `AVANCE = Avance Pilipinas, Inc.`, `CGSI = Cebu General Services, Inc.`, `CEPOL = Cepol Services`, `KOHSAI = Kohsai Contracting System Services, Inc.`, and `NATCORP = NatCorp Career Growth and Manpower Services, Inc`. The keyed employee rows are 433 Avance, 130 Cepol, 496 CGSI, 120 Kohsai, and 176 Natcorp. | Generate `agencies-import.csv` with codes `AVANCE`, `CGSI`, `CEPOL`, `KOHSAI`, `NATCORP`, append workbook-backed agency employees to `employees-import.csv` with `WORKFORCE_SOURCE = AGENCY`, `AGENCY_CODE`, and `SOURCE_WORKBOOK`, then regenerate the DM1/DM3 workbooks. Agency source workbooks do not contain salary amounts, so agency `BASIC_SALARY` is `0` for master-data import unless a payroll-approved agency pay source is supplied. |
-| `docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx` | `DM3.1 / Employees` | Payroll-approved period `Basic Salary` source for `BASIC_SALARY`. | Use Sheet2 `Basic Salary`, not `Monthly Salary`, to populate the `Employees` sheet `BASIC_SALARY` column for this semi-monthly payroll proof. The workbook is password-protected in this repo copy; the client-provided workbook password is `9090`. Treat the password as sensitive payroll migration handling data. The current Node `xlsx` reader still reports the file as protected, so extraction should use Excel/LibreOffice to save an unlocked export or a decryption-capable reader before code maps salary values. |
+| `docs/BNPI PATS Payroll Computation April 26 - May 10, 2026.xlsx` | `DM3.1 / Employees` | Payroll-approved period `Basic Salary` source for `BASIC_SALARY`. | Use Sheet2 `Basic Salary`, not `Monthly Salary`, to populate the `Employees` sheet `BASIC_SALARY` column for this semi-monthly payroll proof. The workbook is password-protected in this repo copy; the client-provided workbook password is `9090`. Treat the password as sensitive payroll migration handling data. The current Node `xlsx` reader still reports the file as protected, so extraction should use Excel/LibreOffice to save an unlocked export or a decryption-capable reader before code maps salary values. |
 
 `BASIC_SALARY` belongs to DM3 employee master data because payroll previews,
 statutory reporting, PAN salary changes, and employee compensation views read
@@ -636,10 +636,10 @@ assignments still belong in DM3.2.
 
 Current wired files:
 
-- `hris-app/app/routes/admin/configuration/migration.tsx`
-- `hris-api/scripts/create-dm-migration-workbooks.cjs`
-- `hris-api/scripts/generate-migration-workbook-doc.cjs`
-- `docs/hris-dm-stage-migration-list.xlsx`
+- `bnpi-pats-app/app/routes/admin/configuration/migration.tsx`
+- `bnpi-pats-api/scripts/create-dm-migration-workbooks.cjs`
+- `bnpi-pats-api/scripts/generate-migration-workbook-doc.cjs`
+- `docs/bnpi-pats-dm-stage-migration-list.xlsx`
 - `docs/dm-source-input-manifest.json`
 
 `docs/dm-source-input-manifest.json` is the safe UI manifest for migration
@@ -685,7 +685,7 @@ Do not drop these from planning just because they are currently template-only in
   values remain unscheduled; recurring schedule truth must come from DM3.2, not
   the BNPI attendance reconciliation default.
 - BNPI period basic salary belongs in `DM3.1 Employees.BASIC_SALARY` and should
-  be sourced from `docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx`
+  be sourced from `docs/BNPI PATS Payroll Computation April 26 - May 10, 2026.xlsx`
   Sheet2 `Basic Salary` or an unlocked/exported derivative of that workbook. Do
   not leave imported active employees at `BASIC_SALARY = 0` for payroll-ready
   migration, and do not use Sheet2 `Monthly Salary` for the April 26-May 10
@@ -731,7 +731,7 @@ Do not drop these from planning just because they are currently template-only in
 
 ## Automated Period Folder Ingestion Orchestrator
 
-For operational cutoff ingestion, `hris-api/scripts/import-payroll-files-folder.mjs` (`npm run import:payroll-files` / `npm run payroll:import-files`) provides a one-command pipeline:
+For operational cutoff ingestion, `bnpi-pats-api/scripts/import-payroll-files-folder.mjs` (`npm run import:payroll-files` / `npm run payroll:import-files`) provides a one-command pipeline:
 - **2-Tier Fingerprint Engine**: Automatically classifies workbooks via filename fuzzy matching and column header fingerprinting.
 - **Dependency Ingestion**: Sequentially uploads WorkSharing, Leave, Compensation, Deduction, Biometrics, and Overtime details.
 - **Post-Import Synchronizations**: Automatically runs Late/UT punch recalculation, Sunday/off-day alignment, loan horizon extensions, and universal MLA guarantees.
@@ -741,12 +741,12 @@ For operational cutoff ingestion, `hris-api/scripts/import-payroll-files-folder.
 When changing the migration sequence, update this document first or in the same
 change as the code. Then align the related surfaces:
 
-1. `hris-app/app/routes/admin/configuration/migration.tsx`
-2. `hris-api/app/migration/migration.controller.ts`
-3. `hris-api/app/migration/migration.router.ts`
-4. `hris-api/scripts/create-dm-migration-workbooks.cjs`
-5. `hris-api/scripts/generate-migration-workbook-doc.cjs`
-6. `docs/hris-dm-stage-migration-list.xlsx`
+1. `bnpi-pats-app/app/routes/admin/configuration/migration.tsx`
+2. `bnpi-pats-api/app/migration/migration.controller.ts`
+3. `bnpi-pats-api/app/migration/migration.router.ts`
+4. `bnpi-pats-api/scripts/create-dm-migration-workbooks.cjs`
+5. `bnpi-pats-api/scripts/generate-migration-workbook-doc.cjs`
+6. `docs/bnpi-pats-dm-stage-migration-list.xlsx`
 7. `docs/dm-source-input-manifest.json`
 
 Do not reintroduce the older category-only checklist as the source of truth.

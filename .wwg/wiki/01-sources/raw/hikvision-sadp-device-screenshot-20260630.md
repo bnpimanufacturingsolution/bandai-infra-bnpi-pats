@@ -24,7 +24,7 @@
 
 - This proves SADP discovery of one active Hikvision device on the LAN at the
   time of the screenshot.
-- This does not prove HRIS callback ingestion, AlarmDemo runtime delivery,
+- This does not prove BNPI PATS callback ingestion, AlarmDemo runtime delivery,
   admin browser/socket receipt, attendance write behavior, or public/VM path
   evidence.
 - Treat device credentials, activation/security state, and full firmware build
@@ -33,7 +33,7 @@
 
 ## Follow-Up Runtime Evidence Captured
 
-On 2026-06-30, the DEV HRIS device row `cmqquro2g002em73cdp74rx0q`
+On 2026-06-30, the DEV BNPI PATS device row `cmqquro2g002em73cdp74rx0q`
 (`Main Entrance Device`) was updated from stale `192.168.110.24` / `https` to
 the SADP-observed physical device address `192.168.254.181:80` / `http`.
 
@@ -43,12 +43,12 @@ Evidence captured by Codex:
 - Direct ISAPI digest-auth probe to
   `http://192.168.254.181/ISAPI/System/time?format=json` returned HTTP 200 and
   device local time `2026-06-30T16:30:08+08:00`.
-- DEV HRIS device health for `cmqquro2g002em73cdp74rx0q` reported network
+- DEV BNPI PATS device health for `cmqquro2g002em73cdp74rx0q` reported network
   reachable and `deviceApi.ok=true` against
   `http://192.168.254.181:80`; the only degraded check was the expected
   Windows-only AlarmDemo process check from the Linux/VM API context.
-- DEV HRIS ACS event pull through
-  `POST https://dev-api.bnpi-hris.tech/api/hikvision/access-control/acs-events`
+- DEV BNPI PATS ACS event pull through
+  `POST https://dev-api.bnpi-pats.tech/api/hikvision/access-control/acs-events`
   returned HTTP 200 for a dated query and included a physical-device attendance
   event: `major=5`, `minor=38`, `employeeNoString=1`, `serialNo=997`, time
   `2026-06-30T16:17:07+08:00`.
@@ -58,7 +58,7 @@ Evidence captured by Codex:
   received at `2026-06-30T08:31:59.811Z`, device address
   `192.168.254.181`.
 - Browser verification with Playwright on
-  `https://dev.bnpi-hris.tech/admin/configuration/devices/events?view=saved`
+  `https://dev.bnpi-pats.tech/admin/configuration/devices/events?view=saved`
   showed the saved event row with employee no. `1`, terminal
   `Main Entrance Device`, address `192.168.254.181`, and save path
   `Device callback`.
@@ -67,7 +67,7 @@ Evidence captured by Codex:
 
 Remaining boundaries:
 
-- This proves DEV physical-device ISAPI pull -> HRIS callback persistence ->
+- This proves DEV physical-device ISAPI pull -> BNPI PATS callback persistence ->
   admin saved-events UI display.
 - It does not prove a spontaneous device HTTP-host push callback, Windows
   AlarmDemo service runtime, employee matching, attendance creation, or

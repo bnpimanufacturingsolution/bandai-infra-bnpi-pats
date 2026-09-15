@@ -21,14 +21,14 @@ If you did not open those files / evidence in this session, label claims `NEEDS_
 1. Open `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` — `alarm_callback`, `build_hikvision_callback_json`. Time GET/SET is `src/hikvision_bio/time.cpp`.
 2. Open recent `.runtime/*` SDK/listener logs or saved DeviceEvent payload samples.
 3. Quote: major/minor, `employeeNo` empty vs plain vs opaque.
-4. Only then plan C++ enrich, HRIS multipass, or UI copy.
+4. Only then plan C++ enrich, BNPI PATS multipass, or UI copy.
 
 ## Correct product expectation
 
 | Event family | First ACS packet | Plain id on first socket | Templates |
 |---|---|---|---|
 | Attendance tap (major 5) | Often has `dwEmployeeNo` | Yes when SDK fills it | N/A |
-| Panel create / FP enroll (often major 3) | Often `dwEmployeeNo=0` | Only after C++ inventory enrich or HRIS multipass | Must be read after plain id known |
+| Panel create / FP enroll (often major 3) | Often `dwEmployeeNo=0` | Only after C++ inventory enrich or BNPI PATS multipass | Must be read after plain id known |
 | logSearch `addUserInfo` / `addFp…` | Opaque token common | After opaque→plain map | Separate read/export |
 
 ## Agent behavior when user wants “always plain on socket”

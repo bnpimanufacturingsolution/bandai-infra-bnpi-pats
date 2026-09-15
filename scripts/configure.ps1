@@ -11,7 +11,7 @@ param(
   [int]$CpuCount = 2,
   [int]$MemoryMb = 4096,
   [string]$GuestIpHint = '',
-  [string]$GitOpsRepoUrl = 'https://github.com/hrisworkforcesystem-coder/bandai-infra.git'
+  [string]$GitOpsRepoUrl = 'https://github.com/bnpimanufacturingsolution/bandai-infra.git'
 )
 
 $ErrorActionPreference = 'Stop'

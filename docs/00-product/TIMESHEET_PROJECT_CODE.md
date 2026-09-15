@@ -36,7 +36,7 @@ Precedence, evaluated per line at write time:
 ## 3. Where it is stored and written
 
 - **Schema:** `Timesheetline.projectCode String?` (additive, nullable) in both `prisma/schema/timesheetline.prisma` and `prisma/schema-postgres/timesheetline.prisma`.
-- **Resolver helper:** `hris-api/helper/timesheet-project-code.helper.ts`
+- **Resolver helper:** `bnpi-pats-api/helper/timesheet-project-code.helper.ts`
   - `resolveTimesheetProjectCode({ dayLaborType, workforceSource, date })` — the canonical derivation.
   - `normalizeProjectCodeOverride(value)` — validates/normalizes explicit overrides.
   - `resolveManilaYearOfDate(value)` — Manila-year extraction.
@@ -48,13 +48,13 @@ Precedence, evaluated per line at write time:
 
 ## 4. UI
 
-- **Timesheet day editor** (`hris-app/.../molecules/TimesheetDayEditor.tsx`): new **Project code** text input below **Day labor**. Placeholder previews the default (`bnpi-dl-YYYY` / `bnpi-id-YYYY` depending on the selected labor type). Empty = use the derived default. Max 64 chars.
+- **Timesheet day editor** (`bnpi-pats-app/.../molecules/TimesheetDayEditor.tsx`): new **Project code** text input below **Day labor**. Placeholder previews the default (`bnpi-dl-YYYY` / `bnpi-id-YYYY` depending on the selected labor type). Empty = use the derived default. Max 64 chars.
 - **Day tooltip** (`TimesheetDayTooltipContent.tsx`): shows `Project code: <code>` when present.
-- Dual-app note: **HR-only** — the timesheet day editor has no `hris-emp-app` counterpart.
+- Dual-app note: **HR-only** — the timesheet day editor has no `bnpi-pats-emp-app` counterpart.
 
 ## 5. Backfill (one-time, already executed on local DEV)
 
-Script: `hris-api/scripts/backfill-timesheet-project-codes.ts` (dry-run by default; `--execute` applies; `--org=` scopes; `--force-overwrite` also fills rows that already carry an explicit code — default preserves existing non-null values).
+Script: `bnpi-pats-api/scripts/backfill-timesheet-project-codes.ts` (dry-run by default; `--execute` applies; `--org=` scopes; `--force-overwrite` also fills rows that already carry an explicit code — default preserves existing non-null values).
 
 Local DEV result (2026-09-08):
 - Scanned 177,948 effective lines → 0 unclassifiable.
@@ -69,7 +69,7 @@ Other environments (UAT/PROD) run the same script after the schema change deploy
 
 ## 7. Tests and proof
 
-- `hris-api/tests/timesheet-project-code.helper.spec.ts` — 16/16 (precedence, AGENCY/missing-source buckets, Manila year boundary, per-day difference, override validation, canonical prefixes).
+- `bnpi-pats-api/tests/timesheet-project-code.helper.spec.ts` — 16/16 (precedence, AGENCY/missing-source buckets, Manila year boundary, per-day difference, override validation, canonical prefixes).
 - Regressions: `timesheet-day-labor-guard.spec.ts` 7/7, `attendance-obligation.helper.spec.ts` 17/17, app `TimesheetDayCell` vitest 6/6.
 - Typecheck: zero errors in touched files (repo-wide 121 pre-existing drift lines unchanged, none on touched surfaces).
 

@@ -9,7 +9,7 @@ Principles:
 
 Usage on VM:
   python3 scripts/fast-residual-burn.py
-  HRIS_API=http://127.0.0.1:3101 python3 /tmp/fast-residual-burn.py
+  BNPI_PATS_API=http://127.0.0.1:3101 python3 /tmp/fast-residual-burn.py
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-API = os.environ.get("HRIS_API", "http://127.0.0.1:3101")
+API = os.environ.get("BNPI_PATS_API", "http://127.0.0.1:3101")
 OUT = os.environ.get("OUT_DIR", "/tmp/fast-residual-burn")
 DEVICES = [
     "cmrht5s2w00ei7zgsre8y3o5n",  # A
@@ -81,7 +81,7 @@ def login() -> str:
     code, body = http(
         "POST",
         "/api/auth/login",
-        body={"email": "admin@bandai.local", "password": "password123", "appCode": "hris"},
+        body={"email": "admin@bandai.local", "password": "password123", "appCode": "bnpi-pats"},
         timeout=30,
     )
     tok = dig(body, "data", "token") or ""

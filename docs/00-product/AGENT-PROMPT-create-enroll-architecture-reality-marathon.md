@@ -39,7 +39,7 @@
 | Max turns (headless) | **`--max-turns 300`** (150 is often too low for C++ rebuild + multi-matrix) |
 | Wall clock | Plan **up to 3–4 hours**; do not kill at 10–20 minutes |
 | Host/VM | Windows host + Hyper-V VM with reverse `59000→8000`, `59443→443`, `53001→3001` |
-| Actor | `admin@bandai.local` / `password123` / `appCode=hris` |
+| Actor | `admin@bandai.local` / `password123` / `appCode=bnpi-pats` |
 
 ### Headless example
 
@@ -133,12 +133,12 @@ Before ANY final/idle/summary-only message you MUST:
 7) Real Stop only per AGENTS.md.
 
 OPERATOR STEPS ARE AGENT STEPS:
-- Restart hris-api with npm.cmd; poll http://localhost:3001/health.
+- Restart bnpi-pats-api with npm.cmd; poll http://localhost:3001/health.
 - SSH LAN-first: ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19
-  (fallback ssh project-truth-hris only if LAN fails). NEVER disable cloudflared.
+  (fallback ssh project-truth-bnpi-pats only if LAN fails). NEVER disable cloudflared.
 - Rebuild/redeploy hikvision_biometric_service on VM; restart listener; prove new binary.
 - Prove reverse: VM:59000→device:8000, :59443→443, :53001→host:3001.
-- Login admin@bandai.local / password123 / appCode=hris.
+- Login admin@bandai.local / password123 / appCode=bnpi-pats.
 - Synthetic create + enroll + re-read + callback proof under .runtime/.
 - Playwright when UI claimed. Commit + push develop when green.
 
@@ -161,7 +161,7 @@ Target wire (end state):
   [C++ HCNetSDK] alarm_callback
        │  major=3 often dwEmployeeNo empty — DO NOT invent person id
        ▼
-  [C++ enrich_hris_job_before_post]
+  [C++ enrich_bnpi_pats_job_before_post]
        │  1) inventory delta / multipass → plain employeeNo + identitySource
        │  2) when plain known + enroll/user-mgmt → READ that person's FP templates
        │     (SDK NET_DVR_GET_FINGERPRINT_CFG_V50 primary; ISAPI FingerPrintUpload fallback)
@@ -172,7 +172,7 @@ Target wire (end state):
        │  employeeNo PLAIN when enrich succeeded
        │  fingerprints[] optional on same POST when readable
        ▼
-  [hris-api callback.controller]
+  [bnpi-pats-api callback.controller]
        │  DeviceEvent USER_CREATED / FINGERPRINT_ENROLLED (ledger) employeeNo PLAIN
        │  DeviceUser upsert vendorUserId=plain + rawFingerprints from callback and/or follow-up read
        │  NEVER store opaque as employeeNo
@@ -184,7 +184,7 @@ HARD GOAL (new — replaces GREEN_WITH_BOUNDARIES):
   After create+enroll of NEW synthetic person P:
   1) Device re-read for P shows numOfFP >= 1 (or equivalent readable template count >=1)
   2) C++ listener log shows fingerprintCount >= 1 for P on a successful enrich/post
-     OR HRIS path proves templates were read from device for P (not donor person 15)
+     OR BNPI PATS path proves templates were read from device for P (not donor person 15)
   3) DeviceUser for P has raw template base64, isAes=false, source label device-owned
      (e.g. isapi_upload_person / sdk_get_fingerprint_cfg / callback_fingerprints)
      FORBIDDEN final label: *donor_blob*
@@ -229,9 +229,9 @@ You MAY edit any of these until acceptance is green. Prefer smallest proven fix.
 | C++ FP read/write SDK/ISAPI | same; NET_DVR_GET/SET_FINGERPRINT_CFG_V50, FingerPrintDownload/Upload |
 | Build/deploy listener | VM rebuild scripts; restart service/process; prove binary mtime + log banner |
 | Reverse tunnel | host scripts that map 59000/59443/53001; do NOT disable cloudflared |
-| Callback API | hris-api/app/hikvision/controller/callback.controller.ts |
-| Identity / multipass / opaque | hris-api/helper/device-person-token.helper.ts |
-| Raw FP custody | hris-api/helper/device-user-raw-fingerprint.helper.ts |
+| Callback API | bnpi-pats-api/app/hikvision/controller/callback.controller.ts |
+| Identity / multipass / opaque | bnpi-pats-api/helper/device-person-token.helper.ts |
+| Raw FP custody | bnpi-pats-api/helper/device-user-raw-fingerprint.helper.ts |
 | Socket emit | emitDeviceEventSaved / device-event realtime path |
 | UI truth copy | Device Events + Device User details (only if data path green) |
 | Tests | focused mocha/unit + optional Playwright for events/details |
@@ -252,9 +252,9 @@ PHASE 0 — DISCOVERY / BASELINE
 - HEARTBEAT.
 
 PHASE 1 — CODE TRACE (no assumptions)
-- Open C++: alarm_callback, enrich_hris_job_before_post, build_hikvision_callback_json,
+- Open C++: alarm_callback, enrich_bnpi_pats_job_before_post, build_hikvision_callback_json,
   FP get/set, inventory pagination, delayed re-POST, arm baseline seed.
-- Open HRIS callback + raw fingerprint helper + applyFastEnrollmentIdentity.
+- Open BNPI PATS callback + raw fingerprint helper + applyFastEnrollmentIdentity.
 - Write .runtime/.../trace-map.md: actual if/else for empty person and FP attach.
 - Identify why synthetic write → numOfFP=0 and fingerprintCount=0 (hypotheses list).
 
@@ -292,7 +292,7 @@ Improve C++ as needed: retries, ISAPI fallback, pagination, card→FP lookup, lo
 
 Rebuild + redeploy listener EVERY time C++ changes. Prove new log lines.
 
-PHASE 4 — HRIS CALLBACK / DEVICEUSER / SOCKET
+PHASE 4 — BNPI PATS CALLBACK / DEVICEUSER / SOCKET
 - Accept callback fingerprints[] → DeviceUser raw store immediately (no AES default)
 - USER_CREATED / FINGERPRINT_ENROLLED employeeNo plain; same deviceUserId
 - If first event empty person: multipass must backfill plain; socket re-emit
@@ -305,7 +305,7 @@ Synthetic person id: use unique high id e.g. 99YYMMDDHHMM or random 8-digit unus
 Run:
   1) Create P on device → wait enrich window → assert DeviceUser + USER_CREATED plain
   2) Enroll FP (best matrix path that achieved numOfFP>=1) → assert device re-read
-  3) Trigger or wait ACS / force re-POST path → assert C++ fingerprintCount or HRIS device-read of P
+  3) Trigger or wait ACS / force re-POST path → assert C++ fingerprintCount or BNPI PATS device-read of P
   4) GET device users API: rawPresent, tplLen, isAes=false, source not donor
   5) GET device events: both actions plain, same deviceUserId
   6) Optional Playwright: Device Events shows User P; Device User details raw preview

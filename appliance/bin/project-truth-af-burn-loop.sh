@@ -7,7 +7,7 @@ set -o pipefail
 API_BASE="${PT_API_BASE:-http://127.0.0.1:3101}"
 EMAIL="${PT_EMAIL:-admin@bandai.local}"
 PASSWORD="${PT_PASSWORD:-password123}"
-APP_CODE="${PT_APP_CODE:-hris}"
+APP_CODE="${PT_APP_CODE:-bnpi-pats}"
 WAVE_SIZE="${PT_WAVE_SIZE:-25}"
 SLEEP_SEC="${PT_SLEEP_SEC:-30}"
 TARGET_FROM="${PT_TARGET_FROM:-874}"
@@ -142,7 +142,7 @@ while true; do
   MATRIX=$(jq -r '
     [.data.devices[]|select(.name|test("Device [A-F]$"))|
       ((.name|capture("Device (?<L>[A-F])$").L)//"?") as $L |
-      "\($L)=\(.vendorUserCount//"n")/\(.hrisUserCount//0)"
+      "\($L)=\(.vendorUserCount//"n")/\(.bnpiPatsUserCount//0)"
     ]|join(" ")
   ' "$PREVIEW" 2>/dev/null || echo matrix_jq_fail)
   rm -f "$PREVIEW"

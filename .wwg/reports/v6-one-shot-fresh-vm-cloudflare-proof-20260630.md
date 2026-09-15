@@ -9,7 +9,7 @@ Result: FULFILLED WITH WARNINGS.
 The V6 one-shot command now exists and was proven against the current alternate
 Project Truth VM target. The VM pulled `develop`, imported the stable host-side
 Cloudflare named tunnel credential at runtime, enabled the VM-side
-`cloudflared-bnpi-hris.service`, restored HRIS Compose app/API runtime from
+`cloudflared-bnpi-pats.service`, restored BNPI PATS Compose app/API runtime from
 existing local images, and passed LAN/public PROD/DEV/UAT health, CORS, and HR
 manager browser login proof.
 
@@ -29,7 +29,7 @@ credential.
 - Zip SHA-256:
   `a3bef4c92211f13d408e213ecf09f16ab619f0310221622f154893aa5a1a24c6`
 - Public zip:
-  `https://storage.googleapis.com/project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v6/latest/project-truth-hyperv-one-click-installer-v6.zip`
+  `https://storage.googleapis.com/project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/hyperv/v6/latest/project-truth-hyperv-one-click-installer-v6.zip`
 - Publish evidence:
   `C:\ProgramData\ProjectTruth\exports\hyperv-v6\20260630-115040\v6-gcs-publish.json`
 - Public URL verification:
@@ -90,7 +90,7 @@ with the added Cloudflare credential import/proof phase.
   `C:\ProgramData\ProjectTruth\secrets\cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json`
 - VM credential target:
   `/etc/cloudflared/e3486f00-f974-46d3-9e11-911266749d00.json`
-- Tunnel name: `bnpi-hris`
+- Tunnel name: `bnpi-pats`
 - Tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
 - Secret handling proof: the script validates expected JSON fields without
   printing `TunnelSecret`, copies the file to `/tmp`, runs the VM helper, removes
@@ -138,7 +138,7 @@ Status:
 
 - `cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate`:
   PASS.
-- `cloudflared-bnpi-hris.service`: enabled and active.
+- `cloudflared-bnpi-pats.service`: enabled and active.
 - Public Grafana through VM-side Cloudflare: PASS.
 
 ## LAN And Public Network Proof
@@ -165,19 +165,19 @@ LAN CORS for `system-provisioning/status`:
 
 Public health:
 
-- `https://bnpi-hris.tech/auth/login`: PASS
-- `https://api.bnpi-hris.tech/health`: PASS
-- `https://dev.bnpi-hris.tech/auth/login`: PASS
-- `https://dev-api.bnpi-hris.tech/health`: PASS
-- `https://uat.bnpi-hris.tech/auth/login`: PASS
-- `https://uat-api.bnpi-hris.tech/health`: PASS
-- `https://grafana.bnpi-hris.tech/api/health`: PASS
+- `https://bnpi-pats.tech/auth/login`: PASS
+- `https://api.bnpi-pats.tech/health`: PASS
+- `https://dev.bnpi-pats.tech/auth/login`: PASS
+- `https://dev-api.bnpi-pats.tech/health`: PASS
+- `https://uat.bnpi-pats.tech/auth/login`: PASS
+- `https://uat-api.bnpi-pats.tech/health`: PASS
+- `https://grafana.bnpi-pats.tech/api/health`: PASS
 
 Public CORS for `system-provisioning/status`:
 
-- PROD `https://bnpi-hris.tech/api/system-provisioning/status`: PASS, HTTP 204
-- DEV `https://dev-api.bnpi-hris.tech/api/system-provisioning/status`: PASS, HTTP 204
-- UAT `https://uat-api.bnpi-hris.tech/api/system-provisioning/status`: PASS, HTTP 204
+- PROD `https://bnpi-pats.tech/api/system-provisioning/status`: PASS, HTTP 204
+- DEV `https://dev-api.bnpi-pats.tech/api/system-provisioning/status`: PASS, HTTP 204
+- UAT `https://uat-api.bnpi-pats.tech/api/system-provisioning/status`: PASS, HTTP 204
 
 ## Browser Proof
 
@@ -234,7 +234,7 @@ Status:
 - Argo Applications reported `Synced/Healthy`.
 
 Warning: many K3s pods were `Pending`, `Evicted`, `Completed`, or
-`ContainerStatusUnknown` under resource pressure. The serving HRIS runtime for
+`ContainerStatusUnknown` under resource pressure. The serving BNPI PATS runtime for
 this proof is Compose app/API containers plus Docker Postgres, not healthy K3s
 pods.
 
@@ -277,7 +277,7 @@ Not run to completion:
 
 Do not turn off any older VM solely from this report unless
 `project-truth-local-vhdx-proof` is explicitly selected as the replacement. This
-proof shows the current VM can serve LAN and public HRIS after V6 repair, but
+proof shows the current VM can serve LAN and public BNPI PATS after V6 repair, but
 K3s resource drift remains and should be reviewed before decommissioning another
 known-good runtime.
 

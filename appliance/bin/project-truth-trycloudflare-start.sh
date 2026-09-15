@@ -47,9 +47,9 @@ uat-api|http://${tunnel_host}:${gateway_port}/uat-api/health|/uat-api/health
 grafana|http://${tunnel_host}:${gateway_port}/grafana/api/health|/grafana/api/health
 prometheus|http://${tunnel_host}:${gateway_port}/prometheus/-/ready|/prometheus/-/ready
 loki|http://${tunnel_host}:${gateway_port}/loki/ready|/loki/ready
-prod-db|hris-postgres|15432|postgresql://postgres:REDACTED@127.0.0.1:15432/hris
-dev-db|hris-postgres-dev|15433|postgresql://postgres:REDACTED@127.0.0.1:15433/hris
-uat-db|hris-postgres-uat|15434|postgresql://postgres:REDACTED@127.0.0.1:15434/hris
+prod-db|bnpi-pats-postgres|15432|postgresql://postgres:REDACTED@127.0.0.1:15432/bnpi_pats
+dev-db|bnpi-pats-postgres-dev|15433|postgresql://postgres:REDACTED@127.0.0.1:15433/bnpi_pats
+uat-db|bnpi-pats-postgres-uat|15434|postgresql://postgres:REDACTED@127.0.0.1:15434/bnpi_pats
 "
 
 wait_for_url() {

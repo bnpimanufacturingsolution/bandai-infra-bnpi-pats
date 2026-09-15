@@ -1,8 +1,8 @@
 {
   "metadata": {
-    "workbookPath": "C:\\Users\\User\\Desktop\\AZURO\\BANDAI\\bandai-infra\\.runtime\\payroll-comparison-apr26-may10\\HRIS Payroll Computation April 26 - May 10, 2026.unlocked.xlsx",
-    "dbUrl": "postgresql://postgres:postgres@127.0.0.1:5433/hris?schema=public",
-    "dbName": "hris",
+    "workbookPath": "C:\\Users\\User\\Desktop\\AZURO\\BANDAI\\bandai-infra\\.runtime\\payroll-comparison-apr26-may10\\BNPI PATS Payroll Computation April 26 - May 10, 2026.unlocked.xlsx",
+    "dbUrl": "postgresql://postgres:postgres@127.0.0.1:5433/bnpi_pats?schema=public",
+    "dbName": "bnpi-pats",
     "organizationId": "cmryhwpv70000vgaktlmrubmx",
     "payrollPeriod": {
       "id": "cmryhzl29002svgakx7dddry4",

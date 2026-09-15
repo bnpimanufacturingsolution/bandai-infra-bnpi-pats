@@ -14,7 +14,7 @@ broken behavior, and implement safe in-scope fixes.
 GOAL
 
 Validate and improve the Hikvision device-user merge journey in the existing
-hris-app and hris-api codebase. The intended flow is:
+bnpi-pats-app and bnpi-pats-api codebase. The intended flow is:
 
   Admin Devices -> select at least two Hikvision devices -> read live users
   -> inspect identity grouping -> review missing users and field conflicts
@@ -32,20 +32,20 @@ REQUIRED DISCOVERY
    configuration siblings. Preserve the existing shell, URL-driven modal
    behavior, primitives, role guard, and terminology.
 3. Inspect these areas first:
-   - hris-app/app/routes/admin/devices/manage.tsx
-   - hris-app/app/routes/admin/devices/enroll.tsx
-   - hris-app/app/services/devices.service.ts
-   - hris-app/app/lib/hooks/useDevices.ts
-   - hris-api/app/device/device.router.ts
-   - hris-api/app/device/device.controller.ts
-   - hris-api/helper/device-user-merge.helper.ts
+   - bnpi-pats-app/app/routes/admin/devices/manage.tsx
+   - bnpi-pats-app/app/routes/admin/devices/enroll.tsx
+   - bnpi-pats-app/app/services/devices.service.ts
+   - bnpi-pats-app/app/lib/hooks/useDevices.ts
+   - bnpi-pats-api/app/device/device.router.ts
+   - bnpi-pats-api/app/device/device.controller.ts
+   - bnpi-pats-api/helper/device-user-merge.helper.ts
    - related tests and docs
 4. Identify the exact endpoint before diagnosing UI:
    - POST /api/device/hikvision/sdk-users/merge/plan
    - POST /api/device/hikvision/sdk-users/merge/apply
    - supporting device, listener, sync, and health endpoints
 5. Use the admin actor unless the task says otherwise:
-   admin@bandai.local / password123 / appCode=hris.
+   admin@bandai.local / password123 / appCode=bnpi-pats.
 6. Run read-only health, auth, device-list, listener, and merge-plan probes
    before browser mutation. Save request URL, payload, status, full JSON,
    errors, and elapsed time under .runtime/endpoint-proof-<stamp>/.

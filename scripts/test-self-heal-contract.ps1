@@ -90,10 +90,10 @@ foreach ($envName in $Environments) {
     'uat' { 15434 }
   }
 
-  $checks.Add((Assert-Text "runtime-$envName has hris-api Deployment" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*hris-api'))
-  $checks.Add((Assert-Text "runtime-$envName has hris-app Deployment" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*hris-app'))
-  $checks.Add((Assert-Text "runtime-$envName has hris-postgres StatefulSet" $rendered '(?ms)^kind:\s*StatefulSet.*?name:\s*hris-postgres'))
-  $checks.Add((Assert-Text "runtime-$envName has db init Job" $rendered '(?ms)^kind:\s*Job.*?name:\s*hris-api-db-init'))
+  $checks.Add((Assert-Text "runtime-$envName has bnpi-pats-api Deployment" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*bnpi-pats-api'))
+  $checks.Add((Assert-Text "runtime-$envName has bnpi-pats-app Deployment" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*bnpi-pats-app'))
+  $checks.Add((Assert-Text "runtime-$envName has bnpi-pats-postgres StatefulSet" $rendered '(?ms)^kind:\s*StatefulSet.*?name:\s*bnpi-pats-postgres'))
+  $checks.Add((Assert-Text "runtime-$envName has db init Job" $rendered '(?ms)^kind:\s*Job.*?name:\s*bnpi-pats-api-db-init'))
   $checks.Add((Assert-Text "runtime-$envName db init Job runs prisma-postgres:push" $rendered 'prisma-postgres:push'))
   $checks.Add((Assert-NoText "runtime-$envName db init Job does not run prisma-seed" $rendered 'npm run prisma-seed'))
   $checks.Add((Assert-Text "runtime-$envName owns its PriorityClass" $runtimePriorityClasses "name:\s*project-truth-$envName"))
@@ -109,7 +109,7 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-Text "runtime-$envName exposes postgres hostPort" $rendered "hostPort:\s*$expectedPostgresPort"))
   $checks.Add((Assert-Text "runtime-$envName API allows LAN CORS" $rendered '(?ms)name:\s*ALLOW_LAN_CORS\s*\r?\n\s*value:\s*"true"'))
   $checks.Add((Assert-Text "runtime-$envName API allows credentialed CORS" $rendered '(?ms)name:\s*CORS_CREDENTIALS\s*\r?\n\s*value:\s*"true"'))
-  $checks.Add((Assert-Text "runtime-$envName API includes public app origins" $rendered 'https://bnpi-hris\.tech,https://www\.bnpi-hris\.tech,https://app\.bnpi-hris\.tech,https://dev\.bnpi-hris\.tech,https://uat\.bnpi-hris\.tech'))
+  $checks.Add((Assert-Text "runtime-$envName API includes public app origins" $rendered 'https://bnpi-pats\.tech,https://www\.bnpi-pats\.tech,https://app\.bnpi-pats\.tech,https://dev\.bnpi-pats\.tech,https://uat\.bnpi-pats\.tech'))
   $checks.Add((Assert-Text "runtime-$envName API mounts DM import data read-only" $rendered '(?ms)mountPath:\s*/data/import\s*\r?\n\s*name:\s*dm-import-data\s*\r?\n\s*readOnly:\s*true'))
   $checks.Add((Assert-Text "runtime-$envName API mounts DM source inputs read-only" $rendered '(?ms)mountPath:\s*/source-inputs-organized\s*\r?\n\s*name:\s*dm-source-inputs\s*\r?\n\s*readOnly:\s*true'))
   $checks.Add((Assert-Text "runtime-$envName API mounts DM docs read-only" $rendered '(?ms)mountPath:\s*/docs\s*\r?\n\s*name:\s*dm-docs\s*\r?\n\s*readOnly:\s*true'))
@@ -121,8 +121,8 @@ foreach ($envName in $Environments) {
   $checks.Add((Assert-NoText "runtime-$envName does not reference retired Node ZKTeco bridge image" $rendered 'project-truth-zkteco-bridge'))
 
   if ($envName -eq 'dev') {
-    $checks.Add((Assert-Text "runtime-dev deploys Hikvision watcher" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*hris-hikvision-watcher'))
-    $checks.Add((Assert-Text "runtime-dev Hikvision watcher uses DB init tools image" $rendered 'image:\s*hris-api-db-init:develop'))
+    $checks.Add((Assert-Text "runtime-dev deploys Hikvision watcher" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*bnpi-pats-hikvision-watcher'))
+    $checks.Add((Assert-Text "runtime-dev Hikvision watcher uses DB init tools image" $rendered 'image:\s*bnpi-pats-api-db-init:develop'))
     $checks.Add((Assert-Text "runtime-dev Hikvision watcher discovers configured devices from DB truth" $rendered 'audit-hikvision-device-events\.ts[\s\S]*--all-hikvision'))
     $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not pin device name in manifest env" $rendered 'HIKVISION_DEVICE_NAME\s*\r?\n\s*value:'))
     $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not pin device port in manifest env" $rendered 'HIKVISION_DEVICE_PORT\s*\r?\n\s*value:'))
@@ -130,10 +130,10 @@ foreach ($envName in $Environments) {
     $checks.Add((Assert-NoText "runtime-dev Hikvision watcher is not pinned to stale seeded id" $rendered 'cmqquro2g002em73cdp74rx0q'))
     $checks.Add((Assert-Text "runtime-dev Hikvision watcher runs apply loop" $rendered 'audit-hikvision-device-events\.ts[\s\S]*--apply[\s\S]*--watch'))
   } else {
-    $checks.Add((Assert-NoText "runtime-$envName does not deploy DEV-only Hikvision watcher" $rendered 'name:\s*hris-hikvision-watcher'))
+    $checks.Add((Assert-NoText "runtime-$envName does not deploy DEV-only Hikvision watcher" $rendered 'name:\s*bnpi-pats-hikvision-watcher'))
   }
 
-  foreach ($imageName in @('hris-api-db-init', 'hris-api-local', 'hris-app-local', 'hris-emp-app-local')) {
+  foreach ($imageName in @('bnpi-pats-api-db-init', 'bnpi-pats-api-local', 'bnpi-pats-app-local', 'bnpi-pats-emp-app-local')) {
     $imageTag = Get-KustomizeImageTag -KustomizationText $runtimeKustomization -ImageName $imageName
     if ($imageTag -ne $environmentRuntimeImageTag) {
       throw "Self-heal contract failed: runtime_image_tag for ${envName} is ${environmentRuntimeImageTag}, but ${imageName} uses ${imageTag}"
@@ -164,7 +164,7 @@ $bootstrapOnpremScript = Get-Content -Raw 'scripts/bootstrap-onprem-vm.sh'
 $ansiblePullScript = Get-Content -Raw 'appliance/bin/project-truth-ansible-pull.sh'
 $ansiblePullPlaybook = Get-Content -Raw 'ansible/project-truth-pull.yml'
 $hikvisionHotReloadScript = Get-Content -Raw 'scripts/project-truth-hikvision-hot-reload-listener.sh'
-$credentialRecoveryEnvPatch = Get-Content -Raw 'gitops/runtime-k8s/overlays/dev/hris-api-credential-recovery-env.patch.yaml'
+$credentialRecoveryEnvPatch = Get-Content -Raw 'gitops/runtime-k8s/overlays/dev/bnpi-pats-api-credential-recovery-env.patch.yaml'
 $ansiblePullService = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pull.service'
 $ansiblePullTimer = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pull.timer'
 $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
@@ -172,7 +172,7 @@ $osSyncService = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.servi
 $osSyncTimer = Get-Content -Raw 'appliance/systemd/project-truth-os-sync.timer'
 $lanConfigScript = Get-Content -Raw 'appliance/bin/project-truth-lan-config.sh'
 $lanSummaryScript = Get-Content -Raw 'appliance/bin/project-truth-lan-summary.sh'
-$profileHelpScript = Get-Content -Raw 'appliance/profile.d/project-truth-hris-help.sh'
+$profileHelpScript = Get-Content -Raw 'appliance/profile.d/project-truth-bnpi-pats-help.sh'
 $imageProvisionScript = Get-Content -Raw 'image-factory/packer/provision.sh'
 $promoteWorkflow = Get-Content -Raw '.github/workflows/promote-gitops.yml'
 $platformConfig = Get-Content -Raw 'gitops/argocd/platform/argocd-cm.yaml'
@@ -195,7 +195,7 @@ $checks.Add((Assert-Text 'verify-gitops-state can require runtime Applications' 
 $checks.Add((Assert-Text 'promote-gitops updates runtime image tag marker' $promoteWorkflow 'runtime_image_tag'))
 $checks.Add((Assert-Text 'promote-gitops updates runtime kustomize image tags' $promoteWorkflow 'gitops/runtime-k8s/overlays/\$env_name/kustomization\.yaml'))
 $checks.Add((Assert-Text 'promote-gitops supports optional registry image flow' $promoteWorkflow 'image_registry'))
-$checks.Add((Assert-Text 'promote-gitops includes employee portal image' $promoteWorkflow 'hris-emp-app-local'))
+$checks.Add((Assert-Text 'promote-gitops includes employee portal image' $promoteWorkflow 'bnpi-pats-emp-app-local'))
 $checks.Add((Assert-Text 'Argo platform declares reconciliation timeout' $platformConfig 'timeout\.reconciliation:\s*60s'))
 $checks.Add((Assert-Text 'Argo platform declares reconciliation jitter' $platformConfig 'timeout\.reconciliation\.jitter:\s*15s'))
 $checks.Add((Assert-Text 'project-truth exposes Argo platform command' $projectTruthScript 'apply-argocd-platform'))
@@ -219,12 +219,12 @@ $checks.Add((Assert-Text 'ansible-pull wrapper invokes ansible-pull' $ansiblePul
 $checks.Add((Assert-Text 'ansible-pull selects changed runtime services' $ansiblePullPlaybook 'Runtime image selection: services='))
 $checks.Add((Assert-Text 'ansible-pull builds only selected runtime services' $ansiblePullPlaybook 'docker compose build "\$\{services\[@\]\}"'))
 $checks.Add((Assert-Text 'ansible-pull restarts only selected deployments' $ansiblePullPlaybook 'for deployment in "\$\{deployments\[@\]\}"'))
-$checks.Add((Assert-Text 'ansible-pull recognizes employee app source changes' $ansiblePullPlaybook 'hris-emp-app/'))
-$checks.Add((Assert-Text 'ansible-pull builds the employee app image' $ansiblePullPlaybook 'services\+=\(hris-emp-app\)'))
-$checks.Add((Assert-Text 'ansible-pull imports the employee app image into K3s' $ansiblePullPlaybook 'images\+=\(hris-emp-app-local:develop\)'))
+$checks.Add((Assert-Text 'ansible-pull recognizes employee app source changes' $ansiblePullPlaybook 'bnpi-pats-emp-app/'))
+$checks.Add((Assert-Text 'ansible-pull builds the employee app image' $ansiblePullPlaybook 'services\+=\(bnpi-pats-emp-app\)'))
+$checks.Add((Assert-Text 'ansible-pull imports the employee app image into K3s' $ansiblePullPlaybook 'images\+=\(bnpi-pats-emp-app-local:develop\)'))
 $checks.Add((Assert-Text 'ansible-pull rolls the employee app through every environment' $ansiblePullPlaybook 'for employee_env_name in prod dev uat'))
-$checks.Add((Assert-Text 'credential recovery env patch remains API-only' $credentialRecoveryEnvPatch 'name:\s*hris-api'))
-$checks.Add((Assert-Text 'ansible-pull recognizes the API-only recovery env patch' $ansiblePullPlaybook 'hris-api-credential-recovery-env'))
+$checks.Add((Assert-Text 'credential recovery env patch remains API-only' $credentialRecoveryEnvPatch 'name:\s*bnpi-pats-api'))
+$checks.Add((Assert-Text 'ansible-pull recognizes the API-only recovery env patch' $ansiblePullPlaybook 'bnpi-pats-api-credential-recovery-env'))
 $checks.Add((Assert-Text 'one-shot Hikvision SDK exports use an isolated device spec' $hikvisionHotReloadScript 'mktemp /tmp/project-truth-hikvision-runtime-spec\.XXXXXX'))
 $checks.Add((Assert-Text 'one-shot Hikvision SDK exports select their isolated spec' $hikvisionHotReloadScript 'SPEC="\$runtime_spec"'))
 $checks.Add((Assert-NoText 'ansible-pull wrapper does not reference retired ZKTeco SDK submodule' $ansiblePullScript 'submodule\.vendor/zkteco-sdk\.update'))
@@ -240,7 +240,7 @@ $checks.Add((Assert-Text 'ansible-pull playbook defaults app/API rollout to DEV 
 $checks.Add((Assert-Text 'ansible-pull playbook iterates rollout namespaces for app/API restarts' $ansiblePullPlaybook 'for env_name in \$rollout_namespaces'))
 $checks.Add((Assert-Text 'ansible-pull playbook skips app/API restart when the Deployment is missing in a namespace' $ansiblePullPlaybook 'skip rollout \$env_name/\$deployment \(not in this namespace\)'))
 $checks.Add((Assert-NoText 'ansible-pull playbook no longer hard-codes DEV-only app/API restart assignment' $ansiblePullPlaybook '(?m)^\s*env_name=dev\s*$'))
-$checks.Add((Assert-Text 'ansible-pull playbook keeps legacy Compose app/API containers off K3s LAN ports' $ansiblePullPlaybook 'hris-app hris-api hris-app-dev hris-api-dev hris-app-uat hris-api-uat'))
+$checks.Add((Assert-Text 'ansible-pull playbook keeps legacy Compose app/API containers off K3s LAN ports' $ansiblePullPlaybook 'bnpi-pats-app bnpi-pats-api bnpi-pats-app-dev bnpi-pats-api-dev bnpi-pats-app-uat bnpi-pats-api-uat'))
 $checks.Add((Assert-Text 'ansible-pull playbook refreshes Argo apps after host sync' $ansiblePullPlaybook 'argocd\.argoproj\.io/refresh=hard'))
 $checks.Add((Assert-Text 'ansible-pull playbook repairs CoreDNS upstreams' $ansiblePullPlaybook 'forward \. 1\.1\.1\.1 8\.8\.8\.8'))
 $checks.Add((Assert-Text 'ansible-pull playbook releases stale retained runtime PV claim refs' $ansiblePullPlaybook 'kubectl patch pv "\$volume_name" --type=merge'))

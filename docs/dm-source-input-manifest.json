@@ -2,7 +2,7 @@
   "version": 1,
   "generatedFrom": [
     "docs/dm-migration-workflow.md",
-    "hris-api/scripts/create-dm-migration-workbooks.cjs",
+    "bnpi-pats-api/scripts/create-dm-migration-workbooks.cjs",
     "data/import/bnpi-dm4-demo-sources.json"
   ],
   "items": [
@@ -40,7 +40,7 @@
       "id": "dm-stage-migration-list",
       "dmPhase": "dm1",
       "displayName": "DM stage migration list",
-      "sourceRef": "docs/hris-dm-stage-migration-list.xlsx",
+      "sourceRef": "docs/bnpi-pats-dm-stage-migration-list.xlsx",
       "description": "Stage workbook/list used as migration planning evidence.",
       "sheetMappings": [
         { "step": "DM1", "sheet": "Stage list" },
@@ -81,7 +81,7 @@
       "id": "dm2-stage-migration-list",
       "dmPhase": "dm2",
       "displayName": "DM stage migration list",
-      "sourceRef": "docs/hris-dm-stage-migration-list.xlsx",
+      "sourceRef": "docs/bnpi-pats-dm-stage-migration-list.xlsx",
       "description": "Stage workbook/list used as migration planning evidence.",
       "sheetMappings": [
         { "step": "DM2", "sheet": "Stage list" }
@@ -159,7 +159,7 @@
       "id": "dm3-payroll-basic-salary",
       "dmPhase": "dm3",
       "displayName": "Payroll computation basic salary source",
-      "sourceRef": "docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx",
+      "sourceRef": "docs/BNPI PATS Payroll Computation April 26 - May 10, 2026.xlsx",
       "description": "Payroll-approved period Basic Salary source for DM3 Employees.BASIC_SALARY. The local workbook is password-protected.",
       "sheetMappings": [
         { "step": "DM3.1", "sheet": "Sheet2 / Basic Salary" }

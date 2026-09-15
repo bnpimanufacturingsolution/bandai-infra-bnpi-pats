@@ -1,5 +1,5 @@
 param(
-  [string]$ProjectId = 'hris-492904',
+  [string]$ProjectId = 'bnpi-pats-492904',
   [int]$MaxRunningMinutes = 30,
   [int]$IntervalMinutes = 15,
   [string]$TaskName = 'Project Truth GCP Build Guard'

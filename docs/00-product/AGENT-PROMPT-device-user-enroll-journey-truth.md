@@ -1,7 +1,7 @@
 # Task Writer: Device user enroll journey truth (opaque map → events → inventory → Sync Center click)
 
 **File:** `docs/00-product/AGENT-PROMPT-device-user-enroll-journey-truth.md`  
-**Purpose:** Force a non-stop loop until the **real device-user journey** works end-to-end: create/enroll on Hikvision → write-time opaque map → Device Events show plain person no → DeviceUser inventory has the person → Sync Center “Device user” click opens that inventory row (not empty, not HRIS Employees).  
+**Purpose:** Force a non-stop loop until the **real device-user journey** works end-to-end: create/enroll on Hikvision → write-time opaque map → Device Events show plain person no → DeviceUser inventory has the person → Sync Center “Device user” click opens that inventory row (not empty, not BNPI PATS Employees).  
 **Use when:** Device Events show USER_CREATED / FINGERPRINT_ENROLLED but Sync Center Device Users is empty; clicks feel broken; opaque “Device person token” still appears; you are not sure callback / socket / on-enroll actually works.
 
 ---
@@ -15,13 +15,13 @@
    - Write-time capture after create maps opaque → plain and stores `DevicePersonToken`.
 2. Opened **Device Events** and filtered:
    - **USER_CREATED** → saw rows with plain nos like `t18live80695` / `t18tmp458`, labels like “Device user plane / Direct device evidence” (partial success).
-   - **FINGERPRINT_ENROLLED** → still saw **opaque** person tokens and “Device person token / Not linked to HRIS yet” (failure for historical / unmapped FP rows).
+   - **FINGERPRINT_ENROLLED** → still saw **opaque** person tokens and “Device person token / Not linked to BNPI PATS yet” (failure for historical / unmapped FP rows).
 3. Clicked **Device user** (or opened Sync Center Device Users) for that person:
    - Landed on Sync Center / Device Users with search for `t18live80695` (or similar).
    - Source/view was effectively **live Device (ISAPI)** (or default merge that depends on live source).
    - Result: **“No device users found”** / empty table — even though Device Events show the create.
 4. Correct mental model the human is enforcing:
-   - These temp people are **device-side users**, not HRIS Employees.
+   - These temp people are **device-side users**, not BNPI PATS Employees.
    - Device Events = **what happened** (lifecycle ledger).
    - Device Users = **who is on the device inventory** (durable `DeviceUser` rows).
    - Clicking Device user must open **inventory on that device**, not Employees, and not an empty live-source search after the person was deleted or never stubbed.
@@ -35,7 +35,7 @@
 | Device Events USER_CREATED | Plain `t18…` after write-time map | Events can resolve without inventory existing |
 | Device Events FINGERPRINT_ENROLLED | Opaque `+M+Q…` / `Device person token` | No map at FP enroll time, or historical rows never captured; list/callback resolve only when map exists |
 | Sync Center Device Users | Empty for `t18live80695` | Click path used live **Source: Device (ISAPI)** or default “shown” merge; person may be **gone from terminal** (temp deletes) and/or **never upserted as DeviceUser**; wrong view = empty |
-| “SDK / callback / on enroll / on create” feel | Nothing trustworthy | Journey not closed: write → capture → event → **DeviceUser stub** → deep-link to **HRIS inventory view** → optional FP enroll map → socket `device-event:saved` |
+| “SDK / callback / on enroll / on create” feel | Nothing trustworthy | Journey not closed: write → capture → event → **DeviceUser stub** → deep-link to **BNPI PATS inventory view** → optional FP enroll map → socket `device-event:saved` |
 
 **Root causes already known (treat as facts unless evidence overturns):**
 
@@ -43,7 +43,7 @@
 2. **Opaque IDs:** Hikvision log plane uses privacy tokens; plain `employeeNo` only appears on UserInfo write path. Map must be captured **write-time** (create/modify/enroll), not reverse-engineered offline.
 3. **Temp demo cleanup:** Earlier proofs deleted users off the device → live ISAPI search returns 0 even when events still exist.
 4. **UI deep-link bug/drift:** “Device user” must open  
-   `action=device-users&deviceId=…&syncPanel=users&deviceUserView=hris&deviceUserSearch=<plainNo>`  
+   `action=device-users&deviceId=…&syncPanel=users&deviceUserView=bnpi-pats&deviceUserSearch=<plainNo>`  
    not live source-only and not Employees.
 5. **Uncommitted / unrestarted code:** Inventory stub + deep-link work may exist in working tree but not running process / not on `develop` yet — always restart API/app and re-prove live.
 
@@ -59,9 +59,9 @@ Create (or enroll) person on device with plain employeeNo
   → DeviceEvent USER_CREATED (and FP enroll if performed) saved with resolved plain employeeNo
   → DeviceUser inventory stub exists for (deviceId, vendorUserId=plainNo)
   → Device Events UI shows plain person no (not “Device person token”) for that new work
-  → Click “Device user” opens Sync Center HRIS inventory filtered to that plain no
+  → Click “Device user” opens Sync Center BNPI PATS inventory filtered to that plain no
   → Table shows the DeviceUser row (name/status/fingerprint flags as available)
-  → Person is still on device OR inventory view still shows HRIS DeviceUser stub with honest empty-source note
+  → Person is still on device OR inventory view still shows BNPI PATS DeviceUser stub with honest empty-source note
   → socket/list/callback path uses same resolve helper (no second truth)
   → evidence in .runtime/ + commit/push develop when green
 ```
@@ -104,7 +104,7 @@ B) PROBLEM TO FIX
 - Deep-link / Sync Center defaults to live source or wrong view → empty when
   person deleted off terminal or never stubbed.
 - FP enroll historical opaques stay unresolved without write-time map.
-- Journey must treat people as DEVICE inventory (DeviceUser), not HRIS Employees.
+- Journey must treat people as DEVICE inventory (DeviceUser), not BNPI PATS Employees.
 - Agent must not end with “you should hard-refresh / click Sync / restart API”.
 
 ----------------------------------------------------------------
@@ -117,8 +117,8 @@ C) TARGET BEHAVIOR
    resolved, upsert DeviceUser inventory stub (non-blocking).
 3. Device Events “Device user” link MUST be:
    /admin/configuration/devices?action=device-users&deviceId=<id>&syncPanel=users
-   &deviceUserView=hris&deviceUserSearch=<plainEmployeeNo>
-4. Sync Center default when opened from events must show HRIS DeviceUser rows
+   &deviceUserView=bnpi-pats&deviceUserSearch=<plainEmployeeNo>
+4. Sync Center default when opened from events must show BNPI PATS DeviceUser rows
    for that search even if live ISAPI currently returns 0.
 5. New FP enrolls after map capture must resolve plain no on list/callback.
 6. Optional but preferred: leave at least one stay-on-device demo user
@@ -129,18 +129,18 @@ D) EXECUTION LOOP (non-stop)
 ----------------------------------------------------------------
 PHASE 0 — Bootstrap + Current-State Report
 - Read AGENTS.md intent, WWG summary/current-task/handoff, relevant code:
-  hris-api/helper/device-person-token.helper.ts
-  hris-api/app/device/device.controller.ts (persist + list resolve)
-  hris-api/app/hikvision/controller/* (record/callback)
-  hris-app/app/routes/admin/devices/events.tsx (Device user deep-link)
-  hris-app/app/routes/admin/devices/enroll.tsx (deviceUserView filters)
+  bnpi-pats-api/helper/device-person-token.helper.ts
+  bnpi-pats-api/app/device/device.controller.ts (persist + list resolve)
+  bnpi-pats-api/app/hikvision/controller/* (record/callback)
+  bnpi-pats-app/app/routes/admin/devices/events.tsx (Device user deep-link)
+  bnpi-pats-app/app/routes/admin/devices/enroll.tsx (deviceUserView filters)
 - Report: STALE / CONFLICTING / NEEDS_CONFIRMATION / finish line this turn.
 
 PHASE 1 — Runtime recover (agent-owned)
 - Ensure DB reachable (local 5432 and/or tunnel 55435 as this host uses).
-- Restart API with npm.cmd / scripts/restart-local-hris-api-dev.ps1; poll /health.
+- Restart API with npm.cmd / scripts/restart-local-bnpi-pats-api-dev.ps1; poll /health.
 - Ensure app on :3000 if browser proof needed.
-- Login admin@bandai.local / password123 appCode=hris for all probes.
+- Login admin@bandai.local / password123 appCode=bnpi-pats for all probes.
 
 PHASE 2 — Inventory backfill for known mapped people
 - For each DevicePersonToken on TEST A (and any t18* events with resolved plain no):
@@ -157,11 +157,11 @@ PHASE 3 — Live create stay-on-device demo (do not auto-delete)
 - Write evidence JSON under .runtime/device-user-enroll-journey-<stamp>/.
 
 PHASE 4 — Deep-link + Sync Center UI truth
-- Ensure events.tsx getDeviceUserSyncCenterUrl uses deviceUserView=hris.
-- Ensure enroll.tsx honors deviceUserSearch + deviceUserView=hris and does not
+- Ensure events.tsx getDeviceUserSyncCenterUrl uses deviceUserView=bnpi-pats.
+- Ensure enroll.tsx honors deviceUserSearch + deviceUserView=bnpi-pats and does not
   clear search on modal open.
 - API + Playwright (preferred headless): open Device Events USER_CREATED for
-  demo person → click Device user → URL has deviceUserView=hris and search →
+  demo person → click Device user → URL has deviceUserView=bnpi-pats and search →
   table row visible (not “No device users found”).
 - If empty: fix view filter / query / missing stub — do not blame the human.
 
@@ -192,7 +192,7 @@ E) ACCEPTANCE CHECKLIST (all required unless real blocker)
     DevicePersonToken + DeviceUser + DeviceEvent USER_CREATED plain no
 [ ] GET device users API returns that vendorUserId
 [ ] Device Events UI shows plain employeeNo for that create (not opaque badge)
-[ ] Device user deep-link URL includes deviceUserView=hris and deviceUserSearch
+[ ] Device user deep-link URL includes deviceUserView=bnpi-pats and deviceUserSearch
 [ ] Sync Center Device Users shows the row when opened from that link
 [ ] FINGERPRINT path: either resolved new enroll OR documented boundary with
     3 attempts evidence
@@ -254,7 +254,7 @@ Next action = tool call. No operator homework. EXIT GATE applies.
 ## One-paragraph “what’s happening in my screenshots”
 
 **Image 1 (USER_CREATED):** The event ledger is partially winning — write-time map resolved plain device person nos for recent creates. That proves **events**, not that inventory or click-through works.  
-**Image 2 (Sync Center empty):** You opened **device user inventory / live source search** for that person and got zero. Either the temp user is **no longer on the terminal**, the UI is on **Device (ISAPI)** instead of **HRIS DeviceUser inventory**, or the backend never created a **DeviceUser** stub when the event was saved.  
-**Image 3 (FINGERPRINT_ENROLLED opaque):** Fingerprint lifecycle rows still carry Hikvision’s privacy token because those enrolls were **not write-time mapped** (often older imports). Without a `DevicePersonToken` row, HRIS correctly cannot invent a plain employeeNo.
+**Image 2 (Sync Center empty):** You opened **device user inventory / live source search** for that person and got zero. Either the temp user is **no longer on the terminal**, the UI is on **Device (ISAPI)** instead of **BNPI PATS DeviceUser inventory**, or the backend never created a **DeviceUser** stub when the event was saved.  
+**Image 3 (FINGERPRINT_ENROLLED opaque):** Fingerprint lifecycle rows still carry Hikvision’s privacy token because those enrolls were **not write-time mapped** (often older imports). Without a `DevicePersonToken` row, BNPI PATS correctly cannot invent a plain employeeNo.
 
 The product gap is not “events don’t exist” — it is **closing the journey**: map + inventory stub + correct Sync Center view so create/enroll → click Device user → see the person.

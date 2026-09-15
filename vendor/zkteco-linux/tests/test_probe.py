@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from zkteco_linux_probe.__main__ import (
     CAPABILITY_REPORT,
     Target,
-    build_hris_payload,
+    build_bnpi_pats_payload,
     cidr_hosts,
     discover_targets,
     filter_attendance_records,
@@ -57,7 +57,7 @@ class ProbeTests(unittest.TestCase):
         payload = emit.call_args.args[0]
         self.assertEqual(payload["event"], "capabilities")
         self.assertEqual(payload["status"], "linux_bridge_runtime")
-        self.assertTrue(payload["canonicalHrisRuntime"])
+        self.assertTrue(payload["canonicalBnpiPatsRuntime"])
         self.assertEqual(payload["notProven"], CAPABILITY_REPORT["notProven"])
         self.assertIn("realtime_watch_mode", payload["notProven"])
         self.assertIn("PyZK Linux bridge", payload["canonicalPath"])
@@ -124,8 +124,8 @@ class ProbeTests(unittest.TestCase):
 
         self.assertEqual([record.user_id for record in selected], ["102", "103"])
 
-    def test_build_hris_payload_matches_zkteco_event_contract(self) -> None:
-        payload = build_hris_payload(
+    def test_build_bnpi_pats_payload_matches_zkteco_event_contract(self) -> None:
+        payload = build_bnpi_pats_payload(
             Target("ZKTeco A", "10.184.38.9", 4370),
             FakeAttendance(37501, "1321", "2026-07-01T15:21:06", status=1, punch=5),
             {"1321": "Sample User"},
@@ -152,7 +152,7 @@ class ProbeTests(unittest.TestCase):
                 "password": 0,
                 "force_udp": False,
                 "sample_limit": 3,
-                "webhook_url": "http://hris-api:3001/api/zkteco/events",
+                "webhook_url": "http://bnpi-pats-api:3001/api/zkteco/events",
                 "webhook_timeout": 1,
             },
         )()

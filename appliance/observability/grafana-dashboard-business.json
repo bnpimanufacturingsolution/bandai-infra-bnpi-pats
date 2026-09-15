@@ -7,7 +7,7 @@
       "title": "User Registrations (Daily)",
       "targets": [
         {
-          "expr": "sum(increase(hris_users_registered_total[1d]))"
+          "expr": "sum(increase(bnpi_pats_users_registered_total[1d]))"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
@@ -17,7 +17,7 @@
       "title": "Transactions Completed",
       "targets": [
         {
-          "expr": "sum(rate(hris_transactions_completed_total[5m]))"
+          "expr": "sum(rate(bnpi_pats_transactions_completed_total[5m]))"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
@@ -27,7 +27,7 @@
       "title": "Orders Created (Daily)",
       "targets": [
         {
-          "expr": "sum(increase(hris_orders_created_total[1d]))"
+          "expr": "sum(increase(bnpi_pats_orders_created_total[1d]))"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
@@ -37,7 +37,7 @@
       "title": "LMS Course Completions",
       "targets": [
         {
-          "expr": "sum(rate(hris_lms_course_completions_total[5m]))"
+          "expr": "sum(rate(bnpi_pats_lms_course_completions_total[5m]))"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
@@ -47,7 +47,7 @@
       "title": "Performance Evaluation Submissions",
       "targets": [
         {
-          "expr": "sum(rate(hris_performance_evaluations_submitted_total[5m]))"
+          "expr": "sum(rate(bnpi_pats_performance_evaluations_submitted_total[5m]))"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
@@ -57,7 +57,7 @@
       "title": "User Activity Trends",
       "targets": [
         {
-          "expr": "sum(rate(hris_user_activity_total[5m])) by (activity_type)"
+          "expr": "sum(rate(bnpi_pats_user_activity_total[5m])) by (activity_type)"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },

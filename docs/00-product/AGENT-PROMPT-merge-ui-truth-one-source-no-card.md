@@ -1,9 +1,9 @@
 # AGENT JOB CARD — Merge UI truth · one source of counts · hide card · multi-agent FE
 
 **Mode:** agent-owned · non-stop · multi-agent crew  
-**Surface:** `hris-app/app/routes/admin/devices/enroll.tsx` (+ API writeMatrix only if required)  
+**Surface:** `bnpi-pats-app/app/routes/admin/devices/enroll.tsx` (+ API writeMatrix only if required)  
 **Skills (ordered):** `impeccable` → **clarify → distill → layout → polish → harden → audit**  
-**ENV:** DEV `dev.bnpi-hris.tech` · devices A/B/D/E/F · admin@bandai.local  
+**ENV:** DEV `dev.bnpi-pats.tech` · devices A/B/D/E/F · admin@bandai.local  
 **Finish line:** honest Review modal + one count contract + card off default residual UX · prove with Playwright + API JSON under `.runtime/`
 
 ---

@@ -24,7 +24,7 @@ Normal users do not run Packer. Packer lives in `image-factory/packer/` for main
 
 ## Ports
 
-The current HRIS appliance runtime exposes app/API pairs. The GitOps overlays record these same ports as environment contract data.
+The current BNPI PATS appliance runtime exposes app/API pairs. The GitOps overlays record these same ports as environment contract data.
 
 | Environment | App | API Health | Postgres Host Port |
 |---|---:|---:|---:|
@@ -34,7 +34,7 @@ The current HRIS appliance runtime exposes app/API pairs. The GitOps overlays re
 
 The default appliance runtime still uses the Docker stack. The Kubernetes GitOps
 contract now includes both environment ConfigMaps and opt-in runtime overlays
-for HRIS app/API/Postgres Deployments/StatefulSets when `enable-k8s-runtime` is
+for BNPI PATS app/API/Postgres Deployments/StatefulSets when `enable-k8s-runtime` is
 used.
 
 ## Legacy Boundary

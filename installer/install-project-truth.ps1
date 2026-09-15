@@ -44,7 +44,7 @@ function Test-ProjectTruthConfigCurrent {
   }
 
   return (
-    $config.gitops.repoUrl -eq 'https://github.com/hrisworkforcesystem-coder/bandai-infra.git' -and
+    $config.gitops.repoUrl -eq 'https://github.com/bnpimanufacturingsolution/bandai-infra.git' -and
     $config.gitops.branch -eq 'develop' -and
     $config.ports.prodApp -eq 3000 -and
     $config.ports.prodApi -eq 3001 -and

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-	One-time workstation onboarding for local hris-api dev (SSH key + ssh config).
+	One-time workstation onboarding for local bnpi-pats-api dev (SSH key + ssh config).
 
 .DESCRIPTION
 	Makes `npm run dev` work on a brand-new Windows workstation without manual
@@ -9,7 +9,7 @@
 	  1. An SSH key pair at %USERPROFILE%\.ssh\node-health-appliance_ed25519
 		 (generates a new one only when missing; never silently overwrites).
 	  2. %USERPROFILE%\.ssh\config entry "Host project-truth-lan" for direct
-		 LAN SSH to infra@10.184.37.19 and "Host project-truth-hris" (Cloudflare
+		 LAN SSH to infra@10.184.37.19 and "Host project-truth-bnpi-pats" (Cloudflare
 		 Access SSH via the cloudflared ProxyCommand).
 	  3. The matching public key installed into the VM infra user's
 		 authorized_keys. LAN-first; when the LAN is unreachable it falls back
@@ -42,8 +42,8 @@ $pubPath = "$keyPath.pub"
 $configPath = Join-Path $sshDir 'config'
 $lanHost = '10.184.37.19'
 $lanUser = 'infra'
-$aliasName = 'project-truth-hris'
-$aliasHostName = 'ssh.bnpi-hris.tech'
+$aliasName = 'project-truth-bnpi-pats'
+$aliasHostName = 'ssh.bnpi-pats.tech'
 $cloudflaredCandidates = @(
 	"${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe",
 	"$env:ProgramFiles\cloudflared\cloudflared.exe",
@@ -56,7 +56,7 @@ function Write-ErrLine { param([string]$Message) Write-Host "[dev-ssh-setup] ERR
 
 function Test-Interactive {
 	if ($AcceptDefaults) { return $false }
-	if ($env:HRIS_PREDEV_NONINTERACTIVE -eq 'true') { return $false }
+	if ($env:BNPI_PATS_PREDEV_NONINTERACTIVE -eq 'true') { return $false }
 	if ([Console]::IsInputRedirected) { return $false }
 	return [Environment]::UserInteractive
 }
@@ -180,7 +180,7 @@ function Ensure-SshConfig {
 		return
 	}
 	if ($needsAlias -and -not $CloudflaredPath) {
-		Write-WarnLine 'cloudflared not found; skipping the project-truth-hris (Cloudflare) config entry. LAN SSH will still work.'
+		Write-WarnLine 'cloudflared not found; skipping the project-truth-bnpi-pats (Cloudflare) config entry. LAN SSH will still work.'
 	}
 	if (Test-Path -LiteralPath $configPath) {
 		Copy-Item -LiteralPath $configPath -Destination "$configPath.bak-$stamp" -Force
@@ -344,6 +344,6 @@ if ($alreadyReady) {
 
 Write-Host ''
 Write-Host '=== SSH onboarding complete ===' -ForegroundColor Green
-Write-Step 'Next: npm run dev (inside hris-api). The DEV DB forward starts automatically.'
+Write-Step 'Next: npm run dev (inside bnpi-pats-api). The DEV DB forward starts automatically.'
 Write-Step "Run evidence: $runRoot"
 exit 0

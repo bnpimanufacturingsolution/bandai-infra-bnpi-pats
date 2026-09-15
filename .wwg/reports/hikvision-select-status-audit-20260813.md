@@ -1,4 +1,4 @@
-# Hikvision Select Status → HRIS mapping audit
+# Hikvision Select Status → BNPI PATS mapping audit
 
 **Status:** `WIRE_AND_DISPLAY_IMPLEMENTED` (pairing unchanged; documented 2026-08-13)  
 **Date:** 2026-08-13  
@@ -21,14 +21,14 @@
 | Panel **Select Status** is real Hikvision T&A (Check In, Check Out, Break Out, Break In, Overtime In, Overtime Out) | CONFIRMED |
 | Live SDK listener POST does **not** include that status | CONFIRMED (0 / 32,489 `EN_HCNETSDK_ALARM`) |
 | ISAPI Sync **can** nest `AcsEventInfo.attendanceStatus` + `label` | CONFIRMED (689 rows; 678 `checkIn`) |
-| HRIS clock in/out is **first tap / later tap**, not panel status | CONFIRMED |
+| BNPI PATS clock in/out is **first tap / later tap**, not panel status | CONFIRMED |
 | Mapping implemented | **No** |
 
 ## Special scenario (operator)
 
 Users Check In on **all** Hikvision devices. The panel cannot auto-detect in vs out; the person picks Select Status.
 
-| Panel | HRIS today |
+| Panel | BNPI PATS today |
 |---|---|
 | Check In @ 08:00 Device A + Check In @ 17:00 Device B | 08:00 = `timeIn`, 17:00 = `timeOut` |
 | Break Out / Break In | Another `TAP` (often becomes/extends `timeOut`) |
@@ -76,6 +76,6 @@ Users Check In on **all** Hikvision devices. The panel cannot auto-detect in vs 
 | ID | Action |
 |---|---|
 | `REC-20260813-HIKVISION-SDK-ATTENDANCE-STATUS-WIRE` | C++ POST `byAttendanceStatus` from ACS extend |
-| `REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP` | After operator decision, honor or display panel status |
+| `REC-20260813-HIKVISION-SELECT-STATUS-BNPI-PATS-MAP` | After operator decision, honor or display panel status |
 
 Do not implement pairing changes until the operator chooses pair-by-time vs honor Select Status.

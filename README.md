@@ -123,9 +123,9 @@ app/
 gitops/
 terraform-hyperv/
 image-factory/
-hris-api/
-hris-app/
-hris-emp-app/
+bnpi-pats-api/
+bnpi-pats-app/
+bnpi-pats-emp-app/
 scripts/
 docs/
 .github/workflows/
@@ -188,14 +188,14 @@ Inside VM:
   Argo CD applications
 
 Public Cloudflare:
-  https://bnpi-hris.tech/auth/login
-  https://api.bnpi-hris.tech/health
-  https://dev.bnpi-hris.tech/auth/login
-  https://uat.bnpi-hris.tech/auth/login
-  https://emp.bnpi-hris.tech/auth/login
-  https://dev-emp.bnpi-hris.tech/auth/login
-  https://uat-emp.bnpi-hris.tech/auth/login
-  https://grafana.bnpi-hris.tech/api/health
+  https://bnpi-pats.tech/auth/login
+  https://api.bnpi-pats.tech/health
+  https://dev.bnpi-pats.tech/auth/login
+  https://uat.bnpi-pats.tech/auth/login
+  https://emp.bnpi-pats.tech/auth/login
+  https://dev-emp.bnpi-pats.tech/auth/login
+  https://uat-emp.bnpi-pats.tech/auth/login
+  https://grafana.bnpi-pats.tech/api/health
 ```
 
 ## Legacy Note

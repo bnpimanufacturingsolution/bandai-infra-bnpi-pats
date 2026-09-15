@@ -1,9 +1,9 @@
 # DeviceEvent actions — triggers, storage, post-effects
 
-**Source of truth:** `hris-api/prisma/schema/device.prisma` enums +  
-`hris-api/helper/device-event-taxonomy.helper.ts` +  
-`hris-api/app/hikvision/controller/callback.controller.ts` +  
-`hris-api/helper/device-person-token.helper.ts`
+**Source of truth:** `bnpi-pats-api/prisma/schema/device.prisma` enums +  
+`bnpi-pats-api/helper/device-event-taxonomy.helper.ts` +  
+`bnpi-pats-api/app/hikvision/controller/callback.controller.ts` +  
+`bnpi-pats-api/helper/device-person-token.helper.ts`
 
 **No assumptions:** only paths that exist in code.
 
@@ -20,13 +20,13 @@ Contract: [`docs/00-product/DEVICE-EVENTS-SAVED-EVENT-DEEPLINK.md`](./00-product
 | Field | What it is | Examples |
 |---|---|---|
 | **`eventAction`** | *What happened on the device / ledger concept* | `USER_CREATED`, `FINGERPRINT_ENROLLED`, `TAP` |
-| **`status`** | *HRIS processing result* | `RECEIVED`, `MATCHED`, `UNMATCHED`, `ATTENDANCE_CREATED`, `IGNORED` |
+| **`status`** | *BNPI PATS processing result* | `RECEIVED`, `MATCHED`, `UNMATCHED`, `ATTENDANCE_CREATED`, `IGNORED` |
 | **`source`** | *Runtime path that delivered the row* | `EN_HCNETSDK_ALARM`, `HIKVISION_CALLBACK`, `ZKTECO_EVENT` |
 | **Panel Select Status** | *Hikvision T&A choice on the glass* — **not** a DeviceEvent column today | `checkIn`, `checkOut`, `breakOut`, `breakIn`, `overtimeIn`, `overtimeOut` |
 
 Hikvision **Select Status** is a third vocabulary. Live SDK and ISAPI extract now copy it to **Device status**. Attendance `timeIn`/`timeOut` is still pair-by-time. Spec: [`docs/HIKVISION_SELECT_STATUS_MAPPING.md`](./HIKVISION_SELECT_STATUS_MAPPING.md).
 | **`employeeNo`** | Plain device person id when known | `"15"` |
-| **`employeeId`** | FK to HRIS `Employee` row | ObjectId or null |
+| **`employeeId`** | FK to BNPI PATS `Employee` row | ObjectId or null |
 | **`deviceUserId`** | FK to `DeviceUser` inventory row | ObjectId or null |
 
 Schema (`DeviceEvent`):
@@ -177,7 +177,7 @@ From `device.prisma`:
 | `TAP_REJECTED` | FP fail minors | **W** | lookup optional | **—** | Yes |
 | `LISTENER_RECEIVED` / `UNKNOWN` | fallback classify | **W** | **—** | **—** | Yes |
 
-### 5.3 HRIS `status` after post-processing
+### 5.3 BNPI PATS `status` after post-processing
 
 | status | When set (callback path) |
 |---|---|
@@ -321,7 +321,7 @@ UI Device Events listens for this to append/update rows without full refresh.
 |---|---|---|---|
 | Create user `15` | DeviceEvent (`SYNC_SIGNAL` and/or `USER_CREATED`) | DeviceUser `15` + plain on event | No |
 | Enroll FP for `15` | DeviceEvent `FINGERPRINT_ENROLLED` | DeviceUser metadata | No |
-| Tap as `15` with HRIS employee `deviceEmpId=15` | DeviceEvent `TAP` | Attendance row | **Yes** |
+| Tap as `15` with BNPI PATS employee `deviceEmpId=15` | DeviceEvent `TAP` | Attendance row | **Yes** |
 | Tap as `15` with no Employee | DeviceEvent `TAP` UNMATCHED | — | No |
 | Major=3 only | DeviceEvent `SYNC_SIGNAL` IGNORED | logSearch typed rows | No |
 
@@ -331,9 +331,9 @@ UI Device Events listens for this to append/update rows without full refresh.
 
 | Concern | File |
 |---|---|
-| Enums | `hris-api/prisma/schema/device.prisma` |
-| Classify action | `hris-api/helper/device-event-taxonomy.helper.ts` |
-| Callback entry | `hris-api/app/hikvision/routes/callback.router.ts` → `callback.controller.ts` |
+| Enums | `bnpi-pats-api/prisma/schema/device.prisma` |
+| Classify action | `bnpi-pats-api/helper/device-event-taxonomy.helper.ts` |
+| Callback entry | `bnpi-pats-api/app/hikvision/routes/callback.router.ts` → `callback.controller.ts` |
 | Attendance vs not | `isHikvisionAttendancePunchEvent` in `hikvision-event-contract.helper.ts` |
 | Identity + DeviceUser | `device-person-token.helper.ts` |
 | Socket | `device-event-realtime.helper.ts` |

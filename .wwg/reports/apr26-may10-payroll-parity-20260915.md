@@ -4,7 +4,7 @@ Task mode: mixed data + engine fix (operator: "generate a payroll on the system 
 
 ## Inputs
 
-- Client registers: `PAYROLL 2026/` (9 cutoffs Dec 26 2025 – Apr 26-May 10 2026, password 9090 via Excel COM) + target `confidential-files/HRIS Payroll Computation April 26 - May 10, 2026.xlsx`.
+- Client registers: `PAYROLL 2026/` (9 cutoffs Dec 26 2025 – Apr 26-May 10 2026, password 9090 via Excel COM) + target `confidential-files/BNPI PATS Payroll Computation April 26 - May 10, 2026.xlsx`.
 - Same-pack mass uploads executed on canonical DEV (K3s 55435 via local API :3001):
   - `Compensation Mass Upload 04.30.26.xlsx` → total=173 created=172 failed=0
   - `Compensation Mass Upload 04.30.26_additional.xlsx` → created=91 updated=3 failed=0
@@ -22,7 +22,7 @@ Task mode: mixed data + engine fix (operator: "generate a payroll on the system 
 
 Audit across all nine client registers: 128 zero-GrossPay rows, **every one TOTAL DEDN = 0** — client books no statutory deduction on a cutoff that pays nothing. Engine already waived loans/benefits (`applyZeroSalaryGuardrail`) but charged the Aug-25 salary-based PhilHealth schedule (00091 = 17,300×2.5% = 432.50; 01303 = 15,950×2.5% = 398.75 — both zero-pay, TR tied to the peso, only the deduction line differed).
 
-Fix: `waiveZeroPayContributions()` in `hris-api/helper/payroll-period.helper.ts`, called in BOTH generate + preview twins immediately after `resolveBandaiPhilHealthCutoffContribution`. Regression: `hris-api/tests/zero-pay-contribution-waiver.spec.ts` (5 passing incl. twin source contract). Neighboring specs green (PH schedule + missing-punch: 16). tsc delta 0 (68 pre-existing).
+Fix: `waiveZeroPayContributions()` in `bnpi-pats-api/helper/payroll-period.helper.ts`, called in BOTH generate + preview twins immediately after `resolveBandaiPhilHealthCutoffContribution`. Regression: `bnpi-pats-api/tests/zero-pay-contribution-waiver.spec.ts` (5 passing incl. twin source contract). Neighboring specs green (PH schedule + missing-punch: 16). tsc delta 0 (68 pre-existing).
 
 ## Tally effect (measured, predicted before shipped)
 

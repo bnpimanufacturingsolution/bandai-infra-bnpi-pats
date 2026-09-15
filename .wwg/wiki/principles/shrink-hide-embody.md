@@ -23,7 +23,7 @@ This is how to think. `DESIGN.md` is the visual system (Metropolis, Bandai red/o
 | Move | Meaning | Do | Do not |
 |---|---|---|---|
 | **Shrink** | Make the surface feel smaller and lighter | Narrower modal, one list, fewer boxes, shorter labels | Four equal stat cards, nested cards, wide debug grids |
-| **Hide** | Complexity exists, but not on first view | Closed accordion, progressive disclosure, details on demand | Always-open raw JSON, vendor action dumps, HRIS CUIDs as tiles |
+| **Hide** | Complexity exists, but not on first view | Closed accordion, progressive disclosure, details on demand | Always-open raw JSON, vendor action dumps, BNPI PATS CUIDs as tiles |
 | **Embody** | What remains must feel complete and high quality | Person, event, time, result, terminal, device status | Hollow chrome; hiding so much that the operator cannot act |
 
 ## Icons and labels
@@ -51,7 +51,7 @@ Device event details:
 2. **Hide** — Raw payload in a **closed** accordion.
 3. **Embody** — Person, event, time, result, source, terminal, address, panel Device status.
 
-Canonical surface: `hris-app/app/routes/admin/devices/events.tsx` view-event modal.
+Canonical surface: `bnpi-pats-app/app/routes/admin/devices/events.tsx` view-event modal.
 
 ## Agent checklist
 

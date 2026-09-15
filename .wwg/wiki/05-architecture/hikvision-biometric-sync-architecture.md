@@ -9,12 +9,12 @@ Last updated: 2026-07-09
 Project Truth needs a Linux/VM-owned Hikvision biometric service that uses the
 official Linux HCNetSDK alarm callback path for enrollment/user-change events,
 then reconciles users and fingerprint templates between Hikvision terminals and
-the HRIS web app.
+the BNPI PATS web app.
 
 The Windows reference source is local-only implementation evidence:
 
 ```text
-C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\EN-HCNetSDKV6.1.9.4_build20220412_win64\AlarmDemo.cpp
+C:\Users\anoni\OneDrive\Desktop\BNPI-PATS-PROJECT\EN-HCNetSDKV6.1.9.4_build20220412_win64\AlarmDemo.cpp
 ```
 
 That file should be treated as a behavior reference, not as a naming or runtime
@@ -34,7 +34,7 @@ shape to preserve. Future Linux files should use Project Truth names such as
   `NET_DVR_SetupAlarmChan_V41`, ACS alarm classification, user sync,
   fingerprint read/write, broker enrollment, event-triggered reconcile, and
   cleanup.
-- The current HRIS callback path is `/api/hikvision/callback`; accepted event
+- The current BNPI PATS callback path is `/api/hikvision/callback`; accepted event
   sources include `HIKVISION_CALLBACK` and `EN_HCNETSDK_ALARM`.
 - The Linux service path should post SDK alarm events to `/api/hikvision/callback`
   and let the existing callback controller persist `DeviceEvent` rows, update
@@ -45,7 +45,7 @@ shape to preserve. Future Linux files should use Project Truth names such as
 
 1. Linux Hikvision biometric service
    - Runs inside the Linux VM/runtime path.
-   - Loads configured Hikvision devices from HRIS `Device` rows.
+   - Loads configured Hikvision devices from BNPI PATS `Device` rows.
    - Uses SDK port `8000` for HCNetSDK login/alarm channels.
    - Uses HTTP/ISAPI port `80` only for supported read/write API calls when
      that path is the safer or already-proven route.
@@ -65,10 +65,10 @@ shape to preserve. Future Linux files should use Project Truth names such as
      user-change event.
    - Syncs the source employee/device user to the other configured biometric
      devices.
-   - Writes durable HRIS state and audit evidence.
+   - Writes durable BNPI PATS state and audit evidence.
    - Supports dry-run/recon mode before mutation.
 
-4. HRIS API contract
+4. BNPI PATS API contract
    - Persists per-device biometric enrollment metadata on the employee/user
      model or the existing `DeviceUser` architecture.
    - Exposes safe admin status, recon, add/delete device, and
@@ -92,7 +92,7 @@ shape to preserve. Future Linux files should use Project Truth names such as
 5. Worker reads source user data and fingerprint templates from the source
    device.
 6. Worker syncs the user/template to peer biometric devices.
-7. Worker updates HRIS durable state.
+7. Worker updates BNPI PATS durable state.
 
 Candidate API shape from the user request:
 
@@ -137,10 +137,10 @@ add raw template storage to the normal `User` table.
 2. Callback or bounded device-log sync receives an attendance event.
 3. The Linux HCNetSDK service queues and posts the alarm payload to
    `/api/hikvision/callback` with source `EN_HCNETSDK_ALARM`.
-4. HRIS resolves the employee through `DeviceUser` first, then legacy
+4. BNPI PATS resolves the employee through `DeviceUser` first, then legacy
    `Employee.deviceEmpId` fallback.
-5. HRIS persists the raw/effective attendance ledger and timesheet-facing data.
-6. HRIS emits `device-event:saved` so the admin saved-events UI can update from
+5. BNPI PATS persists the raw/effective attendance ledger and timesheet-facing data.
+6. BNPI PATS emits `device-event:saved` so the admin saved-events UI can update from
    the real saved row.
 
 Candidate API shape from the user request:
@@ -166,13 +166,13 @@ for Employee Portal access or identity status.
 
 Boundary: Project Truth should not claim web-app-side fingerprint matching until
 a matcher, security model, and template custody design are proven. The safer
-default is device-side verification plus HRIS enrollment/status validation.
+default is device-side verification plus BNPI PATS enrollment/status validation.
 
 ## Event Flow: Web App To Biometrics
 
 Required admin capabilities:
 
-- validation/reconciliation script for device-vs-HRIS data;
+- validation/reconciliation script for device-vs-BNPI PATS data;
 - admin status page for device login/alarm/reconcile state;
 - add/delete biometric device;
 - activate/deactivate device participation;
@@ -199,7 +199,7 @@ Port behavior from the Windows reference code, not the old demo identity:
   `NET_DVR_GET_FINGERPRINT_CFG_V50`, `NET_DVR_SET_FINGERPRINT_CFG_V50`, and
   broker capture where supported.
 - Emit JSON lines evidence for login, callback registration, alarm arm,
-  enrollment event receipt, reconciliation result, HRIS API response, and
+  enrollment event receipt, reconciliation result, BNPI PATS API response, and
   cleanup.
 
 ## Validation Gates
@@ -211,9 +211,9 @@ Do not call this architecture implemented until evidence proves:
 2. Linux service registers callback and arms alarms.
 3. A real enrollment/user-change event reaches the callback.
 4. The event queues reconcile without blocking the callback.
-5. Dry-run shows exactly which HRIS records and peer devices would change.
+5. Dry-run shows exactly which BNPI PATS records and peer devices would change.
 6. A controlled execute pass syncs one test user/template to a peer device.
-7. HRIS persists the resulting `DeviceUser`/biometric metadata.
+7. BNPI PATS persists the resulting `DeviceUser`/biometric metadata.
 8. Attendance events still flow to `Attendance`/timesheet projections.
 9. Admin status page/API shows device, alarm, and reconcile health.
 10. VM/LAN/GitOps/runtime proof is captured without disabling the

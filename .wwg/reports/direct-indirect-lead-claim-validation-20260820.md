@@ -57,8 +57,8 @@ Do not pretend the Workforce tab is that. Do not reuse `Employee.workforceSource
 
 ## Evidence
 
-- `hris-api/helper/workforce-metrics.helper.ts` `getLaborBucket`
-- `hris-api/helper/timesheet.helper.ts` snapshot copy
-- `hris-api/prisma/schema/agency.prisma` enum `DIRECT` \| `AGENCY`
+- `bnpi-pats-api/helper/workforce-metrics.helper.ts` `getLaborBucket`
+- `bnpi-pats-api/helper/timesheet.helper.ts` snapshot copy
+- `bnpi-pats-api/prisma/schema/agency.prisma` enum `DIRECT` \| `AGENCY`
 - `docs/00-product/DIRECT_INDIRECT_LABOR_REPORT.md`
 - `docs/OVERTIME_SOURCE_OF_TRUTH.md`

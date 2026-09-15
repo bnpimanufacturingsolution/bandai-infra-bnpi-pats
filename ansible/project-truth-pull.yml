@@ -20,13 +20,13 @@
       - project-truth-status
       - project-truth-progress
       - project-truth-monitor
-      - project-truth-hris-env-start
-      - project-truth-hris-env-seed
-      - project-truth-hris-dev-current-restore
-      - project-truth-hris-start
-      - project-truth-hris-status
-      - project-truth-hris-seed
-      - project-truth-hris-observability-start
+      - project-truth-bnpi-pats-env-start
+      - project-truth-bnpi-pats-env-seed
+      - project-truth-bnpi-pats-dev-current-restore
+      - project-truth-bnpi-pats-start
+      - project-truth-bnpi-pats-status
+      - project-truth-bnpi-pats-seed
+      - project-truth-bnpi-pats-observability-start
       - project-truth-db-access
       - project-truth-lan-config
       - project-truth-lan-summary
@@ -40,7 +40,7 @@
       - project-truth-disk-guard
       - project-truth-report-github-deploy
     project_truth_systemd_units:
-      - project-truth-hris.service
+      - project-truth-bnpi-pats.service
       - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
@@ -53,7 +53,7 @@
       - project-truth-disk-guard.service
       - project-truth-disk-guard.timer
     project_truth_enabled_services:
-      - project-truth-hris.service
+      - project-truth-bnpi-pats.service
       - project-truth-lan-config.service
       - project-truth-lan-summary.service
       - project-truth-clean-console.service
@@ -93,9 +93,9 @@
           - --exclude
           - .runtime
           - --exclude
-          - hris-api/infrastructure/onprem/observability/.env
+          - bnpi-pats-api/infrastructure/onprem/observability/.env
           - --exclude
-          - hris-api/infrastructure/onprem/observability/backup/.env
+          - bnpi-pats-api/infrastructure/onprem/observability/backup/.env
           - "{{ project_truth_repo_root }}/"
           - "{{ project_truth_install_root }}/"
       changed_when: true
@@ -147,16 +147,16 @@
           build_app=0
           build_emp_app=0
           build_callback_outbox=0
-          if grep -Eq '^(hris-api/|vendor/hikvision-linux/|scripts/project-truth-hikvision-)' <<<"$changed_files"; then
+          if grep -Eq '^(bnpi-pats-api/|vendor/hikvision-linux/|scripts/project-truth-hikvision-)' <<<"$changed_files"; then
             build_api=1
           fi
-          if grep -Eq '^(hris-api/prisma/|hris-api/scripts/.*seed|hris-api/Dockerfile)' <<<"$changed_files"; then
+          if grep -Eq '^(bnpi-pats-api/prisma/|bnpi-pats-api/scripts/.*seed|bnpi-pats-api/Dockerfile)' <<<"$changed_files"; then
             build_db_init=1
           fi
-          if grep -Eq '^hris-app/' <<<"$changed_files"; then
+          if grep -Eq '^bnpi-pats-app/' <<<"$changed_files"; then
             build_app=1
           fi
-          if grep -Eq '^(hris-emp-app/|appliance/dockerfiles/hris-emp-app\.)' <<<"$changed_files"; then
+          if grep -Eq '^(bnpi-pats-emp-app/|appliance/dockerfiles/bnpi-pats-emp-app\.)' <<<"$changed_files"; then
             build_emp_app=1
           fi
           if grep -Eq '^services/callback-outbox/' <<<"$changed_files"; then
@@ -174,7 +174,7 @@
           )"
           if [ -n "$runtime_changes" ]; then
             runtime_non_api_changes="$(
-              grep -Ev '^gitops/runtime-k8s/overlays/dev/(hris-api-credential-recovery-env\.patch\.yaml|kustomization\.yaml)$' \
+              grep -Ev '^gitops/runtime-k8s/overlays/dev/(bnpi-pats-api-credential-recovery-env\.patch\.yaml|kustomization\.yaml)$' \
                 <<<"$runtime_changes" || true
             )"
             if [ -n "$runtime_non_api_changes" ]; then
@@ -183,7 +183,7 @@
               build_app=1
               build_emp_app=1
               build_callback_outbox=1
-            elif grep -q 'hris-api-credential-recovery-env.patch.yaml' \
+            elif grep -q 'bnpi-pats-api-credential-recovery-env.patch.yaml' \
               "{{ project_truth_repo_root }}/gitops/runtime-k8s/overlays/dev/kustomization.yaml"; then
               build_api=1
             else
@@ -197,26 +197,26 @@
         images=()
         deployments=()
         if [ "$build_api" = "1" ]; then
-          services+=(hris-api)
-          images+=(hris-api-local:develop)
-          deployments+=(hris-api)
+          services+=(bnpi-pats-api)
+          images+=(bnpi-pats-api-local:develop)
+          deployments+=(bnpi-pats-api)
         fi
         if [ "$build_db_init" = "1" ]; then
-          services+=(hris-api-db-init)
-          images+=(hris-api-db-init:develop)
+          services+=(bnpi-pats-api-db-init)
+          images+=(bnpi-pats-api-db-init:develop)
         fi
         if [ "$build_app" = "1" ]; then
-          services+=(hris-app)
-          images+=(hris-app-local:develop)
-          deployments+=(hris-app)
+          services+=(bnpi-pats-app)
+          images+=(bnpi-pats-app-local:develop)
+          deployments+=(bnpi-pats-app)
         fi
         if [ "$build_emp_app" = "1" ]; then
-          services+=(hris-emp-app)
-          images+=(hris-emp-app-local:develop)
+          services+=(bnpi-pats-emp-app)
+          images+=(bnpi-pats-emp-app-local:develop)
         fi
         if [ "${build_callback_outbox:-0}" = "1" ]; then
-          images+=(hris-callback-outbox:develop)
-          deployments+=(hris-callback-outbox)
+          images+=(bnpi-pats-callback-outbox:develop)
+          deployments+=(bnpi-pats-callback-outbox)
         fi
         if [ -z "${images[*]:-}" ]; then
           printf 'commit=%s\nsynced_at=%s\nservices=none\n' \
@@ -235,7 +235,7 @@
           fi
         fi
         if [ "${build_callback_outbox:-0}" = "1" ]; then
-          docker build -t hris-callback-outbox:develop \
+          docker build -t bnpi-pats-callback-outbox:develop \
             "{{ project_truth_repo_root }}/services/callback-outbox"
         fi
 
@@ -267,8 +267,8 @@
         done
         if [ "$build_emp_app" = "1" ]; then
           for employee_env_name in prod dev uat; do
-            kubectl -n "$employee_env_name" rollout restart deployment/hris-emp-app >/dev/null
-            kubectl -n "$employee_env_name" rollout status deployment/hris-emp-app --timeout=180s
+            kubectl -n "$employee_env_name" rollout restart deployment/bnpi-pats-emp-app >/dev/null
+            kubectl -n "$employee_env_name" rollout status deployment/bnpi-pats-emp-app --timeout=180s
           done
         fi
         printf 'commit=%s\nsynced_at=%s\nservices=%s\n' \
@@ -280,7 +280,7 @@
     - name: Keep legacy Docker Compose app/API containers off the K3s LAN ports
       ansible.builtin.shell: |
         set -euo pipefail
-        for container_name in hris-app hris-api hris-app-dev hris-api-dev hris-app-uat hris-api-uat; do
+        for container_name in bnpi-pats-app bnpi-pats-api bnpi-pats-app-dev bnpi-pats-api-dev bnpi-pats-app-uat bnpi-pats-api-uat; do
           if docker ps -a --format '{{"{{.Names}}"}}' | grep -qx "$container_name"; then
             docker stop "$container_name" >/dev/null 2>&1 || true
           fi
@@ -327,8 +327,8 @@
 
     - name: Install login profile helper
       ansible.builtin.copy:
-        src: "{{ project_truth_install_root }}/appliance/profile.d/project-truth-hris-help.sh"
-        dest: /etc/profile.d/project-truth-hris-help.sh
+        src: "{{ project_truth_install_root }}/appliance/profile.d/project-truth-bnpi-pats-help.sh"
+        dest: /etc/profile.d/project-truth-bnpi-pats-help.sh
         remote_src: true
         mode: "0644"
 
@@ -347,12 +347,12 @@
     - name: Restore VM-managed BNPI Cloudflare tunnel after accidental local-mode guard
       ansible.builtin.shell: |
         set -euo pipefail
-        rm -f /etc/systemd/system/cloudflared-bnpi-hris.service.d/10-project-truth-cloud-mode.conf
+        rm -f /etc/systemd/system/cloudflared-bnpi-pats.service.d/10-project-truth-cloud-mode.conf
         rm -f /etc/project-truth/cloud-mode.env
         rm -f /usr/local/bin/project-truth-cloud-mode
         systemctl daemon-reload
         if [ -f /etc/cloudflared/config.yml ] && ls /etc/cloudflared/*.json >/dev/null 2>&1; then
-          systemctl enable --now cloudflared-bnpi-hris.service
+          systemctl enable --now cloudflared-bnpi-pats.service
         fi
       args:
         executable: /bin/bash
@@ -496,7 +496,7 @@
       ansible.builtin.shell: |
         set -euo pipefail
         for env_name in dev uat prod; do
-          for volume_name in "hris-postgres-${env_name}" "hris-uploads-${env_name}"; do
+          for volume_name in "bnpi-pats-postgres-${env_name}" "bnpi-pats-uploads-${env_name}"; do
             phase="$(kubectl get pv "$volume_name" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
             claim_uid="$(kubectl get pv "$volume_name" -o jsonpath='{.spec.claimRef.uid}' 2>/dev/null || true)"
             if [ "$phase" = "Released" ] && [ -n "$claim_uid" ]; then
@@ -561,7 +561,7 @@
         dest: "{{ project_truth_state_dir }}/ansible-pull-state"
         mode: "0644"
         content: |
-          repo_url={{ lookup('env', 'PROJECT_TRUTH_REPO_URL') | default('https://github.com/hrisworkforcesystem-coder/bandai-infra.git', true) }}
+          repo_url={{ lookup('env', 'PROJECT_TRUTH_REPO_URL') | default('https://github.com/bnpimanufacturingsolution/bandai-infra.git', true) }}
           branch={{ lookup('env', 'PROJECT_TRUTH_BRANCH') | default('develop', true) }}
           commit={{ project_truth_commit.stdout }}
           synced_at={{ ansible_date_time.iso8601 }}

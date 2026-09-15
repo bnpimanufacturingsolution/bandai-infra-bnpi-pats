@@ -7,7 +7,7 @@ Audience: Business/planning agents, research agents, implementation agents
 ## Purpose
 
 Use this document as the high-signal context pack for any AI agent working on
-Project Truth HRIS, especially work involving:
+Project Truth BNPI PATS, especially work involving:
 
 - the employee portal kiosk/biometric login journey;
 - Hikvision tap-event ingestion and saved-event truth;
@@ -20,19 +20,19 @@ must keep researching, validating, and repairing the real system.
 
 ## Executive Context
 
-Project Truth is a VM-first HRIS runtime on a Linux Hyper-V appliance with
+Project Truth is a VM-first BNPI PATS runtime on a Linux Hyper-V appliance with
 three main product surfaces:
 
-- `hris-app`: admin HRIS and device-management app
-- `hris-api`: API and device/runtime orchestration layer
-- `hris-emp-app`: employee self-service portal with kiosk-style biometric login
+- `bnpi-pats-app`: admin BNPI PATS and device-management app
+- `bnpi-pats-api`: API and device/runtime orchestration layer
+- `bnpi-pats-emp-app`: employee self-service portal with kiosk-style biometric login
 
 The clean target architecture is:
 
 - Windows host for Hyper-V, browser, and SSH only
 - one Linux Hyper-V VM for the real Project Truth runtime
 - Docker/K3s/Argo/GitOps inside the VM
-- LAN-reachable HRIS app/API/employee portal from the Windows host
+- LAN-reachable BNPI PATS app/API/employee portal from the Windows host
 - VM-managed named Cloudflare tunnel kept active for public access and SSH
 
 Current canonical LAN/runtime target:
@@ -46,18 +46,18 @@ Current canonical LAN/runtime target:
 
 Public tunnel targets currently include:
 
-- `https://bnpi-hris.tech/auth/login`
-- `https://api.bnpi-hris.tech/health`
-- `https://emp.bnpi-hris.tech/auth/login`
-- `https://dev-emp.bnpi-hris.tech/auth/login`
-- `https://uat-emp.bnpi-hris.tech/auth/login`
+- `https://bnpi-pats.tech/auth/login`
+- `https://api.bnpi-pats.tech/health`
+- `https://emp.bnpi-pats.tech/auth/login`
+- `https://dev-emp.bnpi-pats.tech/auth/login`
+- `https://uat-emp.bnpi-pats.tech/auth/login`
 
 ## Business Context
 
 The business need is not just "biometric integration." The business need is:
 
 1. Employees must be able to tap on physical biometric devices and have those
-   taps appear reliably in HRIS without guesswork.
+   taps appear reliably in BNPI PATS without guesswork.
 2. The employee portal kiosk experience must support fast biometric-driven
    sign-in and safe fallback manual login.
 3. Admins must be able to see truthful device status, event truth, saved-event
@@ -74,7 +74,7 @@ The business need is not just "biometric integration." The business need is:
 
 ### Employee portal
 
-- `hris-emp-app/app/routes/auth.login.tsx` already implements a kiosk-style
+- `bnpi-pats-emp-app/app/routes/auth.login.tsx` already implements a kiosk-style
   login screen.
 - It polls once per second for biometric kiosk login claims through
   `authService.claimBiometricKioskLogin(...)`.
@@ -84,7 +84,7 @@ The business need is not just "biometric integration." The business need is:
 
 ### Device/admin surface
 
-- `hris-app/app/routes/admin/devices/events.tsx` already exposes a rich admin
+- `bnpi-pats-app/app/routes/admin/devices/events.tsx` already exposes a rich admin
   device-events and sync-center surface.
 - The admin UI already models:
   - live vs saved event views;
@@ -96,7 +96,7 @@ The business need is not just "biometric integration." The business need is:
 
 ### API/device orchestration
 
-- `hris-api/app/device/device.controller.ts` already contains substantial
+- `bnpi-pats-api/app/device/device.controller.ts` already contains substantial
   device orchestration logic.
 - It supports device events, health, Hikvision listener status/control,
   device-user sync, import/export, reset, attendance import, merge planning,
@@ -139,7 +139,7 @@ The business need is not just "biometric integration." The business need is:
 - Linux/VM-owned HCNetSDK listener plus queued reconcile worker is the target
   architecture.
 - The active service must post alarm-derived events to
-  `/api/hikvision/callback`, with HRIS remaining the owner of saved-event
+  `/api/hikvision/callback`, with BNPI PATS remaining the owner of saved-event
   persistence and attendance/timesheet projection.
 - Do not claim raw fingerprint template custody or browser-side fingerprint
   matching until encryption, security, and retention rules are explicitly
@@ -235,7 +235,7 @@ Biometric attendance and employee-portal authentication across:
 
 2. Tap-event observability
    - A tap must be provable through direct API or device-event evidence.
-   - Saved events must show runtime path, event taxonomy, HRIS result, and
+   - Saved events must show runtime path, event taxonomy, BNPI PATS result, and
      match state.
 
 3. Listener status truth
@@ -308,14 +308,14 @@ Any agent using this context must:
 ## Business Prompt For An AI Agent
 
 ```text
-You are the business and product strategy agent for Project Truth HRIS.
+You are the business and product strategy agent for Project Truth BNPI PATS.
 
 Your mission is to turn messy operational biometric/device/runtime reality into
 clear product direction without losing technical truth.
 
 Context:
 - Project Truth runs on a Linux Hyper-V VM, not on the Windows host.
-- Main surfaces are hris-app, hris-api, and hris-emp-app.
+- Main surfaces are bnpi-pats-app, bnpi-pats-api, and bnpi-pats-emp-app.
 - The employee portal already has a kiosk-style biometric polling login flow.
 - The admin device surface already has listener status, saved events, device
   sync previews, import jobs, event taxonomy, and realtime updates.
@@ -356,7 +356,7 @@ When uncertain, label assumptions explicitly.
 ## Research / Execution Prompt For An AI Agent
 
 ```text
-You are the research-and-execution agent for Project Truth HRIS.
+You are the research-and-execution agent for Project Truth BNPI PATS.
 
 Your mission is to discover, prove, and repair the truth about biometric tap
 events, employee kiosk login, device sync, and runtime drift.
@@ -364,7 +364,7 @@ events, employee kiosk login, device sync, and runtime drift.
 Operating rules:
 - The real runtime is the Linux Hyper-V VM.
 - Preferred LAN target is 10.184.37.19.
-- Keep the VM-managed bnpi-hris Cloudflare tunnel active.
+- Keep the VM-managed bnpi-pats Cloudflare tunnel active.
 - Use direct LAN evidence first for host-local VM truth.
 - Use endpoint proof before browser proof.
 - Use Playwright/headless browser proof after API/network proof.
@@ -372,12 +372,12 @@ Operating rules:
   impossible blocker exists.
 
 Current code truth:
-- Employee kiosk login polling exists in hris-emp-app/app/routes/auth.login.tsx.
+- Employee kiosk login polling exists in bnpi-pats-emp-app/app/routes/auth.login.tsx.
 - Admin device-event and sync-center logic exists in
-  hris-app/app/routes/admin/devices/events.tsx.
+  bnpi-pats-app/app/routes/admin/devices/events.tsx.
 - Device orchestration, listener control, sync, copy, import/export, and
   synthetic biometric tally logic exists in
-  hris-api/app/device/device.controller.ts.
+  bnpi-pats-api/app/device/device.controller.ts.
 
 Research goals:
 1. Prove whether employee biometric kiosk login claims arrive reliably.

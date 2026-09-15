@@ -1,7 +1,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$GuestIp,
   [string]$User = 'infra',
-  [string]$RepoUrlPrefix = 'https://github.com/hrisworkforcesystem-coder',
+  [string]$RepoUrlPrefix = 'https://github.com/bnpimanufacturingsolution',
   [Parameter(Mandatory = $true)][string]$GitUsername,
   [Parameter(Mandatory = $true)][string]$GitToken
 )

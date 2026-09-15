@@ -92,7 +92,7 @@ Edge: never WRITE before PREVIEW+DRY. Never claim G2–G4 without fresh PLAN.
 ## 4. API contract (DEV)
 
 ```text
-POST /api/auth/login  {email,password,appCode:hris}
+POST /api/auth/login  {email,password,appCode:bnpi-pats}
 POST /api/device/hikvision/sdk-users/merge/plan  {deviceIds:[...]}
 POST /api/device/hikvision/sdk-users/merge/recovery/review  {planId, canaryModality?}
 POST /api/device/hikvision/sdk-users/merge/recovery/jobs
@@ -101,7 +101,7 @@ GET  /api/device/hikvision/sdk-users/merge/recovery/jobs/:jobId
 POST /api/device/hikvision/sdk-users/merge/jobs  (profile merge apply — only after residual plan validated)
 ```
 
-Admin: `admin@bandai.local` / `password123` / `appCode=hris`. Never print tokens.
+Admin: `admin@bandai.local` / `password123` / `appCode=bnpi-pats`. Never print tokens.
 
 ---
 

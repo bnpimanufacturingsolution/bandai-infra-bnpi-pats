@@ -7,7 +7,7 @@ four explicitly separated data planes:
 
 1. device inventory/current state;
 2. new evidence events in the selected time window;
-3. saved HRIS event rows and match results;
+3. saved BNPI PATS event rows and match results;
 4. sync-run reconciliation results.
 
 No client-side array, socket-only row, or current user list is allowed to
@@ -101,7 +101,7 @@ of one ambiguous device total:
       "endpoint": "ContentMgmt/logSearch",
       "evidenceSource": "ISAPI_LOGSEARCH",
       "onDeviceCount": 2478,
-      "savedHrisCount": 0,
+      "savedBnpiPatsCount": 0,
       "canImportCount": 2478,
       "leaveAloneCount": 0,
       "failedCount": 0,
@@ -113,7 +113,7 @@ of one ambiguous device total:
       "endpoint": "AccessControl/AcsEvent",
       "evidenceSource": "SDK_CALLBACK",
       "onDeviceCount": 2108,
-      "savedHrisCount": 23,
+      "savedBnpiPatsCount": 23,
       "canImportCount": 2085,
       "leaveAloneCount": 0,
       "failedCount": 0,
@@ -184,7 +184,7 @@ never map to fingerprint enrollment.
 
 Resolve `DeviceUser(deviceId + vendorUserId)` first, then its employee link,
 then legacy `Employee.deviceEmpId`. Preserve the device identifier even when no
-employee matches. The status filter is the HRIS match/processing result; it
+employee matches. The status filter is the BNPI PATS match/processing result; it
 does not change the event action.
 
 ## Sync-run behavior
@@ -208,7 +208,7 @@ Below it:
   `GET /api/device/events/item/:eventId`, not by the current table page.
 
 Primary columns: event time, category, action, employee/user, device, evidence,
-confidence, and HRIS result. The drawer shows event/received times, identifiers,
+confidence, and BNPI PATS result. The drawer shows event/received times, identifiers,
 evidence source/directness, raw code/string, runtime path, result, correlation,
 and formatted raw payload. Use flat borders/dividers and existing primitives;
 avoid nested dashboard cards.
@@ -218,13 +218,13 @@ avoid nested dashboard cards.
 The existing `Sync device logs` modal must place the new behavior here, not on a
 separate page:
 
-- top summary: devices checked, on-device total, already in HRIS, can import
+- top summary: devices checked, on-device total, already in BNPI PATS, can import
   now, will leave alone, failed, ready;
 - per Hikvision device: device identity and address;
 - per source family under that device:
   - `Operation logs` from `ContentMgmt/logSearch`;
   - `Attendance/access events` from `AccessControl/AcsEvent`;
-  - read state, endpoint family, on-device count, in-HRIS count, can-import
+  - read state, endpoint family, on-device count, in-BNPI PATS count, can-import
     count, leave-alone count, failed count, and last read/elapsed time.
 
 The primary action `Sync logs` runs only ready source plans. The UI must not
@@ -238,7 +238,7 @@ separate admin workflow.
   unreachable source.
 - Error: inline operational error with retry and exact failing plane.
 - Stale inventory: show `Needs reverify`, last successful source timestamp, and
-  cached HRIS count separately.
+  cached BNPI PATS count separately.
 - Partial sync: keep imported/skipped/failed/still-missing counts and job ID.
 
 ## Tests

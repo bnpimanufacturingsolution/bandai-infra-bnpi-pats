@@ -1,4 +1,4 @@
-$lb = @{email='admin@bandai.local';password='password123';appCode='hris'} | ConvertTo-Json -Compress
+$lb = @{email='admin@bandai.local';password='password123';appCode='bnpi-pats'} | ConvertTo-Json -Compress
 $lg = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $lb
 $tk = $lg.data.token
 $hd = @{Authorization="Bearer $tk"}

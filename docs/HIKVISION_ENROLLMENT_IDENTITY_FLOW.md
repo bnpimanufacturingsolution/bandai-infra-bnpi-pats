@@ -20,9 +20,9 @@ This document captures **what you want**, **what the architecture is**, **what t
 **Source of truth for live events:** HCNetSDK **listener callback only**  
 (`POST /api/hikvision/callback`). Not a product poller inventing people.
 
-Three Hikvision → HRIS event families:
+Three Hikvision → BNPI PATS event families:
 
-| Operator name | Hikvision reality | HRIS action |
+| Operator name | Hikvision reality | BNPI PATS action |
 |---|---|---|
 | **onUserCreate** | User add on panel (op / `addUserInfo` / major=3 then leaf) | DeviceEvent `USER_CREATED` + **DeviceUser** + raw metadata |
 | **onEnrollUser** | Fingerprint enroll (`addFp…` / FP management) | DeviceEvent `FINGERPRINT_ENROLLED` + DeviceUser credential refresh |
@@ -30,7 +30,7 @@ Three Hikvision → HRIS event families:
 
 ### Identity model (operator + schema truth)
 
-**`DeviceEvent` has `employeeNo String?` in schema** (`hris-api/prisma/schema/device.prisma`).
+**`DeviceEvent` has `employeeNo String?` in schema** (`bnpi-pats-api/prisma/schema/device.prisma`).
 
 | Model field | Example | Meaning |
 |---|---|---|
@@ -38,7 +38,7 @@ Three Hikvision → HRIS event families:
 | DeviceUser.employeeNo | `15` | Same plain id |
 | DeviceEvent.employeeNo | `15` | Plain id when resolved |
 | **Employee.deviceEmpId** | **`15`** | **Plain — same as device (NOT padded)** |
-| Employee.employeeId | `00015` / `01029` | HRIS business code (may show leading zeros) |
+| Employee.employeeId | `00015` / `01029` | BNPI PATS business code (may show leading zeros) |
 
 Live linked sample: vendor `1029` → `deviceEmpId=1029`, `employeeId=01029`.
 
@@ -53,7 +53,7 @@ Panel "15"
 | Click | Target |
 |---|---|
 | Device person `15` | Device Users details `vendorUserId=15` |
-| Employee (when linked) | HRIS employee; display may show `employeeId` `00015` |
+| Employee (when linked) | BNPI PATS employee; display may show `employeeId` `00015` |
 
 **Visual HTML:**  
 - Identity model: [`docs/hikvision-callback-event-flows.html`](./hikvision-callback-event-flows.html)  
@@ -122,18 +122,18 @@ When person **15** is created on one device:
 | “Polling invents enroll people” | No. Live path is **SDK ACS alarm → callback**. Multipass logSearch / inventory is **follow-up evidence** when the SDK packet has no plain person id. |
 | “Opaque token = employee number” | No. Opaque tokens are log privacy ids; plain id lives in **UserInfo/Search**. |
 | “DeviceUser is the event ledger” | No. **DeviceEvent** = history. **DeviceUser** = current inventory on device. |
-| “Listener green = employee matched” | No. Listener green = transport/SDK armed. Matching is a separate HRIS link step. |
+| “Listener green = employee matched” | No. Listener green = transport/SDK armed. Matching is a separate BNPI PATS link step. |
 | “Host reverse tunnel = VM can ping device LAN” | No. Reverse only exposes chosen TCP ports on VM loopback. |
-| “First socket always has plain person id on create/enroll” | **False.** ACS often has `dwEmployeeNo=0` on major=3. C++ must inventory-enrich before POST (2026-07-19 harden), or HRIS multipass later. Trace `alarm_callback` + live payload; do not invent. See `.grok/rules/02-sdk-callback-wire-truth.md`. |
+| “First socket always has plain person id on create/enroll” | **False.** ACS often has `dwEmployeeNo=0` on major=3. C++ must inventory-enrich before POST (2026-07-19 harden), or BNPI PATS multipass later. Trace `alarm_callback` + live payload; do not invent. See `.grok/rules/02-sdk-callback-wire-truth.md`. |
 
 ### C++ pre-POST enrich (2026-07-19)
 
-Before `POST /api/hikvision/callback`, `enrich_hris_job_before_post`:
+Before `POST /api/hikvision/callback`, `enrich_bnpi_pats_job_before_post`:
 
 1. If `employeeNo` empty on enroll/op → UserInfo inventory delta (with short retries) → set plain id + `identitySource=inventory_delta`.
 2. If plain known and FP/user-management **or major=3 / operation-sync / identity_repost** → read raw fingerprint templates into callback `fingerprints[]` (base64, not AES).
 3. If card known → optional `faceTemplate` / `facePicture` base64.
-4. Socket/HRIS then receive plain + templates on that same POST when enrich succeeds.
+4. Socket/BNPI PATS then receive plain + templates on that same POST when enrich succeeds.
 
 This matches Project Truth principles: **DeviceEvent is saved event truth; DeviceUser is inventory; evidence over assumption.**
 
@@ -162,7 +162,7 @@ SDK alarm (employeeNo="15")
   → POST /api/hikvision/callback
   → save DeviceEvent (taxonomy USER_CREATED / FP / …)
   → applyFastEnrollmentIdentityOnSdkCallback
-       1) upsert DeviceUser vendorUserId=15 (+ HRIS link 15↔00015 if employee exists)
+       1) upsert DeviceUser vendorUserId=15 (+ BNPI PATS link 15↔00015 if employee exists)
        2) set event.employeeNo=15, deviceUserId, MATCHED|UNMATCHED
        3) emit device-event:saved   ← socket #1 (plain id now)
        4) background UserInfo/Search → DeviceUser.rawPayload/vendorMetadata
@@ -174,8 +174,8 @@ SDK alarm (employeeNo="15")
 | Step | Location |
 |---|---|
 | SDK JSON body | `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` (`build_hikvision_callback_json`) |
-| Callback + non-attendance branch | `hris-api/app/hikvision/controller/callback.controller.ts` |
-| Fast identity | `applyFastEnrollmentIdentityOnSdkCallback` in `hris-api/helper/device-person-token.helper.ts` |
+| Callback + non-attendance branch | `bnpi-pats-api/app/hikvision/controller/callback.controller.ts` |
+| Fast identity | `applyFastEnrollmentIdentityOnSdkCallback` in `bnpi-pats-api/helper/device-person-token.helper.ts` |
 | DeviceUser UserInfo enrich | `enrichEnrollmentLifecycleEvent` same helper |
 | Socket | `emitDeviceEventSaved` → `device-event:saved` |
 
@@ -208,7 +208,7 @@ SDK major=3 SYNC_SIGNAL (employeeNo empty)
        │
        └─ resolveOpaqueViaDeviceUserInventoryDelta
             UserInfo/Search (enough pages for 300+ users)
-            new plains not in HRIS DeviceUser → upsert DeviceUser immediately
+            new plains not in BNPI PATS DeviceUser → upsert DeviceUser immediately
             1 opaque + new plain(s) → map highest pure-numeric plain (e.g. 15)
             DevicePersonToken(opaque → "15")
             backfill recent lifecycle events employeeNo=15 + deviceUserId
@@ -236,12 +236,12 @@ SDK major=3 SYNC_SIGNAL (employeeNo empty)
 
 ---
 
-### Flow C — HRIS-initiated UserInfo write (write-time capture)
+### Flow C — BNPI-PATS-initiated UserInfo write (write-time capture)
 
 **When:** Admin/API creates user via `UserInfo/Record` with known plain id.
 
 ```text
-POST UserInfo/Record (plain employeeNo known to HRIS)
+POST UserInfo/Record (plain employeeNo known to BNPI PATS)
   → scheduleWriteTimePersonTokenCapture
   → poll logSearch for opaque token
   → DevicePersonToken(opaque → plain) for future callbacks
@@ -272,7 +272,7 @@ sequenceDiagram
   autonumber
   participant Panel as Hikvision panel
   participant SDK as HCNetSDK listener (VM)
-  participant API as hris-api callback
+  participant API as bnpi-pats-api callback
   participant DB as Postgres
   participant UI as Device Events (browser)
   participant ISAPI as Device ISAPI
@@ -294,7 +294,7 @@ sequenceDiagram
   API->>DB: Map opaque→15; update events employeeNo=15
   API->>UI: device-event:saved (User 15)
 
-  Note over UI: Click device person → Device Users details for 15<br/>Click employee (if linked) → HRIS employee 00015
+  Note over UI: Click device person → Device Users details for 15<br/>Click employee (if linked) → BNPI PATS employee 00015
 ```
 
 ---
@@ -350,7 +350,7 @@ Device Events row
        │          &deviceUserView=shown   (Current view for brand-new plains)
        │
        └─ Employee name (only if employeeId linked)
-             → employee profile for that HRIS id
+             → employee profile for that BNPI PATS id
              (display code may show 00015)
 ```
 
@@ -420,7 +420,7 @@ Listener modal **armed/receiving** proves transport. Person labels prove identit
 
 $login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' `
   -ContentType 'application/json' `
-  -Body (@{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json)
+  -Body (@{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json)
 $h = @{ Authorization = "Bearer $($login.data.token)" }
 
 # Recent USER_CREATED for TEST A device id
@@ -451,10 +451,10 @@ Invoke-RestMethod -Headers $h -Uri 'http://localhost:3001/api/device/<TEST_A_ID>
 | `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` | WWG architecture twin |
 | `.wwg/wiki/05-architecture/hikvision-biometric-sync-architecture.md` | Biometric peer-sync target architecture |
 | `docs/HIKVISION_RUNTIME_TRUTH.md` | Broader runtime evidence |
-| `hris-api/helper/device-person-token.helper.ts` | Opaque map, inventory delta, fast identity |
-| `hris-api/helper/device-user-sync.helper.ts` | Pad candidates + link decision |
-| `hris-api/app/hikvision/controller/callback.controller.ts` | Callback orchestration |
-| `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` | SDK `alarm_callback` / `build_hikvision_callback_json` → HRIS post |
+| `bnpi-pats-api/helper/device-person-token.helper.ts` | Opaque map, inventory delta, fast identity |
+| `bnpi-pats-api/helper/device-user-sync.helper.ts` | Pad candidates + link decision |
+| `bnpi-pats-api/app/hikvision/controller/callback.controller.ts` | Callback orchestration |
+| `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` | SDK `alarm_callback` / `build_hikvision_callback_json` → BNPI PATS post |
 
 ---
 
@@ -464,7 +464,7 @@ Invoke-RestMethod -Headers $h -Uri 'http://localhost:3001/api/device/<TEST_A_ID>
 |---|---|---|
 | Ledger vs inventory | DeviceEvent vs DeviceUser | History must not be overwritten by current inventory; inventory must not invent lifecycle |
 | Opaque handling | Side table + payload keep | Device will not reverse-lookup opaque as employeeNo |
-| Pad rule | Keep `deviceEmpId` plain; allow padded `employeeId` display/match variants | Device keys stay physical; HRIS business codes may carry leading zeros |
+| Pad rule | Keep `deviceEmpId` plain; allow padded `employeeId` display/match variants | Device keys stay physical; BNPI PATS business codes may carry leading zeros |
 | Socket timing | Emit early, re-emit on resolve | Operator sees liveness immediately |
 | Plain source of truth for person | UserInfo/Search plain id | Op logs are not the person label |
 
@@ -482,10 +482,10 @@ Device person 15
   -> DeviceEvent.employeeNo = "15" when resolved
   -> Device Events "Device user" click opens Device User 15
 
-HRIS employee linked to that device person
+BNPI PATS employee linked to that device person
   -> Employee.deviceEmpId = "15" (plain, same as device)
   -> Employee.employeeId may be "00015" (display/org code)
-  -> Device Events "Employee" click opens the HRIS employee record
+  -> Device Events "Employee" click opens the BNPI PATS employee record
 ```
 
 The architecture is correct only if these two links remain separate. Never pad `deviceUserDetails` to `00015`. Never treat `deviceEmpId` as padded.
@@ -514,7 +514,7 @@ erDiagram
     string deviceId
     string vendorUserId "plain device user id, e.g. 15"
     string employeeNo "same physical person id when known"
-    string employeeId "nullable HRIS employee FK"
+    string employeeId "nullable BNPI PATS employee FK"
     string status
     json vendorMetadata
   }
@@ -523,7 +523,7 @@ erDiagram
     string deviceId
     string deviceUserId "nullable FK"
     string employeeNo "plain device person id when known"
-    string employeeId "nullable HRIS employee FK"
+    string employeeId "nullable BNPI PATS employee FK"
     string eventAction
     string eventCategory
     string status
@@ -531,7 +531,7 @@ erDiagram
   }
   EMPLOYEE {
     string id
-    string employeeId "HRIS code, may be 00015"
+    string employeeId "BNPI PATS code, may be 00015"
     string deviceEmpId "plain device person id e.g. 15"
   }
 ```
@@ -550,12 +550,12 @@ erDiagram
 
 | Layer | File | Contract |
 |---|---|---|
-| Saved event query | `hris-api/app/device/device.controller.ts` | Joins `DeviceEvent` to `DeviceUser` by FK, or by `(organizationId, deviceId, employeeNo/vendorUserId)` fallback for older rows. |
-| Callback identity | `hris-api/helper/device-person-token.helper.ts` | Preserves plain device person id and maps opaque tokens only with evidence. |
-| Device user matching | `hris-api/helper/device-user-sync.helper.ts` | Builds pad-aware employee candidates without rewriting `DeviceUser.vendorUserId`. |
-| Device Events UI | `hris-app/app/routes/admin/devices/events.tsx` | Separates Device user navigation from Employee navigation. |
-| Device Users modal | `hris-app/app/routes/admin/devices/enroll.tsx` | Opens details by plain `vendorUserId`, such as `15`. |
-| Regression proof | `hris-app/tests/smoke/admin-device-events-sync-modal.spec.ts` | Ensures Device user stays `15` while employee identity may be padded. |
+| Saved event query | `bnpi-pats-api/app/device/device.controller.ts` | Joins `DeviceEvent` to `DeviceUser` by FK, or by `(organizationId, deviceId, employeeNo/vendorUserId)` fallback for older rows. |
+| Callback identity | `bnpi-pats-api/helper/device-person-token.helper.ts` | Preserves plain device person id and maps opaque tokens only with evidence. |
+| Device user matching | `bnpi-pats-api/helper/device-user-sync.helper.ts` | Builds pad-aware employee candidates without rewriting `DeviceUser.vendorUserId`. |
+| Device Events UI | `bnpi-pats-app/app/routes/admin/devices/events.tsx` | Separates Device user navigation from Employee navigation. |
+| Device Users modal | `bnpi-pats-app/app/routes/admin/devices/enroll.tsx` | Opens details by plain `vendorUserId`, such as `15`. |
+| Regression proof | `bnpi-pats-app/tests/smoke/admin-device-events-sync-modal.spec.ts` | Ensures Device user stays `15` while employee identity may be padded. |
 
 ---
 
@@ -569,7 +569,7 @@ From 61.245.16.174 icmp_seq=1 Time to live exceeded
 From 61.245.16.174 icmp_seq=2 Time to live exceeded
 ```
 
-This means the shell is not reaching the private Hikvision LAN directly. The packet is escaping toward an upstream/public route and looping or expiring at `61.245.16.174`. That is a network route symptom, not proof that the Hikvision device is down and not proof that HRIS storage failed.
+This means the shell is not reaching the private Hikvision LAN directly. The packet is escaping toward an upstream/public route and looping or expiring at `61.245.16.174`. That is a network route symptom, not proof that the Hikvision device is down and not proof that BNPI PATS storage failed.
 
 Important distinction:
 
@@ -597,7 +597,7 @@ flowchart LR
   Host[Windows host on device LAN] -->|TCP 8000 / 443| Device
   Host -->|SSH reverse forwards| VM[Project Truth VM]
   SiteAgent[Hikvision site agent on device LAN] -->|HCNetSDK / ISAPI| Device
-  SiteAgent -->|POST callback JSON| API[hris-api /api/hikvision/callback]
+  SiteAgent -->|POST callback JSON| API[bnpi-pats-api /api/hikvision/callback]
   API --> DB[(Postgres models)]
 ```
 
@@ -632,18 +632,18 @@ flowchart TD
 
 ### On user create
 
-When the panel creates person `15`, HRIS should create or update:
+When the panel creates person `15`, BNPI PATS should create or update:
 
 | Table/model | Row created or updated | Important stored fields |
 |---|---|---|
-| `device_events` / `DeviceEvent` | One saved history row for user creation | `eventAction=USER_CREATED`, `eventCategory=USER_MANAGEMENT`, `employeeNo=15` when resolved, `deviceUserId` when linked to DeviceUser, `employeeId` only if HRIS employee safely matches, `payload` with raw callback/logSearch evidence, `dedupeKey` to avoid duplicate saves. |
+| `device_events` / `DeviceEvent` | One saved history row for user creation | `eventAction=USER_CREATED`, `eventCategory=USER_MANAGEMENT`, `employeeNo=15` when resolved, `deviceUserId` when linked to DeviceUser, `employeeId` only if BNPI PATS employee safely matches, `payload` with raw callback/logSearch evidence, `dedupeKey` to avoid duplicate saves. |
 | `device_users` / `DeviceUser` | One current identity row for person-on-device | `vendorUserId=15`, `employeeNo=15`, `deviceId=<TEST A>`, `status=UNMATCHED` if no Employee link or `ACTIVE`/linked status when matched, `rawPayload` from UserInfo/Search, `vendorMetadata` with vendor/user summary. |
 | `employees` / `Employee` | Usually not created by device callback | Existing Employee may be linked by `deviceEmpId=15`; `employeeId` may display as `00015`. |
 | `device_person_tokens` / `DevicePersonToken` | Only when Hikvision logSearch gives an opaque token | `opaqueToken=<base64/log token>`, `employeeNo=15`, `source=WRITE_TIME_CAPTURE` or inventory-delta source. |
 
 ### On fingerprint enroll
 
-When the fingerprint is enrolled for the same person `15`, HRIS should create or update:
+When the fingerprint is enrolled for the same person `15`, BNPI PATS should create or update:
 
 | Table/model | Row created or updated | Important stored fields |
 |---|---|---|
@@ -664,7 +664,7 @@ DeviceUser 15 row (operator expectation — viewable here)
   stores: current user identity and UserInfo raw metadata
   stores: fingerprint count/status from UserInfo/Search
   stores: RAW base64 templates at vendorMetadata.rawFingerprints.templates[].data
-           (and rawPayload._hrisDeviceMetadata.rawFingerprints)
+           (and rawPayload._bnpi_patsDeviceMetadata.rawFingerprints)
 
 DeviceUser.vendorMetadata.rawFingerprints
   present: true
@@ -681,7 +681,7 @@ After FINGERPRINT_ENROLLED, enrich runs UserInfo then schedules ISAPI FingerPrin
 sequenceDiagram
   autonumber
   participant Panel as Hikvision panel
-  participant API as hris-api callback/log resolver
+  participant API as bnpi-pats-api callback/log resolver
   participant DU as DeviceUser
   participant DE as DeviceEvent
   participant DPT as DevicePersonToken
@@ -711,7 +711,7 @@ sequenceDiagram
 DeviceUser = "who currently exists on this physical panel?"
 DeviceEvent = "what happened, when, and from what evidence?"
 DevicePersonToken = "how do we translate Hikvision's opaque operation-log token?"
-Employee = "which HRIS person, if any, owns that device identity?"
+Employee = "which BNPI PATS person, if any, owns that device identity?"
 ```
 
 That is why creating user `15` and enrolling a fingerprint can produce two DeviceEvent rows but only one DeviceUser row. The user row is the current identity; the event rows are the history.

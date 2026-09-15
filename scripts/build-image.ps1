@@ -254,9 +254,9 @@ if (-not $SkipBuild) {
   New-Item -ItemType Directory -Force -Path $stagingRoot | Out-Null
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'gitops') -Destination (Join-Path $stagingRoot 'gitops')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'appliance') -Destination (Join-Path $stagingRoot 'appliance')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-api') -Destination (Join-Path $stagingRoot 'hris-api')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-app') -Destination (Join-Path $stagingRoot 'hris-app')
-  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'hris-emp-app') -Destination (Join-Path $stagingRoot 'hris-emp-app')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-api') -Destination (Join-Path $stagingRoot 'bnpi-pats-api')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-app') -Destination (Join-Path $stagingRoot 'bnpi-pats-app')
+  Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'bnpi-pats-emp-app') -Destination (Join-Path $stagingRoot 'bnpi-pats-emp-app')
   Sync-PackerStagingDirectory -Source (Join-Path $repoRoot 'vendor\zkteco-linux') -Destination (Join-Path $stagingRoot 'vendor\zkteco-linux')
 
   Push-Location $PackerDir

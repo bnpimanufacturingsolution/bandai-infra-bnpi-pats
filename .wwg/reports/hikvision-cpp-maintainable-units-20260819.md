@@ -24,7 +24,7 @@ Current `develop` tip for this pack is `301ebb5` (or later if only docs/wrapper 
 | Fingerprint | `fingerprint.cpp` |
 | Face / stored-face | `face.cpp` |
 | Peer copy | `copy.cpp` |
-| HRIS POST / spool | `spool.cpp` |
+| BNPI PATS POST / spool | `spool.cpp` |
 | Time GET/SET | `time.cpp` + `include/hikvision_bio/time.hpp` |
 | Shared state | `include/hikvision_bio/runtime.hpp` |
 | CLI | `main.cpp` |

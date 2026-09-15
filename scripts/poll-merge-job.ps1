@@ -21,7 +21,7 @@ param(
   [string]$ApiBase = "http://localhost:3001",
   [string]$Email = "admin@bandai.local",
   [string]$Password = "password123",
-  [string]$AppCode = "hris",
+  [string]$AppCode = "bnpi-pats",
   [int]$IntervalSeconds = 8,
   [int]$MaxPolls = 120,
   [string]$EvidenceDir = "",
@@ -58,10 +58,10 @@ function Try-RestartLocalApi {
   } catch {}
   Start-Sleep -Seconds 2
   $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-  if (-not (Test-Path (Join-Path $repoRoot "hris-api"))) {
+  if (-not (Test-Path (Join-Path $repoRoot "bnpi-pats-api"))) {
     $repoRoot = (Get-Location).Path
   }
-  $apiDir = Join-Path $repoRoot "hris-api"
+  $apiDir = Join-Path $repoRoot "bnpi-pats-api"
   $logDir = Join-Path $repoRoot ".runtime\merge-poll-api-restart"
   New-Item -ItemType Directory -Force -Path $logDir | Out-Null
   Start-Process -FilePath "npm.cmd" -ArgumentList @("run", "dev") `
@@ -99,7 +99,7 @@ for ($i = 0; $i -lt $MaxPolls; $i++) {
         $terminal = [pscustomobject]@{
           outcome = "API_DOWN"
           jobId = $JobId
-          message = "API unreachable; restart failed. Agent must free port 3001 and npm.cmd run dev in hris-api."
+          message = "API unreachable; restart failed. Agent must free port 3001 and npm.cmd run dev in bnpi-pats-api."
         }
         break
       }
@@ -109,7 +109,7 @@ for ($i = 0; $i -lt $MaxPolls; $i++) {
       $terminal = [pscustomobject]@{
         outcome = "API_DOWN"
         jobId = $JobId
-        message = "API unreachable. Re-run with -RestartApiOnConnectFail or restart hris-api, then re-GET job (durable snapshot may mark failed_stale)."
+        message = "API unreachable. Re-run with -RestartApiOnConnectFail or restart bnpi-pats-api, then re-GET job (durable snapshot may mark failed_stale)."
       }
       break
     }

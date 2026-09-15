@@ -1,5 +1,5 @@
 param(
-  [string]$ProjectId = 'hris-492904',
+  [string]$ProjectId = 'bnpi-pats-492904',
   [string]$Zone = 'asia-southeast1-a',
   [string]$ImageName = '',
   [string]$ImageFamily = 'project-truth-node',
@@ -239,7 +239,7 @@ ip -br addr
 echo "===== project truth summary ====="
 project-truth-lan-summary || true
 echo "===== services ====="
-systemctl --no-pager --full --lines=40 status project-truth-firstboot-identity.service project-truth-lan-config.service project-truth-lan-summary.service project-truth-clean-console.service project-truth-hris.service || true
+systemctl --no-pager --full --lines=40 status project-truth-firstboot-identity.service project-truth-lan-config.service project-truth-lan-summary.service project-truth-clean-console.service project-truth-bnpi-pats.service || true
 echo "===== k3s ====="
 kubectl get nodes -o wide || true
 kubectl get pods -A -o wide || true

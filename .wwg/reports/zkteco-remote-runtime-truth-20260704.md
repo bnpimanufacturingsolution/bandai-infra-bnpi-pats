@@ -16,7 +16,7 @@ as practical, while identifying when a read takes too long for interactive use.
 
 In scope:
 
-- Prove remote SSH path through `ssh project-truth-hris`.
+- Prove remote SSH path through `ssh project-truth-bnpi-pats`.
 - Query the active Linux/PyZK bridge runtime on the remote VM.
 - Check all four known ZKTeco devices:
   - `10.184.38.9:4370`
@@ -25,7 +25,7 @@ In scope:
   - `10.184.38.10:4370`
 - Measure TCP reachability, PyZK handshake, `get_users()`, and
   `get_attendance()` timing.
-- Compare source-device counts to existing DEV HRIS saved ZKTeco rows.
+- Compare source-device counts to existing DEV BNPI PATS saved ZKTeco rows.
 - Capture performance recommendation without silently promoting it to accepted
   project truth.
 
@@ -35,7 +35,7 @@ Out of scope:
 - Clearing attendance.
 - Changing device config.
 - Starting/stopping the VM-managed Cloudflare Tunnel.
-- Triggering HRIS sync writes.
+- Triggering BNPI PATS sync writes.
 - Fixing the unreachable devices.
 
 ## Remote Runtime Proof
@@ -43,7 +43,7 @@ Out of scope:
 Remote SSH was verified with:
 
 ```text
-ssh project-truth-hris
+ssh project-truth-bnpi-pats
 ```
 
 Evidence returned:
@@ -51,7 +51,7 @@ Evidence returned:
 - Hostname: `project-truth-node`
 - VM time during proof: `2026-07-04T04:39:56+00:00`
 - VM `eth0`: `10.184.37.19/24`, `10.184.37.78/24`
-- `cloudflared-bnpi-hris.service`: `active`
+- `cloudflared-bnpi-pats.service`: `active`
 - Runtime source checkout: `/var/lib/project-truth/ansible-pull`
 - Runtime branch/commit: `develop@9a82734`
 
@@ -252,11 +252,11 @@ Performance truth:
 - Full source-device attendance extraction exceeds the user's 15-second
   interactive threshold even on reachable devices.
 
-## HRIS DEV Saved Count Comparison
+## BNPI PATS DEV Saved Count Comparison
 
-DEV HRIS saved ZKTeco rows were queried from `hris-postgres-dev`:
+DEV BNPI PATS saved ZKTeco rows were queried from `bnpi-pats-postgres-dev`:
 
-| Device | DEV HRIS saved `ZKTECO_EVENT` rows | Latest HRIS event time | Latest received time |
+| Device | DEV BNPI PATS saved `ZKTECO_EVENT` rows | Latest BNPI PATS event time | Latest received time |
 | --- | ---: | --- | --- |
 | `10.184.38.10` | 72,090 | `2026-07-01 08:30:36` | `2026-07-01 08:35:07.545` |
 | `10.184.38.234` | 55,833 | `2026-07-01 13:55:29` | `2026-07-01 08:14:52.281` |
@@ -265,7 +265,7 @@ DEV HRIS saved ZKTeco rows were queried from `hris-postgres-dev`:
 
 Interpretation:
 
-- HRIS already contains more saved ZKTeco rows for some devices than PyZK can
+- BNPI PATS already contains more saved ZKTeco rows for some devices than PyZK can
   currently read from the source terminals.
 - Current PyZK reads should not be treated as full historical parity evidence.
 - The likely runtime reality is either source-device log truncation/rotation,

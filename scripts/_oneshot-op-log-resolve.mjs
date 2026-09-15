@@ -2,13 +2,13 @@
  * One-shot: pull recent addUserInfo / addFp logSearch rows for TEST A and save lifecycle events.
  * Uses the same helper the SDK callback schedules after major=3 SYNC_SIGNAL.
  */
-import { PrismaClient } from "../hris-api/generated/prisma/index.js";
-import { scheduleOperationLogResolveAfterSdkSignal } from "../hris-api/helper/device-person-token.helper.ts";
+import { PrismaClient } from "../bnpi-pats-api/generated/prisma/index.js";
+import { scheduleOperationLogResolveAfterSdkSignal } from "../bnpi-pats-api/helper/device-person-token.helper.ts";
 
 const dbUrl =
 	process.env.FORCE_DATABASE_URL ||
 	process.env.DATABASE_URL ||
-	"postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public";
+	"postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public";
 
 const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
 const deviceId = process.env.DEVICE_ID || "cmrlgqsjv000oob01165tbd8n";

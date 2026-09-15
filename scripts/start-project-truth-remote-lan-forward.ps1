@@ -1,6 +1,6 @@
 param(
   [string]$LanIp = '10.184.37.19',
-  [string]$SshAlias = 'project-truth-hris',
+  [string]$SshAlias = 'project-truth-bnpi-pats',
   [switch]$StopExisting,
   [switch]$IncludeProdApi,
   [switch]$Force

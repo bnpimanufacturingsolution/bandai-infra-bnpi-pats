@@ -126,7 +126,7 @@ bool capture_face_template(
     if (handle < 0) {
         emit_json({
             {"event", "source_face_capture"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"ok", "false"},
             {"lastError", std::to_string(NET_DVR_GetLastError())}
         });
@@ -145,7 +145,7 @@ bool capture_face_template(
     }
     emit_json({
         {"event", "source_face_capture"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"ok", ok ? "true" : "false"},
         {"progress", std::to_string(ctx.progress)},
         {"templateSize", std::to_string(ctx.face_template.size())},
@@ -194,7 +194,7 @@ bool write_face_and_template(
     if (!execute_mode) {
         emit_json({
             {"event", "peer_face_write_preview"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"cardNo", card_no.empty() ? "" : "[redacted]"},
             {"templateSize", std::to_string(face_template.size())},
@@ -206,7 +206,7 @@ bool write_face_and_template(
     if (card_no.empty()) {
         emit_json({
             {"event", "peer_face_write"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"failReason", "card_no_required_for_face_and_template"},
@@ -238,7 +238,7 @@ bool write_face_and_template(
         const DWORD start_error = NET_DVR_GetLastError();
         emit_json({
             {"event", "peer_face_write"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"failReason", "start_remote_config_failed"},
@@ -279,7 +279,7 @@ bool write_face_and_template(
         : (ctx.sdk_error != 0 ? ctx.sdk_error : NET_DVR_GetLastError());
     emit_json({
         {"event", "peer_face_write"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
@@ -324,7 +324,7 @@ bool read_face_and_template(
     if (handle < 0) {
         emit_json({
             {"event", "source_face_read"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"cardNo", card_no.empty() ? "" : "[redacted]"},
             {"ok", "false"},
@@ -345,7 +345,7 @@ bool read_face_and_template(
     }
     emit_json({
         {"event", "source_face_read"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
@@ -607,7 +607,7 @@ bool export_biometric_templates_for_employee(
     bool include_face) {
     ReconcileJob job;
     job.source_host = source.config.host;
-    job.source_device_id = source.config.hris_device_id;
+    job.source_device_id = source.config.bnpi_pats_device_id;
     job.employee_no = employee_no;
     job.include_fingerprints = include_fingerprints;
     job.include_face_recognition = include_face;
@@ -648,7 +648,7 @@ bool export_biometric_templates_for_employee(
 
     emit_sensitive_json_stdout_only({
         {"event", "manual_biometric_export_completed"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"userReadOk", user_read_ok ? "true" : "false"},
@@ -676,11 +676,11 @@ bool delete_face_for_exact_owner(
     const std::string authorized_target =
         authorized_target_env == nullptr ? "" : authorized_target_env;
     if (authorized_target.empty() ||
-        authorized_target != target.config.hris_device_id ||
+        authorized_target != target.config.bnpi_pats_device_id ||
         employee_no.empty()) {
         emit_json({
             {"event", "face_delete_blocked"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"reason", "authorized_exact_canary_target_required"}
         });
@@ -688,14 +688,14 @@ bool delete_face_for_exact_owner(
     }
 
     ReconcileJob job;
-    job.source_device_id = target.config.hris_device_id;
+    job.source_device_id = target.config.bnpi_pats_device_id;
     job.source_host = target.config.host;
     job.employee_no = employee_no;
     std::string pre_user_json;
     if (!read_source_user(target, job, &pre_user_json)) {
         emit_json({
             {"event", "face_delete_blocked"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"reason", "exact_employee_userinfo_not_found"}
         });
@@ -710,7 +710,7 @@ bool delete_face_for_exact_owner(
         pre_card_count < 0) {
         emit_json({
             {"event", "face_delete_blocked"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"reason", pre_face_count < 1
                 ? "exact_employee_has_no_face"
@@ -728,7 +728,7 @@ bool delete_face_for_exact_owner(
     if (!read_source_card(target, job, &card_json)) {
         emit_json({
             {"event", "face_delete_blocked"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"reason", "exact_employee_owned_card_not_found"}
         });
@@ -741,7 +741,7 @@ bool delete_face_for_exact_owner(
     if (!execute_mode) {
         emit_json({
             {"event", "face_delete_preview"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"exactCardOwnerVerified", "true"},
             {"preDeleteFaceCount", std::to_string(pre_face_count)},
@@ -800,7 +800,7 @@ bool delete_face_for_exact_owner(
         exact_card_retained;
     emit_json({
         {"event", "face_delete_reread_completed"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"deleteAccepted", deleted == TRUE ? "true" : "false"},
         {"sdkLastError", std::to_string(delete_error)},

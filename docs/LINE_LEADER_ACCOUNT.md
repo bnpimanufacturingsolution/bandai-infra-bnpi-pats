@@ -7,13 +7,13 @@ role wiring works end-to-end, how to verify it, and how to manage more line lead
 
 > **2026-09-08 login fix:** the first real browser login with this account exposed a
 > frontend bug — the post-login role allowlists in
-> `hris-app/app/routes/auth/login.tsx` and `hris-app/app/routes/landing.tsx` were
-> missing `"hris-line-leader"`, so line leaders were dumped on the Access Denied
+> `bnpi-pats-app/app/routes/auth/login.tsx` and `bnpi-pats-app/app/routes/landing.tsx` were
+> missing `"bnpi-pats-line-leader"`, so line leaders were dumped on the Access Denied
 > (`/403`) page even though API login, role derivation, and `/dashboard` (which renders
 > `ManagerDashboard` for the role) were all correct. Both allowlists now include the
-> role, proven by `hris-app/tests/smoke/line-leader-account-login.spec.ts` (headless
+> role, proven by `bnpi-pats-app/tests/smoke/line-leader-account-login.spec.ts` (headless
 > Playwright: login 200 → lands on `/dashboard` → `/auth/me` returns
-> `hris-line-leader`, `isManager=true`).
+> `bnpi-pats-line-leader`, `isManager=true`).
 
 ---
 
@@ -24,7 +24,7 @@ role wiring works end-to-end, how to verify it, and how to manage more line lead
 | Login email | `leader@bandai.local` |
 | Password | `password123` (standard local DEV default) |
 | User ID | `cmtrfdw6d0003vxs830s1d9zs` |
-| Auth role | `hris-line-leader` |
+| Auth role | `bnpi-pats-line-leader` |
 | Manager class | `isManager: true` |
 | Account status | `active` |
 | Created | 2026-09-07T15:58:47Z |
@@ -51,15 +51,15 @@ reconcileSectionLineLeaders  (transactional diff on section create/update/delete
 syncLineLeaderRolesForEmployees  -> deriveRoleAndFlags({ isLineLeader: true })
         |                          precedence: HR > manager level > line leader > plain employee
         v
-users.role = "hris-line-leader"  (persisted; never downgrades an HR/manager role)
+users.role = "bnpi-pats-line-leader"  (persisted; never downgrades an HR/manager role)
         |
         v
 POST /api/auth/login  -> token
-GET  /api/auth/me     -> role=hris-line-leader, isManager=true, employee metadata embedded
+GET  /api/auth/me     -> role=bnpi-pats-line-leader, isManager=true, employee metadata embedded
 ```
 
 Key guarantee: add a leader → role upgrades automatically. Remove a leader or delete the
-section → the ex-leader is auto-demoted back to `hris-employee` (unless they separately
+section → the ex-leader is auto-demoted back to `bnpi-pats-employee` (unless they separately
 hold an HR or manager role). Employee hard delete also detaches section head and clears
 line-leader membership rows before deleting.
 
@@ -73,17 +73,17 @@ All checks ran against the local DEV runtime with the admin actor
 1. **Membership exists** — `GET /api/section?limit=100&document=true` shows section
    **Assembly** with `lineLeaders: [TESTBEN004]`.
 2. **Role persisted** — employee record for TESTBEN004 includes its `user`:
-   `email=leader@bandai.local`, `role=hris-line-leader`, `status=active`.
+   `email=leader@bandai.local`, `role=bnpi-pats-line-leader`, `status=active`.
 3. **Login works** — `POST /api/auth/login` with the credentials returned 200 and a
    token; `lastLogin` updated live.
 4. **Derived truth correct** — `GET /api/auth/me` (with the leader token) returned
-   `role=hris-line-leader`, `metadata.employee.isManager=true`, `isHrManager=false`,
+   `role=bnpi-pats-line-leader`, `metadata.employee.isManager=true`, `isHrManager=false`,
    with TESTBEN004's employee metadata correctly embedded.
 5. **Browser UI login works** — headless Playwright through the real login form:
    `POST /api/auth/login` 200 → redirects to `/dashboard` (ManagerDashboard, not 403) →
-   in-page `GET /api/auth/me` returns `hris-line-leader`. Screenshot:
+   in-page `GET /api/auth/me` returns `bnpi-pats-line-leader`. Screenshot:
    `line-leader-dashboard.png` in the evidence directory. Regression spec:
-   `hris-app/tests/smoke/line-leader-account-login.spec.ts`.
+   `bnpi-pats-app/tests/smoke/line-leader-account-login.spec.ts`.
 
 Evidence pack: `.runtime/line-leader-account-check-20260908-092132/`
 (`SUMMARY.md`, `sections-list.json`, `leader-login-success.json`, `leader-me.json`,
@@ -94,13 +94,13 @@ Evidence pack: `.runtime/line-leader-account-check-20260908-092132/`
 
 ```powershell
 # Login as the line leader
-$loginBody = @{ email='leader@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
+$loginBody = @{ email='leader@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
 $ll = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $loginBody
 $h = @{ Authorization = "Bearer $($ll.data.token)" }
 
 # Derived role truth
 $me = Invoke-RestMethod -Method Get 'http://localhost:3001/api/auth/me' -Headers $h
-$me.data.role            # -> hris-line-leader
+$me.data.role            # -> bnpi-pats-line-leader
 $me.data.metadata.employee.isManager   # -> True
 ```
 
@@ -162,13 +162,13 @@ Requires the local stack: API on `:3001` and the K3s DEV DB forward on `127.0.0.
 - Overtime for members: `docs/LEADER_ASSIGN_OVERTIME.md`
 - Project Truth: `.wwg/wiki/project-truth.md` — "Section Line Leader assignment — IMPLEMENTED (2026-09-07)"
 - Terminology: `.wwg/wiki/terminology.md` — "Line Leader" entry
-- Schema: `hris-api/prisma/schema-postgres/sectionlineleader.prisma`
-- Backend: `hris-api/helper/section-line-leaders.helper.ts`,
-  `hris-api/helper/employee-role-sync.helper.ts` (`syncLineLeaderRolesForEmployees`),
-  `hris-api/utils/role-derivation.ts`, `hris-api/app/section/section.controller.ts`
-- Frontend: `hris-app/app/routes/admin/configuration/sections.tsx`
-- Tests: `hris-api/tests/section-line-leaders.spec.ts` (15/15),
-  `hris-api/tests/role-derivation.spec.ts` (55/55),
-  `hris-app/tests/smoke/admin-config-sections-line-leaders.spec.ts` (2/2)
+- Schema: `bnpi-pats-api/prisma/schema-postgres/sectionlineleader.prisma`
+- Backend: `bnpi-pats-api/helper/section-line-leaders.helper.ts`,
+  `bnpi-pats-api/helper/employee-role-sync.helper.ts` (`syncLineLeaderRolesForEmployees`),
+  `bnpi-pats-api/utils/role-derivation.ts`, `bnpi-pats-api/app/section/section.controller.ts`
+- Frontend: `bnpi-pats-app/app/routes/admin/configuration/sections.tsx`
+- Tests: `bnpi-pats-api/tests/section-line-leaders.spec.ts` (15/15),
+  `bnpi-pats-api/tests/role-derivation.spec.ts` (55/55),
+  `bnpi-pats-app/tests/smoke/admin-config-sections-line-leaders.spec.ts` (2/2)
 - Account verification evidence (2026-09-08):
   `.runtime/line-leader-account-check-20260908-092132/`

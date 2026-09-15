@@ -5,7 +5,7 @@
 
 .NOTES
   - Safe to re-run (probe-first).
-  - Does NOT start hris-api itself (assumes already running).
+  - Does NOT start bnpi-pats-api itself (assumes already running).
   - Listener restart remains an API/VM step after this script.
 #>
 param(
@@ -36,7 +36,7 @@ function Get-VmSshCandidates {
 
   @(
     [pscustomobject]@{ Label = 'lan:infra@10.184.37.19'; Args = $directArgs },
-    [pscustomobject]@{ Label = 'alias:project-truth-hris'; Args = @('project-truth-hris') }
+    [pscustomobject]@{ Label = 'alias:project-truth-bnpi-pats'; Args = @('project-truth-bnpi-pats') }
   )
 }
 
@@ -65,7 +65,7 @@ function Invoke-VmSsh {
     [int]$ConnectTimeoutSeconds = 12
   )
   if (-not $script:VmSshCandidate) {
-    throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-hris)."
+    throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-bnpi-pats)."
   }
   $args = @('-o', "ConnectTimeout=$ConnectTimeoutSeconds", '-o', 'BatchMode=yes') + @($script:VmSshCandidate.Args) + @($Command)
   & ssh.exe @args
@@ -77,7 +77,7 @@ function Invoke-VmSshScript {
     [int]$ConnectTimeoutSeconds = 20
   )
   if (-not $script:VmSshCandidate) {
-    throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-hris)."
+    throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-bnpi-pats)."
   }
   $args = @('-o', "ConnectTimeout=$ConnectTimeoutSeconds", '-o', 'BatchMode=yes') + @($script:VmSshCandidate.Args) + @('bash -s')
   $Script | & ssh.exe @args
@@ -91,7 +91,7 @@ function Resolve-HikvisionBridgeDeviceIp {
     return $DeviceIp
   }
 
-  $resolver = Join-Path $repoRoot "hris-api\scripts\resolve-hikvision-vm-bridge-targets.cjs"
+  $resolver = Join-Path $repoRoot "bnpi-pats-api\scripts\resolve-hikvision-vm-bridge-targets.cjs"
   if (Test-Path -LiteralPath $resolver) {
     try {
       $json = & node.exe $resolver 2>$null
@@ -379,7 +379,7 @@ UNIT=project-truth-hikvision-hot-reload-listener.service
 
 # Prove current listener target from the LATEST service_started / apiBase line only.
 # (journal may still contain older 3101 lines — do not treat those as current.)
-RECENT=`$(sudo -n journalctl -u "`$UNIT" -n 80 --no-pager 2>/dev/null | grep -E 'service_started|hrisApiBase|\"apiBase\"' | tail -n 12 || true)
+RECENT=`$(sudo -n journalctl -u "`$UNIT" -n 80 --no-pager 2>/dev/null | grep -E 'service_started|bnpiPatsApiBase|\"apiBase\"' | tail -n 12 || true)
 LAST=`$(echo "`$RECENT" | tail -n 1 || true)
 if echo "`$LAST" | grep -q "127.0.0.1:$ApiRemotePort"; then
   if systemctl is-active --quiet "`$UNIT"; then
@@ -417,7 +417,7 @@ sudo -n systemctl daemon-reload
 sudo -n systemctl restart "`$UNIT"
 sleep 3
 systemctl is-active "`$UNIT"
-sudo -n journalctl -u "`$UNIT" -n 40 --no-pager 2>/dev/null | grep -E 'service_started|hrisApiBase|apiBase' | tail -n 4 || true
+sudo -n journalctl -u "`$UNIT" -n 40 --no-pager 2>/dev/null | grep -E 'service_started|bnpiPatsApiBase|apiBase' | tail -n 4 || true
 "@
     $retarget = Invoke-VmSshScript -Script $retargetScript -ConnectTimeoutSeconds 20 2>&1
     $retargetText = ($retarget | Out-String)
@@ -459,7 +459,7 @@ $result.message = if ($result.ok -and $apiReverseOk) {
 } elseif (-not $result.dbOpen) {
   "Database tunnel not ready on port $DbLocalPort"
 } else {
-  "Reverse tunnel to device not ready - check direct LAN SSH or project-truth-hris / Cloudflare Access"
+  "Reverse tunnel to device not ready - check direct LAN SSH or project-truth-bnpi-pats / Cloudflare Access"
 }
 
 # Compact single-line JSON so host API parsers do not choke on pretty multi-line output.

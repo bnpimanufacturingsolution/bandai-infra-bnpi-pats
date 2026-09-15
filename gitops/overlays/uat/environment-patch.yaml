@@ -9,5 +9,5 @@ data:
   app_port: "3200"
   api_port: "3201"
   postgres_host_port: "15434"
-  start_command: project-truth-hris-env-start uat
-  seed_command: project-truth-hris-env-seed uat
+  start_command: project-truth-bnpi-pats-env-start uat
+  seed_command: project-truth-bnpi-pats-env-seed uat

@@ -2,8 +2,8 @@ param(
   [string]$DeviceIp = '',
   [int]$HttpPort = 80,
   [int]$SdkPort = 8000,
-  [string]$HttpHostname = $(if ($env:PROJECT_TRUTH_CF_HIKVISION_HTTP_HOSTNAME) { $env:PROJECT_TRUTH_CF_HIKVISION_HTTP_HOSTNAME } else { 'hikvision-http.bnpi-hris.tech' }),
-  [string]$SdkHostname = $(if ($env:PROJECT_TRUTH_CF_HIKVISION_SDK_HOSTNAME) { $env:PROJECT_TRUTH_CF_HIKVISION_SDK_HOSTNAME } else { 'hikvision-sdk.bnpi-hris.tech' }),
+  [string]$HttpHostname = $(if ($env:PROJECT_TRUTH_CF_HIKVISION_HTTP_HOSTNAME) { $env:PROJECT_TRUTH_CF_HIKVISION_HTTP_HOSTNAME } else { 'hikvision-http.bnpi-pats.tech' }),
+  [string]$SdkHostname = $(if ($env:PROJECT_TRUTH_CF_HIKVISION_SDK_HOSTNAME) { $env:PROJECT_TRUTH_CF_HIKVISION_SDK_HOSTNAME } else { 'hikvision-sdk.bnpi-pats.tech' }),
   [int]$StartupTimeoutSeconds = 10,
   [switch]$StopExisting
 )
@@ -37,7 +37,7 @@ if ($StopExisting) {
 }
 
 if ([string]::IsNullOrWhiteSpace($DeviceIp)) {
-  throw 'Pass -DeviceIp <hikvision-device-ip>. This helper publishes only the device TCP ports, not the HRIS app/API.'
+  throw 'Pass -DeviceIp <hikvision-device-ip>. This helper publishes only the device TCP ports, not the BNPI PATS app/API.'
 }
 
 $cloudflared = Get-Command cloudflared -ErrorAction SilentlyContinue

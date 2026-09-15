@@ -1,75 +1,75 @@
 services:
-  hris-postgres-dev:
+  bnpi-pats-postgres-dev:
     image: postgres:16-alpine
-    container_name: hris-postgres-dev
+    container_name: bnpi-pats-postgres-dev
     restart: unless-stopped
     env_file:
-      - ./env/hris-api.env
+      - ./env/bnpi-pats-api.env
     ports:
       - "15433:5432"
     volumes:
       - postgresdata-dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-hris}\""]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-bnpi-pats}\""]
       interval: 10s
       timeout: 5s
       retries: 10
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
 
-  hris-api-db-init-dev:
+  bnpi-pats-api-db-init-dev:
     build:
-      context: ../hris-api
+      context: ../bnpi-pats-api
       dockerfile: Dockerfile
       target: db-init
-    image: hris-api-db-init:develop
-    container_name: hris-api-db-init-dev
+    image: bnpi-pats-api-db-init:develop
+    container_name: bnpi-pats-api-db-init-dev
     restart: "no"
     env_file:
-      - ./env/hris-api.env
+      - ./env/bnpi-pats-api.env
     environment:
       NODE_ENV: development
       APP_ENV: dev
-      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
-      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
-      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      PG_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
+      DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
     # No prisma-seed on appliance DBs (seed can delete timesheet/attendance). Schema-only; prisma db push without --accept-data-loss is fail-closed on destructive drift.
     command: >
       sh -c "npm run prisma-postgres:push"
     depends_on:
-      hris-postgres-dev:
+      bnpi-pats-postgres-dev:
         condition: service_healthy
 
-  hris-api-dev:
+  bnpi-pats-api-dev:
     build:
-      context: ../hris-api
+      context: ../bnpi-pats-api
       dockerfile: Dockerfile
       args:
         PROJECT_TRUTH_BUILD_SHA: ${PROJECT_TRUTH_BUILD_SHA:-local-unattested}
-    image: hris-api-local:develop
-    container_name: hris-api-dev
+    image: bnpi-pats-api-local:develop
+    container_name: bnpi-pats-api-dev
     restart: unless-stopped
     env_file:
-      - ./env/hris-api.env
+      - ./env/bnpi-pats-api.env
     environment:
       NODE_ENV: development
       APP_ENV: dev
       STORAGE_PROVIDER: local
       LOCAL_UPLOAD_ROOT: /app/uploads
-      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
-      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
-      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      PG_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
+      DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
       BACKUP_ENABLED: "true"
       BACKUP_TIMEZONE: Asia/Manila
       BACKUP_CRON: "0 12 * * *"
-      BACKUP_DIR: /var/backups/hris
+      BACKUP_DIR: /var/backups/bnpi-pats
       BACKUP_RETENTION_DAYS: "0"
       OTEL_ENABLED: "true"
-      OTEL_SERVICE_NAME: hris-api-dev
+      OTEL_SERVICE_NAME: bnpi-pats-api-dev
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,service.namespace=hris
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,service.namespace=bnpi-pats
       OTEL_TRACES_SAMPLER: parentbased_traceidratio
       OTEL_TRACES_SAMPLER_ARG: "1.0"
       API_ACTIVITY_LOGGING_ENABLED: "true"
@@ -84,18 +84,18 @@ services:
       PROJECT_TRUTH_HIKVISION_VM_API_BASE: http://127.0.0.1:3101
     volumes:
       - apiuploads-dev:/app/uploads
-      - ./backups/dev:/var/backups/hris
+      - ./backups/dev:/var/backups/bnpi-pats
       - ../data/import:/data/import:ro
       - ../source-inputs-organized:/source-inputs-organized:ro
       - ../docs:/docs:ro
       - /var/lib/project-truth/ssh:/var/run/project-truth/ssh:ro
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     ports:
       - "3101:3001"
     depends_on:
-      hris-postgres-dev:
+      bnpi-pats-postgres-dev:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
@@ -104,68 +104,68 @@ services:
       retries: 12
       start_period: 20s
 
-  hris-api-cron-dev:
+  bnpi-pats-api-cron-dev:
     build:
-      context: ../hris-api
+      context: ../bnpi-pats-api
       dockerfile: Dockerfile
-    image: hris-api-local:develop
-    container_name: hris-api-cron-dev
+    image: bnpi-pats-api-local:develop
+    container_name: bnpi-pats-api-cron-dev
     restart: unless-stopped
     env_file:
-      - ./env/hris-api.env
+      - ./env/bnpi-pats-api.env
     environment:
       NODE_ENV: development
       APP_ENV: dev
-      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
-      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
-      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-dev:5432/hris
+      PG_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
+      DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
       BACKUP_ENABLED: "true"
       BACKUP_TIMEZONE: Asia/Manila
       BACKUP_CRON: "0 12 * * *"
-      BACKUP_DIR: /var/backups/hris
+      BACKUP_DIR: /var/backups/bnpi-pats
       BACKUP_RETENTION_DAYS: "0"
       OTEL_ENABLED: "true"
-      OTEL_SERVICE_NAME: hris-api-cron-dev
+      OTEL_SERVICE_NAME: bnpi-pats-api-cron-dev
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,service.namespace=hris
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,service.namespace=bnpi-pats
       OTEL_TRACES_SAMPLER: parentbased_traceidratio
       OTEL_TRACES_SAMPLER_ARG: "1.0"
       LOG_FORMAT: json
     command: ["node", "dist/cron.js"]
     volumes:
-      - ./backups/dev:/var/backups/hris
+      - ./backups/dev:/var/backups/bnpi-pats
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     depends_on:
-      hris-postgres-dev:
+      bnpi-pats-postgres-dev:
         condition: service_healthy
     healthcheck:
       disable: true
 
-  hris-app-dev:
+  bnpi-pats-app-dev:
     build:
-      context: ../hris-app
+      context: ../bnpi-pats-app
       dockerfile: Dockerfile
-    image: hris-app-local:develop
-    container_name: hris-app-dev
+    image: bnpi-pats-app-local:develop
+    container_name: bnpi-pats-app-dev
     restart: unless-stopped
     environment:
       APP_ENV: dev
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
-      HRIS_API_ORIGIN: "http://hris-api-dev:3001"
+      BNPI_PATS_API_ORIGIN: "http://bnpi-pats-api-dev:3001"
     volumes:
-      - ../hris-app/app/assets:/app/build/client/app/assets:ro
+      - ../bnpi-pats-app/app/assets:/app/build/client/app/assets:ro
     ports:
       - "3100:3000"
     depends_on:
-      hris-api-dev:
+      bnpi-pats-api-dev:
         condition: service_started
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
       interval: 15s
@@ -173,28 +173,28 @@ services:
       retries: 12
       start_period: 20s
 
-  hris-emp-app-dev:
+  bnpi-pats-emp-app-dev:
     build:
       context: ..
-      dockerfile: appliance/dockerfiles/hris-emp-app.Dockerfile
+      dockerfile: appliance/dockerfiles/bnpi-pats-emp-app.Dockerfile
       args:
         VITE_API_BASE_URL: /api
-    image: hris-emp-app-local:develop
-    container_name: hris-emp-app-dev
+    image: bnpi-pats-emp-app-local:develop
+    container_name: bnpi-pats-emp-app-dev
     restart: unless-stopped
     environment:
       PORT: "3000"
-      HRIS_API_ORIGIN: "http://host.docker.internal:3101"
+      BNPI_PATS_API_ORIGIN: "http://host.docker.internal:3101"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "3310:3000"
     depends_on:
-      hris-api-dev:
+      bnpi-pats-api-dev:
         condition: service_started
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1 || exit 1"]
       interval: 15s
@@ -214,7 +214,7 @@ services:
       - --poll-seconds
       - "${ZKTECO_POLL_SECONDS_DEV:-${ZKTECO_POLL_SECONDS:-60}}"
       - --webhook-url
-      - http://hris-api-dev:3001/api/zkteco/events
+      - http://bnpi-pats-api-dev:3001/api/zkteco/events
     environment:
       ZKTECO_STATUS_HOST: 0.0.0.0
       ZKTECO_STATUS_PORT: 4371
@@ -222,11 +222,11 @@ services:
     ports:
       - "4372:4371"
     depends_on:
-      hris-api-dev:
+      bnpi-pats-api-dev:
         condition: service_healthy
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     healthcheck:
       test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:4371/health', timeout=5).read()\nPY"]
       interval: 15s
@@ -234,75 +234,75 @@ services:
       retries: 12
       start_period: 10s
 
-  hris-postgres-uat:
+  bnpi-pats-postgres-uat:
     image: postgres:16-alpine
-    container_name: hris-postgres-uat
+    container_name: bnpi-pats-postgres-uat
     restart: unless-stopped
     env_file:
-      - ./env/hris-api.env
+      - ./env/bnpi-pats-api.env
     ports:
       - "15434:5432"
     volumes:
       - postgresdata-uat:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-hris}\""]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d \"$${POSTGRES_DB:-bnpi-pats}\""]
       interval: 10s
       timeout: 5s
       retries: 10
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
 
-  hris-api-db-init-uat:
+  bnpi-pats-api-db-init-uat:
     build:
-      context: ../hris-api
+      context: ../bnpi-pats-api
       dockerfile: Dockerfile
       target: db-init
-    image: hris-api-db-init:develop
-    container_name: hris-api-db-init-uat
+    image: bnpi-pats-api-db-init:develop
+    container_name: bnpi-pats-api-db-init-uat
     restart: "no"
     env_file:
-      - ./env/hris-api.env
+      - ./env/bnpi-pats-api.env
     environment:
       NODE_ENV: production
       APP_ENV: uat
-      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
-      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
-      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      PG_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
+      DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
     # No prisma-seed on appliance DBs (seed can delete timesheet/attendance). Schema-only; prisma db push without --accept-data-loss is fail-closed on destructive drift.
     command: >
       sh -c "npm run prisma-postgres:push"
     depends_on:
-      hris-postgres-uat:
+      bnpi-pats-postgres-uat:
         condition: service_healthy
 
-  hris-api-uat:
+  bnpi-pats-api-uat:
     build:
-      context: ../hris-api
+      context: ../bnpi-pats-api
       dockerfile: Dockerfile
-    image: hris-api-local:develop
-    container_name: hris-api-uat
+    image: bnpi-pats-api-local:develop
+    container_name: bnpi-pats-api-uat
     restart: unless-stopped
     env_file:
-      - ./env/hris-api.env
+      - ./env/bnpi-pats-api.env
     environment:
       NODE_ENV: production
       APP_ENV: uat
       STORAGE_PROVIDER: local
       LOCAL_UPLOAD_ROOT: /app/uploads
-      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
-      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
-      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      PG_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
+      DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
       BACKUP_ENABLED: "true"
       BACKUP_TIMEZONE: Asia/Manila
       BACKUP_CRON: "0 12 * * *"
-      BACKUP_DIR: /var/backups/hris
+      BACKUP_DIR: /var/backups/bnpi-pats
       BACKUP_RETENTION_DAYS: "0"
       OTEL_ENABLED: "true"
-      OTEL_SERVICE_NAME: hris-api-uat
+      OTEL_SERVICE_NAME: bnpi-pats-api-uat
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=uat,service.namespace=hris
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=uat,service.namespace=bnpi-pats
       OTEL_TRACES_SAMPLER: parentbased_traceidratio
       OTEL_TRACES_SAMPLER_ARG: "1.0"
       API_ACTIVITY_LOGGING_ENABLED: "true"
@@ -317,18 +317,18 @@ services:
       PROJECT_TRUTH_HIKVISION_VM_API_BASE: http://127.0.0.1:3201
     volumes:
       - apiuploads-uat:/app/uploads
-      - ./backups/uat:/var/backups/hris
+      - ./backups/uat:/var/backups/bnpi-pats
       - ../data/import:/data/import:ro
       - ../source-inputs-organized:/source-inputs-organized:ro
       - ../docs:/docs:ro
       - /var/lib/project-truth/ssh:/var/run/project-truth/ssh:ro
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     ports:
       - "3201:3001"
     depends_on:
-      hris-postgres-uat:
+      bnpi-pats-postgres-uat:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
@@ -337,68 +337,68 @@ services:
       retries: 12
       start_period: 20s
 
-  hris-api-cron-uat:
+  bnpi-pats-api-cron-uat:
     build:
-      context: ../hris-api
+      context: ../bnpi-pats-api
       dockerfile: Dockerfile
-    image: hris-api-local:develop
-    container_name: hris-api-cron-uat
+    image: bnpi-pats-api-local:develop
+    container_name: bnpi-pats-api-cron-uat
     restart: unless-stopped
     env_file:
-      - ./env/hris-api.env
+      - ./env/bnpi-pats-api.env
     environment:
       NODE_ENV: production
       APP_ENV: uat
-      PG_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
-      WRITE_DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
-      DATABASE_URL: postgresql://postgres:postgres@hris-postgres-uat:5432/hris
+      PG_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
+      WRITE_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
+      DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
       BACKUP_ENABLED: "true"
       BACKUP_TIMEZONE: Asia/Manila
       BACKUP_CRON: "0 12 * * *"
-      BACKUP_DIR: /var/backups/hris
+      BACKUP_DIR: /var/backups/bnpi-pats
       BACKUP_RETENTION_DAYS: "0"
       OTEL_ENABLED: "true"
-      OTEL_SERVICE_NAME: hris-api-cron-uat
+      OTEL_SERVICE_NAME: bnpi-pats-api-cron-uat
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
-      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=uat,service.namespace=hris
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=uat,service.namespace=bnpi-pats
       OTEL_TRACES_SAMPLER: parentbased_traceidratio
       OTEL_TRACES_SAMPLER_ARG: "1.0"
       LOG_FORMAT: json
     command: ["node", "dist/cron.js"]
     volumes:
-      - ./backups/uat:/var/backups/hris
+      - ./backups/uat:/var/backups/bnpi-pats
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     depends_on:
-      hris-postgres-uat:
+      bnpi-pats-postgres-uat:
         condition: service_healthy
     healthcheck:
       disable: true
 
-  hris-app-uat:
+  bnpi-pats-app-uat:
     build:
-      context: ../hris-app
+      context: ../bnpi-pats-app
       dockerfile: Dockerfile
-    image: hris-app-local:develop
-    container_name: hris-app-uat
+    image: bnpi-pats-app-local:develop
+    container_name: bnpi-pats-app-uat
     restart: unless-stopped
     environment:
       APP_ENV: uat
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
-      HRIS_API_ORIGIN: "http://hris-api-uat:3001"
+      BNPI_PATS_API_ORIGIN: "http://bnpi-pats-api-uat:3001"
     volumes:
-      - ../hris-app/app/assets:/app/build/client/app/assets:ro
+      - ../bnpi-pats-app/app/assets:/app/build/client/app/assets:ro
     ports:
       - "3200:3000"
     depends_on:
-      hris-api-uat:
+      bnpi-pats-api-uat:
         condition: service_started
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:3000/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\""]
       interval: 15s
@@ -406,28 +406,28 @@ services:
       retries: 12
       start_period: 20s
 
-  hris-emp-app-uat:
+  bnpi-pats-emp-app-uat:
     build:
       context: ..
-      dockerfile: appliance/dockerfiles/hris-emp-app.Dockerfile
+      dockerfile: appliance/dockerfiles/bnpi-pats-emp-app.Dockerfile
       args:
         VITE_API_BASE_URL: /api
-    image: hris-emp-app-local:develop
-    container_name: hris-emp-app-uat
+    image: bnpi-pats-emp-app-local:develop
+    container_name: bnpi-pats-emp-app-uat
     restart: unless-stopped
     environment:
       PORT: "3000"
-      HRIS_API_ORIGIN: "http://host.docker.internal:3201"
+      BNPI_PATS_API_ORIGIN: "http://host.docker.internal:3201"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
       - "3320:3000"
     depends_on:
-      hris-api-uat:
+      bnpi-pats-api-uat:
         condition: service_started
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1 || exit 1"]
       interval: 15s
@@ -447,7 +447,7 @@ services:
       - --poll-seconds
       - "${ZKTECO_POLL_SECONDS_UAT:-${ZKTECO_POLL_SECONDS:-60}}"
       - --webhook-url
-      - http://hris-api-uat:3001/api/zkteco/events
+      - http://bnpi-pats-api-uat:3001/api/zkteco/events
     environment:
       ZKTECO_STATUS_HOST: 0.0.0.0
       ZKTECO_STATUS_PORT: 4371
@@ -455,11 +455,11 @@ services:
     ports:
       - "4373:4371"
     depends_on:
-      hris-api-uat:
+      bnpi-pats-api-uat:
         condition: service_healthy
     networks:
       - default
-      - hris-observability
+      - bnpi-pats-observability
     healthcheck:
       test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:4371/health', timeout=5).read()\nPY"]
       interval: 15s
@@ -467,9 +467,9 @@ services:
       retries: 12
       start_period: 10s
 
-  hris-grafana-uat:
+  bnpi-pats-grafana-uat:
     image: grafana/grafana:11.2.0
-    container_name: hris-grafana-uat
+    container_name: bnpi-pats-grafana-uat
     user: "0"
     ports:
       - "53002:3000"
@@ -484,24 +484,24 @@ services:
       - GF_SECURITY_ALLOW_EMBEDDING=false
       - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_DATABASE_TYPE=postgres
-      - GF_DATABASE_HOST=hris-postgres-uat
+      - GF_DATABASE_HOST=bnpi-pats-postgres-uat
       - GF_DATABASE_NAME=grafana_uat
       - GF_DATABASE_USER=postgres
       - GF_DATABASE_PASSWORD=postgres
       - GF_DATABASE_SSL_MODE=disable
     volumes:
-      - ../hris-api/infrastructure/onprem/observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - ../hris-api/infrastructure/onprem/observability/grafana/provisioning-uat:/etc/grafana/provisioning:ro
+      - ../bnpi-pats-api/infrastructure/onprem/observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ../bnpi-pats-api/infrastructure/onprem/observability/grafana/provisioning-uat:/etc/grafana/provisioning:ro
     depends_on:
-      hris-postgres-uat:
+      bnpi-pats-postgres-uat:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - hris-observability
+      - bnpi-pats-observability
 
-  hris-grafana-dev:
+  bnpi-pats-grafana-dev:
     image: grafana/grafana:11.2.0
-    container_name: hris-grafana-dev
+    container_name: bnpi-pats-grafana-dev
     user: "0"
     ports:
       - "53001:3000"
@@ -516,20 +516,20 @@ services:
       - GF_SECURITY_ALLOW_EMBEDDING=false
       - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_DATABASE_TYPE=postgres
-      - GF_DATABASE_HOST=hris-postgres-dev
+      - GF_DATABASE_HOST=bnpi-pats-postgres-dev
       - GF_DATABASE_NAME=grafana_dev
       - GF_DATABASE_USER=postgres
       - GF_DATABASE_PASSWORD=postgres
       - GF_DATABASE_SSL_MODE=disable
     volumes:
-      - ../hris-api/infrastructure/onprem/observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
-      - ../hris-api/infrastructure/onprem/observability/grafana/provisioning-dev:/etc/grafana/provisioning:ro
+      - ../bnpi-pats-api/infrastructure/onprem/observability/grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ../bnpi-pats-api/infrastructure/onprem/observability/grafana/provisioning-dev:/etc/grafana/provisioning:ro
     depends_on:
-      hris-postgres-dev:
+      bnpi-pats-postgres-dev:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - hris-observability
+      - bnpi-pats-observability
 
 volumes:
   postgresdata-dev:
@@ -538,6 +538,6 @@ volumes:
   apiuploads-uat:
 
 networks:
-  hris-observability:
+  bnpi-pats-observability:
     external: true
-    name: hris-observability
+    name: bnpi-pats-observability

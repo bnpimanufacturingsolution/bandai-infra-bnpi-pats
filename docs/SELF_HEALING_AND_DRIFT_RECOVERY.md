@@ -9,8 +9,8 @@ Windows host repo
 -> Hyper-V VM
 -> K3s + Argo CD control plane
 -> appliance Docker runtime
--> LAN HRIS app/API
--> named Cloudflare Tunnel for `bnpi-hris.tech`
+-> LAN BNPI PATS app/API
+-> named Cloudflare Tunnel for `bnpi-pats.tech`
 ```
 
 ## What Self-Heals Today
@@ -24,19 +24,19 @@ Windows host repo
 | Argo CD platform drift | `repair-appliance-online -Mode GitOpsRefresh` reapplies the explicit Argo reconciliation config. | No |
 | Missing Argo Applications | `repair-appliance-online` first applies in-image manifests, then uploads host repo manifests if they are absent. | No |
 | VM OS/script drift | `project-truth-ansible-pull.timer` runs `ansible-pull` inside the VM, pulls `develop`, updates `/opt/project-truth`, reinstalls appliance commands/systemd units, reconciles LAN config before Git fetch, and refreshes Argo CD. | No, unless the repo is unreachable |
-| HRIS app/API containers | Docker Compose uses `restart: unless-stopped`; `project-truth-hris` starts the runtime on boot. | No |
-| HRIS Kubernetes runtime | `enable-k8s-runtime` moves PROD/DEV/UAT HRIS app/API/Postgres into K3s Deployments/StatefulSets managed by Argo CD. | No |
-| HRIS runtime outage | `repair-appliance-online -Mode RestartRuntime` restarts Docker, K3s, and HRIS services. | No |
-| HRIS data safety net | `backup-appliance-data` captures Postgres and uploads; `restore-appliance-data -Force` restores them. | No |
+| BNPI PATS app/API containers | Docker Compose uses `restart: unless-stopped`; `project-truth-bnpi-pats` starts the runtime on boot. | No |
+| BNPI PATS Kubernetes runtime | `enable-k8s-runtime` moves PROD/DEV/UAT BNPI PATS app/API/Postgres into K3s Deployments/StatefulSets managed by Argo CD. | No |
+| BNPI PATS runtime outage | `repair-appliance-online -Mode RestartRuntime` restarts Docker, K3s, and BNPI PATS services. | No |
+| BNPI PATS data safety net | `backup-appliance-data` captures Postgres and uploads; `restore-appliance-data -Force` restores them. | No |
 | LAN health proof | `watch-until-healthy` and `verify-lan-health` prove app/API URLs. | No |
-| Named Cloudflare public access | `start-bnpi-cloudflare-tunnel` discovers the VM LAN IP, rewrites `cloudflared-bnpi-hris.yml`, starts the host-managed named tunnel, and verifies public endpoints. | No |
+| Named Cloudflare public access | `start-bnpi-cloudflare-tunnel` discovers the VM LAN IP, rewrites `cloudflared-bnpi-pats.yml`, starts the host-managed named tunnel, and verifies public endpoints. | No |
 
 ## What Does Not Fully Self-Heal Yet
 
 | Gap | Why it matters | Target fix |
 |---|---|---|
-| HRIS Kubernetes runtime is opt-in | Compose remains the default proven runtime until a VM runs `enable-k8s-runtime`. | Run the K8s runtime migration after boot proof, then capture a new visual proof. |
-| Failed `hris-api-db-init` Job (Argo runtime Degraded) | Argo selfHeal recreates the Job from **git**. Origin still **has** `prisma-seed`, which can delete UAT/PROD timesheets. Leaving the Failed Job is safer than deleting it. | Commit schema-only Job (`prisma-postgres:push` only), then delete the Failed Job. `docs/DB_INIT_JOB.md`. |
+| BNPI PATS Kubernetes runtime is opt-in | Compose remains the default proven runtime until a VM runs `enable-k8s-runtime`. | Run the K8s runtime migration after boot proof, then capture a new visual proof. |
+| Failed `bnpi-pats-api-db-init` Job (Argo runtime Degraded) | Argo selfHeal recreates the Job from **git**. Origin still **has** `prisma-seed`, which can delete UAT/PROD timesheets. Leaving the Failed Job is safer than deleting it. | Commit schema-only Job (`prisma-postgres:push` only), then delete the Failed Job. `docs/DB_INIT_JOB.md`. |
 | Postgres and uploads backup is manual, not scheduled | Container restart does not fix corrupted or deleted data volumes. | Schedule `backup-appliance-data` or move persistence to a managed backup target. |
 | K3s snapshots are not yet wired to external durable storage | Local K3s snapshots help cluster metadata recovery but do not protect against disk loss. | Configure K3s snapshot retention and S3-compatible off-host copy. |
 | VM disk corruption cannot be repaired by Argo or Compose | If the selected VHDX is unreadable, online repair cannot boot. | Restore from the stable VHDX artifact or a known-good archived copy. |
@@ -141,7 +141,7 @@ systemctl list-timers project-truth-ansible-pull.timer --no-pager
 journalctl -u project-truth-ansible-pull.service -n 80 --no-pager
 ```
 
-4. Move HRIS into Kubernetes/Argo ownership when the VM should self-heal app/API/Postgres without Compose:
+4. Move BNPI PATS into Kubernetes/Argo ownership when the VM should self-heal app/API/Postgres without Compose:
 
 ```powershell
 .\scripts\project-truth.ps1 backup-appliance-data -GuestIp <vm-lan-ip>
@@ -240,7 +240,7 @@ When `enable-k8s-runtime` is used, three additional Applications are installed:
 - `project-truth-runtime-uat`
 - `project-truth-runtime-prod`
 
-Those Applications point at `gitops/runtime-k8s/overlays/*`, where HRIS app,
+Those Applications point at `gitops/runtime-k8s/overlays/*`, where BNPI PATS app,
 API, Postgres, hostPath persistence, health probes, and LAN host ports are
 declared as Kubernetes state.
 
@@ -261,7 +261,7 @@ The latest proof folder with real screenshots is:
 .runtime\local-hyperv-proof-20260623-185743
 ```
 
-It includes the authenticated HRIS admin dashboard, Prometheus, and Grafana
+It includes the authenticated BNPI PATS admin dashboard, Prometheus, and Grafana
 screenshots.
 
 ## References

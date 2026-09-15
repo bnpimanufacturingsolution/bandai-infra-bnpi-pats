@@ -79,7 +79,7 @@ Evidence: .runtime/graph-june11-25-payroll-YYYYMMDD-HHMMSS/
                     └──────────────┬──────────────┘
                                    │
                     ┌──────────────▼──────────────┐
-                    │  N9  Compare register ↔ HRIS │
+                    │  N9  Compare register ↔ BNPI PATS │
                     │  NetPay first, then recv     │
                     └──────────────┬──────────────┘
                                    │
@@ -207,7 +207,7 @@ Show problems + repair plan scripts after each full compare.
 
 ### Per-row (samples ≤30)
 
-| empNo | field | register | hris | delta | node to re-enter | class |
+| empNo | field | register | bnpi-pats | delta | node to re-enter | class |
 
 ---
 

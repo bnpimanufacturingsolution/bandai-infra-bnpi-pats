@@ -1,5 +1,5 @@
-﻿import { PrismaClient } from "../hris-api/generated/prisma/index.js";
-import { hikvisionFetch } from "../hris-api/lib/hikvision-client.js";
+﻿﻿import { PrismaClient } from "../bnpi-pats-api/generated/prisma/index.js";
+import { hikvisionFetch } from "../bnpi-pats-api/lib/hikvision-client.js";
 
 const prisma = new PrismaClient();
 const deviceId = "cmrlgqsjv000oob01165tbd8n";

@@ -1,7 +1,7 @@
 [Unit]
 Description=Project Truth Hikvision hot reload listener
 Wants=network-online.target docker.service
-After=network-online.target docker.service project-truth-hris.service
+After=network-online.target docker.service project-truth-bnpi-pats.service
 
 [Service]
 Type=simple
@@ -15,10 +15,10 @@ Group=root
 Environment=HIKVISION_HOT_RELOAD_API_BASE=http://127.0.0.1:53001
 Environment=HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api
 Environment=HIKVISION_HOT_RELOAD_DEVICE_FETCH_LIMIT=200
-Environment=HIKVISION_POSTGRES_CONTAINER=hris-postgres-dev
+Environment=HIKVISION_POSTGRES_CONTAINER=bnpi-pats-postgres-dev
 Environment=HIKVISION_HOT_RELOAD_LOGIN_EMAIL=admin@bandai.local
 Environment=HIKVISION_HOT_RELOAD_LOGIN_PASSWORD=password123
-Environment=HIKVISION_HOT_RELOAD_LOGIN_APP_CODE=hris
+Environment=HIKVISION_HOT_RELOAD_LOGIN_APP_CODE=bnpi-pats
 EnvironmentFile=-/etc/project-truth/hikvision-hot-reload.env
 ExecStart=/usr/local/bin/project-truth-hikvision-hot-reload-daemon
 Restart=always

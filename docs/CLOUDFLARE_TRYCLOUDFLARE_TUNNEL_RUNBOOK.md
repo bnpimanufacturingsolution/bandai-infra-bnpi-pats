@@ -4,7 +4,7 @@ This is a legacy/manual proof runbook. The normal Project Truth public path is
 the named Cloudflare Tunnel in
 [Cloudflare Named Tunnel Runbook](CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md).
 
-This runbook exposes the verified Project Truth HRIS app through a temporary
+This runbook exposes the verified Project Truth BNPI PATS app through a temporary
 Cloudflare quick tunnel. It does not configure a named tunnel, DNS record,
 account token, or persistent Cloudflare service.
 
@@ -39,7 +39,7 @@ Get-Command docker
 Get-Command cloudflared
 ```
 
-`cloudflared` must be installed and available in `PATH`. The current HRIS appliance ports are:
+`cloudflared` must be installed and available in `PATH`. The current BNPI PATS appliance ports are:
 
 | Environment | App | API |
 |---|---:|---:|
@@ -51,9 +51,9 @@ Database LAN URLs are published by the VM on the bridged LAN:
 
 | Environment | Postgres URL |
 |---|---|
-| PROD | `postgresql://postgres:postgres@<guest-lan-ip>:15432/hris` |
-| DEV | `postgresql://postgres:postgres@<guest-lan-ip>:15433/hris` |
-| UAT | `postgresql://postgres:postgres@<guest-lan-ip>:15434/hris` |
+| PROD | `postgresql://postgres:postgres@<guest-lan-ip>:15432/bnpi_pats` |
+| DEV | `postgresql://postgres:postgres@<guest-lan-ip>:15433/bnpi-pats` |
+| UAT | `postgresql://postgres:postgres@<guest-lan-ip>:15434/bnpi-pats` |
 
 To inspect local DB access from the VM:
 
@@ -64,19 +64,19 @@ project-truth-db-access
 ## Host-Local Diagnostic Runtime
 
 ```powershell
-.\scripts\project-truth.ps1 start-local-hris-runtime -Environment prod
+.\scripts\project-truth.ps1 start-local-bnpi-pats-runtime -Environment prod
 ```
 
 For all local environments:
 
 ```powershell
-.\scripts\project-truth.ps1 start-local-hris-runtime -Environment all
+.\scripts\project-truth.ps1 start-local-bnpi-pats-runtime -Environment all
 ```
 
 ## Verify Host-Local Diagnostic Runtime
 
 ```powershell
-.\scripts\project-truth.ps1 verify-local-hris-runtime -Environment all
+.\scripts\project-truth.ps1 verify-local-bnpi-pats-runtime -Environment all
 ```
 
 ## Start Temporary Public Tunnel To The Verified VM
@@ -165,20 +165,20 @@ Server-side helper:
 Client-side commands:
 
 ```powershell
-cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:5432
-cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433
-cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434
+cloudflared access tcp --hostname db.bnpi-pats.tech --url localhost:5432
+cloudflared access tcp --hostname dev-db.bnpi-pats.tech --url localhost:5433
+cloudflared access tcp --hostname uat-db.bnpi-pats.tech --url localhost:5434
 ```
 
 Then point the DB client at:
 
 ```text
-postgresql://postgres:postgres@localhost:5432/hris
-postgresql://postgres:postgres@localhost:5433/hris
-postgresql://postgres:postgres@localhost:5434/hris
+postgresql://postgres:postgres@localhost:5432/bnpi_pats
+postgresql://postgres:postgres@localhost:5433/bnpi_pats
+postgresql://postgres:postgres@localhost:5434/bnpi_pats
 ```
 
-Direct `postgresql://postgres:postgres@db.bnpi-hris.tech:5432/hris` requires
+Direct `postgresql://postgres:postgres@db.bnpi-pats.tech:5432/bnpi_pats` requires
 Cloudflare WARP private routing or Spectrum/raw TCP. Normal Access TCP uses the
 local forwarded URL above.
 
@@ -216,7 +216,7 @@ Press `Ctrl+C` in the terminal running `cloudflared`.
 ## Troubleshooting
 
 ```powershell
-.\scripts\project-truth.ps1 verify-local-hris-runtime -Environment prod
+.\scripts\project-truth.ps1 verify-local-bnpi-pats-runtime -Environment prod
 docker ps
 docker compose -f appliance\docker-compose.yml ps
 ```

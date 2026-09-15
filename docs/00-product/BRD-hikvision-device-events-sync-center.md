@@ -3,7 +3,7 @@
 ## Business problem
 
 Administrators cannot safely operate the Hikvision event ledger while current
-inventory, events in a selected window, saved HRIS rows, and sync-run results
+inventory, events in a selected window, saved BNPI PATS rows, and sync-run results
 are presented as interchangeable counts. Historical code also created
 `USER_CREATED` and `FINGERPRINT_ENROLLED` rows from a current user list. That
 invented lifecycle history and weakened trust in the ledger.
@@ -27,10 +27,10 @@ Primary device: `Main Entrance Device A · Hikvision · 10.184.38.173:443`.
   face deletions, two user creates, and fourteen intentionally unknown rows.
 - The VM app/API and named Cloudflare tunnel are healthy; the tunnel service is
   active and was not changed.
-- The HRIS cache has 151 `DeviceUser` rows for this device, including 149 rows
+- The BNPI PATS cache has 151 `DeviceUser` rows for this device, including 149 rows
   reporting fingerprints and 147 reporting faces. These are current-state
   cache values, not direct-device counts and not lifecycle-event counts.
-- HRIS had 1,075 saved rows before cleanup. The non-mutating reset preview
+- BNPI PATS had 1,075 saved rows before cleanup. The non-mutating reset preview
   identifies 219 proven legacy fake lifecycle rows: 120 `USER_CREATED` and 99
   `FINGERPRINT_ENROLLED`; none link to attendance.
 - Cleanup exported all 219 rows, deleted those rows only, and deleted zero
@@ -44,10 +44,10 @@ Evidence is recorded under `.runtime/device-events-sync-center-20260716-160910/`
 
 ## Users and journey
 
-Primary role: `hris-admin`. Secondary role: operations/support reviewer.
+Primary role: `bnpi-pats-admin`. Secondary role: operations/support reviewer.
 
 1. Open Device Events and select a device and time window.
-2. Read separately labeled inventory, activity, saved-HRIS, and sync-run totals.
+2. Read separately labeled inventory, activity, saved-BNPI PATS, and sync-run totals.
 3. Filter saved rows by runtime path, category, action, employee/user, match
    status, evidence source, and confidence.
 4. Inspect raw evidence in **Device event details** (`action=view-event&id=`)
@@ -83,7 +83,7 @@ Primary role: `hris-admin`. Secondary role: operations/support reviewer.
 |---|---|---|
 | Inventory/current state | users, users with fingerprints/faces/cards, device log total | `DEVICE_CURRENT_STATE` |
 | Window activity | taps, rejected taps, biometric/card/user lifecycle actions, sync imports/signals, unknown | `SDK_CALLBACK`, `ISAPI_LOGSEARCH`, or `STATE_TRANSITION_INFERRED` |
-| Saved HRIS | total, matched, needs match, ignored, failed, direct, inferred, unknown | `DEVICE_EVENT_DATABASE` |
+| Saved BNPI PATS | total, matched, needs match, ignored, failed, direct, inferred, unknown | `DEVICE_EVENT_DATABASE` |
 | Sync reconciliation | source total, imported, known skipped, still missing | `DEVICE_SYNC_RUN` |
 
 Each metric is labeled with its source and selected window. Inventory totals are
@@ -125,7 +125,7 @@ summary denominator.
    vendor evidence, and correlation where applicable.
 3. Important category/action/evidence/confidence/match filters return saved
    rows and summaries whose totals agree.
-4. The UI reads saved rows and keeps inventory, window activity, saved HRIS,
+4. The UI reads saved rows and keeps inventory, window activity, saved BNPI PATS,
    and sync results visually distinct.
 5. Direct device counts, ACS pages, and raw logSearch pages are captured from
    `.173`; stale screen counts are replaced only after a successful probe.
@@ -144,7 +144,7 @@ The business expectation is that an admin can answer:
 - which device source was read;
 - whether the source is available;
 - how many rows are on the device for the selected window;
-- how many equivalent rows already exist in HRIS `DeviceEvent`;
+- how many equivalent rows already exist in BNPI PATS `DeviceEvent`;
 - how many rows can be imported now;
 - how many rows will be left alone because they are known duplicates,
   employee-less rows, or intentionally unmapped rows.
@@ -156,4 +156,4 @@ inventory counts must never be presented as enrollment history.
 
 Browser-captured curl examples are endpoint-shape evidence only. They contain
 session material and must be redacted before storage. Implementation must use
-server-side stored Hikvision credentials and existing HRIS device records.
+server-side stored Hikvision credentials and existing BNPI PATS device records.

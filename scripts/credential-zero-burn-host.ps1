@@ -13,14 +13,14 @@
 
 .EXAMPLE
   powershell -File scripts/credential-zero-burn-host.ps1
-  powershell -File scripts/credential-zero-burn-host.ps1 -ApiBase https://dev-api.bnpi-hris.tech -MaxCycles 0
+  powershell -File scripts/credential-zero-burn-host.ps1 -ApiBase https://dev-api.bnpi-pats.tech -MaxCycles 0
 #>
 [CmdletBinding()]
 param(
-  [string]$ApiBase = 'https://dev-api.bnpi-hris.tech',
+  [string]$ApiBase = 'https://dev-api.bnpi-pats.tech',
   [string]$Email = 'admin@bandai.local',
   [string]$Password = 'password123',
-  [string]$AppCode = 'hris',
+  [string]$AppCode = 'bnpi-pats',
   [int]$WaveMax = 50,
   [int]$PollSleepSec = 15,
   [int]$PollMax = 120,
@@ -31,7 +31,7 @@ param(
 
 $ErrorActionPreference = 'Continue'
 $Root = Split-Path $PSScriptRoot -Parent
-if (-not (Test-Path (Join-Path $Root 'hris-api'))) {
+if (-not (Test-Path (Join-Path $Root 'bnpi-pats-api'))) {
   $Root = (Get-Location).Path
 }
 if (-not $StampDir) {
@@ -240,7 +240,7 @@ while ($true) {
       } | Select-Object -First 1
       $from = $row.vendorUserCount
       $status = $row.status
-      $devLines += "| $letter | $from | $($row.hrisUserCount) | $status |"
+      $devLines += "| $letter | $from | $($row.bnpiPatsUserCount) | $status |"
     }
   }
   $deviceTable = (@('| Letter | From | Saved | Status |', '|---|---:|---:|---|') + $devLines) -join "`n"

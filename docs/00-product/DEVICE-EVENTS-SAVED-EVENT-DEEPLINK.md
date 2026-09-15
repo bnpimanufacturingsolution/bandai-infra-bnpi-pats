@@ -15,7 +15,7 @@ Architecture brief: `.wwg/wiki/05-architecture/device-events-saved-event-deeplin
 
 ## Operator URL
 
-Both admin routes render the same page module (`hris-app/app/routes/admin/devices/events.tsx`):
+Both admin routes render the same page module (`bnpi-pats-app/app/routes/admin/devices/events.tsx`):
 
 ```text
 /admin/configuration/devices/events?deviceId=<deviceId>&page=<n>&action=view-event&id=<eventId>
@@ -115,18 +115,18 @@ deeplink as “event deleted,” hit `/health` and `GET /api/device/events/item/
 | Kind | Path |
 |---|---|
 | Live compare (page 116 miss vs by-id hit) | `.runtime/device-event-deeplink-20260817/` |
-| API contract | `hris-api/tests/device-events-api-contract.spec.ts` |
-| UI resolver | `hris-app/app/lib/device-events-realtime-ui.test.ts` |
-| Page contract | `hris-app/app/lib/device-events-page-contract.test.ts` |
+| API contract | `bnpi-pats-api/tests/device-events-api-contract.spec.ts` |
+| UI resolver | `bnpi-pats-app/app/lib/device-events-realtime-ui.test.ts` |
+| Page contract | `bnpi-pats-app/app/lib/device-events-page-contract.test.ts` |
 
 ## Code map
 
 | Layer | Symbol |
 |---|---|
-| Route | `hris-api/app/device/device.router.ts` `GET /events/item/:eventId` |
-| Handler | `getEventById` in `hris-api/app/device/device.controller.ts` |
+| Route | `bnpi-pats-api/app/device/device.router.ts` `GET /events/item/:eventId` |
+| Handler | `getEventById` in `bnpi-pats-api/app/device/device.controller.ts` |
 | List fallback | `getEvents` `req.query.eventId` |
-| Client | `hris-app/app/services/devices.service.ts` `getDeviceEventById` |
-| Hook | `hris-app/app/lib/hooks/useDevices.ts` `useDeviceEvent` |
-| Page | `hris-app/app/routes/admin/devices/events.tsx` |
+| Client | `bnpi-pats-app/app/services/devices.service.ts` `getDeviceEventById` |
+| Hook | `bnpi-pats-app/app/lib/hooks/useDevices.ts` `useDeviceEvent` |
+| Page | `bnpi-pats-app/app/routes/admin/devices/events.tsx` |
 | Resolver | `resolveActiveSavedDeviceEvent` |

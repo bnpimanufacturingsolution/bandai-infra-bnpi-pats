@@ -1,2 +1,0 @@
-name,description,category,provider,coverage,minAmount,maxAmount,fixedAmount,percentage,minServiceMonths,isTaxable,defaultInstallments,payrollCycleDays,requireTermsAgreement,isActive,isDefault
-HMO,Sample healthcare benefit,HEALTH,Sample HMO Provider,100000,1000,12000,12000,0,0,false,12,15,true,true,true

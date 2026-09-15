@@ -115,7 +115,7 @@ OLD PATH (works but fragile)
 
 ## Code change (this pass)
 
-File: `hris-api/app/device/device.controller.ts`
+File: `bnpi-pats-api/app/device/device.controller.ts`
 
 - `CREDENTIAL_RECOVERY_JOB_LEASE_MS` default **5 min**
 - `CREDENTIAL_RECOVERY_PHYSICAL_LEASE_MS` default **10 min**
@@ -129,6 +129,6 @@ Env overrides: `PROJECT_TRUTH_RECOVERY_JOB_LEASE_MS`, `PROJECT_TRUTH_RECOVERY_PH
 ## Operator watch
 
 ```powershell
-ssh project-truth-hris 'cat /var/log/project-truth/af-cred-burn/STATUS.md; tail -n 30 /var/log/project-truth/af-cred-burn/HEARTBEATS.log'
+ssh project-truth-bnpi-pats 'cat /var/log/project-truth/af-cred-burn/STATUS.md; tail -n 30 /var/log/project-truth/af-cred-burn/HEARTBEATS.log'
 Get-Content .runtime\graph-cred-burn-20260730-140651\OPERATOR-MINUTE.md
 ```

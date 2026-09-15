@@ -27,7 +27,7 @@ Evidence folder:
 Artifact:
 
 ```text
-https://storage.googleapis.com/project-truth-image-export-hris-492904-161377059311/public/project-truth/virtualbox/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vdi
+https://storage.googleapis.com/project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/virtualbox/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vdi
 ```
 
 Local import proof:
@@ -68,7 +68,7 @@ Important import setting:
 Use --cpus 1 for this VDI in VirtualBox.
 ```
 
-At 4 vCPU the imported GCP kernel stalled in initramfs on `raid6_pq` under VirtualBox. The one-vCPU import booted, got LAN config, started Docker/HRIS, and passed login proof.
+At 4 vCPU the imported GCP kernel stalled in initramfs on `raid6_pq` under VirtualBox. The one-vCPU import booted, got LAN config, started Docker/BNPI PATS, and passed login proof.
 
 Full result:
 
@@ -199,9 +199,9 @@ BLOCKED: clean VirtualBox import could not proceed because local C: free space w
 Artifact proof:
 
 ```text
-PROVEN: GCP image exists: project-truth-node-gcp-1781686573 in project hris-492904.
+PROVEN: GCP image exists: project-truth-node-gcp-1781686573 in project bnpi-pats-492904.
 PROVEN: exported VirtualBox VDI exists:
-  gs://project-truth-image-export-hris-492904-161377059311/project-truth-node-gcp-1781686573.vdi
+  gs://project-truth-image-export-bnpi-pats-492904-161377059311/project-truth-node-gcp-1781686573.vdi
   size: 11,647,910,400 bytes
 ```
 
@@ -221,7 +221,7 @@ NOT RUN: the VDI could not be downloaded to C:\ProgramData\ProjectTruth\images b
 Existing VM note:
 
 ```text
-project-truth-hris-local is present and running, but it is not clean proof.
+project-truth-bnpi-pats-local is present and running, but it is not clean proof.
 VirtualBox guest properties reported 192.168.100.79.
 Ping, SSH, and HTTP probes to 192.168.100.79 timed out or were unreachable.
 ```
@@ -229,5 +229,5 @@ Ping, SSH, and HTTP probes to 192.168.100.79 timed out or were unreachable.
 Next exact command after freeing at least 25 GiB on C::
 
 ```powershell
-gsutil cp gs://project-truth-image-export-hris-492904-161377059311/project-truth-node-gcp-1781686573.vdi C:\ProgramData\ProjectTruth\images\project-truth-node-gcp-1781686573.vdi
+gsutil cp gs://project-truth-image-export-bnpi-pats-492904-161377059311/project-truth-node-gcp-1781686573.vdi C:\ProgramData\ProjectTruth\images\project-truth-node-gcp-1781686573.vdi
 ```

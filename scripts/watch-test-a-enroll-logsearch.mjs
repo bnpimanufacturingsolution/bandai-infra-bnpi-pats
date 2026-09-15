@@ -15,19 +15,19 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { PrismaClient } from "../hris-api/generated/prisma/index.js";
-import { hikvisionFetch } from "../hris-api/lib/hikvision-client.js";
+import { PrismaClient } from "../bnpi-pats-api/generated/prisma/index.js";
+import { hikvisionFetch } from "../bnpi-pats-api/lib/hikvision-client.js";
 import {
 	buildHikvisionLogSearchXml,
 	normalizeHikvisionLogSearchRow,
 	parseHikvisionLogSearchResponse,
 	isOpaqueHikvisionPersonToken,
-} from "../hris-api/helper/hikvision-event-contract.helper.js";
+} from "../bnpi-pats-api/helper/hikvision-event-contract.helper.js";
 import {
 	applyDevicePersonTokenToEvidence,
 	formatHikvisionPlus08,
 	upsertDeviceUserInventoryStub,
-} from "../hris-api/helper/device-person-token.helper.js";
+} from "../bnpi-pats-api/helper/device-person-token.helper.js";
 
 const deviceId = process.env.ENROLL_WATCH_DEVICE_ID || "cmrlgqsjv000oob01165tbd8n";
 const minutes = Math.max(1, Number(process.env.ENROLL_WATCH_MINUTES || 15));
@@ -45,7 +45,7 @@ const logPath = path.join(outDir, "watch-events.jsonl");
 const dbUrl =
 	process.env.FORCE_DATABASE_URL ||
 	process.env.DATABASE_URL ||
-	"postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public";
+	"postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public";
 
 const prisma = new PrismaClient({ datasources: { db: { url: dbUrl } } });
 
@@ -216,7 +216,7 @@ async function tick(device, request, seen) {
 						personTokenResolved,
 						opaquePersonToken: opaque,
 						resolvedEmployeeNo: plain,
-						notHrisEmployee: true,
+						notBnpiPatsEmployee: true,
 						plane: "DEVICE_USER",
 						rawEvidence: applied.rawEvidence || evidence,
 					},

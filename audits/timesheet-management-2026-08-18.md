@@ -7,7 +7,7 @@
 
 ---
 
-## Recheck 2026-08-20 on public DEV (`https://dev.bnpi-hris.tech`)
+## Recheck 2026-08-20 on public DEV (`https://dev.bnpi-pats.tech`)
 
 Actor: Maria Santos `hr-manager@seed.local`. CSS `root-CIRKoZkC.css`. Evidence: `.runtime/dev-timesheet-sheet-20260820/`.
 
@@ -109,7 +109,7 @@ Schedule used: Regular Day **08:00–17:00**. Punch: **13:40–14:55** Manila. L
 | Actor | HR `hr-manager@seed.local` · Admin `admin@bandai.local` |
 | App | `http://localhost:5175` |
 | API | `http://localhost:3001` |
-| Spec | `hris-app/tests/smoke/hr-timesheet-management-audit.spec.ts` |
+| Spec | `bnpi-pats-app/tests/smoke/hr-timesheet-management-audit.spec.ts` |
 | Screenshots / JSON | `.runtime/timesheet-mgmt-audit-20260818/` |
 
 ---
@@ -253,7 +253,7 @@ Active names on this snapshot: Jhon `01694`, Russel `00536`, Jessica `01640`, Ze
 ## How to re-run
 
 ```powershell
-cd hris-app
+cd bnpi-pats-app
 $env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:5175'
 npx playwright test tests/smoke/hr-timesheet-management-audit.spec.ts --config=playwright.config.ts --reporter=list
 ```

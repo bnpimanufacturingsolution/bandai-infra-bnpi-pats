@@ -58,9 +58,9 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 
 ## Role Drift Guard
 
-- Admin device/configuration surfaces, including `/admin/configuration/devices`, ZKTeco device events, runtime health checks, VM/GitOps runtime drift, and repair operations, are admin / `hris-admin` work.
-- Do not infer `hris-hr-manager` for admin device/configuration tasks just because HRIS contains HR manager routes, tests, or seed credentials.
-- `hris-hr-manager` remains valid only where the task explicitly targets HR workflows or existing code/docs require that role.
+- Admin device/configuration surfaces, including `/admin/configuration/devices`, ZKTeco device events, runtime health checks, VM/GitOps runtime drift, and repair operations, are admin / `bnpi-pats-admin` work.
+- Do not infer `bnpi-pats-hr-manager` for admin device/configuration tasks just because BNPI PATS contains HR manager routes, tests, or seed credentials.
+- `bnpi-pats-hr-manager` remains valid only where the task explicitly targets HR workflows or existing code/docs require that role.
 - If a role is unclear, prefer the route/workflow owner in Project Truth and mark the uncertainty instead of substituting a convenient seeded login.
 
 ## Host-Local VM First Guard
@@ -68,7 +68,7 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 - For host-local VM, LAN, device, DB, GitOps, and runtime drift work from the
   Windows host, collect direct LAN evidence first through
   `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`.
-- Use `ssh project-truth-hris` as fallback evidence when the direct LAN path is
+- Use `ssh project-truth-bnpi-pats` as fallback evidence when the direct LAN path is
   not routable from the current workstation, or as explicit public Cloudflare
   SSH proof when the task asks for public/remote access.
 - Do not confuse local-first evidence with disabling Cloudflare. The
@@ -77,11 +77,11 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 
 ## Cloudflare Tunnel Safety Guard
 
-- Treat the running VM-managed `bnpi-hris` Cloudflare Tunnel as a protected
-  runtime dependency for public HRIS, Grafana, DB Access TCP helpers, and
-  `ssh project-truth-hris`.
+- Treat the running VM-managed `bnpi-pats` Cloudflare Tunnel as a protected
+  runtime dependency for public BNPI PATS, Grafana, DB Access TCP helpers, and
+  `ssh project-truth-bnpi-pats`.
 - Agents must not disable, stop, mask, remove, or toggle off
-  `cloudflared-bnpi-hris.service` on the running server during normal repair,
+  `cloudflared-bnpi-pats.service` on the running server during normal repair,
   pruning, VHDX, GitOps, observability, image, or documentation work.
 - Agents must not add default-local/cloud-mode guards that prevent the live
   server from starting the named Cloudflare Tunnel on boot.
@@ -103,8 +103,8 @@ Before UI/browser diagnosis or code guessing, agents must find the exact
 endpoint used by the page, hook, or service and run that endpoint directly with
 the same expected actor.
 
-- For local HRIS admin/device/configuration checks, default to admin /
-  `hris-admin`: `admin@bandai.local`, `password123`, `appCode='hris'`.
+- For local BNPI PATS admin/device/configuration checks, default to admin /
+  `bnpi-pats-admin`: `admin@bandai.local`, `password123`, `appCode='bnpi-pats'`.
 - Prefer non-mutating endpoint modes first: `execute=false`, `dryRun=true`,
   preview endpoints, `?preview=true`, or the documented equivalent.
 - Time the call with `Measure-Command` and capture full JSON response,
@@ -119,7 +119,7 @@ the same expected actor.
 Canonical local PowerShell pattern:
 
 ```powershell
-$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
+$loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
 $login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' -ContentType 'application/json' -Body $loginBody
 $headers = @{ Authorization = "Bearer $($login.data.token)" }
 $body = @{ execute=$false; deviceId='all'; source='all'; status='all'; dateField='eventTime'; includeLinkedAttendance=$true } | ConvertTo-Json
@@ -171,9 +171,9 @@ Measure-Command {
   evidence only. Required evidence is network/API behavior: health checks, auth
   POST result, CORS preflight result, browser network failures, and the resolved
   API base path or host.
-- For Project Truth public HRIS checks, record whether the browser used
+- For Project Truth public BNPI PATS checks, record whether the browser used
   same-host `/api`, a paired public API hostname such as
-  `dev-api.bnpi-hris.tech`, or LAN app-to-API port mapping.
+  `dev-api.bnpi-pats.tech`, or LAN app-to-API port mapping.
 
 ## Output Guidance
 

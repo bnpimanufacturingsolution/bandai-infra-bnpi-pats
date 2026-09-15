@@ -60,8 +60,8 @@ hostname
 ip -br addr || true
 echo "===== docker ====="
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" || true
-echo "===== hris ====="
-project-truth-hris-status || true
+echo "===== bnpi-pats ====="
+project-truth-bnpi-pats-status || true
 echo "===== kubernetes ====="
 sudo kubectl get nodes -o wide || true
 sudo kubectl get pods -A -o wide || true
@@ -115,14 +115,14 @@ set -e
 echo "Restarting Project Truth runtime services."
 sudo systemctl restart docker || true
 sudo systemctl restart k3s || true
-sudo systemctl restart project-truth-hris || true
-if command -v project-truth-hris-env-start >/dev/null 2>&1; then
-  sudo project-truth-hris-env-start || true
+sudo systemctl restart project-truth-bnpi-pats || true
+if command -v project-truth-bnpi-pats-env-start >/dev/null 2>&1; then
+  sudo project-truth-bnpi-pats-env-start || true
 fi
-if command -v project-truth-hris-observability-start >/dev/null 2>&1; then
-  sudo project-truth-hris-observability-start || true
+if command -v project-truth-bnpi-pats-observability-start >/dev/null 2>&1; then
+  sudo project-truth-bnpi-pats-observability-start || true
 fi
-project-truth-hris-status || true
+project-truth-bnpi-pats-status || true
 '@
 
 switch ($Mode) {

@@ -77,7 +77,7 @@ def login():
             api,
             "POST",
             "/api/auth/login",
-            body={"email": "admin@bandai.local", "password": "password123", "appCode": "hris"},
+            body={"email": "admin@bandai.local", "password": "password123", "appCode": "bnpi-pats"},
             timeout=30,
         )
         print("login", api, code, flush=True)

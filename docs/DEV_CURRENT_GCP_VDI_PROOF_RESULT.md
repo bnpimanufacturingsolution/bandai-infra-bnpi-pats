@@ -17,10 +17,10 @@ Run root:
   .runtime\overnight-dev-current-gcp\20260618-014413
 
 Public VDI:
-  https://storage.googleapis.com/project-truth-image-export-hris-492904-161377059311/public/project-truth/virtualbox/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vdi
+  https://storage.googleapis.com/project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/virtualbox/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vdi
 
 GCS object:
-  gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/virtualbox/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vdi
+  gs://project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/virtualbox/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vdi
 
 VDI size:
   14,859,698,688 bytes
@@ -45,7 +45,7 @@ Postinstall image:
 The older artifact is stale for this DEV-current goal:
 
 ```text
-gs://project-truth-image-export-hris-492904-161377059311/project-truth-node-gcp-1781686573.vdi
+gs://project-truth-image-export-bnpi-pats-492904-161377059311/project-truth-node-gcp-1781686573.vdi
 ```
 
 ## DEV Snapshot
@@ -189,10 +189,10 @@ Export format:
   vhdx
 
 GCS object:
-  gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vhdx
+  gs://project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/hyperv/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vhdx
 
 Public HTTPS:
-  https://storage.googleapis.com/project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vhdx
+  https://storage.googleapis.com/project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/hyperv/dev-current/latest/project-truth-node-devcurrent-postinstall-20260618-020148.vhdx
 
 VHDX size:
   16,215,179,264 bytes
@@ -293,39 +293,39 @@ Evidence:
 After cold restart:
 
 ```text
-project-truth-hris.service:
+project-truth-bnpi-pats.service:
   enabled
   active
-  ExecStart=/usr/local/bin/project-truth-hris-env-start all
+  ExecStart=/usr/local/bin/project-truth-bnpi-pats-env-start all
 
 Docker:
-  hris-postgres       healthy
-  hris-api            healthy
-  hris-app            healthy
-  hris-postgres-dev   healthy
-  hris-api-dev        healthy
-  hris-app-dev        healthy
-  hris-postgres-uat   healthy
-  hris-api-uat        healthy
-  hris-app-uat        healthy
+  bnpi-pats-postgres       healthy
+  bnpi-pats-api            healthy
+  bnpi-pats-app            healthy
+  bnpi-pats-postgres-dev   healthy
+  bnpi-pats-api-dev        healthy
+  bnpi-pats-app-dev        healthy
+  bnpi-pats-postgres-uat   healthy
+  bnpi-pats-api-uat        healthy
+  bnpi-pats-app-uat        healthy
 ```
 
-ACPI shutdown did not complete within the proof timeout, so the proof used `VBoxManage controlvm <vm> poweroff` for the test VM and then started it again. HRIS auto-start after that cold restart passed after warm-up.
+ACPI shutdown did not complete within the proof timeout, so the proof used `VBoxManage controlvm <vm> poweroff` for the test VM and then started it again. BNPI PATS auto-start after that cold restart passed after warm-up.
 
 ## Repo Changes Behind This Artifact
 
 ```text
-appliance/bin/project-truth-hris-dev-current-restore.sh
+appliance/bin/project-truth-bnpi-pats-dev-current-restore.sh
   New DEV-only restore helper.
 
-appliance/bin/project-truth-hris-env-seed.sh
+appliance/bin/project-truth-bnpi-pats-env-seed.sh
   DEV uses dev-current.dump when present.
   PROD/UAT keep the default seed path.
 
 image-factory/packer/provision.sh
-  Installs project-truth-hris-dev-current-restore.
+  Installs project-truth-bnpi-pats-dev-current-restore.
 
-hris-app/tests/smoke/project-truth-devcurrent-vbox-login.spec.ts
+bnpi-pats-app/tests/smoke/project-truth-devcurrent-vbox-login.spec.ts
   Local proof-only Playwright browser login check.
 ```
 
@@ -346,12 +346,12 @@ WARM-UP GAP:
   A warmed-up rerun passed PROD/DEV/UAT.
 
 STATUS SCRIPT GAP:
-  project-truth-hris-status and docker ps are accurate.
+  project-truth-bnpi-pats-status and docker ps are accurate.
   project-truth-status can still report old base-service names as missing even when the environment containers are healthy.
 ```
 
 ## Final Sentence
 
 ```text
-PROVEN WITH VIRTUALBOX BOOT WORKAROUND: A Windows/VirtualBox user can download the public Project Truth dev-current VDI, import it with bridged LAN, boot it with one vCPU, and log in to PROD, DEV, and UAT HRIS. DEV contains the current captured data snapshot; PROD and UAT keep default seed data.
+PROVEN WITH VIRTUALBOX BOOT WORKAROUND: A Windows/VirtualBox user can download the public Project Truth dev-current VDI, import it with bridged LAN, boot it with one vCPU, and log in to PROD, DEV, and UAT BNPI PATS. DEV contains the current captured data snapshot; PROD and UAT keep default seed data.
 ```

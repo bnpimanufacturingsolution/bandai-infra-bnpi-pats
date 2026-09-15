@@ -6,13 +6,13 @@
 #
 # HARD BANS (never do these):
 #   - Never touch /etc/cloudflared or any cloudflared credentials/config
-#   - Never stop/disable/mask cloudflared-bnpi-hris.service (or any cloudflared unit)
+#   - Never stop/disable/mask cloudflared-bnpi-pats.service (or any cloudflared unit)
 #   - Never delete postgres PVC data or /var/lib/rancher/k3s/storage/*
 #   - Never run docker/k3s "system prune -af" or delete in-use volumes/containers
 #
 # Safe actions:
 #   1) journalctl --vacuum-size=200M
-#   2) prune /srv/hris/observability/backups/rolling files older than 3 days
+#   2) prune /srv/bnpi-pats/observability/backups/rolling files older than 3 days
 #   3) prune old /tmp and /var/tmp agent dirs older than 2 days
 #      (overnight-*, device-user-*, copy-peer-*, pt-*, credential-*)
 #   4) k3s crictl rmi --prune (unused images only) when available
@@ -36,7 +36,7 @@ TMP_DAYS="${PROJECT_TRUTH_TMP_DAYS:-2}"
 JOURNAL_SIZE="${PROJECT_TRUTH_JOURNAL_SIZE:-200M}"
 DRY_RUN="${PROJECT_TRUTH_DISK_GUARD_DRY_RUN:-0}"
 
-ROLLING_DIR="/srv/hris/observability/backups/rolling"
+ROLLING_DIR="/srv/bnpi-pats/observability/backups/rolling"
 
 log() { printf '[disk-guard] %s\n' "$*"; }
 warn() { printf '[disk-guard] WARN %s\n' "$*" >&2; }

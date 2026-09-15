@@ -101,15 +101,15 @@ foreach ($ip in $candidateIps) {
 }
 
 $hostContainers = @(
-  'hris-api',
-  'hris-app',
-  'hris-api-dev',
-  'hris-app-dev',
-  'hris-api-uat',
-  'hris-app-uat',
-  'hris-grafana',
-  'hris-prometheus',
-  'hris-loki'
+  'bnpi-pats-api',
+  'bnpi-pats-app',
+  'bnpi-pats-api-dev',
+  'bnpi-pats-app-dev',
+  'bnpi-pats-api-uat',
+  'bnpi-pats-app-uat',
+  'bnpi-pats-grafana',
+  'bnpi-pats-prometheus',
+  'bnpi-pats-loki'
 )
 
 $stopped = @()
@@ -118,7 +118,7 @@ try {
   $stopped = @($runningContainers)
   $stopped | Set-Content -LiteralPath (Join-Path $runRoot 'host-containers-stopped.txt')
   if ($stopped.Count -gt 0) {
-    Invoke-Capture 'docker-stop-host-hris' { docker stop $stopped }
+    Invoke-Capture 'docker-stop-host-bnpi-pats' { docker stop $stopped }
     Start-Sleep -Seconds 3
   }
 
@@ -130,7 +130,7 @@ try {
   }
 } finally {
   if ($stopped.Count -gt 0) {
-    Invoke-Capture 'docker-restart-host-hris' { docker start $stopped }
+    Invoke-Capture 'docker-restart-host-bnpi-pats' { docker start $stopped }
   }
 }
 

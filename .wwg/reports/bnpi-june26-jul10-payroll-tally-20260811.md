@@ -60,6 +60,6 @@ Rio `01360`: OT match only; Δ TotalReceivable +₱2,195.73.
 ## Re-run
 
 ```text
-hris-api: node scripts/_tmp-full-period-tally-compare.mjs
+bnpi-pats-api: node scripts/_tmp-full-period-tally-compare.mjs
 → .runtime/full-tally-20260811/
 ```

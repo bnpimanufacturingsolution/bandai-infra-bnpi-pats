@@ -10,7 +10,7 @@ The **Function Tracing & Debug** dashboard should now appear automatically in yo
 
 ```
 http://localhost:53001/dashboards
-→ HRIS Observability folder
+→ BNPI PATS Observability folder
 → Function Tracing & Debug
 ```
 
@@ -18,7 +18,7 @@ http://localhost:53001/dashboards
 
 ```
 http://localhost:53002/dashboards
-→ HRIS Observability folder
+→ BNPI PATS Observability folder
 → Function Tracing & Debug
 ```
 
@@ -66,21 +66,21 @@ Then refresh the dashboard to see logs appear.
 **Step 1: Verify files are in place**
 
 ```bash
-ls hris-api/infrastructure/onprem/observability/grafana/provisioning-dev/dashboards/
+ls bnpi-pats-api/infrastructure/onprem/observability/grafana/provisioning-dev/dashboards/
 # Should show: grafana-dashboard-function-tracing.json + others
 ```
 
 **Step 2: Check Grafana logs**
 
 ```bash
-docker logs hris-grafana-dev | tail -50
+docker logs bnpi-pats-grafana-dev | tail -50
 ```
 
 **Step 3: Restart container**
 
 ```bash
-docker-compose restart hris-grafana-dev
-docker-compose restart hris-grafana-uat
+docker-compose restart bnpi-pats-grafana-dev
+docker-compose restart bnpi-pats-grafana-uat
 ```
 
 **Step 4: Clear browser cache**

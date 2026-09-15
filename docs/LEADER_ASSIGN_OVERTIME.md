@@ -12,7 +12,7 @@ login account).
 ## 1. Where to find it
 
 Sidebar → **My Team → Assign Overtime** (`/employee/team?tab=overtime`).
-Visible for manager-class roles; content only fills for `hris-line-leader`
+Visible for manager-class roles; content only fills for `bnpi-pats-line-leader`
 users who lead at least one section.
 
 Screen layout (checkbox model — no per-person request modal):
@@ -148,7 +148,7 @@ materialize/prepare the timesheet, then re-approve.
 - **PROD/UAT:** schema + code are local-DEV until pushed; VM promotion rides
   the next `develop` push.
 - **Dual-app:** HR-only exception — the leader filing surface exists in
-  `hris-app` only; `hris-emp-app` has no line-leader login/filing surface.
+  `bnpi-pats-app` only; `bnpi-pats-emp-app` has no line-leader login/filing surface.
 
 ## 7. Evidence
 

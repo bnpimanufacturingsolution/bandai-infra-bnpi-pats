@@ -27,8 +27,8 @@ Every item carries an OPTIONAL `responsibleDepartmentId` + `responsibleDepartmen
 
 | Actor | Template CRUD | Roster | Item visibility | Sign |
 |---|---|---|---|---|
-| admin / hris-admin | YES | YES | ALL | any ACTIONABLE item (see below) |
-| HR (hris-hr-manager / hris-hr-user) | view only | YES | ALL | any ACTIONABLE item (see below) |
+| admin / bnpi-pats-admin | YES | YES | ALL | any ACTIONABLE item (see below) |
+| HR (bnpi-pats-hr-manager / bnpi-pats-hr-user) | view only | YES | ALL | any ACTIONABLE item (see below) |
 | ONBOARDING employee (own checklist) | no | sees own | ALL of own | **never own checklist** |
 | other employees | no | YES | own-dept items + no-dept context (read-only) | own-dept items only |
 
@@ -96,7 +96,7 @@ Sign
 - `POST /items/:id/unsign` (admin/HR) — reverts to `PENDING`, keeps audit rows
 - `GET  /items/:id/signatures` — audit trail (admin/HR, the signer dept, or the onboarded self)
 
-## Frontend (`hris-app`)
+## Frontend (`bnpi-pats-app`)
 
 - `app/components/organisms/onboarding/checklist.tsx` — **page preview only**: renders THE
   created checklist (single active template) full-page in the builder-preview layout via
@@ -136,25 +136,25 @@ Sign
 
 ## Tests / evidence
 
-- `hris-api/tests/onboarding-access.contract.spec.ts` — sign matrix + visible-view (pure)
-- `hris-api/tests/onboarding-sign.controller.spec.ts` — sign 200/401/403/409 via supertest+mock prisma
-- `hris-api/tests/onboarding-crud.controller.spec.ts` — guards, org forcing, 409 dup,
+- `bnpi-pats-api/tests/onboarding-access.contract.spec.ts` — sign matrix + visible-view (pure)
+- `bnpi-pats-api/tests/onboarding-sign.controller.spec.ts` — sign 200/401/403/409 via supertest+mock prisma
+- `bnpi-pats-api/tests/onboarding-crud.controller.spec.ts` — guards, org forcing, 409 dup,
   templateId auto-resolve, structure-only PATCH, provision-all (403 + dry-run + idempotent execute)
-- `hris-api/tests/onboarding-lifecycle.spec.ts` — `ensureOnboardingChecklistForEmployee`
+- `bnpi-pats-api/tests/onboarding-lifecycle.spec.ts` — `ensureOnboardingChecklistForEmployee`
   (exists-noop, deep copy parents-before-children, active-template auto-resolve,
   requireTemplate skip, TEMPLATE_NOT_FOUND, employee-not-found)
-- `hris-api/tests/onboarding-status-gate.spec.ts` — design C truth table (legacy AND
+- `bnpi-pats-api/tests/onboarding-status-gate.spec.ts` — design C truth table (legacy AND
   dedicated ACTIONABLE items both required; PENDING section rows never block or reopen —
   filter shape pinned; reopen symmetry; no-dedicated = pure legacy)
-- `hris-app` vitest: `builder.test.tsx` (single-template UI contract, section/item edit+delete,
+- `bnpi-pats-app` vitest: `builder.test.tsx` (single-template UI contract, section/item edit+delete,
   tree payload, pure helpers), `checklist.test.tsx` (page preview contract),
   `onboarding-checklist-panel.test.tsx` (sign modal, dept gating, inline errors, skeleton),
   `hr-onboarding-page.test.tsx` (DataTable numbered pager + ellipsis, page forwarding,
   skeletons, search/filter wiring, row→panel, Open Profile nav),
   `employee.$id.test.tsx` (Onboarding tab only for ONBOARDING status),
   `Sidebar.test.tsx` (Recruitment + general entries), `onboarding.service.test.ts`
-- `hris-app/tests/smoke/admin-onboarding-checklist-live-proof.spec.ts` — live browser proof
-- `hris-app/tests/smoke/onboarding-list-tab-live-proof.spec.ts` — live list→search→sign 6.1
+- `bnpi-pats-app/tests/smoke/admin-onboarding-checklist-live-proof.spec.ts` — live browser proof
+- `bnpi-pats-app/tests/smoke/onboarding-list-tab-live-proof.spec.ts` — live list→search→sign 6.1
   (wrong-password inline error → correct password → profile tab) with a self-healing
   unsign prelude so it is re-runnable
 - Live DEV proofs: `.runtime/onboarding-module-proof-<stamp>/` (v1 E2E),
@@ -164,7 +164,7 @@ Sign
 
 ## DEV test fixtures (created for browser proofs — documented on purpose)
 
-- User `e2e-onb-signer2@bandai.local` / `password123` (role hris-hr-manager; note:
+- User `e2e-onb-signer2@bandai.local` / `password123` (role bnpi-pats-hr-manager; note:
   login tokens carry the employee-derived role, so it signs via DEPARTMENT match, not HR
   bypass) linked to synthetic employee `KCSSI-BANDAI1129`
   (`cmq21pu5e04e87ztg4jeqn2cm`), whose `departmentId` was set to
@@ -172,8 +172,8 @@ Sign
   saved in the proof dir) to match the template's IT items.
   **Drift note (2026-09-14):** the fixture had reverted to dept Production + role
   `employee`, which makes login land on `/403` (the frontend allow-list carries
-  `hris-employee`, not bare `employee` — see REC in the registry). Restored both
-  employee and user to `hris-employee` + Software Development
+  `bnpi-pats-employee`, not bare `employee` — see REC in the registry). Restored both
+  employee and user to `bnpi-pats-employee` + Software Development
   (`.runtime/onboarding-section-gate-proof-20260914-213905/signer-fixture-repair.json`).
 - Char Aznable's checklist (`cmty9opte00l77ktghwrtnnmx`, employee `cmtu4w68e06b27kkw7ovruznu`)
   intentionally keeps item 6.1 signed by "Mae Banaga" as the demo record; admin can
@@ -204,7 +204,7 @@ module's `sign`, `unsign`, `deleteItem`/`deleteSection` (checklist kind),
   `onboardingLifecycle.helper.ts` is the single progress source for controller + ops script).
 - No auto-sign/bulk-sign endpoints (declined): a signature always names a password-verified human.
 - Sign/unsign responses echo the resolved `employmentStatus` for observability.
-- Ops repair: `hris-api/scripts/resync-onboarding-employment-status.ts` (dry-run default,
+- Ops repair: `bnpi-pats-api/scripts/resync-onboarding-employment-status.ts` (dry-run default,
   `--execute`) re-evaluates every ONBOARDING employee after gate-rule changes.
 
 Live proof (2026-09-12, `.runtime/onboarding-gate-proof-<stamp>/`): EMP003
@@ -223,8 +223,8 @@ signer sees 6.1/6.2 `canSign:true` while the no-dept row 6 is `canSign:false`
 
 ## Boundaries
 
-- The per-employee list/signing surface lives in **hris-app** (`/hr/onboarding` + the profile
-  Onboarding tab). `hris-emp-app` has no counterpart and is not a checked-in path on this
+- The per-employee list/signing surface lives in **bnpi-pats-app** (`/hr/onboarding` + the profile
+  Onboarding tab). `bnpi-pats-emp-app` has no counterpart and is not a checked-in path on this
   branch; emp-app parity remains a candidate follow-up (recommendation registry).
 - No change to the generic `BoardingProcess` / `ChecklistItem` / `BoardingTemplate` / `TemplateItem`
   controllers or offboarding flows.

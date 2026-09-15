@@ -23,8 +23,8 @@ These principle candidates were inferred during WWG adoption from existing proje
 ## Source Notes
 
 - docs/dm-migration-workflow.md: Principle-like wording found during lightweight scan.
-- hris-api/.wwg/wiki/principles/README.md: Principle-like wording found during lightweight scan.
-- hris-api/.wwg/workspace/AGENTS.md: Principle-like wording found during lightweight scan.
-- hris-api/AGENTS.md: Principle-like wording found during lightweight scan.
-- hris-app/.wwg/workspace/AGENTS.md: Principle-like wording found during lightweight scan.
-- hris-app/AGENTS.md: Principle-like wording found during lightweight scan.
+- bnpi-pats-api/.wwg/wiki/principles/README.md: Principle-like wording found during lightweight scan.
+- bnpi-pats-api/.wwg/workspace/AGENTS.md: Principle-like wording found during lightweight scan.
+- bnpi-pats-api/AGENTS.md: Principle-like wording found during lightweight scan.
+- bnpi-pats-app/.wwg/workspace/AGENTS.md: Principle-like wording found during lightweight scan.
+- bnpi-pats-app/AGENTS.md: Principle-like wording found during lightweight scan.

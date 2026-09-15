@@ -2,13 +2,13 @@
 
 Operator log for a Windows workstation that **cannot** reach the Project Truth VM
 on LAN `10.184.37.19` and must use **Cloudflare Access SSH** for local
-`hris-api` `npm run dev`.
+`bnpi-pats-api` `npm run dev`.
 
 Evidence pack (gitignored): `.runtime/local-dev-cf-ssh-db-tunnel-20260720/`.
 
 ## Automated one-time setup (2026-09-03)
 
-The missing-key blocker is now self-service: `cd hris-api; npm run setup:ssh`
+The missing-key blocker is now self-service: `cd bnpi-pats-api; npm run setup:ssh`
 (`scripts/setup-dev-ssh-access.ps1`) generates the key, writes the ssh config,
 installs the public key on the VM (LAN-first, Cloudflare Access sign-in
 fallback), and verifies. `npm run dev` also offers this interactively when the
@@ -41,7 +41,7 @@ DB forward is blocked. See `docs/DEV_WORKSTATION_ONBOARDING.md`.
 
 ```text
 %USERPROFILE%\.ssh\node-health-appliance_ed25519
-%USERPROFILE%\.ssh\config   # Host project-truth-hris + ssh.bnpi-hris.tech
+%USERPROFILE%\.ssh\config   # Host project-truth-bnpi-pats + ssh.bnpi-pats.tech
 cloudflared access ssh ProxyCommand
 VM infra authorized_keys += matching public key
 ```
@@ -49,7 +49,7 @@ VM infra authorized_keys += matching public key
 Verify:
 
 ```powershell
-ssh project-truth-hris "echo SSH_OK; hostname; whoami"
+ssh project-truth-bnpi-pats "echo SSH_OK; hostname; whoami"
 ```
 
 ## Daily local API recipes
@@ -57,7 +57,7 @@ ssh project-truth-hris "echo SSH_OK; hostname; whoami"
 ### Normal (shared VM DEV via tunnel `55435`) — default
 
 ```powershell
-cd <repo>\hris-api
+cd <repo>\bnpi-pats-api
 npm.cmd run dev
 ```
 
@@ -67,14 +67,14 @@ Writes to **shared DEV** — do not use for experimental mutations.
 ### Local clone (isolated Docker Postgres on `5433`) — one command
 
 ```powershell
-cd <repo>\hris-api
+cd <repo>\bnpi-pats-api
 npm.cmd run dev:local
 ```
 
 Requires Docker. Single command (`scripts/run-dev-local.cjs`) does all of:
 
 1. Ensure `.env.local-clone` (copy from example if missing)
-2. Start/create Docker `hris-local-dev-clone` on `5433` with named volume `hris-local-dev-clone-pgdata`
+2. Start/create Docker `bnpi-pats-local-dev-clone` on `5433` with named volume `bnpi-pats-local-dev-clone-pgdata`
 3. Wait until Postgres is ready
 4. Run `prisma db push` against the local clone (`prisma/schema-postgres`) so tables exist for `/setup`
 5. Run predev with BNPI tunnel + Hikvision bridges skipped
@@ -85,7 +85,7 @@ Requires Docker. Single command (`scripts/run-dev-local.cjs`) does all of:
 Does **not** replace `npm run dev` (VM tunnel `55435`) or `npm run dev:local` (Docker `5433`).
 
 ```powershell
-cd <repo>\hris-api
+cd <repo>\bnpi-pats-api
 # one-time if binaries missing:
 npm.cmd install --no-save embedded-postgres@18.4.0-beta.17
 node node_modules/@embedded-postgres/windows-x64/scripts/hydrate-symlinks.js
@@ -102,7 +102,7 @@ npm.cmd run db:native:stop
 **Yes.** Both lanes read the same portable dump:
 
 ```text
-.runtime/local-db-snapshots/current/hris-local.dump
+.runtime/local-db-snapshots/current/bnpi-pats-local.dump
 ```
 
 | Action | Docker lane | Native lane |
@@ -121,18 +121,18 @@ The dump is gitignored. On a machine without a local capture, **copy** `.runtime
 
 Named volume (distinguishable in Docker Desktop / `docker volume ls`):
 
-- Default name: `hris-local-dev-clone-pgdata`
-- Override: `HRIS_LOCAL_CLONE_VOLUME`
-- Container override: `HRIS_LOCAL_CLONE_CONTAINER` (default `hris-local-dev-clone`)
-- Schema push opt-out: `HRIS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true`
+- Default name: `bnpi-pats-local-dev-clone-pgdata`
+- Override: `BNPI_PATS_LOCAL_CLONE_VOLUME`
+- Container override: `BNPI_PATS_LOCAL_CLONE_CONTAINER` (default `bnpi-pats-local-dev-clone`)
+- Schema push opt-out: `BNPI_PATS_SKIP_LOCAL_CLONE_SCHEMA_PUSH=true`
 
-Existing containers created before the named-volume change keep their old mount; recreate the container to adopt `hris-local-dev-clone-pgdata` (restore dump after if needed).
+Existing containers created before the named-volume change keep their old mount; recreate the container to adopt `bnpi-pats-local-dev-clone-pgdata` (restore dump after if needed).
 
 Writes only to **local clone** — safe for destructive local testing.
 
 - **Schema**: auto-applied every `dev:local` (idempotent `db push`)
 - **Business data**: empty until you complete `/setup` initialize **or** restore a golden snapshot:
-  - Capture after DM work: `cd hris-api; npm run db:snapshot`
+  - Capture after DM work: `cd bnpi-pats-api; npm run db:snapshot`
   - Restore only: `npm run db:restore`
   - Restore + start API: `npm run dev:local:restore`
   - Snapshot files live under `.runtime/local-db-snapshots/` (gitignored client data)
@@ -149,7 +149,7 @@ Health / login proof:
 Invoke-RestMethod http://localhost:3001/health
 Invoke-RestMethod -Method Post http://localhost:3001/api/auth/login `
   -ContentType application/json `
-  -Body '{"identifier":"admin@bandai.local","password":"password123","appCode":"hris"}'
+  -Body '{"identifier":"admin@bandai.local","password":"password123","appCode":"bnpi-pats"}'
 ```
 
 If DB tunnel died:
@@ -167,5 +167,5 @@ device reverse tunnels from this PC; API login does not require it.
 - Does **not** claim K3s DEV Postgres ClusterIP is healthy.
 - Does **not** replace LAN-first access when `10.184.37.19` is routable.
 - Does **not** change public Cloudflare tunnel service on the VM.
-- App UI still needs `hris-app` (e.g. Vite on `5175`) with
+- App UI still needs `bnpi-pats-app` (e.g. Vite on `5175`) with
   `VITE_API_BASE_URL=http://localhost:3001`.

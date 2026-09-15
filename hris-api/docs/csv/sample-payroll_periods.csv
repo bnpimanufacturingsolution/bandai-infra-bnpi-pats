@@ -1,2 +1,0 @@
-name,code,payFrequency,periodNumber,startDate,endDate,payDate,calculatorCode,status,cutoffDay,notes,generationMetadata
-January 2099 First Half,PAY-2099-01A,SEMI_MONTHLY,1,2099-01-01T00:00:00.000Z,2099-01-15T23:59:59.000Z,2099-01-20T00:00:00.000Z,CALC-STD,OPEN,15,Sample payroll period for linked history rows,"{""source"":""sample-pack""}"

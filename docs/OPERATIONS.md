@@ -37,24 +37,24 @@ Current checkout branch for this working tree is `develop`. Older archived promp
 .\scripts\project-truth.ps1 watch-until-healthy -GuestIp <guest-lan-ip>
 ```
 
-## Local HRIS Appliance Runtime
+## Local BNPI PATS Appliance Runtime
 
 Start the production local stack:
 
 ```powershell
-.\scripts\project-truth.ps1 start-local-hris-runtime -Environment prod
+.\scripts\project-truth.ps1 start-local-bnpi-pats-runtime -Environment prod
 ```
 
 Start all local environment stacks:
 
 ```powershell
-.\scripts\project-truth.ps1 start-local-hris-runtime -Environment all
+.\scripts\project-truth.ps1 start-local-bnpi-pats-runtime -Environment all
 ```
 
 Verify without starting containers:
 
 ```powershell
-.\scripts\project-truth.ps1 verify-local-hris-runtime -Environment all
+.\scripts\project-truth.ps1 verify-local-bnpi-pats-runtime -Environment all
 ```
 
 ## Safety Defaults

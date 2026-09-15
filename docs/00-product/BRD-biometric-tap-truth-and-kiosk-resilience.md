@@ -36,7 +36,7 @@ higher risk of repeated manual work or false product claims.
 
 Project Truth should become a system where:
 
-- an employee tap can be traced from physical action to HRIS result;
+- an employee tap can be traced from physical action to BNPI PATS result;
 - the employee kiosk experience feels immediate and believable;
 - admins can distinguish source unavailable, listener failure, unmatched
   identity, saved-only state, and true success;
@@ -70,7 +70,7 @@ Suggested KPIs:
 
 Primary:
 
-- HRIS admin / device admin
+- BNPI PATS admin / device admin
 - onsite implementer validating devices during rollout or troubleshooting
 
 Secondary:
@@ -124,7 +124,7 @@ Out of scope:
 ## Decision
 
 Adopt biometric tap truth and kiosk resilience as a cross-surface product theme
-that guides upcoming work across `hris-emp-app`, `hris-app`, and `hris-api`.
+that guides upcoming work across `bnpi-pats-emp-app`, `bnpi-pats-app`, and `bnpi-pats-api`.
 Narrow feature slices such as copy-to-all performance or device enrollment
 should continue, but they should now be evaluated against this larger business
 objective.

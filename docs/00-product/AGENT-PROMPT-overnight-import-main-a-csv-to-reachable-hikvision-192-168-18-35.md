@@ -5,7 +5,7 @@ You are the **root owner-operator agent** for Project Truth portable SDK package
 | | |
 |---|---|
 | **Repo** | `C:\Users\User\Desktop\AZURO\BANDAI\bandai-infra` (also monorepo root `BANDAI`) on `develop` |
-| **Runtime** | K3s **DEV only** — VM `project-truth-hris` / `10.184.37.19` |
+| **Runtime** | K3s **DEV only** — VM `project-truth-bnpi-pats` / `10.184.37.19` |
 | **Target device (LAN from Windows host)** | `192.168.18.35` — Hikvision (HTTP **80** open, SDK **8000** open; 443 closed) |
 | **Source package** | Device **A** portable CSV (`main-a-device-users.csv`) with raw FP/face blobs |
 | **Mode** | Multi-subagent, root-coordinated, continuous graph loop |
@@ -75,7 +75,7 @@ Stamp: `.runtime/overnight-import-main-a-192-168-18-35-YYYYMMDD-HHMMSS/`
 
 ```text
 Windows workstation ──TCP 80/8000──► Hikvision 192.168.18.35   (PROVEN reachable)
-Windows workstation ──SSH CF/LAN──► VM project-truth-hris (10.184.37.19)
+Windows workstation ──SSH CF/LAN──► VM project-truth-bnpi-pats (10.184.37.19)
 VM ──direct──► 192.168.18.35                                 (OFTEN FAILS — reverse tunnel required)
 VM loopback ◄──ssh -R── Windows ──► 192.168.18.35            (REQUIRED path)
 API/SDK on VM uses device.address = 127.0.0.1:<mapped> OR host-bridge map
@@ -119,7 +119,7 @@ vendorUserId,displayName,userType,rawFingerprintBlob,rawFaceBlob
 
 **Generator / normalize (if package drifts):**
 
-- `hris-api/scripts/project-five-device-sdk-csv.mjs` — always emit `FPn("...")`
+- `bnpi-pats-api/scripts/project-five-device-sdk-csv.mjs` — always emit `FPn("...")`
 - `.runtime/normalize-host-template-fp.js` + `.runtime/strip-status-columns.js`
 
 Copy package into stamp as `package/main-a-device-users.csv` (do not commit).
@@ -151,7 +151,7 @@ C. Reverse tunnel (Windows → VM)
      SDK port open on 127.0.0.1:<sdkListen>
    →
 D. DEV API auth + device inventory
-   POST /api/auth/login admin@bandai.local / password123 / appCode=hris
+   POST /api/auth/login admin@bandai.local / password123 / appCode=bnpi-pats
    GET  /api/device (list)
    If no row for 192.168.18.35 (or tunnel address map):
      CREATE device row (Hikvision, name e.g. "Import Target 192.168.18.35",
@@ -280,11 +280,11 @@ GET  /api/device/users/import/jobs/:jobId
 
 | Layer | Path |
 |---|---|
-| UI journey | `hris-app/app/routes/admin/devices/enroll.tsx` |
+| UI journey | `bnpi-pats-app/app/routes/admin/devices/enroll.tsx` |
 | CSV builder | `buildDeviceUserImportPayloadFromCsv` in enroll.tsx |
 | React Query mutations | `usePreviewDeviceUserImport`, `useExecuteDeviceUserImport` in `useDevices.ts` |
 | Service | `devices.service.ts` → `/api/device/users/import/*` |
-| API | `hris-api/app/device/device.controller.ts` + `device.router.ts` |
+| API | `bnpi-pats-api/app/device/device.controller.ts` + `device.router.ts` |
 | Contract tests | `device-user-ui-contract.test.ts` |
 | Package docs | `docs/00-product/hikvision-five-device-sdk-export-packages.md` |
 | Tunnel | `scripts/start-host-hikvision-vm-ssh-bridge.ps1` |
@@ -300,7 +300,7 @@ Only if EXIT GATE blocked by UX:
 4. Poll import job with existing job query key pattern.
 5. Add/extend contract tests — do **not** fork a parallel import page outside Sync Center.
 
-**Dual-app:** this is **HR/admin-only** (Sync Center). No `hris-emp-app` mirror required.
+**Dual-app:** this is **HR/admin-only** (Sync Center). No `bnpi-pats-emp-app` mirror required.
 
 ---
 
@@ -320,7 +320,7 @@ If reread FP count/templates fail → stop bulk; fix TUN/DEV/PKG.
 
 ## 9. Credentials & secrets
 
-- Login: `admin@bandai.local` / repo DEV password / `appCode=hris` (never print tokens).
+- Login: `admin@bandai.local` / repo DEV password / `appCode=bnpi-pats` (never print tokens).
 - Device username/password: from existing Device secrets / env / appliance seed — **do not invent** and **do not commit**.
 - If unknown: probe carefully with known BNPI lab candidates **only if already used in this repo’s device seeds**; otherwise mark `NEEDS_CONFIRMATION` and keep tunnel green while waiting — do not brute-force.
 
@@ -330,7 +330,7 @@ If reread FP count/templates fail → stop bulk; fix TUN/DEV/PKG.
 
 ```powershell
 # Prefer Cloudflare alias when LAN blocked
-ssh project-truth-hris "echo SSH_OK; hostname"
+ssh project-truth-bnpi-pats "echo SSH_OK; hostname"
 
 # Direct LAN when available
 ssh -i "$env:USERPROFILE\.ssh\node-health-appliance_ed25519" infra@10.184.37.19
@@ -341,7 +341,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-host-hikvisi
   -DeviceIp 192.168.18.35 -HttpDevicePort 80 -SdkDevicePort 8000
 ```
 
-API on VM: `http://127.0.0.1:3101` (DEV) or in-cluster service; public `https://dev-api.bnpi-hris.tech` only if tunnel/auth works.
+API on VM: `http://127.0.0.1:3101` (DEV) or in-cluster service; public `https://dev-api.bnpi-pats.tech` only if tunnel/auth works.
 
 ---
 

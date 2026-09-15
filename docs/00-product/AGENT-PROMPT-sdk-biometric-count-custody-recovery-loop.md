@@ -54,7 +54,7 @@ and export time remain once in the package manifest.
 ## Hard invariants
 
 - A count is not a blob and cannot create one.
-- Never derive biometric bytes from counts, URLs, another modality, HRIS data,
+- Never derive biometric bytes from counts, URLs, another modality, BNPI PATS data,
   or another user.
 - Devices may be probed in parallel. Full `UserInfo/Search` inventory uses
   bounded page concurrency 8 on the currently proven Main firmware, with
@@ -115,7 +115,7 @@ snapshot before mutation.
 Run:
 
 ```powershell
-cd hris-api
+cd bnpi-pats-api
 npm run probe:hikvision-biometric-counts -- --device-ids=<B,A,F,D,E>
 ```
 

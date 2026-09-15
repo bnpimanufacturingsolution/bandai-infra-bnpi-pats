@@ -10,7 +10,7 @@ Usage:
   project-truth-progress
   project-truth-progress --watch
 
-Shows boot/startup progress for Project Truth HRIS without requiring Docker or
+Shows boot/startup progress for Project Truth BNPI PATS without requiring Docker or
 systemd knowledge. Use --watch while the appliance is starting.
 EOF
 }
@@ -124,23 +124,23 @@ service_state() {
 }
 
 render_once() {
-  local ip_addr docker_state hris_state done total
+  local ip_addr docker_state bnpi_pats_state done total
   local prod_db prod_api prod_app dev_db dev_api dev_app uat_db uat_api uat_app
   local prod_http prod_api_http dev_http dev_api_http uat_http uat_api_http
 
   ip_addr="$(lan_ip || true)"
   docker_state="$(service_state docker.service)"
-  hris_state="$(service_state project-truth-hris.service)"
+  bnpi_pats_state="$(service_state project-truth-bnpi-pats.service)"
 
-  prod_db="$(container_state hris-postgres)"
-  prod_api="$(container_state hris-api)"
-  prod_app="$(container_state hris-app)"
-  dev_db="$(container_state hris-postgres-dev)"
-  dev_api="$(container_state hris-api-dev)"
-  dev_app="$(container_state hris-app-dev)"
-  uat_db="$(container_state hris-postgres-uat)"
-  uat_api="$(container_state hris-api-uat)"
-  uat_app="$(container_state hris-app-uat)"
+  prod_db="$(container_state bnpi-pats-postgres)"
+  prod_api="$(container_state bnpi-pats-api)"
+  prod_app="$(container_state bnpi-pats-app)"
+  dev_db="$(container_state bnpi-pats-postgres-dev)"
+  dev_api="$(container_state bnpi-pats-api-dev)"
+  dev_app="$(container_state bnpi-pats-app-dev)"
+  uat_db="$(container_state bnpi-pats-postgres-uat)"
+  uat_api="$(container_state bnpi-pats-api-uat)"
+  uat_app="$(container_state bnpi-pats-app-uat)"
 
   prod_http="$(http_status http://127.0.0.1:3000/auth/login)"
   prod_api_http="$(http_status http://127.0.0.1:3001/health)"
@@ -153,7 +153,7 @@ render_once() {
   total=18
   [ -n "$ip_addr" ] && done=$((done + 1))
   [ "$docker_state" = "active" ] && done=$((done + 1))
-  [ "$hris_state" = "active" ] && done=$((done + 1))
+  [ "$bnpi_pats_state" = "active" ] && done=$((done + 1))
   for state in "$prod_db" "$prod_api" "$prod_app" "$dev_db" "$dev_api" "$dev_app" "$uat_db" "$uat_api" "$uat_app"; do
     if is_ready_state "$state"; then
       done=$((done + 1))
@@ -175,7 +175,7 @@ render_once() {
 
   stage_line "$([ -n "$ip_addr" ] && echo 1 || echo 0)" "Network" "${ip_addr:-waiting for LAN IP}"
   stage_line "$([ "$docker_state" = "active" ] && echo 1 || echo 0)" "Docker" "$docker_state"
-  stage_line "$([ "$hris_state" = "active" ] && echo 1 || echo 0)" "HRIS autostart" "$hris_state"
+  stage_line "$([ "$bnpi_pats_state" = "active" ] && echo 1 || echo 0)" "BNPI PATS autostart" "$bnpi_pats_state"
   echo
 
   printf '  %-4s %-18s %-18s %-18s %-11s %-11s\n' "ENV" "DATABASE" "API" "APP" "LOGIN" "API"
@@ -197,7 +197,7 @@ render_once() {
   echo "Helpful commands:"
   echo "  project-truth-progress --watch"
   echo "  project-truth-status"
-  echo "  project-truth-hris-status"
+  echo "  project-truth-bnpi-pats-status"
 }
 
 if [ "$watch_mode" -eq 1 ]; then

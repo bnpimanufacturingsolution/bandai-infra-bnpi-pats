@@ -45,7 +45,7 @@ $driftScript = Join-Path $repoRoot "scripts\check-device-events-prompt-drift.ps1
 $deadline = (Get-Date).AddHours($MaxHours)
 $cycle = 0
 $consecutiveGreen = 0
-$loginBody = @{ email = "admin@bandai.local"; password = "password123"; appCode = "hris" } | ConvertTo-Json
+$loginBody = @{ email = "admin@bandai.local"; password = "password123"; appCode = "bnpi-pats" } | ConvertTo-Json
 
 function Write-Hb([string]$line) {
   $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -70,18 +70,18 @@ function Get-G1State {
     error = $null
   }
   try {
-    $r = Invoke-WebRequest "https://dev-api.bnpi-hris.tech/health" -UseBasicParsing -TimeoutSec 15
+    $r = Invoke-WebRequest "https://dev-api.bnpi-pats.tech/health" -UseBasicParsing -TimeoutSec 15
     $state.health = ($r.StatusCode -eq 200)
   } catch {
     $state.error = "health: $($_.Exception.Message)"
     return $state
   }
   try {
-    $login = Invoke-RestMethod -Method Post "https://dev-api.bnpi-hris.tech/api/auth/login" `
+    $login = Invoke-RestMethod -Method Post "https://dev-api.bnpi-pats.tech/api/auth/login" `
       -ContentType "application/json" -Body $loginBody -TimeoutSec 20
     $h = @{ Authorization = "Bearer $($login.data.token)" }
     $state.auth = $true
-    $d = (Invoke-RestMethod -Method Get "https://dev-api.bnpi-hris.tech/api/device/events/live-readiness" `
+    $d = (Invoke-RestMethod -Method Get "https://dev-api.bnpi-pats.tech/api/device/events/live-readiness" `
         -Headers $h -TimeoutSec 30).data
     $d | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $StampDir "manager-live-readiness-latest.json") -Encoding UTF8
     $state.db = [bool]$d.database.ok

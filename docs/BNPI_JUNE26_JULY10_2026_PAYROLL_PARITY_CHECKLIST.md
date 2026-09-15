@@ -4,7 +4,7 @@
 **Last investigation:** 2026-07-26  
 **Session findings (2026-08-13):** `docs/BNPI_PAYROLL_APP_VS_FILE_FINDINGS_20260813.md`  
   (absent policy, Basic 481, OT dual Path A/B, TR impact, recommendations)  
-**Target register:** `confidential-files/HRIS Payroll Computation June_26 - July 10, 2026.xlsx`  
+**Target register:** `confidential-files/BNPI PATS Payroll Computation June_26 - July 10, 2026.xlsx`  
 **Period:** `2026-06-26` → `2026-07-10` (BNPI semi-monthly **period 2**, pay date ~2026-07-15)  
 **Password (register):** `9090` (sensitive; local/client handling only)
 
@@ -12,7 +12,7 @@
 
 ## 1. Purpose
 
-Make **processed payroll in the HRIS app** tally with the client payroll computation workbook for this cutoff.
+Make **processed payroll in the BNPI PATS app** tally with the client payroll computation workbook for this cutoff.
 
 This document is based on:
 
@@ -34,7 +34,7 @@ You have:
 
 | Need | Local file |
 |---|---|
-| Target register | `confidential-files/HRIS Payroll Computation June_26 - July 10, 2026.xlsx` |
+| Target register | `confidential-files/BNPI PATS Payroll Computation June_26 - July 10, 2026.xlsx` |
 | DM1 | `confidential-files/DMs/DM1-master-data-migration (4).xlsx` |
 | DM2 | `confidential-files/DMs/DM2-policy-data-migration (2).xlsx` |
 | DM3 | `confidential-files/DMs/DM3-employee-data-migration (4).xlsx` |
@@ -51,7 +51,7 @@ You have:
 |---|---|
 | `April 2026 Monthly Payment_Statutory Benefits.xlsx` | Remittance / historical loan board. **Not** the source of SSS Cont / PhilHealth / Pag-IBIG. Loan amounts are **April**, often **wrong for June**. |
 
-**Possible incomplete client data (not “missing HRIS code”):**
+**Possible incomplete client data (not “missing BNPI PATS code”):**
 
 - Deduction mass upload may not list **every** register loan for every employee (example: Rio `01360` has register SSS Salary Loan `904.55`, RCBC `2,146.40`, MHDMF2 `250`, but mass upload only has HDMF Salary Loan ~`843.68`).
 - Compensation mass upload may omit every-period items if they are expected from catalog/recurring enrollment (example: Rio register DMA `250`, MLA `500` not on her compensation rows; only PFA/ARP/AON).
@@ -70,7 +70,7 @@ Already implemented:
 | Compensation / deduction mass upload | DM3 UI + `POST /api/migration/dm3/import-*-mass-upload` (**additive** period enrollments for this cut — **not** the only benefit/deduction source; see recurring enrollments below) |
 | Recurring / standing benefits & loans | Active `EmployeeBenefit` / `EmployeeLoan` that already exist on the employee and resolve for the period **even if absent from this cut’s mass-upload files** |
 | Employee manpower databank (roster refresh) | DM3 UI **Upload employee databank** + `POST /api/migration/dm3/import-manpower-databank` (create/update master data only; not a salary source) |
-| Statutory / monthly payment register import | **Removed from DM3 UI and HTTP.** Do not use April statutory board as a migration step; loans/deductions belong in the cutoff deduction mass upload. Offline helper only: `hris-api/helper/bnpi-statutory-benefits-import.helper.ts` |
+| Statutory / monthly payment register import | **Removed from DM3 UI and HTTP.** Do not use April statutory board as a migration step; loans/deductions belong in the cutoff deduction mass upload. Offline helper only: `bnpi-pats-api/helper/bnpi-statutory-benefits-import.helper.ts` |
 | DM4 biometrics + approved OT materialization | DM4 durable migration run |
 | Contribution schedule period 1 full / period 2 zero | `payroll-period.helper.ts` → `BNPI_FIRST_CUTOFF_FULL_SECOND_CUTOFF_NONE` |
 | SSS/PHIC/Pag-IBIG calculation | Calculator + `tax-calculator.helper.ts` at Run Payroll |
@@ -171,7 +171,7 @@ Canonical write-up: `.wwg/wiki/project-truth.md` → **BNPI payroll compensation
 
 ### Phase 0 — Scope and target
 
-- [ ] Confirm target: `confidential-files/HRIS Payroll Computation June_26 - July 10, 2026.xlsx`
+- [ ] Confirm target: `confidential-files/BNPI PATS Payroll Computation June_26 - July 10, 2026.xlsx`
 - [ ] Confirm payroll period in app: start `2026-06-26`, end `2026-07-10`, **periodNumber = 2**
 - [ ] Confirm BNPI cycle: period 1 = 11–25, period 2 = 26–10
 - [ ] Pick sample employees (include `01360` and at least 2–3 others with OT + loans)
@@ -262,7 +262,7 @@ Canonical write-up: `.wwg/wiki/project-truth.md` → **BNPI payroll compensation
 | 5 | Deduction Mass Upload 07.15.26 | Phase 2 |
 | 6 | Biometrics Jun 26 – Jul 10 | Phase 3 |
 | 7 | OT details Jun 26 – Jul 10 | Phase 3 |
-| 8 | HRIS Payroll Computation June_26 – July 10 | Target / Phase 5 |
+| 8 | BNPI PATS Payroll Computation June_26 – July 10 | Target / Phase 5 |
 
 ### Optional / supporting
 
@@ -286,13 +286,13 @@ Canonical write-up: `.wwg/wiki/project-truth.md` → **BNPI payroll compensation
 | Concern | Location |
 |---|---|
 | DM workflow / re-import / DM4 order | `docs/dm-migration-workflow.md` |
-| Contribution split period 1/2 | `hris-api/helper/payroll-period.helper.ts` → `resolveContributionSchedule` |
-| Contribution math | `hris-api/helper/tax-calculator.helper.ts`, `hris-api/config/payroll.config.ts` |
-| Compensation / deduction mass upload | `hris-api/app/migration/bnpi-mass-upload-import.service.ts` + DM3 UI buttons |
-| Statutory loan board parse (offline only; not a migration UI step) | `hris-api/helper/bnpi-statutory-benefits-import.helper.ts` |
-| Historical source-trace roles (Apr/May defaults) | `hris-api/scripts/validate-bandai-payroll-source-trace.ts` |
-| Comparison CLI | `hris-api/scripts/dry-run-bandai-payroll-comparison.ts` |
-| Admin UI uploads (workbook + compensation/deduction only) | `hris-app/app/routes/admin/configuration/migration.tsx` |
+| Contribution split period 1/2 | `bnpi-pats-api/helper/payroll-period.helper.ts` → `resolveContributionSchedule` |
+| Contribution math | `bnpi-pats-api/helper/tax-calculator.helper.ts`, `bnpi-pats-api/config/payroll.config.ts` |
+| Compensation / deduction mass upload | `bnpi-pats-api/app/migration/bnpi-mass-upload-import.service.ts` + DM3 UI buttons |
+| Statutory loan board parse (offline only; not a migration UI step) | `bnpi-pats-api/helper/bnpi-statutory-benefits-import.helper.ts` |
+| Historical source-trace roles (Apr/May defaults) | `bnpi-pats-api/scripts/validate-bandai-payroll-source-trace.ts` |
+| Comparison CLI | `bnpi-pats-api/scripts/dry-run-bandai-payroll-comparison.ts` |
+| Admin UI uploads (workbook + compensation/deduction only) | `bnpi-pats-app/app/routes/admin/configuration/migration.tsx` |
 
 ---
 
@@ -325,7 +325,7 @@ Canonical write-up: `.wwg/wiki/project-truth.md` → **BNPI payroll compensation
 
 - `.wwg/wiki/project-truth.md` — BNPI payroll compensation / deduction source ownership (2026-08-05)
 - `docs/dm-migration-workflow.md` — DM0–DM6 sequence, DM4 OT proof, re-import semantics  
-- `hris-api/docs/multi-period-tax-calculation-plan.md` — contribution toggles by period  
+- `bnpi-pats-api/docs/multi-period-tax-calculation-plan.md` — contribution toggles by period  
 - Historical Apr 26–May 10 tooling paths under `docs/Bandai Payroll/` (same pattern; different cutoff files)
 
 ---

@@ -121,7 +121,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("NET_DVR_SetupAlarmChan_V50", text)
         self.assertIn("COMM_ALARM_ACS", text)
         self.assertIn("NET_DVR_ACS_ALARM_INFO", text)
-        self.assertIn("queue_hris_device_event(job)", text)
+        self.assertIn("queue_bnpi_pats_device_event(job)", text)
         self.assertIn("/api/hikvision/callback", text)
         self.assertIn("EN_HCNETSDK_ALARM", text)
         self.assertIn("queue_reconcile(job)", text)
@@ -135,29 +135,29 @@ class ProbeTests(unittest.TestCase):
     def test_attendance_posts_on_an_independent_non_enriching_lane(self) -> None:
         text = hikvision_bio_source_text()
 
-        self.assertIn("std::deque<ReconcileJob> hris_immediate_event_queue", text)
-        self.assertIn("std::deque<ReconcileJob> hris_enrichment_event_queue", text)
-        self.assertIn("constexpr size_t HRIS_IMMEDIATE_WORKER_COUNT = 2", text)
-        self.assertIn("hris_immediate_posters.emplace_back(hris_immediate_post_loop)", text)
-        self.assertIn("std::thread hris_enrichment_poster(hris_enrichment_post_loop)", text)
+        self.assertIn("std::deque<ReconcileJob> bnpi_pats_immediate_event_queue", text)
+        self.assertIn("std::deque<ReconcileJob> bnpi_pats_enrichment_event_queue", text)
+        self.assertIn("constexpr size_t BNPI_PATS_IMMEDIATE_WORKER_COUNT = 2", text)
+        self.assertIn("bnpi_pats_immediate_posters.emplace_back(bnpi_pats_immediate_post_loop)", text)
+        self.assertIn("std::thread bnpi_pats_enrichment_poster(bnpi_pats_enrichment_post_loop)", text)
 
-        immediate_loop = text.split("void hris_immediate_post_loop()", 1)[1].split(
-            "void hris_enrichment_post_loop()", 1
+        immediate_loop = text.split("void bnpi_pats_immediate_post_loop()", 1)[1].split(
+            "void bnpi_pats_enrichment_post_loop()", 1
         )[0]
-        self.assertIn("post_hikvision_callback(hris_job)", immediate_loop)
-        self.assertNotIn("enrich_hris_job_before_post", immediate_loop)
+        self.assertIn("post_hikvision_callback(bnpi_pats_job)", immediate_loop)
+        self.assertNotIn("enrich_bnpi_pats_job_before_post", immediate_loop)
 
-        enrichment_loop = text.split("void hris_enrichment_post_loop()", 1)[1].split(
+        enrichment_loop = text.split("void bnpi_pats_enrichment_post_loop()", 1)[1].split(
             "void reconcile_worker_loop()", 1
         )[0]
-        self.assertIn("enrich_hris_job_before_post(hris_job)", enrichment_loop)
-        self.assertIn("post_hikvision_callback(hris_job)", enrichment_loop)
+        self.assertIn("enrich_bnpi_pats_job_before_post(bnpi_pats_job)", enrichment_loop)
+        self.assertIn("post_hikvision_callback(bnpi_pats_job)", enrichment_loop)
 
     def test_callback_http_retries_do_not_hold_the_spool_mutex(self) -> None:
         text = hikvision_bio_source_text()
 
         post_body = text.split("bool post_hikvision_callback(const ReconcileJob &job)", 1)[1].split(
-            "bool post_hris_contract(", 1
+            "bool post_bnpi_pats_contract(", 1
         )[0]
         retry_position = post_body.index("post_json_with_retries(")
         last_lock_before_retry = post_body.rfind(
@@ -255,7 +255,7 @@ class ProbeTests(unittest.TestCase):
         self.assertIn('"delete_face_requires_exclusive_manual_mode"', text)
         self.assertIn("configs.size() != 1", text)
         self.assertIn(
-            "configs.front().hris_device_id != delete_face_device_id",
+            "configs.front().bnpi_pats_device_id != delete_face_device_id",
             text,
         )
         self.assertIn("HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID", text)
@@ -278,7 +278,7 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn("delete_peer_fingerprints(", delete_face)
         self.assertNotIn("NET_DVR_DEL_CARD", delete_face)
         self.assertNotIn("NET_DVR_DEL_FINGERPRINT", delete_face)
-        self.assertNotIn("post_hris_contract", delete_face)
+        self.assertNotIn("post_bnpi_pats_contract", delete_face)
         self.assertLess(
             text.index('"delete_face_requires_single_exact_target_config"'),
             text.index("if (!NET_DVR_Init())"),

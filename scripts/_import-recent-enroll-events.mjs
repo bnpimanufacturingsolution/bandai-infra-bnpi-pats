@@ -1,18 +1,18 @@
-﻿import { PrismaClient } from "../hris-api/generated/prisma/index.js";
-import { hikvisionFetch } from "../hris-api/lib/hikvision-client.js";
+﻿﻿import { PrismaClient } from "../bnpi-pats-api/generated/prisma/index.js";
+import { hikvisionFetch } from "../bnpi-pats-api/lib/hikvision-client.js";
 import {
   buildHikvisionLogSearchXml,
   normalizeHikvisionLogSearchRow,
   parseHikvisionLogSearchResponse,
   isOpaqueHikvisionPersonToken,
-} from "../hris-api/helper/hikvision-event-contract.helper.js";
+} from "../bnpi-pats-api/helper/hikvision-event-contract.helper.js";
 import {
   applyDevicePersonTokenToEvidence,
   formatHikvisionPlus08,
   upsertDeviceUserInventoryStub,
   upsertDevicePersonToken,
-} from "../hris-api/helper/device-person-token.helper.js";
-import { hikvisionEndpoint } from "../hris-api/config/hikvision.endpoint.js";
+} from "../bnpi-pats-api/helper/device-person-token.helper.js";
+import { hikvisionEndpoint } from "../bnpi-pats-api/config/hikvision.endpoint.js";
 
 const prisma = new PrismaClient({ datasources: { db: { url: process.env.FORCE_DATABASE_URL } } });
 const deviceId = "cmrlgqsjv000oob01165tbd8n";
@@ -101,7 +101,7 @@ for (const metaId of metaIds) {
           personTokenResolved: Boolean(employeeNo && !isOpaqueHikvisionPersonToken(employeeNo) && opaque),
           opaquePersonToken: opaque,
           resolvedEmployeeNo: isOpaqueHikvisionPersonToken(employeeNo) ? null : employeeNo,
-          notHrisEmployee: true, plane: "DEVICE_USER",
+          notBnpiPatsEmployee: true, plane: "DEVICE_USER",
           rawEvidence: applied.rawEvidence || evidence,
         },
       },

@@ -41,7 +41,7 @@ Windows repo on develop
 4. Reverify SSH; do not merely assume it remains available:
 
    ```powershell
-   ssh -o BatchMode=yes project-truth-hris "echo SSH_OK"
+   ssh -o BatchMode=yes project-truth-bnpi-pats "echo SSH_OK"
    ```
 
 5. Prefer direct LAN SSH first when it is routable:
@@ -51,16 +51,16 @@ Windows repo on develop
    ```
 
    At the last check, direct LAN port 22 timed out and the documented
-   `project-truth-hris` Cloudflare SSH alias worked. Recheck both and record the
+   `project-truth-bnpi-pats` Cloudflare SSH alias worked. Recheck both and record the
    current result. Do not disable or restart the named Cloudflare tunnel.
 6. If the local API forward is absent, create only this SSH forward:
 
    ```powershell
-   ssh -N -L 127.0.0.1:53101:127.0.0.1:3101 project-truth-hris
+   ssh -N -L 127.0.0.1:53101:127.0.0.1:3101 project-truth-bnpi-pats
    ```
 
    Use `http://127.0.0.1:53101` only as a tunnel to the VM/K3s DEV API.
-7. Authenticate as `admin@bandai.local` with `appCode='hris'` using the
+7. Authenticate as `admin@bandai.local` with `appCode='bnpi-pats'` using the
    documented repository credential. Never print the bearer token.
 8. Create a new stamped `.runtime` evidence directory and publish a concise
    Current-State Report with confirmed, `STALE`, `CONFLICTING`, and
@@ -74,13 +74,13 @@ At 2026-07-24 around 09:20 Asia/Manila:
   `eba1c099fb246f64203d3d3fd84c6ad517387752`;
 - exact-SHA validation run `30058024551` completed successfully;
 - K3s DEV had exactly one ready API replica and one ready app replica;
-- `cloudflared-bnpi-hris.service` was active;
+- `cloudflared-bnpi-pats.service` was active;
 - the durable recovery list endpoint returned HTTP 200;
 - durable recovery jobs: `0`;
 - active legacy physical merge writers: `0`;
 - no recovery or physical write job had been started;
 - the recovery tables had been applied successfully;
-- `hris-api-db-init` was still failing in the seed phase, after schema sync,
+- `bnpi-pats-api-db-init` was still failing in the seed phase, after schema sync,
   because `defaultProjectSeeder.ts` hit a `User.userName` unique constraint
   during `prisma.user.upsert`;
 - `prisma migrate diff` from live K3s DEV to the checked-in Postgres schema

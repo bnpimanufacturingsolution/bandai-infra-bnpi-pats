@@ -107,12 +107,12 @@ echo
 echo "Network"
 if [ -n "$ip_addr" ]; then
   echo "  LAN IP: $ip_addr"
-  echo "  HRIS app: http://${ip_addr}:3000/"
-  echo "  HRIS login: http://${ip_addr}:3000/auth/login"
-  echo "  HRIS API health: http://${ip_addr}:3001/health"
-  echo "  PROD DB: postgresql://postgres:postgres@${ip_addr}:15432/hris"
-  echo "  DEV DB:  postgresql://postgres:postgres@${ip_addr}:15433/hris"
-  echo "  UAT DB:  postgresql://postgres:postgres@${ip_addr}:15434/hris"
+  echo "  BNPI PATS app: http://${ip_addr}:3000/"
+  echo "  BNPI PATS login: http://${ip_addr}:3000/auth/login"
+  echo "  BNPI PATS API health: http://${ip_addr}:3001/health"
+  echo "  PROD DB: postgresql://postgres:postgres@${ip_addr}:15432/bnpi_pats"
+  echo "  DEV DB:  postgresql://postgres:postgres@${ip_addr}:15433/bnpi_pats"
+  echo "  UAT DB:  postgresql://postgres:postgres@${ip_addr}:15434/bnpi_pats"
 else
   echo "  LAN IP: not detected"
   echo "  Repair: project-truth-lan-config"
@@ -130,27 +130,27 @@ fi
 echo
 
 echo "Docker services"
-print_container_row hris-postgres postgres
-print_container_row hris-api api
-print_container_row hris-app app
+print_container_row bnpi-pats-postgres postgres
+print_container_row bnpi-pats-api api
+print_container_row bnpi-pats-app app
 echo
 
 echo "Environment matrix"
-print_env_row prod 3000 3001 15432 hris-app hris-api hris-postgres
-print_env_row dev  3100 3101 15433 hris-app-dev hris-api-dev hris-postgres-dev
-print_env_row uat  3200 3201 15434 hris-app-uat hris-api-uat hris-postgres-uat
+print_env_row prod 3000 3001 15432 bnpi-pats-app bnpi-pats-api bnpi-pats-postgres
+print_env_row dev  3100 3101 15433 bnpi-pats-app-dev bnpi-pats-api-dev bnpi-pats-postgres-dev
+print_env_row uat  3200 3201 15434 bnpi-pats-app-uat bnpi-pats-api-uat bnpi-pats-postgres-uat
 echo
 
 echo "Database"
-printf '  %-5s %-13s %s\n' "PROD" "$(port_state 15432)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15432/hris"
-printf '  %-5s %-13s %s\n' "DEV" "$(port_state 15433)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15433/hris"
-printf '  %-5s %-13s %s\n' "UAT" "$(port_state 15434)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15434/hris"
-if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1 || sudo -n docker exec hris-postgres pg_isready -U postgres -d hris >/dev/null 2>&1'; then
+printf '  %-5s %-13s %s\n' "PROD" "$(port_state 15432)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15432/bnpi_pats"
+printf '  %-5s %-13s %s\n' "DEV" "$(port_state 15433)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15433/bnpi-pats"
+printf '  %-5s %-13s %s\n' "UAT" "$(port_state 15434)" "postgresql://postgres:postgres@${ip_addr:-<lan-ip>}:15434/bnpi-pats"
+if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec bnpi-pats-postgres pg_isready -U postgres -d bnpi-pats >/dev/null 2>&1 || sudo -n docker exec bnpi-pats-postgres pg_isready -U postgres -d bnpi-pats >/dev/null 2>&1'; then
   echo "  postgres: accepting connections"
 else
   echo "  postgres: not ready"
 fi
-if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1 || sudo -n docker exec hris-api printenv PG_DATABASE_URL >/dev/null 2>&1'; then
+if timeout 8 bash -c 'docker ps >/dev/null 2>&1 && docker exec bnpi-pats-api printenv PG_DATABASE_URL >/dev/null 2>&1 || sudo -n docker exec bnpi-pats-api printenv PG_DATABASE_URL >/dev/null 2>&1'; then
   echo "  api env: PG_DATABASE_URL present"
 else
   echo "  api env: PG_DATABASE_URL missing"
@@ -175,10 +175,10 @@ echo
 echo "Useful commands"
 echo "  project-truth-progress --watch"
 echo "  project-truth-monitor"
-echo "  project-truth-hris-status"
+echo "  project-truth-bnpi-pats-status"
 echo "  project-truth-db-access"
-echo "  project-truth-hris-env-start dev|uat|prod|all"
-echo "  project-truth-hris-env-seed dev|uat|prod|all"
+echo "  project-truth-bnpi-pats-env-start dev|uat|prod|all"
+echo "  project-truth-bnpi-pats-env-seed dev|uat|prod|all"
 echo "  project-truth-lan-config"
 echo "  docker compose -f ${compose_file} ps"
 echo "  docker compose -f ${env_compose_file} ps"

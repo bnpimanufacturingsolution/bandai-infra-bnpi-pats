@@ -30,18 +30,18 @@ impossible to edit from anywhere.
 - **Payroll-locked (paid) sheets are still protected** — they continue to require the
   Payroll Correction flow.
 
-## Rules (backend guardrails — `hris-api/app/timesheet/timesheet.controller.ts`)
+## Rules (backend guardrails — `bnpi-pats-api/app/timesheet/timesheet.controller.ts`)
 
 | Rule | Detail |
 |---|---|
-| Who | `hris-admin` / `admin` / `super_admin` / `superadmin` / `hris-hr-manager` / `hris-hr-user` / `hris-timekeeper` |
+| Who | `bnpi-pats-admin` / `admin` / `super_admin` / `superadmin` / `bnpi-pats-hr-manager` / `bnpi-pats-hr-user` / `bnpi-pats-timekeeper` |
 | What | Breakdown-only payload (`breakdown` + `editedDayKeys`) — status/money fields on the side are still rejected |
 | Status | Only `APPROVED` sheets get the new allowance; `SUBMITTED` keeps its breakdown-only rule; non-HR actors keep the original hard block |
 | Payroll lock | Unchanged — `409` before any other check |
 | Audit | Changed days are versioned (`CORRECTION` ledger) through `resolveVersionDayKeys` / `resolveManualEditDayKeys`; activity + audit logs recorded |
 | Status mutation | HR cannot flip an APPROVED sheet's status through this path (breakdown-only enforced) |
 
-## Frontend behavior (`hris-app/app/components/organisms/TimesheetViewModal.tsx`)
+## Frontend behavior (`bnpi-pats-app/app/components/organisms/TimesheetViewModal.tsx`)
 
 - Orange **HR edit mode** banner appears on APPROVED sheets for HR roles:
   "HR edit mode: click any day to correct it, then use Save changes. The timesheet stays
@@ -54,10 +54,10 @@ impossible to edit from anywhere.
 
 ## Tests
 
-- Backend: `hris-api/tests/timesheet-hr-approved-edit.spec.ts` (6 passing) — pins the HR
+- Backend: `bnpi-pats-api/tests/timesheet-hr-approved-edit.spec.ts` (6 passing) — pins the HR
   allowance, the retained hard block for non-HR, the payroll-lock-first ordering, audit
   versioning, and the untouched leader guard.
-- Frontend: `hris-app/app/components/organisms/TimesheetViewModal.test.tsx` — HR CTA gating,
+- Frontend: `bnpi-pats-app/app/components/organisms/TimesheetViewModal.test.tsx` — HR CTA gating,
   HR edit banner, non-HR isolation. Also repaired 8 pre-existing failing baseline tests
   (incomplete `useTimesheets` mock).
 

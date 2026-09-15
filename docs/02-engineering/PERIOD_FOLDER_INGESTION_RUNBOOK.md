@@ -2,14 +2,14 @@
 
 ## Overview
 
-The **Payroll Files Ingestion Orchestrator** (`hris-api/scripts/import-payroll-files-folder.mjs`, CLI `npm run import:payroll-files` / `npm run payroll:import-files`) enables complete, one-command ingestion and synchronization of all payroll cutoff files directly from a folder of `.xlsx` workbooks without manual file sorting, renaming, or Sheet2 dependence.
+The **Payroll Files Ingestion Orchestrator** (`bnpi-pats-api/scripts/import-payroll-files-folder.mjs`, CLI `npm run import:payroll-files` / `npm run payroll:import-files`) enables complete, one-command ingestion and synchronization of all payroll cutoff files directly from a folder of `.xlsx` workbooks without manual file sorting, renaming, or Sheet2 dependence.
 
 ---
 
 ## Quick Start
 
 ```bash
-# In hris-api directory:
+# In bnpi-pats-api directory:
 npm run import:payroll-files -- --dir="confidential-files/june26-july10"
 npm run import:payroll-files -- --dir="confidential-files/july11-july25"
 
@@ -69,7 +69,7 @@ node scripts/import-payroll-files-folder.mjs --dir="confidential-files/july11-ju
 | **Deduction Mass** | `Deduction Mass Upload 07.31.26.xlsx` | `/deduction\|ded.*mass/i` | `DEDCODE`, `EmployeeID`, `Payment` | `/api/migration/dm3/import-deduction-mass-upload` |
 | **Biometrics Attendance** | `Biometrics Data_Jul 11 - 25_3.xlsx` | `/biometrics\|bio.*data/i` | `Emp No` / `PIN`, `Punch`, `DateTime` | `/api/migration/runs` (DM4) |
 | **Approved Overtime** | `rptOvertimeDetails - July 11 to 25, 2026.xlsx` | `/rptOvertimeDetails\|overtime/i` | Sheet `rptOvertimeDetails` / `Reg OT`, `Spcl OT` | `/api/migration/runs` (DM4) |
-| **Historical Register** | `HRIS Payroll Computation July 11 - 25, 2026.xlsx` | `/computation\|payroll register/i` | `Emp. No.`, `Basic Salary`, `GrossPay` | *Audit target only (not ingested)* |
+| **Historical Register** | `BNPI PATS Payroll Computation July 11 - 25, 2026.xlsx` | `/computation\|payroll register/i` | `Emp. No.`, `Basic Salary`, `GrossPay` | *Audit target only (not ingested)* |
 
 ---
 
@@ -100,7 +100,7 @@ The orchestrator runs 4 automated post-import fixes immediately after ingestion:
 ## Verifying Payroll Results
 
 After running the script:
-1. Open the HRIS web application $\rightarrow$ **Payroll Management**.
+1. Open the BNPI PATS web application $\rightarrow$ **Payroll Management**.
 2. Select the Target Period (e.g. `Period 1 - Jul 2026`).
 3. Click **Preview Payroll** to view the calculated register.
 4. Export or approve the completed payroll.

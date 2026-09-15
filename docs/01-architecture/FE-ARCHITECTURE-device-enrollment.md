@@ -2,7 +2,7 @@
 
 ## Truth Status
 
-**CONFIRMED:** React Router route surface in `hris-app`; `devices.service.ts` contains the device-user, sync-job, merge-plan/apply, link/unlink, and enrollment contracts; backend controller/helper own device persistence and merge planning.
+**CONFIRMED:** React Router route surface in `bnpi-pats-app`; `devices.service.ts` contains the device-user, sync-job, merge-plan/apply, link/unlink, and enrollment contracts; backend controller/helper own device persistence and merge planning.
 
 **INFERRED:** The safest UX boundary is a stateful orchestration screen that composes existing service calls rather than moving merge logic into the browser.
 
@@ -15,7 +15,7 @@ flowchart TB
   UI[Device enrollment workspace]
   UI --> Q[Query/mutation hooks]
   Q --> S[devices.service.ts]
-  S --> API[hris-api device controller]
+  S --> API[bnpi-pats-api device controller]
   API --> DB[(Device / DeviceUser / Employee / DeviceSyncRun)]
   API --> DEV[Hikvision or ZKTeco device adapter]
   API --> JOB[Async sync job]

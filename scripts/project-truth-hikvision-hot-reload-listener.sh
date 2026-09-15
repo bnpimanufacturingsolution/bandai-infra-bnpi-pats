@@ -10,14 +10,14 @@ SOURCE_ROOT=${HIKVISION_HOT_RELOAD_SOURCE_ROOT:-/opt/project-truth/vendor/hikvis
 # Prefer healthy host reverse unless HIKVISION_HOT_RELOAD_FORCE_API_BASE=1.
 HOST_REVERSE_API_BASE=${HIKVISION_HOST_REVERSE_API_BASE:-http://127.0.0.1:53001}
 VM_DEV_API_BASE=${HIKVISION_VM_DEV_API_BASE:-http://localhost:3101}
-# K3s SQLite outbox NodePort (hris-callback-outbox). Drop-in for /api/hikvision/callback.
+# K3s SQLite outbox NodePort (bnpi-pats-callback-outbox). Drop-in for /api/hikvision/callback.
 OUTBOX_API_BASE=${HIKVISION_CALLBACK_OUTBOX_BASE:-http://127.0.0.1:30108}
-POSTGRES_CONTAINER=${HIKVISION_POSTGRES_CONTAINER:-hris-postgres-dev}
+POSTGRES_CONTAINER=${HIKVISION_POSTGRES_CONTAINER:-bnpi-pats-postgres-dev}
 DEVICE_SOURCE=${HIKVISION_HOT_RELOAD_DEVICE_SOURCE:-postgres}
 DEVICE_FETCH_LIMIT=${HIKVISION_HOT_RELOAD_DEVICE_FETCH_LIMIT:-200}
 LOGIN_EMAIL=${HIKVISION_HOT_RELOAD_LOGIN_EMAIL:-admin@bandai.local}
 LOGIN_PASSWORD=${HIKVISION_HOT_RELOAD_LOGIN_PASSWORD:-password123}
-LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_LOGIN_APP_CODE:-hris}
+LOGIN_APP_CODE=${HIKVISION_HOT_RELOAD_LOGIN_APP_CODE:-bnpi-pats}
 
 api_health_ok() {
   local base="${1%/}"
@@ -39,11 +39,11 @@ resolve_local_api_base() {
     fi
   fi
 
-  # Prefer K3s SQLite outbox when healthy so ACS posts survive brief hris-api blips.
+  # Prefer K3s SQLite outbox when healthy so ACS posts survive brief bnpi-pats-api blips.
   # C++ posts to {base}/api/hikvision/callback — outbox implements that drop-in path.
   if [[ "$prefer_outbox" == "1" || "$prefer_outbox" == "true" || "$prefer_outbox" == "yes" ]]; then
     if api_health_ok "$outbox_base"; then
-      echo "INFO: using callback outbox $outbox_base (SQLite drain → hris-api)" >&2
+      echo "INFO: using callback outbox $outbox_base (SQLite drain → bnpi-pats-api)" >&2
       echo "$outbox_base"
       return 0
     fi
@@ -196,7 +196,7 @@ ensure_work_tree() {
   fi
 }
 
-fetch_hikvision_hris_token() {
+fetch_hikvision_bnpi_pats_token() {
   local login_url="${LOCAL_API_BASE%/}/api/auth/login"
   local login_payload
   login_payload=$(python3 - <<'PY'
@@ -248,7 +248,7 @@ SQL
 )
 
   docker exec -i "$POSTGRES_CONTAINER" \
-    psql -U postgres -d hris -v ON_ERROR_STOP=1 -qAt -c "$query" | tr -d '\r'
+    psql -U postgres -d bnpi-pats -v ON_ERROR_STOP=1 -qAt -c "$query" | tr -d '\r'
 }
 
 fetch_hikvision_device_rows_from_api() {
@@ -300,7 +300,7 @@ for device in devices:
 PY
 }
 
-hris_token=""
+bnpi_pats_token=""
 export LOGIN_EMAIL LOGIN_PASSWORD LOGIN_APP_CODE
 tmp_spec=$(mktemp /tmp/project-truth-hikvision-device.XXXXXX)
 runtime_spec=""
@@ -320,8 +320,8 @@ else
       rows="$(fetch_hikvision_device_rows_from_postgres)"
       ;;
     api)
-      hris_token="$(fetch_hikvision_hris_token)"
-      rows="$(fetch_hikvision_device_rows_from_api "$hris_token")"
+      bnpi_pats_token="$(fetch_hikvision_bnpi_pats_token)"
+      rows="$(fetch_hikvision_device_rows_from_api "$bnpi_pats_token")"
       ;;
     *)
       echo "unsupported HIKVISION_HOT_RELOAD_DEVICE_SOURCE: $DEVICE_SOURCE" >&2
@@ -383,20 +383,20 @@ cd "$WORK"
 export HIKVISION_LINUX_SDK_ROOT="$SDK_ROOT"
 export LD_LIBRARY_PATH="$SDK_ROOT/lib:$SDK_ROOT:$SDK_ROOT/HCNetSDKCom:${LD_LIBRARY_PATH:-}"
 # Always mint a token when empty. Static-spec override used to skip the API device
-# fetch and left HIKVISION_HRIS_API_TOKEN blank, so every callback/reconcile curl
+# fetch and left HIKVISION_BNPI_PATS_API_TOKEN blank, so every callback/reconcile curl
 # returned HTTP 401 ("No token provided") and merge peer-copy looked like total failure.
-if [[ -z "${hris_token:-}" ]]; then
-  if ! hris_token="$(fetch_hikvision_hris_token)"; then
-    echo "WARN: failed to mint HRIS API token; HRIS posts may 401 until login works" >&2
-    hris_token=""
+if [[ -z "${bnpi_pats_token:-}" ]]; then
+  if ! bnpi_pats_token="$(fetch_hikvision_bnpi_pats_token)"; then
+    echo "WARN: failed to mint BNPI PATS API token; BNPI PATS posts may 401 until login works" >&2
+    bnpi_pats_token=""
   fi
 fi
-export HIKVISION_HRIS_API_TOKEN="$hris_token"
+export HIKVISION_BNPI_PATS_API_TOKEN="$bnpi_pats_token"
 
 cmd=(
   ./build/hikvision-biometric-service
   --device-file "$SPEC"
-  --hris-api-base "$LOCAL_API_BASE"
+  --bnpi-pats-api-base "$LOCAL_API_BASE"
   --evidence-jsonl /var/log/project-truth/hikvision-hot-reload-listener.jsonl
 )
 

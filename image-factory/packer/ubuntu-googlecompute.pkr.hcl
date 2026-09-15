@@ -9,7 +9,7 @@ packer {
 
 variable "project_id" {
   type    = string
-  default = "hris-492904"
+  default = "bnpi-pats-492904"
 }
 
 variable "zone" {
@@ -113,11 +113,11 @@ build {
       "mkdir -p /tmp/project-truth-staging",
       "tar -xf /tmp/project-truth-staging.tar -C /tmp/project-truth-staging",
       "mkdir -p /opt/project-truth",
-      "rm -rf /opt/project-truth/gitops /opt/project-truth/appliance /opt/project-truth/hris-api /opt/project-truth/hris-app /opt/project-truth/vendor",
+      "rm -rf /opt/project-truth/gitops /opt/project-truth/appliance /opt/project-truth/bnpi-pats-api /opt/project-truth/bnpi-pats-app /opt/project-truth/vendor",
       "cp -R /tmp/project-truth-staging/gitops /opt/project-truth/gitops",
       "cp -R /tmp/project-truth-staging/appliance /opt/project-truth/appliance",
-      "cp -R /tmp/project-truth-staging/hris-api /opt/project-truth/hris-api",
-      "cp -R /tmp/project-truth-staging/hris-app /opt/project-truth/hris-app",
+      "cp -R /tmp/project-truth-staging/bnpi-pats-api /opt/project-truth/bnpi-pats-api",
+      "cp -R /tmp/project-truth-staging/bnpi-pats-app /opt/project-truth/bnpi-pats-app",
       "cp -R /tmp/project-truth-staging/vendor /opt/project-truth/vendor",
       "find /opt/project-truth -type f \\( -name '*.tmp' -o -name '.env' -o -name '.env.*' \\) -delete",
       "chown -R infra:infra /opt/project-truth"

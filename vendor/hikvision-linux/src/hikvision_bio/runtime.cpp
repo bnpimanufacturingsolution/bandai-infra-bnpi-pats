@@ -7,8 +7,8 @@ volatile std::sig_atomic_t keep_running = 1;
 
 std::mutex queue_mutex;
 std::condition_variable queue_cv;
-std::deque<ReconcileJob> hris_immediate_event_queue;
-std::deque<ReconcileJob> hris_enrichment_event_queue;
+std::deque<ReconcileJob> bnpi_pats_immediate_event_queue;
+std::deque<ReconcileJob> bnpi_pats_enrichment_event_queue;
 std::deque<ReconcileJob> reconcile_queue;
 std::vector<DeviceSession> sessions;
 std::mutex sessions_mutex;
@@ -43,8 +43,8 @@ std::atomic<unsigned long long> delayed_reconcile_token{0};
 std::atomic<unsigned long long> callback_spool_token{0};
 bool execute_mode = true;
 bool automatic_peer_reconcile_enabled = true;
-std::string hris_api_base;
-std::string hris_api_token;
+std::string bnpi_pats_api_base;
+std::string bnpi_pats_api_token;
 std::string min_sdk_time;
 std::string reconcile_spool_dir = "/tmp/project-truth-hikvision-reconcile-spool";
 std::string reconcile_quarantine_dir =
@@ -67,7 +67,7 @@ bool parse_device_spec(const std::string &spec, DeviceConfig *config) {
     if (parts.size() < 7) {
         return false;
     }
-    config->hris_device_id = parts[0];
+    config->bnpi_pats_device_id = parts[0];
     config->organization_id = parts[1];
     config->name = parts[2];
     config->host = parts[3];
@@ -93,7 +93,7 @@ bool login_device(DeviceSession &session) {
     session.last_login_error = session.user_id >= 0 ? 0 : NET_DVR_GetLastError();
     emit_json({
         {"event", "sdk_login"},
-        {"deviceId", session.config.hris_device_id},
+        {"deviceId", session.config.bnpi_pats_device_id},
         {"deviceName", session.config.name},
         {"host", session.config.host},
         {"sdkPort", std::to_string(session.config.sdk_port)},
@@ -114,7 +114,7 @@ bool arm_alarm(DeviceSession &session) {
     session.alarm_handle = NET_DVR_SetupAlarmChan_V50(session.user_id, &param, nullptr, 0);
     emit_json({
         {"event", "sdk_alarm_arm"},
-        {"deviceId", session.config.hris_device_id},
+        {"deviceId", session.config.bnpi_pats_device_id},
         {"host", session.config.host},
         {"ok", session.alarm_handle >= 0 ? "true" : "false"},
         {"alarmHandle", std::to_string(session.alarm_handle)},
@@ -127,11 +127,11 @@ void close_sessions() {
     for (auto &session : sessions) {
         if (session.alarm_handle >= 0) {
             NET_DVR_CloseAlarmChan_V30(session.alarm_handle);
-            emit_json({{"event", "sdk_alarm_close"}, {"deviceId", session.config.hris_device_id}});
+            emit_json({{"event", "sdk_alarm_close"}, {"deviceId", session.config.bnpi_pats_device_id}});
         }
         if (session.user_id >= 0) {
             NET_DVR_Logout_V30(session.user_id);
-            emit_json({{"event", "sdk_logout"}, {"deviceId", session.config.hris_device_id}});
+            emit_json({{"event", "sdk_logout"}, {"deviceId", session.config.bnpi_pats_device_id}});
         }
     }
 }
@@ -140,7 +140,7 @@ void usage(const char *program) {
     std::cerr
         << "Usage: " << program << " --device id|org|name|host|sdkPort|username|password[|peer] "
         << "[--device-file path] "
-        << "[--device ...] [--evidence-jsonl path] [--hris-api-base url] [--hris-api-token token] "
+        << "[--device ...] [--evidence-jsonl path] [--bnpi-pats-api-base url] [--bnpi-pats-api-token token] "
         << "[--min-sdk-time YYYY-MM-DDTHH:MM:SS] [--execute|--dry-run] [--seconds n] "
         << "[--replay-spool-only] [--post-contract-file path] "
         << "[--manual-full-mirror-source-device-id id] "

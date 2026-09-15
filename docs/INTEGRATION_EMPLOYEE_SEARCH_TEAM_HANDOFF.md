@@ -1,6 +1,6 @@
-# Bandai HRIS — Employee Search API (Team Handoff)
+# Bandai BNPI PATS — Employee Search API (Team Handoff)
 
-> **Audience:** consuming teams integrating with the Bandai HRIS employee-search API.
+> **Audience:** consuming teams integrating with the Bandai BNPI PATS employee-search API.
 > Full parameter reference: `docs/INTEGRATION_EMPLOYEE_SEARCH_API.md` in the repo.
 > Last verified: 2026-09-07 (every curl in this file was executed and returned HTTP 200).
 
@@ -14,9 +14,9 @@ data is ever returned.**
 
 | Environment | Base URL | Status |
 |---|---|---|
-| PROD | `https://api.bnpi-hris.tech` | Live 2026-09-07 |
-| DEV | `https://dev-api.bnpi-hris.tech` | Live 2026-09-07 |
-| UAT | `https://uat-api.bnpi-hris.tech` | Live 2026-09-07 |
+| PROD | `https://api.bnpi-pats.tech` | Live 2026-09-07 |
+| DEV | `https://dev-api.bnpi-pats.tech` | Live 2026-09-07 |
+| UAT | `https://uat-api.bnpi-pats.tech` | Live 2026-09-07 |
 
 ⚠️ **Security:** the working key below is a real credential. Treat it like a
 password — do not commit it to any repo, do not paste it into public tickets,
@@ -35,7 +35,7 @@ Send your API key in the `X-API-Key` request header.
 | `401` | Missing or invalid API key |
 | `503` | Server key list not configured (fail-closed) |
 
-Keys are **per environment and per team**. Ask the HRIS admin for your team's
+Keys are **per environment and per team**. Ask the BNPI PATS admin for your team's
 key. Rotation is zero-downtime: the admin appends your new key, you switch,
 the old one is removed.
 
@@ -46,8 +46,8 @@ the old one is removed.
 ### DEV — basic search
 
 ```bash
-curl 'https://dev-api.bnpi-hris.tech/api/employee/search?query=z&page=1&limit=2' \
-  -H 'X-API-Key: hris_dev_db8c2a2d810b0757b991b1a5a741ef2f86633f319ceabdc9'
+curl 'https://dev-api.bnpi-pats.tech/api/employee/search?query=z&page=1&limit=2' \
+  -H 'X-API-Key: bnpi_pats_dev_db8c2a2d810b0757b991b1a5a741ef2f86633f319ceabdc9'
 ```
 
 **Actual response (trimmed):**
@@ -97,8 +97,8 @@ curl 'https://dev-api.bnpi-hris.tech/api/employee/search?query=z&page=1&limit=2'
 matched only via typo tolerance:
 
 ```bash
-curl 'https://api.bnpi-hris.tech/api/employee/search?query=zen&limit=1' \
-  -H 'X-API-Key: hris_prod_06501d5157412a9283ff5b53c4c4f10e406742ecfff0f060'
+curl 'https://api.bnpi-pats.tech/api/employee/search?query=zen&limit=1' \
+  -H 'X-API-Key: bnpi_pats_prod_06501d5157412a9283ff5b53c4c4f10e406742ecfff0f060'
 ```
 
 **Actual response (trimmed):**
@@ -129,8 +129,8 @@ curl 'https://api.bnpi-hris.tech/api/employee/search?query=zen&limit=1' \
 ### UAT — smoke check
 
 ```bash
-curl 'https://uat-api.bnpi-hris.tech/api/employee/search?query=z&limit=1' \
-  -H 'X-API-Key: hris_uat_573c99707038ee77fd6bbfab76ae000be052125ec9710cb9'
+curl 'https://uat-api.bnpi-pats.tech/api/employee/search?query=z&limit=1' \
+  -H 'X-API-Key: bnpi_pats_uat_573c99707038ee77fd6bbfab76ae000be052125ec9710cb9'
 ```
 
 → HTTP 200 in ~1s.
@@ -185,12 +185,12 @@ like `cmryaf7ml0015nj3o5k6ljg78`, not names):
    `position.title` — grab the ID from a result row and reuse it to refine.
 2. **Admin/HR JWT list endpoints:** `GET /api/department?document=true&pagination=true`
    and `GET /api/position?document=true&pagination=true` return the full
-   catalog with `id` + `name`/`title` (requires an HRIS JWT, not the API key).
+   catalog with `id` + `name`/`title` (requires an BNPI PATS JWT, not the API key).
 
 **Verified filter-chain example** (HTTP 200, live 2026-09-07):
 
 ```bash
-curl 'https://dev-api.bnpi-hris.tech/api/employee/search?query=a&employmentStatus=ACTIVE&employmentType=REGULAR&limit=1' \
+curl 'https://dev-api.bnpi-pats.tech/api/employee/search?query=a&employmentStatus=ACTIVE&employmentType=REGULAR&limit=1' \
   -H 'X-API-Key: <KEY>'
 ```
 
@@ -198,11 +198,11 @@ curl 'https://dev-api.bnpi-hris.tech/api/employee/search?query=a&employmentStatu
 
 ```bash
 # Filter + sort + paginate
-curl 'https://dev-api.bnpi-hris.tech/api/employee/search?query=tech&page=2&limit=10&sort=fullName&employmentStatus=ACTIVE' \
+curl 'https://dev-api.bnpi-pats.tech/api/employee/search?query=tech&page=2&limit=10&sort=fullName&employmentStatus=ACTIVE' \
   -H 'X-API-Key: <KEY>'
 
 # AND semantics: both words must match
-curl 'https://dev-api.bnpi-hris.tech/api/employee/search?query=zen%20andrei' \
+curl 'https://dev-api.bnpi-pats.tech/api/employee/search?query=zen%20andrei' \
   -H 'X-API-Key: <KEY>'
 ```
 
@@ -214,10 +214,10 @@ curl 'https://dev-api.bnpi-hris.tech/api/employee/search?query=zen%20andrei' \
 
 ```js
 const res = await fetch(
-  "https://dev-api.bnpi-hris.tech/api/employee/search?query=zan%20andrei&limit=10",
-  { headers: { "X-API-Key": process.env.HRIS_API_KEY } },
+  "https://dev-api.bnpi-pats.tech/api/employee/search?query=zan%20andrei&limit=10",
+  { headers: { "X-API-Key": process.env.BNPI_PATS_API_KEY } },
 );
-if (res.status === 401) throw new Error("Check HRIS_API_KEY — rejected");
+if (res.status === 401) throw new Error("Check BNPI_PATS_API_KEY — rejected");
 const { data } = await res.json();
 console.log(data.employees, data.pagination);
 ```
@@ -228,9 +228,9 @@ console.log(data.employees, data.pagination);
 import os, requests
 
 r = requests.get(
-    "https://dev-api.bnpi-hris.tech/api/employee/search",
+    "https://dev-api.bnpi-pats.tech/api/employee/search",
     params={"query": "zan andrei", "limit": 10},
-    headers={"X-API-Key": os.environ["HRIS_API_KEY"]},
+    headers={"X-API-Key": os.environ["BNPI_PATS_API_KEY"]},
     timeout=15,
 )
 r.raise_for_status()
@@ -255,7 +255,7 @@ print(data["employees"], data["pagination"])
 
 ## 7. Getting your own team key
 
-Keys are per-team and per-environment. Contact the HRIS admin with your team
+Keys are per-team and per-environment. Contact the BNPI PATS admin with your team
 name; a distinct key is appended to the server allowlist with zero downtime
 (rotation = append → consumers switch → old key removed).
 

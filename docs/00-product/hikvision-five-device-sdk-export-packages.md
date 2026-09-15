@@ -63,7 +63,7 @@ docs/00-product/hikvision-device-users-sdk-template.csv
 
 ### Fingerprint cell standard (2026-08-03)
 
-Always `FPn("...")` when present (never plain base64). Generator: `hris-api/scripts/project-five-device-sdk-csv.mjs`.
+Always `FPn("...")` when present (never plain base64). Generator: `bnpi-pats-api/scripts/project-five-device-sdk-csv.mjs`.
 
 Host packages:
 

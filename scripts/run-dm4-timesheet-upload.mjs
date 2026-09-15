@@ -26,15 +26,15 @@
  *        --leave "leave-january.xlsx=PP-20260111-20260126" --leave "leave-february.xlsx=PP-20260211-20260226"
  *
  *   # Other options:
- *   --api http://localhost:3001        HRIS API base
+ *   --api http://localhost:3001        BNPI PATS API base
  *   --org <organizationId>             defaults to the BNEI org (cmpxw0mfe00007zws3iypuu9d)
- *   --email / --password               defaults admin@bandai.local / password123 (env: HRIS_UPLOAD_EMAIL/PASSWORD)
+ *   --email / --password               defaults admin@bandai.local / password123 (env: BNPI_PATS_UPLOAD_EMAIL/PASSWORD)
  *   --max-refires 3                    STALE-run refire attempts per file
  *   --only <substring>                 process only files whose name contains this
  *   --skip-dry-run                     NOT recommended: skip the per-file plan gate
  *
  * Requires: node 18+, curl.exe on PATH, the local API healthy on --api
- * (if down: powershell -File scripts/restart-local-hris-api-dev.ps1).
+ * (if down: powershell -File scripts/restart-local-bnpi-pats-api-dev.ps1).
  */
 
 import { spawnSync } from "node:child_process";
@@ -59,8 +59,8 @@ const collect = (name) => {
 
 const API = argValue("--api") || "http://localhost:3001";
 const ORG = argValue("--org") || "cmpxw0mfe00007zws3iypuu9d";
-const EMAIL = argValue("--email") || process.env.HRIS_UPLOAD_EMAIL || "admin@bandai.local";
-const PASSWORD = argValue("--password") || process.env.HRIS_UPLOAD_PASSWORD || "password123";
+const EMAIL = argValue("--email") || process.env.BNPI_PATS_UPLOAD_EMAIL || "admin@bandai.local";
+const PASSWORD = argValue("--password") || process.env.BNPI_PATS_UPLOAD_PASSWORD || "password123";
 const MAX_REFIRES = Number(argValue("--max-refires") || 3);
 const EXECUTE = hasFlag("--execute");
 const SKIP_DRY_RUN = hasFlag("--skip-dry-run");
@@ -74,7 +74,7 @@ const log = (...m) => console.log(new Date().toISOString().slice(11, 19), ...m);
 
 function die(msg) {
 	console.error("ERROR:", msg);
-	console.error("If the API is down: powershell -File scripts/restart-local-hris-api-dev.ps1");
+	console.error("If the API is down: powershell -File scripts/restart-local-bnpi-pats-api-dev.ps1");
 	process.exit(1);
 }
 
@@ -141,7 +141,7 @@ log("API healthy. Logging in...");
 const login = await apiJson(`${API}/api/auth/login`, {
 	method: "POST",
 	headers: { "Content-Type": "application/json" },
-	body: JSON.stringify({ email: EMAIL, password: PASSWORD, appCode: "hris" }),
+	body: JSON.stringify({ email: EMAIL, password: PASSWORD, appCode: "bnpi-pats" }),
 });
 const token = login.json?.data?.token;
 if (!token) die(`login failed (${login.status}): ${(login.text || "").slice(0, 200)}`);

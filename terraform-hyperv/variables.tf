@@ -58,13 +58,13 @@ variable "ssh_port" {
 
 variable "api_port" {
   type        = number
-  description = "HRIS API LAN port."
+  description = "BNPI PATS API LAN port."
   default     = 3001
 }
 
 variable "app_port" {
   type        = number
-  description = "HRIS App LAN port."
+  description = "BNPI PATS App LAN port."
   default     = 3000
 }
 

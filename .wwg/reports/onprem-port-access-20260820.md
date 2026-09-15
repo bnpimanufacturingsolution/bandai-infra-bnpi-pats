@@ -13,12 +13,12 @@
 |---|---:|---|---|---|
 | VM bind up | 6 | `:3000/:3001/:3100/:3101/:3200/:3201` HTTP 200 on `127.0.0.1` | none | use class A or C from this PC |
 | This PC LAN | 6 | `10.184.37.19` all tcp=false | `physical_boundary` (`host_not_on_lan`) | office LAN or Cloudflare |
-| Public tunnel | 3 APIs | DEV/UAT/prod `/health` 200 | none | `https://*-api.bnpi-hris.tech/health` |
+| Public tunnel | 3 APIs | DEV/UAT/prod `/health` 200 | none | `https://*-api.bnpi-pats.tech/health` |
 | Observe onprem | 6 jobs | run 32325378487 success | none | Actions → Observe `onprem-*` |
 
 ## Live probes
 
-### Class A — VM loopback (SSH `project-truth-hris`)
+### Class A — VM loopback (SSH `project-truth-bnpi-pats`)
 
 | Name | URL | HTTP |
 |---|---|---:|
@@ -46,18 +46,18 @@ This host: Wi‑Fi `192.168.1.26`, default gw `192.168.1.1`, no `10.184.37.x` ad
 
 | URL | HTTP |
 |---|---:|
-| `https://dev-api.bnpi-hris.tech/health` | 200 |
-| `https://uat-api.bnpi-hris.tech/health` | 200 |
-| `https://api.bnpi-hris.tech/health` | 200 |
+| `https://dev-api.bnpi-pats.tech/health` | 200 |
+| `https://uat-api.bnpi-pats.tech/health` | 200 |
+| `https://api.bnpi-pats.tech/health` | 200 |
 
 `/health` still has no `buildSha`. Tunnel liveness only.
 
 ## Observe
 
-Push `afd817fb` Observe [32325378487](https://github.com/hrisworkforcesystem-coder/bandai-infra/actions/runs/32325378487): `onprem-prod-app`, `onprem-prod-api`, `onprem-dev-app`, `onprem-dev-api`, `onprem-uat-app`, `onprem-uat-api` all **success**. Reporter curls class A after ansible-pull. GitHub cannot open class B.
+Push `afd817fb` Observe [32325378487](https://github.com/bnpimanufacturingsolution/bandai-infra/actions/runs/32325378487): `onprem-prod-app`, `onprem-prod-api`, `onprem-dev-app`, `onprem-dev-api`, `onprem-uat-app`, `onprem-uat-api` all **success**. Reporter curls class A after ansible-pull. GitHub cannot open class B.
 
 ## Related
 
 - `docs/ONPREM_PORT_ACCESS.md`
 - `.wwg/reports/devops-ci-observe-validate-20260819.md`
-- Tunnel map: `cloudflared-bnpi-hris.yml` (`hostname → 10.184.37.19:<port>`)
+- Tunnel map: `cloudflared-bnpi-pats.yml` (`hostname → 10.184.37.19:<port>`)

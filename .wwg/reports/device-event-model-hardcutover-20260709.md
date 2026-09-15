@@ -2,11 +2,11 @@
 
 ## Status
 
-Implemented and locally verified for the HRIS admin local app/API:
+Implemented and locally verified for the BNPI PATS admin local app/API:
 
 - App: `http://localhost:5175`
 - API: `http://localhost:3001`
-- Actor: `admin@bandai.local` / `hris-admin`
+- Actor: `admin@bandai.local` / `bnpi-pats-admin`
 - Evidence directory: `.runtime/device-event-model-hardcutover-20260709-225223/`
 
 ## Task Classification
@@ -26,13 +26,13 @@ API filters/summary contract, and the admin device-events ledger.
 
 Prisma enum values were added for `DeviceEventCategory`,
 `DeviceEventAction`, and `DeviceEventConfidence`. Useful indexes were added for
-category/action/time, raw runtime path/time, and HRIS processing result/time.
+category/action/time, raw runtime path/time, and BNPI PATS processing result/time.
 
 Raw fields are retained:
 
 - `source` remains the raw listener/callback/runtime path and is exposed as
   `Runtime path` only in debug/details surfaces.
-- `status` remains the HRIS processing result and is exposed as `HRIS result`.
+- `status` remains the BNPI PATS processing result and is exposed as `BNPI PATS result`.
 - `eventType`, `major`, `minor`, `payload`, and `errorMessage` remain raw
   vendor/runtime evidence.
 
@@ -44,7 +44,7 @@ Compatibility aliases `byStatus` and `bySource` are still returned.
 ## Migration And Backfill
 
 Migration file:
-`hris-api/prisma/schema-postgres/migrations/20260709_device_event_taxonomy_hardcutover.sql`
+`bnpi-pats-api/prisma/schema-postgres/migrations/20260709_device_event_taxonomy_hardcutover.sql`
 
 The migration is narrow SQL, not Prisma `db push`. It creates the enum types
 and columns idempotently, backfills existing rows from deterministic raw
@@ -102,7 +102,7 @@ Primary columns:
 - Event
 - Employee/User
 - Terminal
-- HRIS result
+- BNPI PATS result
 
 Primary filters:
 
@@ -112,10 +112,10 @@ Primary filters:
 - Event category
 - Event action
 
-Runtime path/source and HRIS result/status filters are kept only in the debug
+Runtime path/source and BNPI PATS result/status filters are kept only in the debug
 strip. The event details modal is titled `Device event details` and includes
 event label, category, action, confidence, event time, employee/device user,
-terminal, HRIS result, runtime path, and raw payload evidence.
+terminal, BNPI PATS result, runtime path, and raw payload evidence.
 
 Device create/edit copy now uses `Runtime adapter`, `Internal adapter key`, and
 `Callback path`; stored `config.source` remains an implementation detail.
@@ -124,10 +124,10 @@ Device create/edit copy now uses `Runtime adapter`, `Internal adapter key`, and
 
 Focused tests:
 
-- `hris-api`: `npm test -- --grep "Device event taxonomy|Device events API contract"` passed, 10 tests.
-- `hris-api`: `npm run typecheck` passed.
-- `hris-app`: `npm test -- app/lib/device-events-page-contract.test.ts` passed, 10 tests.
-- `hris-app`: `npm run typecheck:test` failed on unrelated existing
+- `bnpi-pats-api`: `npm test -- --grep "Device event taxonomy|Device events API contract"` passed, 10 tests.
+- `bnpi-pats-api`: `npm run typecheck` passed.
+- `bnpi-pats-app`: `npm test -- app/lib/device-events-page-contract.test.ts` passed, 10 tests.
+- `bnpi-pats-app`: `npm run typecheck:test` failed on unrelated existing
   `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)` React Query
   mock typing; focused device-event contract passed.
 
@@ -151,7 +151,7 @@ Browser proof:
 
 The browser proof verified `Device events`, category/action filters, no visible
 `Device attendance` or `Punch details`, and modal fields for category, action,
-confidence, runtime path, and HRIS result.
+confidence, runtime path, and BNPI PATS result.
 
 ## Recommendations
 

@@ -38,7 +38,7 @@ python -m zkteco_linux_probe --mode capabilities
 ```
 
 The handshake mode connects, reads light metadata when supported, and
-disconnects. It does not clear logs, write users, restart devices, or post HRIS
+disconnects. It does not clear logs, write users, restart devices, or post BNPI PATS
 events.
 
 The count mode uses PyZK `read_sizes()` / ZKTeco `CMD_GET_FREE_SIZES` to read
@@ -54,7 +54,7 @@ network.
 
 The `users`, `attendance`, and `history` modes read source-device user and
 stored attendance records from the terminals through PyZK. They are read-only
-probe modes for runtime truth collection; they do not post to HRIS and they do
+probe modes for runtime truth collection; they do not post to BNPI PATS and they do
 not prove realtime watch behavior.
 
 The capabilities mode prints the current runtime boundary as JSON. It reports

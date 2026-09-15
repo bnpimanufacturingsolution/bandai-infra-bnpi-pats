@@ -22,7 +22,7 @@ Status: `IMPLEMENTED_LOCAL` (this commit). Operator asked to push.
 | Embody | Person, event, time, result, source, terminal, address, device status |
 | Icons + labels | Buttons: icon + **Device user** / **Employee record**. Rows: lucide + word. Accordion: Braces + **Raw payload** |
 
-Canonical: `hris-app/app/routes/admin/devices/events.tsx` `action=view-event`.
+Canonical: `bnpi-pats-app/app/routes/admin/devices/events.tsx` `action=view-event`.
 
 ## Proof
 

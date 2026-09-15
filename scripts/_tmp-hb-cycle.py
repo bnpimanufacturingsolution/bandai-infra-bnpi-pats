@@ -35,7 +35,7 @@ def main():
     c, login = http(
         "POST",
         "/api/auth/login",
-        b={"email": "admin@bandai.local", "password": "password123", "appCode": "hris"},
+        b={"email": "admin@bandai.local", "password": "password123", "appCode": "bnpi-pats"},
         timeout=25,
     )
     tok = (login.get("data") or {}).get("token") if isinstance(login, dict) else None
@@ -134,10 +134,10 @@ def main():
         "recovery_active": active,
         "recovery_top3": top,
         "img": subprocess.getoutput(
-            "kubectl -n dev get deploy hris-api -o jsonpath={.spec.template.spec.containers[0].image} 2>/dev/null"
+            "kubectl -n dev get deploy bnpi-pats-api -o jsonpath={.spec.template.spec.containers[0].image} 2>/dev/null"
         ),
         "pod": subprocess.getoutput(
-            "kubectl -n dev get pods -l app.kubernetes.io/name=hris-api --no-headers 2>/dev/null | head -1"
+            "kubectl -n dev get pods -l app.kubernetes.io/name=bnpi-pats-api --no-headers 2>/dev/null | head -1"
         )[:120],
     }
     print(json.dumps(out, indent=2, default=str))

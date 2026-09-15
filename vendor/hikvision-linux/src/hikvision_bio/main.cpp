@@ -91,10 +91,10 @@ int main(int argc, char **argv) {
             std::string value;
             if (!next(&value)) return 2;
             evidence_stream.open(value, std::ios::app);
-        } else if (arg == "--hris-api-base") {
-            if (!next(&hris_api_base)) return 2;
-        } else if (arg == "--hris-api-token") {
-            if (!next(&hris_api_token)) return 2;
+        } else if (arg == "--bnpi-pats-api-base") {
+            if (!next(&bnpi_pats_api_base)) return 2;
+        } else if (arg == "--bnpi-pats-api-token") {
+            if (!next(&bnpi_pats_api_token)) return 2;
         } else if (arg == "--post-contract-file") {
             if (!next(&post_contract_file)) return 2;
         } else if (arg == "--manual-full-mirror-source-device-id") {
@@ -177,9 +177,9 @@ int main(int argc, char **argv) {
         }
     }
 
-    const char *env_token = std::getenv("HIKVISION_HRIS_API_TOKEN");
-    if (hris_api_token.empty() && env_token != nullptr) {
-        hris_api_token = env_token;
+    const char *env_token = std::getenv("HIKVISION_BNPI_PATS_API_TOKEN");
+    if (bnpi_pats_api_token.empty() && env_token != nullptr) {
+        bnpi_pats_api_token = env_token;
     }
     const char *automatic_reconcile_env =
         std::getenv("HIKVISION_AUTOMATIC_PEER_RECONCILE");
@@ -193,7 +193,7 @@ int main(int argc, char **argv) {
     }
 
     if (replay_spool_only) {
-        replay_pending_hris_contract_posts();
+        replay_pending_bnpi_pats_contract_posts();
         replay_pending_hikvision_callbacks();
         return 0;
     }
@@ -204,7 +204,7 @@ int main(int argc, char **argv) {
             std::cerr << "Unable to read --post-contract-file: " << post_contract_file << "\n";
             return 2;
         }
-        post_hris_contract_payload(
+        post_bnpi_pats_contract_payload(
             contract,
             "manual_contract",
             {
@@ -278,7 +278,7 @@ int main(int argc, char **argv) {
         !set_local_time.empty();
     if (delete_face_mode &&
         (configs.size() != 1 ||
-         configs.front().hris_device_id != delete_face_device_id)) {
+         configs.front().bnpi_pats_device_id != delete_face_device_id)) {
         emit_json({
             {"event", "face_delete_blocked"},
             {"targetDeviceId", delete_face_device_id},
@@ -342,7 +342,7 @@ int main(int argc, char **argv) {
     for (const auto &config : arm_order) {
         emit_json({
             {"event", "device_config_loaded"},
-            {"deviceId", config.hris_device_id},
+            {"deviceId", config.bnpi_pats_device_id},
             {"name", config.name},
             {"host", config.host},
             {"sdkPort", std::to_string(config.sdk_port)},
@@ -371,7 +371,7 @@ int main(int argc, char **argv) {
                 armed = true;
                 emit_json({
                     {"event", "device_armed"},
-                    {"deviceId", config.hris_device_id},
+                    {"deviceId", config.bnpi_pats_device_id},
                     {"host", config.host},
                     {"attempt", std::to_string(attempt)},
                     {"peerEnabled", "true"}
@@ -389,7 +389,7 @@ int main(int argc, char **argv) {
                     } catch (...) {
                         emit_json({
                             {"event", "inventory_baseline_seed_failed"},
-                            {"deviceId", config.hris_device_id},
+                            {"deviceId", config.bnpi_pats_device_id},
                             {"host", config.host}
                         });
                     }
@@ -400,13 +400,13 @@ int main(int argc, char **argv) {
             if (!armed && session.last_login_error == NET_DVR_USER_LOCKED) {
                 emit_json({
                     {"event", "device_login_locked_backoff"},
-                    {"deviceId", config.hris_device_id},
+                    {"deviceId", config.bnpi_pats_device_id},
                     {"host", config.host},
                     {"lastError", std::to_string(session.last_login_error)},
                     {"attempt", std::to_string(attempt)},
                     {"attemptsRemaining", "0"},
                     {"attemptsSkipped", std::to_string(max_login_attempts - attempt)},
-                    {"attemptCounterSource", "hris_backoff_guard"}
+                    {"attemptCounterSource", "bnpi_pats_backoff_guard"}
                 });
                 backed_off = true;
                 break;
@@ -414,13 +414,13 @@ int main(int argc, char **argv) {
             if (!armed && session.last_login_error == NET_DVR_PASSWORD_ERROR) {
                 emit_json({
                     {"event", "device_login_auth_failed_backoff"},
-                    {"deviceId", config.hris_device_id},
+                    {"deviceId", config.bnpi_pats_device_id},
                     {"host", config.host},
                     {"lastError", std::to_string(session.last_login_error)},
                     {"attempt", std::to_string(attempt)},
                     {"attemptsRemaining", "0"},
                     {"attemptsSkipped", std::to_string(max_login_attempts - attempt)},
-                    {"attemptCounterSource", "hris_backoff_guard"}
+                    {"attemptCounterSource", "bnpi_pats_backoff_guard"}
                 });
                 backed_off = true;
                 break;
@@ -429,7 +429,7 @@ int main(int argc, char **argv) {
             if (!armed && session.last_login_error == 7) {
                 emit_json({
                     {"event", "device_login_network_fail_skip_retries"},
-                    {"deviceId", config.hris_device_id},
+                    {"deviceId", config.bnpi_pats_device_id},
                     {"host", config.host},
                     {"lastError", "7"},
                     {"attempt", std::to_string(attempt)}
@@ -443,13 +443,13 @@ int main(int argc, char **argv) {
         if (!armed) {
             emit_json({
                 {"event", "device_arming_failed_after_retries"},
-                {"deviceId", config.hris_device_id},
+                {"deviceId", config.bnpi_pats_device_id},
                 {"host", config.host},
                 {"attempts", std::to_string(attempts_performed)},
                 {"maxAttempts", std::to_string(max_login_attempts)},
                 {"backedOff", backed_off ? "true" : "false"},
                 {"attemptsSkipped", backed_off ? std::to_string(max_login_attempts - attempts_performed) : "0"},
-                {"attemptCounterSource", "hris_backoff_guard"}
+                {"attemptCounterSource", "bnpi_pats_backoff_guard"}
             });
         }
     }
@@ -474,7 +474,7 @@ int main(int argc, char **argv) {
         DeviceSession *target = nullptr;
         if (ok) {
             for (auto &session : sessions) {
-                if (session.config.hris_device_id == payload.target_device_id) {
+                if (session.config.bnpi_pats_device_id == payload.target_device_id) {
                     target = &session;
                     break;
                 }
@@ -503,7 +503,7 @@ int main(int argc, char **argv) {
     if (delete_face_mode) {
         DeviceSession *target = nullptr;
         for (auto &session : sessions) {
-            if (session.config.hris_device_id == delete_face_device_id) {
+            if (session.config.bnpi_pats_device_id == delete_face_device_id) {
                 target = &session;
                 break;
             }
@@ -527,7 +527,7 @@ int main(int argc, char **argv) {
     if (device_time_mode) {
         DeviceSession *time_session = nullptr;
         for (auto &session : sessions) {
-            if (time_device_id.empty() || session.config.hris_device_id == time_device_id) {
+            if (time_device_id.empty() || session.config.bnpi_pats_device_id == time_device_id) {
                 time_session = &session;
                 if (!time_device_id.empty()) {
                     break;
@@ -562,12 +562,12 @@ int main(int argc, char **argv) {
     // Start worker threads after the initial session list is stable. SDK callbacks
     // can arrive during arming; they queue jobs, then workers process them once
     // all reachable devices are added, avoiding arm-time session-vector races.
-    std::vector<std::thread> hris_immediate_posters;
-    hris_immediate_posters.reserve(HRIS_IMMEDIATE_WORKER_COUNT);
-    for (size_t i = 0; i < HRIS_IMMEDIATE_WORKER_COUNT; ++i) {
-        hris_immediate_posters.emplace_back(hris_immediate_post_loop);
+    std::vector<std::thread> bnpi_pats_immediate_posters;
+    bnpi_pats_immediate_posters.reserve(BNPI_PATS_IMMEDIATE_WORKER_COUNT);
+    for (size_t i = 0; i < BNPI_PATS_IMMEDIATE_WORKER_COUNT; ++i) {
+        bnpi_pats_immediate_posters.emplace_back(bnpi_pats_immediate_post_loop);
     }
-    std::thread hris_enrichment_poster(hris_enrichment_post_loop);
+    std::thread bnpi_pats_enrichment_poster(bnpi_pats_enrichment_post_loop);
     std::thread reconcile_worker(reconcile_worker_loop);
     std::thread callback_spool_replayer(callback_spool_replay_loop);
     // Historical reconcile/callback spools can contain thousands of durable
@@ -575,7 +575,7 @@ int main(int argc, char **argv) {
     // while no panel was armed for minutes or hours. Arm first; replay remains
     // durable background work and is safe to resume after a process restart.
     if (std::getenv("HIKVISION_SKIP_SPOOL_REPLAY") == nullptr) {
-        std::thread(replay_pending_hris_contract_posts).detach();
+        std::thread(replay_pending_bnpi_pats_contract_posts).detach();
     }
 
     std::thread poller;
@@ -586,10 +586,10 @@ int main(int argc, char **argv) {
         DeviceSession *manual_source = nullptr;
         DeviceSession *manual_target = nullptr;
         for (auto &session : sessions) {
-            if (session.config.hris_device_id == manual_full_mirror_source_device_id) {
+            if (session.config.bnpi_pats_device_id == manual_full_mirror_source_device_id) {
                 manual_source = &session;
             }
-            if (!manual_target_device_id.empty() && session.config.hris_device_id == manual_target_device_id) {
+            if (!manual_target_device_id.empty() && session.config.bnpi_pats_device_id == manual_target_device_id) {
                 manual_target = &session;
             }
         }
@@ -621,7 +621,7 @@ int main(int argc, char **argv) {
     if (manual_fingerprint_capture_mode) {
         DeviceSession *capture_source = nullptr;
         for (auto &session : sessions) {
-            if (session.config.hris_device_id == capture_fingerprint_source_device_id) {
+            if (session.config.bnpi_pats_device_id == capture_fingerprint_source_device_id) {
                 capture_source = &session;
                 break;
             }
@@ -643,7 +643,7 @@ int main(int argc, char **argv) {
     if (manual_face_capture_mode) {
         DeviceSession *capture_source = nullptr;
         for (auto &session : sessions) {
-            if (session.config.hris_device_id == capture_face_source_device_id) {
+            if (session.config.bnpi_pats_device_id == capture_face_source_device_id) {
                 capture_source = &session;
                 break;
             }
@@ -661,7 +661,7 @@ int main(int argc, char **argv) {
     if (manual_face_mirror_mode) {
         DeviceSession *mirror_source = nullptr;
         for (auto &session : sessions) {
-            if (session.config.hris_device_id == mirror_face_source_device_id) {
+            if (session.config.bnpi_pats_device_id == mirror_face_source_device_id) {
                 mirror_source = &session;
                 break;
             }
@@ -679,7 +679,7 @@ int main(int argc, char **argv) {
     if (manual_biometric_export_mode) {
         DeviceSession *export_source = nullptr;
         for (auto &session : sessions) {
-            if (session.config.hris_device_id == export_biometric_source_device_id) {
+            if (session.config.bnpi_pats_device_id == export_biometric_source_device_id) {
                 export_source = &session;
                 break;
             }
@@ -702,7 +702,7 @@ int main(int argc, char **argv) {
     if (manual_reconcile_queue_mode) {
         DeviceSession *manual_source = nullptr;
         for (auto &session : sessions) {
-            if (session.config.hris_device_id == manual_full_mirror_source_device_id) {
+            if (session.config.bnpi_pats_device_id == manual_full_mirror_source_device_id) {
                 manual_source = &session;
                 break;
             }
@@ -716,7 +716,7 @@ int main(int argc, char **argv) {
         } else {
             ReconcileJob manual_job;
             manual_job.source_host = manual_source->config.host;
-            manual_job.source_device_id = manual_source->config.hris_device_id;
+            manual_job.source_device_id = manual_source->config.bnpi_pats_device_id;
             manual_job.employee_no = manual_employee_no;
             manual_job.major = MAJOR_OPERATION;
             manual_job.minor = manual_employee_no.empty() ? 112 : MINOR_ADD_USER_INFO;
@@ -753,7 +753,7 @@ int main(int argc, char **argv) {
         {"armedDevices", std::to_string(sessions.size())},
         {"mode", execute_mode ? "execute" : "dry-run"},
         {"automaticPeerReconcile", automatic_peer_reconcile_enabled ? "true" : "false"},
-        {"hrisApiBase", hris_api_base}
+        {"bnpiPatsApiBase", bnpi_pats_api_base}
     });
 
     const auto start = std::chrono::steady_clock::now();
@@ -766,13 +766,13 @@ int main(int argc, char **argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
 
-    for (auto &poster : hris_immediate_posters) {
+    for (auto &poster : bnpi_pats_immediate_posters) {
         if (poster.joinable()) {
             poster.join();
         }
     }
-    if (hris_enrichment_poster.joinable()) {
-        hris_enrichment_poster.join();
+    if (bnpi_pats_enrichment_poster.joinable()) {
+        bnpi_pats_enrichment_poster.join();
     }
     if (reconcile_worker.joinable()) {
         reconcile_worker.join();

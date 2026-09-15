@@ -2,9 +2,9 @@ param(
   [string]$GuestIp = '',
   [switch]$HostLocal,
   [switch]$StopExisting,
-  [string]$ProdHostname = $(if ($env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME } else { 'db.bnpi-hris.tech' }),
-  [string]$DevHostname = $(if ($env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME } else { 'dev-db.bnpi-hris.tech' }),
-  [string]$UatHostname = $(if ($env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME } else { 'uat-db.bnpi-hris.tech' }),
+  [string]$ProdHostname = $(if ($env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_PROD_DB_HOSTNAME } else { 'db.bnpi-pats.tech' }),
+  [string]$DevHostname = $(if ($env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_DEV_DB_HOSTNAME } else { 'dev-db.bnpi-pats.tech' }),
+  [string]$UatHostname = $(if ($env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME) { $env:PROJECT_TRUTH_CF_UAT_DB_HOSTNAME } else { 'uat-db.bnpi-pats.tech' }),
   [int]$ProdClientPort = $(if ($env:PROJECT_TRUTH_CF_PROD_DB_CLIENT_PORT) { [int]$env:PROJECT_TRUTH_CF_PROD_DB_CLIENT_PORT } else { 5432 }),
   [int]$DevClientPort = $(if ($env:PROJECT_TRUTH_CF_DEV_DB_CLIENT_PORT) { [int]$env:PROJECT_TRUTH_CF_DEV_DB_CLIENT_PORT } else { 5433 }),
   [int]$UatClientPort = $(if ($env:PROJECT_TRUTH_CF_UAT_DB_CLIENT_PORT) { [int]$env:PROJECT_TRUTH_CF_UAT_DB_CLIENT_PORT } else { 5434 }),
@@ -56,14 +56,14 @@ $missing = @($targets | Where-Object { [string]::IsNullOrWhiteSpace($_.Hostname)
 if ($missing.Count -gt 0) {
   Write-Warning "Cloudflare DB TCP hostnames are missing: $($missing.Name -join ', ')"
   Write-Host 'Set these environment variables or pass parameters:'
-  Write-Host '  PROJECT_TRUTH_CF_PROD_DB_HOSTNAME=db.bnpi-hris.tech'
-  Write-Host '  PROJECT_TRUTH_CF_DEV_DB_HOSTNAME=dev-db.bnpi-hris.tech'
-  Write-Host '  PROJECT_TRUTH_CF_UAT_DB_HOSTNAME=uat-db.bnpi-hris.tech'
+  Write-Host '  PROJECT_TRUTH_CF_PROD_DB_HOSTNAME=db.bnpi-pats.tech'
+  Write-Host '  PROJECT_TRUTH_CF_DEV_DB_HOSTNAME=dev-db.bnpi-pats.tech'
+  Write-Host '  PROJECT_TRUTH_CF_UAT_DB_HOSTNAME=uat-db.bnpi-pats.tech'
   Write-Host 'Cloudflare requirements: managed domain on Cloudflare, named tunnel auth, Access policy, and cloudflared on every DB client.'
   Write-Host "LAN URLs remain available at:"
-  Write-Host "  postgresql://postgres:postgres@${targetHost}:15432/hris"
-  Write-Host "  postgresql://postgres:postgres@${targetHost}:15433/hris"
-  Write-Host "  postgresql://postgres:postgres@${targetHost}:15434/hris"
+  Write-Host "  postgresql://postgres:postgres@${targetHost}:15432/bnpi_pats"
+  Write-Host "  postgresql://postgres:postgres@${targetHost}:15433/bnpi_pats"
+  Write-Host "  postgresql://postgres:postgres@${targetHost}:15434/bnpi_pats"
   exit 2
 }
 
@@ -87,8 +87,8 @@ foreach ($target in $targets) {
     Hostname = $target.Hostname
     TargetUrl = $target.TargetUrl
     ClientCommand = "cloudflared access tcp --hostname $($target.Hostname) --url localhost:$($target.ClientPort)"
-    DatabaseUrl = "postgresql://postgres:postgres@localhost:$($target.ClientPort)/hris"
-    RequestedPublicUrl = "postgresql://postgres:postgres@$($target.Hostname):5432/hris"
+    DatabaseUrl = "postgresql://postgres:postgres@localhost:$($target.ClientPort)/bnpi_pats"
+    RequestedPublicUrl = "postgresql://postgres:postgres@$($target.Hostname):5432/bnpi_pats"
     RequestedPublicUrlStatus = 'Not valid with normal Cloudflare Access TCP; use the local DatabaseUrl after starting the client-side cloudflared access tcp process.'
   }
 }
@@ -110,4 +110,4 @@ foreach ($record in $processRecords) {
   Write-Host "  $($record.Name): $($record.DatabaseUrl)"
 }
 Write-Host ''
-Write-Host 'Direct URLs like postgresql://postgres:postgres@db.bnpi-hris.tech:5432/hris require WARP private routing or Spectrum/raw TCP, not normal Cloudflare Access TCP.'
+Write-Host 'Direct URLs like postgresql://postgres:postgres@db.bnpi-pats.tech:5432/bnpi_pats require WARP private routing or Spectrum/raw TCP, not normal Cloudflare Access TCP.'

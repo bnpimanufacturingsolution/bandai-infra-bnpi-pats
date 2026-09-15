@@ -32,8 +32,8 @@
 |---|---|
 | Investigation + FAQ | `.runtime/prior-deduction-recur-20260817/REPORT.md` |
 | Full re-tally | `.runtime/tally-after-loan-20260818/COMPARE-BEFORE-AFTER.md` |
-| Repair script | `hris-api/scripts/repair-bnpi-loan-multi-cutoff-horizon.mjs` |
-| Reimport script | `hris-api/scripts/import-prior-deduction-mass-history.ts` |
+| Repair script | `bnpi-pats-api/scripts/repair-bnpi-loan-multi-cutoff-horizon.mjs` |
+| Reimport script | `bnpi-pats-api/scripts/import-prior-deduction-mass-history.ts` |
 | Helpers | `resolveBandaiMassUploadLoanTermMonths`, `resolveBandaiLoanEndDate` |
 
 ## Product locks

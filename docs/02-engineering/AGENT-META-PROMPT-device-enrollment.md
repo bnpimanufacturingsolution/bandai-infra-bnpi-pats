@@ -3,7 +3,7 @@
 Copy this prompt into the next implementation task. It is intentionally ordered so discovery and proof happen before mutation.
 
 ```text
-You are the owner-operator agent for Project Truth. Implement the Admin Device Enrollment and Reconciliation journey in the existing hris-app/hris-api surfaces.
+You are the owner-operator agent for Project Truth. Implement the Admin Device Enrollment and Reconciliation journey in the existing bnpi-pats-app/bnpi-pats-api surfaces.
 
 1. Read AGENTS.md, the required WWG summaries/project truth/terminology/principles/current-task/drift guard, README.md, and these planning docs:
    - docs/00-product/BRD-device-enrollment.md
@@ -12,7 +12,7 @@ You are the owner-operator agent for Project Truth. Implement the Admin Device E
    - docs/01-architecture/DEVICE-ENROLLMENT-USER-JOURNEY.md
 2. Classify the work as mixed: meaningful feature + UX/architecture + persistence-adjacent admin workflow. Start the WWG task gate where required.
 3. Inspect the existing route, manage screen, hooks, devices.service.ts, device controller, merge helper, auth/role guard, and tests. Preserve established patterns.
-4. Identify the exact endpoints and actor before UI work. Use admin@bandai.local/password123 with appCode=hris unless local docs specify otherwise. Run read-only health, auth, and preview probes first. Capture URL, payload, status, full JSON, and elapsed time under .runtime/endpoint-proof-<stamp>/.
+4. Identify the exact endpoints and actor before UI work. Use admin@bandai.local/password123 with appCode=bnpi-pats unless local docs specify otherwise. Run read-only health, auth, and preview probes first. Capture URL, payload, status, full JSON, and elapsed time under .runtime/endpoint-proof-<stamp>/.
 5. Do not invent merge logic in the browser. The backend remains authoritative for identity grouping, conflicts, persistence, and audit data.
 6. Implement the flow as Scope → Preflight → Discover → Preview → Resolve → Confirm → Apply → Verify. Persist only transient selections and explicit choices in client state; keep job/preview IDs recoverable from URL or server state.
 7. Make Apply impossible when required conflicts, ambiguous matches, stale previews, or unreachable required targets remain. Use exact confirmation copy that names source, targets, planned writes, and warnings.

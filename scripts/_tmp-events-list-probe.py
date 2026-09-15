@@ -26,7 +26,7 @@ def main():
     c, login = http(
         "POST",
         "/api/auth/login",
-        b={"email": "admin@bandai.local", "password": "password123", "appCode": "hris"},
+        b={"email": "admin@bandai.local", "password": "password123", "appCode": "bnpi-pats"},
     )
     print("login", c)
     tok = login["data"]["token"]

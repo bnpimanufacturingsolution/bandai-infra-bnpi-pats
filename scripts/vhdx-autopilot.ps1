@@ -24,7 +24,7 @@ param(
     [switch]$NoStart,
     [switch]$ForceRecreate,
 
-    [string]$Bucket = "project-truth-image-export-hris-492904-161377059311",
+    [string]$Bucket = "project-truth-image-export-bnpi-pats-492904-161377059311",
     [string]$ObjectPrefix = "public/project-truth/hyperv/dev-current/latest",
     [string]$ObjectName = "",
     [string]$ImagesDir = "C:\ProgramData\ProjectTruth\images",

@@ -8,8 +8,8 @@ When **creating or adjusting** any dense list/table page (admin configuration
 lists, HR list screens, device ledgers, audit/activity logs):
 
 1. **Layout viewport-fill** — add/keep the route in
-   `hris-app/app/lib/admin-viewport-fill.ts` (admin layout) or
-   `hris-app/app/lib/unified-viewport-fill.ts` (HR/unified layout).
+   `bnpi-pats-app/app/lib/admin-viewport-fill.ts` (admin layout) or
+   `bnpi-pats-app/app/lib/unified-viewport-fill.ts` (HR/unified layout).
 2. **Page shell** — wrap with `AdminTablePageShell` or the same classes:
    `flex h-full min-h-0 flex-col overflow-hidden`. Optional chrome above the
    table is `shrink-0`; table region is `flex-1 min-h-0`.
@@ -51,7 +51,7 @@ Canonical: `employeeBenefitService.countByBenefitTypeId` and
 | Layer | Path / symbol |
 |---|---|
 | Design doc | `DESIGN.md` → “Full-height list tables” + “Count / aggregate columns” |
-| Shell | `hris-app/app/components/templates/AdminTablePageShell.tsx` |
+| Shell | `bnpi-pats-app/app/components/templates/AdminTablePageShell.tsx` |
 | Admin paths | `isAdminViewportFillPath` |
 | HR paths | `isUnifiedViewportFillPath` |
 | Component | `DataTable` prop `containedScroll` |

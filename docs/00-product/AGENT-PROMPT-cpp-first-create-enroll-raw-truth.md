@@ -1,7 +1,7 @@
 # Task Writer: C++-first create/enroll raw truth (stop assuming)
 
 **File:** `docs/00-product/AGENT-PROMPT-cpp-first-create-enroll-raw-truth.md`  
-**Purpose:** Force agents to prove the **real wire** from Hikvision ACS → C++ listener → POST body → HRIS callback → DeviceEvent/DeviceUser → socket → UI **before** changing product code. Stops the failure mode of editing HRIS/UI while C++ still posts `employeeNo=""` and `fingerprintCount=0`.
+**Purpose:** Force agents to prove the **real wire** from Hikvision ACS → C++ listener → POST body → BNPI PATS callback → DeviceEvent/DeviceUser → socket → UI **before** changing product code. Stops the failure mode of editing BNPI PATS/UI while C++ still posts `employeeNo=""` and `fingerprintCount=0`.
 
 **Use when:** User created/enrolled on device but raw FP/face never appear unless they click Capture; agents keep “fixing” helpers without quoting listener logs; you want one correct finish line.
 
@@ -11,8 +11,8 @@
 
 | Failure | What actually happened | What this card forces |
 |---|---|---|
-| Assumed architecture, edited HRIS first | Live listener showed `callback_enrich_done` with `employeeNo=""`, `fingerprintCount=0`, `templatesAttached=false` then `post_result ok` — **C++ never sent templates** | **PHASE 0–2 = C++ only** until POST body proven |
-| “Event should have raw” without wire proof | Blobs only arrive if C++ attaches them **or** HRIS ISAPI follow-up runs **after plain id** | Prove which path produces bytes |
+| Assumed architecture, edited BNPI PATS first | Live listener showed `callback_enrich_done` with `employeeNo=""`, `fingerprintCount=0`, `templatesAttached=false` then `post_result ok` — **C++ never sent templates** | **PHASE 0–2 = C++ only** until POST body proven |
+| “Event should have raw” without wire proof | Blobs only arrive if C++ attaches them **or** BNPI PATS ISAPI follow-up runs **after plain id** | Prove which path produces bytes |
 | Manual Capture felt required | Auto path never got plain + templates on same POST; ISAPI capture not always scheduled at event create | Auto path must work without Capture button |
 | Donor clone for synthetic FP | Device Progress status 5 rejects another person’s template | Never green donor as enroll success |
 | Skipped WWG / AGENTS | Invented IPs, device counts, “always plain on socket” | Mandatory WWG + `.grok/rules/02-sdk-callback-wire-truth.md` |
@@ -29,8 +29,8 @@
 | Branch | `develop` |
 | Permissions | Always approve / bypassPermissions |
 | Max turns | **`--max-turns 300`** |
-| Actor | `admin@bandai.local` / `password123` / `appCode=hris` |
-| SSH | Prefer real LAN VM IP if known; on this host `10.184.37.19` may be **loopback** — use `ssh project-truth-hris` when LAN SSH fails. **Never** disable cloudflared. |
+| Actor | `admin@bandai.local` / `password123` / `appCode=bnpi-pats` |
+| SSH | Prefer real LAN VM IP if known; on this host `10.184.37.19` may be **loopback** — use `ssh project-truth-bnpi-pats` when LAN SSH fails. **Never** disable cloudflared. |
 
 ### Headless
 
@@ -47,7 +47,7 @@ grok -p (Get-Content -Raw docs\00-product\AGENT-PROMPT-cpp-first-create-enroll-r
 ```text
 CONTINUE C++-FIRST CREATE ENROLL RAW TRUTH.
 Open docs/00-product/AGENT-PROMPT-cpp-first-create-enroll-raw-truth.md.
-Do NOT edit HRIS/UI until PHASE 2 has listener quotes for plain id AND fingerprints/face or a documented C++ gap with evidence.
+Do NOT edit BNPI PATS/UI until PHASE 2 has listener quotes for plain id AND fingerprints/face or a documented C++ gap with evidence.
 WWG open with tools. HEARTBEAT + tool call next.
 ```
 
@@ -93,7 +93,7 @@ Before ANY final/summary-only message:
 1) Re-list ACCEPTANCE F.
 2) If any open: HEARTBEAT + tool call. No idle end.
 3) NOT done if:
-   - You edited HRIS/UI without PHASE 2 C++ wire evidence this session
+   - You edited BNPI PATS/UI without PHASE 2 C++ wire evidence this session
    - You claim templates on socket without quoting listener callback_enrich_done
      with fingerprintCount>=1 OR faceTemplateChars>0 OR a full POST body dump
    - You claim plain on create/enroll without quoting employeeNo non-empty in
@@ -115,7 +115,7 @@ on the Hikvision device that the C++ listener is armed on:
 4) C++ attaches face template/picture when card+face available
 5) POST /api/hikvision/callback body includes:
    employeeNo plain (when resolved), fingerprintCount, fingerprints[], faceTemplate/facePicture
-6) HRIS saves:
+6) BNPI PATS saves:
    - DeviceEvent USER_CREATED / FINGERPRINT_ENROLLED with plain employeeNo + deviceUserId
    - DeviceUser inventory with vendorUserId plain
    - Raw FP (and face if any) usable on DeviceUser AND on the create/enroll event
@@ -130,7 +130,7 @@ PLANES (do not confuse):
 - DeviceEvent = history ledger (operator now also wants raw blobs on create/enroll
   events so the journey is complete — implement only after C++ or auto-ISAPI proof)
 - DeviceUser = inventory + biometric custody
-- Employee = optional HRIS link (deviceEmpId plain)
+- Employee = optional BNPI PATS link (deviceEmpId plain)
 
 ================================================================
 C. REALITY (proven this project — re-verify, do not “remember”)
@@ -171,8 +171,8 @@ Open acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp and quote l
 1. alarm_callback
    - employee_no assignment
    - include_fingerprints flags
-   - queue_hris_device_event
-2. enrich_hris_job_before_post
+   - queue_bnpi_pats_device_event
+2. enrich_bnpi_pats_job_before_post
    - when identity empty → inventory_delta / repost
    - needs_callback_template_enrich gate (when it EARLY RETURNS with fingerprintCount 0)
    - read_source_fingerprints + read_fingerprints_via_isapi
@@ -185,9 +185,9 @@ Open acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp and quote l
 Write: .runtime/.../trace-map.md with function names + what MUST be true for
 templates to appear on the wire.
 
-FORBIDDEN in PHASE 1: editing HRIS, React, “fix UI”.
+FORBIDDEN in PHASE 1: editing BNPI PATS, React, “fix UI”.
 
-### PHASE 2 — LIVE C++ WIRE PROOF (still prefer no HRIS product rewrite)
+### PHASE 2 — LIVE C++ WIRE PROOF (still prefer no BNPI PATS product rewrite)
 Using SSH to the VM listener host:
 
 A) Capture last 100 enrich/post lines:
@@ -205,7 +205,7 @@ C) Within the window, quote NEW listener lines for P:
    - post_result employeeNo?
 
 D) Capture the ACTUAL POST body if C++ logs it (preview/body field) OR
-   capture at hris-api with a temporary evidence log of incoming
+   capture at bnpi-pats-api with a temporary evidence log of incoming
    fingerprints length / identitySource — evidence only, not a product “fix”.
 
 E) Write wire-proof.md:
@@ -219,7 +219,7 @@ IF plain is set but fingerprintCount 0 while device numOfFP>=1 for that person:
   → C++ FP read path broken (SDK/ISAPI) — fix C++ read/retries/ISAPI path
   → Prove after rebuild with isapi_fingerprint_read fingerprintCount>=1
 
-IF C++ posts fingerprints[] with data but HRIS DeviceUser empty:
+IF C++ posts fingerprints[] with data but BNPI PATS DeviceUser empty:
   → THEN (and only then) fix callback.controller / persist path
   → Quote request body fingerprintCount and DB after POST
 
@@ -238,7 +238,7 @@ MANDATORY after C++ edit:
 4) Prove binary mtime + strings or new log fields
 5) Re-run live create/enroll; quote NEW enrich lines
 
-### PHASE 4 — HRIS RECEIVE + STORAGE (only after PHASE 2/3 wire proof)
+### PHASE 4 — BNPI PATS RECEIVE + STORAGE (only after PHASE 2/3 wire proof)
 Open callback.controller.ts — do not guess:
 
 When POST contains fingerprints[] / faceTemplate / facePicture:
@@ -273,7 +273,7 @@ Proof pack under .runtime/cpp-first-create-enroll-raw-<stamp>/:
 P1 Listener: enrich with plain employeeNo for create path (quote)
 P2 Listener: fingerprintCount>=1 OR documented device has numOfFP=0 for that person
 P3 If person has face on device: faceTemplateChars or facePictureChars >0 on enrich OR
-   HRIS auto-capture face after plain with evidence
+   BNPI PATS auto-capture face after plain with evidence
 P4 POST/callback evidence: fingerprints length or rawTemplatesFromCallback true
 P5 DeviceUser: raw FP base64 len>=8, not AES, not donor
 P6 DeviceEvent USER_CREATED and/or FINGERPRINT_ENROLLED: plain employeeNo +
@@ -295,7 +295,7 @@ E. ACCEPTANCE CHECKLIST
 [ ] E2 listener baseline quotes (fingerprintCount reality)
 [ ] E3 live induce create/enroll; new listener quotes saved
 [ ] E4 C++ gap fixed+rebuilt OR proven C++ already sends templates
-[ ] E5 HRIS only fixed after wire proof that POST has or lacks templates
+[ ] E5 BNPI PATS only fixed after wire proof that POST has or lacks templates
 [ ] E6 DeviceUser raw FP for person with device FP
 [ ] E7 Face: stored when device has face; honest empty when not
 [ ] E8 Create/enroll events plain person + raw on event payload (operator goal)
@@ -323,7 +323,7 @@ G. START NOW
 1) Open WWG + 02-sdk-callback-wire-truth + C++ file + current-task (tools).
 2) Current-State Report.
 3) HEARTBEAT cycle=1 | phase=0
-4) PHASE 0–2 tool calls immediately. No HRIS product rewrite until wire proof.
+4) PHASE 0–2 tool calls immediately. No BNPI PATS product rewrite until wire proof.
 
 BEGIN.
 ```

@@ -17,7 +17,7 @@
 | admin login | HTTP 200, bearer token returned |
 | `http://10.184.37.19:3001/health` | HTTP 200 |
 | `http://10.184.37.19:3101/health` | HTTP 200 |
-| `cloudflared-bnpi-hris.service` | active |
+| `cloudflared-bnpi-pats.service` | active |
 | K3s node | Ready |
 | Argo apps | prod/dev/uat application apps healthy; runtime-dev degraded at discovery |
 
@@ -141,15 +141,15 @@ Capture times: direct inventory `2026-07-16T09:16:50Z`; all-time saved ledger
 
 | Metric | Count | Source | Remaining drift |
 |---|---:|---|---|
-| Current device users | 167 | `DEVICE_CURRENT_STATE` | Former UI claim 165 was stale; HRIS cache had 151 |
-| Current users with fingerprints | 162 | `DEVICE_CURRENT_STATE` | HRIS cache had 149 |
-| Current users with faces | 161 | `DEVICE_CURRENT_STATE` | HRIS cache had 147 |
+| Current device users | 167 | `DEVICE_CURRENT_STATE` | Former UI claim 165 was stale; BNPI PATS cache had 151 |
+| Current users with fingerprints | 162 | `DEVICE_CURRENT_STATE` | BNPI PATS cache had 149 |
+| Current users with faces | 161 | `DEVICE_CURRENT_STATE` | BNPI PATS cache had 147 |
 | Current users with cards | 109 | `DEVICE_CURRENT_STATE` | No prior trusted direct count |
 | Current device log total | 2,107 | `DEVICE_CURRENT_STATE` | 1,236-row calculated gap versus 871 all-time SDK rows; full historical serial reconciliation remains |
 | New ACS events in frozen window | 70 | direct ACS search | 0 missing serials; 70/70 saved |
 | New logSearch events in frozen window | 23 | `ISAPI_LOGSEARCH` | 0 missing; second execute was 23/23 duplicates |
 | New saved events in frozen window | 93 | `DEVICE_EVENT_DATABASE` | 70 SDK + 23 logSearch; exact source sum |
-| Total saved HRIS rows | 894 | `DEVICE_EVENT_DATABASE` | Includes 871 SDK and 23 logSearch rows |
+| Total saved BNPI PATS rows | 894 | `DEVICE_EVENT_DATABASE` | Includes 871 SDK and 23 logSearch rows |
 | Matched | 130 | `DEVICE_EVENT_DATABASE` | 14 matched + 36 attendance-created + 80 attendance-updated |
 | Unmatched / needs employee match | 160 | `DEVICE_EVENT_DATABASE` | Requires identity resolution, not event invention |
 | Ignored | 585 | `DEVICE_EVENT_DATABASE` | Raw evidence retained |

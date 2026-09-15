@@ -2,7 +2,7 @@
 
 ## Summary
 
-The Node.js ZKTeco bridge under `appliance/zkteco-bridge` is retired from the active Project Truth runtime. The active ZKTeco runtime path is the Windows Standalone SDK sidecar under `appliance/zkteco-standalone-sdk`, with HRIS API reading its status through an explicitly configured `ZKTECO_BRIDGE_STATUS_URL`.
+The Node.js ZKTeco bridge under `appliance/zkteco-bridge` is retired from the active Project Truth runtime. The active ZKTeco runtime path is the Windows Standalone SDK sidecar under `appliance/zkteco-standalone-sdk`, with BNPI PATS API reading its status through an explicitly configured `ZKTECO_BRIDGE_STATUS_URL`.
 
 ## Task Mode
 

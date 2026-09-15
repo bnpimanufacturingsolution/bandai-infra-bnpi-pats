@@ -6,13 +6,13 @@ Architecture:
   Host SDK listener / K3s watcher
     → POST /api/hikvision/callback  (this service, drop-in)
     → SQLite outbox (indexed, durable on PVC/hostPath)
-    → drain worker POST → hris-api /api/hikvision/callback
+    → drain worker POST → bnpi-pats-api /api/hikvision/callback
     → Postgres device_events (product truth)
 
 Env:
   PORT                 default 8080
   OUTBOX_DB            default /data/outbox.db
-  DRAIN_CALLBACK_URL   default http://hris-api:3001/api/hikvision/callback
+  DRAIN_CALLBACK_URL   default http://bnpi-pats-api:3001/api/hikvision/callback
   DRAIN_INTERVAL_SEC   default 2
   DRAIN_BATCH          default 25
   MAX_ATTEMPTS         default 30
@@ -36,7 +36,7 @@ from urllib import request as urlrequest
 PORT = int(os.environ.get("PORT", "8080"))
 OUTBOX_DB = os.environ.get("OUTBOX_DB", "/data/outbox.db")
 DRAIN_CALLBACK_URL = os.environ.get(
-    "DRAIN_CALLBACK_URL", "http://hris-api:3001/api/hikvision/callback"
+    "DRAIN_CALLBACK_URL", "http://bnpi-pats-api:3001/api/hikvision/callback"
 ).rstrip("/")
 if not DRAIN_CALLBACK_URL.endswith("/api/hikvision/callback"):
     # allow base URL
@@ -414,7 +414,7 @@ class Handler(BaseHTTPRequestHandler):
                 200,
                 {
                     "status": "healthy",
-                    "service": "hris-callback-outbox",
+                    "service": "bnpi-pats-callback-outbox",
                     "pending": stats().get("pending"),
                 },
             )

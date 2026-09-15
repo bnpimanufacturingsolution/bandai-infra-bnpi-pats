@@ -15,7 +15,7 @@ $setupSshScript = Join-Path $PSScriptRoot 'setup-dev-ssh-access.ps1'
 $sshExe = Get-Command ssh.exe -ErrorAction SilentlyContinue
 $vmHost = '10.184.37.19'
 $vmUser = 'infra'
-$sshAlias = 'project-truth-hris'
+$sshAlias = 'project-truth-bnpi-pats'
 $targetHost = '10.43.130.9'
 $targetPort = 5432
 
@@ -186,7 +186,7 @@ if (Test-TcpConnect -HostName '127.0.0.1' -Port $LocalPort -TimeoutMs 250) {
     SshTarget = '127.0.0.1'
     TargetHost = $targetHost
     TargetPort = $targetPort
-    DatabaseUrl = "postgresql://postgres:postgres@127.0.0.1:$LocalPort/hris?schema=public"
+    DatabaseUrl = "postgresql://postgres:postgres@127.0.0.1:$LocalPort/bnpi_pats?schema=public"
     StopCommand = '.\scripts\start-k8s-dev-db-access.ps1 -StopExisting'
     Note = 'Existing 127.0.0.1 listener reused; no new ssh process started.'
   }
@@ -301,7 +301,7 @@ if (-not $pgReady) {
   if ($process.HasExited) {
     throw "K3s DEV DB forward ssh exited before Postgres handshake on 127.0.0.1:$LocalPort. stderr: $stderrText"
   }
-  throw "K3s DEV DB forward opened TCP on 127.0.0.1:$LocalPort but Postgres handshake failed within ${pgMaxWaitSec}s via $selectedPath (timeout ${pgHandshakeTimeoutMs}ms). Confirm dev/hris-postgres is Ready and 10.43.130.9:5432 answers from the VM. stderr: $stderrText"
+  throw "K3s DEV DB forward opened TCP on 127.0.0.1:$LocalPort but Postgres handshake failed within ${pgMaxWaitSec}s via $selectedPath (timeout ${pgHandshakeTimeoutMs}ms). Confirm dev/bnpi-pats-postgres is Ready and 10.43.130.9:5432 answers from the VM. stderr: $stderrText"
 }
 
 Write-K8sDbProgress ("POSTGRES OK after {0:N1}s handshake via $selectedPath" -f $pgTimer.Elapsed.TotalSeconds)
@@ -316,7 +316,7 @@ $record = [pscustomobject]@{
   SshTarget = $selectedTarget
   TargetHost = $targetHost
   TargetPort = $targetPort
-  DatabaseUrl = "postgresql://postgres:postgres@127.0.0.1:$LocalPort/hris?schema=public"
+  DatabaseUrl = "postgresql://postgres:postgres@127.0.0.1:$LocalPort/bnpi_pats?schema=public"
   StopCommand = '.\scripts\start-k8s-dev-db-access.ps1 -StopExisting'
   Stdout = $stdoutPath
   Stderr = $stderrPath

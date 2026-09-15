@@ -28,7 +28,7 @@ DEFAULT_TARGETS = (
 CAPABILITY_REPORT = {
     "runtime": "project-truth-zkteco-linux-pyzk-trial",
     "status": "linux_bridge_runtime",
-    "canonicalHrisRuntime": True,
+    "canonicalBnpiPatsRuntime": True,
     "proven": [
         "tcp_connectivity",
         "pyzk_import",
@@ -40,7 +40,7 @@ CAPABILITY_REPORT = {
         "docker_stored_attendance_history_read_with_host_network",
         "linux_bridge_health_status_api",
         "linux_bridge_sync_api",
-        "hris_event_posting_from_bridge_mode",
+        "bnpi_pats_event_posting_from_bridge_mode",
     ],
     "notProven": [
         "attendance_log_read_parity",
@@ -373,7 +373,7 @@ def user_name_map(users: list[Any]) -> dict[str, str]:
     return output
 
 
-def build_hris_payload(target: Target, record: Any, names: dict[str, str]) -> dict[str, Any]:
+def build_bnpi_pats_payload(target: Target, record: Any, names: dict[str, str]) -> dict[str, Any]:
     user_id = str(getattr(record, "user_id", "") or "")
     timestamp = attendance_time(record)
     return {
@@ -559,7 +559,7 @@ def sync_target(target: Target, args: argparse.Namespace) -> dict[str, Any]:
         post_results = []
 
         for record in records:
-            payload = build_hris_payload(target, record, names)
+            payload = build_bnpi_pats_payload(target, record, names)
             if args.dry_run_webhooks:
                 result = {"ok": True, "dryRun": True, "statusCode": None}
             else:

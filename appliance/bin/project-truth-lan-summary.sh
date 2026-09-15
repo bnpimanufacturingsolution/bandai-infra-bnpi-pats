@@ -87,22 +87,22 @@ emit_os_sync_summary() {
   echo "  status: project-truth-ansible-pull --status"
 }
 
-emit_hris_rows() {
+emit_bnpi_pats_rows() {
   local ip_addr="$1"
   # Prefer clean LAN hostnames (dnsmasq + Caddy). Port URLs remain as fallback.
   echo "  Prefer clean LAN names (no ports) when DNS= ${ip_addr} or hosts file:"
-  printf '  %-5s %-7s %s\n' "DEV" "login" "https://dev.bnpi-hris.lan/auth/login"
-  printf '  %-5s %-7s %s\n' "DEV" "api" "https://dev-api.bnpi-hris.lan/health"
-  printf '  %-5s %-7s %s\n' "DEV" "emp" "https://dev-emp.bnpi-hris.lan/auth/login"
-  printf '  %-5s %-7s %s\n' "UAT" "login" "https://uat.bnpi-hris.lan/auth/login"
-  printf '  %-5s %-7s %s\n' "UAT" "api" "https://uat-api.bnpi-hris.lan/health"
-  printf '  %-5s %-7s %s\n' "UAT" "emp" "https://uat-emp.bnpi-hris.lan/auth/login"
-  printf '  %-5s %-7s %s\n' "PROD" "login" "https://bnpi-hris.lan/auth/login"
-  printf '  %-5s %-7s %s\n' "PROD" "app" "https://app.bnpi-hris.lan/auth/login"
-  printf '  %-5s %-7s %s\n' "PROD" "api" "https://api.bnpi-hris.lan/health"
-  printf '  %-5s %-7s %s\n' "PROD" "emp" "https://emp.bnpi-hris.lan/auth/login"
-  printf '  %-5s %-7s %s\n' "OBS" "grafana" "https://grafana.bnpi-hris.lan"
-  echo "  HTTP also works (http://dev.bnpi-hris.lan). Trust LAN CA once:"
+  printf '  %-5s %-7s %s\n' "DEV" "login" "https://dev.bnpi-pats.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "DEV" "api" "https://dev-api.bnpi-pats.lan/health"
+  printf '  %-5s %-7s %s\n' "DEV" "emp" "https://dev-emp.bnpi-pats.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "UAT" "login" "https://uat.bnpi-pats.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "UAT" "api" "https://uat-api.bnpi-pats.lan/health"
+  printf '  %-5s %-7s %s\n' "UAT" "emp" "https://uat-emp.bnpi-pats.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "PROD" "login" "https://bnpi-pats.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "PROD" "app" "https://app.bnpi-pats.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "PROD" "api" "https://api.bnpi-pats.lan/health"
+  printf '  %-5s %-7s %s\n' "PROD" "emp" "https://emp.bnpi-pats.lan/auth/login"
+  printf '  %-5s %-7s %s\n' "OBS" "grafana" "https://grafana.bnpi-pats.lan"
+  echo "  HTTP also works (http://dev.bnpi-pats.lan). Trust LAN CA once:"
   echo "    /etc/project-truth/lan-ca/caddy-local-root.crt"
   echo "  Port fallbacks (direct NodePort):"
   printf '  %-5s %-5s http://%s:%s/auth/login\n' "PROD" "login" "$ip_addr" "3000"
@@ -118,18 +118,18 @@ emit_hris_rows() {
 
 emit_lan_dns_rows() {
   local ip_addr="$1"
-  echo "LAN DNS + reverse proxy (*.bnpi-hris.lan)"
-  echo "  zone: bnpi-hris.lan  (not .local)"
+  echo "LAN DNS + reverse proxy (*.bnpi-pats.lan)"
+  echo "  zone: bnpi-pats.lan  (not .local)"
   echo "  DNS server: ${ip_addr}  (dnsmasq)"
   echo "  proxy: Caddy :80 + :443 (tls internal CA)"
   if command -v systemctl >/dev/null 2>&1; then
     echo "  dnsmasq: $(systemctl is-active dnsmasq 2>/dev/null || echo unknown)"
     echo "  caddy:   $(systemctl is-active caddy 2>/dev/null || echo unknown)"
   fi
-  echo "  DEV:     https://dev.bnpi-hris.lan   | https://dev-api.bnpi-hris.lan/health"
-  echo "  UAT:     https://uat.bnpi-hris.lan   | https://uat-api.bnpi-hris.lan/health"
-  echo "  PROD:    https://bnpi-hris.lan       | https://api.bnpi-hris.lan/health"
-  echo "  Grafana: https://grafana.bnpi-hris.lan"
+  echo "  DEV:     https://dev.bnpi-pats.lan   | https://dev-api.bnpi-pats.lan/health"
+  echo "  UAT:     https://uat.bnpi-pats.lan   | https://uat-api.bnpi-pats.lan/health"
+  echo "  PROD:    https://bnpi-pats.lan       | https://api.bnpi-pats.lan/health"
+  echo "  Grafana: https://grafana.bnpi-pats.lan"
   echo "  CA trust: /etc/project-truth/lan-ca/caddy-local-root.crt"
   echo "  reinstall: sudo bash /usr/local/share/project-truth/lan-dns-proxy/install.sh"
 }
@@ -150,14 +150,14 @@ emit_observability_rows() {
 
 emit_database_lan_rows() {
   local ip_addr="$1"
-  printf '  %-5s %s\n' "PROD" "postgresql://postgres:postgres@${ip_addr}:15432/hris"
-  printf '  %-5s %s\n' "DEV" "postgresql://postgres:postgres@${ip_addr}:15433/hris"
-  printf '  %-5s %s\n' "UAT" "postgresql://postgres:postgres@${ip_addr}:15434/hris"
+  printf '  %-5s %s\n' "PROD" "postgresql://postgres:postgres@${ip_addr}:15432/bnpi_pats"
+  printf '  %-5s %s\n' "DEV" "postgresql://postgres:postgres@${ip_addr}:15433/bnpi_pats"
+  printf '  %-5s %s\n' "UAT" "postgresql://postgres:postgres@${ip_addr}:15434/bnpi_pats"
 }
 
 cloudflare_tunnel_mode() {
   if command -v systemctl >/dev/null 2>&1 &&
-    systemctl is-active --quiet cloudflared-bnpi-hris.service 2>/dev/null; then
+    systemctl is-active --quiet cloudflared-bnpi-pats.service 2>/dev/null; then
     echo "VM-managed active"
   else
     echo "host-managed on Windows"
@@ -186,18 +186,18 @@ emit_named_cloudflare_rows() {
   local ip_addr="$1"
   echo "Cloudflare named tunnel"
   echo "  mode: $(cloudflare_tunnel_mode)"
-  echo "  name: bnpi-hris"
-  echo "  domain: bnpi-hris.tech"
-  echo "  public app: https://bnpi-hris.tech/auth/login"
-  echo "  public api: https://api.bnpi-hris.tech/health"
-  echo "  employee app: https://emp.bnpi-hris.tech/auth/login"
-  echo "  dev app: https://dev.bnpi-hris.tech/auth/login"
-  echo "  dev api: https://dev-api.bnpi-hris.tech/health"
-  echo "  dev employee app: https://dev-emp.bnpi-hris.tech/auth/login"
-  echo "  uat app: https://uat.bnpi-hris.tech/auth/login"
-  echo "  uat api: https://uat-api.bnpi-hris.tech/health"
-  echo "  uat employee app: https://uat-emp.bnpi-hris.tech/auth/login"
-  echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
+  echo "  name: bnpi-pats"
+  echo "  domain: bnpi-pats.tech"
+  echo "  public app: https://bnpi-pats.tech/auth/login"
+  echo "  public api: https://api.bnpi-pats.tech/health"
+  echo "  employee app: https://emp.bnpi-pats.tech/auth/login"
+  echo "  dev app: https://dev.bnpi-pats.tech/auth/login"
+  echo "  dev api: https://dev-api.bnpi-pats.tech/health"
+  echo "  dev employee app: https://dev-emp.bnpi-pats.tech/auth/login"
+  echo "  uat app: https://uat.bnpi-pats.tech/auth/login"
+  echo "  uat api: https://uat-api.bnpi-pats.tech/health"
+  echo "  uat employee app: https://uat-emp.bnpi-pats.tech/auth/login"
+  echo "  grafana: https://grafana.bnpi-pats.tech/api/health"
   echo "  origin: $(cloudflare_http_origin "$ip_addr")"
   echo "  VM setup: sudo project-truth-cloudflare-vm-tunnel <credential.json>"
   echo "  host repair: project-truth ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic -VerifySsh"
@@ -207,13 +207,13 @@ emit_cloudflare_ssh_rows() {
   local ip_addr="$1"
   echo "Cloudflare SSH"
   echo "  status: verified through Cloudflare Access"
-  echo "  browser: https://ssh.bnpi-hris.tech"
-  echo "  CLI: ssh project-truth-hris"
-  echo "  Access host: ssh.bnpi-hris.tech"
+  echo "  browser: https://ssh.bnpi-pats.tech"
+  echo "  CLI: ssh project-truth-bnpi-pats"
+  echo "  Access host: ssh.bnpi-pats.tech"
   echo "  origin: $(cloudflare_ssh_origin "$ip_addr")"
   echo "  full: ssh -i %USERPROFILE%\\.ssh\\node-health-appliance_ed25519 \\"
   echo "        -o ProxyCommand=\"cloudflared access ssh --hostname %h\" \\"
-  echo "        infra@ssh.bnpi-hris.tech"
+  echo "        infra@ssh.bnpi-pats.tech"
   echo "  LAN fallback: ssh infra@${ip_addr}"
 }
 
@@ -223,9 +223,9 @@ emit_zkteco_runtime_rows() {
   printf '  %-18s %s\n' "VM webhook" "http://${ip_addr}:3001/api/zkteco/events"
   printf '  %-18s %s\n' "Linux bridge" "vendor/zkteco-linux"
   if curl -fsS "http://${ip_addr}:3001/health" >/dev/null 2>&1; then
-    printf '  %-18s %s\n' "VM contract" "ready: HRIS API is reachable"
+    printf '  %-18s %s\n' "VM contract" "ready: BNPI PATS API is reachable"
   else
-    printf '  %-18s %s\n' "VM contract" "not ready: HRIS API health is down"
+    printf '  %-18s %s\n' "VM contract" "not ready: BNPI PATS API health is down"
   fi
   if [ -n "${ZKTECO_BRIDGE_STATUS_URL:-}" ] && curl -fsS "$ZKTECO_BRIDGE_STATUS_URL" >/tmp/project-truth-zkteco-status.json 2>/dev/null; then
     printf '  %-18s %s\n' "bridge status" "$ZKTECO_BRIDGE_STATUS_URL"
@@ -240,14 +240,14 @@ emit_cloudflare_tcp_db_instructions() {
   echo "Cloudflare DB TCP"
   echo "  Use named Cloudflare Tunnel + Access, not trycloudflare HTTP quick tunnels."
   echo "  Client commands after Access/DNS are configured:"
-  echo "    cloudflared access tcp --hostname db.bnpi-hris.tech     --url localhost:5432"
-  echo "    cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:5433"
-  echo "    cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:5434"
+  echo "    cloudflared access tcp --hostname db.bnpi-pats.tech     --url localhost:5432"
+  echo "    cloudflared access tcp --hostname dev-db.bnpi-pats.tech --url localhost:5433"
+  echo "    cloudflared access tcp --hostname uat-db.bnpi-pats.tech --url localhost:5434"
   echo "  Local URLs after forwarding:"
-  echo "    PROD postgresql://postgres:postgres@localhost:5432/hris"
-  echo "    DEV  postgresql://postgres:postgres@localhost:5433/hris"
-  echo "    UAT  postgresql://postgres:postgres@localhost:5434/hris"
-  echo "  Direct db.bnpi-hris.tech:5432 needs WARP private routing or Spectrum/raw TCP."
+  echo "    PROD postgresql://postgres:postgres@localhost:5432/bnpi_pats"
+  echo "    DEV  postgresql://postgres:postgres@localhost:5433/bnpi_pats"
+  echo "    UAT  postgresql://postgres:postgres@localhost:5434/bnpi_pats"
+  echo "  Direct db.bnpi-pats.tech:5432 needs WARP private routing or Spectrum/raw TCP."
 }
 
 emit_screen_os_sync_line() {
@@ -276,7 +276,7 @@ write_summary() {
   mkdir -p "$state_dir"
 
   {
-    echo "Project Truth HRIS appliance"
+    echo "Project Truth BNPI PATS appliance"
     echo "Host: $(hostname)"
     echo "Generated: ${generated_at}"
     echo
@@ -287,7 +287,7 @@ write_summary() {
       echo "Open these from your host browser"
       emit_lan_dns_rows "$ip_addr"
       echo
-      emit_hris_rows "$ip_addr"
+      emit_bnpi_pats_rows "$ip_addr"
       echo
       emit_named_cloudflare_rows "$ip_addr"
       echo
@@ -324,7 +324,7 @@ write_summary() {
     echo
       echo "Useful commands"
       echo "  project-truth-progress --watch"
-      echo "  project-truth-hris-status"
+      echo "  project-truth-bnpi-pats-status"
       echo "  project-truth-db-access"
       echo "  project-truth-lan-config"
     echo "  sudo project-truth-ansible-pull"
@@ -505,17 +505,17 @@ emit_screen_summary() {
   fi
 
   echo
-  echo "HRIS"
-  emit_hris_rows "$ip_addr"
+  echo "BNPI PATS"
+  emit_bnpi_pats_rows "$ip_addr"
   echo "Cloudflare"
-  echo "  public: https://bnpi-hris.tech/auth/login"
-  echo "  api: https://api.bnpi-hris.tech/health"
-  echo "  dev: https://dev.bnpi-hris.tech/auth/login"
-  echo "  uat: https://uat.bnpi-hris.tech/auth/login"
-  echo "  grafana: https://grafana.bnpi-hris.tech/api/health"
+  echo "  public: https://bnpi-pats.tech/auth/login"
+  echo "  api: https://api.bnpi-pats.tech/health"
+  echo "  dev: https://dev.bnpi-pats.tech/auth/login"
+  echo "  uat: https://uat.bnpi-pats.tech/auth/login"
+  echo "  grafana: https://grafana.bnpi-pats.tech/api/health"
   echo "  origin: $(cloudflare_http_origin "$ip_addr")"
-  echo "  mode: $(cloudflare_tunnel_mode) tunnel bnpi-hris"
-  echo "  ssh: ssh project-truth-hris"
+  echo "  mode: $(cloudflare_tunnel_mode) tunnel bnpi-pats"
+  echo "  ssh: ssh project-truth-bnpi-pats"
   echo "Postgres"
   emit_database_lan_rows "$ip_addr"
   echo "ZKTeco"
@@ -525,7 +525,7 @@ emit_screen_summary() {
   emit_screen_os_sync_line
   echo "More: project-truth-lan-summary --screen-tunnels | --screen-db"
   echo "Commands: project-truth-progress --watch"
-  echo "        project-truth-hris-status"
+  echo "        project-truth-bnpi-pats-status"
   echo "        project-truth-db-access"
   echo "        sudo project-truth-ansible-pull"
 }
@@ -540,19 +540,19 @@ if [ "$screen" = "true" ]; then
 fi
 
 {
-  echo "Project Truth HRIS appliance"
+  echo "Project Truth BNPI PATS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
-    echo "DEV:  https://dev.bnpi-hris.lan/auth/login"
-    echo "DEV:  https://dev-api.bnpi-hris.lan/health"
-    echo "UAT:  https://uat.bnpi-hris.lan/auth/login"
-    echo "PROD: https://bnpi-hris.lan/auth/login"
-    echo "Grafana: https://grafana.bnpi-hris.lan"
-    echo "LAN DNS: ${ip_addr}  zone: bnpi-hris.lan"
+    echo "DEV:  https://dev.bnpi-pats.lan/auth/login"
+    echo "DEV:  https://dev-api.bnpi-pats.lan/health"
+    echo "UAT:  https://uat.bnpi-pats.lan/auth/login"
+    echo "PROD: https://bnpi-pats.lan/auth/login"
+    echo "Grafana: https://grafana.bnpi-pats.lan"
+    echo "LAN DNS: ${ip_addr}  zone: bnpi-pats.lan"
     echo "Port fallback DEV: http://${ip_addr}:3100/auth/login"
-    echo "Cloudflare: https://dev.bnpi-hris.tech/auth/login"
-    echo "Tunnel: $(cloudflare_tunnel_mode) bnpi-hris"
-    echo "SSH: ssh infra@${ip_addr}  |  ssh project-truth-hris"
+    echo "Cloudflare: https://dev.bnpi-pats.tech/auth/login"
+    echo "Tunnel: $(cloudflare_tunnel_mode) bnpi-pats"
+    echo "SSH: ssh infra@${ip_addr}  |  ssh project-truth-bnpi-pats"
     echo "Summary: project-truth-lan-summary --screen-overview"
     if [ -r "$sync_state_file" ]; then
       commit="$(awk -F= '$1 == "commit" { print substr($2, 1, 12) }' "$sync_state_file")"
@@ -569,22 +569,22 @@ fi
 } > "$motd_file"
 
 {
-  echo "Project Truth HRIS appliance"
+  echo "Project Truth BNPI PATS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
   else
     echo "LAN IP: NOT DETECTED"
   fi
   echo "LAN clean URLs (DNS ${ip_addr:-?} / hosts):"
-  echo "  DEV  https://dev.bnpi-hris.lan/auth/login"
-  echo "  DEV  https://dev-api.bnpi-hris.lan/health"
-  echo "  UAT  https://uat.bnpi-hris.lan/auth/login"
-  echo "  PROD https://bnpi-hris.lan/auth/login"
-  echo "  Grafana https://grafana.bnpi-hris.lan"
+  echo "  DEV  https://dev.bnpi-pats.lan/auth/login"
+  echo "  DEV  https://dev-api.bnpi-pats.lan/health"
+  echo "  UAT  https://uat.bnpi-pats.lan/auth/login"
+  echo "  PROD https://bnpi-pats.lan/auth/login"
+  echo "  Grafana https://grafana.bnpi-pats.lan"
   echo "Cloudflare (public):"
-  echo "  https://dev.bnpi-hris.tech/auth/login"
-  echo "  https://dev-api.bnpi-hris.tech/health"
-  echo "  https://bnpi-hris.tech/auth/login"
+  echo "  https://dev.bnpi-pats.tech/auth/login"
+  echo "  https://dev-api.bnpi-pats.tech/health"
+  echo "  https://bnpi-pats.tech/auth/login"
   echo "SSH:"
   if [ -n "$ip_addr" ]; then
     echo "  OpenSSH: ssh infra@${ip_addr}"
@@ -594,11 +594,11 @@ fi
     echo "  waiting for LAN IP"
   fi
   echo "Tunnel:"
-  echo "  $(cloudflare_tunnel_mode) bnpi-hris"
+  echo "  $(cloudflare_tunnel_mode) bnpi-pats"
   echo "Cloudflare SSH:"
-  echo "  browser: https://ssh.bnpi-hris.tech"
-  echo "  CLI: ssh project-truth-hris"
-  echo "  host: ssh.bnpi-hris.tech"
+  echo "  browser: https://ssh.bnpi-pats.tech"
+  echo "  CLI: ssh project-truth-bnpi-pats"
+  echo "  host: ssh.bnpi-pats.tech"
   echo "  LAN fallback: ssh infra@${ip_addr:-<lan-ip>}"
   echo
   echo "Console login:"
@@ -631,10 +631,10 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
   {
     printf '\033c'
     if [ -n "$tty_user" ]; then
-    echo "Project Truth HRIS appliance"
+    echo "Project Truth BNPI PATS appliance"
     echo "LAN IP: ${ip_addr:-NOT DETECTED}"
-    echo "Cloudflare: https://bnpi-hris.tech/auth/login"
-    echo "Cloudflare SSH: ssh project-truth-hris"
+    echo "Cloudflare: https://bnpi-pats.tech/auth/login"
+    echo "Cloudflare SSH: ssh project-truth-bnpi-pats"
     echo
       echo "Console is already logged in as ${tty_user}."
       echo "Do not type infra at this shell prompt."

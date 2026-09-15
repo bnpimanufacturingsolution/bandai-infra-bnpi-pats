@@ -54,7 +54,7 @@ Screenshot:
   .runtime\gcp-image-build-v3\20260625-085534\boot-proof-rerun\display-screenshot-final.jpg
 ```
 
-The screenshot shows a clean Project Truth HRIS appliance console, the detected
+The screenshot shows a clean Project Truth BNPI PATS appliance console, the detected
 LAN/IP address, and explicit guidance to type `infra` only when the prompt ends
 with `login:`. This verifies the console login-loop fix in GCompute.
 
@@ -79,7 +79,7 @@ Project Truth services:
   project-truth-firstboot-identity.service SUCCESS
   project-truth-lan-summary.service SUCCESS
   project-truth-clean-console.service SUCCESS
-  project-truth-hris.service SUCCESS
+  project-truth-bnpi-pats.service SUCCESS
 
 Endpoint probes:
   PROD API  http://127.0.0.1:3001/health      healthy
@@ -141,10 +141,10 @@ Cloud Build ID:
   2673afcb-e2c9-4b6f-b719-2293d606d3a2
 
 GCS:
-  gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v3/latest/project-truth-node-gcp-1782354447.vhdx
+  gs://project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/hyperv/v3/latest/project-truth-node-gcp-1782354447.vhdx
 
 Public URL:
-  https://storage.googleapis.com/project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v3/latest/project-truth-node-gcp-1782354447.vhdx
+  https://storage.googleapis.com/project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/hyperv/v3/latest/project-truth-node-gcp-1782354447.vhdx
 
 Size:
   14,168,358,912 bytes

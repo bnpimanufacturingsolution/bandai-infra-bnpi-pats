@@ -2,7 +2,7 @@
 
 **Audience:** owner-operator agents (Grok / Claude / multi-agent root).  
 **Mode:** agent-owned end-to-end. No human homework for recoverable steps.  
-**Environment:** K3s **DEV only** on Hyper-V VM (`project-truth-hris` / LAN `10.184.37.19`).  
+**Environment:** K3s **DEV only** on Hyper-V VM (`project-truth-bnpi-pats` / LAN `10.184.37.19`).  
 **Repo:** `C:\Users\stari\bandai-infra` on `develop`.
 
 This card encodes **proven production mistakes, log truth, and recovery patterns**
@@ -38,7 +38,7 @@ Done only when **all** are true with evidence under a new stamp
 Windows repo develop
   -> push + exact-SHA GitHub Actions
   -> VM ansible-pull / GitOps
-  -> K3s namespace dev (hris-api NodePort :3101, app :3100)
+  -> K3s namespace dev (bnpi-pats-api NodePort :3101, app :3100)
   -> devices 10.184.37.20–25 from inside VM
   -> named Cloudflare tunnel STAYS active
 ```
@@ -50,7 +50,7 @@ SSH preference:
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\node-health-appliance_ed25519" infra@10.184.37.19
 # fallback
-ssh project-truth-hris
+ssh project-truth-bnpi-pats
 ```
 
 API:
@@ -58,17 +58,17 @@ API:
 ```text
 http://127.0.0.1:3101/health   # on VM
 # host tunnel if needed:
-ssh -N -L 127.0.0.1:53101:127.0.0.1:3101 project-truth-hris
+ssh -N -L 127.0.0.1:53101:127.0.0.1:3101 project-truth-bnpi-pats
 ```
 
-Admin actor: `admin@bandai.local` / documented password / `appCode=hris`. Never print bearer tokens.
+Admin actor: `admin@bandai.local` / documented password / `appCode=bnpi-pats`. Never print bearer tokens.
 
 Observability (start if down):
 
 ```bash
-sudo project-truth-hris-observability-start
+sudo project-truth-bnpi-pats-observability-start
 # Grafana :53000  Loki :3110  Prometheus :9091
-# LogQL: {stack="hris-k3s",namespace="dev",container="api"} |= "credential_recovery"
+# LogQL: {stack="bnpi-pats-k3s",namespace="dev",container="api"} |= "credential_recovery"
 ```
 
 ---
@@ -175,27 +175,27 @@ On VM:
 
 ```bash
 sudo cat /var/lib/project-truth/k8s-runtime-image-state
-kubectl -n dev get deploy hris-api hris-app
-kubectl -n dev exec deploy/hris-api -c api -- printenv HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID
+kubectl -n dev get deploy bnpi-pats-api bnpi-pats-app
+kubectl -n dev exec deploy/bnpi-pats-api -c api -- printenv HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID
 # MUST contain all five IDs (comma-separated), not B alone
-kubectl -n dev exec deploy/hris-api -c api -- printenv HIKVISION_FDLIB_FACE_DELIVERY_ORIGIN
+kubectl -n dev exec deploy/bnpi-pats-api -c api -- printenv HIKVISION_FDLIB_FACE_DELIVERY_ORIGIN
 # expect http://10.184.37.19:3101 (or verified DEV API origin)
 ```
 
-If env still B-only: push/deploy `gitops/runtime-k8s/overlays/dev/hris-api-credential-recovery-env.patch.yaml` + API image with multi-ID parser; **API-only** rebuild when possible (`services=hris-api`).
+If env still B-only: push/deploy `gitops/runtime-k8s/overlays/dev/bnpi-pats-api-credential-recovery-env.patch.yaml` + API image with multi-ID parser; **API-only** rebuild when possible (`services=bnpi-pats-api`).
 
 ### A2. Zero writers + health
 
 ```bash
 curl -sS http://127.0.0.1:3101/health
 # recovery jobs: no pending/recovering/retrying
-# cloudflared-bnpi-hris active; do not stop tunnel
+# cloudflared-bnpi-pats active; do not stop tunnel
 ```
 
 ### A3. Observability
 
 ```bash
-curl -sS http://127.0.0.1:53000/api/health || sudo project-truth-hris-observability-start
+curl -sS http://127.0.0.1:53000/api/health || sudo project-truth-bnpi-pats-observability-start
 curl -sS http://127.0.0.1:3110/ready
 ```
 
@@ -313,7 +313,7 @@ Forbidden silent states:
 Query:
 
 ```bash
-kubectl -n dev logs deploy/hris-api -c api --since=2h | grep credential_recovery_write_progress
+kubectl -n dev logs deploy/bnpi-pats-api -c api --since=2h | grep credential_recovery_write_progress
 ```
 
 ### Phase G — Close-out
@@ -448,5 +448,5 @@ logs + verified counters. Heartbeat until EXIT GATE. Commit/push when green.
 - `docs/00-product/AGENT-PROMPT-durable-credential-recovery-overnight-continuation.md`
 - `docs/00-product/HIKVISION_CREDENTIAL_RECOVERY_ARCHITECTURE.md`
 - `docs/00-product/HIKVISION_CREDENTIAL_MERGE_EXECUTION_STANDARD.md`
-- `gitops/runtime-k8s/overlays/dev/hris-api-credential-recovery-env.patch.yaml`
+- `gitops/runtime-k8s/overlays/dev/bnpi-pats-api-credential-recovery-env.patch.yaml`
 - `.runtime/overnight-biometric-convergence-20260724-230000/STATUS.md`

@@ -32,12 +32,12 @@ http://<guest-lan-ip>:3201/health
 ssh infra@<guest-lan-ip> "hostname; ip -br addr; docker ps || true; sudo kubectl get nodes; sudo kubectl get pods -A; sudo kubectl get svc -A; sudo kubectl get applications -n argocd || true"
 ```
 
-App/API HTTP 200 with Argo runtime **Degraded** is expected when Job `hris-api-db-init` is Failed. That is not an empty database. Do not reseed UAT/PROD or delete that Job to make Argo Healthy. `docs/DB_INIT_JOB.md`.
+App/API HTTP 200 with Argo runtime **Degraded** is expected when Job `bnpi-pats-api-db-init` is Failed. That is not an empty database. Do not reseed UAT/PROD or delete that Job to make Argo Healthy. `docs/DB_INIT_JOB.md`.
 
-For host-only HRIS appliance checks without a VM guest IP:
+For host-only BNPI PATS appliance checks without a VM guest IP:
 
 ```powershell
-.\scripts\project-truth.ps1 verify-local-hris-runtime -Environment all
+.\scripts\project-truth.ps1 verify-local-bnpi-pats-runtime -Environment all
 ```
 
 Logs are written under `.runtime/` and are not committed.

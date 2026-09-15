@@ -88,7 +88,7 @@ Agents repeatedly fail by **assuming** the first `device-event:saved` always has
 1. Read `vendor/hikvision-linux/src/hikvision_bio/acs.cpp` (callback/JSON) and `src/hikvision_bio/spool.cpp` (POST/enrich):
    - `alarm_callback` (`acs.cpp`) — person id **only** from `dwEmployeeNo` (empty when 0).
    - `build_hikvision_callback_json` (`acs.cpp`) — `employeeNo` / `employeeNoString` are that same string.
-   - `hris_post_loop` / enrich path (`spool.cpp`) — what is filled **before** POST.
+   - `bnpi_pats_post_loop` / enrich path (`spool.cpp`) — what is filled **before** POST.
 2. Read a real saved payload or `.runtime` SDK log (major/minor + `employeeNo`).
 3. State what the wire actually had: **plain** / **empty** / **opaque**.
 
@@ -105,7 +105,7 @@ Socket shows saved row truth. It does not invent plain id missing from the POST 
 **Correct fix direction when user wants plain on live UI:**
 
 - Prefer C++ inventory delta + template read **before** POST when ACS person is empty.
-- HRIS multipass is fallback, not a license to claim “callback always had 15.”
+- BNPI PATS multipass is fallback, not a license to claim “callback always had 15.”
 - Store raw FP/face templates on DeviceUser when read. For USER_CREATED / FINGERPRINT_ENROLLED, also attach the same evidenced usable blobs to the DeviceEvent payload so the ledger journey is complete; never fabricate bytes or identity when capture is empty.
 
 Also see: `.grok/rules/02-sdk-callback-wire-truth.md`.

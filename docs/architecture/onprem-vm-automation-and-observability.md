@@ -9,7 +9,7 @@
 
 The observability stack for on-premises deployments is **deliberately implemented using Docker Compose** (`docker-compose.yml`) and a dedicated bootstrap script rather than Terraform. 
 
-The script `scripts/bootstrap-onprem-vm.sh` serves as the **single source of truth for VM initialization**. It transforms a fresh Ubuntu-based VM into a complete, self-contained, production-grade HRIS system with full observability, automatic boot integration, persistent storage, and management utilities.
+The script `scripts/bootstrap-onprem-vm.sh` serves as the **single source of truth for VM initialization**. It transforms a fresh Ubuntu-based VM into a complete, self-contained, production-grade BNPI PATS system with full observability, automatic boot integration, persistent storage, and management utilities.
 
 This design prioritizes:
 - Operational simplicity for on-prem administrators
@@ -17,7 +17,7 @@ This design prioritizes:
 - Reliable startup ordering
 - Familiar tooling (`docker compose`, systemd, bash)
 
-It is **not technical debt** — it is a pragmatic, senior-level architecture choice documented in `hris-api/infrastructure/onprem/observability/README.md`.
+It is **not technical debt** — it is a pragmatic, senior-level architecture choice documented in `bnpi-pats-api/infrastructure/onprem/observability/README.md`.
 
 ## 1. Why Observability Is NOT in Terraform
 
@@ -29,7 +29,7 @@ It is **not technical debt** — it is a pragmatic, senior-level architecture ch
    - `loki-config.yml`
    - `tempo.yml`
    - `otel-collector/otel-collector.yml`
-   - Grafana datasources, dashboards (`hris-user-activity-audit.json`, etc.)
+   - Grafana datasources, dashboards (`bnpi-pats-user-activity-audit.json`, etc.)
    - Promtail, Alertmanager, blackbox-exporter configs
    - Backup and replication logic
 
@@ -46,11 +46,11 @@ It is **not technical debt** — it is a pragmatic, senior-level architecture ch
    A pure Terraform Docker provider approach would hide these tools behind `terraform apply`, making troubleshooting slower.
 
 3. **Strict Service Dependency Ordering**  
-   The observability stack **must start first** to create the external Docker network `hris-observability`. The HRIS API and frontend containers attach to this network and send traces/logs to the OTEL Collector.  
-   The bash layer (`project-truth-hris-env-start all`) guarantees correct ordering. Terraform `depends_on` is less reliable across restarts.
+   The observability stack **must start first** to create the external Docker network `bnpi-pats-observability`. The BNPI PATS API and frontend containers attach to this network and send traces/logs to the OTEL Collector.  
+   The bash layer (`project-truth-bnpi-pats-env-start all`) guarantees correct ordering. Terraform `depends_on` is less reliable across restarts.
 
 4. **Persistent Host Volume Management**  
-   The stack uses many host-mounted volumes under `/srv/hris/observability/{grafana,prometheus,loki,tempo,alertmanager,collector,backups}`.  
+   The stack uses many host-mounted volumes under `/srv/bnpi-pats/observability/{grafana,prometheus,loki,tempo,alertmanager,collector,backups}`.  
    The bootstrap script creates these directories with proper permissions before any container starts. This is cleaner and more idempotent in bash than in Terraform on a fresh VM.
 
 5. **Grafana Provisioning Excellence**  
@@ -70,7 +70,7 @@ It is **not technical debt** — it is a pragmatic, senior-level architecture ch
 
 ### Trade-off Summary
 
-**Terraform (used in `hris-api/infrastructure/onprem/main.tf`)**: Excellent for simple services (Redis, MongoDB, MinIO, app, cron).  
+**Terraform (used in `bnpi-pats-api/infrastructure/onprem/main.tf`)**: Excellent for simple services (Redis, MongoDB, MinIO, app, cron).  
 **Docker Compose + Bootstrap Script**: Superior for complex, config-heavy, monitoring platforms that require ongoing human interaction.
 
 ## 2. The VM Automation Script: `scripts/bootstrap-onprem-vm.sh`
@@ -89,8 +89,8 @@ sudo bash scripts/bootstrap-onprem-vm.sh
 
 #### Phase 2: Automatic on Every Boot
 The script installs a systemd service:
-- `/etc/systemd/system/project-truth-hris.service`
-- `ExecStart=/usr/local/bin/project-truth-hris-env-start all`
+- `/etc/systemd/system/project-truth-bnpi-pats.service`
+- `ExecStart=/usr/local/bin/project-truth-bnpi-pats-env-start all`
 - Enabled with `systemctl enable`
 
 This service runs at boot via `multi-user.target`.
@@ -101,27 +101,27 @@ This service runs at boot via `multi-user.target`.
 |------|----------|--------------|
 | 1 | `install_docker()` | Installs `docker.io` and `docker-compose-v2` on Debian-based systems. Enables and starts the Docker service. |
 | 2 | `sync_repo_to_install_root()` | Rsyncs (or cp) the entire repository from current location to `/opt/project-truth` (default). Excludes `.git` and all `node_modules`. |
-| 3 | `prepare_persistent_dirs()` | Creates critical host directories: `/srv/hris/backups` and `/srv/hris/observability/{grafana,prometheus,loki,tempo,alertmanager,collector,backups}`. |
+| 3 | `prepare_persistent_dirs()` | Creates critical host directories: `/srv/bnpi-pats/backups` and `/srv/bnpi-pats/observability/{grafana,prometheus,loki,tempo,alertmanager,collector,backups}`. |
 | 4 | `prepare_env_files()` | Copies `.env.example` → `.env` for both the main observability stack and the backup component (only if missing — idempotent). |
 | 5 | `install_commands_and_services()` | Installs 6 management CLIs into `/usr/local/bin/` with correct permissions. Installs the systemd unit file, runs `daemon-reload`, and enables the service. |
-| 6 | `start_stacks()` | 1. Changes to observability directory and runs `compose up -d`<br>2. Changes to appliance directory, builds images, starts Postgres, then hris-api and hris-app with `--no-deps`. |
-| 7 | `verify_local_endpoints()` | Polls (up to 5 minutes) these critical endpoints:<br>• `http://127.0.0.1:3001/health` (HRIS API)<br>• `http://127.0.0.1:53000/api/health` (Grafana)<br>• Prometheus ready, Loki ready, Tempo ready, Collector metrics |
+| 6 | `start_stacks()` | 1. Changes to observability directory and runs `compose up -d`<br>2. Changes to appliance directory, builds images, starts Postgres, then bnpi-pats-api and bnpi-pats-app with `--no-deps`. |
+| 7 | `verify_local_endpoints()` | Polls (up to 5 minutes) these critical endpoints:<br>• `http://127.0.0.1:3001/health` (BNPI PATS API)<br>• `http://127.0.0.1:53000/api/health` (Grafana)<br>• Prometheus ready, Loki ready, Tempo ready, Collector metrics |
 
 ### Installed Management Commands
 
-- `project-truth-hris-start` — Core start logic + image build check
-- `project-truth-hris-env-start` — Environment-aware starter (`dev|uat|prod|all`). Always starts observability first.
-- `project-truth-hris-observability-start` — Dedicated observability starter
-- `project-truth-hris-status` — Shows container status + health
-- `project-truth-hris-seed` / `project-truth-hris-env-seed` — Database seeding helpers
+- `project-truth-bnpi-pats-start` — Core start logic + image build check
+- `project-truth-bnpi-pats-env-start` — Environment-aware starter (`dev|uat|prod|all`). Always starts observability first.
+- `project-truth-bnpi-pats-observability-start` — Dedicated observability starter
+- `project-truth-bnpi-pats-status` — Shows container status + health
+- `project-truth-bnpi-pats-seed` / `project-truth-bnpi-pats-env-seed` — Database seeding helpers
 
 ### Final Output on Success
 
 ```text
 On-prem VM bootstrap complete.
 Grafana: http://<vm-ip>:53000
-HRIS app: http://<vm-ip>:3000
-HRIS API health: http://<vm-ip>:3001/health
+BNPI PATS app: http://<vm-ip>:3000
+BNPI PATS API health: http://<vm-ip>:3001/health
 ```
 
 ## 3. Integration with Terraform and Packer
@@ -142,10 +142,10 @@ See also: `docs/TERRAFORM_HYPERV_ARCHITECTURE.md` and `docs/ARCHITECTURE.md`.
 
 ## 5. Related Documentation
 
-- `hris-api/infrastructure/onprem/observability/README.md` — Primary observability documentation
-- `hris-api/infrastructure/onprem/observability/docker-compose.yml` — Full stack definition (249 lines)
-- `appliance/bin/project-truth-hris-env-start.sh` — Orchestration logic
-- `appliance/systemd/project-truth-hris.service` — Boot integration
+- `bnpi-pats-api/infrastructure/onprem/observability/README.md` — Primary observability documentation
+- `bnpi-pats-api/infrastructure/onprem/observability/docker-compose.yml` — Full stack definition (249 lines)
+- `appliance/bin/project-truth-bnpi-pats-env-start.sh` — Orchestration logic
+- `appliance/systemd/project-truth-bnpi-pats.service` — Boot integration
 - `terraform-hyperv/main.tf` — VM provisioning
 - `docs/ARCHITECTURE.md` — Overall Hyper-V architecture
 

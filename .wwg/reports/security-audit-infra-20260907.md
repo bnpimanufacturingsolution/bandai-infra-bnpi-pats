@@ -2,7 +2,7 @@
 
 Status: `AUDIT_COMPLETE_READ_ONLY`. Scope: **infrastructure only** — Windows host, Hyper-V VM OS, network/firewall, Docker, K3s/K8s control plane, Cloudflare tunnel edge, system services, patching, logging/audit. App-code findings are in `.wwg/reports/security-audit-full-20260907.md` and are cross-referenced only where they are also infra defects.
 
-Evidence: `.runtime/security-audit-infra-20260907/vm-probe-3-deep-infra.txt` (+ `host-probe.txt`; earlier `../security-audit-full-20260907/vm-probe.txt`, `vm-probe-2.txt`). All VM data gathered read-only over `ssh project-truth-hris`.
+Evidence: `.runtime/security-audit-infra-20260907/vm-probe-3-deep-infra.txt` (+ `host-probe.txt`; earlier `../security-audit-full-20260907/vm-probe.txt`, `vm-probe-2.txt`). All VM data gathered read-only over `ssh project-truth-bnpi-pats`.
 
 Probe limitation: Hyper-V PowerShell cmdlets were unavailable in this session's shell (module not loaded), so VM switch/adapter enumeration could not be re-verified from the host this pass — `NEEDS_CONFIRMATION` against earlier evidence (VM `project-truth-local-vhdx-proof` on `ProjectTruth-External`/Default Switch per Project Truth).
 
@@ -14,7 +14,7 @@ The VM's **kernel and K3s platform posture is notably good** (AppArmor enforcing
 
 1. **LAN → VM root in one step:** sshd accepts **passwords** (`PasswordAuthentication yes`, enforced by 3 sshd_config.d files), the `infra` password appears hardcoded in repo scripts, and `infra` has **`NOPASSWD:ALL` sudo**. No fail2ban, no UFW `limit` on SSH.
 2. **The Windows host has no firewall at all** (all three profiles disabled) and **RDP is enabled** — the hypervisor itself is the softest point in the whole stack.
-3. **Data at rest is unencrypted end-to-end:** no LUKS on the VM, K3s `--secrets-encryption` off, so one copied VHDX (or host disk) yields HRIS DB + biometrics + all K8s secrets in the clear.
+3. **Data at rest is unencrypted end-to-end:** no LUKS on the VM, K3s `--secrets-encryption` off, so one copied VHDX (or host disk) yields BNPI PATS DB + biometrics + all K8s secrets in the clear.
 
 | Severity | Count (infra layer) |
 |---|---|
@@ -33,7 +33,7 @@ The VM's **kernel and K3s platform posture is notably good** (AppArmor enforcing
 |---|---|---|
 | **IC1** | **VM LAN→root chain fully confirmed:** `infra ALL=(ALL) NOPASSWD:ALL` in `/etc/sudoers.d/90-infra` + sshd `passwordauthentication yes` (effective; enforced by `50-cloud-init.conf`, `90-packer-password-auth.conf`, `90-project-truth-password-auth.conf`) + `infra` password hardcoded (`plink -pw infra`) in `scripts/hyperv-visual-proof-loop.ps1:68`, `login-visual-proof-loop.ps1:127` + no fail2ban + UFW plain `ALLOW` (not `limit`) on 22/tcp from Anywhere | `vm-probe-3-deep-infra.txt` §A,§Q,§R; `vm-probe-2.txt` sshd -T; `vm-probe.txt` §9 |
 | **IC2** | **Windows host firewall fully disabled** on Domain/Private/Public profiles (all `Enabled=False`, inbound `NotConfigured`) while **RDP is enabled** (`fDenyTSConnections=0`). The hypervisor host — holder of all VHDXs, SSH keys, Cloudflare credential import paths — accepts unsolicited LAN traffic | `host-probe.txt` firewall + RDP sections |
-| **IC3** | **No encryption at rest anywhere in the chain:** VM filesystem has no LUKS layer; K3s runs **without `--secrets-encryption`** (K8s Secrets, incl. DB creds and `INTEGRATION_API_KEYS`, plaintext in `/var/lib/rancher/k3s/server/db/state.db`); Postgres data dirs unencrypted; host VHDX files unencrypted. One VHDX copy/host disk theft = full HRIS data + biometrics + every credential | `vm-probe-3-deep-infra.txt` §G (no LUKS), §J (no secrets-encryption arg) |
+| **IC3** | **No encryption at rest anywhere in the chain:** VM filesystem has no LUKS layer; K3s runs **without `--secrets-encryption`** (K8s Secrets, incl. DB creds and `INTEGRATION_API_KEYS`, plaintext in `/var/lib/rancher/k3s/server/db/state.db`); Postgres data dirs unencrypted; host VHDX files unencrypted. One VHDX copy/host disk theft = full BNPI PATS data + biometrics + every credential | `vm-probe-3-deep-infra.txt` §G (no LUKS), §J (no secrets-encryption arg) |
 | **IC4** | **Observability stack is an unauthenticated LAN service set:** Prometheus (`user=0`), Loki (`user=0`), Grafana, Tempo, Alertmanager, node/cadvisor exporters all serve with **zero auth**, and UFW allows their ports (`9091,3110,9093,9115,9110,8088,53000`…) **from Anywhere** on both v4 and v6. Loki explicitly `auth_enabled: false` | `vm-probe-3-deep-infra.txt` §H,§I; UFW rules `vm-probe.txt` §5; `loki-config.yml` |
 
 ## HIGH (infra layer)
@@ -107,7 +107,7 @@ The VM's **kernel and K3s platform posture is notably good** (AppArmor enforcing
 
 **P2 — this quarter:** LUKS (or BitLocker-host-side for the VHDX store) as part of the next image build — note this changes the image-factory flow and must keep the V7 clean-image lane separate · CIS Ubuntu benchmark pass (automate with OpenSCAP in Packer) · container image scanning in the VM build path · K8s: enforce NetworkPolicies default-deny per namespace · document `GatewayPorts` necessity per device bridge.
 
-**Constraints honored:** all changes above are additive and keep `cloudflared-bnpi-hris.service` running; nothing here requires tunnel outage. DB-related changes follow the backup-first rule (see app-audit H11 — create HRIS DB backups *before* any K3s secrets-encryption work).
+**Constraints honored:** all changes above are additive and keep `cloudflared-bnpi-pats.service` running; nothing here requires tunnel outage. DB-related changes follow the backup-first rule (see app-audit H11 — create BNPI PATS DB backups *before* any K3s secrets-encryption work).
 
 ## Cross-reference to app-layer report
 

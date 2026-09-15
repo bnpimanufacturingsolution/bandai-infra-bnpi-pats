@@ -7,7 +7,7 @@
 namespace hikvision_bio {
 
 struct DeviceConfig {
-    std::string hris_device_id;
+    std::string bnpi_pats_device_id;
     std::string organization_id;
     std::string name;
     std::string host;

@@ -3,8 +3,8 @@ param(
   [string]$Target = 'all',
   [int]$HttpLocalPort = 58080,
   [int]$SdkLocalPort = 58000,
-  [string]$HttpHostname = $(if ($env:PROJECT_TRUTH_CF_HIKVISION_HTTP_HOSTNAME) { $env:PROJECT_TRUTH_CF_HIKVISION_HTTP_HOSTNAME } else { 'hikvision-http.bnpi-hris.tech' }),
-  [string]$SdkHostname = $(if ($env:PROJECT_TRUTH_CF_HIKVISION_SDK_HOSTNAME) { $env:PROJECT_TRUTH_CF_HIKVISION_SDK_HOSTNAME } else { 'hikvision-sdk.bnpi-hris.tech' }),
+  [string]$HttpHostname = $(if ($env:PROJECT_TRUTH_CF_HIKVISION_HTTP_HOSTNAME) { $env:PROJECT_TRUTH_CF_HIKVISION_HTTP_HOSTNAME } else { 'hikvision-http.bnpi-pats.tech' }),
+  [string]$SdkHostname = $(if ($env:PROJECT_TRUTH_CF_HIKVISION_SDK_HOSTNAME) { $env:PROJECT_TRUTH_CF_HIKVISION_SDK_HOSTNAME } else { 'hikvision-sdk.bnpi-pats.tech' }),
   [switch]$StopExisting
 )
 

@@ -27,23 +27,23 @@ jobs:
         target:
           - id: ansible-pull
             environment: vm-gitops
-            url: https://dev.bnpi-hris.tech/auth/login
+            url: https://dev.bnpi-pats.tech/auth/login
             wait_sec: 1200
-          - id: hris-api
-            environment: hris-api
-            url: https://dev-api.bnpi-hris.tech/health
+          - id: bnpi-pats-api
+            environment: bnpi-pats-api
+            url: https://dev-api.bnpi-pats.tech/health
             wait_sec: 1200
-          - id: hris-app
-            environment: hris-app
-            url: https://dev.bnpi-hris.tech/auth/login
+          - id: bnpi-pats-app
+            environment: bnpi-pats-app
+            url: https://dev.bnpi-pats.tech/auth/login
             wait_sec: 1200
-          - id: hris-emp-app
-            environment: hris-emp-app
-            url: https://dev-emp.bnpi-hris.tech/auth/login
+          - id: bnpi-pats-emp-app
+            environment: bnpi-pats-emp-app
+            url: https://dev-emp.bnpi-pats.tech/auth/login
             wait_sec: 1200
           - id: callback-outbox
             environment: callback-outbox
-            url: https://dev-api.bnpi-hris.tech/health
+            url: https://dev-api.bnpi-pats.tech/health
             wait_sec: 1200
           - id: onprem-prod-api
             environment: onprem-prod-api

@@ -1,5 +1,5 @@
 param(
-  [string]$ProjectId = 'hris-492904',
+  [string]$ProjectId = 'bnpi-pats-492904',
   [int]$MaxRunningMinutes = 30,
   [switch]$StopLeakedBuildVms,
   [switch]$SkipAlert,

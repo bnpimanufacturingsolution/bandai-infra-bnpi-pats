@@ -5,11 +5,11 @@ resources:
   - runtime.yaml
 
 images:
-  - name: hris-api-db-init
+  - name: bnpi-pats-api-db-init
     newTag: develop
-  - name: hris-api-local
+  - name: bnpi-pats-api-local
     newTag: develop
-  - name: hris-app-local
+  - name: bnpi-pats-app-local
     newTag: develop
-  - name: hris-emp-app-local
+  - name: bnpi-pats-emp-app-local
     newTag: develop

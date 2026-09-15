@@ -7,7 +7,7 @@ Task mode: infrastructure/runtime credential preflight.
 Result: The named Cloudflare Tunnel credential is available on this Windows host
 and has been copied into a stable host-side handoff path for V6 one-shot import.
 The current proof VM already has the matching credential installed root-only and
-its VM-side `cloudflared-bnpi-hris.service` is active.
+its VM-side `cloudflared-bnpi-pats.service` is active.
 
 ## Host Credential State
 
@@ -40,15 +40,15 @@ its VM-side `cloudflared-bnpi-hris.service` is active.
   `cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate`
   returned `OK`.
 - VM service:
-  `cloudflared-bnpi-hris.service` is enabled and active.
+  `cloudflared-bnpi-pats.service` is enabled and active.
 
 ## Public CORS Smoke
 
 The public preflight checks for `system-provisioning/status` passed:
 
-- PROD: `https://bnpi-hris.tech` -> `https://bnpi-hris.tech/api/system-provisioning/status`
-- DEV: `https://dev.bnpi-hris.tech` -> `https://dev-api.bnpi-hris.tech/api/system-provisioning/status`
-- UAT: `https://uat.bnpi-hris.tech` -> `https://uat-api.bnpi-hris.tech/api/system-provisioning/status`
+- PROD: `https://bnpi-pats.tech` -> `https://bnpi-pats.tech/api/system-provisioning/status`
+- DEV: `https://dev.bnpi-pats.tech` -> `https://dev-api.bnpi-pats.tech/api/system-provisioning/status`
+- UAT: `https://uat.bnpi-pats.tech` -> `https://uat-api.bnpi-pats.tech/api/system-provisioning/status`
 
 Each returned HTTP `204` with `Access-Control-Allow-Origin` matching the request
 origin and `Access-Control-Allow-Credentials: true`.
@@ -82,7 +82,7 @@ The V6 image may include:
 
 - `cloudflared`
 - `project-truth-cloudflare-vm-tunnel`
-- `cloudflared-bnpi-hris.service` template/support
+- `cloudflared-bnpi-pats.service` template/support
 - ansible-pull tooling
 - Docker/K3s/Argo runtime tooling
 

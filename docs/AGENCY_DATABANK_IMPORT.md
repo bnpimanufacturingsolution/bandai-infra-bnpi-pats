@@ -10,12 +10,12 @@ The client folder itself is ignored (`.gitignore` → `Agency Daily Report/`,
 
 ## What it does
 
-`hris-api/scripts/import-agency-databank.ts`:
+`bnpi-pats-api/scripts/import-agency-databank.ts`:
 
 1. **Agency** — `ensureAgency(code, name)` finds-or-creates the `Agency` row
    by org + code (codes: `AVANCE`, `CEPOL`, `CGSI`, `KOHSAI`, `NATCORP`).
 2. **Coordinator** — `ensureCoordinator` creates exactly **one** login per
-   agency: `coordinator-<code>@bandai.local`, role `hris-agency`, password
+   agency: `coordinator-<code>@bandai.local`, role `bnpi-pats-agency`, password
    `password123` (bcrypt), `User.metadata.agencyId` → the agency. Existing
    coordinators are self-repaired (real password hash, `active` status,
    agency link) — this is idempotent.
@@ -45,7 +45,7 @@ Preconditions (canonical local DEV lane):
 .\scripts\start-k8s-dev-db-access.ps1
 
 # 2) import all five agencies, or one code at a time
-cd hris-api
+cd bnpi-pats-api
 npx tsx scripts/import-agency-databank.ts
 npx tsx scripts/import-agency-databank.ts CGSI
 ```
@@ -62,8 +62,8 @@ npx tsx scripts/fix-agency-person-links.ts   # relink any Person whose name != f
 ## When an agency re-sends an updated databank
 
 Overwrite the same file path, rerun the import for that code. Rows are
-upserted by `employeeId`; removed people are NOT deleted from HRIS (separation
-is HRIS-owned). Verify with the roster page or a count query afterward.
+upserted by `employeeId`; removed people are NOT deleted from BNPI PATS (separation
+is BNPI-PATS-owned). Verify with the roster page or a count query afterward.
 
 ## Agency coordinator accounts — ready to open (DEV)
 
@@ -78,15 +78,15 @@ One coordinator per agency, created by the importer and live-verified:
 | NATCORP | `coordinator-natcorp@bandai.local` | `password123` | 176 | `cmpxw1k4g006v7zwsz160blwj` |
 
 **How to open:** go to `/auth/login` → paste the email + `password123`
-(`appCode=hris`) → auto-redirects to `/agency` (Overview). Role
-`hris-agency` + `User.metadata.agencyId` scope every page (Overview,
+(`appCode=bnpi-pats`) → auto-redirects to `/agency` (Overview). Role
+`bnpi-pats-agency` + `User.metadata.agencyId` scope every page (Overview,
 Employees, Attendance, Timesheets, Biometrics, Reports) to that agency's own
-people — server-enforced via `hris-api/helper/agency-scope.helper.ts`, so no
+people — server-enforced via `bnpi-pats-api/helper/agency-scope.helper.ts`, so no
 cross-agency reads are possible through the API filters either.
 
 **Re-verified live 2026-09-15** against the running local API: all five
 `POST /api/auth/login` → 200 + token; `GET /api/auth/me` →
-`role=hris-agency` + correct `metadata.agencyId`; `GET /api/employee` →
+`role=bnpi-pats-agency` + correct `metadata.agencyId`; `GET /api/employee` →
 roster totals match the table above (433/130/496/120/176). (2026-09-14 first
 pass covered login + CGSI roster + dashboard render with 496 members.)
 
@@ -97,7 +97,7 @@ pass covered login + CGSI roster + dashboard render with 496 members.)
   legitimately show 0 until a DM4-style attendance import runs for these
   workers.
 - These accounts exist in the local DEV K3s DB (`127.0.0.1:55435`) only;
-  opening them on VM/public DEV (`dev.bnpi-hris.tech`) requires replaying the
+  opening them on VM/public DEV (`dev.bnpi-pats.tech`) requires replaying the
   import there first.
 - If the dashboard briefly shows all-zeros with a red Vite badge right after
   login, that is the known transient `/api/auth/me` bootstrap 401 (app-wide,
@@ -106,9 +106,9 @@ pass covered login + CGSI roster + dashboard render with 496 members.)
 ## Boundaries
 
 - **DEV clone only** (`127.0.0.1:55435`). VM/UAT/PROD were not touched.
-- The pack's **Disciplinary Action Databank** sheet has no agency-scoped HRIS
+- The pack's **Disciplinary Action Databank** sheet has no agency-scoped BNPI PATS
   read yet (`GET /api/disciplinaryAction` filters by single `employeeId`);
   tracked as `REC-20260914-AGENCY-DA-DATABANK-NO-SCOPE` (registry, proposed).
 - Absence reasons/advance-notice columns in the client absentee sheets are
-  client-workbook data with no HRIS field; the Reports export leaves them
+  client-workbook data with no BNPI PATS field; the Reports export leaves them
   blank rather than inventing values.

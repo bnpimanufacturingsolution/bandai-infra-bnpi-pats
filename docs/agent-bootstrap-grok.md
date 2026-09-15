@@ -89,11 +89,11 @@ This runs `grok inspect` + independent headless probes. Evidence lands in `.runt
 
 ```powershell
 # Unit
-cd hris-api; npx tsx node_modules/mocha/bin/mocha --no-config tests/sync-logs-event-rows.helper.spec.ts; cd ..
-cd hris-app; npx vitest run app/lib/device-events-page-contract.test.ts; cd ..
+cd bnpi-pats-api; npx tsx node_modules/mocha/bin/mocha --no-config tests/sync-logs-event-rows.helper.spec.ts; cd ..
+cd bnpi-pats-app; npx vitest run app/lib/device-events-page-contract.test.ts; cd ..
 
 # Headless Playwright (starts its own Vite via smoke config)
-cd hris-app
+cd bnpi-pats-app
 npx playwright test tests/smoke/admin-device-events-sync-modal.spec.ts --config=playwright.smoke.config.ts
 cd ..
 

@@ -20,14 +20,14 @@ appliance/observability/grafana/provisioning/
 The dashboards are now in BOTH:
 
 - ✅ `appliance/observability/grafana/provisioning/dashboards/`
-- ✅ `hris-api/infrastructure/onprem/observability/grafana/provisioning-dev/dashboards/`
-- ✅ `hris-api/infrastructure/onprem/observability/grafana/provisioning-uat/dashboards/`
+- ✅ `bnpi-pats-api/infrastructure/onprem/observability/grafana/provisioning-dev/dashboards/`
+- ✅ `bnpi-pats-api/infrastructure/onprem/observability/grafana/provisioning-uat/dashboards/`
 
 ### 3. **Restarted Grafana Containers**
 
 ```bash
-docker-compose restart hris-grafana-dev    ✅ Done
-docker-compose restart hris-grafana-uat    ✅ Done
+docker-compose restart bnpi-pats-grafana-dev    ✅ Done
+docker-compose restart bnpi-pats-grafana-uat    ✅ Done
 ```
 
 ---
@@ -37,7 +37,7 @@ docker-compose restart hris-grafana-uat    ✅ Done
 ### **DEV Environment:**
 
 ```
-http://localhost:53001/d/hris-function-trace
+http://localhost:53001/d/bnpi-pats-function-trace
 Username: admin
 Password: admin
 ```
@@ -55,7 +55,7 @@ Password: admin
 ### **UAT Environment:**
 
 ```
-http://localhost:53002/d/hris-function-trace
+http://localhost:53002/d/bnpi-pats-function-trace
 ```
 
 ---
@@ -114,8 +114,8 @@ Then make API requests and watch logs appear live in the dashboard.
 ✅ **appliance/observability/FUNCTION_TRACING_DASHBOARD_GUIDE.md** - Full usage guide
 ✅ **appliance/observability/IMPORT_FUNCTION_TRACING_DASHBOARD.md** - Import instructions
 ✅ **appliance/observability/grafana/provisioning/** - Provisioning structure
-✅ **hris-api/infrastructure/.../grafana/provisioning-dev/dashboards/** - Dev dashboards
-✅ **hris-api/infrastructure/.../grafana/provisioning-uat/dashboards/** - UAT dashboards
+✅ **bnpi-pats-api/infrastructure/.../grafana/provisioning-dev/dashboards/** - Dev dashboards
+✅ **bnpi-pats-api/infrastructure/.../grafana/provisioning-uat/dashboards/** - UAT dashboards
 ✅ **docker-compose.lgtm.yml** - Updated with correct volumes
 
 ---
@@ -124,7 +124,7 @@ Then make API requests and watch logs appear live in the dashboard.
 
 1. ✅ Open http://localhost:53001 (DEV) or http://localhost:53002 (UAT)
 2. ✅ Go to **Dashboards** in left sidebar
-3. ✅ Click **HRIS Observability** folder
+3. ✅ Click **BNPI PATS Observability** folder
 4. ✅ Select **Function Tracing & Debug**
 5. ✅ Watch live function entry/exit logs
 6. ✅ Click any red-colored (slow) function
@@ -138,8 +138,8 @@ Then make API requests and watch logs appear live in the dashboard.
 
 1. Hard refresh Grafana: `Ctrl+Shift+R`
 2. Clear browser cache
-3. Check Grafana logs: `docker logs hris-grafana-dev`
-4. Restart container: `docker-compose restart hris-grafana-dev`
+3. Check Grafana logs: `docker logs bnpi-pats-grafana-dev`
+4. Restart container: `docker-compose restart bnpi-pats-grafana-dev`
 
 **Need to disable automatic dashboard refresh?**
 
@@ -215,4 +215,4 @@ Then make API requests and watch logs appear live in the dashboard.
 For detailed usage, see:
 
 - [Function Tracing Dashboard Guide](appliance/observability/FUNCTION_TRACING_DASHBOARD_GUIDE.md)
-- [Main Observability Documentation](hris-api/docs/OBSERVABILITY.md)
+- [Main Observability Documentation](bnpi-pats-api/docs/OBSERVABILITY.md)

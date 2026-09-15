@@ -8,22 +8,22 @@
  *   node --import tsx scripts/device-user-enroll-journey-proof.mjs
  * or: npx tsx scripts/device-user-enroll-journey-proof.mjs
  */
-import { PrismaClient } from "../hris-api/generated/prisma/index.js";
-import { hikvisionFetch } from "../hris-api/lib/hikvision-client.js";
-import { hikvisionEndpoint } from "../hris-api/config/hikvision.endpoint.js";
+import { PrismaClient } from "../bnpi-pats-api/generated/prisma/index.js";
+import { hikvisionFetch } from "../bnpi-pats-api/lib/hikvision-client.js";
+import { hikvisionEndpoint } from "../bnpi-pats-api/config/hikvision.endpoint.js";
 import {
 	captureOpaqueTokenAfterUserWrite,
 	applyDevicePersonTokenToEvidence,
 	formatHikvisionPlus08,
 	upsertDeviceUserInventoryStub,
 	upsertDevicePersonToken,
-} from "../hris-api/helper/device-person-token.helper.js";
+} from "../bnpi-pats-api/helper/device-person-token.helper.js";
 import {
 	buildHikvisionLogSearchXml,
 	normalizeHikvisionLogSearchRow,
 	parseHikvisionLogSearchResponse,
 	isOpaqueHikvisionPersonToken,
-} from "../hris-api/helper/hikvision-event-contract.helper.js";
+} from "../bnpi-pats-api/helper/hikvision-event-contract.helper.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -248,7 +248,7 @@ async function main() {
 							opaquePersonToken: cap.opaqueToken,
 							resolvedEmployeeNo: emp,
 							resolvedDisplayName: displayName,
-							notHrisEmployee: true,
+							notBnpiPatsEmployee: true,
 							plane: "DEVICE_USER",
 							journeyProof: true,
 							rawEvidence: applied.rawEvidence,
@@ -328,7 +328,7 @@ async function main() {
 		}
 	}
 
-	const syncUrl = `/admin/configuration/devices?action=device-users&deviceId=${deviceId}&syncPanel=users&deviceUserView=hris&deviceUserSearch=${encodeURIComponent(emp)}`;
+	const syncUrl = `/admin/configuration/devices?action=device-users&deviceId=${deviceId}&syncPanel=users&deviceUserView=bnpi-pats&deviceUserSearch=${encodeURIComponent(emp)}`;
 	const result = {
 		outDir,
 		device: { id: device.id, name: device.name, address: device.address },
@@ -345,7 +345,7 @@ async function main() {
 			onDevice,
 			leftOnDevice: true,
 			syncUrl,
-			note: "Device inventory person — not an HRIS Employee. Open syncUrl with deviceUserView=hris.",
+			note: "Device inventory person — not an BNPI PATS Employee. Open syncUrl with deviceUserView=bnpi-pats.",
 		},
 		inventoryT18,
 		createRespStatusStatus: createResp?.statusCode || createResp?.status || null,

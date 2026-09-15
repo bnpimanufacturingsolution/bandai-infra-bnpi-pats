@@ -9,7 +9,7 @@ Status: `PACKAGES_AND_PREVIEWS_FULFILLED_PHYSICAL_IMPORT_BLOCKED_BY_MISSING_TARG
   backfill, and physical SDK reread paths remain authoritative.
 - Each readable projection has exactly:
   `vendorUserId,displayName,userType,fingerprintStatus,rawFingerprintBlob,faceStatus,rawFaceBlob`.
-- Package/device metadata occurs once in the manifest. No HRIS identity columns
+- Package/device metadata occurs once in the manifest. No BNPI PATS identity columns
   or duplicate `employeeNo` column were added.
 - Counts, URLs, status fields, and peer identities were never converted into
   biometric bytes.

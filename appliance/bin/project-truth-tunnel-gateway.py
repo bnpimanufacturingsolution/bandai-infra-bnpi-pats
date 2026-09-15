@@ -19,9 +19,9 @@ ROUTES = [
     ("/grafana", "Grafana", 53000),
     ("/prometheus", "Prometheus", 9091),
     ("/loki", "Loki", 3110),
-    ("/prod", "PROD HRIS", 3000),
-    ("/dev", "DEV HRIS", 3100),
-    ("/uat", "UAT HRIS", 3200),
+    ("/prod", "PROD BNPI PATS", 3000),
+    ("/dev", "DEV BNPI PATS", 3100),
+    ("/uat", "UAT BNPI PATS", 3200),
 ]
 
 HOP_BY_HOP = {

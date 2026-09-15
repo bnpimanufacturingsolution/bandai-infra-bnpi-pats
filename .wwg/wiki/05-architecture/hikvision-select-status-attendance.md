@@ -39,4 +39,4 @@ Panel **Select Status** is Hikvision T&A. Live SDK and ISAPI copy it to Device E
 
 - Enrollment identity: `./hikvision-enrollment-identity-architecture.md`
 - REC implemented: `REC-20260813-HIKVISION-SDK-ATTENDANCE-STATUS-WIRE`
-- REC still Proposed: `REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP`
+- REC still Proposed: `REC-20260813-HIKVISION-SELECT-STATUS-BNPI-PATS-MAP`

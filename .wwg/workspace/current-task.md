@@ -1,10 +1,10 @@
-﻿## Latest Task Addendum - 2026-09-15 Apr 26–May 10 DEV generation + client-register parity + zero-pay waiver (operator: "generate payroll for the same cutoff and compare", "go, well documented")
+﻿﻿## Latest Task Addendum - 2026-09-15 Apr 26–May 10 DEV generation + client-register parity + zero-pay waiver (operator: "generate payroll for the same cutoff and compare", "go, well documented")
 
 - Client pack "PAYROLL 2026/" = full Jan–May 2026 set (9 Sheet2 registers password 9090 auto-unlockable by run-period-tally-compare, per-cutoff comp/ded mass uploads, EZ Payroll). Imported the 04.30.26 comp (172 new) + _additional (91+3) + deduction (8+6) onto canonical DEV; generated Period 2 - Apr 2026 (cmpxw139n00117zwsipy7md5r): 834/834 EmployeePayroll, period COMPLETED. April register exported to .runtime/dev-payroll-test-20260914/Payroll-Apr26-May10-DEV.xlsx (Register/Summary/MoneySources).
 - Client zero-pay rule proven 128/128 across nine registers (zero GrossPay => TOTAL DEDN = 0). Implemented waiveZeroPayContributions() in payroll-period.helper.ts (both twins, after PH cutoff resolution) + tests/zero-pay-contribution-waiver.spec.ts 5/5. Verified live: 00091/01303 now PH/dedn/TR = 0; tally TALLIED 0 -> 2/834 (before: .runtime/tally-...-2026-09-14T20-33-35, after: -2026-09-15T02-58-18).
 - Duplicate-loan hypothesis audited and REJECTED: 0 duplicate emp+loanType groups over the window (loan-dup-audit.json); 00138 RCBC 2x is monthlyPayment-vs-per-cutoff amortization basis -> REC-20260915-LOAN-MONTHLY-VS-CUTOFF-AMORTIZATION (Proposed, needs client ruling; no engine change made).
 - Remaining measured walls (report .wwg/reports/apr26-may10-payroll-parity-20260915.md + findings §14h): absent +241k/268, late +95k/262, PFA -32.8k/164 people (no rule), tax cascade -57k, day-count definition 146, 15 register-only employees w/o app timesheets.
-- Infra: the 09-14 stability fixes held through every 55435 flap (regen passes recorded 27 transient row-fails, no data loss, no API death). During this pass a stale stash-pop conflict in migration-event.service.ts (another session's autostash over my pushed guards) blocked boot; resolved `git checkout HEAD -- <file>`; their stash left untouched. API still under supervised no-watch loop (HEAVY_REQUEST_TIMEOUT_MS=900000); restore via scripts/restart-local-hris-api-dev.ps1 when done.
+- Infra: the 09-14 stability fixes held through every 55435 flap (regen passes recorded 27 transient row-fails, no data loss, no API death). During this pass a stale stash-pop conflict in migration-event.service.ts (another session's autostash over my pushed guards) blocked boot; resolved `git checkout HEAD -- <file>`; their stash left untouched. API still under supervised no-watch loop (HEAVY_REQUEST_TIMEOUT_MS=900000); restore via scripts/restart-local-bnpi-pats-api-dev.ps1 when done.
 
 ## Latest Task Addendum - 2026-09-14/15 PROD Jul 11-25 audit + DEV payroll generated + generate-crash stability fix (operator: "check prod", "run on develop, I want to test it")
 
@@ -12,23 +12,23 @@
 - Generic `?filter=date:RANGE` silently returns 0 fleet-wide (REC-20260914-GENERIC-DATE-RANGE-FILTER-SILENT-ZERO, Proposed). day-status-review raw SQL used as trustworthy source.
 - DEV test run: DM4 (Biometrics + rptOvertimeDetails Jul 11-25 from root `july11-july25/`) executed idempotently -> DM4.1 10,714 attendance, DM4.2 1,990 timesheets, DM4.3 OT verified (0 pending updates; already bucketed). Comp mass upload: 1,017 updated/28 failed (nonexistent 01831-01842, client gap); Deduction: 38 updated/1 failed. Then generate-timesheet: first job reached 690/846 (9 transient 55435-flap rows) before an unrelated silent exit; resumes raced forward flaps; final job e956f043 **COMPLETED 846/846, 0 failed**; EmployeePayroll count=846; period COMPLETED. Watcher used verified-stable windows before resume POST.
 - Stability fixes (this commit): (1) `index.ts` unhandledRejection no longer `process.exit(1)` - a P1001 flap from floating promises was crash-looping the API and orphaning every migration/payroll worker (error-handling.ts already documented the don't-exit contract); (2) `migration-event.service.ts` append/appendMany try/catch (observability must not kill imports); (3) `dm4-migration.adapter.ts` verification spawn was missing the tsx CLI -> DM4.3 always died ERR_UNKNOWN_FILE_EXTENSION on Windows; both spawns now route through tsx. Pinned by `tests/migration-generate-crash-stability.contract.spec.ts` 4/4.
-- Boundary: DEV test lane only; PROD/UAT untouched; May-Jul leave files still absent everywhere. Local DEV API left on supervised no-watch loop (HEAVY_REQUEST_TIMEOUT_MS=900000) - restore via scripts/restart-local-hris-api-dev.ps1 when done testing.
+- Boundary: DEV test lane only; PROD/UAT untouched; May-Jul leave files still absent everywhere. Local DEV API left on supervised no-watch loop (HEAVY_REQUEST_TIMEOUT_MS=900000) - restore via scripts/restart-local-bnpi-pats-api-dev.ps1 when done testing.
 
 ## Latest Task Addendum - 2026-09-14 Dedicated-checklist "section rows": no-responsible items stop counting toward completion/ACTIVE (operator decision, live-proven)
 
 - Discovery first: the new-employee welcome page renders ONLY the legacy stack (REC-20260914-ONBOARDING-WELCOME-FLOW-LEGACY-ONLY) and the legacy half of the gate is docs-only in current DEV data (no active ONBOARDING BoardingTemplate items); the dedicated half had a real defect â€” a PENDING no-dept parent blocked ACTIVE even at "100%" (progress counted leaves, gate counted ALL items).
 - Operator decisions (2 questions + Q2 batch): no-responsible items act like SECTIONS â€” excluded from the gate AND progress; parents WITH a responsible dept stay actionable; zero-actionable checklist = 100%/COMPLETED; sign endpoint stays PERMISSIVE (admin/HR direct API sign is possible but never counted); UI hides the checkbox.
-- hris-api: canonical `isActionableOnboardingItem` + `ACTIONABLE_ONBOARDING_ITEM_FILTER` in `app/onboarding/onboardingAccess.helper.ts` (single source); `syncEmployeeEmploymentStatus` gate probe now filters PENDING+actionable (boarding-documents.helper.ts); progress centralized as exported `recomputeOnboardingChecklistProgress` in `onboardingLifecycle.helper.ts` (controller closure delegates; script reuses; denominator = actionable items at ANY depth, 100/COMPLETED when zero actionable); `canSignFor` false for section rows for every role.
-- hris-app: `onboarding-checklist-panel.tsx` renders PENDING no-dept rows as plain section rows (blank Responsible/Completed cells - operator follow-up: no "unassigned" label and no "â€”" placeholder anywhere; never a checkbox; historically-signed section rows keep indicator + manager unsign); footer copy "unassigned rows are sections â€” not counted". Single-app exception (no emp-app counterpart).
-- Ops: new `hris-api/scripts/resync-onboarding-employment-status.ts` (dry-run default / --execute / --orgCode) â€” ran both on DEV: 73 ONBOARDING scanned, **EMP3335 (Gabriel Berja) promoted ACTIVE** (legacy clean + no dedicated checklist + trigger never fired â€” promotion owed under the PRE-EXISTING gate, not caused by the rule change), 72 stay ONBOARDING (all have legacy pendings), 0 errors. Char/TESTBEN003/EMP003 each show exactly 1 pending section row â€” previously unblockable by dedicated sign-off alone.
-- Fixture drift recovered mid-task: signer2/KCSSI-BANDAI1129 had reverted to role bare `employee` (login allow-list â†’ /403) + dept Production; restored hris-employee + SW-Dev per 2026-09-12 docs (repair JSON in proof dir); filed REC-20260914-LOGIN-ALLOWLIST-BARE-EMPLOYEE-ROLE.
-- Proof: onboarding mocha **62** green (status-gate spec rewritten to a filter-aware prisma mock pinning the AND fragment + section no-block/no-reopen cases; sign spec +2; access-contract HR matrix + predicate unit), app-module-contract **688**, hris-app onboarding vitest **31**, onboarding Playwright smokes **3/3** live (list-tab re-run after fixture repair), live API: section row `canSign:false` + SW-Dev `canSign:true` for signer2, EMP3335 ACTIVE by direct read. tsc delta 0 (68/173 pre-existing), eslint delta 0 (2 pre-existing warnings). Evidence `.runtime/onboarding-section-gate-proof-20260914-213905/`.
+- bnpi-pats-api: canonical `isActionableOnboardingItem` + `ACTIONABLE_ONBOARDING_ITEM_FILTER` in `app/onboarding/onboardingAccess.helper.ts` (single source); `syncEmployeeEmploymentStatus` gate probe now filters PENDING+actionable (boarding-documents.helper.ts); progress centralized as exported `recomputeOnboardingChecklistProgress` in `onboardingLifecycle.helper.ts` (controller closure delegates; script reuses; denominator = actionable items at ANY depth, 100/COMPLETED when zero actionable); `canSignFor` false for section rows for every role.
+- bnpi-pats-app: `onboarding-checklist-panel.tsx` renders PENDING no-dept rows as plain section rows (blank Responsible/Completed cells - operator follow-up: no "unassigned" label and no "â€”" placeholder anywhere; never a checkbox; historically-signed section rows keep indicator + manager unsign); footer copy "unassigned rows are sections â€” not counted". Single-app exception (no emp-app counterpart).
+- Ops: new `bnpi-pats-api/scripts/resync-onboarding-employment-status.ts` (dry-run default / --execute / --orgCode) â€” ran both on DEV: 73 ONBOARDING scanned, **EMP3335 (Gabriel Berja) promoted ACTIVE** (legacy clean + no dedicated checklist + trigger never fired â€” promotion owed under the PRE-EXISTING gate, not caused by the rule change), 72 stay ONBOARDING (all have legacy pendings), 0 errors. Char/TESTBEN003/EMP003 each show exactly 1 pending section row â€” previously unblockable by dedicated sign-off alone.
+- Fixture drift recovered mid-task: signer2/KCSSI-BANDAI1129 had reverted to role bare `employee` (login allow-list â†’ /403) + dept Production; restored bnpi-pats-employee + SW-Dev per 2026-09-12 docs (repair JSON in proof dir); filed REC-20260914-LOGIN-ALLOWLIST-BARE-EMPLOYEE-ROLE.
+- Proof: onboarding mocha **62** green (status-gate spec rewritten to a filter-aware prisma mock pinning the AND fragment + section no-block/no-reopen cases; sign spec +2; access-contract HR matrix + predicate unit), app-module-contract **688**, bnpi-pats-app onboarding vitest **31**, onboarding Playwright smokes **3/3** live (list-tab re-run after fixture repair), live API: section row `canSign:false` + SW-Dev `canSign:true` for signer2, EMP3335 ACTIVE by direct read. tsc delta 0 (68/173 pre-existing), eslint delta 0 (2 pre-existing warnings). Evidence `.runtime/onboarding-section-gate-proof-20260914-213905/`.
 - Truth: `docs/ONBOARDING_CHECKLIST.md` (role matrix actionable rule + panel bullet + gate section + fixture drift note), two new registry RECs (above). Boundary: committed via PR off develop.
 ï»¿## Latest Task Addendum - 2026-09-14 Agency databank import: 1,355 workers into 5 agencies + 1 coordinator each (local DEV)
 
 - **Source:** client pack `AGENCY-20260914T052438Z-1-001/AGENCY/*.xlsx` (Avance, Cepol, CGSI, Kohsai, Natcorp; gitignored). Operator asked to import each databank to its agency with exactly one agency coordinator per agency.
-- **Tooling:** `hris-api/scripts/import-agency-databank.ts` (idempotent, resumable: ensure agency â†’ ensure/repair coordinator â†’ upsert employees by `organizationId_employeeId`, cached dept/section/position ensures, repeated-header/company-name junk rows skipped, `isDeleted:false`) + `scripts/fix-agency-person-links.ts` (person-name integrity pass, 0 mismatches). Operator doc: `docs/AGENCY_DATABANK_IMPORT.md`.
-- **Result (verified vs files, 0 missing / 0 extra):** AVANCE 433, CEPOL 130, CGSI 496, KOHSAI 120, NATCORP 176; sample names cross-checked against the workbooks. Coordinators `coordinator-<code>@bandai.local` / `password123`, role `hris-agency`, `metadata.agencyId` set; all five login-verified via live `POST /api/auth/login` (200 + token).
+- **Tooling:** `bnpi-pats-api/scripts/import-agency-databank.ts` (idempotent, resumable: ensure agency â†’ ensure/repair coordinator â†’ upsert employees by `organizationId_employeeId`, cached dept/section/position ensures, repeated-header/company-name junk rows skipped, `isDeleted:false`) + `scripts/fix-agency-person-links.ts` (person-name integrity pass, 0 mismatches). Operator doc: `docs/AGENCY_DATABANK_IMPORT.md`.
+- **Result (verified vs files, 0 missing / 0 extra):** AVANCE 433, CEPOL 130, CGSI 496, KOHSAI 120, NATCORP 176; sample names cross-checked against the workbooks. Coordinators `coordinator-<code>@bandai.local` / `password123`, role `bnpi-pats-agency`, `metadata.agencyId` set; all five login-verified via live `POST /api/auth/login` (200 + token).
 - **Defects caught+fixed in pass:** early draft stored a placeholder password hash (coordinator login 401) â†’ finalizer set real bcrypt + re-verified by login; one junk `ID No.` employee from a repeated header row â†’ deleted; repeated-header rows now skipped.
 - **Infra truth re-proven:** K3s DEV forward (55435 via Cloudflare SSH) drops every few minutes; long imports must be resumable and rerun after `start-k8s-dev-db-access.ps1` (in-script self-rebuild attempted; the browser Access prompt still gates recovery).
 - **Boundary:** local DEV clone only (no VM/UAT/PROD writes). DA databank sheet remains blocked by `REC-20260914-AGENCY-DA-DATABANK-NO-SCOPE`.
@@ -42,19 +42,19 @@
 ## Latest Task Addendum - 2026-09-14 Job display-code badges on Recruitment board + Manage Jobs (frontend, operator design, live-proven, uncommitted)
 
 - Operator Q&A answered with live data first: the Candidates board loads ALL non-deleted applicants (14 today; `useApplicantsGrouped` hardcodes `limit 1000`, no pager - the table view deviates from the shared-DataTable convention; an unpaged kanban is normal), each section is one Job record (repeat postings for the same position are intentional independent pipelines), and `model Job` has NO user-facing id (cuid only). Operator then specified a frontend-only identifier: position initials ("Software Engineer"->SE; single word "Operator"->OP) + createdAt MMDDYYYY, e.g. `SE-01182026`, rendered as a Badge.
-- Implemented (hris-app only): new pure helper `app/lib/utils/recruitment-job-code.ts` (`buildJobPositionInitials`/`buildJobDateCode`/`buildJobDisplayCode`/`buildJobDisplayCodes`; prefix = canonical **`Position.code`** per same-day operator follow-up (trimmed/uppercased, non-`A-Z0-9-` stripped; e.g. `OPR`, `SW-MGR`, legacy numeric `23` kept), falling back to initials (multi-word max 3, single word first two letters, `JOB`) only when code absent; same title+day collisions get ordered `-2`/`-3` suffixes; display-only and order-dependent). Board: `useJobs` fields gained `createdAt` + `position.code` (`Job.position` zod schema gained optional `code`), `groupedSections` carries `displayCode`, and the section header renders `<Badge variant="outline" data-testid="job-display-code">` next to the label (one header serves Kanban AND Table). Manage Jobs (`RecruitmentJobsManager`): same fields addition, badge in the Position column and the Job Details header (list-order codes, single-source).
+- Implemented (bnpi-pats-app only): new pure helper `app/lib/utils/recruitment-job-code.ts` (`buildJobPositionInitials`/`buildJobDateCode`/`buildJobDisplayCode`/`buildJobDisplayCodes`; prefix = canonical **`Position.code`** per same-day operator follow-up (trimmed/uppercased, non-`A-Z0-9-` stripped; e.g. `OPR`, `SW-MGR`, legacy numeric `23` kept), falling back to initials (multi-word max 3, single word first two letters, `JOB`) only when code absent; same title+day collisions get ordered `-2`/`-3` suffixes; display-only and order-dependent). Board: `useJobs` fields gained `createdAt` + `position.code` (`Job.position` zod schema gained optional `code`), `groupedSections` carries `displayCode`, and the section header renders `<Badge variant="outline" data-testid="job-display-code">` next to the label (one header serves Kanban AND Table). Manage Jobs (`RecruitmentJobsManager`): same fields addition, badge in the Position column and the Job Details header (list-order codes, single-source).
 - "Fix label" resolved as a verified no-op: both `getJobGroupLabel` and `formatLevelPositionLabel` already guard a missing level (the " - Operator" strings from the earlier session were the investigation script's formatting, NOT the UI). Pinned by a Playwright assertion that no section heading starts with a dash.
 - Tests/proof: vitest `app/lib/utils` green incl. the (now 10-case) `recruitment-job-code.test.ts` (canonical code prefix, case/space/punct normalization, numeric code kept, missing-code initials fallback, composition, collision suffixes, empty-id skips); `tests/smoke/recruitment-candidates-filter-live-proof.spec.ts` PASSED 32.0s live after the position.code switch: all 11 section badges equal the independently computed canonical map (`OPR-08252026`, `17-08252026`, `4-08202026`, `JR-SPEC-08202026`, `19-08202026`, `SW-MGR-08062026`, `TECH-08062026`, `23-07162026/23-07022026/23-06102026`, `17-06102026`) - the two same-day Operator jobs differ by position code so no `-2` suffix is needed on today's data (suffix logic still unit-pinned) - and the Manage Jobs dialog shows the same codes. Evidence `.runtime/recruitment-filter-proof/` (01b/05 screenshots + jobDisplayCodes in api-grouped-proof.json). eslint HEAD-baseline on both touched components = delta 0 (10 pre-existing, 0 new); tsc delta 0.
 - Applicant census for operator UI-check (DEV, 2026-09-14): 14 non-deleted (APPLIED 1, SCREENING 1, INTERVIEW_SCHEDULING 1, OFFER_APPROVAL 2, OFFER_SENT 2, ONBOARDING_READY 5, REJECTED 2; 4 with employee links) + 14 soft-deleted hidden; board renders 11 sections (8 populated, 3 empty) and all 14 candidates are visible.
-- Boundary: frontend working tree only, uncommitted/unpushed; no backend/schema change (a persistent `Job.jobCode` stays a recommendation - REC-20260914-JOB-CODE-BADGE-DERIVED). Parity: HR-only surface, no hris-emp-app counterpart.
+- Boundary: frontend working tree only, uncommitted/unpushed; no backend/schema change (a persistent `Job.jobCode` stays a recommendation - REC-20260914-JOB-CODE-BADGE-DERIVED). Parity: HR-only surface, no bnpi-pats-emp-app counterpart.
 
 ## Latest Task Addendum - 2026-09-13 Recruitment Candidates kanban/table grouping + "filter" repair (backend, live-proven, uncommitted)
 
 - Operator ask: "confirm the filter bug on recruitment/candidates kanban/table" -> confirmed with live evidence and fixed at root. Symptom: on `/hr/recruitment` every job section's Kanban/Table was empty and the "Search applicants..." box appeared broken. Root cause: `GET /api/applicant?groupBy=job` groups by `job.id`, but `applicant.controller.ts` called `buildFindManyQuery`/`getNestedFields` without a model name; `job` became an **ambiguous relation name** in the DMMF ambiguity registry after `58f487dd` (`CredentialRecoveryTask.job -> CredentialRecoveryJob` collided with `Applicant.job -> Job`), so every `job.*` select was **silently dropped**, no row carried `job`, and `helper/dataGrouping.ts` bucketed all 14 candidates under `"unassigned"` (collapsed phantom section; real job boards got `[]`).
-- Fix: pass modelName `"Applicant"` in `getAll`'s `buildFindManyQuery` and `getById`'s `getNestedFields` (hris-api only; read path; no frontend/schema change). New regression spec `hris-api/tests/applicant-grouped-job-fields.spec.ts` (6 passing) pins the hazard and the repair. Full API mocha: 3881 passing / 9 pending / 59 failing - all 59 pre-existing unrelated (auth kiosk, benefits x22, device/hikvision/zkteco, hard-delete; plus `public-kiosk-feeds.contract.spec.ts` unparseable at HEAD); zero applicant-surface failures; eslint/tsc delta 0 on touched files.
-- Proof: live grouped probe -> 8 job-id-keyed groups (no `unassigned`), `job.position.title`/`job.level.name` present; `getById` fields probe returns `Operator`; Playwright `hris-app/tests/smoke/recruitment-candidates-filter-live-proof.spec.ts` PASSED 27.8s (section "Entry - Operator" shows Angela Garcia/Andrea Ramos/Gabriel Berja; search narrows kanban + table; nonsense query -> honest empty state). Evidence `.runtime/recruitment-filter-proof/` (4 screenshots + api-grouped-proof.json + browser-proof-summary.json).
-- Ops notes: shared `tsx watch` API child was wedged again - killed the watcher child only and respawned `tsx watch index.ts` (health green <1 min, :3001 quick tunnel resumed automatically). Browser proof ran against a fresh hris-app dev on :5177 (left running); :5176 belongs to the concurrent hris-emp-app session - untouched. Pre-fix `cache:applicant:byId:*` Redis entries may serve the reduced shape for up to 3600s TTL.
-- Filed REC-20260913-AMBIGUOUS-RELATION-SELECT-HAZARD (audit other model-free `fields` consumers; silent `X.*` drop is a fleet-wide trap). Dual-app parity: HR-only (no hris-emp-app counterpart for recruitment). Uncommitted, unpushed.
+- Fix: pass modelName `"Applicant"` in `getAll`'s `buildFindManyQuery` and `getById`'s `getNestedFields` (bnpi-pats-api only; read path; no frontend/schema change). New regression spec `bnpi-pats-api/tests/applicant-grouped-job-fields.spec.ts` (6 passing) pins the hazard and the repair. Full API mocha: 3881 passing / 9 pending / 59 failing - all 59 pre-existing unrelated (auth kiosk, benefits x22, device/hikvision/zkteco, hard-delete; plus `public-kiosk-feeds.contract.spec.ts` unparseable at HEAD); zero applicant-surface failures; eslint/tsc delta 0 on touched files.
+- Proof: live grouped probe -> 8 job-id-keyed groups (no `unassigned`), `job.position.title`/`job.level.name` present; `getById` fields probe returns `Operator`; Playwright `bnpi-pats-app/tests/smoke/recruitment-candidates-filter-live-proof.spec.ts` PASSED 27.8s (section "Entry - Operator" shows Angela Garcia/Andrea Ramos/Gabriel Berja; search narrows kanban + table; nonsense query -> honest empty state). Evidence `.runtime/recruitment-filter-proof/` (4 screenshots + api-grouped-proof.json + browser-proof-summary.json).
+- Ops notes: shared `tsx watch` API child was wedged again - killed the watcher child only and respawned `tsx watch index.ts` (health green <1 min, :3001 quick tunnel resumed automatically). Browser proof ran against a fresh bnpi-pats-app dev on :5177 (left running); :5176 belongs to the concurrent bnpi-pats-emp-app session - untouched. Pre-fix `cache:applicant:byId:*` Redis entries may serve the reduced shape for up to 3600s TTL.
+- Filed REC-20260913-AMBIGUOUS-RELATION-SELECT-HAZARD (audit other model-free `fields` consumers; silent `X.*` drop is a fleet-wide trap). Dual-app parity: HR-only (no bnpi-pats-emp-app counterpart for recruitment). Uncommitted, unpushed.
 
 ## Latest Task Addendum - 2026-09-13 Onboarding list now uses shared DataTable pager + skeletons (operator ask, uncommitted)
 
@@ -65,7 +65,7 @@
 ## Latest Task Addendum - 2026-09-12 Design C: dedicated checklist joins the ONBOARDINGâ†’ACTIVE promotion gate (operator decision, uncommitted)
 
 - **Operator decision:** completing/signing the new checklist must NOT graduate an employee by itself, and documents alone must not either â€” the legacy AND dedicated-checklist completion are both required (mirrors the legacy reopen behavior on the other side).
-- **hris-api (only files touched):** `boarding-documents.helper.ts` â€” `syncEmployeeEmploymentStatus` now exported and extended: `hasPendingOnboarding = legacy pending OR dedicated OnboardingItem PENDING (non-deleted, active checklist)`; employees with no dedicated checklist keep pure legacy semantics; an empty dedicated checklist is non-blocking. `app/onboarding/onboarding.controller.ts` â€” new `syncEmploymentForChecklist()` fired best-effort (own try/catch, never fails the request; throws log a warn and the response reports `employmentStatus: null`) after every completion-changing path: sign, unsign, deleteItem/deleteSection (checklist kinds), createChecklist, and provision-all per created employee; sign/unsign responses echo `employmentStatus`. No legacy trigger sites changed; no auto-sign/bulk-sign (declined).
+- **bnpi-pats-api (only files touched):** `boarding-documents.helper.ts` â€” `syncEmployeeEmploymentStatus` now exported and extended: `hasPendingOnboarding = legacy pending OR dedicated OnboardingItem PENDING (non-deleted, active checklist)`; employees with no dedicated checklist keep pure legacy semantics; an empty dedicated checklist is non-blocking. `app/onboarding/onboarding.controller.ts` â€” new `syncEmploymentForChecklist()` fired best-effort (own try/catch, never fails the request; throws log a warn and the response reports `employmentStatus: null`) after every completion-changing path: sign, unsign, deleteItem/deleteSection (checklist kinds), createChecklist, and provision-all per created employee; sign/unsign responses echo `employmentStatus`. No legacy trigger sites changed; no auto-sign/bulk-sign (declined).
 - **Tests:** mocha 56 (new `onboarding-status-gate.spec.ts` 5-case truth table: legacy-pending blocks, dedicated-pending blocks, both clear promotes, ACTIVE reopens on dedicated PENDING, no-dedicated = legacy-only; sign spec +2: promotion asserts `employmentStatus=ACTIVE` + `employee.update`, and throw-safe sync still signs 200) + 685 app-module-contract green; eslint/tsc clean; API restarted and 3/3 onboarding Playwright smokes still green.
 - **Live DEV proof (`.runtime/onboarding-gate-proof-20260913-115*/`):** EMP003 baseline ONBOARDING â†’ provisioned (dedicated PENDING + legacy clean) stays ONBOARDING â†’ signer2 signs the only item â†’ **ACTIVE** (resolver value in response + direct employee read) â†’ admin unsign â†’ **ONBOARDING** (reopen) â†’ checklist deleted â†’ ACTIVE again by design â†’ status explicitly restored to ONBOARDING. Bonus negative case: Hirotaka Tanaka reached 100% dedicated sign-off but stayed ONBOARDING because one legacy 201 item is pending â€” the AND gate exactly as specified. All GATE TEST artifacts deleted (templates=1 "Standard", only real checklists remain); note Hirotaka's and EMP003's statuses were verified back to ONBOARDING.
 - Uncommitted, unpushed (branch `feature/onboarding-checklist-signature` HEAD still `d0d1a7f5`).
@@ -79,41 +79,41 @@
 ## Latest Task Addendum - 2026-09-12 Onboarding list page + profile Onboarding tab (operator flow, live-proven, NOT committed)
 
 - **Operator flow:** (1) new page = LIST of onboarding employees with search/filters; (2) employee profile gets an **Onboarding tab only when employmentStatus=ONBOARDING**; (3) list row â†’ `/employee/<id>?tab=onboarding&from=hr-onboarding`; (4) tab shows the checklist; (5) signing = modal with short instruction + password. Decisions: compose from existing endpoints (no new route); sign available on BOTH list and tab; HR + all employees get the nav entry.
-- **Backend (hris-api, additive to onboarding module only):** `GET /api/onboarding/employees?search&departmentId` (multi-term AND across employee number + person first/last name via the existing JSON-path pattern; malformed departmentId ignored). 2 new mocha cases; onboarding suite 48 passing; tsc/eslint clean.
-- **Frontend (hris-app):** `hr-onboarding-page.tsx` at `/hr/onboarding` (route `routes/hr/onboarding.tsx` + routes.ts; debounced search + department select; table w/ status/progress; row-click mounts panel; Open Profile). Shared `onboarding-checklist-panel.tsx` (instance resolve: admin/HR `GET /checklists?employeeId=` fallback roster-by-number; `.../visible` tree with disabled context/non-dept rows + tooltips; progress; admin/HR provision CTA; **sign modal** = instruction + password + remarks, inline 401 error, admin/HR unsign; `retry:false` added to all onboarding mutations after TanStack's default retries made wrong-password errors appear ~3s late). Profile `employee.$id.tsx`: conditional Onboarding tab (`employmentStatus === "ONBOARDING"`, deep-linkable; legacy boarding tab untouched). Nav: "Onboarding" in HR Recruitment submenu + General for non-HR employees + "Onboarding Employees" admin nav â†’ `/hr/onboarding`.
+- **Backend (bnpi-pats-api, additive to onboarding module only):** `GET /api/onboarding/employees?search&departmentId` (multi-term AND across employee number + person first/last name via the existing JSON-path pattern; malformed departmentId ignored). 2 new mocha cases; onboarding suite 48 passing; tsc/eslint clean.
+- **Frontend (bnpi-pats-app):** `hr-onboarding-page.tsx` at `/hr/onboarding` (route `routes/hr/onboarding.tsx` + routes.ts; debounced search + department select; table w/ status/progress; row-click mounts panel; Open Profile). Shared `onboarding-checklist-panel.tsx` (instance resolve: admin/HR `GET /checklists?employeeId=` fallback roster-by-number; `.../visible` tree with disabled context/non-dept rows + tooltips; progress; admin/HR provision CTA; **sign modal** = instruction + password + remarks, inline 401 error, admin/HR unsign; `retry:false` added to all onboarding mutations after TanStack's default retries made wrong-password errors appear ~3s late). Profile `employee.$id.tsx`: conditional Onboarding tab (`employmentStatus === "ONBOARDING"`, deep-linkable; legacy boarding tab untouched). Nav: "Onboarding" in HR Recruitment submenu + General for non-HR employees + "Onboarding Employees" admin nav â†’ `/hr/onboarding`.
 - **Tests:** vitest 38 across 8 files (new panel/page/tab/sidebar contracts). Playwright `onboarding-list-tab-live-proof.spec.ts` â€” self-healing unsign prelude, passed 2 consecutive live runs (search â†’ dept-filtered panel â†’ context parent disabled â†’ wrong password inline error â†’ sign â†’ "Mae Banaga" stamped + remarks â†’ 14% progress â†’ Open Profile tab same state). Batch-1/2 smokes re-passed. Evidence `.runtime/onboarding-list-tab-proof-20260912-214829/` (screenshots + final-visible-admin.json + signer-employee-data-changes.txt).
-- **DEV test fixtures kept deliberately (documented in docs/ONBOARDING_CHECKLIST.md):** signer user `e2e-onb-signer2@bandai.local`/`password123` â†” synthetic `KCSSI-BANDAI1129` (dept moved to Software Development; original id recorded) and Char Aznable's checklist left with item 6.1 signed as the demo. **Observation filed as REC-20260912-SIGNER-ROLE-DRIFT:** a user created with role hris-hr-manager still gets a non-HR effective role at login (login derives from the employee record), so "HR can sign any item" is not reachable for freshly-created users without employee role derivation â€” department-match path exercised instead.
+- **DEV test fixtures kept deliberately (documented in docs/ONBOARDING_CHECKLIST.md):** signer user `e2e-onb-signer2@bandai.local`/`password123` â†” synthetic `KCSSI-BANDAI1129` (dept moved to Software Development; original id recorded) and Char Aznable's checklist left with item 6.1 signed as the demo. **Observation filed as REC-20260912-SIGNER-ROLE-DRIFT:** a user created with role bnpi-pats-hr-manager still gets a non-HR effective role at login (login derives from the employee record), so "HR can sign any item" is not reachable for freshly-created users without employee role derivation â€” department-match path exercised instead.
 - **Boundary:** working tree ONLY â€” no commit, no push (operator has not asked). Concurrent session's cosmetic builder-component edits coexist (all onboarding tests green with them). API restarted twice this batch for module loads; roster search verified live.
 
 ## Latest Task Addendum - 2026-09-12 Onboarding follow-up batch: builder edit/delete, create-on-hire + provision-all, checklist page = full-page preview (operator-ordered)
 
 - **Operator asks:** (1) builder was missing edit/delete while building sections/items; (2) "FOR NOW, only one checklist will be created. BUT dont change the endpoints" â†’ plus create-on-hire and an option to provision all existing ONBOARDING employees; (3) `/admin/configuration/onboarding/checklist` must show **the created checklist** exactly like the builder Preview but full-page â€” **nothing employee-related**; builder must open on the **first template created** with every create-another-template affordance hidden.
-- **Backend (hris-api):** new `app/onboarding/onboardingLifecycle.helper.ts` â€” `ensureOnboardingChecklistForEmployee()` (idempotent exists-noop, single-active-template auto-resolve, deep copy parents-before-children, `requireTemplate` skip). Create endpoint now runs through it (`templateId` optional). New `POST /api/onboarding/checklists/provision-all` `{dryRun?, employeeIds?}` (admin/HR; dry-run plan per the repo's non-mutating-first rule; idempotent). Create-on-hire hooks wired best-effort (own try/catch, after commit, never fails the hire): employee.controller create Step 8.9 (ONBOARDING-gated) + `reconcileEmployeeOnboardingState` boarding-documents helper (covers update transitions + import post-actions). Existing 25 endpoints + offboarding stack untouched.
-- **Frontend (hris-app):** checklist.tsx rewritten from the v1 roster/sign UI to a **pure page preview** â€” resolves the single active template and renders it via new shared `checklist-preview-table.tsx` (extracted verbatim from BuilderPreview so modal and page are one source); honest empty state + Build CTA; zero employee widgets. builder.tsx = **single-template editor**: auto-loads first template via effect, `<select>`/"New templateâ€¦" removed, Save button label "Save", always PUTs the same id. Section rename (inline input, Enter/Escape/blur) + delete; item edit (add-item.tsx now create+edit mode) + subtree delete with `DeleteConfirm` dialog; pure helpers `updateSectionName/removeSectionById/updateItemInItems/removeItemFromItems` exported + tested. Mock demo table removed from the page (`mock-checklist-data.ts` left unused; roster/sign hooks/services remain exported for the future employee surface).
-- **Tests:** hris-api mocha onboarding suite now **46** (new `onboarding-lifecycle.spec.ts` 7; provision-all 403/dry-run/idempotent-execute; create auto-resolve/409) â€” 731 passing with app-module-contract; eslint clean incl. employee.controller + boarding-documents helper. hris-app vitest **19** (new `checklist.test.tsx` page-preview contract incl. no-combobox assertion; builder edit/delete + hidden-affordance + helper tests; service 4). Playwright rewritten to the new model, **2/2 PASSED live** (page shows the operator's real "Standard Onboarding Checklist" template preview with nothing employee-related; builder auto-loads it, no selector). tsc delta 0 (173 pre-existing elsewhere, 0 in onboarding files).
+- **Backend (bnpi-pats-api):** new `app/onboarding/onboardingLifecycle.helper.ts` â€” `ensureOnboardingChecklistForEmployee()` (idempotent exists-noop, single-active-template auto-resolve, deep copy parents-before-children, `requireTemplate` skip). Create endpoint now runs through it (`templateId` optional). New `POST /api/onboarding/checklists/provision-all` `{dryRun?, employeeIds?}` (admin/HR; dry-run plan per the repo's non-mutating-first rule; idempotent). Create-on-hire hooks wired best-effort (own try/catch, after commit, never fails the hire): employee.controller create Step 8.9 (ONBOARDING-gated) + `reconcileEmployeeOnboardingState` boarding-documents helper (covers update transitions + import post-actions). Existing 25 endpoints + offboarding stack untouched.
+- **Frontend (bnpi-pats-app):** checklist.tsx rewritten from the v1 roster/sign UI to a **pure page preview** â€” resolves the single active template and renders it via new shared `checklist-preview-table.tsx` (extracted verbatim from BuilderPreview so modal and page are one source); honest empty state + Build CTA; zero employee widgets. builder.tsx = **single-template editor**: auto-loads first template via effect, `<select>`/"New templateâ€¦" removed, Save button label "Save", always PUTs the same id. Section rename (inline input, Enter/Escape/blur) + delete; item edit (add-item.tsx now create+edit mode) + subtree delete with `DeleteConfirm` dialog; pure helpers `updateSectionName/removeSectionById/updateItemInItems/removeItemFromItems` exported + tested. Mock demo table removed from the page (`mock-checklist-data.ts` left unused; roster/sign hooks/services remain exported for the future employee surface).
+- **Tests:** bnpi-pats-api mocha onboarding suite now **46** (new `onboarding-lifecycle.spec.ts` 7; provision-all 403/dry-run/idempotent-execute; create auto-resolve/409) â€” 731 passing with app-module-contract; eslint clean incl. employee.controller + boarding-documents helper. bnpi-pats-app vitest **19** (new `checklist.test.tsx` page-preview contract incl. no-combobox assertion; builder edit/delete + hidden-affordance + helper tests; service 4). Playwright rewritten to the new model, **2/2 PASSED live** (page shows the operator's real "Standard Onboarding Checklist" template preview with nothing employee-related; builder auto-loads it, no selector). tsc delta 0 (173 pre-existing elsewhere, 0 in onboarding files).
 - **Live DEV proof:** `.runtime/onboarding-provision-proof-20260912-173212/` â€” scoped provision-all on one ONBOARDING employee: dryRun wouldCreate=1 (no writes) â†’ execute created=1 (deep-copied the operator's real 2-section UI template) â†’ re-run skipped=1 (idempotent) â†’ visible tree intact â†’ checklist soft-deleted, count back to 0. Full 170-employee run intentionally NOT executed on shared DEV (operator triggers via provision-all when ready; endpoint is re-runnable). Restarted the local dev API once (tsx watch not reloading; 2:14pm process predated new routes).
 - **Boundary:** committed to `feature/onboarding-checklist-signature` (branch now has v1 + this batch), **not pushed**; single-app exception unchanged (employee-facing view stays REC-20260912-ONBOARDING-EMPAPP-READ-VIEW). Docs `docs/ONBOARDING_CHECKLIST.md` updated.
 
 ## Latest Task Addendum - 2026-09-12 Dedicated /api/onboarding module: checklist builder + password-as-signature (operator-ordered)
 
 - **Operator ask:** check whether existing onboarding endpoints support the mock checklist/builder (CRUD + department sign-off with password, name-of-signee, per-department visibility). Answer: CRUD existed (generic boarding stack), but password signing, signee stamping, and department scoping did NOT. Operator then approved a **full dedicated onboarding module** and the role matrix (admin=template CRUD+sign all; HR=view+sign all; ONBOARDING employee=see own full, NEVER sign own; other employees=see own-dept items + no-dept context read-only, sign own-dept).
-- **Backend (hris-api):** new Prisma models in `prisma/schema-postgres/onboarding.prisma` â€” `OnboardingTemplate/Section/Item` (builder, self-relation `parentId`, depthâ‰¤3, OPTIONAL `responsibleDepartmentId/Name`) + `OnboardingChecklist/Section/Item` (per-employee deep copy, server-stamped `signedByName/completedByEmployeeId/completedDate/remarks`) + append-only `OnboardingSignature` audit rows. Additive `db push` to canonical DEV 55435 only; existing tables untouched. New module `app/onboarding/` (26 routes incl. `PUT /templates/:id/tree`, `POST /items/:id/sign|unsign`, `GET /items/:id/signatures`, `GET /employees` roster, `GET /checklists/:id/visible`), `zod/onboarding.ts`, and `onboardingAccess.helper.ts` as single source for the permission matrix + visible-tree builder (`canSign`/`isContextOnly`). Sign = bcrypt re-check of the caller's own password (no relogin): 401 wrong password Â· 403 dept mismatch/own checklist/no-dept item Â· 409 already signed or passwordless account; signee name resolved server-side from the actor's employee person. Completion auto-advances `completionPercentage`/status; `unsign` (admin/HR) keeps audit rows. Generic `boardingProcess`/`checklistItem` stack **not modified** (offboarding unaffected).
-- **Frontend (hris-app):** live `onboarding.service.ts` + `useOnboarding.ts` hooks; `organisms/onboarding/checklist.tsx` rewritten to roster picker â†’ filtered tree â†’ password sign modal, with the ORIGINAL mock table kept as a labelled demo fallback when `/api/onboarding/employees` errors (coexist per operator); `builder.tsx` gains template name/load-existing/Save-all (`POST` + `PUT /tree`) while keeping local add flows and the department picker (`add-item.tsx`, department optional for parent rows). Fixed pre-existing red `builder.test.tsx` href pin (route is `/admin/configuration/onboarding/checklist`) and a TS5097 `.tsx` import in the untracked `routes/admin/onboarding/builder.tsx`.
-- **Tests:** backend mocha 37 passing (`onboarding-access.contract` sign matrix + `onboarding-sign.controller` supertest/mock-prisma 200/401/403/409 + `onboarding-crud.controller` guards; existing boarding-title contracts still green); app-module-contract 688 green; hris-api + hris-app tsc show no errors in any touched file (only pre-existing unrelated ones). Frontend vitest onboarding 9 passing. New playwright smoke `tests/smoke/admin-onboarding-checklist-live-proof.spec.ts` 2/2 PASSED (screenshots in `.runtime/onboarding-module-proof-20260912-*`).
+- **Backend (bnpi-pats-api):** new Prisma models in `prisma/schema-postgres/onboarding.prisma` â€” `OnboardingTemplate/Section/Item` (builder, self-relation `parentId`, depthâ‰¤3, OPTIONAL `responsibleDepartmentId/Name`) + `OnboardingChecklist/Section/Item` (per-employee deep copy, server-stamped `signedByName/completedByEmployeeId/completedDate/remarks`) + append-only `OnboardingSignature` audit rows. Additive `db push` to canonical DEV 55435 only; existing tables untouched. New module `app/onboarding/` (26 routes incl. `PUT /templates/:id/tree`, `POST /items/:id/sign|unsign`, `GET /items/:id/signatures`, `GET /employees` roster, `GET /checklists/:id/visible`), `zod/onboarding.ts`, and `onboardingAccess.helper.ts` as single source for the permission matrix + visible-tree builder (`canSign`/`isContextOnly`). Sign = bcrypt re-check of the caller's own password (no relogin): 401 wrong password Â· 403 dept mismatch/own checklist/no-dept item Â· 409 already signed or passwordless account; signee name resolved server-side from the actor's employee person. Completion auto-advances `completionPercentage`/status; `unsign` (admin/HR) keeps audit rows. Generic `boardingProcess`/`checklistItem` stack **not modified** (offboarding unaffected).
+- **Frontend (bnpi-pats-app):** live `onboarding.service.ts` + `useOnboarding.ts` hooks; `organisms/onboarding/checklist.tsx` rewritten to roster picker â†’ filtered tree â†’ password sign modal, with the ORIGINAL mock table kept as a labelled demo fallback when `/api/onboarding/employees` errors (coexist per operator); `builder.tsx` gains template name/load-existing/Save-all (`POST` + `PUT /tree`) while keeping local add flows and the department picker (`add-item.tsx`, department optional for parent rows). Fixed pre-existing red `builder.test.tsx` href pin (route is `/admin/configuration/onboarding/checklist`) and a TS5097 `.tsx` import in the untracked `routes/admin/onboarding/builder.tsx`.
+- **Tests:** backend mocha 37 passing (`onboarding-access.contract` sign matrix + `onboarding-sign.controller` supertest/mock-prisma 200/401/403/409 + `onboarding-crud.controller` guards; existing boarding-title contracts still green); app-module-contract 688 green; bnpi-pats-api + bnpi-pats-app tsc show no errors in any touched file (only pre-existing unrelated ones). Frontend vitest onboarding 9 passing. New playwright smoke `tests/smoke/admin-onboarding-checklist-live-proof.spec.ts` 2/2 PASSED (screenshots in `.runtime/onboarding-module-proof-20260912-*`).
 - **Live DEV E2E PASSED (API):** template create â†’ tree save (no-dept parent "1 Device" + dept child "1.1 Laptop") â†’ checklist deep copy for ONBOARDING employee â†’ department signer (TESTBEN003/Assembly) sees context parent `canSign:false` + own-dept child `canSign:true`, wrong dept child hidden â†’ wrong password 401 â†’ sign 200 stamps `signedByName="Beneficiary Employee"` server-side, remarks kept, progress 100% checklist auto-COMPLETED â†’ signature audit row `method=PASSWORD` â†’ no-dept parent sign 403, dept-user unsign 403, admin unsign restores PENDING. Full cleanup proven (0 templates/checklists, e2e user deleted+login 401, TESTBEN003 `userId` restored to null). Evidence: `.runtime/onboarding-module-proof-20260912-*/`.
 - **Restart note:** had to stop the other session's `npm run dev` API tree (PID 6280) to unlock the Prisma engine DLL for client regeneration; it then died on the 240s health timeout due to one YAML compact-mapping bug in a new `@openapi` comment (fixed, quoted). API restarted and healthy on 3001; DB forward self-healed its usual 55435 flap mid-run.
-- **Boundary:** single-app exception (admin/HR configuration surface; `hris-emp-app` untracked, no counterpart). Not pushed (no operator push request; working tree also carries another session's in-flight mock-builder files). Docs: `docs/ONBOARDING_CHECKLIST.md`. Recommendations filed (see registry).
+- **Boundary:** single-app exception (admin/HR configuration surface; `bnpi-pats-emp-app` untracked, no counterpart). Not pushed (no operator push request; working tree also carries another session's in-flight mock-builder files). Docs: `docs/ONBOARDING_CHECKLIST.md`. Recommendations filed (see registry).
 ## Latest Task Addendum - 2026-09-11 Janâ€“Jul 2026 payroll data backfill (operator-ordered "do the january to july")
 
 - **Executed:** full DM4 backfill Dec 26 â†’ Jun 10 + OT + leave review, dry-run-gated, oldestâ†’newest, on canonical local DEV (K3s DB via 55435). **Biometrics: 10 windows COMPLETED, 0 failed** (Dec26-Jan10 4,153 | Jan11-25 8,019 | Jan26-Feb10 10,630 | Feb11-25 9,074 | Feb26-Mar10 8,858 | Mar11-25 10,216 | Mar26-Apr10 8,792 | Apr11-25 10,226 | Apr26-May10 10,043 | May11-25 5,198), 2,237 employees matched every run â€” punch source discovered inside the client archive `ATTENDANCE & TIME TRACKING.../zip-rar/Biometrics Data.rar â†’ 2026/`. **OT:** yearly `2026 rptOvertimeDetails.xlsx` (1/1â€“5/31, 121,422 rows) split into 11 per-cutoff workbooks (0 unassigned), all executed â€” mostly idempotent no-ops (OT already on lines; buckets survived the biometrics refresh); fleet proof 850â€“6,565 real-OT lines per period. **Leave Janâ€“Apr: honest zeros** â€” the 2026 monthly `Final Leave & Awol` bundles contain no PAID rows in any cutoff window (UNPAID/AWOL = day-status evidence only); Mayâ€“Jul leave still missing everywhere. With the earlier Junâ€“Jul pass, **punch coverage is continuous Dec 26 â†’ Jul 25 except May 26â€“Jun 10 (no punch workbook exists anywhere; that period keeps its odd 1,805 APPROVED + 412 DRAFT / 29,268 lines schedule-derived state)**.
 - **Gaps needing client data:** May 26â€“Jun 10 punches; Janâ€“May comp/ded mass uploads (none provided; only PP-20260426-20260511 has prior-era 2,249 benefits + 1,182 loans); Mayâ€“Jul leave files. Payroll generation deliberately NOT run (separate money order).
-- **Infra:** API died mid-import 4Ã— â†’ ran the backfill under a supervised no-watch API (auto-respawn, log in `.runtime/jan-jul-backfill-20260911/api-supervised.log`); STALE runs recovered via fresh idempotent runs (new `idempotencyKey`); restore normal watch flow via `scripts/restart-local-hris-api-dev.ps1`. `HEAVY_REQUEST_TIMEOUT_MS=900000` set for the window.
+- **Infra:** API died mid-import 4Ã— â†’ ran the backfill under a supervised no-watch API (auto-respawn, log in `.runtime/jan-jul-backfill-20260911/api-supervised.log`); STALE runs recovered via fresh idempotent runs (new `idempotencyKey`); restore normal watch flow via `scripts/restart-local-bnpi-pats-api-dev.ps1`. `HEAVY_REQUEST_TIMEOUT_MS=900000` set for the window.
 - **Docs/git:** operator page `docs/DM4_JAN_JUL_2026_BACKFILL.md`; WWG report `.wwg/reports/jan-jul-2026-backfill-20260911.md`; evidence `.runtime/jan-jul-backfill-20260911/BACKFILL-SUMMARY.md` + archive review `.runtime/attendance-archive-review-20260911/REVIEW.md`. `.gitignore` now excludes the client archive (`ATTENDANCE & TIME TRACKING*/` + `**/...`), verified via `git check-ignore` and clean `git status`. Uncommitted: `.gitignore`, `migration.router.ts` heavy-timeout fix, this addendum â€” awaiting operator commit/push order.
 
 ## Latest Task Addendum - 2026-09-11 DM4 biometrics import for Jun 11â€“Jul 25 executed (operator-ordered)
 
 - **Operator order:** import the biometrics timesheet data from `confidential-files`. Executed DM4 runs for all three windows, dry-run-reviewed then executed, oldestâ†’newest. **All COMPLETED, 0 failed, 2,237 employees matched each run**: Jun 11â€“25 (11,745 rows / 37,864 upserts / 3,479 timesheets recalculated), Jun 26â€“Jul 10 (11,258 / 13,770 / 2,512), Jul 11â€“25 (10,714 / 12,399 / 1,685). Biometrics-only (no rptOvertimeDetails â†’ 0 OT line updates by design). `created=0` everywhere â€” idempotent re-import refreshed/patched effective attendance+timesheet lines over prior import eras; post-write rereads attendanceRowsFound=110,579 / timesheetlineRowsFoundâ‰ˆ107,670. Period statuses preserved (OPEN/DRAFT/COMPLETED â€” Jul 11â€“25 paid snapshot untouched by design). Evidence: `.runtime/dm4-biometrics-import-20260911-162642/IMPORT-SUMMARY.md`.
-- **Defect fixed (code):** `/api/migration/runs/dry-run` + `/runs` had no heavy request-timeout tier â€” the 120s server default made a multi-minute DM4 dry-run impossible over HTTP. Wrapped both routes with `requestTimeout(heavyRequestTimeoutMs)` in `hris-api/app/migration/migration.router.ts`, matching the payroll/timesheet/attendance router pattern (uncommitted).
+- **Defect fixed (code):** `/api/migration/runs/dry-run` + `/runs` had no heavy request-timeout tier â€” the 120s server default made a multi-minute DM4 dry-run impossible over HTTP. Wrapped both routes with `requestTimeout(heavyRequestTimeoutMs)` in `bnpi-pats-api/app/migration/migration.router.ts`, matching the payroll/timesheet/attendance router pattern (uncommitted).
 - **Recurring infra truth re-proven:** the K3s DEV DB forward (127.0.0.1:55435 via Cloudflare SSH) flapped repeatedly (half-dead TCP-open states, stale ssh PID squatting the port); k8s-db-access watcher rebuilt it. API process died mid-import twice â†’ runs honestly STALE (REC-20260908-IMPORT-JOB-PROGRESS-DURABILITY still open). **New finding:** `/runs/:id/recover` flips status without actually relaunching the worker (needs repair); the working recovery is a fresh idempotent run with a new `idempotencyKey`. Also: one apparent API death was a transient connection gap with the app PID unchanged â€” pollers must tolerate gaps before declaring STALE.
 - **Follow-ups captured:** recover-endpoint no-op defect; heavy-timeout change needs commit+push decision; DM4.3 approved-OT workbooks NOT imported this pass (user asked biometrics only).
 
@@ -126,7 +126,7 @@
 - **Frontend:** `attendance-adjustment-request.ts` Ã¢â‚¬â€ `AttendanceAdjustmentDraft.onBehalf` + on-behalf payload (requesterId=leader, `targetEmployeeId`=member, `requestSource=LINE_LEADER_FILED`, `workflowTarget=MANAGER_FINAL`, filedBy block). Stale OT label fixed: on-behalf `workflowTarget` now `MANAGER_FINAL` (chain changed 2026-09-08), description no longer says "manager then HR". `AttendanceAdjustmentRequestModal` Ã¢â‚¬â€ "For whom" picker now renders for BOTH request kinds; adjustment submit emits member context; **two-column modal with a right "Approval flow" panel** (`data-testid="approval-flow-panel"`) laying out the exact chain per kind + on-behalf before executing ("Nothing is applied until every approval step above is done."). Hub `handleCreateAttendanceAdjustment` passes onBehalf.
 - **Tests:** backend `line-leader-workflow` (pins manager-final 3-step, no HR) + `section-leader-scope` + `overtime-approval-target-line` + `overtime-workflow` + `workflow-config.helper` = **53 passing**; frontend builder + new modal contract + team/sidebar contracts = **26 passing**. Pre-existing failures untouched (hikvision-callback spec 500-vs-200 and `middleware/apiActivityLogging.ts` tsc errors verified on stashed HEAD).
 - **Live API E2E:** leader TESTBEN004 filed for member 00062 Ã¢â€ â€™ `REQ-1786424090647` on `WF-ATTENDANCE-CORRECTION-LEADER-FILED` (3 steps; manager step assigned to 00021) Ã¢â€ â€™ manager (`arvin@bandai.com.ph`) approved Ã¢â€ â€™ SYSTEM completion Ã¢â€ â€™ member attendance backfilled PRESENT 08:00Ã¢â‚¬â€œ17:00 Manila on 2026-08-14 Ã¢â€ â€™ **side effect wrote to the member, leader untouched**. Manager visibility proven via `GET /api/request?approvalActorId=<manager>` (request listed before approval). Cleanup: backfilled attendance row deleted; completed request kept as marked evidence.
-- **Browser E2E PASSED:** `hris-app/tests/smoke/line-leader-timesheet-adjustment.spec.ts` Ã¢â‚¬â€ For-whom on the adjustment branch, right panel switches to the member chain, POST 201 with `requesterId=leader`/`targetEmployeeId=member`/`LINE_LEADER_FILED`/`MANAGER_FINAL` (`REQ-1786424090648`, cancelled after proof). Evidence: `.runtime/leader-timesheet-adjustment-20260909-154503/`, `.runtime/leader-timesheet-adjustment-browser-proof/`.
+- **Browser E2E PASSED:** `bnpi-pats-app/tests/smoke/line-leader-timesheet-adjustment.spec.ts` Ã¢â‚¬â€ For-whom on the adjustment branch, right panel switches to the member chain, POST 201 with `requesterId=leader`/`targetEmployeeId=member`/`LINE_LEADER_FILED`/`MANAGER_FINAL` (`REQ-1786424090648`, cancelled after proof). Evidence: `.runtime/leader-timesheet-adjustment-20260909-154503/`, `.runtime/leader-timesheet-adjustment-browser-proof/`.
 - **Concurrent-session incident (recovered):** mid-task, another agent session stashed the whole working tree ("foreign line-leader work + diagnostics, kept while UI push proceeds"), reset to develop, merged PR #16/#17, and moved to `feature/profile-account-settings-ui` Ã¢â‚¬â€ which wiped this task's uncommitted work from the shared tree. **Recovered into isolated worktree `../bandai-infra-leader-adj` on branch `feature/leader-timesheet-adjustment` (off merged origin/develop `f5b1c3f3`)** and committed there; the shared tree keeps the other session's in-flight files. Nothing lost on either side; nothing pushed.
 - **Incidental repairs this pass:** the in-flight uncommitted Sidebar edit had dropped the `myTeamEntry` render (My Team heading would vanish; contract test red) Ã¢â‚¬â€ restored `myTeamEntry && <NavItemComponent item={myTeamEntry} />` at the top of Working Space and re-pinned the contract to the working-tree render syntax.
 - **Boundary:** not pushed (no operator push request; also awaiting operator guidance given the concurrent session). Dual-app = HR-only exception (no emp-app requests-hub counterpart). Bulk checkbox screen for adjustments intentionally not built (per-person/per-day times don't fit the OT bulk pattern) Ã¢â‚¬â€ can be a follow-up if wanted. Docs: `docs/LEADER_TIMESHEET_ADJUSTMENT.md`.
@@ -134,16 +134,16 @@
 ## Latest Task Addendum - 2026-09-09: Sidebar My Team flat at top of Working Space (no collapsed submenu)
 
 - **Operator ask:** line-leader sidebar had My Team (Overview / Organization Chart / Team Timesheets / Assign Overtime) as a collapsible submenu in General; operator wanted it moved to the top under Working Space AND **not** a collapsed submenu ("dont make the content submodule of my team").
-- **Shipped (`4e777d4f`, local, not pushed):** `hris-app/app/components/organisms/Sidebar.tsx` Ã¢â‚¬â€ My Team group extracted from `generalItems` and rendered flat at the **top of the Working Space section**: `myTeamEntry` is a direct NavLink to `/employee/team` (highlights on any team tab), and `myTeamChildren` (Overview, Organization Chart, Team Timesheets, Assign Overtime; Schedule Calendar for department managers) render as always-visible links beneath it Ã¢â‚¬â€ no chevron, no expand/collapse. Admins keep not seeing My Team (they render neither General nor this group). Nav item ids unchanged (`general-my-team*`), so DOM ids and the existing contract pins stay stable.
+- **Shipped (`4e777d4f`, local, not pushed):** `bnpi-pats-app/app/components/organisms/Sidebar.tsx` Ã¢â‚¬â€ My Team group extracted from `generalItems` and rendered flat at the **top of the Working Space section**: `myTeamEntry` is a direct NavLink to `/employee/team` (highlights on any team tab), and `myTeamChildren` (Overview, Organization Chart, Team Timesheets, Assign Overtime; Schedule Calendar for department managers) render as always-visible links beneath it Ã¢â‚¬â€ no chevron, no expand/collapse. Admins keep not seeing My Team (they render neither General nor this group). Nav item ids unchanged (`general-my-team*`), so DOM ids and the existing contract pins stay stable.
 - **Tests:** `team-timesheets-ui-contract.test.ts` 5/5 (new pin: flat-at-top-of-Working-Space + General no longer hosts the group); `Sidebar.test.tsx` 4/4. Live browser proof `tests/smoke/line-leader-my-team-flat-sidebar.spec.ts` PASSED against local dev (leader@bandai.local): My Team is a **link** (not a toggle button), all four entries visible without interaction, doc order Working Space Ã¢â€ â€™ My Team Ã¢â€ â€™ Dashboard Ã¢â€ â€™ General. Evidence: `.runtime/my-team-flat-sidebar-20260909/`. Regression: `line-leader-ot-checkbox-screen.spec.ts` PASSED. Targeted ESLint 0 errors (2 pre-existing unused-import warnings); tsc shows no errors in changed files.
-- **Dual-app parity:** single-app exception Ã¢â‚¬â€ hris-emp-app submodule is not checked out locally and this sidebar surface has no emp-app counterpart (consistent with the 2026-09-08 line-leader HR-only exception).
+- **Dual-app parity:** single-app exception Ã¢â‚¬â€ bnpi-pats-emp-app submodule is not checked out locally and this sidebar surface has no emp-app counterpart (consistent with the 2026-09-08 line-leader HR-only exception).
 - Boundary: local DEV only, **not pushed** (no operator push request for this change); same VM auto-roll path as prior sidebar work applies on next develop push.
 
 ## Latest Task Addendum - 2026-09-09: OT batch close-out - verified, malware blob removed, merged to origin/develop, PR-ready
 
 - **What:** user-facing **Preview Payroll** / **Payroll Preview** on `/hr/run-payroll` is now **Payroll Management** (Quick Actions button, results H1, modal titles `Start Payroll Management` / `running` / `failed`, `Managed rows`, `Run Management`). Rationale: the surface previews dry-run amounts but also manages manual add/deduct via the 2026-09-08 quick-adjust (per-row `Adjust` + auto re-run, OAD/NEGADJ pinned to OPEN period).
 - **Unchanged by design:** URL `action=preview-payroll`, `preview-payroll-*` testIDs, helper/function names, payroll engine, Start Payroll semantics, dry-run explanatory copy + `Preview only` badge. Distinct surfaces untouched (`special-payroll-modal` Preview failed, device-events Retry preview).
-- **Files:** hris-app `run-payroll-template.tsx` (labels/comments), `payroll-preview-modal.ts` + `.test.ts`, smoke `hr-payroll-management-audit.spec.ts`, `CHANGELOG.md` (Unreleased), root terminology `Payroll Preview` row renamed with former-name note. HR-only surface (no emp-app counterpart).
+- **Files:** bnpi-pats-app `run-payroll-template.tsx` (labels/comments), `payroll-preview-modal.ts` + `.test.ts`, smoke `hr-payroll-management-audit.spec.ts`, `CHANGELOG.md` (Unreleased), root terminology `Payroll Preview` row renamed with former-name note. HR-only surface (no emp-app counterpart).
 - **Proof:** vitest `payroll-preview-modal.test.ts` 7/7; filtered `tsc` shows only the known pre-existing `run-payroll-template(2231,5)` error. Browser proof NEEDS_CONFIRMATION.
 - **Do not Reopen** completed periods for this rename (labels only, no money effect).
 
@@ -151,10 +151,10 @@
 
 - **Operator report:** progress modal showed "Processed 693 of 2206 payable" for an 851-person run; headcount flips 800+ vs 2000+.
 - **Root cause (proven live):** period has 2,234 APPROVED timesheet rows (bulk-materialized Sep 2 for all 2,235 employees, every frequency/agency) but the run universe is DIRECT + semi-monthly = 880 scope / 851 payable. Backend `payrollRunTotals` stored the unscoped row counts; the modal computed approved(2234) Ã¢Ë†â€™ scoped-excluded(28) = **2206**.
-- **Fixes:** (1) backend completion totals scoped with `buildPayrollPreviewBaseWhere` (hris-api `payroll-period.helper.ts`); (2) modal denominator is now job-scoped only (hris-app `run-payroll-template.tsx`, `approved Ã¢Ë†â€™ excluded` reconstruction removed); (3) all-skipped resume falls through to shared completion (was stuck PROCESSING); (4) candidate fetch chunked 100/batch (giant findMany died on the flaky forward; Postgres stable since Jul 29 Ã¢â‚¬â€ flap is transport-only).
+- **Fixes:** (1) backend completion totals scoped with `buildPayrollPreviewBaseWhere` (bnpi-pats-api `payroll-period.helper.ts`); (2) modal denominator is now job-scoped only (bnpi-pats-app `run-payroll-template.tsx`, `approved Ã¢Ë†â€™ excluded` reconstruction removed); (3) all-skipped resume falls through to shared completion (was stuck PROCESSING); (4) candidate fetch chunked 100/batch (giant findMany died on the flaky forward; Postgres stable since Jul 29 Ã¢â‚¬â€ flap is transport-only).
 - **Final proof (direct DB):** PP-20260826-20260911 COMPLETED, 851/851 failed 0; stored totals tsTotal 880 / approved 880 / ready 851 / ep 851; money rows 851 alive / 851 unique, all unpaid. The "46 dup rows" scare was a false alarm: the list endpoint returned cross-period rows; per-period truth is clean.
 - **Also today:** two API restarts (poisoned Prisma pool), one forward rebuild, ~7 resumes across flap waves + self-pauses (auto-pause-on-unmount suspected Ã¢â‚¬â€ REC-20260909 filed; user advised to leave the tab open mid-run). `PayrollPeriod.updatedAt` frozen at 00:22:31Z despite later writes (suspected stale generated client Ã¢â‚¬â€ NEEDS_CONFIRMATION, use `generationMetadata` timestamps). Server DB conns climbed 33Ã¢â€ â€™61 (dead-tunnel orphans; watch cap).
-- **Evidence:** `.runtime/payroll-db-flap-20260909-144803/`. Package workspaces synced (hris-api + hris-app current-task.md). Vitest 7/7.
+- **Evidence:** `.runtime/payroll-db-flap-20260909-144803/`. Package workspaces synced (bnpi-pats-api + bnpi-pats-app current-task.md). Vitest 7/7.
 - **Do not Reopen** this period. Corrections go retro/payroll-correction or quick-adjust on the OPEN period.
 - <<<<<<< HEAD
 
@@ -183,10 +183,10 @@
 - **Live DEV proof:** sweep dry-run found 50 capped real candidates; execute(limit=3) sent 3, re-run sent 0 with no dup rows; one-sided PRESENT lines proven (00985 Sep 7, 00212 Sep 3); 00212 preview unchanged (no-bucket Path B already excluded the day).
 - **Tests:** 20/20 (`missing-punch-no-pay`, `missing-punch-reminder`); 94 passing across 17 payroll/attendance/notify specs; 2 `hikvision-callback.controller` failures proven pre-existing on pristine HEAD.
 - **CONFLICTING (accepted by operator order):** Sheet2/register parity will now diverge on one-sided bucket days (file says worked, company pays zero until correction). Tally bands for such days move to underpay-by-design.
-- **Follow-ups:** REC-20260908-MISSING-PUNCH-SCHEDULED-SWEEP (Proposed). Branch note: `feat-attendance` also carries unrelated in-flight `hris-app` NO-PAY-chip work (`payroll-no-pay-days.ts`, untouched) that consumes the same flags Ã¢â‚¬â€ converges with this change.
+- **Follow-ups:** REC-20260908-MISSING-PUNCH-SCHEDULED-SWEEP (Proposed). Branch note: `feat-attendance` also carries unrelated in-flight `bnpi-pats-app` NO-PAY-chip work (`payroll-no-pay-days.ts`, untouched) that consumes the same flags Ã¢â‚¬â€ converges with this change.
 ## Latest Task Addendum - 2026-09-07 Stuck payroll run recovered: PP-20260826-20260911 PROCESSING 322/851 -> COMPLETED 851/851
 
-- **Root cause (infra, not payroll data):** all 15 saved errors (rows 239-253, employees 00904-00935) are identical `Can't reach database server at 127.0.0.1:55435` at `payroll-period.helper.ts:1892`. The K3s DEV forward (`ssh -L 127.0.0.1:55435:10.43.130.9:5432 project-truth-hris`) flapped mid-run; no row needed fixing.
+- **Root cause (infra, not payroll data):** all 15 saved errors (rows 239-253, employees 00904-00935) are identical `Can't reach database server at 127.0.0.1:55435` at `payroll-period.helper.ts:1892`. The K3s DEV forward (`ssh -L 127.0.0.1:55435:10.43.130.9:5432 project-truth-bnpi-pats`) flapped mid-run; no row needed fixing.
 - **Orphaned job:** `5eb47312-7cdc-4b5f-8d19-68829c339ec5` stayed `processing` with no live worker after API restart (active-job poll `null`). Resume path verified safe: `resumeFromExistingPayrolls` skips only `isPaid`/timesheet-locked rows, reprocesses the rest via upsert (`payroll-period.helper.ts:1752-1794`).
 - **Recovery:** watcher-confirmed forward + API restart (fresh Prisma pool; pool held dead conns: `Server has closed the connection` even with TCP handshake OK 6/6). Resume 1 (`7c35bcc7`) died in a second flap at 13:01 UTC; Resume 2 (`a588560d`) **completed 851/851, failed 0** at 13:15 UTC. Period now **COMPLETED**, `EmployeePayroll` count for period **851** (= `includedEmployeesCount`; preview scope 880 / approved 879 / ready 851).
 - **Do not Reopen** this period (would clear the good state). Evidence: `.runtime/payroll-stuck-20260907-205217/` (+ `211827/`).
@@ -201,7 +201,7 @@
 - **API**:
   - `GET /api/payrollperiod/:id/day-status-review` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ DB-only buckets + review queue.
   - `POST /api/payrollperiod/:id/day-status-review/workbook` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ multipart in-memory refinement with `leaveFile` and `awolFile`.
-- **Helper**: `hris-api/helper/day-status-resolution.helper.ts` (12/12 unit tests passing).
+- **Helper**: `bnpi-pats-api/helper/day-status-resolution.helper.ts` (12/12 unit tests passing).
 - **Frontend**: `/hr/day-status-review` (service, spec, route, sidebar entry, period selector, bucket chips, weekday histogram, DataTable with pagination, CSV export, in-memory workbook refinement).
 - **Live Endpoint Proof**:
   - Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10: DB-only review queue 18,889; Refined with combined June+July leave workbook + AWOL workbook: LEAVE_PAID 657 (+115 days recovered), LEAVE_UNPAID 208, AWOL_EVIDENCED 244, REVIEW_NO_EVIDENCE 18,322.
@@ -248,7 +248,7 @@
 
 - Operator asked for one tally script usable for ALL periods after imports.
 - Shipped: `scripts/run-period-tally-compare.mjs` (`npm run tally:period -- --period=<CODE|id>`), helper `helper/tally-compare.helper.ts` (money/normCode/classifyTally, 22 fields incl. Leave/leavePay non-core), spec `tests/tally-compare.helper.spec.ts` **8/8**.
-- Auto-resolves period from DB; built-in register map (Apr/Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10/Jul11ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´25) + `--target-xlsx`; **auto-unlocks password 9090 registers via Excel COM** (`ensureUnlockedWorkbook`); read-only vs HRIS; evidence to `.runtime/tally-<PERIODCODE>-<stamp>/`.
+- Auto-resolves period from DB; built-in register map (Apr/Jun26ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´Jul10/Jul11ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â´25) + `--target-xlsx`; **auto-unlocks password 9090 registers via Excel COM** (`ensureUnlockedWorkbook`); read-only vs BNPI PATS; evidence to `.runtime/tally-<PERIODCODE>-<stamp>/`.
 - Proof run 1 (parity): PP-20260626-20260711 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  818 compared, TALLIED 0 / MATCH_ONLY 813 / NEAR_50 4 / UNMATCH 1; Alexa dTotal +934.98 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ identical to morning `_tmp` baseline. Proof run 2 (multi-period): PP-20260711-20260726 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  828 compared, TALLIED 22 / ALEXA_NEAR 10 / NEAR_50 49 / MATCH_ONLY 388 / UNMATCH 359.
 - Runbook Phase 4 updated. Delivery+proof: `.runtime/verify-period-leave-20260826/TALLY-SCRIPT-DELIVERY.md`.
 
@@ -336,12 +336,12 @@
 - Operator feedback applied (same day): upload now **imports immediately** like other DM3 uploads (default execute; preview only via `dryRun=true`); amber preview/Confirm step removed; **payroll-period selector** added to the modal (default OPEN period, sends `payrollPeriodId`) so month-wide files cannot silently land in the prior cutoff (REC-20260825-PERIOD-LEAVE-EXPLICIT-PERIOD **Implemented**).
 - Tests: backend spec **9/9** (incl. default-executes contract); app migration route tests 20/20. Pre-existing fails documented separately (6 app-lib vitest; 2 migration.tsx tsc).
 - Live local DB (5433) execute proof: window `2026-07-11..25`, **321 created / 0 updated / 6 failed** (missing emps 01827/01834/01835/01836/01838/01841), **ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢327,991.84**, log `cmt86rh9b00s8vgewuoj41i4j` retrievable via `GET /dm3/mass-upload-imports/:id` (summary+importLog ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  activity click-through works). Opt-in preview: 0 writes.
-- Infra fix: `hris-app/app/services/payroll-periods.service.ts` was **UTF-16 LE** (broke vitest oxc transform when the leave modal's period hook pulled it in) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  converted to UTF-8, no content change.
+- Infra fix: `bnpi-pats-app/app/services/payroll-periods.service.ts` was **UTF-16 LE** (broke vitest oxc transform when the leave modal's period hook pulled it in) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  converted to UTF-8, no content change.
 - Baseline (pre-leave, true July Sheet2): `.runtime/tally-jul1125-before-leave-julysheet2/` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ 828 compared, TALLIED 0, OT_MATCH_ONLY 134, UNMATCH 694, leavePay fails 366. **After-leave tally done**: `.runtime/tally-jul1125-after-leave-julysheet2/REPORT.md` ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ 283 improved / 23 worsened; leave exact 113/366, 201 underpaid (rest-day/day-count residual), app-only 1; ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â¬ÃƒÆ’Ã‚Âº Sheet2 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢434,311.72 vs app ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢327,991.84 (gap ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â©ÃƒÂ¢Ã¢â‚¬â€œÃ¢â‚¬â„¢106,319.88); bands still TALLIED 0 ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¡ÃƒÆ’Ã‚Â¶ deductions/tax wall dominates (worst-now ÃƒÂ¢Ã¢â‚¬Â¢Ã‚Â¬ÃƒÆ’Ã‚Â¶Gross ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚ÂªÃƒÆ’Ã¢â‚¬Â 36k class). First tally attempts had compared JUNE Sheet2 by mistake (hardcoded target) ÃƒÅ½Ã¢â‚¬Å“ÃƒÆ’Ã‚Â¥ÃƒÆ’Ã¢â‚¬Â  superseded notes in old dirs; jul script now honors `TARGET_XLSX`. Canonical: findings ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¬Ãƒâ€šÃ‚Âº14e.
 
 ## Latest Task Addendum - 2026-08-24 Fleet Hikvision time sync button + live clock snap
 
-- Operator authorized live write on A/B/D/E, then asked for an HRIS button to trigger fleet time sync.
+- Operator authorized live write on A/B/D/E, then asked for an BNPI PATS button to trigger fleet time sync.
 - Live snap done twice via SDK STDXML; final state skew A -2s/B +8s->-19s/D -3s/E 0s before second pass -> all within ~19s latency residual after writes. C/F unreachable (C known down; F ECONNRESET open), TEST A/B + Device 5 lanes down as expected.
 - NEW: POST /api/device/time-sync-all (preview-first, execute=false default, deviceIds scope, concurrency 2, honest aggregate) sharing 
 unHikvisionTimeSyncCore with the per-device route.
@@ -407,7 +407,7 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-20 UAT/PROD app+API auto-roll
 
 - Operator: no auto-deploy for UAT/PROD app/API; asked if we can do it and document well.
-- Yes: ansible-pull restart loop is `dev uat prod` for existing Deployments (`hris-api`, `hris-app`, callback-outbox only where present). Still triggered by **`develop` push + image rebuild**, not GitHub `uat`/`prod` branches.
+- Yes: ansible-pull restart loop is `dev uat prod` for existing Deployments (`bnpi-pats-api`, `bnpi-pats-app`, callback-outbox only where present). Still triggered by **`develop` push + image rebuild**, not GitHub `uat`/`prod` branches.
 - Revert env: `PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev`.
 - Canonical: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md` + `docs/ONPREM_PORT_ACCESS.md` + `docs/DEVOPS_RUNBOOK.md`.
 
@@ -434,7 +434,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator: document DevOps CI well; **do not deploy**; **do not push** until ordered.
 - Canonical: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
-- Live tip at proof: `efc86c56` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ CI + Observe + Validate success; VM pull match; images `services=none`; runtime Argo **Degraded** (`hris-api-db-init` Failed).
+- Live tip at proof: `efc86c56` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ CI + Observe + Validate success; VM pull match; images `services=none`; runtime Argo **Degraded** (`bnpi-pats-api-db-init` Failed).
 - Observe success GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ live pod SHA. `/health` has no `buildSha`. Nested Cloud Run/Firebase workflows do not run on this repo.
 
 
@@ -450,7 +450,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Operator: improve without breaking, then **do it** (push `develop`). VM ansible-pull will pick up the SHA.
 - CI adds `zkteco` unittest + `ansible` syntax-check. Existing jobs unchanged.
 - Observe still succeeds on `services=none`. Summary now prints VM description; public URL GET is informational (`continue-on-error`).
-- Reporter descriptions add `outcome=pulled|rebuilt|not_rebuilt|pull_only` and match `hris-api-local:develop` (not db-init substring). Still never posts `failure`.
+- Reporter descriptions add `outcome=pulled|rebuilt|not_rebuilt|pull_only` and match `bnpi-pats-api-local:develop` (not db-init substring). Still never posts `failure`.
 - Emp-app skip stays green, with a GitHub notice that it is not test proof.
 
 
@@ -499,7 +499,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Operator: audit DevOps with 10 subagents. Audit only (no playbook/workflow/Job edits).
 - Tip SHA `37b443a`: CI+Validate green; Observe waiting VM reporter; last apply `885c331` `services=none`.
-- Runtime Argo still Synced/Degraded on failed `hris-api-db-init` (dev/uat/prod).
+- Runtime Argo still Synced/Degraded on failed `bnpi-pats-api-db-init` (dev/uat/prod).
 - Canonical: `.wwg/reports/devops-audit-20260820.md`.
 
 
@@ -546,11 +546,11 @@ unHikvisionTimeSyncCore with the per-device route.
 - One binary, same CLI/JSONL. Wrapper syncs whole include/src trees.
 
 
-## Latest Task Addendum - 2026-08-19 HRIS Hikvision Update time button
+## Latest Task Addendum - 2026-08-19 BNPI PATS Hikvision Update time button
 
-- Operator: add an HRIS button that does the Hikvision time update (Manila). Then: do not stop; check/update must use SDK.
+- Operator: add an BNPI PATS button that does the Hikvision time update (Manila). Then: do not stop; check/update must use SDK.
 - Check + update now go through **HCNetSDK STDXML** first: C++ `--get-time` / `--set-time` via `NET_DVR_STDXMLConfig` GET/PUT `/ISAPI/System/time` (same SDK session as FP/face).
-- HRIS: `runHikvisionDeviceTimeOnVm` then ISAPI HTTP fallback if VM SDK command cannot arm.
+- BNPI PATS: `runHikvisionDeviceTimeOnVm` then ISAPI HTTP fallback if VM SDK command cannot arm.
 - API: `POST /api/device/:id/time-sync` (`execute=false` default). Response `transport=sdk_stdxml|isapi_http`.
 - UI: Preview time GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ confirm Update time. Modal shows check path.
 - Does not enable NTP. Listener binary on the VM must rebuild from this C++ before SDK path is live.
@@ -577,14 +577,14 @@ unHikvisionTimeSyncCore with the per-device route.
 - Operator: add hourly on the payroll snapshot; auto-compute; document; do not add other features.
 - Field: `EmployeePayroll.hourlySalary` Float default 0. Generate/preview persist via `computeEmployeePayrollHourlySalarySnapshot`.
 - Employee still has only `basicSalary` + `currency` + `payFrequency`. No hire/edit hourly. No Sheet2 Hourly column.
-- Tests: `hris-api/tests/employee-payroll-hourly-salary-snapshot.spec.ts` (5 green).
+- Tests: `bnpi-pats-api/tests/employee-payroll-hourly-salary-snapshot.spec.ts` (5 green).
 - Canonical: `.wwg/reports/employee-payroll-hourly-salary-snapshot-20260819.md`.
 
 
 ## Latest Task Addendum - 2026-08-19 Hikvision bio time / Manila sync research
 
 - Operator: can Hikvision biometric terminals set time manually, and can we sync all devices together to Manila time?
-- Verdict: **Yes** on the device (panel / web / Hik-Connect / iVMS Batch Time Sync / ISAPI PUT / NTP). **HRIS does not SET** today GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ GET `/ISAPI/System/time` only.
+- Verdict: **Yes** on the device (panel / web / Hik-Connect / iVMS Batch Time Sync / ISAPI PUT / NTP). **BNPI PATS does not SET** today GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ GET `/ISAPI/System/time` only.
 - Manila mapping: device `timeZone=CST-8:00:00`, DST off, `localTime` `+08:00`. Same offset as `Asia/Manila`. Do not send IANA names to the panel.
 - Live BNPI XML (stale 2026-08-17 and earlier): always `timeMode=manual`. Clocks already +08 but **not** fleet-NTP; B/D/E differed by ~40s. TodayGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œs clocks `NEEDS_CONFIRMATION` (localhost:3001 down; VM ping false).
 - Attendance uses **device punch time**, not `receivedAt`. Aligning clocks is required for Time In/Out.
@@ -595,7 +595,7 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-08-19 hourlySalary backfill script
 
 - Operator: backfill current EmployeePayroll rows for the new `hourlySalary` snapshot. Dry-run default. Does **not** change payroll computation.
-- Commands (`hris-api`):
+- Commands (`bnpi-pats-api`):
   - `npm run backfill:employee-payroll-hourly-salary` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ dry-run (default; no writes)
   - `npm run backfill:employee-payroll-hourly-salary:execute` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ write `hourlySalary` only
 - Derive: prefer metadata `hourlyRate`, else `dailySalary` (or metadata daily) ++ `workingHoursPerDay` (BNPI 313 uses 8). Same helper as generate: `computeEmployeePayrollHourlySalarySnapshot`.
@@ -617,22 +617,22 @@ unHikvisionTimeSyncCore with the per-device route.
 - Operator: git was not interactively logged in for `infra` (no `gh`, no `~/.git-credentials`; ansible-pull still used Argo secret).
 - Fix: `infra` git `credential.helper=store` from `argocd/project-truth-repo-creds` (`x-access-token` / GitHub `g-zenr`). Mode 0600.
 - Proof: `git ls-remote` as `infra` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `6f973877ca13` `refs/heads/develop`.
-- LAN `ssh infra@10.184.37.19` still times out from this PC (Wi-Fi `192.168.1.26`, no `10.184.37.x`). Use `ssh project-truth-hris`.
+- LAN `ssh infra@10.184.37.19` still times out from this PC (Wi-Fi `192.168.1.26`, no `10.184.37.x`). Use `ssh project-truth-bnpi-pats`.
 - Evidence: `.runtime/vm-git-login-20260819/infra-git-login-proof.txt`.
 
 
 ## Latest Task Addendum - 2026-08-19 Promote attendance request UI to develop
 
-- Local Vite on `bryan-task` showed **Request time** / attendance request. Public DEV `https://dev.bnpi-hris.tech` did not.
+- Local Vite on `bryan-task` showed **Request time** / attendance request. Public DEV `https://dev.bnpi-pats.tech` did not.
 - Cause: GitOps DEV serves `develop` `b409ca4`. The attendance request work lived only on `bryan-task` `3bad2d1`. Merging `develop` into `bryan-task` does not deploy the feature.
 - Layout (Today left / log right) was still uncommitted local CSS. Promote the committed attendance request + related API/UI from `3bad2d1` onto `develop`.
 
 
 ## Latest Task Addendum - 2026-08-19 CI checks per deploy type
 
-- Operator: GitHub Actions should show checks per deployment type (hris-app, hris-api, others).
-- Workflow **CI**: jobs `hris-api`, `hris-app`, `hris-emp-app`, `hikvision`, `callback-outbox`, `gitops`.
-- Observe VM GitOps deploy is now a matrix: `ansible-pull`, `hris-api`, `hris-app`, `hris-emp-app`, `callback-outbox`.
+- Operator: GitHub Actions should show checks per deployment type (bnpi-pats-app, bnpi-pats-api, others).
+- Workflow **CI**: jobs `bnpi-pats-api`, `bnpi-pats-app`, `bnpi-pats-emp-app`, `hikvision`, `callback-outbox`, `gitops`.
+- Observe VM GitOps deploy is now a matrix: `ansible-pull`, `bnpi-pats-api`, `bnpi-pats-app`, `bnpi-pats-emp-app`, `callback-outbox`.
 - VM reporter posts success per GitHub environment. Docs-only SHA reports image jobs as not rebuilt.
 
 
@@ -646,9 +646,9 @@ unHikvisionTimeSyncCore with the per-device route.
 
 ## Latest Task Addendum - 2026-08-19 DEV pull/push GitOps operator report
 
-- Operator asked how to pull latest (VM / `https://dev.bnpi-hris.tech` / `develop`) and how a push to `develop` shows on DEV.
-- Report: `audits/dev-bnpi-hris-pull-push-gitops-2026-08-19.md`. Indexed in `audits/README.md`.
-- Truth: do not pull code from the website. Pull `origin/develop`. DEV updates only after `git push origin develop` and VM ansible-pull rebuilds `hris-*-local:develop`.
+- Operator asked how to pull latest (VM / `https://dev.bnpi-pats.tech` / `develop`) and how a push to `develop` shows on DEV.
+- Report: `audits/dev-bnpi-pats-pull-push-gitops-2026-08-19.md`. Indexed in `audits/README.md`.
+- Truth: do not pull code from the website. Pull `origin/develop`. DEV updates only after `git push origin develop` and VM ansible-pull rebuilds `bnpi-pats-*-local:develop`.
 
 
 ## Latest Task Addendum - 2026-08-19 Period overview totals, not duplicate days
@@ -843,7 +843,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Cause: GET copied stale stored UNKNOWN taxonomy; payload lacked evidenceSource on old rows.
 - Fix: GET reclassifies stale UNKNOWN to TAP for major=5 punches; stamp SDK_CALLBACK + direct evidence; UI prefers live taxonomy; callback matches employee by pad/deviceEmpId/employeeId and links DeviceUser on next tap.
 - Live local GET `cmsr688py002xvxwwttxhdsal` now `ATTENDANCE` / `TAP` / `SDK_CALLBACK` / `direct=true`.
-- DeviceUser 10 on B/D/E linked ACTIVE to `00010` Zen Andrei. Did not auto-link the other 50 unmatched (no HRIS employee).
+- DeviceUser 10 on B/D/E linked ACTIVE to `00010` Zen Andrei. Did not auto-link the other 50 unmatched (no BNPI PATS employee).
 - Full write-up: `.wwg/reports/device-event-tap-display-20260817.md`.
 
 
@@ -946,7 +946,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: UI display of already-stored ISAPI Select Status. No pairing. No C++. **Do not push.**
 - Device Events saved/live rows show **Device status** from `AcsEventInfo.attendanceStatus` + `label`.
 - Missing field = `Not sent` / `Not on wire`. Device sent `undefined` = `Unset`.
-- Helper: `hris-app/app/lib/hikvision-panel-select-status.ts`.
+- Helper: `bnpi-pats-app/app/lib/hikvision-panel-select-status.ts`.
 - Time In/Out still first/later punch.
 
 
@@ -963,7 +963,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: API + UI display. No pairing. No C++. **Do not push.**
 - `GET /api/device/events` now returns `panelSelectStatus` from payload/AcsEventInfo.
-- Live `POST .../acs-events` InfoList items get `hrisPanelSelectStatus`.
+- Live `POST .../acs-events` InfoList items get `bnpiPatsPanelSelectStatus`.
 - Callback/sync persist stamps `payload.panelSelectStatus` when present.
 - Pairing still first/later punch.
 
@@ -973,7 +973,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: pairing fix after live status copy.
 - `selectHikvisionPunchPair` mode `panel`: Time In = earliest Check In, Time Out = latest Check Out. Later Check In is not out.
 - Unsigned punches keep first/last pairing.
-- Spec + REC-20260813-HIKVISION-SELECT-STATUS-HRIS-MAP Implemented.
+- Spec + REC-20260813-HIKVISION-SELECT-STATUS-BNPI-PATS-MAP Implemented.
 
 
 ## Latest Task Addendum - 2026-08-13 Select Status copy (ready to push)
@@ -988,7 +988,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: deep audit only (no mapping implementation).
 - Operator: Hikvision **Select Status** (Check In / Out, Break In / Out, Overtime In / Out); users Check In on all devices; suspect status is not on the mapped device response.
-- Result: live SDK callback never sends it; ISAPI Sync can store unused `AcsEventInfo.attendanceStatus`; HRIS pairs first tap = in, later = out.
+- Result: live SDK callback never sends it; ISAPI Sync can store unused `AcsEventInfo.attendanceStatus`; BNPI PATS pairs first tap = in, later = out.
 - Live DEV residual: 689 nested statuses (678 checkIn, 6 checkOut, 2 undefined, 1 overtimeOut, 1 breakOut, 1 breakIn).
 - Documented (not committed): spec `docs/HIKVISION_SELECT_STATUS_MAPPING.md`, WWG report `.wwg/reports/hikvision-select-status-audit-20260813.md`, architecture `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`.
 - Evidence: `.runtime/hikvision-status-audit-20260813/` (10 agent reports + lead synthesis).
@@ -1012,7 +1012,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Listener setup **does** use vendor HCNetSDK 6.1.9.48 on the VM.
 - That header **has** `NET_DVR_ACS_EVENT_INFO_EXTEND.byAttendanceStatus` (0GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ6 = panel six).
 - C++ already opens that struct for `byEmployeeNo` and does not copy the status byte.
-- HRIS setup does not configure panel T&A mode.
+- BNPI PATS setup does not configure panel T&A mode.
 - Evidence: `.runtime/hikvision-status-audit-20260813/16-vendor-sdk-setup-investigation.md`.
 
 
@@ -1030,8 +1030,8 @@ unHikvisionTimeSyncCore with the per-device route.
      row `timesheetStatus` / `isPayrollReady` / readiness labels.
   4. UI badges + copy; Run Preview enabled when computable &gt; 0 even if payable=0.
 - Start Payroll / generate path **unchanged** (APPROVED only).
-- Tests: `hris-api/tests/payroll-preview-readiness.spec.ts` (mocha 4);
-  `hris-app/.../payroll-preview-modal.test.ts` (6).
+- Tests: `bnpi-pats-api/tests/payroll-preview-readiness.spec.ts` (mocha 4);
+  `bnpi-pats-app/.../payroll-preview-modal.test.ts` (6).
 - Live: `PP-20260711-20260726` ready 641 / preview 834 /
   `estimatedIncludesNonApproved=true`.
 - Evidence: `.runtime/preview-non-submitted-20260812/`.
@@ -1176,7 +1176,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Root cause: button used `bg-emerald-700` / `hover:bg-emerald-800`, which are
   not present in the compiled Tailwind CSS for this app GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ transparent
   background + white text = invisible. DOM still had the button.
-- Fix: `hris-app/.../run-payroll-template.tsx` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ use `bg-emerald-600
+- Fix: `bnpi-pats-app/.../run-payroll-template.tsx` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ use `bg-emerald-600
   hover:bg-emerald-500` (proven to resolve) for View Payroll Report and current
   period month chip.
 - Proof: Playwright `.runtime/view-payroll-btn-*/after-fix.{png,json}` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
@@ -1201,9 +1201,9 @@ unHikvisionTimeSyncCore with the per-device route.
 - Finish line: Run Payroll cannot stack open-horizon + period-scoped same COMCODE;
   re-import of period-scoped mass upload supersedes open-horizon peers.
 - Code:
-  - `hris-api/helper/payroll-benefit-source.helper.ts` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
+  - `bnpi-pats-api/helper/payroll-benefit-source.helper.ts` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
     `preferPeriodScopedPayrollBenefitSources` in `resolvePayrollBenefitSources`
-  - `hris-api/app/migration/bnpi-mass-upload-import.service.ts` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
+  - `bnpi-pats-api/app/migration/bnpi-mass-upload-import.service.ts` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ
     `supersedeOpenHorizonBenefitsForPeriodScoped` after compensation/deduction benefit write
 - Tests: payroll-benefit-source + mass-upload summary specs green (stack + supersede cases).
 - Operator note: existing dirty open-horizon rows still need one regenerate (resolve now
@@ -1221,7 +1221,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - `GET /api/migration/dm3/mass-upload-imports` list/detail/CSV
   - UI: keep modal open with result tables; history table on DM3 page
 - Local runtime: `npm run dev:local` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `.env.local-clone` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ container
-  `hris-local-dev-clone` port `5433` (not shared VM `15433`/`55435`).
+  `bnpi-pats-local-dev-clone` port `5433` (not shared VM `15433`/`55435`).
 - Proof: import of 2 failing rows returned per-row messages + `importLogId`;
   history listed log linked to run `cmryj0vpm00huvgaks2t2js57`.
 - Tests: `bnpi-mass-upload-import.helper.spec.ts` +
@@ -1236,7 +1236,7 @@ unHikvisionTimeSyncCore with the per-device route.
   create GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ release/cancel; manual + `.xlsx` mass upload; separate employee payslips
   with Special Payroll badge; regular payroll generation unchanged.
 - Code surfaces:
-  - API: `hris-api/app/specialPayroll/*`, helper/zod, additive SQL migration
+  - API: `bnpi-pats-api/app/specialPayroll/*`, helper/zod, additive SQL migration
     `20260729_add_special_payroll_tables.sql`
   - App: Special Payroll button/modal on Run Payroll, history chip, employee
     payroll history badge + `/employee/:id/special-payslip/:payslipId`
@@ -1249,7 +1249,7 @@ unHikvisionTimeSyncCore with the per-device route.
 # Latest Task Addendum - 2026-07-28 SDK Device-User Export / Import
 
 - Status: `PARTIALLY_FULFILLED`; implementation and source export proof are complete, while physical import is gated on the user's future compatible target device.
-- Existing schema/endpoints remain in use. CSV/Excel now contain exactly seven SDK columns, package users omit duplicate HRIS identity/link data, and model/firmware are read once into device-manifest metadata.
+- Existing schema/endpoints remain in use. CSV/Excel now contain exactly seven SDK columns, package users omit duplicate BNPI PATS identity/link data, and model/firmware are read once into device-manifest metadata.
 - Fresh Main Entrance Device B proof confirmed 874 unique IDs and 0 duplicates. Protected row validation decoded 1,634 fingerprint slots and 313 faces across all 874 rows with 0 invalid rows.
 - Explicit residuals: fingerprint `not_enrolled=46`, `missing_raw_blob=9`; face `not_enrolled=68`, `missing_raw_blob=493`.
 - Main Entrance A import preview returned 0 new / 873 match / 1 conflict. All five inventory-readable Main Entrance panels already have 874 users; offline C/TEST A/TEST B cannot pass backup/read gates. No physical write was started.
@@ -1279,11 +1279,11 @@ unHikvisionTimeSyncCore with the per-device route.
 # Latest Task Addendum - 2026-07-28 DEV/UAT/PROD Employee Portal Recovery
 
 - Status: `FULFILLED`; evidence root `.runtime/employee-portals-recovery-20260728-122800/`.
-- Root cause: all three `hris-emp-app` pods were `ErrImageNeverPull`; the employee image was absent from K3s, leaving host ports `3300/3310/3320` closed and causing the named Cloudflare connector's exact origin dial `connection refused` errors.
+- Root cause: all three `bnpi-pats-emp-app` pods were `ErrImageNeverPull`; the employee image was absent from K3s, leaving host ports `3300/3310/3320` closed and causing the named Cloudflare connector's exact origin dial `connection refused` errors.
 - Durable repair: governed VM ansible-pull now detects, builds, imports, and restarts the employee image in PROD/DEV/UAT; GitOps image tags and promotion coverage include the employee app; public unauthenticated employee calendar/birthday routes are exact-match guarded; biometric kiosk polling is fail-closed unless explicitly enabled.
 - Runtime schema drift in the three employee databases was repaired only after fresh full backups. PROD/DEV/UAT now expose the required benefit and payroll columns.
 - Final proof: all three VM-local origins, paired APIs, public login pages, same-host API routes, valid linked-employee logins, authenticated refresh, and logout pass. Playwright recorded zero unexpected page, console, request, CORS, mixed-content, or HTTP 5xx errors.
-- The VM-managed Cloudflare service remained enabled and active. All six Argo applications were `Synced/Healthy` at the deployed revision. Direct LAN SSH/HTTP from this Windows host timed out; the documented `ssh project-truth-hris` fallback passed and all VM-local plus public paths were independently proven.
+- The VM-managed Cloudflare service remained enabled and active. All six Argo applications were `Synced/Healthy` at the deployed revision. Direct LAN SSH/HTTP from this Windows host timed out; the documented `ssh project-truth-bnpi-pats` fallback passed and all VM-local plus public paths were independently proven.
 
 
 
@@ -1383,7 +1383,7 @@ unHikvisionTimeSyncCore with the per-device route.
     OT truth (`validate-bandai-payroll-source-trace.ts`).
 - Docs/UI truth sync (kept OT upload): `docs/dm-migration-workflow.md`,
   `docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md`, DM4 copy in
-  `hris-app/.../migration.tsx`.
+  `bnpi-pats-app/.../migration.tsx`.
 
 
 ## Latest Task Addendum - 2026-07-27 DM3 Upload employee databank
@@ -1535,7 +1535,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Root cause: Windows `npm run dev` and the active local SSH tunnel mapped only `.20-.23`. `.24/.25` therefore bypassed `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP`, fell back to direct Windows routing, and rendered offline even though the VM and K3s runtime could reach them.
 - Repair: default tunnel/predev/restart labels and the tunnel contract now cover `.20-.25`. The regenerated tunnel exposes all 18 HTTP/HTTPS/SDK forwards and local API reloads the six-device map.
 - Proof: VM `nc` and ISAPI unauthenticated probes reached all six; K3s DEV quick health reported all six online; local quick health reported all six online via `env_tunnel_map`; full authenticated `.24/.25` health returned `systemTime=readable` and `deviceApi=online`; Playwright found every address and six online API responses. Focused test passed 11/11, API typecheck passed, Node syntax and PowerShell parse passed.
-- Public boundary: LAN app/API `10.184.37.19:3100/3101` return 200 and `cloudflared-bnpi-hris.service` remains active, but public `bnpi-hris.tech` hosts return Cloudflare 503/TLS resets. Existing QUIC plus additive HTTP/2 connector probes from VM source `.19` and `.78` all failed at Cloudflare edge TLS/control streams. The named service was not stopped or reconfigured.
+- Public boundary: LAN app/API `10.184.37.19:3100/3101` return 200 and `cloudflared-bnpi-pats.service` remains active, but public `bnpi-pats.tech` hosts return Cloudflare 503/TLS resets. Existing QUIC plus additive HTTP/2 connector probes from VM source `.19` and `.78` all failed at Cloudflare edge TLS/control streams. The named service was not stopped or reconfigured.
 - Evidence root: `.runtime/hikvision-six-device-20260722-143712/`.
 
 
@@ -1548,7 +1548,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Focused Main A-D reread narrowed the LAN issue: `.runtime/merge-users-final-run-20260722-042955/fresh-main-a-d-plan-after-cd-unauthorized-20260722-151915/operator-summary.json` shows A/B/C read and Main Entrance D `Unauthorized`; separate D health proof `.runtime/merge-users-final-run-20260722-042955/device-d-health-20260722-152010/` shows D online with `userRead.count=744`, so the D plan failure is endpoint/path-specific or transient, not general reachability.
 - Live listener/progress truth: latest poll `.runtime/merge-users-final-run-20260722-042955/poll-loop-20260722-152326/operator-progress.json` shows `sdkState=receiving`, `callbacks=true`, `armed=true`, device summary `receiving=6`, and active SDK inventory reads from Main Entrance Device E `cmriu5ab102goi001x9o7nfct` through `totalMatches=740`. This is live listener/background SDK work, not the expired merge job.
 - Frontend listener modal polish/hardening: `events.tsx` now distinguishes callback receiving from armed/listening state and surfaces an `Active SDK work` strip parsed from real listener JSONL rows. Browser proof `.runtime/merge-users-final-run-20260722-042955/browser-listener-active-work-20260722-151819/operator-proof.json` shows the modal, raw log tail, `0 callbacks / 6 armed/listening / 0 login failed / SDK work active`, and `Active SDK work`.
-- Validation: `hris-api npx tsc --noEmit --pretty false --incremental false --listFiles false` passed; `hris-app npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` passed; targeted frontend ESLint for `events.tsx` and `enroll.tsx` passed with 0 errors and existing warnings only.
+- Validation: `bnpi-pats-api npx tsc --noEmit --pretty false --incremental false --listFiles false` passed; `bnpi-pats-app npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` passed; targeted frontend ESLint for `events.tsx` and `enroll.tsx` passed with 0 errors and existing warnings only.
 - Remaining gaps: no safe merge retry has been started; TEST A/B final reread remains blocked by fetch failures/TEST A SDK-login boundary, Main D plan path needs a clean reread after health proof, the API restarted during one A-D plan attempt, and listener logs show some invalid biometric reconcile retries with empty `sourceDeviceId`/`employeeNo` rejected by API 400. No SDK files were deleted and Cloudflare was not disabled.
 - Final non-mutating poll in this turn: `.runtime/merge-users-final-run-20260722-042955/fresh-main-a-d-plan-after-d-live-read-20260722-152629/operator-summary.json` still returned `validForFinalCounts=false`, `unionUsers=748`, `sourceRows=1435`, `plannedWrites=2244`, with Main Entrance D `Unauthorized` and Main Entrance B `Unauthorized`. This reinforces the no-write boundary: listener receiving does not equal merge-plan final-count readiness.
 
@@ -1562,7 +1562,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Live progress proof is saved continuously under `.runtime/merge-users-final-run-20260722-042955/active-job-77df35c4-6c9b-4a68-9201-8ffc71fcb14b/` (`poll-*.json` and `polls-robust.jsonl`). Polls expose current employee, source, target(s), credential stages, backend stage, `updatedAt`, applied writes, and failed writes.
 - Current observed trajectory during this handoff window: job advanced through employees including `469`, `1340`, `7`, `9`, `927`, `1615`, and `11`; failures increased from timeout/circuit-skip paths such as `Main Entrance Device E -> Main Entrance Device C/F`. Do not hide these as success.
 - Frontend polish/hardening: running merge modal now shows a `Live copy now` block from backend `progressEvents` with Employee now, Source, Targets, Credential stage, and a `Latest backend events` list. Browser proof `.runtime/merge-users-final-run-20260722-042955/browser-merge-live-work-20260722-1545/operator-proof.json` proves the modal shows running job state, locked scope, selected unique IDs, peer copy attempts, live event rows, and no editable pre-run review controls.
-- Validation after patches: `hris-app npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` passed; targeted frontend ESLint for `events.tsx`/`enroll.tsx` passed with 0 errors and existing warnings; `hris-api npx tsc --noEmit --pretty false --incremental false --listFiles false` passed after literal biometric-status hardening in `device.controller.ts`.
+- Validation after patches: `bnpi-pats-app npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` passed; targeted frontend ESLint for `events.tsx`/`enroll.tsx` passed with 0 errors and existing warnings; `bnpi-pats-api npx tsc --noEmit --pretty false --incremental false --listFiles false` passed after literal biometric-status hardening in `device.controller.ts`.
 - Runtime health: API health stayed green, DB forward was checked on `127.0.0.1:55435`, and Cloudflare was not disabled. A transient watcher 503 and one DB-forward blip were recorded; subsequent polls recovered.
 - Finish line remains open: keep polling until job terminal, then run fresh non-mutating reread/merge plan for the same devices and document remaining conflicts, missing users, fingerprint gaps, face gaps, failed rows, and any no-raw/device limitations without invented completion.
 
@@ -1614,8 +1614,8 @@ unHikvisionTimeSyncCore with the per-device route.
 - Job/run truth:
   - Fast retry job `8498a8cf-81a8-42b1-b836-6f77ca9323ca` processed `2813/2813` observed writes before terminal `failed` at reread/finalize with `Cannot read properties of undefined (reading 'counts')`.
   - Last honest live processing evidence before failure showed `successfulWrites=366` and `failedWrites=2447`; the terminal failed response collapsed failed writes and is not copy-row truth.
-  - Fresh six-device plan after restart returned `852` unique IDs, `3715` source/device records, `needsDecisionIds=0`, `4260` all planned writes, `1235` conflicts, `1397` missing, and `51` missing HRIS links. This proves the original selected Needs-decision scope was consumed/resolved, but it does not prove all devices are synced.
-  - Fresh four-device plan for the VM-reachable `.20/.21/.22/.23` devices returned `687` unique IDs, `2748` source/device records, `needsDecisionIds=0`, `2061` all planned writes, `952` conflicts, `0` missing, and `47` missing HRIS links.
+  - Fresh six-device plan after restart returned `852` unique IDs, `3715` source/device records, `needsDecisionIds=0`, `4260` all planned writes, `1235` conflicts, `1397` missing, and `51` missing BNPI PATS links. This proves the original selected Needs-decision scope was consumed/resolved, but it does not prove all devices are synced.
+  - Fresh four-device plan for the VM-reachable `.20/.21/.22/.23` devices returned `687` unique IDs, `2748` source/device records, `needsDecisionIds=0`, `2061` all planned writes, `952` conflicts, `0` missing, and `47` missing BNPI PATS links.
 - Backend repair:
   - Reread finalization now accepts both plan shapes (`reread.counts` or `reread.plan.counts`) instead of crashing on `counts`.
   - Merge job failure catch now preserves latest processed/success/failed write counts instead of resetting to one failed row.
@@ -1632,10 +1632,10 @@ unHikvisionTimeSyncCore with the per-device route.
   - VM physical SDK proof: `vm-physical-sdk-preflight-simple-20260722-075847.json` (`.20-.23` OK, TEST A/B `.109/.110` failed).
   - Browser proof: `browser-merge-monitor-proof/summary.json` and `merge-monitor-proof.png`.
 - Validation:
-  - `hris-api`: `npx.cmd tsc --noEmit --pretty false --incremental false --listFiles false` passed.
-  - `hris-api`: `npx.cmd tsx node_modules/mocha/bin/mocha --no-config tests/hikvision-biometric-sync-contract.spec.ts` passed (`16` passing).
-  - `hris-app`: `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` passed.
-  - `hris-app`: `npx.cmd eslint app/routes/admin/devices/enroll.tsx --max-warnings=999` had `0` errors with existing warnings only.
+  - `bnpi-pats-api`: `npx.cmd tsc --noEmit --pretty false --incremental false --listFiles false` passed.
+  - `bnpi-pats-api`: `npx.cmd tsx node_modules/mocha/bin/mocha --no-config tests/hikvision-biometric-sync-contract.spec.ts` passed (`16` passing).
+  - `bnpi-pats-app`: `npm exec -- vitest run app/routes/admin/devices/device-user-ui-contract.test.ts` passed.
+  - `bnpi-pats-app`: `npx.cmd eslint app/routes/admin/devices/enroll.tsx --max-warnings=999` had `0` errors with existing warnings only.
 - Boundary:
   - Do not claim all `852` unique IDs are fully synced.
   - Do not claim fingerprint/face bytes are fixed from counts.
@@ -1685,7 +1685,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - `5175` app **LISTEN** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ frontend up alone does not equal working login.
   - `55435` DEV DB forward **CLOSED** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Prisma cannot reach K3s DEV Postgres.
   - Hikvision tunnel ports `10080/10081/18000` **CLOSED** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ local device health via tunnel map cannot be green.
-  - Host Wi-Fi `192.168.1.110`; `ping 10.184.37.19` **False** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ use `ssh project-truth-hris` for DB/device tunnels, not direct LAN.
+  - Host Wi-Fi `192.168.1.110`; `ping 10.184.37.19` **False** GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ use `ssh project-truth-bnpi-pats` for DB/device tunnels, not direct LAN.
 - **Why login fails (causal chain, evidence-backed):**
   1. Login requires API on `:3001` + Prisma GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `DATABASE_URL` `@127.0.0.1:55435`.
   2. When `55435` is down, login returns 500 with `Can't reach database server at 127.0.0.1:55435` (seen in `.runtime/local-api-watch/latest.log`).
@@ -1708,22 +1708,22 @@ unHikvisionTimeSyncCore with the per-device route.
   - `.20/.21/.22/.23` Hikvision host tunnels stayed active; Cloudflare was not disabled.
 - Merge/run truth:
   - Original job `a9d3acf7-7dee-406a-9198-c413fbd699d4` is not pollable after API restart, so completion was not invented.
-  - Current valid four-device reread for `.20/.21/.22/.23`: `validForFinalCounts=true`, `unionUsers=698`, `sourceRows=2759`, `dedupedDeviceRecords=2759`, `conflicts=862`, `missing=33`, `missingHrisLinks=47`, `plannedWrites=2094`.
+  - Current valid four-device reread for `.20/.21/.22/.23`: `validForFinalCounts=true`, `unionUsers=698`, `sourceRows=2759`, `dedupedDeviceRecords=2759`, `conflicts=862`, `missing=33`, `missingBnpiPatsLinks=47`, `plannedWrites=2094`.
   - Current six-device reread after TEST A/B host-local forward remains `validForFinalCounts=false`; TEST A and TEST B still fail HTTP user reread with `fetch failed`, and one run also saw Main Entrance Device A `Unauthorized`. These six-device counts are diagnostic only and must not be used as final truth.
   - TEST B isolated peer copy for employee `9` succeeded earlier with `fingerprintCount=2`, `faceCount=0`; TEST A clean retry remains deterministic SDK login failure `lastError=9`.
 - Listener/UI truth:
   - Backend listener endpoint currently reports Main Entrance Device B armed and TEST A login failed on SDK `58000`.
-  - The listener modal now waits long enough for the VM status call and distinguishes HRIS post failure from SDK login failure. Browser proof shows `0 receiving / 1 armed / 1 login failed`, Main B `Armed, waiting for tap`, TEST A `Login failed (9)`, and `HRIS callback post failed after reading 10.184.37.20`.
+  - The listener modal now waits long enough for the VM status call and distinguishes BNPI PATS post failure from SDK login failure. Browser proof shows `0 receiving / 1 armed / 1 login failed`, Main B `Armed, waiting for tap`, TEST A `Login failed (9)`, and `BNPI PATS callback post failed after reading 10.184.37.20`.
 - Evidence:
   - Browser: `.runtime/merge-users-final-run-20260722-042955/browser-listener-modal-live-20260722-145705/`.
   - Valid four-device plan: `.runtime/merge-users-final-run-20260722-042955/fresh-four-device-plan-current-20260722-144103/`.
   - Invalid six-device diagnostic plan: `.runtime/merge-users-final-run-20260722-042955/fresh-six-device-plan-after-host-forward-20260722-143756/`.
   - TEST A/B host-local forward proof: `.runtime/merge-users-final-run-20260722-042955/testab-host-local-forward-20260722-143736/`.
 - Validation:
-  - `hris-api`: typecheck passed.
-  - `hris-api`: Hikvision biometric sync contract passed (`16` passing).
-  - `hris-app`: Device Users UI contract passed.
-  - `hris-app`: targeted ESLint for `events.tsx` and `enroll.tsx` exited `0` with existing warnings only.
+  - `bnpi-pats-api`: typecheck passed.
+  - `bnpi-pats-api`: Hikvision biometric sync contract passed (`16` passing).
+  - `bnpi-pats-app`: Device Users UI contract passed.
+  - `bnpi-pats-app`: targeted ESLint for `events.tsx` and `enroll.tsx` exited `0` with existing warnings only.
 - Boundary:
   - Do not claim all `852` or current six-device unique IDs are fully synced.
   - Do not claim fingerprint/face bytes are repaired from counts alone.
@@ -1734,10 +1734,10 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: mixed live runtime repair, admin UX/performance regression repair, predev/bridge guard repair, and same-environment browser/API validation.
 - Final status for this run: `FULFILLED_WITH_WARNINGS`.
-- Runtime truth: direct LAN SSH to `infra@10.184.37.19` timed out from the Windows host; fallback `ssh project-truth-hris` worked. `cloudflared-bnpi-hris.service` remained active. Fast VM reachability proved `.20`, `.21`, `.22`, `.23` reachable on device ports `80`, `443`, and `8000` (ICMP for `.20` missed once, but all required TCP ports were open).
+- Runtime truth: direct LAN SSH to `infra@10.184.37.19` timed out from the Windows host; fallback `ssh project-truth-bnpi-pats` worked. `cloudflared-bnpi-pats.service` remained active. Fast VM reachability proved `.20`, `.21`, `.22`, `.23` reachable on device ports `80`, `443`, and `8000` (ICMP for `.20` missed once, but all required TCP ports were open).
 - Bridge/predev truth: host-local Hikvision SSH tunnel now maps all four devices (`.20-.23`) to local HTTP/HTTPS/SDK ports, and the generated `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP` is a single-line env value. Local API quick health proved all four devices `online` through `env_tunnel_map`.
-- Sync Center UX repair: removed the Sync Center `Checking DB + live path` / Keep Ready / Prove-fix blocking strip from `enroll.tsx`. Sync Center preview now requests `quick=true`, treats skipped live source counts as neutral `saved_preview`, and does not block on DB/live/source readiness before rendering HRIS DeviceUser counts.
-- Device proof: API health final showed all four target devices online in 404ms-1777ms. Quick Sync Center preview returned target HRIS user counts `.20=459`, `.21=687`, `.22=416`, `.23=399` in 2454ms with neutral saved-preview status. Separate live source-count endpoint succeeded for all four in 1574ms-4784ms. Device Users endpoint returned saved totals for all four in about 2.5s-2.7s.
+- Sync Center UX repair: removed the Sync Center `Checking DB + live path` / Keep Ready / Prove-fix blocking strip from `enroll.tsx`. Sync Center preview now requests `quick=true`, treats skipped live source counts as neutral `saved_preview`, and does not block on DB/live/source readiness before rendering BNPI PATS DeviceUser counts.
+- Device proof: API health final showed all four target devices online in 404ms-1777ms. Quick Sync Center preview returned target BNPI PATS user counts `.20=459`, `.21=687`, `.22=416`, `.23=399` in 2454ms with neutral saved-preview status. Separate live source-count endpoint succeeded for all four in 1574ms-4784ms. Device Users endpoint returned saved totals for all four in about 2.5s-2.7s.
 - Listener proof: local API listener endpoint returned running/armed/receiving overall with four SDK device rows; `.20` was receiving and `.21-.23` were armed.
 - Browser proof: Playwright against `http://127.0.0.1:5175` proved `/admin/configuration/devices`, Sync Center, and Device Users visible for `.20-.23`; no `Checking DB + live path`, `Prove / fix now`, or `Keep ready ON` text was present. Network trace showed `sync-preview?quick=true`, quick per-device health, and listener status; screenshots and trace are under `.runtime/sync-center-four-hikvision-20260721-090712/`.
 - Validation: backend focused contracts passed 17/17; frontend focused Sync Center/Device Users contract passed 1/1; API typecheck passed. Frontend `typecheck:test` still fails outside touched device scope at `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)`, already covered by existing recommendation `REC-20260706-TEST-TYPECHECK-MOCKS`.
@@ -1749,10 +1749,10 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: mixed admin runtime repair, Hikvision listener/device-event proof, API/UI validation, and focused code repair.
 - Final status for this run: `GREEN_WITH_BOUNDARY`.
-- Runtime truth: direct LAN SSH to `infra@10.184.37.19` timed out from the Windows host, but fallback `ssh project-truth-hris` worked. `cloudflared-bnpi-hris.service` stayed active. VM reverse/API ports `53001`, `59000`, and `59443` were proven listening.
+- Runtime truth: direct LAN SSH to `infra@10.184.37.19` timed out from the Windows host, but fallback `ssh project-truth-bnpi-pats` worked. `cloudflared-bnpi-pats.service` stayed active. VM reverse/API ports `53001`, `59000`, and `59443` were proven listening.
 - Listener truth: `project-truth-hikvision-hot-reload-listener.service` is active/running with PID `2912473`. Final logs show four intended Hikvision devices A/B/C/D logged in, SDK-armed, and free of unhandled login failures. Final UI/API state is truthful `Ready for tap proof` after callback freshness aged out.
-- Callback truth: HRIS post path through `http://127.0.0.1:53001` is proven by successful `hikvision_callback_post_result` and `hris_contract_post ok=true` logs. Fresh physical tap proof remains the boundary for changing quiet devices from armed to receiving.
-- Code truth: `hris-api/app/device/device.controller.ts` restored `summaryScope=facets` handling for saved Device Events facet counts. The VM listener source/binary contains a session-list concurrency repair, but this checkout has no tracked C++ diff for `vendor/hikvision-linux/hikvision_biometric_service.cpp`; review durable source promotion before claiming repo-level C++ completion.
+- Callback truth: BNPI PATS post path through `http://127.0.0.1:53001` is proven by successful `hikvision_callback_post_result` and `bnpi_pats_contract_post ok=true` logs. Fresh physical tap proof remains the boundary for changing quiet devices from armed to receiving.
+- Code truth: `bnpi-pats-api/app/device/device.controller.ts` restored `summaryScope=facets` handling for saved Device Events facet counts. The VM listener source/binary contains a session-list concurrency repair, but this checkout has no tracked C++ diff for `vendor/hikvision-linux/hikvision_biometric_service.cpp`; review durable source promotion before claiming repo-level C++ completion.
 - Validation: API typecheck passed; focused API contracts passed 32/32; focused frontend contracts passed 31/31; live API/browser proof passed. Evidence root: `.runtime/overnight-hikvision-listener-green-20260721-065548/`.
 
 
@@ -1760,7 +1760,7 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: mixed payroll source-truth dry-run, local DEV data seeding, and reconciliation evidence. Status: `PARTIALLY_FULFILLED`.
 - Same testing lane was used: local API `127.0.0.1:3001`, app `127.0.0.1:5175`, and DEV Postgres through `127.0.0.1:55435`. Cloudflare tunnel/runtime controls were not touched.
-- Workbook intake completed for all provided new-cutoff XLSX files. Passworded HRIS Payroll Computation workbooks were decrypted with `officecrypto-tool` into the evidence folder after SheetJS/ExcelJS limitations were verified.
+- Workbook intake completed for all provided new-cutoff XLSX files. Passworded BNPI PATS Payroll Computation workbooks were decrypted with `officecrypto-tool` into the evidence folder after SheetJS/ExcelJS limitations were verified.
 - July 15 period (`2026-06-26` to `2026-07-10`) was seeded in DEV after dry-run proof:
   - Biometrics attendance: 9,811 importable employee-days; 517 grouped unmatched rows; applied into effective attendance.
   - Approved timesheets: 812 new timesheets and 9,603 lines created from seeded attendance; final period state had 832 approved timesheets and 9,860 effective lines.
@@ -1769,20 +1769,20 @@ unHikvisionTimeSyncCore with the per-device route.
 - July 15 comparison after attendance/OT/mass-upload seed still had severe source gaps, so payroll generation was intentionally not run. Summary: 859 workbook rows, 838 employees matched, 824 approved timesheets found, 0 exact/tolerance row matches; categories included `SOURCE_MISSING_APPROVED_OT=553`, `SOURCE_MISSING_ALLOWANCE=124`, `SOURCE_MISSING_MANUAL_ADJUSTMENT=73`, `SOURCE_MISSING_DEDUCTION_OR_LOAN=43`, `TIMESHEET_NOT_FOUND=14`, `EMPLOYEE_NOT_FOUND=21`, and `SOURCE_MISSING_STATUTORY_CONFIG=6`.
 - June 30 period (`2026-06-11` to `2026-06-25`) remained dry-run only: no biometrics workbook was provided, DEV has no attendance/timesheets for the period, and compensation code `INC` covered 816 rows / about PHP 9.9M without a governed payroll classification. No June 30 payroll generation was attempted.
 - July 30 period (`2026-07-11` to `2026-07-25`) has biometrics evidence only and no comparator workbook in `docs/new-cutoff`; payroll tally remains `NEEDS_CONFIRMATION`.
-- Validation: `hris-api npm run test:regression:payroll-source-truth` passed 52 specs; `hris-api npm run typecheck` passed.
+- Validation: `bnpi-pats-api npm run test:regression:payroll-source-truth` passed 52 specs; `bnpi-pats-api npm run typecheck` passed.
 - Evidence root: `.runtime/overnight-payroll-new-cutoff-20260721-144322/`.
 
 
 # Latest Task Addendum - 2026-07-21 Device C DeviceUser Gap Repair
 
 - Task mode: mixed backend truth repair, admin UI wording repair, real endpoint execution, and local API restart.
-- Root cause: bulk DeviceUser sync job planning built the decision matrix with `vendorUserCount: null`, so `needs_attention_only` trusted saved HRIS DeviceUser rows and skipped live source identity reads even when Sync Center preview proved Device C had `687` physical users and only `416` saved HRIS rows.
+- Root cause: bulk DeviceUser sync job planning built the decision matrix with `vendorUserCount: null`, so `needs_attention_only` trusted saved BNPI PATS DeviceUser rows and skipped live source identity reads even when Sync Center preview proved Device C had `687` physical users and only `416` saved BNPI PATS rows.
 - Backend repair: `buildDeviceUserSyncJobDecisionMatrix` now reads the fast Hikvision source user count before deciding whether missing DeviceUser records are zero. If the live device count shows missing source IDs, the job marks `sourceReadRequired=true` and includes `Reading source users needed for identity gaps`.
-- UI repair: live job cards no longer label failed raw capture attempts as honest remaining HRIS "raw gaps"; they show `Device no-data` / `raw reads failed` because Device C returned 404/no-data for face raw reads.
+- UI repair: live job cards no longer label failed raw capture attempts as honest remaining BNPI PATS "raw gaps"; they show `Device no-data` / `raw reads failed` because Device C returned 404/no-data for face raw reads.
 - Runtime proof: after API restart, dry-run for Device C showed `missingDeviceUsers=271`, `sourceReadRequired=true`, `sourceReadSkipped=false`. Real job `690dbe6d-c751-4dc3-9dff-f1f70738012a` completed with `totalSourceRecords=687`, `created=271`, `updated=416`, `linked=640`, `unmatched=46`.
-- Final endpoint proof: fresh `GET /api/device/sync-preview?deviceId=cmripjwbx00ewl001ihcke210&quick=true` returned Main Entrance Device C `fromDevice=687`, `savedInHris=687`, `gap=0`, `missingDeviceUsers=0`, `needsLink=46`, `alreadyPresent=641`.
+- Final endpoint proof: fresh `GET /api/device/sync-preview?deviceId=cmripjwbx00ewl001ihcke210&quick=true` returned Main Entrance Device C `fromDevice=687`, `savedInBnpiPats=687`, `gap=0`, `missingDeviceUsers=0`, `needsLink=46`, `alreadyPresent=641`.
 - Merge proof: fresh merge plan returned `687` unique IDs and no duplicate unique IDs for the checked scope.
-- Boundary: 118 face raw reads failed because the device returned 404/no-data. HRIS did not fabricate biometric bytes from counts.
+- Boundary: 118 face raw reads failed because the device returned 404/no-data. BNPI PATS did not fabricate biometric bytes from counts.
 - Evidence root: `.runtime/device-c-repaired-sync-20260721-1153/`.
 
 
@@ -1792,15 +1792,15 @@ unHikvisionTimeSyncCore with the per-device route.
 - Implemented:
   - Sync Center now builds a `syncDecisionMatrix` before starting a Device Users sync job.
   - The matrix classifies `missing_device_user_record`, `missing_employee_link`, `missing_raw_fingerprint_blob`, `missing_raw_face_blob`, `already_present`, `stale_count_only_or_live_no_data`, and `unsupported_by_sync`.
-  - Default Device Users sync mode is now `needs_attention_only`; the job skips source-device rereads when the matrix says saved HRIS state is enough, and raw-custody capture returns from saved state when no missing raw blobs exist.
+  - Default Device Users sync mode is now `needs_attention_only`; the job skips source-device rereads when the matrix says saved BNPI PATS state is enough, and raw-custody capture returns from saved state when no missing raw blobs exist.
   - The review modal shows `What Sync can fix`, bucket counts, bucket filters, selected fastest valid plan, and truthful stage copy.
 - Evidence:
   - API proof: `.runtime/sync-center-decision-matrix-20260721-110520/api-sync-preview-decision-matrix-final.json`.
   - Browser proof: `.runtime/sync-center-decision-matrix-20260721-110520/browser-sync-center-review-modal.json` and `.runtime/sync-center-decision-matrix-20260721-110520/browser-sync-center-review-modal.png`.
 - Validation:
-  - Backend contract: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` passed (`15` passing).
+  - Backend contract: `bnpi-pats-api/tests/hikvision-biometric-sync-contract.spec.ts` passed (`15` passing).
   - Backend typecheck: `npx tsc --noEmit --pretty false` passed.
-  - Frontend contract: `hris-app/app/routes/admin/devices/device-user-ui-contract.test.ts` passed (`1` passing).
+  - Frontend contract: `bnpi-pats-app/app/routes/admin/devices/device-user-ui-contract.test.ts` passed (`1` passing).
   - Frontend broad `tsconfig.test` typecheck still fails outside this scope at `app/routes/employee/dashboard/TimesheetsTab.test.tsx(54,46)`, covered by existing `REC-20260706-TEST-TYPECHECK-MOCKS`.
 - Recommendation capture: No new recommendations were identified.
 
@@ -1810,21 +1810,21 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: Mixed live runtime repair, native listener regression repair, and evidence closeout.
 - Evidence: `.runtime/hikvision-four-device-online-20260721-064751/`.
 - Runtime repaired:
-  - Canonical VM access used `ssh project-truth-hris` after direct LAN SSH to `10.184.37.19` timed out from the Windows host.
+  - Canonical VM access used `ssh project-truth-bnpi-pats` after direct LAN SSH to `10.184.37.19` timed out from the Windows host.
   - VM direct TCP to `10.184.37.20`, `.21`, `.22`, and `.23` passed on ports `80`, `443`, and `8000`; no extra device bridge was required for the VM listener.
   - Host local API reverse `VM 127.0.0.1:53001 -> Windows 127.0.0.1:3001` was restored; VM `/health` through `53001` returned healthy.
   - The managed `project-truth-hikvision-hot-reload-listener.service` was rebuilt/restarted after deploying the fixed native listener source.
 - Device proof:
-  - HRIS config contains the four target Hikvision rows only as saved addresses `10.184.37.20`, `.21`, `.22`, `.23`, all HTTPS `443` with SDK `8000`.
+  - BNPI PATS config contains the four target Hikvision rows only as saved addresses `10.184.37.20`, `.21`, `.22`, `.23`, all HTTPS `443` with SDK `8000`.
   - Final API health returned `online` for all four target devices using the local tunnel map while preserving saved addresses.
   - Final listener/readiness API returned green readiness and all four listener devices with `lastLoginOk=true`, `armed=true`, and `receivingCallbacks=true`.
   - Raw VM logs show fresh `sdk_login`, `sdk_alarm_arm`, `device_armed`, `acs_alarm_received`, and successful callback post results for the target devices in this run.
   - Playwright against `http://127.0.0.1:5175/admin/configuration/devices` found all four target IPs present with online/ready/armed text nearby.
 - Validation:
   - VM native build passed: `HIKVISION_LINUX_SDK_ROOT=... bash scripts/build-hikvision-biometric-service.sh`.
-  - Focused backend contract passed: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` (`14` passing).
-  - Focused listener-status helper passed: `hris-api/tests/hikvision-listener-status.helper.spec.ts` (`10` passing).
-  - Broad `npm --prefix hris-api test -- ...` was accidentally expansive and failed on unrelated existing suite drift plus stale compose DB `10.184.37.19:15433`; focused reruns above passed.
+  - Focused backend contract passed: `bnpi-pats-api/tests/hikvision-biometric-sync-contract.spec.ts` (`14` passing).
+  - Focused listener-status helper passed: `bnpi-pats-api/tests/hikvision-listener-status.helper.spec.ts` (`10` passing).
+  - Broad `npm --prefix bnpi-pats-api test -- ...` was accidentally expansive and failed on unrelated existing suite drift plus stale compose DB `10.184.37.19:15433`; focused reruns above passed.
 - Boundary:
   - Cloudflare tunnel remained active.
   - No stale `.167`, `.168`, `.102`, or old rows were used as the four-device proof.
@@ -1835,8 +1835,8 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: Focused admin UX regression repair.
 - Implemented:
-  - The Device Users `Needs link` metric now sets `deviceUserStatus=UNMATCHED` when clicked, so the table requests saved HRIS rows that actually need employee links.
-  - The source-scoped optimization now applies only to `shown` and `source` views; saved truth views such as `open` and `linked` use HRIS `DeviceUser` rows.
+  - The Device Users `Needs link` metric now sets `deviceUserStatus=UNMATCHED` when clicked, so the table requests saved BNPI PATS rows that actually need employee links.
+  - The source-scoped optimization now applies only to `shown` and `source` views; saved truth views such as `open` and `linked` use BNPI PATS `DeviceUser` rows.
 - Runtime/browser proof:
   - Evidence root: `.runtime/sync-center-needs-link-click-browser-20260721T053934Z/`.
   - Clicking Device C `Needs link: 46` produced URL `deviceUserView=open&deviceUserStatus=UNMATCHED`, requested `/api/device/cmripjwbx00ewl001ihcke210/users?limit=50&status=UNMATCHED`, and showed `1 - 8 of 46` without the empty-state copy.
@@ -1861,9 +1861,9 @@ unHikvisionTimeSyncCore with the per-device route.
   - Final modal proof showed completed status with `262` captured raw payloads and `270` missing raw reads, preserved as review/repair items.
   - Final browser proof confirmed friendly missing-face labels and no `<!DOCTYPE html>`, `<html>`, `Access Error: 404`, or `can't locate document` text in the modal.
 - Validation:
-  - `hris-api` focused raw biometric + Hikvision sync contracts passed (`24` passing).
-  - `hris-api` typecheck passed.
-  - `hris-app` focused Device Users UI contract passed (`1` passing).
+  - `bnpi-pats-api` focused raw biometric + Hikvision sync contracts passed (`24` passing).
+  - `bnpi-pats-api` typecheck passed.
+  - `bnpi-pats-app` focused Device Users UI contract passed (`1` passing).
 - Recommendation capture: No new recommendations were identified.
 
 
@@ -1871,8 +1871,8 @@ unHikvisionTimeSyncCore with the per-device route.
 
 - Task mode: Mixed backend correctness and admin UX truth repair.
 - Implemented:
-  - Hikvision device-user merge planning now counts strict unique device/vendor person IDs from live selected-device reads. The same `vendorUserId` cannot split into separate selectable unique-ID rows just because one source row is manually/HRIS-linked and another is not.
-  - Saved HRIS `DeviceUser` rows attach link/status/manual-link context only; they do not drive the unique-ID count and no longer collapse two different vendor IDs into one selectable unique-ID row.
+  - Hikvision device-user merge planning now counts strict unique device/vendor person IDs from live selected-device reads. The same `vendorUserId` cannot split into separate selectable unique-ID rows just because one source row is manually/BNPI-PATS-linked and another is not.
+  - Saved BNPI PATS `DeviceUser` rows attach link/status/manual-link context only; they do not drive the unique-ID count and no longer collapse two different vendor IDs into one selectable unique-ID row.
   - Duplicate source rows for the same device/user ID are collapsed before unique-ID counting, with `sourceRows`, `dedupedDeviceRecords`, and `duplicateSourceRows` reported in the plan.
   - The merge modal now labels the record count as `Device ID records`, reports unique-list counts as IDs, and can disclose when duplicate source rows were collapsed into matching unique IDs.
 - Runtime/API proof after API restart:
@@ -1880,8 +1880,8 @@ unHikvisionTimeSyncCore with the per-device route.
   - Local API restarted to listener PID `9228`; `/health` returned `healthy`.
   - Non-mutating admin merge-plan endpoint returned `uniqueDeviceIdCount=687`, `apiCountUnionUsers=687`, `sourceRowsFromDevice=2748`, `dedupedDeviceRecords=2748`, `duplicateSourceRows=0`, `hasDuplicateUniqueIdsShown=false`, and zero groups with more than one vendor ID for the four current Hikvision target devices.
 - Validation:
-  - `hris-api` focused merge helper tests passed (`12` passing).
-  - `hris-api` typecheck passed.
+  - `bnpi-pats-api` focused merge helper tests passed (`12` passing).
+  - `bnpi-pats-api` typecheck passed.
 - Boundary:
   - Browser automation against `http://127.0.0.1:5175/auth/login` could not complete login because the current frontend dev server rendered no login input elements in headless DOM; API proof and source/UI contracts were used as the closeout evidence.
 - Recommendation capture: No new recommendations were identified.
@@ -1899,15 +1899,15 @@ unHikvisionTimeSyncCore with the per-device route.
   - Evidence root: `.runtime/sync-center-dry-run-scope-20260721-112157/`.
   - Non-mutating admin dry-run for Main Entrance Device B (`cmpxw13hx002h7zwso7dyedrn`) returned `mode=dry_run`, `willCreateJob=false`, `jobId=null`, `selectedFastPlan=needs_attention_only`, `sourceReadRequired=false`, and `sourceReadSkipped=true` in `7.586s`.
   - Matrix counts: `missing_device_user_record=0`, `missing_employee_link=49`, `missing_raw_fingerprint_blob=106`, `missing_raw_face_blob=65`, `already_present=741`, `stale_count_only_or_live_no_data=0`, `unsupported_by_sync=0`.
-  - Execution steps explicitly include `Skip source user reread because saved HRIS state scopes the actionable work`, raw capture only for fingerprint/face candidates, and skipping already-present rows.
+  - Execution steps explicitly include `Skip source user reread because saved BNPI PATS state scopes the actionable work`, raw capture only for fingerprint/face candidates, and skipping already-present rows.
 - Browser proof:
   - `.runtime/sync-center-dry-run-scope-20260721-112157/browser-sync-center-scoped-review-final.json`.
   - `.runtime/sync-center-dry-run-scope-20260721-112157/browser-sync-center-scoped-review-final.png`.
   - Browser verified the review modal shows the dry-run planner counts (`49`, `106`, `65`, `741`), `Fastest valid plan: needs_attention_only`, `Saved-state first`, and no old `Reading source device users` copy.
 - Validation:
-  - Backend contract: `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` passed (`15` passing).
+  - Backend contract: `bnpi-pats-api/tests/hikvision-biometric-sync-contract.spec.ts` passed (`15` passing).
   - Backend typecheck: `npx tsc --noEmit --pretty false` passed.
-  - Frontend focused contract: `hris-app/app/routes/admin/devices/device-user-ui-contract.test.ts` passed (`1` passing).
+  - Frontend focused contract: `bnpi-pats-app/app/routes/admin/devices/device-user-ui-contract.test.ts` passed (`1` passing).
   - Frontend broad `npx tsc --noEmit --pretty false` still fails on unrelated existing app-wide type drift outside Device Users.
 - Recommendation capture: No new recommendations were identified.
 
@@ -1939,13 +1939,13 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-07-20 Local Windows remote-dev CF SSH / DB tunnel bootstrap
 
 - Task mode: Regression repair + workstation bootstrap (docs + scripts).
-- Problem: Remote Windows host could not complete `hris-api` `npm run dev` / login because LAN SSH to `10.184.37.19` is closed, K3s DEV ClusterIP `10.43.130.9:5432` refused Postgres, local `55435` tunnel half-died, and Hikvision reverse port `59443` was held by stale VM `sshd`.
+- Problem: Remote Windows host could not complete `bnpi-pats-api` `npm run dev` / login because LAN SSH to `10.184.37.19` is closed, K3s DEV ClusterIP `10.43.130.9:5432` refused Postgres, local `55435` tunnel half-died, and Hikvision reverse port `59443` was held by stale VM `sshd`.
 - Repo changes:
   - `scripts/start-k8s-dev-db-access.ps1` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Postgres wire check + compose DEV `127.0.0.1:15433` fallback for SSH `-L` to local `55435`.
   - `scripts/start-host-hikvision-vm-ssh-bridge.ps1` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ clear reverse ports with `fuser -k`.
   - `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md` GÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ operator log.
-- Workstation-only (not git): `node-health-appliance_ed25519`, SSH config `project-truth-hris`, cloudflared install, VM `authorized_keys` public key append.
-- Operator recipe for API-only local dev: `HIKVISION_VM_BRIDGE_ENABLED=false`, `HRIS_SKIP_DEVICE_LIVE_PATH=true`, `npm.cmd run dev`; success = `Server running at http://localhost:3001`.
+- Workstation-only (not git): `node-health-appliance_ed25519`, SSH config `project-truth-bnpi-pats`, cloudflared install, VM `authorized_keys` public key append.
+- Operator recipe for API-only local dev: `HIKVISION_VM_BRIDGE_ENABLED=false`, `BNPI_PATS_SKIP_DEVICE_LIVE_PATH=true`, `npm.cmd run dev`; success = `Server running at http://localhost:3001`.
 - Evidence: `.runtime/local-dev-cf-ssh-db-tunnel-20260720/`.
 - Boundary: not a push to `origin/develop`; not a K3s health claim; UI "Unable to connect" was empty `:3001`, not auth body.
 
@@ -1965,11 +1965,11 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-07-20 Remote local-dev Hikvision tunnel proof
 
 - Task mode: Focused local-dev runtime access repair for far-away work against a LAN-only Hikvision device.
-- Goal: Keep the saved HRIS device row visible as `10.184.37.21:443` / SDK `8000`, while allowing a Windows localhost API launched by `npm run dev` to reach the device through SSH forwards.
+- Goal: Keep the saved BNPI PATS device row visible as `10.184.37.21:443` / SDK `8000`, while allowing a Windows localhost API launched by `npm run dev` to reach the device through SSH forwards.
 - Implemented:
   - Added `PROJECT_TRUTH_HIKVISION_TUNNEL_MAP` support for Hikvision HTTP/ISAPI base URL resolution, device health network probes, and SDK endpoint selection.
   - Added `scripts/start-hikvision-remote-device-tunnel.ps1`, which starts `127.0.0.1:10080 -> 10.184.37.21:80`, `127.0.0.1:10443 -> 10.184.37.21:443`, and `127.0.0.1:18000 -> 10.184.37.21:8000`, then writes the ignored local API env line.
-  - Preserved the tunnel-map line when `hris-api/scripts/ensure-bnpi-db-access.cjs` regenerates `hris-api/.env.development.local`.
+  - Preserved the tunnel-map line when `bnpi-pats-api/scripts/ensure-bnpi-db-access.cjs` regenerates `bnpi-pats-api/.env.development.local`.
 - Proof:
   - Tunnel helper returned `running`, PID `17684`, with TCP OK for `127.0.0.1:10080`, `:10443`, and `:18000`.
   - Local API `GET /api/device/cmrht5s2w00ei7zgsre8y3o5n/health` returned `summary.status=online` for Main Entrance Device A, while the response still showed saved device address `10.184.37.21` and `checks.network.source=env_tunnel_map`.
@@ -1979,7 +1979,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - `.runtime/remote-device-tunnel-proof-20260720-161455/device-a-health-with-tunnel-map.json`
   - `.runtime/remote-device-browser-proof-20260720082234/summary.json`
 - Boundary:
-  - On the current LAN, `ssh project-truth-hris` through Cloudflare still reset at the edge, so the helper used direct LAN fallback `infra@10.184.37.19` for this proof. Far-away work should use `project-truth-hris` when Cloudflare Access is reachable from that network.
+  - On the current LAN, `ssh project-truth-bnpi-pats` through Cloudflare still reset at the edge, so the helper used direct LAN fallback `infra@10.184.37.19` for this proof. Far-away work should use `project-truth-bnpi-pats` when Cloudflare Access is reachable from that network.
 
 
 ## Latest Task Addendum - 2026-07-20 Device Events saved view fast/truthful listener UX
@@ -2000,7 +2000,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Quick health server durations for sampled devices were `0ms`, `1ms`, `1214ms`, and `1327ms`, all with `provenBy=tcpReachability` and `Skipped in quick health mode`.
   - Browser settled text showed `Ready for tap proof`, `4 online / 0 degraded / 3 offline`, the clean `/` health separator, and saved rows; it did not contain `Live path needs proof` or `not checked for a long time`.
 - Validation:
-  - `hris-api` `npx tsc --noEmit --pretty false --incremental false --listFiles false` passed.
+  - `bnpi-pats-api` `npx tsc --noEmit --pretty false --incremental false --listFiles false` passed.
   - Backend focused tests passed: `25` passing for listener-status helper, readiness, listener fast-path, and quick-health contracts.
   - Frontend focused contract passed: `12` passing for `app/lib/device-events-page-contract.test.ts`.
   - Frontend `typecheck:test` remains blocked by unrelated existing `TimesheetsTab.test.tsx` `UseQueryResult` fixture drift.
@@ -2038,10 +2038,10 @@ unHikvisionTimeSyncCore with the per-device route.
 - Device truth: TEST A was identified by API/DB as `cmrlgqsjv000oob01165tbd8n` (`192.168.254.102:443`, Hikvision). DeviceUser remains the durable current raw biometric custody plane; plain device person id is `DeviceUser.vendorUserId` / `employeeNo`.
 - Root cause repaired: Hikvision bulk `FingerPrintUpload` can return only one template while `UserInfo.numOfFP=2`; the helper now probes per-finger when raw stored count is below reported template slots and merges prior + newly fetched templates without fabricating bytes.
 - Raw-only sync proof:
-  - Before focused repair: source users `314`, HRIS DeviceUsers `394`, fingerprint slots `718`, fingerprint raw `325`, fingerprint missing `393`, face reported `356`, face raw `311`, face missing `45`.
+  - Before focused repair: source users `314`, BNPI PATS DeviceUsers `394`, fingerprint slots `718`, fingerprint raw `325`, fingerprint missing `393`, face reported `356`, face raw `311`, face missing `45`.
   - Job `bbccf2b6-75be-4e78-a7fa-e1a683149c02` captured `266` additional raw payloads and reduced fingerprint missing to `120`.
   - Local recovery setting `HIKVISION_RAW_BIOMETRIC_SYNC_CONCURRENCY=2` removed transient `Unauthorized` failures; job `834d6273-74d8-416f-aecf-8fd92430a062` captured `29` more and reduced fingerprint missing to `91`.
-  - Final preview: source users `314`, HRIS DeviceUsers `394`, fingerprint slots `718`, fingerprint raw `627`, fingerprint missing `91`; face reported `356`, face raw `311`, face missing `45`.
+  - Final preview: source users `314`, BNPI PATS DeviceUsers `394`, fingerprint slots `718`, fingerprint raw `627`, fingerprint missing `91`; face reported `356`, face raw `311`, face missing `45`.
 - Remaining boundary: per-row sample repair for users `1008`, `1076`, and `1143` returned HTTP `422` with exact bodies `no_fingerprint_data_from_device` and `no_face_on_device`. These rows remain `missing_raw_blob`; no raw blobs were fabricated.
 - UI proof: Sync review modal shows raw custody counts (`718 enrolled +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-+ 627 raw +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-+ 91 missing_raw_blob`, `356 enrolled +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-+ 311 raw +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-+ 45 missing_raw_blob`) and details modal shows `2 of 2 stored` for repaired user `1004`; user `1008` shows `2 missing_raw_blob`, `Repair: capture raw`, face count-only raw missing, and `Repair: capture face`.
 - Evidence: `.runtime/test-a-raw-repair-loop-20260720-103434/`.
@@ -2060,7 +2060,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Face slots: `356` reported, `311` stored raw faces, `45` missing raw blobs.
 - Live capture classification for visible/sample rows `83`, `839`, `984`, `1008`, `1076`, and `1143`: all six are stale/count-only inventory rows where `UserInfo` reports enrolled counts/face URL but live raw endpoints return `no_fingerprint_data_from_device` and `no_face_on_device`. No parser/merge/probe code bug was proven for these rows, and no raw blob was fabricated.
 - Code bug repaired in this pass: manual raw fingerprint/face capture endpoints no longer return HTTP `422` with a `status: "success"` body on no-data. They now return compact `status: "error"` bodies with `capture.reason`, preserving truthful no-data classification for UI/API consumers and avoiding large stale metadata payloads on failure.
-- Validation: focused backend helper/contract tests passed (`20` passing), and `hris-api` `tsc --noEmit --pretty false` passed.
+- Validation: focused backend helper/contract tests passed (`20` passing), and `bnpi-pats-api` `tsc --noEmit --pretty false` passed.
 - Browser proof: local Playwright against `http://127.0.0.1:5175` opened TEST A Device Users Sync Center and issued the same local API calls through the authenticated browser context. All twelve sample capture calls returned compact HTTP `422` / `status: "error"` bodies with exact no-data reasons.
 
 
@@ -2070,7 +2070,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Current TEST A runtime truth from the completed proof: 394 exported DeviceUser rows, 338 linked, 56 unlinked; 361 rows report fingerprints and 316 rows carry raw fingerprint blobs; the latest package preview carries 628 raw fingerprint templates against the previously proven 718 enrolled template slots; 356 rows report face and 311 carry raw face blobs.
 - Sync recovery loop: TEST A biometrics-only jobs `e692290a-1d4f-4965-887f-c107bd473992` and `8d3a48df-a85e-44e2-abd3-3120d21e046f` completed with zero new captures and cached existing custody; all-Hikvision recovery job `6c7e3e4c-f722-4b00-a57c-81e06ab709d4` remained stalled on Main Entrance Device B fetch failures and is not proof that TEST A is incomplete.
 - Export proof: real browser downloads for CSV, Excel, and Package JSON have 394 rows/users, no duplicate columns, no encrypted/passphrase copy, explicit `not_enrolled` / `missing_raw_blob` statuses, and multi-fingerprint cells using the `FPn("...")` pattern.
-- Import proof: full 22,968,896-byte Package JSON preview succeeded non-mutating on a proof API with `HRIS_API_BODY_LIMIT=75mb`; matching users 394, conflicts 0, missing HRIS employees 55; execute without `confirmation="IMPORT DEVICE USERS"` was rejected with HTTP 400.
+- Import proof: full 22,968,896-byte Package JSON preview succeeded non-mutating on a proof API with `BNPI_PATS_API_BODY_LIMIT=75mb`; matching users 394, conflicts 0, missing BNPI PATS employees 55; execute without `confirmation="IMPORT DEVICE USERS"` was rejected with HTTP 400.
 - UI proof: export modal shows the current action, scope, row count, and biometric readiness while preview/export is running; CSV import modal shows preview-first wording and package-data status without raw/developer copy.
 - Remaining boundary: 46 rows still have `Reported biometric enrollment exists but no evidenced raw blob is stored`; this is retained as `partial_missing_requested_raw_blobs`, not fabricated from counts.
 - Evidence: `.runtime/device-user-raw-export-proof-20260720-110129/final-evidence-summary.json`, `browser-export-download-proof.json`, `api-import-proof-3002-summary.json`, and screenshots in the same directory.
@@ -2081,7 +2081,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: Biometric persistence regression repair plus operator-journey hardening.
 - Root cause: the C++ listener successfully read and posted the raw template, and the enrollment DeviceEvent retained it, but a slower UserInfo enrichment could overwrite DeviceUser with metadata read before the callback completed.
 - Repair: DeviceUser UserInfo enrichment now uses an `updatedAt` optimistic merge/retry and preserves current raw fingerprint/face custody across a concurrent callback write.
-- User journey: the Device Users details modal refetches the saved HRIS row and shows `Checking saved templates+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ` during that read; it does not show `Not captured yet` until absence is confirmed.
+- User journey: the Device Users details modal refetches the saved BNPI PATS row and shows `Checking saved templates+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ` during that read; it does not show `Not captured yet` until absence is confirmed.
 - Live TEST A proof: exact event `cmrrwqkpc009l7zaogna1hbkd` for person `18` replayed successfully; after 20 seconds DeviceUser retained one 684-character raw template from `cpp_sdk_callback_raw`. Users `15` and `18` both rendered `1 stored` in headless browser proof.
 - Verification: 22 focused backend tests, 14 C++ source-contract tests, and 1 modal Playwright regression passed. The current C++ source also built/linked against the VM HCNetSDK in an isolated output path.
 - Evidence: `.runtime/fingerprint-enroll-raw-race-20260719/summary.md` and screenshots in the same directory.
@@ -2102,22 +2102,22 @@ unHikvisionTimeSyncCore with the per-device route.
   - Headless browser: `.runtime/device-events-filter-ui-20260719-192858/ui-proof.json` showed Category options from saved rows (`Attendance`, `Enrollment`, `Runtime`, `Unknown vendor`, `User management`) and no empty `Device health`; Action options included `Sync signal`.
   - Headless browser selection: `.runtime/device-events-filter-select-20260719-193038/select-proof.json` showed selecting `Sync signal` sets `eventAction=SYNC_SIGNAL&eventCategory=RUNTIME`.
 - Existing unrelated validation drift:
-  - `hris-app` focused lint still fails on the two pre-existing `jsx-a11y/label-has-associated-control` errors in Device Events and many existing warnings.
-  - `hris-app` source-contract test still fails on a pre-existing expectation that `events.tsx` contains `useDeviceHealthMap`.
-  - `hris-api` typecheck remains blocked by pre-existing missing module `../../helper/device-user-raw-fingerprint.helper` and existing helper type errors.
+  - `bnpi-pats-app` focused lint still fails on the two pre-existing `jsx-a11y/label-has-associated-control` errors in Device Events and many existing warnings.
+  - `bnpi-pats-app` source-contract test still fails on a pre-existing expectation that `events.tsx` contains `useDeviceHealthMap`.
+  - `bnpi-pats-api` typecheck remains blocked by pre-existing missing module `../../helper/device-user-raw-fingerprint.helper` and existing helper type errors.
 - Recommendation capture: No new recommendations were identified.
 
 
 ## Latest Task Addendum - 2026-07-19 Backend helper module resolution repair
 
 - Task mode: Backend TypeScript regression repair.
-- Reported symptom: VS Code/TypeScript showed `TS2307` in `hris-api/app/device/device.controller.ts` for dynamic imports of `device-user-raw-fingerprint.helper` and `hikvision-event-contract.helper`.
-- Root cause: `hris-api` uses `module: Node16` / `moduleResolution: node16`; dynamic imports need the emitted `.js` specifier. Static imports in the same tree remained resolvable, but the extensionless dynamic imports failed.
+- Reported symptom: VS Code/TypeScript showed `TS2307` in `bnpi-pats-api/app/device/device.controller.ts` for dynamic imports of `device-user-raw-fingerprint.helper` and `hikvision-event-contract.helper`.
+- Root cause: `bnpi-pats-api` uses `module: Node16` / `moduleResolution: node16`; dynamic imports need the emitted `.js` specifier. Static imports in the same tree remained resolvable, but the extensionless dynamic imports failed.
 - Implemented:
   - Changed the three dynamic helper imports in `device.controller.ts` to `.helper.js`, matching existing project import style.
   - Added a narrow local type for recent lifecycle event backfill rows in `device-person-token.helper.ts`, clearing the strict type errors exposed after the missing modules were fixed.
 - Proof:
-  - `npx tsc --noEmit --pretty false` passed in `hris-api`.
+  - `npx tsc --noEmit --pretty false` passed in `bnpi-pats-api`.
   - Focused backend tests passed 63/63: `device-events-api-contract`, `device-person-token.helper`, `device-user-raw-fingerprint.helper`, and `hikvision-event-contract.helper`.
   - Focused backend lint passed for `device.controller.ts` and the three helper files.
 - Recommendation capture: No new recommendations were identified.
@@ -2128,15 +2128,15 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: docs-only architecture clarification from operator runtime evidence.
 - Observed network evidence:
   - From `project-truth-db-access` / `infra@project-truth-node`, `ping 192.168.254.102` returned `Time to live exceeded` from `61.245.16.174`.
-  - Interpretation: the shell does not have a direct ICMP/L3 route to the private Hikvision device LAN. This is not proof that the panel is down and not proof that HRIS model storage failed.
+  - Interpretation: the shell does not have a direct ICMP/L3 route to the private Hikvision device LAN. This is not proof that the panel is down and not proof that BNPI PATS model storage failed.
   - Architecture boundary: Cloudflare DB/SSH access is not a general LAN route; use selected TCP reverse forwards or a site agent on the device LAN for HCNetSDK/ISAPI evidence.
 - Storage documentation updated:
   - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` now documents what is created/updated on panel user create and fingerprint enroll:
     - `DeviceEvent` rows for `USER_CREATED` and `FINGERPRINT_ENROLLED`.
     - one `DeviceUser` row for the current physical user identity (`vendorUserId=15`).
-    - actual fingerprint template custody belongs to encrypted `DeviceUser.vendorMetadata.biometricBundle` / `_hrisDeviceMetadata.biometricExport` after the SDK biometric export worker reads template bytes; `DeviceEvent` stores proof/evidence only.
+    - actual fingerprint template custody belongs to encrypted `DeviceUser.vendorMetadata.biometricBundle` / `_bnpi_patsDeviceMetadata.biometricExport` after the SDK biometric export worker reads template bytes; `DeviceEvent` stores proof/evidence only.
     - optional `DevicePersonToken` when Hikvision operation logs expose only an opaque token.
-    - optional `Employee` link when an existing HRIS employee safely matches.
+    - optional `Employee` link when an existing BNPI PATS employee safely matches.
 - Architecture twin updated:
   - `.wwg/wiki/05-architecture/hikvision-enrollment-identity-architecture.md` now records that `Employee.deviceEmpId` is plain for device matching, while `Employee.employeeId` may be padded/display-coded.
 
@@ -2147,9 +2147,9 @@ unHikvisionTimeSyncCore with the per-device route.
 - Operator intent documented:
   - Device user/person `15` created on the physical Hikvision device must appear as DeviceUser `vendorUserId=15`.
   - Device Events should resolve to the plain device person id `15` when DeviceUser or callback evidence exists.
-  - Clicking `Device user` must navigate to Device User `15`, not a padded HRIS employee code.
-  - Clicking an employee record may show the HRIS-padded code/device id `00015` when that employee is safely linked.
-- Architecture verdict: the three-plane model remains correct: `DeviceUser` is physical-device identity/current inventory, `DeviceEvent` is saved event/history evidence, and `Employee` is the HRIS person record. Padding belongs only to HRIS employee matching/display; it must not rewrite `DeviceUser.vendorUserId`.
+  - Clicking `Device user` must navigate to Device User `15`, not a padded BNPI PATS employee code.
+  - Clicking an employee record may show the BNPI-PATS-padded code/device id `00015` when that employee is safely linked.
+- Architecture verdict: the three-plane model remains correct: `DeviceUser` is physical-device identity/current inventory, `DeviceEvent` is saved event/history evidence, and `Employee` is the BNPI PATS person record. Padding belongs only to BNPI PATS employee matching/display; it must not rewrite `DeviceUser.vendorUserId`.
 - Documentation updated:
   - `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` now includes a modal/click flowchart, ER diagram, decision table, and implementation-owner map for this contract.
 
@@ -2163,11 +2163,11 @@ unHikvisionTimeSyncCore with the per-device route.
 - Implemented hardening:
   - `scripts/ensure-device-live-path.ps1` now proves VM-side `127.0.0.1:59000` and `127.0.0.1:59443` before treating the Hikvision reverse bridge as healthy.
   - If a local SSH bridge process exists but VM reverse ports are not proven, Keep Ready records `reverse_bridge_stale` and rebinds the bridge.
-  - `hris-api/scripts/ensure-device-live-path.cjs` fast path now requires VM SDK reverse proof instead of accepting a host-local SDK port as enough.
+  - `bnpi-pats-api/scripts/ensure-device-live-path.cjs` fast path now requires VM SDK reverse proof instead of accepting a host-local SDK port as enough.
 - Runtime proof after hardening:
-  - `node hris-api/scripts/ensure-device-live-path.cjs` fast-passed with VM `53001=true` and VM `59000=true`, and listener `service_started` showed `hrisApiBase=http://127.0.0.1:53001`.
+  - `node bnpi-pats-api/scripts/ensure-device-live-path.cjs` fast-passed with VM `53001=true` and VM `59000=true`, and listener `service_started` showed `bnpiPatsApiBase=http://127.0.0.1:53001`.
   - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ensure-device-live-path.ps1` returned `ok=true`, DB tunnel open, VM reverse ports open, API reverse open, and listener API base already host-aligned.
-  - Listener status after hardening showed TEST A on `127.0.0.1:59000` with `lastLoginOk=true`, `armed=true`, `receivingCallbacks=true`, and `postingToHris=true`.
+  - Listener status after hardening showed TEST A on `127.0.0.1:59000` with `lastLoginOk=true`, `armed=true`, `receivingCallbacks=true`, and `postingToBnpiPats=true`.
 
 ## Latest Task Addendum - 2026-07-19 Create+Enroll flow C++ EXIT GATE
 
@@ -2188,7 +2188,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - **Root cause of synthetic FP stickiness:** `FingerPrintDownload` HTTP OK but `FingerPrintProgress` `cardReaderRecvStatus=5` `errorMsg=15` when cloning person-15 template onto a new employeeNo (device anti-dupe). Re-read stays `numOfFP=0`.
 - **Code:**
   - C++: template enrich after inventory_delta/op-sync; ISAPI write verifies Progress + re-read fingerData
-  - HRIS: `writeAndVerifyFingerprintOnDevice` / `parseFingerPrintProgress`; device.controller uses verify path
+  - BNPI PATS: `writeAndVerifyFingerprintOnDevice` / `parseFingerPrintProgress`; device.controller uses verify path
   - Proof scripts: ban donor-as-success
 - **Proven green:** create plain + inventory_delta; person-15 device-owned raw 684; unit 6/6; reverse ports; rebuilt listener with `progressRecvOk`
 - **Still open:** physical unique panel enroll for new person sticky F8; live C++ `fingerprintCount>=1` on ACS for person already having FP
@@ -2212,7 +2212,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Windows reached TEST A `192.168.254.102` on TCP `8000` and `443`.
   - VM loopback `53001`, `59000`, and `59443` stayed open; listener and VM-managed Cloudflare services stayed active.
   - Listener PID `2458362` remained unchanged from `11:04:27Z` through `11:09:55Z`, beyond the former two-minute restart cycle.
-  - Admin status returned running/armed, safe-to-tap, and fresh successful HRIS callback posts; quiet remained yellow rather than being misreported as tunnel failure.
+  - Admin status returned running/armed, safe-to-tap, and fresh successful BNPI PATS callback posts; quiet remained yellow rather than being misreported as tunnel failure.
   - Focused tests: Keep-ready 3/3, listener/readiness 17/17, listener-modal Playwright 1/1.
 - Existing unrelated validation drift: Full backend typecheck is blocked by the pre-existing missing module `helper/device-user-raw-fingerprint.helper`; targeted lint reaches two pre-existing empty-label accessibility errors in Device Events. Focused changed behavior is green.
 - Recommendation capture: No new recommendations were identified.
@@ -2237,7 +2237,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: Bug fix / product expectation correction + live proof.
 - Operator correction: on fingerprint enroll, store **raw** base64 fingerData on DeviceUser +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ do **not** default to encrypted-only custody.
 - Implemented:
-  - `hris-api/helper/device-user-raw-fingerprint.helper.ts` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
+  - `bnpi-pats-api/helper/device-user-raw-fingerprint.helper.ts` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ ISAPI FingerPrintUpload read, proven TEST A `FingerPrintInfo.FingerPrintList[]` parser, persist to `vendorMetadata.rawFingerprints.templates[].data` (and rawPayload mirror).
   - `enrichEnrollmentLifecycleEvent` schedules raw capture after FINGERPRINT_ENROLLED / USER_CREATED / USER_UPDATED when plain person id is known.
   - DeviceEvent gets pointer/status only (`rawFingerprintCustody`, `raw_on_device_user`); full blobs stay on DeviceUser.
   - Device user details UI shows raw present + first 120 chars preview.
@@ -2258,9 +2258,9 @@ unHikvisionTimeSyncCore with the per-device route.
   - `AGENTS.md` hard ban on inventing callback person id
   - principle `evidence-over-assumption.md` Hikvision wire-truth section
 - C++ (`hikvision_biometric_service.cpp`):
-  - `enrich_hris_job_before_post` before POST: inventory delta multipass when ACS person empty; attach raw FP templates (+ face when card known)
+  - `enrich_bnpi_pats_job_before_post` before POST: inventory delta multipass when ACS person empty; attach raw FP templates (+ face when card known)
   - Callback JSON: `identitySource`, `fingerprints[]` raw base64, `faceTemplate`/`facePicture`, `fingerprintCount`
-- HRIS:
+- BNPI PATS:
   - Accept callback fingerprints/face +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ DeviceUser raw store immediately
   - Socket: plain-only `employeeNo`; include deviceUser; UI +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œResolving person id+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ when empty/resolving
 - Rebuild/redeploy listener binary on VM still required for C++ path to run live.
@@ -2298,17 +2298,17 @@ unHikvisionTimeSyncCore with the per-device route.
 - Goal: When an SDK user create/update (or enroll) callback already carries a plain device person id, apply it on the callback path immediately, socket identity quickly, and always land raw UserInfo metadata on `DeviceUser` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ without treating multipass logSearch as the only path.
 - Clarified architecture (not a secret second poller inventing people):
   - Live path is still the HCNetSDK ACS alarm callback +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ `/api/hikvision/callback`.
-  - When `dwEmployeeNo` / plain `employeeNo` is present on that callback, HRIS now runs the fast identity path.
+  - When `dwEmployeeNo` / plain `employeeNo` is present on that callback, BNPI PATS now runs the fast identity path.
   - When the callback is only a major=3 opaque SYNC_SIGNAL (empty person), multipass ISAPI `ContentMgmt/logSearch` still resolves typed USER_CREATED / FP leaves and may map opaque tokens +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ plain via inventory delta / `DevicePersonToken`. That is follow-up evidence, not a replacement for the SDK callback.
 - Implemented:
-  - `applyFastEnrollmentIdentityOnSdkCallback` / `isHikvisionEnrollmentLifecycleCallback` in `hris-api/helper/device-person-token.helper.ts`.
-  - Immediate `DeviceUser` upsert (stub + HRIS link via `deviceEmpId` / `employeeId` code match), `DeviceEvent` MATCHED/UNMATCHED with plain `employeeNo`, first `device-event:saved` socket.
+  - `applyFastEnrollmentIdentityOnSdkCallback` / `isHikvisionEnrollmentLifecycleCallback` in `bnpi-pats-api/helper/device-person-token.helper.ts`.
+  - Immediate `DeviceUser` upsert (stub + BNPI PATS link via `deviceEmpId` / `employeeId` code match), `DeviceEvent` MATCHED/UNMATCHED with plain `employeeNo`, first `device-event:saved` socket.
   - Background `enrichEnrollmentLifecycleEvent` still pulls full UserInfo into `DeviceUser.rawPayload` / `vendorMetadata` and re-sockets.
   - `callback.controller.ts` non-attendance enrollment path uses the fast path and no longer forces `IGNORED` over identity when plain id is applied.
 - Proof:
   - Focused Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ 17/17 pass.
 - Boundary:
-  - Plain device person id +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸Ãƒâ€šÃ‚Âª-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ HRIS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
+  - Plain device person id +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸Ãƒâ€šÃ‚Âª-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ BNPI PATS `Employee.employeeId` code unless already linked via DeviceUser / `deviceEmpId`.
   - Empty-person major=3 signals still need logSearch / inventory delta for plain id; we do not invent person numbers.
 - Recommendation capture: No new recommendations were identified.
 
@@ -2316,23 +2316,23 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-07-19 Hikvision bridge follows DB device address
 
 - Task mode: Bug fix + runtime proof.
-- Goal: Stop local predev/Keep-ready from reusing a stale TEST A reverse-tunnel IP when the HRIS Device row already has the current Hikvision address.
+- Goal: Stop local predev/Keep-ready from reusing a stale TEST A reverse-tunnel IP when the BNPI PATS Device row already has the current Hikvision address.
 - Implemented:
   - Added a DB-backed resolver for host-side Hikvision VM bridge targets.
-  - `ensure-hikvision-vm-bridge.cjs` now resolves reverse-bridge devices from HRIS Device rows, prefers rows configured with `ssh-reverse-forward`, and restarts stale tunnels instead of accepting an open SDK port pointed at an old IP.
-  - `ensure-device-live-path.ps1` and `restart-local-hris-api-dev.ps1` now follow the same DB-resolved target unless an explicit operator override is supplied.
+  - `ensure-hikvision-vm-bridge.cjs` now resolves reverse-bridge devices from BNPI PATS Device rows, prefers rows configured with `ssh-reverse-forward`, and restarts stale tunnels instead of accepting an open SDK port pointed at an old IP.
+  - `ensure-device-live-path.ps1` and `restart-local-bnpi-pats-api-dev.ps1` now follow the same DB-resolved target unless an explicit operator override is supplied.
 - Proof:
   - Resolver selected `TEST A` at `192.168.254.102` from the DB.
   - Host live-path ensure reported DB tunnel, SDK reverse, and API reverse all ready for `192.168.254.102`.
   - Prove endpoint returned `proven=true`, listener `armed=true`, `receiving=true`, and fresh SDK event proof.
-- Truth sync: Existing Hikvision runtime truth already says the HRIS Device row is the source of configuration truth; this repair aligns predev/Keep-ready scripts with that truth.
+- Truth sync: Existing Hikvision runtime truth already says the BNPI PATS Device row is the source of configuration truth; this repair aligns predev/Keep-ready scripts with that truth.
 - Recommendation capture: No new recommendations were identified.
 
 
 ## Latest Task Addendum - 2026-07-19 Local API predev DB fast path
 
 - Task mode: Focused startup performance repair + regression proof.
-- Goal: Make `hris-api` DEV startup claim `127.0.0.1:55435` quickly without changing the VM/K3s database architecture or disabling the VM-managed Cloudflare tunnel.
+- Goal: Make `bnpi-pats-api` DEV startup claim `127.0.0.1:55435` quickly without changing the VM/K3s database architecture or disabling the VM-managed Cloudflare tunnel.
 - Implemented:
   - The DB preflight now checks only the canonical localhost Prisma forward instead of also probing a LAN-bound alias that cannot satisfy the datasource contract.
   - The broad multi-port remote-LAN forward is opt-in and no longer blocks the default DB-specific cold path.
@@ -2344,8 +2344,8 @@ unHikvisionTimeSyncCore with the per-device route.
   - PowerShell and Node syntax parsing pass.
   - Warm real predev proof completed the DB step in 0.3 seconds and all seven predev steps in 8.9 seconds; the remaining dominant cost was the separate device-live-path check at 6.5 seconds.
   - Controlled cold proof through the Cloudflare SSH fallback opened a replacement Postgres forward in 3.18 seconds and returned a valid Postgres SSL negotiation reply; the replacement forward remains active.
-- 2026-07-20 follow-up: `dev.bnpi-hris.tech` and K3s DEV proved the correct local DEV runtime: 7 active devices including `TEST A` (`cmrlgqsjv000oob01165tbd8n`, `192.168.254.102:443`), 394 TEST A DeviceUser rows, and 1924 TEST A DeviceEvent rows. Compose DEV at `10.184.37.19:15433` proved stale/drifted with only one old `192.168.18.39` device. Localhost hot reload must point at the K3s DEV forward `127.0.0.1:55435`; compose DEV `15433` is diagnostic-only unless explicitly requested.
-- Recovery evidence: K3s was blocked by `DiskPressure=True` because old retained VHDX snapshots under `/var/lib/project-truth/retained-vhdx` consumed about 194 GB. Removing those retained snapshots increased free space from about 28 GB to about 193 GB; after K3s restart, node `DiskPressure=False`, and DEV `hris-postgres-0`, `hris-api`, `hris-app`, and `hris-hikvision-watcher` returned to `Running`.
+- 2026-07-20 follow-up: `dev.bnpi-pats.tech` and K3s DEV proved the correct local DEV runtime: 7 active devices including `TEST A` (`cmrlgqsjv000oob01165tbd8n`, `192.168.254.102:443`), 394 TEST A DeviceUser rows, and 1924 TEST A DeviceEvent rows. Compose DEV at `10.184.37.19:15433` proved stale/drifted with only one old `192.168.18.39` device. Localhost hot reload must point at the K3s DEV forward `127.0.0.1:55435`; compose DEV `15433` is diagnostic-only unless explicitly requested.
+- Recovery evidence: K3s was blocked by `DiskPressure=True` because old retained VHDX snapshots under `/var/lib/project-truth/retained-vhdx` consumed about 194 GB. Removing those retained snapshots increased free space from about 28 GB to about 193 GB; after K3s restart, node `DiskPressure=False`, and DEV `bnpi-pats-postgres-0`, `bnpi-pats-api`, `bnpi-pats-app`, and `bnpi-pats-hikvision-watcher` returned to `Running`.
 - Truth sync: Architecture clarification; canonical DEV datasource remains `127.0.0.1:55435` backed by the VM/K3s database forward. Compose DEV `10.184.37.19:15433` must not be silently selected for normal localhost hot reload because it is a duplicate drift-prone runtime.
 - Recommendation capture: No new recommendations were identified.
 
@@ -2353,7 +2353,7 @@ unHikvisionTimeSyncCore with the per-device route.
 ## Latest Task Addendum - 2026-07-19 Device Events plain DeviceUser navigation
 
 - Task mode: Bug fix + focused admin UX regression proof.
-- Goal: In Device Events, keep the physical device user ID (`DeviceUser.vendorUserId` / `employeeNo`, e.g. `15`) separate from the HRIS employee code display/link (`Employee.employeeId`, e.g. `00015`) so admins can open the Device user details quickly from rows and the details modal.
+- Goal: In Device Events, keep the physical device user ID (`DeviceUser.vendorUserId` / `employeeNo`, e.g. `15`) separate from the BNPI PATS employee code display/link (`Employee.employeeId`, e.g. `00015`) so admins can open the Device user details quickly from rows and the details modal.
 - Implemented:
   - Saved Device Events API now falls back from `device_events.deviceUserId` to `organizationId + deviceId + employeeNo = device_users.vendorUserId`, so older/healed rows can still return the matching `deviceUser` object when the event has a plain person ID.
   - Device Events UI now carries `deviceUserVendorUserId` separately and uses it for Sync Center deep links (`deviceUserSearch=15&deviceUserDetails=15`) while preserving the Employee record link for matched employees.
@@ -2364,7 +2364,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Focused Playwright: `admin device events keeps plain device user id separate from padded employee code` passed 1/1.
   - Focused backend Mocha: `tests/device-person-token.helper.spec.ts` + `tests/hikvision-callback.controller.spec.ts` passed 17/17.
 - Existing unrelated validation drift:
-  - Full `hris-app` typecheck remains red on many historical errors outside this Device Events fix; one local Device Users type hole surfaced by the run was fixed.
+  - Full `bnpi-pats-app` typecheck remains red on many historical errors outside this Device Events fix; one local Device Users type hole surfaced by the run was fixed.
   - Full `admin-device-events-sync-modal.spec.ts` still has an older Sync logs assertion expecting a `Category` column while the current UI renders `Business area`; the new `15`/`00015` regression passes by name.
 - Recommendation capture: No new recommendations were identified.
 
@@ -2384,7 +2384,7 @@ unHikvisionTimeSyncCore with the per-device route.
   - Admin prove endpoint returned `proven=true`, readiness green, listener `receiving=true`, and a fresh saved SDK event.
   - Focused Playwright listener-modal smoke passed 1/1; bridge contract passed 4/4; PowerShell parsing passed.
 - Boundary: `ping 192.168.254.102` from the VM is not reverse-tunnel proof. SSH reverse forwarding exposes selected TCP ports on VM loopback; it does not route ICMP or the device subnet.
-- Existing validation drift: Full `hris-app` typecheck remains red on numerous unrelated historical errors outside the touched Device Events surface; the focused Playwright regression is green.
+- Existing validation drift: Full `bnpi-pats-app` typecheck remains red on numerous unrelated historical errors outside the touched Device Events surface; the focused Playwright regression is green.
 - Recommendation capture: No new recommendations were identified.
 
 
@@ -2426,7 +2426,7 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: Mixed regression repair across C++ listener identity enrichment, biometric custody, realtime, and admin UI truth.
 - Evidence: `.runtime/cpp-first-create-enroll-raw-20260719-200043/`.
 - Listener truth: major=3 create/enroll ACS may carry empty `dwEmployeeNo`; do not claim first-callback plain identity. Serialized, completion-checked UserInfo inventory scans now prevent interleaved partial baselines from producing false deltas. A post-rebuild create of `99200129` resolved through a one-person inventory delta and posted plain identity; that new user honestly had `numOfFP=0` and no face.
-- Enrollment truth: TEST A person `15` has `numOfFP=1`, `numOfFace=0`. Rewriting person 15's own template (donor=false) proved status 6, sticky read-back, and one 684-character raw template. Existing-person ACS remained empty/zero-template, then HRIS logSearch resolved plain `15` and automatic ISAPI capture stored the raw template on DeviceUser and FINGERPRINT_ENROLLED DeviceEvent payloads without manual Capture.
+- Enrollment truth: TEST A person `15` has `numOfFP=1`, `numOfFace=0`. Rewriting person 15's own template (donor=false) proved status 6, sticky read-back, and one 684-character raw template. Existing-person ACS remained empty/zero-template, then BNPI PATS logSearch resolved plain `15` and automatic ISAPI capture stored the raw template on DeviceUser and FINGERPRINT_ENROLLED DeviceEvent payloads without manual Capture.
 - Realtime/UI truth: `device-event:saved` delivered saved lifecycle rows with plain `employeeNo=15`; opaque tokens stayed only in payload evidence. Device user details renders stored raw fingerprint data and labels manual capture as repair-only.
 - Face boundary: person `15` has no face on the device, so raw face remains honestly absent. Earlier person `1` face proof is historical and is not reused as proof for this path.
 
@@ -2436,18 +2436,18 @@ unHikvisionTimeSyncCore with the per-device route.
 - Task mode: Regression repair + Playwright-first proof + API contract guard.
 - Goal: A 35-hour stale Device-user sync status must not be displayed as live processing after app/dev-server startup. Sync device users remains admin-triggered; persisted status may reopen only when the job has recent progress evidence.
 - Implemented:
-  - `hris-app/app/routes/admin/devices/enroll.tsx` now treats processing sync-job progress without a recent `updatedAt`/progress timestamp as stale and clears the active startup status instead of showing a live Sync status badge/modal.
-  - `hris-api/app/device/device.controller.ts` now stamps device-user sync jobs with `updatedAt`, updates it on progress writes, and marks stale persisted processing snapshots as failed/stopped on job lookup.
-  - `hris-app/app/services/devices.service.ts` exposes optional `updatedAt` on `DeviceUserSyncJobProgress`.
+  - `bnpi-pats-app/app/routes/admin/devices/enroll.tsx` now treats processing sync-job progress without a recent `updatedAt`/progress timestamp as stale and clears the active startup status instead of showing a live Sync status badge/modal.
+  - `bnpi-pats-api/app/device/device.controller.ts` now stamps device-user sync jobs with `updatedAt`, updates it on progress writes, and marks stale persisted processing snapshots as failed/stopped on job lookup.
+  - `bnpi-pats-app/app/services/devices.service.ts` exposes optional `updatedAt` on `DeviceUserSyncJobProgress`.
   - Playwright regression coverage added for stale startup state while preserving the fresh live-status toolbar path.
 - Proof:
   - Failing-first Playwright reproduced the stale startup bug before the fix.
   - `npm run test:e2e:smoke -- tests/smoke/admin-device-user-summary-toolbar.spec.ts` passed 2/2 after the fix.
   - `npx tsx node_modules/mocha/bin/mocha --no-config tests/device-user-api-contract.spec.ts --grep "expires stale processing"` passed 1/1.
-  - `npm run typecheck` in `hris-api` passed.
+  - `npm run typecheck` in `bnpi-pats-api` passed.
 - Existing unrelated validation drift:
-  - `npm run typecheck:test` in `hris-app` still fails in `app/routes/employee/dashboard/TimesheetsTab.test.tsx` with a pre-existing `UseQueryResult` mock-shape type error.
-  - `npm test -- tests/device-user-api-contract.spec.ts` in `hris-api` runs the full backend suite because the script already includes `tests/**/*.spec.ts`; that broader run still has unrelated historical failures, and the focused Mocha command above was used for this contract.
+  - `npm run typecheck:test` in `bnpi-pats-app` still fails in `app/routes/employee/dashboard/TimesheetsTab.test.tsx` with a pre-existing `UseQueryResult` mock-shape type error.
+  - `npm test -- tests/device-user-api-contract.spec.ts` in `bnpi-pats-api` runs the full backend suite because the script already includes `tests/**/*.spec.ts`; that broader run still has unrelated historical failures, and the focused Mocha command above was used for this contract.
 - Truth sync: Project Truth and Project Truth summary now state that processing device-user sync snapshots older than 30 minutes without progress evidence are stale and require a fresh admin-triggered run.
 - Recommendation capture: No new recommendations were identified.
 
@@ -2459,8 +2459,8 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Task mode: Meaningful UX feature + contract tests + Playwright journey proof.
 - Goal: Device management / Device events / Sync logs / Sync users journey is admin-friendly, not engineer-verbose; loading is honest; Sync logs not repeated/noisy; no redundant filter columns; no primary VM jargon.
 - Implemented:
-  - `hris-app/app/routes/admin/devices/events.tsx` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
-  - `hris-app/app/routes/admin/devices/manage.tsx` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œChecking device connection+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ / +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œReading users from device+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ.
+  - `bnpi-pats-app/app/routes/admin/devices/events.tsx` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ Live capture status copy; Saved event ledger strip; Sync logs slim summary + blocked collapse + 4-column table; loading/empty honesty.
+  - `bnpi-pats-app/app/routes/admin/devices/manage.tsx` +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œChecking device connection+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ / +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œReading users from device+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ+ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ-ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ.
   - Contract + Playwright smoke (3 tests) updated and green.
   - Non-stop agent loop prompt: `docs/00-product/AGENT-PROMPT-device-admin-ux-clarity-loop.md`
 - Evidence: `.runtime/device-ux-clarity-20260716-221328/`, screenshots under `.runtime/device-ux-clarity-proof/screenshots/`
@@ -2484,14 +2484,14 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 ## Latest Task Addendum - 2026-07-16 Sync logs live residual unblocked (Cloudflare)
 
 - Task mode: Runtime proof / residual close-out (no code change).
-- Trigger: operator `ssh project-truth-hris` succeeded after Cloudflare Access browser login; public client screens stayed up.
+- Trigger: operator `ssh project-truth-bnpi-pats` succeeded after Cloudflare Access browser login; public client screens stayed up.
 - Evidence: `.runtime/vm-sync-logs-continue-20260716-220308/`
 - Proven:
   - Host LAN to `10.184.37.19` still times out from this agent host; Cloudflare SSH + public origins work.
-  - Argo apps at revision `7309928` (includes event-first `ee42f4a`); PROD/DEV/UAT `hris-api`/`hris-app` Running on `hris-api-local:develop` / app images; tunnel active.
-  - `GET https://api.bnpi-hris.tech/api/device/sync-preview` returns per-device `eventRows[]` + `sources[]` with live ZKTeco Ready rows (e.g. `.235` willAdd `2035` / already `20267`).
-  - `GET https://dev-api.bnpi-hris.tech/api/device/sync-preview` returns Hikvision 16-row event catalogs with already-in-HRIS by action even when sources unavailable.
-  - Public browser: admin login +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Device events +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in HRIS / Source proof; network `sync-preview` HTTP 200.
+  - Argo apps at revision `7309928` (includes event-first `ee42f4a`); PROD/DEV/UAT `bnpi-pats-api`/`bnpi-pats-app` Running on `bnpi-pats-api-local:develop` / app images; tunnel active.
+  - `GET https://api.bnpi-pats.tech/api/device/sync-preview` returns per-device `eventRows[]` + `sources[]` with live ZKTeco Ready rows (e.g. `.235` willAdd `2035` / already `20267`).
+  - `GET https://dev-api.bnpi-pats.tech/api/device/sync-preview` returns Hikvision 16-row event catalogs with already-in-BNPI PATS by action even when sources unavailable.
+  - Public browser: admin login +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Device events +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œ Sync logs (`action=sync-logs`); UI shows Event to add / Will add / Already in BNPI PATS / Source proof; network `sync-preview` HTTP 200.
 - Residual still open:
   - Hikvision TCP from VM fail for configured addresses; PROD Main Entrance Device missing access credentials in preview error.
   - ZKTeco `.234` preview still source_unavailable while later TCP `4370` OK +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ investigate bridge/read path, not modal contract.
@@ -2505,11 +2505,11 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Task mode: Meaningful feature + API contract + UI + tests + Playwright proof.
 - Commit: `ee42f4a` on `develop`.
 - Evidence: `.runtime/sync-logs-event-first-20260716-215712/`
-- Goal: Sync logs modal is event-first +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ per Hikvision device show what will be added to Device Events (not inventory-first On device / In HRIS / Can import as the main story).
+- Goal: Sync logs modal is event-first +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬ÂÃ‚ÂÃƒÂ¢Ã¢â‚¬Â¢Ã…â€œGÃƒÂ¢Ã¢â‚¬Â¢Ã…Â¸ÃƒÆ’Ã¢â‚¬Ëœ per Hikvision device show what will be added to Device Events (not inventory-first On device / In BNPI PATS / Can import as the main story).
 - Implemented:
-  - `hris-api/helper/sync-logs-event-rows.helper.ts` catalog + dual-source builders.
-  - `GET /api/device/sync-preview` now returns `eventRows[]`, `sources[]`, operation log total probe (`ContentMgmt/logSearch`), attendance total (`AccessControl/AcsEvent`), and already-in-HRIS by `eventAction`.
-  - UI summary uses Ready source checks X of Y from source probes; per-device table remains Event to add | Will add | Already in HRIS | Source proof | Filter after sync | Status.
+  - `bnpi-pats-api/helper/sync-logs-event-rows.helper.ts` catalog + dual-source builders.
+  - `GET /api/device/sync-preview` now returns `eventRows[]`, `sources[]`, operation log total probe (`ContentMgmt/logSearch`), attendance total (`AccessControl/AcsEvent`), and already-in-BNPI PATS by `eventAction`.
+  - UI summary uses Ready source checks X of Y from source probes; per-device table remains Event to add | Will add | Already in BNPI PATS | Source proof | Filter after sync | Status.
   - Focused mocha + vitest + Playwright headless smoke (ZKTeco + Hikvision event-first) with screenshots.
 - Boundary / residual (updated by live proof above):
   - Live DB/API preview residual closed via Cloudflare public + CF SSH path.
@@ -2532,7 +2532,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Device-user biometric capture is resumable and visible through an orange status modal and reopenable status badge. Main Entrance Device C job `d3a6f6f8-d16c-4919-b65e-e0b7a54502be` completed 537 modality tasks: 531 captured, 22 already present/cached, and 6 failed. The six failures remain explicit and are not treated as portable credentials.
 - Merge preview reads independent devices concurrently and excludes devices that the bounded availability preview marks unavailable. Sync Logs preserves its last usable rows while its 15-second quiet refresh runs.
 - Headless Playwright measured merge UI readiness at 3.369 seconds, merge API completion at 2.939 seconds, and sync preview refreshes at 4.406-4.677 seconds, with no console errors and no refresh skeleton replacing rows.
-- CI passed at `f57d45e`. After repairing the npm 10 lockfile contract, VM reconciliation completed with zero failures, DEV Argo CD returned `Synced/Healthy`, new app/API pods were running, LAN app/API returned HTTP 200, and `cloudflared-bnpi-hris.service` remained active. The deployed merge dry-run completed in 3.781 seconds.
+- CI passed at `f57d45e`. After repairing the npm 10 lockfile contract, VM reconciliation completed with zero failures, DEV Argo CD returned `Synced/Healthy`, new app/API pods were running, LAN app/API returned HTTP 200, and `cloudflared-bnpi-pats.service` remained active. The deployed merge dry-run completed in 3.781 seconds.
 - Evidence: `.runtime/device-preflight-latency-20260715-151721/`, `.runtime/biometric-portability-proof-20260715-114841/playwright-main-c-background/`, and `.runtime/device-user-sync-jobs/d3a6f6f8-d16c-4919-b65e-e0b7a54502be.json`.
 
 
@@ -2615,8 +2615,8 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - Fix the Hikvision Linux listener path so the managed VM service is running
     and so the DEV API/UI can read truthful listener status from the same VM.
 - Current-state finding before the fix:
-  - The VM service could be started manually over `ssh project-truth-hris`,
-    but the live DEV `hris-api` pod still used stale listener code that pointed
+  - The VM service could be started manually over `ssh project-truth-bnpi-pats`,
+    but the live DEV `bnpi-pats-api` pod still used stale listener code that pointed
     at `10.184.37.241`.
   - After the first controller patch, the live DEV API still could not expose
     status/control because it ran inside a container without `ssh`, without a
@@ -2624,26 +2624,26 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     service honestly.
 - Implemented repair:
   - `scripts/project-truth-hikvision-hot-reload-listener.sh` now rebuilds from
-    `/opt/project-truth/vendor/hikvision-linux` and defaults HRIS posts to
+    `/opt/project-truth/vendor/hikvision-linux` and defaults BNPI PATS posts to
     `http://localhost:3101`.
   - Added managed VM daemon wrapper
     `scripts/project-truth-hikvision-hot-reload-daemon.sh` and managed unit
     `appliance/systemd/project-truth-hikvision-hot-reload-listener.service`.
-  - `hris-api/app/device/device.controller.ts` now installs the wrapper,
+  - `bnpi-pats-api/app/device/device.controller.ts` now installs the wrapper,
     daemon, and systemd unit together and exposes corrected VM target logic for
     the managed listener controls.
   - `ansible/project-truth-pull.yml` and
     `appliance/bin/project-truth-os-sync.sh` now install the managed listener
     scripts/unit so the repair survives VM self-heal.
-  - `hris-api/Dockerfile` now installs `openssh-client`, and
+  - `bnpi-pats-api/Dockerfile` now installs `openssh-client`, and
     `gitops/runtime-k8s/overlays/dev/runtime.yaml` now mounts
     `/var/lib/project-truth/ssh` plus `PROJECT_TRUTH_VM_HOST`,
     `PROJECT_TRUTH_VM_USER`, and `PROJECT_TRUTH_VM_SSH_KEY` env so the DEV API
     pod can SSH back to the VM host truthfully.
   - Provisioned VM-local SSH key
     `/var/lib/project-truth/ssh/node-health-appliance_ed25519`, authorized it
-    for `infra`, rebuilt `hris-api-local:develop`, imported it into K3s, and
-    rolled the DEV `hris-api` deployment after temporarily pausing
+    for `infra`, rebuilt `bnpi-pats-api-local:develop`, imported it into K3s, and
+    rolled the DEV `bnpi-pats-api` deployment after temporarily pausing
     `project-truth-ansible-pull.timer` to avoid stale checkout drift during the
     rebuild. The timer was restarted after the rollout.
 - Proven live truth:
@@ -2673,24 +2673,24 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 ## Latest Task Addendum - 2026-07-12 Hikvision Remote-Site Agent And Local Dev Tunnel Proof
 
 
-## Latest Task Addendum - 2026-07-12 HRIS Employee App Submodule And Runtime Integration
+## Latest Task Addendum - 2026-07-12 BNPI PATS Employee App Submodule And Runtime Integration
 
 - Task mode: Mixed repo-structure integration plus runtime/GitOps sync.
 - User goal:
-  - Bring `https://github.com/hrisworkforcesystem-coder/hris-emp-app/tree/develop` into this Project Truth workspace as a visible/editable root folder while preserving the upstream repo relationship.
-  - Align it with the existing `hris-api` / `hris-app` repo shape and extend Project Truth runtime/GitOps evidence so DEV/UAT/PROD are not implicit.
+  - Bring `https://github.com/bnpimanufacturingsolution/bnpi-pats-emp-app/tree/develop` into this Project Truth workspace as a visible/editable root folder while preserving the upstream repo relationship.
+  - Align it with the existing `bnpi-pats-api` / `bnpi-pats-app` repo shape and extend Project Truth runtime/GitOps evidence so DEV/UAT/PROD are not implicit.
 - Implemented integration:
-  - Added root git submodule `hris-emp-app` on upstream branch `develop`.
-  - Added parent-owned container wrapper `appliance/dockerfiles/hris-emp-app.Dockerfile` plus Nginx proxy template so the employee app can stay a clean upstream checkout while runtime-specific `/api` and `socket.io` proxy behavior lives in Project Truth.
+  - Added root git submodule `bnpi-pats-emp-app` on upstream branch `develop`.
+  - Added parent-owned container wrapper `appliance/dockerfiles/bnpi-pats-emp-app.Dockerfile` plus Nginx proxy template so the employee app can stay a clean upstream checkout while runtime-specific `/api` and `socket.io` proxy behavior lives in Project Truth.
   - Added Compose services:
-    - PROD `hris-emp-app` on port `3300`
-    - DEV `hris-emp-app-dev` on port `3310`
-    - UAT `hris-emp-app-uat` on port `3320`
+    - PROD `bnpi-pats-emp-app` on port `3300`
+    - DEV `bnpi-pats-emp-app-dev` on port `3310`
+    - UAT `bnpi-pats-emp-app-uat` on port `3320`
   - Added matching K3s runtime Deployments/Services in `gitops/runtime-k8s/overlays/{prod,dev,uat}/runtime.yaml`.
-  - Extended image staging/import and verification scripts so Project Truth now treats `hris-emp-app` as part of the runtime surface, not an orphan checkout.
+  - Extended image staging/import and verification scripts so Project Truth now treats `bnpi-pats-emp-app` as part of the runtime surface, not an orphan checkout.
 - Truth/docs sync:
-  - Updated Project Truth summary, Project Truth wiki, README verification targets, and local port config to include `hris-emp-app`.
-  - Reserved employee-app public hostnames `emp.bnpi-hris.tech`, `dev-emp.bnpi-hris.tech`, and `uat-emp.bnpi-hris.tech` in both host-managed and VM-managed tunnel configs plus runtime CORS surfaces.
+  - Updated Project Truth summary, Project Truth wiki, README verification targets, and local port config to include `bnpi-pats-emp-app`.
+  - Reserved employee-app public hostnames `emp.bnpi-pats.tech`, `dev-emp.bnpi-pats.tech`, and `uat-emp.bnpi-pats.tech` in both host-managed and VM-managed tunnel configs plus runtime CORS surfaces.
 - Validation target:
   - Focused config verification only in this pass; runtime bring-up/probe is still required before claiming live VM proof for the new employee-app ports.
 
@@ -2728,7 +2728,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     `https://constant-scholar-handbook-learners.trycloudflare.com`
   - Public API health returned HTTP 200.
   - Public app `/auth/login` returned HTTP 200 after allowing
-    `*.trycloudflare.com` in `hris-app/vite.config.ts`.
+    `*.trycloudflare.com` in `bnpi-pats-app/vite.config.ts`.
   - Public API login with `admin@bandai.local` / `password123` succeeded and a
     subsequent public `GET /api/device?page=1&limit=10&document=true` returned
     the live local `Main Entrance Device` row, proving the exact remote
@@ -2764,7 +2764,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     because it called `prisma.deviceUser.findMany()` directly while
     `public.device_users` was absent.
 - Implemented repair:
-  - `hris-api/app/device/device.controller.ts` now detects local
+  - `bnpi-pats-api/app/device/device.controller.ts` now detects local
     `device_events` column presence through `information_schema` and degrades
     raw SQL to safe defaults when older columns are missing.
   - The device-events query now:
@@ -2777,7 +2777,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - Device-user list retrieval now returns an empty success payload with
     `migrationState=device_users_table_missing` instead of a 500 when the table
     is absent.
-  - `hris-api/tests/hikvision-biometric-sync-contract.spec.ts` now includes the
+  - `bnpi-pats-api/tests/hikvision-biometric-sync-contract.spec.ts` now includes the
     contract coverage for these fallback paths.
 - Proven local truth:
   - After restarting the local `tsx watch` API process, direct authenticated
@@ -2801,20 +2801,20 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 ## Latest Task Addendum - 2026-07-12 Cross-Network Hikvision Agent Mode
 
 - Task mode: Architecture repair for deployments where the browser/admin user
-  and central HRIS runtime are not on the same LAN as the Hikvision terminal.
+  and central BNPI PATS runtime are not on the same LAN as the Hikvision terminal.
 - Research-backed conclusion:
   - For direct HCNetSDK/ISAPI control, some runtime still needs LAN adjacency
     to the physical device.
   - The correct cross-network pattern is not "make the browser share the
     device LAN"; it is "run an outbound agent on the device LAN and let that
-    agent post back to HRIS."
+    agent post back to BNPI PATS."
 - Implemented runtime change:
   - `scripts/project-truth-hikvision-hot-reload-listener.sh` now supports:
     - `HIKVISION_HOT_RELOAD_DEVICE_SOURCE=postgres` for the VM-local mode
       already in use
     - `HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api` for a remote site-agent mode
   - In `api` mode, the wrapper:
-    - authenticates to the configured HRIS API base,
+    - authenticates to the configured BNPI PATS API base,
     - fetches active Hikvision `Device` rows and credentials from
       `/api/device?...document=true`,
     - prepares the SDK spec locally on the site host,
@@ -2822,11 +2822,11 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - Added `scripts/hikvision-remote-site-agent.env.example` as the minimal env
     example for that mode.
 - Proven contract:
-  - `hris-api` Hikvision biometric sync contract tests still pass after the
+  - `bnpi-pats-api` Hikvision biometric sync contract tests still pass after the
     wrapper change.
 - Architectural implication:
   - This enables the same Project Truth Hikvision listener runtime to be placed
-    beside the remote device tomorrow, while still using central/public HRIS
+    beside the remote device tomorrow, while still using central/public BNPI PATS
     as the source of truth and callback sink.
 
 
@@ -2850,11 +2850,11 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - Post-reset local proof now shows:
     - `GET /api/device/events?...` => `total=0`
     - `GET /api/device/sync-preview` => device address `10.184.38.137`,
-      `hrisSavedCount=0`, `status=source_unavailable`
+      `bnpiPatsSavedCount=0`, `status=source_unavailable`
 - VM listener truth corrected:
   - The VM runtime had a separate source of truth and was still targeting
     `10.184.37.139`.
-  - Updated the VM-side `hris-postgres-dev` device row to
+  - Updated the VM-side `bnpi-pats-postgres-dev` device row to
     `10.184.38.137`, verified `/run/project-truth/hikvision-hot-reload-device.spec`
     reflects that address, and restarted
     `project-truth-hikvision-hot-reload-listener.service`.
@@ -2888,18 +2888,18 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     listener service was actually healthy when reached through the prepared
     Cloudflare SSH alias.
 - Implemented repair:
-  - `hris-api/app/device/device.controller.ts` now tries Hikvision VM commands
+  - `bnpi-pats-api/app/device/device.controller.ts` now tries Hikvision VM commands
     against multiple targets in order:
     - direct LAN SSH to `infra@10.184.37.19`
-    - fallback SSH alias `project-truth-hris`
+    - fallback SSH alias `project-truth-bnpi-pats`
   - The same fallback logic now applies to remote command execution and file
     copy operations used by listener status/control/runtime install flows.
   - Listener status payloads now expose the resolved path through
-    `vm.path`, for example `alias:project-truth-hris`.
-  - `hris-app/app/routes/admin/devices/enroll.tsx` now distinguishes
+    `vm.path`, for example `alias:project-truth-bnpi-pats`.
+  - `bnpi-pats-app/app/routes/admin/devices/enroll.tsx` now distinguishes
     `status unreachable` from `VM stopped` so the Sync Center stops claiming a
     healthy remote listener is down when only the local LAN probe failed.
-  - `hris-app/app/routes/admin/devices/events.tsx` now treats
+  - `bnpi-pats-app/app/routes/admin/devices/events.tsx` now treats
     `control.available=false` and endpoint-level listener errors as status
     unavailability, not just transport exceptions.
 - Proven local truth after restart:
@@ -2908,7 +2908,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     - `running=true`
     - `status=running`
     - `control.available=true`
-    - `vm.path=alias:project-truth-hris`
+    - `vm.path=alias:project-truth-bnpi-pats`
     - `sdk.state=login_failed`
     - `sdk.lastLoginError=7`
   - This confirms the cross-LAN admin/browser path is now repaired: the host
@@ -3010,7 +3010,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - The running Hyper-V VM should be reachable from the Windows host at static
     `10.184.37.241`, not only through the transient `192.168.*` Default Switch
     address.
-  - Local HRIS API/database access should work when the app/browser is
+  - Local BNPI PATS API/database access should work when the app/browser is
     refreshed.
 - Current-state finding:
   - Hyper-V reported `project-truth-local-vhdx-proof` running on
@@ -3034,8 +3034,8 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - SSH to `infra@10.184.37.241` returned hostname `project-truth-node` and
     `eth0` with `10.184.37.241/24`.
   - Prisma from Windows to
-    `postgresql://postgres:postgres@10.184.37.241:15433/hris?schema=public`
-    returned `db=hris`, `user=postgres`, server port `5432`, and
+    `postgresql://postgres:postgres@10.184.37.241:15433/bnpi_pats?schema=public`
+    returned `db=bnpi-pats`, `user=postgres`, server port `5432`, and
     `public_tables=73`.
   - `http://10.184.37.241:3001/health`, `http://localhost:3001/health`, and
     admin login through both API paths passed.
@@ -3065,28 +3065,28 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     `fingerprintCount=1` at the physical-device truth layer unless a real
     template is read from a source device and written back through the SDK.
 - Implemented change:
-  - `hris-api/app/device/device.controller.ts` now exposes
+  - `bnpi-pats-api/app/device/device.controller.ts` now exposes
     `POST /api/device/hikvision/mock-fingerprint` for a clearly labeled
-    dev-only synthetic fingerprint tally on an existing HRIS `DeviceUser` row.
-  - The same controller now carries that synthetic tally to the peer HRIS row
+    dev-only synthetic fingerprint tally on an existing BNPI PATS `DeviceUser` row.
+  - The same controller now carries that synthetic tally to the peer BNPI PATS row
     during `POST /api/device/hikvision/copy-user` only when the source user has
     no real fingerprint templates to send, so the FE journey can be tested
     without claiming physical device truth.
-  - `hris-app/app/routes/admin/devices/enroll.tsx`,
-    `hris-app/app/lib/hooks/useDevices.ts`, and
-    `hris-app/app/services/devices.service.ts` now expose the synthetic tally
+  - `bnpi-pats-app/app/routes/admin/devices/enroll.tsx`,
+    `bnpi-pats-app/app/lib/hooks/useDevices.ts`, and
+    `bnpi-pats-app/app/services/devices.service.ts` now expose the synthetic tally
     state separately from the real fingerprint truth in the Device Users modal.
 - Proven local UI/API truth:
   - The exact screenshot row `vendorUserId=9023` on `Main Entrance Device A`
     was confirmed before the patch as:
     - `rawPayload.numOfFP=0`
-    - `_hrisDeviceMetadata.credentialSummary.fingerprintCount=0`
+    - `_bnpi_patsDeviceMetadata.credentialSummary.fingerprintCount=0`
   - After restarting the local API, `POST /api/device/hikvision/mock-fingerprint`
     with `fingerprintCount=1` wrote only
-    `_hrisDeviceMetadata.syntheticCredentialSummary.fingerprintCount=1` while
+    `_bnpi_patsDeviceMetadata.syntheticCredentialSummary.fingerprintCount=1` while
     leaving the physical-device truth at `numOfFP=0`.
   - Clearing the same synthetic tally removed
-    `_hrisDeviceMetadata.syntheticCredentialSummary` and returned the row to
+    `_bnpi_patsDeviceMetadata.syntheticCredentialSummary` and returned the row to
     pure zero-truth state.
 - Live blocker isolated with proof:
   - As of `2026-07-10T09:50Z`, both Hikvision devices were unreachable from
@@ -3121,18 +3121,18 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - `scripts/project-truth-hikvision-hot-reload-listener.sh` now supports
     scoped one-off runs with device filtering and a short run window intended
     for a single user-copy request.
-  - `hris-api/app/device/device.controller.ts` now exposes a real
+  - `bnpi-pats-api/app/device/device.controller.ts` now exposes a real
     admin-only `POST /api/device/hikvision/copy-user` path that:
     - runs a scoped VM SDK copy from a chosen source device to a chosen target
       device,
     - confirms the peer write from SDK evidence,
-    - refreshes only the copied target user into HRIS truth instead of
+    - refreshes only the copied target user into BNPI PATS truth instead of
       rereading the entire target device,
     - and reuses the same copy helper during Hikvision enrollment when the
       target device does not yet physically contain the requested vendor user.
-  - `hris-app/app/routes/admin/devices/enroll.tsx`,
-    `hris-app/app/lib/hooks/useDevices.ts`, and
-    `hris-app/app/services/devices.service.ts` now expose a real
+  - `bnpi-pats-app/app/routes/admin/devices/enroll.tsx`,
+    `bnpi-pats-app/app/lib/hooks/useDevices.ts`, and
+    `bnpi-pats-app/app/services/devices.service.ts` now expose a real
     `Copy to peer device` action in the Device Users panel instead of forcing
     the journey through metadata-only sync assumptions.
 - Runtime proof:
@@ -3203,9 +3203,9 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     instead of implying the physical tap path is live.
 - Validation:
   - `npm test -- --grep "Hikvision biometric sync contract"` passed in
-    `hris-api`.
+    `bnpi-pats-api`.
   - `npm test -- app/lib/device-events-page-contract.test.ts` passed in
-    `hris-app`.
+    `bnpi-pats-app`.
   - Headless browser proof showed the localhost page contains
     `SDK listener recent`, `SDK listener receiving taps`, and no old
     `Saved rows live` / `Saved rows update live` wording.
@@ -3253,7 +3253,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - SDK init succeeded, callback registration succeeded, SDK login succeeded
     with `lastError=0`, and alarm arm succeeded with `lastError=0`.
   - The listener received live ACS/fingerprint events, posted them to
-    `/api/hikvision/callback`, and HRIS persisted 74 recent
+    `/api/hikvision/callback`, and BNPI PATS persisted 74 recent
     `EN_HCNETSDK_ALARM` rows for `Main Entrance Device`.
   - Recent saved rows include fingerprint pass events for `employeeNo=1`; they
     currently persist as `UNMATCHED` where employee mapping is not resolved in
@@ -3276,7 +3276,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     inside `project-truth-local-vhdx-proof`, Docker inside the VM, and no new
     Hyper-V switch unless `Default Switch` is disproven.
   - First repair boot-time route drift, then repair live Hikvision credentials
-    for `Main Entrance Device` at `192.168.254.189`, then rerun HRIS and SDK
+    for `Main Entrance Device` at `192.168.254.189`, then rerun BNPI PATS and SDK
     proof.
 - Runtime result:
   - VM remains attached to `Default Switch`.
@@ -3290,7 +3290,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     through `172.26.48.1`, and reached `192.168.254.189:80` and `:8000`.
   - Stale failed `project-truth-hikvision-route.service` was disabled. The
     normal `project-truth-ansible-pull.timer` was re-enabled.
-- HRIS/API proof:
+- BNPI PATS/API proof:
   - `http://10.184.37.241:3001/health` returned healthy after reboot.
   - Admin login to the VM-backed API succeeded.
   - `/api/device/:id/health` for `Main Entrance Device` reported network
@@ -3327,10 +3327,10 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   contract repair, and local evidence.
 - User goal:
   - Verify and clarify Add/Edit Device, device list event journeys, Device
-    events modals/details, and responsive behavior for a normal HRIS admin.
+    events modals/details, and responsive behavior for a normal BNPI PATS admin.
   - Keep the Device events model truth centered on `eventCategory` and
     `eventAction`, with `source` only as Runtime path/debug and `status` only
-    as HRIS result.
+    as BNPI PATS result.
   - Add an admin-only Employee hard delete dropdown journey that previews
     relation blockers before any destructive execute path can run.
 - UI result:
@@ -3356,12 +3356,12 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     references are detached rather than deleted; legal/payroll/attendance/time
     history blockers stop hard delete.
 - Validation:
-  - `hris-app` focused tests passed:
+  - `bnpi-pats-app` focused tests passed:
     `npm test -- app/lib/device-events-page-contract.test.ts app/lib/employee-hard-delete-ui-contract.test.ts app/services/employees.service.test.ts`.
-  - `hris-api` focused direct Mocha tests passed:
+  - `bnpi-pats-api` focused direct Mocha tests passed:
     `npx tsx node_modules/mocha/bin/mocha --no-config tests/employee-hard-delete.contract.spec.ts tests/device-events-api-contract.spec.ts tests/device-event-taxonomy.helper.spec.ts`.
-  - `hris-api npm run typecheck` passed.
-  - `hris-app npm run typecheck:test` still fails only on the pre-existing
+  - `bnpi-pats-api npm run typecheck` passed.
+  - `bnpi-pats-app npm run typecheck:test` still fails only on the pre-existing
     `TimesheetsTab.test.tsx` React Query mock typing issue already tracked as
     `REC-20260706-TEST-TYPECHECK-MOCKS`.
   - Real local API dry-run as `admin@bandai.local` returned HTTP 200 with
@@ -3412,9 +3412,9 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     `aria-labelledby` and description into `aria-describedby`.
 - Validation:
   - `npm test -- app/lib/device-events-page-contract.test.ts` passed in
-    `hris-app`.
+    `bnpi-pats-app`.
   - `npm test -- --grep "Hikvision biometric sync contract"` passed in
-    `hris-api`.
+    `bnpi-pats-api`.
   - Playwright proof logged in locally, opened the listener modal, refreshed
     status, closed/reopened, closed with Escape, and captured screenshots.
   - Admin API restart proof restarted the VM service from PID `129398` to
@@ -3430,7 +3430,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Task mode: Bug fix / operator workflow repair for local hot-reload tap
   debugging.
 - User goal:
-  - Live taps should save into the hot-reload HRIS path by default instead of
+  - Live taps should save into the hot-reload BNPI PATS path by default instead of
     silently running preview-only.
 - Change:
   - `vendor/hikvision-linux/hikvision_biometric_service.cpp` now defaults
@@ -3442,7 +3442,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     listener default.
 - Validation:
   - Focused contract test passed:
-    `npm test -- --grep "Hikvision biometric sync contract"` in `hris-api`.
+    `npm test -- --grep "Hikvision biometric sync contract"` in `bnpi-pats-api`.
   - The VM copy under
     `/tmp/project-truth-hikvision-live-20260709-credential-repair/vendor-hikvision-linux`
     was rebuilt.
@@ -3460,7 +3460,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - Document the Hikvision Linux HCNetSDK alarm-callback biometric sync
     architecture in WWG.
   - Use the existing Windows HCNetSDK reference under
-    `C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\EN-HCNetSDKV6.1.9.4_build20220412_win64`
+    `C:\Users\anoni\OneDrive\Desktop\BNPI-PATS-PROJECT\EN-HCNetSDKV6.1.9.4_build20220412_win64`
     as behavior evidence.
   - Make the future Linux runtime copy/refactor the callback/user/fingerprint
     sync behavior without preserving demo names such as `AlarmDemo`.
@@ -3546,7 +3546,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     `ping 10.184.37.139` passed with 0% loss, TCP `80` passed, and TCP `8000`
     passed.
   - Docker is running on the host-test VM; PROD/DEV/UAT app/API containers are
-    present. A stale existing `hris-hikvision-watcher` process was observed
+    present. A stale existing `bnpi-pats-hikvision-watcher` process was observed
     using old `10.184.38.215`, so it is drift and not current device proof.
   - Current local `vendor/hikvision-linux` source was copied to a task-scoped
     VM temp folder and built with
@@ -3573,9 +3573,9 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - `python -m unittest vendor.hikvision-linux.tests.test_probe` passed
     11 tests.
   - `npm test -- --grep "Hikvision callback controller|Hikvision biometric sync contract|device event realtime helper"`
-    in `hris-api` passed 7 tests.
-  - `npm run typecheck` in `hris-api` passed.
-  - `npm test -- app/lib/device-events-realtime-ui.test.ts` in `hris-app`
+    in `bnpi-pats-api` passed 7 tests.
+  - `npm run typecheck` in `bnpi-pats-api` passed.
+  - `npm test -- app/lib/device-events-realtime-ui.test.ts` in `bnpi-pats-app`
     passed 16 tests.
 - Remaining boundary:
   - Real physical tap proof is still missing. The current blocker is not
@@ -3593,7 +3593,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - User goal:
   - Make the Linux HCNetSDK path the clean single source of truth for live
     Hikvision tap events.
-  - Keep HRIS `Device` row truth at `Main Entrance Device`,
+  - Keep BNPI PATS `Device` row truth at `Main Entrance Device`,
     `10.184.37.139:80`, protocol `http`, model `DS-K1T341CMFW`, SDK port
     `8000`.
 - Implementation result:
@@ -3602,7 +3602,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - Removed the old active `hcnetsdk_alarm_probe` build path and replaced it
     with `scripts/build-hikvision-biometric-service.sh`.
   - SDK callback work stays minimal: parse ACS alarm, emit JSONL evidence,
-    queue HRIS callback posting, and queue biometric reconcile only for
+    queue BNPI PATS callback posting, and queue biometric reconcile only for
     user/fingerprint management events.
   - Worker posts SDK alarm events to `/api/hikvision/callback` with source
     `EN_HCNETSDK_ALARM`, so existing callback logic owns `DeviceEvent`
@@ -3642,8 +3642,8 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Validation:
   - `python -m unittest vendor.hikvision-linux.tests.test_probe` passed.
   - `npm test -- --grep "Hikvision callback controller|Hikvision biometric sync contract|Hikvision device seed defaults|Hikvision endpoint config|device event realtime helper|DEV Hikvision watcher runtime manifest"` passed.
-  - `npm run typecheck` in `hris-api` passed.
-  - `npm test -- app/lib/device-events-realtime-ui.test.ts` in `hris-app`
+  - `npm run typecheck` in `bnpi-pats-api` passed.
+  - `npm test -- app/lib/device-events-realtime-ui.test.ts` in `bnpi-pats-app`
     passed.
 - Remaining boundary:
   - Real SDK login, alarm arm, physical tap callback, saved row existence,
@@ -3664,7 +3664,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
     `10.184.38.215` candidates.
   - The discovery wrapper now uses direct LAN SSH `10.184.37.19` with
     `node-health-appliance_ed25519` and no longer defaults Hikvision username
-    to HRIS `admin@bandai.local`.
+    to BNPI PATS `admin@bandai.local`.
   - Historical `.234/.235` references are ZKTeco evidence, not Hikvision
     config truth, and must not be copied into the Hikvision runtime path.
 
@@ -3715,12 +3715,12 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Keep Cloudflare Access SSH policy in the `933c5547e32839d664d155ce8a7424d5` Zero Trust account aligned with the allowed operator email.
 - Replace shared Postgres superuser teammate URLs with limited per-environment
   database users before broadening DB Access TCP use beyond trusted operators.
-- Enable and verify browser-rendered SSH for `https://ssh.bnpi-hris.tech` so
+- Enable and verify browser-rendered SSH for `https://ssh.bnpi-pats.tech` so
   remote admins can access the VM from unprepared browsers without configuring
   BNPI Windows host SSH or per-PC `.ssh/config`.
 - Reconcile whether Docker Compose is the intended serving runtime for this V6
   appliance profile or tune K3s memory/capacity until Argo/K3s health matches
-  the actually served HRIS app/API.
+  the actually served BNPI PATS app/API.
 - Resolve existing WWG generated-report validation findings before release/commit claims that require a fully green WWG gate.
 
 
@@ -3735,12 +3735,12 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Current tunnel bootstrap ownership: host-managed on the Windows host.
 - Current proof VM also has a VM-managed connector active after deliberate root-only credential import.
 - Running-server Cloudflare access must remain active by default. Agents must
-  not disable, stop, mask, remove, or toggle off `cloudflared-bnpi-hris.service`
+  not disable, stop, mask, remove, or toggle off `cloudflared-bnpi-pats.service`
   on the live VM, and must not add a default-local/cloud-mode guard, unless the
   user explicitly requests a time-bounded outage and a verified recovery path is
   already documented.
 - Preferred BNPI remote-admin journey is VM-managed Cloudflare Tunnel plus
-  browser-rendered SSH at `https://ssh.bnpi-hris.tech`; the BNPI Windows Server
+  browser-rendered SSH at `https://ssh.bnpi-pats.tech`; the BNPI Windows Server
   should remain Hyper-V-only with no inbound ports, no Windows SSH setup, and no
   `.ssh/config` dependency.
 - Canonical startup/repair command:
@@ -3751,10 +3751,10 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 
 - Fresh/final images must not contain Cloudflare tunnel credentials.
 - TryCloudflare is disabled by default and remains only a deprecated manual proof tool.
-- Public SSH through `ssh.bnpi-hris.tech` is verified through Cloudflare Access and the host-managed named tunnel.
-- Public SSH through `ssh.bnpi-hris.tech` is also verified through the VM-side connector using `ssh://localhost:22`.
-- Postgres Cloudflare Access TCP hostnames are configured as client-forwarding targets: `db.bnpi-hris.tech` for PROD, `dev-db.bnpi-hris.tech` for DEV, and `uat-db.bnpi-hris.tech` for UAT. These require client-side `cloudflared access tcp` and produce local DB URLs such as `postgresql://postgres:postgres@localhost:55432/hris`; they are not raw public Postgres URLs through normal Cloudflare Tunnel.
-- Local `npm run dev` for HRIS API/app is configured to use the deployed DEV
+- Public SSH through `ssh.bnpi-pats.tech` is verified through Cloudflare Access and the host-managed named tunnel.
+- Public SSH through `ssh.bnpi-pats.tech` is also verified through the VM-side connector using `ssh://localhost:22`.
+- Postgres Cloudflare Access TCP hostnames are configured as client-forwarding targets: `db.bnpi-pats.tech` for PROD, `dev-db.bnpi-pats.tech` for DEV, and `uat-db.bnpi-pats.tech` for UAT. These require client-side `cloudflared access tcp` and produce local DB URLs such as `postgresql://postgres:postgres@localhost:55432/bnpi_pats`; they are not raw public Postgres URLs through normal Cloudflare Tunnel.
+- Local `npm run dev` for BNPI PATS API/app is configured to use the deployed DEV
   VM-backed Postgres through the Cloudflare Access TCP helper on
   `localhost:55433`; PROD and UAT helper URLs are documented beside it.
 - Browser-rendered SSH is the desired clean journey for unprepared office or
@@ -3779,19 +3779,19 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   separate retained artifact with hash/manifest evidence, while keeping the
   clean public V7 package lane separate from any credential-bearing or
   client-specific disk.
-- Current V6 proof serves public/LAN HRIS through healthy Docker Compose
+- Current V6 proof serves public/LAN BNPI PATS through healthy Docker Compose
   containers and VM-side Cloudflare. K3s/Argo still needs follow-up because many
   pods remain Pending/Evicted under memory pressure even when Argo Applications
   summarize as Synced/Healthy.
-- 2026-07-01 incident correction: the current public HRIS path for PROD, UAT,
-  and DEV is Docker Compose app/API containers behind the `bnpi-hris` named
-  Cloudflare Tunnel. Do not treat K3s HRIS pods as the active public serving
+- 2026-07-01 incident correction: the current public BNPI PATS path for PROD, UAT,
+  and DEV is Docker Compose app/API containers behind the `bnpi-pats` named
+  Cloudflare Tunnel. Do not treat K3s BNPI PATS pods as the active public serving
   path until K3s/Argo is deliberately re-enabled and proven end-to-end.
-- 2026-07-01 incident correction: K3s HRIS deployments/statefulsets are paused
+- 2026-07-01 incident correction: K3s BNPI PATS deployments/statefulsets are paused
   at zero replicas for DEV/UAT/PROD to avoid runtime contention while Docker
-  Compose serves public HRIS. PVCs and data were not deleted.
+  Compose serves public BNPI PATS. PVCs and data were not deleted.
 - 2026-07-01 incident correction: public browser traffic must not call
-  `https://*.bnpi-hris.tech:3001`. The working public pattern is same-origin
+  `https://*.bnpi-pats.tech:3001`. The working public pattern is same-origin
   `/api` through the app proxy/tunnel for app hostnames, with API hostnames
   available for direct health and API checks.
 
@@ -3804,7 +3804,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   - Code/docs/config remain evidence of operational reality.
   - Inferred or stale adoption truth must stay labeled and reconciled instead of silently overwritten.
 - User request:
-  - Make the `bnpi-hris.tech` named Cloudflare Tunnel the first-class public path.
+  - Make the `bnpi-pats.tech` named Cloudflare Tunnel the first-class public path.
   - Remove normal TryCloudflare usage from Project Truth, VM login, SSH login, visual proof, image/bootstrap, and WWG truth surfaces.
   - Clarify whether SSH can be accessed through the domain.
   - Clarify how fresh/final images work on another device.
@@ -3812,19 +3812,19 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 
 ## Validation Notes
 
-- LAN SSH and LAN HRIS endpoints passed.
+- LAN SSH and LAN BNPI PATS endpoints passed.
 - Public app/API/dev/uat/Grafana checks passed after connector warmup.
 - CORS preflight returned HTTP 204.
 - Wrong-password auth probe returned HTTP 401.
-- `ssh.bnpi-hris.tech` DNS route and tunnel ingress were provisioned; LAN SSH passed; after Cloudflare Access policy allowed `1bis.solutions.tech@gmail.com`, SSH through `cloudflared access ssh --hostname %h` returned `SSH_ACCESS_OK`.
-- On 2026-06-29, the named tunnel credential was imported into the proof VM as root-only runtime state, `cloudflared-bnpi-hris.service` was enabled and active, `cloudflared tunnel info bnpi-hris` showed a `linux_amd64` connector, and SSH through `ssh.bnpi-hris.tech` returned `SSH_DOMAIN_OK`.
+- `ssh.bnpi-pats.tech` DNS route and tunnel ingress were provisioned; LAN SSH passed; after Cloudflare Access policy allowed `1bis.solutions.tech@gmail.com`, SSH through `cloudflared access ssh --hostname %h` returned `SSH_ACCESS_OK`.
+- On 2026-06-29, the named tunnel credential was imported into the proof VM as root-only runtime state, `cloudflared-bnpi-pats.service` was enabled and active, `cloudflared tunnel info bnpi-pats` showed a `linux_amd64` connector, and SSH through `ssh.bnpi-pats.tech` returned `SSH_DOMAIN_OK`.
 - On 2026-07-03, live VM banner evidence after `sudo project-truth-ansible-pull`
-  reported `Cloudflare named tunnel mode: VM-managed active`, public HRIS/API,
-  Grafana, SSH browser, and `ssh project-truth-hris` targets, plus `OS pull
+  reported `Cloudflare named tunnel mode: VM-managed active`, public BNPI PATS/API,
+  Grafana, SSH browser, and `ssh project-truth-bnpi-pats` targets, plus `OS pull
   last: develop@75e7c1d845df` and sync time `2026-07-03T04:40:53Z`.
 - On 2026-06-30, V6 one-shot proof passed LAN PROD/DEV/UAT app/API health,
   public PROD/DEV/UAT app/API/Grafana health, public CORS, VM-side Cloudflare
-  ingress validation, and CLI SSH through `ssh.bnpi-hris.tech`.
+  ingress validation, and CLI SSH through `ssh.bnpi-pats.tech`.
 - On 2026-06-30, a V2-style V6 one-click zip was generated and uploaded as a
   tiny package under `hyperv/v6/latest`; public URL checks returned HTTP 200 for
   the zip, installer script, README, and manifest. The package contains no VHDX
@@ -3836,27 +3836,27 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   V7 installer dry run targeted the V7 VHDX/manifest paths while preserving the
   runtime-only Cloudflare credential import.
 - On 2026-07-01, PROD and UAT app containers were recreated from
-  `hris-app-local:develop` image
+  `bnpi-pats-app-local:develop` image
   `sha256:fa41efd235cbb372b7b9c2cd631081d8f7a6738af464b7ca67a0dcf47cdd83c5`.
-  Browser verification for `https://bnpi-hris.tech/` loaded the HR login screen,
-  requested `https://bnpi-hris.tech/api/system-provisioning/status` with HTTP
+  Browser verification for `https://bnpi-pats.tech/` loaded the HR login screen,
+  requested `https://bnpi-pats.tech/api/system-provisioning/status` with HTTP
   200, and showed no public `:3001` browser request.
 - On 2026-07-01, DEV Docker Compose API/app containers were restored without
   rebuilding or touching the DEV Postgres volume. VM origin checks passed:
   `http://localhost:3100/auth/login` HTTP 200,
   `http://localhost:3100/api/auth/me` HTTP 401, and
   `http://localhost:3101/health` HTTP 200. Browser verification for
-  `https://dev.bnpi-hris.tech/` loaded the HR login screen, requested
-  `https://dev.bnpi-hris.tech/api/system-provisioning/status` with HTTP 200,
+  `https://dev.bnpi-pats.tech/` loaded the HR login screen, requested
+  `https://dev.bnpi-pats.tech/api/system-provisioning/status` with HTTP 200,
   and showed no public `:3001` browser request.
-- Earlier on 2026-07-02, `10.184.38.138` no longer answered SSH or HRIS port
+- Earlier on 2026-07-02, `10.184.38.138` no longer answered SSH or BNPI PATS port
   probes from the Windows host. The VM was temporarily reached through DHCP
-  transient address `10.184.38.144`, and host-managed `cloudflared-bnpi-hris.yml` was
+  transient address `10.184.38.144`, and host-managed `cloudflared-bnpi-pats.yml` was
   temporarily corrected to that DHCP address. This was superseded by stable
   secondary address `10.184.37.19`.
 - Public verification from the client LAN is currently blocked by network
   policy: plain HTTP returns a company-policy block page and HTTPS resets
-  during TLS for `bnpi-hris.tech` hostnames, while general Cloudflare/Google
+  during TLS for `bnpi-pats.tech` hostnames, while general Cloudflare/Google
   HTTPS works.
 - On 2026-07-03, after the LAN config drift follow-up, the VM was hard-cut over to
   pure static LAN addressing on `eth0`. The accepted canonical runtime target is
@@ -3864,12 +3864,12 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   address/TLS SAN. DHCP is disabled, the default route is static via
   `10.184.38.254`, and read-only VM probes proved ping, SSH, and PROD/DEV/UAT
   API health on `10.184.37.19`.
-- On 2026-07-03, Postgres Access TCP DNS routes for `db.bnpi-hris.tech`,
-  `dev-db.bnpi-hris.tech`, and `uat-db.bnpi-hris.tech` were provisioned to the
+- On 2026-07-03, Postgres Access TCP DNS routes for `db.bnpi-pats.tech`,
+  `dev-db.bnpi-pats.tech`, and `uat-db.bnpi-pats.tech` were provisioned to the
   named tunnel and resolved to Cloudflare A records. The host-managed connector
   was started with DB TCP ingress, and the live VM-side `/etc/cloudflared/config.yml`
   was updated with matching DB TCP ingress while preserving existing SSH routes.
-  A client-side `cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:55432`
+  A client-side `cloudflared access tcp --hostname db.bnpi-pats.tech --url localhost:55432`
   smoke test opened the local listener but Postgres protocol probing failed with
   `websocket: bad handshake`, and a read-only Access API list returned HTTP 403.
   Treat DNS/tunnel ingress as applied, but teammate DB access is not fully
@@ -3878,15 +3878,15 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Later on 2026-07-03, after Access browser success and token return, real
   Postgres query proof passed through Cloudflare Access TCP for all three DB
   hostnames using a temporary Node `pg` probe under `.runtime/pg-probe`:
-  `db.bnpi-hris.tech` via local `56532`, `dev-db.bnpi-hris.tech` via local
-  `56533`, and `uat-db.bnpi-hris.tech` via local `56534` each returned
-  `current_database=hris`, `current_user=postgres`, server port `5432`, and
+  `db.bnpi-pats.tech` via local `56532`, `dev-db.bnpi-pats.tech` via local
+  `56533`, and `uat-db.bnpi-pats.tech` via local `56534` each returned
+  `current_database=bnpi_pats`, `current_user=postgres`, server port `5432`, and
   `public_tables=70`. The wrapper command timed out during cleanup, but no
   temporary test forwards remained afterward; only the intentional PROD helper
   forward on `localhost:55432` remained active.
 - Later on 2026-07-03, local dev verification kept the stable DB helper
   forwards active on PROD `localhost:55432`, DEV `localhost:55433`, and UAT
-  `localhost:55434`. `hris-api/.env` defaulted `npm run dev` to the DEV forward
+  `localhost:55434`. `bnpi-pats-api/.env` defaulted `npm run dev` to the DEV forward
   on `localhost:55433`, `http://localhost:3001/health` returned HTTP 200, direct
   API login for `admin@bandai.local` returned HTTP 200, and Playwright login
   through the local app at `http://localhost:5175/auth/login` reached
@@ -3896,9 +3896,9 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   `.runtime/local-dev/20260703-verify/api-auth-login-proof.json`, and
   `.runtime/local-dev/20260703-verify/browser/playwright-login-proof.json`.
 - Later on 2026-07-03, development-stage observability rolling backups were
-  hard-deleted as approved: `/srv/hris/observability/backups/rolling` dropped
-  from about `161G` to zero files, `/srv/hris/observability/backups` was about
-  `28K`, and `/srv/hris/observability` was about `8.2G`. Backup and replicator
+  hard-deleted as approved: `/srv/bnpi-pats/observability/backups/rolling` dropped
+  from about `161G` to zero files, `/srv/bnpi-pats/observability/backups` was about
+  `28K`, and `/srv/bnpi-pats/observability` was about `8.2G`. Backup and replicator
   containers were intentionally left stopped to prevent immediate archive
   regeneration.
 - Later on 2026-07-03, a compact retained current-state VHDX was built inside
@@ -3919,7 +3919,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   Hyper-V Worker/Admin event `18601` reported that it successfully booted an
   operating system, heartbeat was OK, and KVP reported guest IPs
   `10.184.37.78` and `10.184.37.19`. Direct Windows host probes to SSH and
-  HRIS ports still failed because the current `ProjectTruth-External`
+  BNPI PATS ports still failed because the current `ProjectTruth-External`
   host/vSwitch path is on `192.168.254.149/24` and did not route to the guest's
   static `10.184.37.x` addresses, even after a temporary additive host
   `10.184.37.250/24` test address.
@@ -3942,7 +3942,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   runtime/config drift repair because the Cloudflare config regression guard was
   updated with the active SSH origin.
 - `wwg validate` passes after the stable LAN target drift repair.
-- On 2026-07-09, the local HRIS device-event model was hard-cut over from
+- On 2026-07-09, the local BNPI PATS device-event model was hard-cut over from
   attendance/source/status-led UI language to persisted `DeviceEvent`
   taxonomy fields: `eventCategory`, `eventAction`, `eventLabel`, and
   `eventConfidence`. A narrow SQL migration/backfill preserved all 96 existing
@@ -3950,7 +3950,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   `device_events_backup_20260709_225223`, and backfilled:
   `ATTENDANCE/TAP/PROVEN=32`, `ACCESS_CONTROL/UNKNOWN/UNKNOWN=62`, and
   `UNKNOWN_VENDOR/LISTENER_RECEIVED/UNKNOWN=2`. The admin route now presents
-  `Device events`, category/action filters, `HRIS result`, and debug-only
+  `Device events`, category/action filters, `BNPI PATS result`, and debug-only
   runtime path wording while retaining raw `source` and processing `status`
   compatibility fields. Evidence:
   `.runtime/device-event-model-hardcutover-20260709-225223/`.
@@ -3962,7 +3962,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - Canonical Project Truth LAN/runtime IP: `10.184.37.19` (pure static)
 - Retained secondary transition IP/TLS SAN: `10.184.37.78` (pure static)
 - LAN SSH: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19`
-- Named tunnel: `bnpi-hris`
+- Named tunnel: `bnpi-pats`
 - Named tunnel ID: `e3486f00-f974-46d3-9e11-911266749d00`
 - Public verification artifact: `.runtime/cloudflare-drift-proof/20260629-220610/public-verification-final.json`
 - VM text proof: `.runtime/cloudflare-drift-proof/20260629-220610/screen-overview.txt`, `.runtime/cloudflare-drift-proof/20260629-220610/screen-tunnels.txt`, `.runtime/cloudflare-drift-proof/20260629-220610/vm-text-surfaces.txt`
@@ -3977,13 +3977,13 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - V6 one-click zip artifact:
   `C:\ProgramData\ProjectTruth\exports\hyperv-v6\20260630-115040\project-truth-hyperv-one-click-installer-v6.zip`
 - Published V6 tiny package path:
-  `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v6/latest/project-truth-hyperv-one-click-installer-v6.zip`
+  `gs://project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/hyperv/v6/latest/project-truth-hyperv-one-click-installer-v6.zip`
 - V7 one-click zip artifact:
   `C:\ProgramData\ProjectTruth\exports\hyperv-v7\20260630-161359\project-truth-hyperv-one-click-installer-v7.zip`
 - Published V7 package path:
-  `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-hyperv-one-click-installer-v7.zip`
+  `gs://project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-hyperv-one-click-installer-v7.zip`
 - Published V7 VHDX path:
-  `gs://project-truth-image-export-hris-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-node-local-hyperv-v7-current-state.vhdx`
+  `gs://project-truth-image-export-bnpi-pats-492904-161377059311/public/project-truth/hyperv/v7/latest/project-truth-node-local-hyperv-v7-current-state.vhdx`
 - Retained in-VM compact current-state VHDX:
   `/var/lib/project-truth/retained-vhdx/20260703-102324/project-truth-node-current-state-20260703-102324.vhdx`
 - Retained current-state VHDX evidence:
@@ -4007,7 +4007,7 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
   time-out, or zero worked minutes such as a single duplicated punch) is a
   company no-pay day. Previously a PRESENT day with 0:00 worked still earned
   the full daily rate (`dayRegularPay = PRESENT ? dailyRate : 0`).
-- **Engine** (`hris-api/helper/payroll-period.helper.ts`): new exported
+- **Engine** (`bnpi-pats-api/helper/payroll-period.helper.ts`): new exported
   `isMissingPunchDay()` + `MISSING_PUNCH_NO_PAY_REASON`; dailyBreakdown zeroes
   fallback-leg regular pay for INCOMPLETE / PRESENT-missing-punch days and
   stamps `missingPunchNoPay` + `noPayReason` (approved-bucket basis still wins
@@ -4016,8 +4016,8 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 - **UI** (HR-only, no emp counterpart): `NO PAY` chips on both Daily
   Attendance Logs and Daily Pay Computation rows, unpaid-day count in the
   section header, period-gross tooltip; derivation in
-  `hris-app/app/lib/utils/payroll-no-pay-days.ts`.
-- **Tests**: `hris-api/tests/missing-punch-no-pay.spec.ts` 6/6;
+  `bnpi-pats-app/app/lib/utils/payroll-no-pay-days.ts`.
+- **Tests**: `bnpi-pats-api/tests/missing-punch-no-pay.spec.ts` 6/6;
   `payroll-no-pay-days.test.ts` 3/3; neighbors 82 + source-truth 34 passing.
 - **Follow-ups**: `WAIT_SEC`/submodule-404 notes from the 2026-09-04 Observe
   diagnosis remain open; bucket-paid missing-punch days keep approved pay.
@@ -4042,14 +4042,14 @@ Status: IMPLEMENTED + PROVEN +ÃƒÂ¢Ã‹â€ Ã‚Â©ÃƒÂ¢Ã¢â‚¬Â
 
 ## Latest Task Addendum - 2026-09-14 Agency workspace (operator-ordered feature, no push)
 
-- **Delivered local DEV, unpushed:** agency coordinator login (`hris-agency`, link in `User.metadata.agencyId` â€” no `User.agencyId` column) + `/agency` workspace (Dashboard/Roster/Attendance/Timesheets/Biometrics) + server-enforced own-agency scope + CSV attendance import (`POST /api/agency/:id/attendance-import`, dryRun preview zero-write + execute).
-- **Backend** (`hris-api`): `helper/agency-scope.helper.ts` (resolve/same-agency/where-fragment); employee + timesheet `getAll` force own-agency `AND` (403 when agency unresolvable, never unscoped); timesheet PATCH allow-list + same-agency gate (cross-agency 403; APPROVED breakdown-only semantics unchanged); import parses EMPLOYEE_ID/DATE/TIME_IN/TIME_OUT/NOTES (xlsx lib reads CSV), matches employeeId/deviceEmpId within target agency, 202 async job + activity/audit logs. Repaired in-review: nested `employee.agencyId` scope on timesheet list (was invalid top-level key), `:id` route shape, dryRun mode, deviceEmpId fallback.
-- **Frontend** (`hris-app`): `AgencyWorkspace` + `BiometricsImport` on existing hooks/components (`useEmployees`/`useTimesheets`/`TimesheetViewModal`/`GenericImportModal` pattern/`SummaryCard`), Sidebar `Agency Workspace` entry for AGENCY_ROLES, role-redirect `/agency`, login/landing/layout guards. Single-app exception (no emp-app counterpart).
-- **Live proof** (canonical local DEV, agency-test@test.com): roster unfiltered = own 2 only, foreign filter = 0 rows (no leak); own APPROVED day-adjust PATCH 200 (tweak + cleanup, notes null, stays APPROVED); foreign PATCH 403; CSV dryRun matched 1 / rejected foreign 1 zero-write; execute created 1 PRESENT 2020-01-05 row then deleted; Playwright login-workspace + workspace specs PASSED (`/agency`, cards, tabs, roster/timesheet API calls with agency filter). Proof subjects (KCSSI-BANDAI1129/1128) moved to TEST and reverted; TEST roster back to 0. Evidence: `.runtime/agency-workspace-proof-20260914-031238/`, `hris-app/.runtime/agency-workspace-20260914/`.
+- **Delivered local DEV, unpushed:** agency coordinator login (`bnpi-pats-agency`, link in `User.metadata.agencyId` â€” no `User.agencyId` column) + `/agency` workspace (Dashboard/Roster/Attendance/Timesheets/Biometrics) + server-enforced own-agency scope + CSV attendance import (`POST /api/agency/:id/attendance-import`, dryRun preview zero-write + execute).
+- **Backend** (`bnpi-pats-api`): `helper/agency-scope.helper.ts` (resolve/same-agency/where-fragment); employee + timesheet `getAll` force own-agency `AND` (403 when agency unresolvable, never unscoped); timesheet PATCH allow-list + same-agency gate (cross-agency 403; APPROVED breakdown-only semantics unchanged); import parses EMPLOYEE_ID/DATE/TIME_IN/TIME_OUT/NOTES (xlsx lib reads CSV), matches employeeId/deviceEmpId within target agency, 202 async job + activity/audit logs. Repaired in-review: nested `employee.agencyId` scope on timesheet list (was invalid top-level key), `:id` route shape, dryRun mode, deviceEmpId fallback.
+- **Frontend** (`bnpi-pats-app`): `AgencyWorkspace` + `BiometricsImport` on existing hooks/components (`useEmployees`/`useTimesheets`/`TimesheetViewModal`/`GenericImportModal` pattern/`SummaryCard`), Sidebar `Agency Workspace` entry for AGENCY_ROLES, role-redirect `/agency`, login/landing/layout guards. Single-app exception (no emp-app counterpart).
+- **Live proof** (canonical local DEV, agency-test@test.com): roster unfiltered = own 2 only, foreign filter = 0 rows (no leak); own APPROVED day-adjust PATCH 200 (tweak + cleanup, notes null, stays APPROVED); foreign PATCH 403; CSV dryRun matched 1 / rejected foreign 1 zero-write; execute created 1 PRESENT 2020-01-05 row then deleted; Playwright login-workspace + workspace specs PASSED (`/agency`, cards, tabs, roster/timesheet API calls with agency filter). Proof subjects (KCSSI-BANDAI1129/1128) moved to TEST and reverted; TEST roster back to 0. Evidence: `.runtime/agency-workspace-proof-20260914-031238/`, `bnpi-pats-app/.runtime/agency-workspace-20260914/`.
 - **Tests:** api `agency-scope.helper.spec.ts` 9/9; app agency-workspace 3/3 + role-redirect 11/11; tsc clean on touched backend scope; eslint 0 errors (warnings only). Pre-existing drift untouched (unified-layout overlay a11y, TimesheetsTab mock).
 - **Boundaries:** `User.metadata.agencyId` provisioning is manual seed (no admin UI yet); approve-action + `PATCH /api/timesheetline/:id` have no role guards (filed REC-20260914-TIMESHEET-APPROVE-NO-ROLE-CHECK, REC-20260914-TIMESHEETLINE-PATCH-NO-GUARD); TEST agency holds no standing members (roster empty until real assignment).
-- **Truth-sync:** terminology `Agency (hris-agency)` row added; 2 RECs Proposed; this addendum. Not pushed (no operator push order).
-- **Revision 2026-09-14 (operator: dedicated pages + chart dashboard, no tabs):** `/agency` now redirects to `/agency/dashboard`; five real routes (`dashboard/roster/attendance/timesheets/biometrics`) under unified-layout + Sidebar `Agency` section (5 sub-links) for AGENCY_ROLES. Dashboard has recharts graphs from live rows: 14-day attendance stacked bars, timesheet-status donut, members-by-department bars. Attendance is a real day-level table; timesheets gained View/adjust modal. Fixed in-review: `TimesheetViewModal` named import (was white-screening Timesheets), `enabled` inside `useTimesheets` params, roster ACTIVE-only filter widened to ACTIVE/ONBOARDING/ON_LEAVE, duplicate testids removed, date-range filter dropped (DSL ORs same-key items â€” bucket client-side instead), attendance `getAll` agency-scoped on backend. Proof with 3 TEST subjects (1129/1128/NC-BNP1425, all reverted): dashboard 3 members / 9 punches / 10 sheets consistent; Playwright PASSED; evidence `hris-app/.runtime/agency-workspace-20260914/agency-dashboard.png` + `agency-roster.png`. Old tab specs removed.
+- **Truth-sync:** terminology `Agency (bnpi-pats-agency)` row added; 2 RECs Proposed; this addendum. Not pushed (no operator push order).
+- **Revision 2026-09-14 (operator: dedicated pages + chart dashboard, no tabs):** `/agency` now redirects to `/agency/dashboard`; five real routes (`dashboard/roster/attendance/timesheets/biometrics`) under unified-layout + Sidebar `Agency` section (5 sub-links) for AGENCY_ROLES. Dashboard has recharts graphs from live rows: 14-day attendance stacked bars, timesheet-status donut, members-by-department bars. Attendance is a real day-level table; timesheets gained View/adjust modal. Fixed in-review: `TimesheetViewModal` named import (was white-screening Timesheets), `enabled` inside `useTimesheets` params, roster ACTIVE-only filter widened to ACTIVE/ONBOARDING/ON_LEAVE, duplicate testids removed, date-range filter dropped (DSL ORs same-key items â€” bucket client-side instead), attendance `getAll` agency-scoped on backend. Proof with 3 TEST subjects (1129/1128/NC-BNP1425, all reverted): dashboard 3 members / 9 punches / 10 sheets consistent; Playwright PASSED; evidence `bnpi-pats-app/.runtime/agency-workspace-20260914/agency-dashboard.png` + `agency-roster.png`. Old tab specs removed.
 
 
 

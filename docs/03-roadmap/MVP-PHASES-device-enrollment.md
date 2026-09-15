@@ -14,7 +14,7 @@ Preview revalidation, async job progress, cancel, partial-result semantics, and 
 
 ## Phase 4 — Verification
 
-Re-read source/target/HRIS state, show divergence, safe retry, and downloadable evidence.
+Re-read source/target/BNPI PATS state, show divergence, safe retry, and downloadable evidence.
 
 ## Phase 5 — Runtime promotion
 

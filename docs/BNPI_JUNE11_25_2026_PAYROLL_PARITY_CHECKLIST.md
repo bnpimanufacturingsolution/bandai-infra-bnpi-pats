@@ -9,7 +9,7 @@
 
 ## 1. Purpose
 
-Make **processed payroll in HRIS** tally to the client **HRIS Payroll Computation** workbook for this cutoff, using the ordered import pipeline:
+Make **processed payroll in BNPI PATS** tally to the client **BNPI PATS Payroll Computation** workbook for this cutoff, using the ordered import pipeline:
 
 ```text
 Biometrics (raw punches)
@@ -36,7 +36,7 @@ This cut is **not** the same as June 26 – July 10:
 | Pack folder | `docs/new-cutoff/june-11-25/` | `docs/new-cutoff/june-26-10/` |
 
 Contribution schedule: `BNPI_FIRST_CUTOFF_FULL_SECOND_CUTOFF_NONE` in  
-`hris-api/helper/payroll-period.helper.ts` → period 1 factor **1**, period 2 factor **0**.
+`bnpi-pats-api/helper/payroll-period.helper.ts` → period 1 factor **1**, period 2 factor **0**.
 
 ---
 
@@ -46,7 +46,7 @@ All paths relative to repo root unless noted.
 
 | # | Role | Path | Proven shape (2026-08-04 probe) |
 |---|---|---|---|
-| T | **Target register** | `docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx` | Password `9090`. Sheets: `Sheet2` (full register, ~859 employees + grand total), `Sheet1` (Emp / Bank / Total Receivable). Period line: `6/11/2026 to 6/25/2026`, pay date `6/30/2026`. |
+| T | **Target register** | `docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx` | Password `9090`. Sheets: `Sheet2` (full register, ~859 employees + grand total), `Sheet1` (Emp / Bank / Total Receivable). Period line: `6/11/2026 to 6/25/2026`, pay date `6/30/2026`. |
 | B | **Biometrics (raw attendance)** | `docs/new-cutoff/june-11-25/Biometrics Data_Jun 11 - 25.xlsx` | Sheet `062626_1`. Columns **only** `No.`, `Date/Time`. ~24,054 punch rows. **Not** OT buckets. |
 | O | **Approved OT** | `docs/new-cutoff/june-11-25/1rptOvertimeDetails - June 11-25, 2026.xlsx` | Sheet `rptOvertimeDetails`. Title OVERTIME/ND/HOLIDAY WORK DETAIL REPORT. Range `6/11/2026 to 6/25/2026`. Headers include Regular Dys, Reg OTHrs, Reg NDHrs, Spcl*, RHol*, RDHrs, RDOTHrs. |
 | C | **Compensation mass upload** | `docs/new-cutoff/june-11-25/Compensation Mass Upload 06.30.26.xlsx` | Sheet1. `COMCODE, Amount, EmployeeID, EmployeeName, StartPayDate`. ~2,027 rows. Codes seen: LLA, TSA, OAD, INC, MTX, ARP, OBA, ABS, AON. StartPayDate aligns to this cut (~6/11 local). |
@@ -70,7 +70,7 @@ Do **not** use April statutory remittance board as this cut’s contribution or 
 
 Sheet2 header (105 money/identity columns). Ownership for **this cut**:
 
-| Register family (Sheet2) | Source of truth | HRIS path |
+| Register family (Sheet2) | Source of truth | BNPI PATS path |
 |---|---|---|
 | Monthly / Daily / Basic Salary, No. of Days | Employee master + attendance/timesheet | DM3 `BASIC_SALARY`; DM4 punches + schedules |
 | Absent-Amt / UT/Late-Amt | Attendance + rules | DM4 biometrics + timesheet rules |
@@ -148,8 +148,8 @@ Prior parity tooling and truth docs defaulted to:
 
 | Item | Historical path / fact |
 |---|---|
-| Target register | `docs/Bandai Payroll/.../HRIS Payroll Computation April 26 - May 10, 2026.xlsx` (password `9090`) |
-| Source-trace script defaults | `hris-api/scripts/validate-bandai-payroll-source-trace.ts` cutoff `2026-04-26`–`2026-05-10`, pay `2026-05-15` |
+| Target register | `docs/Bandai Payroll/.../BNPI PATS Payroll Computation April 26 - May 10, 2026.xlsx` (password `9090`) |
+| Source-trace script defaults | `bnpi-pats-api/scripts/validate-bandai-payroll-source-trace.ts` cutoff `2026-04-26`–`2026-05-10`, pay `2026-05-15` |
 | Comparison CLI defaults | `dry-run-bandai-payroll-comparison.ts` still points at May 15 reference + Compensation/Deduction `05.15.26` + generic OT workbook under `docs/Bandai Payroll/` |
 | DM3.6 lesson | Employee benefits dated **only** Apr 26–May 10 are **wrong period** for June cuts |
 | OT timesheet repair default periodCode | `PP-20260426-20260511` — **must override** for June 11–25 |
@@ -195,7 +195,7 @@ Related checklist pattern: `docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIS
 - [ ] Dry-run OT → timesheet lines until `plannedLineUpdates = 0`:
 
 ```powershell
-cd hris-api
+cd bnpi-pats-api
 npm.cmd run dry-run:bandai-payroll-timesheet-lines -- `
   --periodCode=<ACTUAL_JUNE_11_25_PERIOD_CODE> `
   --overtime-workbook="../docs/new-cutoff/june-11-25/1rptOvertimeDetails - June 11-25, 2026.xlsx" `
@@ -236,10 +236,10 @@ Priority order when mismatching:
 10. Receivable-only → **TotalReceivable**
 
 ```powershell
-cd hris-api
+cd bnpi-pats-api
 # Source ownership only (no DB compare):
 npm.cmd run dry-run:bandai-payroll-source -- `
-  --workbook="../docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx" `
+  --workbook="../docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx" `
   --password=9090 `
   --no-default-sources `
   --compensation-upload="../docs/new-cutoff/june-11-25/Compensation Mass Upload 06.30.26.xlsx" `
@@ -249,7 +249,7 @@ npm.cmd run dry-run:bandai-payroll-source -- `
 
 # Full DB vs register (requires local API/DB with generated payroll):
 npm.cmd run dry-run:bandai-payroll-comparison -- `
-  --workbook="../docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx" `
+  --workbook="../docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx" `
   --password=9090 `
   --no-default-sources `
   --compensation-upload="../docs/new-cutoff/june-11-25/Compensation Mass Upload 06.30.26.xlsx" `
@@ -288,15 +288,15 @@ npm.cmd run dry-run:bandai-payroll-comparison -- `
 | Concern | Location |
 |---|---|
 | DM workflow | `docs/dm-migration-workflow.md` |
-| Contribution period 1/2 | `hris-api/helper/payroll-period.helper.ts` |
-| Tax / contributions | `hris-api/helper/tax-calculator.helper.ts`, payroll config |
-| Compensation / deduction import | `hris-api/app/migration/bnpi-mass-upload-import.service.ts` |
-| Migration routes | `hris-api/app/migration/migration.router.ts` |
-| Register unlock + compare | `hris-api/helper/payroll-reconciliation.helper.ts` |
-| Comparison CLI | `hris-api/scripts/dry-run-bandai-payroll-comparison.ts` |
-| OT → timesheet lines | `hris-api/scripts/repair-bandai-payroll-source-timesheet-lines.ts` |
-| Source-trace (May defaults — override) | `hris-api/scripts/validate-bandai-payroll-source-trace.ts` |
-| Debug payroll wipe deep link | `hris-app/app/routes/settings.tsx` → `?debug=true&resetEmployeePayrolls=true` |
+| Contribution period 1/2 | `bnpi-pats-api/helper/payroll-period.helper.ts` |
+| Tax / contributions | `bnpi-pats-api/helper/tax-calculator.helper.ts`, payroll config |
+| Compensation / deduction import | `bnpi-pats-api/app/migration/bnpi-mass-upload-import.service.ts` |
+| Migration routes | `bnpi-pats-api/app/migration/migration.router.ts` |
+| Register unlock + compare | `bnpi-pats-api/helper/payroll-reconciliation.helper.ts` |
+| Comparison CLI | `bnpi-pats-api/scripts/dry-run-bandai-payroll-comparison.ts` |
+| OT → timesheet lines | `bnpi-pats-api/scripts/repair-bandai-payroll-source-timesheet-lines.ts` |
+| Source-trace (May defaults — override) | `bnpi-pats-api/scripts/validate-bandai-payroll-source-trace.ts` |
+| Debug payroll wipe deep link | `bnpi-pats-app/app/routes/settings.tsx` → `?debug=true&resetEmployeePayrolls=true` |
 | Reset API | `POST /api/employeePayroll/debug/reset-generated-payrolls` |
 | June 26–10 sibling checklist | `docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md` |
 

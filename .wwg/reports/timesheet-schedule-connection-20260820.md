@@ -60,7 +60,7 @@ It is **not** the schedule. Schedule = start/end. Day labor = Direct vs Indirect
 
 | Piece | Path |
 |---|---|
-| Resolve that day’s shift | `hris-api/helper/employee-schedule.helper.ts` `resolveEffectiveShift` |
+| Resolve that day’s shift | `bnpi-pats-api/helper/employee-schedule.helper.ts` `resolveEffectiveShift` |
 | Rebuild expected days | `recomputeAttendanceObligationsForRange` reason `ScheduleChanged` |
 | Punch freeze | `attendance.controller.ts` / Hikvision callback stamp `scheduleSnapshot` |
 | Timesheet persist math | `normalizeBreakdownForPersistence` uses **live** resolve |

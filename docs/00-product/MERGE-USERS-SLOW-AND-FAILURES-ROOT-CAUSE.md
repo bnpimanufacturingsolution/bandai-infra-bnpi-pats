@@ -3,7 +3,7 @@
 **Status:** Live runtime diagnosis (DEV local + VM SDK path)  
 **Last updated:** 2026-07-22  
 **Audience:** operators and agents working Project Truth Device Users merge  
-**Evidence sources:** live `GET /api/device/hikvision/sdk-users/merge/jobs`, job poll JSON, copy failure summaries, `hris-api` VM manual-copy path in `device.controller.ts`
+**Evidence sources:** live `GET /api/device/hikvision/sdk-users/merge/jobs`, job poll JSON, copy failure summaries, `bnpi-pats-api` VM manual-copy path in `device.controller.ts`
 
 ---
 
@@ -14,7 +14,7 @@
 | **Primary problem** | Almost all **slowness** and **failures** are on the **VM SDK peer-copy write path**, not on “search can’t find users.” |
 | **Dominant failure family** | **Timeout** on Hikvision **manual copy** (`static_spec`, then often `api` retry) |
 | **Hot paths** | Writes **into Device F** and **out of Device E** (also B→F, C→F in samples) |
-| **Not the primary problem** | SSH disabled; random HRIS inventing fails; needing SSH to merge |
+| **Not the primary problem** | SSH disabled; random BNPI PATS inventing fails; needing SSH to merge |
 | **How to finish “all sync”** | One job at a time → terminal status → **remaining-only** retry from failure ledger + reread — **not** blind full re-mirror |
 
 ---
@@ -42,7 +42,7 @@ requires a VM-local SDK control service or sidecar.
 |---|---|---|---|
 | **Plan / inventory** | ISAPI-style user snapshot per selected device (`UserInfo/Search` etc.) | Medium (once per plan) | Sometimes **Unauthorized** under concurrent load (separate from write timeouts) |
 | **Merge job write** | For each unique user: build spec → SCP to VM → SSH → HCNetSDK manual peer copy (user + fingerprint + face) → optional verify reread | **Yes — dominant cost** | **Yes — mostly timeouts** |
-| **HRIS update** | DeviceUser / link bookkeeping after copy | Fast | Rare |
+| **BNPI PATS update** | DeviceUser / link bookkeeping after copy | Fast | Rare |
 
 UI poll stages that match the write path:
 
@@ -80,7 +80,7 @@ Each peer write roughly does:
 
 ### 3.2 Hard timeouts in code
 
-From `hris-api` merge VM copy path (`device.controller.ts`):
+From `bnpi-pats-api` merge VM copy path (`device.controller.ts`):
 
 - Manual copy wall clock is bounded (env `HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS`, default floor ~25s, modality/peer bonuses, **cap ~90s** per strategy).  
 - Comment in source: multi-target + FP/face need headroom; short defaults caused **timeout storms**.  
@@ -194,7 +194,7 @@ If two jobs show `status=processing` at the same time, they **compete** for the 
 
 - Hikvision **SSH** disabled (SSH is not the merge bus; ISAPI + HCNetSDK are)  
 - “Search can’t find users” as the main **write** failure class  
-- HRIS inventing failures without device interaction  
+- BNPI PATS inventing failures without device interaction  
 - Needing to re-merge **all** unique IDs from scratch after every partial run  
 
 ---
@@ -265,9 +265,9 @@ Do **not**:
 | Item | Location |
 |---|---|
 | Merge plan / job API | `POST/GET /api/device/hikvision/sdk-users/merge/...` |
-| VM manual copy + timeouts | `hris-api/app/device/device.controller.ts` (manual copy strategies `static_spec` / `api`) |
-| Unique-ID / missing semantics | `hris-api/helper/device-user-merge.helper.ts` |
-| Merge UI (Device Users) | `hris-app/app/routes/admin/devices/enroll.tsx` |
+| VM manual copy + timeouts | `bnpi-pats-api/app/device/device.controller.ts` (manual copy strategies `static_spec` / `api`) |
+| Unique-ID / missing semantics | `bnpi-pats-api/helper/device-user-merge.helper.ts` |
+| Merge UI (Device Users) | `bnpi-pats-app/app/routes/admin/devices/enroll.tsx` |
 | WWG handoff / task | `.wwg/reports/wwg-agent-handoff.md`, `.wwg/workspace/current-task.md` |
 | Runtime evidence | `.runtime/merge-users-final-run-*`, `.runtime/device-e-merge-truth-*`, `.runtime/merge-overnight-*` |
 

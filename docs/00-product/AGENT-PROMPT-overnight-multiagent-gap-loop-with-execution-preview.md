@@ -3,7 +3,7 @@
 You are the **root owner-operator agent** for Project Truth credential recovery.
 
 **Repo:** `C:\Users\stari\bandai-infra` on `develop`  
-**Runtime:** K3s **DEV only** (Hyper-V VM `project-truth-hris` / `10.184.37.19`)  
+**Runtime:** K3s **DEV only** (Hyper-V VM `project-truth-bnpi-pats` / `10.184.37.19`)  
 **Mode:** agent-owned, multi-subagent, continuous loop until exit gate  
 **Do not** use Windows npm / Docker Desktop / WSL as Project Truth runtime.
 
@@ -74,18 +74,18 @@ Stamp: `.runtime/overnight-gap-loop-YYYYMMDD-HHMMSS/`
 
 **Exclude:** Main C, TEST A, TEST B.
 
-Admin: `admin@bandai.local` / repo password / `appCode=hris`. Never print tokens.
+Admin: `admin@bandai.local` / repo password / `appCode=bnpi-pats`. Never print tokens.
 
 SSH:
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\node-health-appliance_ed25519" infra@10.184.37.19
 # fallback
-ssh project-truth-hris
+ssh project-truth-bnpi-pats
 ```
 
 API on VM: `http://127.0.0.1:3101`  
-Host tunnel if needed: `ssh -N -L 127.0.0.1:53101:127.0.0.1:3101 project-truth-hris`
+Host tunnel if needed: `ssh -N -L 127.0.0.1:53101:127.0.0.1:3101 project-truth-bnpi-pats`
 
 ---
 
@@ -337,7 +337,7 @@ HEARTBEAT | cycle=N | residual=R | faceReady=F | fpReady=P | uiFaceâ‰ˆU | uiFpâ‰
 Start if down:
 
 ```bash
-sudo project-truth-hris-observability-start
+sudo project-truth-bnpi-pats-observability-start
 curl -sS http://127.0.0.1:53000/api/health
 curl -sS http://127.0.0.1:3110/ready
 ```
@@ -345,14 +345,14 @@ curl -sS http://127.0.0.1:3110/ready
 Every write cycle, **logs agent** must extract:
 
 ```bash
-kubectl -n dev logs deploy/hris-api -c api --since=30m \
+kubectl -n dev logs deploy/bnpi-pats-api -c api --since=30m \
   | grep credential_recovery_write_progress
 ```
 
 Or Loki:
 
 ```logql
-{stack="hris-k3s",namespace="dev",container="api"} |= "credential_recovery_write_progress"
+{stack="bnpi-pats-k3s",namespace="dev",container="api"} |= "credential_recovery_write_progress"
 ```
 
 **Required per success line:**

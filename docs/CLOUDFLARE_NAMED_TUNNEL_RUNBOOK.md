@@ -2,33 +2,33 @@
 
 ## Current Public Access Model
 
-Project Truth public access uses the named Cloudflare Tunnel `bnpi-hris`.
+Project Truth public access uses the named Cloudflare Tunnel `bnpi-pats`.
 
 ```text
 Bootstrap or repair:
   Windows host cloudflared
-  -> cloudflared-bnpi-hris.yml
+  -> cloudflared-bnpi-pats.yml
   -> Hyper-V VM LAN IP
-  -> HRIS app/API/dev/uat/employee/Grafana ports
-  -> bnpi-hris.tech public hostnames
+  -> BNPI PATS app/API/dev/uat/employee/Grafana ports
+  -> bnpi-pats.tech public hostnames
 
 Preferred BNPI runtime:
   Linux VM cloudflared
   -> localhost app/API/dev/uat/employee/Grafana/SSH services
-  -> bnpi-hris.tech public hostnames
+  -> bnpi-pats.tech public hostnames
 ```
 
 Current tunnel:
 
 ```text
-Name: bnpi-hris
+Name: bnpi-pats
 ID: e3486f00-f974-46d3-9e11-911266749d00
-Config: cloudflared-bnpi-hris.yml
+Config: cloudflared-bnpi-pats.yml
 Current connectors: Windows host scheduled task and optional VM-side systemd
 ```
 
 The Windows host remains the canonical bootstrap owner for fresh imports. The wrapper discovers the
-running VM LAN IP, rewrites `cloudflared-bnpi-hris.yml`, starts one named tunnel
+running VM LAN IP, rewrites `cloudflared-bnpi-pats.yml`, starts one named tunnel
 connector, and writes evidence under `.runtime/cloudflare-named-tunnel`.
 
 The current proof VM can also run the same named tunnel inside Linux after the
@@ -49,10 +49,10 @@ The wrapper:
 - starts `project-truth-local-vhdx-proof` if needed,
 - discovers the VM LAN IP,
 - verifies the production app origin,
-- rewrites `cloudflared-bnpi-hris.yml`,
-- optionally provisions the public DNS routes, including `ssh.bnpi-hris.tech`,
+- rewrites `cloudflared-bnpi-pats.yml`,
+- optionally provisions the public DNS routes, including `ssh.bnpi-pats.tech`,
 - stops conflicting `cloudflared` named tunnel processes,
-- starts the `bnpi-hris` tunnel,
+- starts the `bnpi-pats` tunnel,
 - optionally verifies public URLs.
 
 To check a Windows host before running or exporting the appliance setup:
@@ -70,24 +70,24 @@ To repair DNS routes and start the tunnel from one command:
 ## Public URLs
 
 ```text
-https://bnpi-hris.tech/auth/login
-https://www.bnpi-hris.tech/auth/login
-https://app.bnpi-hris.tech/auth/login
-https://api.bnpi-hris.tech/health
-https://emp.bnpi-hris.tech/auth/login
-https://dev.bnpi-hris.tech/auth/login
-https://dev-api.bnpi-hris.tech/health
-https://dev-emp.bnpi-hris.tech/auth/login
-https://uat.bnpi-hris.tech/auth/login
-https://uat-api.bnpi-hris.tech/health
-https://uat-emp.bnpi-hris.tech/auth/login
-https://grafana.bnpi-hris.tech/api/health
+https://bnpi-pats.tech/auth/login
+https://www.bnpi-pats.tech/auth/login
+https://app.bnpi-pats.tech/auth/login
+https://api.bnpi-pats.tech/health
+https://emp.bnpi-pats.tech/auth/login
+https://dev.bnpi-pats.tech/auth/login
+https://dev-api.bnpi-pats.tech/health
+https://dev-emp.bnpi-pats.tech/auth/login
+https://uat.bnpi-pats.tech/auth/login
+https://uat-api.bnpi-pats.tech/health
+https://uat-emp.bnpi-pats.tech/auth/login
+https://grafana.bnpi-pats.tech/api/health
 ```
 
 Same-host API routing is also expected:
 
 ```text
-https://bnpi-hris.tech/api/*
+https://bnpi-pats.tech/api/*
 ```
 
 ## Postgres Through Cloudflare Access TCP
@@ -95,30 +95,30 @@ https://bnpi-hris.tech/api/*
 Project Truth can publish Postgres TCP hostnames through the named tunnel, but
 normal Cloudflare Access TCP still requires a client-side `cloudflared` process.
 It does not create a raw public Postgres socket that database tools can open
-directly at `db.bnpi-hris.tech:5432`.
+directly at `db.bnpi-pats.tech:5432`.
 
 Current DB Access TCP hostnames:
 
 ```text
-PROD  db.bnpi-hris.tech     -> tcp://<VM>:15432
-DEV   dev-db.bnpi-hris.tech -> tcp://<VM>:15433
-UAT   uat-db.bnpi-hris.tech -> tcp://<VM>:15434
+PROD  db.bnpi-pats.tech     -> tcp://<VM>:15432
+DEV   dev-db.bnpi-pats.tech -> tcp://<VM>:15433
+UAT   uat-db.bnpi-pats.tech -> tcp://<VM>:15434
 ```
 
 On each client workstation, start the local forwards:
 
 ```powershell
-cloudflared access tcp --hostname db.bnpi-hris.tech --url localhost:55432
-cloudflared access tcp --hostname dev-db.bnpi-hris.tech --url localhost:55433
-cloudflared access tcp --hostname uat-db.bnpi-hris.tech --url localhost:55434
+cloudflared access tcp --hostname db.bnpi-pats.tech --url localhost:55432
+cloudflared access tcp --hostname dev-db.bnpi-pats.tech --url localhost:55433
+cloudflared access tcp --hostname uat-db.bnpi-pats.tech --url localhost:55434
 ```
 
 Then use these local database URLs:
 
 ```text
-PROD  postgresql://postgres:postgres@localhost:55432/hris
-DEV   postgresql://postgres:postgres@localhost:55433/hris
-UAT   postgresql://postgres:postgres@localhost:55434/hris
+PROD  postgresql://postgres:postgres@localhost:55432/bnpi_pats
+DEV   postgresql://postgres:postgres@localhost:55433/bnpi_pats
+UAT   postgresql://postgres:postgres@localhost:55434/bnpi_pats
 ```
 
 Project Truth also provides a small Windows helper that starts the same stable
@@ -137,10 +137,10 @@ To start all three deployed database forwards at once:
 It prints the exact `DATABASE_URL` to use and stores the background
 `cloudflared` PID under `.runtime\cloudflare-db-tcp`.
 
-### Local `hris-api` DEV via SSH `-L` (2026-07-20)
+### Local `bnpi-pats-api` DEV via SSH `-L` (2026-07-20)
 
 When the Windows workstation cannot reach VM LAN `10.184.37.19` but
-`ssh project-truth-hris` works through Cloudflare Access, prefer:
+`ssh project-truth-bnpi-pats` works through Cloudflare Access, prefer:
 
 ```powershell
 .\scripts\start-k8s-dev-db-access.ps1 -LocalPort 55435
@@ -151,7 +151,7 @@ Behavior (updated 2026-07-20):
 1. Reuse `127.0.0.1:55435` only if **Postgres wire** answers (not TCP alone).
 2. Prefer SSH forward to K3s DEV ClusterIP `10.43.130.9:5432`.
 3. If that remote target refuses, **fall back** to compose DEV on the VM:
-   `127.0.0.1:15433` (local Prisma URL remains `postgresql://postgres:postgres@127.0.0.1:55435/hris`).
+   `127.0.0.1:15433` (local Prisma URL remains `postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats`).
 
 Operator bootstrap log for a full remote Windows workstation (key, cloudflared,
 SSH alias, `npm run dev` skips): `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_20260720.md`.
@@ -159,7 +159,7 @@ SSH alias, `npm run dev` skips): `docs/LOCAL_WINDOWS_REMOTE_DEV_BOOTSTRAP_202607
 The URL the user requested:
 
 ```text
-postgresql://postgres:postgres@db.bnpi-hris.tech:5432/hris
+postgresql://postgres:postgres@db.bnpi-pats.tech:5432/bnpi_pats
 ```
 
 is only valid if the client is on Cloudflare WARP private routing, Cloudflare
@@ -182,7 +182,7 @@ host-managed setup is:
 This model works on another Windows host only after that host has:
 
 - `cloudflared` installed,
-- access to the Cloudflare account that owns `bnpi-hris.tech`,
+- access to the Cloudflare account that owns `bnpi-pats.tech`,
 - the named tunnel credentials installed under the operator's `.cloudflared`
   profile, or a deliberate credential import step,
 - network reachability to the VM LAN IP.
@@ -205,16 +205,16 @@ targets localhost services:
 
 ```yaml
 ingress:
-  - hostname: bnpi-hris.tech
+  - hostname: bnpi-pats.tech
     path: /api/.*
     service: http://localhost:3001
-  - hostname: bnpi-hris.tech
+  - hostname: bnpi-pats.tech
     service: http://localhost:3000
-  - hostname: api.bnpi-hris.tech
+  - hostname: api.bnpi-pats.tech
     service: http://localhost:3001
-  - hostname: emp.bnpi-hris.tech
+  - hostname: emp.bnpi-pats.tech
     service: http://localhost:3300
-  - hostname: grafana.bnpi-hris.tech
+  - hostname: grafana.bnpi-pats.tech
     service: http://localhost:53000
 ```
 
@@ -231,7 +231,7 @@ The script writes:
 ```text
 /etc/cloudflared/e3486f00-f974-46d3-9e11-911266749d00.json
 /etc/cloudflared/config.yml
-/etc/systemd/system/cloudflared-bnpi-hris.service
+/etc/systemd/system/cloudflared-bnpi-pats.service
 ```
 
 Do not run this during image baking. Fresh/final images must still avoid baked
@@ -250,11 +250,11 @@ BNPI Windows Server:
   Hyper-V host only
 
 BNPI Linux VM:
-  runs cloudflared-bnpi-hris.service on boot
-  exposes localhost:22 through ssh.bnpi-hris.tech
+  runs cloudflared-bnpi-pats.service on boot
+  exposes localhost:22 through ssh.bnpi-pats.tech
 
 Remote admin:
-  opens https://ssh.bnpi-hris.tech
+  opens https://ssh.bnpi-pats.tech
   signs in with Cloudflare Access
   uses the browser-rendered SSH terminal
 ```
@@ -271,11 +271,11 @@ the Project Truth SSH key to every machine an admin might use.
 
 Required state:
 
-1. `ssh.bnpi-hris.tech` is a published SSH application route on tunnel
-   `bnpi-hris`.
+1. `ssh.bnpi-pats.tech` is a published SSH application route on tunnel
+   `bnpi-pats`.
 2. The route service is `localhost:22` when the connector runs inside the VM.
 3. A Cloudflare Access self-hosted application protects
-   `ssh.bnpi-hris.tech`.
+   `ssh.bnpi-pats.tech`.
 4. Browser rendering is enabled for the SSH application.
 5. The Access policy allows only approved admin identities.
 6. The Linux VM has an SSH username compatible with the Access identity mapping
@@ -284,12 +284,12 @@ Required state:
 Cloudflare dashboard path:
 
 ```text
-Zero Trust -> Networks -> Tunnels -> bnpi-hris -> Routes
-  Add/confirm published application: ssh.bnpi-hris.tech
+Zero Trust -> Networks -> Tunnels -> bnpi-pats -> Routes
+  Add/confirm published application: ssh.bnpi-pats.tech
   Service: SSH / localhost:22
 
 Zero Trust -> Access controls -> Applications
-  Configure ssh.bnpi-hris.tech
+  Configure ssh.bnpi-pats.tech
   Enable browser-based SSH sessions
   Keep only Allow/Block policies for this browser-rendered app
 ```
@@ -297,7 +297,7 @@ Zero Trust -> Access controls -> Applications
 Validation from any browser:
 
 ```text
-https://ssh.bnpi-hris.tech
+https://ssh.bnpi-pats.tech
 ```
 
 Expected result: Cloudflare Access login appears, then Cloudflare renders an
@@ -309,7 +309,7 @@ clean journey for random office PCs:
 ```powershell
 ssh -i $env:USERPROFILE\.ssh\node-health-appliance_ed25519 `
   -o ProxyCommand="cloudflared access ssh --hostname %h" `
-  infra@ssh.bnpi-hris.tech
+  infra@ssh.bnpi-pats.tech
 ```
 
 ## Prepared Workstation CLI Key
@@ -321,26 +321,26 @@ half into the VM's `infra` account.
 Current Windows workstation key:
 
 ```text
-%USERPROFILE%\.ssh\bnpi_hris_cloudflare_ed25519
+%USERPROFILE%\.ssh\bnpi_pats_cloudflare_ed25519
 ```
 
 Current Windows SSH alias:
 
 ```powershell
-ssh bnpi-hris-client-vm
+ssh bnpi-pats-client-vm
 ```
 
 If the public key is not installed yet, open the browser SSH terminal at:
 
 ```text
-https://ssh.bnpi-hris.tech
+https://ssh.bnpi-pats.tech
 ```
 
 Then run this inside the browser terminal as `infra`:
 
 ```bash
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
-grep -qxF 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIQuU6GwMOippbn5Hdwk6ExcbqcbQyI4aHVmN2j9IAS bnpi-hris-cloudflare-cli' ~/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIQuU6GwMOippbn5Hdwk6ExcbqcbQyI4aHVmN2j9IAS bnpi-hris-cloudflare-cli' >> ~/.ssh/authorized_keys
+grep -qxF 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIQuU6GwMOippbn5Hdwk6ExcbqcbQyI4aHVmN2j9IAS bnpi-pats-cloudflare-cli' ~/.ssh/authorized_keys 2>/dev/null || echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICIQuU6GwMOippbn5Hdwk6ExcbqcbQyI4aHVmN2j9IAS bnpi-pats-cloudflare-cli' >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 ```
 
@@ -348,15 +348,15 @@ After the key is installed, this native SSH command should authenticate through
 Cloudflare Access:
 
 ```powershell
-ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 `
+ssh -i $env:USERPROFILE\.ssh\bnpi_pats_cloudflare_ed25519 `
   -o ProxyCommand="cloudflared access ssh --hostname %h" `
-  infra@ssh.bnpi-hris.tech
+  infra@ssh.bnpi-pats.tech
 ```
 
 The equivalent durable alias is:
 
 ```powershell
-ssh bnpi-hris-client-vm
+ssh bnpi-pats-client-vm
 ```
 
 ## Remote CLI SSH Through WARP Private Routing
@@ -374,7 +374,7 @@ Current VM LAN SSH target:
 Current private route to publish to Cloudflare Tunnel:
 
 ```text
-10.184.37.19/32 -> bnpi-hris
+10.184.37.19/32 -> bnpi-pats
 ```
 
 Current VM connector requirement:
@@ -387,14 +387,14 @@ warp-routing:
 The Windows workstation key is already authorized on the VM:
 
 ```text
-%USERPROFILE%\.ssh\bnpi_hris_cloudflare_ed25519
+%USERPROFILE%\.ssh\bnpi_pats_cloudflare_ed25519
 ```
 
 After the workstation is enrolled into the correct Cloudflare Zero Trust WARP
 organization, the remote CLI command is plain SSH to the private VM address:
 
 ```powershell
-ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 infra@10.184.37.19
+ssh -i $env:USERPROFILE\.ssh\bnpi_pats_cloudflare_ed25519 infra@10.184.37.19
 ```
 
 Proof with WARP connected and the same key:
@@ -427,7 +427,7 @@ Expected WARP setup on another admin workstation:
 winget install --id Cloudflare.Warp
 & "C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe" --accept-tos registration new tight-thunder-c664
 & "C:\Program Files\Cloudflare\Cloudflare WARP\warp-cli.exe" connect
-ssh -i $env:USERPROFILE\.ssh\bnpi_hris_cloudflare_ed25519 infra@10.184.37.19
+ssh -i $env:USERPROFILE\.ssh\bnpi_pats_cloudflare_ed25519 infra@10.184.37.19
 ```
 
 ## V6 One-Shot Fresh VM Proof
@@ -457,7 +457,7 @@ C:\ProgramData\ProjectTruth\secrets\cloudflared\e3486f00-f974-46d3-9e11-91126674
 The command validates that the JSON has the expected tunnel fields without
 printing secret contents, copies it to the VM only as temporary runtime input,
 installs it root-only under `/etc/cloudflared`, validates ingress, restarts
-`cloudflared-bnpi-hris.service`, and writes evidence under
+`cloudflared-bnpi-pats.service`, and writes evidence under
 `.runtime\v6-one-shot`.
 
 ## V6 One-Click Zip Contract
@@ -494,13 +494,13 @@ Cloudflare. Minimum proof after the VM imports:
 
 - LAN SSH to the VM.
 - `project-truth-ansible-pull` sync from `develop`.
-- VM-side `cloudflared-bnpi-hris.service` enabled and active.
+- VM-side `cloudflared-bnpi-pats.service` enabled and active.
 - LAN PROD/DEV/UAT app/API health.
 - Public PROD/DEV/UAT app/API/Grafana health.
 - Public CORS for pre-login provisioning endpoints.
-- CLI SSH through `ssh.bnpi-hris.tech`.
+- CLI SSH through `ssh.bnpi-pats.tech`.
 
-Current V6 proof warning: public/LAN HRIS is served by healthy Docker Compose
+Current V6 proof warning: public/LAN BNPI PATS is served by healthy Docker Compose
 containers while K3s pods remain resource-constrained. Do not treat Argo
 Application `Synced/Healthy` summaries alone as proof that K3s is the serving
 runtime.
@@ -513,7 +513,7 @@ with normal HTTPS routing.
 Preferred hostname:
 
 ```text
-ssh.bnpi-hris.tech
+ssh.bnpi-pats.tech
 ```
 
 Current host-managed origin:
@@ -531,7 +531,7 @@ ssh://localhost:22
 Preferred access for unprepared computers:
 
 ```text
-https://ssh.bnpi-hris.tech
+https://ssh.bnpi-pats.tech
 ```
 
 Verified client command:
@@ -539,13 +539,13 @@ Verified client command:
 ```powershell
 ssh -i $env:USERPROFILE\.ssh\node-health-appliance_ed25519 `
   -o ProxyCommand="cloudflared access ssh --hostname %h" `
-  infra@ssh.bnpi-hris.tech
+  infra@ssh.bnpi-pats.tech
 ```
 
 The Windows SSH alias is also configured on the current host:
 
 ```powershell
-ssh project-truth-hris
+ssh project-truth-bnpi-pats
 ```
 
 Current status: DNS route, tunnel ingress, Cloudflare Access policy, public CLI

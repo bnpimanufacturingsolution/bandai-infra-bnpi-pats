@@ -12,8 +12,8 @@ User intent:
 - Do not break the VM-managed Cloudflare SSH/public connection.
 
 Actions taken:
-- Reconfirmed `cloudflared-bnpi-hris.service` stayed active.
-- Queried DEV `hris-postgres-dev` database `hris` for configured ZKTeco device
+- Reconfirmed `cloudflared-bnpi-pats.service` stayed active.
+- Queried DEV `bnpi-pats-postgres-dev` database `bnpi-pats` for configured ZKTeco device
   rows.
 - Temporarily added non-persistent `10.184.38.144/24` to VM `eth0` to test
   whether same-subnet presence recovered `.9` and `.10`.
@@ -52,7 +52,7 @@ Validation:
 
 Boundary:
 - No device writes were performed.
-- No HRIS sync write was triggered.
+- No BNPI PATS sync write was triggered.
 - No Cloudflare tunnel outage or service change was introduced.
 - No persistent VM network config change was left behind.
 - The photos prove the configured device IPs/ports, but they do not prove the
@@ -99,7 +99,7 @@ Decision:
 Boundary:
 - No device writes were performed.
 - No full-history read was required.
-- No HRIS runtime default was changed.
+- No BNPI PATS runtime default was changed.
 
 ## 2026-07-04 ZKTeco Quick Count Protocol Proof
 
@@ -177,9 +177,9 @@ Decision:
   stable user extraction and stable history reads across the reachable devices.
 
 Boundary:
-- No HRIS runtime default was changed.
+- No BNPI PATS runtime default was changed.
 - No device writes were performed.
-- No HRIS sync write was triggered.
+- No BNPI PATS sync write was triggered.
 - No tunnel/service outage was introduced.
 
 ## 2026-07-04 ZKTeco Remote Runtime Truth Pass
@@ -189,21 +189,21 @@ documentation.
 
 User intent:
 - Verify the real remote/client-side ZKTeco runtime through `ssh
-  project-truth-hris`, not a host-local VM shortcut.
+  project-truth-bnpi-pats`, not a host-local VM shortcut.
 - Query current ZKTeco source-device users and attendance events through the
   Linux/PyZK bridge as fast as practical.
 - Identify whether source reads exceed the user's rough 15-second interactive
   threshold.
 
 Actions taken:
-- Verified remote SSH to `project-truth-node` through `ssh project-truth-hris`.
-- Confirmed the VM-managed `cloudflared-bnpi-hris.service` remained active.
+- Verified remote SSH to `project-truth-node` through `ssh project-truth-bnpi-pats`.
+- Confirmed the VM-managed `cloudflared-bnpi-pats.service` remained active.
 - Confirmed runtime checkout `/var/lib/project-truth/ansible-pull` on
   `develop@9a82734`.
 - Checked active ZKTeco bridge containers on ports `4371`, `4372`, and `4373`.
 - Ran read-only TCP, PyZK handshake, `get_users()`, and `get_attendance()`
   probes from inside the running Linux bridge container.
-- Compared source-device counts to DEV HRIS saved `ZKTECO_EVENT` rows.
+- Compared source-device counts to DEV BNPI PATS saved `ZKTECO_EVENT` rows.
 - Added report `.wwg/reports/zkteco-remote-runtime-truth-20260704.md`.
 - Added proposed recommendation `REC-20260704-ZKTECO-PREVIEW-PERF` to
   `.wwg/governance/recommendation-registry.md`.
@@ -224,11 +224,11 @@ Findings:
 
 Boundary:
 - No device writes were performed.
-- No HRIS sync write was triggered.
+- No BNPI PATS sync write was triggered.
 - No tunnel/service outage was introduced.
 - Count parity remains unresolved and should not be claimed from this pass.
 
-## 2026-07-01 Public HRIS Restore
+## 2026-07-01 Public BNPI PATS Restore
 
 Task mode: Mixed runtime incident repair and WWG documentation update.
 
@@ -236,19 +236,19 @@ Current-state finding:
 - PROD and UAT public app pages were loading, but the stale frontend container
   image caused browser traffic to attempt public `:3001` API calls and strand
   session validation.
-- DEV public `https://dev.bnpi-hris.tech/` returned Cloudflare 502 because
-  `hris-api-dev` and `hris-app-dev` Docker containers were missing; only
-  `hris-postgres-dev` was running.
-- K3s HRIS workloads for DEV/UAT/PROD were already paused at zero replicas.
+- DEV public `https://dev.bnpi-pats.tech/` returned Cloudflare 502 because
+  `bnpi-pats-api-dev` and `bnpi-pats-app-dev` Docker containers were missing; only
+  `bnpi-pats-postgres-dev` was running.
+- K3s BNPI PATS workloads for DEV/UAT/PROD were already paused at zero replicas.
   Docker Compose, not K3s, is the current public serving path.
 
 Actions taken:
 - Stopped a stale interrupted frontend build process on the VM.
-- Recreated only `hris-app` and `hris-app-uat` from existing
-  `hris-app-local:develop`
+- Recreated only `bnpi-pats-app` and `bnpi-pats-app-uat` from existing
+  `bnpi-pats-app-local:develop`
   `sha256:fa41efd235cbb372b7b9c2cd631081d8f7a6738af464b7ca67a0dcf47cdd83c5`.
-- Recreated only `hris-api-dev` and `hris-app-dev` with Docker Compose
-  `--no-build`, leaving `hris-postgres-dev` and its volume untouched.
+- Recreated only `bnpi-pats-api-dev` and `bnpi-pats-app-dev` with Docker Compose
+  `--no-build`, leaving `bnpi-pats-postgres-dev` and its volume untouched.
 - Did not run migrations, seeders, imports, database resets, K3s re-enable, or
   Argo app creation during this restore.
 
@@ -265,11 +265,11 @@ Validation:
   `http://localhost:3100/api/auth/me` HTTP 401,
   `http://localhost:3101/health` HTTP 200.
 - Browser verification:
-  `https://bnpi-hris.tech/` and `https://dev.bnpi-hris.tech/` both loaded the
+  `https://bnpi-pats.tech/` and `https://dev.bnpi-pats.tech/` both loaded the
   HR Management System login screen.
 - Browser network proof:
-  PROD requested `https://bnpi-hris.tech/api/system-provisioning/status` HTTP
-  200; DEV requested `https://dev.bnpi-hris.tech/api/system-provisioning/status`
+  PROD requested `https://bnpi-pats.tech/api/system-provisioning/status` HTTP
+  200; DEV requested `https://dev.bnpi-pats.tech/api/system-provisioning/status`
   HTTP 200. No public browser request to `:3001` was observed.
 
 Evidence:
@@ -286,7 +286,7 @@ Drift guard note:
   re-enabling K3s. The incident was public runtime routing/container drift, not
   a DM workbook mount problem.
 - Future agents must first prove which runtime is serving the public hostname
-  before touching data. As of this entry, public HRIS is Docker Compose behind
+  before touching data. As of this entry, public BNPI PATS is Docker Compose behind
   the named Cloudflare Tunnel.
 
 ## 2026-07-01 Device Linux SDK Truth Documentation
@@ -325,7 +325,7 @@ Task mode: Mixed experimental runtime proof and vendor scaffold.
 
 Current-state finding:
 - The proof VM was reachable at `10.184.38.144` using
-  `%USERPROFILE%\.ssh\bnpi_hris_cloudflare_ed25519`.
+  `%USERPROFILE%\.ssh\bnpi_pats_cloudflare_ed25519`.
 - The previously documented `192.168.254.148:22` path timed out from this
   Windows host during this pass.
 
@@ -333,7 +333,7 @@ Actions taken:
 - Created `vendor/zkteco-linux` with a read-only Python probe, `pyzk==0.9`
   dependency, Dockerfile, and README.
 - Added `--mode capabilities` so the scaffold emits its own boundary:
-  experimental read-only proof only, not the canonical HRIS runtime.
+  experimental read-only proof only, not the canonical BNPI PATS runtime.
 - Synced that folder to `/tmp/project-truth-zkteco-linux` on the VM.
 - Installed missing VM dependency `python3.12-venv`.
 - Installed `pyzk` in a VM-local virtualenv and ran TCP plus handshake probes.
@@ -355,7 +355,7 @@ Validation:
 
 Boundary:
 - This proves read-only Linux/PyZK handshake from the VM and Docker.
-- It does not yet prove attendance-log sync parity, realtime watch, HRIS
+- It does not yet prove attendance-log sync parity, realtime watch, BNPI PATS
   `/api/zkteco/events` posting, sidecar health/status API compatibility, or a
   managed GitOps/K3s runtime.
 
@@ -366,7 +366,7 @@ governance validation repair.
 
 Actions taken:
 - Added `--mode capabilities` to `vendor/zkteco-linux` so the trial emits an
-  executable boundary report: experimental read-only, not canonical HRIS
+  executable boundary report: experimental read-only, not canonical BNPI PATS
   runtime.
 - Added regression coverage for the capability boundary.
 - Updated ZKTeco runtime docs and the Linux PyZK trial report to reference the
@@ -378,17 +378,17 @@ Actions taken:
 Validation:
 - `python -m unittest discover -s vendor\zkteco-linux\tests` passed.
 - `python -m zkteco_linux_probe --mode capabilities` returned
-  `canonicalHrisRuntime: false` and listed HRIS posting, realtime watch,
+  `canonicalBnpiPatsRuntime: false` and listed BNPI PATS posting, realtime watch,
   sidecar status/sync APIs, and GitOps/K3s runtime as not proven.
-- `agent-browser` loaded `https://bnpi-hris.tech/`, redirected to
+- `agent-browser` loaded `https://bnpi-pats.tech/`, redirected to
   `/auth/login`, and recorded same-origin
-  `https://bnpi-hris.tech/api/system-provisioning/status` HTTP 200 with no
+  `https://bnpi-pats.tech/api/system-provisioning/status` HTTP 200 with no
   public `:3001` browser request in the trace.
 - `wwg test-check --format plain` passed.
 - `wwg validate` passed after report-contract repair.
 
 Warning:
-- A host `curl.exe -I https://bnpi-hris.tech/api/system-provisioning/status`
+- A host `curl.exe -I https://bnpi-pats.tech/api/system-provisioning/status`
   probe hit `Recv failure: Connection was reset`; browser Fetch evidence for
   the same same-origin endpoint returned HTTP 200.
 
@@ -397,8 +397,8 @@ Warning:
 Task mode: Runtime validation and truth synchronization.
 
 Goal:
-- Verify source-device truth from the ZKTeco terminals themselves, not HRIS API
-  or HRIS database rows.
+- Verify source-device truth from the ZKTeco terminals themselves, not BNPI PATS API
+  or BNPI PATS database rows.
 
 Actions taken:
 - Followed the Agent Meta-Prompt discovery/plan/validation loop.
@@ -430,7 +430,7 @@ Truth finding:
 - Linux/PyZK is not yet equivalent to the Windows Standalone SDK path because
   PyZK stored-event counts are lower than the 2026-06-29 Windows SDK baseline
   on every device.
-- Realtime watch, HRIS posting, sidecar `/health`/`/status`/`/sync`, and
+- Realtime watch, BNPI PATS posting, sidecar `/health`/`/status`/`/sync`, and
   GitOps/K3s managed runtime remain unproven.
 
 ## 2026-07-01 Hikvision Linux Probe Scaffold
@@ -438,11 +438,11 @@ Truth finding:
 Task mode: Mixed experimental runtime scaffold, Docker proof, and truth sync.
 
 Current-state finding:
-- Hikvision already has DEV VM/K3s ACS-pull watcher evidence through the HRIS
+- Hikvision already has DEV VM/K3s ACS-pull watcher evidence through the BNPI PATS
   ISAPI flow, but Project Truth did not have a dedicated Linux/Docker probe
   scaffold or Linux HCNetSDK listener.
 - The current proof VM was reachable at `10.184.38.144` using
-  `%USERPROFILE%\.ssh\bnpi_hris_cloudflare_ed25519`.
+  `%USERPROFILE%\.ssh\bnpi_pats_cloudflare_ed25519`.
 - The previously documented `192.168.254.148:22` path timed out from this
   Windows host during this pass.
 
@@ -475,7 +475,7 @@ Validation:
 Boundary:
 - This proves the Linux/Docker probe scaffold and Docker build/run shape.
 - It does not prove live ISAPI system-time handshake, Linux HCNetSDK login,
-  alarm receipt, HRIS callback posting, saved device events, browser rendering,
+  alarm receipt, BNPI PATS callback posting, saved device events, browser rendering,
   attendance creation, or a managed GitOps/K3s Linux Hikvision runtime.
 
 ## 2026-07-01 Hikvision Vendor-Only Device Truth Pass
@@ -484,7 +484,7 @@ Task mode: Vendor/device-source runtime discovery and tooling.
 
 Scope correction:
 - User explicitly narrowed this pass to biometric-device truth only.
-- HRIS DB, HRIS API, saved device events, attendance rows, and browser UI were
+- BNPI PATS DB, BNPI PATS API, saved device events, attendance rows, and browser UI were
   intentionally excluded as evidence sources.
 - `Agent-Meta-Prompt-Template.md` was not changed.
 
@@ -516,7 +516,7 @@ Validation:
 Boundary:
 - This proves device network reachability from the Linux VM.
 - It does not yet prove credentialed ISAPI login, direct ACS event history,
-  watch-mode tap observation, HCNetSDK alarm listener behavior, HRIS callback,
+  watch-mode tap observation, HCNetSDK alarm listener behavior, BNPI PATS callback,
   DB persistence, attendance, or UI rendering.
 
 ## 2026-07-01 Hikvision Linux SDK / Device-Source Runtime Pass
@@ -533,7 +533,7 @@ Actions taken:
 - Added `vendor/hikvision-linux/hcnetsdk_alarm_probe.cpp`.
 - Added `vendor/hikvision-linux/scripts/build-hcnetsdk-alarm-probe.sh`.
 - Recovered VM disk by pruning Docker build cache and removing only
-  experimental trial images; HRIS containers and database volumes were not
+  experimental trial images; BNPI PATS containers and database volumes were not
   removed.
 - Installed `g++` and `make` in the Linux VM.
 - Extracted SDK on the VM and compiled the C++ HCNetSDK probe.
@@ -572,7 +572,7 @@ Boundary:
 - This pass proves ISAPI device-source event history and proves the Linux SDK
   is downloaded, installed, compiled, and callable on the VM.
 - It does not yet prove HCNetSDK login, alarm arming, alarm callback receipt,
-  HRIS posting, HRIS DB persistence, attendance, or UI rendering.
+  BNPI PATS posting, BNPI PATS DB persistence, attendance, or UI rendering.
 
 ## 2026-07-15 Main Entrance Device C Excel Export Proof
 

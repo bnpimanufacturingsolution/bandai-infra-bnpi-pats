@@ -13,12 +13,12 @@
 
   HARD BANS (guard script enforces; installer never touches these):
     - /etc/cloudflared
-    - cloudflared-bnpi-hris.service (never stop/disable)
+    - cloudflared-bnpi-pats.service (never stop/disable)
     - postgres / k3s PVC data
 
 .PARAMETER SshTarget
-  Host/IP or full user@host, or 'project-truth-hris'. Empty = auto probe
-  10.184.37.78, then 10.184.37.19, then project-truth-hris.
+  Host/IP or full user@host, or 'project-truth-bnpi-pats'. Empty = auto probe
+  10.184.37.78, then 10.184.37.19, then project-truth-bnpi-pats.
 
 .PARAMETER DryRun
   Install units but run guard with PROJECT_TRUTH_DISK_GUARD_DRY_RUN=1.
@@ -70,7 +70,7 @@ function Get-SshPrefix {
   if (Test-Path -LiteralPath $IdentityFile) {
     $prefix = @('-i', $IdentityFile) + $prefix
   }
-  if ($Target -match '@' -or $Target -eq 'project-truth-hris') {
+  if ($Target -match '@' -or $Target -eq 'project-truth-bnpi-pats') {
     return @{ Remote = $Target; Args = $prefix + @($Target) }
   }
   return @{ Remote = "infra@$Target"; Args = $prefix + @("infra@$Target") }
@@ -85,7 +85,7 @@ if ($SshTarget) {
   }
   $script:SshInfo = $info
 } else {
-  foreach ($h in @('10.184.37.78', '10.184.37.19', 'project-truth-hris')) {
+  foreach ($h in @('10.184.37.78', '10.184.37.19', 'project-truth-bnpi-pats')) {
     $info = Get-SshPrefix -Target $h
     if (Test-SshTarget -SshArgs $info.Args -Label $info.Remote) {
       $script:SshInfo = $info
@@ -94,7 +94,7 @@ if ($SshTarget) {
   }
 }
 if (-not $script:SshInfo) {
-  throw 'No SSH target reachable (tried 10.184.37.78, 10.184.37.19, project-truth-hris).'
+  throw 'No SSH target reachable (tried 10.184.37.78, 10.184.37.19, project-truth-bnpi-pats).'
 }
 Write-Host "Using SSH target: $($script:SshInfo.Remote)"
 
@@ -166,7 +166,7 @@ echo "=== df ==="
 df -h / /var /tmp
 echo
 echo "=== cloudflared must stay active; guard never touches it ==="
-systemctl is-active cloudflared-bnpi-hris.service 2>/dev/null || echo unknown
+systemctl is-active cloudflared-bnpi-pats.service 2>/dev/null || echo unknown
 '@
   exit (Invoke-Remote -Command $statusCmd -TimeoutSec 45)
 }
@@ -196,7 +196,7 @@ sudo install -m 0644 "$tmp/project-truth-disk-guard.sh" /usr/local/share/project
 sudo install -m 0644 "$tmp/project-truth-disk-guard.service" /etc/systemd/system/project-truth-disk-guard.service
 sudo install -m 0644 "$tmp/project-truth-disk-guard.timer" /etc/systemd/system/project-truth-disk-guard.timer
 
-echo "cloudflared before: $(systemctl is-active cloudflared-bnpi-hris.service 2>/dev/null || echo unknown)"
+echo "cloudflared before: $(systemctl is-active cloudflared-bnpi-pats.service 2>/dev/null || echo unknown)"
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now project-truth-disk-guard.timer
@@ -204,7 +204,7 @@ sudo systemctl restart project-truth-disk-guard.timer
 
 echo "installed_timer=$(systemctl is-enabled project-truth-disk-guard.timer)"
 systemctl list-timers project-truth-disk-guard.timer --no-pager || true
-echo "cloudflared after: $(systemctl is-active cloudflared-bnpi-hris.service 2>/dev/null || echo unknown)"
+echo "cloudflared after: $(systemctl is-active cloudflared-bnpi-pats.service 2>/dev/null || echo unknown)"
 head -n 5 /usr/local/sbin/project-truth-disk-guard.sh
 '@
 

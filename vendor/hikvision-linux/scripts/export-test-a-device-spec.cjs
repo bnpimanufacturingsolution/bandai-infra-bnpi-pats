@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 
 const repoRoot = path.resolve(__dirname, "../../..");
-const prismaPath = path.join(repoRoot, "hris-api/generated/prisma");
+const prismaPath = path.join(repoRoot, "bnpi-pats-api/generated/prisma");
 const { PrismaClient } = require(prismaPath);
 
 const databaseUrl = String(process.env.FORCE_DATABASE_URL || process.env.DATABASE_URL || "").trim();

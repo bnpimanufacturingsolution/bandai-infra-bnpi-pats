@@ -1,7 +1,7 @@
-# Frontend Mock-Data Audit — hris-app (2026-08-25)
+# Frontend Mock-Data Audit — bnpi-pats-app (2026-08-25)
 
-Task: find pages that use mock data. Scope: `hris-app` only (`emp-app` submodule not checked out locally).
-Method: full route inventory from `hris-app/app/routes.ts` (registered URLs), then `git grep` sweeps for mock module imports, `MOCK_*`/`mock[A-Z]` identifiers, `Math.random` data generation, and "sample/dummy/fake/hardcoded" markers; every hit opened and read in context before classification.
+Task: find pages that use mock data. Scope: `bnpi-pats-app` only (`emp-app` submodule not checked out locally).
+Method: full route inventory from `bnpi-pats-app/app/routes.ts` (registered URLs), then `git grep` sweeps for mock module imports, `MOCK_*`/`mock[A-Z]` identifiers, `Math.random` data generation, and "sample/dummy/fake/hardcoded" markers; every hit opened and read in context before classification.
 
 ## Verdict summary
 
@@ -16,25 +16,25 @@ Method: full route inventory from `hris-app/app/routes.ts` (registered URLs), th
 ## A. Live registered pages using mock data
 
 ### A1. `/time-logging` — FULL MOCK
-- File: `hris-app/app/routes/time-logging.tsx` (routes.ts:209)
+- File: `bnpi-pats-app/app/routes/time-logging.tsx` (routes.ts:209)
 - Evidence: line 22 `const MOCK_USERS = [...]` (John Doe / Jane Smith / Sarah Johnson, fake faceId/QR); lines 195, 299 clock events picked via `Math.random()`.
 - Guarded by `TimeLoggingGuard`; no other file links to it — reachable by URL only.
 
 ### A2. `/employee/benefits` — FULL MOCK
-- File: `hris-app/app/routes/employee/benefits.tsx` (routes.ts:103)
+- File: `bnpi-pats-app/app/routes/employee/benefits.tsx` (routes.ts:103)
 - Evidence: line 5 `const MOCK_PRODUCTS = [...]` — 6 hardcoded Bandai products, `placehold.co` images, ratings/reviews invented; no service/API call anywhere in the 251-line page.
 
 ### A3. `/calendar` — PARTIAL MOCK (leave layer)
-- File: `hris-app/app/routes/calendar.tsx` (routes.ts:232)
+- File: `bnpi-pats-app/app/routes/calendar.tsx` (routes.ts:232)
 - Evidence: line 57 `mockLeaveData` = 2 hardcoded leaves ("Vacation Leave" Jan 2026, "Sick Leave" Feb 2026); line 467 `leavesByDate` built ONLY from this mock.
 - `/employee/leave-calendar` (routes.ts:117) redirects here with `type=leave`, inheriting the mock.
 
 ### A4. `/hr/dashboard` — PARTIAL MOCK
-- File: `hris-app/app/routes/hr/dashboard.tsx` (routes.ts:139)
+- File: `bnpi-pats-app/app/routes/hr/dashboard.tsx` (routes.ts:139)
 - Evidence: line 275 `// Sample data for company news` → hardcoded "Holiday Party Announcement", "New Benefits Program Starting January 2024", etc. Page has essentially one real query/service touch total.
 
 ### A5. `/hr/announcements` — FALLBACK MOCK (dishonest empty state risk)
-- File: `hris-app/app/routes/hr/announcements.tsx`
+- File: `bnpi-pats-app/app/routes/hr/announcements.tsx`
 - Real API first: `announcementsService.list()` (line 327-330). But lines 332-342: when the list is empty it renders 23 generated `Quarterly Update N` rows (`// Mock data fallback for demo`). An empty real workspace looks fully populated.
 
 ## B. Live dev-tool routes (registered, low priority)
@@ -86,8 +86,8 @@ No code changed in this task (audit-only). emp-app audit pending submodule check
 
 ## F. Completeness method
 
-- Registered URLs come from `hris-app/app/routes.ts` (React Router v7 config, read in full) — file-path-to-URL claims in this report are from that file, not guessed.
-- Sweeps run over all of `hris-app/app` excluding `*.test.*`: (1) mock module import paths; (2) identifiers `\bMOCK_[A-Z]` and `\bmock[A-Z][A-Za-z]*\b`; (3) `Math.random`; (4) case-insensitive markers `hard-coded|dummy data|fake data|sample data|placeholder data`.
+- Registered URLs come from `bnpi-pats-app/app/routes.ts` (React Router v7 config, read in full) — file-path-to-URL claims in this report are from that file, not guessed.
+- Sweeps run over all of `bnpi-pats-app/app` excluding `*.test.*`: (1) mock module import paths; (2) identifiers `\bMOCK_[A-Z]` and `\bmock[A-Z][A-Za-z]*\b`; (3) `Math.random`; (4) case-insensitive markers `hard-coded|dummy data|fake data|sample data|placeholder data`.
 - A final full-app identifier rescan re-confirmed the hit list (17 files incl. the mock modules themselves). Lowercase-comment-only mock code without mock-style identifiers was caught separately via the Math.random and marker sweeps (e.g. `TeamAttendanceTab`, `attendance-management-template`).
 - Cross-check against `.wwg/governance/recommendation-registry.md`: REC-20260818-DISCIPLINARY-LIVE-API named `/admin/disciplinary-action` as in-memory `mockRules`; current develop uses real `disciplinaryActionService.list/create/update/remove` — that page is clean today and the old registry row can be promoted to Implemented by its owner.
 - Known blind spots: runtime-only mock injection (e.g. MSW/service worker) not present; `emp-app` submodule absent; non-TS assets (storybook stories under `.storybook/`) not audited.
@@ -110,18 +110,18 @@ Priority order = operator-facing dishonesty first.
 
 ```powershell
 # All files still carrying mock-style identifiers (expect only the modules/tools you decided to keep)
-git grep -n -E "\bMOCK_[A-Z]|\bmock[A-Z][A-Za-z]*\b" -- "hris-app/app" ":!*test*"
+git grep -n -E "\bMOCK_[A-Z]|\bmock[A-Z][A-Za-z]*\b" -- "bnpi-pats-app/app" ":!*test*"
 
 # Fabricated/random data generators on live pages
-git grep -n "Math.random" -- "hris-app/app/routes" ":!*test*"
+git grep -n "Math.random" -- "bnpi-pats-app/app/routes" ":!*test*"
 
 # Confirm dead-code candidates are still unimported (expect no output per file name)
-git grep -rln "TeamAttendanceTab" -- "hris-app/app"
-git grep -rln "ScannerInterface" -- "hris-app/app"
-git grep -rn "mockLeaveData" -- "hris-app/app/routes/calendar.tsx"
+git grep -rln "TeamAttendanceTab" -- "bnpi-pats-app/app"
+git grep -rln "ScannerInterface" -- "bnpi-pats-app/app"
+git grep -rn "mockLeaveData" -- "bnpi-pats-app/app/routes/calendar.tsx"
 
 # Confirm billings stays on real API (expect useStatementOfAccounts hits)
-git grep -n "useStatementOfAccounts" -- "hris-app/app/components/templates/common/billings-template.tsx"
+git grep -n "useStatementOfAccounts" -- "bnpi-pats-app/app/components/templates/common/billings-template.tsx"
 ```
 
 Each fix should end with: identifier grep for that file returns nothing (or only intended dev-tool mocks), page browser-checked against live API, and this report's checklist box ticked with the commit SHA.

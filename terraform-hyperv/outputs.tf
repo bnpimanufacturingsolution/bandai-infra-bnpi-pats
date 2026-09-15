@@ -14,10 +14,10 @@ output "ssh_target" {
   value = var.guest_ip_hint == "" ? "infra@<guest-lan-ip>" : "infra@${var.guest_ip_hint}"
 }
 
-output "hris_api_health_url" {
+output "bnpi_pats_api_health_url" {
   value = var.guest_ip_hint == "" ? "http://<guest-lan-ip>:${var.api_port}/health" : "http://${var.guest_ip_hint}:${var.api_port}/health"
 }
 
-output "hris_app_url" {
+output "bnpi_pats_app_url" {
   value = var.guest_ip_hint == "" ? "http://<guest-lan-ip>:${var.app_port}/" : "http://${var.guest_ip_hint}:${var.app_port}/"
 }

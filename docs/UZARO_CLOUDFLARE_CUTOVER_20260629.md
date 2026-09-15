@@ -14,24 +14,24 @@
 
 ## Tunnel And DNS
 
-- Named tunnel `bnpi-hris` exists:
+- Named tunnel `bnpi-pats` exists:
   - Tunnel ID: `1c8ee2c4-c9c5-4840-be39-639e4b5f605b`
   - Active connector observed from Windows host.
 - Cloudflare DNS contains proxied record:
-  - `bnpi-hris.uzaro.net CNAME 1c8ee2c4-c9c5-4840-be39-639e4b5f605b.cfargotunnel.com`
-- Local `cloudflared-bnpi-hris.yml` routes:
-  - `app.bnpi-hris.dedyn.io -> http://192.168.254.148:3000`
-  - `bnpi-hris.uzaro.net -> http://192.168.254.148:3000`
-- Stray record `hris-bandai.dpdns.org.uzaro.net` was removed from Cloudflare.
+  - `bnpi-pats.uzaro.net CNAME 1c8ee2c4-c9c5-4840-be39-639e4b5f605b.cfargotunnel.com`
+- Local `cloudflared-bnpi-pats.yml` routes:
+  - `app.bnpi-pats.dedyn.io -> http://192.168.254.148:3000`
+  - `bnpi-pats.uzaro.net -> http://192.168.254.148:3000`
+- Stray record `bnpi-pats-bandai.dpdns.org.uzaro.net` was removed from Cloudflare.
 
 ## Verification
 
 - LAN target responds:
   - `http://192.168.254.148:3000/auth/login`
-  - Returned HRIS app HTML with title `HR Management System`.
-- Public DNS currently resolves `bnpi-hris.uzaro.net` through Arvixe DNS to the tunnel CNAME, but it is not Cloudflare-proxied from the authoritative DNS path.
+  - Returned BNPI PATS app HTML with title `HR Management System`.
+- Public DNS currently resolves `bnpi-pats.uzaro.net` through Arvixe DNS to the tunnel CNAME, but it is not Cloudflare-proxied from the authoritative DNS path.
 - Public HTTPS currently times out:
-  - `https://bnpi-hris.uzaro.net/auth/login`
+  - `https://bnpi-pats.uzaro.net/auth/login`
 
 ## Remaining Cutover Step
 
@@ -53,6 +53,6 @@ After propagation, verify:
 
 ```powershell
 Resolve-DnsName uzaro.net -Type NS
-Resolve-DnsName bnpi-hris.uzaro.net -Type A
-curl.exe -I https://bnpi-hris.uzaro.net/auth/login
+Resolve-DnsName bnpi-pats.uzaro.net -Type A
+curl.exe -I https://bnpi-pats.uzaro.net/auth/login
 ```

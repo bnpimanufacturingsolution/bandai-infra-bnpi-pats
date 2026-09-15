@@ -29,7 +29,7 @@ be Hikvision.
 ### FR-02 Safe dry-run
 
 `execute=false` or `dryRun=true` returns a per-target plan without SSH, SDK,
-device, or HRIS mutation. The response identifies already-converged targets and
+device, or BNPI PATS mutation. The response identifies already-converged targets and
 targets requiring a physical peer copy.
 
 ### FR-03 One VM SDK session
@@ -46,7 +46,7 @@ batch because no target can be copied truthfully from it.
 
 ### FR-05 Concurrent verification
 
-After the SDK run, target single-user refresh, HRIS link mirroring, and
+After the SDK run, target single-user refresh, BNPI PATS link mirroring, and
 credential verification run concurrently per target. Verification retains
 existing fingerprint/card truth rules.
 

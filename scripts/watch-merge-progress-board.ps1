@@ -13,7 +13,7 @@ param(
   [string]$ApiBase = "http://localhost:3001",
   [string]$Email = "admin@bandai.local",
   [string]$Password = "password123",
-  [string]$AppCode = "hris",
+  [string]$AppCode = "bnpi-pats",
   [string]$OutFile = ".runtime/merge-progress-BOARD.txt",
   [int]$IntervalSeconds = 5,
   [int]$MaxTicks = 120
@@ -60,7 +60,7 @@ function Build-Board([int]$tick, $data) {
     if ($stage -eq "copy_started") { $icon = "[COPY ]"; $human = "copying on $tgt (user+fp+face)" }
     if ($stage -eq "copy_success") { $icon = "[ OK  ]"; $human = "done on $tgt" }
     if ($stage -eq "copy_error") { $icon = "[FAIL ]"; $human = "failed on $tgt" }
-    if ($stage -eq "db_merge_done") { $icon = "[ DB  ]"; $human = "HRIS row only on $tgt" }
+    if ($stage -eq "db_merge_done") { $icon = "[ DB  ]"; $human = "BNPI PATS row only on $tgt" }
     if ($stage -eq "user_done") { $icon = "[DONE ]"; $human = "employee finished in job" }
     $err = ""
     if ($e.error) {

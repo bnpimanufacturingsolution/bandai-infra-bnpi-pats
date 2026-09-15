@@ -1,28 +1,28 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: hris-postgres-env
+  name: bnpi-pats-postgres-env
 type: Opaque
 stringData:
   POSTGRES_USER: postgres
   POSTGRES_PASSWORD: postgres
-  POSTGRES_DB: hris
+  POSTGRES_DB: bnpi_pats
 ---
 apiVersion: v1
 kind: Secret
 metadata:
-  name: hris-api-integration-env
+  name: bnpi-pats-api-integration-env
 type: Opaque
 stringData:
   # GET /api/employee/search X-API-Key allowlist (one key per consuming team).
   # Rotation: append new key, give consumers time to switch, then remove old key.
   # See docs/INTEGRATION_EMPLOYEE_SEARCH_API.md. Fail-closed 503 when empty.
-  INTEGRATION_API_KEYS: hris_uat_573c99707038ee77fd6bbfab76ae000be052125ec9710cb9
+  INTEGRATION_API_KEYS: bnpi_pats_uat_573c99707038ee77fd6bbfab76ae000be052125ec9710cb9
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: hris-postgres-uat
+  name: bnpi-pats-postgres-uat
 spec:
   capacity:
     storage: 20Gi
@@ -37,7 +37,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: hris-postgres
+  name: bnpi-pats-postgres
 spec:
   accessModes:
     - ReadWriteOnce
@@ -45,12 +45,12 @@ spec:
   resources:
     requests:
       storage: 20Gi
-  volumeName: hris-postgres-uat
+  volumeName: bnpi-pats-postgres-uat
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: hris-uploads-uat
+  name: bnpi-pats-uploads-uat
 spec:
   capacity:
     storage: 20Gi
@@ -65,7 +65,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: hris-uploads
+  name: bnpi-pats-uploads
 spec:
   accessModes:
     - ReadWriteOnce
@@ -73,25 +73,25 @@ spec:
   resources:
     requests:
       storage: 20Gi
-  volumeName: hris-uploads-uat
+  volumeName: bnpi-pats-uploads-uat
 ---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: hris-postgres
+  name: bnpi-pats-postgres
   labels:
-    app.kubernetes.io/name: hris-postgres
+    app.kubernetes.io/name: bnpi-pats-postgres
     app.kubernetes.io/part-of: project-truth
 spec:
-  serviceName: hris-postgres
+  serviceName: bnpi-pats-postgres
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: hris-postgres
+      app.kubernetes.io/name: bnpi-pats-postgres
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: hris-postgres
+        app.kubernetes.io/name: bnpi-pats-postgres
         app.kubernetes.io/part-of: project-truth
     spec:
       priorityClassName: project-truth-uat
@@ -108,7 +108,7 @@ spec:
               memory: 1536Mi
           envFrom:
             - secretRef:
-                name: hris-postgres-env
+                name: bnpi-pats-postgres-env
           ports:
             - name: postgres
               containerPort: 5432
@@ -128,15 +128,15 @@ spec:
       volumes:
         - name: postgres-data
           persistentVolumeClaim:
-            claimName: hris-postgres
+            claimName: bnpi-pats-postgres
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: hris-postgres
+  name: bnpi-pats-postgres
 spec:
   selector:
-    app.kubernetes.io/name: hris-postgres
+    app.kubernetes.io/name: bnpi-pats-postgres
   ports:
     - name: postgres
       port: 5432
@@ -145,19 +145,19 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: hris-api-db-init
+  name: bnpi-pats-api-db-init
 spec:
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: hris-api-db-init
+        app.kubernetes.io/name: bnpi-pats-api-db-init
         app.kubernetes.io/part-of: project-truth
     spec:
       restartPolicy: OnFailure
       containers:
         - name: db-init
-          image: hris-api-db-init:develop
+          image: bnpi-pats-api-db-init:develop
           imagePullPolicy: Never
           # No prisma-seed on appliance DBs (seed can delete timesheet/attendance). Schema-only; prisma db push without --accept-data-loss is fail-closed on destructive drift.
           command:
@@ -170,18 +170,18 @@ spec:
             - name: APP_ENV
               value: uat
             - name: PG_DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@bnpi-pats-postgres:5432/bnpi_pats
             - name: WRITE_DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@bnpi-pats-postgres:5432/bnpi_pats
             - name: DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@bnpi-pats-postgres:5432/bnpi_pats
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hris-api
+  name: bnpi-pats-api
   labels:
-    app.kubernetes.io/name: hris-api
+    app.kubernetes.io/name: bnpi-pats-api
     app.kubernetes.io/part-of: project-truth
 spec:
   replicas: 1
@@ -189,17 +189,17 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app.kubernetes.io/name: hris-api
+      app.kubernetes.io/name: bnpi-pats-api
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: hris-api
+        app.kubernetes.io/name: bnpi-pats-api
         app.kubernetes.io/part-of: project-truth
     spec:
       priorityClassName: project-truth-uat
       containers:
         - name: api
-          image: hris-api-local:develop
+          image: bnpi-pats-api-local:develop
           imagePullPolicy: Never
           resources:
             requests:
@@ -224,19 +224,19 @@ spec:
             - name: LOCAL_UPLOAD_ROOT
               value: /app/uploads
             - name: PG_DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@bnpi-pats-postgres:5432/bnpi_pats
             - name: WRITE_DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@bnpi-pats-postgres:5432/bnpi_pats
             - name: DATABASE_URL
-              value: postgresql://postgres:postgres@hris-postgres:5432/hris
+              value: postgresql://postgres:postgres@bnpi-pats-postgres:5432/bnpi_pats
             - name: OTEL_ENABLED
               value: "true"
             - name: OTEL_SERVICE_NAME
-              value: hris-api-uat
+              value: bnpi-pats-api-uat
             - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
               value: http://10.184.37.19:4318/v1/traces
             - name: OTEL_RESOURCE_ATTRIBUTES
-              value: deployment.environment=uat,service.namespace=hris
+              value: deployment.environment=uat,service.namespace=bnpi-pats
             - name: OTEL_TRACES_SAMPLER
               value: parentbased_traceidratio
             - name: OTEL_TRACES_SAMPLER_ARG
@@ -254,7 +254,7 @@ spec:
             - name: CORS_CREDENTIALS
               value: "true"
             - name: CORS_ORIGINS
-              value: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3100,http://127.0.0.1:3100,http://localhost:3200,http://127.0.0.1:3200,http://localhost:5175,http://127.0.0.1:5175,https://bnpi-hris.tech,https://www.bnpi-hris.tech,https://app.bnpi-hris.tech,https://dev.bnpi-hris.tech,https://uat.bnpi-hris.tech,https://emp.bnpi-hris.tech,https://dev-emp.bnpi-hris.tech,https://uat-emp.bnpi-hris.tech,http://bnpi-hris.lan,https://bnpi-hris.lan,http://www.bnpi-hris.lan,https://www.bnpi-hris.lan,http://app.bnpi-hris.lan,https://app.bnpi-hris.lan,http://api.bnpi-hris.lan,https://api.bnpi-hris.lan,http://dev.bnpi-hris.lan,https://dev.bnpi-hris.lan,http://dev-api.bnpi-hris.lan,https://dev-api.bnpi-hris.lan,http://uat.bnpi-hris.lan,https://uat.bnpi-hris.lan,http://uat-api.bnpi-hris.lan,https://uat-api.bnpi-hris.lan,http://emp.bnpi-hris.lan,https://emp.bnpi-hris.lan,http://dev-emp.bnpi-hris.lan,https://dev-emp.bnpi-hris.lan,http://uat-emp.bnpi-hris.lan,https://uat-emp.bnpi-hris.lan,http://grafana.bnpi-hris.lan,https://grafana.bnpi-hris.lan
+              value: http://localhost:3000,http://127.0.0.1:3000,http://localhost:3100,http://127.0.0.1:3100,http://localhost:3200,http://127.0.0.1:3200,http://localhost:5175,http://127.0.0.1:5175,https://bnpi-pats.tech,https://www.bnpi-pats.tech,https://app.bnpi-pats.tech,https://dev.bnpi-pats.tech,https://uat.bnpi-pats.tech,https://emp.bnpi-pats.tech,https://dev-emp.bnpi-pats.tech,https://uat-emp.bnpi-pats.tech,http://bnpi-pats.lan,https://bnpi-pats.lan,http://www.bnpi-pats.lan,https://www.bnpi-pats.lan,http://app.bnpi-pats.lan,https://app.bnpi-pats.lan,http://api.bnpi-pats.lan,https://api.bnpi-pats.lan,http://dev.bnpi-pats.lan,https://dev.bnpi-pats.lan,http://dev-api.bnpi-pats.lan,https://dev-api.bnpi-pats.lan,http://uat.bnpi-pats.lan,https://uat.bnpi-pats.lan,http://uat-api.bnpi-pats.lan,https://uat-api.bnpi-pats.lan,http://emp.bnpi-pats.lan,https://emp.bnpi-pats.lan,http://dev-emp.bnpi-pats.lan,https://dev-emp.bnpi-pats.lan,http://uat-emp.bnpi-pats.lan,https://uat-emp.bnpi-pats.lan,http://grafana.bnpi-pats.lan,https://grafana.bnpi-pats.lan
             - name: NODE_HOST_IP
               valueFrom:
                 fieldRef:
@@ -278,7 +278,7 @@ spec:
             - name: INTEGRATION_API_KEYS
               valueFrom:
                 secretKeyRef:
-                  name: hris-api-integration-env
+                  name: bnpi-pats-api-integration-env
                   key: INTEGRATION_API_KEYS
           ports:
             - name: http
@@ -316,7 +316,7 @@ spec:
       volumes:
         - name: uploads
           persistentVolumeClaim:
-            claimName: hris-uploads
+            claimName: bnpi-pats-uploads
         - name: dm-import-data
           hostPath:
             path: /var/lib/project-truth/dm-workflow/data/import
@@ -337,10 +337,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: hris-api
+  name: bnpi-pats-api
 spec:
   selector:
-    app.kubernetes.io/name: hris-api
+    app.kubernetes.io/name: bnpi-pats-api
   ports:
     - name: http
       port: 3001
@@ -349,9 +349,9 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hris-app
+  name: bnpi-pats-app
   labels:
-    app.kubernetes.io/name: hris-app
+    app.kubernetes.io/name: bnpi-pats-app
     app.kubernetes.io/part-of: project-truth
 spec:
   replicas: 1
@@ -359,17 +359,17 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app.kubernetes.io/name: hris-app
+      app.kubernetes.io/name: bnpi-pats-app
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: hris-app
+        app.kubernetes.io/name: bnpi-pats-app
         app.kubernetes.io/part-of: project-truth
     spec:
       priorityClassName: project-truth-uat
       containers:
         - name: app
-          image: hris-app-local:develop
+          image: bnpi-pats-app-local:develop
           imagePullPolicy: Never
           resources:
             requests:
@@ -385,8 +385,8 @@ spec:
               value: "3000"
             - name: HOSTNAME
               value: 0.0.0.0
-            - name: HRIS_API_ORIGIN
-              value: http://hris-api:3001
+            - name: BNPI_PATS_API_ORIGIN
+              value: http://bnpi-pats-api:3001
           ports:
             - name: http
               containerPort: 3000
@@ -409,10 +409,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: hris-app
+  name: bnpi-pats-app
 spec:
   selector:
-    app.kubernetes.io/name: hris-app
+    app.kubernetes.io/name: bnpi-pats-app
   ports:
     - name: http
       port: 3000
@@ -421,9 +421,9 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hris-emp-app
+  name: bnpi-pats-emp-app
   labels:
-    app.kubernetes.io/name: hris-emp-app
+    app.kubernetes.io/name: bnpi-pats-emp-app
     app.kubernetes.io/part-of: project-truth
 spec:
   replicas: 1
@@ -431,17 +431,17 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app.kubernetes.io/name: hris-emp-app
+      app.kubernetes.io/name: bnpi-pats-emp-app
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: hris-emp-app
+        app.kubernetes.io/name: bnpi-pats-emp-app
         app.kubernetes.io/part-of: project-truth
     spec:
       priorityClassName: project-truth-uat
       containers:
         - name: app
-          image: hris-emp-app-local:develop
+          image: bnpi-pats-emp-app-local:develop
           imagePullPolicy: Never
           resources:
             requests:
@@ -457,7 +457,7 @@ spec:
                   fieldPath: status.hostIP
             - name: PORT
               value: "3000"
-            - name: HRIS_API_ORIGIN
+            - name: BNPI_PATS_API_ORIGIN
               value: http://$(NODE_HOST_IP):3201
           ports:
             - name: http
@@ -481,10 +481,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: hris-emp-app
+  name: bnpi-pats-emp-app
 spec:
   selector:
-    app.kubernetes.io/name: hris-emp-app
+    app.kubernetes.io/name: bnpi-pats-emp-app
   ports:
     - name: http
       port: 3000

@@ -5,9 +5,9 @@
 | Status | `IMPLEMENTED` in `ansible/project-truth-pull.yml` |
 | Operator ask | Auto-update UAT/PROD app and API, not only DEV; document well |
 | Trigger | **Not** a new Git branch. Still `git push origin develop` → ansible-pull rebuild |
-| What changed | After `k3s ctr images import`, restart `hris-api` / `hris-app` / `hris-callback-outbox` in **every namespace that has that Deployment**: `dev`, `uat`, `prod` |
+| What changed | After `k3s ctr images import`, restart `bnpi-pats-api` / `bnpi-pats-app` / `bnpi-pats-callback-outbox` in **every namespace that has that Deployment**: `dev`, `uat`, `prod` |
 | Old behavior | `env_name=dev` only for those deployments |
-| Unchanged | Docs-only `services=none` still does **not** roll. `hris-emp-app` already rolled all three NS. `promote-gitops.yml` still exists for **tag** promotion / registry clients |
+| Unchanged | Docs-only `services=none` still does **not** roll. `bnpi-pats-emp-app` already rolled all three NS. `promote-gitops.yml` still exists for **tag** promotion / registry clients |
 | Revert | Set VM env `PROJECT_TRUTH_ROLLOUT_NAMESPACES=dev` on the ansible-pull unit |
 
 ## Blast radius (this appliance)
@@ -16,9 +16,9 @@ All three live on **one VM**. Images are `*:develop` + `imagePullPolicy: Never`.
 
 | Push content | DEV `:3100/:3101` | UAT `:3200/:3201` | PROD `:3000/:3001` |
 |---|---|---|---|
-| `hris-api/` or `hris-app/` (or compose / hikvision-linux that builds API) | rebuild + restart | **restart** (same `:develop` import) | **restart** |
+| `bnpi-pats-api/` or `bnpi-pats-app/` (or compose / hikvision-linux that builds API) | rebuild + restart | **restart** (same `:develop` import) | **restart** |
 | `services/callback-outbox/` | restart outbox (DEV only — UAT/PROD have no that Deployment) | skip | skip |
-| `hris-emp-app/` | emp-app all NS (already) | emp-app | emp-app |
+| `bnpi-pats-emp-app/` | emp-app all NS (already) | emp-app | emp-app |
 | docs / CI YAML only | no image, no roll | no | no |
 
 Creating GitHub branches `uat` / `production` is **still not** the trigger. Argo `targetRevision` remains `develop`.
@@ -29,7 +29,7 @@ Creating GitHub branches `uat` / `production` is **still not** the trigger. Argo
 
 ## Skip-safe
 
-`kubectl get deploy` per namespace: UAT/PROD do not have `hris-callback-outbox` or `hris-hikvision-watcher`. Those are skipped, not failed.
+`kubectl get deploy` per namespace: UAT/PROD do not have `bnpi-pats-callback-outbox` or `bnpi-pats-hikvision-watcher`. Those are skipped, not failed.
 
 ## How to watch
 

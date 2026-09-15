@@ -59,6 +59,6 @@ All parked questions: `REMAINING-GAPS-AND-WHAT-IS-NEEDED.md` §C "Pending operat
 
 ## Deploy notes
 
-- Push of `develop` rebuilds `hris-api`/`hris-app` images and rolls dev/uat/prod Deployments via ansible-pull (per GitOps truth).
-- DB prerequisites already applied on shared DEV: `RequestType` enum `LEAVE_CONVERSION`; `employees.pregnant` + `expectedDueDate`; `employee_payrolls.assemblyStanding`. Migration SQLs committed under `hris-api/prisma/schema-postgres/migrations/`.
+- Push of `develop` rebuilds `bnpi-pats-api`/`bnpi-pats-app` images and rolls dev/uat/prod Deployments via ansible-pull (per GitOps truth).
+- DB prerequisites already applied on shared DEV: `RequestType` enum `LEAVE_CONVERSION`; `employees.pregnant` + `expectedDueDate`; `employee_payrolls.assemblyStanding`. Migration SQLs committed under `bnpi-pats-api/prisma/schema-postgres/migrations/`.
 - UAT/PROD DB columns are NOT auto-applied — apply the three additive migration SQLs before/at first deploy there if register/pregnant features are exercised.

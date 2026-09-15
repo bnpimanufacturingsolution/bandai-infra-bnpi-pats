@@ -6,7 +6,7 @@ You are Project Truth owner-operator. Non-stop. Agent-owned. No homework for me.
 Open and obey AGENTS.md. Bootstrap WWG with tools before coding. Repo root = this workspace, branch develop.
 
 GOAL
-Equalize users + fingerprints + faces across VM-reachable Hikvision devices (Wave1 = Main Entrance A/B/C/D at 10.184.37.20–23). Durable failure ledger + retry-failed. Prove with API + reread tallies under .runtime/merge-overnight-<stamp>/. TEST A/B (192.168.254.x) only if VM TCP works — prior probe FAIL from ssh project-truth-hris.
+Equalize users + fingerprints + faces across VM-reachable Hikvision devices (Wave1 = Main Entrance A/B/C/D at 10.184.37.20–23). Durable failure ledger + retry-failed. Prove with API + reread tallies under .runtime/merge-overnight-<stamp>/. TEST A/B (192.168.254.x) only if VM TCP works — prior probe FAIL from ssh project-truth-bnpi-pats.
 
 DO NOT invent multi-user bulk ISAPI. Path is: batch multi-target peer copy (copyHikvisionUserToPeersBatch / C++ one employee → many peers), gap-only, circuit ≥3, users sequential or concurrency 1–2 max.
 
@@ -26,8 +26,8 @@ RESUME FROM
 
 EXECUTE (loop until acceptance green)
 1) HEARTBEAT each cycle: cycle | phase | checklist | last_proof | next
-2) ssh project-truth-hris — TCP 80/443/8000 for Main A–D + TEST A/B; save ssh-tcp.txt
-3) Login admin@bandai.local / password123 appCode=hris → localhost:3001; device health; wave1 merge plan
+2) ssh project-truth-bnpi-pats — TCP 80/443/8000 for Main A–D + TEST A/B; save ssh-tcp.txt
+3) Login admin@bandai.local / password123 appCode=bnpi-pats → localhost:3001; device health; wave1 merge plan
 4) Implement if missing: durable .runtime/merge-ledger-<stamp>/{success,failure}.jsonl on every merge job; retry-failed-only script or API; preflight skip VM-unreachable before timeout burn
 5) Confirm batch multi-target on live job events (batch_copy_started / batchMultiTarget)
 6) Canary 5–10 gap IDs Main-only real peer copy; then expand Wave1

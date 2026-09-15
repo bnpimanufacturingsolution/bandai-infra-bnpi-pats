@@ -4,7 +4,7 @@ Execute fingerprint force-clear recovery for the unique FP gap 9 people.
 DEV only. Real writes (dryRun=false after a preview gate).
 
   python3 scripts/execute-fp-gap-force-clear.py
-  HRIS_API=http://127.0.0.1:3101 OUT_DIR=/tmp/fp-gap-exec python3 ...
+  BNPI_PATS_API=http://127.0.0.1:3101 OUT_DIR=/tmp/fp-gap-exec python3 ...
 """
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
-API = os.environ.get("HRIS_API", "http://127.0.0.1:3101")
+API = os.environ.get("BNPI_PATS_API", "http://127.0.0.1:3101")
 EMAIL = "admin@bandai.local"
 PASSWORD = "password123"
-APP_CODE = "hris"
+APP_CODE = "bnpi-pats"
 # Canonical Main A/B/D/E/F (never C / TEST)
 DEVICE_IDS = [
     "cmrht5s2w00ei7zgsre8y3o5n",  # A

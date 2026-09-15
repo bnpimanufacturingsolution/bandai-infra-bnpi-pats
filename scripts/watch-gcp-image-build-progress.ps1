@@ -1,7 +1,7 @@
 param(
   [string]$RuntimeDir = '',
   [string]$LatestPath = (Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime\gcp-build-visible-proof-LATEST.txt'),
-  [string]$ProjectId = 'hris-492904',
+  [string]$ProjectId = 'bnpi-pats-492904',
   [int]$IntervalSeconds = 10,
   [int]$Ticks = 0
 )

@@ -400,7 +400,7 @@ Callback URL variable: `$callbackUrl`
 - `FingerPrintUpload` is a sensitive read because it can return raw fingerprint template data.
 - `WRITE HTTP host slot 1` is mutating and should only be used after the GET/capability/slot reads pass on this firmware.
 - `alertStream` is long-running; a timeout can still mean the endpoint opened but no event arrived in the bounded test window.
-- This script does not create/enroll a physical user and does not trigger a physical panel event. Callback receipt must be proven separately by making the panel post to a reachable HRIS callback URL and saving the payload.
+- This script does not create/enroll a physical user and does not trigger a physical panel event. Callback receipt must be proven separately by making the panel post to a reachable BNPI PATS callback URL and saving the payload.
 
 ## Evidence Files
 

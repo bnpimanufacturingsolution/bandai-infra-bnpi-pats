@@ -9,7 +9,7 @@ Related:
 - OT-only: `docs/00-product/AGENT-PROMPT-e2e-ot-report-vs-run-payroll.md`
 - OT graph: `docs/00-product/AGENT-PROMPT-graph-ot-truth-run-payroll-tally.md`
 - Column map / sources: `docs/BNPI_JUNE11_25_2026_PAYROLL_PARITY_CHECKLIST.md`
-- Comparison engine: `hris-api/scripts/dry-run-bandai-payroll-comparison.ts`
+- Comparison engine: `bnpi-pats-api/scripts/dry-run-bandai-payroll-comparison.ts`
 - Preview engine (same as Run Payroll preview): `previewPayrollFromTimesheets` in `payroll-period.helper.ts`
   - **2026-08-12:** Preview dry-run may include non-APPROVED timesheets
     (`DRAFT`/`SUBMITTED`/`REJECTED`/`REVISED`) as **estimate-only** rows when
@@ -35,8 +35,8 @@ Secondary:     PP-20260626-20260711 (June 26–July 10)
 Optional:      PP-20260711-20260726 (July 11–25)
 
 Register workbooks (password 9090):
-  docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx
-  docs/new-cutoff/june-26-10/HRIS Payroll Computation June_26 - July 10, 2026.xlsx
+  docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx
+  docs/new-cutoff/june-26-10/BNPI PATS Payroll Computation June_26 - July 10, 2026.xlsx
 
 Frozen sample (must always report):
   Emp 01360 Rio Jane Marasigan — June 11–25
@@ -47,8 +47,8 @@ Column rules (HARD — never mix):
   OT payable hours = RegOT+SpclOT+RHolOT+RDOT (NOT ND, NOT plain RD)
 
 DB: FORCE_ENV_DB=1
-    DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public
-    Forward if needed: ssh project-truth-hris -L 127.0.0.1:55435:10.43.130.9:5432
+    DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public
+    Forward if needed: ssh project-truth-bnpi-pats -L 127.0.0.1:55435:10.43.130.9:5432
 
 Every phase MUST print a NUMBER table (counts, ₱, hours). HEARTBEAT each cycle.
 Non-stop until EXIT GATE green or real residual classes only.
@@ -125,15 +125,15 @@ If register NetPay is **7,269.50** and TOTAL DEDN **5,325.95** (SSS/RCBC loans),
 # HEARTBEAT | phase=A
 cd C:\Users\stari\bandai-infra
 # DB forward if needed
-# ssh project-truth-hris -N -L 127.0.0.1:55435:10.43.130.9:5432
+# ssh project-truth-bnpi-pats -N -L 127.0.0.1:55435:10.43.130.9:5432
 $env:FORCE_ENV_DB='1'
-$env:PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public'
+$env:PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public'
 $env:DATABASE_URL=$env:PG_DATABASE_URL
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $dir = ".runtime\payroll-tally-e2e-$stamp"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
-# Expect: TCP 55435 up; API :3001 /health 200 (restart npm.cmd run dev in hris-api if down)
+# Expect: TCP 55435 up; API :3001 /health 200 (restart npm.cmd run dev in bnpi-pats-api if down)
 ```
 
 **Pass:** DB ping OK + API health OK. Write `A-health.json`.
@@ -143,7 +143,7 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 ### Phase B — OT truth (file ↔ DB ↔ readiness)
 
 ```powershell
-cd hris-api
+cd bnpi-pats-api
 npx tsx scripts/probe-ot-truth-fast.ts
 # Copy INDEX.json into $dir
 ```
@@ -222,9 +222,9 @@ OR Run Payroll → Preview Payroll → open employee detail
 ### Phase F — Register comparison (existing scripts)
 
 ```powershell
-cd hris-api
+cd bnpi-pats-api
 npx tsx scripts/dry-run-bandai-payroll-comparison.ts `
-  --workbook="..\docs\new-cutoff\june-11-25\HRIS Payroll Computation June 11 - 25, 2026.xlsx" `
+  --workbook="..\docs\new-cutoff\june-11-25\BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx" `
   --password=9090 `
   --organizationId=cmpxw0mfe00007zws3iypuu9d `
   --overtime-workbook="..\docs\new-cutoff\june-11-25\1rptOvertimeDetails - June 11-25, 2026.xlsx" `
@@ -335,9 +335,9 @@ HEARTBEAT | cycle=<N> | phase=<A-H> | checklist=<done>/<total>
 ## 7. Ordered command cheat-sheet
 
 ```powershell
-cd C:\Users\stari\bandai-infra\hris-api
+cd C:\Users\stari\bandai-infra\bnpi-pats-api
 $env:FORCE_ENV_DB='1'
-$env:PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public'
+$env:PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public'
 $env:DATABASE_URL=$env:PG_DATABASE_URL
 
 # OT
@@ -355,7 +355,7 @@ npx tsx scripts/fast-import-cutoff-money.ts
 # Workshare
 # Register comparison
 npx tsx scripts/dry-run-bandai-payroll-comparison.ts `
-  --workbook="..\docs\new-cutoff\june-11-25\HRIS Payroll Computation June 11 - 25, 2026.xlsx" `
+  --workbook="..\docs\new-cutoff\june-11-25\BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx" `
   --password=9090 --organizationId=cmpxw0mfe00007zws3iypuu9d `
   --no-default-sources `
   --overtime-workbook="..\docs\new-cutoff\june-11-25\1rptOvertimeDetails - June 11-25, 2026.xlsx" `

@@ -79,10 +79,10 @@ function Resolve-SshTargetSpec {
       ScpTargetPrefix = 'infra@10.184.37.19'
     }
     $candidates += @{
-      Label = 'project-truth-hris'
-      SshArgs = @('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', 'project-truth-hris')
+      Label = 'project-truth-bnpi-pats'
+      SshArgs = @('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', 'project-truth-bnpi-pats')
       ScpArgs = @()
-      ScpTargetPrefix = 'project-truth-hris'
+      ScpTargetPrefix = 'project-truth-bnpi-pats'
     }
   }
 

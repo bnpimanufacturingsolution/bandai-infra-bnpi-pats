@@ -8,7 +8,7 @@ bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::
     if (setup_payload.empty()) {
         emit_json({
             {"event", "peer_user_write_skipped"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"reason", "invalid_source_user_payload"}
         });
@@ -18,7 +18,7 @@ bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::
     if (!execute_mode) {
         emit_json({
             {"event", "peer_user_write_preview"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"wouldCall", "PUT /ISAPI/AccessControl/UserInfo/SetUp?format=json"}
         });
@@ -34,7 +34,7 @@ bool write_peer_user(DeviceSession &target, const ReconcileJob &job, const std::
 
     emit_json({
         {"event", "peer_user_write"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"ok", ok ? "true" : "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
@@ -128,7 +128,7 @@ bool write_fingerprint_via_isapi(
 
     emit_json({
         {"event", "peer_fingerprint_write_isapi"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"fingerPrintId", std::to_string(record.byFingerPrintID)},
         {"setupOk", setup_ok ? "true" : "false"},
@@ -152,7 +152,7 @@ bool write_peer_fingerprints(
     if (templates.empty()) {
         emit_json({
             {"event", "peer_fingerprint_write_skipped"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"reason", "no_source_templates"}
         });
@@ -162,7 +162,7 @@ bool write_peer_fingerprints(
     if (!execute_mode) {
         emit_json({
             {"event", "peer_fingerprint_write_preview"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"templateCount", std::to_string(templates.size())},
             {"rawFingerprintTemplateStored", "false"}
@@ -186,7 +186,7 @@ bool write_peer_fingerprints(
         isapi_verified_templates.size() >= templates.size() && !isapi_verified_templates.empty();
     emit_json({
         {"event", "peer_fingerprint_write_isapi_summary"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"templateCount", std::to_string(templates.size())},
         {"isapiOkCount", std::to_string(isapi_ok_count)},
@@ -206,7 +206,7 @@ bool write_peer_fingerprints(
     enable_default_card_reader(cond.byEnableCardReader, sizeof(cond.byEnableCardReader));
 
     FingerprintReadContext ctx;
-    ctx.device_id = target.config.hris_device_id;
+    ctx.device_id = target.config.bnpi_pats_device_id;
     ctx.employee_no = job.employee_no;
     ctx.operation = "write";
     std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
@@ -221,7 +221,7 @@ bool write_peer_fingerprints(
     if (handle < 0) {
         emit_json({
             {"event", "peer_fingerprint_write"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"ok", "false"},
             {"lastError", std::to_string(NET_DVR_GetLastError())}
@@ -243,7 +243,7 @@ bool write_peer_fingerprints(
             ok = false;
             emit_json({
                 {"event", "peer_fingerprint_write_status"},
-                {"targetDeviceId", target.config.hris_device_id},
+                {"targetDeviceId", target.config.bnpi_pats_device_id},
                 {"employeeNo", job.employee_no},
                 {"sendStatus", "send_remote_config_failed"},
                 {"recvStatus", "unknown"},
@@ -267,7 +267,7 @@ bool write_peer_fingerprints(
             ok = true;
             emit_json({
                 {"event", "peer_fingerprint_write_verified_after_error"},
-                {"targetDeviceId", target.config.hris_device_id},
+                {"targetDeviceId", target.config.bnpi_pats_device_id},
                 {"employeeNo", job.employee_no},
                 {"verifiedTemplateCount", std::to_string(verified_templates.size())}
             });
@@ -277,7 +277,7 @@ bool write_peer_fingerprints(
     if (!ok && !job.card_no.empty()) {
         emit_json({
             {"event", "peer_fingerprint_write_legacy_attempt"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"cardNo", "[redacted]"},
             {"templateCount", std::to_string(templates.size())}
@@ -290,7 +290,7 @@ bool write_peer_fingerprints(
         std::strncpy(reinterpret_cast<char *>(legacy_cond.byCardNo), job.card_no.c_str(), ACS_CARD_NO_LEN - 1);
 
         FingerprintReadContext legacy_ctx;
-        legacy_ctx.device_id = target.config.hris_device_id;
+        legacy_ctx.device_id = target.config.bnpi_pats_device_id;
         legacy_ctx.employee_no = job.employee_no;
         legacy_ctx.operation = "legacy_write";
 
@@ -322,7 +322,7 @@ bool write_peer_fingerprints(
                     legacy_send_ok = false;
                     emit_json({
                         {"event", "peer_fingerprint_write_legacy_send_failed"},
-                        {"targetDeviceId", target.config.hris_device_id},
+                        {"targetDeviceId", target.config.bnpi_pats_device_id},
                         {"employeeNo", job.employee_no},
                         {"cardNo", "[redacted]"},
                         {"lastError", std::to_string(NET_DVR_GetLastError())}
@@ -343,7 +343,7 @@ bool write_peer_fingerprints(
             legacy_sdk_lock.unlock();
             emit_json({
                 {"event", "peer_fingerprint_write_legacy_start_failed"},
-                {"targetDeviceId", target.config.hris_device_id},
+                {"targetDeviceId", target.config.bnpi_pats_device_id},
                 {"employeeNo", job.employee_no},
                 {"cardNo", "[redacted]"},
                 {"lastError", std::to_string(NET_DVR_GetLastError())}
@@ -353,7 +353,7 @@ bool write_peer_fingerprints(
 
     emit_json({
         {"event", "peer_fingerprint_write"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"cardNo", job.card_no.empty() ? "" : "[redacted]"},
         {"ok", ok ? "true" : "false"},
@@ -374,16 +374,16 @@ bool clone_fingerprints_between_users(
     const std::string &target_employee_no) {
     ReconcileJob read_job;
     read_job.source_host = source.config.host;
-    read_job.source_device_id = source.config.hris_device_id;
+    read_job.source_device_id = source.config.bnpi_pats_device_id;
     read_job.employee_no = source_employee_no;
     read_job.include_fingerprints = true;
     read_job.event_kind = "manual_fingerprint_clone_read";
 
     emit_json({
         {"event", "manual_fingerprint_clone_started"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"sourceEmployeeNo", source_employee_no},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"targetEmployeeNo", target_employee_no},
         {"mode", execute_mode ? "execute" : "dry-run"}
     });
@@ -395,9 +395,9 @@ bool clone_fingerprints_between_users(
             {"event", "manual_fingerprint_clone_completed"},
             {"ok", "false"},
             {"reason", "no_source_templates"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"sourceEmployeeNo", source_employee_no},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"targetEmployeeNo", target_employee_no}
         });
         return false;
@@ -410,9 +410,9 @@ bool clone_fingerprints_between_users(
     emit_json({
         {"event", "manual_fingerprint_clone_completed"},
         {"ok", ok ? "true" : "false"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"sourceEmployeeNo", source_employee_no},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"targetEmployeeNo", target_employee_no},
         {"templateCount", std::to_string(templates.size())}
     });
@@ -426,7 +426,7 @@ bool capture_and_sync_fingerprint_for_employee(
     BYTE finger_type) {
     ReconcileJob source_user_job;
     source_user_job.source_host = source.config.host;
-    source_user_job.source_device_id = source.config.hris_device_id;
+    source_user_job.source_device_id = source.config.bnpi_pats_device_id;
     source_user_job.employee_no = employee_no;
     std::string source_user_json;
     read_source_user(source, source_user_job, &source_user_json);
@@ -440,7 +440,7 @@ bool capture_and_sync_fingerprint_for_employee(
     NET_DVR_CAPTURE_FINGERPRINT_CFG capture{};
     emit_json({
         {"event", "manual_fingerprint_capture_sync_started"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"fingerNo", std::to_string(finger_no)},
@@ -453,7 +453,7 @@ bool capture_and_sync_fingerprint_for_employee(
             {"event", "manual_fingerprint_capture_sync_completed"},
             {"ok", "false"},
             {"reason", "capture_failed"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"employeeNo", employee_no}
         });
         return false;
@@ -466,14 +466,14 @@ bool capture_and_sync_fingerprint_for_employee(
 
     ReconcileJob job;
     job.source_host = source.config.host;
-    job.source_device_id = source.config.hris_device_id;
+    job.source_device_id = source.config.bnpi_pats_device_id;
     job.employee_no = employee_no;
     job.card_no = card_no;
     job.include_fingerprints = true;
     job.event_kind = "manual_fingerprint_capture_sync";
 
     for (auto &target : sessions) {
-        if (target.config.hris_device_id == source.config.hris_device_id) {
+        if (target.config.bnpi_pats_device_id == source.config.bnpi_pats_device_id) {
             continue;
         }
         const bool wrote = retry_peer_operation("fingerprint", target, employee_no, [&]() {
@@ -489,7 +489,7 @@ bool capture_and_sync_fingerprint_for_employee(
     emit_json({
         {"event", "manual_fingerprint_capture_sync_completed"},
         {"ok", ok ? "true" : "false"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"fingerNo", std::to_string(finger_no)},
         {"targetWrites", std::to_string(target_writes)}
@@ -502,7 +502,7 @@ bool capture_and_sync_face_for_employee(
     const std::string &employee_no) {
     ReconcileJob job;
     job.source_host = source.config.host;
-    job.source_device_id = source.config.hris_device_id;
+    job.source_device_id = source.config.bnpi_pats_device_id;
     job.employee_no = employee_no;
     std::string user_json;
     std::string card_json;
@@ -513,7 +513,7 @@ bool capture_and_sync_face_for_employee(
 
     emit_json({
         {"event", "manual_face_capture_sync_started"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"mode", execute_mode ? "execute" : "dry-run"}
@@ -521,7 +521,7 @@ bool capture_and_sync_face_for_employee(
     if (card_no.empty()) {
         emit_json({
             {"event", "manual_face_capture_sync_completed"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"reason", "card_required_by_face_sdk"}
@@ -534,7 +534,7 @@ bool capture_and_sync_face_for_employee(
     if (!capture_face_template(source, &face_template, &face_picture)) {
         emit_json({
             {"event", "manual_face_capture_sync_completed"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"reason", "capture_failed"}
@@ -545,7 +545,7 @@ bool capture_and_sync_face_for_employee(
     bool ok = true;
     int target_writes = 0;
     for (auto &target : sessions) {
-        if (target.config.hris_device_id == source.config.hris_device_id) continue;
+        if (target.config.bnpi_pats_device_id == source.config.bnpi_pats_device_id) continue;
         const bool wrote = retry_peer_operation("face", target, employee_no, [&]() {
             return write_face_and_template(target, employee_no, card_no, face_template, face_picture);
         });
@@ -554,7 +554,7 @@ bool capture_and_sync_face_for_employee(
     }
     emit_json({
         {"event", "manual_face_capture_sync_completed"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"ok", ok ? "true" : "false"},
         {"targetWrites", std::to_string(target_writes)},
@@ -569,7 +569,7 @@ bool mirror_face_for_employee(
     const std::string &employee_no) {
     ReconcileJob job;
     job.source_host = source.config.host;
-    job.source_device_id = source.config.hris_device_id;
+    job.source_device_id = source.config.bnpi_pats_device_id;
     job.employee_no = employee_no;
     std::string user_json;
     std::string card_json;
@@ -580,7 +580,7 @@ bool mirror_face_for_employee(
 
     emit_json({
         {"event", "manual_face_mirror_started"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"cardNo", card_no.empty() ? "" : "[redacted]"},
         {"mode", execute_mode ? "execute" : "dry-run"}
@@ -588,7 +588,7 @@ bool mirror_face_for_employee(
     if (card_no.empty()) {
         emit_json({
             {"event", "manual_face_mirror_completed"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"reason", "card_required_by_face_sdk"}
@@ -602,7 +602,7 @@ bool mirror_face_for_employee(
     if (!read_face_and_template(source, employee_no, card_no, &face_template, &face_picture)) {
         emit_json({
             {"event", "manual_face_mirror_completed"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"reason", "source_face_not_read"}
@@ -613,7 +613,7 @@ bool mirror_face_for_employee(
     bool ok = true;
     int target_writes = 0;
     for (auto &target : sessions) {
-        if (target.config.hris_device_id == source.config.hris_device_id) continue;
+        if (target.config.bnpi_pats_device_id == source.config.bnpi_pats_device_id) continue;
         const bool wrote = retry_peer_operation("face", target, employee_no, [&]() {
             return write_face_and_template(target, employee_no, card_no, face_template, face_picture);
         });
@@ -622,7 +622,7 @@ bool mirror_face_for_employee(
     }
     emit_json({
         {"event", "manual_face_mirror_completed"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"ok", ok ? "true" : "false"},
         {"targetWrites", std::to_string(target_writes)},
@@ -636,7 +636,7 @@ bool delete_peer_user(DeviceSession &target, const ReconcileJob &job) {
     if (job.employee_no.empty()) {
         emit_json({
             {"event", "peer_user_delete_skipped"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"reason", "missing_employee_no"}
         });
         return false;
@@ -645,7 +645,7 @@ bool delete_peer_user(DeviceSession &target, const ReconcileJob &job) {
     if (!execute_mode) {
         emit_json({
             {"event", "peer_user_delete_preview"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"wouldCall", "POST /ISAPI/AccessControl/UserInfoDetail/Delete?format=json"}
         });
@@ -676,7 +676,7 @@ bool delete_peer_user(DeviceSession &target, const ReconcileJob &job) {
 
     emit_json({
         {"event", "peer_user_delete"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"ok", ok ? "true" : "false"},
         {"lastError", ok ? "0" : std::to_string(NET_DVR_GetLastError())}
@@ -691,7 +691,7 @@ bool delete_peer_fingerprints(DeviceSession &target, const ReconcileJob &job) {
     if (job.employee_no.empty()) {
         emit_json({
             {"event", "peer_fingerprint_delete_skipped"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"reason", "missing_employee_no"}
         });
         return false;
@@ -700,7 +700,7 @@ bool delete_peer_fingerprints(DeviceSession &target, const ReconcileJob &job) {
     if (!execute_mode) {
         emit_json({
             {"event", "peer_fingerprint_delete_preview"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"wouldCall", "NET_DVR_DEL_FINGERPRINT_CFG_V50"},
             {"rawFingerprintTemplateStored", "false"}
@@ -745,7 +745,7 @@ bool delete_peer_fingerprints(DeviceSession &target, const ReconcileJob &job) {
 
     emit_json({
         {"event", "peer_fingerprint_delete"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"ok", ok ? "true" : "false"},
         {"rawFingerprintTemplateStored", "false"},
@@ -778,7 +778,7 @@ bool target_card_allows_owner(
     if (!read_ok) {
         emit_json({
             {"event", "peer_card_owner_probe"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"reason", "target_card_owner_read_failed"}
@@ -789,7 +789,7 @@ bool target_card_allows_owner(
     if (!owner.empty() && owner != employee_no) {
         emit_json({
             {"event", "peer_card_owner_conflict"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"existingOwner", owner},
             {"ok", "false"}
@@ -813,7 +813,7 @@ bool add_sync_card_if_unowned(
     if (already_owned) {
         emit_json({
             {"event", "peer_sync_card"},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"cardPresent", "true"},
             {"ok", "true"},

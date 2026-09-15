@@ -29,7 +29,7 @@ On this Windows host, Project Truth injects root **`Agents.md` / `AGENTS.md`** a
 | `.wwg/wiki/terminology.md` | Names that must stay stable |
 | `.wwg/governance/drift-guard.md` | What not to drift |
 | `Agent-Meta-Prompt-Template.md` | Phase loop for multi-step work |
-| Relevant source under `hris-app` / `hris-api` | Real implementation |
+| Relevant source under `bnpi-pats-app` / `bnpi-pats-api` | Real implementation |
 
 **Rule of thumb:**  
 - **AGENTS.md** = how Grok must behave (autonomy, host/VM, bans, stop conditions).  
@@ -65,11 +65,11 @@ B. Immediately open these files in order (do not skip):
    9. Agent-Meta-Prompt-Template.md  (use the phase loop for this multi-step work)
 
 C. Then code discovery (read before editing):
-   - hris-app/app/routes/admin/devices/events.tsx  (Sync logs modal UI)
-   - hris-app/app/services/devices.service.ts
-   - hris-app/app/lib/*device-events*
-   - hris-api device controller + Hikvision sync/preview helpers
-   - hris-api helper/hikvision-event-contract.helper.ts (and related)
+   - bnpi-pats-app/app/routes/admin/devices/events.tsx  (Sync logs modal UI)
+   - bnpi-pats-app/app/services/devices.service.ts
+   - bnpi-pats-app/app/lib/*device-events*
+   - bnpi-pats-api device controller + Hikvision sync/preview helpers
+   - bnpi-pats-api helper/hikvision-event-contract.helper.ts (and related)
    - existing tests: device-events page contract, smoke sync modal, taxonomy specs
    - latest .runtime/* and .wwg/reports/*hikvision*device-events* evidence
 
@@ -97,7 +97,7 @@ Main table is EVENT-FIRST, not inventory-first.
 ================================================================================
 
 Current modal is hard to understand: one broad row per device with abstract
-counts like On device / In HRIS / Can import.
+counts like On device / In BNPI PATS / Can import.
 
 That forces the admin to decode internals instead of seeing:
 
@@ -119,7 +119,7 @@ Then for EVERY Hikvision device:
 
   Will add to Device Events
 
-  | Event to add | Will add | Already in HRIS | Source proof | Filter after sync | Status |
+  | Event to add | Will add | Already in BNPI PATS | Source proof | Filter after sync | Status |
   |---|---:|---:|---|---|---|
   | Fingerprint enrolled | +24 | 3 | Operation logs | Enrollment > Fingerprint enrolled | Ready |
   | User created | +20 | 0 | Operation logs | User Management > User created | Ready |
@@ -131,11 +131,11 @@ Then for EVERY Hikvision device:
 Admin must see event counts FIRST.
 Source proof is secondary but visible.
 
-"On device / In HRIS / Can import" may live in collapsed details only.
+"On device / In BNPI PATS / Can import" may live in collapsed details only.
 They must NOT be the main story.
 
 Required columns exactly:
-Event to add | Will add | Already in HRIS | Source proof | Filter after sync | Status
+Event to add | Will add | Already in BNPI PATS | Source proof | Filter after sync | Status
 
 ================================================================================
 4) TOP SUMMARY (REQUIRED)
@@ -143,7 +143,7 @@ Event to add | Will add | Already in HRIS | Source proof | Filter after sync | S
 
 Devices checked: N
 Will add to Device Events: N
-Already in HRIS: N
+Already in BNPI PATS: N
 Needs review: N
 Failed: N
 Ready source checks: X of Y
@@ -151,7 +151,7 @@ Ready source checks: X of Y
 Example target shape:
 Devices checked: 7
 Will add to Device Events: 12,927
-Already in HRIS: 23
+Already in BNPI PATS: 23
 Needs review: 14
 Failed: 0
 Ready source checks: 12 of 14
@@ -202,7 +202,7 @@ Required filter destinations:
 - Operation logs = ContentMgmt/logSearch
 - Attendance/access events = AccessControl/AcsEvent
 - Do NOT reuse browser cookies, WebSession, SessionTag, or copied curl session headers.
-- Use stored HRIS device credentials / existing server-side Hikvision client only.
+- Use stored BNPI PATS device credentials / existing server-side Hikvision client only.
 
 ================================================================================
 7) PREVIEW BEHAVIOR
@@ -222,10 +222,10 @@ Do not fake UI counts.
 
 On Sync logs click:
 1. Save listed Will-add rows as DeviceEvent
-2. Do not duplicate rows already in HRIS
+2. Do not duplicate rows already in BNPI PATS
 3. Preserve raw device evidence
 4. After sync, the Filter after sync destinations must show imported rows
-5. Refresh modal/page counts so Will add drops and Already in HRIS rises correctly
+5. Refresh modal/page counts so Will add drops and Already in BNPI PATS rises correctly
 
 Support dual sources in one sync run when both are ready:
 - logSearch operation/enrollment history
@@ -237,10 +237,10 @@ Support dual sources in one sync run when both are ready:
 
 - Do not stop after one file edit, one test pass, or a "looks fine" claim
 - Do not ask for approval for normal implement/test/recover/commit progress
-- Do not disable/stop/mask cloudflared-bnpi-hris tunnel
+- Do not disable/stop/mask cloudflared-bnpi-pats tunnel
 - Do not make Windows Docker Desktop / WSL the Project Truth runtime
 - Do not invent lifecycle events from DeviceUser inventory
-- Do not leave device-first On device/In HRIS/Can import as primary UX
+- Do not leave device-first On device/In BNPI PATS/Can import as primary UX
 - Do not save during preview
 - Do not import duplicates
 - Do not paste secrets/cookies into repo, logs, screenshots, or .runtime
@@ -261,9 +261,9 @@ PASS C — Implement preview contract (backend) if needed
 PASS D — Implement event-first modal UI
 PASS E — Implement sync execute path + dedupe + filter destinations
 PASS F — Unit/contract tests
-PASS G — Local API dry-run proof (admin@bandai.local / password123 / appCode hris)
+PASS G — Local API dry-run proof (admin@bandai.local / password123 / appCode bnpi-pats)
 PASS H — Browser/Playwright proof of Sync logs modal (headless preferred)
-        Use: cd hris-app; npx playwright test tests/smoke/admin-device-events-sync-modal.spec.ts --config=playwright.smoke.config.ts
+        Use: cd bnpi-pats-app; npx playwright test tests/smoke/admin-device-events-sync-modal.spec.ts --config=playwright.smoke.config.ts
         (webServer auto-starts Vite; plain playwright.config.ts expects :5175 and will fail if app is down)
         Save screenshots under .runtime/sync-logs-event-first-<stamp>/screenshots/
 PASS I — Fix failures; re-run from the failed pass
@@ -293,7 +293,7 @@ Capture:
   - test command outputs
 
 For local admin API checks, default actor:
-  email=admin@bandai.local password=password123 appCode=hris
+  email=admin@bandai.local password=password123 appCode=bnpi-pats
 Prefer non-mutating first (preview / execute=false).
 
 Browser verification:
@@ -304,7 +304,7 @@ Browser verification:
 11) ACCEPTANCE CHECKLIST (ALL REQUIRED)
 ================================================================================
 
-[ ] Top summary shows Devices checked, Will add, Already in HRIS, Needs review,
+[ ] Top summary shows Devices checked, Will add, Already in BNPI PATS, Needs review,
     Failed, Ready source checks
 [ ] Every Hikvision device shows name + address
 [ ] Event-first table columns exactly match required set
@@ -315,7 +315,7 @@ Browser verification:
 [ ] Filter destinations match required mapping
 [ ] Preview saves nothing (prove with DB/API before/after or dry-run flag)
 [ ] Sync saves only Will-add DeviceEvent rows
-[ ] Already-in-HRIS rows are not duplicated
+[ ] Already-in-BNPI PATS rows are not duplicated
 [ ] Raw device evidence preserved
 [ ] After sync, filters show imported rows
 [ ] Fingerprint enrolled never created from DeviceUser inventory

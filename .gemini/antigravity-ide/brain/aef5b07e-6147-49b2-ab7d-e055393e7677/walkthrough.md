@@ -1,6 +1,6 @@
 # Walkthrough: Attendance Daily Trend Shift Breakdown & Attendance Roster
 
-We implemented the Shift Breakdown and Shift Attendance features in the Attendance Daily Trend report ([`AttendanceDailyTrendTab.tsx`](file:///c:/uzaro/bandai-infra/hris-app/app/routes/hr/reports/tabs/AttendanceDailyTrendTab.tsx)), enabling HR to see shift distributions (e.g., Night Shift: 6:00 PM – 6:00 AM, Day Shift: 6:00 AM – 6:00 PM, Regular Shift: 8:00 AM – 5:00 PM), filter by shift, and view the list of employees present on each shift along with their actual clock-in and clock-out times.
+We implemented the Shift Breakdown and Shift Attendance features in the Attendance Daily Trend report ([`AttendanceDailyTrendTab.tsx`](file:///c:/uzaro/bandai-infra/bnpi-pats-app/app/routes/hr/reports/tabs/AttendanceDailyTrendTab.tsx)), enabling HR to see shift distributions (e.g., Night Shift: 6:00 PM – 6:00 AM, Day Shift: 6:00 AM – 6:00 PM, Regular Shift: 8:00 AM – 5:00 PM), filter by shift, and view the list of employees present on each shift along with their actual clock-in and clock-out times.
 
 ---
 
@@ -37,9 +37,9 @@ We implemented the Shift Breakdown and Shift Attendance features in the Attendan
 
 ## 2. Verification & Automated Test Results
 
-- Created [`attendance-shift.test.ts`](file:///c:/uzaro/bandai-infra/hris-app/app/lib/utils/attendance-shift.test.ts):
+- Created [`attendance-shift.test.ts`](file:///c:/uzaro/bandai-infra/bnpi-pats-app/app/lib/utils/attendance-shift.test.ts):
   - Verified 12-hour AM/PM formatting, scheduleSnapshot start/end extraction, timeSlot range extraction, and clock-in based night/day shift inference (5/5 passed).
-- Updated [`AttendanceDailyTrendTab.test.tsx`](file:///c:/uzaro/bandai-infra/hris-app/app/routes/hr/reports/tabs/AttendanceDailyTrendTab.test.tsx):
+- Updated [`AttendanceDailyTrendTab.test.tsx`](file:///c:/uzaro/bandai-infra/bnpi-pats-app/app/routes/hr/reports/tabs/AttendanceDailyTrendTab.test.tsx):
   - Verified Shift View toggle, shift stat cards, shift roster table, and employee clock-in/out rendering (passed).
 - Executed entire reports test suite:
   - **12 Test Files Passed (31 Tests Passed)**:

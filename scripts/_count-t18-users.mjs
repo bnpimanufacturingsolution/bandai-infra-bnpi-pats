@@ -1,4 +1,4 @@
-import { PrismaClient } from "../hris-api/generated/prisma/index.js";
+import { PrismaClient } from "../bnpi-pats-api/generated/prisma/index.js";
 const p = new PrismaClient();
 const deviceId = "cmrlgqsjv000oob01165tbd8n";
 const all = await p.deviceUser.count({ where: { deviceId } });

@@ -1,16 +1,16 @@
-# hris-callback-outbox (K3s SQLite outbox)
+# bnpi-pats-callback-outbox (K3s SQLite outbox)
 
-Durable, **indexed** buffer for Hikvision ACS payloads when `hris-api` is slow/down.
+Durable, **indexed** buffer for Hikvision ACS payloads when `bnpi-pats-api` is slow/down.
 
 ## Architecture (Project Truth)
 
 ```text
 Host SDK listener (systemd)  ──┐
-                               ├──► hris-callback-outbox:8080  (this pod)
-K3s hris-hikvision-watcher  ───┘         │
+                               ├──► bnpi-pats-callback-outbox:8080  (this pod)
+K3s bnpi-pats-hikvision-watcher  ───┘         │
                                          │ SQLite /data/outbox.db  (hostPath)
                                          ▼
-                                   POST hris-api:3001/api/hikvision/callback
+                                   POST bnpi-pats-api:3001/api/hikvision/callback
                                          ▼
                                    Postgres device_events  (product truth)
 ```
@@ -32,14 +32,14 @@ K3s hris-hikvision-watcher  ───┘         │
 
 Manifest lives in `gitops/runtime-k8s/overlays/dev/runtime.yaml`:
 
-- Deployment `hris-callback-outbox`
+- Deployment `bnpi-pats-callback-outbox`
 - Service ClusterIP + NodePort **30108** (host listener can use `http://127.0.0.1:30108`)
 - hostPath `/var/lib/project-truth/callback-outbox`
 
 ## Build / import
 
 ```bash
-docker build -t hris-callback-outbox:develop services/callback-outbox
+docker build -t bnpi-pats-callback-outbox:develop services/callback-outbox
 # on VM:
 k3s ctr -n k8s.io images import <tar>
 kubectl -n dev apply -k gitops/runtime-k8s/overlays/dev

@@ -1,7 +1,7 @@
-﻿import { PrismaClient } from "../hris-api/generated/prisma/index.js";
-import { hikvisionFetch } from "../hris-api/lib/hikvision-client.js";
-import { hikvisionEndpoint } from "../hris-api/config/hikvision.endpoint.js";
-import { captureOpaqueTokenAfterUserWrite } from "../hris-api/helper/device-person-token.helper.js";
+﻿﻿import { PrismaClient } from "../bnpi-pats-api/generated/prisma/index.js";
+import { hikvisionFetch } from "../bnpi-pats-api/lib/hikvision-client.js";
+import { hikvisionEndpoint } from "../bnpi-pats-api/config/hikvision.endpoint.js";
+import { captureOpaqueTokenAfterUserWrite } from "../bnpi-pats-api/helper/device-person-token.helper.js";
 
 const emp = process.argv[2];
 const prisma = new PrismaClient({ datasources: { db: { url: process.env.FORCE_DATABASE_URL } } });

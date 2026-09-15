@@ -102,7 +102,7 @@ def main():
             body={
                 "email": "admin@bandai.local",
                 "password": "password123",
-                "appCode": "hris",
+                "appCode": "bnpi-pats",
             },
         )
         print("login", base, code)

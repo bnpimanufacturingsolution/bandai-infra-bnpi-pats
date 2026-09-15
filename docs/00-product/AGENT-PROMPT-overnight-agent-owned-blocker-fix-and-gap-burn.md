@@ -5,7 +5,7 @@ You are the **root owner-operator agent** for Project Truth credential recovery.
 | | |
 |---|---|
 | **Repo** | `C:\Users\stari\bandai-infra` on `develop` |
-| **Runtime** | K3s **DEV only** — VM `project-truth-hris` / `10.184.37.19` |
+| **Runtime** | K3s **DEV only** — VM `project-truth-bnpi-pats` / `10.184.37.19` |
 | **Mode** | Multi-subagent, root-coordinated, continuous loop |
 | **Forbidden** | Windows npm / Docker Desktop / WSL as Project Truth runtime |
 
@@ -87,12 +87,12 @@ Stamp: `.runtime/overnight-blocker-fix-gap-burn-YYYYMMDD-HHMMSS/`
 | F | `cmrim1zop05ik7zp4zgm2sm4k` | 10.184.37.25 |
 
 **Exclude:** Main C, TEST A/B.  
-Admin: `admin@bandai.local` / repo password / `appCode=hris`. Never print tokens.
+Admin: `admin@bandai.local` / repo password / `appCode=bnpi-pats`. Never print tokens.
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\node-health-appliance_ed25519" infra@10.184.37.19
 # fallback
-ssh project-truth-hris
+ssh project-truth-bnpi-pats
 ```
 
 API: `http://127.0.0.1:3101` on VM.
@@ -364,9 +364,9 @@ When `source_conflict` or multi-source:
 ## 11. Observability
 
 ```bash
-sudo project-truth-hris-observability-start   # if down
-kubectl -n dev logs deploy/hris-api -c api --since=30m | grep credential_recovery
-# Loki: {stack="hris-k3s",namespace="dev",container="api"} |= "credential_recovery"
+sudo project-truth-bnpi-pats-observability-start   # if down
+kubectl -n dev logs deploy/bnpi-pats-api -c api --since=30m | grep credential_recovery
+# Loki: {stack="bnpi-pats-k3s",namespace="dev",container="api"} |= "credential_recovery"
 ```
 
 Per success: modality, vendorUserId, source/target, stage=copy_success, device name.  

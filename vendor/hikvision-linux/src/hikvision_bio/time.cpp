@@ -27,7 +27,7 @@ bool run_device_time_command(
     emit_json({
         {"event", "device_time_read"},
         {"ok", read_ok && !before_local.empty() ? "true" : "false"},
-        {"deviceId", session.config.hris_device_id},
+        {"deviceId", session.config.bnpi_pats_device_id},
         {"host", session.config.host},
         {"sdkPort", std::to_string(session.config.sdk_port)},
         {"localTime", before_local},
@@ -40,7 +40,7 @@ bool run_device_time_command(
         emit_json({
             {"event", "device_time_preview"},
             {"ok", read_ok ? "true" : "false"},
-            {"deviceId", session.config.hris_device_id},
+            {"deviceId", session.config.bnpi_pats_device_id},
             {"plannedLocalTime", local_time},
             {"plannedTimeZone", time_zone.empty() ? "CST-8:00:00" : time_zone},
             {"plannedTimeMode", "manual"},
@@ -52,7 +52,7 @@ bool run_device_time_command(
         emit_json({
             {"event", "device_time_write"},
             {"ok", "false"},
-            {"deviceId", session.config.hris_device_id},
+            {"deviceId", session.config.bnpi_pats_device_id},
             {"reason", "local_time_required"}
         });
         return false;
@@ -97,7 +97,7 @@ bool run_device_time_command(
     emit_json({
         {"event", "device_time_write"},
         {"ok", wrote ? "true" : "false"},
-        {"deviceId", session.config.hris_device_id},
+        {"deviceId", session.config.bnpi_pats_device_id},
         {"host", session.config.host},
         {"localTime", after_local},
         {"timeMode", after_mode},

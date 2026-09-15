@@ -5,7 +5,7 @@ Drive Needs decision → 0 for name/date residual.
 1) Build merge plan
 2) Auto-pick: longer displayName, later validFrom/validTo
 3) For every lagging panel peer: PUT UserInfo/Modify with selected name/dates
-4) HRIS profile overlay job (users merge) when totalWork > 0
+4) BNPI PATS profile overlay job (users merge) when totalWork > 0
 5) Replan until decision people == 0 (or max rounds)
 """
 from __future__ import annotations
@@ -85,7 +85,7 @@ def login() -> tuple[str, str]:
             api,
             "POST",
             "/api/auth/login",
-            body={"email": "admin@bandai.local", "password": "password123", "appCode": "hris"},
+            body={"email": "admin@bandai.local", "password": "password123", "appCode": "bnpi-pats"},
             timeout=30,
         )
         print("login", api, code, flush=True)
@@ -403,7 +403,7 @@ def main():
         err_writes = [r for r in align if r.get("status") == "error"]
         print(f"panel ok={ok_writes} err={len(err_writes)}", flush=True)
 
-        # 2) HRIS overlay job
+        # 2) BNPI PATS overlay job
         selected = [r["key"] for r in rows]
         plan_id = p.get("planId") or raw.get("planId")
         if plan_id:

@@ -12,7 +12,7 @@
 
 ## 1. Purpose
 
-Capture **session-proven** reasons the HRIS app Payroll Preview does not tally to the client **HRIS Payroll Computation** workbooks (Sheet2), with emphasis on:
+Capture **session-proven** reasons the BNPI PATS app Payroll Preview does not tally to the client **BNPI PATS Payroll Computation** workbooks (Sheet2), with emphasis on:
 
 1. Absent / empty biometrics policy  
 2. Basic Salary column mismatch  
@@ -36,9 +36,9 @@ Capture **session-proven** reasons the HRIS app Payroll Preview does not tally t
 | Item | Path / value |
 |---|---|
 | Primary tally period | `PP-20260626-20260711` (Jun 26–Jul 10, 2026) |
-| June register | `confidential-files/june26-july10/` or `confidential-files/HRIS Payroll Computation June_26 - July 10, 2026.xlsx` (password `9090`) |
-| Unlocked June copy (agent use) | `.runtime/alexa-payroll-compare/hris_payroll_unlocked.xlsx` |
-| April register (OT formula consistency) | `confidential-files/HRIS Payroll Computation April 26 - May 10, 2026.xlsx` (password `9090`) |
+| June register | `confidential-files/june26-july10/` or `confidential-files/BNPI PATS Payroll Computation June_26 - July 10, 2026.xlsx` (password `9090`) |
+| Unlocked June copy (agent use) | `.runtime/alexa-payroll-compare/bnpi_pats_payroll_unlocked.xlsx` |
+| April register (OT formula consistency) | `confidential-files/BNPI PATS Payroll Computation April 26 - May 10, 2026.xlsx` (password `9090`) |
 | April unlocked extract | `.runtime/april-ot-rate-20260813/april_unlocked.xlsx` |
 | Fleet scan (post BNPI OT fix) | `.runtime/payroll-scan-june26-jul10-after-otbnpi-20260812-131059/` |
 | Gross unmatch report | `.runtime/gross-unmatch-from-bio-ot-20260812/` |
@@ -86,7 +86,7 @@ attendanceGross =
 GrossPay = attendanceGross + GROSS_INCLUDED benefits (DMA, AON, …)
 ```
 
-Code: `hris-api/helper/payroll-period.helper.ts`  
+Code: `bnpi-pats-api/helper/payroll-period.helper.ts`  
 Detail map: `.runtime/payroll-component-map-20260812/REPORT.md`
 
 ### 4.2 File Gross (Sheet2)
@@ -447,10 +447,10 @@ Independent of OT rate work.
 | Absent/late dual | **Out of scope** (still BNPI attendance path) |
 | Import Daily Salary | `DAILY_SALARY` / `DAILY_RATE` on employee import → `dailyRate` |
 | Schema | `Employee.dailyRate Float?` + migration `20260813_add_employee_daily_rate.sql` |
-| Backfill script | `hris-api/scripts/backfill-employee-daily-rate-from-sheet2.mjs` |
-| Tests | `hris-api/tests/bandai-ot-rate-basis.spec.ts` (Path A + B) |
+| Backfill script | `bnpi-pats-api/scripts/backfill-employee-daily-rate-from-sheet2.mjs` |
+| Tests | `bnpi-pats-api/tests/bandai-ot-rate-basis.spec.ts` (Path A + B) |
 | Admin toggle | Not in first ship (hardcoded FILE_DUAL) |
-| **Local clone DB** (`127.0.0.1:5433` / `hris-local-dev-clone`) | **Backfilled** 2026-08-13: `dailyRate` column + **569 Path A** (all 600), 1643 Path B |
+| **Local clone DB** (`127.0.0.1:5433` / `bnpi-pats-local-dev-clone`) | **Backfilled** 2026-08-13: `dailyRate` column + **569 Path A** (all 600), 1643 Path B |
 | **VM DB** (`10.184.37.19:15433` / appliance) | **NOT updated yet** — host/LAN/Cloudflare SSH unreachable this session. Re-run migrate/backfill when VM is up. |
 | **Re-tally local after FILE_DUAL** | 2026-08-13: OT pay fails **482 → 1**; OT_MATCH_ONLY **327 → 797**; full TALLIED still **4**. Evidence: `.runtime/full-tally-after-ot-dual-20260813/` |
 | Re-import period Basic | Optional; won’t alone fix TR |
@@ -468,7 +468,7 @@ Independent of OT rate work.
 | Path B Basic | Unchanged: `periodBasic` + full-day absent still charged |
 | Register | `buildBandaiPayrollRegister` uses computed `basicPay` + Path A days/daily (no longer forces periodBasic) |
 | Helper | `resolveBandaiRegisterBasicPay` in `payroll-period.helper.ts` |
-| Tests | `hris-api/tests/bandai-register-basic-pay.spec.ts` (5) + OT dual (6) = **11 green** |
+| Tests | `bnpi-pats-api/tests/bandai-register-basic-pay.spec.ts` (5) + OT dual (6) = **11 green** |
 | **Re-tally local after Path A Basic** | Jun 26–Jul 10: **basicPay fails 481 → 1**; **absent 603 → 222**; **numberOfDays 818 → 263**; OT pay still 1; Gross ~805; TR ~827. Evidence: `.runtime/full-tally-jul11-25-after-basic-path-a-20260817/` |
 | Single Basic residual | `01711` Lanto: target 8050 vs app 7975 (Path B periodBasic drift ₱75) |
 | VM dailyRate | Still pending (same as OT dual) |
@@ -618,7 +618,7 @@ Repair: 329 updated, 6 inserted, 2 missing employees (`01831`, `01845` — not i
 
 Evidence: `.runtime/dma-tally-20260818/REPORT.md`, `.runtime/dma-open-horizon-repair-20260818/`, `.runtime/tally-after-dma-repair-20260818/DMA-REPORT.md`.
 
-**Local vs VM (operator note, 2026-08-18):** Local clone DB (`127.0.0.1:5433` / `hris-local-dev-clone`) is **testing only**. Brute/data repairs proved here (DMA open-horizon upsert, multi-cutoff loan horizon repair, WS-off ABSENT→REST_DAY line repair, late/EO punch recompute, prior DED mass reimport, Sheet2 dailyRate backfill, etc.) are **not** durable runtime truth until re-run against the **VM/appliance DB**. Code/import-path fixes land via git; data mutations must be replayed on VM later.
+**Local vs VM (operator note, 2026-08-18):** Local clone DB (`127.0.0.1:5433` / `bnpi-pats-local-dev-clone`) is **testing only**. Brute/data repairs proved here (DMA open-horizon upsert, multi-cutoff loan horizon repair, WS-off ABSENT→REST_DAY line repair, late/EO punch recompute, prior DED mass reimport, Sheet2 dailyRate backfill, etc.) are **not** durable runtime truth until re-run against the **VM/appliance DB**. Code/import-path fixes land via git; data mutations must be replayed on VM later.
 
 **Still open:** Gross (~620), absent reverse (~173), late (~55), TR/Net — not DMA. VM data replay of brute fixes.
 
@@ -644,12 +644,12 @@ Evidence: `.runtime/dma-tally-20260818/REPORT.md`, `.runtime/dma-open-horizon-re
 
 | Item | Status |
 |---|---|
-| Helper | `hris-api/helper/bnpi-period-leave-import.helper.ts` — sheet pick (first qualifying = `EmployeeNumber`+`DateOfLeave`), paid+window filter, dual daily basis (Path A `dailyRate`; Path B `basicSalary × 24 / 313`, unrounded rate, cent-rounded amount), `LVP` code constants |
-| Service | `hris-api/app/migration/bnpi-period-leave-import.service.ts` — preview-first (`dryRun` defaults true), explicit `payrollPeriodId` override, upsert keyed `employee|LVP benefitType|payrollPeriodId` (period-pinned RECURRING/EVERY_CUTOFF like COMP mass), notes carry sheet/days/dates/basis/source, durable log kind `period-leave` |
+| Helper | `bnpi-pats-api/helper/bnpi-period-leave-import.helper.ts` — sheet pick (first qualifying = `EmployeeNumber`+`DateOfLeave`), paid+window filter, dual daily basis (Path A `dailyRate`; Path B `basicSalary × 24 / 313`, unrounded rate, cent-rounded amount), `LVP` code constants |
+| Service | `bnpi-pats-api/app/migration/bnpi-period-leave-import.service.ts` — preview-first (`dryRun` defaults true), explicit `payrollPeriodId` override, upsert keyed `employee|LVP benefitType|payrollPeriodId` (period-pinned RECURRING/EVERY_CUTOFF like COMP mass), notes carry sheet/days/dates/basis/source, durable log kind `period-leave` |
 | Endpoint | `POST /api/migration/dm3/import-period-leave` (multipart `file`; optional `dryRun=true`; `payrollPeriodId`; `sheetName`) — **executes on upload by default** like the other DM3 mass uploads (operator decision 2026-08-25); multer string booleans coerced |
 | Engine | **`leavePay` now included in GrossPay**: `grossPayWithSources = grossPay + grossIncludedBenefits + payrollSourceAmounts.leavePay` at both generate and preview sites in `payroll-period.helper.ts`. Register `leavePay` unchanged (already sourced). Net/TR/tax follow Gross. |
 | UI | Admin → Configuration → Migration → DM3 card **Upload leave (period)** → **payroll-period selector** (default OPEN period, sends `payrollPeriodId`) + single **Import** button (immediate execute per operator feedback). Failures render in the result panel and in Upload activity click-through (kind `period-leave`). |
-| Tests | `hris-api/tests/bnpi-period-leave-import.spec.ts` (9): sheet pick, window/paid filter, dual basis incl. Sheet2 sample 00032 (₱2913.74), explicit dry-run no-writes, execute create+update+log, **default-executes contract**, missing-employee failures |
+| Tests | `bnpi-pats-api/tests/bnpi-period-leave-import.spec.ts` (9): sheet pick, window/paid filter, dual basis incl. Sheet2 sample 00032 (₱2913.74), explicit dry-run no-writes, execute create+update+log, **default-executes contract**, missing-employee failures |
 | Local DB state | **Executed 2026-08-25** on local clone (5433): PP-20260711-20260726 → **321 created / 0 updated / 6 failed** (missing emps 01827/01834/01835/01836/01838/01841), **₱327,991.84**, log `cmt86rh9b00s8vgewuoj41i4j`. Superseded by the full **§14f tally fix pack** same day — final tally `.runtime/tally-jul1125-after-repairs-2026082508243/REPORT.md`. Baseline (pre-leave, reconstructed vs July Sheet2): `.runtime/tally-jul1125-before-leave-julysheet2/`. |
 
 ### Multi-file hazard (discovered 2026-08-26, fix pending — REC-20260826-PERIOD-LEAVE-MULTI-FILE-MERGE)
@@ -752,7 +752,7 @@ default. Summary still returns `periodCandidates[]` (days/emps/chosen) for hones
 ## 14h. Apr 26–May 10 cutoff parity: zero-pay statutory waiver + loan-basis finding (2026-09-15)
 
 - Client pack `PAYROLL 2026/` (registers Dec–Apr, per-cutoff comp/ded uploads, EZ Payroll) +
-  `confidential-files/HRIS Payroll Computation April 26 - May 10, 2026.xlsx` (password 9090, auto-unlocked
+  `confidential-files/BNPI PATS Payroll Computation April 26 - May 10, 2026.xlsx` (password 9090, auto-unlocked
   via Excel COM by `run-period-tally-compare.mjs`). Full DEV run + comparison report:
   `.wwg/reports/apr26-may10-payroll-parity-20260915.md`.
 - **NEW CLIENT RULE — CONFIRMED_BY_CLIENT_FILE_BEHAVIOR: a cutoff that pays zero books NO statutory

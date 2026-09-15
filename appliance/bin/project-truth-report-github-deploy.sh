@@ -3,7 +3,7 @@
 # Always posts success when gh works. Image envs include outcome=rebuilt|not_rebuilt|pull_only.
 set -euo pipefail
 
-repo="${PROJECT_TRUTH_GITHUB_REPO:-hrisworkforcesystem-coder/bandai-infra}"
+repo="${PROJECT_TRUTH_GITHUB_REPO:-bnpimanufacturingsolution/bandai-infra}"
 state_file="${PROJECT_TRUTH_ANSIBLE_PULL_STATE:-/var/lib/project-truth/ansible-pull-state}"
 image_state_file="${PROJECT_TRUTH_K8S_IMAGE_STATE:-/var/lib/project-truth/k8s-runtime-image-state}"
 report_file="${PROJECT_TRUTH_GITHUB_DEPLOY_REPORT:-/var/lib/project-truth/github-deploy-report}"
@@ -120,11 +120,11 @@ service_note() {
 }
 
 ok=0
-report_env "vm-gitops" "https://dev.bnpi-hris.tech/auth/login" "ansible-pull ${commit} outcome=pulled synced_at=${synced_at:-unknown}"
-report_env "hris-api" "https://dev-api.bnpi-hris.tech/health" "hris-api ${commit} $(service_note 'hris-api-local:develop')"
-report_env "hris-app" "https://dev.bnpi-hris.tech/auth/login" "hris-app ${commit} $(service_note 'hris-app-local:develop')"
-report_env "hris-emp-app" "https://dev-emp.bnpi-hris.tech/auth/login" "hris-emp-app ${commit} $(service_note 'hris-emp-app-local:develop')"
-report_env "callback-outbox" "https://dev-api.bnpi-hris.tech/health" "callback-outbox ${commit} $(service_note 'hris-callback-outbox:develop')"
+report_env "vm-gitops" "https://dev.bnpi-pats.tech/auth/login" "ansible-pull ${commit} outcome=pulled synced_at=${synced_at:-unknown}"
+report_env "bnpi-pats-api" "https://dev-api.bnpi-pats.tech/health" "bnpi-pats-api ${commit} $(service_note 'bnpi-pats-api-local:develop')"
+report_env "bnpi-pats-app" "https://dev.bnpi-pats.tech/auth/login" "bnpi-pats-app ${commit} $(service_note 'bnpi-pats-app-local:develop')"
+report_env "bnpi-pats-emp-app" "https://dev-emp.bnpi-pats.tech/auth/login" "bnpi-pats-emp-app ${commit} $(service_note 'bnpi-pats-emp-app-local:develop')"
+report_env "callback-outbox" "https://dev-api.bnpi-pats.tech/health" "callback-outbox ${commit} $(service_note 'bnpi-pats-callback-outbox:develop')"
 
 probe_http() {
   local url="$1"

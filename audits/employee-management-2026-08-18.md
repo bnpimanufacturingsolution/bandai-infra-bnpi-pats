@@ -7,10 +7,10 @@
 
 | | |
 |---|---|
-| Actor | `hr-manager@seed.local` / `hris-hr-manager` (Maria Santos) |
+| Actor | `hr-manager@seed.local` / `bnpi-pats-hr-manager` (Maria Santos) |
 | App | `http://localhost:5175` |
 | API | `http://localhost:3001` |
-| Spec | `hris-app/tests/smoke/hr-employee-management-audit.spec.ts` |
+| Spec | `bnpi-pats-app/tests/smoke/hr-employee-management-audit.spec.ts` |
 | Screenshots | `.runtime/employee-mgmt-audit-20260818/` |
 
 ---
@@ -92,7 +92,7 @@ Benefit types present on this clone (no Birthday Allowance):
 ## How to re-run
 
 ```powershell
-cd hris-app
+cd bnpi-pats-app
 npx playwright test tests/smoke/hr-employee-management-audit.spec.ts --reporter=list
 ```
 

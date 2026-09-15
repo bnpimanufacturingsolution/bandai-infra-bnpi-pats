@@ -1,6 +1,6 @@
 # Remaining Gaps — What Is Needed To Complete The Key Modules
 
-> Canonical companion to `HRIS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md` (statuses + evidence live there).
+> Canonical companion to `BNPI_PATS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md` (statuses + evidence live there).
 > **2026-08-26 chain-completion update:** salary loan application flow, leave tardiness/UT columns,
 > pregnant employees list (flag + tab), age brackets, Annual BIR pack, PhilHealth RF-1, SSS R-3,
 > Pag-ibig MF, the 201 File tab, the annual leave credits upload UI (with live sample proof) and
@@ -126,4 +126,4 @@ These block final closure of the last PARTIAL items. Buildable with flagged assu
 
 - Chain prompt + rules: `docs/00-product/AGENT-PROMPT-spec-gaps-modules-1-to-5-chain.md`
 - Stage evidence: `.runtime/spec-gap-m1-5/stage-*` and `.runtime/spec-gap-m1-5/resume-20260825-173211/RESUME-SUMMARY.json`
-- Statuses/evidence per item: `HRIS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md`
+- Statuses/evidence per item: `BNPI_PATS_KEY_MODULES_FUNCTIONAL_SCOPE_CHECKLIST.md`

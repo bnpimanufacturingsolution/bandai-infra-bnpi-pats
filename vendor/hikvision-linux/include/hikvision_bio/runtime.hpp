@@ -93,7 +93,7 @@ struct StoredFaceWritePayload {
     std::vector<char> face_picture;
 };
 
-inline constexpr size_t HRIS_IMMEDIATE_WORKER_COUNT = 2;
+inline constexpr size_t BNPI_PATS_IMMEDIATE_WORKER_COUNT = 2;
 inline constexpr auto recent_employee_candidate_ttl = std::chrono::seconds(180);
 inline constexpr auto poll_reconcile_min_interval = std::chrono::seconds(3);
 inline constexpr auto inventory_poll_interval = std::chrono::seconds(2);
@@ -102,8 +102,8 @@ inline constexpr auto callback_identity_scan_min_interval = std::chrono::minutes
 extern volatile std::sig_atomic_t keep_running;
 extern std::mutex queue_mutex;
 extern std::condition_variable queue_cv;
-extern std::deque<ReconcileJob> hris_immediate_event_queue;
-extern std::deque<ReconcileJob> hris_enrichment_event_queue;
+extern std::deque<ReconcileJob> bnpi_pats_immediate_event_queue;
+extern std::deque<ReconcileJob> bnpi_pats_enrichment_event_queue;
 extern std::deque<ReconcileJob> reconcile_queue;
 extern std::vector<DeviceSession> sessions;
 extern std::mutex sessions_mutex;
@@ -135,8 +135,8 @@ extern std::atomic<unsigned long long> delayed_reconcile_token;
 extern std::atomic<unsigned long long> callback_spool_token;
 extern bool execute_mode;
 extern bool automatic_peer_reconcile_enabled;
-extern std::string hris_api_base;
-extern std::string hris_api_token;
+extern std::string bnpi_pats_api_base;
+extern std::string bnpi_pats_api_token;
 extern std::string min_sdk_time;
 extern std::string reconcile_spool_dir;
 extern std::string reconcile_quarantine_dir;
@@ -154,7 +154,7 @@ bool retry_peer_operation(
         emit_json({
             {"event", "peer_sync_attempt"},
             {"operation", operation},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"targetHost", target.config.host},
             {"employeeNo", employee_no},
             {"attempt", std::to_string(attempt)},
@@ -171,7 +171,7 @@ bool retry_peer_operation(
     emit_json({
         {"event", "peer_sync_failed_after_retries"},
         {"operation", operation},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"targetHost", target.config.host},
         {"employeeNo", employee_no},
         {"attempts", std::to_string(max_attempts)}
@@ -205,8 +205,8 @@ std::vector<std::string> get_recent_employee_candidates_for_host(const std::stri
 bool should_queue_poll_reconcile_now(const std::string &key);
 bool claim_callback_identity_scan(const std::string &host);
 void queue_reconcile(const ReconcileJob &job);
-bool is_immediate_hris_job(const ReconcileJob &job);
-void queue_hris_device_event(const ReconcileJob &job);
+bool is_immediate_bnpi_pats_job(const ReconcileJob &job);
+void queue_bnpi_pats_device_event(const ReconcileJob &job);
 void CALLBACK alarm_callback(
     LONG command,
     NET_DVR_ALARMER *alarmer,
@@ -325,20 +325,20 @@ bool curl_post_json(
     const std::string &body,
     const std::string &event_name,
     int max_time_seconds);
-void replay_pending_hris_contract_posts();
+void replay_pending_bnpi_pats_contract_posts();
 void replay_pending_hikvision_callbacks();
 void callback_spool_replay_loop();
-bool post_hris_contract_payload(
+bool post_bnpi_pats_contract_payload(
     const std::string &body,
     const std::string &event_name,
     const std::map<std::string, std::string> &fields);
 bool post_hikvision_callback(const ReconcileJob &job);
-bool post_hris_contract(const ReconcileJob &job, const std::string &status);
-void enrich_hris_job_before_post(ReconcileJob &job);
+bool post_bnpi_pats_contract(const ReconcileJob &job, const std::string &status);
+void enrich_bnpi_pats_job_before_post(ReconcileJob &job);
 void process_reconcile_job(const ReconcileJob &job);
-void prepare_immediate_hris_job_for_post(ReconcileJob &job);
-void hris_immediate_post_loop();
-void hris_enrichment_post_loop();
+void prepare_immediate_bnpi_pats_job_for_post(ReconcileJob &job);
+void bnpi_pats_immediate_post_loop();
+void bnpi_pats_enrichment_post_loop();
 void reconcile_worker_loop();
 void worker_loop();
 void polling_loop();

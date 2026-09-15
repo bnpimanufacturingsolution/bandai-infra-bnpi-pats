@@ -111,13 +111,13 @@ function injectPriorityAfterPodSpec(text, deployName, priority) {
 }
 
 function injectNodeOptionsOnApi(text, envName, nodeOptions) {
-  // Only the hris-api Deployment, not the db-init Job (which also has APP_ENV).
+  // Only the bnpi-pats-api Deployment, not the db-init Job (which also has APP_ENV).
   const re = new RegExp(
-    `(name: hris-api\\r?\\n[\\s\\S]*?- name: APP_ENV\\r?\\n\\s+value: ${envName}\\r?\\n)(            - name: )`,
+    `(name: bnpi-pats-api\\r?\\n[\\s\\S]*?- name: APP_ENV\\r?\\n\\s+value: ${envName}\\r?\\n)(            - name: )`,
     "m"
   );
   if (!re.test(text)) {
-    console.error("MISS APP_ENV under hris-api for", envName);
+    console.error("MISS APP_ENV under bnpi-pats-api for", envName);
     process.exitCode = 1;
     return text;
   }
@@ -177,39 +177,39 @@ function patchFile(env) {
     `        - name: postgres\n          image: postgres:16-alpine\n`,
     t.pg
   );
-  text = injectPriorityAfterPodSpec(text, "hris-postgres", t.priority);
+  text = injectPriorityAfterPodSpec(text, "bnpi-pats-postgres", t.priority);
 
   text = injectAfterImagePull(
     text,
-    `        - name: api\n          image: hris-api-local:develop\n`,
+    `        - name: api\n          image: bnpi-pats-api-local:develop\n`,
     t.api
   );
-  text = injectPriorityAfterPodSpec(text, "hris-api", t.priority);
+  text = injectPriorityAfterPodSpec(text, "bnpi-pats-api", t.priority);
   text = injectNodeOptionsOnApi(text, env, t.api.nodeOptions);
 
   text = injectAfterImagePull(
     text,
-    `        - name: app\n          image: hris-app-local:develop\n`,
+    `        - name: app\n          image: bnpi-pats-app-local:develop\n`,
     t.app
   );
-  text = injectPriorityAfterPodSpec(text, "hris-app", t.priority);
+  text = injectPriorityAfterPodSpec(text, "bnpi-pats-app", t.priority);
 
   text = injectAfterImagePull(
     text,
-    `        - name: app\n          image: hris-emp-app-local:develop\n`,
+    `        - name: app\n          image: bnpi-pats-emp-app-local:develop\n`,
     t.emp
   );
-  text = injectPriorityAfterPodSpec(text, "hris-emp-app", t.priority);
+  text = injectPriorityAfterPodSpec(text, "bnpi-pats-emp-app", t.priority);
 
-  if (t.watcher && text.includes("name: hris-hikvision-watcher")) {
+  if (t.watcher && text.includes("name: bnpi-pats-hikvision-watcher")) {
     text = injectAfterImagePull(
       text,
-      `        - name: watcher\n          image: hris-api-db-init:develop\n`,
+      `        - name: watcher\n          image: bnpi-pats-api-db-init:develop\n`,
       t.watcher
     );
     text = injectPriorityAfterPodSpec(
       text,
-      "hris-hikvision-watcher",
+      "bnpi-pats-hikvision-watcher",
       t.priority
     );
   }

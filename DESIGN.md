@@ -2,7 +2,7 @@
 
 ## Visual System
 
-Project Truth HRIS uses a restrained product UI system with Metropolis as the primary font, Bandai red/orange for active and primary states, white and neutral gray surfaces, and compact borders/dividers for dense admin workflows.
+Project Truth BNPI PATS uses a restrained product UI system with Metropolis as the primary font, Bandai red/orange for active and primary states, white and neutral gray surfaces, and compact borders/dividers for dense admin workflows.
 
 ## Color
 

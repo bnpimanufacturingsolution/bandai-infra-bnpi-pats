@@ -33,7 +33,7 @@ results.
 
 ## Target Users
 
-Primary: HRIS/device administrator maintaining Hikvision device-user
+Primary: BNPI PATS/device administrator maintaining Hikvision device-user
 enrollment across multiple terminals.
 
 Secondary: operations engineers reviewing API timing and per-device SDK
@@ -52,7 +52,7 @@ production proof from localhost evidence.
 
 ## Constraints and Risks
 
-- The operation remains admin-only and uses `DeviceUser` as durable HRIS
+- The operation remains admin-only and uses `DeviceUser` as durable BNPI PATS
   identity truth.
 - Fingerprint/face verification must remain truthful; an API response cannot
   claim a copy that target truth does not confirm.

@@ -5,7 +5,7 @@
 Mode: owner-operator implementation, preview-first, evidence-backed.
 
 Do not ask for approval for normal development progress. Do not run destructive
-cleanup or irreversible device writes. Use stored HRIS device credentials only;
+cleanup or irreversible device writes. Use stored BNPI PATS device credentials only;
 do not paste browser `WebSession_*`, `SessionTag`, cookies, or raw curl session
 headers into source, docs, tests, logs, screenshots, or runtime artifacts.
 
@@ -22,7 +22,7 @@ Hikvision log sources:
    successful taps, rejected taps, and other ACS rows.
 
 The user-facing modal must show where each source will be added, how many rows
-are on the device, how many are already saved in HRIS `DeviceEvent`, how many
+are on the device, how many are already saved in BNPI PATS `DeviceEvent`, how many
 can be imported now, how many will be left alone, and whether the source read is
 available.
 
@@ -54,7 +54,7 @@ For each source show:
 - read state: ready, unavailable, partial, or stale;
 - endpoint family: `logSearch` or `AcsEvent`;
 - on-device count for the selected date/window;
-- saved HRIS count using the same device/window/source/action/confidence
+- saved BNPI PATS count using the same device/window/source/action/confidence
   predicate;
 - can-import count;
 - leave-alone count;

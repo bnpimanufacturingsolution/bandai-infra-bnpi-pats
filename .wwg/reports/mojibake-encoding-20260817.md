@@ -37,10 +37,10 @@ User-facing notification titles and API/UI copy must be ASCII (or verified UTF-8
 
 ## Tests
 
-- `hris-api/tests/boarding-notification-title.contract.spec.ts`
-- `hris-api/tests/checklist-item-boarding-notification-titles.contract.spec.ts`
-- `hris-api/tests/user-facing-mojibake.contract.spec.ts`
-- `hris-api/tests/set-active-schedule-recompute.contract.spec.ts`
+- `bnpi-pats-api/tests/boarding-notification-title.contract.spec.ts`
+- `bnpi-pats-api/tests/checklist-item-boarding-notification-titles.contract.spec.ts`
+- `bnpi-pats-api/tests/user-facing-mojibake.contract.spec.ts`
+- `bnpi-pats-api/tests/set-active-schedule-recompute.contract.spec.ts`
 
 ## Evidence
 

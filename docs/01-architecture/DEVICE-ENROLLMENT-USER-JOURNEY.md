@@ -11,7 +11,7 @@
 | Resolve | What should happen to exceptions? | Explicit link/conflict choices | Store decisions locally |
 | Confirm | What exactly will be written? | Check-answers summary | Revalidate preview |
 | Apply | Is the job progressing? | Job ID, progress, cancel | Execute approved writes |
-| Verify | Did reality converge? | Applied/failed/divergent report | Re-read device and HRIS |
+| Verify | Did reality converge? | Applied/failed/divergent report | Re-read device and BNPI PATS |
 
 ## State Visualization
 

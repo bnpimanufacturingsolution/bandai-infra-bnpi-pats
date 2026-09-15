@@ -35,7 +35,7 @@ try {
     if ($dockerMode -notmatch '^linux\b') {
         throw "Docker must be in Linux mode for the Project Truth ZKTeco Linux bridge."
     }
-    Write-Pass "Docker is in Linux mode for HRIS API/app/Postgres and the ZKTeco Linux bridge."
+    Write-Pass "Docker is in Linux mode for BNPI PATS API/app/Postgres and the ZKTeco Linux bridge."
 
     Write-Step "Compose config"
     docker compose -f .\appliance\docker-compose.yml config --quiet
@@ -55,9 +55,9 @@ try {
     Write-Pass "ZKTeco Linux bridge files exist."
 
     if ($BuildApi) {
-        Write-Step "Build HRIS API image"
-        docker compose -f .\appliance\docker-compose.yml build hris-api
-        Write-Pass "HRIS API image builds with ZKTeco route included."
+        Write-Step "Build BNPI PATS API image"
+        docker compose -f .\appliance\docker-compose.yml build bnpi-pats-api
+        Write-Pass "BNPI PATS API image builds with ZKTeco route included."
     }
 
     Write-Step "API health"
@@ -66,7 +66,7 @@ try {
         Write-Host ($health | ConvertTo-Json -Depth 5)
         Write-Pass "API health responded."
     } catch {
-        Write-WarnLine "API health did not respond at $ApiBaseUrl/health. Start the stack before live smoke: docker compose -f .\appliance\docker-compose.yml up -d postgres hris-api hris-app"
+        Write-WarnLine "API health did not respond at $ApiBaseUrl/health. Start the stack before live smoke: docker compose -f .\appliance\docker-compose.yml up -d postgres bnpi-pats-api bnpi-pats-app"
     }
 
     if ($SmokePost -or $ContractOnly) {
@@ -99,10 +99,10 @@ try {
             -TimeoutSec 20
 
         Write-Host ($response | ConvertTo-Json -Depth 8)
-        Write-Pass "Smoke post reached the HRIS ZKTeco webhook endpoint."
+        Write-Pass "Smoke post reached the BNPI PATS ZKTeco webhook endpoint."
 
         if ($response.data.reason -eq "device_not_found") {
-            Write-WarnLine "Contract accepted the payload, but no HRIS Device matched $DeviceIp`:$DevicePort."
+            Write-WarnLine "Contract accepted the payload, but no BNPI PATS Device matched $DeviceIp`:$DevicePort."
         } elseif ($response.data.reason -eq "employee_not_found") {
             Write-WarnLine "Device matched, but no Employee.deviceEmpId matched enroll number $EnrollNumber."
         } elseif ($response.data.matched -eq $true) {

@@ -60,9 +60,9 @@ gh workflow run promote-gitops.yml `
 That updates the runtime kustomization so Argo selects:
 
 ```text
-ghcr.io/<org>/<project>/hris-api-local:<tag>
-ghcr.io/<org>/<project>/hris-api-db-init:<tag>
-ghcr.io/<org>/<project>/hris-app-local:<tag>
+ghcr.io/<org>/<project>/bnpi-pats-api-local:<tag>
+ghcr.io/<org>/<project>/bnpi-pats-api-db-init:<tag>
+ghcr.io/<org>/<project>/bnpi-pats-app-local:<tag>
 ```
 
 If the registry is private, create Kubernetes `imagePullSecrets` for the target

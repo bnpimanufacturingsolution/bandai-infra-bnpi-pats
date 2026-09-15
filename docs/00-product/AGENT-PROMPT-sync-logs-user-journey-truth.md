@@ -43,7 +43,7 @@ Bootstrap WWG with tools, Current-State Report, then work until acceptance green
 - Interactive sync may only complete PART of the preview estimate in one pass
   (scan caps). That is not a bug if Saved/Scanned progress is honest.
 - Hikvision often returns EmployeeNo as base64 opaque token in operation logs
-  (e.g. ADRenBQDnvFhBTMtB9zT3g==). That is NOT employee "17". Matching to HRIS
+  (e.g. ADRenBQDnvFhBTMtB9zT3g==). That is NOT employee "17". Matching to BNPI PATS
   requires a plain person id or DeviceUser inventory reconciliation — do not
   pretend the token is a readable employee number.
 

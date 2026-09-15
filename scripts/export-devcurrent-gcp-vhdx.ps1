@@ -1,10 +1,10 @@
 [CmdletBinding()]
 param(
-    [string]$Project = "hris-492904",
+    [string]$Project = "bnpi-pats-492904",
     [string]$Region = "asia-southeast1",
     [string]$Zone = "asia-southeast1-a",
     [string]$Image = "project-truth-node-devcurrent-postinstall-20260618-020148",
-    [string]$Bucket = "project-truth-image-export-hris-492904-161377059311",
+    [string]$Bucket = "project-truth-image-export-bnpi-pats-492904-161377059311",
     [string]$ObjectPrefix = "public/project-truth/hyperv/dev-current/latest",
     [string]$RunRoot = "",
     [int]$PollSeconds = 30,

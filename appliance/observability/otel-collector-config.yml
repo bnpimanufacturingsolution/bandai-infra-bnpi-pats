@@ -20,7 +20,7 @@ receivers:
   prometheus:
     config:
       scrape_configs:
-        - job_name: "hris-api"
+        - job_name: "bnpi-pats-api"
           static_configs:
             - targets: ["localhost:9090"]
 

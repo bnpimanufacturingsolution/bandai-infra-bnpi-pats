@@ -5,7 +5,7 @@ applications (kiosks, partner systems, dashboards). Lightweight, fuzzy-capable,
 paginated. Exposes **no salary/payroll data**.
 
 Status: `CONFIRMED_CODE_AND_LIVE_LOCAL` (2026-09-04, `localhost:3001`).
-Owner: hris-api (`app/employee/employee.controller.ts` → `searchEmployees`,
+Owner: bnpi-pats-api (`app/employee/employee.controller.ts` → `searchEmployees`,
 route in `app/employee/employee.router.ts`, auth in
 `middleware/integrationApiKey.ts`).
 
@@ -16,7 +16,7 @@ route in `app/employee/employee.router.ts`, auth in
 | Mode | How | Notes |
 |---|---|---|
 | **API key (integration)** | Header `X-API-Key: <key>` | Keys come from server env `INTEGRATION_API_KEYS` (comma-separated list). Fail-closed: if the env var is unset/empty the endpoint answers **503** rather than allowing open access. Comparison is timing-safe. |
-| **JWT (HRIS users)** | Header `Authorization: Bearer <token>` from `POST /api/auth/login` | Same token as every other `/api` route. |
+| **JWT (BNPI PATS users)** | Header `Authorization: Bearer <token>` from `POST /api/auth/login` | Same token as every other `/api` route. |
 
 Wrong or missing key → `401`. Unconfigured server → `503` (deployment issue,
 not a client error). Invalid JWT → `401`.
@@ -24,11 +24,11 @@ not a client error). Invalid JWT → `401`.
 ### Providing keys per environment
 
 ```bash
-# local dev (hris-api/.env — never commit real values)
-INTEGRATION_API_KEYS="hris_dev_key_one,hris_dev_key_two"
+# local dev (bnpi-pats-api/.env — never commit real values)
+INTEGRATION_API_KEYS="bnpi_pats_dev_key_one,bnpi_pats_dev_key_two"
 
 # VM/K3s runtime envs (appliance env / secret plumbing)
-INTEGRATION_API_KEYS="hris_prod_team_a"
+INTEGRATION_API_KEYS="bnpi_pats_prod_team_a"
 ```
 
 - One key **per consuming team** — rotate by appending the new key, giving the
@@ -36,7 +36,7 @@ INTEGRATION_API_KEYS="hris_prod_team_a"
   downtime rotation).
 - Changing the env requires an API process restart (K3s rollout).
 - Generate keys with sufficient entropy, e.g.
-  `openssl rand -hex 24` prefixed with `hris_`.
+  `openssl rand -hex 24` prefixed with `bnpi_pats_`.
 
 ---
 
@@ -133,10 +133,10 @@ middleware, key `cache:employee:search:<query>`).
 
 | Environment | Base URL | API-key env source |
 |---|---|---|
-| Local dev | `http://localhost:3001` | `hris-api/.env` |
-| VM PROD | `http://10.184.37.19:3001` / `https://api.bnpi-hris.tech` | PROD runtime env |
-| VM DEV | `http://10.184.37.19:3101` / `https://dev-api.bnpi-hris.tech` | DEV runtime env |
-| VM UAT | `http://10.184.37.19:3201` / `https://uat-api.bnpi-hris.tech` | UAT runtime env |
+| Local dev | `http://localhost:3001` | `bnpi-pats-api/.env` |
+| VM PROD | `http://10.184.37.19:3001` / `https://api.bnpi-pats.tech` | PROD runtime env |
+| VM DEV | `http://10.184.37.19:3101` / `https://dev-api.bnpi-pats.tech` | DEV runtime env |
+| VM UAT | `http://10.184.37.19:3201` / `https://uat-api.bnpi-pats.tech` | UAT runtime env |
 
 Runtime environments must define `INTEGRATION_API_KEYS` in their env/secret
 plumbing before the API-key mode works there; JWT mode works immediately.
@@ -149,11 +149,11 @@ plumbing before the API-key mode works there; JWT mode works immediately.
 
 ```bash
 # DEV (swap host for PROD/UAT per the matrix above; ask the admin for your env's key)
-curl --location 'https://dev-api.bnpi-hris.tech/api/employee/search?query=z&page=1&limit=10' \
+curl --location 'https://dev-api.bnpi-pats.tech/api/employee/search?query=z&page=1&limit=10' \
   --header 'X-API-Key: <KEY>'
 
 # Fuzzy typo tolerance example (matches "Zen Andrei" from "zan andrei")
-curl --location 'https://dev-api.bnpi-hris.tech/api/employee/search?query=zan%20andrei&limit=10' \
+curl --location 'https://dev-api.bnpi-pats.tech/api/employee/search?query=zan%20andrei&limit=10' \
   --header 'X-API-Key: <KEY>'
 ```
 
@@ -168,8 +168,8 @@ curl --location 'http://localhost:3001/api/employee/search?query=z&page=2&limit=
 
 ```js
 const res = await fetch(
-  "https://dev-api.bnpi-hris.tech/api/employee/search?query=zan%20andrei&limit=10",
-  { headers: { "X-API-Key": process.env.HRIS_API_KEY } },
+  "https://dev-api.bnpi-pats.tech/api/employee/search?query=zan%20andrei&limit=10",
+  { headers: { "X-API-Key": process.env.BNPI_PATS_API_KEY } },
 );
 const { data } = await res.json();
 console.log(data.employees, data.pagination);
@@ -180,7 +180,7 @@ console.log(data.employees, data.pagination);
 ```python
 import requests
 r = requests.get(
-    "https://dev-api.bnpi-hris.tech/api/employee/search",
+    "https://dev-api.bnpi-pats.tech/api/employee/search",
     params={"query": "zan andrei", "limit": 10},
     headers={"X-API-Key": api_key},
     timeout=15,
@@ -196,13 +196,13 @@ employees = r.json()["data"]["employees"]
   (`SEARCH_EMPLOYEES` / "Searched employees via integration API").
 - **No payroll exposure**: the row shape is fixed and deliberately excludes
   salary, payroll, benefits, and document data.
-- **Tests**: `hris-api/tests/employee-integration-search.spec.ts` (13) +
-  `hris-api/tests/integration-api-key.spec.ts` (8). Run scoped:
+- **Tests**: `bnpi-pats-api/tests/employee-integration-search.spec.ts` (13) +
+  `bnpi-pats-api/tests/integration-api-key.spec.ts` (8). Run scoped:
   `npx tsx node_modules/mocha/bin/mocha --no-config tests/employee-integration-search.spec.ts tests/integration-api-key.spec.ts`
 - **Pool cap**: fuzzy matching covers the first 5000 filter-scoped employees
   (fleet is ~2,225 today). If the fleet grows past the cap, revisit with a
   trigram index.
-- **Git hygiene**: `hris-api/.env` is (pre-existing) tracked in git — real
+- **Git hygiene**: `bnpi-pats-api/.env` is (pre-existing) tracked in git — real
   integration keys must never be committed; register runtime keys through the
   env/secret plumbing instead.
 

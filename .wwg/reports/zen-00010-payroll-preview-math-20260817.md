@@ -187,7 +187,7 @@ Net                                   5,424.54
 | Saved payslip exists | No — preview only |
 | Daily rate = present days only (3) | No — engine used **14** non-rest lines, including future SCHEDULED and holidays |
 
-Code path: `hris-api/helper/payroll-period.helper.ts`  
+Code path: `bnpi-pats-api/helper/payroll-period.helper.ts`  
 `dailyRate = periodBasic / totalWorkDays` when Bandai 313 buckets are absent;  
 `absentDeduction = daysAbsent × dailyRate`;  
 `shortfallDeduction = (lateMinutes + earlyOutMinutes) × minuteRate`;  

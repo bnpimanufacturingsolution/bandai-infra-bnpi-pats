@@ -2,7 +2,7 @@ param(
   [ValidateSet('start', 'stop', 'status')]
   [string]$Action = 'start',
   [string]$DeviceIp = '192.168.254.194',
-  [string]$VmSshTarget = 'project-truth-hris',
+  [string]$VmSshTarget = 'project-truth-bnpi-pats',
   [string]$DeviceUsername = 'admin',
   [string]$DevicePassword = '',
   [int]$HttpPort = 80,

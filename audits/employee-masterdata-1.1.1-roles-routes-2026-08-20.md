@@ -18,15 +18,15 @@ The product does **not** use the words “Employee Masterdata”. That row is th
 
 ## Who can see it in the UI
 
-Sidebar item is built only when `user.role` is HR (`hris-hr-manager` or `hris-hr-user`). Code: `hris-app/app/components/organisms/Sidebar.tsx` (`isHR` → `hrWorkingSpaceItems` → **Employees**).
+Sidebar item is built only when `user.role` is HR (`bnpi-pats-hr-manager` or `bnpi-pats-hr-user`). Code: `bnpi-pats-app/app/components/organisms/Sidebar.tsx` (`isHR` → `hrWorkingSpaceItems` → **Employees**).
 
 | Role | Sees **Employees** in Working Space? | Where to go instead |
 |---|---|---|
-| `hris-hr-manager` | **Yes** | Working Space → Employees → Directory |
-| `hris-hr-user` | **Yes** | Same |
-| `admin` / `hris-admin` | No HR sidebar item | Admin config list `/admin/configuration/employees` |
-| `hris-employee-manager` | No | **My Team** `/employee/team` (not masterdata) |
-| `hris-employee` | No | **My Profile** `/employee/:id` (self only) |
+| `bnpi-pats-hr-manager` | **Yes** | Working Space → Employees → Directory |
+| `bnpi-pats-hr-user` | **Yes** | Same |
+| `admin` / `bnpi-pats-admin` | No HR sidebar item | Admin config list `/admin/configuration/employees` |
+| `bnpi-pats-employee-manager` | No | **My Team** `/employee/team` (not masterdata) |
+| `bnpi-pats-employee` | No | **My Profile** `/employee/:id` (self only) |
 
 Unified layout still *mounts* `/hr/*` for several roles (`unified-layout.tsx` AuthGuard includes admin, HR, employee, manager). The **nav entry** is HR-only. A non-HR user can open `/hr/employees` by URL; that is not the intended product path.
 
@@ -34,9 +34,9 @@ Unified layout still *mounts* `/hr/*` for several roles (`unified-layout.tsx` Au
 
 ## How to open it (HR)
 
-1. Log in as HR, e.g. Maria Santos `hr-manager@seed.local` / `hris-hr-manager`.
+1. Log in as HR, e.g. Maria Santos `hr-manager@seed.local` / `bnpi-pats-hr-manager`.
 2. Sidebar **WORKING SPACE** → **Employees** (folder) → **Directory**.
-3. URL: `https://dev.bnpi-hris.tech/hr/employees` (or local `http://localhost:5175/hr/employees`).
+3. URL: `https://dev.bnpi-pats.tech/hr/employees` (or local `http://localhost:5175/hr/employees`).
 4. Page chrome: List View / Directory / Organization Chart. Default list is masterdata.
 
 ---
@@ -45,19 +45,19 @@ Unified layout still *mounts* `/hr/*` for several roles (`unified-layout.tsx` Au
 
 | What | Path | File |
 |---|---|---|
-| HR list / directory / org tabs | `/hr/employees` | `hris-app/app/routes/hr/employees.tsx` |
+| HR list / directory / org tabs | `/hr/employees` | `bnpi-pats-app/app/routes/hr/employees.tsx` |
 | HR list view | `/hr/employees` or `?view=list` | `EmployeeList` |
 | HR directory cards | `/hr/employees?view=directory` | `EmployeeDirectoryView` |
 | Org chart (sheet 1.1.3, same page) | `/hr/employees?view=organization` | `OrganizationChartTab` |
-| Add employee | `/hr/employees/new` | `hris-app/app/routes/hr/employees.new.tsx` |
-| Edit employee | `/hr/employees/:id/edit` | `hris-app/app/routes/hr/employees.$id.edit.tsx` |
-| Person profile (from a row) | `/employee/:id` | `hris-app/app/routes/employee/employee.$id.tsx` |
-| Admin list | `/admin/configuration/employees` | `hris-app/app/routes/admin/configuration/employees.tsx` |
+| Add employee | `/hr/employees/new` | `bnpi-pats-app/app/routes/hr/employees.new.tsx` |
+| Edit employee | `/hr/employees/:id/edit` | `bnpi-pats-app/app/routes/hr/employees.$id.edit.tsx` |
+| Person profile (from a row) | `/employee/:id` | `bnpi-pats-app/app/routes/employee/employee.$id.tsx` |
+| Admin list | `/admin/configuration/employees` | `bnpi-pats-app/app/routes/admin/configuration/employees.tsx` |
 | Admin add | `/admin/configuration/employees/new` | same new form as HR |
 | Admin profile | `/admin/configuration/employees/:id` | employee profile under admin layout |
 | Admin edit | `/admin/configuration/employees/:id/edit` | same edit form as HR |
 
-Route table: `hris-app/app/routes.ts` (`hrRoutes` under unified layout, `adminRoutes` under admin layout).
+Route table: `bnpi-pats-app/app/routes.ts` (`hrRoutes` under unified layout, `adminRoutes` under admin layout).
 
 ---
 
@@ -86,4 +86,4 @@ Route table: `hris-app/app/routes.ts` (`hrRoutes` under unified layout, `adminRo
 
 ## Verdict
 
-Sheet **1.1.1 Employee Masterdata** = HR **Employees Directory** at `/hr/employees`, shown in the sidebar to **`hris-hr-manager` and `hris-hr-user`**. Admin has a twin list under configuration. Employees and managers do not get this nav; they see self / team only.
+Sheet **1.1.1 Employee Masterdata** = HR **Employees Directory** at `/hr/employees`, shown in the sidebar to **`bnpi-pats-hr-manager` and `bnpi-pats-hr-user`**. Admin has a twin list under configuration. Employees and managers do not get this nav; they see self / team only.

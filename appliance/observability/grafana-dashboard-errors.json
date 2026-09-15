@@ -7,7 +7,7 @@
       "title": "Error Rate by Endpoint",
       "targets": [
         {
-          "expr": "sum(rate(hris_api_http_requests_total{status_code=~\"5..\"}[5m])) by (route)"
+          "expr": "sum(rate(bnpi_pats_api_http_requests_total{status_code=~\"5..\"}[5m])) by (route)"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
@@ -17,11 +17,11 @@
       "title": "HTTP 4xx vs 5xx",
       "targets": [
         {
-          "expr": "sum(rate(hris_api_http_requests_total{status_code=~\"4..\"}[5m]))",
+          "expr": "sum(rate(bnpi_pats_api_http_requests_total{status_code=~\"4..\"}[5m]))",
           "legendFormat": "4xx Errors"
         },
         {
-          "expr": "sum(rate(hris_api_http_requests_total{status_code=~\"5..\"}[5m]))",
+          "expr": "sum(rate(bnpi_pats_api_http_requests_total{status_code=~\"5..\"}[5m]))",
           "legendFormat": "5xx Errors"
         }
       ],
@@ -32,7 +32,7 @@
       "title": "Top Failing Endpoints",
       "targets": [
         {
-          "expr": "topk(5, sum(rate(hris_api_http_requests_total{status_code=~\"5..\"}[5m])) by (route))"
+          "expr": "topk(5, sum(rate(bnpi_pats_api_http_requests_total{status_code=~\"5..\"}[5m])) by (route))"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
@@ -43,7 +43,7 @@
       "datasource": "Loki",
       "targets": [
         {
-          "expr": "sum by (error_type) (count_over_time({job=\"hris-api\"} | json | level=\"error\" | error_type!=\"\" [$__range]))"
+          "expr": "sum by (error_type) (count_over_time({job=\"bnpi-pats-api\"} | json | level=\"error\" | error_type!=\"\" [$__range]))"
         }
       ],
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
@@ -54,7 +54,7 @@
       "datasource": "Loki",
       "targets": [
         {
-          "expr": "{job=\"hris-api\"} | json | level=\"error\""
+          "expr": "{job=\"bnpi-pats-api\"} | json | level=\"error\""
         }
       ],
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },

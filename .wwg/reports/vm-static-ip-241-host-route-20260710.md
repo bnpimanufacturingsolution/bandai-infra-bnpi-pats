@@ -37,7 +37,7 @@ exists and probes:
 - SSH to `infra@10.184.37.241` returned hostname `project-truth-node`.
 - Windows TCP probes passed for SSH, app/API, and PROD/DEV/UAT DB ports.
 - Prisma from Windows to DEV DB at `10.184.37.241:15433` returned:
-  `db=hris`, `user=postgres`, server port `5432`, and `public_tables=73`.
+  `db=bnpi-pats`, `user=postgres`, server port `5432`, and `public_tables=73`.
 - `http://10.184.37.241:3001/health` passed.
 - `http://localhost:3001/health` and admin login passed after the route repair.
 - Headless browser login through `http://localhost:5175/auth/login` reached

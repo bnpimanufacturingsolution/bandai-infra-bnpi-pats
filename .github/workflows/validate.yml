@@ -100,7 +100,7 @@ jobs:
             'yarn-error.log*',
             'pnpm-debug.log*'
           )
-          foreach ($name in @('gitops', 'appliance', 'hris-api', 'hris-app')) {
+          foreach ($name in @('gitops', 'appliance', 'bnpi-pats-api', 'bnpi-pats-app')) {
             $destination = Join-Path $staging $name
             New-Item -ItemType Directory -Force -Path $destination | Out-Null
             & robocopy.exe $name $destination /MIR /NFL /NDL /NJH /NJS /NP /XD $excludedDirectories /XF $excludedFiles

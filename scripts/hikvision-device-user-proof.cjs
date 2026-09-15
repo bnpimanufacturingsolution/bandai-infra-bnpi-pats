@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { performance } = require("perf_hooks");
-const { chromium } = require(path.join(process.env.PT_ROOT, "hris-app", "node_modules", "playwright"));
+const { chromium } = require(path.join(process.env.PT_ROOT, "bnpi-pats-app", "node_modules", "playwright"));
 
 const requiredEnv = [
   "PT_BASE_URL",
@@ -52,8 +52,8 @@ const evidenceDir = process.env.PT_EVIDENCE_DIR;
 
   await page.addInitScript((jwt) => {
     window.localStorage.setItem("authToken", jwt);
-    window.localStorage.setItem("userRole", "hris-admin");
-    window.localStorage.setItem("userSubRole", "hris-admin");
+    window.localStorage.setItem("userRole", "bnpi-pats-admin");
+    window.localStorage.setItem("userSubRole", "bnpi-pats-admin");
   }, token);
 
   await page.route("**/api/**", async (route) => {

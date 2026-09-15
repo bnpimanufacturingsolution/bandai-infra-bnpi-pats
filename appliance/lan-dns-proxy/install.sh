@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install Project Truth LAN DNS (dnsmasq) + reverse proxy (Caddy) + TLS internal CA.
-# Does NOT touch cloudflared-bnpi-hris.service.
+# Does NOT touch cloudflared-bnpi-pats.service.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 VM_IP="${PROJECT_TRUTH_LAN_IP:-10.184.37.19}"
@@ -18,7 +18,7 @@ if ! command -v caddy >/dev/null 2>&1; then
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y caddy
 fi
 
-sudo cp "$ROOT/bnpi-hris-lan.dnsmasq.conf" /etc/dnsmasq.d/bnpi-hris-lan.conf
+sudo cp "$ROOT/bnpi-pats-lan.dnsmasq.conf" /etc/dnsmasq.d/bnpi-pats-lan.conf
 sudo cp "$ROOT/Caddyfile" /etc/caddy/Caddyfile
 
 # UFW: DNS + HTTP + HTTPS
@@ -46,7 +46,7 @@ for p in \
   if [ -f "$p" ]; then CA_SRC="$p"; break; fi
 done
 # Trigger PKI by local HTTPS request
-curl -sk -o /dev/null -H "Host: dev.bnpi-hris.lan" https://127.0.0.1/ || true
+curl -sk -o /dev/null -H "Host: dev.bnpi-pats.lan" https://127.0.0.1/ || true
 sleep 1
 for p in \
   /var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt \
@@ -58,7 +58,7 @@ if [ -n "$CA_SRC" ]; then
   sudo chmod 644 /etc/project-truth/lan-ca/caddy-local-root.crt
   echo "LAN CA: /etc/project-truth/lan-ca/caddy-local-root.crt"
 else
-  echo "LAN CA not found yet — run: curl -sk https://dev.bnpi-hris.lan/ then re-run install"
+  echo "LAN CA not found yet — run: curl -sk https://dev.bnpi-pats.lan/ then re-run install"
 fi
 
 # Install summary script if present next to this tree or from ansible-pull
@@ -74,9 +74,9 @@ fi
 echo "=== status ==="
 systemctl is-active dnsmasq
 systemctl is-active caddy
-systemctl is-active cloudflared-bnpi-hris.service || true
-dig @"$VM_IP" dev.bnpi-hris.lan +time=2 +tries=1 +short || true
-curl -sS -m 5 -o /dev/null -w "http_dev=%{http_code}\n" -H "Host: dev.bnpi-hris.lan" http://127.0.0.1/
-curl -sk -m 5 -o /dev/null -w "https_dev=%{http_code}\n" -H "Host: dev.bnpi-hris.lan" https://127.0.0.1/
-curl -sk -m 5 -o /dev/null -w "https_grafana=%{http_code}\n" -H "Host: grafana.bnpi-hris.lan" https://127.0.0.1/
+systemctl is-active cloudflared-bnpi-pats.service || true
+dig @"$VM_IP" dev.bnpi-pats.lan +time=2 +tries=1 +short || true
+curl -sS -m 5 -o /dev/null -w "http_dev=%{http_code}\n" -H "Host: dev.bnpi-pats.lan" http://127.0.0.1/
+curl -sk -m 5 -o /dev/null -w "https_dev=%{http_code}\n" -H "Host: dev.bnpi-pats.lan" https://127.0.0.1/
+curl -sk -m 5 -o /dev/null -w "https_grafana=%{http_code}\n" -H "Host: grafana.bnpi-pats.lan" https://127.0.0.1/
 echo "DONE"

@@ -9,11 +9,11 @@ current `develop` has them automatically.
 
 ## Phase 0 — Environment (once per machine)
 
-1. Local clone DB up: docker container `hris-local-dev-clone` (Postgres on `127.0.0.1:5433`, db `hris`).
-2. `hris-api/.env.development.local` → `DATABASE_URL/PG_DATABASE_URL/WRITE_DATABASE_URL` = `127.0.0.1:5433/hris` plus:
-   `HRIS_SKIP_PREDEV=true`, `HRIS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL=true`, `HRIS_SKIP_DEVICE_LIVE_PATH=true`
+1. Local clone DB up: docker container `bnpi-pats-local-dev-clone` (Postgres on `127.0.0.1:5433`, db `bnpi-pats`).
+2. `bnpi-pats-api/.env.development.local` → `DATABASE_URL/PG_DATABASE_URL/WRITE_DATABASE_URL` = `127.0.0.1:5433/bnpi-pats` plus:
+   `BNPI_PATS_SKIP_PREDEV=true`, `BNPI_PATS_SKIP_HIKVISION_REMOTE_DEVICE_TUNNEL=true`, `BNPI_PATS_SKIP_DEVICE_LIVE_PATH=true`
    (no K3s forward / Cloudflare prompts needed for local-DB mode).
-3. Start API: `cd hris-api && npm run dev` → `http://localhost:3001/health`.
+3. Start API: `cd bnpi-pats-api && npm run dev` → `http://localhost:3001/health`.
 4. Reset DB (when needed): recreate container/volume → `npx prisma db push --force-reset` + seed (`npm run seed:bandai`).
 
 ---
@@ -43,7 +43,7 @@ On the **DM3 & DM4** tabs for the target cutoff (e.g. June 26 – July 10 or Jul
 After importing the files for **ANY** period, run the single unified orchestrator command:
 
 ```powershell
-cd hris-api
+cd bnpi-pats-api
 npm run tally:fix -- --period=PP-20260626-20260711
 ```
 *(For July 11–25, replace `--period=PP-20260711-20260726`).*

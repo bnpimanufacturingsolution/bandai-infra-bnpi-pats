@@ -3,7 +3,7 @@
 ## Executive Summary
 
 Project Truth needs one safe admin journey for enrolling and reconciling device
-users across Hikvision/ZKTeco terminals and HRIS employees. The experience
+users across Hikvision/ZKTeco terminals and BNPI PATS employees. The experience
 must turn a technically complex operation into an auditable task: inspect
 source devices, preview differences, resolve identity/conflict decisions, apply
 only approved changes, and verify the result.
@@ -13,7 +13,7 @@ only approved changes, and verify the result.
 The current capability is distributed across device management, sync,
 user-linking, SDK merge, and enrollment actions. That makes it difficult for an
 administrator to answer: what will change, which records are ambiguous, what is
-safe to apply, and whether the physical device and HRIS now agree.
+safe to apply, and whether the physical device and BNPI PATS now agree.
 
 ## Goals and KPIs
 
@@ -26,14 +26,14 @@ safe to apply, and whether the physical device and HRIS now agree.
 
 ## Target Users
 
-Primary: HRIS administrator or device administrator, usually working under time
+Primary: BNPI PATS administrator or device administrator, usually working under time
 pressure after a new hire, transfer, terminal replacement, or sync incident.
 
 Secondary: support/operations engineer reviewing sync history and evidence.
 
 ## Scope
 
-In scope: device selection, health/capability preflight, user discovery, HRIS
+In scope: device selection, health/capability preflight, user discovery, BNPI PATS
 matching, preview/dry-run, conflict resolution, link/unlink, enrollment to a
 audit trail, and accessible responsive UI.
 oy

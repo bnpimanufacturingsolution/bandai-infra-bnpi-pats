@@ -189,13 +189,13 @@ sudo systemctl enable project-truth-firstboot-k3s-cleanup.service
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-status.sh /usr/local/bin/project-truth-status
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-progress.sh /usr/local/bin/project-truth-progress
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-monitor.sh /usr/local/bin/project-truth-monitor
-sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-env-start.sh /usr/local/bin/project-truth-hris-env-start
-sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-env-seed.sh /usr/local/bin/project-truth-hris-env-seed
-sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-dev-current-restore.sh /usr/local/bin/project-truth-hris-dev-current-restore
-sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-start.sh /usr/local/bin/project-truth-hris-start
-sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-status.sh /usr/local/bin/project-truth-hris-status
-sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-seed.sh /usr/local/bin/project-truth-hris-seed
-sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-hris-observability-start.sh /usr/local/bin/project-truth-hris-observability-start
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-bnpi-pats-env-start.sh /usr/local/bin/project-truth-bnpi-pats-env-start
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-bnpi-pats-env-seed.sh /usr/local/bin/project-truth-bnpi-pats-env-seed
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-bnpi-pats-dev-current-restore.sh /usr/local/bin/project-truth-bnpi-pats-dev-current-restore
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-bnpi-pats-start.sh /usr/local/bin/project-truth-bnpi-pats-start
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-bnpi-pats-status.sh /usr/local/bin/project-truth-bnpi-pats-status
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-bnpi-pats-seed.sh /usr/local/bin/project-truth-bnpi-pats-seed
+sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-bnpi-pats-observability-start.sh /usr/local/bin/project-truth-bnpi-pats-observability-start
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-db-access.sh /usr/local/bin/project-truth-db-access
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-config.sh /usr/local/bin/project-truth-lan-config
 sudo install -m 0755 /opt/project-truth/appliance/bin/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary
@@ -229,14 +229,14 @@ WantedBy=multi-user.target
 LANDHCP
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-lan-summary.service /etc/systemd/system/project-truth-lan-summary.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-clean-console.service /etc/systemd/system/project-truth-clean-console.service
-sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-hris.service /etc/systemd/system/project-truth-hris.service
+sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-bnpi-pats.service /etc/systemd/system/project-truth-bnpi-pats.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-trycloudflare.service /etc/systemd/system/project-truth-trycloudflare.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-ansible-pull.service /etc/systemd/system/project-truth-ansible-pull.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-ansible-pull.timer /etc/systemd/system/project-truth-ansible-pull.timer
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-os-sync.service /etc/systemd/system/project-truth-os-sync.service
 sudo install -m 0644 /opt/project-truth/appliance/systemd/project-truth-os-sync.timer /etc/systemd/system/project-truth-os-sync.timer
-sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh
-sudo chmod 0644 /etc/profile.d/project-truth-hris-help.sh
+sudo install -m 0644 /opt/project-truth/appliance/profile.d/project-truth-bnpi-pats-help.sh /etc/profile.d/project-truth-bnpi-pats-help.sh
+sudo chmod 0644 /etc/profile.d/project-truth-bnpi-pats-help.sh
 pam_line='session optional pam_exec.so quiet /usr/local/bin/project-truth-console-session-hook'
 if [ -f /etc/pam.d/login ] && ! grep -Fq "$pam_line" /etc/pam.d/login; then
   {
@@ -245,7 +245,7 @@ if [ -f /etc/pam.d/login ] && ! grep -Fq "$pam_line" /etc/pam.d/login; then
     echo "$pam_line"
   } | sudo tee -a /etc/pam.d/login >/dev/null
 fi
-for service in hris-api-db-init hris-api hris-app; do
+for service in bnpi-pats-api-db-init bnpi-pats-api bnpi-pats-app; do
   sudo docker compose -f /opt/project-truth/appliance/docker-compose.yml build "$service"
 done
 sudo systemctl daemon-reload
@@ -254,7 +254,7 @@ if [ "$PROJECT_TRUTH_IMAGE_TARGET" != "googlecompute" ]; then
 fi
 sudo systemctl enable project-truth-lan-summary.service
 sudo systemctl enable project-truth-clean-console.service
-sudo systemctl enable project-truth-hris.service
+sudo systemctl enable project-truth-bnpi-pats.service
 sudo systemctl disable --now project-truth-trycloudflare.service >/dev/null 2>&1 || true
 sudo systemctl enable project-truth-ansible-pull.timer
 

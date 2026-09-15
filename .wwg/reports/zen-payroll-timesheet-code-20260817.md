@@ -27,10 +27,10 @@ Fills **missing** `Timesheetline` rows from `AttendanceObligation` for one times
 
 Files:
 
-- `hris-api/app/timesheet/timesheet.controller.ts` — `syncObligationLines`
-- `hris-api/app/timesheet/timesheet.router.ts`
-- `hris-app/app/services/timesheet.service.ts` — `syncObligationLines(timesheetId)`
-- `hris-api/tests/timesheet-sync-obligation-lines.contract.spec.ts`
+- `bnpi-pats-api/app/timesheet/timesheet.controller.ts` — `syncObligationLines`
+- `bnpi-pats-api/app/timesheet/timesheet.router.ts`
+- `bnpi-pats-app/app/services/timesheet.service.ts` — `syncObligationLines(timesheetId)`
+- `bnpi-pats-api/tests/timesheet-sync-obligation-lines.contract.spec.ts`
 
 Why: payroll generate reads **saved lines**, not the GET overlay. Empty lines → daily rate ₱0 → late/absent do not deduct.
 

@@ -73,7 +73,7 @@ requests:**
    membership is in the leader's section(s) (via `section_line_leaders`).
 5. Existing grounded machinery: request types `OVERTIME`, `TIMESHEET`,
    `ATTENDANCE_CORRECTION`, etc. already exist (`RequestType` enum); the
-   approval engine already routes by role incl. `hris-line-leader`
+   approval engine already routes by role incl. `bnpi-pats-line-leader`
    (`request.controller.ts` approver sets). This requirement wires the leader
    as **initiator with section-scoped employee selection**, and manager→HR as
    approvers.
@@ -214,7 +214,7 @@ Catalog fallback added in `getDefaultRequestWorkflow` for orgs whose
 WorkflowInstance rows predate the templates.
 
 **Tests:** 166 backend (5 new spec files), Playwright smoke 2/2, tsc 65
-pre-existing only. Live E2E evidence: `hris-api/.runtime/line-leader-e2e-*`,
+pre-existing only. Live E2E evidence: `bnpi-pats-api/.runtime/line-leader-e2e-*`,
 `line-leader-daylabor-*`, `assign-members-proof`.
 
 **Boundaries / follow-ups:**

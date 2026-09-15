@@ -1,2 +1,0 @@
-name,description,category,maxAmount,minAmount,interestRate,maxTermMonths,minServiceMonths,isActive
-SALARY_ADVANCE,Sample salary advance loan,SALARY_LOAN,10000,1000,0,12,0,true

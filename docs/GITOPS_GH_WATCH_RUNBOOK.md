@@ -40,7 +40,7 @@ experimental_trycloudflare_flag=EXPERIMENTAL_TRY_CLOUDFLARE
 ```
 
 This is documentation and drift visibility only. The normal public path is the
-host-managed named Cloudflare Tunnel for `bnpi-hris.tech`; quick-tunnel URLs are
+host-managed named Cloudflare Tunnel for `bnpi-pats.tech`; quick-tunnel URLs are
 generated runtime evidence, not GitOps desired state.
 
 ## Dispatch Promotion
@@ -90,18 +90,18 @@ signal for whether the VM has already pulled the SHA.
 
 | GitHub Actions job | Meaning |
 |---|---|
-| **CI / hris-api** | API source-truth mocha (`npm run test:regression:payroll-source-truth`) |
-| **CI / hris-app** | App vitest payroll-correction (`npm run test:payroll-correction`). Full `npm test` still has Router/typecheck failures. |
-| **CI / hris-emp-app** | Employee app tests, or skip if submodule missing |
+| **CI / bnpi-pats-api** | API source-truth mocha (`npm run test:regression:payroll-source-truth`) |
+| **CI / bnpi-pats-app** | App vitest payroll-correction (`npm run test:payroll-correction`). Full `npm test` still has Router/typecheck failures. |
+| **CI / bnpi-pats-emp-app** | Employee app tests, or skip if submodule missing |
 | **CI / hikvision** | Linux probe unit tests |
 | **CI / zkteco** | Linux probe unit tests (`vendor/zkteco-linux/tests`) |
 | **CI / ansible** | `ansible-playbook --syntax-check` of `ansible/project-truth-pull.yml` |
 | **CI / callback-outbox** | Python syntax |
 | **CI / gitops** | `kubectl kustomize` overlays |
 | **Observe / ansible-pull** | VM wrote `ansible-pull-state` for this SHA |
-| **Observe / hris-api** | DEV API image rebuilt **or** `services=none` this SHA |
-| **Observe / hris-app** | DEV app image rebuilt **or** not rebuilt this SHA |
-| **Observe / hris-emp-app** | Employee app image rebuilt **or** not rebuilt |
+| **Observe / bnpi-pats-api** | DEV API image rebuilt **or** `services=none` this SHA |
+| **Observe / bnpi-pats-app** | DEV app image rebuilt **or** not rebuilt this SHA |
+| **Observe / bnpi-pats-emp-app** | Employee app image rebuilt **or** not rebuilt |
 | **Observe / callback-outbox** | Outbox image rebuilt **or** not rebuilt |
 | **Observe / onprem-prod-api** | VM `127.0.0.1:3001/health` HTTP 2xx |
 | **Observe / onprem-prod-app** | VM `127.0.0.1:3000/auth/login` HTTP 2xx |
@@ -113,20 +113,20 @@ signal for whether the VM has already pulled the SHA.
 `in progress` on Observe = waiting for VM `ansible-pull` (timer every 5 min).
 `success` = VM reported that environment. Image jobs can succeed with **not rebuilt this SHA**.
 
-On this appliance, a **rebuild** of hris-api/hris-app now restarts those Deployments in **dev, uat, and prod** (skip if missing). GitHub branches `uat`/`production` are not that trigger. Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
+On this appliance, a **rebuild** of bnpi-pats-api/bnpi-pats-app now restarts those Deployments in **dev, uat, and prod** (skip if missing). GitHub branches `uat`/`production` are not that trigger. Report: `.wwg/reports/uat-prod-app-api-auto-roll-20260820.md`.
 
 Hard honesty:
 
 - **CI green** is tests, not “deployed”.
-- **Observe hris-api success** is not a new API image unless the status description says rebuilt (live `efc86c56` was `services=none`).
+- **Observe bnpi-pats-api success** is not a new API image unless the status description says rebuilt (live `efc86c56` was `services=none`).
 - **`/health` healthy** is not a git SHA (`buildSha` is absent).
-- **Runtime Argo Synced/Degraded** is usually Failed Job `hris-api-db-init`, not “database wiped”. Do not reseed UAT/PROD. Do not delete that Failed Job until `origin/develop` is schema-only (`prisma-postgres:push` only). Operator page: `docs/DB_INIT_JOB.md`.
+- **Runtime Argo Synced/Degraded** is usually Failed Job `bnpi-pats-api-db-init`, not “database wiped”. Do not reseed UAT/PROD. Do not delete that Failed Job until `origin/develop` is schema-only (`prisma-postgres:push` only). Operator page: `docs/DB_INIT_JOB.md`.
 - **Validate** is the Windows terraform/packer/installer gate; watching only **CI** misses it.
-- Nested Cloud Run / Firebase workflows under `hris-api/.github` and `hris-app/.github` do not run here.
+- Nested Cloud Run / Firebase workflows under `bnpi-pats-api/.github` and `bnpi-pats-app/.github` do not run here.
 
 Full map: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
 
-Deployments page environments: `vm-gitops`, `hris-api`, `hris-app`, `hris-emp-app`, `callback-outbox`, plus `onprem-{prod,dev,uat}-{api,app}`.
+Deployments page environments: `vm-gitops`, `bnpi-pats-api`, `bnpi-pats-app`, `bnpi-pats-emp-app`, `callback-outbox`, plus `onprem-{prod,dev,uat}-{api,app}`.
 
 On-prem URL cheat sheet: `docs/ONPREM_PORT_ACCESS.md`.
 

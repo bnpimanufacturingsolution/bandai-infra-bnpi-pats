@@ -115,9 +115,9 @@ function Try-PatchLiveGuest {
       Mode = '0755'
     },
     @{
-      Source = (Resolve-Path 'appliance\profile.d\project-truth-hris-help.sh').Path
-      Temp = '/tmp/project-truth-hris-help.sh'
-      Target = '/etc/profile.d/project-truth-hris-help.sh'
+      Source = (Resolve-Path 'appliance\profile.d\project-truth-bnpi-pats-help.sh').Path
+      Temp = '/tmp/project-truth-bnpi-pats-help.sh'
+      Target = '/etc/profile.d/project-truth-bnpi-pats-help.sh'
       Mode = '0644'
     }
   )

@@ -8,7 +8,7 @@ bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::strin
         emit_json({
             {"event", "source_user_read_skipped"},
             {"reason", "missing_employee_no"},
-            {"sourceDeviceId", source.config.hris_device_id}
+            {"sourceDeviceId", source.config.bnpi_pats_device_id}
         });
         return false;
     }
@@ -34,7 +34,7 @@ bool read_source_user(DeviceSession &source, const ReconcileJob &job, std::strin
         returned_employees.count(job.employee_no) == 1;
     emit_json({
         {"event", "source_user_read"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"ok", exact_owner ? "true" : "false"},
         {"responseAccepted", ok ? "true" : "false"},
@@ -89,7 +89,7 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
         emit_json({
             {"event", "source_card_read_skipped"},
             {"reason", "missing_employee_no"},
-            {"sourceDeviceId", source.config.hris_device_id}
+            {"sourceDeviceId", source.config.bnpi_pats_device_id}
         });
         return false;
     }
@@ -115,7 +115,7 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
 
     emit_json({
         {"event", "source_card_read"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"strategy", "filtered_exact_owner"},
         {"ok", !exact_card.empty() ? "true" : "false"},
@@ -160,7 +160,7 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
             read_failed = true;
             emit_json({
                 {"event", "source_card_inventory_page"},
-                {"sourceDeviceId", source.config.hris_device_id},
+                {"sourceDeviceId", source.config.bnpi_pats_device_id},
                 {"employeeNo", job.employee_no},
                 {"ok", "false"},
                 {"offset", std::to_string(position)},
@@ -183,7 +183,7 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
 
         emit_json({
             {"event", "source_card_inventory_page"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"ok", "true"},
             {"offset", std::to_string(position)},
@@ -199,7 +199,7 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
             }
             emit_json({
                 {"event", "source_card_read"},
-                {"sourceDeviceId", source.config.hris_device_id},
+                {"sourceDeviceId", source.config.bnpi_pats_device_id},
                 {"employeeNo", job.employee_no},
                 {"strategy", "full_inventory_exact_owner"},
                 {"ok", "true"},
@@ -221,7 +221,7 @@ bool read_source_card(DeviceSession &source, const ReconcileJob &job, std::strin
 
     emit_json({
         {"event", "source_card_read"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"strategy", "full_inventory_exact_owner"},
         {"ok", "false"},
@@ -255,7 +255,7 @@ bool add_sync_card(DeviceSession &target, const std::string &employee_no, const 
         &response);
     emit_json({
         {"event", "peer_sync_card"},
-        {"targetDeviceId", target.config.hris_device_id},
+        {"targetDeviceId", target.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"cardPresent", "true"},
         {"ok", ok ? "true" : "false"},
@@ -394,7 +394,7 @@ std::map<std::string, UserInfoTouchSnapshot> read_device_userinfo_touch_map(
             read_failed = true;
             emit_json({
                 {"event", "source_userinfo_touch_read"},
-                {"sourceDeviceId", device.config.hris_device_id},
+                {"sourceDeviceId", device.config.bnpi_pats_device_id},
                 {"ok", "false"},
                 {"offset", std::to_string(position)},
                 {"lastError", std::to_string(NET_DVR_GetLastError())}
@@ -427,7 +427,7 @@ std::map<std::string, UserInfoTouchSnapshot> read_device_userinfo_touch_map(
 
         emit_json({
             {"event", "source_userinfo_touch_read"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"ok", "true"},
             {"offset", std::to_string(position)},
             {"pageEmployees", std::to_string(advance)},
@@ -456,7 +456,7 @@ std::map<std::string, UserInfoTouchSnapshot> read_device_userinfo_touch_map(
     if (!complete) {
         emit_json({
             {"event", "source_userinfo_touch_incomplete"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"employeeCount", std::to_string(touches.size())}
         });
         return {};
@@ -470,7 +470,7 @@ void seed_userinfo_touch_baseline_for_session(DeviceSession &device) {
     if (!complete || current.empty()) {
         emit_json({
             {"event", "userinfo_touch_baseline_seed_failed"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"sourceHost", device.config.host}
         });
         return;
@@ -480,7 +480,7 @@ void seed_userinfo_touch_baseline_for_session(DeviceSession &device) {
     userinfo_touch_baseline_ready_hosts.insert(device.config.host);
     emit_json({
         {"event", "userinfo_touch_baseline_seeded"},
-        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceDeviceId", device.config.bnpi_pats_device_id},
         {"sourceHost", device.config.host},
         {"employeeCount", std::to_string(current.size())}
     });
@@ -494,7 +494,7 @@ std::string resolve_plain_employee_no_from_userinfo_touch(DeviceSession &device)
     if (!complete || current.empty()) {
         emit_json({
             {"event", "callback_identity_userinfo_touch_incomplete"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"sourceHost", device.config.host}
         });
         return "";
@@ -508,7 +508,7 @@ std::string resolve_plain_employee_no_from_userinfo_touch(DeviceSession &device)
         userinfo_touch_baseline_ready_hosts.insert(device.config.host);
         emit_json({
             {"event", "callback_identity_userinfo_touch_baseline"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"sourceHost", device.config.host},
             {"employeeCount", std::to_string(current.size())},
             {"note", "late_baseline"}
@@ -530,7 +530,7 @@ std::string resolve_plain_employee_no_from_userinfo_touch(DeviceSession &device)
     if (changed.empty()) {
         emit_json({
             {"event", "callback_identity_userinfo_touch_no_change"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"sourceHost", device.config.host},
             {"employeeCount", std::to_string(current.size())}
         });
@@ -560,7 +560,7 @@ std::string resolve_plain_employee_no_from_userinfo_touch(DeviceSession &device)
 
     emit_json({
         {"event", "callback_identity_userinfo_touch"},
-        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceDeviceId", device.config.bnpi_pats_device_id},
         {"sourceHost", device.config.host},
         {"changedCount", std::to_string(changed.size())},
         {"employeeNo", plain}
@@ -602,7 +602,7 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device, boo
             read_failed = true;
             emit_json({
                 {"event", "source_user_inventory_read"},
-                {"sourceDeviceId", device.config.hris_device_id},
+                {"sourceDeviceId", device.config.bnpi_pats_device_id},
                 {"ok", "false"},
                 {"offset", std::to_string(position)},
                 {"lastError", std::to_string(NET_DVR_GetLastError())}
@@ -638,7 +638,7 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device, boo
 
         emit_json({
             {"event", "source_user_inventory_read"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"ok", "true"},
             {"offset", std::to_string(position)},
             {"pageEmployees", std::to_string(page_count)},
@@ -674,7 +674,7 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device, boo
 
     emit_json({
         {"event", "source_user_inventory_complete"},
-        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceDeviceId", device.config.bnpi_pats_device_id},
         {"employeeCount", std::to_string(employee_numbers.size())},
         {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""},
         {"complete", (!read_failed && (total_matches < 0 || static_cast<int>(employee_numbers.size()) >= total_matches)) ? "true" : "false"}
@@ -686,7 +686,7 @@ std::vector<std::string> read_device_employee_numbers(DeviceSession &device, boo
     if (!complete) {
         emit_json({
             {"event", "source_user_inventory_incomplete_discarded"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"employeeCount", std::to_string(employee_numbers.size())},
             {"totalMatches", total_matches >= 0 ? std::to_string(total_matches) : ""}
         });

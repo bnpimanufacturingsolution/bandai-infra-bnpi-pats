@@ -87,12 +87,12 @@ true
 ## Suggested Mappings
 
 - root_agents: AGENTS.md
-- project_master_context: hris-api/.wwg/workspace/context/project-context.md
-- maintenance_matrix: hris-api/.wwg/workspace/context/context-maintenance-matrix.md
+- project_master_context: bnpi-pats-api/.wwg/workspace/context/project-context.md
+- maintenance_matrix: bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md
 - architecture_context: docs/ARCHITECTURE.md
 - runtime_context: docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md
-- public_discovery_context: hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md
-- domain_context: hris-api/.wwg/workspace/context/domain-context.md
+- public_discovery_context: bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md
+- domain_context: bnpi-pats-api/.wwg/workspace/context/domain-context.md
 
 ## Rollback Guidance
 

@@ -9,7 +9,7 @@ set -o pipefail
 API_BASE="${PT_API_BASE:-http://127.0.0.1:3101}"
 EMAIL="${PT_EMAIL:-admin@bandai.local}"
 PASSWORD="${PT_PASSWORD:-password123}"
-APP_CODE="${PT_APP_CODE:-hris}"
+APP_CODE="${PT_APP_CODE:-bnpi-pats}"
 WAVE_MAX="${PT_WAVE_MAX:-50}"
 SLEEP_SEC="${PT_SLEEP_SEC:-20}"
 IDLE_SLEEP_SEC="${PT_IDLE_SLEEP_SEC:-90}"

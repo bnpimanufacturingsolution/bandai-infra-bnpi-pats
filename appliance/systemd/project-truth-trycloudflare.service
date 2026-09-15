@@ -1,6 +1,6 @@
 [Unit]
 Description=Project Truth experimental TryCloudflare quick tunnels
-After=network-online.target project-truth-hris.service
+After=network-online.target project-truth-bnpi-pats.service
 Wants=network-online.target
 
 [Service]

@@ -320,7 +320,7 @@ std::string find_session_device_id_by_host(const std::string &host) {
     std::lock_guard<std::mutex> lock(sessions_mutex);
     for (const auto &session : sessions) {
         if (session.config.host == host) {
-            return session.config.hris_device_id;
+            return session.config.bnpi_pats_device_id;
         }
     }
     return "";
@@ -441,25 +441,25 @@ void queue_reconcile(const ReconcileJob &job) {
 // Authentication events contain all identity evidence that the device supplied and
 // must be posted without an SDK inventory/template read. A separate worker owns this
 // lane so a slow empty operation callback cannot delay a later attendance tap.
-bool is_immediate_hris_job(const ReconcileJob &job) {
+bool is_immediate_bnpi_pats_job(const ReconcileJob &job) {
     return job.event_kind.find("attendance_") == 0 || job.major == 5;
 }
 
-void queue_hris_device_event(const ReconcileJob &job) {
-    const bool immediate = is_immediate_hris_job(job);
+void queue_bnpi_pats_device_event(const ReconcileJob &job) {
+    const bool immediate = is_immediate_bnpi_pats_job(job);
     {
         std::lock_guard<std::mutex> lock(queue_mutex);
         if (immediate) {
-            hris_immediate_event_queue.push_back(job);
+            bnpi_pats_immediate_event_queue.push_back(job);
         } else {
-            hris_enrichment_event_queue.push_back(job);
+            bnpi_pats_enrichment_event_queue.push_back(job);
         }
     }
     // Multiple queue consumers have different predicates; wake each so the owner of
     // this lane runs now instead of relying on its polling timeout.
     queue_cv.notify_all();
     emit_json({
-        {"event", "hris_device_event_queued"},
+        {"event", "bnpi_pats_device_event_queued"},
         {"sourceDeviceId", job.source_device_id},
         {"sourceHost", job.source_host},
         {"employeeNo", job.employee_no},
@@ -614,7 +614,7 @@ void CALLBACK alarm_callback(
     if (!job.employee_no.empty()) {
         mark_recent_employee_candidate(job.source_host, job.employee_no);
     }
-    queue_hris_device_event(job);
+    queue_bnpi_pats_device_event(job);
 
     if (!should_queue_reconcile(acs->dwMajor, acs->dwMinor)) {
         return;

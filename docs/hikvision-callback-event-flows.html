@@ -190,13 +190,13 @@
         <td>Plain id when resolved (never leave opaque as the label)</td>
       </tr>
       <tr>
-        <td>Employee (HRIS)</td>
+        <td>Employee (BNPI PATS)</td>
         <td><code>deviceEmpId</code></td>
         <td class="highlight">15</td>
         <td>Plain device person id — same as vendorUserId (NOT padded)</td>
       </tr>
       <tr>
-        <td>Employee (HRIS)</td>
+        <td>Employee (BNPI PATS)</td>
         <td><code>employeeId</code></td>
         <td class="highlight">00015</td>
         <td>Business / display code (may use leading zeros); not deviceEmpId</td>
@@ -279,20 +279,20 @@
         <code>Employee.deviceEmpId === "15"</code> (same as device).
         <code>Employee.employeeId</code> may be <code>00015</code> for display/org code.
         On match set FKs → status <span class="ok">MATCHED / ACTIVE</span>.</li>
-      <li><strong>If no Employee</strong> with that pad: DeviceUser stays <strong>UNMATCHED</strong>; event still shows <strong>User 15</strong> (device person), not HRIS employee name.</li>
+      <li><strong>If no Employee</strong> with that pad: DeviceUser stays <strong>UNMATCHED</strong>; event still shows <strong>User 15</strong> (device person), not BNPI PATS employee name.</li>
       <li><strong>Socket</strong> so Device Events updates without refresh; Device Users list can open
         <code>deviceUserDetails=15</code>.</li>
     </ol>
   </div>
 
-  <h2>5. Side-by-side: what Hikvision sends vs what HRIS stores</h2>
+  <h2>5. Side-by-side: what Hikvision sends vs what BNPI PATS stores</h2>
   <table class="id-table">
     <thead>
       <tr>
         <th>Event family</th>
         <th>Typical Hikvision signal</th>
         <th>First callback may have plain id?</th>
-        <th>HRIS primary write</th>
+        <th>BNPI PATS primary write</th>
       </tr>
     </thead>
     <tbody>
@@ -322,7 +322,7 @@
 PANEL create user 15
         │
         ▼
-HCNetSDK LISTENER  ──callback──►  hris-api /api/hikvision/callback
+HCNetSDK LISTENER  ──callback──►  bnpi-pats-api /api/hikvision/callback
         │                              │
         │                              ├─► DeviceEvent  USER_CREATED
         │                              │      employeeNo: "15"     (plain when resolved)
@@ -341,7 +341,7 @@ HCNetSDK LISTENER  ──callback──►  hris-api /api/hikvision/callback
 Socket device-event:saved  →  Device Events UI
    · show "User 15" or employee name
    · click device person → Device Users details for vendorUserId 15
-   · click employee → HRIS employee (employeeId may display 00015)
+   · click employee → BNPI PATS employee (employeeId may display 00015)
   </pre>
 
   <footer>

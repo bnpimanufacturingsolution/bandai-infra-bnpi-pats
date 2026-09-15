@@ -1,2 +1,0 @@
-code,name,description,cycleDays,graceLateMinutes,graceEarlyOutMinutes,pattern,isActive
-STD-5D,Standard Five Day Week,Default weekday template for sample employees,7,15,15,"[{""dayIndex"":1,""shiftTypeCode"":""DAY-STD""},{""dayIndex"":2,""shiftTypeCode"":""DAY-STD""},{""dayIndex"":3,""shiftTypeCode"":""DAY-STD""},{""dayIndex"":4,""shiftTypeCode"":""DAY-STD""},{""dayIndex"":5,""shiftTypeCode"":""DAY-STD""},{""dayIndex"":6,""shiftTypeCode"":""DAY-STD""},{""dayIndex"":0,""shiftTypeCode"":""DAY-STD"",""isOff"":true}]",true

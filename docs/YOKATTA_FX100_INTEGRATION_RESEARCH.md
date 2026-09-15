@@ -11,7 +11,7 @@
 
 This document records the deep-research findings for integrating the
 **Yokatta FX-100** (also FX100) fingerprint biometric time recorder into a
-custom attendance / HRIS system (Project Truth context: Hikvision + ZKTeco
+custom attendance / BNPI PATS system (Project Truth context: Hikvision + ZKTeco
 already supported).
 
 It is the **canonical research memo** for agents and operators. It supersedes
@@ -44,7 +44,7 @@ quote path → prove on hardware → implement.
 | Candidate OEM SDK (Timmy / TIMY)? | **Exists for Timmy devices**; **transfer to FX-100 unproven** | Timmy SDK **95%** · FX-100 match **35–45%** |
 | ZKTeco / pyzk / port 4370? | **No good evidence** for FX-100 | **88%** not compatible as sold |
 | Yokatta is OEM factory? | **No** — PH retail / private-label brand | **92%** |
-| Best integration method **today** | **USB / GLOG / Excel batch import** into HRIS | **85%** |
+| Best integration method **today** | **USB / GLOG / Excel batch import** into BNPI PATS | **85%** |
 | Best method **if** Timmy protocol proven on unit | Timmy WebSocket/JSON + official Timmy SDKs | Conditional **90%** *after canary* |
 
 ### Bottom line
@@ -204,7 +204,7 @@ Yokatta FX-100 (standalone punches)
   → USB stick → PC
   → Lite Version Software / TIME MASTER import
   → MS Excel / Crystal reports
-  → Custom HRIS import (recommended integration surface)
+  → Custom BNPI PATS import (recommended integration surface)
 ```
 
 ---
@@ -231,7 +231,7 @@ Yokatta FX-100 (standalone punches)
 | Real-time punch stream | **Unproven on FX-100** | Only if Timmy/network protocol proven | **Low for FX-100** |
 | User CRUD remote | **Unproven** | Device UI / Lite SW / Timmy SDK if matched | **Low–Med** |
 | FP template R/W remote | **Poor without OEM match** | Timmy SDK only if matched | **Low** |
-| Sync to custom HRIS | **Yes (batch)** | File/DB import job | **High** |
+| Sync to custom BNPI PATS | **Yes (batch)** | File/DB import job | **High** |
 
 ### Language notes
 
@@ -305,7 +305,7 @@ Timmy has WebSocket SDK
                     └──────────┬───────────┘
                                ▼
                     ┌──────────────────────┐
-                    │ HRIS attendance /     │
+                    │ BNPI PATS attendance /     │
                     │ DeviceEvent ledger    │
                     │ labels: batch | stale │
                     │ NOT live-listener     │
@@ -386,7 +386,7 @@ Update this docs file when hardware canary evidence lands; do not silently overw
 6. **Rebranded OEM?** Brand is private-label class; exact factory open.
 7. **Manufacturer?** Candidate Timmy **unproven**; Chinese ODM class **strong**.
 8. **Network detail to implement?** Timmy docs exist for Timmy devices only; not proven for FX-100.
-9. **USB automation?** Stick/export → drop folder → idempotent HRIS upsert.
+9. **USB automation?** Stick/export → drop folder → idempotent BNPI PATS upsert.
 10. **Architecture?** Batch adapter default; optional protocol bridge behind canary gate.
 
 ---

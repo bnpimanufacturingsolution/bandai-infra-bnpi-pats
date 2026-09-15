@@ -32,7 +32,7 @@ Accepted local architecture:
   physical Wi-Fi/LAN connection.
 - `project-truth-local-vhdx-proof` owns the Project Truth runtime.
 - Docker Engine belongs inside the Linux VM.
-- HRIS app/API/Postgres/device services belong inside the VM or VM Docker
+- BNPI PATS app/API/Postgres/device services belong inside the VM or VM Docker
   containers.
 - Hikvision/ZKTeco device SDK/listener processes run inside the VM or inside VM
   containers.
@@ -99,12 +99,12 @@ Final host-only VM proof from this cleanup:
 - VM DHCP/NAT address from Default Switch: `172.26.62.243/20`
 - Host ping to `10.184.37.241`: passed
 - Host SSH/TCP `22` to `10.184.37.241`: passed
-- Host HRIS URL proof:
+- Host BNPI PATS URL proof:
   - `http://10.184.37.241:3000/auth/login` returned HTTP `200`
   - `http://10.184.37.241:3001/health` returned HTTP `200`
   - `http://10.184.37.241:3101/health` returned HTTP `200`
   - `http://10.184.37.241:3201/health` returned HTTP `200`
-- VM Docker runtime: running inside Linux VM with HRIS app/API/Postgres
+- VM Docker runtime: running inside Linux VM with BNPI PATS app/API/Postgres
   containers healthy.
 - Local VM Cloudflare status: `inactive` and `masked`.
 - VM console/issue text now shows `LAN IP: 10.184.37.241`.
@@ -130,7 +130,7 @@ Latest reachable biometric truth:
   path is still the VM NIC plus Hyper-V host/NAT routing.
 - After a live guest route fix, the VM also reached `192.168.254.189` on TCP
   `80`, `443`, and `8000` while remaining on `Default Switch`.
-- The local HRIS `Main Entrance Device` row was stale and was corrected from
+- The local BNPI PATS `Main Entrance Device` row was stale and was corrected from
   `192.168.110.24` / `https` to `192.168.254.189` / `http`, with
   `vendor=Hikvision`, `model=DS-K1T341CMFW`, `sdkPort=8000`, and
   `webhookPath=/api/hikvision/callback`.
@@ -184,7 +184,7 @@ Latest local VM route truth:
 
 Credential/SDK boundary after durable route repair:
 
-- VM-backed HRIS health was healthy at `http://10.184.37.241:3001/health`.
+- VM-backed BNPI PATS health was healthy at `http://10.184.37.241:3001/health`.
 - `/api/device/:id/health` for `Main Entrance Device` reported network
   `reachable`, but device API `Unauthorized`.
 - `/api/device/sync-preview?deviceId=cmqq3ho8c002eti3dzzk94z1w` returned
@@ -199,7 +199,7 @@ Credential/SDK boundary after durable route repair:
   against Linux HCNetSDK and reran from the VM. SDK init and callback
   registration succeeded, but SDK login failed with HCNetSDK error `153` while
   the terminal was locked, so no alarm channel was armed and no real
-  `EN_HCNETSDK_ALARM` event reached HRIS.
+  `EN_HCNETSDK_ALARM` event reached BNPI PATS.
 
 Current real blocker:
 
@@ -242,7 +242,7 @@ Latest local hot-reload service truth:
 - It runs inside the Linux VM while the VM remains on `Default Switch`.
 - It posts live SDK alarm callbacks to the Windows host local hot-reload API:
   `http://10.184.37.248:3001`.
-- It reads the DEV `Main Entrance Device` row from `hris-postgres-dev`, writes a
+- It reads the DEV `Main Entrance Device` row from `bnpi-pats-postgres-dev`, writes a
   root-scoped runtime device spec under `/run/project-truth/`, and starts
   `hikvision-biometric-service` with `--device-file` so the Hikvision password
   is not exposed in process arguments.
@@ -343,7 +343,7 @@ HCNetSDK proof:
 - SDK init succeeded, callback registration succeeded, SDK login succeeded
   with `lastError=0`, and alarm arm succeeded with `lastError=0`.
 - The listener received live ACS/fingerprint events, posted them to
-  `/api/hikvision/callback`, and HRIS persisted 74 recent
+  `/api/hikvision/callback`, and BNPI PATS persisted 74 recent
   `EN_HCNETSDK_ALARM` rows for the PROD `Main Entrance Device`.
 - Recent saved rows include fingerprint pass events for `employeeNo=1`; in
   PROD they currently persist as `UNMATCHED` where employee mapping is not
@@ -388,14 +388,14 @@ Current proven network truth:
 - Host-side helper IP on `vEthernet (Default Switch)`: `10.184.37.248/24`
 - Host ping to `10.184.37.241` works.
 - Host SSH to `infra@10.184.37.241` works.
-- Host HRIS URLs on `10.184.37.241` work.
+- Host BNPI PATS URLs on `10.184.37.241` work.
 - Cloudflare in this local VM path is inactive/masked.
 
 Current Hikvision truth:
 - Live physical device is `192.168.254.189`.
 - Host reachability to `192.168.254.189`: ping OK, TCP 80 OK, TCP 443 OK, TCP 8000 OK.
 - VM reachability to `192.168.254.189` can work on `Default Switch` without creating another Hyper-V switch.
-- Local HRIS `Main Entrance Device` row was corrected to:
+- Local BNPI PATS `Main Entrance Device` row was corrected to:
   - address `192.168.254.189`
   - port `80`
   - protocol `http`
@@ -425,7 +425,7 @@ Work order:
    - `/api/device/sync-preview?deviceId=<Main Entrance Device>`
    - `vendor/hikvision-linux/hikvision_biometric_service.cpp` live run against `192.168.254.189:8000`
 6. Do not stop until one of these is true:
-   - a real tap event is received by the HCNetSDK listener and posted into HRIS
+   - a real tap event is received by the HCNetSDK listener and posted into BNPI PATS
    - or 3 distinct documented recovery attempts fail after route and credential repair, with evidence
 
 Rules:
@@ -440,7 +440,7 @@ Final answer must include:
 - current VM IP
 - current live Hikvision IP
 - whether credential auth succeeded
-- whether a real tap event reached HRIS
+- whether a real tap event reached BNPI PATS
 - exact evidence directory
 ```
 
@@ -546,7 +546,7 @@ external bridge state rather than changing the VM identity:
 5. Do not assign `10.184.37.254` to the host bridge; it is occupied.
 6. Do not reassign stale `10.184.37.250/24` unless a future isolated host-test
    switch is deliberately recreated and proven non-conflicting.
-7. Verify host-to-VM SSH and HRIS ports against `10.184.37.19`.
+7. Verify host-to-VM SSH and BNPI PATS ports against `10.184.37.19`.
 8. Verify VM-to-Hikvision `10.184.37.139:80` and `10.184.37.139:8000` from
    inside the VM.
 9. Do not rename `10.184.37.250` or `10.184.37.254` as a VM IP in Project Truth

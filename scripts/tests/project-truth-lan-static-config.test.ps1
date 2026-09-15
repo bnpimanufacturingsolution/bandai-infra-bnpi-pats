@@ -51,7 +51,7 @@ if ($summaryContent -match '"Gateway"\s+"\$ip_addr"\s+"38080"') {
   throw 'LAN summary must not advertise the stale Gateway :38080 URL after host-side verification failed.'
 }
 
-$loginHelpPath = Join-Path $repoRoot 'appliance/profile.d/project-truth-hris-help.sh'
+$loginHelpPath = Join-Path $repoRoot 'appliance/profile.d/project-truth-bnpi-pats-help.sh'
 $loginHelpContent = Get-Content -Raw -LiteralPath $loginHelpPath
 foreach ($pattern in @(
     'PROD"\s+"\$lan_ip"\s+"3300"',
@@ -81,10 +81,10 @@ if ($driftGuardContent -notmatch 'Host-Local VM First Guard') {
 }
 
 $helperPaths = @(
-  'appliance/profile.d/project-truth-hris-help.sh',
+  'appliance/profile.d/project-truth-bnpi-pats-help.sh',
   'appliance/bin/project-truth-clean-console.sh',
   'appliance/bin/project-truth-db-access.sh',
-  'appliance/bin/project-truth-hris-status.sh',
+  'appliance/bin/project-truth-bnpi-pats-status.sh',
   'appliance/bin/project-truth-progress.sh',
   'appliance/bin/project-truth-status.sh'
 )

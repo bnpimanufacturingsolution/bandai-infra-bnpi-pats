@@ -3,11 +3,11 @@
 
 namespace hikvision_bio {
 
-void post_hris_contract_preview(const ReconcileJob &job, const std::string &status) {
+void post_bnpi_pats_contract_preview(const ReconcileJob &job, const std::string &status) {
     const std::string contract = build_status_contract_json(job, status);
     emit_json({
-        {"event", "hris_contract_preview"},
-        {"apiBase", hris_api_base},
+        {"event", "bnpi_pats_contract_preview"},
+        {"apiBase", bnpi_pats_api_base},
         {"contractPath", "/api/device/biometric-sync/reconcile"},
         {"body", contract}
     });
@@ -62,7 +62,7 @@ bool ensure_reconcile_spool_dir() {
         return true;
     }
     emit_json({
-        {"event", "hris_contract_spool_dir_failed"},
+        {"event", "bnpi_pats_contract_spool_dir_failed"},
         {"path", reconcile_spool_dir},
         {"errno", std::to_string(errno)}
     });
@@ -77,7 +77,7 @@ bool ensure_reconcile_quarantine_dir() {
         return true;
     }
     emit_json({
-        {"event", "hris_contract_spool_quarantine_dir_failed"},
+        {"event", "bnpi_pats_contract_spool_quarantine_dir_failed"},
         {"path", reconcile_quarantine_dir},
         {"errno", std::to_string(errno)}
     });
@@ -220,8 +220,8 @@ bool post_json_with_retries(
     return false;
 }
 
-void replay_pending_hris_contract_posts() {
-    if (!execute_mode || hris_api_base.empty()) {
+void replay_pending_bnpi_pats_contract_posts() {
+    if (!execute_mode || bnpi_pats_api_base.empty()) {
         return;
     }
     if (!ensure_reconcile_spool_dir()) {
@@ -231,12 +231,12 @@ void replay_pending_hris_contract_posts() {
     if (paths.empty()) {
         return;
     }
-    const std::string url = hris_api_base + "/api/device/biometric-sync/reconcile";
+    const std::string url = bnpi_pats_api_base + "/api/device/biometric-sync/reconcile";
     for (const auto &path : paths) {
         std::string body;
         if (!read_text_file(path, &body)) {
             emit_json({
-                {"event", "hris_contract_spool_read_failed"},
+                {"event", "bnpi_pats_contract_spool_read_failed"},
                 {"path", path}
             });
             continue;
@@ -254,7 +254,7 @@ void replay_pending_hris_contract_posts() {
                 ensure_reconcile_quarantine_dir() &&
                 std::rename(path.c_str(), quarantine_path.c_str()) == 0;
             emit_json({
-                {"event", "hris_contract_spool_quarantined"},
+                {"event", "bnpi_pats_contract_spool_quarantined"},
                 {"path", path},
                 {"quarantinePath", preserved ? quarantine_path : ""},
                 {"reason", "missing_source_device_id"},
@@ -262,9 +262,9 @@ void replay_pending_hris_contract_posts() {
             });
             continue;
         }
-        const bool ok = post_json_with_retries(url, body, "hris_contract_spool_replay", 3, 1500);
+        const bool ok = post_json_with_retries(url, body, "bnpi_pats_contract_spool_replay", 3, 1500);
         emit_json({
-            {"event", "hris_contract_spool_replay_result"},
+            {"event", "bnpi_pats_contract_spool_replay_result"},
             {"path", path},
             {"ok", ok ? "true" : "false"}
         });
@@ -275,10 +275,10 @@ void replay_pending_hris_contract_posts() {
 }
 
 void replay_pending_hikvision_callbacks() {
-    if (!execute_mode || hris_api_base.empty()) {
+    if (!execute_mode || bnpi_pats_api_base.empty()) {
         return;
     }
-    const std::string url = hris_api_base + "/api/hikvision/callback";
+    const std::string url = bnpi_pats_api_base + "/api/hikvision/callback";
     std::vector<std::string> paths;
     {
         std::lock_guard<std::mutex> lock(callback_spool_mutex);
@@ -338,7 +338,7 @@ void callback_spool_replay_loop() {
     }
 }
 
-bool post_hris_contract_payload(
+bool post_bnpi_pats_contract_payload(
     const std::string &contract,
     const std::string &spool_key,
     const std::map<std::string, std::string> &spool_meta) {
@@ -347,13 +347,13 @@ bool post_hris_contract_payload(
         spool_path = build_reconcile_spool_path_from_key(spool_key);
         if (!write_text_file(spool_path, contract)) {
             emit_json({
-                {"event", "hris_contract_spool_write_failed"},
+                {"event", "bnpi_pats_contract_spool_write_failed"},
                 {"path", spool_path}
             });
             spool_path.clear();
         } else {
             std::map<std::string, std::string> fields = {
-                {"event", "hris_contract_spool_written"},
+                {"event", "bnpi_pats_contract_spool_written"},
                 {"path", spool_path},
                 {"spoolKey", spool_key}
             };
@@ -361,36 +361,36 @@ bool post_hris_contract_payload(
             emit_json(fields);
         }
     }
-    if (hris_api_base.empty()) {
+    if (bnpi_pats_api_base.empty()) {
         emit_json({
-            {"event", "hris_contract_post_skipped"},
-            {"reason", "missing_hris_api_base"},
+            {"event", "bnpi_pats_contract_post_skipped"},
+            {"reason", "missing_bnpi_pats_api_base"},
             {"spoolKey", spool_key}
         });
         return false;
     }
     if (!execute_mode) {
         emit_json({
-            {"event", "hris_contract_preview"},
-            {"apiBase", hris_api_base},
+            {"event", "bnpi_pats_contract_preview"},
+            {"apiBase", bnpi_pats_api_base},
             {"contractPath", "/api/device/biometric-sync/reconcile"},
             {"body", contract}
         });
         return true;
     }
 
-    const std::string url = hris_api_base + "/api/device/biometric-sync/reconcile";
-    const bool ok = post_json_with_retries(url, contract, "hris_contract_post", 3, 1500);
+    const std::string url = bnpi_pats_api_base + "/api/device/biometric-sync/reconcile";
+    const bool ok = post_json_with_retries(url, contract, "bnpi_pats_contract_post", 3, 1500);
     emit_json({
-        {"event", "hris_contract_post"},
-        {"apiBase", hris_api_base},
+        {"event", "bnpi_pats_contract_post"},
+        {"apiBase", bnpi_pats_api_base},
         {"spoolKey", spool_key},
         {"ok", ok ? "true" : "false"}
     });
     if (ok && !spool_path.empty()) {
         std::remove(spool_path.c_str());
         emit_json({
-            {"event", "hris_contract_spool_cleared"},
+            {"event", "bnpi_pats_contract_spool_cleared"},
             {"path", spool_path}
         });
     }
@@ -439,8 +439,8 @@ bool curl_post_json(
     std::fprintf(config_file, "header = \"Content-Type: application/json\"\n");
     std::fprintf(config_file, "connect-timeout = 3\n");
     std::fprintf(config_file, "max-time = %d\n", std::max(1, max_time_seconds));
-    if (!hris_api_token.empty()) {
-        std::fprintf(config_file, "header = \"Authorization: Bearer %s\"\n", hris_api_token.c_str());
+    if (!bnpi_pats_api_token.empty()) {
+        std::fprintf(config_file, "header = \"Authorization: Bearer %s\"\n", bnpi_pats_api_token.c_str());
     }
     std::fprintf(config_file, "data = \"@%s\"\n", body_template);
     std::fclose(config_file);
@@ -500,7 +500,7 @@ void seed_inventory_baseline_for_session(DeviceSession &device) {
     if (!complete) {
         emit_json({
             {"event", "inventory_baseline_seed_failed"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"sourceHost", device.config.host},
             {"reason", "incomplete_inventory"}
         });
@@ -513,7 +513,7 @@ void seed_inventory_baseline_for_session(DeviceSession &device) {
     inventory_baseline_ready_hosts.insert(device.config.host);
     emit_json({
         {"event", "inventory_baseline_seeded"},
-        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceDeviceId", device.config.bnpi_pats_device_id},
         {"sourceHost", device.config.host},
         {"employeeCount", std::to_string(observed.size())}
     });
@@ -529,7 +529,7 @@ std::string resolve_plain_employee_no_from_inventory(DeviceSession &device) {
     if (!complete) {
         emit_json({
             {"event", "callback_identity_inventory_incomplete"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"sourceHost", device.config.host}
         });
         return "";
@@ -542,7 +542,7 @@ std::string resolve_plain_employee_no_from_inventory(DeviceSession &device) {
         inventory_baseline_ready_hosts.insert(device.config.host);
         emit_json({
             {"event", "callback_identity_inventory_baseline"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"sourceHost", device.config.host},
             {"employeeCount", std::to_string(observed.size())},
             {"note", "late_baseline_prefer_arm_seed"}
@@ -562,7 +562,7 @@ std::string resolve_plain_employee_no_from_inventory(DeviceSession &device) {
     if (news.empty()) {
         emit_json({
             {"event", "callback_identity_inventory_no_new_plain"},
-            {"sourceDeviceId", device.config.hris_device_id},
+            {"sourceDeviceId", device.config.bnpi_pats_device_id},
             {"sourceHost", device.config.host},
             {"employeeCount", std::to_string(current.size())}
         });
@@ -572,7 +572,7 @@ std::string resolve_plain_employee_no_from_inventory(DeviceSession &device) {
     const std::string plain = pick_newest_plain_employee_no(news);
     emit_json({
         {"event", "callback_identity_inventory_delta"},
-        {"sourceDeviceId", device.config.hris_device_id},
+        {"sourceDeviceId", device.config.bnpi_pats_device_id},
         {"sourceHost", device.config.host},
         {"newPlainCount", std::to_string(news.size())},
         {"employeeNo", plain}
@@ -645,9 +645,9 @@ bool needs_callback_template_enrich(const ReconcileJob &job) {
             job.event_kind == "biometric_user_management");
 }
 
-// Schedule a delayed re-queue of the HRIS callback job so empty-ACS create/enroll
+// Schedule a delayed re-queue of the BNPI PATS callback job so empty-ACS create/enroll
 // can get plain id after UserInfo catches up (second POST, not inventing ids).
-void schedule_delayed_hris_identity_repost(const ReconcileJob &job, int delay_ms, int attempt) {
+void schedule_delayed_bnpi_pats_identity_repost(const ReconcileJob &job, int delay_ms, int attempt) {
     if (attempt > 3) {
         return;
     }
@@ -675,7 +675,7 @@ void schedule_delayed_hris_identity_repost(const ReconcileJob &job, int delay_ms
             {"delayMs", std::to_string(delay_ms)},
             {"serialNo", copy.serial_no}
         });
-        queue_hris_device_event(copy);
+        queue_bnpi_pats_device_event(copy);
     }).detach();
 }
 
@@ -718,7 +718,7 @@ void schedule_delayed_template_repost(const ReconcileJob &job, int delay_ms, int
             {"delayMs", std::to_string(delay_ms)},
             {"serialNo", copy.serial_no}
         });
-        queue_hris_device_event(copy);
+        queue_bnpi_pats_device_event(copy);
     }).detach();
 }
 
@@ -747,7 +747,7 @@ bool read_fingerprints_via_isapi(
     if (!ok || response.empty()) {
         emit_json({
             {"event", "isapi_fingerprint_read"},
-            {"sourceDeviceId", session.config.hris_device_id},
+            {"sourceDeviceId", session.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"}
         });
@@ -768,7 +768,7 @@ bool read_fingerprints_via_isapi(
     if (datas.empty()) {
         emit_json({
             {"event", "isapi_fingerprint_read"},
-            {"sourceDeviceId", session.config.hris_device_id},
+            {"sourceDeviceId", session.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "true"},
             {"fingerprintCount", "0"}
@@ -791,7 +791,7 @@ bool read_fingerprints_via_isapi(
     *fingerprint_count = static_cast<int>(datas.size());
     emit_json({
         {"event", "isapi_fingerprint_read"},
-        {"sourceDeviceId", session.config.hris_device_id},
+        {"sourceDeviceId", session.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"ok", "true"},
         {"fingerprintCount", std::to_string(*fingerprint_count)}
@@ -825,7 +825,7 @@ bool read_face_picture_via_isapi_userinfo(
     if (!ok || response.empty()) {
         emit_json({
             {"event", "isapi_face_userinfo_read"},
-            {"sourceDeviceId", session.config.hris_device_id},
+            {"sourceDeviceId", session.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"reason", "userinfo_search_failed"}
@@ -837,7 +837,7 @@ bool read_face_picture_via_isapi_userinfo(
     if (face_url.empty()) {
         emit_json({
             {"event", "isapi_face_userinfo_read"},
-            {"sourceDeviceId", session.config.hris_device_id},
+            {"sourceDeviceId", session.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "true"},
             {"facePictureChars", "0"},
@@ -869,7 +869,7 @@ bool read_face_picture_via_isapi_userinfo(
     if (!pic_ok || picture.size() < 32) {
         emit_json({
             {"event", "isapi_face_userinfo_read"},
-            {"sourceDeviceId", session.config.hris_device_id},
+            {"sourceDeviceId", session.config.bnpi_pats_device_id},
             {"employeeNo", employee_no},
             {"ok", "false"},
             {"reason", "faceURL_download_failed"},
@@ -882,7 +882,7 @@ bool read_face_picture_via_isapi_userinfo(
         picture.size());
     emit_json({
         {"event", "isapi_face_userinfo_read"},
-        {"sourceDeviceId", session.config.hris_device_id},
+        {"sourceDeviceId", session.config.bnpi_pats_device_id},
         {"employeeNo", employee_no},
         {"ok", "true"},
         {"facePictureChars", std::to_string(face_picture_b64->size())},
@@ -893,7 +893,7 @@ bool read_face_picture_via_isapi_userinfo(
 
 // Before POST: fill plain employeeNo when ACS left it empty; attach raw FP/face when possible.
 // This is the correct place to harden "socket always has plain id" for enroll — not inventing in UI.
-void enrich_hris_job_before_post(ReconcileJob &job) {
+void enrich_bnpi_pats_job_before_post(ReconcileJob &job) {
     DeviceSession *session = find_session_by_host(job.source_host);
     if (session == nullptr) {
         if (job.employee_no.empty()) {
@@ -969,7 +969,7 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
             // One delayed pass covers UserInfo lag without amplifying empty
             // callbacks into thousands of full-inventory page reads.
             if (!is_repost && identity_scan_claimed) {
-                schedule_delayed_hris_identity_repost(job, 5000, 1);
+                schedule_delayed_bnpi_pats_identity_repost(job, 5000, 1);
             }
         }
     } else if (!job.employee_no.empty() && job.identity_source.empty()) {
@@ -1119,10 +1119,10 @@ void enrich_hris_job_before_post(ReconcileJob &job) {
 
 bool post_hikvision_callback(const ReconcileJob &job) {
     const std::string body = build_hikvision_callback_json(job);
-    if (hris_api_base.empty()) {
+    if (bnpi_pats_api_base.empty()) {
         emit_json({
             {"event", "hikvision_callback_post_skipped"},
-            {"reason", "missing_hris_api_base"},
+            {"reason", "missing_bnpi_pats_api_base"},
             {"body", body}
         });
         return false;
@@ -1130,7 +1130,7 @@ bool post_hikvision_callback(const ReconcileJob &job) {
     if (!execute_mode) {
         emit_json({
             {"event", "hikvision_callback_preview"},
-            {"apiBase", hris_api_base},
+            {"apiBase", bnpi_pats_api_base},
             {"contractPath", "/api/hikvision/callback"},
             {"body", body}
         });
@@ -1154,12 +1154,12 @@ bool post_hikvision_callback(const ReconcileJob &job) {
         }
     }
 
-    const std::string url = hris_api_base + "/api/hikvision/callback";
+    const std::string url = bnpi_pats_api_base + "/api/hikvision/callback";
     // Raw biometric custody can require DeviceUser + DeviceEvent writes before the API
     // acknowledges. Attendance uses one short live attempt; its durable spool is the
     // retry mechanism. This prevents one unhealthy API request from head-of-line
     // blocking later taps. Enrichment callbacks retain the longer retry budget.
-    const bool immediate = is_immediate_hris_job(job);
+    const bool immediate = is_immediate_bnpi_pats_job(job);
     const bool ok = post_json_with_retries(
         url,
         body,
@@ -1186,20 +1186,20 @@ bool post_hikvision_callback(const ReconcileJob &job) {
     return ok;
 }
 
-bool post_hris_contract(const ReconcileJob &job, const std::string &status) {
+bool post_bnpi_pats_contract(const ReconcileJob &job, const std::string &status) {
     const std::string contract = build_status_contract_json(job, status);
-    if (hris_api_base.empty() || !execute_mode) {
-        post_hris_contract_preview(job, status);
-        if (hris_api_base.empty()) {
+    if (bnpi_pats_api_base.empty() || !execute_mode) {
+        post_bnpi_pats_contract_preview(job, status);
+        if (bnpi_pats_api_base.empty()) {
             emit_json({
-                {"event", "hris_contract_post_skipped"},
-                {"reason", "missing_hris_api_base"}
+                {"event", "bnpi_pats_contract_post_skipped"},
+                {"reason", "missing_bnpi_pats_api_base"}
             });
             return false;
         }
         return true;
     }
-    return post_hris_contract_payload(
+    return post_bnpi_pats_contract_payload(
         contract,
         sanitize_filename_token(job.source_device_id + "_" + (job.employee_no.empty() ? "all" : job.employee_no) + "_" + status),
         {
@@ -1214,7 +1214,7 @@ bool process_fast_user_delta_reconcile(DeviceSession &source, const ReconcileJob
     if (source_employee_numbers.empty()) {
         emit_json({
             {"event", "reconcile_fast_path_fallback"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"reason", "empty_source_inventory"}
         });
         return false;
@@ -1225,7 +1225,7 @@ bool process_fast_user_delta_reconcile(DeviceSession &source, const ReconcileJob
     int missing_total = 0;
 
     for (auto &target : sessions) {
-        if (target.config.hris_device_id == source.config.hris_device_id) {
+        if (target.config.bnpi_pats_device_id == source.config.bnpi_pats_device_id) {
             continue;
         }
 
@@ -1237,8 +1237,8 @@ bool process_fast_user_delta_reconcile(DeviceSession &source, const ReconcileJob
 
         emit_json({
             {"event", "reconcile_fast_path_inventory_delta"},
-            {"sourceDeviceId", source.config.hris_device_id},
-            {"targetDeviceId", target.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
+            {"targetDeviceId", target.config.bnpi_pats_device_id},
             {"sourceEmployees", std::to_string(source_employee_numbers.size())},
             {"targetEmployees", std::to_string(target_employee_numbers.size())},
             {"missingEmployees", std::to_string(missing_employee_numbers.size())}
@@ -1261,10 +1261,10 @@ bool process_fast_user_delta_reconcile(DeviceSession &source, const ReconcileJob
         }
     }
 
-    post_hris_contract(job, missing_total > 0 ? "mirrored_fast" : "fast_checked");
+    post_bnpi_pats_contract(job, missing_total > 0 ? "mirrored_fast" : "fast_checked");
     emit_json({
         {"event", "reconcile_fast_path_completed"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"peerDevices", std::to_string(peer_count)},
         {"peerUserWrites", std::to_string(peer_write_count)},
         {"missingEmployees", std::to_string(missing_total)},
@@ -1315,7 +1315,7 @@ void polling_loop() {
                 observed_employee_numbers_by_host[source.config.host] = current_employee_numbers;
                 emit_json({
                     {"event", "poll_user_inventory_baseline"},
-                    {"sourceDeviceId", source.config.hris_device_id},
+                    {"sourceDeviceId", source.config.bnpi_pats_device_id},
                     {"sourceHost", source.config.host},
                     {"employeeCount", std::to_string(current_employee_numbers.size())}
                 });
@@ -1327,17 +1327,17 @@ void polling_loop() {
 
                     ReconcileJob lifecycle_job;
                     lifecycle_job.source_host = source.config.host;
-                    lifecycle_job.source_device_id = source.config.hris_device_id;
+                    lifecycle_job.source_device_id = source.config.bnpi_pats_device_id;
                     lifecycle_job.employee_no = employee_no;
                     lifecycle_job.major = MAJOR_OPERATION;
                     lifecycle_job.minor = MINOR_ADD_USER_INFO;
                     lifecycle_job.event_kind = "poll_inventory_user_created";
                     lifecycle_job.sdk_time = now_utc();
-                    queue_hris_device_event(lifecycle_job);
+                    queue_bnpi_pats_device_event(lifecycle_job);
                     observed->second.insert(employee_no);
                     emit_json({
                         {"event", "poll_user_created_detected"},
-                        {"sourceDeviceId", source.config.hris_device_id},
+                        {"sourceDeviceId", source.config.bnpi_pats_device_id},
                         {"sourceHost", source.config.host},
                         {"employeeNo", employee_no},
                         {"observedAt", lifecycle_job.sdk_time}
@@ -1346,7 +1346,7 @@ void polling_loop() {
             }
 
             for (auto &target : sessions) {
-                if (target.config.hris_device_id == source.config.hris_device_id) {
+                if (target.config.bnpi_pats_device_id == source.config.bnpi_pats_device_id) {
                     continue;
                 }
 
@@ -1356,7 +1356,7 @@ void polling_loop() {
                 for (const auto &employee_no : missing_employee_numbers) {
                     ReconcileJob job;
                     job.source_host = source.config.host;
-                    job.source_device_id = source.config.hris_device_id;
+                    job.source_device_id = source.config.bnpi_pats_device_id;
                     job.employee_no = employee_no;
                     job.major = MAJOR_OPERATION;
                     job.minor = MINOR_ADD_USER_INFO;
@@ -1372,7 +1372,7 @@ void polling_loop() {
             for (const auto &employee_no : recent_employees) {
                 ReconcileJob fingerprint_job;
                 fingerprint_job.source_host = source.config.host;
-                fingerprint_job.source_device_id = source.config.hris_device_id;
+                fingerprint_job.source_device_id = source.config.bnpi_pats_device_id;
                 fingerprint_job.employee_no = employee_no;
                 fingerprint_job.major = MAJOR_OPERATION;
                 fingerprint_job.minor = MINOR_ADD_FINGER_BY_EMPLOYEE_NO;
@@ -1386,7 +1386,7 @@ void polling_loop() {
                 }
 
                 for (auto &target : sessions) {
-                    if (target.config.hris_device_id == source.config.hris_device_id) {
+                    if (target.config.bnpi_pats_device_id == source.config.bnpi_pats_device_id) {
                         continue;
                     }
                     const int target_template_count =
@@ -1408,7 +1408,7 @@ void polling_loop() {
                         &source_face_template, &source_face_picture);
                     if (source_has_face) {
                         for (auto &target : sessions) {
-                            if (target.config.hris_device_id == source.config.hris_device_id) {
+                            if (target.config.bnpi_pats_device_id == source.config.bnpi_pats_device_id) {
                                 continue;
                             }
                             std::vector<char> target_face_template;
@@ -1445,7 +1445,7 @@ void process_reconcile_job(const ReconcileJob &job) {
     DeviceSession *source = find_session_by_host(job.source_host);
     if (source == nullptr && !job.source_device_id.empty()) {
         for (auto &session : sessions) {
-            if (session.config.hris_device_id == job.source_device_id) {
+            if (session.config.bnpi_pats_device_id == job.source_device_id) {
                 source = &session;
                 break;
             }
@@ -1516,10 +1516,10 @@ void process_reconcile_job(const ReconcileJob &job) {
             mirrored_users += 1;
         }
 
-        post_hris_contract(job, "mirrored");
+        post_bnpi_pats_contract(job, "mirrored");
         emit_json({
             {"event", "reconcile_full_mirror_completed"},
-            {"sourceDeviceId", source->config.hris_device_id},
+            {"sourceDeviceId", source->config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"mirroredUsers", std::to_string(mirrored_users)},
             {"peerDevices", std::to_string(peer_count)},
@@ -1558,7 +1558,7 @@ void process_reconcile_job(const ReconcileJob &job) {
         if (add_sync_card(*source, job.employee_no, card_no)) {
             emit_json({
                 {"event", "source_sync_card_created"},
-                {"sourceDeviceId", source->config.hris_device_id},
+                {"sourceDeviceId", source->config.bnpi_pats_device_id},
                 {"employeeNo", job.employee_no},
                 {"cardNo", "[redacted]"}
             });
@@ -1568,7 +1568,7 @@ void process_reconcile_job(const ReconcileJob &job) {
     }
 
     for (auto &target : sessions) {
-        if (target.config.hris_device_id == source->config.hris_device_id) {
+        if (target.config.bnpi_pats_device_id == source->config.bnpi_pats_device_id) {
             continue;
         }
         peer_count += 1;
@@ -1581,7 +1581,7 @@ void process_reconcile_job(const ReconcileJob &job) {
         } else {
             emit_json({
                 {"event", "peer_user_write_skipped"},
-                {"targetDeviceId", target.config.hris_device_id},
+                {"targetDeviceId", target.config.bnpi_pats_device_id},
                 {"employeeNo", job.employee_no},
                 {"reason", "credential_only"}
             });
@@ -1593,7 +1593,7 @@ void process_reconcile_job(const ReconcileJob &job) {
                     target_card_allows_owner(target, job.employee_no, card_no, &already_owned);
                 emit_json({
                     {"event", "peer_card_write_preview"},
-                    {"targetDeviceId", target.config.hris_device_id},
+                    {"targetDeviceId", target.config.bnpi_pats_device_id},
                     {"employeeNo", job.employee_no},
                     {"ok", owner_ok ? "true" : "false"},
                     {"alreadyOwned", already_owned ? "true" : "false"}
@@ -1617,10 +1617,10 @@ void process_reconcile_job(const ReconcileJob &job) {
         }
     }
 
-    post_hris_contract(job, user_delete ? "deleted" : user_ok ? "reviewed" : "source-user-read-failed");
+    post_bnpi_pats_contract(job, user_delete ? "deleted" : user_ok ? "reviewed" : "source-user-read-failed");
     emit_json({
         {"event", "reconcile_completed"},
-        {"sourceDeviceId", source->config.hris_device_id},
+        {"sourceDeviceId", source->config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"peerDevices", std::to_string(peer_count)},
         {"peerUserWrites", std::to_string(peer_write_count)},
@@ -1637,7 +1637,7 @@ void process_reconcile_job(const ReconcileJob &job) {
     }
 }
 
-void prepare_immediate_hris_job_for_post(ReconcileJob &job) {
+void prepare_immediate_bnpi_pats_job_for_post(ReconcileJob &job) {
     if (job.identity_source.empty()) {
         job.identity_source = job.employee_no.empty() ? "empty" : "acs_dwEmployeeNo";
     }
@@ -1651,45 +1651,45 @@ void prepare_immediate_hris_job_for_post(ReconcileJob &job) {
     });
 }
 
-// Dedicated auth/attendance lane. It never calls enrich_hris_job_before_post,
+// Dedicated auth/attendance lane. It never calls enrich_bnpi_pats_job_before_post,
 // therefore it cannot wait on inventory, fingerprint, face, or reconciliation SDK work.
-void hris_immediate_post_loop() {
+void bnpi_pats_immediate_post_loop() {
     while (keep_running) {
-        ReconcileJob hris_job;
+        ReconcileJob bnpi_pats_job;
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
             queue_cv.wait_for(lock, std::chrono::milliseconds(50), [] {
-                return !hris_immediate_event_queue.empty() || !keep_running;
+                return !bnpi_pats_immediate_event_queue.empty() || !keep_running;
             });
-            if (!keep_running || hris_immediate_event_queue.empty()) {
+            if (!keep_running || bnpi_pats_immediate_event_queue.empty()) {
                 continue;
             }
-            hris_job = hris_immediate_event_queue.front();
-            hris_immediate_event_queue.pop_front();
+            bnpi_pats_job = bnpi_pats_immediate_event_queue.front();
+            bnpi_pats_immediate_event_queue.pop_front();
         }
-        prepare_immediate_hris_job_for_post(hris_job);
-        post_hikvision_callback(hris_job);
+        prepare_immediate_bnpi_pats_job_for_post(bnpi_pats_job);
+        post_hikvision_callback(bnpi_pats_job);
     }
 }
 
 // Lifecycle/operation lane. SDK identity and biometric enrichment can be slow,
 // but it is isolated from authentication delivery.
-void hris_enrichment_post_loop() {
+void bnpi_pats_enrichment_post_loop() {
     while (keep_running) {
-        ReconcileJob hris_job;
+        ReconcileJob bnpi_pats_job;
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
             queue_cv.wait_for(lock, std::chrono::milliseconds(200), [] {
-                return !hris_enrichment_event_queue.empty() || !keep_running;
+                return !bnpi_pats_enrichment_event_queue.empty() || !keep_running;
             });
-            if (!keep_running || hris_enrichment_event_queue.empty()) {
+            if (!keep_running || bnpi_pats_enrichment_event_queue.empty()) {
                 continue;
             }
-            hris_job = hris_enrichment_event_queue.front();
-            hris_enrichment_event_queue.pop_front();
+            bnpi_pats_job = bnpi_pats_enrichment_event_queue.front();
+            bnpi_pats_enrichment_event_queue.pop_front();
         }
-        enrich_hris_job_before_post(hris_job);
-        post_hikvision_callback(hris_job);
+        enrich_bnpi_pats_job_before_post(bnpi_pats_job);
+        post_hikvision_callback(bnpi_pats_job);
     }
 }
 
@@ -1716,7 +1716,7 @@ void reconcile_worker_loop() {
 
 // Back-compat name used by older call sites if any.
 void worker_loop() {
-    hris_enrichment_post_loop();
+    bnpi_pats_enrichment_post_loop();
 }
 
 }  // namespace hikvision_bio

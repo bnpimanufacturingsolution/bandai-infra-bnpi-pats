@@ -11,8 +11,8 @@
 
 | Actor | Login | Role | Employee |
 |---|---|---|---|
-| HR | `hr-manager@seed.local` / `Password123!` | `hris-hr-manager` | Maria Santos `EMP-HR-MGR-001` |
-| Employee | `employee@seed.local` / `Password123!` | `hris-employee` | Juan Mendoza `EMP-SW-DEV-001` |
+| HR | `hr-manager@seed.local` / `Password123!` | `bnpi-pats-hr-manager` | Maria Santos `EMP-HR-MGR-001` |
+| Employee | `employee@seed.local` / `Password123!` | `bnpi-pats-employee` | Juan Mendoza `EMP-SW-DEV-001` |
 | Subject | (HR API as Maria) | DIRECT | Zen Andrei `00010` `cmspnnxot02s5qw01yk7yy2er` |
 | Admin | `admin@bandai.local` / `password123` | login only | same payroll count **46** |
 
@@ -143,7 +143,7 @@ powershell -File .runtime/payroll-mgmt-audit-20260819-204314/run-pass3.ps1
 powershell -File .runtime/payroll-mgmt-audit-20260819-204314/run-focus.ps1
 
 # UI
-cd hris-app
+cd bnpi-pats-app
 npx playwright test tests/smoke/hr-payroll-management-audit.spec.ts tests/smoke/hr-payroll-management-audit-employee.spec.ts --reporter=list
 ```
 

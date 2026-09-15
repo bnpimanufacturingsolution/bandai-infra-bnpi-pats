@@ -15,14 +15,14 @@ import fs from "node:fs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
-const require = createRequire(path.join(repoRoot, "hris-api", "package.json"));
+const require = createRequire(path.join(repoRoot, "bnpi-pats-api", "package.json"));
 
 // Use tsx register via dynamic import of the compiled path isn't available;
 // load helper through tsx when available, else fail with clear message.
 async function loadHelper() {
 	const helperPath = path.join(
 		repoRoot,
-		"hris-api",
+		"bnpi-pats-api",
 		"helper",
 		"device-user-merge.helper.ts",
 	);
@@ -424,7 +424,7 @@ import path from "node:path";
 import {
 	buildDeviceUserMergePlan,
 	reconcileDurableFingerprintOwnerConflicts,
-} from "../hris-api/helper/device-user-merge.helper";
+} from "../bnpi-pats-api/helper/device-user-merge.helper";
 
 const GAP9 = ${JSON.stringify(GAP9, null, 2)};
 

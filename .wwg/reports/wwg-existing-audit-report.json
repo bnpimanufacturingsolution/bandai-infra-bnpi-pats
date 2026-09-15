@@ -32,18 +32,18 @@
       "severity": "info",
       "code": "mapping-project_master_context",
       "message": "Detected candidate for project_master_context.",
-      "path": "hris-api/.wwg/workspace/context/project-context.md",
+      "path": "bnpi-pats-api/.wwg/workspace/context/project-context.md",
       "evidence_level": "confirmed",
-      "recommendation": "Register hris-api/.wwg/workspace/context/project-context.md as project_master_context; do not duplicate it.",
+      "recommendation": "Register bnpi-pats-api/.wwg/workspace/context/project-context.md as project_master_context; do not duplicate it.",
       "risk": "low"
     },
     {
       "severity": "info",
       "code": "mapping-maintenance_matrix",
       "message": "Detected candidate for maintenance_matrix.",
-      "path": "hris-api/.wwg/workspace/context/context-maintenance-matrix.md",
+      "path": "bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md",
       "evidence_level": "confirmed",
-      "recommendation": "Register hris-api/.wwg/workspace/context/context-maintenance-matrix.md as maintenance_matrix; do not duplicate it.",
+      "recommendation": "Register bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md as maintenance_matrix; do not duplicate it.",
       "risk": "low"
     },
     {
@@ -68,18 +68,18 @@
       "severity": "info",
       "code": "mapping-public_discovery_context",
       "message": "Detected candidate for public_discovery_context.",
-      "path": "hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
+      "path": "bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
       "evidence_level": "confirmed",
-      "recommendation": "Register hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md as public_discovery_context; do not duplicate it.",
+      "recommendation": "Register bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md as public_discovery_context; do not duplicate it.",
       "risk": "low"
     },
     {
       "severity": "info",
       "code": "mapping-domain_context",
       "message": "Detected candidate for domain_context.",
-      "path": "hris-api/.wwg/workspace/context/domain-context.md",
+      "path": "bnpi-pats-api/.wwg/workspace/context/domain-context.md",
       "evidence_level": "confirmed",
-      "recommendation": "Register hris-api/.wwg/workspace/context/domain-context.md as domain_context; do not duplicate it.",
+      "recommendation": "Register bnpi-pats-api/.wwg/workspace/context/domain-context.md as domain_context; do not duplicate it.",
       "risk": "low"
     },
     {
@@ -122,7 +122,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/.wwg/changelog/config.yml",
+      "path": "bnpi-pats-api/.wwg/changelog/config.yml",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -131,7 +131,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/.wwg/changelog/state.json",
+      "path": "bnpi-pats-api/.wwg/changelog/state.json",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -140,7 +140,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/.wwg/reports/changelog-bump-recommendation.md",
+      "path": "bnpi-pats-api/.wwg/reports/changelog-bump-recommendation.md",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -149,7 +149,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/.wwg/reports/changelog-preview.md",
+      "path": "bnpi-pats-api/.wwg/reports/changelog-preview.md",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -158,7 +158,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/.wwg/reports/wwg-changelog-handoff.md",
+      "path": "bnpi-pats-api/.wwg/reports/wwg-changelog-handoff.md",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -167,7 +167,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/CHANGELOG.md",
+      "path": "bnpi-pats-api/CHANGELOG.md",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -176,7 +176,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/scripts/generate-bnpi-dm3-supporting-imports.cjs",
+      "path": "bnpi-pats-api/scripts/generate-bnpi-dm3-supporting-imports.cjs",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -185,7 +185,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/scripts/update-hikvision-metadata.ts",
+      "path": "bnpi-pats-api/scripts/update-hikvision-metadata.ts",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -194,7 +194,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/tests/support/db-fault-invariants.ts",
+      "path": "bnpi-pats-api/tests/support/db-fault-invariants.ts",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -203,7 +203,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/tests/support/isolated-db-fault.guard.ts",
+      "path": "bnpi-pats-api/tests/support/isolated-db-fault.guard.ts",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -212,7 +212,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-api/tests/support/isolated-prisma-client.ts",
+      "path": "bnpi-pats-api/tests/support/isolated-prisma-client.ts",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -221,7 +221,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts",
+      "path": "bnpi-pats-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -230,7 +230,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts",
+      "path": "bnpi-pats-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -239,7 +239,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.react-router/types/app/routes/support/+types/faq.ts",
+      "path": "bnpi-pats-app/.react-router/types/app/routes/support/+types/faq.ts",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -248,7 +248,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.react-router/types/app/routes/support/+types/help-desk.ts",
+      "path": "bnpi-pats-app/.react-router/types/app/routes/support/+types/help-desk.ts",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -257,7 +257,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.wwg/changelog/config.yml",
+      "path": "bnpi-pats-app/.wwg/changelog/config.yml",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -266,7 +266,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.wwg/changelog/state.json",
+      "path": "bnpi-pats-app/.wwg/changelog/state.json",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -275,7 +275,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.wwg/reports/changelog-bump-recommendation.md",
+      "path": "bnpi-pats-app/.wwg/reports/changelog-bump-recommendation.md",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -284,7 +284,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.wwg/reports/changelog-preview.md",
+      "path": "bnpi-pats-app/.wwg/reports/changelog-preview.md",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -293,7 +293,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/.wwg/reports/wwg-changelog-handoff.md",
+      "path": "bnpi-pats-app/.wwg/reports/wwg-changelog-handoff.md",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "low"
@@ -302,7 +302,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/app/routes/legal/privacy-policy.tsx",
+      "path": "bnpi-pats-app/app/routes/legal/privacy-policy.tsx",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -311,7 +311,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/app/routes/legal/terms-of-use.tsx",
+      "path": "bnpi-pats-app/app/routes/legal/terms-of-use.tsx",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -320,7 +320,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/app/routes/support/faq.tsx",
+      "path": "bnpi-pats-app/app/routes/support/faq.tsx",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -329,7 +329,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/app/routes/support/help-desk.tsx",
+      "path": "bnpi-pats-app/app/routes/support/help-desk.tsx",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -338,7 +338,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/build/client/assets/privacy-policy-DKziWBt5.js",
+      "path": "bnpi-pats-app/build/client/assets/privacy-policy-DKziWBt5.js",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -347,7 +347,7 @@
       "severity": "info",
       "code": "public-surface-artifact",
       "message": "Public surface or discovery artifact detected.",
-      "path": "hris-app/build/client/assets/terms-of-use-BXeUTGd2.js",
+      "path": "bnpi-pats-app/build/client/assets/terms-of-use-BXeUTGd2.js",
       "evidence_level": "confirmed",
       "recommendation": "Treat public/trust messaging changes as approval-gated when content is customer-facing.",
       "risk": "approval-gated"
@@ -406,28 +406,28 @@
         "category": "agentInstructions"
       },
       {
-        "path": "hris-api/.wwg/workspace/AGENTS.md",
+        "path": "bnpi-pats-api/.wwg/workspace/AGENTS.md",
         "kind": "unknown scoped agent policy",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "agentInstructions"
       },
       {
-        "path": "hris-api/AGENTS.md",
+        "path": "bnpi-pats-api/AGENTS.md",
         "kind": "unknown scoped agent policy",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "agentInstructions"
       },
       {
-        "path": "hris-app/.wwg/workspace/AGENTS.md",
+        "path": "bnpi-pats-app/.wwg/workspace/AGENTS.md",
         "kind": "unknown scoped agent policy",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "agentInstructions"
       },
       {
-        "path": "hris-app/AGENTS.md",
+        "path": "bnpi-pats-app/AGENTS.md",
         "kind": "unknown scoped agent policy",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
@@ -443,210 +443,210 @@
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/governance/context-drift-detection.md",
+        "path": "bnpi-pats-api/.wwg/governance/context-drift-detection.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/reports/context-skill-quality.md",
+        "path": "bnpi-pats-api/.wwg/reports/context-skill-quality.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/reports/cross-repo-context-reconciliation.md",
+        "path": "bnpi-pats-api/.wwg/reports/cross-repo-context-reconciliation.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/reports/wwg-refresh-context-report.md",
+        "path": "bnpi-pats-api/.wwg/reports/wwg-refresh-context-report.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/workspace/context/architecture-context.md",
+        "path": "bnpi-pats-api/.wwg/workspace/context/architecture-context.md",
         "kind": "architecture source",
         "suggestedRole": "architecture_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/workspace/context/context-maintenance-matrix.md",
+        "path": "bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md",
         "kind": "maintenance matrix",
         "suggestedRole": "maintenance_matrix",
         "confidence": "high",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/workspace/context/domain-context.md",
+        "path": "bnpi-pats-api/.wwg/workspace/context/domain-context.md",
         "kind": "canonical context",
         "suggestedRole": "domain_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/workspace/context/governance-context.md",
+        "path": "bnpi-pats-api/.wwg/workspace/context/governance-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/workspace/context/project-context.md",
+        "path": "bnpi-pats-api/.wwg/workspace/context/project-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/.wwg/workspace/context/ux-context.md",
+        "path": "bnpi-pats-api/.wwg/workspace/context/ux-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/wiki-template/base/09-agent-context/canonical-context-policy.md",
+        "path": "bnpi-pats-api/wiki-template/base/09-agent-context/canonical-context-policy.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/wiki-template/base/12-maintenance/context-maintenance-matrix.md",
+        "path": "bnpi-pats-api/wiki-template/base/12-maintenance/context-maintenance-matrix.md",
         "kind": "maintenance matrix",
         "suggestedRole": "maintenance_matrix",
         "confidence": "high",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-api/workspace-template/base/context/context-maintenance-matrix.md",
+        "path": "bnpi-pats-api/workspace-template/base/context/context-maintenance-matrix.md",
         "kind": "maintenance matrix",
         "suggestedRole": "maintenance_matrix",
         "confidence": "high",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/governance/context-drift-detection.md",
+        "path": "bnpi-pats-app/.wwg/governance/context-drift-detection.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/reports/context-skill-quality.md",
+        "path": "bnpi-pats-app/.wwg/reports/context-skill-quality.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/reports/cross-repo-context-reconciliation.md",
+        "path": "bnpi-pats-app/.wwg/reports/cross-repo-context-reconciliation.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/reports/wwg-refresh-context-report.md",
+        "path": "bnpi-pats-app/.wwg/reports/wwg-refresh-context-report.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/wiki/11-synthesis/context-completeness-review.md",
+        "path": "bnpi-pats-app/.wwg/wiki/11-synthesis/context-completeness-review.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/wiki/12-maintenance/context-maintenance-matrix.md",
+        "path": "bnpi-pats-app/.wwg/wiki/12-maintenance/context-maintenance-matrix.md",
         "kind": "maintenance matrix",
         "suggestedRole": "maintenance_matrix",
         "confidence": "high",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/workspace/context/architecture-context.md",
+        "path": "bnpi-pats-app/.wwg/workspace/context/architecture-context.md",
         "kind": "architecture source",
         "suggestedRole": "architecture_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/workspace/context/chain-state-template.md",
+        "path": "bnpi-pats-app/.wwg/workspace/context/chain-state-template.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/workspace/context/context-maintenance-matrix.md",
+        "path": "bnpi-pats-app/.wwg/workspace/context/context-maintenance-matrix.md",
         "kind": "maintenance matrix",
         "suggestedRole": "maintenance_matrix",
         "confidence": "high",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/workspace/context/domain-context.md",
+        "path": "bnpi-pats-app/.wwg/workspace/context/domain-context.md",
         "kind": "canonical context",
         "suggestedRole": "domain_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/workspace/context/governance-context.md",
+        "path": "bnpi-pats-app/.wwg/workspace/context/governance-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/workspace/context/project-context.md",
+        "path": "bnpi-pats-app/.wwg/workspace/context/project-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/workspace/context/task-context-index.md",
+        "path": "bnpi-pats-app/.wwg/workspace/context/task-context-index.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/.wwg/workspace/context/ux-context.md",
+        "path": "bnpi-pats-app/.wwg/workspace/context/ux-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/test-results/smoke-project-truth-devcur-30dbc-s-on-imported-VirtualBox-VM/error-context.md",
+        "path": "bnpi-pats-app/test-results/smoke-project-truth-devcur-30dbc-s-on-imported-VirtualBox-VM/error-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/test-results/smoke-project-truth-devcur-479f7-s-on-imported-VirtualBox-VM/error-context.md",
+        "path": "bnpi-pats-app/test-results/smoke-project-truth-devcur-479f7-s-on-imported-VirtualBox-VM/error-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
         "category": "canonicalContext"
       },
       {
-        "path": "hris-app/test-results/smoke-project-truth-devcur-d5969-s-on-imported-VirtualBox-VM/error-context.md",
+        "path": "bnpi-pats-app/test-results/smoke-project-truth-devcur-d5969-s-on-imported-VirtualBox-VM/error-context.md",
         "kind": "canonical context",
         "suggestedRole": "project_master_context",
         "confidence": "medium",
@@ -669,175 +669,175 @@
     ],
     "skillsPrompts": [
       {
-        "path": "hris-api/.wwg/workspace/prompts/bug-fix.md",
+        "path": "bnpi-pats-api/.wwg/workspace/prompts/bug-fix.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/prompts/feature-implementation.md",
+        "path": "bnpi-pats-api/.wwg/workspace/prompts/feature-implementation.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/prompts/production-monitoring.md",
+        "path": "bnpi-pats-api/.wwg/workspace/prompts/production-monitoring.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
+        "path": "bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/prompts/public-surface-update.md",
+        "path": "bnpi-pats-api/.wwg/workspace/prompts/public-surface-update.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/prompts/runtime-infrastructure.md",
+        "path": "bnpi-pats-api/.wwg/workspace/prompts/runtime-infrastructure.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/prompts/task-router.md",
+        "path": "bnpi-pats-api/.wwg/workspace/prompts/task-router.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/skills/change-classifier.skill.md",
+        "path": "bnpi-pats-api/.wwg/workspace/skills/change-classifier.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/skills/context-skill-maintenance.skill.md",
+        "path": "bnpi-pats-api/.wwg/workspace/skills/context-skill-maintenance.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/skills/drift-detector.skill.md",
+        "path": "bnpi-pats-api/.wwg/workspace/skills/drift-detector.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "path": "bnpi-pats-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-api/.wwg/workspace/skills/task-router.skill.md",
+        "path": "bnpi-pats-api/.wwg/workspace/skills/task-router.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/prompts/bug-fix.md",
+        "path": "bnpi-pats-app/.wwg/workspace/prompts/bug-fix.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/prompts/chain-pass-template.md",
+        "path": "bnpi-pats-app/.wwg/workspace/prompts/chain-pass-template.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/prompts/feature-implementation.md",
+        "path": "bnpi-pats-app/.wwg/workspace/prompts/feature-implementation.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/prompts/production-monitoring.md",
+        "path": "bnpi-pats-app/.wwg/workspace/prompts/production-monitoring.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/prompts/public-discovery-maintenance.md",
+        "path": "bnpi-pats-app/.wwg/workspace/prompts/public-discovery-maintenance.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/prompts/public-surface-update.md",
+        "path": "bnpi-pats-app/.wwg/workspace/prompts/public-surface-update.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/prompts/runtime-infrastructure.md",
+        "path": "bnpi-pats-app/.wwg/workspace/prompts/runtime-infrastructure.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/prompts/task-router.md",
+        "path": "bnpi-pats-app/.wwg/workspace/prompts/task-router.md",
         "kind": "prompt",
         "suggestedRole": "workspace_prompts",
         "confidence": "medium",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/skills/change-classifier.skill.md",
+        "path": "bnpi-pats-app/.wwg/workspace/skills/change-classifier.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/skills/context-skill-maintenance.skill.md",
+        "path": "bnpi-pats-app/.wwg/workspace/skills/context-skill-maintenance.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/skills/drift-detector.skill.md",
+        "path": "bnpi-pats-app/.wwg/workspace/skills/drift-detector.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "path": "bnpi-pats-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
         "category": "skillsPrompts"
       },
       {
-        "path": "hris-app/.wwg/workspace/skills/task-router.skill.md",
+        "path": "bnpi-pats-app/.wwg/workspace/skills/task-router.skill.md",
         "kind": "skill",
         "suggestedRole": "specialized_agent_workflows",
         "confidence": "high",
@@ -909,427 +909,427 @@
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/audit-log.md",
+        "path": "bnpi-pats-api/.wwg/governance/audit-log.md",
         "kind": "governance artifact",
         "suggestedRole": "audit_log",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/quality-gates.md",
+        "path": "bnpi-pats-api/.wwg/governance/quality-gates.md",
         "kind": "governance artifact",
         "suggestedRole": "quality_gates",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/regression-gaps.json",
+        "path": "bnpi-pats-api/.wwg/governance/regression-gaps.json",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/regression-gaps.md",
+        "path": "bnpi-pats-api/.wwg/governance/regression-gaps.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/regression-guardrail-catalog.md",
+        "path": "bnpi-pats-api/.wwg/governance/regression-guardrail-catalog.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/regression-manifest.json",
+        "path": "bnpi-pats-api/.wwg/governance/regression-manifest.json",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/regression-manifest.md",
+        "path": "bnpi-pats-api/.wwg/governance/regression-manifest.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/release-checklist.md",
+        "path": "bnpi-pats-api/.wwg/governance/release-checklist.md",
         "kind": "governance artifact",
         "suggestedRole": "release_checklist",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/security-review.md",
+        "path": "bnpi-pats-api/.wwg/governance/security-review.md",
         "kind": "governance artifact",
         "suggestedRole": "quality_gates",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/governance/test-plan.md",
+        "path": "bnpi-pats-api/.wwg/governance/test-plan.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/reports/adoption-regression-report.json",
+        "path": "bnpi-pats-api/.wwg/reports/adoption-regression-report.json",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/reports/adoption-regression-report.md",
+        "path": "bnpi-pats-api/.wwg/reports/adoption-regression-report.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/reports/api-testing-implementation.md",
+        "path": "bnpi-pats-api/.wwg/reports/api-testing-implementation.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/reports/regression-quality-report.md",
+        "path": "bnpi-pats-api/.wwg/reports/regression-quality-report.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/reports/wwg-regression-handoff.md",
+        "path": "bnpi-pats-api/.wwg/reports/wwg-regression-handoff.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "path": "bnpi-pats-api/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/workspace/testing/manual-verification-checklist.md",
+        "path": "bnpi-pats-api/.wwg/workspace/testing/manual-verification-checklist.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/workspace/testing/manual-verification-evidence.json",
+        "path": "bnpi-pats-api/.wwg/workspace/testing/manual-verification-evidence.json",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/workspace/testing/non-technical-regression-checklist.md",
+        "path": "bnpi-pats-api/.wwg/workspace/testing/non-technical-regression-checklist.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/workspace/testing/proposed-executable-tests.json",
+        "path": "bnpi-pats-api/.wwg/workspace/testing/proposed-executable-tests.json",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/workspace/testing/proposed-executable-tests.md",
+        "path": "bnpi-pats-api/.wwg/workspace/testing/proposed-executable-tests.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/workspace/testing/regression-candidate-review.json",
+        "path": "bnpi-pats-api/.wwg/workspace/testing/regression-candidate-review.json",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/.wwg/workspace/testing/regression-candidate-review.md",
+        "path": "bnpi-pats-api/.wwg/workspace/testing/regression-candidate-review.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/docs/MIGRATION_CSV_UPLOAD_TESTING.md",
+        "path": "bnpi-pats-api/docs/MIGRATION_CSV_UPLOAD_TESTING.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/docs/testing-maturity-audit.md",
+        "path": "bnpi-pats-api/docs/testing-maturity-audit.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/docs/testing-strategy.md",
+        "path": "bnpi-pats-api/docs/testing-strategy.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/prisma/schema-postgres/statusIncident.prisma",
+        "path": "bnpi-pats-api/prisma/schema-postgres/statusIncident.prisma",
         "kind": "governance artifact",
         "suggestedRole": "reference_history",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/prisma/schema/statusIncident.prisma",
+        "path": "bnpi-pats-api/prisma/schema/statusIncident.prisma",
         "kind": "governance artifact",
         "suggestedRole": "reference_history",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/tests/wwg-regression-coverage.spec.ts",
+        "path": "bnpi-pats-api/tests/wwg-regression-coverage.spec.ts",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-api/wiki-template/base/08-operations/monitoring.md",
+        "path": "bnpi-pats-api/wiki-template/base/08-operations/monitoring.md",
         "kind": "governance artifact",
         "suggestedRole": "operational_readiness",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.react-router/types/app/routes/admin/+types/audit-logs.ts",
+        "path": "bnpi-pats-app/.react-router/types/app/routes/admin/+types/audit-logs.ts",
         "kind": "governance artifact",
         "suggestedRole": "audit_log",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/audit-log.md",
+        "path": "bnpi-pats-app/.wwg/governance/audit-log.md",
         "kind": "governance artifact",
         "suggestedRole": "audit_log",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/quality-gates.md",
+        "path": "bnpi-pats-app/.wwg/governance/quality-gates.md",
         "kind": "governance artifact",
         "suggestedRole": "quality_gates",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/regression-gaps.json",
+        "path": "bnpi-pats-app/.wwg/governance/regression-gaps.json",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/regression-gaps.md",
+        "path": "bnpi-pats-app/.wwg/governance/regression-gaps.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/regression-guardrail-catalog.md",
+        "path": "bnpi-pats-app/.wwg/governance/regression-guardrail-catalog.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/regression-manifest.json",
+        "path": "bnpi-pats-app/.wwg/governance/regression-manifest.json",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/regression-manifest.md",
+        "path": "bnpi-pats-app/.wwg/governance/regression-manifest.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/release-checklist.md",
+        "path": "bnpi-pats-app/.wwg/governance/release-checklist.md",
         "kind": "governance artifact",
         "suggestedRole": "release_checklist",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/security-review.md",
+        "path": "bnpi-pats-app/.wwg/governance/security-review.md",
         "kind": "governance artifact",
         "suggestedRole": "quality_gates",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/governance/test-plan.md",
+        "path": "bnpi-pats-app/.wwg/governance/test-plan.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/reports/adoption-regression-report.json",
+        "path": "bnpi-pats-app/.wwg/reports/adoption-regression-report.json",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/reports/adoption-regression-report.md",
+        "path": "bnpi-pats-app/.wwg/reports/adoption-regression-report.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/reports/regression-priority-review.md",
+        "path": "bnpi-pats-app/.wwg/reports/regression-priority-review.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/reports/testing-program-implementation.md",
+        "path": "bnpi-pats-app/.wwg/reports/testing-program-implementation.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/reports/wwg-regression-handoff.md",
+        "path": "bnpi-pats-app/.wwg/reports/wwg-regression-handoff.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
+        "path": "bnpi-pats-app/.wwg/workspace/skills/regression-guardrail-maintenance.skill.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/workspace/testing/manual-verification-checklist.md",
+        "path": "bnpi-pats-app/.wwg/workspace/testing/manual-verification-checklist.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/workspace/testing/manual-verification-evidence.json",
+        "path": "bnpi-pats-app/.wwg/workspace/testing/manual-verification-evidence.json",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/workspace/testing/non-technical-regression-checklist.md",
+        "path": "bnpi-pats-app/.wwg/workspace/testing/non-technical-regression-checklist.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/workspace/testing/proposed-executable-tests.json",
+        "path": "bnpi-pats-app/.wwg/workspace/testing/proposed-executable-tests.json",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/workspace/testing/proposed-executable-tests.md",
+        "path": "bnpi-pats-app/.wwg/workspace/testing/proposed-executable-tests.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/workspace/testing/regression-candidate-review.json",
+        "path": "bnpi-pats-app/.wwg/workspace/testing/regression-candidate-review.json",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/.wwg/workspace/testing/regression-candidate-review.md",
+        "path": "bnpi-pats-app/.wwg/workspace/testing/regression-candidate-review.md",
         "kind": "governance artifact",
         "suggestedRole": "regression_guardrails",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/app/lib/ci-cd-quality-gates.test.ts",
+        "path": "bnpi-pats-app/app/lib/ci-cd-quality-gates.test.ts",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/app/routes/admin/audit-logs.tsx",
+        "path": "bnpi-pats-app/app/routes/admin/audit-logs.tsx",
         "kind": "governance artifact",
         "suggestedRole": "audit_log",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/app/services/audit-logs.service.ts",
+        "path": "bnpi-pats-app/app/services/audit-logs.service.ts",
         "kind": "governance artifact",
         "suggestedRole": "audit_log",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/build/client/assets/audit-logs-BXkiI1U5.js",
+        "path": "bnpi-pats-app/build/client/assets/audit-logs-BXkiI1U5.js",
         "kind": "governance artifact",
         "suggestedRole": "audit_log",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/docs/testing-coverage-matrix.md",
+        "path": "bnpi-pats-app/docs/testing-coverage-matrix.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/docs/testing-maturity-audit.md",
+        "path": "bnpi-pats-app/docs/testing-maturity-audit.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
         "category": "governance"
       },
       {
-        "path": "hris-app/docs/testing-strategy.md",
+        "path": "bnpi-pats-app/docs/testing-strategy.md",
         "kind": "governance artifact",
         "suggestedRole": "test_plan",
         "confidence": "medium",
@@ -1373,182 +1373,182 @@
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/.wwg/changelog/config.yml",
+        "path": "bnpi-pats-api/.wwg/changelog/config.yml",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/.wwg/changelog/state.json",
+        "path": "bnpi-pats-api/.wwg/changelog/state.json",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/.wwg/reports/changelog-bump-recommendation.md",
+        "path": "bnpi-pats-api/.wwg/reports/changelog-bump-recommendation.md",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/.wwg/reports/changelog-preview.md",
+        "path": "bnpi-pats-api/.wwg/reports/changelog-preview.md",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/.wwg/reports/wwg-changelog-handoff.md",
+        "path": "bnpi-pats-api/.wwg/reports/wwg-changelog-handoff.md",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/CHANGELOG.md",
+        "path": "bnpi-pats-api/CHANGELOG.md",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/scripts/generate-bnpi-dm3-supporting-imports.cjs",
+        "path": "bnpi-pats-api/scripts/generate-bnpi-dm3-supporting-imports.cjs",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/scripts/update-hikvision-metadata.ts",
+        "path": "bnpi-pats-api/scripts/update-hikvision-metadata.ts",
         "kind": "public surface",
         "suggestedRole": "public_discovery_context",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/tests/support/db-fault-invariants.ts",
+        "path": "bnpi-pats-api/tests/support/db-fault-invariants.ts",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/tests/support/isolated-db-fault.guard.ts",
+        "path": "bnpi-pats-api/tests/support/isolated-db-fault.guard.ts",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-api/tests/support/isolated-prisma-client.ts",
+        "path": "bnpi-pats-api/tests/support/isolated-prisma-client.ts",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts",
+        "path": "bnpi-pats-app/.react-router/types/app/routes/legal/+types/privacy-policy.ts",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts",
+        "path": "bnpi-pats-app/.react-router/types/app/routes/legal/+types/terms-of-use.ts",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.react-router/types/app/routes/support/+types/faq.ts",
+        "path": "bnpi-pats-app/.react-router/types/app/routes/support/+types/faq.ts",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.react-router/types/app/routes/support/+types/help-desk.ts",
+        "path": "bnpi-pats-app/.react-router/types/app/routes/support/+types/help-desk.ts",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.wwg/changelog/config.yml",
+        "path": "bnpi-pats-app/.wwg/changelog/config.yml",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.wwg/changelog/state.json",
+        "path": "bnpi-pats-app/.wwg/changelog/state.json",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.wwg/reports/changelog-bump-recommendation.md",
+        "path": "bnpi-pats-app/.wwg/reports/changelog-bump-recommendation.md",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.wwg/reports/changelog-preview.md",
+        "path": "bnpi-pats-app/.wwg/reports/changelog-preview.md",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/.wwg/reports/wwg-changelog-handoff.md",
+        "path": "bnpi-pats-app/.wwg/reports/wwg-changelog-handoff.md",
         "kind": "public surface",
         "suggestedRole": "public_surface_updates",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/app/routes/legal/privacy-policy.tsx",
+        "path": "bnpi-pats-app/app/routes/legal/privacy-policy.tsx",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/app/routes/legal/terms-of-use.tsx",
+        "path": "bnpi-pats-app/app/routes/legal/terms-of-use.tsx",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/app/routes/support/faq.tsx",
+        "path": "bnpi-pats-app/app/routes/support/faq.tsx",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/app/routes/support/help-desk.tsx",
+        "path": "bnpi-pats-app/app/routes/support/help-desk.tsx",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/build/client/assets/privacy-policy-DKziWBt5.js",
+        "path": "bnpi-pats-app/build/client/assets/privacy-policy-DKziWBt5.js",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
         "category": "publicSurface"
       },
       {
-        "path": "hris-app/build/client/assets/terms-of-use-BXeUTGd2.js",
+        "path": "bnpi-pats-app/build/client/assets/terms-of-use-BXeUTGd2.js",
         "kind": "public surface",
         "suggestedRole": "approval_gated_public_messaging",
         "confidence": "medium",
@@ -1613,28 +1613,28 @@
         "category": "projectStructure"
       },
       {
-        "path": "hris-api/docker-compose.yml",
+        "path": "bnpi-pats-api/docker-compose.yml",
         "kind": "runtime structure",
         "suggestedRole": "runtime_context",
         "confidence": "medium",
         "category": "projectStructure"
       },
       {
-        "path": "hris-api/Dockerfile",
+        "path": "bnpi-pats-api/Dockerfile",
         "kind": "runtime structure",
         "suggestedRole": "runtime_context",
         "confidence": "medium",
         "category": "projectStructure"
       },
       {
-        "path": "hris-api/infrastructure/onprem/observability/docker-compose.yml",
+        "path": "bnpi-pats-api/infrastructure/onprem/observability/docker-compose.yml",
         "kind": "runtime structure",
         "suggestedRole": "runtime_context",
         "confidence": "medium",
         "category": "projectStructure"
       },
       {
-        "path": "hris-app/Dockerfile",
+        "path": "bnpi-pats-app/Dockerfile",
         "kind": "runtime structure",
         "suggestedRole": "runtime_context",
         "confidence": "medium",
@@ -1644,12 +1644,12 @@
   },
   "suggestedMappings": {
     "root_agents": "AGENTS.md",
-    "project_master_context": "hris-api/.wwg/workspace/context/project-context.md",
-    "maintenance_matrix": "hris-api/.wwg/workspace/context/context-maintenance-matrix.md",
+    "project_master_context": "bnpi-pats-api/.wwg/workspace/context/project-context.md",
+    "maintenance_matrix": "bnpi-pats-api/.wwg/workspace/context/context-maintenance-matrix.md",
     "architecture_context": "docs/ARCHITECTURE.md",
     "runtime_context": "docs/CLOUDFLARE_TRYCLOUDFLARE_TUNNEL_RUNBOOK.md",
-    "public_discovery_context": "hris-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
-    "domain_context": "hris-api/.wwg/workspace/context/domain-context.md"
+    "public_discovery_context": "bnpi-pats-api/.wwg/workspace/prompts/public-discovery-maintenance.md",
+    "domain_context": "bnpi-pats-api/.wwg/workspace/context/domain-context.md"
   },
   "recommendedArtifacts": {
     "changelog": "CHANGELOG.md",

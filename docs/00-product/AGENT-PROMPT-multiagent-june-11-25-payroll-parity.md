@@ -30,12 +30,12 @@ You are ROOT. Obey AGENTS.md. Open WWG with tools first.
 Spawn 6 child agents (or 5 if combining PROBE+COMPARE). Non-stop.
 
 GOAL:
-  HRIS processed payroll for 2026-06-11..2026-06-25 (periodNumber=1)
-  tallies to docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx
+  BNPI PATS processed payroll for 2026-06-11..2026-06-25 (periodNumber=1)
+  tallies to docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx
   password 9090 — NetPay first for frozen samples, then expand.
 
 PACK:
-  T = docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx
+  T = docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx
   B = docs/new-cutoff/june-11-25/Biometrics Data_Jun 11 - 25.xlsx
   O = docs/new-cutoff/june-11-25/1rptOvertimeDetails - June 11-25, 2026.xlsx
   C = docs/new-cutoff/june-11-25/Compensation Mass Upload 06.30.26.xlsx
@@ -68,7 +68,7 @@ PIPELINE (serial spine ROOT owns; agents prepare in parallel):
   → N7 clear unpaid (A-API-PAYROLL or A-UI) → N8 run payroll
   → N9 compare (A-COMPARE) + N10 residual → loop failing node
 
-Admin: admin@bandai.local / password123 / appCode=hris
+Admin: admin@bandai.local / password123 / appCode=bnpi-pats
 Local: API :3001 app :5175 DB 127.0.0.1:55435
 Recover runtime yourself. Min 20 HEARTBEATs or EXIT GATE green.
 ================================================================
@@ -215,7 +215,7 @@ Read: docs/BNPI_JUNE11_25_2026_PAYROLL_PARITY_CHECKLIST.md section period truth.
 
 DO:
 1) Prove DB 127.0.0.1:55435, API :3001 /health, app :5175 (recover with npm.cmd / start-k8s-dev-db-access; 3 tries).
-2) Login admin@bandai.local password123 appCode=hris; save non-secret proof (role, org id) under 00-runtime/.
+2) Login admin@bandai.local password123 appCode=bnpi-pats; save non-secret proof (role, org id) under 00-runtime/.
 3) Find or create PayrollPeriod start 2026-06-11 end 2026-06-25 periodNumber=1 payDate ~2026-06-30.
 4) Write SHARED/period.json and SHARED/samples.json (default 01360,00032,00021 + note to expand).
 5) Keep stack alive; re-probe every ROOT cycle if asked.
@@ -237,8 +237,8 @@ DO:
 2) Parse headers/counts: Sheet2 ~859, B punches, O date range 6/11-6/25, C codes, D row count (~24).
 3) Extract sample vectors for SHARED/samples.json: Basic, OT hrs, Gross, SSS Cont, loans, NetPay, TotalReceivable.
 4) Run source-only:
-   cd hris-api
-   npm.cmd run dry-run:bandai-payroll-source -- --workbook=../docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx --password=9090 --no-default-sources --compensation-upload=../docs/new-cutoff/june-11-25/Compensation\ Mass\ Upload\ 06.30.26.xlsx --deduction-upload=../docs/new-cutoff/june-11-25/Deduction\ Mass\ Upload\ 06.30.26.xlsx --overtime-workbook=../docs/new-cutoff/june-11-25/1rptOvertimeDetails\ -\ June\ 11-25,\ 2026.xlsx --output-dir=../<stamp>/01-probe/source
+   cd bnpi-pats-api
+   npm.cmd run dry-run:bandai-payroll-source -- --workbook=../docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx --password=9090 --no-default-sources --compensation-upload=../docs/new-cutoff/june-11-25/Compensation\ Mass\ Upload\ 06.30.26.xlsx --deduction-upload=../docs/new-cutoff/june-11-25/Deduction\ Mass\ Upload\ 06.30.26.xlsx --overtime-workbook=../docs/new-cutoff/june-11-25/1rptOvertimeDetails\ -\ June\ 11-25,\ 2026.xlsx --output-dir=../<stamp>/01-probe/source
 5) Write 01-probe/REPORT.md tables. Do NOT mutate DB payroll. Do NOT use May defaults.
 
 DELIVERABLE: 01-probe/* including sample-register.json
@@ -291,7 +291,7 @@ EARLY (parallel): build field maps from unlocked register; prepare empty residua
 AFTER Run Payroll exists:
 1) npm.cmd run dry-run:bandai-payroll-comparison -- workbook T password 9090 --no-default-sources + C/D/O paths --output-dir=<stamp>/04-compare
 2) show:bandai-payroll-problems and show:bandai-payroll-repair-plan
-3) Per-sample table: emp | field | register | hris | delta | node to re-enter | class
+3) Per-sample table: emp | field | register | bnpi-pats | delta | node to re-enter | class
 4) Residual MUST use buckets (not bare N):
    basic_days | ot_hours_pay | contrib_period1 | loan_missing_upload | tax_after_gross | receivable_only
 5) Write SHARED/handoff-board.md for ROOT fan-out.
@@ -400,7 +400,7 @@ Every residual answer must be a **table** (count, samples, class, next) per proj
 
 ```powershell
 $pack = "docs/new-cutoff/june-11-25"
-$T = "$pack/HRIS Payroll Computation June 11 - 25, 2026.xlsx"
+$T = "$pack/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx"
 $C = "$pack/Compensation Mass Upload 06.30.26.xlsx"
 $D = "$pack/Deduction Mass Upload 06.30.26.xlsx"
 $O = "$pack/1rptOvertimeDetails - June 11-25, 2026.xlsx"

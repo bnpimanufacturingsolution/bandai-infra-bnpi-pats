@@ -1,7 +1,7 @@
 /**
  * Project Truth — HCNetSDK dry-run probe: opaque log person id vs plain employeeNo.
  *
- * Read-only. Never writes users, templates, cards, config, or HRIS rows.
+ * Read-only. Never writes users, templates, cards, config, or BNPI PATS rows.
  * Inspired by hikvision_biometric_service.cpp (login + NET_DVR_STDXMLConfig).
  *
  * Paths exercised:
@@ -40,7 +40,7 @@
 namespace {
 
 struct DeviceConfig {
-	std::string hris_device_id;
+	std::string bnpi_pats_device_id;
 	std::string organization_id;
 	std::string name;
 	std::string host;
@@ -127,7 +127,7 @@ bool parse_device_spec(const std::string &spec, DeviceConfig *config) {
 		parts.push_back(item);
 	}
 	if (parts.size() < 7) return false;
-	config->hris_device_id = parts[0];
+	config->bnpi_pats_device_id = parts[0];
 	config->organization_id = parts[1];
 	config->name = parts[2];
 	config->host = parts[3];
@@ -305,7 +305,7 @@ std::string build_logsearch_xml(
 	const std::string &meta_id,
 	int max_results,
 	int position) {
-	// Must match hris-api buildHikvisionLogSearchXml (device-proven on TEST A).
+	// Must match bnpi-pats-api buildHikvisionLogSearchXml (device-proven on TEST A).
 	std::ostringstream xml;
 	xml << "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
 		<< "<CMSearchDescription version=\"2.0\" xmlns=\"http://www.hikvision.com/ver20/XMLSchema\">"
@@ -380,7 +380,7 @@ int main(int argc, char **argv) {
 	emit(evidence, {
 		{"event", "probe_start"},
 		{"mode", "dry-run"},
-		{"deviceId", device.hris_device_id},
+		{"deviceId", device.bnpi_pats_device_id},
 		{"deviceName", device.name},
 		{"host", device.host},
 		{"sdkPort", std::to_string(device.sdk_port)},
@@ -827,7 +827,7 @@ int main(int argc, char **argv) {
 		summary_out << "{\n"
 			<< "  \"generatedAt\": \"" << now_utc() << "\",\n"
 			<< "  \"mode\": \"dry-run\",\n"
-			<< "  \"device\": {\"id\":\"" << json_escape(device.hris_device_id)
+			<< "  \"device\": {\"id\":\"" << json_escape(device.bnpi_pats_device_id)
 			<< "\",\"name\":\"" << json_escape(device.name)
 			<< "\",\"host\":\"" << json_escape(device.host)
 			<< "\",\"sdkPort\":" << device.sdk_port << "},\n"

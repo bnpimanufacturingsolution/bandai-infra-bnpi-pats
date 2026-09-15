@@ -75,14 +75,14 @@ surface) is unchanged (manager → HR).
 
 ## 4. Testing summary (2026-09-09)
 
-- Backend: `hris-api/tests/line-leader-workflow.spec.ts` (pins the 3-step
+- Backend: `bnpi-pats-api/tests/line-leader-workflow.spec.ts` (pins the 3-step
   manager-final chain, no HR step), `section-leader-scope.spec.ts`,
   `overtime-approval-target-line.spec.ts`, `overtime-workflow.spec.ts`,
   `workflow-config.helper.spec.ts` — **53 passing**.
-- Frontend: `hris-app/app/lib/utils/attendance-adjustment-request.test.ts`
+- Frontend: `bnpi-pats-app/app/lib/utils/attendance-adjustment-request.test.ts`
   (on-behalf adjustment payload: requester = leader, targetEmployeeId = member,
   `requestSource=LINE_LEADER_FILED`, `workflowTarget=MANAGER_FINAL`),
-  `hris-app/app/components/modals/AttendanceAdjustmentRequestModal.test.tsx`
+  `bnpi-pats-app/app/components/modals/AttendanceAdjustmentRequestModal.test.tsx`
   (For-whom on the adjustment branch, right-panel chains) — **26 passing**.
 - Live API E2E: leader `TESTBEN004` filed for member `00062` (Danica Ebreo)
   → chain created (3 steps, manager step assigned to `00021`) → manager
@@ -91,7 +91,7 @@ surface) is unchanged (manager → HR).
   attendance row deleted afterwards; the completed request remains as marked
   evidence (`REQ-1786424090647`).
 - Browser E2E:
-  `hris-app/tests/smoke/line-leader-timesheet-adjustment.spec.ts` (PASSED) —
+  `bnpi-pats-app/tests/smoke/line-leader-timesheet-adjustment.spec.ts` (PASSED) —
   For-whom picker on the adjustment branch, right-panel member chain, POST 201
   with leader-filed payload (`REQ-1786424090648`, cancelled after proof).
 
@@ -109,7 +109,7 @@ surface) is unchanged (manager → HR).
   adjustments are per-person/per-day with times, so the requests-hub modal is
   the filing surface. If the operator wants a My Team "Adjust Timesheet" tab
   later, it would be a new task.
-- Dual-app parity: **HR-only exception** — no `hris-emp-app` counterpart for
+- Dual-app parity: **HR-only exception** — no `bnpi-pats-emp-app` counterpart for
   the requests hub modal (consistent with the 2026-09-08 line-leader exception).
 
 ## 6. Evidence

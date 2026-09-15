@@ -255,8 +255,8 @@ if ($PatchLiveGuest) {
   Write-Step 'Patching live guest summary/console scripts through SSH'
   Copy-ToGuest -Source (Resolve-Path 'appliance\bin\project-truth-lan-summary.sh').Path -Target '/tmp/project-truth-lan-summary.sh'
   Copy-ToGuest -Source (Resolve-Path 'appliance\bin\project-truth-clean-console.sh').Path -Target '/tmp/project-truth-clean-console.sh'
-  Copy-ToGuest -Source (Resolve-Path 'appliance\profile.d\project-truth-hris-help.sh').Path -Target '/tmp/project-truth-hris-help.sh'
-  Invoke-Plink "sudo install -m 0755 /tmp/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary && sudo install -m 0755 /tmp/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console && sudo install -m 0644 /tmp/project-truth-hris-help.sh /etc/profile.d/project-truth-hris-help.sh"
+  Copy-ToGuest -Source (Resolve-Path 'appliance\profile.d\project-truth-bnpi-pats-help.sh').Path -Target '/tmp/project-truth-bnpi-pats-help.sh'
+  Invoke-Plink "sudo install -m 0755 /tmp/project-truth-lan-summary.sh /usr/local/bin/project-truth-lan-summary && sudo install -m 0755 /tmp/project-truth-clean-console.sh /usr/local/bin/project-truth-clean-console && sudo install -m 0644 /tmp/project-truth-bnpi-pats-help.sh /etc/profile.d/project-truth-bnpi-pats-help.sh"
 
   if ($PublicUrlsFile) {
     Copy-ToGuest -Source (Resolve-Path $PublicUrlsFile).Path -Target '/tmp/trycloudflare-public-urls.txt'
@@ -309,7 +309,7 @@ Pass rules:
 - PASS only if the screenshot is the VMConnect console and the summary is readable.
 - PASS only if the overview page shows PROD/DEV/UAT, Cloudflare named tunnel,
   LAN SSH, and Cloudflare SSH as not enabled unless Access has been proven.
-- PASS only if the tunnels page shows bnpi-hris.tech named tunnel ownership and
+- PASS only if the tunnels page shows bnpi-pats.tech named tunnel ownership and
   treats TryCloudflare as deprecated/manual fallback, not the normal path.
 - PASS only if the db page shows redacted DB facts without ugly table wrapping.
 - FAIL if the screenshot shows cramped table rows, cropped URLs, command spam,

@@ -31,7 +31,7 @@
 | Max turns (headless) | **`--max-turns 300`** |
 | Wall clock | Up to **3–4 hours**; do not kill at 10–20 minutes |
 | Host/VM | Windows host + Hyper-V VM; reverse `59000→8000`, `59443→443`, `53001→3001` |
-| Actor | `admin@bandai.local` / `password123` / `appCode=hris` |
+| Actor | `admin@bandai.local` / `password123` / `appCode=bnpi-pats` |
 
 ### Headless
 
@@ -97,7 +97,7 @@ Before ANY final/idle/summary-only message:
 OPERATOR STEPS ARE AGENT STEPS:
 - Restart API with npm.cmd; poll /health
 - SSH: prefer LAN if real VM IP; on this host 10.184.37.19 may be loopback —
-  use ssh project-truth-hris when needed. NEVER disable cloudflared.
+  use ssh project-truth-bnpi-pats when needed. NEVER disable cloudflared.
 - Rebuild/redeploy hikvision-biometric-service after EVERY C++ change
 - Login admin, hit real endpoints, write .runtime evidence
 - Playwright when UI claimed; commit/push develop when green
@@ -109,15 +109,15 @@ Canonical sources (OPEN WITH TOOLS; quote paths):
 
 1) C++ wire: vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp
    - alarm_callback (acs.cpp): person ONLY from dwEmployeeNo > 0
-   - enrich_hris_job_before_post (spool.cpp): inventory_delta + FP/face attach
+   - enrich_bnpi_pats_job_before_post (spool.cpp): inventory_delta + FP/face attach
    - build_hikvision_callback_json (acs.cpp) → POST /api/hikvision/callback
 2) Live listener logs (VM): /var/log/project-truth/hikvision-hot-reload-listener.jsonl
    Quote: identitySource, employeeNo, fingerprintCount, templatesAttached, post_result
-3) HRIS callback: hris-api/app/hikvision/controller/callback.controller.ts
+3) BNPI PATS callback: bnpi-pats-api/app/hikvision/controller/callback.controller.ts
 4) Identity/raw helpers:
-   hris-api/helper/device-person-token.helper.ts
-   hris-api/helper/device-user-raw-fingerprint.helper.ts
-5) UI: hris-app Device Events + Device user details (enroll.tsx)
+   bnpi-pats-api/helper/device-person-token.helper.ts
+   bnpi-pats-api/helper/device-user-raw-fingerprint.helper.ts
+5) UI: bnpi-pats-app Device Events + Device user details (enroll.tsx)
 6) Spec: docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md
 7) Prior evidence (re-verify, do not trust alone):
    .runtime/create-enroll-arch-reality-*/
@@ -138,7 +138,7 @@ If you did not open the file/log this session → label NEEDS_CONFIRMATION.
 IDENTITY PLANES:
 - DeviceEvent = history (USER_CREATED / FINGERPRINT_ENROLLED / SYNC_SIGNAL)
 - DeviceUser = inventory (vendorUserId plain + rawFingerprints + optional rawFace)
-- Employee = HRIS link (optional; deviceEmpId plain match)
+- Employee = BNPI PATS link (optional; deviceEmpId plain match)
 
 TARGET WIRE:
 
@@ -177,13 +177,13 @@ D. CODE OWNERS (change as needed)
 |---|---|
 | C++ alarm/enrich/POST/FP/face | vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp |
 | Build/deploy listener | VM build.sh / systemctl project-truth-hikvision-hot-reload-listener |
-| Callback | hris-api/app/hikvision/controller/callback.controller.ts |
+| Callback | bnpi-pats-api/app/hikvision/controller/callback.controller.ts |
 | Plain backfill + schedule raw | device-person-token.helper.ts |
 | Raw FP/face persist | device-user-raw-fingerprint.helper.ts (+ face helper if needed) |
 | Preserve raw on UserInfo enrich | device-person-token enrich must NOT wipe rawFingerprints/rawFace |
 | List/details API | device.controller listDeviceUsers; org from req.organizationId |
 | UI ledger | events.tsx person ref / avatar |
-| UI Device user modal | enroll.tsx — always merge HRIS DeviceUser raw into details |
+| UI Device user modal | enroll.tsx — always merge BNPI PATS DeviceUser raw into details |
 | Tests | focused mocha + Playwright for ledger person + modal raw preview |
 
 ================================================================
@@ -214,7 +214,7 @@ PHASE 2 — C++ (if gaps)
 - Rebuild binary on VM; restart service; prove strings/log banner new
 Quote: callback_identity_inventory_delta / fingerprintCount / post_result
 
-PHASE 3 — HRIS CALLBACK / STORAGE
+PHASE 3 — BNPI PATS CALLBACK / STORAGE
 - Never put opaque in DeviceEvent.employeeNo
 - On plain known (fast identity OR sibling backfill):
   - USER_CREATED + FINGERPRINT_ENROLLED get plain + deviceUserId
@@ -232,7 +232,7 @@ Device Events:
 - No forever “Identity check pending” unless actively resolving
 - SYNC_SIGNAL is path-alive; must not be the only row that shows person while create/enroll empty
 Device User details:
-- On open: always refetch HRIS DeviceUser by vendorUserId (not live-source-only metadata)
+- On open: always refetch BNPI PATS DeviceUser by vendorUserId (not live-source-only metadata)
 - Show raw FP: count, source, preview 120 chars, expand full base64, copy
 - Show raw face: thumbnail if base64/contentType present; honest “no face on device” if numOfFace=0
 - “Capture raw” button = repair only; auto path must work without it for happy path
@@ -393,7 +393,7 @@ C++ rebuilt if code changed
 |---|---|
 | Create/enroll ledger empty person, SYNC_SIGNAL has person | Opaque logSearch race; backfill plain onto lifecycle rows |
 | Event has no fingerData | Correct — blobs on DeviceUser only |
-| Modal “Not captured” but API rawPresent | UI must refetch HRIS DeviceUser, not live-source-only metadata |
+| Modal “Not captured” but API rawPresent | UI must refetch BNPI PATS DeviceUser, not live-source-only metadata |
 | Capture API 400 “deviceId required” | Use `req.organizationId` (middleware), not only `req.user.organizationId` |
 | FingerPrintDownload OK, numOfFP=0 | Progress status 5 clone anti-dupe; not sticky |
 | Face always expected | Only when device has face |

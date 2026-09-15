@@ -29,7 +29,7 @@ If you were about to write any of those: **stop and make the next tool call inst
 
 | Need | You do (do not ask the human) |
 |---|---|
-| API down | Free port 3001, `npm.cmd run dev` in `hris-api`, poll `/health` |
+| API down | Free port 3001, `npm.cmd run dev` in `bnpi-pats-api`, poll `/health` |
 | App stale | Restart Vite or re-probe UI; Playwright headless |
 | DB 55435 down | `scripts/start-k8s-dev-db-access.ps1` or repo equivalent (3 tries) |
 | Sync logs truth | Live `sync-preview` + dual-source `hikvision/sync` + poll job + Playwright |

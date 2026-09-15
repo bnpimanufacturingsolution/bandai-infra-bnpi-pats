@@ -111,9 +111,9 @@ Before you emit ANY final/idle/summary-only message, you MUST:
    irreversible data risk, missing irrecoverable access, or would invent secrets.
 
 OPERATOR STEPS ARE AGENT STEPS (never assign to human):
-- Restart hris-api with npm.cmd; poll http://localhost:3001/health.
-- Restart or re-hit hris-app if UI is stale; prove via network/API + Playwright.
-- Login admin@bandai.local / password123 / appCode=hris.
+- Restart bnpi-pats-api with npm.cmd; poll http://localhost:3001/health.
+- Restart or re-hit bnpi-pats-app if UI is stale; prove via network/API + Playwright.
+- Login admin@bandai.local / password123 / appCode=bnpi-pats.
 - GET sync-preview; POST hikvision/sync with includeAttendance+includeOperations;
   poll import-jobs until completed; save JSON under .runtime/.
 - Run Playwright smoke for Sync logs table + scope toggles to GREEN.
@@ -142,11 +142,11 @@ Before plan or edit, Read with tools IN ORDER:
 6. Agent-Meta-Prompt-Template.md (phase loop)
 7. docs/00-product/AGENT-PROMPT-nonstop-loop-engineering.md (rules)
 8. This file’s sibling knowledge in code:
-   - hris-api/app/device/device.controller.ts (sync-preview, logSearch)
-   - hris-api/helper/sync-logs-event-rows.helper.ts
-   - hris-api/helper/hikvision-event-contract.helper.ts
-   - hris-app/app/routes/admin/devices/events.tsx
-   - hris-app/tests/smoke/admin-device-sync-logs-truth.spec.ts
+   - bnpi-pats-api/app/device/device.controller.ts (sync-preview, logSearch)
+   - bnpi-pats-api/helper/sync-logs-event-rows.helper.ts
+   - bnpi-pats-api/helper/hikvision-event-contract.helper.ts
+   - bnpi-pats-app/app/routes/admin/devices/events.tsx
+   - bnpi-pats-app/tests/smoke/admin-device-sync-logs-truth.spec.ts
 9. Latest .runtime/* sync-logs / listener evidence if present
 
 Post short Current-State Report:
@@ -186,7 +186,7 @@ TEST A defaults (re-confirm from live API/DB; do not invent if changed):
 - Device address: 192.168.254.189
 - Prefer deviceId from live list/sync-preview if present
 - App UI: http://localhost:5175  API: http://localhost:3001
-- Admin: admin@bandai.local / password123 / appCode=hris
+- Admin: admin@bandai.local / password123 / appCode=bnpi-pats
 
 ================================================================
 D. GOAL
@@ -241,7 +241,7 @@ PHASE 3 — IMPLEMENT (60–120 min)
 
 PHASE 4 — LIVE PROCESS PROOF (120–150 min)  *** CRITICAL ***
   - Kill stale process on :3001 if needed
-  - Start hris-api dev RELIABLY on Windows:
+  - Start bnpi-pats-api dev RELIABLY on Windows:
       Prefer: npm.cmd run dev  (or cmd /c "npm run dev")
       Do NOT assume Start-Process -FilePath npm works (often fails)
   - Poll http://localhost:3001/health until healthy (up to ~3 min)
@@ -250,11 +250,11 @@ PHASE 4 — LIVE PROCESS PROOF (120–150 min)  *** CRITICAL ***
   - HEARTBEAT
 
 PHASE 5 — AUTOMATED PROOF (150–165 min)
-  - hris-api mocha: sync-logs-event-rows + device-log-sync + hikvision contracts
-  - hris-app vitest: device-events-page-contract
+  - bnpi-pats-api mocha: sync-logs-event-rows + device-log-sync + hikvision contracts
+  - bnpi-pats-app vitest: device-events-page-contract
   - Playwright (headless):
-      hris-app/tests/smoke/admin-device-sync-logs-truth.spec.ts
-      hris-app/tests/smoke/admin-device-events-sync-modal.spec.ts
+      bnpi-pats-app/tests/smoke/admin-device-sync-logs-truth.spec.ts
+      bnpi-pats-app/tests/smoke/admin-device-events-sync-modal.spec.ts
   - On fail: fix → re-run (do not stop)
   - Save junit/stdout + screenshots under .runtime/
   - HEARTBEAT
@@ -315,23 +315,23 @@ New-Item -ItemType Directory -Force -Path $dir | Out-Null
 # Stop-Process on owners of port 3001 if needed
 # Start with npm.cmd (NOT bare "npm" via Start-Process):
 #   Start-Process -FilePath 'npm.cmd' -ArgumentList 'run','dev' `
-#     -WorkingDirectory '...\hris-api' -RedirectStandardOutput $out `
+#     -WorkingDirectory '...\bnpi-pats-api' -RedirectStandardOutput $out `
 #     -RedirectStandardError $err -WindowStyle Hidden
 # Then poll /health until up.
 
 # Login + preview (admin)
-# $loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='hris' } | ConvertTo-Json
+# $loginBody = @{ email='admin@bandai.local'; password='password123'; appCode='bnpi-pats' } | ConvertTo-Json
 # $login = Invoke-RestMethod -Method Post 'http://localhost:3001/api/auth/login' ...
 # Invoke-RestMethod GET sync-preview?deviceId=... → save JSON to $dir
 
 # Unit
-# cd hris-api
+# cd bnpi-pats-api
 # npx tsx node_modules/mocha/bin/mocha --no-config tests/sync-logs-event-rows.helper.spec.ts tests/device-log-sync-targeted.contract.spec.ts tests/hikvision-event-contract.helper.spec.ts
-# cd hris-app
+# cd bnpi-pats-app
 # npx vitest run app/lib/device-events-page-contract.test.ts
 
 # Playwright
-# cd hris-app
+# cd bnpi-pats-app
 # npx playwright test --config=playwright.smoke.config.ts tests/smoke/admin-device-sync-logs-truth.spec.ts tests/smoke/admin-device-events-sync-modal.spec.ts
 
 ================================================================

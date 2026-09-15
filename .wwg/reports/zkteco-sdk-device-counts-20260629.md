@@ -50,7 +50,7 @@ No devices had to be skipped in this run.
 
 - The SDK count report proves all four known Project Truth ZKTeco devices were readable during this run.
 - The active sidecar process was only configured to stream `10.184.38.9` at the time of the status check.
-- Stored terminal log counts are not the same as HRIS saved event counts or sidecar realtime counters.
+- Stored terminal log counts are not the same as BNPI PATS saved event counts or sidecar realtime counters.
 - Earlier SDK error `-2` evidence for `10.184.38.234` and `10.184.38.235` is stale for count reporting after this successful read, but remains useful as transient connectivity history.
 
 ## WWG Truth Synchronization
@@ -67,7 +67,7 @@ No devices had to be skipped in this run.
 - Implementation discoveries synced:
   - All four known Project Truth ZKTeco devices connected through the Windows Standalone SDK during the read-only summary run.
   - The active local sidecar status endpoint was configured for only `10.184.38.9:4370` during the status check.
-  - Stored terminal log counts are distinct from HRIS saved event counts and sidecar realtime counters.
+  - Stored terminal log counts are distinct from BNPI PATS saved event counts and sidecar realtime counters.
 - Remaining stale context:
   - Older SDK error `-2` evidence for `10.184.38.234` and `10.184.38.235` is stale for count reporting after this successful SDK read.
   - Existing generated report truth-sync failures remain outside this count-report scope.

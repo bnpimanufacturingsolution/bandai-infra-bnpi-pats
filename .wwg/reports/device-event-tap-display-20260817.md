@@ -14,9 +14,9 @@ The Device D tap for **Zen Andrei / person 10 / serial 9652** already wrote atte
 |---|---|---|---|
 | Event `cmsr688py002xvxwwttxhdsal` serial 9652 | Stored `UNKNOWN_VENDOR` / `UNKNOWN` | GET returns `ATTENDANCE` / `TAP` / label Fingerprint attendance punch | Yes — this is the screenshot |
 | Evidence on that row | Missing → UI “Unknown evidence” / Direct No | `SDK_CALLBACK` + `directDeviceEvidence=true` | Yes |
-| HRIS result | Attendance updated `cmsr4ngt2011jvxj4wardyw9f` | Unchanged | Attendance was already correct |
+| BNPI PATS result | Attendance updated `cmsr4ngt2011jvxj4wardyw9f` | Unchanged | Attendance was already correct |
 | DeviceUser 10 on B/D/E | UNMATCHED `uzaro_zen` | Linked ACTIVE → employee `00010` Zen Andrei | Inventory now matches the tap |
-| Other unmatched DeviceUsers | 50 with no HRIS employee | Unchanged | Do not invent employees |
+| Other unmatched DeviceUsers | 50 with no BNPI PATS employee | Unchanged | Do not invent employees |
 
 ## What is true (do not mix)
 
@@ -24,18 +24,18 @@ The Device D tap for **Zen Andrei / person 10 / serial 9652** already wrote atte
 |---|---|---|
 | Panel Select Status | Check Out | TAP / PRESENT |
 | `DeviceEvent.eventAction` | **TAP** after classify | Unknown Vendor |
-| `DeviceEvent.status` (HRIS result) | `ATTENDANCE_UPDATED` | Category/action |
+| `DeviceEvent.status` (BNPI PATS result) | `ATTENDANCE_UPDATED` | Category/action |
 | ACS major/minor | **5 / 38** = real punch | **2 / 38** = armed-device exception, not a punch |
 | Device person id | `10` | `01515` (Rheyjie) is a different person |
 | `Employee.employeeId` | `00010` | pad of `10`, not of `01515` |
-| DeviceUser inventory | row vendor `10` on each device | Event list “Matched HRIS” badge (can hydrate employee without a DeviceUser link) |
+| DeviceUser inventory | row vendor `10` on each device | Event list “Matched BNPI PATS” badge (can hydrate employee without a DeviceUser link) |
 
 ## Residual: unmatched DeviceUsers (Device B at census)
 
 | Bucket | Count | What it is | Blocker | Next |
 |---|---:|---|---|---|
 | Person 10 B/D/E | 3 rows | Linked this session to `00010` | done | — |
-| No HRIS employee | 48 | Panel ids with no `deviceEmpId` / `employeeId` hit | `optional_product` / data | Leave unmatched |
+| No BNPI PATS employee | 48 | Panel ids with no `deviceEmpId` / `employeeId` hit | `optional_product` / data | Leave unmatched |
 | Test-like ids | 2 | `t18rt124015`, `t18stay63721` | `optional_product` | Leave unmatched |
 
 Do **not** treat “51 unmatched” as “taps do not work.” Person 10 tapped and attendance updated while DeviceUser was still unmatched.
@@ -74,7 +74,7 @@ Employee: `cmspnnxot02s5qw01yk7yy2er` / `00010` / `deviceEmpId=10` / Zen Andrei.
 
 ## Tests
 
-- `hris-api/tests/device-event-taxonomy.helper.spec.ts` — 11 passing, including stale UNKNOWN punch → TAP and SDK evidence stamp.
+- `bnpi-pats-api/tests/device-event-taxonomy.helper.spec.ts` — 11 passing, including stale UNKNOWN punch → TAP and SDK evidence stamp.
 - Focused callback tests for persist skip of major=2 and serial collapse — passing.
 - Device Events page contract: new string guards for `UNKNOWN_VENDOR` fallback and SDK evidence. One **pre-existing** fail remains (`? 2_000` socket interval) — not this change.
 

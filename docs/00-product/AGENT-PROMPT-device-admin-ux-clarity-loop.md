@@ -75,7 +75,7 @@ LOOP until ALL acceptance boxes are checked with evidence:
 
 ```powershell
 # Contract
-cd hris-app
+cd bnpi-pats-app
 npx vitest run app/lib/device-events-page-contract.test.ts app/routes/admin/devices/device-user-ui-contract.test.ts
 
 # Playwright smoke (headless)
@@ -86,7 +86,7 @@ npx playwright test tests/smoke/admin-device-events-sync-modal.spec.ts --config=
 
 | Concept | Preferred |
 |---|---|
-| HRIS up | Server working |
+| BNPI PATS up | Server working |
 | Live taps service | Live capture working / offline / blocked |
 | Terminal unreachable | Blocked: device / Can’t reach this device |
 | Sync preview | Preview only — nothing is saved until you confirm |

@@ -47,7 +47,7 @@ Live local snapshot 2026-08-20: Direct labor **872**, Indirect labor **1,355**, 
 | Item | Now | Do not treat as |
 |---|---|---|
 | Gender / Agency / Total Manpower = 0 | Client roster gap | “No Direct people” |
-| Public `dev.bnpi-hris.tech` | Until `6aad83c5` is serving | Proof this SHA is live |
+| Public `dev.bnpi-pats.tech` | Until `6aad83c5` is serving | Proof this SHA is live |
 | No-work / daily manpower tabs | Still not mounted (2.1.9) | Part of this report |
 
 ## Day labor vs this report (lead 2026-08-20)

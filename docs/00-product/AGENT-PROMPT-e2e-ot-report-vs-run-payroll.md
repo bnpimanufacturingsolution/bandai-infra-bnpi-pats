@@ -2,8 +2,8 @@
 
 **Status:** `EXECUTE_NOW`  
 **Created:** 2026-08-04  
-**Fast probe:** `hris-api/scripts/probe-ot-truth-fast.ts`  
-**Repair apply:** `hris-api/scripts/repair-bandai-payroll-source-timesheet-lines.ts`
+**Fast probe:** `bnpi-pats-api/scripts/probe-ot-truth-fast.ts`  
+**Repair apply:** `bnpi-pats-api/scripts/repair-bandai-payroll-source-timesheet-lines.ts`
 
 ---
 
@@ -49,9 +49,9 @@ Evidence: .runtime/ot-e2e-<stamp>/
 ## 2. Fast E2E procedure (copy)
 
 ```powershell
-cd C:\Users\stari\bandai-infra\hris-api
+cd C:\Users\stari\bandai-infra\bnpi-pats-api
 $env:FORCE_ENV_DB='1'
-$env:PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public'
+$env:PG_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public'
 $env:DATABASE_URL=$env:PG_DATABASE_URL
 
 # 1) Fast full tally (~5–8s both packs)

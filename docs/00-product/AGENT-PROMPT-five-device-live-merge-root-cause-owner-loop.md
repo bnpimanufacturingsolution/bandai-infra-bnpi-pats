@@ -72,7 +72,7 @@ For every configured Hikvision device, record these separately:
 | Authentication | current credentialed device/API response |
 | Quick health | exact endpoint, timestamp, target, cache state, duration |
 | Full inventory | current UserInfo read, IDs read, duration, exact error |
-| Listener | service, SDK login, alarm arm, callback receipt, HRIS posting |
+| Listener | service, SDK login, alarm arm, callback receipt, BNPI PATS posting |
 | Merge eligibility | exact included/excluded reason |
 
 Never output one unlabeled `online` total.
@@ -155,7 +155,7 @@ Rules:
 
 - no cached quick health reused as current full-read evidence;
 - no tunnel response marks a physical target online without identity proof;
-- preserve saved HRIS values while refreshing;
+- preserve saved BNPI PATS values while refreshing;
 - show `Checked <time>` and evidence source;
 - label stale/conflicting data;
 - row Retry runs the exact row query;
@@ -236,7 +236,7 @@ A `completed` response is not sufficient. Reread all five targets and prove:
 - expected writes equal successes plus explained safe skips;
 - no writes reached Main C or TEST devices;
 - no unintended identities/duplicates were created;
-- saved HRIS DeviceUser state reconciles with physical rereads;
+- saved BNPI PATS DeviceUser state reconciles with physical rereads;
 - listener and Saved Events remain operational.
 
 Run the exact browser journey:

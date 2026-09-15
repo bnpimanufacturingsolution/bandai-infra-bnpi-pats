@@ -15,7 +15,7 @@ The **Function Tracing & Debug Dashboard** provides real-time visibility into:
 Once imported into Grafana:
 
 ```
-http://localhost:3000/d/hris-function-trace
+http://localhost:3000/d/bnpi-pats-function-trace
 ```
 
 ## Panels Explained

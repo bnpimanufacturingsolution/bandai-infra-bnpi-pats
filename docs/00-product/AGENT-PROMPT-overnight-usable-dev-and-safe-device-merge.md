@@ -20,10 +20,10 @@ The requested goal is not “run `npm run dev`.” The goal is a usable authenti
 
 - Follow root and nested `AGENTS.md` files.
 - Open the required WWG files and `Agent-Meta-Prompt-Template.md` before planning.
-- Use admin / `hris-admin` for device/configuration work.
+- Use admin / `bnpi-pats-admin` for device/configuration work.
 - Use canonical DEV DB `127.0.0.1:55435`; never silently fall back to compose `10.184.37.19:15433`.
-- Preserve the VM-managed `cloudflared-bnpi-hris.service`; never stop or disable it.
-- Prefer direct LAN SSH first, then `ssh project-truth-hris`.
+- Preserve the VM-managed `cloudflared-bnpi-pats.service`; never stop or disable it.
+- Prefer direct LAN SSH first, then `ssh project-truth-bnpi-pats`.
 - Use direct API proof before Playwright proof.
 - Do not mutate device users until the write gate in Phase 10 is green.
 - Do not ask the operator to restart, refresh, run tests, poll, or click Sync when the agent can do it.
@@ -71,7 +71,7 @@ Do not call DEV usable unless all of these pass together:
 - a real Prisma-backed query;
 - API health;
 - login token;
-- `/auth/me` returns `admin@bandai.local` / `hris-admin`;
+- `/auth/me` returns `admin@bandai.local` / `bnpi-pats-admin`;
 - frontend 200;
 - Playwright reaches an authenticated admin page.
 
@@ -129,7 +129,7 @@ Prove the deployed listener source/binary and service state. Arm SDK sessions be
 - SDK login attempted;
 - armed/listening or exact login failure;
 - callback receiving;
-- posting to HRIS;
+- posting to BNPI PATS;
 - spool pending/replay state;
 - latest current timestamp.
 

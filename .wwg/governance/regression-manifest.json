@@ -25,36 +25,36 @@
       "name": "jest",
       "confidence": "medium",
       "evidence": [
-        "hris-api/node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/is-array-buffer/package.json script test",
-        "hris-api/node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/util-buffer-from/package.json script test",
-        "hris-api/node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/util-utf8/package.json script test",
-        "hris-api/node_modules/@aws-crypto/util/node_modules/@smithy/is-array-buffer/package.json script test",
-        "hris-api/node_modules/@aws-crypto/util/node_modules/@smithy/util-buffer-from/package.json script test",
-        "hris-api/node_modules/@aws-crypto/util/node_modules/@smithy/util-utf8/package.json script test"
+        "bnpi-pats-api/node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/is-array-buffer/package.json script test",
+        "bnpi-pats-api/node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/util-buffer-from/package.json script test",
+        "bnpi-pats-api/node_modules/@aws-crypto/sha256-browser/node_modules/@smithy/util-utf8/package.json script test",
+        "bnpi-pats-api/node_modules/@aws-crypto/util/node_modules/@smithy/is-array-buffer/package.json script test",
+        "bnpi-pats-api/node_modules/@aws-crypto/util/node_modules/@smithy/util-buffer-from/package.json script test",
+        "bnpi-pats-api/node_modules/@aws-crypto/util/node_modules/@smithy/util-utf8/package.json script test"
       ]
     },
     {
       "name": "mocha",
       "confidence": "high",
       "evidence": [
-        "hris-api/node_modules/@apidevtools/json-schema-ref-parser/package.json: mocha",
-        "hris-api/node_modules/@apidevtools/openapi-schemas/package.json: mocha",
-        "hris-api/node_modules/@apidevtools/swagger-methods/package.json: mocha",
-        "hris-api/node_modules/@apidevtools/swagger-parser/package.json: mocha"
+        "bnpi-pats-api/node_modules/@apidevtools/json-schema-ref-parser/package.json: mocha",
+        "bnpi-pats-api/node_modules/@apidevtools/openapi-schemas/package.json: mocha",
+        "bnpi-pats-api/node_modules/@apidevtools/swagger-methods/package.json: mocha",
+        "bnpi-pats-api/node_modules/@apidevtools/swagger-parser/package.json: mocha"
       ]
     },
     {
       "name": "vitest",
       "confidence": "medium",
       "evidence": [
-        "hris-api/node_modules/@aws-sdk/core/package.json script test",
-        "hris-api/node_modules/@aws-sdk/core/package.json script test:watch",
-        "hris-api/node_modules/@aws-sdk/core/package.json script test:integration",
-        "hris-api/node_modules/@aws-sdk/core/package.json script test:integration:watch",
-        "hris-api/node_modules/@aws-sdk/credential-provider-env/package.json script test",
-        "hris-api/node_modules/@aws-sdk/credential-provider-env/package.json script test:watch",
-        "hris-api/node_modules/@aws-sdk/credential-provider-http/package.json script test",
-        "hris-api/node_modules/@aws-sdk/credential-provider-http/package.json script test:watch"
+        "bnpi-pats-api/node_modules/@aws-sdk/core/package.json script test",
+        "bnpi-pats-api/node_modules/@aws-sdk/core/package.json script test:watch",
+        "bnpi-pats-api/node_modules/@aws-sdk/core/package.json script test:integration",
+        "bnpi-pats-api/node_modules/@aws-sdk/core/package.json script test:integration:watch",
+        "bnpi-pats-api/node_modules/@aws-sdk/credential-provider-env/package.json script test",
+        "bnpi-pats-api/node_modules/@aws-sdk/credential-provider-env/package.json script test:watch",
+        "bnpi-pats-api/node_modules/@aws-sdk/credential-provider-http/package.json script test",
+        "bnpi-pats-api/node_modules/@aws-sdk/credential-provider-http/package.json script test:watch"
       ]
     }
   ],
@@ -219,16 +219,16 @@
       "smoke": 4
     },
     "examples": [
-      "hris-api/node_modules/@eslint/eslintrc/node_modules/json-schema-traverse/spec/.eslintrc.yml",
-      "hris-api/node_modules/@eslint/eslintrc/node_modules/json-schema-traverse/spec/fixtures/schema.js",
-      "hris-api/node_modules/@eslint/eslintrc/node_modules/json-schema-traverse/spec/index.spec.js",
-      "hris-api/node_modules/@logtail/core/dist/cjs/base.test.js",
-      "hris-api/node_modules/@logtail/core/dist/es6/base.test.js",
-      "hris-api/node_modules/@logtail/core/src/base.test.ts",
-      "hris-api/node_modules/@logtail/node/dist/cjs/node.test.js",
-      "hris-api/node_modules/@logtail/node/dist/cjs/timeout.test.js",
-      "hris-api/node_modules/@logtail/node/dist/es6/node.test.js",
-      "hris-api/node_modules/@logtail/node/dist/es6/timeout.test.js"
+      "bnpi-pats-api/node_modules/@eslint/eslintrc/node_modules/json-schema-traverse/spec/.eslintrc.yml",
+      "bnpi-pats-api/node_modules/@eslint/eslintrc/node_modules/json-schema-traverse/spec/fixtures/schema.js",
+      "bnpi-pats-api/node_modules/@eslint/eslintrc/node_modules/json-schema-traverse/spec/index.spec.js",
+      "bnpi-pats-api/node_modules/@logtail/core/dist/cjs/base.test.js",
+      "bnpi-pats-api/node_modules/@logtail/core/dist/es6/base.test.js",
+      "bnpi-pats-api/node_modules/@logtail/core/src/base.test.ts",
+      "bnpi-pats-api/node_modules/@logtail/node/dist/cjs/node.test.js",
+      "bnpi-pats-api/node_modules/@logtail/node/dist/cjs/timeout.test.js",
+      "bnpi-pats-api/node_modules/@logtail/node/dist/es6/node.test.js",
+      "bnpi-pats-api/node_modules/@logtail/node/dist/es6/timeout.test.js"
     ]
   },
   "criticalBehaviorSummary": {
@@ -329,7 +329,7 @@
         "appliance/bin/project-truth-tunnel-gateway.py",
         "appliance/zkteco-bridge/src/index.js",
         "appliance/zkteco-standalone-sdk/Program.cs",
-        "hris-api/app/Rule/index.ts"
+        "bnpi-pats-api/app/Rule/index.ts"
       ],
       "inferredBehavior": "Confirm the application or package starts/builds at a minimal baseline.",
       "recommendedAction": "Identify the smallest safe smoke check before writing executable tests."
@@ -349,7 +349,7 @@
         "appliance/bin/project-truth-tunnel-gateway.py",
         "appliance/zkteco-bridge/src/index.js",
         "appliance/zkteco-standalone-sdk/Program.cs",
-        "hris-api/app/Rule/index.ts"
+        "bnpi-pats-api/app/Rule/index.ts"
       ],
       "inferredBehavior": "Confirm API routes handle success and failure paths.",
       "recommendedAction": "Draft route coverage from existing route files before generating tests."
@@ -381,7 +381,7 @@
       "safeToGenerateExecutableTest": false,
       "confidence": "medium",
       "sourceEvidence": [
-        "hris-app/.react-router/types/app/routes/hr/+types/billings.$id.ts: payments/billing indicator"
+        "bnpi-pats-app/.react-router/types/app/routes/hr/+types/billings.$id.ts: payments/billing indicator"
       ],
       "inferredBehavior": "Confirm payment safe and failure states.",
       "recommendedAction": "Keep this report-first until production/payment boundaries are confirmed."
@@ -397,7 +397,7 @@
       "safeToGenerateExecutableTest": false,
       "confidence": "medium",
       "sourceEvidence": [
-        "hris-api/app/migration/dm3-migration.adapter.ts: persistence indicator"
+        "bnpi-pats-api/app/migration/dm3-migration.adapter.ts: persistence indicator"
       ],
       "inferredBehavior": "Confirm stored data, migrations, and invalid data behavior.",
       "recommendedAction": "Confirm data ownership before creating executable tests."
@@ -418,9 +418,9 @@
         "appliance/docker-compose.yml",
         "appliance/zkteco-bridge/Dockerfile",
         "appliance/zkteco-bridge/package.json",
-        "hris-api/Dockerfile",
-        "hris-api/docker-compose.yml",
-        "hris-api/generated/prisma-postgres/package.json"
+        "bnpi-pats-api/Dockerfile",
+        "bnpi-pats-api/docker-compose.yml",
+        "bnpi-pats-api/generated/prisma-postgres/package.json"
       ],
       "inferredBehavior": "Confirm required config files and safe defaults.",
       "recommendedAction": "Convert known-safe config expectations into checks later."
@@ -440,7 +440,7 @@
         "appliance/bin/project-truth-tunnel-gateway.py",
         "appliance/zkteco-bridge/src/index.js",
         "appliance/zkteco-standalone-sdk/Program.cs",
-        "hris-api/app/Rule/index.ts"
+        "bnpi-pats-api/app/Rule/index.ts"
       ],
       "inferredBehavior": "Confirm data contracts, config contracts, or public interfaces do not drift.",
       "recommendedAction": "Identify actual schemas/contracts before generating tests."
@@ -463,7 +463,7 @@
         "appliance/observability/IMPORT_FUNCTION_TRACING_DASHBOARD.md",
         "appliance/observability/VERIFY_DASHBOARD.md",
         "appliance/observability/WHERE_TO_SEE_DEBUG_LOGS.md",
-        "client-handover/hris-monorepo-docker-lan.md"
+        "client-handover/bnpi-pats-monorepo-docker-lan.md"
       ],
       "inferredBehavior": "Confirm documented process steps remain current.",
       "recommendedAction": "Turn recurring process expectations into a review checklist."
@@ -486,7 +486,7 @@
         "appliance/observability/IMPORT_FUNCTION_TRACING_DASHBOARD.md",
         "appliance/observability/VERIFY_DASHBOARD.md",
         "appliance/observability/WHERE_TO_SEE_DEBUG_LOGS.md",
-        "client-handover/hris-monorepo-docker-lan.md"
+        "client-handover/bnpi-pats-monorepo-docker-lan.md"
       ],
       "inferredBehavior": "Confirm docs, policies, and handoff material do not contradict one another.",
       "recommendedAction": "Review canonical ownership before automating doc checks."
@@ -509,7 +509,7 @@
         "appliance/observability/IMPORT_FUNCTION_TRACING_DASHBOARD.md",
         "appliance/observability/VERIFY_DASHBOARD.md",
         "appliance/observability/WHERE_TO_SEE_DEBUG_LOGS.md",
-        "client-handover/hris-monorepo-docker-lan.md"
+        "client-handover/bnpi-pats-monorepo-docker-lan.md"
       ],
       "inferredBehavior": "Confirm sensitive changes have review and approval evidence.",
       "recommendedAction": "Define approval evidence in governance before enforcement."
@@ -532,7 +532,7 @@
         "appliance/observability/IMPORT_FUNCTION_TRACING_DASHBOARD.md",
         "appliance/observability/VERIFY_DASHBOARD.md",
         "appliance/observability/WHERE_TO_SEE_DEBUG_LOGS.md",
-        "client-handover/hris-monorepo-docker-lan.md"
+        "client-handover/bnpi-pats-monorepo-docker-lan.md"
       ],
       "inferredBehavior": "Confirm future agents have enough context to continue.",
       "recommendedAction": "Use the candidate as manual review guidance first."
@@ -555,7 +555,7 @@
         "appliance/observability/IMPORT_FUNCTION_TRACING_DASHBOARD.md",
         "appliance/observability/VERIFY_DASHBOARD.md",
         "appliance/observability/WHERE_TO_SEE_DEBUG_LOGS.md",
-        "client-handover/hris-monorepo-docker-lan.md"
+        "client-handover/bnpi-pats-monorepo-docker-lan.md"
       ],
       "inferredBehavior": "Confirm runbooks, ownership, and release readiness are reviewed.",
       "recommendedAction": "Keep report-first until owners confirm operational truth."

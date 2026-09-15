@@ -22,11 +22,11 @@
    - task-relevant `.wwg/wiki/project-truth.md` / principles `evidence-over-assumption.md`
    - `.wwg/governance/drift-guard.md` when changing behavior
 2. **Do not invent** device counts, tallies, timings, “success,” or C++ behavior. Prove from live API/SSH/`.runtime` or label `NEEDS_CONFIRMATION`.
-3. **Do not disable** `cloudflared-bnpi-hris` / Cloudflare tunnel.
+3. **Do not disable** `cloudflared-bnpi-pats` / Cloudflare tunnel.
 4. **Do not count** circuit-skips, `db_merge_done`, or `noop_overlay_only` as peer-write success.
 5. Windows: `npm.cmd`. Restart API yourself. Prefer `npm.cmd run dev:api-only` if `predev` device-live-path flakes; poll `/health`.
-6. SSH first: `ssh project-truth-hris` (fallback LAN key to `infra@10.184.37.19`).
-7. Local admin: `admin@bandai.local` / `password123` / `appCode=hris` on `http://localhost:3001`.
+6. SSH first: `ssh project-truth-bnpi-pats` (fallback LAN key to `infra@10.184.37.19`).
+7. Local admin: `admin@bandai.local` / `password123` / `appCode=bnpi-pats` on `http://localhost:3001`.
 8. **MANDATORY MULTI-AGENT (cycle ≤2):** spawn **≥3** subagents. Soft language is banned. See §2.
 
 ---
@@ -58,7 +58,7 @@ Admin merge job → copyHikvisionUserToPeersBatch → runHikvisionManualCopyOnVm
 
 | # | subagent_type | Leg (independent) | Required return |
 |---|---|---|---|
-| A1 | `explore` | `hris-api/app/device/device.controller.ts` merge apply, batch, circuit, durable job, face physical gap, timeout scaling | path + line quotes + “what live events mean” |
+| A1 | `explore` | `bnpi-pats-api/app/device/device.controller.ts` merge apply, batch, circuit, durable job, face physical gap, timeout scaling | path + line quotes + “what live events mean” |
 | A2 | `explore` | `vendor/hikvision-linux/src/hikvision_bio/copy.cpp` + `acs.cpp` + `spool.cpp` + `identity.cpp` + `fingerprint.cpp` + `face.cpp` manual copy / peer write / timeouts / 401 faceURL | path + line quotes + failure classes |
 | A3 | `general-purpose` (execute) | SSH TCP matrix all 6 devices × 80/443/8000 + listener active | `.runtime/merge-fast-<stamp>/ssh-tcp.txt` |
 | A4 (optional 4th) | `general-purpose` | API health + WAVE plan + gap ID pick list | `devices-health-summary.json`, `merge-plan-wave.json`, `bakeoff-ids.json` |
@@ -143,7 +143,7 @@ Prior WAVE plan shape (stale until re-run): ~687 union users, ~2061 planned writ
    $env:HIKVISION_MANUAL_COPY_TIMEOUT_SECONDS = "45"
    $env:HIKVISION_MERGE_COPY_TIMEOUT_CIRCUIT_LIMIT = "3"
    # If predev ensure-device-live-path fails:
-   npm.cmd run dev:api-only   # from hris-api
+   npm.cmd run dev:api-only   # from bnpi-pats-api
    ```
 5. Devices health summary → `devices-health-summary.json` (user counts from `checks.userRead.count`).
 6. WAVE lock → `TRUTH-MATRIX.md` + `wave-lock.json`.
@@ -221,7 +221,7 @@ Already partially present; **prove live** and close gaps:
 | `noop_overlay_only` / false converged | Target+source single-user refresh; use live numOfFP; do not celebrate overlay |
 | VM copy 401 / curl 401 | Agent A2 C++ + credentials/spec; try FP-only; check listener contention |
 | Circuit-skip storm | WAVE exclude unreachable; circuit ≥3; do not count skip as ok |
-| SSH flake | Retry `project-truth-hris`; then LAN key |
+| SSH flake | Retry `project-truth-bnpi-pats`; then LAN key |
 
 ---
 

@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from "../hris-api/generated/prisma";
+import { PrismaClient, Prisma } from "../bnpi-pats-api/generated/prisma";
 
 const prisma = new PrismaClient();
 

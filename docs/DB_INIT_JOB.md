@@ -1,4 +1,4 @@
-# GitOps DB init Job (`hris-api-db-init`)
+# GitOps DB init Job (`bnpi-pats-api-db-init`)
 
 Operator page for schema apply on the appliance. Evidence: `.wwg/reports/db-init-repair-20260821.md`.
 
@@ -15,12 +15,12 @@ Operator page for schema apply on the appliance. Evidence: `.wwg/reports/db-init
 
 | Item | Value |
 |---|---|
-| Kind | Kubernetes `Job` `hris-api-db-init` in namespaces `dev`, `uat`, `prod` |
-| Image | `hris-api-db-init:develop` (`imagePullPolicy: Never`) |
+| Kind | Kubernetes `Job` `bnpi-pats-api-db-init` in namespaces `dev`, `uat`, `prod` |
+| Image | `bnpi-pats-api-db-init:develop` (`imagePullPolicy: Never`) |
 | Manifests | `gitops/runtime-k8s/overlays/{dev,uat,prod}/runtime.yaml` |
 | Argo apps | `project-truth-runtime-dev` / `-uat` / `-prod` (`selfHeal: true`, `prune: true`) |
 | Schema command | `npm run prisma-postgres:push` = `npx prisma db push --schema prisma/schema-postgres --skip-generate` |
-| Dangerous extra (live origin) | `&& npm run prisma-seed` → `hris-api/prisma/seed.ts` |
+| Dangerous extra (live origin) | `&& npm run prisma-seed` → `bnpi-pats-api/prisma/seed.ts` |
 
 DEV, UAT, and PROD are **three Postgres volumes on one VM**, not three clouds. Ports: PROD `15432`, DEV `15433`, UAT `15434`.
 
@@ -28,7 +28,7 @@ DEV, UAT, and PROD are **three Postgres volumes on one VM**, not three clouds. P
 
 | Source | Proves | Does not prove |
 |---|---|---|
-| Runtime Argo **Degraded** | Job `hris-api-db-init` Failed (`BackoffLimitExceeded`) | Database wiped, API down, need restore |
+| Runtime Argo **Degraded** | Job `bnpi-pats-api-db-init` Failed (`BackoffLimitExceeded`) | Database wiped, API down, need restore |
 | Overlay Argo **Healthy** | GitOps ConfigMaps/Services in sync | Images rebuilt |
 | `/health` 200 | API process up | Git SHA, Job success |
 | Observe green | VM reported a SHA (often `services=none`) | Job Complete |
@@ -61,7 +61,7 @@ That Failed object is a **safety lock** until git is schema-only **and** that co
 | File | Change |
 |---|---|
 | `gitops/runtime-k8s/overlays/{dev,uat,prod}/runtime.yaml` | Command = `npm run prisma-postgres:push` only |
-| `appliance/docker-compose.environments.yml` | `hris-api-db-init-dev` / `-uat` schema-only |
+| `appliance/docker-compose.environments.yml` | `bnpi-pats-api-db-init-dev` / `-uat` schema-only |
 | `appliance/docker-compose.yml` | Local empty bootstrap **keeps** seed; comment forbids GitOps/UAT/PROD seed |
 | `scripts/test-self-heal-contract.ps1` | All three ns: push required, `npm run prisma-seed` forbidden |
 
@@ -85,8 +85,8 @@ Custom `pg_dump` (`-Fc`), mode `600`, taken **before** any Job recreate:
 
 | Env | VM path | Size |
 |---|---|---|
-| UAT | `/home/infra/db-init-repair-dumps/hris-uat.dump` | 156M |
-| PROD | `/home/infra/db-init-repair-dumps/hris-prod.dump` | 156M |
+| UAT | `/home/infra/db-init-repair-dumps/bnpi-pats-uat.dump` | 156M |
+| PROD | `/home/infra/db-init-repair-dumps/bnpi-pats-prod.dump` | 156M |
 
 No restore was run.
 
@@ -94,7 +94,7 @@ Restore only if a later write goes wrong (operator-approved):
 
 ```bash
 # example PROD — destructive; needs explicit approval
-kubectl -n prod exec -i sts/hris-postgres -- pg_restore -U postgres -d hris --clean --if-exists < /home/infra/db-init-repair-dumps/hris-prod.dump
+kubectl -n prod exec -i sts/bnpi-pats-postgres -- pg_restore -U postgres -d bnpi-pats --clean --if-exists < /home/infra/db-init-repair-dumps/bnpi-pats-prod.dump
 ```
 
 Do not run restore as part of the normal Job repair.
@@ -110,12 +110,12 @@ Do **not** skip the git wait. Jobs are immutable.
 5. Delete Failed Jobs **only after** origin has no-seed:
 
 ```bash
-ssh project-truth-hris
-kubectl -n dev get job hris-api-db-init -o jsonpath='{.spec.template.spec.containers[0].command}'; echo
+ssh project-truth-bnpi-pats
+kubectl -n dev get job bnpi-pats-api-db-init -o jsonpath='{.spec.template.spec.containers[0].command}'; echo
 # must already be git-synced no-seed before delete
-kubectl -n uat delete job hris-api-db-init
-kubectl -n prod delete job hris-api-db-init
-kubectl -n dev delete job hris-api-db-init
+kubectl -n uat delete job bnpi-pats-api-db-init
+kubectl -n prod delete job bnpi-pats-api-db-init
+kubectl -n dev delete job bnpi-pats-api-db-init
 ```
 
 6. Watch new Jobs Complete (`kubectl get jobs -A | grep db-init`).
@@ -126,13 +126,13 @@ If the new Job command still contains `prisma-seed`, **stop** — do not delete.
 
 ## How to look (SSH)
 
-LAN may timeout from home Wi‑Fi. Use `ssh project-truth-hris`. Do not stop `cloudflared-bnpi-hris.service`.
+LAN may timeout from home Wi‑Fi. Use `ssh project-truth-bnpi-pats`. Do not stop `cloudflared-bnpi-pats.service`.
 
 ```bash
 kubectl -n argocd get app project-truth-runtime-dev project-truth-runtime-uat project-truth-runtime-prod \
   -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,REV:.status.sync.revision
 kubectl get jobs -A | grep db-init
-kubectl -n uat get job hris-api-db-init -o jsonpath='{.spec.template.spec.containers[0].command}'; echo
+kubectl -n uat get job bnpi-pats-api-db-init -o jsonpath='{.spec.template.spec.containers[0].command}'; echo
 ```
 
 ## Related

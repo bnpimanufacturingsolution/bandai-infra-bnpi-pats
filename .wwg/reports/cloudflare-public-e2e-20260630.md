@@ -4,20 +4,20 @@
 
 Task mode: mixed bug fix and runtime verification.
 
-Result: PROD, DEV, and UAT public Cloudflare HRIS paths are verified end to
+Result: PROD, DEV, and UAT public Cloudflare BNPI PATS paths are verified end to
 end through the VM-side named tunnel path.
 
 ## Findings And Repair
 
 - DEV and UAT frontend bundles were using stale public API-base behavior. The
   appliance DEV/UAT app build config now lets runtime hostname resolution pick
-  `dev-api.bnpi-hris.tech` and `uat-api.bnpi-hris.tech`.
-- Missing static assets now return non-cacheable 404 responses from the HRIS app
+  `dev-api.bnpi-pats.tech` and `uat-api.bnpi-pats.tech`.
+- Missing static assets now return non-cacheable 404 responses from the BNPI PATS app
   server instead of cached SPA HTML.
 - DEV and UAT browser login initially failed because
   `/api/system-provisioning/status` returned 200/204 without CORS headers for
-  `https://dev.bnpi-hris.tech` and `https://uat.bnpi-hris.tech`.
-- The API CORS contract now includes the public `bnpi-hris.tech` PROD, DEV, and
+  `https://dev.bnpi-pats.tech` and `https://uat.bnpi-pats.tech`.
+- The API CORS contract now includes the public `bnpi-pats.tech` PROD, DEV, and
   UAT app origins, and the appliance API env file carries the same origins.
 
 ## Evidence
@@ -35,13 +35,13 @@ end through the VM-side named tunnel path.
 
 Browser results:
 
-- PROD: `https://bnpi-hris.tech/admin/dashboard`, `/auth/me` 200,
+- PROD: `https://bnpi-pats.tech/admin/dashboard`, `/auth/me` 200,
   `/dashboard/overview` 200, expected same-host `/api` path used.
-- DEV: `https://dev.bnpi-hris.tech/admin/dashboard`, `/auth/me` 200,
-  `/dashboard/overview` 200, expected `https://dev-api.bnpi-hris.tech/api` path
+- DEV: `https://dev.bnpi-pats.tech/admin/dashboard`, `/auth/me` 200,
+  `/dashboard/overview` 200, expected `https://dev-api.bnpi-pats.tech/api` path
   used.
-- UAT: `https://uat.bnpi-hris.tech/admin/dashboard`, `/auth/me` 200,
-  `/dashboard/overview` 200, expected `https://uat-api.bnpi-hris.tech/api` path
+- UAT: `https://uat.bnpi-pats.tech/admin/dashboard`, `/auth/me` 200,
+  `/dashboard/overview` 200, expected `https://uat-api.bnpi-pats.tech/api` path
   used.
 
 Dashboard DB counts:
@@ -53,7 +53,7 @@ Dashboard DB counts:
 Runtime state:
 
 - VM Docker app/API containers for PROD, DEV, and UAT were healthy.
-- `cloudflared-bnpi-hris.service` was active on the VM.
+- `cloudflared-bnpi-pats.service` was active on the VM.
 - K3s node was Ready.
 - Argo CD applications for prod/dev/uat runtime and app paths were
   Synced/Healthy.

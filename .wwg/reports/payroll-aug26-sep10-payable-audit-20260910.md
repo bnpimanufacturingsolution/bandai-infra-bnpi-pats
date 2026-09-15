@@ -2,13 +2,13 @@
 
 Date: 2026-09-10
 Period: `PP-20260826-20260911` (`cmpxw13bf001h7zwsyy6k976f`), `SEMI_MONTHLY`, Period 2 - Aug 2026
-DB audited: local DEV K3s forward `127.0.0.1:55435` (`hris`), direct SQL via `pg`
+DB audited: local DEV K3s forward `127.0.0.1:55435` (`bnpi-pats`), direct SQL via `pg`
 Status at audit: `PROCESSING` (see §6 CONFLICTING note)
 Scope note: request said "employee dorm Aug 26 to Sep 10". No `BenefitType.code=DORM` and no dorm/housing/accommodation field exists in schema (live codes §7). Audited as **all employees, Aug 26–Sep 10**. If "dorm" means a dormitory-fee code or a dorm-resident roster, that input is `NEEDS_CONFIRMATION`.
 
 ## 1. Headline
 
-* Only ~851 `EmployeePayroll` rows exist because Start Payroll only writes the **DIRECT + SEMI_MONTHLY + APPROVED + basicSalary>0 + embeddedSchedule** universe (`hris-api/helper/payroll-period.helper.ts:3964-3998`, `:4001-4016`, `:4018-4088`; candidate gate `:616-642`).
+* Only ~851 `EmployeePayroll` rows exist because Start Payroll only writes the **DIRECT + SEMI_MONTHLY + APPROVED + basicSalary>0 + embeddedSchedule** universe (`bnpi-pats-api/helper/payroll-period.helper.ts:3964-3998`, `:4001-4016`, `:4018-4088`; candidate gate `:616-642`).
 * The 1,355 AGENCY employees are excluded **by design** from this BNPI direct run — they hold APPROVED timesheets but never enter `includedEmployeesCount`.
 * Correction to the interim "1 employee has no timesheet" claim: that was **header-level only** (`EMP3336`). At **day-line level**, **2,047 of 2,236 timesheet headers have zero `timesheet_lines`**, and **675 of 851 EP rows pay ₱0 gross/₱0 net** (665 of the 675 sit on 0-line timesheets). The operator screenshot (01770–01774, `No salary` + ₱0.00) is this population, not the 1-header case.
 * The 5 screenshot employees **do** have APPROVED timesheet headers + EP rows + salary + schedule — they pay zero because their timesheets carry **0 day-lines** and their snapshots are `totalDays:0 / breakdown:[]`.
@@ -46,7 +46,7 @@ Stored `generationMetadata.payrollRunTotals` (`savedAt 2026-09-09T11:54:28Z`: ts
 | 01773 | DIRECT/SEMI | 6,600 | yes | `cmtmologl00wj8hh89rtak5bt` | `cmtr9jl1y00118hcotle4264m` | 0/0/0 | same 0-day shape | 0 |
 | 01774 | DIRECT/SEMI | 6,600 | yes | `cmtmom5dm00wp8hh8dl5d89fu` | `cmtr9jw9000158hcohijos59s` | 0/0/0 | same 0-day shape | 0 |
 
-UI source: payroll register (`hris-app/app/components/templates/common/payroll-management-template.tsx:788-800` fetches `timesheetSnapshot`, not the `timesheet` relation; `:1836` `resolvePayrollRowStatus`). Status helper: `hris-app/app/lib/utils/payroll-row-status.ts:45-99`.
+UI source: payroll register (`bnpi-pats-app/app/components/templates/common/payroll-management-template.tsx:788-800` fetches `timesheetSnapshot`, not the `timesheet` relation; `:1836` `resolvePayrollRowStatus`). Status helper: `bnpi-pats-app/app/lib/utils/payroll-row-status.ts:45-99`.
 
 ### 3b. The 29 DIRECT APPROVED-but-excluded (have headers, correctly yield no EP)
 24 with `basicSalary=0` (incl. `00679,00836,00852,00985,01113,01127,01212,01370,01426,01500,01520,01523,01538,01539,01598,01795,01825,01826,EMP004`), 5 of those also schedule-null (`00987,01109,01423,01425,LMS-E2E-EMP-A`), plus 5 with salary but no schedule (`01432 ₱8,500; EMP-HR-TK-001 ₱18k; EMP-HR-TK-002 ₱18k; TESTBEN003 ₱25k; TESTBEN004 ₱25k`). Full list §2 query `DIRECT_APPROVED_BUT_EXCLUDED`.
@@ -80,7 +80,7 @@ Live `benefit_types` (grouped): `ABS, AON, ARP, ASA, DMA, HYS, INC, LLA, LVP, MH
 
 ## 8. Next agent steps (not executed)
 
-1. Confirm screenshot env/URL (local `127.0.0.1` vs VM `10.184.37.19` DEV/UAT/PROD vs public `*.bnpi-hris.tech`) and re-run §2 counts there — do not assume env parity.
+1. Confirm screenshot env/URL (local `127.0.0.1` vs VM `10.184.37.19` DEV/UAT/PROD vs public `*.bnpi-pats.tech`) and re-run §2 counts there — do not assume env parity.
 2. Materialize missing day-lines for the period (`POST /api/timesheet/:id/sync-obligation-lines`, fills missing dates only; proven payroll-lock safe Sep 8 Whilma recovery) — fleet scope, then verify `TS_ZERO_LINES → ~0` and snapshots gain days.
 3. Resume `POST /api/payrollperiod/:id/generate-timesheet` (skips paid/locked, upserts rest) until `COMPLETED`; prove `EP = ready` and zero-pay band collapses for worked days. `EMP3338` should appear; `EMP3336` needs a header first (`ensure-period-drafts`).
 4. Do NOT `Reopen` the period (would clear good EP state). Agency coverage, if wanted, is a separate scoped run.
@@ -90,7 +90,7 @@ Live `benefit_types` (grouped): `ABS, AON, ARP, ASA, DMA, HYS, INC, LLA, LVP, MH
 
 * Direct SQL scripts (local, read-only): `audit-dorm.js` (period + scope + EP + benefit codes), `audit-dorm2/3/4/5.js` (29-excluded list, EMP3336/3338 edges, dup checks), `audit-missing.js` (01770–01774 + EP source/snapshot null checks), `audit-zero.js` (snapshots + line counts + 675 zero-EP), `audit-fleet.js` / `audit-fleet2.js` (2,047 zero-line / 189 with lines / 665 zero-EP-on-zero-lines). Temp scripts under `%LOCALAPPDATA%\Temp\opencode\`, not committed.
 * API: `GET /api/payrollperiod?document=true&pagination=false` (period identity + PROCESSING + failed job payload); preview endpoint not used for counts (heavy; DB used instead).
-* Code: scope gates `hris-api/helper/payroll-period.helper.ts:616-642, 3964-3998, 4001-4016, 4018-4116`; status UI `hris-app/app/components/templates/common/payroll-management-template.tsx:770-804,1836`, `hris-app/app/lib/utils/payroll-row-status.ts:1-100`; schemas `hris-api/prisma/schema/payrollperiod.prisma`, `employeepayroll.prisma:1-12,250-286`, `benefittype.prisma`.
+* Code: scope gates `bnpi-pats-api/helper/payroll-period.helper.ts:616-642, 3964-3998, 4001-4016, 4018-4116`; status UI `bnpi-pats-app/app/components/templates/common/payroll-management-template.tsx:770-804,1836`, `bnpi-pats-app/app/lib/utils/payroll-row-status.ts:1-100`; schemas `bnpi-pats-api/prisma/schema/payrollperiod.prisma`, `employeepayroll.prisma:1-12,250-286`, `benefittype.prisma`.
 * Prior truth: `.wwg/workspace/current-task.md` (COMPLETED claim, Whilma Sep-3 materialization note, 880/851 totals); `.wwg/wiki/project-truth.md` + `terminology.md` (preview vs Start Payroll payable contract); `.wwg/reports/wwg-agent-handoff.md`, `payroll-audit-20260903.md`, `timekeeping-deep-audit-20260908.md`.
 
 No code, data, or status changed in this audit. No new recommendations beyond §8.5 (candidate).
@@ -101,7 +101,7 @@ Row: `EMP3338` (Char Aznable, GA/HR Management Trainee), `basicPay ₱30,000`, `
 
 Tenure (the operator's "you should check" — confirmed): `employmentHireDate = employmentStartDate = 2026-09-08T16:00Z` (Sep 9 Manila), `employmentStatus ONBOARDING`, created Sep 9. In-period tenure = Sep 9–10 only → 2 `attendance_obligations` (both `EXPECTED/PAID`), 0 `attendances`, 0 `device_events`, 2 `timesheet_lines` (Sep 9 `ABSENT`, Sep 10 `NOT_CLOCKED_IN`). Pre-Sep-9 days are `OUT_OF_TENURE`, correctly unobligated. So `totalWorkDays=2` and the 2-line timesheet are **correct**; the money is not.
 
-Mechanism (`hris-api/helper/payroll-period.helper.ts:2052-2067` divisor, `:2153-2158` Path-B base): `dailyRate = 30,000/2 = ₱15,000` (`metadata.dailyRate`, `rateBreakdown "PHP 30000.00 / 2 days"`), then `pathBDaysAbsent = max(0, 12 − 0 worked) = 12`, `absent = 12 × 15,000 = ₱180,000`. The counted absent days (1–2) never enter the charge. Correct per the operator's rule: in-tenure scheduled 2, present 0 → absent **2**; cutoff-divisor absent `2 × 15,000 = ₱30,000`, gross `₱0`, net `₱0` (same take-home, honest magnitudes); BNPI-313 variant `2 × 2,300.32 ≈ ₱4,601`. Fictitious magnitude `6× basic` for a 2-day tenure is impossible.
+Mechanism (`bnpi-pats-api/helper/payroll-period.helper.ts:2052-2067` divisor, `:2153-2158` Path-B base): `dailyRate = 30,000/2 = ₱15,000` (`metadata.dailyRate`, `rateBreakdown "PHP 30000.00 / 2 days"`), then `pathBDaysAbsent = max(0, 12 − 0 worked) = 12`, `absent = 12 × 15,000 = ₱180,000`. The counted absent days (1–2) never enter the charge. Correct per the operator's rule: in-tenure scheduled 2, present 0 → absent **2**; cutoff-divisor absent `2 × 15,000 = ₱30,000`, gross `₱0`, net `₱0` (same take-home, honest magnitudes); BNPI-313 variant `2 × 2,300.32 ≈ ₱4,601`. Fictitious magnitude `6× basic` for a 2-day tenure is impossible.
 
 Secondary defects on the same row: (a) payslip daily table shows `−₱15,000`/day (sums to `−₱30k`) while the header carries `−₱180k/−₱150k` — display vs header inconsistent; (b) snapshot says `absent 1` while both daily rows render `ABSENT` (line `NOT_CLOCKED_IN` vs snapshot count mismatch); (c) PhilHealth `₱1,500` (= 60k monthly × 2.5%) charged on a negative gross while SSS/Pag-IBIG are ₱0 — contributions on a negative base need a floor; (d) `basicPay` keeps the full ₱30,000 for 2 days' tenure — pro-rata policy `NEEDS_CONFIRMATION`. Gross must never go negative: clamp `absentDeduction ≤ basicPay`.
 
@@ -121,9 +121,9 @@ Cohort pattern (all five blowup rows fit `absent = 12 × basic/tenureWorkDays`):
 
 SCHEDULED-line dates are all past (stale unprocessed) except Sep-10-today lines, whose shift was still open at generation — those stay open for the next run.
 
-Code (`hris-api/helper/payroll-period.helper.ts`): new exported `resolvePathBAbsentDays()` + `PAYROLL_PATH_B_CUTOFF_BASE_DAYS=12`, wired into both generate (`pathBDaysAbsent`) and preview (`pathBDaysAbsentPreview`) twins. Rule: `absent = min(evidencedPool, min(12, totalWorkDays) − worked − openToday)`, where pool = ABSENT (any date) + past NOT_CLOCKED_IN/SCHEDULED/INCOMPLETE + past PRESENT-with-no-usable-pair (missing-punch no-pay preserved); LEAVE/HOLIDAY/REST never charged; today-or-later (Manila) lines stay open. Fully-materialized full-period timesheets resolve identically to legacy `12 − worked`, except LEAVE/HOLIDAY lines are no longer double-charged as absent (Path-A parity; tally will move on leave rows — flagged). Boundedness is structural: `absent ≤ min(12, total) − worked − open` with `dailyRate = basic/total` ⇒ `absentDeduction ≤ basicPay`, gross can no longer go negative from absent alone.
+Code (`bnpi-pats-api/helper/payroll-period.helper.ts`): new exported `resolvePathBAbsentDays()` + `PAYROLL_PATH_B_CUTOFF_BASE_DAYS=12`, wired into both generate (`pathBDaysAbsent`) and preview (`pathBDaysAbsentPreview`) twins. Rule: `absent = min(evidencedPool, min(12, totalWorkDays) − worked − openToday)`, where pool = ABSENT (any date) + past NOT_CLOCKED_IN/SCHEDULED/INCOMPLETE + past PRESENT-with-no-usable-pair (missing-punch no-pay preserved); LEAVE/HOLIDAY/REST never charged; today-or-later (Manila) lines stay open. Fully-materialized full-period timesheets resolve identically to legacy `12 − worked`, except LEAVE/HOLIDAY lines are no longer double-charged as absent (Path-A parity; tally will move on leave rows — flagged). Boundedness is structural: `absent ≤ min(12, total) − worked − open` with `dailyRate = basic/total` ⇒ `absentDeduction ≤ basicPay`, gross can no longer go negative from absent alone.
 
-Tests: `hris-api/tests/path-b-absent-days.spec.ts` 7/7 (legacy parity, EMP3338/3337/3334/3333 shapes, missing-punch PRESENT still charged, usable PRESENT never charged). Neighbors 42/42 green (register-basic-pay, 313 daily rate, hourly snapshot, missing-punch ×2, special-holiday split). `tsc` on touched regions clean (2× TS1117 `notes` duplicates proven pre-existing on HEAD).
+Tests: `bnpi-pats-api/tests/path-b-absent-days.spec.ts` 7/7 (legacy parity, EMP3338/3337/3334/3333 shapes, missing-punch PRESENT still charged, usable PRESENT never charged). Neighbors 42/42 green (register-basic-pay, 313 daily rate, hourly snapshot, missing-punch ×2, special-holiday split). `tsc` on touched regions clean (2× TS1117 `notes` duplicates proven pre-existing on HEAD).
 
 Live preview proof (no writes): `GET .../PP-20260826-20260911/generate-timesheet/preview?calculateRows=true&employeeId=<EMP3338>` → basicPay 30,000 / absent **15,000** (was 180,000) / gross 15,000 / net 13,037.55. Summary now reads scope 882 / approved 881 / ready **852** (stored 851 totals confirmed stale).
 
@@ -135,7 +135,7 @@ NOT pushed: `develop` push would auto-roll DEV/UAT/PROD API with new money math 
 
 Operator rule: mid-period hires/exits get schedule-based pro-rata basic (never full cutoff), for hires AND terminations, based on THEIR schedule — not materialized days. Tenure source verified: `attendance_obligations` exist only in-tenure (0 `OUT_OF_TENURE` rows stored this period).
 
-(a) `resolveTenureProRata()` (`hris-api/helper/payroll-period.helper.ts`): in-tenure scheduled workdays over schedule-derived monthly days (weekly pattern × 52/12; Mon–Sat fallback with flag; 1969 sentinel termination ignored). Full tenure → factor 1, basic untouched (zero tally impact). Wired into generate + preview: Path-B basic input, 313/cutoff daily override (schedule daily), tenure fields stamped on EP metadata. EMP3337 (stored 7-day pattern): basic 30,000 → **5,934.07**, daily 1,978.02; with HR-corrected Mon–Sat pattern it becomes 6,923.08 / 2,307.69. HR action still open: her pattern says Sunday-work vs week-view Monday-off vs Mon–Sat standard; Sep 4–7 pre-start stay `OUT_OF_TENURE` unless HR moves the start date.
+(a) `resolveTenureProRata()` (`bnpi-pats-api/helper/payroll-period.helper.ts`): in-tenure scheduled workdays over schedule-derived monthly days (weekly pattern × 52/12; Mon–Sat fallback with flag; 1969 sentinel termination ignored). Full tenure → factor 1, basic untouched (zero tally impact). Wired into generate + preview: Path-B basic input, 313/cutoff daily override (schedule daily), tenure fields stamped on EP metadata. EMP3337 (stored 7-day pattern): basic 30,000 → **5,934.07**, daily 1,978.02; with HR-corrected Mon–Sat pattern it becomes 6,923.08 / 2,307.69. HR action still open: her pattern says Sunday-work vs week-view Monday-off vs Mon–Sat standard; Sep 4–7 pre-start stay `OUT_OF_TENURE` unless HR moves the start date.
 
 (b) Operator-600 fallback gate: `resolveEmployeeDailyRate` 600-default now skipped when semi-monthly basic ≥ ₱15,000 (≈ a full month of 600/day — monthly contract, not daily-rated). Fleet proof: 1,931 operator-titled staff, clean split — legacy daily cohort tops at 6,600, monthly hires at 25–40k (incl. EMP3336, the header-missing hire starting Sep 14, i.e. next cutoff — explains the "1 missing timesheet"). Explicit Daily Salary still wins first; true daily operators unchanged.
 

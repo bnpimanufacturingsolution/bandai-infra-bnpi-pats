@@ -1,6 +1,6 @@
 # Bandai / BNPI HR — Payroll Process Discovery Questions
 
-**Purpose:** Client interview guide for understanding Bandai/BNPI HR’s **current (as-is)** payroll process before mapping or refining it in HRIS.
+**Purpose:** Client interview guide for understanding Bandai/BNPI HR’s **current (as-is)** payroll process before mapping or refining it in BNPI PATS.
 
 **Audience:** Project team interviewing HR / payroll / finance operators.
 
@@ -9,7 +9,7 @@
 1. Walk through **one real cutoff** (not a theoretical ideal).
 2. For each answer capture: **who → what file/system → when → what if wrong**.
 3. Prefer samples and files over verbal policy only.
-4. End with: “What must never change when we move this into HRIS?”
+4. End with: “What must never change when we move this into BNPI PATS?”
 5. Label anything not confirmed in the meeting as `NEEDS_CONFIRMATION`.
 
 **Related internal context (not client-confirmed truth):**
@@ -25,7 +25,7 @@
 
 ## Opening script
 
-> We’re not redesigning your policies today. We want to understand **exactly how you process payroll now** for one real cutoff — who does what, which files, what freezes when, and what always goes wrong. Then we can map that cleanly into HRIS without changing your business rules.
+> We’re not redesigning your policies today. We want to understand **exactly how you process payroll now** for one real cutoff — who does what, which files, what freezes when, and what always goes wrong. Then we can map that cleanly into BNPI PATS without changing your business rules.
 
 **Suggested sample cutoff for walkthrough:** June 26 – July 10, 2026 (or the latest completed register).
 
@@ -188,16 +188,16 @@ Ask HR to bring or send for the sample cutoff:
 | # | Question | Answer / notes | Owner | Evidence / file |
 |---|---|---|---|---|
 | 64 | If we could fix only **three** payroll pain points in the system, what would they be? | | | |
-| 65 | What would make you trust the HRIS payroll run enough to **stop using the Excel register** as primary? | | | |
-| 66 | Who should be the day-to-day HRIS payroll operator after go-live, and who is backup? | | | |
+| 65 | What would make you trust the BNPI PATS payroll run enough to **stop using the Excel register** as primary? | | | |
+| 66 | Who should be the day-to-day BNPI PATS payroll operator after go-live, and who is backup? | | | |
 
 ---
 
-## Optional: HRIS mapping notes (fill after interview)
+## Optional: BNPI PATS mapping notes (fill after interview)
 
-Map confirmed process steps to HRIS / DM surfaces. Leave blank until HR answers are captured.
+Map confirmed process steps to BNPI PATS / DM surfaces. Leave blank until HR answers are captured.
 
-| Client current step | Confirmed owner | Source file / system | HRIS / DM target | Open risk |
+| Client current step | Confirmed owner | Source file / system | BNPI PATS / DM target | Open risk |
 |---|---|---|---|---|
 | Setup / cycle / rates | | | DM0 / Setup | |
 | Org + schedules | | | DM1 | |

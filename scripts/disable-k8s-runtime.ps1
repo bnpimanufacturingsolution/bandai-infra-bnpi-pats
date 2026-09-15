@@ -21,12 +21,12 @@ sudo rm -f \
   /var/lib/rancher/k3s/server/manifests/project-truth-runtime-uat.yaml \
   /var/lib/rancher/k3s/server/manifests/project-truth-runtime-prod.yaml
 sudo kubectl delete application -n argocd project-truth-runtime-dev project-truth-runtime-uat project-truth-runtime-prod --ignore-not-found
-sudo kubectl delete -n dev deployment/hris-app deployment/hris-emp-app deployment/hris-api statefulset/hris-postgres job/hris-api-db-init service/hris-app service/hris-emp-app service/hris-api service/hris-postgres pvc/hris-postgres pvc/hris-uploads secret/hris-postgres-env --ignore-not-found
-sudo kubectl delete -n uat deployment/hris-app deployment/hris-emp-app deployment/hris-api statefulset/hris-postgres job/hris-api-db-init service/hris-app service/hris-emp-app service/hris-api service/hris-postgres pvc/hris-postgres pvc/hris-uploads secret/hris-postgres-env --ignore-not-found
-sudo kubectl delete -n prod deployment/hris-app deployment/hris-emp-app deployment/hris-api statefulset/hris-postgres job/hris-api-db-init service/hris-app service/hris-emp-app service/hris-api service/hris-postgres pvc/hris-postgres pvc/hris-uploads secret/hris-postgres-env --ignore-not-found
+sudo kubectl delete -n dev deployment/bnpi-pats-app deployment/bnpi-pats-emp-app deployment/bnpi-pats-api statefulset/bnpi-pats-postgres job/bnpi-pats-api-db-init service/bnpi-pats-app service/bnpi-pats-emp-app service/bnpi-pats-api service/bnpi-pats-postgres pvc/bnpi-pats-postgres pvc/bnpi-pats-uploads secret/bnpi-pats-postgres-env --ignore-not-found
+sudo kubectl delete -n uat deployment/bnpi-pats-app deployment/bnpi-pats-emp-app deployment/bnpi-pats-api statefulset/bnpi-pats-postgres job/bnpi-pats-api-db-init service/bnpi-pats-app service/bnpi-pats-emp-app service/bnpi-pats-api service/bnpi-pats-postgres pvc/bnpi-pats-postgres pvc/bnpi-pats-uploads secret/bnpi-pats-postgres-env --ignore-not-found
+sudo kubectl delete -n prod deployment/bnpi-pats-app deployment/bnpi-pats-emp-app deployment/bnpi-pats-api statefulset/bnpi-pats-postgres job/bnpi-pats-api-db-init service/bnpi-pats-app service/bnpi-pats-emp-app service/bnpi-pats-api service/bnpi-pats-postgres pvc/bnpi-pats-postgres pvc/bnpi-pats-uploads secret/bnpi-pats-postgres-env --ignore-not-found
 '@
 
 if ($RestartCompose) {
-  Invoke-Guest 'sudo systemctl start project-truth-hris'
+  Invoke-Guest 'sudo systemctl start project-truth-bnpi-pats'
   & "$PSScriptRoot\watch-until-healthy.ps1" -GuestIp $GuestIp -MaxHours 1 -RetryIntervalSeconds 20
 }

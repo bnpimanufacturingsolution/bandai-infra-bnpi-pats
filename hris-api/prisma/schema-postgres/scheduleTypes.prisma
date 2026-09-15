@@ -1,5 +1,0 @@
-enum DepartmentScheduleTemplateSource {
-  department_default
-  department_head_created
-  department_head_linked
-}

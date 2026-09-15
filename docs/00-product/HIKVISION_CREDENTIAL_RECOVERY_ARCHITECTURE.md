@@ -53,9 +53,9 @@ credential gaps, and it does not prove recovery is running.
 
 Evidence:
 
-- `hris-app/app/routes/admin/devices/enroll.tsx`
+- `bnpi-pats-app/app/routes/admin/devices/enroll.tsx`
   (`sdkMergeSelectableCredentialWrites`)
-- `hris-api/app/device/device.controller.ts`
+- `bnpi-pats-api/app/device/device.controller.ts`
   (`ready_from_raw_blob` and `ready_to_write`)
 
 ### What `Recovery queued` means today

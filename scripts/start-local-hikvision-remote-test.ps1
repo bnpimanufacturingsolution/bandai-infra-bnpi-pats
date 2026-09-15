@@ -3,7 +3,7 @@ param(
   [string]$AppUrl = 'http://127.0.0.1:5175',
   [string]$LoginEmail = 'admin@bandai.local',
   [string]$LoginPassword = 'password123',
-  [string]$LoginAppCode = 'hris',
+  [string]$LoginAppCode = 'bnpi-pats',
   [int]$StartupTimeoutSeconds = 60,
   [switch]$StopExisting
 )

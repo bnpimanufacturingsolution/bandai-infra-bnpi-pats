@@ -8,7 +8,7 @@ TEST_GREP=credential
 DEVICE_ID=${3:-}
 VENDOR_USER_ID=${4:-}
 MODALITY=${5:-face}
-HOTLOOP_IMAGE=${PROJECT_TRUTH_HOTLOOP_IMAGE:-project-truth-hris-api-hotloop:node20}
+HOTLOOP_IMAGE=${PROJECT_TRUTH_HOTLOOP_IMAGE:-project-truth-bnpi-pats-api-hotloop:node20}
 TEST_CONTAINER=""
 SDK_SPEC=""
 SDK_RAW_STDOUT=""
@@ -30,7 +30,7 @@ run_tests() {
     sudo docker build \
       --target builder \
       --tag "$HOTLOOP_IMAGE" \
-      /opt/project-truth/hris-api
+      /opt/project-truth/bnpi-pats-api
   fi
 
   TEST_CONTAINER="project-truth-hotloop-$$"
@@ -47,7 +47,7 @@ run_tests() {
     "$HOTLOOP_IMAGE" \
     -c 'sleep 3600' >/dev/null
   sudo docker start "$TEST_CONTAINER" >/dev/null
-  sudo docker cp "$STAGE_ROOT/hris-api/." "$TEST_CONTAINER:/app/"
+  sudo docker cp "$STAGE_ROOT/bnpi-pats-api/." "$TEST_CONTAINER:/app/"
   sudo docker exec "$TEST_CONTAINER" mkdir -p /scripts /vendor
   sudo docker cp "$STAGE_ROOT/scripts/." "$TEST_CONTAINER:/scripts/"
   sudo docker cp "$STAGE_ROOT/vendor/." "$TEST_CONTAINER:/vendor/"
@@ -105,8 +105,8 @@ COPY (
 ) TO STDOUT WITH DELIMITER '|'
 SQL
 )
-  sudo k3s kubectl -n dev exec statefulset/hris-postgres -- \
-    psql -U postgres -d hris -v ON_ERROR_STOP=1 -qAt -c "$query" \
+  sudo k3s kubectl -n dev exec statefulset/bnpi-pats-postgres -- \
+    psql -U postgres -d bnpi-pats -v ON_ERROR_STOP=1 -qAt -c "$query" \
     >"$SDK_SPEC"
   if [[ ! -s "$SDK_SPEC" ]]; then
     echo "No current Hikvision device row was found for $DEVICE_ID" >&2
@@ -201,8 +201,8 @@ COPY (
 ) TO STDOUT WITH DELIMITER '|'
 SQL
 )
-  sudo k3s kubectl -n dev exec statefulset/hris-postgres -- \
-    psql -U postgres -d hris -v ON_ERROR_STOP=1 -qAt -c "$query" \
+  sudo k3s kubectl -n dev exec statefulset/bnpi-pats-postgres -- \
+    psql -U postgres -d bnpi-pats -v ON_ERROR_STOP=1 -qAt -c "$query" \
     >"$connection_spec"
   if [[ ! -s "$connection_spec" ]]; then
     echo "No current Hikvision device row was found for $DEVICE_ID" >&2

@@ -1,7 +1,7 @@
 # DM4 Timesheet Upload — Operator Guide
 
 How to import timesheet source data (biometrics punches, approved overtime, period
-leave) into HRIS with one script — no agent session required.
+leave) into BNPI PATS with one script — no agent session required.
 
 Script: `scripts/run-dm4-timesheet-upload.mjs`
 Journey background: `docs/DM4_JAN_JUL_2026_BACKFILL.md`
@@ -10,7 +10,7 @@ Journey background: `docs/DM4_JAN_JUL_2026_BACKFILL.md`
 
 ## What this script does
 
-HRIS has no literal "timesheet workbook". The DM4 pipeline **materializes** timesheets:
+BNPI PATS has no literal "timesheet workbook". The DM4 pipeline **materializes** timesheets:
 
 ```text
 Biometrics punch workbook (No. | Date/Time)   -> DM4.1 attendance -> DM4.2 timesheets
@@ -39,11 +39,11 @@ The script runs that journey for you:
 
 | Need | Check / fix |
 |---|---|
-| Local API on `http://localhost:3001` | down → `powershell -File scripts\restart-local-hris-api-dev.ps1` |
+| Local API on `http://localhost:3001` | down → `powershell -File scripts\restart-local-bnpi-pats-api-dev.ps1` |
 | DEV DB forward on `127.0.0.1:55435` | script fails at login if dead → `powershell -File scripts\start-k8s-dev-db-access.ps1` (kill any stale ssh PID squatting 55435 first) |
 | `curl.exe` on PATH | standard on Windows 10+ |
 | Node 18+ | `node --version` |
-| Login | defaults `admin@bandai.local` / `password123` (override: `--email/--password` or env `HRIS_UPLOAD_EMAIL`/`HRIS_UPLOAD_PASSWORD`) |
+| Login | defaults `admin@bandai.local` / `password123` (override: `--email/--password` or env `BNPI_PATS_UPLOAD_EMAIL`/`BNPI_PATS_UPLOAD_PASSWORD`) |
 
 Workbooks must use the proven formats: punch ledger (`No. | Date/Time`), Bandai
 `rptOvertimeDetails` bucket report, `Final Leave & Awol` leave ledger. Files ending in
@@ -87,7 +87,7 @@ DONE: 12/12 OK. Evidence: .runtime/dm4-upload-2026-09-11T23-52-52
 | `--ot <dir-or-file>` | Folder of **approved-OT workbooks** (must be per-cutoff files) | optional |
 | `--leave "<file>=<PP-CODE>"` | Leave workbook + its payroll period (repeatable) | optional |
 | `--execute` | Actually import. Without it: plan-only | off |
-| `--api <url>` | HRIS API base | `http://localhost:3001` |
+| `--api <url>` | BNPI PATS API base | `http://localhost:3001` |
 | `--org <id>` | Organization id | BNEI org `cmpxw0mfe00007zws3iypuu9d` |
 | `--email` / `--password` | Login credentials | admin defaults (env overridable) |
 | `--max-refires <n>` | STALE-run refire attempts per file | 3 |
@@ -156,7 +156,7 @@ Evidence per pass lives in `.runtime/dm4-upload-<timestamp>/`:
 
 | Symptom | Cause / fix |
 |---|---|
-| `API not healthy` at start | Start/restart the API (`scripts\restart-local-hris-api-dev.ps1`) |
+| `API not healthy` at start | Start/restart the API (`scripts\restart-local-bnpi-pats-api-dev.ps1`) |
 | Login fails | DB forward down → rebuild (`scripts\start-k8s-dev-db-access.ps1`) |
 | `DRY-RUN NOT CLEAN` | The workbook plan has blockers — open the run's `errorJson` in `dryrun-*.json`; fix source data, never force |
 | `rowsWithoutAnySchedulePlan > 0` | Some punch dates have no employee schedule coverage — import the DM3 schedule assignments for that window first |

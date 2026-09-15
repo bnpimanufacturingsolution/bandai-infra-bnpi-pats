@@ -11,7 +11,7 @@ The scaffold proves the tool shape, local tests, VM tests, Docker image build,
 and direct Linux VM TCP reachability to the current Bandai Hikvision candidate
 device at `10.184.38.215`.
 
-This file records vendor/device-source truth only. HRIS DB/API rows, saved
+This file records vendor/device-source truth only. BNPI PATS DB/API rows, saved
 device events, and attendance tables are intentionally not used as evidence for
 this pass.
 
@@ -20,7 +20,7 @@ this pass.
 - VM hostname: `project-truth-node`
 - Current reachable VM IP for this pass: `10.184.38.144`
 - SSH key used from Windows host:
-  `%USERPROFILE%\.ssh\bnpi_hris_cloudflare_ed25519`
+  `%USERPROFILE%\.ssh\bnpi_pats_cloudflare_ed25519`
 - Stale path observed during this pass: `192.168.254.148:22` timed out from
   the Windows host.
 
@@ -35,7 +35,7 @@ On 2026-07-01, the vendor-only discovery wrapper was added and run:
 Scope:
 
 ```text
-vendor/device only; no HRIS DB/API reads
+vendor/device only; no BNPI PATS DB/API reads
 ```
 
 Result from inside Linux VM `project-truth-node`:
@@ -367,7 +367,7 @@ Proven:
 - Dockerized probe runs with `--network host`.
 - Linux VM can reach current Bandai Hikvision candidate
   `10.184.38.215:80` and `10.184.38.215:8000`.
-- Vendor-only discovery script exists and avoids HRIS DB/API evidence.
+- Vendor-only discovery script exists and avoids BNPI PATS DB/API evidence.
 - Credentialed ISAPI time and ACS history work with username `admin`.
 - Official Hikvision Linux SDK was downloaded, extracted, copied to the VM,
   and compiled against.
@@ -380,7 +380,7 @@ Not yet proven:
 - Linux HCNetSDK login or alarm listener behavior; current SDK login fails
   with `NET_DVR_PASSWORD_ERROR (1)`.
 - Device alarm receipt.
-- HRIS callback posting from the Linux probe.
+- BNPI PATS callback posting from the Linux probe.
 - Saved `device_events` rows from the Linux probe.
 - Browser/socket/attendance proof from the Linux path.
 - GitOps/K3s managed Linux Hikvision runtime.
@@ -401,6 +401,6 @@ While the operator taps, the script runs direct device ACS polling with:
 python -m hikvision_linux_probe --mode watch --target "Bandai Hikvision ISAPI=10.184.38.215:80:http"
 ```
 
-Only after direct device-source watch evidence passes should HRIS callback, DB,
+Only after direct device-source watch evidence passes should BNPI PATS callback, DB,
 attendance, browser, or Linux HCNetSDK listener proof be promoted as the next
 implementation target.

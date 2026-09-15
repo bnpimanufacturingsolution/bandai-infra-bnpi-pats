@@ -3,7 +3,7 @@ param(
 	[string]$AppBase = "http://localhost:5175",
 	[string]$Email = "admin@bandai.local",
 	[string]$Password = "password123",
-	[string]$AppCode = "hris",
+	[string]$AppCode = "bnpi-pats",
 	[string]$SourceDeviceId = "cmrht5s2w00ei7zgsre8y3o5n",
 	[string]$TargetDeviceId = "cmpxw13hx002h7zwso7dyedrn",
 	[string]$VendorUserId = "6",
@@ -97,7 +97,7 @@ if (-not $targetRow) {
 	throw "Target vendor user $VendorUserId was not found after copy"
 }
 
-$syntheticSummary = $targetRow.rawPayload._hrisDeviceMetadata.syntheticCredentialSummary
+$syntheticSummary = $targetRow.rawPayload._bnpi_patsDeviceMetadata.syntheticCredentialSummary
 $actualSyntheticFaceCount = 0
 if ($null -ne $syntheticSummary -and $null -ne $syntheticSummary.faceCount) {
 	$actualSyntheticFaceCount = [int]$syntheticSummary.faceCount

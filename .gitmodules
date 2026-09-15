@@ -1,4 +1,4 @@
-[submodule "hris-emp-app"]
-	path = hris-emp-app
-	url = https://github.com/hrisworkforcesystem-coder/hris-emp-app.git
+[submodule "bnpi-pats-emp-app"]
+	path = bnpi-pats-emp-app
+	url = https://github.com/bnpimanufacturingsolution/bnpi-pats-emp-app.git
 	branch = develop

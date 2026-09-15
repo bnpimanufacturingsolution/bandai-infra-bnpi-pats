@@ -16,9 +16,9 @@
 ## Damage Assessment
 
 - **3,793 tracked files deleted** from `develop` across the two "save" commits, **zero content added**.
-- Deleted scope: all of `hris-app/`, most of `hris-api/`, `scripts/`, `gitops/`, `appliance/`, `installer/`, `README.md`, `.github/` workflows.
+- Deleted scope: all of `bnpi-pats-app/`, most of `bnpi-pats-api/`, `scripts/`, `gitops/`, `appliance/`, `installer/`, `README.md`, `.github/` workflows.
 - **Strict-subset proof:** `653d3c32` tree ⊂ `85327bd2` tree; only differing file (`.gitignore`) was an EOL-only change. The restore therefore loses nothing.
-- PR #9's conflicts (`docs/OVERTIME_SOURCE_OF_TRUTH.md`, `hris-api/app/timesheet/timesheet.controller.ts`, `hris-app/app/routes/admin/rules-policies/timesheet.tsx`) were **modify/delete artifacts** of the gutting, not content disputes.
+- PR #9's conflicts (`docs/OVERTIME_SOURCE_OF_TRUTH.md`, `bnpi-pats-api/app/timesheet/timesheet.controller.ts`, `bnpi-pats-app/app/routes/admin/rules-policies/timesheet.tsx`) were **modify/delete artifacts** of the gutting, not content disputes.
 
 ## Restore Method
 

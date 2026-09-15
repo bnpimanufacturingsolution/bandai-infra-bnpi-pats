@@ -11,7 +11,7 @@ import path from "node:path";
 import {
 	buildDeviceUserMergePlan,
 	reconcileDurableFingerprintOwnerConflicts,
-} from "../hris-api/helper/device-user-merge.helper";
+} from "../bnpi-pats-api/helper/device-user-merge.helper";
 
 type GapPerson = {
 	uid: string;

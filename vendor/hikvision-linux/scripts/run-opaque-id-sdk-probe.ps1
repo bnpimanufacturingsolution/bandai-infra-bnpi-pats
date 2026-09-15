@@ -25,7 +25,7 @@ Write-Log "START outDir=$outDir"
 
 # 1) Ensure DB tunnel URL for credential export
 if (-not $env:FORCE_DATABASE_URL) {
-  $env:FORCE_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public"
+  $env:FORCE_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public"
 }
 $env:HIKVISION_DEVICE_ID = $DeviceId
 
@@ -181,7 +181,7 @@ $handoff = Join-Path $outDir "HANDOFF.md"
 - summary: sdk-probe-summary.json
 - stream: sdk-probe.jsonl
 
-Read-only dry-run. No HRIS writes. No device mutations.
+Read-only dry-run. No BNPI PATS writes. No device mutations.
 "@ | Set-Content -Path $handoff -Encoding UTF8
 
 Write-Log "DONE handoff=$handoff"

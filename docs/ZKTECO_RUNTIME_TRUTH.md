@@ -13,7 +13,7 @@ The runtime is a Linux/PyZK bridge that:
 - connects to the four known ZKTeco TCP terminals on port `4370`;
 - serves `/health`, `/status`, and `POST /sync` on port `4371` inside the
   container;
-- posts HRIS event payloads to `/api/zkteco/events`;
+- posts BNPI PATS event payloads to `/api/zkteco/events`;
 - is wired into Docker Compose as `zkteco-linux-bridge`,
   `zkteco-linux-bridge-dev`, and `zkteco-linux-bridge-uat`.
 
@@ -54,7 +54,7 @@ For each ZKTeco device row:
 Incoming ZKTeco events are stored with `DeviceEventSource` value
 `ZKTECO_EVENT`.
 
-The admin device events screen is an `hris-admin` surface:
+The admin device events screen is an `bnpi-pats-admin` surface:
 
 ```text
 /admin/configuration/devices/events?view=saved&source=ZKTECO_EVENT
@@ -68,7 +68,7 @@ Still not claimed:
 - realtime push parity versus polling;
 - GitOps/K3s-managed Linux bridge runtime;
 - production attendance/payroll readiness from ZKTeco events beyond the
-  existing tested HRIS event contract.
+  existing tested BNPI PATS event contract.
 
 Historical Windows SDK counts remain useful only as migration comparison data.
 They are not active runtime instructions.

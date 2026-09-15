@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_url="${PROJECT_TRUTH_REPO_URL:-https://github.com/hrisworkforcesystem-coder/bandai-infra.git}"
+repo_url="${PROJECT_TRUTH_REPO_URL:-https://github.com/bnpimanufacturingsolution/bandai-infra.git}"
 branch="${PROJECT_TRUTH_BRANCH:-develop}"
 install_root="${PROJECT_TRUTH_ROOT:-/opt/project-truth}"
 source_root="${PROJECT_TRUTH_SOURCE_ROOT:-/var/lib/project-truth/source}"
@@ -218,8 +218,8 @@ sync_install_root() {
     --exclude "*/node_modules" \
     --exclude logs \
     --exclude .runtime \
-    --exclude "hris-api/infrastructure/onprem/observability/.env" \
-    --exclude "hris-api/infrastructure/onprem/observability/backup/.env" \
+    --exclude "bnpi-pats-api/infrastructure/onprem/observability/.env" \
+    --exclude "bnpi-pats-api/infrastructure/onprem/observability/backup/.env" \
     "${source_root}/" "${install_root}/"
 }
 
@@ -231,13 +231,13 @@ install_commands_and_services() {
   as_root install -m 0755 "${bin_dir}/project-truth-status.sh" /usr/local/bin/project-truth-status
   as_root install -m 0755 "${bin_dir}/project-truth-progress.sh" /usr/local/bin/project-truth-progress
   as_root install -m 0755 "${bin_dir}/project-truth-monitor.sh" /usr/local/bin/project-truth-monitor
-  as_root install -m 0755 "${bin_dir}/project-truth-hris-env-start.sh" /usr/local/bin/project-truth-hris-env-start
-  as_root install -m 0755 "${bin_dir}/project-truth-hris-env-seed.sh" /usr/local/bin/project-truth-hris-env-seed
-  as_root install -m 0755 "${bin_dir}/project-truth-hris-dev-current-restore.sh" /usr/local/bin/project-truth-hris-dev-current-restore
-  as_root install -m 0755 "${bin_dir}/project-truth-hris-start.sh" /usr/local/bin/project-truth-hris-start
-  as_root install -m 0755 "${bin_dir}/project-truth-hris-status.sh" /usr/local/bin/project-truth-hris-status
-  as_root install -m 0755 "${bin_dir}/project-truth-hris-seed.sh" /usr/local/bin/project-truth-hris-seed
-  as_root install -m 0755 "${bin_dir}/project-truth-hris-observability-start.sh" /usr/local/bin/project-truth-hris-observability-start
+  as_root install -m 0755 "${bin_dir}/project-truth-bnpi-pats-env-start.sh" /usr/local/bin/project-truth-bnpi-pats-env-start
+  as_root install -m 0755 "${bin_dir}/project-truth-bnpi-pats-env-seed.sh" /usr/local/bin/project-truth-bnpi-pats-env-seed
+  as_root install -m 0755 "${bin_dir}/project-truth-bnpi-pats-dev-current-restore.sh" /usr/local/bin/project-truth-bnpi-pats-dev-current-restore
+  as_root install -m 0755 "${bin_dir}/project-truth-bnpi-pats-start.sh" /usr/local/bin/project-truth-bnpi-pats-start
+  as_root install -m 0755 "${bin_dir}/project-truth-bnpi-pats-status.sh" /usr/local/bin/project-truth-bnpi-pats-status
+  as_root install -m 0755 "${bin_dir}/project-truth-bnpi-pats-seed.sh" /usr/local/bin/project-truth-bnpi-pats-seed
+  as_root install -m 0755 "${bin_dir}/project-truth-bnpi-pats-observability-start.sh" /usr/local/bin/project-truth-bnpi-pats-observability-start
   as_root install -m 0755 "${bin_dir}/project-truth-db-access.sh" /usr/local/bin/project-truth-db-access
   as_root install -m 0755 "${bin_dir}/project-truth-cloudflare-vm-tunnel.sh" /usr/local/bin/project-truth-cloudflare-vm-tunnel
   as_root install -m 0755 "${bin_dir}/project-truth-lan-config.sh" /usr/local/bin/project-truth-lan-config
@@ -253,7 +253,7 @@ install_commands_and_services() {
   fi
   as_root install -m 0755 "${bin_dir}/project-truth-os-sync.sh" /usr/local/bin/project-truth-os-sync
 
-  as_root install -m 0644 "${systemd_dir}/project-truth-hris.service" /etc/systemd/system/project-truth-hris.service
+  as_root install -m 0644 "${systemd_dir}/project-truth-bnpi-pats.service" /etc/systemd/system/project-truth-bnpi-pats.service
   as_root install -m 0644 "${systemd_dir}/project-truth-lan-summary.service" /etc/systemd/system/project-truth-lan-summary.service
   as_root install -m 0644 "${systemd_dir}/project-truth-clean-console.service" /etc/systemd/system/project-truth-clean-console.service
   as_root install -m 0644 "${systemd_dir}/project-truth-trycloudflare.service" /etc/systemd/system/project-truth-trycloudflare.service
@@ -266,12 +266,12 @@ install_commands_and_services() {
   fi
   as_root install -m 0644 "${systemd_dir}/project-truth-os-sync.service" /etc/systemd/system/project-truth-os-sync.service
   as_root install -m 0644 "${systemd_dir}/project-truth-os-sync.timer" /etc/systemd/system/project-truth-os-sync.timer
-  as_root install -m 0644 "${profile_dir}/project-truth-hris-help.sh" /etc/profile.d/project-truth-hris-help.sh
-  as_root chmod 0644 /etc/profile.d/project-truth-hris-help.sh
+  as_root install -m 0644 "${profile_dir}/project-truth-bnpi-pats-help.sh" /etc/profile.d/project-truth-bnpi-pats-help.sh
+  as_root chmod 0644 /etc/profile.d/project-truth-bnpi-pats-help.sh
   configure_console_session_hook
 
   as_root systemctl daemon-reload
-  as_root systemctl enable project-truth-hris.service
+  as_root systemctl enable project-truth-bnpi-pats.service
   as_root systemctl enable project-truth-lan-summary.service
   as_root systemctl enable project-truth-clean-console.service
   as_root systemctl enable project-truth-hikvision-hot-reload-listener.service

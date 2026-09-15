@@ -1,7 +1,0 @@
-employeeId,name,type,number,issueDate,expiryDate,fileUrl,ext,documentTypeCode,fieldValues,metadata
-BNEI-001,Government ID 1,GOVERNMENT_ID,ID-0001,2024-01-15T00:00:00.000Z,2034-01-15T00:00:00.000Z,https://example.com/documents/bnei-001-id.pdf,pdf,GOV_ID,"{""idType"":""National ID""}","{""source"":""sample-pack""}"
-BNEI-002,Government ID 2,GOVERNMENT_ID,ID-0002,2024-01-16T00:00:00.000Z,2034-01-16T00:00:00.000Z,https://example.com/documents/bnei-002-id.pdf,pdf,GOV_ID,"{""idType"":""National ID""}","{""source"":""sample-pack""}"
-BNEI-003,Government ID 3,GOVERNMENT_ID,ID-0003,2024-01-17T00:00:00.000Z,2034-01-17T00:00:00.000Z,https://example.com/documents/bnei-003-id.pdf,pdf,GOV_ID,"{""idType"":""National ID""}","{""source"":""sample-pack""}"
-00050,Government ID 4,GOVERNMENT_ID,ID-0004,2024-01-18T00:00:00.000Z,2034-01-18T00:00:00.000Z,https://example.com/documents/00050-id.pdf,pdf,GOV_ID,"{""idType"":""National ID""}","{""source"":""sample-pack""}"
-00062,Government ID 5,GOVERNMENT_ID,ID-0005,2024-01-19T00:00:00.000Z,2034-01-19T00:00:00.000Z,https://example.com/documents/00062-id.pdf,pdf,GOV_ID,"{""idType"":""National ID""}","{""source"":""sample-pack""}"
-00065,Government ID 6,GOVERNMENT_ID,ID-0006,2024-01-20T00:00:00.000Z,2034-01-20T00:00:00.000Z,https://example.com/documents/00065-id.pdf,pdf,GOV_ID,"{""idType"":""National ID""}","{""source"":""sample-pack""}"

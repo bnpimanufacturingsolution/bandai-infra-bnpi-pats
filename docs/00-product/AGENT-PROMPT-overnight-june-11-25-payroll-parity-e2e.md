@@ -24,17 +24,17 @@ PRIMARY DOCS (open with tools, do not invent):
 2. docs/00-product/AGENT-PROMPT-graph-loop-june-11-25-payroll-tally.md
 3. docs/dm-migration-workflow.md (DM3 mass upload + DM4 bio/OT sections)
 4. docs/BNPI_JUNE26_JULY10_2026_PAYROLL_PARITY_CHECKLIST.md (sibling; period-2 zeros — DO NOT copy contribution zeros)
-5. Historical May path awareness only: hris-api/scripts/validate-bandai-payroll-source-trace.ts defaults are Apr26–May10 — OVERRIDE all paths
+5. Historical May path awareness only: bnpi-pats-api/scripts/validate-bandai-payroll-source-trace.ts defaults are Apr26–May10 — OVERRIDE all paths
 
 GOAL:
   Dry-run and execute the local/DEV import → timesheet → Run Payroll pipeline
-  for BNPI cutoff 2026-06-11..2026-06-25 until HRIS EmployeePayroll NetPay
+  for BNPI cutoff 2026-06-11..2026-06-25 until BNPI PATS EmployeePayroll NetPay
   (and documented TotalReceivable secondaries) tallies to
-  docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx
+  docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx
   (password 9090) for the frozen sample set, then expand coverage.
 
 SOURCE PACK (only these cutoff files for money/attendance this cut):
-  T = docs/new-cutoff/june-11-25/HRIS Payroll Computation June 11 - 25, 2026.xlsx
+  T = docs/new-cutoff/june-11-25/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx
   B = docs/new-cutoff/june-11-25/Biometrics Data_Jun 11 - 25.xlsx
   O = docs/new-cutoff/june-11-25/1rptOvertimeDetails - June 11-25, 2026.xlsx
   C = docs/new-cutoff/june-11-25/Compensation Mass Upload 06.30.26.xlsx
@@ -66,7 +66,7 @@ HARD BANS:
 
 RUNTIME:
   Prefer local Windows hot-reload: API :3001, app :5175, DB 127.0.0.1:55435
-  Admin: admin@bandai.local / password123 / appCode=hris (or hris-hr-manager where payroll UI requires)
+  Admin: admin@bandai.local / password123 / appCode=bnpi-pats (or bnpi-pats-hr-manager where payroll UI requires)
   Recover DB/API yourself (npm.cmd, start-k8s-dev-db-access, 3 tries)
 
 EVIDENCE ROOT:
@@ -130,7 +130,7 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $root = Join-Path '.runtime' "june-11-25-payroll-parity-$stamp"
 New-Item -ItemType Directory -Force -Path $root | Out-Null
 $pack = 'docs/new-cutoff/june-11-25'
-$T = "$pack/HRIS Payroll Computation June 11 - 25, 2026.xlsx"
+$T = "$pack/BNPI PATS Payroll Computation June 11 - 25, 2026.xlsx"
 $B = "$pack/Biometrics Data_Jun 11 - 25.xlsx"
 $O = "$pack/1rptOvertimeDetails - June 11-25, 2026.xlsx"
 $C = "$pack/Compensation Mass Upload 06.30.26.xlsx"
@@ -140,7 +140,7 @@ $D = "$pack/Deduction Mass Upload 06.30.26.xlsx"
 # recover 55435 + API 3001 if needed; login admin; save token proof
 
 # 1) Source-only
-cd hris-api
+cd bnpi-pats-api
 npm.cmd run dry-run:bandai-payroll-source -- `
   --workbook="../$T" --password=9090 --no-default-sources `
   --compensation-upload="../$C" --deduction-upload="../$D" `
@@ -213,7 +213,7 @@ Every residual answer **must** use table form (bucket / count / blocker class / 
 ## 6. Output contract before idle
 
 1. `STATUS.md` with checklist G0–G12  
-2. Sample NetPay table (register vs HRIS)  
+2. Sample NetPay table (register vs BNPI PATS)  
 3. Residual taxonomy table  
 4. Artifact paths under stamp  
 5. If code/import bug fixed: commit/push `develop` when green  

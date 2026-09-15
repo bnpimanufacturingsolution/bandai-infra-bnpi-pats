@@ -4,12 +4,12 @@ metadata:
   name: project-truth-environment
   labels:
     app.kubernetes.io/name: project-truth
-    app.kubernetes.io/component: hris-environment
+    app.kubernetes.io/component: bnpi-pats-environment
 data:
-  app_family: hris
+  app_family: bnpi-pats
   runtime: docker-compose
-  note: "HRIS runtime services run on the appliance Docker stack; this GitOps object records the environment contract."
+  note: "BNPI PATS runtime services run on the appliance Docker stack; this GitOps object records the environment contract."
   experimental_trycloudflare_supported: "true"
   experimental_trycloudflare_default: "false"
   experimental_trycloudflare_flag: "EXPERIMENTAL_TRY_CLOUDFLARE"
-  experimental_trycloudflare_scope: "deprecated manual demo URLs only; named Cloudflare Tunnel bnpi-hris.tech is the normal public path"
+  experimental_trycloudflare_scope: "deprecated manual demo URLs only; named Cloudflare Tunnel bnpi-pats.tech is the normal public path"

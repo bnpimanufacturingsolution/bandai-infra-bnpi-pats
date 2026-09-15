@@ -6,21 +6,21 @@ Status: `CONFIRMED_CODE_AND_LIVE_LOCAL`
 
 Operator chose **option B**: a section can have **multiple line leaders**; an employee can
 lead many sections. Many-to-many join model `SectionLineLeader` (table
-`section_line_leaders`). This activates the previously dormant `hris-line-leader` role:
+`section_line_leaders`). This activates the previously dormant `bnpi-pats-line-leader` role:
 assignment now derives the role automatically, and removal deletes membership and
 re-derives the role back down.
 
 ## Schema
 
-- `hris-api/prisma/schema/sectionlineleader.prisma` (Mongo variant, ObjectId)
-- `hris-api/prisma/schema-postgres/sectionlineleader.prisma` (Postgres variant)
+- `bnpi-pats-api/prisma/schema/sectionlineleader.prisma` (Mongo variant, ObjectId)
+- `bnpi-pats-api/prisma/schema-postgres/sectionlineleader.prisma` (Postgres variant)
 - Reverse relations: `Section.lineLeaders`, `Employee.lineLeaderSections`
-- Migration: `hris-api/prisma/schema-postgres/migrations/20260907 applied to local DEV (K3s forward 55435).
+- Migration: `bnpi-pats-api/prisma/schema-postgres/migrations/20260907 applied to local DEV (K3s forward 55435).
 - `bootstrap.sql` mirror updated (table + FKs + indexes).
 
 ## Backend
 
-- `hris-api/helper/section-line-leaders.helper.ts` — `resolveLineLeaderIds`
+- `bnpi-pats-api/helper/section-line-leaders.helper.ts` — `resolveLineLeaderIds`
   (same-org validation, dedupe) + `reconcileSectionLineLeaders` (transactional diff:
   delete removed / create added with `skipDuplicates`), returns changed employee ids.
 - `app/section/section.controller.ts`:
@@ -35,32 +35,32 @@ re-derives the role back down.
   - New `syncLineLeaderRolesForEmployees` wrapper.
 - `utils/role-derivation.ts`: new `isLineLeader` input; precedence
   HR > manager level > line leader > plain employee; `withFlags` unchanged
-  (`hris-line-leader` was already treated as manager class).
+  (`bnpi-pats-line-leader` was already treated as manager class).
 - Employee hard delete (`app/employee/employee.controller.ts`): now detaches
   `Section.headId` (pre-existing gap fixed) and deletes `sectionLineLeader` rows
   before delete.
 
 ## Frontend
 
-- `hris-app/app/routes/admin/configuration/sections.tsx`:
+- `bnpi-pats-app/app/routes/admin/configuration/sections.tsx`:
   - Line Leaders **column** in the sections table (first 2 names + "+N").
   - Edit form: removable chips + "Add line leader..." single-select that clears
     after each add; honest "Loading employees..." placeholder while roster loads.
   - View modal: Line leaders row.
   - CSV export includes Line Leaders column.
-- `hris-app/app/services/sections.service.ts`: `SectionLineLeaderMembership`,
+- `bnpi-pats-app/app/services/sections.service.ts`: `SectionLineLeaderMembership`,
   `lineLeaders`, `lineLeaderIds` on create/update requests.
 
 ## Tests
 
-- `hris-api/tests/section-line-leaders.spec.ts` — **15/15 passing** (resolve
+- `bnpi-pats-api/tests/section-line-leaders.spec.ts` — **15/15 passing** (resolve
   dedupe/missing, reconcile diff/idempotent/no-op, role derivation precedence incl.
   manager/HR wins and legacy-path no-grant).
-- `hris-api/tests/role-derivation.spec.ts` — 55/55 still passing (no regression).
-- `hris-api/tests/section.controller.spec.ts` — **66/66 passing** after adding a
+- `bnpi-pats-api/tests/role-derivation.spec.ts` — 55/55 still passing (no regression).
+- `bnpi-pats-api/tests/section.controller.spec.ts` — **66/66 passing** after adding a
   `sectionLineLeader` stub to the spec's mock prisma (the new `remove()` pre-delete
   membership read needed it; no assertions changed).
-- `hris-app/tests/smoke/admin-config-sections-line-leaders.spec.ts` — **2/2 passing**
+- `bnpi-pats-app/tests/smoke/admin-config-sections-line-leaders.spec.ts` — **2/2 passing**
   (column render; edit modal chips load + remove).
 - **Pre-existing drift (NOT from this work)**:
   `tests/employee-hard-delete.contract.spec.ts` fails 4/4 statically (0 passing)
@@ -72,32 +72,32 @@ re-derives the role back down.
   from this feature is additive (two prisma calls before `employee.delete`) and is
   covered by live behavior, not by this static spec.
 - Dual-app parity: admin-only configuration surface — HR-only exception, no
-  `hris-emp-app` counterpart (per hris-app AGENTS.md exception list).
+  `bnpi-pats-emp-app` counterpart (per bnpi-pats-app AGENTS.md exception list).
 
 ## Live API round-trip proof (K3s DEV forward, admin actor)
 
-Evidence: `hris-api/.runtime/20260907-section-ll-proof/` +
+Evidence: `bnpi-pats-api/.runtime/20260907-section-ll-proof/` +
 `.runtime/browser-evidence/sections-line-leaders-live/proof.json` + screenshot.
 
 1. CREATE section with 1 leader → 201, membership row + `lineLeaders` include.
-2. Role auto-upgrade: TESTBEN004 → `hris-line-leader`, `isManager=true`.
+2. Role auto-upgrade: TESTBEN004 → `bnpi-pats-line-leader`, `isManager=true`.
 3. UPDATE adds second leader → both leaders upgraded.
 4. UPDATE removing one leader → removed employee auto-demoted
-   (`hris-employee`/`isManager=false`); kept leader unchanged.
+   (`bnpi-pats-employee`/`isManager=false`); kept leader unchanged.
 5. DELETE section → join rows cascade; **initially ex-leader role stayed stale**
    → controller fixed → re-proved: ex-leader auto-demoted after section delete.
 6. Browser proof on real app (5175→3001→DEV DB): LINE LEADERS column renders;
    edit modal shows "Line Leaders (optional)" + chip/remove UI + add select.
 
-All temp proof sections deleted; TESTBEN004/TESTBEN003 back to `hris-employee`.
+All temp proof sections deleted; TESTBEN004/TESTBEN003 back to `bnpi-pats-employee`.
 
 ## DEV db-init drift repair (push blocker removed)
 
 - K3s DEV held stale `requests_type_backup_20260826` (47 rows, backup of
   requests_type from the 2026-08-26 day-status repair) which would make the
   schema-only GitOps `prisma-postgres:push` demand `--accept-data-loss` and fail
-  `hris-api-db-init` (runtime-dev was already `Synced/Degraded` before this work).
-- Read-only export first: `hris-api/scripts/export-dev-requests-type-backup.ts` →
+  `bnpi-pats-api-db-init` (runtime-dev was already `Synced/Degraded` before this work).
+- Read-only export first: `bnpi-pats-api/scripts/export-dev-requests-type-backup.ts` →
   `.runtime/dev-dbinit-drift-repair-20260907/requests_type_backup_20260826.export.json`
   (47 rows, full JSON).
 - Then `DROP TABLE` on DEV. Local `prisma db push` now syncs clean (9.44s).
@@ -105,8 +105,8 @@ All temp proof sections deleted; TESTBEN004/TESTBEN003 back to `hris-employee`.
 ## VM/GitOps promotion (2026-09-07)
 
 - Pushed `2f6aed49` to `origin/develop` (rebased cleanly onto `e5e51a43`).
-- VM ansible-pull synced the SHA, rebuilt `hris-api-local:develop` /
-  `hris-app-local:develop`, and rolled `hris-api`/`hris-app` Deployments in
+- VM ansible-pull synced the SHA, rebuilt `bnpi-pats-api-local:develop` /
+  `bnpi-pats-app-local:develop`, and rolled `bnpi-pats-api`/`bnpi-pats-app` Deployments in
   dev, uat, and prod (pods 1/1 Running on the new images).
 - DEV db-init Job was `Failed` (pre-existing, created 01:26Z). Released it;
   Argo recreated from git → `SuccessCriteriaMet Complete` (09:35:28Z).

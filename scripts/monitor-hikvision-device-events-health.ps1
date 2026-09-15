@@ -6,7 +6,7 @@
 
 param(
   [int]$IntervalSeconds = 60,
-  [string]$SshTarget = "project-truth-hris",
+  [string]$SshTarget = "project-truth-bnpi-pats",
   [string]$EvidenceDir = ".runtime/hikvision-health-monitor"
 )
 
@@ -31,9 +31,9 @@ while ($true) {
 
   # Public API health
   foreach ($u in @(
-    "https://dev-api.bnpi-hris.tech/health",
-    "https://api.bnpi-hris.tech/health",
-    "https://uat-api.bnpi-hris.tech/health"
+    "https://dev-api.bnpi-pats.tech/health",
+    "https://api.bnpi-pats.tech/health",
+    "https://uat-api.bnpi-pats.tech/health"
   )) {
     try {
       $r = Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 15
@@ -48,10 +48,10 @@ while ($true) {
   $remote = @'
 set +e
 echo LISTENER=$(systemctl is-active project-truth-hikvision-hot-reload-listener.service 2>/dev/null)
-echo MISS_5M=$(kubectl -n dev logs deploy/hris-hikvision-watcher --since=5m 2>/dev/null | grep -c "missing access credentials" || echo 0)
-echo GHOST=$(kubectl -n dev exec sts/hris-postgres -- psql -U postgres -d hris -t -A -c "SELECT \"isDeleted\" FROM \"Device\" WHERE id='"'"'cmry9tvve000gnr3oqo2zhzgw'"'"';" 2>/dev/null | tr -d "[:space:]")
-echo WATCHER=$(kubectl -n dev get deploy hris-hikvision-watcher -o jsonpath="{.status.readyReplicas}/{.status.replicas}" 2>/dev/null)
-echo DEVAPI=$(kubectl -n dev get deploy hris-api -o jsonpath="{.status.readyReplicas}/{.status.replicas}" 2>/dev/null)
+echo MISS_5M=$(kubectl -n dev logs deploy/bnpi-pats-hikvision-watcher --since=5m 2>/dev/null | grep -c "missing access credentials" || echo 0)
+echo GHOST=$(kubectl -n dev exec sts/bnpi-pats-postgres -- psql -U postgres -d bnpi-pats -t -A -c "SELECT \"isDeleted\" FROM \"Device\" WHERE id='"'"'cmry9tvve000gnr3oqo2zhzgw'"'"';" 2>/dev/null | tr -d "[:space:]")
+echo WATCHER=$(kubectl -n dev get deploy bnpi-pats-hikvision-watcher -o jsonpath="{.status.readyReplicas}/{.status.replicas}" 2>/dev/null)
+echo DEVAPI=$(kubectl -n dev get deploy bnpi-pats-api -o jsonpath="{.status.readyReplicas}/{.status.replicas}" 2>/dev/null)
 curl -sS -m 3 http://127.0.0.1:3101/health | head -c 80; echo
 '@
   try {

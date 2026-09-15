@@ -33,7 +33,7 @@ function Get-VmSshCandidates {
 
   @(
     [pscustomobject]@{ Label = 'lan:infra@10.184.37.19'; Args = $directArgs },
-    [pscustomobject]@{ Label = 'alias:project-truth-hris'; Args = @('project-truth-hris') }
+    [pscustomobject]@{ Label = 'alias:project-truth-bnpi-pats'; Args = @('project-truth-bnpi-pats') }
   )
 }
 
@@ -58,7 +58,7 @@ function Select-VmSshCandidate {
       return $candidate
     }
   }
-  throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-hris)."
+  throw "No VM SSH target reachable (tried direct LAN 10.184.37.19, then project-truth-bnpi-pats)."
 }
 
 function Stop-ExistingBridge {
@@ -132,7 +132,7 @@ ss -ltn 2>/dev/null | grep -E ":(__PORT_PATTERN__)[[:space:]]" || echo REMOTE_PO
 }
 
 if ($DeviceIps.Count -eq 0 -and [string]::IsNullOrWhiteSpace($DeviceIp)) {
-  $resolver = Join-Path $repoRoot "hris-api\scripts\resolve-hikvision-vm-bridge-targets.cjs"
+  $resolver = Join-Path $repoRoot "bnpi-pats-api\scripts\resolve-hikvision-vm-bridge-targets.cjs"
   if (Test-Path -LiteralPath $resolver) {
     try {
       $json = & node.exe $resolver 2>$null

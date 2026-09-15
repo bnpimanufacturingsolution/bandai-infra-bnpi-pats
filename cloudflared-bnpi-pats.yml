@@ -1,0 +1,85 @@
+tunnel: e3486f00-f974-46d3-9e11-911266749d00
+credentials-file: C:\Users\anoni\.cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
+
+ingress:
+  - hostname: bnpi-pats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3001
+  - hostname: bnpi-pats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3001
+  - hostname: www.bnpi-pats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3001
+  - hostname: www.bnpi-pats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3001
+  - hostname: app.bnpi-pats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3001
+  - hostname: app.bnpi-pats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3001
+  - hostname: dev.bnpi-pats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3101
+  - hostname: dev.bnpi-pats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3101
+  - hostname: uat.bnpi-pats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3201
+  - hostname: uat.bnpi-pats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3201
+  - hostname: emp.bnpi-pats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3001
+  - hostname: emp.bnpi-pats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3001
+  - hostname: dev-emp.bnpi-pats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3101
+  - hostname: dev-emp.bnpi-pats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3101
+  - hostname: uat-emp.bnpi-pats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3201
+  - hostname: uat-emp.bnpi-pats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3201
+  - hostname: bnpi-pats.tech
+    service: http://10.184.37.19:3000
+  - hostname: www.bnpi-pats.tech
+    service: http://10.184.37.19:3000
+  - hostname: app.bnpi-pats.tech
+    service: http://10.184.37.19:3000
+  - hostname: api.bnpi-pats.tech
+    service: http://10.184.37.19:3001
+  - hostname: dev.bnpi-pats.tech
+    service: http://10.184.37.19:3100
+  - hostname: dev-api.bnpi-pats.tech
+    service: http://10.184.37.19:3101
+  - hostname: uat.bnpi-pats.tech
+    service: http://10.184.37.19:3200
+  - hostname: uat-api.bnpi-pats.tech
+    service: http://10.184.37.19:3201
+  - hostname: emp.bnpi-pats.tech
+    service: http://10.184.37.19:3300
+  - hostname: dev-emp.bnpi-pats.tech
+    service: http://10.184.37.19:3310
+  - hostname: uat-emp.bnpi-pats.tech
+    service: http://10.184.37.19:3320
+  - hostname: grafana.bnpi-pats.tech
+    service: http://10.184.37.19:53000
+  - hostname: ssh.bnpi-pats.tech
+    service: ssh://10.184.37.19:22
+  - hostname: db.bnpi-pats.tech
+    service: tcp://10.184.37.19:15432
+  - hostname: dev-db.bnpi-pats.tech
+    service: tcp://10.184.37.19:15433
+  - hostname: uat-db.bnpi-pats.tech
+    service: tcp://10.184.37.19:15434
+  - service: http_status:404

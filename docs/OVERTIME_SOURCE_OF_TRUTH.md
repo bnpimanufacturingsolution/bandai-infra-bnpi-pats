@@ -2,7 +2,7 @@
 
 **Status:** current implementation (local DEV clone, 2026-08-18)  
 **Audience:** HR, payroll operators, and agents working attendance / timesheets / Run Payroll  
-**Scope:** How OT is detected, approved, stored, and paid in this HRIS.  
+**Scope:** How OT is detected, approved, stored, and paid in this BNPI PATS.  
 **Not in WWG.** Product wiki is separate; this file is the working OT contract.
 
 Related:
@@ -154,13 +154,13 @@ Pre-approved exception: if metadata has `bandaiPayrollSourceRepair`, policy trea
 
 | Concern | Path |
 |---|---|
-| Policy + candidate vs payable hours | `hris-api/helper/overtime-approval.helper.ts` |
-| File / approve / reject OT request | `hris-api/app/timesheet/overtime-request.service.ts` |
-| Timesheet config default | `hris-api/helper/timesheet-config.helper.ts` |
-| Run Payroll OT readiness | `hris-api/helper/payroll-ot-readiness.helper.ts` |
-| OT / bucket money | `hris-api/helper/payroll-period.helper.ts` |
-| Workbook apply + timesheet auto-approve | `hris-api/helper/bandai-payroll-ot-auto-approve.helper.ts`, `hris-api/scripts/repair-bandai-payroll-source-timesheet-lines.ts`, DM4 adapter |
-| UI candidate + submit warning | `hris-app/app/lib/utils/overtime-candidate.ts`, `TimesheetViewModal.tsx` |
+| Policy + candidate vs payable hours | `bnpi-pats-api/helper/overtime-approval.helper.ts` |
+| File / approve / reject OT request | `bnpi-pats-api/app/timesheet/overtime-request.service.ts` |
+| Timesheet config default | `bnpi-pats-api/helper/timesheet-config.helper.ts` |
+| Run Payroll OT readiness | `bnpi-pats-api/helper/payroll-ot-readiness.helper.ts` |
+| OT / bucket money | `bnpi-pats-api/helper/payroll-period.helper.ts` |
+| Workbook apply + timesheet auto-approve | `bnpi-pats-api/helper/bandai-payroll-ot-auto-approve.helper.ts`, `bnpi-pats-api/scripts/repair-bandai-payroll-source-timesheet-lines.ts`, DM4 adapter |
+| UI candidate + submit warning | `bnpi-pats-app/app/lib/utils/overtime-candidate.ts`, `TimesheetViewModal.tsx` |
 | Run Payroll OT panel | `GET /api/payrollPeriod/:id/ot-readiness` |
 
 ---

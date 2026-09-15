@@ -12,10 +12,10 @@ if (-not $Force) {
 }
 
 $backup = Resolve-Path -LiteralPath $BackupPath
-$dump = Join-Path $backup 'hris.dump'
+$dump = Join-Path $backup 'bnpi-pats.dump'
 $uploads = Join-Path $backup 'apiuploads.tgz'
 if (-not (Test-Path -LiteralPath $dump)) {
-  throw "Backup is missing hris.dump: $dump"
+  throw "Backup is missing bnpi-pats.dump: $dump"
 }
 if (-not (Test-Path -LiteralPath $uploads)) {
   throw "Backup is missing apiuploads.tgz: $uploads"
@@ -33,7 +33,7 @@ function Invoke-Guest {
 }
 
 Invoke-Guest "rm -rf '$remoteDir' && mkdir -p '$remoteDir'"
-scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $dump "${User}@${GuestIp}:${remoteDir}/hris.dump"
+scp -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 $dump "${User}@${GuestIp}:${remoteDir}/bnpi-pats.dump"
 if ($LASTEXITCODE -ne 0) {
   throw "Failed to upload database dump."
 }
@@ -45,12 +45,12 @@ if ($LASTEXITCODE -ne 0) {
 $restoreCommand = @'
 set -e
 cd /opt/project-truth/appliance
-docker compose stop hris-app hris-api || docker-compose stop hris-app hris-api
-cat "__REMOTE_DIR__/hris.dump" | docker exec -i hris-postgres sh -lc 'pg_restore -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-hris}" --clean --if-exists --no-owner'
-docker cp "__REMOTE_DIR__/apiuploads.tgz" hris-api:/tmp/project-truth-apiuploads.tgz
-docker exec hris-api sh -lc 'rm -rf /app/uploads/* && cd /app/uploads && tar -xzf /tmp/project-truth-apiuploads.tgz && rm -f /tmp/project-truth-apiuploads.tgz'
-docker compose up -d hris-api hris-app || docker-compose up -d hris-api hris-app
-project-truth-hris-status || true
+docker compose stop bnpi-pats-app bnpi-pats-api || docker-compose stop bnpi-pats-app bnpi-pats-api
+cat "__REMOTE_DIR__/bnpi-pats.dump" | docker exec -i bnpi-pats-postgres sh -lc 'pg_restore -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-bnpi-pats}" --clean --if-exists --no-owner'
+docker cp "__REMOTE_DIR__/apiuploads.tgz" bnpi-pats-api:/tmp/project-truth-apiuploads.tgz
+docker exec bnpi-pats-api sh -lc 'rm -rf /app/uploads/* && cd /app/uploads && tar -xzf /tmp/project-truth-apiuploads.tgz && rm -f /tmp/project-truth-apiuploads.tgz'
+docker compose up -d bnpi-pats-api bnpi-pats-app || docker-compose up -d bnpi-pats-api bnpi-pats-app
+project-truth-bnpi-pats-status || true
 '@
 Invoke-Guest ($restoreCommand.Replace('__REMOTE_DIR__', $remoteDir))
 

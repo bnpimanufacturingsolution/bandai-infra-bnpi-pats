@@ -3,7 +3,7 @@
   Thin wrapper for the EmployeePayroll.hourlySalary backfill.
 
 .DESCRIPTION
-  cds to hris-api and runs npm.cmd run backfill:employee-payroll-hourly-salary.
+  cds to bnpi-pats-api and runs npm.cmd run backfill:employee-payroll-hourly-salary.
   Dry-run by default. -Execute passes --execute. Remaining args are forwarded.
 
 .EXAMPLE
@@ -20,9 +20,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$hrisApi = Join-Path $repoRoot "hris-api"
-if (-not (Test-Path (Join-Path $hrisApi "package.json"))) {
-  throw "hris-api package.json not found at $hrisApi"
+$bnpiPatsApi = Join-Path $repoRoot "bnpi-pats-api"
+if (-not (Test-Path (Join-Path $bnpiPatsApi "package.json"))) {
+  throw "bnpi-pats-api package.json not found at $bnpiPatsApi"
 }
 
 $forward = [System.Collections.Generic.List[string]]::new()
@@ -35,7 +35,7 @@ foreach ($arg in @($RemainingArgs)) {
   }
 }
 
-Push-Location $hrisApi
+Push-Location $bnpiPatsApi
 try {
   & npm.cmd run backfill:employee-payroll-hourly-salary -- @forward
   exit $LASTEXITCODE

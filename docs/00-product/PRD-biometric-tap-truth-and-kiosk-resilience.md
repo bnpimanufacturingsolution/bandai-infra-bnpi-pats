@@ -21,7 +21,7 @@ should support one clear chain of truth:
 
 ## Personas
 
-- **HRIS admin** - reviews saved events, device status, employee matching, and
+- **BNPI PATS admin** - reviews saved events, device status, employee matching, and
   sync results.
 - **Onsite implementer** - tests live taps, device reachability, and kiosk
   login behavior while devices are being deployed or repaired.
@@ -32,7 +32,7 @@ should support one clear chain of truth:
 
 ## User Stories
 
-- As an admin, I can prove whether a real biometric tap became a saved HRIS
+- As an admin, I can prove whether a real biometric tap became a saved BNPI PATS
   event.
 - As an admin, I can tell whether failure happened at the device, listener,
   API, saved-event, or UI layer.
@@ -68,7 +68,7 @@ happened:
 - event category;
 - event action;
 - runtime path/source;
-- HRIS result;
+- BNPI PATS result;
 - employee match state;
 - observed vs configured device identity when relevant.
 
@@ -152,12 +152,12 @@ high-risk operation, the gap should be called out rather than hidden.
 ## Current Product Evidence
 
 - Employee kiosk biometric polling exists in
-  `hris-emp-app/app/routes/auth.login.tsx`.
+  `bnpi-pats-emp-app/app/routes/auth.login.tsx`.
 - Admin saved-event, listener, and sync-center truth surfaces exist in
-  `hris-app/app/routes/admin/devices/events.tsx`.
+  `bnpi-pats-app/app/routes/admin/devices/events.tsx`.
 - Device orchestration, listener control, sync, import/export, copy, and
   synthetic biometric helpers exist in
-  `hris-api/app/device/device.controller.ts`.
+  `bnpi-pats-api/app/device/device.controller.ts`.
 - Current broader context and AI-agent operating brief exists in
   `docs/PROJECT_TRUTH_AI_AGENT_CONTEXT_20260714.md`.
 

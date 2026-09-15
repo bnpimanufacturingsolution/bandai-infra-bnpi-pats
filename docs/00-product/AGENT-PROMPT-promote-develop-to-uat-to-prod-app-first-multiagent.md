@@ -7,7 +7,7 @@ You are the **ROOT owner-operator agent** for Project Truth environment promotio
 | **Repo** | `C:\Users\stari\bandai-infra` on `develop` |
 | **Runtime** | K3s on VM `project-truth-node` / `10.184.37.19` |
 | **SSH** | Prefer direct LAN: `ssh -i %USERPROFILE%\.ssh\node-health-appliance_ed25519 infra@10.184.37.19` |
-| **Fallback SSH** | `ssh project-truth-hris` (Cloudflare) only if LAN SSH fails |
+| **Fallback SSH** | `ssh project-truth-bnpi-pats` (Cloudflare) only if LAN SSH fails |
 | **Mode** | Multi-subagent, root-coordinated, continuous loop with **watch state** |
 | **Order** | **APP / GitOps / images first** → prove UAT → prove PROD → **only then** DB/uploads clone (Phase D) |
 | **Forbidden** | Windows Docker Desktop / WSL as Project Truth runtime; disable Cloudflare; invent Synced/Healthy; invent DB parity |
@@ -54,13 +54,13 @@ Stamp: `.runtime/promote-dev-uat-prod-YYYYMMDD-HHMMSS/`
 |---|---|---|---|
 | A1 | `origin/develop` HEAD known | SHA printed; local matches remote | `00-git.json` |
 | A2 | Argo env apps track develop | All three `project-truth-{dev,uat,prod}` `targetRevision=develop` and revision = develop HEAD (or documented lag + fix) | `01-argo.json` |
-| A3 | DEV app healthy | `http://10.184.37.19:3101/health` 200; `hris-api` Ready; admin login works | `02-dev-app.json` |
-| B1 | UAT image/code matches DEV promote intent | UAT `hris-api` / `hris-app` rolled after import; imageId or pod start ≥ promote stamp; health `3201` 200 | `03-uat-app.json` |
+| A3 | DEV app healthy | `http://10.184.37.19:3101/health` 200; `bnpi-pats-api` Ready; admin login works | `02-dev-app.json` |
+| B1 | UAT image/code matches DEV promote intent | UAT `bnpi-pats-api` / `bnpi-pats-app` rolled after import; imageId or pod start ≥ promote stamp; health `3201` 200 | `03-uat-app.json` |
 | B2 | UAT admin UI reachable | Login + `/admin/dashboard` (API or Playwright) | `03-uat-app.json` |
 | C1 | PROD image/code matches same promote | PROD rolled same images; health `3001` 200 | `04-prod-app.json` |
 | C2 | PROD admin UI reachable | Login + `/admin/dashboard` | `04-prod-app.json` |
-| X1 | Cloudflare still active | `cloudflared-bnpi-hris.service` active; not stopped/masked | `05-tunnel.txt` |
-| X2 | Runtime degraded classified | Failed `hris-api-db-init` Jobs named `preexisting` or fixed — not left as silent “green” lie | `01-argo.json` |
+| X1 | Cloudflare still active | `cloudflared-bnpi-pats.service` active; not stopped/masked | `05-tunnel.txt` |
+| X2 | Runtime degraded classified | Failed `bnpi-pats-api-db-init` Jobs named `preexisting` or fixed — not left as silent “green” lie | `01-argo.json` |
 
 ### Phase D — DATA (only after A–C green; operator-authorized)
 
@@ -69,7 +69,7 @@ Stamp: `.runtime/promote-dev-uat-prod-YYYYMMDD-HHMMSS/`
 | D0 | Pre-clone backups | DEV/UAT/PROD `pg_dump -Fc` + uploads archives; `sha256sum -c` green | `10-backups.md` |
 | D1 | UAT restored from DEV | Business counts match DEV (see matrix); uploads set hash match | `11-uat-db.json` |
 | D2 | PROD restored from same DEV dump | Same matrix as DEV/UAT | `12-prod-db.json` |
-| D3 | Writers restored | Each env `hris-api` Ready after scale-up | health JSON |
+| D3 | Writers restored | Each env `bnpi-pats-api` Ready after scale-up | health JSON |
 
 ### Phase E — close-out
 
@@ -103,7 +103,7 @@ Argo CD (all envs targetRevision: develop)
         │
         ▼
 K3s namespaces dev / uat / prod
-  images: hris-*-local:develop  (and outbox on DEV only today)
+  images: bnpi-pats-*-local:develop  (and outbox on DEV only today)
         │
         ▼
 LAN proof
@@ -125,9 +125,9 @@ LAN proof
 
 | Workload | DEV | UAT | PROD | Note |
 |---|---|---|---|---|
-| hris-api / hris-app / hris-emp-app | yes | yes | yes | must match image promote |
-| hris-callback-outbox | yes (today) | no unless overlay added | no unless overlay added | classify as `optional_product` / env asymmetry |
-| hris-hikvision-watcher | yes | usually no | usually no | DEV device path; do not invent UAT/PROD watcher green |
+| bnpi-pats-api / bnpi-pats-app / bnpi-pats-emp-app | yes | yes | yes | must match image promote |
+| bnpi-pats-callback-outbox | yes (today) | no unless overlay added | no unless overlay added | classify as `optional_product` / env asymmetry |
+| bnpi-pats-hikvision-watcher | yes | usually no | usually no | DEV device path; do not invent UAT/PROD watcher green |
 
 ---
 
@@ -284,7 +284,7 @@ kubectl get applications -n argocd -o custom-columns=NAME:.metadata.name,SYNC:.s
 curl -sS http://127.0.0.1:3101/health
 curl -sS http://127.0.0.1:3201/health
 curl -sS http://127.0.0.1:3001/health
-systemctl is-active cloudflared-bnpi-hris.service
+systemctl is-active cloudflared-bnpi-pats.service
 ```
 
 Optional **A4 main mirror** (only if product wants `main` = release tip):
@@ -300,17 +300,17 @@ Do **not** block UAT/PROD app promote on main merge; Argo uses `develop`.
 ### Phase B — UAT app promote
 
 1. On VM: ensure source at develop SHA (`ansible-pull` / `/var/lib/project-truth/ansible-pull` or documented build path).
-2. Rebuild and import the same tags DEV uses (`hris-api-local:develop`, `hris-app-local:develop`, `hris-emp-app-local:develop`, `hris-api-db-init:develop` as needed).
+2. Rebuild and import the same tags DEV uses (`bnpi-pats-api-local:develop`, `bnpi-pats-app-local:develop`, `bnpi-pats-emp-app-local:develop`, `bnpi-pats-api-db-init:develop` as needed).
 3. Record digests before/after.
 4. Roll UAT:
 
 ```bash
-kubectl -n uat rollout restart deploy/hris-api deploy/hris-app deploy/hris-emp-app
-kubectl -n uat rollout status deploy/hris-api --timeout=300s
+kubectl -n uat rollout restart deploy/bnpi-pats-api deploy/bnpi-pats-app deploy/bnpi-pats-emp-app
+kubectl -n uat rollout status deploy/bnpi-pats-api --timeout=300s
 curl -sS http://127.0.0.1:3201/health
 ```
 
-5. Admin login against UAT API (`3201`) with `admin@bandai.local` / `password123` / `appCode=hris`.
+5. Admin login against UAT API (`3201`) with `admin@bandai.local` / `password123` / `appCode=bnpi-pats`.
 6. Mark gate B only when health + login + image/pod proof match promote stamp.
 
 ### Phase C — PROD app promote
@@ -327,8 +327,8 @@ For each target independently (UAT then PROD):
 
 1. Backup target `pg_dump -Fc` + uploads archive; `sha256sum`.
 2. Dump DEV once; verify checksum; reuse same dump for both targets.
-3. Scale target `hris-api` to 0.
-4. Drop/recreate `hris` with compatible encoding; `pg_restore --no-owner --no-acl --exit-on-error`.
+3. Scale target `bnpi-pats-api` to 0.
+4. Drop/recreate `bnpi-pats` with compatible encoding; `pg_restore --no-owner --no-acl --exit-on-error`.
 5. Mirror DEV uploads → target uploads path.
 6. Scale API back; wait Ready; re-count matrix.
 7. Do not touch secrets, Cloudflare, or shared DM host paths.

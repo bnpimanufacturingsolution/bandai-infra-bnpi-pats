@@ -15,7 +15,7 @@ Goal: For ONE device (default TEST A), produce hard numbers with evidence:
 
 A) How many users exist ON THE DEVICE NOW (inventory)
 B) This WEEK: how many User created / Fingerprint enrolled / User deleted /
-   Attendance tap events HAPPENED (device logs + HRIS saved)
+   Attendance tap events HAPPENED (device logs + BNPI PATS saved)
 C) What is residual willAdd in Sync logs preview
 D) Employee-no shape truth (plain vs opaque base64 tokens)
 E) Explain layers so numbers are not confused
@@ -32,28 +32,28 @@ ORDERED STEPS (do in order; save JSON after each)
    - Create .runtime/device-truth-matrix-<yyyyMMdd-HHmmss>/
    - health :3001; if login fails on 55435 → start-k8s-dev-db-access or
      ssh -L 127.0.0.1:55435:10.43.130.9:5432 infra@10.184.37.19
-   - restart hris-api with npm.cmd; poll /health; login admin
+   - restart bnpi-pats-api with npm.cmd; poll /health; login admin
 
 1) DEVICE USERS NOW (inventory truth — UserInfo)
    - GET /api/device/<deviceId>/users?page=1&limit=100 (paginate all pages)
-   - Report: total, ACTIVE, linked to HRIS employeeId
+   - Report: total, ACTIVE, linked to BNPI PATS employeeId
    - Sample vendorUserId list (first 20) — expect PLAIN ids (1, 01515, …)
    - Save: device-users-summary.json
 
 2) SYNC PREVIEW (event residual estimate — all history)
    - GET /api/device/sync-preview?deviceId=<id>
-   - Table: eventLabel, eventCategory, willAdd, alreadyInHris, status
+   - Table: eventLabel, eventCategory, willAdd, alreadyInBnpiPats, status
    - Record operationLogTotal + attendance totalEvents
    - Save: sync-preview.json + preview-rows.txt
    - NOTE: willAdd ≠ users-on-device-now; willAdd = estimated missing DeviceEvents
 
-3) HRIS DEVICE EVENTS — ALL TIME + THIS WEEK
+3) BNPI PATS DEVICE EVENTS — ALL TIME + THIS WEEK
    - For each action: USER_CREATED, USER_DELETED, FINGERPRINT_ENROLLED,
      FINGERPRINT_UPDATED, FACE_ENROLLED, TAP, TAP_REJECTED, UNKNOWN_OPERATION
    - Count via GET /api/device/events?deviceId=&eventAction=&page=1&limit=1
      pagination.total
    - Week: same with window=7d (or dateFrom/dateTo last 7 days, dateField=eventTime)
-   - Save: hris-event-counts.json
+   - Save: bnpi-pats-event-counts.json
 
 4) LOGSEARCH WEEK SAMPLE (device operation truth — Information metaId)
    - POST /api/device/<id>/hikvision/log-search
@@ -65,7 +65,7 @@ ORDERED STEPS (do in order; save JSON after each)
      operation sample — use for proportion if week logSearch fails
 
 5) EMPLOYEE NUMBER SHAPE MATRIX
-   - Sample 50 USER_CREATED from HRIS events: count opaque base64 vs plain
+   - Sample 50 USER_CREATED from BNPI PATS events: count opaque base64 vs plain
    - Sample 20 TAP: expect plain employee nos
    - Device users: expect plain vendorUserId
    - Document: logSearch addUserInfo often operator=SDK + remoteHost=VM IP
@@ -74,14 +74,14 @@ ORDERED STEPS (do in order; save JSON after each)
 6) CROSS-CHECK MATRIX (must fill every cell)
    | Layer | Metric | Source | Count |
    | Users on device now | inventory total | DeviceUser UserInfo | |
-   | Users linked HRIS | inventory linked | DeviceUser.employeeId | |
+   | Users linked BNPI PATS | inventory linked | DeviceUser.employeeId | |
    | User created residual | willAdd | sync-preview | |
    | Fingerprint enrolled residual | willAdd | sync-preview | |
-   | User created saved all-time | HRIS | DeviceEvent | |
-   | User created saved this week | HRIS window=7d | DeviceEvent | |
-   | Fingerprint enrolled saved this week | HRIS | DeviceEvent | |
+   | User created saved all-time | BNPI PATS | DeviceEvent | |
+   | User created saved this week | BNPI PATS window=7d | DeviceEvent | |
+   | Fingerprint enrolled saved this week | BNPI PATS | DeviceEvent | |
    | Attendance tap residual | willAdd | sync-preview | |
-   | Attendance tap saved this week | HRIS | DeviceEvent | |
+   | Attendance tap saved this week | BNPI PATS | DeviceEvent | |
    | Operation log total | device | logSearch totalMatches Information | |
    | ACS attendance total | device | AcsEvent totalMatches | |
 
@@ -96,7 +96,7 @@ ORDERED STEPS (do in order; save JSON after each)
 8) ACCEPTANCE
    [ ] Inventory total > 0 with plain vendorUserIds
    [ ] Preview rows include USER_CREATED + FINGERPRINT_ENROLLED + TAP
-   [ ] Week HRIS counts for at least USER_CREATED and FINGERPRINT_ENROLLED (0 ok if true)
+   [ ] Week BNPI PATS counts for at least USER_CREATED and FINGERPRINT_ENROLLED (0 ok if true)
    [ ] Employee-no shape documented (opaque vs plain)
    [ ] TRUTH-REPORT.md + JSON under .runtime/
    [ ] HEARTBEAT cycles ≥ 8 or full green
@@ -123,6 +123,6 @@ Recover DB/API yourself. Fill truth matrix: users now + this week events + previ
 |---|---|
 | **DeviceUser inventory** | Who exists on the device **now**? |
 | **logSearch / ACS + willAdd** | What **events** happened / still need to be saved as DeviceEvents? |
-| **HRIS DeviceEvent counts** | What did we **already import** this week / all time? |
+| **BNPI PATS DeviceEvent counts** | What did we **already import** this week / all time? |
 
 These three are **not** the same number and must not be forced equal.

@@ -42,7 +42,7 @@ fi
 {
   printf '\033c'
   if [ -n "$tty_user" ]; then
-    echo "Project Truth HRIS appliance"
+    echo "Project Truth BNPI PATS appliance"
     echo "LAN IP: ${lan_ip:-NOT DETECTED}"
     echo "Console is already logged in as ${tty_user}."
     echo "Do not type infra at this shell prompt."
@@ -57,7 +57,7 @@ fi
     cat /etc/issue
     printf '%s login: ' "$(hostname)"
   else
-    echo "Project Truth HRIS appliance"
+    echo "Project Truth BNPI PATS appliance"
     echo "LAN IP: NOT DETECTED"
     echo
     echo "Console login:"

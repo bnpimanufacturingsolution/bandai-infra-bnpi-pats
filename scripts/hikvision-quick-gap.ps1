@@ -4,12 +4,12 @@ param(
 	[string]$ApiBase = "http://localhost:3001",
 	[string]$Email = "admin@bandai.local",
 	[string]$Password = "password123",
-	[string]$AppCode = "hris",
+	[string]$AppCode = "bnpi-pats",
 	[string]$SourceDevice = "Main Entrance Device A",
 	[string]$VendorUserId = "",
 	[int]$FaceCount = 1,
 	[switch]$RestartApiIfStale,
-	[switch]$SyncSourceToHris,
+	[switch]$SyncSourceToBnpiPats,
 	[switch]$DeleteFromAllDevices
 )
 
@@ -95,12 +95,12 @@ function Get-SyncPreview {
 function Show-PreviewTable {
 	param([array]$Rows)
 	$Rows |
-		Select-Object name, vendorUserCount, hrisUserCount, peerDriftTotalCount, openUserCount |
+		Select-Object name, vendorUserCount, bnpiPatsUserCount, peerDriftTotalCount, openUserCount |
 		Format-Table -AutoSize
 }
 
 if ($RestartApiIfStale) {
-	& (Join-Path $repoRoot "scripts/ensure-local-hris-api-hotreload.ps1") -ApiBase $ApiBase -RestartIfStale
+	& (Join-Path $repoRoot "scripts/ensure-local-bnpi-pats-api-hotreload.ps1") -ApiBase $ApiBase -RestartIfStale
 }
 
 $headers = Get-ApiHeaders
@@ -142,7 +142,7 @@ if ($Mode -eq "real-user-gap") {
 }
 
 if ($Mode -eq "mock-face" -or $Mode -eq "clear-mock-face") {
-	if ($SyncSourceToHris) {
+	if ($SyncSourceToBnpiPats) {
 		Invoke-RestMethod -Method Post "$ApiBase/api/device/$($source.id)/users/sync" -Headers $headers -ContentType "application/json" -Body (@{} | ConvertTo-Json) | Out-Null
 	}
 	$facePayload = @{

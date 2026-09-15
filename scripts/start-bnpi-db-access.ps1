@@ -14,9 +14,9 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $runRoot = Join-Path $runtimeRoot "bnpi-db-access-$stamp"
 
 $targets = @{
-  prod = [pscustomobject]@{ Hostname = 'db.bnpi-hris.tech'; PreferredPort = 55432; FallbackPort = 56532 }
-  dev  = [pscustomobject]@{ Hostname = 'dev-db.bnpi-hris.tech'; PreferredPort = 55433; FallbackPort = 56533 }
-  uat  = [pscustomobject]@{ Hostname = 'uat-db.bnpi-hris.tech'; PreferredPort = 55434; FallbackPort = 56534 }
+  prod = [pscustomobject]@{ Hostname = 'db.bnpi-pats.tech'; PreferredPort = 55432; FallbackPort = 56532 }
+  dev  = [pscustomobject]@{ Hostname = 'dev-db.bnpi-pats.tech'; PreferredPort = 55433; FallbackPort = 56533 }
+  uat  = [pscustomobject]@{ Hostname = 'uat-db.bnpi-pats.tech'; PreferredPort = 55434; FallbackPort = 56534 }
 }
 
 function Stop-ExistingForward {
@@ -87,8 +87,8 @@ foreach ($envName in $selected) {
     Hostname = $target.Hostname
     LocalPort = $port
     ProcessId = $process.Id
-    DatabaseUrl = "postgresql://postgres:postgres@localhost:$port/hris"
-    SchemaDatabaseUrl = "postgresql://postgres:postgres@localhost:$port/hris?schema=public"
+    DatabaseUrl = "postgresql://postgres:postgres@localhost:$port/bnpi_pats"
+    SchemaDatabaseUrl = "postgresql://postgres:postgres@localhost:$port/bnpi_pats?schema=public"
     StopCommand = '.\scripts\project-truth.ps1 start-bnpi-db-access -StopExisting'
     Stdout = $stdoutPath
     Stderr = $stderrPath

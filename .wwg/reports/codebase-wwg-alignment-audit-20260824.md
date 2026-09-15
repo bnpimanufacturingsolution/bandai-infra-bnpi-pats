@@ -21,15 +21,15 @@ concentrated in legacy tooling, stale defaults, and a few labels/comments.
 
 | # | Fix | Files |
 |---|---|---|
-| 1 | Deleted Windows `AlarmDemo.exe` launcher scripts (no references anywhere; contradicted Linux-first listener canon) | `hris-api/scripts/run-dev-with-hikvision.ps1`, `hris-api/scripts/run-hikvision-alarmdemo.ps1` (deleted) |
-| 2 | Stale TEST A `.102` → live `.109` sweep in defaults/fallbacks/tests | `postman/hikvision-isapi-tested.postman_environment.json`, `postman/hikvision-isapi-tested.postman_collection.json`, `scripts/ensure-device-live-path.ps1`, `scripts/verify-hikvision-isapi-postman.ps1`, `hris-api/scripts/resolve-hikvision-vm-bridge-targets.cjs`, `hris-api/scripts/ensure-hikvision-vm-bridge.cjs` (`host-fallback-109`), `hris-api/tests/resolve-hikvision-vm-bridge-targets.spec.cjs` |
-| 3 | Terminology hard-cutover leftovers: activity-log title `Device Attendance` → `Device Events`; saved-events Playwright proof waits on `Device events`; key renamed `deviceEvents` | `hris-api/app/device/device.controller.ts:26999`, `hris-app/playwright-saved-events-proof.cjs` |
-| 4 | Stale ZKTeco copy: router comment now names Linux bridge; error text `ZKTeco SDK sidecar` → `ZKTeco Linux bridge` ×3 | `hris-api/app/zkteco/zkteco.router.ts`, `hris-api/app/device/device.controller.ts` |
-| 5 | Mojibake double-encoded comment blocks cleaned (ASCII tails preserved as clean comments); one orphan garbage comment removed | `hris-api/app/employee/employee.controller.ts` (lines ~3660/3744/3745/3794/3809 pre-edit) |
-| 6 | Test fixture stale IP hygiene: `NODE_HOST_IP` fixture `.144` → canonical VM `.19` | `hris-api/tests/device-health-zkteco.spec.ts` |
+| 1 | Deleted Windows `AlarmDemo.exe` launcher scripts (no references anywhere; contradicted Linux-first listener canon) | `bnpi-pats-api/scripts/run-dev-with-hikvision.ps1`, `bnpi-pats-api/scripts/run-hikvision-alarmdemo.ps1` (deleted) |
+| 2 | Stale TEST A `.102` → live `.109` sweep in defaults/fallbacks/tests | `postman/hikvision-isapi-tested.postman_environment.json`, `postman/hikvision-isapi-tested.postman_collection.json`, `scripts/ensure-device-live-path.ps1`, `scripts/verify-hikvision-isapi-postman.ps1`, `bnpi-pats-api/scripts/resolve-hikvision-vm-bridge-targets.cjs`, `bnpi-pats-api/scripts/ensure-hikvision-vm-bridge.cjs` (`host-fallback-109`), `bnpi-pats-api/tests/resolve-hikvision-vm-bridge-targets.spec.cjs` |
+| 3 | Terminology hard-cutover leftovers: activity-log title `Device Attendance` → `Device Events`; saved-events Playwright proof waits on `Device events`; key renamed `deviceEvents` | `bnpi-pats-api/app/device/device.controller.ts:26999`, `bnpi-pats-app/playwright-saved-events-proof.cjs` |
+| 4 | Stale ZKTeco copy: router comment now names Linux bridge; error text `ZKTeco SDK sidecar` → `ZKTeco Linux bridge` ×3 | `bnpi-pats-api/app/zkteco/zkteco.router.ts`, `bnpi-pats-api/app/device/device.controller.ts` |
+| 5 | Mojibake double-encoded comment blocks cleaned (ASCII tails preserved as clean comments); one orphan garbage comment removed | `bnpi-pats-api/app/employee/employee.controller.ts` (lines ~3660/3744/3745/3794/3809 pre-edit) |
+| 6 | Test fixture stale IP hygiene: `NODE_HOST_IP` fixture `.144` → canonical VM `.19` | `bnpi-pats-api/tests/device-health-zkteco.spec.ts` |
 | 7 | STALE-address banner added to enrollment identity spec (`.102` examples marked historical; live `.109/.110` restated) | `docs/HIKVISION_ENROLLMENT_IDENTITY_FLOW.md` |
 
-One-off DB-query proof scripts under `hris-api/scripts/*` that query
+One-off DB-query proof scripts under `bnpi-pats-api/scripts/*` that query
 `address: "192.168.254.102"` were left untouched: they are dated evidence tools,
 not current-state defaults.
 
@@ -39,7 +39,7 @@ not current-state defaults.
    `prisma-postgres:push && npm run prisma-seed`, diverging from push-only GitOps
    overlays. Removing seed changes fresh-compose bootstrap behavior → deferred.
    See REC-20260824-COMPOSE-SEED-PUSH-ONLY.
-2. `hris-emp-app` restart loop ignores `PROJECT_TRUTH_ROLLOUT_NAMESPACES`
+2. `bnpi-pats-emp-app` restart loop ignores `PROJECT_TRUTH_ROLLOUT_NAMESPACES`
    (`ansible/project-truth-pull.yml` employee loop hardcodes `prod dev uat`,
    no skip-missing). Deploy-path semantics change → deferred.
    See REC-20260824-EMPAPP-NAMESPACES-OVERRIDE.
@@ -68,7 +68,7 @@ not current-state defaults.
   internally consistent.
 - App vitest `device-events-page-contract`: 11 passed / 3 failed, all three
   assert source strings in untouched `events.tsx` — matches known full-vitest
-  debt (REC-20260819-HRIS-APP-CI-FULL-VITEST).
+  debt (REC-20260819-BNPI-PATS-APP-CI-FULL-VITEST).
 - No product money/auth/schema paths touched. No DB migrations.
 
 ## WWG Auto-Sync

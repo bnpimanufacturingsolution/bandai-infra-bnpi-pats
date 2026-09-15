@@ -17,7 +17,7 @@ and handshake with the four listed ZKTeco terminals.
 - VM hostname: `project-truth-node`
 - Current reachable VM IP for this pass: `10.184.38.144`
 - SSH key used from Windows host:
-  `%USERPROFILE%\.ssh\bnpi_hris_cloudflare_ed25519`
+  `%USERPROFILE%\.ssh\bnpi_pats_cloudflare_ed25519`
 - Stale path observed during this pass: `192.168.254.148:22` timed out from
   the Windows host.
 
@@ -86,15 +86,15 @@ The repo scaffold now has an explicit read-only boundary command:
 python -m zkteco_linux_probe --mode capabilities
 ```
 
-It reports `canonicalHrisRuntime: false`, `status: experimental_read_only`,
-and lists HRIS event posting, realtime watch mode, sidecar health/status/sync
+It reports `canonicalBnpiPatsRuntime: false`, `status: experimental_read_only`,
+and lists BNPI PATS event posting, realtime watch mode, sidecar health/status/sync
 APIs, attendance log parity, and GitOps/K3s runtime as not proven.
 
 ## Source-Device Users And Historical Events
 
 On 2026-07-01, the Linux/PyZK scaffold read users and stored attendance
 history directly from the four physical ZKTeco terminals. This evidence is from
-the devices through PyZK, not from HRIS API or HRIS database rows.
+the devices through PyZK, not from BNPI PATS API or BNPI PATS database rows.
 
 Bare VM command shape:
 
@@ -140,7 +140,7 @@ Interpretation:
 - PyZK saw newer punches on 2026-07-01, so the lower counts are not simply
   stale connectivity.
 - Do not promote PyZK as the canonical runtime until the count drift is
-  explained and realtime/watch plus HRIS posting are proven.
+  explained and realtime/watch plus BNPI PATS posting are proven.
 
 ## Boundary
 
@@ -159,7 +159,7 @@ Not yet proven:
   2026-07-01 PyZK history pass returned fewer stored events than the
   2026-06-29 historical Windows SDK summary on every device.
 - Realtime event watch behavior.
-- Dedupe and HRIS `/api/zkteco/events` posting.
+- Dedupe and BNPI PATS `/api/zkteco/events` posting.
 - Sidecar `/health`, `/status`, and `/sync` API compatibility.
 - GitOps/K3s deployment as the active runtime.
 - Hikvision `192.168.1.61:8000` routing from the VM.

@@ -36,7 +36,7 @@
 
 ## Current-State Evidence
 
-- `hris-app/app/routes/hr/run-payroll.tsx` renders `hris-app/app/components/templates/common/run-payroll-template.tsx`; the right card currently exposes regular `Start Payroll` only.
+- `bnpi-pats-app/app/routes/hr/run-payroll.tsx` renders `bnpi-pats-app/app/components/templates/common/run-payroll-template.tsx`; the right card currently exposes regular `Start Payroll` only.
 - Regular payroll uses `POST /api/payrollperiod/:id/generate-timesheet`, with preview and progress contracts. Special Payroll must not reuse that generator.
 - `EmployeeBenefit` and `EmployeeBenefitInstallment` are established regular payroll sources. Reusing them would risk regular-payroll consumption.
 - `EmployeePayroll` is the regular snapshot and has unique `(employeeId, payrollPeriodId)` semantics. Special payslips require a separate record boundary.
@@ -82,7 +82,7 @@ Preview must return a preview ID, selected-period display context, normalized ro
 
 ### Backend persistence and service
 
-Add PostgreSQL Prisma models, matching schema definitions where required by repository convention, plus an additive migration and indexes for organization, run, employee, status, fingerprint, and payslip lookup. Add Zod request/response contracts and a dedicated service/controller/router under `hris-api/app/specialPayroll`.
+Add PostgreSQL Prisma models, matching schema definitions where required by repository convention, plus an additive migration and indexes for organization, run, employee, status, fingerprint, and payslip lookup. Add Zod request/response contracts and a dedicated service/controller/router under `bnpi-pats-api/app/specialPayroll`.
 
 Implement one normalization service for manual rows and workbook rows. It must support the canonical template fields and sample aliases, parse comma-formatted amounts and workbook dates, validate active employees and compensation types, compare optional employee names, detect duplicates, calculate gross/net totals, and retain source metadata without logging raw employee data.
 
@@ -92,7 +92,7 @@ Implement transaction-safe creation, idempotency, once-per-period uniqueness, au
 
 Update `run-payroll-template.tsx` with a secondary `Special Payroll` action beneath regular Start Payroll. Add a focused Special Payroll modal with Manual Entry and Mass Upload tabs, required label, selected-period context display, per-employee amount table, flexible mapper, preview summary, all-or-nothing confirmation, creation result, release action, and cancellation state.
 
-Add typed service/hooks and import utilities/constants in `hris-app`. Add the downloadable canonical template and map sample aliases. Add the HR Special Payroll history/report section and separate payslip links. Update employee payroll history to show released special payslips with a Special Payroll badge, existing notification routing, separate detail view, and PDF download.
+Add typed service/hooks and import utilities/constants in `bnpi-pats-app`. Add the downloadable canonical template and map sample aliases. Add the HR Special Payroll history/report section and separate payslip links. Update employee payroll history to show released special payslips with a Special Payroll badge, existing notification routing, separate detail view, and PDF download.
 
 ### Payslip and reporting
 

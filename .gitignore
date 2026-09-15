@@ -28,18 +28,18 @@ terraform.tfstate.backup
 
 # Sync Center export/import working files (may contain real biometric blobs).
 # Keep package templates out of git; regenerate under /templates as needed.
-# Anchor to repo root so hris-app/app/components/templates is not ignored.
+# Anchor to repo root so bnpi-pats-app/app/components/templates is not ignored.
 /templates/sync-center-device-users/
 /templates/
 # Allow committed ops env-compare template under docs/templates/
 !docs/templates/
 !docs/templates/DEV-UAT-PROD-env-compare.xlsx
 !docs/templates/DEV-UAT-PROD-env-compare.TEMPLATE.md
-# HRIS React page templates must stay in git.
-!hris-app/app/components/templates/
+# BNPI PATS React page templates must stay in git.
+!bnpi-pats-app/app/components/templates/
 
 # Local DM migration workbook/source payloads.
-# These are copied from HRIS-PROJECT for local/VM operations and may contain
+# These are copied from BNPI-PATS-PROJECT for local/VM operations and may contain
 # client payroll, attendance, biometric, agency, or employee data.
 confidential-files/
 # Client attendance/time-tracking archive exports (Google Drive download naming
@@ -47,14 +47,14 @@ confidential-files/
 ATTENDANCE & TIME TRACKING*/
 **/ATTENDANCE & TIME TRACKING*/
 data/import/
-hris-api/data/
+bnpi-pats-api/data/
 docs/2026-20260527T124252Z-3-001/
 docs/AGENCY/
 docs/Bandai Payroll/
 docs/BNPI_MASTERLIST.xlsx
 docs/Breaktime Schedule.xlsx
 docs/FY2025_BNPI Organization Chart - as of March 31, 2026.xlsx
-docs/HRIS Payroll Computation April 26 - May 10, 2026.xlsx
+docs/BNPI PATS Payroll Computation April 26 - May 10, 2026.xlsx
 docs/new-cutoff/
 docs/rptLeaveBalance as of June 4, 2026.xlsx
 config.bat

@@ -23,11 +23,11 @@ Those proof files were useful evidence, but they were not a reusable operator sc
     - applying a dev-only synthetic face tally to a saved `DeviceUser`
     - clearing the synthetic face tally
     - deleting the quick-test user from one or all Hikvision devices
-- `scripts/ensure-local-hris-api-hotreload.ps1`
+- `scripts/ensure-local-bnpi-pats-api-hotreload.ps1`
   - Checks whether local `sync-preview` is fresh enough to expose `peerDriftTotalCount`
   - Can restart the local API watcher if the response is stale
-- `scripts/restart-local-hris-api-dev.ps1`
-  - Cleanly stops the local repo-owned `hris-api` watcher and starts it again
+- `scripts/restart-local-bnpi-pats-api-dev.ps1`
+  - Cleanly stops the local repo-owned `bnpi-pats-api` watcher and starts it again
 
 ## Why the API looked stale
 
@@ -36,7 +36,7 @@ The page can look wrong even when Chrome is fine if `localhost:3001` is still se
 The hot-reload path now runs through:
 
 ```text
-hris-api/scripts/run-dev-api-watch.cjs
+bnpi-pats-api/scripts/run-dev-api-watch.cjs
 ```
 
 That watcher forces polling-friendly file watch env for Windows/OneDrive:
@@ -50,7 +50,7 @@ That watcher forces polling-friendly file watch env for Windows/OneDrive:
 Check whether the local API is fresh enough for the new Sync Center preview fields:
 
 ```powershell
-.\scripts\ensure-local-hris-api-hotreload.ps1 -RestartIfStale
+.\scripts\ensure-local-bnpi-pats-api-hotreload.ps1 -RestartIfStale
 ```
 
 Create a real `8 vs 7` gap on one physical Hikvision device:
@@ -67,10 +67,10 @@ Apply a dev-only synthetic face tally to an already-saved `DeviceUser`:
 .\scripts\hikvision-quick-gap.ps1 -Mode mock-face -SourceDevice "Main Entrance Device A" -VendorUserId 6 -FaceCount 2 -RestartApiIfStale
 ```
 
-If the saved `DeviceUser` row is stale, add `-SyncSourceToHris`:
+If the saved `DeviceUser` row is stale, add `-SyncSourceToBnpiPats`:
 
 ```powershell
-.\scripts\hikvision-quick-gap.ps1 -Mode mock-face -SourceDevice "Main Entrance Device A" -VendorUserId 6 -FaceCount 2 -SyncSourceToHris -RestartApiIfStale
+.\scripts\hikvision-quick-gap.ps1 -Mode mock-face -SourceDevice "Main Entrance Device A" -VendorUserId 6 -FaceCount 2 -SyncSourceToBnpiPats -RestartApiIfStale
 ```
 
 Clear the synthetic face tally:
@@ -96,7 +96,7 @@ Preview current counts only:
 1. Run:
 
 ```powershell
-.\scripts\ensure-local-hris-api-hotreload.ps1 -RestartIfStale
+.\scripts\ensure-local-bnpi-pats-api-hotreload.ps1 -RestartIfStale
 ```
 
 2. Create one real-device-only gap:
@@ -110,7 +110,7 @@ Preview current counts only:
 Expected result:
 
 - the source device should move from `7` to `8` under `From device`
-- `Saved in HRIS` should still be the old count until the sync path catches up
+- `Saved in BNPI PATS` should still be the old count until the sync path catches up
 - the row should clearly show a mismatch
 
 4. Run `Make peers match` in Sync Center.
@@ -123,4 +123,4 @@ Expected result:
 ## Boundary
 
 - `real-user-gap` creates a real user on the physical terminal.
-- `mock-face` only changes saved HRIS `DeviceUser` metadata for verification; it does not claim that a real face template was written to the physical device.
+- `mock-face` only changes saved BNPI PATS `DeviceUser` metadata for verification; it does not claim that a real face template was written to the physical device.

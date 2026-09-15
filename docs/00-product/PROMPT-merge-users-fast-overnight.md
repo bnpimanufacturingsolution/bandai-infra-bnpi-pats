@@ -13,8 +13,8 @@
 
   Law: AGENTS.md + WWG bootstrap (open with tools: project-truth summary/handoff,
   current-task, relevant truth, then code). Branch: develop.
-  SSH: ssh project-truth-hris first (fallback infra@10.184.37.19 with node-health key).
-  Local API: http://localhost:3001  admin@bandai.local / password123 / appCode=hris
+  SSH: ssh project-truth-bnpi-pats first (fallback infra@10.184.37.19 with node-health key).
+  Local API: http://localhost:3001  admin@bandai.local / password123 / appCode=bnpi-pats
   Windows: npm.cmd. Restart API yourself; poll /health. Never leave “restart API” for me.
   Do not disable Cloudflare tunnel (AGENTS.md).
 
@@ -98,7 +98,7 @@
     (Main E / Login A out of scope unless you explicitly prove them)
 
   Wave policy:
-    MERGE ONLY devices with VM TCP OK on 80, 443, and 8000 from ssh project-truth-hris.
+    MERGE ONLY devices with VM TCP OK on 80, 443, and 8000 from ssh project-truth-bnpi-pats.
     Prior: Main A–D OK; TEST A/B FAIL from VM. Re-probe every session.
     If you can repair TEST A/B reachability from VM (routes/tunnels without breaking
     AGENTS tunnel rules), then include them in a later wave. Until then Wave1 = Main A–D.
@@ -116,14 +116,14 @@
   Out of scope:
     Invent multi-employee bulk ISAPI write not in repo / not proven on these panels.
     Unbounded Promise.all of concurrent SDK logins to the same panels.
-    Disabling cloudflared-bnpi-hris.
+    Disabling cloudflared-bnpi-pats.
 
   ================================================================
   4) ARCHITECTURE TRUTH (use this; re-verify in code)
   ================================================================
 
   Copy path:
-    Admin merge job (hris-api)
+    Admin merge job (bnpi-pats-api)
       → runHikvisionManualCopyOnVm (SSH + scp spec + sudo timeout run-once)
       → C++ hikvision_biometric_service
       → per peer: UserInfo/SetUp (ISAPI) → fingerprints (ISAPI/SDK) → face (SDK)
@@ -138,10 +138,10 @@
       + optional long-lived listener if run-once dominates
 
   Files to know:
-    hris-api/app/device/device.controller.ts
+    bnpi-pats-api/app/device/device.controller.ts
       applyHikvisionSdkUserMerge, startHikvisionSdkUserMergeJob,
       copyHikvisionUserToPeersBatch, runHikvisionManualCopyOnVm
-    hris-api/helper/device-user-merge.helper.ts  (plan only)
+    bnpi-pats-api/helper/device-user-merge.helper.ts  (plan only)
     vendor/hikvision-linux/src/hikvision_bio/acs.cpp + spool.cpp + identity.cpp + fingerprint.cpp + face.cpp + copy.cpp
     docs/00-product/PRD-hikvision-copy-to-all-performance.md
 
@@ -156,7 +156,7 @@
 
   PHASE A — Measure reality (no big mutate yet)
     A1. Create .runtime/merge-fast-<stamp>/
-    A2. ssh project-truth-hris: hostname, hikvision listener active?, TCP matrix all 6
+    A2. ssh project-truth-bnpi-pats: hostname, hikvision listener active?, TCP matrix all 6
         devices × ports 80/443/8000 → ssh-tcp.txt
     A3. API health; admin login; device list + per-device /health user counts
         → devices-health.json

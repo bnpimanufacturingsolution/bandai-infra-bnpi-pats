@@ -12,7 +12,7 @@ Old saved SDK punches can still have stored `UNKNOWN` taxonomy. GET/UI reclassif
 
 ## Select Status / T&A punch direction (2026-08-13)
 
-Panel **Select Status** is copied on the live SDK callback (`byAttendanceStatus` → `attendanceStatus`/`label`) and extracted from ISAPI `AcsEventInfo`. Device Events shows **Device status**. HRIS still pairs first tap = in, later tap = out.
+Panel **Select Status** is copied on the live SDK callback (`byAttendanceStatus` → `attendanceStatus`/`label`) and extracted from ISAPI `AcsEventInfo`. Device Events shows **Device status**. BNPI PATS still pairs first tap = in, later tap = out.
 
 - Spec: **`docs/HIKVISION_SELECT_STATUS_MAPPING.md`**
 - WWG: `.wwg/wiki/05-architecture/hikvision-select-status-attendance.md`
@@ -45,7 +45,7 @@ Current evidence from `.runtime/hikvision-real-tap-pipeline-20260709-125441`:
 - Host-test VM `10.184.37.241` now reaches the physical Hikvision device:
   ping to `10.184.37.139` passed with 0% loss, TCP `80` passed, and TCP
   `8000` passed.
-- Docker is running on the host-test VM. PROD/DEV/UAT HRIS app/API containers
+- Docker is running on the host-test VM. PROD/DEV/UAT BNPI PATS app/API containers
   are healthy enough for runtime inspection, and the VM has Linux HCNetSDK at
   `/home/infra/project-truth-hcnetsdk/EN-HCNetSDKV6.1.9.48_build20230410_linux64`.
 - The current local `vendor/hikvision-linux` source was copied to a task-scoped
@@ -67,7 +67,7 @@ Current evidence from `.runtime/hikvision-real-tap-pipeline-20260709-125441`:
   before posting, waited for "Saved rows update live", then displayed the new
   marker `CODEX-UI-LIVE-HCNETSDK-READY-1783573373427` with "Socket received"
   without manual refresh.
-- Host-test VM drift was observed: the existing `hris-hikvision-watcher` path is
+- Host-test VM drift was observed: the existing `bnpi-pats-hikvision-watcher` path is
   still running with stale `HIKVISION_DEVICE_ADDRESS=10.184.38.215`. That
   watcher is not the real-tap HCNetSDK service and must not be used as proof for
   the current `10.184.37.139` device row.
@@ -76,7 +76,7 @@ Boundary: VM/device reachability is no longer the blocker for the host-test VM.
 Real SDK login, `NET_DVR_SetupAlarmChan_V50`, physical tap callback receipt,
 attendance/timesheet projection from a real tap, and real browser live-row proof
 remain unproven until valid Hikvision SDK credentials are supplied through a
-documented runtime source. The simulation rows prove only the HRIS
+documented runtime source. The simulation rows prove only the BNPI PATS
 callback/persistence/socket/UI leg.
 
 ## 2026-07-09 HCNetSDK Single-Source Pass
@@ -95,9 +95,9 @@ Current implementation state:
   active build path were removed. The active build script is
   `scripts/build-hikvision-biometric-service.sh`.
 - The service registers `NET_DVR_SetDVRMessageCallBack_V51`, arms devices with
-  `NET_DVR_SetupAlarmChan_V50` after login, queues every ACS alarm for HRIS
+  `NET_DVR_SetupAlarmChan_V50` after login, queues every ACS alarm for BNPI PATS
   posting, and queues biometric/user-management reconcile work separately.
-- The HRIS event post target is `/api/hikvision/callback` with source
+- The BNPI PATS event post target is `/api/hikvision/callback` with source
   `EN_HCNETSDK_ALARM`; that existing callback controller remains the single
   owner of `DeviceEvent` persistence, attendance/timesheet projection, cache
   invalidation, and `device-event:saved` socket emission.
@@ -130,7 +130,7 @@ and valid Hikvision device credentials are supplied at runtime.
 
 ## Remote-Site Agent Direction
 
-For a deployment where the HRIS browser/admin user is not on the same LAN as the
+For a deployment where the BNPI PATS browser/admin user is not on the same LAN as the
 physical Hikvision terminal, Project Truth should not assume the central VM can
 directly reach the device over SDK or ISAPI.
 
@@ -139,9 +139,9 @@ The preferred runtime shape is:
 ```text
 remote Linux host on the device LAN
   -> runs project-truth-hikvision-hot-reload-listener
-  -> reads Hikvision device rows from HRIS API
+  -> reads Hikvision device rows from BNPI PATS API
   -> arms HCNetSDK locally against the nearby device
-  -> posts attendance callbacks back to public HRIS API
+  -> posts attendance callbacks back to public BNPI PATS API
 ```
 
 The hot-reload listener wrapper now supports that mode through:
@@ -150,7 +150,7 @@ The hot-reload listener wrapper now supports that mode through:
 HIKVISION_HOT_RELOAD_DEVICE_SOURCE=api
 ```
 
-In `api` mode, the wrapper authenticates to the configured HRIS API base, fetches
+In `api` mode, the wrapper authenticates to the configured BNPI PATS API base, fetches
 active Hikvision `Device` rows plus access credentials, prepares the local SDK
 spec file, and reuses the same callback-post pipeline. This allows the same
 listener binary/runtime to be used either:
@@ -161,7 +161,7 @@ listener binary/runtime to be used either:
 Boundary:
 
 - Tap ingestion can work over different networks when the site agent has local
-  LAN reachability to the device and outbound HTTPS reachability to the HRIS
+  LAN reachability to the device and outbound HTTPS reachability to the BNPI PATS
   API.
 - Device-user sync, live SDK login, and other direct device operations still
   require some runtime on the device LAN unless Hikvision cloud/gateway
@@ -203,7 +203,7 @@ Boundary:
 - This is only for temporary development proof.
 - Quick tunnels rotate and are not production architecture.
 - The preferred durable architecture remains a stable Linux site agent beside
-  the device, pointed at a stable public HRIS API host.
+  the device, pointed at a stable public BNPI PATS API host.
 
 ## Active Runtime Direction
 
@@ -211,7 +211,7 @@ Project Truth now treats `vendor/hikvision-linux` as the only active Hikvision
 SDK/runtime scaffold in this repo.
 
 Runtime watchers must not encode a physical Hikvision IP in GitOps, Docker, or
-script defaults. The HRIS `Device` row is the single config truth for the device
+script defaults. The BNPI PATS `Device` row is the single config truth for the device
 name, model, address, port, protocol, SDK port, and webhook path. Watchers should
 use `scripts/audit-hikvision-device-events.ts --all-hikvision` so they discover
 configured Hikvision devices from the DB and follow admin-side device config
@@ -219,7 +219,7 @@ changes without a manifest edit. This watcher belongs in the Linux/VM runtime
 path; Windows-host local-dev bootstrap must not start a second Hikvision watcher
 process.
 
-Current admin UI / HRIS Device row truth, as verified on 2026-07-09:
+Current admin UI / BNPI PATS Device row truth, as verified on 2026-07-09:
 
 | Field | Value |
 | --- | --- |
@@ -231,7 +231,7 @@ Current admin UI / HRIS Device row truth, as verified on 2026-07-09:
 
 Older Hikvision addresses such as `192.168.254.181`, `10.184.38.215`, and
 `10.184.38.96` are historical evidence only. They must not be used as defaults
-or active runtime targets unless the HRIS `Device` row is deliberately changed
+or active runtime targets unless the BNPI PATS `Device` row is deliberately changed
 and re-verified.
 
 The removed Windows `vendor/hikvision-bio` submodule and AlarmDemo helper
@@ -272,9 +272,9 @@ to the Linux VM, compiled against, and initialized. `NET_DVR_Init()` and SDK
 version reads worked. SDK login/alarm callback against the current device row
 is still not proven.
 
-## HRIS Contract
+## BNPI PATS Contract
 
-The HRIS callback path remains:
+The BNPI PATS callback path remains:
 
 ```text
 /api/hikvision/callback
@@ -298,20 +298,20 @@ hikvision-biometric-service / HCNetSDK callback
 
 Biometric enrollment/user-change alarms still queue the slower reconcile worker.
 The callback thread must not perform fingerprint template reads, peer writes, or
-HRIS biometric reconcile writes inline. Dry-run remains the default for
-biometric reconcile; `--execute` is required for HRIS/device mutation. Raw
+BNPI PATS biometric reconcile writes inline. Dry-run remains the default for
+biometric reconcile; `--execute` is required for BNPI PATS/device mutation. Raw
 fingerprint template bytes must not be written into normal `User` records or
 JSONL evidence.
 
-As of 2026-07-08, the HRIS callback parser accepts Hikvision HTTP-host XML
+As of 2026-07-08, the BNPI PATS callback parser accepts Hikvision HTTP-host XML
 aliases used by physical terminals, including `ipAddress` for observed device
 matching and `dateTime` for punch time. Localhost callback proof passed against
 the DEV API after restart: posting XML with `ipAddress=10.184.38.96` matched
 the current local `Main Entrance Device` row and persisted a marked
 `HIKVISION_CALLBACK` `DeviceEvent`; the marked smoke row was deleted after
 verification. Boundary: `localhost` is valid for a local SDK/watcher process
-running on the same machine as the HRIS API. A physical Hikvision terminal must
-post to a LAN-reachable or tunneled HRIS API URL; configuring the terminal
+running on the same machine as the BNPI PATS API. A physical Hikvision terminal must
+post to a LAN-reachable or tunneled BNPI PATS API URL; configuring the terminal
 itself to `localhost` points back at the terminal, not the Windows host API.
 
 On this workstation, `localhost` admin testing can still show fresh saved
@@ -322,11 +322,11 @@ be started.
 
 On 2026-07-08, that warning became concrete runtime evidence:
 
-- the DEV K3s Deployment `hris-hikvision-watcher` was still stale and unhealthy,
+- the DEV K3s Deployment `bnpi-pats-hikvision-watcher` was still stale and unhealthy,
   with pod args hardcoding `HIKVISION_DEVICE_ADDRESS=10.184.38.215` and
   `--deviceAddress`, while K3s itself was degraded by missing sandbox image
   `rancher/mirrored-pause:3.6`;
-- the VM Docker image `hris-api-db-init:develop` was patched to the current
+- the VM Docker image `bnpi-pats-api-db-init:develop` was patched to the current
   watcher code (`ab9bce3e9182`) and proved the real Linux watcher path against
   the then-configured `Main Entrance Device` row `10.184.38.96:80` / `http`;
 - bounded apply runs from that VM image saved physical-device rows with
@@ -348,7 +348,7 @@ save into the VM DB is proven; immediate localhost `device-event:saved` delivery
 is still drifting and must not be presented as verified.
 
 The active seed source for the default Hikvision device is now
-`vendor/hikvision-linux`. Runtime should read the configured HRIS `Device` row
+`vendor/hikvision-linux`. Runtime should read the configured BNPI PATS `Device` row
 rather than carrying a second IP value. The current local admin UI shows `Main Entrance Device` as `10.184.37.139:80` / `http`, model `DS-K1T341CMFW`, with SDK/server port `8000` recorded separately in device config. Do not treat `800`, `8000`, and HTTP port `80` as
 interchangeable values.
 
@@ -358,7 +358,7 @@ Hikvision physical-device evidence remains split:
 
 - Historical SADP screenshot evidence showed `DS-K1T201AEF` at
   `192.168.254.181:8000`.
-- DEV proof on 2026-06-30 showed HRIS can reach `192.168.254.181:80`, pull ACS
+- DEV proof on 2026-06-30 showed BNPI PATS can reach `192.168.254.181:80`, pull ACS
   events, save a `HIKVISION_CALLBACK` row, and render it in the admin
   saved-events UI.
 - DEV VM/K3s watcher proof showed ACS-pull ingestion into saved device events.
@@ -376,7 +376,7 @@ Hikvision physical-device evidence remains split:
   were `HIKVISION_CALLBACK` / `ATTENDANCE_CREATED`.
 - On 2026-07-09, the admin UI shows the active DB-configured device as
   `10.184.37.139:80` / `http`, model `DS-K1T341CMFW`. The watcher path must
-  follow the HRIS device row as config truth.
+  follow the BNPI PATS device row as config truth.
 
 ## Remaining Boundaries
 
@@ -406,13 +406,13 @@ The target Hikvision biometric architecture is now documented in WWG at:
 The design intent is to use a Linux/VM-owned HCNetSDK alarm listener for
 enrollment and user-change events, then queue reconciliation work that reads
 source user/fingerprint records and syncs them to peer biometric devices and
-HRIS. The callback should trigger sync work; it should not perform long-running
+BNPI PATS. The callback should trigger sync work; it should not perform long-running
 template transfer inline.
 
 The local Windows reference implementation is:
 
 ```text
-C:\Users\anoni\OneDrive\Desktop\HRIS-PROJECT\EN-HCNetSDKV6.1.9.4_build20220412_win64\AlarmDemo.cpp
+C:\Users\anoni\OneDrive\Desktop\BNPI-PATS-PROJECT\EN-HCNetSDKV6.1.9.4_build20220412_win64\AlarmDemo.cpp
 ```
 
 Use that file as a behavior reference only. It already demonstrates multi-device
@@ -428,7 +428,7 @@ Target event flow:
 - the service classifies user/fingerprint management events and queues a
   reconcile job;
 - the worker reads user/fingerprint data from the source device, syncs peer
-  devices, and persists HRIS state;
+  devices, and persists BNPI PATS state;
 - attendance verification still flows through callback/log import into
   `Attendance` and timesheet projections;
 - admin web app controls include recon/status, add/delete device, and
@@ -442,27 +442,27 @@ reviewed biometric model.
 
 ## Fast Gap Sync Evidence
 
-On 2026-07-08, the local DEV path proved a bounded dry-run against the physical`n`Main Entrance Device` at the then-configured HRIS Device row target:
+On 2026-07-08, the local DEV path proved a bounded dry-run against the physical`n`Main Entrance Device` at the then-configured BNPI PATS Device row target:
 
 ```powershell
 npx tsx scripts/audit-hikvision-device-events.ts --deviceName="Main Entrance Device" --limit=13 --target-unsaved=3
 ```
 
 The dry run read 13 latest-first ACS rows from the device, compared generated
-HRIS dedupe keys against `device_events`, and found 4 missing rows in about 8
+BNPI PATS dedupe keys against `device_events`, and found 4 missing rows in about 8
 seconds: 2 with employee no. and 2 employee-less device rows. This confirms the
 fast safe sync architecture for small gaps:
 
 - Use ISAPI ACS event paging with `timeReverseOrder=true`, `searchResultPosition`,
   and a small `maxResults`.
-- Compute HRIS fingerprints/dedupe keys locally and compare against the DB.
+- Compute BNPI PATS fingerprints/dedupe keys locally and compare against the DB.
 - Stop after the target missing count is found or after a bounded latest-row
   scan limit.
 - Do not present the device's historical total as the sync job size for a small
   targeted gap.
 
-Boundary: Hikvision ISAPI does not know which rows are absent from HRIS, so the
-physical device cannot directly query "only unsaved HRIS rows." HRIS must read a
+Boundary: Hikvision ISAPI does not know which rows are absent from BNPI PATS, so the
+physical device cannot directly query "only unsaved BNPI PATS rows." BNPI PATS must read a
 bounded latest page and perform the missing-row comparison.
 
 ## Config-Truth Watcher Evidence
@@ -474,12 +474,12 @@ are unnecessary:
 npx dotenv -- tsx scripts/audit-hikvision-device-events.ts --all-hikvision --limit=10 --apply --watch --until-clean --loops=1 --interval=5
 ```
 
-The watcher discovered `Main Entrance Device` from the HRIS DB, read 10 latest`nACS rows, found 7 employee-bearing
+The watcher discovered `Main Entrance Device` from the BNPI PATS DB, read 10 latest`nACS rows, found 7 employee-bearing
 rows and 3 employee-less rows, and reported `gap.missingWithEmployeeNo=0`.
 Recent local DB rows show serials `1130`, `1132`, and `1133` saved as
 `HIKVISION_CALLBACK` at `2026-07-08T03:13:23Z`. Remaining missing rows in that
 window were employee-less non-attendance device rows (`major=5`, `minor=21/22`),
-not HRIS attendance punches.
+not BNPI PATS attendance punches.
 
 Boundary: this proves the DB-config-truth watcher contract and callback/save
 behavior. The canonical runtime owner for ongoing watch mode remains the

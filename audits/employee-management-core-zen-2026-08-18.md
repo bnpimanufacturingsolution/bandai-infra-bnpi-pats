@@ -19,8 +19,8 @@
 | Employee | Zen Andrei `00010` / device 10 |
 | Employee id | `cmspnnxot02s5qw01yk7yy2er` |
 | User | `zen-andrei` / `zensample@gmail.com` / `cmspnny1c02s7qw01uramwasc` |
-| **Now** | role **`hris-employee`** · workforce **DIRECT** · status **ACTIVE** · onboarding **COMPLETED** |
-| **Was** (before today’s fix) | role `hris-hr-user` · status ONBOARDING · that is why he could open Attendance Overview |
+| **Now** | role **`bnpi-pats-employee`** · workforce **DIRECT** · status **ACTIVE** · onboarding **COMPLETED** |
+| **Was** (before today’s fix) | role `bnpi-pats-hr-user` · status ONBOARDING · that is why he could open Attendance Overview |
 | App / API | `http://localhost:5175` · `http://localhost:3001` |
 | Raw evidence | `.runtime/employee-mgmt-core-20260818/` · `.runtime/zen-role-fix-20260818/` |
 
@@ -33,7 +33,7 @@ Temp reset used in between: `andrei00010!2026` (lastName + employeeId + `!` + ye
 
 | Field | Before this audit day | After role + mock IDs + schedule matrix |
 |---|---|---|
-| `Employee.role` / `User.role` | `hris-hr-user` | **`hris-employee`** |
+| `Employee.role` / `User.role` | `bnpi-pats-hr-user` | **`bnpi-pats-employee`** |
 | `workforceSource` | already DIRECT in later snapshots | **DIRECT** |
 | `employmentStatus` | ONBOARDING | **ACTIVE** |
 | Boarding process `cmspnny6t02sfqw01yxfdlxum` | NOT_STARTED / reopened for missing docs | **COMPLETED** 100% (`actualCompleteDate` 2026-08-18T07:18:12Z) |
@@ -95,9 +95,9 @@ Restored after the edit pass: `workLocation=ONSITE`, `isTour=false`.
 
 This is the check that was **missing** from the first write of this file.
 
-Code gate (`assertCanManageSchedule` in `hris-api/app/employee/employee.controller.ts`):
+Code gate (`assertCanManageSchedule` in `bnpi-pats-api/app/employee/employee.controller.ts`):
 
-- Allowed roles: `hris-hr-manager`, `hris-hr-user`, `admin`, `hris-admin`, and `hris-employee-manager` **only for owned departments**.
+- Allowed roles: `bnpi-pats-hr-manager`, `bnpi-pats-hr-user`, `admin`, `bnpi-pats-admin`, and `bnpi-pats-employee-manager` **only for owned departments**.
 - GET timeline: self **or** those HR/admin roles **or** the employee’s **direct** manager (`reportToId`). Seed manager is **not** Zen’s supervisor (`reportToId` is null).
 
 Template used for the change: **`REGULAR_14DAY_ROTATION`**.  
@@ -130,11 +130,11 @@ Deactivate (`PATCH …/schedules/:entryId/deactivate`) was **not** called (it un
 
 ## Why Zen could open Attendance Overview (and what we changed)
 
-Zen is in department **GA/HR** (`isHr=true`). Role derivation had set `Employee.role` / `User.role` to **`hris-hr-user`**. In the app, `isHR = hris-hr-manager || hris-hr-user` unlocks `/hr/attendance`.
+Zen is in department **GA/HR** (`isHr=true`). Role derivation had set `Employee.role` / `User.role` to **`bnpi-pats-hr-user`**. In the app, `isHR = bnpi-pats-hr-manager || bnpi-pats-hr-user` unlocks `/hr/attendance`.
 
 | Step | Result | Evidence |
 |---|---|---|
-| PATCH Employee + User `role=hris-employee` | Both roles now `hris-employee` | `.runtime/zen-role-fix-20260818/user-patch.json` |
+| PATCH Employee + User `role=bnpi-pats-employee` | Both roles now `bnpi-pats-employee` | `.runtime/zen-role-fix-20260818/user-patch.json` |
 | Confirm workforce DIRECT | Already DIRECT; left DIRECT | live GET |
 | PATCH `employmentStatus=ACTIVE` alone | Overwritten back to ONBOARDING while mandated docs missing | `reconcileEmployeeOnboardingState` / `reopenedForMissingDocuments` |
 | Upload mock TIN / SSS / PhilHealth / Pag-IBIG | HR upload auto-APPROVED | `.runtime/zen-role-fix-20260818/upload-*.json` |
@@ -158,9 +158,9 @@ There is **no password-request workflow**. Password is:
 | Step | Who | Result |
 |---|---|---|
 | Reset user password | Any logged-in role (API) | 200 · sets temp password + `requirePasswordChange=true` |
-| Login with temp password | Zen `zensample@gmail.com` / `andrei00010!2026` | 200 · (then still `hris-hr-user`; later fixed) |
+| Login with temp password | Zen `zensample@gmail.com` / `andrei00010!2026` | 200 · (then still `bnpi-pats-hr-user`; later fixed) |
 | Change password | Zen `PATCH /api/auth/change-password` | 200 · “Password updated successfully” |
-| Login with new password | `ZenAndrei00010!Audit` | 200 · role **`hris-employee`** |
+| Login with new password | `ZenAndrei00010!Audit` | 200 · role **`bnpi-pats-employee`** |
 
 Admin UI has **Reset Password** on `/admin/configuration/users`. That is the product control. It is **not** an approval queue. It is an immediate reset.
 
@@ -201,7 +201,7 @@ Who **cannot** approve this step:
 | 1.1.2 Approval | CEO approved, HR completed | **Yes, with hierarchy** | Needs assigned supervisor (or rank fallback) |
 | Password | Reset + change | **Yes** | Not a request. **No role check** on reset |
 | Onboarding complete | Mock mandated IDs | **Yes** | ACTIVE only after TIN/SSS/PhilHealth/Pag-IBIG |
-| Role / HR access | Stripped `hris-hr-user` | **Yes** | Login role is now `hris-employee` |
+| Role / HR access | Stripped `bnpi-pats-hr-user` | **Yes** | Login role is now `bnpi-pats-employee` |
 | 1.1.3–1.1.6 | Not re-run here | See [employee-management-2026-08-18.md](./employee-management-2026-08-18.md) | Screen-exists audit only |
 
 **Not 100% “core is correctly authorized.”**  
@@ -243,7 +243,7 @@ Who **cannot** approve this step:
 ```text
 Email:    zensample@gmail.com
 Password: ZenAndrei00010!Audit
-Role:     hris-employee
+Role:     bnpi-pats-employee
 ```
 
 He should **not** see HR Attendance Overview anymore. If the UI still does, that is a stale session — log out and log in again.
@@ -256,6 +256,6 @@ He should **not** see HR Attendance Overview anymore. If the UI still does, that
 |---|---|
 | Original GET / PATCH / password / request matrix | `.runtime/run-zen-core-matrix.ps1` |
 | Schedule + update role matrix | `.runtime/run-zen-schedule-update-matrix.ps1` |
-| UI spec (HR only is reliable today) | `hris-app/tests/smoke/hr-employee-management-core-zen.spec.ts` |
+| UI spec (HR only is reliable today) | `bnpi-pats-app/tests/smoke/hr-employee-management-core-zen.spec.ts` |
 | Sheet existence audit | [employee-management-2026-08-18.md](./employee-management-2026-08-18.md) |
 | Role / onboarding / mock IDs | `.runtime/zen-role-fix-20260818/` |

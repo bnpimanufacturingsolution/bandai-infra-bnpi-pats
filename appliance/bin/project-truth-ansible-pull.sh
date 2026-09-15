@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_url="${PROJECT_TRUTH_REPO_URL:-https://github.com/hrisworkforcesystem-coder/bandai-infra.git}"
+repo_url="${PROJECT_TRUTH_REPO_URL:-https://github.com/bnpimanufacturingsolution/bandai-infra.git}"
 branch="${PROJECT_TRUTH_BRANCH:-develop}"
 checkout_root="${PROJECT_TRUTH_ANSIBLE_PULL_ROOT:-/var/lib/project-truth/ansible-pull}"
 state_dir="/var/lib/project-truth"
@@ -198,7 +198,7 @@ run_ansible_pull() {
     "$playbook"
 }
 
-# ansible-pull recurses submodules. hris-emp-app is a private sibling repo the
+# ansible-pull recurses submodules. bnpi-pats-emp-app is a private sibling repo the
 # appliance token often cannot read. If the main checkout is already on
 # develop, still apply the playbook so /opt and units stay in sync.
 apply_from_checkout() {

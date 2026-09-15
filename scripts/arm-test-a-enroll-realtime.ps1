@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Arm TEST A for live create/enroll proof against local HRIS API (:3001) + Device Events UI.
+  Arm TEST A for live create/enroll proof against local BNPI PATS API (:3001) + Device Events UI.
 
 .DESCRIPTION
   1) Ensures API health + admin login
@@ -30,7 +30,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-if (-not (Test-Path (Join-Path $root "hris-api"))) { $root = Get-Location }
+if (-not (Test-Path (Join-Path $root "bnpi-pats-api"))) { $root = Get-Location }
 Set-Location $root
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -50,14 +50,14 @@ for ($i = 0; $i -lt 30; $i++) {
 	} catch { Start-Sleep -Seconds 2 }
 }
 if (-not $healthy) {
-	Write-Warn "API not healthy — attempting restart-local-hris-api-dev.ps1"
-	& powershell -NoProfile -File (Join-Path $root "scripts\restart-local-hris-api-dev.ps1") -WaitSeconds 90
+	Write-Warn "API not healthy — attempting restart-local-bnpi-pats-api-dev.ps1"
+	& powershell -NoProfile -File (Join-Path $root "scripts\restart-local-bnpi-pats-api-dev.ps1") -WaitSeconds 90
 	$h = Invoke-RestMethod -Uri "$ApiBase/health" -TimeoutSec 8
 	if ($h.status -ne "healthy") { throw "API still not healthy after restart" }
 }
 Write-Ok "API healthy"
 
-$loginBody = @{ email = $Email; password = $Password; appCode = "hris" } | ConvertTo-Json
+$loginBody = @{ email = $Email; password = $Password; appCode = "bnpi-pats" } | ConvertTo-Json
 $login = Invoke-RestMethod -Method Post "$ApiBase/api/auth/login" -ContentType "application/json" -Body $loginBody -TimeoutSec 20
 $token = $login.data.token
 if (-not $token) { throw "Login failed" }
@@ -99,9 +99,9 @@ if (-not $EmployeeNo) {
 if (-not $EmployeeNo) {
 	Write-Step "No stay user in inventory — running create journey proof (UserInfo/Record + token map + DeviceUser)"
 	$env:PROOF_DEVICE_ID = $DeviceId
-	# Prefer tunnel URL if API uses remote DB; journey script uses process env DATABASE_URL from hris-api/.env
-	if (Test-Path (Join-Path $root "hris-api\.env")) {
-		$line = (Select-String -Path (Join-Path $root "hris-api\.env") -Pattern '^DATABASE_URL=' | Select-Object -First 1).Line
+	# Prefer tunnel URL if API uses remote DB; journey script uses process env DATABASE_URL from bnpi-pats-api/.env
+	if (Test-Path (Join-Path $root "bnpi-pats-api\.env")) {
+		$line = (Select-String -Path (Join-Path $root "bnpi-pats-api\.env") -Pattern '^DATABASE_URL=' | Select-Object -First 1).Line
 		if ($line) {
 			$env:DATABASE_URL = $line.Substring("DATABASE_URL=".Length).Trim().Trim('"')
 			$env:FORCE_DATABASE_URL = $env:DATABASE_URL
@@ -113,7 +113,7 @@ if (-not $EmployeeNo) {
 		$iar = $tcp.BeginConnect("127.0.0.1", 55435, $null, $null)
 		$ok = $iar.AsyncWaitHandle.WaitOne(400)
 		if ($ok -and $tcp.Connected) {
-			$env:FORCE_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:55435/hris?schema=public"
+			$env:FORCE_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:55435/bnpi_pats?schema=public"
 			$env:DATABASE_URL = $env:FORCE_DATABASE_URL
 		}
 		$tcp.Close()
@@ -133,12 +133,12 @@ if (-not $EmployeeNo) {
 	}
 }
 if (-not $EmployeeNo) { throw "Could not resolve a demo employeeNo to enroll against" }
-Write-Ok "Demo person: $EmployeeNo (device inventory, NOT HRIS Employee)"
+Write-Ok "Demo person: $EmployeeNo (device inventory, NOT BNPI PATS Employee)"
 
 $eventsUrl = "$AppBase/admin/configuration/devices/events?view=saved&deviceId=$DeviceId&eventAction=USER_CREATED"
 $eventsAllUrl = "$AppBase/admin/configuration/devices/events?view=saved&deviceId=$DeviceId"
 $fpUrl = "$AppBase/admin/configuration/devices/events?view=saved&deviceId=$DeviceId&eventAction=FINGERPRINT_ENROLLED"
-$syncUrl = "$AppBase/admin/configuration/devices?action=device-users&deviceId=$DeviceId&syncPanel=users&deviceUserView=hris&deviceUserSearch=$([uri]::EscapeDataString($EmployeeNo))"
+$syncUrl = "$AppBase/admin/configuration/devices?action=device-users&deviceId=$DeviceId&syncPanel=users&deviceUserView=bnpi-pats&deviceUserSearch=$([uri]::EscapeDataString($EmployeeNo))"
 
 # Snapshot baseline event count (re-login if token expired during listener probe)
 $baselineNote = "events_baseline=unknown"
@@ -193,7 +193,7 @@ OPEN THESE (after login as admin@bandai.local / password123):
     $eventsUrl
   FINGERPRINT_ENROLLED filter:
     $fpUrl
-  Device user inventory (HRIS view for this person):
+  Device user inventory (BNPI PATS view for this person):
     $syncUrl
 
 WHAT TO DO ON THE PHYSICAL TERMINAL (TEST A / 192.168.254.189):
@@ -211,7 +211,7 @@ IMPORTANT TRUTH:
     so host UI on $AppBase still gets events without waiting for SDK arm.
   - Opaque historical FP rows stay unresolved without a write-time map — NEW enrolls after map
     for a known plain employeeNo will resolve when capture succeeds.
-  - Device user click must use deviceUserView=hris (sync URL above). Live Device(ISAPI) search
+  - Device user click must use deviceUserView=bnpi-pats (sync URL above). Live Device(ISAPI) search
     is empty if the person was deleted off the terminal.
 
 STOP POLLER:

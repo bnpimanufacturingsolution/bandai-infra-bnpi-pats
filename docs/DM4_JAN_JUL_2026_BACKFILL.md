@@ -100,7 +100,7 @@ node scripts\run-dm4-timesheet-upload.mjs --execute --leave "leave-january.xlsx=
 # Useful flags: --only "<substring>"  --max-refires 3  --api http://localhost:3001  --skip-dry-run (not recommended)
 ```
 
-Prerequisites: local API healthy (if down: `scripts\restart-local-hris-api-dev.ps1`;
+Prerequisites: local API healthy (if down: `scripts\restart-local-bnpi-pats-api-dev.ps1`;
 during bulk windows prefer the supervised no-watch API pattern from the infra notes),
 curl.exe on PATH. OT workbooks must be per-cutoff files — split a yearly report first
 (the splitter used for the backfill is preserved in the session evidence; reruns of the
@@ -116,7 +116,7 @@ Verified 2026-09-11 in plan-only mode against a biometrics workbook and an OT sp
   `npx dotenv-cli -o -e .env -e .env.development.local -- npx tsx index.ts` with
   **no file watcher** and 5s auto-respawn; log:
   `.runtime/jan-jul-backfill-20260911/api-supervised.log`. Restore the normal
-  `scripts/restart-local-hris-api-dev.ps1` watch flow when done.
+  `scripts/restart-local-bnpi-pats-api-dev.ps1` watch flow when done.
 - STALE runs (in-memory job lost on restart) were recovered by **fresh idempotent
   runs with new `idempotencyKey`s** — the upsert is proven safe across all refires.
   `/runs/:id/recover` flips status without relaunching the worker (defect, follow-up).
@@ -126,7 +126,7 @@ Verified 2026-09-11 in plan-only mode against a biometrics workbook and an OT sp
 
 ## Code change shipped (uncommitted at write time)
 
-`hris-api/app/migration/migration.router.ts` — `/runs/dry-run` and `/runs` wrapped with
+`bnpi-pats-api/app/migration/migration.router.ts` — `/runs/dry-run` and `/runs` wrapped with
 `requestTimeout({ timeoutMs: config.heavyRequestTimeoutMs })` (matching the
 payroll/timesheet/attendance router pattern). Before this, the 120s server default made
 a multi-minute DM4 dry-run impossible over HTTP. `HEAVY_REQUEST_TIMEOUT_MS=900000` used

@@ -182,7 +182,7 @@ bool capture_fingerprint_template(
     if (handle < 0) {
         emit_json({
             {"event", "source_fingerprint_capture"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"fingerNo", std::to_string(finger_no)},
             {"ok", "false"},
             {"lastError", std::to_string(NET_DVR_GetLastError())}
@@ -199,7 +199,7 @@ bool capture_fingerprint_template(
 
     emit_json({
         {"event", "source_fingerprint_capture"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"fingerNo", std::to_string(finger_no)},
         {"ok", wait_ok && ctx.has_data ? "true" : "false"},
         {"dataSize", std::to_string(ctx.capture.dwFingerPrintDataSize)},
@@ -243,7 +243,7 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
         emit_json({
             {"event", "source_fingerprint_read_skipped"},
             {"reason", "missing_employee_no"},
-            {"sourceDeviceId", source.config.hris_device_id}
+            {"sourceDeviceId", source.config.bnpi_pats_device_id}
         });
         return empty;
     }
@@ -256,7 +256,7 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
     enable_default_card_reader(cond.byEnableCardReader, sizeof(cond.byEnableCardReader));
 
     FingerprintReadContext ctx;
-    ctx.device_id = source.config.hris_device_id;
+    ctx.device_id = source.config.bnpi_pats_device_id;
     ctx.employee_no = job.employee_no;
     ctx.operation = "read";
     std::unique_lock<std::mutex> sdk_lock(sdk_request_mutex);
@@ -271,7 +271,7 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
     if (handle < 0) {
         emit_json({
             {"event", "source_fingerprint_read"},
-            {"sourceDeviceId", source.config.hris_device_id},
+            {"sourceDeviceId", source.config.bnpi_pats_device_id},
             {"employeeNo", job.employee_no},
             {"ok", "false"},
             {"lastError", std::to_string(NET_DVR_GetLastError())}
@@ -289,7 +289,7 @@ std::vector<NET_DVR_FINGER_PRINT_CFG_V50> read_source_fingerprints(DeviceSession
     const bool have_templates = wait_ok && !ctx.failed && !ctx.templates.empty();
     emit_json({
         {"event", "source_fingerprint_read"},
-        {"sourceDeviceId", source.config.hris_device_id},
+        {"sourceDeviceId", source.config.bnpi_pats_device_id},
         {"employeeNo", job.employee_no},
         {"ok", wait_ok && !ctx.failed ? "true" : "false"},
         {"templateCount", std::to_string(ctx.templates.size())},

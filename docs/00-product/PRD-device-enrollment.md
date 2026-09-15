@@ -9,7 +9,7 @@ ending state.
 
 ## Personas
 
-- **HRIS admin** - links a terminal identity to an employee and enrolls a
+- **BNPI PATS admin** - links a terminal identity to an employee and enrolls a
   person to a device.
 - **Device admin** - reconciles multiple terminals, investigates unreachable
   devices, and verifies convergence.
@@ -30,7 +30,7 @@ flowchart LR
   F -- No --> H
   H --> I[Confirm approved changes]
   I --> J[Run async apply job]
-  J --> K[Verify device and HRIS state]
+  J --> K[Verify device and BNPI PATS state]
   K --> L[Evidence and audit summary]
 ```
 
@@ -64,7 +64,7 @@ credential/SDK errors, and last successful sync.
 ### FR-03 Preview
 
 Use a preview mode or plan endpoint. Present counts for union users, conflicts,
-missing-on-target, ambiguous matches, missing HRIS links, unreachable devices,
+missing-on-target, ambiguous matches, missing BNPI PATS links, unreachable devices,
 and planned writes.
 
 ### FR-04 Review and resolution
@@ -88,7 +88,7 @@ run summary.
 
 ### FR-07 Verification
 
-After apply, refresh device users and HRIS links. Show applied, skipped,
+After apply, refresh device users and BNPI PATS links. Show applied, skipped,
 failed, and still-divergent records, with links to sync history and retry
 guidance.
 
@@ -99,7 +99,7 @@ results, and errors. Never render raw biometric templates.
 
 ## Non-Functional Requirements
 
-- Admin-only route and existing `hris-admin` authorization model.
+- Admin-only route and existing `bnpi-pats-admin` authorization model.
 - WCAG 2.2 AA intent: keyboard operation, visible focus, semantic table
   headers, live progress announcements, and error summary plus inline errors.
 - Preserve URL state for selected device, panel, filter, and job where

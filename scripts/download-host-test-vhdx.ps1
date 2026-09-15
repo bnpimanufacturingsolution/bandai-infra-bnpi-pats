@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$RemoteHost = 'project-truth-hris',
+  [string]$RemoteHost = 'project-truth-bnpi-pats',
   [string]$RemoteChunkDir = '/var/lib/project-truth/retained-vhdx/20260703-102324/host-test-chunks-128m',
   [string]$RemoteImage = '/var/lib/project-truth/retained-vhdx/20260703-102324/project-truth-node-current-state-20260703-102324-host-test-cloudflare-disabled.vhdx',
   [string]$TargetPath = 'C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx',

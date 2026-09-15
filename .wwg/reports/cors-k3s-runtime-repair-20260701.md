@@ -15,9 +15,9 @@ Mixed regression repair and runtime/GitOps drift investigation.
 ## Findings
 
 - K3s DEV API pod had `APP_ENV=dev` and `PORT=3001`, but no `CORS_CREDENTIALS`, `CORS_ORIGINS`, or `ALLOW_LAN_CORS`.
-- GitOps runtime manifests for DEV/UAT/PROD did not explicitly set the API CORS env vars, while Docker Compose used `appliance/env/hris-api.env` with `CORS_CREDENTIALS=true`.
+- GitOps runtime manifests for DEV/UAT/PROD did not explicitly set the API CORS env vars, while Docker Compose used `appliance/env/bnpi-pats-api.env` with `CORS_CREDENTIALS=true`.
 - Runtime manifests intentionally use `imagePullPolicy: Never`; K3s does not pull images from a registry in this appliance path. `enable-k8s-runtime` imports local images into K3s/containerd and stores the archive for pre-import.
-- DEV data is split between runtimes: K3s DEV Postgres had `employees=7`; Docker `hris-postgres-dev` had `employees=2217`.
+- DEV data is split between runtimes: K3s DEV Postgres had `employees=7`; Docker `bnpi-pats-postgres-dev` had `employees=2217`.
 - No employee records were deleted by this CORS repair.
 
 ## Changes

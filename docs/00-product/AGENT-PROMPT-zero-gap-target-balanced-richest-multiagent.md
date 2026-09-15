@@ -8,7 +8,7 @@ explicit hard residuals remain with evidence.
 | | |
 |---|---|
 | **Repo** | `C:\Users\stari\bandai-infra` on `develop` |
-| **Runtime** | K3s **DEV only** — `project-truth-hris` / `10.184.37.19` |
+| **Runtime** | K3s **DEV only** — `project-truth-bnpi-pats` / `10.184.37.19` |
 | **Mode** | Multi-subagent, root-coordinated, continuous |
 | **Forbidden** | Windows npm / Docker Desktop / WSL as Project Truth runtime |
 | **Policy already live** | `c5d43a0` richest-source overwrite (prove still live) |
@@ -112,12 +112,12 @@ OR documented hard residual people with blockingReason in:
 | E | `cmriu5ab102goi001x9o7nfct` | 10.184.37.24 |
 | F | `cmrim1zop05ik7zp4zgm2sm4k` | 10.184.37.25 |
 
-Exclude Main C, TEST. Admin `admin@bandai.local` / repo password / `appCode=hris`. Never print tokens.
+Exclude Main C, TEST. Admin `admin@bandai.local` / repo password / `appCode=bnpi-pats`. Never print tokens.
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\node-health-appliance_ed25519" infra@10.184.37.19
 # fallback
-ssh project-truth-hris
+ssh project-truth-bnpi-pats
 ```
 
 API: `http://127.0.0.1:3101` on VM.
@@ -178,7 +178,7 @@ Min **15** heartbeats.
 
 ### 5.1 Where to change
 
-Primary: `hris-api/helper/hikvision-credential-recovery.helper.ts`
+Primary: `bnpi-pats-api/helper/hikvision-credential-recovery.helper.ts`
 function that selects ready writes for a canary wave (`selectCredentialRecoveryReadyWrites` or equivalent unique-person-first).
 
 ### 5.2 Required behavior
@@ -215,7 +215,7 @@ Output: frozen operation list
 
 ### 5.5 UI richest (if not already complete)
 
-`hris-app/.../enroll.tsx`:
+`bnpi-pats-app/.../enroll.tsx`:
 
 - Fingerprint/face gap rows: `RICHEST SOURCE (default): … overwrite …`
 - Decision rows: default richest
@@ -243,7 +243,7 @@ printenv HIKVISION_AUTHORIZED_FACE_CANARY_DEVICE_ID
 curl -sS http://127.0.0.1:3101/health
 curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3100/ready   # Loki
 # Grafana if present
-kubectl -n dev logs deploy/hris-api -c api --since=15m | grep credential_recovery | tail
+kubectl -n dev logs deploy/bnpi-pats-api -c api --since=15m | grep credential_recovery | tail
 ```
 
 ### Phase C — Code: balance + tests + push + deploy

@@ -59,7 +59,7 @@ function Write-Hb {
 }
 
 function Get-AdminHeaders {
-  $loginBody = @{ email = "admin@bandai.local"; password = "password123"; appCode = "hris" } | ConvertTo-Json
+  $loginBody = @{ email = "admin@bandai.local"; password = "password123"; appCode = "bnpi-pats" } | ConvertTo-Json
   $login = Invoke-RestMethod -Method Post "http://localhost:3001/api/auth/login" -ContentType "application/json" -Body $loginBody -TimeoutSec 30
   $token = $login.data.token
   if (-not $token) { throw "Login returned no token" }
@@ -98,7 +98,7 @@ function Ensure-Api {
     try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch {}
   }
   Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -match "hris-api" } |
+    Where-Object { $_.CommandLine -match "bnpi-pats-api" } |
     ForEach-Object { try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } catch {} }
   Start-Sleep -Seconds 2
   $logDir = Join-Path $EvidenceRoot "api-restart"
@@ -106,7 +106,7 @@ function Ensure-Api {
   $stdout = Join-Path $logDir "api.stdout.log"
   $stderr = Join-Path $logDir "api.stderr.log"
   Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "npm.cmd run dev" `
-    -WorkingDirectory (Join-Path $repoRoot "hris-api") `
+    -WorkingDirectory (Join-Path $repoRoot "bnpi-pats-api") `
     -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden | Out-Null
   for ($i = 0; $i -lt 60; $i++) {
     Start-Sleep -Seconds 2
@@ -223,7 +223,7 @@ if ($processing.Count -gt 0) {
       conflicts = $plan.counts.conflicts
       missing = $plan.counts.missing
       ambiguous = $plan.counts.ambiguous
-      missingHrisLinks = $plan.counts.missingHrisLinks
+      missingBnpiPatsLinks = $plan.counts.missingBnpiPatsLinks
       plannedWrites = if ($plan.plannedWrites) { @($plan.plannedWrites).Count } else { $plan.counts.plannedWrites }
       errors = if ($plan.errors) { @($plan.errors).Count } else { 0 }
       deviceCount = if ($plan.deviceIds) { @($plan.deviceIds).Count } else { 6 }

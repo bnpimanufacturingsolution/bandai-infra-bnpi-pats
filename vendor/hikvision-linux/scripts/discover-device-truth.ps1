@@ -27,7 +27,7 @@ $sshBase = @(
 Write-Host "Project Truth Hikvision device-source discovery"
 Write-Host "VM: $sshTarget"
 Write-Host "Device: $DeviceHost"
-Write-Host "Scope: vendor/device only; no HRIS DB/API reads"
+Write-Host "Scope: vendor/device only; no BNPI PATS DB/API reads"
 
 ssh @sshBase $sshTarget "rm -rf '$RemoteDir' && mkdir -p '$RemoteDir'"
 scp @sshBase -r (Join-Path $localVendor "*") "${sshTarget}:$RemoteDir/"

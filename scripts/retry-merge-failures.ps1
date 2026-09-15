@@ -19,7 +19,7 @@ param(
   [string]$ApiBase = "http://localhost:3001",
   [string]$Email = "admin@bandai.local",
   [string]$Password = "password123",
-  [string]$AppCode = "hris",
+  [string]$AppCode = "bnpi-pats",
   [int]$Limit = 50,
   [switch]$DryRun
 )

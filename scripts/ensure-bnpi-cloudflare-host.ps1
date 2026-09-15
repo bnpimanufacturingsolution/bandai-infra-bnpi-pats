@@ -1,12 +1,12 @@
 [CmdletBinding()]
 param(
-  [string]$TunnelName = 'bnpi-hris',
+  [string]$TunnelName = 'bnpi-pats',
   [string]$TunnelId = 'e3486f00-f974-46d3-9e11-911266749d00',
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
-  [string]$TaskName = 'ProjectTruth-BNPI-HRIS-Cloudflared',
-  [string]$SshHostname = 'ssh.bnpi-hris.tech',
-  [string]$SshAlias = 'project-truth-hris',
+  [string]$TaskName = 'ProjectTruth-BNPI-PATS-Cloudflared',
+  [string]$SshHostname = 'ssh.bnpi-pats.tech',
+  [string]$SshAlias = 'project-truth-bnpi-pats',
   [string]$SshKeyPath = '',
   [switch]$Login,
   [switch]$ProvisionDns,
@@ -19,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 if (-not $ConfigPath) {
-  $ConfigPath = Join-Path $repoRoot 'cloudflared-bnpi-hris.yml'
+  $ConfigPath = Join-Path $repoRoot 'cloudflared-bnpi-pats.yml'
 }
 if (-not $CredentialsFile) {
   $CredentialsFile = Join-Path $env:USERPROFILE ".cloudflared\$TunnelId.json"
@@ -175,22 +175,22 @@ if ($ProvisionDns) {
   }
 
   $dnsNames = @(
-    'bnpi-hris.tech',
-    'www.bnpi-hris.tech',
-    'app.bnpi-hris.tech',
-    'api.bnpi-hris.tech',
-    'dev.bnpi-hris.tech',
-    'dev-api.bnpi-hris.tech',
-    'uat.bnpi-hris.tech',
-    'uat-api.bnpi-hris.tech',
-    'emp.bnpi-hris.tech',
-    'dev-emp.bnpi-hris.tech',
-    'uat-emp.bnpi-hris.tech',
-    'grafana.bnpi-hris.tech',
-    'ssh.bnpi-hris.tech',
-    'db.bnpi-hris.tech',
-    'dev-db.bnpi-hris.tech',
-    'uat-db.bnpi-hris.tech'
+    'bnpi-pats.tech',
+    'www.bnpi-pats.tech',
+    'app.bnpi-pats.tech',
+    'api.bnpi-pats.tech',
+    'dev.bnpi-pats.tech',
+    'dev-api.bnpi-pats.tech',
+    'uat.bnpi-pats.tech',
+    'uat-api.bnpi-pats.tech',
+    'emp.bnpi-pats.tech',
+    'dev-emp.bnpi-pats.tech',
+    'uat-emp.bnpi-pats.tech',
+    'grafana.bnpi-pats.tech',
+    'ssh.bnpi-pats.tech',
+    'db.bnpi-pats.tech',
+    'dev-db.bnpi-pats.tech',
+    'uat-db.bnpi-pats.tech'
   )
 
   foreach ($dnsName in $dnsNames) {
@@ -204,7 +204,7 @@ if ($StartTunnel) {
   $args = @('-File', (Join-Path $repoRoot 'scripts\start-bnpi-cloudflare-tunnel.ps1'), '-RepairScheduledTask')
   if ($ProvisionDns) { $args += '-ProvisionDns' }
   if ($VerifyPublic) { $args += '-VerifyPublic' }
-  Write-Step 'Starting host-managed bnpi-hris tunnel wrapper.'
+  Write-Step 'Starting host-managed bnpi-pats tunnel wrapper.'
   $quotedArgs = $args | ForEach-Object {
     if ($_ -match '[\s"]') {
       '"' + ($_ -replace '"', '\"') + '"'
@@ -262,7 +262,7 @@ $result = [pscustomobject]@{
     if (-not $certExists) { 'Cloudflare origin cert; run this command with -Login.' }
     if (-not $credentialExists) { 'Named tunnel credential JSON; securely import it or recreate the tunnel credential for this host.' }
     if (-not $sshKeyExists) { "SSH key missing: $SshKeyPath." }
-    if (-not $configExists) { 'cloudflared-bnpi-hris.yml; run start-bnpi-cloudflare-tunnel after VM import.' }
+    if (-not $configExists) { 'cloudflared-bnpi-pats.yml; run start-bnpi-cloudflare-tunnel after VM import.' }
     if (-not $task) { 'Scheduled task; run start-bnpi-cloudflare-tunnel -RepairScheduledTask.' }
   )
 }
