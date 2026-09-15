@@ -1052,6 +1052,29 @@ export function applyZeroSalaryGuardrail(
 }
 
 /**
+ * Zero-pay waiver for STATUTORY contributions (SSS / PhilHealth / Pag-IBIG).
+ *
+ * Client-file truth (2026-09-15 audit of nine Sheet2 registers, Dec 26 2025 →
+ * Apr 26-May 10 2026): every one of 128 zero-pay rows (GrossPay <= 0) carries
+ * TOTAL DEDN = 0 — the client books no statutory deduction on a cutoff that
+ * pays nothing. applyZeroSalaryGuardrail already waived loans + benefit
+ * deductions for the same zero-gross case; this closes the statutory half so
+ * totalDedn matches the register (proven: 00091 +398.75 / 01303 +432.50 PH-only
+ * drift on Apr 26-May 10, TR tied to the peso otherwise).
+ */
+export function waiveZeroPayContributions<T extends { sss: number; philHealth: number; pagIbig: number }>(
+	grossPayWithSources: number,
+	periodContributions: T,
+): T {
+	if (grossPayWithSources <= 0) {
+		periodContributions.sss = 0;
+		periodContributions.philHealth = 0;
+		periodContributions.pagIbig = 0;
+	}
+	return periodContributions;
+}
+
+/**
  * Get date key in YYYY-MM-DD format from a Date object
  * Uses the local date components to avoid timezone issues
  * @param date - Date object
@@ -2658,6 +2681,7 @@ export async function generatePayrollFromTimesheets(
 				monthlyRate: estimatedMonthlyRate,
 				dailyRate: (employee as { dailyRate?: number | null }).dailyRate,
 			});
+			waiveZeroPayContributions(grossPayWithSources, periodContributions);
 
 			// Calculate tax based on period gross pay
 			const periodTaxableIncome =
@@ -5614,6 +5638,7 @@ function calculatePayrollPreviewDataset(params: {
 				monthlyRate: estimatedMonthlyRate,
 				dailyRate: (employee as { dailyRate?: number | null }).dailyRate,
 			});
+			waiveZeroPayContributions(grossPayWithSources, periodContributions);
 
 			const periodTaxableIncome =
 				grossPayWithSources -

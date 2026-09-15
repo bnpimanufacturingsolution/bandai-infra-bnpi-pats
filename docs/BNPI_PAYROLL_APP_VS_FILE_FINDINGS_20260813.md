@@ -748,3 +748,32 @@ default. Summary still returns `periodCandidates[]` (days/emps/chosen) for hones
 | 2026-08-17/18 | §14c recurring DED mass, Amount vs Payment, multi-cutoff loan horizon, Jul re-tally after loan fix |
 | 2026-08-18 | §14d DMA open-horizon EVERY_CUTOFF; Jul DMA fails 332→0; note local DB test-only — brute data fixes replay on VM later |
 | 2026-08-25 | §14e period leave import (LVP): Leave (2) feed proven vs Sheet2 (99.2%), DM3 endpoint + UI card, engine Gross now includes leavePay; operator feedback → immediate execute + period selector; executed on local clone 321 created / ₱327,991.84; after-tally pending |
+
+## 14h. Apr 26–May 10 cutoff parity: zero-pay statutory waiver + loan-basis finding (2026-09-15)
+
+- Client pack `PAYROLL 2026/` (registers Dec–Apr, per-cutoff comp/ded uploads, EZ Payroll) +
+  `confidential-files/HRIS Payroll Computation April 26 - May 10, 2026.xlsx` (password 9090, auto-unlocked
+  via Excel COM by `run-period-tally-compare.mjs`). Full DEV run + comparison report:
+  `.wwg/reports/apr26-may10-payroll-parity-20260915.md`.
+- **NEW CLIENT RULE — CONFIRMED_BY_CLIENT_FILE_BEHAVIOR: a cutoff that pays zero books NO statutory
+  deduction.** Nine client registers (Dec 26–Apr 25, 770–849 rows each) contain 128 zero-GrossPay people and
+  **all 128 carry TOTAL DEDN = 0**. The engine already waived loans/benefits on zero gross
+  (`applyZeroSalaryGuardrail`) but still charged the Aug-25 salary-based PhilHealth schedule.
+- **Engine change (this session):** `waiveZeroPayContributions(grossPayWithSources, periodContributions)`
+  applied in BOTH generate + preview twins right after the PH cutoff resolution. Pinned by
+  `tests/zero-pay-contribution-waiver.spec.ts` (5/5) incl. a twin-call source contract. Live proof on DEV:
+  00091/01303 regenerated `PH=0 totalDedn=0 TR=0`; Apr 26–May 10 tally moved **TALLIED 0 -> 2/834**
+  (bands: TALLIED 2, OT_MATCH_ONLY 737, OT_OK_NEAR_50 2, UNMATCH 93; onlyInRegister 16; evidence
+  `.runtime/tally-PP-20260426-20260511-2026-09-15T02-58-18/`).
+- **Loan-basis finding (hypothesis audited and REJECTED as duplicate):** the RCBC "2x" on 00138
+  (app 6,854.26 vs register 3,427.13) is NOT a duplicate schedule — fleet audit over the cutoff window
+  found **0 duplicate emp+loanType groups** (1,182 window-covering loans;
+  `.runtime/dev-payroll-test-20260914/loan-dup-audit.json`). It is ONE loan whose `monthlyPayment`
+  (6,854.26) is being charged whole per cutoff while the client file charges half (3,427.13/cutoff).
+  Filed REC-20260915-LOAN-MONTHLY-VS-CUTOFF-AMORTIZATION (Proposed) — needs the client's answer whether
+  EmployeeLoan.monthlyPayment is monthly (÷2 per semi-monthly cutoff) or per-cutoff before any engine change.
+  Residual loan-column fails stay the §14c client-data class (rcbc -3.9k / hdmfSl -14.3k / sssSl -4.5k net).
+- **Unchanged walls this cutoff (measured):** absent +241k app-over-register (268 people), late +95k (262),
+  W/Tax cascade -57k, PFA -32.8k not awarded (164 people x 200), day-count 146 fails = §definition,
+  15 register-only employees with no app timesheet (00396, 00679, 00782, 00836, 00852, 00985, 00987, 01113,
+  01127, 01228, 01370, 01432, 01523, 01730, 01775).

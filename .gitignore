@@ -78,3 +78,7 @@ opencode.json
 # Local CLI scripts (keep personal workflow scripts local)
 scripts/project-truth.ps1
 scripts/project-truth-*.ps1
+
+# Client payroll pack (real salary data - never commit)
+PAYROLL 2026/
+
