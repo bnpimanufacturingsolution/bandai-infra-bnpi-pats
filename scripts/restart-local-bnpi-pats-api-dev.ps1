@@ -14,7 +14,6 @@ $dotenvCli = Join-Path $apiDir "node_modules\dotenv-cli\cli.js"
 $nodeBinary = (Get-Command node.exe).Source
 $ensureDbAccessScript = Join-Path $apiDir "scripts\ensure-bnpi-db-access.cjs"
 $ensureDbWatchScript = Join-Path $repoRoot "scripts\watch-k8s-dev-db-access.ps1"
-$ensureHikvisionRemoteTunnelScript = Join-Path $apiDir "scripts\ensure-hikvision-remote-device-tunnel.cjs"
 
 function Get-RepoApiProcesses {
 	$connections = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
@@ -133,13 +132,6 @@ if (Test-Path $ensureDbWatchScript) {
 	& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ensureDbWatchScript
 }
 
-if (Test-Path $ensureHikvisionRemoteTunnelScript) {
-Write-Host "[local-api-restart] Ensuring Hikvision remote device tunnels (.20-.25)"
-	& $nodeBinary $ensureHikvisionRemoteTunnelScript
-} else {
-	Write-Host "[local-api-restart] Hikvision remote tunnel ensure skipped: missing $ensureHikvisionRemoteTunnelScript"
-}
-
 $launchScript = @"
 Set-Location '$apiDir'
 `$env:CHOKIDAR_USEPOLLING='true'
@@ -162,49 +154,3 @@ if (-not (Wait-ForApiHealth)) {
 }
 
 Write-Host "[local-api-restart] Local bnpi-pats-api is healthy on http://localhost:$Port/health"
-
-# Required A-F forwards, VM callback reverse, and listener recovery are owned by
-# run-dev-api-watch.cjs. The TEST A/B lab bridge is optional and must never hold
-# an otherwise healthy local API restart open.
-$bridgeScript = Join-Path $repoRoot "scripts\start-host-hikvision-vm-ssh-bridge.ps1"
-$listenerRestartScript = Join-Path $repoRoot "scripts\restart-local-hikvision-listener.ps1"
-if (
-	$env:BNPI_PATS_RESTART_RUN_OPTIONAL_TEST_BRIDGE -eq "true" -and
-	(Test-Path $bridgeScript)
-) {
-	try {
-		Write-Host "[local-api-restart] Ensuring TEST A SSH reverse bridge for Live capture"
-		$previousErrorActionPreference = $ErrorActionPreference
-		$ErrorActionPreference = "Continue"
-		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $bridgeScript `
-			-Action start `
-			-HttpDevicePort 443 `
-			-SdkDevicePort 8000 `
-			-HttpListenPort 59443 `
-			-SdkListenPort 59000 `
-			-ApiLocalPort $Port `
-			-ApiRemotePort 53001 2>&1 | ForEach-Object { Write-Host $_ }
-		$bridgeExitCode = $LASTEXITCODE
-		$ErrorActionPreference = $previousErrorActionPreference
-		if ($bridgeExitCode -ne 0) {
-			Write-Host "[local-api-restart] Bridge ensure skipped: optional TEST A bridge exited $bridgeExitCode"
-		}
-	} catch {
-		$ErrorActionPreference = "Stop"
-		Write-Host "[local-api-restart] Bridge ensure skipped: $($_.Exception.Message)"
-	}
-} else {
-	Write-Host "[local-api-restart] Optional TEST A/B bridge skipped; required live paths are managed by the dependency watchdog"
-}
-if (
-	$env:BNPI_PATS_RESTART_RUN_OPTIONAL_LISTENER_RESTART -eq "true" -and
-	(Test-Path $listenerRestartScript)
-) {
-	try {
-		& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $listenerRestartScript -ApiBase "http://localhost:$Port" -WaitHealthSeconds 0
-	} catch {
-		Write-Host "[local-api-restart] Listener restart skipped: $($_.Exception.Message)"
-	}
-} else {
-	Write-Host "[local-api-restart] Synchronous listener restart skipped; dependency watchdog verifies it after 53001 is healthy"
-}

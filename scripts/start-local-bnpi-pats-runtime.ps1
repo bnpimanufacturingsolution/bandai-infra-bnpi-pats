@@ -1,7 +1,6 @@
 param(
   [ValidateSet('prod','dev','uat','all')]
   [string]$Environment = 'prod',
-  [switch]$IncludeZkteco,
   [switch]$SkipVerify
 )
 
@@ -67,10 +66,6 @@ if ($Environment -eq 'prod') {
   $composeArgs += @('-f', 'docker-compose.yml', '-f', 'docker-compose.environments.yml', 'up', '-d')
 } else {
   $composeArgs += @('-f', 'docker-compose.environments.yml', 'up', '-d')
-}
-
-if ($IncludeZkteco) {
-  Write-Host "The Windows and Node ZKTeco bridges are retired. Use vendor/zkteco-linux and set ZKTECO_BRIDGE_STATUS_URL if live device status is needed."
 }
 
 $log = Join-Path $logsRoot ("start-local-bnpi-pats-runtime-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))

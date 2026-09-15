@@ -119,21 +119,13 @@ foreach ($envName in $Environments) {
 
   $checks.Add((Assert-NoText "runtime-$envName does not deploy retired Node ZKTeco bridge" $rendered 'name:\s*zkteco-bridge'))
   $checks.Add((Assert-NoText "runtime-$envName does not reference retired Node ZKTeco bridge image" $rendered 'project-truth-zkteco-bridge'))
+  $checks.Add((Assert-NoText "runtime-$envName does not deploy retired Hikvision watcher" $rendered 'name:\s*bnpi-pats-hikvision-watcher'))
+  $checks.Add((Assert-NoText "runtime-$envName does not deploy retired callback outbox" $rendered 'name:\s*bnpi-pats-callback-outbox'))
+  $checks.Add((Assert-NoText "runtime-$envName does not deploy retired HRIS employee portal" $rendered 'bnpi-pats-emp-app'))
+  $checks.Add((Assert-NoText "runtime-$envName carries no Hikvision device env" $rendered 'PROJECT_TRUTH_HIKVISION_'))
+  $checks.Add((Assert-NoText "runtime-$envName carries no ZKTeco bridge env" $rendered 'ZKTECO_BRIDGE_'))
 
-  if ($envName -eq 'dev') {
-    $checks.Add((Assert-Text "runtime-dev deploys Hikvision watcher" $rendered '(?ms)^kind:\s*Deployment.*?name:\s*bnpi-pats-hikvision-watcher'))
-    $checks.Add((Assert-Text "runtime-dev Hikvision watcher uses DB init tools image" $rendered 'image:\s*bnpi-pats-api-db-init:develop'))
-    $checks.Add((Assert-Text "runtime-dev Hikvision watcher discovers configured devices from DB truth" $rendered 'audit-hikvision-device-events\.ts[\s\S]*--all-hikvision'))
-    $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not pin device name in manifest env" $rendered 'HIKVISION_DEVICE_NAME\s*\r?\n\s*value:'))
-    $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not pin device port in manifest env" $rendered 'HIKVISION_DEVICE_PORT\s*\r?\n\s*value:'))
-    $checks.Add((Assert-NoText "runtime-dev Hikvision watcher does not pin device address in manifest env" $rendered 'HIKVISION_DEVICE_ADDRESS\s*\r?\n\s*value:'))
-    $checks.Add((Assert-NoText "runtime-dev Hikvision watcher is not pinned to stale seeded id" $rendered 'cmqquro2g002em73cdp74rx0q'))
-    $checks.Add((Assert-Text "runtime-dev Hikvision watcher runs apply loop" $rendered 'audit-hikvision-device-events\.ts[\s\S]*--apply[\s\S]*--watch'))
-  } else {
-    $checks.Add((Assert-NoText "runtime-$envName does not deploy DEV-only Hikvision watcher" $rendered 'name:\s*bnpi-pats-hikvision-watcher'))
-  }
-
-  foreach ($imageName in @('bnpi-pats-api-db-init', 'bnpi-pats-api-local', 'bnpi-pats-app-local', 'bnpi-pats-emp-app-local')) {
+  foreach ($imageName in @('bnpi-pats-api-db-init', 'bnpi-pats-api-local', 'bnpi-pats-app-local')) {
     $imageTag = Get-KustomizeImageTag -KustomizationText $runtimeKustomization -ImageName $imageName
     if ($imageTag -ne $environmentRuntimeImageTag) {
       throw "Self-heal contract failed: runtime_image_tag for ${envName} is ${environmentRuntimeImageTag}, but ${imageName} uses ${imageTag}"
@@ -163,8 +155,6 @@ $vmGitCredsScript = Get-Content -Raw 'scripts/configure-vm-git-creds.ps1'
 $bootstrapOnpremScript = Get-Content -Raw 'scripts/bootstrap-onprem-vm.sh'
 $ansiblePullScript = Get-Content -Raw 'appliance/bin/project-truth-ansible-pull.sh'
 $ansiblePullPlaybook = Get-Content -Raw 'ansible/project-truth-pull.yml'
-$hikvisionHotReloadScript = Get-Content -Raw 'scripts/project-truth-hikvision-hot-reload-listener.sh'
-$credentialRecoveryEnvPatch = Get-Content -Raw 'gitops/runtime-k8s/overlays/dev/bnpi-pats-api-credential-recovery-env.patch.yaml'
 $ansiblePullService = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pull.service'
 $ansiblePullTimer = Get-Content -Raw 'appliance/systemd/project-truth-ansible-pull.timer'
 $osSyncScript = Get-Content -Raw 'appliance/bin/project-truth-os-sync.sh'
@@ -195,7 +185,7 @@ $checks.Add((Assert-Text 'verify-gitops-state can require runtime Applications' 
 $checks.Add((Assert-Text 'promote-gitops updates runtime image tag marker' $promoteWorkflow 'runtime_image_tag'))
 $checks.Add((Assert-Text 'promote-gitops updates runtime kustomize image tags' $promoteWorkflow 'gitops/runtime-k8s/overlays/\$env_name/kustomization\.yaml'))
 $checks.Add((Assert-Text 'promote-gitops supports optional registry image flow' $promoteWorkflow 'image_registry'))
-$checks.Add((Assert-Text 'promote-gitops includes employee portal image' $promoteWorkflow 'bnpi-pats-emp-app-local'))
+$checks.Add((Assert-NoText 'promote-gitops no longer carries retired employee portal image' $promoteWorkflow 'bnpi-pats-emp-app-local'))
 $checks.Add((Assert-Text 'Argo platform declares reconciliation timeout' $platformConfig 'timeout\.reconciliation:\s*60s'))
 $checks.Add((Assert-Text 'Argo platform declares reconciliation jitter' $platformConfig 'timeout\.reconciliation\.jitter:\s*15s'))
 $checks.Add((Assert-Text 'project-truth exposes Argo platform command' $projectTruthScript 'apply-argocd-platform'))
@@ -219,23 +209,15 @@ $checks.Add((Assert-Text 'ansible-pull wrapper invokes ansible-pull' $ansiblePul
 $checks.Add((Assert-Text 'ansible-pull selects changed runtime services' $ansiblePullPlaybook 'Runtime image selection: services='))
 $checks.Add((Assert-Text 'ansible-pull builds only selected runtime services' $ansiblePullPlaybook 'docker compose build "\$\{services\[@\]\}"'))
 $checks.Add((Assert-Text 'ansible-pull restarts only selected deployments' $ansiblePullPlaybook 'for deployment in "\$\{deployments\[@\]\}"'))
-$checks.Add((Assert-Text 'ansible-pull recognizes employee app source changes' $ansiblePullPlaybook 'bnpi-pats-emp-app/'))
-$checks.Add((Assert-Text 'ansible-pull builds the employee app image' $ansiblePullPlaybook 'services\+=\(bnpi-pats-emp-app\)'))
-$checks.Add((Assert-Text 'ansible-pull imports the employee app image into K3s' $ansiblePullPlaybook 'images\+=\(bnpi-pats-emp-app-local:develop\)'))
-$checks.Add((Assert-Text 'ansible-pull rolls the employee app through every environment' $ansiblePullPlaybook 'for employee_env_name in prod dev uat'))
-$checks.Add((Assert-Text 'credential recovery env patch remains API-only' $credentialRecoveryEnvPatch 'name:\s*bnpi-pats-api'))
-$checks.Add((Assert-Text 'ansible-pull recognizes the API-only recovery env patch' $ansiblePullPlaybook 'bnpi-pats-api-credential-recovery-env'))
-$checks.Add((Assert-Text 'one-shot Hikvision SDK exports use an isolated device spec' $hikvisionHotReloadScript 'mktemp /tmp/project-truth-hikvision-runtime-spec\.XXXXXX'))
-$checks.Add((Assert-Text 'one-shot Hikvision SDK exports select their isolated spec' $hikvisionHotReloadScript 'SPEC="\$runtime_spec"'))
+$checks.Add((Assert-NoText 'ansible-pull no longer builds the retired employee app' $ansiblePullPlaybook 'bnpi-pats-emp-app'))
+$checks.Add((Assert-NoText 'ansible-pull no longer builds the retired callback outbox' $ansiblePullPlaybook 'bnpi-pats-callback-outbox'))
+$checks.Add((Assert-NoText 'ansible-pull no longer defers on retired device-job heartbeats' $ansiblePullPlaybook 'device-user-merge-jobs'))
 $checks.Add((Assert-NoText 'ansible-pull wrapper does not reference retired ZKTeco SDK submodule' $ansiblePullScript 'submodule\.vendor/zkteco-sdk\.update'))
 $checks.Add((Assert-Text 'ansible-pull wrapper preflights Git network before fetch' $ansiblePullScript 'repair_network_for_git'))
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs resolver drift before fetch' $ansiblePullScript 'systemd-resolved\.service'))
 $checks.Add((Assert-Text 'ansible-pull wrapper repairs LAN config drift before fetch' $ansiblePullScript 'project-truth-lan-config'))
 $checks.Add((Assert-Text 'ansible-pull playbook updates install root' $ansiblePullPlaybook '/opt/project-truth'))
 $checks.Add((Assert-NoText 'ansible-pull playbook does not import retired Node ZKTeco bridge image into K3s' $ansiblePullPlaybook 'project-truth-zkteco-bridge:develop'))
-$checks.Add((Assert-Text 'ansible-pull playbook defers runtime rollout during an active DEV device-job heartbeat' $ansiblePullPlaybook 'Deferring runtime image rollout: active DEV device job snapshot'))
-$checks.Add((Assert-Text 'ansible-pull rollout guard includes credential merge jobs' $ansiblePullPlaybook 'device-user-merge-jobs'))
-$checks.Add((Assert-Text 'ansible-pull rollout guard includes raw-custody sync jobs' $ansiblePullPlaybook 'device-user-sync-jobs'))
 $checks.Add((Assert-Text 'ansible-pull playbook defaults app/API rollout to DEV UAT and PROD after a develop image import' $ansiblePullPlaybook 'PROJECT_TRUTH_ROLLOUT_NAMESPACES:-dev uat prod'))
 $checks.Add((Assert-Text 'ansible-pull playbook iterates rollout namespaces for app/API restarts' $ansiblePullPlaybook 'for env_name in \$rollout_namespaces'))
 $checks.Add((Assert-Text 'ansible-pull playbook skips app/API restart when the Deployment is missing in a namespace' $ansiblePullPlaybook 'skip rollout \$env_name/\$deployment \(not in this namespace\)'))
