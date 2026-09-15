@@ -70,21 +70,24 @@ test("agency sidebar navigates dedicated pages and dashboard charts render", asy
 	await expect(page.getByTestId("agency-page-biometrics")).toBeVisible({ timeout: 30_000 });
 	results.timesheetsBiometricsVisited = true;
 
-	// Reports page deep-dives the overview charts and keeps the Excel export.
+	// Reports page is charts-and-graphs only (date filter + Excel export kept).
 	await page.getByRole("link", { name: "Reports", exact: true }).first().click();
 	await expect(page.getByTestId("agency-page-reports")).toBeVisible({ timeout: 30_000 });
-	await expect(page.getByTestId("agency-report-attendance-trend")).toBeVisible();
-	await expect(page.getByTestId("agency-report-timesheet-mix")).toBeVisible();
-	await expect(page.getByTestId("agency-report-departments")).toBeVisible();
-	await expect(page.getByTestId("agency-report-daily-table")).toBeVisible();
-	await expect(page.getByTestId("agency-report-status-table")).toBeVisible();
-	await expect(page.getByTestId("agency-report-dept-table")).toBeVisible();
-	await expect(page.getByTestId("agency-report-time-entries")).toBeVisible();
-	await expect(page.getByTestId("agency-report-absentee")).toBeVisible();
-	await expect(page.getByTestId("agency-report-manpower")).toBeVisible();
-	await expect(page.getByTestId("agency-report-inactive")).toBeVisible();
+	for (const t of [
+		"agency-report-attendance-trend",
+		"agency-report-timesheet-mix",
+		"agency-report-departments",
+		"agency-report-absentee-trend",
+		"agency-report-employment-mix",
+		"agency-report-date-filter",
+	]) {
+		await expect(page.getByTestId(t)).toBeVisible({ timeout: 30_000 });
+	}
+	await expect(page.getByTestId("agency-page-reports").locator("table")).toHaveCount(0);
 	await expect(page.getByRole("button", { name: /export excel/i })).toBeVisible();
 	results.reportsDeepDiveVisible = true;
+	// Coordinator sidebar: no duplicate generic Dashboard (Overview is the dashboard).
+	await expect(page.getByRole("link", { name: "Dashboard", exact: true })).toHaveCount(0);
 	await page.screenshot({ path: path.join(EVIDENCE_DIR, "agency-reports.png") });
 
 	writeFileSync(

@@ -76,30 +76,32 @@ describe("agency workspace contract", () => {
 		expect(src.toLowerCase()).not.toContain("mock");
 	});
 
-	it("reports page shows the overview charts plus breakdown tables (export kept)", () => {
+	it("reports page is charts-and-graphs only (tables removed, export kept)", () => {
 		const src = read("app/routes/agency/reports.tsx");
 		expect(src).toContain("recharts");
 		for (const t of [
 			"agency-report-attendance-trend",
 			"agency-report-timesheet-mix",
 			"agency-report-departments",
-			"agency-report-daily-table",
-			"agency-report-status-table",
-			"agency-report-dept-table",
-			"agency-report-time-entries",
-			"agency-report-absentee",
-			"agency-report-manpower",
-			"agency-report-inactive",
+			"agency-report-absentee-trend",
+			"agency-report-employment-mix",
 			"agency-report-date-filter",
 			"agency-report-status",
 		]) {
 			expect(src).toContain(t);
 		}
+		// No table markup on the reports surface; export unchanged.
+		expect(src).not.toContain("<table");
 		expect(src).toContain("Export Excel");
 		expect(src).toContain("DatePickerWithRange");
 		// No report-type picker: the date filter scopes the charts and the export.
 		expect(src).not.toContain("REPORT_TYPES");
 		expect(src).not.toContain("reportType");
+	});
+
+	it("coordinator sidebar drops the generic Dashboard (Overview is their dashboard)", () => {
+		const src = read("app/components/organisms/Sidebar.tsx");
+		expect(src).toContain('user?.role === "hris-agency" ? [] : [dashboardItem]');
 	});
 
 	it("keeps testids unique per page (no strict-mode collisions)", () => {

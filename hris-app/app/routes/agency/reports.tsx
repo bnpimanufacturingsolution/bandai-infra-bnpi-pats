@@ -29,10 +29,8 @@ import { lastNDaysRange, toISODate } from "~/routes/agency/attendance";
 // Hard cap so a huge agency cannot lock the tab; stated honestly in the status line.
 const PAGE_LIMIT = 200;
 const MAX_PAGES = 10;
-// Date filter is capped so the daily table cannot grow unbounded.
+// Date filter is capped so the daily chart cannot grow unbounded.
 const MAX_RANGE_DAYS = 62;
-// Detail tables render the first N rows; the count line states the full total honestly.
-const TABLE_ROW_CAP = 100;
 
 const PIE_COLORS = ["#16a34a", "#f59e0b", "#3b82f6", "#94a3b8", "#ef4444"];
 
@@ -142,9 +140,13 @@ function AgencyReportsContent() {
 		() => (rosterData as any)?.employees || [],
 		[rosterData],
 	);
-	const inactiveMembers: any[] = React.useMemo(
-		() => ((allRosterData as any)?.employees || []).filter((m: any) => !isActiveAgencyMember(m)),
+	const allMembers: any[] = React.useMemo(
+		() => (allRosterData as any)?.employees || [],
 		[allRosterData],
+	);
+	const inactiveMembers: any[] = React.useMemo(
+		() => allMembers.filter((m: any) => !isActiveAgencyMember(m)),
+		[allMembers],
 	);
 	const attendanceRows: any[] = React.useMemo(
 		() => (attendanceData as any)?.attendances || [],
@@ -206,6 +208,24 @@ function AgencyReportsContent() {
 		() => inRangeRows.filter((r: any) => String(r.status || "").toUpperCase() === "ABSENT"),
 		[inRangeRows],
 	);
+	// Charts replace the pack detail tables: absenteeism per day + roster mix.
+	const absenteeByDay = React.useMemo(() => {
+		const map = new Map<string, number>();
+		for (const d of dayKeys) map.set(d, 0);
+		for (const r of absentRows) {
+			const day = String(r.date || "").slice(0, 10);
+			if (map.has(day)) map.set(day, (map.get(day) || 0) + 1);
+		}
+		return dayKeys.map((day) => ({ day: day.slice(5), fullDay: day, absent: map.get(day) || 0 }));
+	}, [absentRows, dayKeys]);
+	const employmentMix = React.useMemo(() => {
+		const map = new Map<string, number>();
+		for (const m of allMembers) {
+			const s = String(m.employmentStatus || "UNKNOWN");
+			map.set(s, (map.get(s) || 0) + 1);
+		}
+		return [...map.entries()].map(([status, count]) => ({ status, count }));
+	}, [allMembers]);
 	const [status, setStatus] = React.useState<"idle" | "working" | "done" | "error">("idle");
 	const [message, setMessage] = React.useState("");
 
@@ -497,34 +517,6 @@ function AgencyReportsContent() {
 								</ResponsiveContainer>
 							)}
 						</div>
-						<div className="mt-3 overflow-x-auto" data-testid="agency-report-daily-table">
-							<table className="w-full text-xs">
-								<thead>
-									<tr className="text-left text-slate-500">
-										<th className="py-1 pr-2 font-medium">Day</th>
-										<th className="py-1 pr-2 text-right font-medium">Present</th>
-										<th className="py-1 pr-2 text-right font-medium">Other</th>
-										<th className="py-1 pr-2 text-right font-medium">Total</th>
-										<th className="py-1 text-right font-medium">Present %</th>
-									</tr>
-								</thead>
-								<tbody>
-									{trendData.map((d) => {
-										const total = d.present + d.other;
-										const pct = total === 0 ? "—" : `${Math.round((d.present / total) * 100)}%`;
-										return (
-											<tr key={d.fullDay} className="border-t border-slate-100 dark:border-slate-800">
-												<td className="py-1 pr-2 text-slate-700 dark:text-slate-300">{d.fullDay}</td>
-												<td className="py-1 pr-2 text-right">{d.present}</td>
-												<td className="py-1 pr-2 text-right">{d.other}</td>
-												<td className="py-1 pr-2 text-right">{total}</td>
-												<td className="py-1 text-right">{pct}</td>
-											</tr>
-										);
-									})}
-								</tbody>
-							</table>
-						</div>
 					</div>
 
 					<div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
@@ -547,28 +539,6 @@ function AgencyReportsContent() {
 									</PieChart>
 								</ResponsiveContainer>
 							)}
-						</div>
-						<div className="mt-3 overflow-x-auto" data-testid="agency-report-status-table">
-							<table className="w-full text-xs">
-								<thead>
-									<tr className="text-left text-slate-500">
-										<th className="py-1 pr-2 font-medium">Status</th>
-										<th className="py-1 pr-2 text-right font-medium">Count</th>
-										<th className="py-1 text-right font-medium">Share</th>
-									</tr>
-								</thead>
-								<tbody>
-									{statusData.map((s) => (
-										<tr key={s.status} className="border-t border-slate-100 dark:border-slate-800">
-											<td className="py-1 pr-2 text-slate-700 dark:text-slate-300">{s.status}</td>
-											<td className="py-1 pr-2 text-right">{s.count}</td>
-											<td className="py-1 text-right">
-												{timesheets.length === 0 ? "—" : `${Math.round((s.count / timesheets.length) * 100)}%`}
-											</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
 						</div>
 					</div>
 				</div>
@@ -593,164 +563,54 @@ function AgencyReportsContent() {
 							</ResponsiveContainer>
 						)}
 					</div>
-					<div className="mt-3 overflow-x-auto" data-testid="agency-report-dept-table">
-						<table className="w-full text-xs">
-							<thead>
-								<tr className="text-left text-slate-500">
-									<th className="py-1 pr-2 font-medium">Department</th>
-									<th className="py-1 pr-2 text-right font-medium">Members</th>
-									<th className="py-1 text-right font-medium">Share</th>
-								</tr>
-							</thead>
-							<tbody>
-								{deptData.map((d) => (
-									<tr key={d.department} className="border-t border-slate-100 dark:border-slate-800">
-										<td className="py-1 pr-2 text-slate-700 dark:text-slate-300">{d.department}</td>
-										<td className="py-1 pr-2 text-right">{d.count}</td>
-										<td className="py-1 text-right">
-											{members.length === 0 ? "—" : `${Math.round((d.count / members.length) * 100)}%`}
-										</td>
-									</tr>
-								))}
-							</tbody>
-						</table>
-					</div>
 				</div>
 
 				<div className="grid gap-4 lg:grid-cols-2">
 					<div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
 						<h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-							Time entries
+							Absentees by day
 						</h3>
 						<p className="mt-1 text-xs text-slate-500">
-							Clock rows {dateFrom} to {dateTo} — showing first {Math.min(inRangeRows.length, TABLE_ROW_CAP)} of {inRangeRows.length}.
+							{absentRows.length} absent days, {dateFrom} to {dateTo}.
 						</p>
-						<div className="mt-3 overflow-x-auto" data-testid="agency-report-time-entries">
-							<table className="w-full text-xs">
-								<thead>
-									<tr className="text-left text-slate-500">
-										<th className="py-1 pr-2 font-medium">Date</th>
-										<th className="py-1 pr-2 font-medium">Code</th>
-										<th className="py-1 pr-2 font-medium">Name</th>
-										<th className="py-1 pr-2 text-right font-medium">Time in</th>
-										<th className="py-1 pr-2 text-right font-medium">Time out</th>
-										<th className="py-1 text-right font-medium">Status</th>
-									</tr>
-								</thead>
-								<tbody>
-									{inRangeRows.slice(0, TABLE_ROW_CAP).map((r: any) => (
-										<tr key={r.id || `${r.employee?.employeeId}-${r.date}`} className="border-t border-slate-100 dark:border-slate-800">
-											<td className="py-1 pr-2 text-slate-700 dark:text-slate-300">{String(r.date || "").slice(0, 10)}</td>
-											<td className="py-1 pr-2">{r.employee?.employeeId || "—"}</td>
-											<td className="py-1 pr-2">{fullNameOf(r.employee?.person?.personalInfo)}</td>
-											<td className="py-1 pr-2 text-right">{r.timeIn ? String(r.timeIn).slice(11, 16) : "—"}</td>
-											<td className="py-1 pr-2 text-right">{r.timeOut ? String(r.timeOut).slice(11, 16) : "—"}</td>
-											<td className="py-1 text-right">{r.status || "—"}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
+						<div className="mt-3 h-64" data-testid="agency-report-absentee-trend">
+							{attendanceLoading ? (
+								<Skeleton className="h-full w-full" />
+							) : (
+								<ResponsiveContainer width="100%" height="100%">
+									<BarChart data={absenteeByDay}>
+										<CartesianGrid strokeDasharray="3 3" />
+										<XAxis dataKey="day" tick={{ fontSize: 10 }} interval={2} />
+										<YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+										<Tooltip />
+										<Bar dataKey="absent" fill="#ef4444" name="Absent" />
+									</BarChart>
+								</ResponsiveContainer>
+							)}
 						</div>
 					</div>
 
 					<div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
 						<h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-							Daily absentee
+							Members by employment status
 						</h3>
 						<p className="mt-1 text-xs text-slate-500">
-							Absent rows {dateFrom} to {dateTo} — showing first {Math.min(absentRows.length, TABLE_ROW_CAP)} of {absentRows.length}.
+							{allMembers.length} roster members across all statuses.
 						</p>
-						<div className="mt-3 overflow-x-auto" data-testid="agency-report-absentee">
-							<table className="w-full text-xs">
-								<thead>
-									<tr className="text-left text-slate-500">
-										<th className="py-1 pr-2 font-medium">Date</th>
-										<th className="py-1 pr-2 font-medium">Code</th>
-										<th className="py-1 pr-2 font-medium">Name</th>
-										<th className="py-1 pr-2 font-medium">Department</th>
-										<th className="py-1 text-right font-medium">Status</th>
-									</tr>
-								</thead>
-								<tbody>
-									{absentRows.slice(0, TABLE_ROW_CAP).map((r: any) => (
-										<tr key={r.id || `${r.employee?.employeeId}-${r.date}`} className="border-t border-slate-100 dark:border-slate-800">
-											<td className="py-1 pr-2 text-slate-700 dark:text-slate-300">{String(r.date || "").slice(0, 10)}</td>
-											<td className="py-1 pr-2">{r.employee?.employeeId || "—"}</td>
-											<td className="py-1 pr-2">{fullNameOf(r.employee?.person?.personalInfo)}</td>
-											<td className="py-1 pr-2">{r.employee?.department?.name || "—"}</td>
-											<td className="py-1 text-right">{r.status || "—"}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					</div>
-				</div>
-
-				<div className="grid gap-4 lg:grid-cols-2">
-					<div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-						<h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-							Manpower databank
-						</h3>
-						<p className="mt-1 text-xs text-slate-500">
-							Active roster — showing first {Math.min(members.length, TABLE_ROW_CAP)} of {members.length}.
-						</p>
-						<div className="mt-3 overflow-x-auto" data-testid="agency-report-manpower">
-							<table className="w-full text-xs">
-								<thead>
-									<tr className="text-left text-slate-500">
-										<th className="py-1 pr-2 font-medium">Code</th>
-										<th className="py-1 pr-2 font-medium">Name</th>
-										<th className="py-1 pr-2 font-medium">Department</th>
-										<th className="py-1 pr-2 font-medium">Section</th>
-										<th className="py-1 text-right font-medium">Status</th>
-									</tr>
-								</thead>
-								<tbody>
-									{members.slice(0, TABLE_ROW_CAP).map((m: any) => (
-										<tr key={m.id || m.employeeId} className="border-t border-slate-100 dark:border-slate-800">
-											<td className="py-1 pr-2 text-slate-700 dark:text-slate-300">{m.employeeId || "—"}</td>
-											<td className="py-1 pr-2">{fullNameOf(m.person?.personalInfo)}</td>
-											<td className="py-1 pr-2">{m.department?.name || "—"}</td>
-											<td className="py-1 pr-2">{m.section?.name || "—"}</td>
-											<td className="py-1 text-right">{m.employmentStatus || "—"}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
-						</div>
-					</div>
-
-					<div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-						<h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">
-							Inactive operators
-						</h3>
-						<p className="mt-1 text-xs text-slate-500">
-							Members past active status — showing first {Math.min(inactiveMembers.length, TABLE_ROW_CAP)} of {inactiveMembers.length}.
-						</p>
-						<div className="mt-3 overflow-x-auto" data-testid="agency-report-inactive">
-							<table className="w-full text-xs">
-								<thead>
-									<tr className="text-left text-slate-500">
-										<th className="py-1 pr-2 font-medium">Code</th>
-										<th className="py-1 pr-2 font-medium">Name</th>
-										<th className="py-1 pr-2 font-medium">Department</th>
-										<th className="py-1 pr-2 font-medium">Section</th>
-										<th className="py-1 text-right font-medium">Status</th>
-									</tr>
-								</thead>
-								<tbody>
-									{inactiveMembers.slice(0, TABLE_ROW_CAP).map((m: any) => (
-										<tr key={m.id || m.employeeId} className="border-t border-slate-100 dark:border-slate-800">
-											<td className="py-1 pr-2 text-slate-700 dark:text-slate-300">{m.employeeId || "—"}</td>
-											<td className="py-1 pr-2">{fullNameOf(m.person?.personalInfo)}</td>
-											<td className="py-1 pr-2">{m.department?.name || "—"}</td>
-											<td className="py-1 pr-2">{m.section?.name || "—"}</td>
-											<td className="py-1 text-right">{m.employmentStatus || "—"}</td>
-										</tr>
-									))}
-								</tbody>
-							</table>
+						<div className="mt-3 h-64" data-testid="agency-report-employment-mix">
+							{allRosterLoading ? (
+								<Skeleton className="h-full w-full" />
+							) : (
+								<ResponsiveContainer width="100%" height="100%">
+									<BarChart data={employmentMix} layout="vertical">
+										<CartesianGrid strokeDasharray="3 3" />
+										<XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} />
+										<YAxis type="category" dataKey="status" width={120} tick={{ fontSize: 10 }} />
+										<Tooltip />
+										<Bar dataKey="count" fill="#8b5cf6" name="Members" />
+									</BarChart>
+								</ResponsiveContainer>
+							)}
 						</div>
 					</div>
 				</div>

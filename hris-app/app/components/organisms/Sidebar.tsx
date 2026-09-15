@@ -201,7 +201,9 @@ export function Sidebar({ onClose }: SidebarProps) {
 		: { id: "profile", label: "My Profile", path: "#", icon: <User className="w-5 h-5" /> };
 
 	// Working Space items (role-specific, deterministic order)
-	const baseWorkingSpaceItems: NavItem[] = [dashboardItem];
+	// Agency coordinators: the Agency section's Overview IS their dashboard —
+	// don't show the generic /dashboard item twice in Working Space.
+	const baseWorkingSpaceItems: NavItem[] = user?.role === "hris-agency" ? [] : [dashboardItem];
 	const approvalsPath = isHR ? "/hr/approvals/requests" : "/employee/approvals/requests";
 	const approvalsItem: NavItem | null =
 		isHR || isManager
