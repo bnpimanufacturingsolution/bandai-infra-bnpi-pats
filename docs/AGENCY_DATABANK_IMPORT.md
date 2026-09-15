@@ -65,19 +65,43 @@ Overwrite the same file path, rerun the import for that code. Rows are
 upserted by `employeeId`; removed people are NOT deleted from HRIS (separation
 is HRIS-owned). Verify with the roster page or a count query afterward.
 
-## Coordinator logins (DEV)
+## Agency coordinator accounts — ready to open (DEV)
 
-| Agency | Login | Workers imported |
-|---|---|---|
-| AVANCE | `coordinator-avance@bandai.local` / `password123` | 433 |
-| CEPOL | `coordinator-cepol@bandai.local` / `password123` | 130 |
-| CGSI | `coordinator-cgsi@bandai.local` / `password123` | 496 |
-| KOHSAI | `coordinator-kohsai@bandai.local` / `password123` | 120 |
-| NATCORP | `coordinator-natcorp@bandai.local` / `password123` | 176 |
+One coordinator per agency, created by the importer and live-verified:
 
-Verified 2026-09-14: all five return 200 + token from
-`POST /api/auth/login` (`appCode=hris`); each lands on `/agency` scoped to
-their own people only. Change these passwords before real use.
+| Agency | Login | Password | Workers | agencyId (verified) |
+|---|---|---|---|---|
+| AVANCE | `coordinator-avance@bandai.local` | `password123` | 433 | `cmpxw1k2s006r7zwsgzkef8ze` |
+| CEPOL | `coordinator-cepol@bandai.local` | `password123` | 130 | `cmpxw1k3w006t7zws05yjigg9` |
+| CGSI | `coordinator-cgsi@bandai.local` | `password123` | 496 | `cmpxw1k3m006s7zwsv7xpa3go` |
+| KOHSAI | `coordinator-kohsai@bandai.local` | `password123` | 120 | `cmpxw1k47006u7zwsqovbmwcq` |
+| NATCORP | `coordinator-natcorp@bandai.local` | `password123` | 176 | `cmpxw1k4g006v7zwsz160blwj` |
+
+**How to open:** go to `/auth/login` → paste the email + `password123`
+(`appCode=hris`) → auto-redirects to `/agency` (Overview). Role
+`hris-agency` + `User.metadata.agencyId` scope every page (Overview,
+Employees, Attendance, Timesheets, Biometrics, Reports) to that agency's own
+people — server-enforced via `hris-api/helper/agency-scope.helper.ts`, so no
+cross-agency reads are possible through the API filters either.
+
+**Re-verified live 2026-09-15** against the running local API: all five
+`POST /api/auth/login` → 200 + token; `GET /api/auth/me` →
+`role=hris-agency` + correct `metadata.agencyId`; `GET /api/employee` →
+roster totals match the table above (433/130/496/120/176). (2026-09-14 first
+pass covered login + CGSI roster + dashboard render with 496 members.)
+
+**Before handing to real coordinators:**
+- `password123` is the shared dev seed — change per account.
+- Rosters are populated, but **attendance/time-entry data is NOT imported
+  yet** (the databank files are roster-only), so Punches/Absent/Time-entries
+  legitimately show 0 until a DM4-style attendance import runs for these
+  workers.
+- These accounts exist in the local DEV K3s DB (`127.0.0.1:55435`) only;
+  opening them on VM/public DEV (`dev.bnpi-hris.tech`) requires replaying the
+  import there first.
+- If the dashboard briefly shows all-zeros with a red Vite badge right after
+  login, that is the known transient `/api/auth/me` bootstrap 401 (app-wide,
+  pre-existing) — refresh resolves it; queries re-run with the token.
 
 ## Boundaries
 
