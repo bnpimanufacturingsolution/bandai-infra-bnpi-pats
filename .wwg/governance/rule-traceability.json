@@ -25,7 +25,6 @@
       "sourceEvidence": [
         "index.js: entry point candidate",
         "app/server.js: entry point candidate",
-        "appliance/zkteco-bridge/src/index.js: entry point candidate",
         "bnpi-pats-api/app/Rule/index.ts: entry point candidate",
         "bnpi-pats-api/app/activityLogging/index.ts: entry point candidate",
         "bnpi-pats-api/app/agency/index.ts: entry point candidate",
@@ -255,7 +254,6 @@
         ".github/workflows/validate.yml: deployment config",
         "app/Dockerfile: deployment config",
         "appliance/docker-compose.yml: deployment config",
-        "appliance/zkteco-bridge/Dockerfile: deployment config",
         "bnpi-pats-api/Dockerfile: deployment config",
         "bnpi-pats-api/docker-compose.yml: deployment config",
         "bnpi-pats-api/infrastructure/onprem/observability/docker-compose.yml: deployment config",
@@ -337,8 +335,6 @@
         "app/Dockerfile",
         "app/package.json",
         "appliance/docker-compose.yml",
-        "appliance/zkteco-bridge/Dockerfile",
-        "appliance/zkteco-bridge/package.json",
         "bnpi-pats-api/Dockerfile",
         "bnpi-pats-api/docker-compose.yml",
         "bnpi-pats-api/generated/prisma-postgres/package.json"

@@ -327,8 +327,6 @@
       "sourceEvidence": [
         "app/server.js",
         "appliance/bin/project-truth-tunnel-gateway.py",
-        "appliance/zkteco-bridge/src/index.js",
-        "appliance/zkteco-standalone-sdk/Program.cs",
         "bnpi-pats-api/app/Rule/index.ts"
       ],
       "inferredBehavior": "Confirm the application or package starts/builds at a minimal baseline.",
@@ -347,8 +345,6 @@
       "sourceEvidence": [
         "app/server.js",
         "appliance/bin/project-truth-tunnel-gateway.py",
-        "appliance/zkteco-bridge/src/index.js",
-        "appliance/zkteco-standalone-sdk/Program.cs",
         "bnpi-pats-api/app/Rule/index.ts"
       ],
       "inferredBehavior": "Confirm API routes handle success and failure paths.",
@@ -416,8 +412,6 @@
         "app/Dockerfile",
         "app/package.json",
         "appliance/docker-compose.yml",
-        "appliance/zkteco-bridge/Dockerfile",
-        "appliance/zkteco-bridge/package.json",
         "bnpi-pats-api/Dockerfile",
         "bnpi-pats-api/docker-compose.yml",
         "bnpi-pats-api/generated/prisma-postgres/package.json"
@@ -438,8 +432,6 @@
       "sourceEvidence": [
         "app/server.js",
         "appliance/bin/project-truth-tunnel-gateway.py",
-        "appliance/zkteco-bridge/src/index.js",
-        "appliance/zkteco-standalone-sdk/Program.cs",
         "bnpi-pats-api/app/Rule/index.ts"
       ],
       "inferredBehavior": "Confirm data contracts, config contracts, or public interfaces do not drift.",
