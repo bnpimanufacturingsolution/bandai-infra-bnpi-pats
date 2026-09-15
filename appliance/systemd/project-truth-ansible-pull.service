@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-Environment=PROJECT_TRUTH_REPO_URL=https://github.com/bnpimanufacturingsolution/bandai-infra.git
+Environment=PROJECT_TRUTH_REPO_URL=https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats.git
 Environment=PROJECT_TRUTH_BRANCH=develop
 EnvironmentFile=-/etc/project-truth/os-sync.env
 ExecStart=/usr/local/bin/project-truth-ansible-pull

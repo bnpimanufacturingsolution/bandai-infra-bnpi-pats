@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_url="${PROJECT_TRUTH_REPO_URL:-https://github.com/bnpimanufacturingsolution/bandai-infra.git}"
+repo_url="${PROJECT_TRUTH_REPO_URL:-https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats.git}"
 branch="${PROJECT_TRUTH_BRANCH:-develop}"
 install_root="${PROJECT_TRUTH_ROOT:-/opt/project-truth}"
 source_root="${PROJECT_TRUTH_SOURCE_ROOT:-/var/lib/project-truth/source}"

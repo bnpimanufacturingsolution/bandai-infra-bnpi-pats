@@ -11,13 +11,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bnpimanufacturingsolution/bandai-infra.git"
+    "url": "git+https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/bnpimanufacturingsolution/bandai-infra/issues"
+    "url": "https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats/issues"
   },
-  "homepage": "https://github.com/bnpimanufacturingsolution/bandai-infra#readme"
+  "homepage": "https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats#readme"
 }

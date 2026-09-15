@@ -3,7 +3,7 @@
 # Always posts success when gh works. Image envs include outcome=rebuilt|not_rebuilt|pull_only.
 set -euo pipefail
 
-repo="${PROJECT_TRUTH_GITHUB_REPO:-bnpimanufacturingsolution/bandai-infra}"
+repo="${PROJECT_TRUTH_GITHUB_REPO:-bnpimanufacturingsolution/bandai-infra-bnpi-pats}"
 state_file="${PROJECT_TRUTH_ANSIBLE_PULL_STATE:-/var/lib/project-truth/ansible-pull-state}"
 image_state_file="${PROJECT_TRUTH_K8S_IMAGE_STATE:-/var/lib/project-truth/k8s-runtime-image-state}"
 report_file="${PROJECT_TRUTH_GITHUB_DEPLOY_REPORT:-/var/lib/project-truth/github-deploy-report}"

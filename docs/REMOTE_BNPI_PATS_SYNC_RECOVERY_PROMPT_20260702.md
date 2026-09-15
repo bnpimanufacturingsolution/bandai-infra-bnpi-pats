@@ -39,7 +39,7 @@ Sync the latest `develop` changes from:
 - https://github.com/bnpimanufacturingsolution/bnpi-pats-api
 
 into the embedded `bnpi-pats-app/` and `bnpi-pats-api/` directories of
-`bnpimanufacturingsolution/bandai-infra`, while preserving Project Truth
+`bnpimanufacturingsolution/bandai-infra-bnpi-pats`, while preserving Project Truth
 runtime/GitOps/VM behavior.
 
 Hard rules:
@@ -173,4 +173,4 @@ Recommended execution:
 
 - `https://github.com/bnpimanufacturingsolution/bnpi-pats-app`
 - `https://github.com/bnpimanufacturingsolution/bnpi-pats-api`
-- `https://github.com/bnpimanufacturingsolution/bandai-infra`
+- `https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats`

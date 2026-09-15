@@ -82,3 +82,12 @@ scripts/project-truth-*.ps1
 # Client payroll pack (real salary data - never commit)
 PAYROLL 2026/
 
+
+# Agent/tool local state + one-off artifacts (never commit)
+__pycache__/
+*.pyc
+.memory-atlas-plugin/
+.gemini/
+scratch/
+*.har
+*.obj

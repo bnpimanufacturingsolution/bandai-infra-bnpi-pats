@@ -4,7 +4,7 @@ param(
   [string]$Password = $env:PROJECT_TRUTH_SSH_PASSWORD,
   [string]$SshHostKey = $env:PROJECT_TRUTH_SSH_HOSTKEY,
   [string]$GitHubToken = $env:PROJECT_TRUTH_GITHUB_TOKEN,
-  [string]$RepoUrl = 'https://github.com/bnpimanufacturingsolution/bandai-infra.git',
+  [string]$RepoUrl = 'https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats.git',
   [string]$Branch = 'develop',
   [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json"
 )

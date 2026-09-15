@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_url="${PROJECT_TRUTH_REPO_URL:-https://github.com/bnpimanufacturingsolution/bandai-infra.git}"
+repo_url="${PROJECT_TRUTH_REPO_URL:-https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats.git}"
 branch="${PROJECT_TRUTH_BRANCH:-develop}"
 checkout_root="${PROJECT_TRUTH_ANSIBLE_PULL_ROOT:-/var/lib/project-truth/ansible-pull}"
 state_dir="/var/lib/project-truth"

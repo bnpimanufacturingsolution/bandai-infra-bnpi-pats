@@ -561,7 +561,7 @@
         dest: "{{ project_truth_state_dir }}/ansible-pull-state"
         mode: "0644"
         content: |
-          repo_url={{ lookup('env', 'PROJECT_TRUTH_REPO_URL') | default('https://github.com/bnpimanufacturingsolution/bandai-infra.git', true) }}
+          repo_url={{ lookup('env', 'PROJECT_TRUTH_REPO_URL') | default('https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats.git', true) }}
           branch={{ lookup('env', 'PROJECT_TRUTH_BRANCH') | default('develop', true) }}
           commit={{ project_truth_commit.stdout }}
           synced_at={{ ansible_date_time.iso8601 }}

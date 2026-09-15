@@ -57,12 +57,12 @@ Order: **DEV < UAT < PROD**.
 
 | Workload | GitOps file | limit keys |
 |---|---|---|
-| postgres | `gitops/runtime-k8s/overlays/{env}/runtime.yaml` | StatefulSet `hris-postgres` |
-| api | same | Deployment `hris-api` (+ `NODE_OPTIONS` heap) |
-| app | same | Deployment `hris-app` |
-| emp-app | same | Deployment `hris-emp-app` |
-| watcher | `overlays/dev/runtime.yaml` only | Deployment `hris-hikvision-watcher` |
-| outbox | `overlays/dev/runtime.yaml` only | Deployment `hris-callback-outbox` |
+| postgres | `gitops/runtime-k8s/overlays/{env}/runtime.yaml` | StatefulSet `bnpi-pats-postgres` |
+| api | same | Deployment `bnpi-pats-api` (+ `NODE_OPTIONS` heap) |
+| app | same | Deployment `bnpi-pats-app` |
+| emp-app | same | Deployment `bnpi-pats-emp-app` |
+| watcher | `overlays/dev/runtime.yaml` only | Deployment `bnpi-pats-hikvision-watcher` |
+| outbox | `overlays/dev/runtime.yaml` only | Deployment `bnpi-pats-callback-outbox` |
 
 ---
 
@@ -77,5 +77,5 @@ Scheduler uses **requests**. Keep request totals well under allocatable.
 
 - Commit: `3606339`
 - Live prove: `.runtime/resource-ladder-20260729-145307/04-live-limits.md`
-- G4: all workloads match EXPECTED (±5%)
+- G4: all workloads match EXPECTED (ï¿½5%)
 - Cloudflare: active/enabled (not stopped)

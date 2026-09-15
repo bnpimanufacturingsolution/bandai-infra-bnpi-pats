@@ -64,7 +64,7 @@ Invoke-WebRequest http://10.184.37.19:3101/health -UseBasicParsing
 | VM `127.0.0.1` prod/dev/uat app+API | HTTP **200** all six |
 | This PC → `10.184.37.19:3000,3001,3100,3101,3200,3201` | ping=false **tcp=false** all six |
 | Public `dev-api` / `uat-api` / `api.bnpi-pats.tech/health` | HTTP **200** |
-| Observe run | [32325378487](https://github.com/bnpimanufacturingsolution/bandai-infra/actions/runs/32325378487) success including all `onprem-*` jobs |
+| Observe run | [32325378487](https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats/actions/runs/32325378487) success including all `onprem-*` jobs |
 
 ## Push vs ports
 

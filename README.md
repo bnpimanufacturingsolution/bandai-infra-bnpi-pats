@@ -17,8 +17,10 @@ Packer is not part of the normal install path. Packer belongs only to the option
 ## Current Working Branch
 
 ```text
-develop
+main
 ```
+
+Canonical remote: `https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats`
 
 ## Main Documents
 
