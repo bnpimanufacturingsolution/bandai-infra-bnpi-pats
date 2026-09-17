@@ -24,17 +24,21 @@ Canonical remote: `https://github.com/bnpimanufacturingsolution/bandai-infra-bnp
 
 ## Main Documents
 
-- [Terraform Hyper-V Architecture](docs/TERRAFORM_HYPERV_ARCHITECTURE.md)
-- [Overnight Fresh Repo Prompt](docs/OVERNIGHT_TERRAFORM_HYPERV_FRESH_REPO_PROMPT.md)
-- [Operations](docs/OPERATIONS.md)
-- [Image Formats](docs/IMAGE_FORMATS.md)
-- [Health Checks](docs/HEALTHCHECKS.md)
+- [BNPI PATS Documentation Index](docs/README.md)
+- [PATS System Overview](docs/01-overview-and-requirements/PATS_SYSTEM_OVERVIEW.md)
+- [Business Requirements Document (BRD)](docs/01-overview-and-requirements/BUSINESS_REQUIREMENTS_BRD.md)
+- [Product Requirements Document (PRD)](docs/01-overview-and-requirements/PRODUCT_REQUIREMENTS_PRD.md)
+- [Domain Foundation](docs/02-domain-and-architecture/DOMAIN_FOUNDATION.md)
+- [Configurable Workflow Model](docs/02-domain-and-architecture/CONFIGURABLE_WORKFLOW_MODEL.md)
+- [Routing & Variance Engine](docs/02-domain-and-architecture/ROUTING_AND_VARIANCE_ENGINE.md)
+- [Planning Desk](docs/03-user-journeys-and-workstations/PLANNING_DESK.md)
+- [Line Setup & Stations](docs/03-user-journeys-and-workstations/LINE_SETUP_AND_STATIONS.md)
+- [Line Operations & Execution](docs/03-user-journeys-and-workstations/LINE_OPERATIONS_AND_EXECUTION.md)
+- [Warehouse & Inventory](docs/03-user-journeys-and-workstations/WAREHOUSE_AND_INVENTORY.md)
+- [On-Premises Appliance Architecture](docs/04-infrastructure-and-operations/ONPREM_APPLIANCE_ARCHITECTURE.md)
+- [Local Development Setup](docs/04-infrastructure-and-operations/LOCAL_DEV_SETUP.md)
 - [Cloudflare Named Tunnel Runbook](docs/CLOUDFLARE_NAMED_TUNNEL_RUNBOOK.md)
-- [GitOps GitHub Watch Runbook](docs/GITOPS_GH_WATCH_RUNBOOK.md)
-- [GitOps DB init Job](docs/DB_INIT_JOB.md)
-- [DM4 Timesheet Upload Guide](docs/DM4_TIMESHEET_UPLOAD_GUIDE.md)
-- [Self-Healing And Drift Recovery](docs/SELF_HEALING_AND_DRIFT_RECOVERY.md)
-- [Installer Test Report](docs/INSTALLER_TEST_REPORT.md)
+- [GitOps Client Scaling Runbook](docs/GITOPS_CLIENT_ENV_SCALING.md)
 
 ## Normal CLI Flow
 
