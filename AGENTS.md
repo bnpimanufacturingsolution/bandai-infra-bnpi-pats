@@ -398,7 +398,7 @@ For login, CORS, Cloudflare, and gateway checks, collect evidence in this order:
    and public host checks.
 
 Screenshots alone are not enough for CORS/proxy claims. Network evidence must
-show whether the app used same-host `/api`, a paired `*-api.bnpi-pats.tech`
+show whether the app used same-host `/api`, a paired `*-api.bnpipats.tech`
 host, or direct LAN app-to-API port mapping.
 
 ## Real Stop Conditions
@@ -440,7 +440,7 @@ Windows host repo
 -> Argo CD inside the bridged Hyper-V VM
 -> K3s/appliance runtime inside the VM
 -> LAN-reachable BNPI PATS app/API
--> named Cloudflare Tunnel for verified public `bnpi-pats.tech` targets
+-> named Cloudflare Tunnel for verified public `bnpipats.tech` targets
 ```
 
 Do not declare the architecture complete from host-local Docker alone unless the VM path is proven impossible with evidence.

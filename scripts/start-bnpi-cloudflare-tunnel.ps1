@@ -7,11 +7,11 @@ param(
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
   [string]$PreferredGuestIp = $(if ($env:PROJECT_TRUTH_PREFERRED_GUEST_IP) { $env:PROJECT_TRUTH_PREFERRED_GUEST_IP } else { '10.184.37.19' }),
-  [string]$SshHostname = 'ssh.bnpi-pats.tech',
-  [string]$ProdDbHostname = 'db.bnpi-pats.tech',
-  [string]$DevDbHostname = 'dev-db.bnpi-pats.tech',
-  [string]$UatDbHostname = 'uat-db.bnpi-pats.tech',
-  [string[]]$Hostnames = @('bnpi-pats.tech', 'www.bnpi-pats.tech', 'app.bnpi-pats.tech'),
+  [string]$SshHostname = 'ssh.bnpipats.tech',
+  [string]$ProdDbHostname = 'db.bnpipats.tech',
+  [string]$DevDbHostname = 'dev-db.bnpipats.tech',
+  [string]$UatDbHostname = 'uat-db.bnpipats.tech',
+  [string[]]$Hostnames = @('bnpipats.tech', 'www.bnpipats.tech', 'app.bnpipats.tech'),
   [int]$OriginPort = 3000,
   [int]$OriginWarmupSeconds = 180,
   [int]$ConnectorWarmupSeconds = 60,
@@ -135,12 +135,12 @@ function Write-TunnelConfig {
   foreach ($hostname in $Hostnames) {
     $targets += [pscustomobject]@{ Hostname = $hostname; Service = $origin }
   }
-  $targets += [pscustomobject]@{ Hostname = 'api.bnpi-pats.tech'; Service = "http://${GuestIp}:3001" }
-  $targets += [pscustomobject]@{ Hostname = 'dev.bnpi-pats.tech'; Service = "http://${GuestIp}:3100" }
-  $targets += [pscustomobject]@{ Hostname = 'dev-api.bnpi-pats.tech'; Service = "http://${GuestIp}:3101" }
-  $targets += [pscustomobject]@{ Hostname = 'uat.bnpi-pats.tech'; Service = "http://${GuestIp}:3200" }
-  $targets += [pscustomobject]@{ Hostname = 'uat-api.bnpi-pats.tech'; Service = "http://${GuestIp}:3201" }
-  $targets += [pscustomobject]@{ Hostname = 'grafana.bnpi-pats.tech'; Service = "http://${GuestIp}:53000" }
+  $targets += [pscustomobject]@{ Hostname = 'api.bnpipats.tech'; Service = "http://${GuestIp}:3001" }
+  $targets += [pscustomobject]@{ Hostname = 'dev.bnpipats.tech'; Service = "http://${GuestIp}:3100" }
+  $targets += [pscustomobject]@{ Hostname = 'dev-api.bnpipats.tech'; Service = "http://${GuestIp}:3101" }
+  $targets += [pscustomobject]@{ Hostname = 'uat.bnpipats.tech'; Service = "http://${GuestIp}:3200" }
+  $targets += [pscustomobject]@{ Hostname = 'uat-api.bnpipats.tech'; Service = "http://${GuestIp}:3201" }
+  $targets += [pscustomobject]@{ Hostname = 'grafana.bnpipats.tech'; Service = "http://${GuestIp}:53000" }
   $targets += [pscustomobject]@{ Hostname = $SshHostname; Service = "ssh://${GuestIp}:22" }
   $targets += [pscustomobject]@{ Hostname = $ProdDbHostname; Service = "tcp://${GuestIp}:15432" }
   $targets += [pscustomobject]@{ Hostname = $DevDbHostname; Service = "tcp://${GuestIp}:15433" }
@@ -162,16 +162,16 @@ function Write-TunnelConfig {
     $lines += "    service: http://${GuestIp}:3001"
   }
 
-  $lines += '  - hostname: dev.bnpi-pats.tech'
+  $lines += '  - hostname: dev.bnpipats.tech'
   $lines += '    path: /api/.*'
   $lines += "    service: http://${GuestIp}:3101"
-  $lines += '  - hostname: dev.bnpi-pats.tech'
+  $lines += '  - hostname: dev.bnpipats.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3101"
-  $lines += '  - hostname: uat.bnpi-pats.tech'
+  $lines += '  - hostname: uat.bnpipats.tech'
   $lines += '    path: /api/.*'
   $lines += "    service: http://${GuestIp}:3201"
-  $lines += '  - hostname: uat.bnpi-pats.tech'
+  $lines += '  - hostname: uat.bnpipats.tech'
   $lines += '    path: /socket.io/.*'
   $lines += "    service: http://${GuestIp}:3201"
 
@@ -250,14 +250,14 @@ function Register-HostManagedTask {
 
 function Invoke-DnsProvisioning {
   $dnsNames = @(
-    'bnpi-pats.tech',
-    'www.bnpi-pats.tech',
-    'app.bnpi-pats.tech',
-    'api.bnpi-pats.tech',
-    'dev.bnpi-pats.tech',
-    'dev-api.bnpi-pats.tech',
-    'uat.bnpi-pats.tech',
-    'uat-api.bnpi-pats.tech',
+    'bnpipats.tech',
+    'www.bnpipats.tech',
+    'app.bnpipats.tech',
+    'api.bnpipats.tech',
+    'dev.bnpipats.tech',
+    'dev-api.bnpipats.tech',
+    'uat.bnpipats.tech',
+    'uat-api.bnpipats.tech',
     'grafana.bnpi-pats.tech',
     $SshHostname,
     $ProdDbHostname,

@@ -413,7 +413,7 @@ def main():
             ["Backend Core API", "Node.js / Express / Prisma", "REST API & Business Logic Engine", "Port 3001 (Prod) / 3101 (Dev) / 3201 (UAT)"],
             ["Database", "PostgreSQL 16 (Alpine)", "Relational Store (Persistent Volume)", "Port 15432 (Prod) / 15433 (Dev) / 15434 (UAT)"],
             ["Observability", "Prometheus / Grafana / Loki", "LGTM Telemetry & Monitoring", "Grafana: 53000, Prometheus: 9091"],
-            ["Public Tunnel", "Cloudflare Named Tunnel", "Zero-inbound remote HTTPS/SSH gateway", "*.bnpi-pats.tech / ssh.bnpi-pats.tech"]
+            ["Public Tunnel", "Cloudflare Named Tunnel", "Zero-inbound remote HTTPS/SSH gateway", "*.bnpipats.tech / ssh.bnpipats.tech"]
         ]
     )
 

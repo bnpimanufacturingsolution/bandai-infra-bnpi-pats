@@ -5,7 +5,7 @@ param(
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
   [string]$TaskName = 'ProjectTruth-BNPI-PATS-Cloudflared',
-  [string]$SshHostname = 'ssh.bnpi-pats.tech',
+  [string]$SshHostname = 'ssh.bnpipats.tech',
   [string]$SshAlias = 'project-truth-bnpi-pats',
   [string]$SshKeyPath = '',
   [switch]$Login,
@@ -187,7 +187,7 @@ if ($ProvisionDns) {
     'dev-emp.bnpi-pats.tech',
     'uat-emp.bnpi-pats.tech',
     'grafana.bnpi-pats.tech',
-    'ssh.bnpi-pats.tech',
+    'ssh.bnpipats.tech',
     'db.bnpi-pats.tech',
     'dev-db.bnpi-pats.tech',
     'uat-db.bnpi-pats.tech'

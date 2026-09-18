@@ -1,4 +1,4 @@
-vm_name           = "project-truth-hyperv-lan-proof"
+vm_name           = "bnpi-pats"
 switch_name       = "ProjectTruth-External"
 switch_type       = "External"
 net_adapter_names = []

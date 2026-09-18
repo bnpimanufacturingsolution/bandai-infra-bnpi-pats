@@ -9,4 +9,9 @@ terraform {
   }
 }
 
-provider "hyperv" {}
+provider "hyperv" {
+  https    = true
+  insecure = true
+  user     = "zenja"
+  use_ntlm = true
+}

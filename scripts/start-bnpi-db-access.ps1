@@ -14,9 +14,9 @@ $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $runRoot = Join-Path $runtimeRoot "bnpi-db-access-$stamp"
 
 $targets = @{
-  prod = [pscustomobject]@{ Hostname = 'db.bnpi-pats.tech'; PreferredPort = 55432; FallbackPort = 56532 }
-  dev  = [pscustomobject]@{ Hostname = 'dev-db.bnpi-pats.tech'; PreferredPort = 55433; FallbackPort = 56533 }
-  uat  = [pscustomobject]@{ Hostname = 'uat-db.bnpi-pats.tech'; PreferredPort = 55434; FallbackPort = 56534 }
+  prod = [pscustomobject]@{ Hostname = 'db.bnpipats.tech'; PreferredPort = 55432; FallbackPort = 56532 }
+  dev  = [pscustomobject]@{ Hostname = 'dev-db.bnpipats.tech'; PreferredPort = 55433; FallbackPort = 56533 }
+  uat  = [pscustomobject]@{ Hostname = 'uat-db.bnpipats.tech'; PreferredPort = 55434; FallbackPort = 56534 }
 }
 
 function Stop-ExistingForward {

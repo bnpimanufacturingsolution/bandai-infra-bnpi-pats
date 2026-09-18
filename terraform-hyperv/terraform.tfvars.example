@@ -1,4 +1,4 @@
-vm_name           = "project-truth-node-01"
+vm_name           = "bnpi-pats"
 switch_name       = "ProjectTruth-External"
 switch_type       = "External"
 net_adapter_names = ["YOUR-LAN-OR-WIFI-ADAPTER"]

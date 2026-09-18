@@ -29,7 +29,7 @@ This manual provides the definitive step-by-step instructions and command sequen
 | **Backend API** | Node.js / Express / TypeScript / Prisma | REST API, Business Logic, DB Gateway | Port `3001` (Prod) / `3101` (Dev) / `3201` (UAT) |
 | **Database** | PostgreSQL 16 (Alpine) | Relational Database (Persistent Volume) | Port `15432` (Prod) / `15433` (Dev) / `15434` (UAT) |
 | **Observability** | Prometheus, Grafana, Loki, Tempo | LGTM Telemetry & Monitoring | Grafana: `53000`, Prometheus: `9091` |
-| **Public Gateway** | Cloudflare Named Tunnel | Secure zero-inbound HTTPS/SSH tunnel | `*.bnpi-pats.tech`, `ssh.bnpi-pats.tech` |
+| **Public Gateway** | Cloudflare Named Tunnel | Secure zero-inbound HTTPS/SSH tunnel | `*.bnpipats.tech`, `ssh.bnpipats.tech` |
 
 ---
 
@@ -350,7 +350,7 @@ powershell -File scripts/test-self-heal-contract.ps1
 *All contract checks must pass with green status.*
 
 ### 4.4 Browser Manual Acceptance Test
-1. Open a browser and navigate to: `http://10.184.37.19:3000` (or `https://app.bnpi-pats.tech` if testing public route).
+1. Open a browser and navigate to: `http://10.184.37.19:3000` (or `https://app.bnpipats.tech` if testing public route).
 2. Enter administrator credentials:
    - **Email**: `admin@bandai.local`
    - **Password**: `password123`

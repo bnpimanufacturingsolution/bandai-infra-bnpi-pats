@@ -1,4 +1,4 @@
-# Project Truth LAN reverse proxy — one-to-one with public *.bnpi-pats.tech
+# Project Truth LAN reverse proxy — one-to-one with public *.bnpipats.tech
 # Zone: *.bnpi-pats.lan (not .local)
 # HTTPS: Caddy tls internal (local CA). HTTP also served.
 # Public Cloudflare tunnel is separate and must stay active.

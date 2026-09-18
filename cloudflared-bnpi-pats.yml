@@ -2,84 +2,84 @@ tunnel: e3486f00-f974-46d3-9e11-911266749d00
 credentials-file: C:\Users\anoni\.cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
 
 ingress:
-  - hostname: bnpi-pats.tech
+  - hostname: bnpipats.tech
     path: /api/.*
     service: http://10.184.37.19:3001
-  - hostname: bnpi-pats.tech
+  - hostname: bnpipats.tech
     path: /socket.io/.*
     service: http://10.184.37.19:3001
-  - hostname: www.bnpi-pats.tech
+  - hostname: www.bnpipats.tech
     path: /api/.*
     service: http://10.184.37.19:3001
-  - hostname: www.bnpi-pats.tech
+  - hostname: www.bnpipats.tech
     path: /socket.io/.*
     service: http://10.184.37.19:3001
-  - hostname: app.bnpi-pats.tech
+  - hostname: app.bnpipats.tech
     path: /api/.*
     service: http://10.184.37.19:3001
-  - hostname: app.bnpi-pats.tech
+  - hostname: app.bnpipats.tech
     path: /socket.io/.*
     service: http://10.184.37.19:3001
-  - hostname: dev.bnpi-pats.tech
-    path: /api/.*
-    service: http://10.184.37.19:3101
-  - hostname: dev.bnpi-pats.tech
-    path: /socket.io/.*
-    service: http://10.184.37.19:3101
-  - hostname: uat.bnpi-pats.tech
-    path: /api/.*
-    service: http://10.184.37.19:3201
-  - hostname: uat.bnpi-pats.tech
-    path: /socket.io/.*
-    service: http://10.184.37.19:3201
-  - hostname: emp.bnpi-pats.tech
-    path: /api/.*
-    service: http://10.184.37.19:3001
-  - hostname: emp.bnpi-pats.tech
-    path: /socket.io/.*
-    service: http://10.184.37.19:3001
-  - hostname: dev-emp.bnpi-pats.tech
+  - hostname: dev.bnpipats.tech
     path: /api/.*
     service: http://10.184.37.19:3101
-  - hostname: dev-emp.bnpi-pats.tech
+  - hostname: dev.bnpipats.tech
     path: /socket.io/.*
     service: http://10.184.37.19:3101
-  - hostname: uat-emp.bnpi-pats.tech
+  - hostname: uat.bnpipats.tech
     path: /api/.*
     service: http://10.184.37.19:3201
-  - hostname: uat-emp.bnpi-pats.tech
+  - hostname: uat.bnpipats.tech
     path: /socket.io/.*
     service: http://10.184.37.19:3201
-  - hostname: bnpi-pats.tech
+  - hostname: emp.bnpipats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3001
+  - hostname: emp.bnpipats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3001
+  - hostname: dev-emp.bnpipats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3101
+  - hostname: dev-emp.bnpipats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3101
+  - hostname: uat-emp.bnpipats.tech
+    path: /api/.*
+    service: http://10.184.37.19:3201
+  - hostname: uat-emp.bnpipats.tech
+    path: /socket.io/.*
+    service: http://10.184.37.19:3201
+  - hostname: bnpipats.tech
     service: http://10.184.37.19:3000
-  - hostname: www.bnpi-pats.tech
+  - hostname: www.bnpipats.tech
     service: http://10.184.37.19:3000
-  - hostname: app.bnpi-pats.tech
+  - hostname: app.bnpipats.tech
     service: http://10.184.37.19:3000
-  - hostname: api.bnpi-pats.tech
+  - hostname: api.bnpipats.tech
     service: http://10.184.37.19:3001
-  - hostname: dev.bnpi-pats.tech
+  - hostname: dev.bnpipats.tech
     service: http://10.184.37.19:3100
-  - hostname: dev-api.bnpi-pats.tech
+  - hostname: dev-api.bnpipats.tech
     service: http://10.184.37.19:3101
-  - hostname: uat.bnpi-pats.tech
+  - hostname: uat.bnpipats.tech
     service: http://10.184.37.19:3200
-  - hostname: uat-api.bnpi-pats.tech
+  - hostname: uat-api.bnpipats.tech
     service: http://10.184.37.19:3201
-  - hostname: emp.bnpi-pats.tech
+  - hostname: emp.bnpipats.tech
     service: http://10.184.37.19:3300
-  - hostname: dev-emp.bnpi-pats.tech
+  - hostname: dev-emp.bnpipats.tech
     service: http://10.184.37.19:3310
-  - hostname: uat-emp.bnpi-pats.tech
+  - hostname: uat-emp.bnpipats.tech
     service: http://10.184.37.19:3320
-  - hostname: grafana.bnpi-pats.tech
+  - hostname: grafana.bnpipats.tech
     service: http://10.184.37.19:53000
-  - hostname: ssh.bnpi-pats.tech
+  - hostname: ssh.bnpipats.tech
     service: ssh://10.184.37.19:22
-  - hostname: db.bnpi-pats.tech
+  - hostname: db.bnpipats.tech
     service: tcp://10.184.37.19:15432
-  - hostname: dev-db.bnpi-pats.tech
+  - hostname: dev-db.bnpipats.tech
     service: tcp://10.184.37.19:15433
-  - hostname: uat-db.bnpi-pats.tech
+  - hostname: uat-db.bnpipats.tech
     service: tcp://10.184.37.19:15434
   - service: http_status:404

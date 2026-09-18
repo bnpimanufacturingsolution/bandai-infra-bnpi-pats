@@ -43,7 +43,7 @@ $configPath = Join-Path $sshDir 'config'
 $lanHost = '10.184.37.19'
 $lanUser = 'infra'
 $aliasName = 'project-truth-bnpi-pats'
-$aliasHostName = 'ssh.bnpi-pats.tech'
+$aliasHostName = 'ssh.bnpipats.tech'
 $cloudflaredCandidates = @(
 	"${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe",
 	"$env:ProgramFiles\cloudflared\cloudflared.exe",

@@ -120,9 +120,9 @@ service_note() {
 }
 
 ok=0
-report_env "vm-gitops" "https://dev.bnpi-pats.tech/auth/login" "ansible-pull ${commit} outcome=pulled synced_at=${synced_at:-unknown}"
-report_env "bnpi-pats-api" "https://dev-api.bnpi-pats.tech/health" "bnpi-pats-api ${commit} $(service_note 'bnpi-pats-api-local:develop')"
-report_env "bnpi-pats-app" "https://dev.bnpi-pats.tech/auth/login" "bnpi-pats-app ${commit} $(service_note 'bnpi-pats-app-local:develop')"
+report_env "vm-gitops" "https://dev.bnpipats.tech/auth/login" "ansible-pull ${commit} outcome=pulled synced_at=${synced_at:-unknown}"
+  report_env "bnpi-pats-api" "https://dev-api.bnpipats.tech/health" "bnpi-pats-api ${commit} $(service_note 'bnpi-pats-api-local:develop')"
+  report_env "bnpi-pats-app" "https://dev.bnpipats.tech/auth/login" "bnpi-pats-app ${commit} $(service_note 'bnpi-pats-app-local:develop')"
 
 probe_http() {
   local url="$1"

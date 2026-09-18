@@ -27,15 +27,15 @@ jobs:
         target:
           - id: ansible-pull
             environment: vm-gitops
-            url: https://dev.bnpi-pats.tech/auth/login
+            url: https://dev.bnpipats.tech/auth/login
             wait_sec: 1200
           - id: bnpi-pats-api
             environment: bnpi-pats-api
-            url: https://dev-api.bnpi-pats.tech/health
+            url: https://dev-api.bnpipats.tech/health
             wait_sec: 1200
           - id: bnpi-pats-app
             environment: bnpi-pats-app
-            url: https://dev.bnpi-pats.tech/auth/login
+            url: https://dev.bnpipats.tech/auth/login
             wait_sec: 1200
           - id: onprem-prod-api
             environment: onprem-prod-api

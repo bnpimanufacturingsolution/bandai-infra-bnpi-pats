@@ -1,7 +1,7 @@
 variable "vm_name" {
   type        = string
   description = "Hyper-V VM name."
-  default     = "project-truth-node-01"
+  default     = "bnpi-pats"
 }
 
 variable "switch_name" {

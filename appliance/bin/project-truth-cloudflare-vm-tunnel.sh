@@ -19,7 +19,7 @@ Usage:
   sudo project-truth-cloudflare-vm-tunnel /path/to/${tunnel_id}.json
 
 Installs the existing named Cloudflare Tunnel credential as root-only VM
-runtime state, writes localhost ingress for bnpi-pats.tech, and enables the
+runtime state, writes localhost ingress for bnpipats.tech, and enables the
 VM-side connector. Do not run this in image baking; credentials are secrets.
 USAGE
 }
@@ -48,63 +48,63 @@ tunnel: ${tunnel_id}
 credentials-file: ${credential_path}
 
 ingress:
-  - hostname: bnpi-pats.tech
+  - hostname: bnpipats.tech
     path: /api/.*
     service: http://localhost:3001
-  - hostname: www.bnpi-pats.tech
+  - hostname: www.bnpipats.tech
     path: /api/.*
     service: http://localhost:3001
-  - hostname: app.bnpi-pats.tech
+  - hostname: app.bnpipats.tech
     path: /api/.*
     service: http://localhost:3001
-  - hostname: dev.bnpi-pats.tech
+  - hostname: dev.bnpipats.tech
     path: /api/.*
     service: http://localhost:3101
-  - hostname: uat.bnpi-pats.tech
+  - hostname: uat.bnpipats.tech
     path: /api/.*
     service: http://localhost:3201
-  - hostname: emp.bnpi-pats.tech
+  - hostname: emp.bnpipats.tech
     path: /api/.*
     service: http://localhost:3001
-  - hostname: dev-emp.bnpi-pats.tech
+  - hostname: dev-emp.bnpipats.tech
     path: /api/.*
     service: http://localhost:3101
-  - hostname: uat-emp.bnpi-pats.tech
+  - hostname: uat-emp.bnpipats.tech
     path: /api/.*
     service: http://localhost:3201
-  - hostname: bnpi-pats.tech
+  - hostname: bnpipats.tech
     service: http://localhost:3000
-  - hostname: www.bnpi-pats.tech
+  - hostname: www.bnpipats.tech
     service: http://localhost:3000
-  - hostname: app.bnpi-pats.tech
+  - hostname: app.bnpipats.tech
     service: http://localhost:3000
-  - hostname: api.bnpi-pats.tech
+  - hostname: api.bnpipats.tech
     service: http://localhost:3001
-  - hostname: dev.bnpi-pats.tech
+  - hostname: dev.bnpipats.tech
     service: http://localhost:3100
     originRequest:
       httpHostHeader: localhost:3100
-  - hostname: dev-api.bnpi-pats.tech
+  - hostname: dev-api.bnpipats.tech
     service: http://localhost:3101
-  - hostname: uat.bnpi-pats.tech
+  - hostname: uat.bnpipats.tech
     service: http://localhost:3200
-  - hostname: uat-api.bnpi-pats.tech
+  - hostname: uat-api.bnpipats.tech
     service: http://localhost:3201
-  - hostname: emp.bnpi-pats.tech
+  - hostname: emp.bnpipats.tech
     service: http://localhost:3300
-  - hostname: dev-emp.bnpi-pats.tech
+  - hostname: dev-emp.bnpipats.tech
     service: http://localhost:3310
-  - hostname: uat-emp.bnpi-pats.tech
+  - hostname: uat-emp.bnpipats.tech
     service: http://localhost:3320
-  - hostname: grafana.bnpi-pats.tech
+  - hostname: grafana.bnpipats.tech
     service: http://localhost:53000
-  - hostname: ssh.bnpi-pats.tech
+  - hostname: ssh.bnpipats.tech
     service: ssh://localhost:22
-  - hostname: db.bnpi-pats.tech
+  - hostname: db.bnpipats.tech
     service: tcp://localhost:15432
-  - hostname: dev-db.bnpi-pats.tech
+  - hostname: dev-db.bnpipats.tech
     service: tcp://localhost:15433
-  - hostname: uat-db.bnpi-pats.tech
+  - hostname: uat-db.bnpipats.tech
     service: tcp://localhost:15434
   - service: http_status:404
 YAML
