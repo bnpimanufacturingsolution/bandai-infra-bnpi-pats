@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [string]$TunnelName = 'bnpi-pats',
-  [string]$TunnelId = 'e3486f00-f974-46d3-9e11-911266749d00',
+  [string]$TunnelId = '12e89b6a-dabb-4897-9925-08ce9213b983',
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
   [string]$TaskName = 'ProjectTruth-BNPI-PATS-Cloudflared',
@@ -175,22 +175,19 @@ if ($ProvisionDns) {
   }
 
   $dnsNames = @(
-    'bnpi-pats.tech',
-    'www.bnpi-pats.tech',
-    'app.bnpi-pats.tech',
-    'api.bnpi-pats.tech',
-    'dev.bnpi-pats.tech',
-    'dev-api.bnpi-pats.tech',
-    'uat.bnpi-pats.tech',
-    'uat-api.bnpi-pats.tech',
-    'emp.bnpi-pats.tech',
-    'dev-emp.bnpi-pats.tech',
-    'uat-emp.bnpi-pats.tech',
-    'grafana.bnpi-pats.tech',
+    'bnpipats.tech',
+    'www.bnpipats.tech',
+    'app.bnpipats.tech',
+    'api.bnpipats.tech',
+    'dev.bnpipats.tech',
+    'dev-api.bnpipats.tech',
+    'uat.bnpipats.tech',
+    'uat-api.bnpipats.tech',
+    'grafana.bnpipats.tech',
     'ssh.bnpipats.tech',
-    'db.bnpi-pats.tech',
-    'dev-db.bnpi-pats.tech',
-    'uat-db.bnpi-pats.tech'
+    'db.bnpipats.tech',
+    'dev-db.bnpipats.tech',
+    'uat-db.bnpipats.tech'
   )
 
   foreach ($dnsName in $dnsNames) {

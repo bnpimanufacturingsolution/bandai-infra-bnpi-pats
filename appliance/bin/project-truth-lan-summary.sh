@@ -207,9 +207,9 @@ emit_cloudflare_ssh_rows() {
   local ip_addr="$1"
   echo "Cloudflare SSH"
   echo "  status: verified through Cloudflare Access"
-  echo "  browser: https://ssh.bnpi-pats.tech"
+  echo "  browser: https://ssh.bnpipats.tech"
   echo "  CLI: ssh project-truth-bnpi-pats"
-  echo "  Access host: ssh.bnpi-pats.tech"
+  echo "  Access host: ssh.bnpipats.tech"
   echo "  origin: $(cloudflare_ssh_origin "$ip_addr")"
   echo "  full: ssh -i %USERPROFILE%\\.ssh\\node-health-appliance_ed25519 \\"
   echo "        -o ProxyCommand=\"cloudflared access ssh --hostname %h\" \\"
@@ -552,8 +552,8 @@ fi
   echo "  Grafana https://grafana.bnpi-pats.lan"
   echo "Cloudflare (public):"
   echo "  https://dev.bnpipats.tech/auth/login"
-  echo "  https://dev-api.bnpi-pats.tech/health"
-  echo "  https://bnpi-pats.tech/auth/login"
+  echo "  https://dev-api.bnpipats.tech/health"
+  echo "  https://bnpipats.tech/auth/login"
   echo "SSH:"
   if [ -n "$ip_addr" ]; then
     echo "  OpenSSH: ssh infra@${ip_addr}"
@@ -565,9 +565,9 @@ fi
   echo "Tunnel:"
   echo "  $(cloudflare_tunnel_mode) bnpi-pats"
   echo "Cloudflare SSH:"
-  echo "  browser: https://ssh.bnpi-pats.tech"
+  echo "  browser: https://ssh.bnpipats.tech"
   echo "  CLI: ssh project-truth-bnpi-pats"
-  echo "  host: ssh.bnpi-pats.tech"
+  echo "  host: ssh.bnpipats.tech"
   echo "  LAN fallback: ssh infra@${ip_addr:-<lan-ip>}"
   echo
   echo "Console login:"
@@ -602,7 +602,7 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
     if [ -n "$tty_user" ]; then
     echo "Project Truth BNPI PATS appliance"
     echo "LAN IP: ${ip_addr:-NOT DETECTED}"
-    echo "Cloudflare: https://bnpi-pats.tech/auth/login"
+    echo "Cloudflare: https://bnpipats.tech/auth/login"
     echo "Cloudflare SSH: ssh project-truth-bnpi-pats"
     echo
       echo "Console is already logged in as ${tty_user}."

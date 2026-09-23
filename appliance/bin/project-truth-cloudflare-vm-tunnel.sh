@@ -2,7 +2,7 @@
 set -euo pipefail
 
 tunnel_name="${PROJECT_TRUTH_CLOUDFLARE_TUNNEL_NAME:-bnpi-pats}"
-tunnel_id="${PROJECT_TRUTH_CLOUDFLARE_TUNNEL_ID:-e3486f00-f974-46d3-9e11-911266749d00}"
+tunnel_id="${PROJECT_TRUTH_CLOUDFLARE_TUNNEL_ID:-12e89b6a-dabb-4897-9925-08ce9213b983}"
 credential_source="${1:-}"
 config_dir="/etc/cloudflared"
 credential_path="${config_dir}/${tunnel_id}.json"
@@ -63,15 +63,6 @@ ingress:
   - hostname: uat.bnpipats.tech
     path: /api/.*
     service: http://localhost:3201
-  - hostname: emp.bnpipats.tech
-    path: /api/.*
-    service: http://localhost:3001
-  - hostname: dev-emp.bnpipats.tech
-    path: /api/.*
-    service: http://localhost:3101
-  - hostname: uat-emp.bnpipats.tech
-    path: /api/.*
-    service: http://localhost:3201
   - hostname: bnpipats.tech
     service: http://localhost:3000
   - hostname: www.bnpipats.tech
@@ -90,12 +81,6 @@ ingress:
     service: http://localhost:3200
   - hostname: uat-api.bnpipats.tech
     service: http://localhost:3201
-  - hostname: emp.bnpipats.tech
-    service: http://localhost:3300
-  - hostname: dev-emp.bnpipats.tech
-    service: http://localhost:3310
-  - hostname: uat-emp.bnpipats.tech
-    service: http://localhost:3320
   - hostname: grafana.bnpipats.tech
     service: http://localhost:53000
   - hostname: ssh.bnpipats.tech

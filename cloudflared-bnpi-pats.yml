@@ -1,5 +1,5 @@
-tunnel: e3486f00-f974-46d3-9e11-911266749d00
-credentials-file: C:\Users\anoni\.cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
+tunnel: 12e89b6a-dabb-4897-9925-08ce9213b983
+credentials-file: C:\Users\anoni\.cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
 
 ingress:
   - hostname: bnpipats.tech
@@ -32,24 +32,6 @@ ingress:
   - hostname: uat.bnpipats.tech
     path: /socket.io/.*
     service: http://10.184.37.19:3201
-  - hostname: emp.bnpipats.tech
-    path: /api/.*
-    service: http://10.184.37.19:3001
-  - hostname: emp.bnpipats.tech
-    path: /socket.io/.*
-    service: http://10.184.37.19:3001
-  - hostname: dev-emp.bnpipats.tech
-    path: /api/.*
-    service: http://10.184.37.19:3101
-  - hostname: dev-emp.bnpipats.tech
-    path: /socket.io/.*
-    service: http://10.184.37.19:3101
-  - hostname: uat-emp.bnpipats.tech
-    path: /api/.*
-    service: http://10.184.37.19:3201
-  - hostname: uat-emp.bnpipats.tech
-    path: /socket.io/.*
-    service: http://10.184.37.19:3201
   - hostname: bnpipats.tech
     service: http://10.184.37.19:3000
   - hostname: www.bnpipats.tech
@@ -66,12 +48,6 @@ ingress:
     service: http://10.184.37.19:3200
   - hostname: uat-api.bnpipats.tech
     service: http://10.184.37.19:3201
-  - hostname: emp.bnpipats.tech
-    service: http://10.184.37.19:3300
-  - hostname: dev-emp.bnpipats.tech
-    service: http://10.184.37.19:3310
-  - hostname: uat-emp.bnpipats.tech
-    service: http://10.184.37.19:3320
   - hostname: grafana.bnpipats.tech
     service: http://10.184.37.19:53000
   - hostname: ssh.bnpipats.tech

@@ -100,8 +100,8 @@ Get-Service sshd | Format-Table Name, Status, StartType
 **File**: `cloudflared-bnpi-pats.yml` (or `~/.cloudflared/config.yml`)
 
 ```yaml
-tunnel: e3486f00-f974-46d3-9e11-911266749d00
-credentials-file: C:\Users\<you>\.cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
+tunnel: 12e89b6a-dabb-4897-9925-08ce9213b983
+credentials-file: C:\Users\<you>\.cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
 ingress:
   - hostname: bnpipats.tech
     service: http://localhost:3000

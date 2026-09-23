@@ -22,7 +22,7 @@ Current tunnel:
 
 ```text
 Name: bnpi-pats
-ID: e3486f00-f974-46d3-9e11-911266749d00
+ID: 12e89b6a-dabb-4897-9925-08ce9213b983
 Config: cloudflared-bnpi-pats.yml
 Current connectors: Windows host scheduled task and optional VM-side systemd
 ```
@@ -222,14 +222,14 @@ To install it on a running VM, copy the named tunnel credential JSON to a
 temporary VM path, then run:
 
 ```bash
-sudo project-truth-cloudflare-vm-tunnel /tmp/e3486f00-f974-46d3-9e11-911266749d00.json
-rm -f /tmp/e3486f00-f974-46d3-9e11-911266749d00.json
+sudo project-truth-cloudflare-vm-tunnel /tmp/12e89b6a-dabb-4897-9925-08ce9213b983.json
+rm -f /tmp/12e89b6a-dabb-4897-9925-08ce9213b983.json
 ```
 
 The script writes:
 
 ```text
-/etc/cloudflared/e3486f00-f974-46d3-9e11-911266749d00.json
+/etc/cloudflared/12e89b6a-dabb-4897-9925-08ce9213b983.json
 /etc/cloudflared/config.yml
 /etc/systemd/system/cloudflared-bnpi-pats.service
 ```
@@ -451,7 +451,7 @@ If `-GuestIp` is omitted, the command checks `PROJECT_TRUTH_GUEST_IP`,
 discovery. The default credential source is:
 
 ```text
-C:\ProgramData\ProjectTruth\secrets\cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
+C:\ProgramData\ProjectTruth\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
 ```
 
 The command validates that the JSON has the expected tunnel fields without
@@ -486,7 +486,7 @@ object, repo file, or baked image. The installer may require the host-side
 handoff credential to exist before it runs the V6 runtime phase:
 
 ```text
-C:\ProgramData\ProjectTruth\secrets\cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
+C:\ProgramData\ProjectTruth\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
 ```
 
 The V6 runtime phase should pass or fail with evidence, not silently skip

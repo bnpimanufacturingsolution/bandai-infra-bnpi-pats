@@ -126,7 +126,7 @@ kubectl get svc -n prod
 sudo project-truth-os-sync
 
 # Set up the tunnel with credentials
-sudo project-truth-cloudflare-vm-tunnel /path/to/e3486f00-f974-46d3-9e11-911266749d00.json
+sudo project-truth-cloudflare-vm-tunnel /path/to/12e89b6a-dabb-4897-9925-08ce9213b983.json
 
 # Verify tunnel is running
 sudo systemctl status cloudflared-bnpi-pats.service
@@ -140,12 +140,12 @@ In your Cloudflare dashboard for `bnpipats.tech`:
 
 | Type | Name | Content | Proxy |
 |---|---|---|---|
-| CNAME | `@` | `e3486f00-f974-46d3-9e11-911266749d00.cfargotunnel.com` | Proxied |
-| CNAME | `dev` | `e3486f00-f974-46d3-9e11-911266749d00.cfargotunnel.com` | Proxied |
-| CNAME | `uat` | `e3486f00-f974-46d3-9e11-911266749d00.cfargotunnel.com` | Proxied |
-| CNAME | `api` | `e3486f00-f974-46d3-9e11-911266749d00.cfargotunnel.com` | Proxied |
-| CNAME | `ssh` | `e3486f00-f974-46d3-9e11-911266749d00.cfargotunnel.com` | Proxied |
-| CNAME | `grafana` | `e3486f00-f974-46d3-9e11-911266749d00.cfargotunnel.com` | Proxied |
+| CNAME | `@` | `12e89b6a-dabb-4897-9925-08ce9213b983.cfargotunnel.com` | Proxied |
+| CNAME | `dev` | `12e89b6a-dabb-4897-9925-08ce9213b983.cfargotunnel.com` | Proxied |
+| CNAME | `uat` | `12e89b6a-dabb-4897-9925-08ce9213b983.cfargotunnel.com` | Proxied |
+| CNAME | `api` | `12e89b6a-dabb-4897-9925-08ce9213b983.cfargotunnel.com` | Proxied |
+| CNAME | `ssh` | `12e89b6a-dabb-4897-9925-08ce9213b983.cfargotunnel.com` | Proxied |
+| CNAME | `grafana` | `12e89b6a-dabb-4897-9925-08ce9213b983.cfargotunnel.com` | Proxied |
 
 ---
 

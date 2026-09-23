@@ -72,6 +72,7 @@ if [ -n "$lan_ip" ]; then
   echo "  SSH browser: https://ssh.bnpipats.tech"
 
   echo "  SSH host: ssh.bnpipats.tech"
+  echo "  SSH alias: ssh project-truth-bnpi-pats"
   echo "  SSH full: ssh -i %USERPROFILE%\\.ssh\\node-health-appliance_ed25519 -o ProxyCommand=\"cloudflared access ssh --hostname %h\" infra@ssh.bnpipats.tech"
   echo "  SSH LAN fallback: ssh infra@${lan_ip}"
   echo

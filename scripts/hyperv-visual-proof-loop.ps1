@@ -309,7 +309,7 @@ Pass rules:
 - PASS only if the screenshot is the VMConnect console and the summary is readable.
 - PASS only if the overview page shows PROD/DEV/UAT, Cloudflare named tunnel,
   LAN SSH, and Cloudflare SSH as not enabled unless Access has been proven.
-- PASS only if the tunnels page shows bnpi-pats.tech named tunnel ownership and
+- PASS only if the tunnels page shows bnpipats.tech named tunnel ownership and
   treats TryCloudflare as deprecated/manual fallback, not the normal path.
 - PASS only if the db page shows redacted DB facts without ugly table wrapping.
 - FAIL if the screenshot shows cramped table rows, cropped URLs, command spam,

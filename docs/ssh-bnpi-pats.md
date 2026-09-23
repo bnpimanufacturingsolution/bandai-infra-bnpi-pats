@@ -4,7 +4,7 @@
 Reuses existing Cloudflare Zero Trust SSH application `ssh.bnpipats.tech` for Hyper-V VM remote access.
 
 ## Current Configuration
-- **Tunnel**: `bnpi-pats` (ID: e3486f00-f974-46d3-9e11-911266749d00)
+- **Tunnel**: `bnpi-pats` (ID: 12e89b6a-dabb-4897-9925-08ce9213b983)
 - **SSH Hostname**: `ssh.bnpipats.tech`
 - **Access Policy**: `allow-owner-ssh` (allows owner email)
 - **Browser SSH**: Enabled
@@ -42,8 +42,8 @@ Restart-Service sshd
 **File**: `cloudflared-bnpi-pats.yml` (or `~/.cloudflared/config.yml`)
 
 ```yaml
-tunnel: e3486f00-f974-46d3-9e11-911266749d00
-credentials-file: C:\Users\<you>\.cloudflared\e3486f00-f974-46d3-9e11-911266749d00.json
+tunnel: 12e89b6a-dabb-4897-9925-08ce9213b983
+credentials-file: C:\Users\<you>\.cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
 ingress:
   - hostname: bnpipats.tech
     service: http://localhost:3000

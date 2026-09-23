@@ -3,7 +3,7 @@ param(
   [string]$VmName = 'project-truth-local-vhdx-proof',
   [string]$TaskName = 'ProjectTruth-BNPI-PATS-Cloudflared',
   [string]$TunnelName = 'bnpi-pats',
-  [string]$TunnelId = 'e3486f00-f974-46d3-9e11-911266749d00',
+  [string]$TunnelId = '12e89b6a-dabb-4897-9925-08ce9213b983',
   [string]$ConfigPath = '',
   [string]$CredentialsFile = '',
   [string]$PreferredGuestIp = $(if ($env:PROJECT_TRUTH_PREFERRED_GUEST_IP) { $env:PROJECT_TRUTH_PREFERRED_GUEST_IP } else { '10.184.37.19' }),
@@ -258,7 +258,7 @@ function Invoke-DnsProvisioning {
     'dev-api.bnpipats.tech',
     'uat.bnpipats.tech',
     'uat-api.bnpipats.tech',
-    'grafana.bnpi-pats.tech',
+    'grafana.bnpipats.tech',
     $SshHostname,
     $ProdDbHostname,
     $DevDbHostname,
@@ -286,15 +286,15 @@ function Invoke-DnsProvisioning {
 function Invoke-PublicChecks {
   $results = @()
   $checks = @(
-    @{ Name = 'prod-app'; Url = 'https://bnpi-pats.tech/auth/login' },
-    @{ Name = 'www-app'; Url = 'https://www.bnpi-pats.tech/auth/login' },
-    @{ Name = 'app-app'; Url = 'https://app.bnpi-pats.tech/auth/login' },
-    @{ Name = 'prod-api'; Url = 'https://api.bnpi-pats.tech/health' },
-    @{ Name = 'dev-app'; Url = 'https://dev.bnpi-pats.tech/auth/login' },
-    @{ Name = 'dev-api'; Url = 'https://dev-api.bnpi-pats.tech/health' },
-    @{ Name = 'uat-app'; Url = 'https://uat.bnpi-pats.tech/auth/login' },
-    @{ Name = 'uat-api'; Url = 'https://uat-api.bnpi-pats.tech/health' },
-    @{ Name = 'grafana'; Url = 'https://grafana.bnpi-pats.tech/api/health' }
+    @{ Name = 'prod-app'; Url = 'https://bnpipats.tech/auth/login' },
+    @{ Name = 'www-app'; Url = 'https://www.bnpipats.tech/auth/login' },
+    @{ Name = 'app-app'; Url = 'https://app.bnpipats.tech/auth/login' },
+    @{ Name = 'prod-api'; Url = 'https://api.bnpipats.tech/health' },
+    @{ Name = 'dev-app'; Url = 'https://dev.bnpipats.tech/auth/login' },
+    @{ Name = 'dev-api'; Url = 'https://dev-api.bnpipats.tech/health' },
+    @{ Name = 'uat-app'; Url = 'https://uat.bnpipats.tech/auth/login' },
+    @{ Name = 'uat-api'; Url = 'https://uat-api.bnpipats.tech/health' },
+    @{ Name = 'grafana'; Url = 'https://grafana.bnpipats.tech/api/health' }
   )
 
   foreach ($check in $checks) {
