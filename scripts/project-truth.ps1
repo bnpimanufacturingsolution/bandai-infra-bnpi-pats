@@ -1,6 +1,6 @@
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('doctor','configure','select-image','download-image','build-image','build-image-gcp','watch-gcp-image-build-progress','watch-gcp-build-resources','export-devcurrent-gcp-vhdx','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','bnpi-pats-vm','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','v6-one-shot','configure-vm-git-creds','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-bnpi-pats-runtime','verify-local-bnpi-pats-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite','start-cloudflare-db-tcp','start-bnpi-db-access','ensure-bnpi-cloudflare-host','start-bnpi-cloudflare-tunnel')]
+  [ValidateSet('doctor','configure','select-image','download-image','build-image','build-image-gcp','watch-gcp-image-build-progress','watch-gcp-build-resources','export-devcurrent-gcp-vhdx','verify-gcp-image-boot','configure-virtualbox','vhdx-autopilot','finalize-local-vhdx','bnpi-pats-vm','bnpi-pats-full','repair-appliance-online','backup-appliance-data','restore-appliance-data','enable-k8s-runtime','disable-k8s-runtime','test-self-heal-contract','repair-hyperv-boot','verify-hyperv-bridge','login-visual-proof-loop','hyperv-visual-proof-loop','terraform-plan','terraform-apply','verify','watch-until-healthy','repair-and-verify','watch-github-run','verify-gitops-state','gitops-pull','vm-pull','v6-one-shot','configure-vm-git-creds','apply-argocd-platform','configure-argocd-repo-creds','configure-argocd-webhook','start-local-bnpi-pats-runtime','verify-local-bnpi-pats-runtime','start-trycloudflare-tunnel','start-trycloudflare-suite','start-cloudflare-db-tcp','start-bnpi-db-access','ensure-bnpi-cloudflare-host','start-bnpi-cloudflare-tunnel')]
   [string]$Command = 'doctor',
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -25,6 +25,7 @@ $scriptMap = @{
   'vhdx-autopilot'      = 'vhdx-autopilot.ps1'
   'finalize-local-vhdx' = 'finalize-local-vhdx.ps1'
   'bnpi-pats-vm' = 'bnpi-pats-vm.ps1'
+  'bnpi-pats-full' = 'bnpi-pats-full.ps1'
   'repair-appliance-online' = 'repair-appliance-online.ps1'
   'backup-appliance-data' = 'backup-appliance-data.ps1'
   'restore-appliance-data' = 'restore-appliance-data.ps1'
