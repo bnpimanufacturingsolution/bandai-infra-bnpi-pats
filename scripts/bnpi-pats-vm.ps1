@@ -1,10 +1,11 @@
 param(
   [Parameter(Mandatory = $true)]
   [string]$VhdxPath,
-  [string]$VmName = "bnpi-pats-new",
+  [string]$VmName = "bnpi-pats",
   [string]$SwitchName = "ProjectTruth-External",
   [int]$MemoryMb = 2048,
   [int]$CpuCount = 2,
+  [string]$BaseDir = "C:\ProgramData\ProjectTruth",
   [string]$GuestIp = "",
   [int]$IpWaitSeconds = 600,
   [int]$IpPollSeconds = 10,
@@ -43,6 +44,13 @@ if ([IO.Path]::GetExtension($resolved).ToLowerInvariant() -ne ".vhdx") {
 }
 Write-Step "Using VHDX: $resolved"
 
+$vmPath = Join-Path $BaseDir "HyperV"
+$hostConfigPath = Join-Path $BaseDir "config\image.json"
+foreach ($dir in @($vmPath, (Join-Path $BaseDir "images"), (Join-Path $BaseDir "logs"), (Join-Path $BaseDir "secrets\cloudflared"), (Split-Path -Parent $hostConfigPath))) {
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+}
+Write-Step "Base layout ready under $BaseDir (HyperV, images, logs, secrets\cloudflared, config)"
+
 $shaFile = "$resolved.sha256"
 if (Test-Path -LiteralPath $shaFile) {
   $first = ((Get-Content -LiteralPath $shaFile -TotalCount 1) -split "\s+")[0].Trim().ToLowerInvariant()
@@ -56,7 +64,7 @@ if (Test-Path -LiteralPath $shaFile) {
 }
 
 Write-Step "Selecting image (host config only, no VM change yet)"
-& "$PSScriptRoot\select-image.ps1" -ImagePath $resolved -TargetPlatform hyperv
+& "$PSScriptRoot\select-image.ps1" -ImagePath $resolved -TargetPlatform hyperv -ConfigPath $hostConfigPath
 if ($LASTEXITCODE -ne 0) { throw "select-image failed with exit code $LASTEXITCODE" }
 
 $tfvars = Join-Path $repoRoot "terraform-hyperv\terraform.tfvars"
@@ -69,13 +77,15 @@ if (-not (Test-Path -LiteralPath $tfvars)) {
 
 $content = Get-Content -LiteralPath $tfvars -Raw
 $escapedVhdx = $resolved.Replace("\", "\\")
+$escapedVmPath = $vmPath.Replace("\", "\\")
 $content = $content -replace '(?m)^\s*vm_name\s*=.*$', ('vm_name           = "{0}"' -f $VmName)
 $content = $content -replace '(?m)^\s*switch_name\s*=.*$', ('switch_name       = "{0}"' -f $SwitchName)
 $content = $content -replace '(?m)^\s*source_image_path\s*=.*$', ('source_image_path = "{0}"' -f $escapedVhdx)
+$content = $content -replace '(?m)^\s*vm_path\s*=.*$', ('vm_path           = "{0}"' -f $escapedVmPath)
 $content = $content -replace '(?m)^\s*memory_mb\s*=.*$', ('memory_mb         = {0}' -f $MemoryMb)
 $content = $content -replace '(?m)^\s*cpu_count\s*=.*$', ('cpu_count         = {0}' -f $CpuCount)
 Set-Content -LiteralPath $tfvars -Value $content -Encoding ASCII
-Write-Step "Terraform vars pinned: vm=$VmName switch=$SwitchName mem=${MemoryMb}MB cpu=$CpuCount"
+Write-Step "Terraform vars pinned: vm=$VmName switch=$SwitchName mem=${MemoryMb}MB cpu=$CpuCount path=$vmPath"
 
 Write-Step "terraform-plan (fmt/init/validate/plan)"
 & "$PSScriptRoot\terraform-plan.ps1"
