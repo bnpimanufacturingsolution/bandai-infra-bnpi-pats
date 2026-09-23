@@ -16,7 +16,7 @@ if [ -z "$lan_ip" ]; then
 fi
 
 echo
-echo "Project Truth BNPI PATS appliance"
+echo "BNPI PATS appliance"
 echo "Logged in as $(id -un). Use the URLs below from the Windows host browser."
 echo "You are already logged in when the prompt ends with $. Do not type infra here."
 echo

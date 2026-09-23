@@ -51,7 +51,7 @@ docker_cmd() {
   fi
 }
 
-echo "Project Truth BNPI PATS appliance status"
+echo "BNPI PATS appliance status"
 hostname
 ip -br addr
 

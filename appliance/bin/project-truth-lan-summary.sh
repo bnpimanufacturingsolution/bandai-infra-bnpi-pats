@@ -257,7 +257,7 @@ write_summary() {
   mkdir -p "$state_dir"
 
   {
-    echo "Project Truth BNPI PATS appliance"
+    echo "BNPI PATS appliance"
     echo "Host: $(hostname)"
     echo "Generated: ${generated_at}"
     echo
@@ -509,7 +509,7 @@ if [ "$screen" = "true" ]; then
 fi
 
 {
-  echo "Project Truth BNPI PATS appliance"
+  echo "BNPI PATS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
     echo "DEV:  https://dev.bnpi-pats.lan/auth/login"
@@ -538,7 +538,7 @@ fi
 } > "$motd_file"
 
 {
-  echo "Project Truth BNPI PATS appliance"
+  echo "BNPI PATS appliance"
   if [ -n "$ip_addr" ]; then
     echo "LAN IP: ${ip_addr}"
   else
@@ -600,7 +600,7 @@ if [ "${PROJECT_TRUTH_SKIP_TTY1_WRITE:-}" != "1" ] && [ -w /dev/tty1 ]; then
   {
     printf '\033c'
     if [ -n "$tty_user" ]; then
-    echo "Project Truth BNPI PATS appliance"
+    echo "BNPI PATS appliance"
     echo "LAN IP: ${ip_addr:-NOT DETECTED}"
     echo "Cloudflare: https://bnpipats.tech/auth/login"
     echo "Cloudflare SSH: ssh project-truth-bnpi-pats"
