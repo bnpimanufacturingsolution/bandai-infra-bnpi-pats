@@ -115,3 +115,27 @@ ssh project-truth-bnpi-pats
 .\scripts\project-truth.ps1 bnpi-pats-vm -VhdxPath "<vhdx>" -VmName "bnpi-pats" -BaseDir "C:\ProgramData\BnpiPats"
 .\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic
 ```
+
+## 7. Full command reference (every script in this flow)
+
+| # | Command | Purpose |
+|---|---|---|
+| 1 | `doctor` | Host preflight (Hyper-V, tools, paths) |
+| 2 | `select-image -ImagePath …` | Register VHDX in host config (no VM change) |
+| 3 | `download-image -ImageUrl … -ExpectedSha256 …` | Hash-verified fetch + register |
+| 4 | `build-image -TargetPlatform hyperv` | Bake VHDX (Packer, hours) |
+| 5 | `vhdx-autopilot -Mode Import -VhdxPath … -VmName …` | Direct import without Terraform |
+| 6 | `vhdx-autopilot -Mode SelfTestHyperV …` | Test-boot a VHDX, then teardown |
+| 7 | `finalize-local-vhdx -VmName … -StopVm -Force` | Freeze proven disk to stable name + manifest + SHA |
+| 8 | `bnpi-pats-vm -VhdxPath … -VmName … -BaseDir …` | Birth VM: SHA, tfvars pin, `terraform-apply`, IP wait, health |
+| 9 | `bnpi-pats-full -BaseDir … [-SelfTest] [-WithPublic …]` | Legs 4+6+8 in one command (this doc's main command) |
+| 10 | `terraform-plan` | fmt/init/validate/plan only (safe preview) |
+| 11 | `terraform-apply -Apply` | Create switch + disk copy + start VM (`-Apply` gate) |
+| 12 | `verify` | Host-local `:3000/:3001/:3100/:3101/:3200/:3201` checks |
+| 13 | `watch-until-healthy -GuestIp …` | Poll host-local + LAN checks until green |
+| 14 | `ensure-bnpi-cloudflare-host -Login` | Cloudflare account login (browser, once) |
+| 15 | `ensure-bnpi-cloudflare-host` | Readiness report (cert, credential, key, task) |
+| 16 | `ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` | DNS routes + connector + public proof |
+| 17 | `verify-gitops-state -GuestIp …` | Argo CD applications state on the VM |
+| 18 | `vm-pull -GuestIp … -Status` | VM pull/sync status |
+| 19 | `v6-one-shot -GuestIp …` | Full runtime proof (ansible-pull, tunnel import, network, browser) |
