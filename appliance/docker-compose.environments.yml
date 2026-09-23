@@ -34,6 +34,7 @@ services:
       PG_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
       WRITE_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
       DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
+      PATS_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-dev:5432/bnpi_pats
     # No prisma-seed on appliance DBs (seed can delete timesheet/attendance). Schema-only; prisma db push without --accept-data-loss is fail-closed on destructive drift.
     command: >
       sh -c "npm run prisma-postgres:push"
@@ -205,6 +206,7 @@ services:
       PG_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
       WRITE_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
       DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
+      PATS_DATABASE_URL: postgresql://postgres:postgres@bnpi-pats-postgres-uat:5432/bnpi_pats
     # No prisma-seed on appliance DBs (seed can delete timesheet/attendance). Schema-only; prisma db push without --accept-data-loss is fail-closed on destructive drift.
     command: >
       sh -c "npm run prisma-postgres:push"

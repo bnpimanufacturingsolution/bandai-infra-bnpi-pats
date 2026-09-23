@@ -26,9 +26,11 @@ services:
     env_file:
       - ./env/bnpi-pats-api.env
     # Empty local bootstrap may seed; UAT/PROD/GitOps must not seed.
+    # Schema-only on appliance DBs (REC-20260824): push without
+    # --accept-data-loss is fail-closed on destructive drift, and seeding can
+    # delete timesheet/attendance rows.
     command: >
-      sh -c "npm run prisma-postgres:push
-      && npm run prisma-seed"
+      sh -c "npm run prisma-postgres:push"
     depends_on:
       postgres:
         condition: service_healthy
