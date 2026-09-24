@@ -5,7 +5,7 @@
   "description": "Minimal Project Truth health check service for K3s DEV/UAT/PROD verification.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node init && node server.js"
   },
   "dependencies": {
     "express": "^5.2.1"
