@@ -112,9 +112,26 @@ services:
       retries: 12
       start_period: 20s
 
+  redis:
+    profiles: ["redis"]
+    image: redis:7.2.7-alpine
+    container_name: bnpi-pats-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-template}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD:-template}' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgresdata:
   apiuploads:
+  redisdata:
 
 networks:
   bnpi-pats-observability:

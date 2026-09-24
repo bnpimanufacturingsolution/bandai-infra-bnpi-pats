@@ -405,11 +405,45 @@ services:
     networks:
       - bnpi-pats-observability
 
+  bnpi-pats-redis-dev:
+    profiles: ["redis"]
+    image: redis:7.2.7-alpine
+    container_name: bnpi-pats-redis-dev
+    restart: unless-stopped
+    ports:
+      - "${REDIS_DEV_HOST_PORT:-6380}:6379"
+    volumes:
+      - redisdata-dev:/data
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-template}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD:-template}' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bnpi-pats-redis-uat:
+    profiles: ["redis"]
+    image: redis:7.2.7-alpine
+    container_name: bnpi-pats-redis-uat
+    restart: unless-stopped
+    ports:
+      - "${REDIS_UAT_HOST_PORT:-6381}:6379"
+    volumes:
+      - redisdata-uat:/data
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-template}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD:-template}' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgresdata-dev:
   postgresdata-uat:
   apiuploads-dev:
   apiuploads-uat:
+  redisdata-dev:
+  redisdata-uat:
 
 networks:
   bnpi-pats-observability:
