@@ -158,7 +158,6 @@ Path → image (from `ansible/project-truth-pull.yml`):
 | `bnpi-pats-app/` | `bnpi-pats-app-local:develop` |
 | `bnpi-pats-api/` (most) | `bnpi-pats-api-local:develop` |
 | `bnpi-pats-api/prisma/` or seeds | also `bnpi-pats-api-db-init:develop` |
-| `bnpi-pats-emp-app/` | `bnpi-pats-emp-app-local:develop` |
 | `appliance/docker-compose*` | all of the above |
 | `.wwg/`, `docs/`, `audits/` only | usually **no** image (`services=none`) |
 
@@ -235,7 +234,7 @@ Example from 2026-08-19 (attendance request):
 | `origin/develop` `b409ca4` | `f93f30d` then docs `6f97387` |
 | HTML `root-pLw9zlEI.css` | `root-CIRKoZkC.css` |
 | No `Request time` | `_id.attendance-DI1eNUjI.js` contains `Request time` |
-| — | Playwright: Zen My Attendance, expand Aug 19 → orange **Request time** |
+| — | Playwright: open the attendance view and expand the open-day card to see the **Request time** control |
 
 ---
 
@@ -249,7 +248,6 @@ Example from 2026-08-19 (attendance request):
 | Push “done” but DEV image build red | New file under `bnpi-pats-app/app/components/templates/` ignored | `git check-ignore -v`, fix `/templates/` ignore, `git add` the file, push again |
 | Argo Synced, UI still old | Manifest SHA updated; Docker tag not rebuilt yet | Wait for ansible-pull or run `sudo project-truth-ansible-pull`; watch `k8s-runtime-image-state` |
 | ansible-pull 403 `account is suspended` | VM GitHub token user suspended | Repair `argocd/project-truth-repo-creds` / pull token; host `git push` can still work |
-| `bnpi-pats-emp-app` 404 on pull | Token cannot read the private submodule | Script applies playbook from the main checkout; do not delete `bnpi-pats-emp-app` from `develop` |
 | Tab still looks old | Browser cached previous hashed assets | Hard-refresh; confirm CSS/JS hash in View Source |
 
 ---

@@ -5,7 +5,22 @@
 > (this file was compacted 2026-09-15 during the retirement pass; the product
 > truth records live in `.wwg/wiki/project-truth.md` and dated reports).
 
-## Latest Task Addendum - 2026-09-25 Terraform host-layer removal (operator: remove Terraform from infra)
+## Latest Task Addendum - 2026-09-25 audits retention (operator: keep GitOps audit only)
+
+- Removed `timesheet-management-2026-08-18.md` and `payroll-management-2026-08-19.md` from `audits/`.
+- Kept `dev-bnpi-pats-pull-push-gitops-2026-08-19.md` and cleaned the audit index links.
+- Pre-change backup: `C:\Users\zenja\AppData\Local\Temp\opencode\bandai-audits-timesheet-payroll-removal-20260925-115203`.
+- No application/runtime/data files were touched.
+
+## Previous Task Addendum - 2026-09-25 audits cleanup (operator: scrub employee content)
+
+- Deleted the three employee-only audit files and removed their links from `audits/README.md`.
+- Scrubbed named-person, employee-role, and employee-record sections from the timesheet and payroll audits while preserving those audit files.
+- Removed retired employee-portal references from the GitOps audit.
+- Pre-change backup: `C:\Users\zenja\AppData\Local\Temp\opencode\bandai-audits-employee-scrub-20260925-113637`.
+- Scope was limited to `audits/`; application code, runtime data, and broader workforce terminology were not changed.
+
+## Previous Task Addendum - 2026-09-25 Terraform host-layer removal (operator: remove Terraform from infra)
 
 - **Scope:** remove tracked Terraform Hyper-V configuration/state/provider cache, Terraform-specific scripts and CLI commands, installer packaging, and active validation references.
 - **Replacement:** direct Hyper-V PowerShell import/start through `scripts/vhdx-autopilot.ps1` and `scripts/bnpi-pats-vm.ps1`; Packer remains the optional image-factory path.

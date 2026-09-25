@@ -1,3 +1,24 @@
+## 2026-09-25 - Timesheet/payroll audit removal completed
+
+- User requested that only the GitOps audit remain from the current audit set.
+- Removed `timesheet-management-2026-08-18.md` and `payroll-management-2026-08-19.md`.
+- Kept `dev-bnpi-pats-pull-push-gitops-2026-08-19.md` and cleaned `audits/README.md`.
+- Backup: `C:\Users\zenja\AppData\Local\Temp\opencode\bandai-audits-timesheet-payroll-removal-20260925-115203`.
+- No application/runtime/data files were changed.
+
+---
+
+## 2026-09-25 - Audits employee-content cleanup completed
+
+- User requested removal of employee content from `audits/`.
+- Deleted the three employee-only audit files and cleaned `audits/README.md` links.
+- Scrubbed named-person, employee-role, and employee-record sections from the timesheet and payroll audits; preserved the broader audit files.
+- Removed retired employee-portal references from the GitOps audit.
+- Backup: `C:\Users\zenja\AppData\Local\Temp\opencode\bandai-audits-employee-scrub-20260925-113637`.
+- No application code, runtime, database, or broader workforce data was changed.
+
+---
+
 ## 2026-09-25 - Terraform host-layer removal completed in repository
 
 - User selected repository/file removal; no infrastructure destroy was authorized or run.
