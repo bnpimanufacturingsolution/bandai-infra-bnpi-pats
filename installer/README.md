@@ -12,4 +12,4 @@ or the PowerShell fallback:
 .\installer\install-project-truth.ps1
 ```
 
-The installer does not run Packer. It installs the CLI, Terraform configuration, GitOps manifests, and docs, then creates a shortcut that launches the installed CLI.
+The installer does not run Packer. It installs the CLI, direct Hyper-V helpers, GitOps manifests, and docs, then creates a shortcut that launches the installed CLI.

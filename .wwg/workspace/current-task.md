@@ -5,7 +5,15 @@
 > (this file was compacted 2026-09-15 during the retirement pass; the product
 > truth records live in `.wwg/wiki/project-truth.md` and dated reports).
 
-## Latest Task Addendum - 2026-09-15 device lane + HRIS emp-app FULL retirement (operator: "it's not HRIS anymore, it's BNPI, so delete everything HRIS-related in the codebase")
+## Latest Task Addendum - 2026-09-25 Terraform host-layer removal (operator: remove Terraform from infra)
+
+- **Scope:** remove tracked Terraform Hyper-V configuration/state/provider cache, Terraform-specific scripts and CLI commands, installer packaging, and active validation references.
+- **Replacement:** direct Hyper-V PowerShell import/start through `scripts/vhdx-autopilot.ps1` and `scripts/bnpi-pats-vm.ps1`; Packer remains the optional image-factory path.
+- **Safety:** no `terraform destroy`, VM deletion, Hyper-V resource change, Cloudflare Tunnel change, or runtime/data mutation was authorized or performed.
+- **Recovery:** pre-removal backup saved outside the repository at `C:\Users\zenja\AppData\Local\Temp\opencode\bandai-terraform-removal-20260925-110912`.
+- **Boundary:** dated `.wwg/reports/` and archived evidence remain read-only historical references.
+
+## Previous Task Addendum - 2026-09-15 device lane + HRIS emp-app FULL retirement (operator: "it's not HRIS anymore, it's BNPI, so delete everything HRIS-related in the codebase")
 
 - **Supersedes the earlier 2026-09-15 "IoT/Hikvision script sweep" addendum below-in-git** which concluded the device lane was live product truth and "NOT purged." The operator has since directed full retirement; the device lane and `bnpi-pats-emp-app` are now retired product truth (see `.wwg/wiki/project-truth.md` "Device lane + HRIS emp-app retired (2026-09-15)").
 - **Pass 1 — infra** (commit `4e7325bd`, 102 files): GitOps dev/uat/prod overlays de-deviced and de-emp'd; `vendor/`, callback-outbox service, `services/`, postman, hik/zk dockerfiles, credential-recovery patch, 18 device scripts deleted; ansible build/rollout matrices, ci/observe/promote workflows, appliance bins/env cleaned. Proof: kustomize ×6, docker compose config, js-yaml ×12, greps.

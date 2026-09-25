@@ -1,13 +1,13 @@
-# Project Truth Hyper-V Terraform
+# Project Truth Hyper-V
 
-This branch is the clean Hyper-V/Terraform direction for Project Truth, with a
+This branch is the clean Hyper-V image and appliance direction for Project Truth, with a
 separate maintainer image-factory track for VirtualBox client artifacts.
 
 The normal user flow is:
 
 ```text
 prebuilt Hyper-V image
-  -> Terraform apply on the Windows host
+  -> direct Hyper-V import/start on the Windows host
   -> Argo CD sync inside the VM
   -> host-local, LAN, and inside-VM verification
 ```
@@ -45,12 +45,11 @@ Canonical remote: `https://github.com/bnpimanufacturingsolution/bandai-infra-bnp
 ```powershell
 .\scripts\project-truth.ps1 doctor
 .\scripts\project-truth.ps1 select-image -ImagePath C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx
-.\scripts\project-truth.ps1 terraform-plan
-.\scripts\project-truth.ps1 terraform-apply -Apply
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode Import -VhdxPath C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx -VmName bnpi-pats
 .\scripts\project-truth.ps1 watch-until-healthy -GuestIp <guest-lan-ip>
 ```
 
-`terraform-apply` requires `-Apply` on purpose. The default path does not delete existing VMs and does not run Packer.
+The normal path uses the direct Hyper-V PowerShell flow. It does not run Packer and does not use a Terraform state or apply step.
 
 ## VHDX Autopilot
 
@@ -98,20 +97,18 @@ Windows Host
 |   |-- doctor
 |   |-- select-image
 |   |-- download-image
-|   |-- terraform-plan
-|   |-- terraform-apply
+|   |-- vhdx-autopilot
 |   `-- verify
 |
 |-- Prebuilt Hyper-V Image
 |   |-- project-truth-node-<version>.vhdx
 |   `-- project-truth-node-<version>.sha256
 |
-`-- Terraform Host Layer
-    |-- creates/selects Hyper-V switch
-    |-- creates Hyper-V VM
-    |-- attaches VHDX
-    |-- sets CPU and memory
-    `-- outputs VM access info
+`-- Direct Hyper-V Host Layer
+    |-- selects/creates a Hyper-V switch
+    |-- imports the VHDX as a Gen2 VM
+    |-- starts the VM and reports its address
+    `-- records the selected image and VM settings
 
 Hyper-V Ubuntu VM
 |
@@ -127,7 +124,6 @@ Hyper-V Ubuntu VM
 ```text
 app/
 gitops/
-terraform-hyperv/
 image-factory/
 bnpi-pats-api/
 bnpi-pats-app/
@@ -143,14 +139,14 @@ docs/
 .\scripts\project-truth.ps1 build-image -TargetPlatform virtualbox
 ```
 
-Hyper-V uses `.vhdx` and remains the Terraform-managed host path. VirtualBox uses
+Hyper-V uses `.vhdx` and is consumed by the direct Hyper-V CLI path. VirtualBox uses
 `.vdi` first, with `.ova` allowed as a handoff appliance format.
 
 ## Ownership Rules
 
 | Concern | Owner |
 |---|---|
-| Hyper-V VM lifecycle | Terraform on Windows host |
+| Hyper-V VM lifecycle | Project Truth CLI and Hyper-V PowerShell |
 | Base VM image rebuild | Optional Packer image factory |
 | K3s and Argo CD platform | Prebuilt image or platform bootstrap |
 | DEV/UAT/PROD application state | GitOps manifests synced by Argo CD |
@@ -205,4 +201,4 @@ Public Cloudflare:
 
 ## Legacy Note
 
-Older VirtualBox-first and Terraform-inside-VM workflows may exist in the source history. They are source material only. The current VirtualBox support is limited to a separate image artifact track, not the Hyper-V Terraform runtime path.
+Older VirtualBox-first and Terraform-based workflows may exist in the source history. They are source material only. The current VirtualBox support is limited to a separate image artifact track, and Hyper-V uses the direct CLI path.

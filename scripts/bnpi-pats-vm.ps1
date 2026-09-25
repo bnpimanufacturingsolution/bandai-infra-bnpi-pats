@@ -13,7 +13,6 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$repoRoot = Split-Path -Parent $PSScriptRoot
 
 function Write-Step {
   param([string]$Message)
@@ -26,16 +25,13 @@ function Test-Admin {
 }
 
 if (-not (Test-Admin)) {
-  throw "Run this script in an elevated PowerShell (Run as Administrator). Hyper-V + Terraform need admin."
+  throw "Run this script in an elevated PowerShell (Run as Administrator). Hyper-V operations need admin."
 }
 
-foreach ($cmd in @("Get-VM", "Get-VMNetworkAdapter", "Get-VHD")) {
+foreach ($cmd in @("Get-VM", "Get-VMNetworkAdapter", "Get-VMSwitch")) {
   if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
     throw "Hyper-V PowerShell cmdlets missing ($cmd). Enable Hyper-V Management Tools on this server first."
   }
-}
-if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
-  throw "terraform not found in PATH. Install Terraform on this server first."
 }
 
 $resolved = (Resolve-Path -LiteralPath $VhdxPath -ErrorAction Stop).Path
@@ -45,59 +41,55 @@ if ([IO.Path]::GetExtension($resolved).ToLowerInvariant() -ne ".vhdx") {
 Write-Step "Using VHDX: $resolved"
 
 $vmPath = Join-Path $BaseDir "HyperV"
-$hostConfigPath = Join-Path $BaseDir "config\image.json"
-foreach ($dir in @($vmPath, (Join-Path $BaseDir "images"), (Join-Path $BaseDir "logs"), (Join-Path $BaseDir "secrets\cloudflared"), (Split-Path -Parent $hostConfigPath))) {
+$imageConfigPath = Join-Path $BaseDir "config\image.json"
+$projectConfigPath = Join-Path $BaseDir "config\project-truth.json"
+foreach ($dir in @($vmPath, (Join-Path $BaseDir "images"), (Join-Path $BaseDir "logs"), (Join-Path $BaseDir "secrets\cloudflared"), (Split-Path -Parent $imageConfigPath))) {
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
-Write-Step "Base layout ready under $BaseDir (HyperV, images, logs, secrets\cloudflared, config)"
+Write-Step "Base layout ready under $BaseDir"
 
+$expectedSha256 = ''
 $shaFile = "$resolved.sha256"
 if (Test-Path -LiteralPath $shaFile) {
-  $first = ((Get-Content -LiteralPath $shaFile -TotalCount 1) -split "\s+")[0].Trim().ToLowerInvariant()
-  $actual = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($first -ne $actual) {
-    throw "SHA256 mismatch. sidecar=$first actual=$actual file=$shaFile"
+  $expectedSha256 = ((Get-Content -LiteralPath $shaFile -TotalCount 1) -split "\s+")[0].Trim().ToLowerInvariant()
+  $actualSha256 = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($expectedSha256 -ne $actualSha256) {
+    throw "SHA256 mismatch. sidecar=$expectedSha256 actual=$actualSha256 file=$shaFile"
   }
-  Write-Step "SHA256 verified: $actual"
+  Write-Step "SHA256 verified: $actualSha256"
 } else {
   Write-Warning "No .sha256 sidecar found at $shaFile. Continuing without checksum proof."
 }
 
 Write-Step "Selecting image (host config only, no VM change yet)"
-& "$PSScriptRoot\select-image.ps1" -ImagePath $resolved -TargetPlatform hyperv -ConfigPath $hostConfigPath
+& "$PSScriptRoot\select-image.ps1" -ImagePath $resolved -ExpectedSha256 $expectedSha256 -TargetPlatform hyperv -ConfigPath $imageConfigPath
 if ($LASTEXITCODE -ne 0) { throw "select-image failed with exit code $LASTEXITCODE" }
 
-$tfvars = Join-Path $repoRoot "terraform-hyperv\terraform.tfvars"
-$example = Join-Path $repoRoot "terraform-hyperv\terraform.tfvars.example"
-if (-not (Test-Path -LiteralPath $tfvars)) {
-  if (-not (Test-Path -LiteralPath $example)) { throw "Missing both $tfvars and $example" }
-  Write-Step "Creating $tfvars from example"
-  Copy-Item -LiteralPath $example -Destination $tfvars -Force
-}
+$startupMemoryGB = [Math]::Max(1, [int][Math]::Ceiling($MemoryMb / 1024.0))
+$minimumMemoryGB = [Math]::Max(1, [int][Math]::Floor($MemoryMb / 2048.0))
+$maximumMemoryGB = [Math]::Max($startupMemoryGB + 2, 3)
+$pollCount = [Math]::Max(1, [int][Math]::Ceiling($IpWaitSeconds / [Math]::Max(1, $IpPollSeconds)))
 
-$content = Get-Content -LiteralPath $tfvars -Raw
-$escapedVhdx = $resolved.Replace("\", "\\")
-$escapedVmPath = $vmPath.Replace("\", "\\")
-$content = $content -replace '(?m)^\s*vm_name\s*=.*$', ('vm_name           = "{0}"' -f $VmName)
-$content = $content -replace '(?m)^\s*switch_name\s*=.*$', ('switch_name       = "{0}"' -f $SwitchName)
-$content = $content -replace '(?m)^\s*source_image_path\s*=.*$', ('source_image_path = "{0}"' -f $escapedVhdx)
-$content = $content -replace '(?m)^\s*vm_path\s*=.*$', ('vm_path           = "{0}"' -f $escapedVmPath)
-$content = $content -replace '(?m)^\s*memory_mb\s*=.*$', ('memory_mb         = {0}' -f $MemoryMb)
-$content = $content -replace '(?m)^\s*cpu_count\s*=.*$', ('cpu_count         = {0}' -f $CpuCount)
-Set-Content -LiteralPath $tfvars -Value $content -Encoding ASCII
-Write-Step "Terraform vars pinned: vm=$VmName switch=$SwitchName mem=${MemoryMb}MB cpu=$CpuCount path=$vmPath"
-
-Write-Step "terraform-plan (fmt/init/validate/plan)"
-& "$PSScriptRoot\terraform-plan.ps1"
-if ($LASTEXITCODE -ne 0) { throw "terraform-plan failed with exit code $LASTEXITCODE" }
-
-Write-Step "terraform-apply -Apply (creates switch + copies disk + starts Gen2 VM)"
-& "$PSScriptRoot\terraform-apply.ps1" -Apply
-if ($LASTEXITCODE -ne 0) { throw "terraform-apply failed with exit code $LASTEXITCODE" }
+Write-Step "Direct Hyper-V import: vm=$VmName switch=$SwitchName mem=${MemoryMb}MB cpu=$CpuCount"
+$autopilotArgs = @(
+  '-Mode', 'Import',
+  '-VhdxPath', $resolved,
+  '-VmName', $VmName,
+  '-PreferredSwitch', $SwitchName,
+  '-RequireExternalSwitch',
+  '-CpuCount', $CpuCount,
+  '-StartupMemoryGB', $startupMemoryGB,
+  '-MinimumMemoryGB', $minimumMemoryGB,
+  '-MaximumMemoryGB', $maximumMemoryGB,
+  '-PollSeconds', $IpPollSeconds,
+  '-PollCount', $pollCount
+)
+& "$PSScriptRoot\vhdx-autopilot.ps1" @autopilotArgs
+if ($LASTEXITCODE -ne 0) { throw "vhdx-autopilot failed with exit code $LASTEXITCODE" }
 
 $targetIp = $GuestIp.Trim()
 if ([string]::IsNullOrWhiteSpace($targetIp)) {
-  Write-Step "Waiting for guest IP from Hyper-V KVP (up to ${IpWaitSeconds}s)"
+  Write-Step "Reading guest IP from Hyper-V (up to ${IpWaitSeconds}s)"
   $deadline = (Get-Date).AddSeconds($IpWaitSeconds)
   while ((Get-Date) -lt $deadline -and [string]::IsNullOrWhiteSpace($targetIp)) {
     try {
@@ -113,6 +105,20 @@ if ([string]::IsNullOrWhiteSpace($targetIp)) {
   throw "No guest IP appeared for VM $VmName. Check with: Get-VMNetworkAdapter -VMName $VmName"
 }
 Write-Step "Guest IP: $targetIp"
+
+Write-Step "Writing direct Hyper-V host configuration"
+& "$PSScriptRoot\configure.ps1" `
+  -ConfigPath $projectConfigPath `
+  -ImagePath $resolved `
+  -ExpectedSha256 $expectedSha256 `
+  -TargetPlatform hyperv `
+  -VmName $VmName `
+  -SwitchName $SwitchName `
+  -VmPath $vmPath `
+  -CpuCount $CpuCount `
+  -MemoryMb $MemoryMb `
+  -GuestIpHint $targetIp
+if ($LASTEXITCODE -ne 0) { throw "configure failed with exit code $LASTEXITCODE" }
 
 Write-Step "watch-until-healthy -GuestIp $targetIp"
 & "$PSScriptRoot\watch-until-healthy.ps1" -GuestIp $targetIp

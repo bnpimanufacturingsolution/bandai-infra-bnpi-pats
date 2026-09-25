@@ -1,7 +1,7 @@
 {
   "name": "project_truth_hyperv_fresh",
   "version": "1.0.0",
-  "description": "This branch is the clean Hyper-V/Terraform direction for Project Truth, with a\r separate maintainer image-factory track for VirtualBox client artifacts.",
+  "description": "This branch is the clean Hyper-V image and appliance direction for Project Truth, with a separate maintainer image-factory track for VirtualBox client artifacts.",
   "main": "index.js",
   "directories": {
     "doc": "docs"

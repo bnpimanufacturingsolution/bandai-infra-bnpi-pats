@@ -1,4 +1,15 @@
-﻿## 2026-09-15 - Device lane + HRIS emp-app FULL retirement, passes 1-3 (infra, scripts/tests, docs/governance truth)
+## 2026-09-25 - Terraform host-layer removal completed in repository
+
+- User selected repository/file removal; no infrastructure destroy was authorized or run.
+- Removed `terraform-hyperv/` (tracked configuration plus local state/provider cache), `scripts/terraform-plan.ps1`, and `scripts/terraform-apply.ps1`.
+- Removed Terraform CLI commands, installer payloads/shortcuts, workflow setup/validation steps, and active README/runbook references.
+- `scripts/bnpi-pats-vm.ps1` now uses the direct `vhdx-autopilot` import/start path, preserves checksum/IP/health behavior, and records host configuration JSON; no Terraform state is required.
+- Pre-removal backup: `C:\Users\zenja\AppData\Local\Temp\opencode\bandai-terraform-removal-20260925-110912` (includes `terraform.tfstate` and staged pre-removal edits).
+- Historical `.wwg/reports/` references to Terraform remain read-only evidence. Runtime VM/tunnel/data were not touched.
+
+---
+
+## 2026-09-15 - Device lane + HRIS emp-app FULL retirement, passes 1-3 (infra, scripts/tests, docs/governance truth)
 
 - Operator directive: "it's not HRIS anymore, it's BNPI, so delete everything HRIS-related in the codebase." Supersedes the earlier same-day sweep that kept the device lane as live truth.
 - PASS 1 `4e7325bd` (102 files): GitOps overlays dev/uat/prod, ansible build/rollout, ci/observe/promote workflows, appliance bins/env, hik/zk dockerfiles, callback-outbox service, postman, credential-recovery patch, 18 device scripts, `vendor/` all de-deviced/de-emp'd. Proven with kustomize ×6, docker compose config, js-yaml, greps.

@@ -7,7 +7,6 @@ optionally connect Cloudflare. Everything runs in one elevated terminal.
 
 - Windows with Hyper-V enabled + Hyper-V Management Tools
   (`Get-VM` must exist).
-- Terraform in PATH (`terraform --version`).
 - `cloudflared` in PATH (only for `-WithPublic`).
 - Elevated PowerShell (Run as Administrator).
 - Repo checkout of `bandai-infra-bnpi-pats`
@@ -32,7 +31,7 @@ What it does, in order:
 | Leg | Step | Skipped when |
 |---|---|---|
 | 1 | Bake VHDX (`build-image`, Hyper-V Packer, hours) | VHDX already in `<BaseDir>\images` |
-| 2 | Birth VM (`bnpi-pats-vm`): SHA check, `terraform-apply`, IP wait, health proof | Never (core job) |
+| 2 | Birth VM (`bnpi-pats-vm`): SHA check, direct Hyper-V import/start, IP wait, health proof | Never (core job) |
 | 3 | Public (`-WithPublic` only): credential import to VM, DNS, verify | Without the flag |
 
 Useful flags:
@@ -48,8 +47,8 @@ Useful flags:
 ## 2. Layout it creates
 
 ```text
-C:\ProgramData\BandaiApp\Bnpipats\HyperV\               VM + virtual disk
-C:\ProgramData\BandaiApp\Bnpipats\images\               VHDX + .sha256 + .manifest
+C:\ProgramData\BandaiApp\Bnpipats\HyperV\               reserved host VM layout
+C:\ProgramData\BandaiApp\Bnpipats\images\               source VHDX + .sha256 + .manifest
 C:\ProgramData\BandaiApp\Bnpipats\logs\
 C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\  put the tunnel JSON here
 C:\ProgramData\BandaiApp\Bnpipats\config\image.json
@@ -93,7 +92,7 @@ ssh project-truth-bnpi-pats
 |---|---|
 | `Run as Administrator` throw | Reopen PowerShell elevated. |
 | `Get-VM` missing | Enable Hyper-V Management Tools. |
-| `terraform not found` | Install Terraform, reopen shell. |
+| `Hyper-V cmdlets missing` | Enable Hyper-V Management Tools and reopen the elevated shell. |
 | `VM 'bnpi-pats' already exists` | `Get-VM -Name bnpi-pats`; remove/rename old, or pass `-VmName`. |
 | `SHA256 mismatch` | VHDX vs sidecar differ; re-download or rebuild. |
 | `No guest IP appeared` | `Get-VMNetworkAdapter -VMName bnpi-pats`; check switch (`ProjectTruth-External`). |
@@ -124,18 +123,16 @@ ssh project-truth-bnpi-pats
 | 2 | `select-image -ImagePath …` | Register VHDX in host config (no VM change) |
 | 3 | `download-image -ImageUrl … -ExpectedSha256 …` | Hash-verified fetch + register |
 | 4 | `build-image -TargetPlatform hyperv` | Bake VHDX (Packer, hours) |
-| 5 | `vhdx-autopilot -Mode Import -VhdxPath … -VmName …` | Direct import without Terraform |
+| 5 | `vhdx-autopilot -Mode Import -VhdxPath … -VmName …` | Direct Hyper-V import and start |
 | 6 | `vhdx-autopilot -Mode SelfTestHyperV …` | Test-boot a VHDX, then teardown |
 | 7 | `finalize-local-vhdx -VmName … -StopVm -Force` | Freeze proven disk to stable name + manifest + SHA |
-| 8 | `bnpi-pats-vm -VhdxPath … -VmName … -BaseDir …` | Birth VM: SHA, tfvars pin, `terraform-apply`, IP wait, health |
+| 8 | `bnpi-pats-vm -VhdxPath … -VmName … -BaseDir …` | Birth VM: SHA, direct import, IP wait, health |
 | 9 | `bnpi-pats-full -BaseDir … [-SelfTest] [-WithPublic …]` | Legs 4+6+8 in one command (this doc's main command) |
-| 10 | `terraform-plan` | fmt/init/validate/plan only (safe preview) |
-| 11 | `terraform-apply -Apply` | Create switch + disk copy + start VM (`-Apply` gate) |
-| 12 | `verify` | Host-local `:3000/:3001/:3100/:3101/:3200/:3201` checks |
-| 13 | `watch-until-healthy -GuestIp …` | Poll host-local + LAN checks until green |
-| 14 | `ensure-bnpi-cloudflare-host -Login` | Cloudflare account login (browser, once) |
-| 15 | `ensure-bnpi-cloudflare-host` | Readiness report (cert, credential, key, task) |
-| 16 | `ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` | DNS routes + connector + public proof |
-| 17 | `verify-gitops-state -GuestIp …` | Argo CD applications state on the VM |
-| 18 | `vm-pull -GuestIp … -Status` | VM pull/sync status |
-| 19 | `v6-one-shot -GuestIp …` | Full runtime proof (ansible-pull, tunnel import, network, browser) |
+| 10 | `verify` | Host-local `:3000/:3001/:3100/:3101/:3200/:3201` checks |
+| 11 | `watch-until-healthy -GuestIp …` | Poll host-local + LAN checks until green |
+| 12 | `ensure-bnpi-cloudflare-host -Login` | Cloudflare account login (browser, once) |
+| 13 | `ensure-bnpi-cloudflare-host` | Readiness report (cert, credential, key, task) |
+| 14 | `ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` | DNS routes + connector + public proof |
+| 15 | `verify-gitops-state -GuestIp …` | Argo CD applications state on the VM |
+| 16 | `vm-pull -GuestIp … -Status` | VM pull/sync status |
+| 17 | `v6-one-shot -GuestIp …` | Full runtime proof (ansible-pull, tunnel import, network, browser) |

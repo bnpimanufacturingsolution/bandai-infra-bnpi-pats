@@ -3,11 +3,9 @@ param(
   [string]$ImagesDir = "$env:ProgramData\BandaiApp\Bnpipats\images",
   [string]$FinalImageName = 'project-truth-node-latest.vhdx',
   [string]$ConfigPath = "$env:ProgramData\BandaiApp\Bnpipats\config\image.json",
-  [string]$TerraformVarsPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'terraform-hyperv\terraform.tfvars'),
   [switch]$StopVm,
   [switch]$Force,
-  [switch]$SkipCopy,
-  [switch]$SkipTerraformUpdate
+  [switch]$SkipCopy
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,13 +82,6 @@ $shaPath = "$finalPath.sha256"
 & "$PSScriptRoot\normalize-image-acl.ps1" -ImagePath $finalPath
 & "$PSScriptRoot\select-image.ps1" -ImagePath $finalPath -ExpectedSha256 $hash -TargetPlatform hyperv -ConfigPath $ConfigPath
 
-if (-not $SkipTerraformUpdate -and (Test-Path -LiteralPath $TerraformVarsPath)) {
-  $escaped = $finalPath.Replace('\', '\\')
-  $content = Get-Content -LiteralPath $TerraformVarsPath -Raw
-  $content = $content -replace 'source_image_path\s*=\s*".*"', ('source_image_path = "{0}"' -f $escaped)
-  Set-Content -LiteralPath $TerraformVarsPath -Value $content -Encoding UTF8
-}
-
 $evidencePointer = Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime\local-hyperv-proof-LATEST.txt'
 $evidenceDir = if (Test-Path -LiteralPath $evidencePointer) { Get-Content -LiteralPath $evidencePointer -ErrorAction SilentlyContinue } else { '' }
 $manifestPath = Join-Path $ImagesDir ("{0}.manifest.json" -f ([IO.Path]::GetFileNameWithoutExtension($FinalImageName)))
@@ -104,7 +95,6 @@ Write-Manifest -Path $manifestPath -Data ([pscustomobject]@{
   sourceDiskLastWriteTime = $sourceItem.LastWriteTime.ToString('o')
   finalizedAt = (Get-Date).ToString('o')
   evidenceDir = $evidenceDir
-  terraformVarsPath = $TerraformVarsPath
   selectedImageConfigPath = $ConfigPath
 })
 

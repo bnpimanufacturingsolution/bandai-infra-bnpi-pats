@@ -1,15 +1,14 @@
 # BNPI PATS Infrastructure - Progress Log
 
-## Status: BLOCKED - Hyper-V Not Installed
+## Status: Historical deployment notes — direct Hyper-V path is now the repository path
 
 ---
 
 ## What Was Done
 
 ### 1. Renamed VM to `bnpi-pats`
-- `terraform.tfvars` - `vm_name = "bnpi-pats"`
-- `variables.tf` - default value updated
-- `terraform.tfvars.example` - example updated
+- Direct Hyper-V CLI parameters and runbooks use `VmName = "bnpi-pats"`
+- The selected image and VM settings are stored in the host config JSON
 
 ### 2. Updated Domain from `bnpi-pats.tech` to `bnpipats.tech`
 Files updated (15+):
@@ -32,11 +31,10 @@ Subdomains:
 - AllowUnencrypted enabled
 - HTTPS listener on port 5986 with self-signed cert
 
-### 4. Terraform Setup
-- Provider: `taliesins/hyperv v1.2.1` (installed)
-- `terraform init` ✅
-- `terraform plan` ✅
-- `terraform apply` ❌ - Fails with `401 - invalid content type`
+### 4. Direct Hyper-V Setup
+- Use `vhdx-autopilot -Mode Import` for a direct VHDX import
+- Use `bnpi-pats-vm` for checksum verification, VM settings, IP discovery, and health proof
+- No provider initialization, state file, or remote-state setup is required
 
 ### 5. Created VM Deployment Guide
 - `docs/04-infrastructure-and-operations/VM_DEPLOYMENT_GUIDE.md`
@@ -94,9 +92,8 @@ systeminfo | Select-String "Hyper-V"
 
 | File | Purpose |
 |------|---------|
-| `terraform-hyperv/terraform.tfvars` | VM config (name, memory, CPU) |
-| `terraform-hyperv/providers.tf` | Terraform provider config |
-| `scripts/vhdx-autopilot.ps1` | VM creation script |
+| `scripts/vhdx-autopilot.ps1` | Direct Hyper-V import, start, and cleanup |
+| `scripts/bnpi-pats-vm.ps1` | Checksum, direct VM import, IP discovery, and health |
 | `scripts/project-truth.ps1` | Main CLI entry point |
 | `cloudflared-bnpi-pats.yml` | Cloudflare tunnel config |
 | `appliance/env/bnpi-pats-api.env` | API environment config |

@@ -1,6 +1,5 @@
 param(
   [string]$GuestIp = '',
-  [switch]$EnableTerraformApply,
   [int]$MaxHours = 8
 )
 
@@ -24,16 +23,8 @@ Add-Report '## Doctor'
 Add-Report '## Installer Verification'
 & (Join-Path (Split-Path -Parent $PSScriptRoot) 'installer\build-installer.ps1') *>&1 | Tee-Object -FilePath (Join-Path $runDir 'installer.log') | Out-String | Add-Content -LiteralPath $report
 
-Add-Report '## Terraform'
-& "$PSScriptRoot\terraform-plan.ps1" *>&1 | Tee-Object -FilePath (Join-Path $runDir 'terraform.log') | Out-String | Add-Content -LiteralPath $report
-
-if ($EnableTerraformApply) {
-  Add-Report '## Terraform Apply'
-  & "$PSScriptRoot\terraform-apply.ps1" -Apply *>&1 | Tee-Object -FilePath (Join-Path $runDir 'terraform-apply.log') | Out-String | Add-Content -LiteralPath $report
-} else {
-  Add-Report '## Terraform Apply'
-  Add-Report 'Skipped by safety gate. Pass -EnableTerraformApply to run apply.'
-}
+Add-Report '## Host Configuration'
+Add-Report 'The VM lifecycle is managed by the direct Hyper-V CLI path; no Terraform state or apply step is used.'
 
 Add-Report '## Health'
 if ([string]::IsNullOrWhiteSpace($GuestIp)) {

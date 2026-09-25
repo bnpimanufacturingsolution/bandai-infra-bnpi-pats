@@ -90,6 +90,13 @@ If uncertain, add a candidate principle or record the issue in the handoff/repor
 - If Cloudflare behavior drifts, prefer additive repair that preserves current
   SSH/public access and record connector state before changing tunnel config.
 
+## Terraform Retirement Guard
+
+- The repository's Hyper-V VM lifecycle is direct PowerShell automation, not Terraform.
+- Do not reintroduce `terraform-hyperv/`, Terraform CLI commands, Terraform state files, provider setup, or Terraform packaging without a new explicit user decision and updated architecture truth.
+- `scripts/vhdx-autopilot.ps1` and `scripts/bnpi-pats-vm.ps1` are the active VM import/start paths.
+- Dated reports and archived evidence may mention Terraform; they are read-only history, not active configuration.
+
 ## Test Enforcement
 
 - Meaningful feature behavior requires meaningful tests.
@@ -192,7 +199,8 @@ Measure-Command {
     and `bnpi-pats-emp-app` after the runtime retirement; this governance pass
     retired the rules, banners/compacted the wiki, and corrected live-state rows.
   - RESOLVED (2026-09-25): legacy `deviceId` / `deviceEmpId` fields purged from Prisma schemas, Zod schemas, and API/app models; 54.7 MB `appliance/seeds/dev-current/dev-current.dump` deleted.
-  - REMAINING (accepted): dated reports/audits left read-only by policy.
+  - RESOLVED (2026-09-25): Terraform host-layer files and active integration removed; direct Hyper-V import/start path is documented and wired.
+  - REMAINING (accepted): dated reports/audits left read-only by policy, including historical Terraform evidence.
 - Files synchronized:
   - `AGENTS.md`, `CLAUDE.md`, `.grok/rules/*`, root `README.md`, `docs/**`,
     `.wwg/wiki/*`, `.wwg/wiki/principles/*`, `.wwg/workspace/current-task.md`,

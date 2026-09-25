@@ -9,7 +9,6 @@ once git is available.
 ## 0. Prerequisites (server)
 
 - Hyper-V role + Management Tools (`Get-VM` works).
-- Terraform in PATH.
 - `cloudflared` in PATH (only for `-WithPublic`).
 - Existing VHDX on this server, e.g.
   `D:\path\to\project-truth-node-local-hyperv-v7-current-state.vhdx`
@@ -65,8 +64,8 @@ If a row returns, remove/rename the old VM or pass another `-VmName`.
 ## 3. Layout it creates (untouched `ProjectTruth` folder stays as-is)
 
 ```text
-C:\ProgramData\BandaiApp\Bnpipats\HyperV\               new VM + virtual disk
-C:\ProgramData\BandaiApp\Bnpipats\images\
+C:\ProgramData\BandaiApp\Bnpipats\HyperV\               reserved host VM layout
+C:\ProgramData\BandaiApp\Bnpipats\images\               source VHDX + .sha256 + .manifest
 C:\ProgramData\BandaiApp\Bnpipats\logs\
 C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\  put 12e89b6a-*.json here
 C:\ProgramData\BandaiApp\Bnpipats\config\image.json
@@ -118,21 +117,19 @@ Only cut over (stop/remove the HRIS appliance) after all three are green.
 | 2 | `select-image -ImagePath …` | Register VHDX in host config (no VM change) |
 | 3 | `download-image -ImageUrl … -ExpectedSha256 …` | Hash-verified fetch + register |
 | 4 | `build-image -TargetPlatform hyperv` | Bake VHDX (Packer, hours; skip here, VHDX exists) |
-| 5 | `vhdx-autopilot -Mode Import -VhdxPath … -VmName …` | Direct import without Terraform |
+| 5 | `vhdx-autopilot -Mode Import -VhdxPath … -VmName …` | Direct Hyper-V import and start |
 | 6 | `vhdx-autopilot -Mode SelfTestHyperV …` | Test-boot a VHDX, then teardown |
 | 7 | `finalize-local-vhdx -VmName … -StopVm -Force` | Freeze proven disk to stable name + manifest + SHA |
-| 8 | `bnpi-pats-vm -VhdxPath … -VmName … -BaseDir …` | Birth VM: SHA, tfvars pin, `terraform-apply`, IP wait, health |
+| 8 | `bnpi-pats-vm -VhdxPath … -VmName … -BaseDir …` | Birth VM: SHA, direct import, IP wait, health |
 | 9 | `bnpi-pats-full -BaseDir … [-SelfTest] [-WithPublic …]` | Bake (if missing) + birth + public in one command |
-| 10 | `terraform-plan` | fmt/init/validate/plan only (safe preview) |
-| 11 | `terraform-apply -Apply` | Create switch + disk copy + start VM (`-Apply` gate) |
-| 12 | `verify` | Host-local `:3000/:3001/:3100/:3101/:3200/:3201` checks |
-| 13 | `watch-until-healthy -GuestIp …` | Poll host-local + LAN checks until green |
-| 14 | `ensure-bnpi-cloudflare-host -Login` | Cloudflare account login (browser, once) |
-| 15 | `ensure-bnpi-cloudflare-host` | Readiness report (cert, credential, key, task) |
-| 16 | `ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` | DNS routes + connector + public proof |
-| 17 | `verify-gitops-state -GuestIp …` | Argo CD applications state on the VM |
-| 18 | `vm-pull -GuestIp … -Status` | VM pull/sync status |
-| 19 | `v6-one-shot -GuestIp …` | Full runtime proof (ansible-pull, tunnel import, network, browser) |
+| 10 | `verify` | Host-local `:3000/:3001/:3100/:3101/:3200/:3201` checks |
+| 11 | `watch-until-healthy -GuestIp …` | Poll host-local + LAN checks until green |
+| 12 | `ensure-bnpi-cloudflare-host -Login` | Cloudflare account login (browser, once) |
+| 13 | `ensure-bnpi-cloudflare-host` | Readiness report (cert, credential, key, task) |
+| 14 | `ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic` | DNS routes + connector + public proof |
+| 15 | `verify-gitops-state -GuestIp …` | Argo CD applications state on the VM |
+| 16 | `vm-pull -GuestIp … -Status` | VM pull/sync status |
+| 17 | `v6-one-shot -GuestIp …` | Full runtime proof (ansible-pull, tunnel import, network, browser) |
 
 ## 8. Troubleshooting
 
@@ -140,6 +137,6 @@ Same table as the laptop runbook, plus:
 
 | Symptom | Cause / fix |
 |---|---|
-| `Missing both terraform.tfvars and example` | Repo copy incomplete; restore `terraform-hyperv/terraform.tfvars.example`. |
+| `Get-VM` or `Get-VMSwitch` missing | Install/enable Hyper-V Management Tools on the server, then reopen the elevated shell. |
 | `tunnel route dns` fails for a name | Wrong account login (`cert.pem`) or name already on the old tunnel; check dashboard DNS targets. |
 | New VM and old appliance share `.19` | One of them must move IP; never run two VMs on one static LAN IP. |

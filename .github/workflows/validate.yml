@@ -1,4 +1,4 @@
-name: Validate Project Truth Hyper-V Repo
+name: Validate Project Truth Repo
 
 on:
   pull_request:
@@ -12,10 +12,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.15.6
 
       - uses: hashicorp/setup-packer@v3
         with:
@@ -38,16 +34,6 @@ jobs:
               throw "PowerShell parse failed: $($file.FullName)"
             }
           }
-
-      - name: Terraform fmt
-        shell: powershell
-        run: terraform -chdir=terraform-hyperv fmt -check -recursive
-
-      - name: Terraform init and validate
-        shell: powershell
-        run: |
-          terraform -chdir=terraform-hyperv init
-          terraform -chdir=terraform-hyperv validate
 
       - name: Render GitOps overlays
         shell: powershell

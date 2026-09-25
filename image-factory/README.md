@@ -2,7 +2,7 @@
 
 This folder is maintainer-only.
 
-Normal users should not run Packer. Hyper-V users should consume a released VHDX and checksum through the Project Truth CLI, then let Terraform create the Hyper-V VM from that image. VirtualBox clients should consume the separate VDI/OVA artifact.
+Normal users should not run Packer. Hyper-V users should consume a released VHDX and checksum through the Project Truth CLI, then import and start the Hyper-V VM directly with the CLI. VirtualBox clients should consume the separate VDI/OVA artifact.
 
 Use this flow only when the base platform changes:
 

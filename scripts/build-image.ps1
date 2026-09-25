@@ -10,13 +10,9 @@ param(
   [string]$IsoCachePath = (Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) '.runtime\image-cache') 'ubuntu-24.04.4-live-server-amd64.iso'),
   [int]$IsoChunkMb = 64,
   [bool]$PredownloadIso = $true,
-  [string]$TerraformVarsPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'terraform-hyperv\terraform.tfvars'),
   [string]$VmName = 'project-truth-node-01',
   [string]$SwitchName = 'ProjectTruth-Internal',
   [string]$BridgeAdapterName = '',
-  [ValidateSet('External','Internal','Private')]
-  [string]$SwitchType = 'Internal',
-  [string[]]$NetAdapterNames = @(),
   [string]$VmPath = "$env:ProgramData\BandaiApp\Bnpipats\HyperV",
   [int]$MemoryMb = 4096,
   [int]$CpuCount = 0,
@@ -338,27 +334,7 @@ if ($TargetPlatform -eq 'hyperv') {
 
 & "$PSScriptRoot\select-image.ps1" -ImagePath $PublishedImagePath -ExpectedSha256 $hash.Hash -TargetPlatform $TargetPlatform
 
-if ($TargetPlatform -eq 'hyperv') {
-  $adapterList = ($NetAdapterNames | ForEach-Object {
-    $escaped = $_ -replace '\\', '\\' -replace '"', '\"'
-    '"{0}"' -f $escaped
-  }) -join ', '
-  @"
-vm_name           = "$VmName"
-switch_name       = "$SwitchName"
-switch_type       = "$SwitchType"
-net_adapter_names = [$adapterList]
-source_image_path = "$($PublishedImagePath -replace '\\', '\\')"
-vm_path           = "$($VmPath -replace '\\', '\\')"
-memory_mb         = $MemoryMb
-cpu_count         = $CpuCount
-ssh_port          = 22
-api_port          = 3001
-app_port          = 3000
-guest_ip_hint     = ""
-"@ | Set-Content -LiteralPath $TerraformVarsPath -Encoding ASCII
-  Write-Host "Terraform vars: $TerraformVarsPath"
-} else {
+if ($TargetPlatform -eq 'virtualbox') {
   $configureVirtualBoxArgs = @(
     '-ImagePath', $PublishedImagePath,
     '-VmName', $VmName,
@@ -369,7 +345,7 @@ guest_ip_hint     = ""
     $configureVirtualBoxArgs += @('-BridgeAdapterName', $BridgeAdapterName)
   }
   & "$PSScriptRoot\configure-virtualbox.ps1" @configureVirtualBoxArgs
-  Write-Host "Skipped Hyper-V Terraform vars because target platform is virtualbox."
+  Write-Host "Published VirtualBox configuration; Hyper-V image configuration is handled by the direct Hyper-V CLI path."
 }
 
 Write-Host "Published Project Truth $TargetPlatform image: $PublishedImagePath"

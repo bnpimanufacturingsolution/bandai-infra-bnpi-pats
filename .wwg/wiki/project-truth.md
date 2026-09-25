@@ -1,5 +1,13 @@
 # Project Truth
 
+## Terraform host layer removed (2026-09-25)
+
+- Status: `CONFIRMED_REPO_CHANGE` (user-requested removal; no infrastructure destroy performed).
+- The tracked Terraform Hyper-V configuration, local state/provider cache, Terraform-specific scripts, CLI commands, installer payloads, and active workflow validation steps were removed from this repository.
+- Hyper-V VM lifecycle is now handled by the direct `vhdx-autopilot` / `bnpi-pats-vm` PowerShell path; the prebuilt VHDX is imported and started directly.
+- The running VM, Hyper-V resources, application data, and the VM-managed Cloudflare Tunnel were not changed. A temporary pre-removal backup of the Terraform directory/state is outside the repository.
+- Dated reports and historical evidence that mention Terraform remain read-only history.
+
 ## Device lane + HRIS emp-app retired (2026-09-15)
 
 - Status: `CONFIRMED_CODE` (this repo + submodule sweep; evidence `scripts/test-self-heal-contract.ps1` retirement guards).
@@ -197,7 +205,7 @@
 ## GitHub Actions CI / Observe / Validate (2026-08-19 documented 2026-08-20)
 
 - Status: `CONFIRMED_LIVE_20260819`; operator 2026-08-20 authorized push of the CI/Observe harden.
-- Root workflows only: `ci.yml` (per-type tests), `observe-deploy.yml` (GitHub Deployments wait on VM reporter), `validate.yml` (Windows terraform/packer/installer/self-heal). `promote-gitops.yml` is manual.
+- Root workflows only: `ci.yml` (per-type tests), `observe-deploy.yml` (GitHub Deployments wait on VM reporter), `validate.yml` (Windows Packer/installer/self-heal). `promote-gitops.yml` is manual.
 - Nested `bnpi-pats-api/.github` Cloud Run and `bnpi-pats-app/.github` Firebase workflows **do not run** on `bandai-infra`.
 - Observe environment `success` is the VM reporter. `k8s-runtime-image-state` `services=none` still posts **success** with GÇ£not rebuilt this SHAGÇ¥. That is not a live API/app image SHA. `/health` has no `buildSha`.
 - Live proof SHA `efc86c56`: CI + Observe + Validate green; VM ansible-pull match; Argo contract apps Synced/Healthy; runtime apps Synced/**Degraded** because Job `bnpi-pats-api-db-init` Failed `BackoffLimitExceeded`.
@@ -780,9 +788,9 @@ Accepted or observed architecture:
 - Item: Previous LAN BNPI PATS proof target `10.184.38.91` is historical evidence, not current reachable state from this host.
   - Status: STALE
   - Evidence: Earlier 2026-06-29 proofs showed LAN app/API PASS at `10.184.38.91`; during the 2026-06-29 21:23 PHT Cloudflare repair pass, probes to `10.184.38.91` timed out while `192.168.254.148` passed.
-- Item: Terraform SSH port config currently differs from the live VM.
-  - Status: RESOLVED
-  - Evidence: `terraform-hyperv/terraform.tfvars`, `terraform-hyperv/terraform.tfvars.example`, `terraform-hyperv/variables.tf`, `scripts/configure.ps1`, and `scripts/build-image.ps1` now document LAN SSH port `22`, matching the live bridged VM.
+- Item: Terraform host-layer configuration is retired.
+  - Status: CONFIRMED_REPO_CHANGE
+  - Evidence: The Terraform Hyper-V directory and Terraform-specific scripts/commands were removed on 2026-09-25; the active Hyper-V path is `scripts/vhdx-autopilot.ps1` plus `scripts/bnpi-pats-vm.ps1`. No running infrastructure was destroyed.
 
 Do not introduce without approval:
 

@@ -5,7 +5,7 @@ Complete step-by-step from Hyper-V VM creation to app deployment with domain.
 ## Prerequisites
 
 - Windows with Hyper-V enabled
-- Terraform installed
+- Hyper-V Management Tools available
 - Packer installed (for image building)
 - SSH key at `%USERPROFILE%\.ssh\node-health-appliance_ed25519`
 - Cloudflare account with `bnpipats.tech` domain
@@ -26,26 +26,25 @@ This creates: `C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-lates
 
 ---
 
-## Step 2: Deploy VM with Terraform
+## Step 2: Import and Start the VM Directly
+
+The project uses the direct Hyper-V PowerShell path. It does not require Terraform,
+Terraform state, or a provider initialization step.
 
 ```powershell
-cd terraform-hyperv
-
-# Edit terraform.tfvars
-# vm_name           = "bnpi-pats"
-# source_image_path = "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx"
-# net_adapter_names = ["Wi-Fi"]  # or ["Ethernet"]
-
-# Initialize and apply
-terraform init
-terraform plan
-terraform apply -auto-approve
+# Use the released VHDX and verify its checksum
+.\scripts\project-truth.ps1 bnpi-pats-vm `
+  -VhdxPath "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx" `
+  -VmName "bnpi-pats" `
+  -SwitchName "ProjectTruth-External" `
+  -MemoryMb 2048 `
+  -CpuCount 2
 ```
 
-This creates:
-- Hyper-V switch `ProjectTruth-External`
-- VM `bnpi-pats` with 4GB RAM, 2 CPUs
-- Copies VHDX and boots the VM
+This verifies the image checksum when a `.sha256` sidecar is present, imports the VHDX
+as a Generation 2 VM, starts it, discovers its guest IP, and runs the normal health
+watch. The source VHDX remains the image artifact; no separate Terraform-managed disk
+copy is created.
 
 ---
 
@@ -179,11 +178,11 @@ If you want to do everything in one go:
 ```powershell
 cd C:\Users\zenja\OneDrive\Desktop\UZARO-PROJECT\HRIS-BANDAI\bandai-infra
 
-# 1. Build image
+# 1. Build image (or use a released image)
 .\scripts\project-truth.ps1 build-image -TargetPlatform hyperv
 
-# 2. Deploy VM
-.\scripts\terraform-apply.ps1 -Apply
+# 2. Import and start the VM directly
+.\scripts\project-truth.ps1 bnpi-pats-vm -VhdxPath "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx" -VmName "bnpi-pats"
 
 # 3. Verify
 .\scripts\verify-hyperv-bridge.ps1 -VmName bnpi-pats
@@ -216,7 +215,7 @@ sudo project-truth-cloudflare-vm-tunnel /path/to/credentials.json
 ## Summary Flow
 
 ```
-Packer build → VHDX → Terraform create VM → Boot → Ansible pull → ArgoCD sync → Cloudflare tunnel → DNS → Live at bnpipats.tech
+Packer build → VHDX → direct Hyper-V import → Boot → Ansible pull → ArgoCD sync → Cloudflare tunnel → DNS → Live at bnpipats.tech
 ```
 
 ---

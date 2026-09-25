@@ -24,7 +24,7 @@ Add-Check 'Administrator' $(if ($isAdmin) { 'PASS' } else { 'WARN' }) $(if ($isA
 $hyperv = Get-Module -ListAvailable -Name Hyper-V
 Add-Check 'Hyper-V PowerShell module' $(if ($hyperv) { 'PASS' } else { 'BLOCKED' }) $(if ($hyperv) { 'Hyper-V cmdlets available.' } else { 'Hyper-V module is missing or Windows edition does not include it.' })
 
-foreach ($tool in @('terraform','git','gh','curl','ssh')) {
+foreach ($tool in @('git','gh','curl','ssh')) {
   $cmd = Find-Command $tool
   Add-Check $tool $(if ($cmd) { 'PASS' } else { 'BLOCKED' }) $(if ($cmd) { $cmd.Source } else { "$tool not found in PATH." })
 }

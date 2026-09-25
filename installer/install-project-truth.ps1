@@ -15,9 +15,15 @@ foreach ($dir in @($InstallDir, "$programData\config", "$programData\images", "$
   New-Item -ItemType Directory -Force -Path $dir | Out-Null
 }
 
+$legacyTerraformDir = Join-Path $InstallDir 'terraform-hyperv'
+if (Test-Path -LiteralPath $legacyTerraformDir) {
+  Remove-Item -LiteralPath $legacyTerraformDir -Recurse -Force
+  "Removed legacy Terraform files from $InstallDir" | Tee-Object -FilePath $logPath -Append
+}
+
 "Installing Project Truth to $InstallDir" | Tee-Object -FilePath $logPath -Append
 
-foreach ($path in @('README.md','app','docs','gitops','terraform-hyperv','scripts','image-factory','installer')) {
+foreach ($path in @('README.md','app','docs','gitops','scripts','image-factory','installer')) {
   $source = Join-Path $repoRoot $path
   if (Test-Path -LiteralPath $source) {
     Copy-Item -LiteralPath $source -Destination $InstallDir -Recurse -Force
@@ -100,8 +106,6 @@ function New-ProjectTruthShortcut {
 $shortcutSpecs = @(
   @{ Name = 'Project Truth Doctor'; Target = $launcher; Args = 'doctor'; WorkDir = $InstallDir; Description = 'Run Project Truth doctor checks.' },
   @{ Name = 'Select Project Truth Image'; Target = $launcher; Args = 'select-image'; WorkDir = $InstallDir; Description = 'Select the prebuilt Project Truth VHDX.' },
-  @{ Name = 'Terraform Plan'; Target = $launcher; Args = 'terraform-plan'; WorkDir = $InstallDir; Description = 'Plan the Hyper-V VM layer.' },
-  @{ Name = 'Apply Hyper-V VM'; Target = $launcher; Args = 'terraform-apply'; WorkDir = $InstallDir; Description = 'Apply the Hyper-V VM layer with safety gates.' },
   @{ Name = 'Watch Until Healthy'; Target = $launcher; Args = 'watch-until-healthy'; WorkDir = $InstallDir; Description = 'Watch health until DEV/UAT/PROD are healthy.' },
   @{ Name = 'Repair And Verify'; Target = $launcher; Args = 'repair-and-verify'; WorkDir = $InstallDir; Description = 'Run repair and verification loop.' },
   @{ Name = 'Open Project Truth Folder'; Target = 'explorer.exe'; Args = "`"$InstallDir`""; WorkDir = $InstallDir; Description = 'Open installed Project Truth files.' },

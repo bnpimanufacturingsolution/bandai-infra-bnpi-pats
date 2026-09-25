@@ -17,9 +17,6 @@ appliance/backups/
 packer/packer.auto.pkrvars.hcl
 image-factory/packer/packer.auto.pkrvars.hcl
 image-factory/packer/staging/
-.terraform/
-terraform.tfstate
-terraform.tfstate.backup
 
 # Sync Center export/import working files (may contain real biometric blobs).
 # Keep package templates out of git; regenerate under /templates as needed.

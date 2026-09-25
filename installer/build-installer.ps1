@@ -23,7 +23,7 @@ if (Test-Path -LiteralPath $packageDir) {
 }
 New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
 
-foreach ($path in @('README.md','app','docs','gitops','terraform-hyperv','scripts','installer','image-factory')) {
+foreach ($path in @('README.md','app','docs','gitops','scripts','installer','image-factory')) {
   Copy-Item -LiteralPath (Join-Path $repoRoot $path) -Destination $packageDir -Recurse -Force
 }
 

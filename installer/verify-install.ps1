@@ -9,7 +9,6 @@ $required = @(
   (Join-Path $InstallDir 'scripts\project-truth.ps1'),
   (Join-Path $InstallDir 'scripts\configure.ps1'),
   (Join-Path $InstallDir 'installer\build-installer.ps1'),
-  (Join-Path $InstallDir 'terraform-hyperv\providers.tf'),
   (Join-Path $InstallDir 'gitops\base\environment-config.yaml'),
   (Join-Path $InstallDir 'docs\ARCHITECTURE.md')
 )
@@ -18,6 +17,11 @@ foreach ($path in $required) {
   if (-not (Test-Path -LiteralPath $path)) {
     throw "Installed file missing: $path"
   }
+}
+
+$legacyTerraformDir = Join-Path $InstallDir 'terraform-hyperv'
+if (Test-Path -LiteralPath $legacyTerraformDir) {
+  throw "Legacy Terraform directory was packaged unexpectedly: $legacyTerraformDir"
 }
 
 $shell = New-Object -ComObject WScript.Shell
@@ -33,8 +37,6 @@ if (-not (Test-Path -LiteralPath $shortcutDir)) {
 $expectedShortcuts = @(
   'Project Truth Doctor',
   'Select Project Truth Image',
-  'Terraform Plan',
-  'Apply Hyper-V VM',
   'Watch Until Healthy',
   'Repair And Verify',
   'Open Project Truth Folder',

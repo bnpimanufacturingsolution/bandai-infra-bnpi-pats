@@ -1,3 +1,9 @@
+## Terraform host layer removed (2026-09-25)
+
+- Terraform Hyper-V configuration, state/provider cache, scripts, CLI commands, installer payloads, and active validation steps were removed from the repository.
+- Hyper-V VM lifecycle now uses direct PowerShell import/start through `vhdx-autopilot` and `bnpi-pats-vm`.
+- No VM, Hyper-V resource, runtime service, or Cloudflare Tunnel was destroyed or changed. Dated Terraform evidence remains historical only.
+
 ## Device lane + HRIS emp-app retired (2026-09-15)
 
 - Hikvision/ZKTeco device lane (watcher, callback-outbox, Device Events, Sync
@@ -88,7 +94,7 @@
 
 ## 2026-08-20 GitHub Actions CI / Observe / Validate
 
-- Three root workflows: **CI** (per-type tests), **Observe VM GitOps deploy** (VM reporter), **Validate** (Windows terraform/packer/installer). Nested Cloud Run/Firebase YAML does not run on this repo.
+- Three root workflows: **CI** (per-type tests), **Observe VM GitOps deploy** (VM reporter), **Validate** (Windows Packer/installer). Nested Cloud Run/Firebase YAML does not run on this repo.
 - Observe `success` can mean **not rebuilt** (`services=none`). `/health` has no `buildSha`. Runtime Argo can be Synced/**Degraded** (failed `bnpi-pats-api-db-init` Job) while Observe is green.
 - Operator 2026-08-20 authorized push of the CI/Observe harden. Full: `.wwg/reports/devops-ci-observe-validate-20260819.md`.
 
@@ -249,7 +255,7 @@
 
 # Project Truth Summary
 
-Last updated: 2026-08-12
+Last updated: 2026-09-25
 
 
 ## Current Runtime Truth
