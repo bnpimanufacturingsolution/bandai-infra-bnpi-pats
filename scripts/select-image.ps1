@@ -3,14 +3,14 @@ param(
   [string]$ExpectedSha256 = '',
   [ValidateSet('hyperv','virtualbox')]
   [string]$TargetPlatform = 'hyperv',
-  [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\image.json"
+  [string]$ConfigPath = "$env:ProgramData\BandaiApp\Bnpipats\config\image.json"
 )
 
 $ErrorActionPreference = 'Stop'
 
 if (-not $ImagePath) {
   $defaultExtension = if ($TargetPlatform -eq 'virtualbox') { 'vdi' } else { 'vhdx' }
-  $default = "$env:ProgramData\ProjectTruth\images\project-truth-node-latest.$defaultExtension"
+  $default = "$env:ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.$defaultExtension"
   if (Test-Path -LiteralPath $default) {
     $ImagePath = $default
   } else {

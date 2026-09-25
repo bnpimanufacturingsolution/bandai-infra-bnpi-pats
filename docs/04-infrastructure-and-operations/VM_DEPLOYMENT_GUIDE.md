@@ -22,7 +22,7 @@ cd C:\Users\zenja\OneDrive\Desktop\UZARO-PROJECT\HRIS-BANDAI\bandai-infra
 .\scripts\project-truth.ps1 build-image -TargetPlatform hyperv
 ```
 
-This creates: `C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx`
+This creates: `C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx`
 
 ---
 
@@ -33,7 +33,7 @@ cd terraform-hyperv
 
 # Edit terraform.tfvars
 # vm_name           = "bnpi-pats"
-# source_image_path = "C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx"
+# source_image_path = "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx"
 # net_adapter_names = ["Wi-Fi"]  # or ["Ethernet"]
 
 # Initialize and apply

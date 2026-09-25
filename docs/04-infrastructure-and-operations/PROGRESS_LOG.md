@@ -108,7 +108,7 @@ systeminfo | Select-String "Hyper-V"
 | Setting | Value |
 |---------|-------|
 | VM Name | `bnpi-pats` |
-| VHDX Path | `C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx` |
+| VHDX Path | `C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx` |
 | Hyper-V Switch | `ProjectTruth-External` |
 | Production Domain | `bnpipats.tech` |
 | Dev Domain | `dev.bnpipats.tech` |

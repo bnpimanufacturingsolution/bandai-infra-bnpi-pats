@@ -1,7 +1,7 @@
 param(
   [string]$GuestIp = '',
   [string]$User = 'infra',
-  [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json"
+  [string]$ConfigPath = "$env:ProgramData\BandaiApp\Bnpipats\config\project-truth.json"
 )
 
 $ErrorActionPreference = 'Stop'

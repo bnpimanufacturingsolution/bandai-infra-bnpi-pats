@@ -3,7 +3,7 @@ param(
   [string]$SwitchName = "ProjectTruth-External",
   [int]$MemoryMb = 2048,
   [int]$CpuCount = 2,
-  [string]$BaseDir = "C:\ProgramData\BnpiPats",
+  [string]$BaseDir = "C:\ProgramData\BandaiApp\Bnpipats",
   [string]$VhdxName = "project-truth-node-latest.vhdx",
   [string]$TunnelJson = "",
   [string]$SshKey = (Join-Path $env:USERPROFILE ".ssh\node-health-appliance_ed25519"),

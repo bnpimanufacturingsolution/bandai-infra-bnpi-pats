@@ -47,7 +47,10 @@ foreach ($root in $activeRoots) {
         return
       }
 
-      $text = Get-Content -Raw -LiteralPath $_.FullName
+      $text = Get-Content -Raw -LiteralPath $_.FullName -ErrorAction SilentlyContinue
+      if ($null -eq $text) {
+        return
+      }
       foreach ($parts in $bannedLiteralParts) {
         $needle = -join $parts
         if ($text.Contains($needle)) {

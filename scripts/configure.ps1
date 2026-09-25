@@ -1,13 +1,13 @@
 param(
-  [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json",
-  [string]$ImagePath = "$env:ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx",
+  [string]$ConfigPath = "$env:ProgramData\BandaiApp\Bnpipats\config\project-truth.json",
+  [string]$ImagePath = "$env:ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx",
   [string]$ExpectedSha256 = '',
   [ValidateSet('hyperv','virtualbox')]
   [string]$TargetPlatform = 'hyperv',
   [string]$VmName = 'project-truth-node-01',
   [string]$SwitchName = 'ProjectTruth-External',
   [string]$BridgeAdapterName = '',
-  [string]$VmPath = "$env:ProgramData\ProjectTruth\HyperV",
+  [string]$VmPath = "$env:ProgramData\BandaiApp\Bnpipats\HyperV",
   [int]$CpuCount = 2,
   [int]$MemoryMb = 4096,
   [string]$GuestIpHint = '',

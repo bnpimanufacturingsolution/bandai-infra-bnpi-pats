@@ -35,7 +35,7 @@ variable "source_image_path" {
 variable "vm_path" {
   type        = string
   description = "Folder where Hyper-V VM files and copied VHDX are placed."
-  default     = "C:\\ProgramData\\ProjectTruth\\HyperV"
+  default     = "C:\\ProgramData\\BandaiApp\\Bnpipats\\HyperV"
 }
 
 variable "memory_mb" {

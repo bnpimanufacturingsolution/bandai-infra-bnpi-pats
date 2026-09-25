@@ -1,5 +1,5 @@
 param(
-  [string]$ImagePath = "$env:ProgramData\ProjectTruth\images\project-truth-node-latest.vdi",
+  [string]$ImagePath = "$env:ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vdi",
   [string]$VmName = 'project-truth-node-01',
   [string]$BridgeAdapterName = '',
   [int]$MemoryMb = 4096,

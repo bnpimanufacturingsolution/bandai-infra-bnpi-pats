@@ -5,7 +5,7 @@ param(
   [string]$SwitchName = "ProjectTruth-External",
   [int]$MemoryMb = 2048,
   [int]$CpuCount = 2,
-  [string]$BaseDir = "C:\ProgramData\ProjectTruth",
+  [string]$BaseDir = "C:\ProgramData\BandaiApp\Bnpipats",
   [string]$GuestIp = "",
   [int]$IpWaitSeconds = 600,
   [int]$IpPollSeconds = 10,

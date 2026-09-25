@@ -1,4 +1,4 @@
-﻿# Current Task Workspace
+# Current Task Workspace
 
 > Full addendum history for this file is preserved in git:
 > `git log --follow --oneline -- .wwg/workspace/current-task.md`
@@ -12,9 +12,9 @@
 - **Pass 2 — scripts/tests** (commit `f1a6b62f`): `restart-local-bnpi-pats-api-dev.ps1`, `start-local-bnpi-pats-runtime.ps1`, `project-truth.ps1` menu cleaned; `test-self-heal-contract.ps1` device/emp assertions inverted to Assert-NoText retirement guards across dev/uat/prod. Contract now **217 checks** (was 226: −9 retired positives, +retirement guards). LAN terminology + cloudflare + static-config PS tests green.
 - **Pass 3 — docs + governance truth** (this commit): 68 device/HRIS docs deleted; runbooks/doctrine/product docs corrected or retirement-banded; `AGENTS.md`, `CLAUDE.md`, `.grok/rules/*` de-deviced (rules 02/03 deleted); principles `evidence-over-assumption.md` + `shrink-hide-embody.md` generalized; wiki banners in `project-truth.md`, `project-truth-summary.md`, `terminology.md`; drift-guard device guards generalized; `README.md` shape fixed; this file compacted.
 - **Verification**: `scripts/test-self-heal-contract.ps1`, `scripts/tests/project-truth-lan-terminology.test.ps1`, `scripts/tests/bnpi-cloudflare-config.test.ps1`, `scripts/tests/project-truth-lan-static-config.test.ps1`, `scripts/verify-grok-wwg-bootstrap.ps1` (see handoff for results).
-- **Deliberate residue (documented, not bugs)**: dated evidence kept read-only (`.wwg/reports/`, `audits/`, `client-handover/`, `*_2026*.md` docs); `appliance/seeds/dev-current/dev-current.dump` contains historical device rows; `scripts/disable-k8s-runtime.ps1` keeps emp-app delete entries for stale-object cleanup; prisma still carries legacy `Device*` models.
-- **Pass 4 (next, pending operator scope)**: submodule sweep — decide fate of `bnpi-pats-api` prisma `Device*` models/migration; clean stray empty dirs `bnpi-pats-app/app/routes/admin/devices` + `app/components/molecules/device`.
-- **Boundary**: nothing pushed; parent on local `main`; submodule commits (prior HRIS pass) stay local on `feat-reports`; foreign dirty submodule files untouched.
+- **Deliberate residue (documented, not bugs)**: dated evidence kept read-only (`.wwg/reports/`, `audits/`, `client-handover/`, `*_2026*.md` docs); `scripts/disable-k8s-runtime.ps1` keeps emp-app delete entries for stale-object cleanup.
+- **Pass 4 (completed 2026-09-25 per operator instruction)**: residual legacy device fields (`deviceId`, `deviceEmpId`) purged from `bnpi-pats-api` (`employee.prisma`, `employee.zod.ts`, `employee.service.ts`) and `bnpi-pats-app` (`employee.ts`); 54.7 MB `appliance/seeds/dev-current/dev-current.dump` deleted with directory preserved via `.gitkeep`; Prisma clients regenerated; tsc / typecheck clean (0 errors) on both API and app; self-heal contract 217 PASS.
+- **Boundary**: nothing pushed; parent on local `main`.
 
 ## How to work here
 

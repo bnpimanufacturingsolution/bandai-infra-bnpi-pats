@@ -28,7 +28,7 @@ Assert-Contains -Path 'scripts/ensure-bnpi-cloudflare-host.ps1' -Pattern 'projec
 Assert-Contains -Path 'scripts/ensure-bnpi-cloudflare-host.ps1' -Pattern 'VerifySsh' -Message 'Host readiness helper must support public SSH verification'
 Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'ensure-bnpi-cloudflare-host' -Message 'Main CLI must expose host readiness helper'
 Assert-Contains -Path 'scripts/project-truth.ps1' -Pattern 'v6-one-shot' -Message 'Main CLI must expose the V6 one-shot helper'
-Assert-Contains -Path 'scripts/project-truth-v6-one-shot.ps1' -Pattern 'C:\\ProgramData\\ProjectTruth\\secrets\\cloudflared\\12e89b6a-dabb-4897-9925-08ce9213b983\.json' -Message 'V6 one-shot must use the stable host-side credential handoff path'
+Assert-Contains -Path 'scripts/project-truth-v6-one-shot.ps1' -Pattern 'C:\\ProgramData\\BandaiApp\\Bnpipats\\secrets\\cloudflared\\12e89b6a-dabb-4897-9925-08ce9213b983\.json' -Message 'V6 one-shot must use the stable host-side credential handoff path'
 Assert-Contains -Path 'project-truth-v6-one-shot.cmd' -Pattern 'v6-one-shot' -Message 'Tired-human V6 wrapper must delegate to the project-truth v6-one-shot command'
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'ssh://localhost:22' -Message 'VM tunnel helper must route public SSH to the VM SSH daemon'
 Assert-Contains -Path 'appliance/bin/project-truth-cloudflare-vm-tunnel.sh' -Pattern 'hostname:\s+dev\.bnpipats\.tech\s+path:\s+/api/\.\*\s+service:\s+http://localhost:3101' -Message 'VM tunnel helper must route DEV same-host API traffic to the DEV API origin'

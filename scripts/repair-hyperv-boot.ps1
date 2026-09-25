@@ -1,5 +1,5 @@
 param(
-  [string]$VhdxPath = "C:\ProgramData\ProjectTruth\images\project-truth-devcurrent-hyperv.vhdx",
+  [string]$VhdxPath = "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-devcurrent-hyperv.vhdx",
   [string]$VmName = "project-truth-devcurrent-hyperv-proof",
   [string]$PreferredSwitch = "ProjectTruth-External",
   [int]$CpuCount = 2,

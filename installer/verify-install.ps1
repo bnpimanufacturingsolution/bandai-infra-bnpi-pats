@@ -74,7 +74,7 @@ $inspections = foreach ($name in $expectedShortcuts) {
 
 $inspections | Format-Table -AutoSize
 
-$configPath = Join-Path $env:ProgramData 'ProjectTruth\config\project-truth.json'
+$configPath = Join-Path $env:ProgramData 'BandaiApp\Bnpipats\config\project-truth.json'
 if (-not (Test-Path -LiteralPath $configPath)) {
   throw "Config file missing: $configPath"
 }

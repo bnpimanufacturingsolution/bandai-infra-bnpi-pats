@@ -1,8 +1,8 @@
 param(
   [string]$VmName = 'project-truth-local-vhdx-proof',
-  [string]$ImagesDir = "$env:ProgramData\ProjectTruth\images",
+  [string]$ImagesDir = "$env:ProgramData\BandaiApp\Bnpipats\images",
   [string]$FinalImageName = 'project-truth-node-latest.vhdx',
-  [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\image.json",
+  [string]$ConfigPath = "$env:ProgramData\BandaiApp\Bnpipats\config\image.json",
   [string]$TerraformVarsPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'terraform-hyperv\terraform.tfvars'),
   [switch]$StopVm,
   [switch]$Force,

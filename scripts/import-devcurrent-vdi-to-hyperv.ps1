@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$VdiPath = "C:\ProgramData\ProjectTruth\images\project-truth-node-devcurrent-postinstall-20260618-020148.vdi",
-    [string]$VhdxPath = "C:\ProgramData\ProjectTruth\images\project-truth-devcurrent-hyperv.vhdx",
+    [string]$VdiPath = "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-devcurrent-postinstall-20260618-020148.vdi",
+    [string]$VhdxPath = "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-devcurrent-hyperv.vhdx",
     [string]$VmName = "project-truth-devcurrent-hyperv-proof",
     [string]$PreferredSwitch = "ProjectTruth-External",
     [int]$CpuCount = 2,

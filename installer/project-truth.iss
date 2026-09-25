@@ -26,10 +26,10 @@ Source: "{#SourceRoot}\installer\*"; DestDir: "{app}\installer"; Flags: ignoreve
 Source: "{#SourceRoot}\image-factory\README.md"; DestDir: "{app}\image-factory"; Flags: ignoreversion
 
 [Dirs]
-Name: "{commonappdata}\ProjectTruth\config"
-Name: "{commonappdata}\ProjectTruth\images"
-Name: "{commonappdata}\ProjectTruth\logs"
-Name: "{commonappdata}\ProjectTruth\state"
+Name: "{commonappdata}\BandaiApp\Bnpipats\config"
+Name: "{commonappdata}\BandaiApp\Bnpipats\images"
+Name: "{commonappdata}\BandaiApp\Bnpipats\logs"
+Name: "{commonappdata}\BandaiApp\Bnpipats\state"
 
 [Icons]
 Name: "{group}\Project Truth Doctor"; Filename: "{app}\ProjectTruth.cmd"; Parameters: "doctor"; WorkingDir: "{app}"
@@ -39,7 +39,7 @@ Name: "{group}\Apply Hyper-V VM"; Filename: "{app}\ProjectTruth.cmd"; Parameters
 Name: "{group}\Watch Until Healthy"; Filename: "{app}\ProjectTruth.cmd"; Parameters: "watch-until-healthy"; WorkingDir: "{app}"
 Name: "{group}\Repair And Verify"; Filename: "{app}\ProjectTruth.cmd"; Parameters: "repair-and-verify"; WorkingDir: "{app}"
 Name: "{group}\Open Project Truth Folder"; Filename: "{app}"; WorkingDir: "{app}"
-Name: "{group}\Open Logs"; Filename: "{commonappdata}\ProjectTruth\logs"; WorkingDir: "{app}"
+Name: "{group}\Open Logs"; Filename: "{commonappdata}\BandaiApp\Bnpipats\logs"; WorkingDir: "{app}"
 Name: "{group}\Open Documentation"; Filename: "{app}\docs"; WorkingDir: "{app}"
 Name: "{commondesktop}\Project Truth Doctor"; Filename: "{app}\ProjectTruth.cmd"; Parameters: "doctor"; WorkingDir: "{app}"; Tasks: desktopicon
 Name: "{commondesktop}\Project Truth Repair And Verify"; Filename: "{app}\ProjectTruth.cmd"; Parameters: "repair-and-verify"; WorkingDir: "{app}"; Tasks: desktopicon

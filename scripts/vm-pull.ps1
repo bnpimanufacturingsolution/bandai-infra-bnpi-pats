@@ -3,7 +3,7 @@ param(
   [string]$User = 'infra',
   [string]$Password = $env:PROJECT_TRUTH_SSH_PASSWORD,
   [string]$SshHostKey = $env:PROJECT_TRUTH_SSH_HOSTKEY,
-  [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json",
+  [string]$ConfigPath = "$env:ProgramData\BandaiApp\Bnpipats\config\project-truth.json",
   [switch]$Status
 )
 

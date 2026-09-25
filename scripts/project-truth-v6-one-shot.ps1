@@ -4,10 +4,10 @@ param(
   [string]$User = 'infra',
   [string]$Branch = 'develop',
   [string]$SshKeyPath = '',
-  [string]$CredentialPath = 'C:\ProgramData\ProjectTruth\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json',
+  [string]$CredentialPath = 'C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json',
   [string]$TunnelId = '12e89b6a-dabb-4897-9925-08ce9213b983',
   [string]$TunnelName = 'bnpi-pats',
-  [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json",
+  [string]$ConfigPath = "$env:ProgramData\BandaiApp\Bnpipats\config\project-truth.json",
   [switch]$SkipRuntimeRepair
 )
 

@@ -44,7 +44,7 @@ Canonical remote: `https://github.com/bnpimanufacturingsolution/bandai-infra-bnp
 
 ```powershell
 .\scripts\project-truth.ps1 doctor
-.\scripts\project-truth.ps1 select-image -ImagePath C:\ProgramData\ProjectTruth\images\project-truth-node-latest.vhdx
+.\scripts\project-truth.ps1 select-image -ImagePath C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-node-latest.vhdx
 .\scripts\project-truth.ps1 terraform-plan
 .\scripts\project-truth.ps1 terraform-apply -Apply
 .\scripts\project-truth.ps1 watch-until-healthy -GuestIp <guest-lan-ip>
@@ -57,7 +57,7 @@ Canonical remote: `https://github.com/bnpimanufacturingsolution/bandai-infra-bnp
 For a direct Hyper-V smoke test from an already-built `.vhdx`, use the VHDX autopilot command. It self-elevates through UAC, starts the Hyper-V management service, creates a fallback switch if needed, imports the VHDX, starts the VM, and prints guest IP/curl checks when an IP appears.
 
 ```powershell
-.\scripts\project-truth.ps1 vhdx-autopilot -Mode Import -VhdxPath "C:\ProgramData\ProjectTruth\images\project-truth-devcurrent-hyperv.vhdx" -VmName "project-truth-devcurrent"
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode Import -VhdxPath "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-devcurrent-hyperv.vhdx" -VmName "project-truth-devcurrent"
 ```
 
 If the host cannot allocate the requested `4GB` startup RAM, the script automatically retries with lower startup RAM before failing.
@@ -65,7 +65,7 @@ If the host cannot allocate the requested `4GB` startup RAM, the script automati
 To prove the full scoped lifecycle in one loop, create/start/delete the Hyper-V VM without deleting the source VHDX:
 
 ```powershell
-.\scripts\project-truth.ps1 vhdx-autopilot -Mode SelfTestHyperV -VhdxPath "C:\ProgramData\ProjectTruth\images\project-truth-devcurrent-hyperv.vhdx" -VmName "project-truth-devcurrent" -PollCount 6 -PollSeconds 5
+.\scripts\project-truth.ps1 vhdx-autopilot -Mode SelfTestHyperV -VhdxPath "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-devcurrent-hyperv.vhdx" -VmName "project-truth-devcurrent" -PollCount 6 -PollSeconds 5
 ```
 
 Cleanup commands are scoped to Project Truth names by default:
@@ -78,7 +78,7 @@ Cleanup commands are scoped to Project Truth names by default:
 .\scripts\project-truth.ps1 vhdx-autopilot -Mode ResetAll -VmName "project-truth-devcurrent"
 ```
 
-Add `-DeleteVhdx` only when the Hyper-V `.vhdx`/`.vhd` image files should be removed from `C:\ProgramData\ProjectTruth\images`.
+Add `-DeleteVhdx` only when the Hyper-V `.vhdx`/`.vhd` image files should be removed from `C:\ProgramData\BandaiApp\Bnpipats\images`.
 
 ## Installer Flow
 

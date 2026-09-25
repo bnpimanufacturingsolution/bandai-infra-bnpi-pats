@@ -24,7 +24,7 @@ optionally connect Cloudflare. Everything runs in one elevated terminal.
 
 ```powershell
 cd C:\path\to\bandai-infra-bnpi-pats
-.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BnpiPats"
+.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BandaiApp\Bnpipats"
 ```
 
 What it does, in order:
@@ -39,24 +39,24 @@ Useful flags:
 
 ```powershell
 # test-boot + freeze the proven disk first (slower, safer)
-.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BnpiPats" -SelfTest
+.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BandaiApp\Bnpipats" -SelfTest
 
 # full run including Cloudflare (needs credential file on this host)
-.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BnpiPats" -WithPublic -TunnelJson "$env:USERPROFILE\.cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json"
+.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BandaiApp\Bnpipats" -WithPublic -TunnelJson "$env:USERPROFILE\.cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json"
 ```
 
 ## 2. Layout it creates
 
 ```text
-C:\ProgramData\BnpiPats\HyperV\               VM + virtual disk
-C:\ProgramData\BnpiPats\images\               VHDX + .sha256 + .manifest
-C:\ProgramData\BnpiPats\logs\
-C:\ProgramData\BnpiPats\secrets\cloudflared\  put the tunnel JSON here
-C:\ProgramData\BnpiPats\config\image.json
+C:\ProgramData\BandaiApp\Bnpipats\HyperV\               VM + virtual disk
+C:\ProgramData\BandaiApp\Bnpipats\images\               VHDX + .sha256 + .manifest
+C:\ProgramData\BandaiApp\Bnpipats\logs\
+C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\  put the tunnel JSON here
+C:\ProgramData\BandaiApp\Bnpipats\config\image.json
 ```
 
 Default `VmName` is `bnpi-pats`. Default `BaseDir` is
-`C:\ProgramData\ProjectTruth` (kept for the existing server).
+`C:\ProgramData\BandaiApp\Bnpipats` (kept for the existing server).
 
 ## 3. Expected result
 
@@ -112,7 +112,7 @@ ssh project-truth-bnpi-pats
 ```powershell
 .\scripts\project-truth.ps1 build-image -TargetPlatform hyperv -SwitchName "Default Switch"
 .\scripts\project-truth.ps1 download-image -ImageUrl "<bucket-url>" -ExpectedSha256 "<sha>"
-.\scripts\project-truth.ps1 bnpi-pats-vm -VhdxPath "<vhdx>" -VmName "bnpi-pats" -BaseDir "C:\ProgramData\BnpiPats"
+.\scripts\project-truth.ps1 bnpi-pats-vm -VhdxPath "<vhdx>" -VmName "bnpi-pats" -BaseDir "C:\ProgramData\BandaiApp\Bnpipats"
 .\scripts\project-truth.ps1 ensure-bnpi-cloudflare-host -ProvisionDns -StartTunnel -VerifyPublic
 ```
 

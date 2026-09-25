@@ -191,15 +191,11 @@ Measure-Command {
   - RESOLVED-IN-PASS (2026-09-15): rules/docs/wiki described a live device lane
     and `bnpi-pats-emp-app` after the runtime retirement; this governance pass
     retired the rules, banners/compacted the wiki, and corrected live-state rows.
-  - REMAINING (accepted): prisma `Device*` models + one legacy migration in
-    `bnpi-pats-api`; historical device rows in
-    `appliance/seeds/dev-current/dev-current.dump`; dated reports/audits left
-    read-only by policy.
+  - RESOLVED (2026-09-25): legacy `deviceId` / `deviceEmpId` fields purged from Prisma schemas, Zod schemas, and API/app models; 54.7 MB `appliance/seeds/dev-current/dev-current.dump` deleted.
+  - REMAINING (accepted): dated reports/audits left read-only by policy.
 - Files synchronized:
   - `AGENTS.md`, `CLAUDE.md`, `.grok/rules/*`, root `README.md`, `docs/**`,
     `.wwg/wiki/*`, `.wwg/wiki/principles/*`, `.wwg/workspace/current-task.md`,
     `.wwg/governance/recommendation-registry.md`, this file.
 - Remaining follow-ups:
-  - Pass 4 submodule decision on legacy prisma `Device*` models (see
-    `.wwg/workspace/current-task.md`); contract count 226 → 217 recorded in
-    `.wwg/reports/wwg-agent-handoff.md`.
+  - Pass 4 complete; contract count 217 recorded and verified.

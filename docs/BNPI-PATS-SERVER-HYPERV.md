@@ -45,13 +45,13 @@ Must print `bnpi Cloudflare config regression checks passed.`
 
 ```powershell
 cd C:\path\to\bandai-infra-bnpi-pats
-.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BnpiPats" -VhdxName "<your-file>.vhdx"
+.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BandaiApp\Bnpipats" -VhdxName "<your-file>.vhdx"
 ```
 
 With only a VHDX and no credential yet, stop after birth:
 
 ```powershell
-.\scripts\project-truth.ps1 bnpi-pats-vm -VhdxPath "<full-path-to-vhdx>" -VmName "bnpi-pats" -BaseDir "C:\ProgramData\BnpiPats"
+.\scripts\project-truth.ps1 bnpi-pats-vm -VhdxPath "<full-path-to-vhdx>" -VmName "bnpi-pats" -BaseDir "C:\ProgramData\BandaiApp\Bnpipats"
 ```
 
 Check first for a name clash:
@@ -65,14 +65,14 @@ If a row returns, remove/rename the old VM or pass another `-VmName`.
 ## 3. Layout it creates (untouched `ProjectTruth` folder stays as-is)
 
 ```text
-C:\ProgramData\BnpiPats\HyperV\               new VM + virtual disk
-C:\ProgramData\BnpiPats\images\
-C:\ProgramData\BnpiPats\logs\
-C:\ProgramData\BnpiPats\secrets\cloudflared\  put 12e89b6a-*.json here
-C:\ProgramData\BnpiPats\config\image.json
+C:\ProgramData\BandaiApp\Bnpipats\HyperV\               new VM + virtual disk
+C:\ProgramData\BandaiApp\Bnpipats\images\
+C:\ProgramData\BandaiApp\Bnpipats\logs\
+C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\  put 12e89b6a-*.json here
+C:\ProgramData\BandaiApp\Bnpipats\config\image.json
 ```
 
-Leave `C:\ProgramData\ProjectTruth\bnpi-pats` (HRIS-era) alone until
+Leave `C:\ProgramData\BandaiApp\Bnpipats\bnpi-pats` (HRIS-era) alone until
 the new VM is proven — verify with
 `Get-VM | Select-Object Name, State, Path` which folder is active.
 
@@ -80,10 +80,10 @@ the new VM is proven — verify with
 
 ```powershell
 # 4a. tunnel JSON for 12e89b6a must exist at:
-#     C:\ProgramData\BnpiPats\secrets\cloudflared\  (copy it here first)
+#     C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\  (copy it here first)
 # 4b. existing infra SSH private key must exist at:
 #     $env:USERPROFILE\.ssh\node-health-appliance_ed25519
-.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BnpiPats" -WithPublic -TunnelJson "C:\ProgramData\BnpiPats\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json"
+.\scripts\project-truth.ps1 bnpi-pats-full -BaseDir "C:\ProgramData\BandaiApp\Bnpipats" -WithPublic -TunnelJson "C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json"
 ```
 
 This imports the credential into the VM (`/etc/cloudflared`,

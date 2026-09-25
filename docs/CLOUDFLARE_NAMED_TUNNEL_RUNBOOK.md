@@ -447,11 +447,11 @@ or the equivalent CLI subcommand:
 ```
 
 If `-GuestIp` is omitted, the command checks `PROJECT_TRUTH_GUEST_IP`,
-`C:\ProgramData\ProjectTruth\config\project-truth.json`, then Hyper-V adapter
+`C:\ProgramData\BandaiApp\Bnpipats\config\project-truth.json`, then Hyper-V adapter
 discovery. The default credential source is:
 
 ```text
-C:\ProgramData\ProjectTruth\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
+C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
 ```
 
 The command validates that the JSON has the expected tunnel fields without
@@ -486,7 +486,7 @@ object, repo file, or baked image. The installer may require the host-side
 handoff credential to exist before it runs the V6 runtime phase:
 
 ```text
-C:\ProgramData\ProjectTruth\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
+C:\ProgramData\BandaiApp\Bnpipats\secrets\cloudflared\12e89b6a-dabb-4897-9925-08ce9213b983.json
 ```
 
 The V6 runtime phase should pass or fail with evidence, not silently skip

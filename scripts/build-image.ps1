@@ -1,6 +1,6 @@
 param(
   [string]$PackerDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'image-factory\packer'),
-  [string]$ImagesDir = "$env:ProgramData\ProjectTruth\images",
+  [string]$ImagesDir = "$env:ProgramData\BandaiApp\Bnpipats\images",
   [ValidateSet('hyperv','virtualbox')]
   [string]$TargetPlatform = 'hyperv',
   [string]$PublishedImagePath = '',
@@ -17,7 +17,7 @@ param(
   [ValidateSet('External','Internal','Private')]
   [string]$SwitchType = 'Internal',
   [string[]]$NetAdapterNames = @(),
-  [string]$VmPath = "$env:ProgramData\ProjectTruth\HyperV",
+  [string]$VmPath = "$env:ProgramData\BandaiApp\Bnpipats\HyperV",
   [int]$MemoryMb = 4096,
   [int]$CpuCount = 0,
   [switch]$SkipBuild

@@ -5,8 +5,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$programData = Join-Path $env:ProgramData 'ProjectTruth'
-$localData = Join-Path $env:LOCALAPPDATA 'ProjectTruth'
+$programData = Join-Path $env:ProgramData 'BandaiApp\Bnpipats'
+$localData = Join-Path $env:LOCALAPPDATA 'BandaiApp\Bnpipats'
 $logDir = Join-Path $programData 'logs'
 $configPath = Join-Path $programData 'config\project-truth.json'
 $logPath = Join-Path $logDir ("install-{0}.log" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))

@@ -1,12 +1,11 @@
-﻿# Project Truth
+# Project Truth
 
 ## Device lane + HRIS emp-app retired (2026-09-15)
 
 - Status: `CONFIRMED_CODE` (this repo + submodule sweep; evidence `scripts/test-self-heal-contract.ps1` retirement guards).
 - **The Hikvision/ZKTeco device lane no longer exists**: `vendor/`, hikvision watcher workload, callback-outbox service, Device Events / Sync logs UI, merge/enroll flows, and all device env vars (`PROJECT_TRUTH_HIKVISION_*`, `ZKTECO_BRIDGE_*`) were removed from infra, GitOps overlays, workflows, ansible, scripts, and docs.
 - **`bnpi-pats-emp-app` (HRIS employee portal) is retired**: it is no longer a workload in any overlay, CI matrix, build script, or menu. The product is BNPI PATS timekeeping/payroll only; the "HRIS" framing is deprecated.
-- Dated device/emp sections further down in this file and in `.wwg/reports/`, `.wwg/wiki/01-sources/`, `audits/` are **read-only history**; they do not describe current runtime. Do not resurrect counts, endpoints, or workloads from them.
-- Residual data artifacts (not code): `appliance/seeds/dev-current/dev-current.dump` still contains historical device rows; prisma still carries legacy `Device*` models pending the submodule pass.
+- Residual data artifacts eliminated (2026-09-25): `appliance/seeds/dev-current/dev-current.dump` (54.7 MB) was deleted, and legacy device fields (`deviceId`, `deviceEmpId`) were purged from Prisma schemas, Zod definitions, and API/app models.
 
 ## Zero-pay statutory contribution waiver (2026-09-15)
 

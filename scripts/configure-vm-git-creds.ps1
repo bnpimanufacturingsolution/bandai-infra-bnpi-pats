@@ -6,7 +6,7 @@ param(
   [string]$GitHubToken = $env:PROJECT_TRUTH_GITHUB_TOKEN,
   [string]$RepoUrl = 'https://github.com/bnpimanufacturingsolution/bandai-infra-bnpi-pats.git',
   [string]$Branch = 'develop',
-  [string]$ConfigPath = "$env:ProgramData\ProjectTruth\config\project-truth.json"
+  [string]$ConfigPath = "$env:ProgramData\BandaiApp\Bnpipats\config\project-truth.json"
 )
 
 $ErrorActionPreference = 'Stop'

@@ -3,7 +3,7 @@ param(
   [string]$ExpectedSha256 = $env:PROJECT_TRUTH_IMAGE_SHA256,
   [ValidateSet('hyperv','virtualbox')]
   [string]$TargetPlatform = $(if ($env:PROJECT_TRUTH_TARGET_PLATFORM) { $env:PROJECT_TRUTH_TARGET_PLATFORM } else { 'hyperv' }),
-  [string]$ImagesDir = "$env:ProgramData\ProjectTruth\images"
+  [string]$ImagesDir = "$env:ProgramData\BandaiApp\Bnpipats\images"
 )
 
 $ErrorActionPreference = 'Stop'

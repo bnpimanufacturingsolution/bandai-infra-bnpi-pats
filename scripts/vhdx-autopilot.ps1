@@ -3,7 +3,7 @@ param(
     [ValidateSet("Import", "Publish", "Both", "DeleteHyperV", "ResetHyperV", "ResetVirtualBox", "ResetImages", "ResetAll", "SelfTestHyperV")]
     [string]$Mode = "Import",
 
-    [string]$VhdxPath = "C:\ProgramData\ProjectTruth\images\project-truth-devcurrent-hyperv.vhdx",
+    [string]$VhdxPath = "C:\ProgramData\BandaiApp\Bnpipats\images\project-truth-devcurrent-hyperv.vhdx",
     [string]$SourceUrl = "",
     [string]$SourceGcsUri = "",
 
@@ -27,7 +27,7 @@ param(
     [string]$Bucket = "project-truth-image-export-bnpi-pats-492904-161377059311",
     [string]$ObjectPrefix = "public/project-truth/hyperv/dev-current/latest",
     [string]$ObjectName = "",
-    [string]$ImagesDir = "C:\ProgramData\ProjectTruth\images",
+    [string]$ImagesDir = "C:\ProgramData\BandaiApp\Bnpipats\images",
     [string]$VirtualBoxVmPattern = "project-truth*",
     [string]$ImageNamePattern = "project-truth*",
     [switch]$DeleteVhdx,
