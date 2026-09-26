@@ -31,11 +31,17 @@ function Find-File {
 
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ([string]::IsNullOrWhiteSpace($StagingDirectory)) {
-    if ((Split-Path -Leaf $scriptDirectory) -eq 'gcs-v7-release') {
+    # Stage beside this script when it already lives in a release package
+    # folder. The folder name is not significant, so both the original
+    # "gcs-v7-release" name and the current "bandai-bnpi-pats" name are
+    # accepted. When the script sits in a parent folder (for example the
+    # external Setup flow directory), stage into a package subfolder instead.
+    $packageFolderNames = @('gcs-v7-release', 'bandai-bnpi-pats')
+    if ($packageFolderNames -contains (Split-Path -Leaf $scriptDirectory)) {
         $StagingDirectory = $scriptDirectory
     }
     else {
-        $StagingDirectory = Join-Path $scriptDirectory 'gcs-v7-release'
+        $StagingDirectory = Join-Path $scriptDirectory 'bandai-bnpi-pats'
     }
 }
 New-Item -ItemType Directory -Force -Path $StagingDirectory | Out-Null

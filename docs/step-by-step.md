@@ -1,4 +1,4 @@
-# Project Truth VHDX: GCS to VM Step-by-Step
+﻿# Project Truth VHDX: GCS to VM Step-by-Step
 
 This is the single supported flow for the existing V7 VHDX:
 
@@ -28,7 +28,7 @@ Image dir:    C:\ProgramData\BandaiApp\Bnpipats\images
 The GCS release package is located at:
 
 ```text
-C:\Users\zenja\OneDrive\Desktop\UZARO PROJECT 2026\Bandai\bandai-infra-bnpi-pats\gcs-v7-release
+C:\Users\zenja\OneDrive\Desktop\UZARO PROJECT 2026\Bandai\bandai-infra-bnpi-pats\bandai-bnpi-pats
 ```
 
 ## 1. Locate the VHDX on the laptop
@@ -66,7 +66,7 @@ Do not use the literal placeholder `C:\path\to\...`.
 Run from the repository package folder:
 
 ```powershell
-$packageDir = 'C:\Users\zenja\OneDrive\Desktop\UZARO PROJECT 2026\Bandai\bandai-infra-bnpi-pats\gcs-v7-release'
+$packageDir = 'C:\Users\zenja\OneDrive\Desktop\UZARO PROJECT 2026\Bandai\bandai-infra-bnpi-pats\bandai-bnpi-pats'
 Set-Location -LiteralPath $packageDir
 
 gcloud auth login
@@ -85,7 +85,7 @@ Expected result:
 STAGING_V7_READY=...
 ```
 
-The preparation script copies the V7 VHDX, checksum, manifest, README, import script, and helper package into `gcs-v7-release`. It does not upload anything yet.
+The preparation script copies the V7 VHDX, checksum, manifest, README, import script, and helper package into `bandai-bnpi-pats`. It does not upload anything yet.
 
 ## 3. Upload the release to private GCS
 
@@ -115,29 +115,102 @@ The upload allowlist includes the V7 VHDX, its checksum, V7 manifest/README/impo
 
 ## 4. Generate temporary signed URLs
 
-Because the bucket is private, the target server needs signed URLs. Run these on the authenticated laptop:
+Because the bucket is private, the target server needs signed URLs.
+
+`gcloud storage objects generate-signed-url` **does not exist** in current
+Google Cloud CLI (`gcloud 586.0.0` only has `compose`, `describe`, `list`,
+`update`). Signed URLs are created with `gsutil signurl`, which signs locally
+using a service-account RSA private key.
+
+You need once, from someone with project IAM admin:
+
+```text
+Service account:  bnpi-pats-vhdx-signer@bandai-pats-vhdx-artifacts.iam.gserviceaccount.com
+Role:             roles/storage.objectViewer   (signing only)
+Key file:         a downloaded JSON private key, stored OFF the repo
+```
+
+Then, on the authenticated laptop:
 
 ```powershell
-$helperUrl = gcloud storage objects generate-signed-url `
-  'gs://bandai-pats-vhdx-artifacts/project-truth/hyperv/v7/download-project-truth-vhdx.ps1' `
-  --duration=2h
+$signerEmail = 'bnpi-pats-vhdx-signer@bandai-pats-vhdx-artifacts.iam.gserviceaccount.com'
+$signerKey   = "$env:USERPROFILE\.secrets\bnpi-pats-vhdx-signer.json"
+$duration   = '2h'
+$releaseUri = 'gs://bandai-pats-vhdx-artifacts/project-truth/hyperv/v7'
 
-$helperSidecarUrl = gcloud storage objects generate-signed-url `
-  'gs://bandai-pats-vhdx-artifacts/project-truth/hyperv/v7/download-project-truth-vhdx.ps1.sha256' `
-  --duration=2h
+function New-SignedUrl {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    $out = & gsutil signurl -e $signerEmail -k $signerKey -d $duration "$releaseUri/$Name" 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "gsutil signurl failed for ${Name}:`n$out" }
+    return (($out -split "`r?`n" | Where-Object { $_ -match '^https://' } | Select-Object -First 1)).Trim()
+}
 
-$vhdxUrl = gcloud storage objects generate-signed-url `
-  'gs://bandai-pats-vhdx-artifacts/project-truth/hyperv/v7/project-truth-node-local-hyperv-v7-current-state.vhdx' `
-  --duration=2h
+$helperUrl       = New-SignedUrl 'download-project-truth-vhdx.ps1'
+$helperSidecarUrl = New-SignedUrl 'download-project-truth-vhdx.ps1.sha256'
+$vhdxUrl         = New-SignedUrl 'project-truth-node-local-hyperv-v7-current-state.vhdx'
+$vhdxSidecarUrl  = New-SignedUrl 'project-truth-node-local-hyperv-v7-current-state.vhdx.sha256'
 
-$vhdxSidecarUrl = gcloud storage objects generate-signed-url `
-  'gs://bandai-pats-vhdx-artifacts/project-truth/hyperv/v7/project-truth-node-local-hyperv-v7-current-state.vhdx.sha256' `
-  --duration=2h
+$helperUrl
+$vhdxUrl
+```
+
+Verify the private-bucket contract before trusting a URL:
+
+```powershell
+# expect 403 -> bucket is private
+curl.exe -s -o NUL -w "%{http_code}`n" `
+  'https://storage.googleapis.com/bandai-pats-vhdx-artifacts/project-truth/hyperv/v7/download-project-truth-vhdx.ps1'
+
+# expect 200 -> signed URL works
+curl.exe -s -o NUL -w "%{http_code}`n" $helperUrl
 ```
 
 Transfer the four URL values to the target server securely. Do not put signed URLs in Git, documents, or chat. They expire.
 
 ## 5. Download on the Windows Server/local Hyper-V host
+
+There are two methods. **Method A is the current supported path.**
+
+### Method A - gcloud direct copy (recommended)
+
+No signed URL and no public bucket. The host authenticates to Google with its
+own account and pulls the object with `gcloud storage cp`.
+
+On the target server, in **Administrator PowerShell**:
+
+```powershell
+gcloud auth login
+gcloud config set project bandai-pats-vhdx-artifacts
+
+# one-time: fetch the deployer from the private bucket
+$tools = "$env:ProgramData\BandaiApp\Bnpipats\tools"
+New-Item -ItemType Directory -Force -Path $tools | Out-Null
+gcloud storage cp `
+  'gs://bandai-pats-vhdx-artifacts/project-truth/hyperv/v7/deploy-project-truth-v7-from-gcs.ps1' `
+  $tools
+
+# download + verify + create/start the VM
+& "$tools\deploy-project-truth-v7-from-gcs.ps1" `
+  -RepoRoot 'C:\path\to\bandai-infra-bnpi-pats' `
+  -StartVm
+```
+
+Drop `-StartVm` to only download and verify.
+
+Success markers:
+
+```text
+PROJECT_TRUTH_V7_DOWNLOAD_OK   # downloaded and SHA-256 verified, no VM changes
+PROJECT_TRUTH_V7_DEPLOY_OK     # VM imported and started
+```
+
+The VHDX `.sha256` sidecar in the bucket is the trust anchor. A mismatch deletes
+the partial file and throws. A missing object throws with the exact upload
+commands to run on the machine that holds the VHDX.
+
+### Method B - signed URL (fallback)
+
+Use this only when the target host cannot run `gcloud`.
 
 Open **Administrator PowerShell** on the target machine and set:
 

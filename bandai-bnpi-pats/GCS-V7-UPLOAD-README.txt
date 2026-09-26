@@ -1,8 +1,8 @@
-PROJECT TRUTH V7 GCS RELEASE STAGING
+﻿PROJECT TRUTH V7 GCS RELEASE STAGING
 
 This folder is the single staging/upload package.
 
-STEP 1 — On the machine that contains the V7 VHDX, run:
+STEP 1 â€” On the machine that contains the V7 VHDX, run:
 
   powershell -NoProfile -ExecutionPolicy Bypass -File .\prepare-project-truth-v7-staging.ps1
 
@@ -13,7 +13,7 @@ The preparation script searches these locations:
   C:\ProgramData\ProjectTruth\images
   C:\ProgramData\ProjectTruth
 
-It copies into this same gcs-v7-release folder:
+It copies into this same bandai-bnpi-pats folder:
 
   project-truth-node-local-hyperv-v7-current-state.vhdx
   project-truth-node-local-hyperv-v7-current-state.vhdx.sha256
@@ -29,7 +29,7 @@ It copies into this same gcs-v7-release folder:
   step-up.md
   STAGING-MANIFEST.json
 
-STEP 2 — After STAGING_V7_READY is displayed, run:
+STEP 2 â€” After STAGING_V7_READY is displayed, run:
 
   powershell -NoProfile -ExecutionPolicy Bypass -File .\upload-project-truth-v7-to-gcs.ps1
 

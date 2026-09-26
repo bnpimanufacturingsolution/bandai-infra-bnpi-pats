@@ -1,4 +1,4 @@
-# Project Truth VHDX Setup Flow
+﻿# Project Truth VHDX Setup Flow
 
 ## Scope and ownership
 
@@ -92,7 +92,7 @@ Keep an existing production VM untouched until the replacement has passed verifi
 
 ## 2A. Upload the standalone Windows downloader
 
-The helper script is stored in the same `gcs-v7-release` folder as this guide:
+The helper script is stored in the same `bandai-bnpi-pats` folder as this guide:
 
 ```text
 download-project-truth-vhdx.ps1

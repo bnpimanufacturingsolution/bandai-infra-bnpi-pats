@@ -45,8 +45,8 @@ source "hyperv-iso" "ubuntu" {
   iso_url          = var.iso_url
   iso_checksum     = var.iso_checksum
   cpus             = 2
-  memory           = 4096
-  disk_size        = 30000
+  memory           = 6144
+  disk_size        = 60000
   headless         = true
   switch_name      = var.switch_name
   http_directory   = "${path.root}/http"
@@ -58,15 +58,22 @@ source "hyperv-iso" "ubuntu" {
   shutdown_command = "echo '${var.ssh_password}' | sudo -S shutdown -P now"
   output_directory = "output/${var.vm_name}"
 
-  boot_wait = "0s"
+  # The previous build never reached SSH: boot_wait was "0s", so the GRUB
+  # keystrokes were sent before GRUB was ready, the live ISO booted without the
+  # autoinstall kernel arguments, and the guest never provisioned SSH.
+  # GRUB needs real time to render before any key is sent.
+  boot_wait = "10s"
+  # ds=nocloud without s= makes cloud-init discover the seed volume by its
+  # "cidata" label, which is what cd_files/cd_label below attach. The previous
+  # s=/cdrom/ pointed at the live ISO root instead of the seed volume.
   boot_command = [
-    "<enter><wait2>",
-    "<esc><wait><esc><wait>",
-    "c<wait5>",
+    "<esc><wait>",
+    "<esc><wait>",
+    "c<wait10>",
     "set gfxpayload=keep<enter><wait>",
-    "linux /casper/vmlinuz autoinstall ds='nocloud;s=/cdrom/' ---<enter><wait>",
+    "linux /casper/vmlinuz autoinstall ds=nocloud ---<enter><wait>",
     "initrd /casper/initrd<enter><wait>",
-    "boot<enter><wait30>",
+    "boot<enter><wait60>",
     "yes<enter>"
   ]
 }

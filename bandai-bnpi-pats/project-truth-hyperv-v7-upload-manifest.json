@@ -1,0 +1,164 @@
+﻿{
+    "projectId":  "bandai-pats-vhdx-artifacts",
+    "bucket":  "gs://bandai-pats-vhdx-artifacts",
+    "objectPath":  "project-truth/hyperv/v7",
+    "generatedAtUtc":  "2026-09-26T15:08:59.5238327Z",
+    "files":  [
+                  {
+                      "name":  "download-project-truth-vhdx.ps1",
+                      "category":  "windows-downloader",
+                      "bytes":  8703,
+                      "sha256":  "66ca0274707ee20c05a88dd4e0262c5a948552c7860d8f4429f5eb605cc3bfc5"
+                  },
+                  {
+                      "name":  "download-project-truth-vhdx.ps1.sha256",
+                      "category":  "windows-downloader",
+                      "bytes":  97,
+                      "sha256":  "86a1dbfc098583879c6858d75783103c6aca3c1f673bba504b683eb3d4b4f3a6"
+                  },
+                  {
+                      "name":  "deploy-project-truth-v7-from-gcs.ps1",
+                      "category":  "windows-downloader",
+                      "bytes":  6697,
+                      "sha256":  "2271c521360c3fd39c222663c98d1b90edc5eb55c4664c78f3c46ca9d9f42f67"
+                  },
+                  {
+                      "name":  "deploy-project-truth-v7-from-gcs.ps1.sha256",
+                      "category":  "windows-downloader",
+                      "bytes":  102,
+                      "sha256":  "15c67e0e1687c3571b627994277c6e9ff386419951c9dadd0992a2e69fe35ad2"
+                  },
+                  {
+                      "name":  "upload-project-truth-v7-to-gcs.ps1",
+                      "category":  "windows-downloader",
+                      "bytes":  8039,
+                      "sha256":  "56ff5bceea45804916e5265f361cfa760bf32487d094b10dcf5d2df274292ea9"
+                  },
+                  {
+                      "name":  "prepare-project-truth-v7-staging.ps1",
+                      "category":  "windows-downloader",
+                      "bytes":  5177,
+                      "sha256":  "cf11750da7adda1ef94d3d567cbca34ebf00957d1e005d31978a4d9d6f70b58f"
+                  },
+                  {
+                      "name":  "prepare-project-truth-v7-staging.ps1.sha256",
+                      "category":  "windows-downloader",
+                      "bytes":  102,
+                      "sha256":  "0c94a10275383e5bb771c437fad606c96c8cd3a9f256f6708e6deea14a91dc1b"
+                  },
+                  {
+                      "name":  "GCS-V7-UPLOAD-README.txt",
+                      "category":  "windows-downloader",
+                      "bytes":  1356,
+                      "sha256":  "dd7a9eeb70fafa5d76bd00e7b4428c06ccacfa799c8c1d1218749af40e4cbc9b"
+                  },
+                  {
+                      "name":  "step-up.md",
+                      "category":  "windows-downloader",
+                      "bytes":  9176,
+                      "sha256":  "be26fb02ad43fa7961685b0b7e2c5d7ead5333b1bd608e4053b25eea76002769"
+                  },
+                  {
+                      "name":  "step-by-step.md",
+                      "category":  "windows-downloader",
+                      "bytes":  11804,
+                      "sha256":  "50f02c089a03e276fe7e673b27fdae076df3e15c7b7c58d3fbbe804afafacae8"
+                  },
+                  {
+                      "name":  "bnpi-pats-vm.ps1",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  5923,
+                      "sha256":  "54f2d326d189db442f793309f4164739703d7886e06862f73131372e67c2e221"
+                  },
+                  {
+                      "name":  "bnpi-pats-vm.ps1.sha256",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  82,
+                      "sha256":  "988583c105d88063a731a5739375cebac15cff54bcb76c001d41bed3ed38985a"
+                  },
+                  {
+                      "name":  "configure.ps1",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  2639,
+                      "sha256":  "6f2c3d6ce4a328ec45f6b8af120d00b6e29c24b989161cdb28518196a2e05f6c"
+                  },
+                  {
+                      "name":  "configure.ps1.sha256",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  79,
+                      "sha256":  "28235f7adaa172afbc5fba31cb3c6eb56a121372d1eb0060da64c43df8113024"
+                  },
+                  {
+                      "name":  "normalize-image-acl.ps1",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  899,
+                      "sha256":  "c4c91a300dd6965cccd3bbecd98ffb0e893a964539785a5c26c5256e9f3bbb71"
+                  },
+                  {
+                      "name":  "normalize-image-acl.ps1.sha256",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  89,
+                      "sha256":  "49179aa22034f5a61415ca0c464b74cf88faa5677403254013cf1a651987ba92"
+                  },
+                  {
+                      "name":  "select-image.ps1",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  1588,
+                      "sha256":  "3a8cf97339d194dc31077a4934af5bb05a37a95b198f3c25bd643d39a9b3e9ff"
+                  },
+                  {
+                      "name":  "select-image.ps1.sha256",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  82,
+                      "sha256":  "1db7171f7e137f627e96f71e8ea68d7cf6d2f40ccb715b133dc56c4ae64bec4c"
+                  },
+                  {
+                      "name":  "verify-host-health.ps1",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  1601,
+                      "sha256":  "b8c4e8a29a132d9394237279a0f31cf8aabce0d5c8f1032c09971b8cb05a59b4"
+                  },
+                  {
+                      "name":  "verify-host-health.ps1.sha256",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  88,
+                      "sha256":  "7a6be66ab710e112e251f5da38ae2dc1490bef6539004c5c688d7cc040812dd9"
+                  },
+                  {
+                      "name":  "verify-lan-health.ps1",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  1346,
+                      "sha256":  "f8f6407bd30de5f00fea16648fafc70046cc416dffdf84089bb1e7acc8850106"
+                  },
+                  {
+                      "name":  "verify-lan-health.ps1.sha256",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  87,
+                      "sha256":  "8cae3926ca6010e4fefb91c48dd5ce1e49177865feace7cb688514c727cdd99c"
+                  },
+                  {
+                      "name":  "vhdx-autopilot.ps1",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  20958,
+                      "sha256":  "0687fd8c3d9eaaf09b360b6631150eb39e5656d4918cc462062e3477f758b412"
+                  },
+                  {
+                      "name":  "vhdx-autopilot.ps1.sha256",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  84,
+                      "sha256":  "fa83a7fde33c85f62bd34313a439360a69a9ea737c02c1b479fd2c75654ce9f1"
+                  },
+                  {
+                      "name":  "watch-until-healthy.ps1",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  1666,
+                      "sha256":  "2db7c8c54805eb0dee3ecc53ae54adfbfc5ef2a1c9b39ee8045071506269285b"
+                  },
+                  {
+                      "name":  "watch-until-healthy.ps1.sha256",
+                      "category":  "hyperv-vm-scripts",
+                      "bytes":  89,
+                      "sha256":  "d35a752931ea2c0c3847d589c93413fa7bedbc624c756410cf96de133191b7d5"
+                  }
+              ]
+}

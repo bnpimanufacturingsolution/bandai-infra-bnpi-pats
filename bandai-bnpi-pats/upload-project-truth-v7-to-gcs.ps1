@@ -35,7 +35,7 @@ function Find-ExistingFile {
 
 function Add-UploadItem {
     param(
-        [Parameter(Mandatory = $true)][System.Collections.Generic.List[object]]$Items,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Items,
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Category,
         [switch]$Required
@@ -62,8 +62,38 @@ if (-not $gcloud) {
 }
 
 $gcloudExe = $gcloud.Source
-& $gcloudExe config set project $ProjectId | Out-Host
-$authOutput = (& $gcloudExe auth list --format='value(account)' 2>&1 | Out-String).Trim()
+
+function Invoke-Gcloud {
+    <#
+        Runs a gcloud subcommand without letting benign stderr output
+        (for example the "does not have permission to access projects
+        instance" warning that gcloud emits on `config set project`) become a
+        terminating error. The real failure signal is the exit code.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string[]]$GcloudArgs
+    )
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'SilentlyContinue'
+    try {
+        $captured = & $gcloudExe @GcloudArgs 2>&1
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $text = ($captured | Out-String).Trim()
+    if ($exitCode -ne 0) {
+        throw "gcloud $($GcloudArgs -join ' ') failed with exit code ${exitCode}: $text"
+    }
+
+    return $text
+}
+
+Write-Host (Invoke-Gcloud -GcloudArgs @('config', 'set', 'project', $ProjectId))
+$authOutput = Invoke-Gcloud -GcloudArgs @('auth', 'list', '--format=value(account)')
 if ([string]::IsNullOrWhiteSpace($authOutput)) {
     throw 'No active gcloud account. Run gcloud auth login first.'
 }
@@ -79,11 +109,14 @@ $candidateRoots = @(
 $helperFiles = @(
     'download-project-truth-vhdx.ps1',
     'download-project-truth-vhdx.ps1.sha256',
+    'deploy-project-truth-v7-from-gcs.ps1',
+    'deploy-project-truth-v7-from-gcs.ps1.sha256',
     'upload-project-truth-v7-to-gcs.ps1',
     'prepare-project-truth-v7-staging.ps1',
     'prepare-project-truth-v7-staging.ps1.sha256',
     'GCS-V7-UPLOAD-README.txt',
-    'step-up.md'
+    'step-up.md',
+    'step-by-step.md'
 )
 
 $items = [System.Collections.Generic.List[object]]::new()
@@ -125,6 +158,18 @@ if (-not $HelpersOnly) {
 
 foreach ($name in $helperFiles) {
     Add-UploadItem -Items $items -Path (Join-Path $HelperDirectory $name) -Category 'windows-downloader' -Required
+}
+
+# Hyper-V VM import scripts. bnpi-pats-vm.ps1 resolves its siblings through
+# $PSScriptRoot, so these are uploaded flat into the same object path and must
+# be restored side by side in one directory on the target host.
+$vmScriptsDir = Join-Path $HelperDirectory 'vmscripts'
+if (Test-Path -LiteralPath $vmScriptsDir -PathType Container) {
+    Get-ChildItem -LiteralPath $vmScriptsDir -File -ErrorAction SilentlyContinue |
+        Sort-Object Name |
+        ForEach-Object {
+            Add-UploadItem -Items $items -Path $_.FullName -Category 'hyperv-vm-scripts'
+        }
 }
 
 $stagingManifest = Join-Path $HelperDirectory 'STAGING-MANIFEST.json'
@@ -174,18 +219,12 @@ if (-not $PSCmdlet.ShouldProcess("Upload Project Truth V7 release to $Bucket/$Ob
 
 foreach ($item in $items) {
     Write-Host "Uploading $($item.Name)..."
-    & $gcloudExe storage cp $item.Path "$Bucket/$ObjectPath/$($item.Name)"
-    if ($LASTEXITCODE -ne 0) {
-        throw "gcloud storage cp failed for $($item.Name) with exit code $LASTEXITCODE"
-    }
+    Write-Host (Invoke-Gcloud -GcloudArgs @('storage', 'cp', $item.Path, "$Bucket/$ObjectPath/$($item.Name)"))
 }
 
 Write-Host ''
 Write-Host 'GCS objects after upload:'
-& $gcloudExe storage ls "$Bucket/$ObjectPath/"
-if ($LASTEXITCODE -ne 0) {
-    throw "gcloud storage ls failed with exit code $LASTEXITCODE"
-}
+Write-Host (Invoke-Gcloud -GcloudArgs @('storage', 'ls', "$Bucket/$ObjectPath/"))
 
 Write-Host ''
 Write-Host 'PROJECT_TRUTH_V7_UPLOAD_OK'
