@@ -1,5 +1,10 @@
 ﻿# Project Truth VHDX: GCS to VM Step-by-Step
 
+> Quick: oo, copy muna from GCS, tapos run script para gawin ang VM.
+> 1. Download lang: `deploy-project-truth-v7-from-gcs.ps1` (walang `-StartVm`).
+> 2. Gawa + start VM: same script + `-RepoRoot '<path>\bandai-infra-bnpi-pats' -StartVm` (auto-tawag `bnpi-pats-vm.ps1` -> `vhdx-autopilot.ps1 -Mode Import`).
+> Full commands nasa §5 Method A. Pag `VHDX not found in bucket`, i-upload muna galing laptop (§2-§3).
+
 This is the single supported flow for the existing V7 VHDX:
 
 ```text
@@ -140,7 +145,7 @@ $releaseUri = 'gs://bandai-pats-vhdx-artifacts/project-truth/hyperv/v7'
 
 function New-SignedUrl {
     param([Parameter(Mandatory = $true)][string]$Name)
-    $out = & gsutil signurl -e $signerEmail -k $signerKey -d $duration "$releaseUri/$Name" 2>&1 | Out-String
+    $out = & gsutil signurl -d $duration $signerKey "$releaseUri/$Name" 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "gsutil signurl failed for ${Name}:`n$out" }
     return (($out -split "`r?`n" | Where-Object { $_ -match '^https://' } | Select-Object -First 1)).Trim()
 }
@@ -169,16 +174,27 @@ Transfer the four URL values to the target server securely. Do not put signed UR
 
 ## 5. Download on the Windows Server/local Hyper-V host
 
+> Windows Server preflight (gawin muna bago Method A/B):
+> 1. Administrator PowerShell lang (Run as Administrator). Check: `whoami; Get-VM; Get-VMSwitch`.
+> 2. Hyper-V Role naka-install + reboot na. Check: `(Get-WindowsFeature Hyper-V).Installed` at `Get-Service vmms`.
+> 3. May External switch (`ProjectTruth-External`) o payag mag-auto-create sa isang physical NIC. Check: `Get-VMSwitch | Select Name,SwitchType`. Pag maraming NIC/teaming, tandaan ang adapter name.
+> 4. Disk space para sa multi-GB VHDX. Check: `Get-PSDrive C`.
+> 5. Walang `winget` sa Server by default — manual installer gamitin: `GoogleCloudSDKInstaller.exe` mula sa Google Cloud docs, tapos close/reopen Admin PowerShell.
+
 There are two methods. **Method A is the current supported path.**
 
-### Method A - gcloud direct copy (recommended)
+### Method A - gcloud direct copy (recommended, Windows Server)
 
 No signed URL and no public bucket. The host authenticates to Google with its
 own account and pulls the object with `gcloud storage cp`.
 
-On the target server, in **Administrator PowerShell**:
+On the target server, in **Administrator PowerShell (Windows Server)**:
 
 ```powershell
+# Kung `gcloud : not recognized` pa: isara/buksan uli ang Admin PowerShell,
+# o gamitin ang full path:
+# & 'C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd' --version
+
 gcloud auth login
 gcloud config set project bandai-pats-vhdx-artifacts
 
@@ -189,9 +205,12 @@ gcloud storage cp `
   'gs://bandai-pats-vhdx-artifacts/project-truth/hyperv/v7/deploy-project-truth-v7-from-gcs.ps1' `
   $tools
 
-# download + verify + create/start the VM
-& "$tools\deploy-project-truth-v7-from-gcs.ps1" `
-  -RepoRoot 'C:\path\to\bandai-infra-bnpi-pats' `
+# 1) download + verify lang, walang VM gagalawin:
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$tools\deploy-project-truth-v7-from-gcs.ps1"
+
+# 2) download + verify + create/start VM (RepoRoot = server checkout, hal. C:\BandaiApp\bandai-infra-bnpi-pats):
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$tools\deploy-project-truth-v7-from-gcs.ps1" `
+  -RepoRoot 'C:\BandaiApp\bandai-infra-bnpi-pats' `
   -StartVm
 ```
 

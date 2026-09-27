@@ -39,13 +39,19 @@ variable "switch_name" {
   default     = "Default Switch"
 }
 
+variable "memory_mb" {
+  type        = number
+  description = "RAM (MB) for the maintainer image build VM. Lower on 16 GB hosts (see build-image.ps1 -BuildMemoryMb)."
+  default     = 4096
+}
+
 source "hyperv-iso" "ubuntu" {
   vm_name          = var.vm_name
   generation       = 2
   iso_url          = var.iso_url
   iso_checksum     = var.iso_checksum
   cpus             = 2
-  memory           = 6144
+  memory           = var.memory_mb
   disk_size        = 60000
   headless         = true
   switch_name      = var.switch_name

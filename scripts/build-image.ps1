@@ -15,6 +15,7 @@ param(
   [string]$BridgeAdapterName = '',
   [string]$VmPath = "$env:ProgramData\BandaiApp\Bnpipats\HyperV",
   [int]$MemoryMb = 4096,
+  [int]$BuildMemoryMb = 4096,
   [int]$CpuCount = 0,
   [switch]$SkipBuild
 )
@@ -261,7 +262,7 @@ if (-not $SkipBuild) {
     if ($TargetPlatform -eq 'virtualbox') {
       $packerBuildArgs += '-on-error=abort'
     } else {
-      $packerBuildArgs += @('-var', "switch_name=$SwitchName")
+      $packerBuildArgs += @('-var', "switch_name=$SwitchName", '-var', "memory_mb=$BuildMemoryMb")
     }
     if ($PredownloadIso) {
       $resolvedIso = (Resolve-Path -LiteralPath $IsoCachePath).Path

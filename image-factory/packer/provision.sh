@@ -58,12 +58,9 @@ sudo install -d -m 0755 /etc/project-truth
 printf 'EXPERIMENTAL_TRY_CLOUDFLARE=false\n' | sudo tee /etc/project-truth/experimental.env >/dev/null
 sudo chmod 0644 /etc/project-truth/experimental.env
 
-echo "infra:infra" | sudo chpasswd
-sudo passwd -u infra || true
-sudo install -d -m 0755 /etc/ssh/sshd_config.d
-printf 'PasswordAuthentication yes\nKbdInteractiveAuthentication yes\n' | sudo tee /etc/ssh/sshd_config.d/90-project-truth-password-auth.conf >/dev/null
-echo 'infra ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-infra >/dev/null
-sudo chmod 0440 /etc/sudoers.d/90-infra
+# NOTE (user-directed, muna): guest SSH password-auth setup removed here for now.
+# Build-time Packer SSH still comes from image-factory/packer/http/user-data
+# late-commands — removing that too would break provisioning entirely.
 
 sudo ufw allow OpenSSH
 sudo ufw allow 3000/tcp
@@ -341,8 +338,13 @@ find /var/log -type f -name '*.log' -exec truncate -s 0 {} + 2>/dev/null || true
 GENERALIZE
 sudo chmod 0755 /usr/local/bin/project-truth-generalize-image
 
-sudo systemctl enable ssh
+# User-directed: no SSH in the final image. disable (NOT stop/mask) so the
+# live Packer session survives until shutdown; ssh just won't start on boot.
+# Console login still uses the infra account password set by autoinstall.
+sudo systemctl disable ssh || true
 sudo systemctl restart ssh || sudo systemctl restart sshd || true
+sudo rm -f /etc/ssh/sshd_config.d/90-packer-password-auth.conf /etc/ssh/sshd_config.d/90-project-truth-password-auth.conf
+sudo ufw delete allow OpenSSH || true
 
 sudo kubectl get nodes
 sudo kubectl get pods -A

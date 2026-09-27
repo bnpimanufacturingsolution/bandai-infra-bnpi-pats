@@ -1,5 +1,7 @@
 ﻿# Project Truth VHDX Setup Flow
 
+> Quick: oo, copy muna from GCS, tapos run script para gawin ang VM. Kung V7 na (`project-truth-node-local-hyperv-v7-current-state.vhdx`), sundin `step-by-step.md` §5 Method A — ito lang ang supported V7 flow. Itong `step-up.md` = generic/background guide. Sa Windows Server: Admin PS + Hyper-V Role + External switch — preflight nasa `step-by-step.md` §5.
+
 ## Scope and ownership
 
 - **Build/publish machine:** Windows/Packer or an optional GCP/GCS build lane.
