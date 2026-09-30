@@ -1,7 +1,7 @@
 param(
   [string]$PackerDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'image-factory\packer'),
   [string]$ImagesDir = "$env:ProgramData\BandaiApp\Bnpipats\images",
-  [ValidateSet('hyperv','virtualbox')]
+  [ValidateSet('hyperv')]
   [string]$TargetPlatform = 'hyperv',
   [string]$PublishedImagePath = '',
   [string]$BuiltImagePath = '',
@@ -25,17 +25,15 @@ $ErrorActionPreference = 'Stop'
 $publishedImagePathProvided = -not [string]::IsNullOrWhiteSpace($PublishedImagePath)
 
 if ($CpuCount -le 0) {
-  $CpuCount = if ($TargetPlatform -eq 'virtualbox') { 1 } else { 2 }
+  $CpuCount = 2
 }
 
 $artifactExtensions = @{
   hyperv     = @('.vhdx')
-  virtualbox = @('.vdi', '.ova')
 }
 
 if (-not $publishedImagePathProvided) {
-  $defaultExtension = if ($TargetPlatform -eq 'virtualbox') { 'vdi' } else { 'vhdx' }
-  $PublishedImagePath = Join-Path $ImagesDir "project-truth-node-latest.$defaultExtension"
+  $PublishedImagePath = Join-Path $ImagesDir "project-truth-node-latest.vhdx"
 }
 
 if (-not (Get-Command packer -ErrorAction SilentlyContinue)) {
@@ -46,15 +44,8 @@ if ($PredownloadIso -and -not (Get-Command curl.exe -ErrorAction SilentlyContinu
   throw 'curl.exe not found in PATH. It is required for explicit Ubuntu ISO predownload.'
 }
 
-if ($TargetPlatform -eq 'virtualbox' -and -not (Get-Command VBoxManage -ErrorAction SilentlyContinue)) {
-  $defaultVBoxManage = Join-Path $env:ProgramFiles 'Oracle\VirtualBox\VBoxManage.exe'
-  if (Test-Path -LiteralPath $defaultVBoxManage) {
-    $env:Path = "$(Split-Path -Parent $defaultVBoxManage);$env:Path"
-  }
-}
-
-if ($TargetPlatform -eq 'virtualbox' -and -not $SkipBuild -and -not (Get-Command VBoxManage -ErrorAction SilentlyContinue)) {
-  throw 'VBoxManage not found in PATH. Install Oracle VirtualBox on the image-builder host before building the VirtualBox image.'
+if ($TargetPlatform -ne 'hyperv') {
+  throw "Unsupported TargetPlatform: $TargetPlatform. This builder is Hyper-V (VHDX) only."
 }
 
 if ($TargetPlatform -eq 'hyperv' -and -not (Get-Command Get-VHD -ErrorAction SilentlyContinue)) {
@@ -240,7 +231,7 @@ if (-not $SkipBuild) {
     }
   }
 
-  $packerTemplateName = if ($TargetPlatform -eq 'virtualbox') { 'ubuntu-virtualbox.pkr.hcl' } else { 'ubuntu-hyperv.pkr.hcl' }
+  $packerTemplateName = 'ubuntu-hyperv.pkr.hcl'
   $packerTemplate = Join-Path $PackerDir $packerTemplateName
   if (-not (Test-Path -LiteralPath $packerTemplate)) {
     throw "Packer template not found for ${TargetPlatform}: $packerTemplate"
@@ -259,11 +250,7 @@ if (-not $SkipBuild) {
     packer init $packerTemplateName
     packer validate $packerTemplateName
     $packerBuildArgs = @('build', '-force')
-    if ($TargetPlatform -eq 'virtualbox') {
-      $packerBuildArgs += '-on-error=abort'
-    } else {
-      $packerBuildArgs += @('-var', "switch_name=$SwitchName", '-var', "memory_mb=$BuildMemoryMb")
-    }
+    $packerBuildArgs += @('-var', "switch_name=$SwitchName", '-var', "memory_mb=$BuildMemoryMb")
     if ($PredownloadIso) {
       $resolvedIso = (Resolve-Path -LiteralPath $IsoCachePath).Path
       $packerBuildArgs += @('-var', "iso_url=$resolvedIso", '-var', "iso_checksum=sha256:$IsoSha256")
@@ -316,11 +303,7 @@ $hash = Get-FileHash -LiteralPath $PublishedImagePath -Algorithm SHA256
 $shaPath = "$PublishedImagePath.sha256"
 "$($hash.Hash.ToLowerInvariant())  $(Split-Path -Leaf $PublishedImagePath)" | Set-Content -LiteralPath $shaPath -Encoding ASCII
 
-if ($TargetPlatform -eq 'hyperv') {
-  Get-VHD -Path $PublishedImagePath | Format-List * | Out-String | Write-Host
-} else {
-  Get-Item -LiteralPath $PublishedImagePath | Format-List FullName,Length,LastWriteTime | Out-String | Write-Host
-}
+Get-VHD -Path $PublishedImagePath | Format-List * | Out-String | Write-Host
 
 & "$PSScriptRoot\configure.ps1" `
   -ImagePath $PublishedImagePath `
@@ -334,20 +317,6 @@ if ($TargetPlatform -eq 'hyperv') {
   -MemoryMb $MemoryMb
 
 & "$PSScriptRoot\select-image.ps1" -ImagePath $PublishedImagePath -ExpectedSha256 $hash.Hash -TargetPlatform $TargetPlatform
-
-if ($TargetPlatform -eq 'virtualbox') {
-  $configureVirtualBoxArgs = @(
-    '-ImagePath', $PublishedImagePath,
-    '-VmName', $VmName,
-    '-MemoryMb', $MemoryMb,
-    '-CpuCount', $CpuCount
-  )
-  if (-not [string]::IsNullOrWhiteSpace($BridgeAdapterName)) {
-    $configureVirtualBoxArgs += @('-BridgeAdapterName', $BridgeAdapterName)
-  }
-  & "$PSScriptRoot\configure-virtualbox.ps1" @configureVirtualBoxArgs
-  Write-Host "Published VirtualBox configuration; Hyper-V image configuration is handled by the direct Hyper-V CLI path."
-}
 
 Write-Host "Published Project Truth $TargetPlatform image: $PublishedImagePath"
 Write-Host "SHA256: $($hash.Hash)"
